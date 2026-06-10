@@ -27,7 +27,7 @@ R2-B9 已由主管线回收为 `accepted_with_p2`。
 
 - R2-B9 start commit：`d100d73c39ddb014372c48ea5a7eaa643fd15bf7`
 - R2-B9 completion commit：`bd63d7f5a12a29443d4d0c97713c1c6b1921cf20`
-- 本 supervisor checkpoint 提交：待提交后回填。
+- 本 supervisor checkpoint 提交：`5e3f281df9574a61520f8995dc6539e61020dd56`。
 
 ## 复核文件
 

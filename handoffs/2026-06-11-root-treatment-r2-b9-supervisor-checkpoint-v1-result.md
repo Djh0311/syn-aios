@@ -9,7 +9,7 @@ R2-B9 已回收为 `accepted_with_p2`。本轮接受为 index parsing、allowed 
 ## 主管复核结果
 
 - HEAD 复核时为 `bd63d7f5a12a29443d4d0c97713c1c6b1921cf20`。
-- 本 supervisor checkpoint 提交：待提交后回填。
+- 本 supervisor checkpoint 提交：`5e3f281df9574a61520f8995dc6539e61020dd56`。
 - `lib.rs`：17,042 lines -> 16,457 lines。
 - `index_host_app_entrypoints.rs`：新增 586 lines。
 - Tauri command registry：96 total，`lib.rs` 内 `#[tauri::command]` 为 0。
