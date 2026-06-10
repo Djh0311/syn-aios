@@ -9,7 +9,7 @@ R2-B7 已回收为 `accepted_with_p2`。本轮接受为 memory command bridge、
 ## 主管复核结果
 
 - HEAD 复核时为 `9cd10bb51fe828ae5b2b72501414b5cf025b77a9`。
-- 本 supervisor checkpoint 提交：待本 checkpoint 提交后回填。
+- 本 supervisor checkpoint 提交：`b270f453f8b5b01bb129eb40db09423c70769bc4`。
 - `lib.rs`：19,401 lines -> 18,932 lines。
 - `memory_context_entrypoints.rs`：新增 475 lines。
 - Tauri command registry：96 total，`lib.rs` 内 `#[tauri::command]` 为 0。
