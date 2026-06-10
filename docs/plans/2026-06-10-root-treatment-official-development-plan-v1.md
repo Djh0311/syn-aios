@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R3-P0 SQLite schema / importer / rollback contract freeze 和 R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures 已完成；R3-A1 completion commit 为 `c6cb5634e79edd9ddba1b1b737c1953806649069`。当前下一步是准备并执行 R3-A2 apply importer contract tests、schema constraint hardening、transaction crash fixtures 和 DB -> JSON export dry-run。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
+状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R3-P0 SQLite schema / importer / rollback contract freeze 和 R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures 已完成；R3-A1 completion commit 为 `c6cb5634e79edd9ddba1b1b737c1953806649069`。R3-A2 任务包已创建，当前下一步是执行 `tasks/2026-06-11-root-treatment-r3-a2-apply-importer-contract-tests-schema-hardening-and-export-dry-run-v1.md`。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
 
 本文不是任务包，不授权真实 `codex exec` / `codex exec resume`，不授权读写 `/Users/yoyi/.codex`，不授权 Stage L 的 K3-B1 retry / K3-B2，不授权 planned adapters 真实接入，不授权 backlog 解冻后功能开工。
 
@@ -707,7 +707,7 @@ R0 可接受不跑全量 cargo，但必须说明原因；R1 改 Rust 存储逻�
 
 当前按用户要求继续 Root Treatment / Stage R，下一步：
 
-1. 准备并执行 R3-A2 任务包。
+1. 执行 `tasks/2026-06-11-root-treatment-r3-a2-apply-importer-contract-tests-schema-hardening-and-export-dry-run-v1.md`。
 2. 在 R3-A1 schema / dry-run importer 基础上补 apply importer contract tests、schema constraint hardening、transaction crash fixtures 和 DB -> JSON export dry-run。
 3. R3-A2 仍只允许临时 DB、fixture 和 dry-run / contract tests；不得直接开始真实数据迁移、双写、读切 DB 或生产 DB 创建。
 
