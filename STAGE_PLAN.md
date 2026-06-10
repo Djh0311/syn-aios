@@ -47,7 +47,7 @@ Root Treatment / Stage R 治理计划：
 - R-Preflight 已完成权威入口同步和 git baseline 建立；R0 / R1 已完成并提交。
 - R0 已建立 workbench shape gate、任务包形状影响节、治理任务包类型和解冻后 `1:3` 治理配额。
 - R1 已为 workflow state 最终写入 / rename 增加文件级 StoreLock、corrupt guard 和测试夹具 backup retention；完整 read-modify-write 串行化仍是 P2，等待 R2/R3 后续治理。
-- 当前下一步是 R2 `lib.rs` 解体任务包准备与分批执行。
+- 当前下一步是 R2-B1 command registry extraction：`tasks/2026-06-10-root-treatment-r2-b1-command-registry-extraction-v1.md`。
 - R3 SQLite 收口是多 agent 并行真实执行的硬门槛。
 
 H-I 当前原则：
