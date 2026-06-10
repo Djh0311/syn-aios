@@ -1,0 +1,15 @@
+Reading prompt from stdin...
+2026-06-06T07:21:24.379998Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported
+2026-06-06T07:21:24.511738Z  WARN codex_rmcp_client::stdio_server_launcher: Failed to terminate MCP process group 25155: Operation not permitted (os error 1)
+2026-06-06T07:21:24.512132Z  WARN codex_rmcp_client::stdio_server_launcher: Failed to terminate MCP process group 25160: Operation not permitted (os error 1)
+2026-06-06T07:21:24.512313Z  WARN codex_rmcp_client::stdio_server_launcher: Failed to terminate MCP process group 25157: Operation not permitted (os error 1)
+2026-06-06T07:21:24.512564Z  WARN codex_rmcp_client::stdio_server_launcher: Failed to terminate MCP process group 25159: Operation not permitted (os error 1)
+2026-06-06T07:21:24.513711Z  WARN codex_rmcp_client::stdio_server_launcher: Failed to terminate MCP process group 25158: Operation not permitted (os error 1)
+2026-06-06T07:21:34.384661Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=failed to send remote plugin sync request to https://chatgpt.com/backend-api/plugins/featured: error sending request for url (https://chatgpt.com/backend-api/plugins/featured?platform=codex)
+2026-06-06T07:21:55.942718Z  WARN codex_core_plugins::startup_sync: git sync failed for curated plugin sync; falling back to GitHub HTTP error=git clone curated plugins repo timed out after 30s: Cloning into '/Users/yoyi/.codex/.tmp/plugins-clone-3pHaqa'...
+fatal: early EOF git_binary="git"
+2026-06-06T07:21:57.668631Z  WARN codex_mcp::rmcp_client: failed to initialize MCP client during shutdown: MCP startup failed: handshaking with MCP server failed: connection closed: initialize response
+2026-06-06T07:21:57.668926Z  WARN codex_mcp::rmcp_client: failed to initialize MCP client during shutdown: MCP startup failed: handshaking with MCP server failed: connection closed: initialize response
+2026-06-06T07:21:57.669118Z  WARN codex_mcp::rmcp_client: failed to initialize MCP client during shutdown: MCP startup failed: handshaking with MCP server failed: connection closed: initialize response
+2026-06-06T07:21:57.669123Z  WARN codex_mcp::rmcp_client: failed to initialize MCP client during shutdown: MCP startup failed: handshaking with MCP server failed: connection closed: initialize response
+2026-06-06T07:21:57.669125Z  WARN codex_mcp::rmcp_client: failed to initialize MCP client during shutdown: MCP startup failed: handshaking with MCP server failed: connection closed: initialize response

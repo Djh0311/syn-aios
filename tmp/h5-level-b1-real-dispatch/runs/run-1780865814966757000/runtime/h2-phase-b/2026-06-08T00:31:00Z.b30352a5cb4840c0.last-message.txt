@@ -1,0 +1,5 @@
+status: completed
+marker: H5_LEVEL_B_MARIO_TEST_CODEX_DEV_REAL_DISPATCH_OK_2026_06_08
+scope: read_only_project_workflow_dispatch_probe
+changed_files: []
+process_fact_candidate: codex-local worker received a project-workflow-bound dispatch and returned a readback marker.

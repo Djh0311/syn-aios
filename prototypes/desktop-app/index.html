@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Codex 治理工作台静态壳</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="主导航">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">C</div>
+          <div>
+            <p class="eyebrow">只读原型</p>
+            <h1>Codex 治理工作台</h1>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="页面">
+          <button class="nav-item active" type="button" data-view="home">首页</button>
+          <button class="nav-item" type="button" data-view="projects">项目</button>
+          <button class="nav-item" type="button" data-view="sessions">会话</button>
+          <button class="nav-item" type="button" data-view="skills">Skills</button>
+          <button class="nav-item" type="button" data-view="harness">Harness</button>
+          <button class="nav-item" type="button" data-view="tasks">任务线</button>
+        </nav>
+
+        <div class="scope-note">
+          <span class="status-dot"></span>
+          <span>只展示索引候选、未知项和 warning；不读取正文、不运行命令。</span>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">数据源</p>
+            <p class="source-path" id="sourcePath">等待加载静态索引</p>
+          </div>
+          <div class="topbar-actions">
+            <label class="search-box">
+              <span>搜索</span>
+              <input id="globalSearch" type="search" placeholder="项目、会话、skill、路径">
+            </label>
+            <button class="ghost-button" type="button" id="reloadButton">重新读取</button>
+          </div>
+        </header>
+
+        <section class="notice-panel" id="noticePanel" aria-live="polite">
+          <strong>加载中</strong>
+          <span>正在读取 `product-line/prototypes/index-kernel/codex-index.json`。</span>
+        </section>
+
+        <section class="view active" id="view-home" aria-labelledby="homeTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">总览</p>
+              <h2 id="homeTitle">首页</h2>
+            </div>
+            <p class="muted" id="generatedAt">数据生成时间未知</p>
+          </div>
+          <div class="metric-grid" id="metricGrid"></div>
+          <div class="content-grid two">
+            <article class="panel">
+              <div class="panel-heading">
+                <h3>Warning 摘要</h3>
+                <span class="badge warning">候选风险</span>
+              </div>
+              <div id="warningSummary" class="list-stack"></div>
+            </article>
+            <article class="panel">
+              <div class="panel-heading">
+                <h3>最近项目</h3>
+                <span class="badge neutral">按索引更新时间</span>
+              </div>
+              <div id="recentProjects" class="list-stack"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="view-projects" aria-labelledby="projectsTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">项目上下文</p>
+              <h2 id="projectsTitle">项目页</h2>
+            </div>
+            <p class="muted">项目类型不自动判定；证据不足时显示未知。</p>
+          </div>
+          <div id="projectsList" class="card-list"></div>
+        </section>
+
+        <section class="view" id="view-sessions" aria-labelledby="sessionsTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">会话索引</p>
+              <h2 id="sessionsTitle">会话页</h2>
+            </div>
+            <p class="muted">只展示元数据和 rollout 是否存在，不展示会话正文。</p>
+          </div>
+          <div id="sessionsList" class="table-wrap"></div>
+        </section>
+
+        <section class="view" id="view-skills" aria-labelledby="skillsTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">能力来源</p>
+              <h2 id="skillsTitle">Skills 页</h2>
+            </div>
+            <p class="muted">区分本地 skill、系统 skill 和插件 skill。</p>
+          </div>
+          <div id="skillsList" class="card-list compact"></div>
+        </section>
+
+        <section class="view" id="view-harness" aria-labelledby="harnessTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">验证入口候选</p>
+              <h2 id="harnessTitle">Harness 页</h2>
+            </div>
+            <p class="muted">只展示候选入口，不展示命令正文，不提供运行按钮。</p>
+          </div>
+          <div id="harnessList" class="card-list compact"></div>
+        </section>
+
+        <section class="view" id="view-tasks" aria-labelledby="tasksTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">任务队列</p>
+              <h2 id="tasksTitle">任务线页</h2>
+            </div>
+            <p class="muted">从 `product-line/tasks/README.md` 轻量解析状态。</p>
+          </div>
+          <div id="tasksList" class="content-grid four"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="emptyTemplate">
+      <div class="empty-state">
+        <strong>未知或暂无数据</strong>
+        <span>索引没有提供这个字段，页面不做推断。</span>
+      </div>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

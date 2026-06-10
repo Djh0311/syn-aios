@@ -1,0 +1,11 @@
+status: completed
+marker: H5_LEVEL_B2_MARIO_TEST_CODEX_DEV_WRITE_PROBE_OK_2026_06_08
+scope: workspace_write_project_workflow_dispatch_probe
+changed_files:
+- .workbench/h5-b2/real-dispatch-write-probe.md
+unchanged_core_files:
+- index.html
+- styles.css
+- game.js
+- README.md
+process_fact_candidate: codex-local worker received a project-workflow-bound dispatch and wrote the authorized probe file only.

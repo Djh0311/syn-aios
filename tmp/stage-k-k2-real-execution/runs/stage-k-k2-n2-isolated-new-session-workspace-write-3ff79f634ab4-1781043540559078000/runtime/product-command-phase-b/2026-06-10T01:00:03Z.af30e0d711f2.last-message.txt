@@ -1,0 +1,2 @@
+K2_N2_ISOLATED_NEW_SESSION_WRITE_OK_2026_06_10
+/Users/yoyi/workspace/product-line/test-fixtures/stage-k-isolated-project/.workbench/stage-k/k2/new-session-write-probe.md

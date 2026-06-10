@@ -1,0 +1,61 @@
+{
+  "artifacts": [
+    {
+      "allowed_write": [
+        "/Users/yoyi/Documents/mario test"
+      ],
+      "artifact_id": "artifact:h5-level-b1:mario-test:codex-dev:read-only-probe:v1",
+      "artifact_type": "task_package",
+      "memory_packet_snapshot": {
+        "estimated_tokens": 0,
+        "excluded_items": [],
+        "fingerprint": "h5-level-b1-memory-fingerprint-mario-test-codex-dev-2026-06-08",
+        "generated_at": "2026-06-08T00:29:00Z",
+        "included_memories": [],
+        "max_estimated_tokens": 2000,
+        "project_id": "project:users-yoyi-documents-mario-test",
+        "retrieval_intent": "worker_task",
+        "review_materials": [],
+        "role_id": "codex-dev",
+        "schema_version": "task_package_memory_packet_snapshot.v1",
+        "snapshot_id": "task-memory-packet-snapshot:h5-level-b1:mario-test:codex-dev:2026-06-08",
+        "source_packet_id": "task-memory-packet:h5-level-b1:mario-test:codex-dev:2026-06-08",
+        "stale": false,
+        "stale_reasons": [],
+        "store_revisions": {
+          "candidate_store_revision": 0,
+          "entity_relation_store_revision": 0,
+          "formal_store_revision": 0,
+          "lint_store_revision": 0,
+          "observation_store_revision": 0
+        },
+        "task_package_artifact_id": "artifact:h5-level-b1:mario-test:codex-dev:read-only-probe:v1",
+        "warnings": [],
+        "work_item_id": "work-item:h5-level-b1:mario-test:codex-dev:read-only-probe:v1",
+        "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+      },
+      "source_ref": "work-item:h5-level-b1:mario-test:codex-dev:read-only-probe:v1"
+    }
+  ],
+  "revision": 1,
+  "workflow_node_dispatches": [
+    {
+      "authorization_check": {
+        "status": "authorized"
+      },
+      "dispatch_id": "dispatch:h5-level-b1:mario-test:codex-dev:read-only-probe:v1",
+      "memory_packet_fingerprint": "h5-level-b1-memory-fingerprint-mario-test-codex-dev-2026-06-08",
+      "memory_packet_snapshot_id": "task-memory-packet-snapshot:h5-level-b1:mario-test:codex-dev:2026-06-08",
+      "native_thread_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+      "plan_authorization_id": "authorization:h5-level-b1:mario-test:codex-dev:read-only-probe:v1",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "prompt_kind": "h5_level_b1_authorized_project_workflow_dispatch",
+      "prompt_preview": "redacted prompt preview; body is workbench-managed and sent via stdin only",
+      "state": "prepared",
+      "task_package_id": "artifact:h5-level-b1:mario-test:codex-dev:read-only-probe:v1",
+      "work_item_id": "work-item:h5-level-b1:mario-test:codex-dev:read-only-probe:v1",
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    }
+  ]
+}

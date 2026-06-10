@@ -1,0 +1,317 @@
+{
+  "schema_version": "real_execution_product_commands.v1",
+  "revision": 4,
+  "created_at": "2026-06-09T09:00:00Z",
+  "updated_at": "2026-06-09T09:00:03Z",
+  "last_write_id": "pcr9a_phase_b:real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1:4",
+  "commands": [
+    {
+      "product_command_id": "real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1",
+      "command_family": "real_execution_product_command",
+      "operation_id": "resume",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "project_root": "/Users/yoyi/Documents/mario test",
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+      "work_item_id": "work-item:pcr9-b1:mario-test:codex-dev:read-only-probe:v1",
+      "task_package_ref": "artifact:pcr9-b1:mario-test:codex-dev:read-only-probe:v1",
+      "memory_packet_ref": "task-memory-packet-snapshot:pcr9-b1:mario-test:codex-dev:2026-06-09",
+      "adapter_id": "codex-local",
+      "session_mode": "resume_existing_session",
+      "target_session_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+      "sandbox": "read-only",
+      "prompt_summary": "PCR9 Level B read-only unified product command resume probe for mario test codex-dev worker.",
+      "prompt_ref": "workbench-managed:pcr9:mario-test:codex-dev:read-only-unified-product-command-probe:v1",
+      "prompt_hash": "99f65e9f986272da4b1dfda91261b0bed32621b963b515e08296384443d650cc",
+      "allowed_write_roots": [
+        "/Users/yoyi/Documents/mario test"
+      ],
+      "denied_paths": [
+        "/Users/yoyi/.codex unless Level B explicitly authorizes minimal scope",
+        "auth/token/secret/.env/keychain/OAuth/provider credential",
+        "full transcript/rollout by default"
+      ],
+      "readback_plan": "unknown result remains null; never display failed readback as 0 results",
+      "timeout_ms": null,
+      "requested_by": "project_director",
+      "created_at": "2026-06-09T09:00:00Z"
+    }
+  ],
+  "previews": [
+    {
+      "preview_id": "real-exec-preview:h5-level-a-preview:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1:1780975668203",
+      "request": {
+        "product_command_id": "real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1",
+        "command_family": "real_execution_product_command",
+        "operation_id": "resume",
+        "project_id": "project:users-yoyi-documents-mario-test",
+        "project_root": "/Users/yoyi/Documents/mario test",
+        "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+        "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+        "work_item_id": "work-item:pcr9-b1:mario-test:codex-dev:read-only-probe:v1",
+        "task_package_ref": "artifact:pcr9-b1:mario-test:codex-dev:read-only-probe:v1",
+        "memory_packet_ref": "task-memory-packet-snapshot:pcr9-b1:mario-test:codex-dev:2026-06-09",
+        "adapter_id": "codex-local",
+        "session_mode": "resume_existing_session",
+        "target_session_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+        "sandbox": "read-only",
+        "prompt_summary": "PCR9 Level B read-only unified product command resume probe for mario test codex-dev worker.",
+        "prompt_ref": "workbench-managed:pcr9:mario-test:codex-dev:read-only-unified-product-command-probe:v1",
+        "prompt_hash": "99f65e9f986272da4b1dfda91261b0bed32621b963b515e08296384443d650cc",
+        "allowed_write_roots": [
+          "/Users/yoyi/Documents/mario test"
+        ],
+        "denied_paths": [
+          "/Users/yoyi/.codex unless Level B explicitly authorizes minimal scope",
+          "auth/token/secret/.env/keychain/OAuth/provider credential",
+          "full transcript/rollout by default"
+        ],
+        "readback_plan": "unknown result remains null; never display failed readback as 0 results",
+        "timeout_ms": null,
+        "requested_by": "project_director",
+        "created_at": "2026-06-09T09:00:00Z"
+      },
+      "permission_envelope": {
+        "envelope_id": "permission-envelope:real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1",
+        "product_command_id": "real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1",
+        "status": "awaiting_explicit_level_b_authorization",
+        "explicit_user_confirmation_required": true,
+        "approved_for_real_execution": false,
+        "confirmed_by": null,
+        "allowed_write_roots": [
+          "/Users/yoyi/Documents/mario test"
+        ],
+        "denied_paths": [
+          "/Users/yoyi/.codex unless Level B explicitly authorizes minimal scope",
+          "auth/token/secret/.env/keychain/OAuth/provider credential",
+          "full transcript/rollout by default"
+        ],
+        "risk_summary": "PCR2 preview only; PCR3 user decision and later execute gate are required.",
+        "warnings": [
+          "do_not_show_codex_received_task_before_real_execution",
+          "do_not_show_worker_running_before_real_execution"
+        ]
+      },
+      "readiness": {
+        "status": "ready_for_pcr3_decision_preview_only",
+        "runner_call_allowed": false,
+        "level_b_authorization_required": true,
+        "blocked_reasons": [],
+        "warnings": [
+          "pcr2_prepare_does_not_execute",
+          "pcr3_decision_required_before_any_runner"
+        ]
+      },
+      "guard_preview": {
+        "status": "ready_for_pcr3_decision_no_runner",
+        "runner_call_allowed": false,
+        "blocks_execution": false,
+        "reasons": [],
+        "required_fixes": [
+          "H1 dry-run 也必须引用已确认的工作台授权/确认记录。"
+        ],
+        "warnings": [
+          "guard_inspected_only_no_phase_a_or_phase_b_call",
+          "user_confirmation_is_deferred_to_pcr3"
+        ]
+      },
+      "diagnostics_summary": {
+        "status": "ok",
+        "blocks_real_execution": false,
+        "degraded_reasons": [],
+        "warnings": [
+          "diagnostics_summary_mapped_from_h5_preview"
+        ]
+      },
+      "duplicate_scope": {
+        "scope_id": "h5:workflow:users-yoyi-documents-mario-test:default:node:codex-dev:work-item:pcr9-b1:mario-test:codex-dev:read-only-probe:v1:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1",
+        "active_attempt_count": 0,
+        "duplicate_blocked": false,
+        "warnings": [
+          "duplicate_scope_mapped_from_h5_active_attempts"
+        ]
+      },
+      "runtime_log_preview": {
+        "status": "preview_only_not_written",
+        "runtime_log_refs": [
+          "runtime-log-preview:h5:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1"
+        ],
+        "redaction_status": "redacted_safe_summary_only",
+        "warnings": [
+          "runtime_log_refs_are_preview_only_not_written"
+        ]
+      },
+      "audit_preview": {
+        "status": "preview_only_not_written",
+        "audit_refs": [
+          "audit-preview:h5-permission:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1"
+        ],
+        "warnings": [
+          "audit_refs_are_preview_only_not_written"
+        ]
+      },
+      "readback_boundary": {
+        "status": "not_attempted",
+        "attempted": false,
+        "real_readback_performed": false,
+        "result_count": null,
+        "unavailable_reason": "pcr2_preview_no_real_readback",
+        "warnings": [
+          "h4_unknown_readback_states_keep_result_count_null"
+        ]
+      },
+      "warnings": [
+        "h5_level_a_preview_only_no_real_runner",
+        "prompt_body_not_included",
+        "do_not_show_codex_received_task_before_real_execution",
+        "do_not_show_worker_running_before_real_execution",
+        "runtime_log_and_audit_refs_are_preview_only_not_written",
+        "h1_guard_preview:user_confirmation_required",
+        "pcr2_preview_mapped_from_h5_no_real_execution",
+        "pcr3_user_decision_required_before_execute"
+      ],
+      "blocked_reasons": [],
+      "prompt_sent": false,
+      "real_codex_executed": false,
+      "writes_codex_home": false,
+      "writes_project_files": false,
+      "writes_workbench_state": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "real-exec-decision:real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1:2",
+      "product_command_id": "real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1",
+      "decision": "approved",
+      "confirmed_by": "user",
+      "confirmed_at": "2026-06-09T09:00:01Z",
+      "store_revision": 2,
+      "risk_acknowledgement": "User authorized PCR9 Level B unified product command real resume once.",
+      "allowed_once": true,
+      "reason": "PCR9 B1/B2 real probe authorization from user and global supervisor."
+    }
+  ],
+  "attempts": [
+    {
+      "attempt_id": "real-exec-command-attempt:phase-a:real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1:3",
+      "product_command_id": "real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1",
+      "continuation_id": "session-continuation:v1:f5d65043975bb550c9c3a9467025972b14287ad0829ce94f275e1c1af85f36fb",
+      "adapter_id": "codex-local",
+      "operation_id": "resume",
+      "status": "phase_a_noop_completed",
+      "started_at": "2026-06-09T09:00:02Z",
+      "completed_at": "2026-06-09T09:00:02Z",
+      "runner_call_allowed": false,
+      "prompt_sent": false,
+      "real_codex_executed": false,
+      "writes_codex_home": false,
+      "writes_project_files": false,
+      "runtime_log_ref": "runtime-log:dispatch-attempt:session-continuation-attempt:h2-phase-a:2026-06-09T09:00:02Z:b3b2cd092c06cba5",
+      "audit_refs": [
+        "audit:session-continuation-h2-phase-a-completed:2026-06-09T09:00:02Z:b3b2cd092c06cba5",
+        "audit:session-continuation-h2-phase-a-started:2026-06-09T09:00:02Z:b3b2cd092c06cba5"
+      ],
+      "readback_summary": {
+        "status": "readback_unavailable",
+        "attempted": true,
+        "real_readback_performed": false,
+        "result_count": null,
+        "unavailable_reason": "H2.5 Phase A 不读取真实 transcript；unavailable/failed/timed_out 不等于 0 条结果。",
+        "warnings": [
+          "pcr4_phase_a_no_real_readback",
+          "readback_unavailable_is_not_zero_results"
+        ]
+      },
+      "failure_reason": "H2.5 Phase A built structured command plan for codex, but did not spawn Codex.",
+      "warnings": [
+        "pcr4_phase_a_noop_completed",
+        "runner_call_allowed_false_phase_a_noop_only",
+        "prompt_not_sent",
+        "real_codex_executed_false",
+        "codex_home_not_touched",
+        "project_files_not_written",
+        "readback_unavailable_is_not_zero_results"
+      ]
+    },
+    {
+      "attempt_id": "real-exec-command-attempt:phase-b:real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1:4",
+      "product_command_id": "real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1",
+      "continuation_id": "session-continuation:v1:f5d65043975bb550c9c3a9467025972b14287ad0829ce94f275e1c1af85f36fb",
+      "adapter_id": "codex-local",
+      "operation_id": "resume",
+      "status": "phase_b_real_resume_executed",
+      "started_at": "2026-06-09T09:00:03Z",
+      "completed_at": "2026-06-09T09:00:03Z",
+      "runner_call_allowed": true,
+      "prompt_sent": true,
+      "real_codex_executed": true,
+      "writes_codex_home": true,
+      "writes_project_files": false,
+      "runtime_log_ref": "runtime-log:dispatch-attempt:session-continuation-attempt:h2-phase-b:2026-06-09T09:00:03Z:b3b2cd092c06cba5",
+      "audit_refs": [
+        "audit:session-continuation-confirmed:2026-06-09T09:00:02Z:b3b2cd092c06cba5",
+        "audit:session-continuation-h2-phase-b-completed:2026-06-09T09:00:03Z:b3b2cd092c06cba5",
+        "audit:session-continuation-h2-phase-b-started:2026-06-09T09:00:03Z:b3b2cd092c06cba5"
+      ],
+      "readback_summary": {
+        "status": "succeeded",
+        "attempted": true,
+        "real_readback_performed": true,
+        "result_count": 1,
+        "unavailable_reason": null,
+        "warnings": [
+          "readback_unavailable_or_failed_is_not_zero_results",
+          "raw_transcript_not_read_in_h2_phase_b"
+        ]
+      },
+      "failure_reason": null,
+      "warnings": [
+        "pcr9a_product_command_phase_b_bridge",
+        "stdin_prompt_runtime_only_not_persisted",
+        "continuation_phase_b_status:succeeded",
+        "authorization_status:phase_b_real_resume_executed",
+        "argv_only_no_shell",
+        "codex_local_attempt_ref:codex-local-attempt:h2-phase-b:2026-06-09T09:00:03Z:4b5d997c3b6a9ec3",
+        "command_family:controlled_session_continuation",
+        "h2_phase_b_real_runner_path",
+        "h5_unified_product_command_boundary",
+        "operation_id:resume",
+        "phase_b_exit_code_redacted:Some(0)",
+        "phase_b_real_codex_process_spawned",
+        "phase_b_real_codex_resume_authorized",
+        "planned_adapters_not_connected",
+        "product_command:run_controlled_session_continuation_real_resume_phase_b",
+        "product_gate_status:authorized_for_real_runner",
+        "project_file_diff_must_be_verified_by_hash",
+        "prompt_body_not_persisted_by_runner",
+        "prompt_body_sent_via_stdin_not_persisted",
+        "prompt_via_stdin_only",
+        "raw_stdout_stderr_not_persisted",
+        "raw_transcript_not_read",
+        "readback_required_by_product_gate",
+        "readback_unavailable_or_failed_is_not_zero_results",
+        "real_execution_command_gate_v1",
+        "runner_call_allowed_after_unified_product_gate",
+        "stderr_summary:Reading prompt from stdin... 2026-06-09T03:27:48.478327Z WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported 2026-06-09T03:27:48.577918Z WARN codex_rmcp_client::stdio_server_launcher: Failed to terminate MCP process group 21086: Operation not permitted (os error 1) 2026-06-09T03:27:48.578383Z WARN codex_rmcp_client::stdio_server_launcher: Failed to ",
+        "workbench_managed_last_message_ref:/Users/yoyi/workspace/product-line/tmp/pcr9-real-product-command/runs/b1-run-1780975668202642000/runtime/product-command-phase-b/2026-06-09T09:00:03Z.b7ef67d39dc3.last-message.txt",
+        "writes_workbench_state_true"
+      ]
+    }
+  ],
+  "audit_refs": [
+    "audit:session-continuation-confirmed:2026-06-09T09:00:02Z:b3b2cd092c06cba5",
+    "audit:session-continuation-h2-phase-a-completed:2026-06-09T09:00:02Z:b3b2cd092c06cba5",
+    "audit:session-continuation-h2-phase-a-started:2026-06-09T09:00:02Z:b3b2cd092c06cba5",
+    "audit:session-continuation-h2-phase-b-completed:2026-06-09T09:00:03Z:b3b2cd092c06cba5",
+    "audit:session-continuation-h2-phase-b-started:2026-06-09T09:00:03Z:b3b2cd092c06cba5",
+    "real-exec-command-audit:real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1:real-exec-decision:real-exec-command:dispatch:pcr9-b1:mario-test:codex-dev:read-only-probe:v1:2"
+  ],
+  "warnings": [
+    "pcr1_store_skeleton_only",
+    "no_real_execution_product_command_sidecar_written_by_pcr1",
+    "pcr2_prepare_wrote_command_and_preview_only",
+    "pcr3_decision_recorded_no_runner_no_attempt",
+    "pcr4_phase_a_noop_attempt_recorded_no_real_codex",
+    "pcr9a_phase_b_attempt_recorded_from_product_command_bridge"
+  ]
+}

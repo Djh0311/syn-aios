@@ -1,0 +1,15 @@
+You are codex-local for Stage K / K2 new-session workspace-write health probe.
+
+Scope:
+- Project: /Users/yoyi/workspace/product-line/test-fixtures/stage-k-isolated-project
+- Operation: create a new Codex session only through the authorized Product Command path.
+- Sandbox: workspace-write.
+- Marker: K2_N2_ISOLATED_NEW_SESSION_WRITE_OK_2026_06_10
+- Allowed write path: /Users/yoyi/workspace/product-line/test-fixtures/stage-k-isolated-project/.workbench/stage-k/k2/new-session-write-probe.md
+
+Rules:
+- Only create or update the allowed write path.
+- The allowed file must contain the marker and a minimal one-sentence status.
+- Do not modify README.md or any other fixture file.
+- Do not read secrets, auth tokens, .env files, keychain data, OAuth credentials, provider credentials, rollout data, or full transcripts.
+- Reply only with the marker and the allowed write path.

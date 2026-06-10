@@ -1,0 +1,94 @@
+{
+  "schema_version": "session_continuation_store.v1",
+  "store_version": 1,
+  "storage_kind": "sidecar_json_v0",
+  "scope": {
+    "scope_kind": "workflow_state_sidecar",
+    "workflow_state_path": "/Users/yoyi/workspace/product-line/tmp/h2-phase-b-real-resume/run-1780855910749629000/workflow-state.v0.json",
+    "sidecar_path": "/Users/yoyi/workspace/product-line/tmp/h2-phase-b-real-resume/run-1780855910749629000/session-continuations.v1.json",
+    "project_roots": [
+      "/Users/yoyi/Documents/mario test"
+    ]
+  },
+  "revision": 1,
+  "last_write_id": "write-h2-phase-b-real-confirm",
+  "generated_by": "control_core",
+  "created_at": "2026-06-08T00:00:00Z",
+  "updated_at": "2026-06-08T00:00:00Z",
+  "continuations": [
+    {
+      "record_version": 1,
+      "continuation_id": "session-continuation:v1:51fd2f4a011059f5d6a2fc77f90aba033834641e0bfcfea01aa3ec695d1e4522",
+      "preview_id": "session-continuation-preview:codex-local:resume:binding",
+      "adapter_id": "codex-local",
+      "operation_id": "resume",
+      "project_id": "project:mario-test",
+      "project_root": "/Users/yoyi/Documents/mario test",
+      "workflow_id": "workflow:mario-test:h2-phase-b",
+      "node_id": "node:global-director:h2-phase-b",
+      "session_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+      "target_cwd": "/Users/yoyi/Documents/mario test",
+      "allowed_write_roots": [
+        "/Users/yoyi/Documents/mario test"
+      ],
+      "sandbox": "workspace-write",
+      "prompt_source_kind": "task_package_summary",
+      "prompt_summary": "H2 Phase B mario test safe real resume probe",
+      "command_preview": "Level A preview only: codex exec resume --skip-git-repo-check --json --output-last-message <workbench-managed> -C /Users/yoyi/Documents/mario test --sandbox workspace-write 019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+      "readback_strategy": "required",
+      "status": "preview_confirmed",
+      "execution_level": "level_a_stub_only",
+      "runner_kind": "stub",
+      "user_confirmation_state": "confirmed",
+      "guard_status": "needs_user_confirmation",
+      "requested_by": "workbench_e4_preview",
+      "confirmed_by": "user_and_global_supervisor",
+      "confirmation_reason": "用户授权测试项目和 mario test 权限，执行 H2 Phase B 安全 probe。",
+      "created_at": "2026-06-08T00:00:00Z",
+      "updated_at": "2026-06-08T00:00:00Z",
+      "audit_refs": [
+        "audit:session-continuation-confirmed:2026-06-08T00:00:00Z:09a276f40fad45aa"
+      ],
+      "warnings": [
+        "codex_local_only",
+        "controlled_session_continuation_only",
+        "level_a_stub_only",
+        "level_b_real_execution_requires_user_approval",
+        "no_planned_adapter_execution",
+        "prompt_sent_false",
+        "real_codex_executed_false",
+        "requires_project_workflow_node_session_binding",
+        "writes_codex_home_false"
+      ]
+    }
+  ],
+  "attempts": [],
+  "audit_events": [
+    {
+      "event_version": 1,
+      "event_id": "audit:session-continuation-confirmed:2026-06-08T00:00:00Z:09a276f40fad45aa",
+      "event_type": "session_continuation_preview_confirmed",
+      "continuation_id": "session-continuation:v1:51fd2f4a011059f5d6a2fc77f90aba033834641e0bfcfea01aa3ec695d1e4522",
+      "attempt_id": null,
+      "preview_id": "session-continuation-preview:codex-local:resume:binding",
+      "actor_role": "user_and_global_supervisor",
+      "before_status": null,
+      "after_status": "preview_confirmed",
+      "store_revision": 1,
+      "reason": "用户授权测试项目和 mario test 权限，执行 H2 Phase B 安全 probe。",
+      "created_at": "2026-06-08T00:00:00Z",
+      "warnings": [
+        "codex_local_only",
+        "controlled_session_continuation_only",
+        "level_a_stub_only",
+        "level_b_real_execution_requires_user_approval",
+        "no_planned_adapter_execution",
+        "prompt_sent_false",
+        "real_codex_executed_false",
+        "requires_project_workflow_node_session_binding",
+        "writes_codex_home_false"
+      ]
+    }
+  ],
+  "warnings": []
+}

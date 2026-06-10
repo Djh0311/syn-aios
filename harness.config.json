@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "ai-agent-workbench-product-line",
+    "type": "mixed",
+    "description": "Codex 会话管理和 Codex 工作流编排产品线。Harness 用于协助开发治理、检查和证据纪律，不替代产品工作流本身。"
+  },
+  "commands": {
+    "packageManager": "npm",
+    "install": "npm --prefix prototypes/productized-desktop-shell install",
+    "lint": "",
+    "typecheck": "npm --prefix prototypes/productized-desktop-shell run typecheck",
+    "test": "npm --prefix prototypes/productized-desktop-shell run test:offline-interaction",
+    "testUnit": "python3 -m unittest discover prototypes/index-kernel/tests",
+    "testIntegration": "cargo test --manifest-path prototypes/productized-desktop-shell/src-tauri/Cargo.toml --offline",
+    "testE2E": "",
+    "build": "npm --prefix prototypes/productized-desktop-shell run build",
+    "dev": "npm --prefix prototypes/productized-desktop-shell run dev"
+  },
+  "ecosystemDetection": {
+    "plannedOnly": true,
+    "commonEntrypoints": [
+      "README.md",
+      "CURRENT.md",
+      "tasks/README.md",
+      "prototypes/productized-desktop-shell/package.json",
+      "prototypes/productized-desktop-shell/src-tauri/Cargo.toml",
+      "prototypes/index-kernel/build_index.py"
+    ],
+    "inferredCommands": [
+      "npm --prefix prototypes/productized-desktop-shell run typecheck",
+      "npm --prefix prototypes/productized-desktop-shell run test:offline-interaction",
+      "npm --prefix prototypes/productized-desktop-shell run build",
+      "cargo test --manifest-path prototypes/productized-desktop-shell/src-tauri/Cargo.toml --offline",
+      "python3 -m unittest discover prototypes/index-kernel/tests"
+    ]
+  },
+  "runtimeDocs": {
+    "templateSource": "templates/docs",
+    "projectTarget": "docs",
+    "protected": [
+      "CURRENT.md",
+      "STAGE_PLAN.md",
+      "DEV_LINES.md",
+      "PROTOTYPE_WORK_LINES.md",
+      "principles.md",
+      "tasks/**",
+      "evidence/**",
+      "handoffs/**",
+      "decisions/**",
+      "archive/**",
+      "docs/current-state.md",
+      "docs/requirements-matrix.md",
+      "docs/task-queue.md",
+      "docs/decisions.md",
+      "docs/open-questions.md",
+      "docs/context-checkpoints.md",
+      "docs/sprint-contract.md",
+      "docs/agent-mistake-ledger.md",
+      "docs/tooling-and-mcp-registry.md",
+      "docs/evidence/**",
+      "docs/plans/**"
+    ]
+  },
+  "protectedPaths": [
+    ".env",
+    ".env.*",
+    "CURRENT.md",
+    "STAGE_PLAN.md",
+    "DEV_LINES.md",
+    "PROTOTYPE_WORK_LINES.md",
+    "principles.md",
+    "tasks/**",
+    "evidence/**",
+    "handoffs/**",
+    "decisions/**",
+    "archive/**",
+    "prototypes/index-kernel/codex-index.json",
+    "prototypes/productized-desktop-shell/src-tauri/target/**",
+    "prototypes/productized-desktop-shell/dist/**",
+    "prototypes/productized-desktop-shell/node_modules/**",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock"
+  ],
+  "policy": {
+    "mode": "balanced",
+    "git": {
+      "requireRepository": false,
+      "blockProtectedPathChanges": true,
+      "allowDirtyWorktree": true
+    },
+    "ci": {
+      "required": false,
+      "providers": []
+    },
+    "evidence": {
+      "requireFreshForCompletion": true,
+      "maxAgeHours": 24,
+      "writeIndexOnFinish": false,
+      "retentionMaxAgeDays": 30,
+      "retentionDryRunByDefault": true,
+      "compactMaxLines": 120,
+      "protectStrictFailedSecurity": true
+    },
+    "ui": {
+      "requireRealBrowserEvidence": true,
+      "allowHttpOnlyReachability": false
+    },
+    "hooks": {
+      "enabled": false,
+      "preCommit": "advisory",
+      "prePush": "advisory"
+    },
+    "disabledChecks": []
+  },
+  "ui": {
+    "targets": [
+      {
+        "name": "codex-governance-workbench-vite",
+        "url": "http://127.0.0.1:5173",
+        "viewports": ["desktop"],
+        "requiredEvidence": ["route", "interaction", "console", "network", "screenshot-or-dom"]
+      }
+    ]
+  },
+  "tools": {
+    "browser": {
+      "preferred": "Codex in-app Browser",
+      "fallbacks": ["Chrome DevTools MCP", "Playwright", "manual user verification"]
+    },
+    "mcp": {
+      "required": [],
+      "preferred": ["Chrome DevTools MCP"],
+      "optional": ["GitHub MCP", "Figma MCP", "Sentry MCP", "DB MCP"]
+    }
+  },
+  "gates": {
+    "hard": [
+      "no-false-completion",
+      "no-runtime-doc-overwrite",
+      "no-unauthorized-write-scope",
+      "fresh-verification-for-completion",
+      "browser-evidence-for-ui-completion"
+    ],
+    "soft": [
+      "prefer-tdd-for-behavior-changes",
+      "prefer-durable-evidence-for-strict-work",
+      "prefer-evaluator-review-for-high-risk-work"
+    ],
+    "escapeHatch": {
+      "requiresExplicitUserConfirmation": true,
+      "recordReason": true
+    }
+  },
+  "preWork": {
+    "recommendedChecks": [
+      "node scripts/harness/config-check.js --target .",
+      "node scripts/harness/capability-scan.js --target .",
+      "node scripts/harness/verification-plan.js --target .",
+      "node scripts/harness/mcp-doctor.js --target .",
+      "node scripts/harness/status-snapshot.js --target .",
+      "node scripts/harness/guard-state-files.js --target .",
+      "node scripts/harness/mistake-check.js --target ."
+    ],
+    "strictPathRecommendedChecks": [
+      "node scripts/harness/config-check.js --target . --strict",
+      "node scripts/harness/verification-plan.js --target . --strict",
+      "node scripts/harness/status-snapshot.js --target . --strict",
+      "node scripts/harness/guard-state-files.js --target . --strict",
+      "node scripts/harness/mistake-check.js --target . --strict"
+    ]
+  },
+  "preCompletion": {
+    "recommendedChecks": [
+      "node scripts/harness/config-check.js --target .",
+      "node scripts/harness/capability-scan.js --target .",
+      "node scripts/harness/verification-plan.js --target .",
+      "node scripts/harness/status-snapshot.js --target .",
+      "node scripts/harness/guard-state-files.js --target .",
+      "node scripts/harness/evidence-check.js --target .",
+      "node scripts/harness/evidence-freshness.js --target .",
+      "node scripts/harness/browser-evidence-check.js --target .",
+      "node scripts/harness/mistake-check.js --target ."
+    ],
+    "strictPathRecommendedChecks": [
+      "node scripts/harness/config-check.js --target . --strict",
+      "node scripts/harness/verification-plan.js --target . --strict",
+      "node scripts/harness/status-snapshot.js --target . --strict",
+      "node scripts/harness/guard-state-files.js --target . --strict",
+      "node scripts/harness/evidence-check.js --target . --strict",
+      "node scripts/harness/evidence-freshness.js --target . --strict",
+      "node scripts/harness/browser-evidence-check.js --target . --strict",
+      "node scripts/harness/mistake-check.js --target . --strict"
+    ]
+  },
+  "completionProtocol": {
+    "preCompletionIsAggregateCheck": true,
+    "preCompletionDoesNotReplaceFreshVerification": true,
+    "requiredBeforeStrictCompletion": [
+      "运行与任务相关的真实验证命令。",
+      "前端或 Tauri UI 改动必须有真实浏览器、Tauri smoke 或明确缺口说明。",
+      "回收时区分代码完成、测试通过、真实可用和用户已验证。"
+    ],
+    "uiVerifyMode": "HTTP reachability is not enough for UI acceptance."
+  },
+  "memoryIntegration": {
+    "enabled": false,
+    "provider": "agentmemory",
+    "mode": "governed",
+    "endpoint": "http://127.0.0.1:3111",
+    "auth": {
+      "secretEnv": "AGENTMEMORY_SECRET"
+    },
+    "readPolicy": {
+      "maxMemoriesPerTask": 5,
+      "maxMemoryChars": 1200,
+      "requireProvenance": true,
+      "allowUnverified": false,
+      "staleAfterDays": 30,
+      "respectProjectDocsOverMemory": true
+    },
+    "writePolicy": {
+      "autoWrite": false,
+      "candidateQueue": true,
+      "requirePromotion": true,
+      "blockSecrets": true,
+      "quarantinePromptInjection": true
+    },
+    "retention": {
+      "reviewAfterDays": 30
+    }
+  }
+}

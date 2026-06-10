@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Codex 治理工作台 Tauri 探针</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Tauri 最小能力验证</p>
+          <h1>Codex 治理工作台</h1>
+          <p class="summary">
+            这个探针只读取静态索引，只允许对索引内路径执行复制、打开项目目录和定位 rollout 文件。
+          </p>
+        </div>
+        <button id="reloadButton" type="button">重新读取索引</button>
+      </section>
+
+      <section class="notice" id="notice" aria-live="polite">
+        等待加载。
+      </section>
+
+      <section class="grid" aria-label="索引摘要">
+        <article class="metric">
+          <span>项目</span>
+          <strong id="projectCount">-</strong>
+        </article>
+        <article class="metric">
+          <span>会话</span>
+          <strong id="threadCount">-</strong>
+        </article>
+        <article class="metric">
+          <span>Skills</span>
+          <strong id="skillCount">-</strong>
+        </article>
+        <article class="metric">
+          <span>Plugins</span>
+          <strong id="pluginCount">-</strong>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">索引来源</p>
+            <h2>只读数据</h2>
+          </div>
+          <span id="generatedAt" class="pill">生成时间未知</span>
+        </div>
+        <dl class="facts">
+          <div>
+            <dt>索引文件</dt>
+            <dd id="indexPath">未知</dd>
+          </div>
+          <div>
+            <dt>可打开项目路径</dt>
+            <dd id="projectActionCount">未知</dd>
+          </div>
+          <div>
+            <dt>可定位 rollout 路径</dt>
+            <dd id="rolloutActionCount">未知</dd>
+          </div>
+          <div>
+            <dt>Warning</dt>
+            <dd id="warnings">未知</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="actions">
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">项目路径</p>
+              <h2>打开项目目录</h2>
+            </div>
+          </div>
+          <p class="path" id="projectPath">索引未提供项目路径</p>
+          <div class="button-row">
+            <button id="copyProjectButton" type="button">复制路径</button>
+            <button id="openProjectButton" type="button">打开目录</button>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Rollout 路径</p>
+              <h2>定位日志文件</h2>
+            </div>
+          </div>
+          <p class="path" id="rolloutPath">索引未提供 rollout 路径</p>
+          <div class="button-row">
+            <button id="copyRolloutButton" type="button">复制路径</button>
+            <button id="revealRolloutButton" type="button">定位文件</button>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

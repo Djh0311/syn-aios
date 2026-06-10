@@ -1,0 +1,218 @@
+{
+  "schema_version": "session_continuation_store.v1",
+  "store_version": 1,
+  "storage_kind": "sidecar_json_v0",
+  "scope": {
+    "scope_kind": "workflow_state_sidecar",
+    "workflow_state_path": "/Users/yoyi/workspace/product-line/tmp/h2-phase-b-real-resume/run-1780855910749629000/workflow-state.v0.json",
+    "sidecar_path": "/Users/yoyi/workspace/product-line/tmp/h2-phase-b-real-resume/run-1780855910749629000/session-continuations.v1.json",
+    "project_roots": [
+      "/Users/yoyi/Documents/mario test"
+    ]
+  },
+  "revision": 2,
+  "last_write_id": "write-h2-phase-b-real-run",
+  "generated_by": "control_core",
+  "created_at": "2026-06-08T00:00:00Z",
+  "updated_at": "2026-06-08T00:01:00Z",
+  "continuations": [
+    {
+      "record_version": 1,
+      "continuation_id": "session-continuation:v1:51fd2f4a011059f5d6a2fc77f90aba033834641e0bfcfea01aa3ec695d1e4522",
+      "preview_id": "session-continuation-preview:codex-local:resume:binding",
+      "adapter_id": "codex-local",
+      "operation_id": "resume",
+      "project_id": "project:mario-test",
+      "project_root": "/Users/yoyi/Documents/mario test",
+      "workflow_id": "workflow:mario-test:h2-phase-b",
+      "node_id": "node:global-director:h2-phase-b",
+      "session_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+      "target_cwd": "/Users/yoyi/Documents/mario test",
+      "allowed_write_roots": [
+        "/Users/yoyi/Documents/mario test"
+      ],
+      "sandbox": "workspace-write",
+      "prompt_source_kind": "task_package_summary",
+      "prompt_summary": "H2 Phase B mario test safe real resume probe",
+      "command_preview": "Level A preview only: codex exec resume --skip-git-repo-check --json --output-last-message <workbench-managed> -C /Users/yoyi/Documents/mario test --sandbox workspace-write 019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+      "readback_strategy": "required",
+      "status": "succeeded",
+      "execution_level": "h2_phase_b_real_codex_resume",
+      "runner_kind": "codex_local_phase_b_real_process_runner",
+      "user_confirmation_state": "confirmed",
+      "guard_status": "needs_user_confirmation",
+      "requested_by": "workbench_e4_preview",
+      "confirmed_by": "user_and_global_supervisor",
+      "confirmation_reason": "用户授权测试项目和 mario test 权限，执行 H2 Phase B 安全 probe。",
+      "created_at": "2026-06-08T00:00:00Z",
+      "updated_at": "2026-06-08T00:01:00Z",
+      "audit_refs": [
+        "audit:session-continuation-confirmed:2026-06-08T00:00:00Z:09a276f40fad45aa",
+        "audit:session-continuation-h2-phase-b-completed:2026-06-08T00:01:00Z:09a276f40fad45aa",
+        "audit:session-continuation-h2-phase-b-started:2026-06-08T00:01:00Z:09a276f40fad45aa"
+      ],
+      "warnings": [
+        "codex_local_only",
+        "controlled_session_continuation_only",
+        "level_a_stub_only",
+        "level_b_real_execution_requires_user_approval",
+        "no_planned_adapter_execution",
+        "prompt_sent_false",
+        "real_codex_executed_false",
+        "requires_project_workflow_node_session_binding",
+        "writes_codex_home_false",
+        "argv_only_no_shell",
+        "codex_local_attempt_ref:codex-local-attempt:h2-phase-b:2026-06-08T00:01:00Z:bf5f123eb76b5c1a",
+        "h2_phase_b_real_runner_path",
+        "phase_b_exit_code_redacted:Some(0)",
+        "phase_b_real_codex_process_spawned",
+        "phase_b_real_codex_resume_authorized",
+        "planned_adapters_not_connected",
+        "project_file_diff_must_be_verified_by_hash",
+        "prompt_body_not_persisted_by_runner",
+        "prompt_body_sent_via_stdin_not_persisted",
+        "prompt_via_stdin_only",
+        "raw_stdout_stderr_not_persisted",
+        "raw_transcript_not_read",
+        "readback_unavailable_or_failed_is_not_zero_results",
+        "stderr_summary:Reading prompt from stdin... 2026-06-07T18:11:50.835658Z WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported 2026-06-07T18:11:50.925370Z ERROR rmcp::transport::worker: worker quit with fatal: Deserialize error: data did not match any variant of untagged enum JsonRpcMessage, when send initialized notification 2026-06-07T18:11:50.945579Z WARN codex_rm",
+        "workbench_managed_last_message_ref:/Users/yoyi/workspace/product-line/tmp/h2-phase-b-real-resume/run-1780855910749629000/runtime/h2-phase-b/mario.last-message.txt",
+        "writes_workbench_state_true"
+      ]
+    }
+  ],
+  "attempts": [
+    {
+      "attempt_version": 1,
+      "attempt_id": "session-continuation-attempt:h2-phase-b:2026-06-08T00:01:00Z:09a276f40fad45aa",
+      "continuation_id": "session-continuation:v1:51fd2f4a011059f5d6a2fc77f90aba033834641e0bfcfea01aa3ec695d1e4522",
+      "runner_kind": "codex_local_phase_b_real_process_runner",
+      "execution_level": "h2_phase_b_real_codex_resume",
+      "status": "succeeded",
+      "started_at": "2026-06-08T00:01:00Z",
+      "finished_at": "2026-06-08T00:01:00Z",
+      "timeout_ms": 120000,
+      "command_preview": "Level A preview only: codex exec resume --skip-git-repo-check --json --output-last-message <workbench-managed> -C /Users/yoyi/Documents/mario test --sandbox workspace-write 019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+      "prompt_sent": true,
+      "real_codex_executed": true,
+      "writes_codex_home": true,
+      "writes_workbench_state": true,
+      "readback_summary": {
+        "status": "succeeded",
+        "source_kind": "h2_phase_b_workbench_managed_last_message",
+        "result_count": 1,
+        "unavailable_reason": null,
+        "warnings": [
+          "readback_unavailable_or_failed_is_not_zero_results",
+          "raw_transcript_not_read_in_h2_phase_b"
+        ]
+      },
+      "failure_reason": null,
+      "audit_refs": [
+        "audit:session-continuation-h2-phase-b-started:2026-06-08T00:01:00Z:09a276f40fad45aa",
+        "audit:session-continuation-h2-phase-b-completed:2026-06-08T00:01:00Z:09a276f40fad45aa"
+      ],
+      "warnings": [
+        "argv_only_no_shell",
+        "codex_local_attempt_ref:codex-local-attempt:h2-phase-b:2026-06-08T00:01:00Z:bf5f123eb76b5c1a",
+        "h2_phase_b_real_runner_path",
+        "phase_b_exit_code_redacted:Some(0)",
+        "phase_b_real_codex_process_spawned",
+        "phase_b_real_codex_resume_authorized",
+        "planned_adapters_not_connected",
+        "project_file_diff_must_be_verified_by_hash",
+        "prompt_body_not_persisted_by_runner",
+        "prompt_body_sent_via_stdin_not_persisted",
+        "prompt_via_stdin_only",
+        "raw_stdout_stderr_not_persisted",
+        "raw_transcript_not_read",
+        "readback_unavailable_or_failed_is_not_zero_results",
+        "stderr_summary:Reading prompt from stdin... 2026-06-07T18:11:50.835658Z WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported 2026-06-07T18:11:50.925370Z ERROR rmcp::transport::worker: worker quit with fatal: Deserialize error: data did not match any variant of untagged enum JsonRpcMessage, when send initialized notification 2026-06-07T18:11:50.945579Z WARN codex_rm",
+        "workbench_managed_last_message_ref:/Users/yoyi/workspace/product-line/tmp/h2-phase-b-real-resume/run-1780855910749629000/runtime/h2-phase-b/mario.last-message.txt",
+        "writes_workbench_state_true"
+      ]
+    }
+  ],
+  "audit_events": [
+    {
+      "event_version": 1,
+      "event_id": "audit:session-continuation-confirmed:2026-06-08T00:00:00Z:09a276f40fad45aa",
+      "event_type": "session_continuation_preview_confirmed",
+      "continuation_id": "session-continuation:v1:51fd2f4a011059f5d6a2fc77f90aba033834641e0bfcfea01aa3ec695d1e4522",
+      "attempt_id": null,
+      "preview_id": "session-continuation-preview:codex-local:resume:binding",
+      "actor_role": "user_and_global_supervisor",
+      "before_status": null,
+      "after_status": "preview_confirmed",
+      "store_revision": 1,
+      "reason": "用户授权测试项目和 mario test 权限，执行 H2 Phase B 安全 probe。",
+      "created_at": "2026-06-08T00:00:00Z",
+      "warnings": [
+        "codex_local_only",
+        "controlled_session_continuation_only",
+        "level_a_stub_only",
+        "level_b_real_execution_requires_user_approval",
+        "no_planned_adapter_execution",
+        "prompt_sent_false",
+        "real_codex_executed_false",
+        "requires_project_workflow_node_session_binding",
+        "writes_codex_home_false"
+      ]
+    },
+    {
+      "event_version": 1,
+      "event_id": "audit:session-continuation-h2-phase-b-started:2026-06-08T00:01:00Z:09a276f40fad45aa",
+      "event_type": "session_continuation_h2_phase_b_started",
+      "continuation_id": "session-continuation:v1:51fd2f4a011059f5d6a2fc77f90aba033834641e0bfcfea01aa3ec695d1e4522",
+      "attempt_id": "session-continuation-attempt:h2-phase-b:2026-06-08T00:01:00Z:09a276f40fad45aa",
+      "preview_id": "session-continuation-preview:codex-local:resume:binding",
+      "actor_role": "global_supervisor",
+      "before_status": "preview_confirmed",
+      "after_status": "running_h2_phase_b",
+      "store_revision": 2,
+      "reason": "H2 Phase B real codex resume started; prompt body is sent via stdin and is not persisted.",
+      "created_at": "2026-06-08T00:01:00Z",
+      "warnings": [
+        "h2_phase_b_real_runner_path",
+        "phase_b_real_codex_resume_authorized",
+        "prompt_body_sent_via_stdin_not_persisted",
+        "readback_unavailable_or_failed_is_not_zero_results",
+        "writes_workbench_state_true"
+      ]
+    },
+    {
+      "event_version": 1,
+      "event_id": "audit:session-continuation-h2-phase-b-completed:2026-06-08T00:01:00Z:09a276f40fad45aa",
+      "event_type": "session_continuation_h2_phase_b_completed",
+      "continuation_id": "session-continuation:v1:51fd2f4a011059f5d6a2fc77f90aba033834641e0bfcfea01aa3ec695d1e4522",
+      "attempt_id": "session-continuation-attempt:h2-phase-b:2026-06-08T00:01:00Z:09a276f40fad45aa",
+      "preview_id": "session-continuation-preview:codex-local:resume:binding",
+      "actor_role": "global_supervisor",
+      "before_status": "running_h2_phase_b",
+      "after_status": "succeeded",
+      "store_revision": 2,
+      "reason": "H2 Phase B real runner completed as succeeded; prompt_sent=true, real_codex_executed=true, writes_codex_home=true.",
+      "created_at": "2026-06-08T00:01:00Z",
+      "warnings": [
+        "argv_only_no_shell",
+        "codex_local_attempt_ref:codex-local-attempt:h2-phase-b:2026-06-08T00:01:00Z:bf5f123eb76b5c1a",
+        "h2_phase_b_real_runner_path",
+        "phase_b_exit_code_redacted:Some(0)",
+        "phase_b_real_codex_process_spawned",
+        "phase_b_real_codex_resume_authorized",
+        "planned_adapters_not_connected",
+        "project_file_diff_must_be_verified_by_hash",
+        "prompt_body_not_persisted_by_runner",
+        "prompt_body_sent_via_stdin_not_persisted",
+        "prompt_via_stdin_only",
+        "raw_stdout_stderr_not_persisted",
+        "raw_transcript_not_read",
+        "readback_unavailable_or_failed_is_not_zero_results",
+        "stderr_summary:Reading prompt from stdin... 2026-06-07T18:11:50.835658Z WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported 2026-06-07T18:11:50.925370Z ERROR rmcp::transport::worker: worker quit with fatal: Deserialize error: data did not match any variant of untagged enum JsonRpcMessage, when send initialized notification 2026-06-07T18:11:50.945579Z WARN codex_rm",
+        "workbench_managed_last_message_ref:/Users/yoyi/workspace/product-line/tmp/h2-phase-b-real-resume/run-1780855910749629000/runtime/h2-phase-b/mario.last-message.txt",
+        "writes_workbench_state_true"
+      ]
+    }
+  ],
+  "warnings": []
+}

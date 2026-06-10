@@ -1,0 +1,321 @@
+{
+  "schema_version": "real_execution_product_commands.v1",
+  "revision": 4,
+  "created_at": "2026-06-09T10:00:00Z",
+  "updated_at": "2026-06-09T10:00:03Z",
+  "last_write_id": "pcr9a_phase_b:real-exec-command:codex-control:bc2914f7ad1b:4",
+  "commands": [
+    {
+      "product_command_id": "real-exec-command:codex-control:bc2914f7ad1b",
+      "command_family": "real_execution_product_command",
+      "operation_id": "resume",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "project_root": "/Users/yoyi/Documents/mario test",
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+      "node_id": "node:j1-b:mario-test:codex-control:real-resume-probe:v1",
+      "work_item_id": "work-item:j1-b:mario-test:codex-control:real-resume-probe:v1",
+      "task_package_ref": "artifact:j1-b:mario-test:codex-control:real-resume-probe:v1",
+      "memory_packet_ref": "task-memory-packet-snapshot:j1-b:mario-test:codex-control:2026-06-09",
+      "adapter_id": "codex-local",
+      "session_mode": "resume",
+      "target_session_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+      "sandbox": "read-only",
+      "prompt_summary": "J1-B mario test Codex Control real resume marker probe",
+      "prompt_ref": "workbench-runtime-prompt:j1-b:mario-test:2547d65c4e86",
+      "prompt_hash": "2547d65c4e86e6357906a7a55b5923f806f719b952658606e2a6ff9d3797755b",
+      "allowed_write_roots": [
+        "/Users/yoyi/Documents/mario test"
+      ],
+      "denied_paths": [
+        "secret",
+        "token",
+        ".env",
+        "keychain",
+        "OAuth",
+        "provider credential",
+        "full transcript",
+        "rollout"
+      ],
+      "readback_plan": "Read only the workbench-managed last message for this attempt and verify the J1-B marker; do not read full transcript.",
+      "timeout_ms": 120000,
+      "requested_by": "user",
+      "created_at": "2026-06-09T10:00:00Z"
+    }
+  ],
+  "previews": [
+    {
+      "preview_id": "real-exec-preview:codex-control:3834f908f7a1",
+      "request": {
+        "product_command_id": "real-exec-command:codex-control:bc2914f7ad1b",
+        "command_family": "real_execution_product_command",
+        "operation_id": "resume",
+        "project_id": "project:users-yoyi-documents-mario-test",
+        "project_root": "/Users/yoyi/Documents/mario test",
+        "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+        "node_id": "node:j1-b:mario-test:codex-control:real-resume-probe:v1",
+        "work_item_id": "work-item:j1-b:mario-test:codex-control:real-resume-probe:v1",
+        "task_package_ref": "artifact:j1-b:mario-test:codex-control:real-resume-probe:v1",
+        "memory_packet_ref": "task-memory-packet-snapshot:j1-b:mario-test:codex-control:2026-06-09",
+        "adapter_id": "codex-local",
+        "session_mode": "resume",
+        "target_session_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+        "sandbox": "read-only",
+        "prompt_summary": "J1-B mario test Codex Control real resume marker probe",
+        "prompt_ref": "workbench-runtime-prompt:j1-b:mario-test:2547d65c4e86",
+        "prompt_hash": "2547d65c4e86e6357906a7a55b5923f806f719b952658606e2a6ff9d3797755b",
+        "allowed_write_roots": [
+          "/Users/yoyi/Documents/mario test"
+        ],
+        "denied_paths": [
+          "secret",
+          "token",
+          ".env",
+          "keychain",
+          "OAuth",
+          "provider credential",
+          "full transcript",
+          "rollout"
+        ],
+        "readback_plan": "Read only the workbench-managed last message for this attempt and verify the J1-B marker; do not read full transcript.",
+        "timeout_ms": 120000,
+        "requested_by": "user",
+        "created_at": "2026-06-09T10:00:00Z"
+      },
+      "permission_envelope": {
+        "envelope_id": "permission-envelope:real-exec-command:codex-control:bc2914f7ad1b",
+        "product_command_id": "real-exec-command:codex-control:bc2914f7ad1b",
+        "status": "awaiting_user_confirmation",
+        "explicit_user_confirmation_required": true,
+        "approved_for_real_execution": false,
+        "confirmed_by": null,
+        "allowed_write_roots": [
+          "/Users/yoyi/Documents/mario test"
+        ],
+        "denied_paths": [
+          "secret",
+          "token",
+          ".env",
+          "keychain",
+          "OAuth",
+          "provider credential",
+          "full transcript",
+          "rollout"
+        ],
+        "risk_summary": "J1-A preview only; user decision, Phase A no-op, and later Level B authorization are required.",
+        "warnings": [
+          "confirmed_by_user_required_for_high_impact_operation",
+          "prompt_body_not_stored_in_product_command"
+        ]
+      },
+      "readiness": {
+        "status": "ready_for_pcr3_decision_preview_only",
+        "runner_call_allowed": false,
+        "level_b_authorization_required": true,
+        "blocked_reasons": [],
+        "warnings": [
+          "j1a_prepare_does_not_execute",
+          "j1b_required_for_real_codex_resume"
+        ]
+      },
+      "guard_preview": {
+        "status": "ready_for_pcr3_decision_no_runner",
+        "runner_call_allowed": false,
+        "blocks_execution": false,
+        "reasons": [],
+        "required_fixes": [],
+        "warnings": [
+          "codex_control_guard_preview_only",
+          "no_cli_command_exposed_to_ordinary_ui"
+        ]
+      },
+      "diagnostics_summary": {
+        "status": "not_evaluated_j1a_preview",
+        "blocks_real_execution": false,
+        "degraded_reasons": [],
+        "warnings": [
+          "diagnostics_not_probed_in_j1a_preview"
+        ]
+      },
+      "duplicate_scope": {
+        "scope_id": "codex-control:resume:a063234b34af:fc51ae2caa51",
+        "active_attempt_count": 0,
+        "duplicate_blocked": false,
+        "warnings": [
+          "duplicate_scope_preview_only_checked_again_in_phase_a"
+        ]
+      },
+      "runtime_log_preview": {
+        "status": "preview_only_not_written",
+        "runtime_log_refs": [],
+        "redaction_status": "prompt_body_redacted_summary_ref_hash_only",
+        "warnings": [
+          "runtime_log_will_store_summary_ref_hash_only"
+        ]
+      },
+      "audit_preview": {
+        "status": "preview_only_not_written",
+        "audit_refs": [],
+        "warnings": [
+          "audit_will_store_decision_and_refs_not_prompt_body"
+        ]
+      },
+      "readback_boundary": {
+        "status": "readback_unavailable",
+        "attempted": false,
+        "real_readback_performed": false,
+        "result_count": null,
+        "unavailable_reason": "j1a_no_real_readback_before_phase_b",
+        "warnings": [
+          "readback_unavailable_is_not_zero_results"
+        ]
+      },
+      "warnings": [
+        "j1_codex_control_preview_not_h5_dispatch",
+        "prompt_body_runtime_only_not_persisted",
+        "j1a_no_real_codex_execution",
+        "phase_b_requires_separate_execution_point_authorization",
+        "memory_capture_observation_candidate_only_not_formal_memory"
+      ],
+      "blocked_reasons": [],
+      "prompt_sent": false,
+      "real_codex_executed": false,
+      "writes_codex_home": false,
+      "writes_project_files": false,
+      "writes_workbench_state": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "real-exec-decision:real-exec-command:codex-control:bc2914f7ad1b:2",
+      "product_command_id": "real-exec-command:codex-control:bc2914f7ad1b",
+      "decision": "approved",
+      "confirmed_by": "user",
+      "confirmed_at": "2026-06-09T10:00:01Z",
+      "store_revision": 2,
+      "risk_acknowledgement": "User authorized J1-B mario test Codex Control real resume once.",
+      "allowed_once": true,
+      "reason": "J1-B real resume execution point authorized by user and global supervisor."
+    }
+  ],
+  "attempts": [
+    {
+      "attempt_id": "real-exec-command-attempt:phase-a:real-exec-command:codex-control:bc2914f7ad1b:3",
+      "product_command_id": "real-exec-command:codex-control:bc2914f7ad1b",
+      "continuation_id": "session-continuation:v1:5f46570fdd060e6ce71a73a06205edb28ed5c6c33937eef8cab56f98b2e12f8e",
+      "adapter_id": "codex-local",
+      "operation_id": "resume",
+      "status": "phase_a_noop_completed",
+      "started_at": "2026-06-09T10:00:02Z",
+      "completed_at": "2026-06-09T10:00:02Z",
+      "runner_call_allowed": false,
+      "prompt_sent": false,
+      "real_codex_executed": false,
+      "writes_codex_home": false,
+      "writes_project_files": false,
+      "runtime_log_ref": "runtime-log:dispatch-attempt:session-continuation-attempt:h2-phase-a-blocked:2026-06-09T10:00:02Z:61c8c795710af3a5",
+      "audit_refs": [
+        "audit:session-continuation-h2-phase-a-blocked:2026-06-09T10:00:02Z:61c8c795710af3a5"
+      ],
+      "readback_summary": {
+        "status": "blocked_by_guard",
+        "attempted": true,
+        "real_readback_performed": false,
+        "result_count": null,
+        "unavailable_reason": "H2.5 Phase A 不读取真实 transcript；unavailable/failed/timed_out 不等于 0 条结果。",
+        "warnings": [
+          "pcr4_phase_a_no_real_readback",
+          "readback_unavailable_is_not_zero_results"
+        ]
+      },
+      "failure_reason": "H2.5 Phase A blocked: codex_local_guard:secret_deny_list_hit,codex_local_guard_blocked",
+      "warnings": [
+        "pcr4_phase_a_noop_completed",
+        "runner_call_allowed_false_phase_a_noop_only",
+        "prompt_not_sent",
+        "real_codex_executed_false",
+        "codex_home_not_touched",
+        "project_files_not_written",
+        "readback_unavailable_is_not_zero_results"
+      ]
+    },
+    {
+      "attempt_id": "real-exec-command-attempt:phase-b:real-exec-command:codex-control:bc2914f7ad1b:4",
+      "product_command_id": "real-exec-command:codex-control:bc2914f7ad1b",
+      "continuation_id": "session-continuation:v1:5f46570fdd060e6ce71a73a06205edb28ed5c6c33937eef8cab56f98b2e12f8e",
+      "adapter_id": "codex-local",
+      "operation_id": "resume",
+      "status": "phase_b_real_resume_executed",
+      "started_at": "2026-06-09T10:00:03Z",
+      "completed_at": "2026-06-09T10:00:03Z",
+      "runner_call_allowed": true,
+      "prompt_sent": true,
+      "real_codex_executed": true,
+      "writes_codex_home": true,
+      "writes_project_files": false,
+      "runtime_log_ref": "runtime-log:dispatch-attempt:session-continuation-attempt:h2-phase-b:2026-06-09T10:00:03Z:61c8c795710af3a5",
+      "audit_refs": [
+        "audit:session-continuation-confirmed:2026-06-09T10:00:02Z:61c8c795710af3a5",
+        "audit:session-continuation-h2-phase-b-completed:2026-06-09T10:00:03Z:61c8c795710af3a5",
+        "audit:session-continuation-h2-phase-b-started:2026-06-09T10:00:03Z:61c8c795710af3a5"
+      ],
+      "readback_summary": {
+        "status": "succeeded",
+        "attempted": true,
+        "real_readback_performed": true,
+        "result_count": 1,
+        "unavailable_reason": null,
+        "warnings": [
+          "readback_unavailable_or_failed_is_not_zero_results",
+          "raw_transcript_not_read_in_h2_phase_b"
+        ]
+      },
+      "failure_reason": null,
+      "warnings": [
+        "pcr9a_product_command_phase_b_bridge",
+        "stdin_prompt_runtime_only_not_persisted",
+        "continuation_phase_b_status:succeeded",
+        "authorization_status:phase_b_real_resume_executed",
+        "argv_only_no_shell",
+        "codex_local_attempt_ref:codex-local-attempt:h2-phase-b:2026-06-09T10:00:03Z:a9e792df0ff79622",
+        "command_family:controlled_session_continuation",
+        "h2_phase_b_real_runner_path",
+        "h5_unified_product_command_boundary",
+        "operation_id:resume",
+        "phase_b_exit_code_redacted:Some(0)",
+        "phase_b_real_codex_process_spawned",
+        "phase_b_real_codex_resume_authorized",
+        "planned_adapters_not_connected",
+        "product_command:run_controlled_session_continuation_real_resume_phase_b",
+        "product_gate_status:authorized_for_real_runner",
+        "project_file_diff_must_be_verified_by_hash",
+        "prompt_body_not_persisted_by_runner",
+        "prompt_body_sent_via_stdin_not_persisted",
+        "prompt_via_stdin_only",
+        "raw_stdout_stderr_not_persisted",
+        "raw_transcript_not_read",
+        "readback_required_by_product_gate",
+        "readback_unavailable_or_failed_is_not_zero_results",
+        "real_execution_command_gate_v1",
+        "runner_call_allowed_after_unified_product_gate",
+        "stderr_summary:Reading prompt from stdin... 2026-06-09T09:40:17.973566Z WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported 2026-06-09T09:40:18.071188Z WARN codex_rmcp_client::stdio_server_launcher: Failed to terminate MCP process group 41164: Operation not permitted (os error 1) 2026-06-09T09:40:18.073943Z WARN codex_rmcp_client::stdio_server_launcher: Failed to ",
+        "workbench_managed_last_message_ref:/Users/yoyi/workspace/product-line/tmp/j1-b-codex-control/runs/j1-b-run-1780998017713782000/runtime/product-command-phase-b/2026-06-09T10:00:03Z.3834f908f7a1.last-message.txt",
+        "writes_workbench_state_true"
+      ]
+    }
+  ],
+  "audit_refs": [
+    "audit:session-continuation-confirmed:2026-06-09T10:00:02Z:61c8c795710af3a5",
+    "audit:session-continuation-h2-phase-a-blocked:2026-06-09T10:00:02Z:61c8c795710af3a5",
+    "audit:session-continuation-h2-phase-b-completed:2026-06-09T10:00:03Z:61c8c795710af3a5",
+    "audit:session-continuation-h2-phase-b-started:2026-06-09T10:00:03Z:61c8c795710af3a5",
+    "real-exec-command-audit:real-exec-command:codex-control:bc2914f7ad1b:real-exec-decision:real-exec-command:codex-control:bc2914f7ad1b:2"
+  ],
+  "warnings": [
+    "pcr1_store_skeleton_only",
+    "no_real_execution_product_command_sidecar_written_by_pcr1",
+    "pcr2_prepare_wrote_command_and_preview_only",
+    "pcr3_decision_recorded_no_runner_no_attempt",
+    "pcr4_phase_a_noop_attempt_recorded_no_real_codex",
+    "pcr9a_phase_b_attempt_recorded_from_product_command_bridge"
+  ]
+}

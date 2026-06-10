@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1180" viewBox="0 0 1680 1180">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbfaf6"/>
+      <stop offset="1" stop-color="#eee8dc"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a1b1d"/>
+      <stop offset="1" stop-color="#08090a"/>
+    </linearGradient>
+    <linearGradient id="cream" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbf8ef"/>
+      <stop offset="1" stop-color="#f0eadc"/>
+    </linearGradient>
+    <linearGradient id="midnight" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0f17"/>
+      <stop offset="1" stop-color="#020406"/>
+    </linearGradient>
+    <linearGradient id="editor" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7f4ea"/>
+      <stop offset="1" stop-color="#e7dcc6"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#201a10" flood-opacity="0.16"/>
+    </filter>
+    <filter id="darkShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#000000" flood-opacity="0.38"/>
+    </filter>
+    <style>
+      .title { font-family: "Songti SC", "Noto Serif CJK SC", serif; font-size: 46px; font-weight: 700; fill: #1e1b16; }
+      .subtitle { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 18px; fill: #6e6559; }
+      .card-title { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 23px; font-weight: 700; }
+      .card-sub { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; }
+      .ui-label { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 12px; font-weight: 600; }
+      .ui-small { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 10px; }
+      .mono { font-family: "SF Mono", "Menlo", monospace; font-size: 10px; }
+    </style>
+  </defs>
+
+  <rect width="1680" height="1180" fill="url(#paper)"/>
+  <circle cx="130" cy="90" r="120" fill="#d8c7a4" opacity="0.25"/>
+  <circle cx="1510" cy="1060" r="180" fill="#9f8a63" opacity="0.16"/>
+  <path d="M0 170 C 300 120, 420 230, 690 170 S 1160 130, 1680 210" fill="none" stroke="#d1c2a7" stroke-width="1" opacity="0.7"/>
+
+  <text x="76" y="88" class="title">中间版本工作台 UI 风格候选</text>
+  <text x="78" y="123" class="subtitle">用于选择方向，不复制任何产品界面。重点是 OS Shell：项目、智能体、Skill、Harness、运行中工作流、秘书、权限、记忆、管理。</text>
+
+  <!-- Option 1 -->
+  <g transform="translate(78 170)">
+    <rect width="470" height="405" rx="28" fill="#fbfaf5" stroke="#d8c9ae" filter="url(#softShadow)"/>
+    <text x="26" y="46" class="card-title" fill="#252018">A. 纸墨操作台</text>
+    <text x="26" y="73" class="card-sub" fill="#756a5b">保留 inkwash 气质，但改成清晰 OS 面板</text>
+    <rect x="26" y="98" width="418" height="260" rx="18" fill="#f3eee3" stroke="#d8ccb6"/>
+    <rect x="44" y="118" width="82" height="220" rx="13" fill="#292720"/>
+    <circle cx="70" cy="145" r="14" fill="#f5efe0"/>
+    <text x="65" y="150" class="ui-label" fill="#292720">案</text>
+    <rect x="60" y="180" width="50" height="11" rx="5" fill="#eee3ca"/>
+    <rect x="60" y="205" width="45" height="11" rx="5" fill="#9f8761"/>
+    <rect x="60" y="230" width="54" height="11" rx="5" fill="#eee3ca"/>
+    <rect x="60" y="255" width="38" height="11" rx="5" fill="#eee3ca"/>
+    <rect x="145" y="118" width="182" height="220" rx="14" fill="#fffdf8" stroke="#ded2bc"/>
+    <text x="164" y="148" class="ui-label" fill="#2d281f">首页</text>
+    <rect x="164" y="168" width="138" height="46" rx="12" fill="#ece1c9"/>
+    <rect x="164" y="226" width="138" height="34" rx="10" fill="#f6f0e4" stroke="#e0d4bf"/>
+    <rect x="164" y="272" width="138" height="34" rx="10" fill="#f6f0e4" stroke="#e0d4bf"/>
+    <rect x="344" y="118" width="82" height="220" rx="14" fill="#fffdf8" stroke="#ded2bc"/>
+    <text x="364" y="148" class="ui-label" fill="#2d281f">秘书</text>
+    <rect x="362" y="170" width="46" height="15" rx="7" fill="#ede2c9"/>
+    <rect x="360" y="196" width="50" height="44" rx="10" fill="#f6f1e8"/>
+    <rect x="360" y="255" width="50" height="58" rx="10" fill="#f6f1e8"/>
+    <text x="26" y="384" class="card-sub" fill="#4d4538">适合：你当前喜欢的东方纸墨感；风险：如果信息密度不收敛，会继续像“文档墙”。</text>
+  </g>
+
+  <!-- Option 2 -->
+  <g transform="translate(606 170)">
+    <rect width="470" height="405" rx="28" fill="url(#ink)" stroke="#2b2e33" filter="url(#darkShadow)"/>
+    <text x="26" y="46" class="card-title" fill="#f7f8f2">B. 黑曜命令中心</text>
+    <text x="26" y="73" class="card-sub" fill="#9ba0a8">Raycast / Linear 气质：低噪音、高对比、命令优先</text>
+    <rect x="26" y="98" width="418" height="260" rx="18" fill="#0d0f12" stroke="#2a2e33"/>
+    <rect x="44" y="118" width="82" height="220" rx="13" fill="#08090b" stroke="#24272c"/>
+    <rect x="62" y="138" width="46" height="12" rx="6" fill="#f0efe8"/>
+    <rect x="62" y="176" width="38" height="10" rx="5" fill="#5d6df2"/>
+    <rect x="62" y="201" width="52" height="10" rx="5" fill="#333842"/>
+    <rect x="62" y="226" width="45" height="10" rx="5" fill="#333842"/>
+    <rect x="62" y="251" width="58" height="10" rx="5" fill="#333842"/>
+    <rect x="144" y="118" width="196" height="220" rx="14" fill="#111318" stroke="#282d35"/>
+    <rect x="164" y="140" width="156" height="36" rx="18" fill="#f4f3ee"/>
+    <text x="184" y="163" class="ui-label" fill="#181a1d">搜索或派发任务</text>
+    <rect x="164" y="196" width="156" height="34" rx="10" fill="#191c22" stroke="#303640"/>
+    <rect x="164" y="244" width="156" height="34" rx="10" fill="#191c22" stroke="#303640"/>
+    <rect x="164" y="292" width="156" height="28" rx="10" fill="#151820"/>
+    <rect x="358" y="118" width="68" height="220" rx="14" fill="#0a0c0f" stroke="#24272c"/>
+    <text x="379" y="150" class="ui-label" fill="#f0efe8">秘</text>
+    <circle cx="392" cy="196" r="19" fill="#ff5f57"/>
+    <circle cx="392" cy="246" r="19" fill="#57c1ff"/>
+    <circle cx="392" cy="296" r="19" fill="#59d499"/>
+    <text x="26" y="384" class="card-sub" fill="#c9ccd1">适合：真实自动化、运行中工作流；风险：太暗会压住“纸墨工作台”的原气质。</text>
+  </g>
+
+  <!-- Option 3 -->
+  <g transform="translate(1134 170)">
+    <rect width="470" height="405" rx="28" fill="url(#cream)" stroke="#d8cbb3" filter="url(#softShadow)"/>
+    <text x="26" y="46" class="card-title" fill="#26231d">C. 温白 AI IDE</text>
+    <text x="26" y="73" class="card-sub" fill="#766e60">Cursor 气质：代码/会话/任务并置，清爽但专业</text>
+    <rect x="26" y="98" width="418" height="260" rx="18" fill="#fffdf8" stroke="#d9cdb8"/>
+    <rect x="44" y="118" width="88" height="220" rx="13" fill="#f1eadc"/>
+    <rect x="62" y="142" width="52" height="10" rx="5" fill="#2b2924"/>
+    <rect x="62" y="178" width="42" height="10" rx="5" fill="#f15a24"/>
+    <rect x="62" y="203" width="54" height="10" rx="5" fill="#cdbf9f"/>
+    <rect x="62" y="228" width="47" height="10" rx="5" fill="#cdbf9f"/>
+    <rect x="150" y="118" width="170" height="220" rx="14" fill="#fbf7ed" stroke="#e2d5bd"/>
+    <text x="168" y="146" class="ui-label" fill="#29251e">项目工作区</text>
+    <rect x="168" y="166" width="134" height="38" rx="10" fill="#ffffff" stroke="#e0d5c1"/>
+    <rect x="168" y="218" width="134" height="78" rx="10" fill="#27241f"/>
+    <text x="184" y="246" class="mono" fill="#e8dcc3">codex-local</text>
+    <text x="184" y="268" class="mono" fill="#f15a24">preview only</text>
+    <rect x="336" y="118" width="90" height="220" rx="14" fill="#fffdf8" stroke="#e2d5bd"/>
+    <text x="356" y="146" class="ui-label" fill="#29251e">运行中</text>
+    <rect x="356" y="170" width="50" height="48" rx="10" fill="#ffe1d0"/>
+    <rect x="356" y="232" width="50" height="48" rx="10" fill="#dff0dc"/>
+    <rect x="356" y="294" width="50" height="24" rx="10" fill="#e8e1f6"/>
+    <text x="26" y="384" class="card-sub" fill="#4d4538">适合：智能体/会话/任务包；风险：首页可能不够“操作系统”，更像开发 IDE。</text>
+  </g>
+
+  <!-- Option 4 -->
+  <g transform="translate(78 630)">
+    <rect width="735" height="405" rx="28" fill="#ffffff" stroke="#dedbd3" filter="url(#softShadow)"/>
+    <text x="26" y="46" class="card-title" fill="#22201b">D. 知识型操作系统</text>
+    <text x="26" y="73" class="card-sub" fill="#736c61">Notion / Superhuman 气质：列表、确认队列、记忆与知识库清楚分层</text>
+    <rect x="26" y="98" width="683" height="260" rx="18" fill="#f7f5ef" stroke="#dfd8cb"/>
+    <rect x="48" y="120" width="140" height="216" rx="15" fill="#ffffff" stroke="#ded8ce"/>
+    <text x="68" y="150" class="ui-label" fill="#28251f">入口</text>
+    <rect x="68" y="178" width="76" height="12" rx="6" fill="#191815"/>
+    <rect x="68" y="204" width="88" height="12" rx="6" fill="#bbb2a4"/>
+    <rect x="68" y="230" width="58" height="12" rx="6" fill="#bbb2a4"/>
+    <rect x="68" y="256" width="96" height="12" rx="6" fill="#bbb2a4"/>
+    <rect x="208" y="120" width="300" height="216" rx="15" fill="#ffffff" stroke="#ded8ce"/>
+    <text x="230" y="150" class="ui-label" fill="#28251f">待确认队列</text>
+    <rect x="230" y="172" width="246" height="42" rx="11" fill="#faf3de" stroke="#ecdfbc"/>
+    <rect x="230" y="226" width="246" height="42" rx="11" fill="#e7f1e6" stroke="#cadfc9"/>
+    <rect x="230" y="280" width="246" height="42" rx="11" fill="#ece8f7" stroke="#d7cfee"/>
+    <rect x="530" y="120" width="156" height="216" rx="15" fill="#0b1530"/>
+    <text x="552" y="150" class="ui-label" fill="#ffffff">秘书</text>
+    <rect x="552" y="176" width="112" height="52" rx="14" fill="#ffffff" opacity="0.14"/>
+    <rect x="552" y="244" width="112" height="52" rx="14" fill="#ffffff" opacity="0.14"/>
+    <text x="26" y="384" class="card-sub" fill="#4d4538">适合：把“记忆/知识库/待办/审计”从状态堆里整理出来；风险：自动化的力量感偏弱。</text>
+  </g>
+
+  <!-- Option 5 -->
+  <g transform="translate(865 630)">
+    <rect width="737" height="405" rx="28" fill="url(#midnight)" stroke="#242a36" filter="url(#darkShadow)"/>
+    <text x="26" y="46" class="card-title" fill="#f7f7f0">E. 多 Agent 调度塔</text>
+    <text x="26" y="73" class="card-sub" fill="#9da5b5">面向 H/I：真实派发、运行日志、权限、失败、回读、协作线程</text>
+    <rect x="26" y="98" width="685" height="260" rx="18" fill="#090d14" stroke="#273040"/>
+    <rect x="48" y="120" width="130" height="216" rx="15" fill="#111722" stroke="#2d3748"/>
+    <text x="70" y="150" class="ui-label" fill="#f0f4ff">线程</text>
+    <rect x="70" y="176" width="84" height="22" rx="11" fill="#57c1ff" opacity="0.9"/>
+    <rect x="70" y="212" width="92" height="22" rx="11" fill="#ffcf5a" opacity="0.85"/>
+    <rect x="70" y="248" width="72" height="22" rx="11" fill="#59d499" opacity="0.85"/>
+    <rect x="206" y="120" width="270" height="216" rx="15" fill="#111722" stroke="#2d3748"/>
+    <text x="230" y="150" class="ui-label" fill="#f0f4ff">运行中工作流</text>
+    <path d="M250 206 C300 170, 360 170, 410 206" fill="none" stroke="#56657a" stroke-width="2" stroke-dasharray="5 8"/>
+    <circle cx="250" cy="206" r="24" fill="#57c1ff"/>
+    <circle cx="330" cy="184" r="24" fill="#ffcf5a"/>
+    <circle cx="410" cy="206" r="24" fill="#59d499"/>
+    <rect x="238" y="260" width="190" height="38" rx="12" fill="#0a0f18" stroke="#334056"/>
+    <text x="258" y="284" class="mono" fill="#cbd7ea">permission -> runner -> readback</text>
+    <rect x="504" y="120" width="184" height="216" rx="15" fill="#111722" stroke="#2d3748"/>
+    <text x="528" y="150" class="ui-label" fill="#f0f4ff">管理 / 审计</text>
+    <rect x="528" y="176" width="132" height="18" rx="9" fill="#273040"/>
+    <rect x="528" y="208" width="132" height="18" rx="9" fill="#273040"/>
+    <rect x="528" y="240" width="132" height="18" rx="9" fill="#273040"/>
+    <rect x="528" y="286" width="78" height="28" rx="14" fill="#f0f4ff"/>
+    <text x="542" y="305" class="ui-small" fill="#10141b">查看证据</text>
+    <text x="26" y="384" class="card-sub" fill="#c5ccda">适合：最终真实多线程/多模型协作；风险：如果现在就全用，会显得太“控制台”，普通项目操作不够亲近。</text>
+  </g>
+
+  <rect x="78" y="1080" width="1524" height="54" rx="18" fill="#efe6d4" stroke="#d8c9ae"/>
+  <text x="104" y="1115" class="subtitle" fill="#4c4438">建议初选：A 作为品牌底色 + D 做首页/知识/记忆的信息架构 + E 做运行中工作流和 H/I 自动化。B/C 可作为智能体与命令面板局部语言。</text>
+</svg>

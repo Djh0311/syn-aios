@@ -1,0 +1,1 @@
+K2_R1_MARIO_TEST_RESUME_READ_ONLY_OK_2026_06_10 - Read-only resume probe acknowledged; no files were read or modified.

@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"019e798a-6ce5-76c3-b8ee-33bd0fda841f"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"E5_LEVEL_B_MARIO_TEST_DIRECTOR_RESUME_OK_2026_06_06"}}
+{"type":"turn.completed","usage":{"input_tokens":452097,"cached_input_tokens":268544,"output_tokens":5052,"reasoning_output_tokens":452}}

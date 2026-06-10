@@ -1,0 +1,6 @@
+marker: PCR9_UNIFIED_PRODUCT_COMMAND_MARIO_TEST_WRITE_PROBE_OK_2026_06_09
+status: completed
+operation: resume_only
+scope: workspace_write_unified_product_command_probe
+changed_files:
+- .workbench/pcr9/real-product-command-write-probe.md

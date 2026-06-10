@@ -1,0 +1,67 @@
+{
+  "artifacts": [
+    {
+      "allowed_write": [
+        "/Users/yoyi/Documents/mario test"
+      ],
+      "artifact_id": "artifact:j1-b:mario-test:codex-control:real-resume-probe:v1",
+      "artifact_type": "task_package",
+      "memory_packet_snapshot": {
+        "estimated_tokens": 0,
+        "excluded_items": [],
+        "fingerprint": "j1-b-memory-fingerprint-mario-test-codex-control-2026-06-09",
+        "generated_at": "2026-06-09T10:00:00Z",
+        "included_memories": [],
+        "max_estimated_tokens": 2000,
+        "project_id": "project:users-yoyi-documents-mario-test",
+        "retrieval_intent": "codex_control_resume_probe",
+        "review_materials": [],
+        "role_id": "project_director",
+        "schema_version": "task_package_memory_packet_snapshot.v1",
+        "snapshot_id": "task-memory-packet-snapshot:j1-b:mario-test:codex-control:2026-06-09",
+        "source_packet_id": "task-memory-packet:j1-b:mario-test:codex-control:2026-06-09",
+        "stale": false,
+        "stale_reasons": [],
+        "store_revisions": {
+          "candidate_store_revision": 0,
+          "entity_relation_store_revision": 0,
+          "formal_store_revision": 0,
+          "lint_store_revision": 0,
+          "observation_store_revision": 0
+        },
+        "task_package_artifact_id": "artifact:j1-b:mario-test:codex-control:real-resume-probe:v1",
+        "warnings": [],
+        "work_item_id": "work-item:j1-b:mario-test:codex-control:real-resume-probe:v1",
+        "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+      },
+      "source_ref": "work-item:j1-b:mario-test:codex-control:real-resume-probe:v1"
+    }
+  ],
+  "projects": [
+    {
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "project_root": "/Users/yoyi/Documents/mario test"
+    }
+  ],
+  "revision": 1,
+  "workflow_node_dispatches": [
+    {
+      "authorization_check": {
+        "status": "authorized"
+      },
+      "dispatch_id": "dispatch:j1-b:mario-test:codex-control:real-resume-probe:v1",
+      "memory_packet_fingerprint": "j1-b-memory-fingerprint-mario-test-codex-control-2026-06-09",
+      "memory_packet_snapshot_id": "task-memory-packet-snapshot:j1-b:mario-test:codex-control:2026-06-09",
+      "native_thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+      "node_id": "node:j1-b:mario-test:codex-control:real-resume-probe:v1",
+      "plan_authorization_id": "authorization:j1-b:mario-test:codex-control:v1",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "prompt_kind": "j1_b_codex_control_real_resume_probe",
+      "prompt_preview": "redacted prompt preview; body is runtime stdin only",
+      "state": "prepared",
+      "task_package_id": "artifact:j1-b:mario-test:codex-control:real-resume-probe:v1",
+      "work_item_id": "work-item:j1-b:mario-test:codex-control:real-resume-probe:v1",
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    }
+  ]
+}

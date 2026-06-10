@@ -1,0 +1,318 @@
+{
+  "schema_version": "real_execution_product_commands.v1",
+  "revision": 4,
+  "created_at": "2026-06-10T03:00:03Z",
+  "updated_at": "2026-06-10T03:00:03Z",
+  "last_write_id": "pcr9a_phase_b:real-exec-command:codex-control:84c982798304:4",
+  "commands": [
+    {
+      "product_command_id": "real-exec-command:codex-control:84c982798304",
+      "command_family": "real_execution_product_command",
+      "operation_id": "resume",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "project_root": "/Users/yoyi/Documents/mario test",
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+      "work_item_id": "work-item:stage-k:k3:b1:mario-test:developer-read-only",
+      "task_package_ref": "task-package:stage-k:k3:b1:mario-test",
+      "memory_packet_ref": "memory-packet:stage-k:k3:b1:mario-test",
+      "adapter_id": "codex-local",
+      "session_mode": "resume_existing_session",
+      "target_session_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+      "sandbox": "read-only",
+      "prompt_summary": "Stage K K3-B1 read-only project workflow probe for mario test codex-dev worker.",
+      "prompt_ref": "prompt:stage-k:k3:b1:mario-test-workflow-read-only",
+      "prompt_hash": "ab0442e86e75900ab47b293328e4a2b46512ae68868799b94e8608ffedd57039",
+      "allowed_write_roots": [],
+      "denied_paths": [
+        "/Users/yoyi/.codex",
+        "secret material",
+        "token material",
+        ".env files",
+        "keychain material",
+        "OAuth material",
+        "provider credential",
+        "full transcript material",
+        "rollout material"
+      ],
+      "readback_plan": "Read only the workbench-managed latest message for marker K3_B1_MARIO_TEST_WORKFLOW_READ_ONLY_OK_2026_06_10; unavailable, failed, or timed_out keeps result_count=null; no full transcript.",
+      "timeout_ms": 120000,
+      "requested_by": "user",
+      "created_at": "2026-06-10T03:00:03Z"
+    }
+  ],
+  "previews": [
+    {
+      "preview_id": "real-exec-preview:codex-control:dedc969009a8",
+      "request": {
+        "product_command_id": "real-exec-command:codex-control:84c982798304",
+        "command_family": "real_execution_product_command",
+        "operation_id": "resume",
+        "project_id": "project:users-yoyi-documents-mario-test",
+        "project_root": "/Users/yoyi/Documents/mario test",
+        "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+        "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+        "work_item_id": "work-item:stage-k:k3:b1:mario-test:developer-read-only",
+        "task_package_ref": "task-package:stage-k:k3:b1:mario-test",
+        "memory_packet_ref": "memory-packet:stage-k:k3:b1:mario-test",
+        "adapter_id": "codex-local",
+        "session_mode": "resume_existing_session",
+        "target_session_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+        "sandbox": "read-only",
+        "prompt_summary": "Stage K K3-B1 read-only project workflow probe for mario test codex-dev worker.",
+        "prompt_ref": "prompt:stage-k:k3:b1:mario-test-workflow-read-only",
+        "prompt_hash": "ab0442e86e75900ab47b293328e4a2b46512ae68868799b94e8608ffedd57039",
+        "allowed_write_roots": [],
+        "denied_paths": [
+          "/Users/yoyi/.codex",
+          "secret material",
+          "token material",
+          ".env files",
+          "keychain material",
+          "OAuth material",
+          "provider credential",
+          "full transcript material",
+          "rollout material"
+        ],
+        "readback_plan": "Read only the workbench-managed latest message for marker K3_B1_MARIO_TEST_WORKFLOW_READ_ONLY_OK_2026_06_10; unavailable, failed, or timed_out keeps result_count=null; no full transcript.",
+        "timeout_ms": 120000,
+        "requested_by": "user",
+        "created_at": "2026-06-10T03:00:03Z"
+      },
+      "permission_envelope": {
+        "envelope_id": "permission-envelope:real-exec-command:codex-control:84c982798304",
+        "product_command_id": "real-exec-command:codex-control:84c982798304",
+        "status": "awaiting_user_confirmation",
+        "explicit_user_confirmation_required": true,
+        "approved_for_real_execution": false,
+        "confirmed_by": null,
+        "allowed_write_roots": [],
+        "denied_paths": [
+          "/Users/yoyi/.codex",
+          "secret material",
+          "token material",
+          ".env files",
+          "keychain material",
+          "OAuth material",
+          "provider credential",
+          "full transcript material",
+          "rollout material"
+        ],
+        "risk_summary": "J1-A preview only; user decision, Phase A no-op, and later Level B authorization are required.",
+        "warnings": [
+          "confirmed_by_user_required_for_high_impact_operation",
+          "prompt_body_not_stored_in_product_command"
+        ]
+      },
+      "readiness": {
+        "status": "ready_for_pcr3_decision_preview_only",
+        "runner_call_allowed": false,
+        "level_b_authorization_required": true,
+        "blocked_reasons": [],
+        "warnings": [
+          "j1a_prepare_does_not_execute",
+          "j1b_required_for_real_codex_resume"
+        ]
+      },
+      "guard_preview": {
+        "status": "ready_for_pcr3_decision_no_runner",
+        "runner_call_allowed": false,
+        "blocks_execution": false,
+        "reasons": [],
+        "required_fixes": [],
+        "warnings": [
+          "codex_control_guard_preview_only",
+          "no_cli_command_exposed_to_ordinary_ui"
+        ]
+      },
+      "diagnostics_summary": {
+        "status": "not_evaluated_j1a_preview",
+        "blocks_real_execution": false,
+        "degraded_reasons": [],
+        "warnings": [
+          "diagnostics_not_probed_in_j1a_preview"
+        ]
+      },
+      "duplicate_scope": {
+        "scope_id": "codex-control:resume:a063234b34af:311739d98450",
+        "active_attempt_count": 0,
+        "duplicate_blocked": false,
+        "warnings": [
+          "duplicate_scope_preview_only_checked_again_in_phase_a"
+        ]
+      },
+      "runtime_log_preview": {
+        "status": "preview_only_not_written",
+        "runtime_log_refs": [],
+        "redaction_status": "prompt_body_redacted_summary_ref_hash_only",
+        "warnings": [
+          "runtime_log_will_store_summary_ref_hash_only"
+        ]
+      },
+      "audit_preview": {
+        "status": "preview_only_not_written",
+        "audit_refs": [],
+        "warnings": [
+          "audit_will_store_decision_and_refs_not_prompt_body"
+        ]
+      },
+      "readback_boundary": {
+        "status": "readback_unavailable",
+        "attempted": false,
+        "real_readback_performed": false,
+        "result_count": null,
+        "unavailable_reason": "j1a_no_real_readback_before_phase_b",
+        "warnings": [
+          "readback_unavailable_is_not_zero_results"
+        ]
+      },
+      "warnings": [
+        "j1_codex_control_preview_not_h5_dispatch",
+        "prompt_body_runtime_only_not_persisted",
+        "j1a_no_real_codex_execution",
+        "phase_b_requires_separate_execution_point_authorization",
+        "memory_capture_observation_candidate_only_not_formal_memory"
+      ],
+      "blocked_reasons": [],
+      "prompt_sent": false,
+      "real_codex_executed": false,
+      "writes_codex_home": false,
+      "writes_project_files": false,
+      "writes_workbench_state": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "real-exec-decision:real-exec-command:codex-control:84c982798304:2",
+      "product_command_id": "real-exec-command:codex-control:84c982798304",
+      "decision": "approved",
+      "confirmed_by": "user",
+      "confirmed_at": "2026-06-10T03:00:03Z",
+      "store_revision": 2,
+      "risk_acknowledgement": "K3-B1 fake/no-op harness authorization.",
+      "allowed_once": true,
+      "reason": "Test K3-B1 bridge without spawning Codex."
+    }
+  ],
+  "attempts": [
+    {
+      "attempt_id": "real-exec-command-attempt:phase-a:real-exec-command:codex-control:84c982798304:3",
+      "product_command_id": "real-exec-command:codex-control:84c982798304",
+      "continuation_id": "session-continuation:v1:e257fc3affda8b43ef60ca10ab45fbe4a4b6d76aac024afd6adbe76fa44f416b",
+      "adapter_id": "codex-local",
+      "operation_id": "resume",
+      "status": "phase_a_noop_completed",
+      "started_at": "2026-06-10T03:00:03Z",
+      "completed_at": "2026-06-10T03:00:03Z",
+      "runner_call_allowed": false,
+      "prompt_sent": false,
+      "real_codex_executed": false,
+      "writes_codex_home": false,
+      "writes_project_files": false,
+      "runtime_log_ref": "runtime-log:dispatch-attempt:session-continuation-attempt:h2-phase-a-blocked:2026-06-10T03:00:03Z:7b024c80fc1c4d5e",
+      "audit_refs": [
+        "audit:session-continuation-h2-phase-a-blocked:2026-06-10T03:00:03Z:7b024c80fc1c4d5e"
+      ],
+      "readback_summary": {
+        "status": "blocked_by_guard",
+        "attempted": true,
+        "real_readback_performed": false,
+        "result_count": null,
+        "unavailable_reason": "H2.5 Phase A 不读取真实 transcript；unavailable/failed/timed_out 不等于 0 条结果。",
+        "warnings": [
+          "pcr4_phase_a_no_real_readback",
+          "readback_unavailable_is_not_zero_results"
+        ]
+      },
+      "failure_reason": "H2.5 Phase A blocked: codex_local_guard:secret_deny_list_hit,codex_local_guard_blocked",
+      "warnings": [
+        "pcr4_phase_a_noop_completed",
+        "runner_call_allowed_false_phase_a_noop_only",
+        "prompt_not_sent",
+        "real_codex_executed_false",
+        "codex_home_not_touched",
+        "project_files_not_written",
+        "readback_unavailable_is_not_zero_results"
+      ]
+    },
+    {
+      "attempt_id": "real-exec-command-attempt:phase-b:real-exec-command:codex-control:84c982798304:4",
+      "product_command_id": "real-exec-command:codex-control:84c982798304",
+      "continuation_id": "session-continuation:v1:e257fc3affda8b43ef60ca10ab45fbe4a4b6d76aac024afd6adbe76fa44f416b",
+      "adapter_id": "codex-local",
+      "operation_id": "resume",
+      "status": "runner_failed",
+      "started_at": "2026-06-10T03:00:03Z",
+      "completed_at": "2026-06-10T03:00:03Z",
+      "runner_call_allowed": true,
+      "prompt_sent": true,
+      "real_codex_executed": true,
+      "writes_codex_home": true,
+      "writes_project_files": false,
+      "runtime_log_ref": "runtime-log:dispatch-attempt:session-continuation-attempt:h2-phase-b:2026-06-10T03:00:03Z:7b024c80fc1c4d5e",
+      "audit_refs": [
+        "audit:session-continuation-confirmed:2026-06-10T03:00:03Z:7b024c80fc1c4d5e",
+        "audit:session-continuation-h2-phase-b-completed:2026-06-10T03:00:03Z:7b024c80fc1c4d5e",
+        "audit:session-continuation-h2-phase-b-started:2026-06-10T03:00:03Z:7b024c80fc1c4d5e"
+      ],
+      "readback_summary": {
+        "status": "readback_failed",
+        "attempted": true,
+        "real_readback_performed": false,
+        "result_count": null,
+        "unavailable_reason": "H2 Phase B readback unavailable/failed/timed_out is not zero results.",
+        "warnings": [
+          "readback_unavailable_or_failed_is_not_zero_results",
+          "raw_transcript_not_read_in_h2_phase_b"
+        ]
+      },
+      "failure_reason": "H2 Phase B codex process ended as failed; exit_code=1.",
+      "warnings": [
+        "pcr9a_product_command_phase_b_bridge",
+        "stdin_prompt_runtime_only_not_persisted",
+        "continuation_phase_b_status:failed",
+        "authorization_status:phase_b_real_resume_executed",
+        "argv_only_no_shell",
+        "codex_local_attempt_ref:codex-local-attempt:h2-phase-b:2026-06-10T03:00:03Z:2ddaabc03ef92e82",
+        "command_family:controlled_session_continuation",
+        "h2_phase_b_real_runner_path",
+        "h5_unified_product_command_boundary",
+        "operation_id:resume",
+        "phase_b_exit_code_redacted:Some(1)",
+        "phase_b_real_codex_process_spawned",
+        "phase_b_real_codex_resume_authorized",
+        "planned_adapters_not_connected",
+        "product_command:run_controlled_session_continuation_real_resume_phase_b",
+        "product_gate_status:authorized_for_real_runner",
+        "project_file_diff_must_be_verified_by_hash",
+        "prompt_body_not_persisted_by_runner",
+        "prompt_body_sent_via_stdin_not_persisted",
+        "prompt_via_stdin_only",
+        "raw_stdout_stderr_not_persisted",
+        "raw_transcript_not_read",
+        "readback_required_by_product_gate",
+        "readback_unavailable_or_failed_is_not_zero_results",
+        "real_execution_command_gate_v1",
+        "runner_call_allowed_after_unified_product_gate",
+        "stderr_summary:WARNING: proceeding, even though we could not update PATH: Operation not permitted (os error 1) 2026-06-10T03:42:07.379840Z WARN codex_state::runtime: failed to open state db at /Users/yoyi/.codex/state_5.sqlite: error returned from database: (code: 8) attempt to write a readonly database 2026-06-10T03:42:07.379864Z WARN codex_rollout::state_db: failed to initialize state runtime: failed to initialize state runtime at /Users/yoyi/.codex: error returned from database: (code: 8) attempt to write a",
+        "workbench_managed_last_message_ref:/Users/yoyi/workspace/product-line/tmp/k3-b-real-workflow-automation/runs/k3-b1-run-1781062927271794000/k3-b1-mario-test-workflow-read-only-last-message-2026-06-10t03-00-03z.json",
+        "writes_workbench_state_true"
+      ]
+    }
+  ],
+  "audit_refs": [
+    "audit:session-continuation-confirmed:2026-06-10T03:00:03Z:7b024c80fc1c4d5e",
+    "audit:session-continuation-h2-phase-a-blocked:2026-06-10T03:00:03Z:7b024c80fc1c4d5e",
+    "audit:session-continuation-h2-phase-b-completed:2026-06-10T03:00:03Z:7b024c80fc1c4d5e",
+    "audit:session-continuation-h2-phase-b-started:2026-06-10T03:00:03Z:7b024c80fc1c4d5e",
+    "real-exec-command-audit:real-exec-command:codex-control:84c982798304:real-exec-decision:real-exec-command:codex-control:84c982798304:2"
+  ],
+  "warnings": [
+    "pcr1_store_skeleton_only",
+    "no_real_execution_product_command_sidecar_written_by_pcr1",
+    "pcr2_prepare_wrote_command_and_preview_only",
+    "pcr3_decision_recorded_no_runner_no_attempt",
+    "pcr4_phase_a_noop_attempt_recorded_no_real_codex",
+    "pcr9a_phase_b_attempt_recorded_from_product_command_bridge"
+  ]
+}

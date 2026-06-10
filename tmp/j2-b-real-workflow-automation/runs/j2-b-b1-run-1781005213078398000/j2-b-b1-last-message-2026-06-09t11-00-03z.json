@@ -1,0 +1,6 @@
+marker: J2_B_MARIO_TEST_DEVELOPER_RUN_UNIT_READ_ONLY_OK_2026_06_09
+status: completed
+run_unit: developer_execution
+operation: resume_only
+sandbox: read-only
+changed_files: []

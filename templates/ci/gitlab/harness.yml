@@ -1,0 +1,18 @@
+stages:
+  - harness
+
+harness:
+  stage: harness
+  image: node:20
+  script:
+    - node scripts/harness/harness-doctor.js --target .
+    - node scripts/harness/pre-work.js --target .
+    # Add project command checks by configuring harness.config.json command keys.
+    # Example:
+    # - node scripts/harness/verification-runner.js --target . --command-key test
+    - node scripts/harness/pre-completion.js --target .
+    # Source package only. Installed projects can remove this command.
+    - |
+      if [ -f plans/2026-05-13-harness-upgrade-phase-3.md ]; then
+        node scripts/harness/self-test.js
+      fi

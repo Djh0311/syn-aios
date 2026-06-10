@@ -1,0 +1,12 @@
+You are running a controlled Stage H / H3-B new-session fixture probe for the local AI workbench.
+
+Scope:
+- Work only inside /Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture.
+- Do not read secrets, auth files, tokens, .env files, keychains, OAuth/provider credentials, or full transcripts.
+- Do not modify files outside this fixture directory.
+
+Task:
+- Append exactly this line to probe-result.txt:
+  H3_B_REAL_NEW_SESSION_PROBE_OK_2026_06_07
+- Then finish with a short final message containing exactly this marker:
+  H3_B_REAL_NEW_SESSION_LAST_MESSAGE_OK_2026_06_07

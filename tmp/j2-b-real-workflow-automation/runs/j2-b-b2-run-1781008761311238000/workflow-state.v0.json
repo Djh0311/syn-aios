@@ -1,0 +1,394 @@
+{
+  "agent_adapters": [
+    {
+      "adapter_id": "codex-local",
+      "agent_id": "codex-local",
+      "agent_type": "codex",
+      "capabilities": [
+        "codex_index_read",
+        "workflow_state_v0"
+      ],
+      "display_name": "Codex",
+      "permission_level": "read_only",
+      "provider": "local-codex-index",
+      "source_kind": "workspace_state",
+      "status": "available"
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "artifact:j2:work-item-j2-workflow-stage-j-j2-b-isolated-project-default-j2-b-isolated-project-developer-run-:task-package",
+      "artifact_type": "task_package",
+      "brief": "J2-B isolated project developer run unit workspa",
+      "created_at": "2026-06-09T12:00:03Z",
+      "path": null,
+      "permission_level": "workflow_event_record",
+      "project_id": "project:stage-j-j2-b-isolated-project",
+      "source_kind": "stage_j_j2_project_workflow_automation",
+      "source_ref": "work-item:j2:workflow-stage-j-j2-b-isolated-project-default:j2-b-isolated-project-developer-run-unit-workspace-write-real-probe",
+      "stale": false,
+      "stale_reasons": [],
+      "title": "J2-A 自动编排任务包摘要",
+      "updated_at": "2026-06-09T12:00:03Z",
+      "version": 1,
+      "warnings": [
+        "j2a_task_package_summary_no_raw_prompt"
+      ]
+    }
+  ],
+  "audit_events": [
+    {
+      "actor_ref": "user_confirmed_desktop_shell",
+      "after_state": "initialized",
+      "before_state": "missing_state_no_backup",
+      "created_at": "1781008761311",
+      "event_id": "audit:init:1781008761311",
+      "event_type": "workflow_state_initialized",
+      "permission_level": "user_confirmed_write",
+      "reason": "用户确认首次初始化工作流事实层 v0；此前无旧文件可备份。",
+      "source_kind": "workspace_state",
+      "target_ref": "/Users/yoyi/workspace/product-line/tmp/j2-b-real-workflow-automation/runs/j2-b-b2-run-1781008761311238000/workflow-state.v0.json"
+    },
+    {
+      "actor_ref": "user_confirmed_desktop_shell",
+      "after_state": "draft",
+      "before_state": "missing_project_workflow",
+      "created_at": "1781008761311",
+      "event_id": "audit:bootstrap:users-yoyi-workspace-product-line-tmp-stage-j-j2-b-isolated-project:1781008761311",
+      "event_type": "project_default_workflow_bootstrapped",
+      "permission_level": "user_confirmed_write",
+      "reason": "用户确认给索引内项目创建默认工作流草稿：/Users/yoyi/workspace/product-line/tmp/stage-j-j2-b-isolated-project",
+      "source_kind": "workspace_state",
+      "target_ref": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "actor_ref": "user",
+      "after_state": "ready_to_dispatch",
+      "created_at": "2026-06-09T12:00:03Z",
+      "event_id": "audit:j2-work-item:work-item-j2-workflow-stage-j-j2-b-isolated-project-default-j2-b-isolated-project-developer-run-:2026-06-09T12:00:03Z",
+      "event_type": "project_workflow_automation_work_item_created",
+      "permission_level": "workflow_event_record",
+      "project_id": "project:stage-j-j2-b-isolated-project",
+      "reason": "J2-A 为用户目标生成自动编排工作项；不代表真实 Codex 已执行。",
+      "source_kind": "stage_j_j2_project_workflow_automation",
+      "target_ref": "work-item:j2:workflow-stage-j-j2-b-isolated-project-default:j2-b-isolated-project-developer-run-unit-workspace-write-real-probe",
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "actor_ref": "user",
+      "allowed_write_path": "/Users/yoyi/workspace/product-line/tmp/stage-j-j2-b-isolated-project/.workbench/stage-j/j2-b/developer-run-unit-write-probe.md",
+      "allowed_write_roots": [
+        "/Users/yoyi/workspace/product-line/tmp/stage-j-j2-b-isolated-project/.workbench/stage-j/j2-b"
+      ],
+      "backup_ref": "/Users/yoyi/workspace/product-line/tmp/j2-b-real-workflow-automation/runs/j2-b-b2-run-1781008761311238000/backups/workflow-state.v0.2026-06-09T12:00:03Z.json",
+      "continuation_id": "session-continuation:v1:ab246dba122a4afe7f76475af041a54393737f77151abdfecbc4ea5be43d5f2c",
+      "created_at": "2026-06-09T12:00:03Z",
+      "denied_paths": [
+        "/Users/yoyi/.codex",
+        "secret material",
+        "token material",
+        ".env files",
+        "keychain material",
+        "OAuth material",
+        "provider credential",
+        "full transcript material",
+        "rollout material"
+      ],
+      "event_id": "audit:j2-b-b2-project-workflow-automation:real-exec-command-codex-control-b7c65a1f0ee6:2026-06-09T12:00:03Z",
+      "event_type": "project_workflow_automation_j2_b_b2_phase_b_recorded",
+      "memory_packet_ref": "memory-packet:j2-b:b2:isolated-project:developer-run-unit:workspace-write:v1",
+      "operation_id": "new_session",
+      "permission_level": "real_execution_product_command",
+      "phase_a_attempt_ref": "real-exec-command-attempt:phase-a:real-exec-command:codex-control:b7c65a1f0ee6:3",
+      "phase_b_attempt_ref": "real-exec-command-attempt:phase-b-new-session:real-exec-command:codex-control:b7c65a1f0ee6:4",
+      "product_command_id": "real-exec-command:codex-control:b7c65a1f0ee6",
+      "project_id": "project:stage-j-j2-b-isolated-project",
+      "prompt_body_persisted": false,
+      "prompt_hash": "a1e3eb2285a75b30d0104f5bd032e3b4fdfc51111ff52949597ce78de5878bb0",
+      "prompt_ref": "workbench-managed:j2-b:isolated-project:developer-run-unit:workspace-write:v1",
+      "prompt_summary": "J2-B isolated project developer run unit workspace-write real probe.",
+      "readback_result_count": 1,
+      "readback_status": "succeeded",
+      "result_status": "phase_b_completed",
+      "run_unit_id": "run-unit:j2-automation:workflow-stage-j-j2-b-isolated-project-default:j2-b-isolated-project-developer-run-unit-workspace-write-real-probe:developer_execution",
+      "runtime_log_ref": "runtime-log:dispatch-attempt:session-continuation-attempt:h3-b:2026-06-09T12:00:03Z:2c5e1500737685e9",
+      "sandbox": "workspace-write",
+      "source_kind": "stage_j_j2_b_b2_project_workflow_automation_new_session_bridge",
+      "target_ref": "j2-automation:workflow-stage-j-j2-b-isolated-project-default:j2-b-isolated-project-developer-run-unit-workspace-write-real-probe",
+      "task_package_ref": "task-package:j2-b:b2:isolated-project:developer-run-unit:workspace-write:v1",
+      "warnings": [
+        "j2_b_b2_bridge_uses_unified_product_command_new_session_phase_b",
+        "prompt_body_runtime_only_not_persisted",
+        "readback_full_transcript_forbidden",
+        "baseline_hashes_must_verify_only_allowed_write_path_changed"
+      ],
+      "work_item_id": "work-item:j2:workflow-stage-j-j2-b-isolated-project-default:j2-b-isolated-project-developer-run-unit-workspace-write-real-probe",
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default",
+      "workflow_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:codex-dev"
+    }
+  ],
+  "capabilities": [],
+  "created_at": "1781008761311",
+  "edges": [
+    {
+      "created_at": "1781008761311",
+      "edge_id": "workflow:stage-j-j2-b-isolated-project:default:edge:assigns_task",
+      "edge_type": "decomposes_to",
+      "from_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:director",
+      "permission_level": "user_confirmed_write",
+      "source_kind": "derived",
+      "state": "draft",
+      "to_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:task",
+      "updated_at": "1781008761311",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "created_at": "1781008761311",
+      "edge_id": "workflow:stage-j-j2-b-isolated-project:default:edge:assigned_to_codex",
+      "edge_type": "assigned_to",
+      "from_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:task",
+      "permission_level": "user_confirmed_write",
+      "source_kind": "derived",
+      "state": "draft",
+      "to_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:codex-dev",
+      "updated_at": "1781008761311",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "created_at": "1781008761311",
+      "edge_id": "workflow:stage-j-j2-b-isolated-project:default:edge:produces_handoff",
+      "edge_type": "produces",
+      "from_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:codex-dev",
+      "permission_level": "user_confirmed_write",
+      "source_kind": "derived",
+      "state": "draft",
+      "to_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:handoff",
+      "updated_at": "1781008761311",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "created_at": "1781008761311",
+      "edge_id": "workflow:stage-j-j2-b-isolated-project:default:edge:produces_evidence",
+      "edge_type": "produces",
+      "from_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:codex-dev",
+      "permission_level": "user_confirmed_write",
+      "source_kind": "derived",
+      "state": "draft",
+      "to_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:evidence",
+      "updated_at": "1781008761311",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "created_at": "1781008761311",
+      "edge_id": "workflow:stage-j-j2-b-isolated-project:default:edge:validates_artifacts",
+      "edge_type": "validates",
+      "from_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:validation",
+      "permission_level": "user_confirmed_write",
+      "source_kind": "derived",
+      "state": "draft",
+      "to_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:evidence",
+      "updated_at": "1781008761311",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "created_at": "1781008761311",
+      "edge_id": "workflow:stage-j-j2-b-isolated-project:default:edge:reviews_handoff",
+      "edge_type": "reviews",
+      "from_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:review",
+      "permission_level": "user_confirmed_write",
+      "source_kind": "derived",
+      "state": "draft",
+      "to_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:handoff",
+      "updated_at": "1781008761311",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    }
+  ],
+  "harness_resources": [],
+  "nodes": [
+    {
+      "adapter_id": null,
+      "agent_type": null,
+      "artifact_type": null,
+      "node_id": "workflow:stage-j-j2-b-isolated-project:default:node:director",
+      "node_type": "director",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 120,
+        "y": 120
+      },
+      "source_kind": "derived",
+      "source_ref": "role:director",
+      "state": "draft",
+      "title": "总指导 / Director",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "adapter_id": "codex-local",
+      "agent_type": "codex",
+      "artifact_type": null,
+      "node_id": "workflow:stage-j-j2-b-isolated-project:default:node:codex-dev",
+      "node_type": "actor",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 340,
+        "y": 120
+      },
+      "source_kind": "workspace_state",
+      "source_ref": "adapter:codex-local",
+      "state": "draft",
+      "title": "Codex 开发线",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "adapter_id": null,
+      "agent_type": null,
+      "artifact_type": null,
+      "node_id": "workflow:stage-j-j2-b-isolated-project:default:node:validation",
+      "node_type": "validation",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 560,
+        "y": 120
+      },
+      "source_kind": "derived",
+      "source_ref": "role:tester",
+      "state": "draft",
+      "title": "验证线",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "adapter_id": null,
+      "agent_type": null,
+      "artifact_type": "task",
+      "node_id": "workflow:stage-j-j2-b-isolated-project:default:node:task",
+      "node_type": "task",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 780,
+        "y": 120
+      },
+      "source_kind": "derived",
+      "source_ref": "artifact:task-package",
+      "state": "draft",
+      "title": "任务包",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "adapter_id": null,
+      "agent_type": null,
+      "artifact_type": "handoff",
+      "node_id": "workflow:stage-j-j2-b-isolated-project:default:node:handoff",
+      "node_type": "artifact",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 120,
+        "y": 300
+      },
+      "source_kind": "derived",
+      "source_ref": "artifact:handoff",
+      "state": "draft",
+      "title": "Handoff",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "adapter_id": null,
+      "agent_type": null,
+      "artifact_type": "evidence",
+      "node_id": "workflow:stage-j-j2-b-isolated-project:default:node:evidence",
+      "node_type": "artifact",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 340,
+        "y": 300
+      },
+      "source_kind": "derived",
+      "source_ref": "artifact:evidence",
+      "state": "draft",
+      "title": "Evidence",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    },
+    {
+      "adapter_id": null,
+      "agent_type": null,
+      "artifact_type": "review",
+      "node_id": "workflow:stage-j-j2-b-isolated-project:default:node:review",
+      "node_type": "review",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 560,
+        "y": 300
+      },
+      "source_kind": "derived",
+      "source_ref": "artifact:review",
+      "state": "draft",
+      "title": "Review",
+      "warnings": [],
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    }
+  ],
+  "permission_level": "user_confirmed_write",
+  "projects": [
+    {
+      "created_at": "1781008761311",
+      "display_name": "J2A Fixture",
+      "permission_level": "read_only",
+      "project_id": "project:stage-j-j2-b-isolated-project",
+      "root_path": "/Users/yoyi/workspace/product-line/tmp/stage-j-j2-b-isolated-project",
+      "source_kind": "codex_index",
+      "updated_at": "1781008761311",
+      "warnings": []
+    }
+  ],
+  "reviews": [],
+  "schema_version": "workflow_state_v0",
+  "source_kind": "workspace_state",
+  "updated_at": "2026-06-09T12:00:03Z",
+  "work_items": [
+    {
+      "adapter_id": "codex-local",
+      "agent_type": "codex",
+      "assigned_role_id": "developer_execution",
+      "created_at": "2026-06-09T12:00:03Z",
+      "current_node_id": "workflow:stage-j-j2-b-isolated-project:default:node:codex-dev",
+      "permission_level": "workflow_event_record",
+      "project_id": "project:stage-j-j2-b-isolated-project",
+      "source_kind": "stage_j_j2_project_workflow_automation",
+      "source_ref": "task-package:j2-b:b2:isolated-project:developer-run-unit:workspace-write:v1",
+      "state": "ready_to_dispatch",
+      "title": "J2-A 自动编排：J2-B isolated project developer run unit workspa",
+      "updated_at": "2026-06-09T12:00:03Z",
+      "work_item_id": "work-item:j2:workflow-stage-j-j2-b-isolated-project-default:j2-b-isolated-project-developer-run-unit-workspace-write-real-probe",
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default"
+    }
+  ],
+  "workflow_node_dispatches": [],
+  "workflow_node_session_bindings": [],
+  "workflow_version": 1,
+  "workflows": [
+    {
+      "created_at": "1781008761311",
+      "model_policy": "none",
+      "permission_level": "user_confirmed_write",
+      "project_id": "project:stage-j-j2-b-isolated-project",
+      "source_kind": "workspace_state",
+      "state": "draft",
+      "title": "J2A Fixture 默认工作流草稿",
+      "updated_at": "1781008761311",
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default",
+      "workflow_version": 1
+    }
+  ],
+  "workspace_id": "workspace:yoyi-workspace"
+}

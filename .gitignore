@@ -1,0 +1,30 @@
+# OS / editor noise
+.DS_Store
+*.swp
+*.swo
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+
+# JavaScript dependencies and build outputs
+node_modules/
+dist/
+
+# Rust / Tauri build outputs
+.cargo-home/
+target/
+**/src-tauri/target/
+
+# Local Tauri probe caches
+prototypes/tauri-capability-probe/.cargo-home/
+prototypes/tauri-capability-probe/.cargo-target/
+prototypes/tauri-capability-probe/.tauri-cli/
+
+# Logs and transient crash output
+*.log
+*.pid
+
+# Local harness runtime cache
+.harness/

@@ -1,0 +1,2788 @@
+{"bad_json_line_count": 0, "event_count": 58, "output": "/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/codex-workbench-transcript-019e798a-ac37-7771-b982-e38084fcd22e-1780165080449.json", "thread_id": "019e798a-ac37-7771-b982-e38084fcd22e", "unknown_event_count": 0, "warning_count": 5}
+{"bad_json_line_count": 0, "event_count": 73, "output": "/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/codex-workbench-transcript-019e798a-f9d4-7922-8da8-1b6a8dbd6769-1780165196548.json", "thread_id": "019e798a-f9d4-7922-8da8-1b6a8dbd6769", "unknown_event_count": 2, "warning_count": 9}
+{"bad_json_line_count": 0, "event_count": 22, "output": "/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/codex-workbench-transcript-019e798b-2ee7-7f90-beb2-9031f6ad3e05-1780165218409.json", "thread_id": "019e798b-2ee7-7f90-beb2-9031f6ad3e05", "unknown_event_count": 0, "warning_count": 2}
+{"bad_json_line_count": 0, "event_count": 28, "output": "/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/codex-workbench-transcript-019e798a-6ce5-76c3-b8ee-33bd0fda841f-1780165252477.json", "thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f", "unknown_event_count": 0, "warning_count": 3}
+{"bad_json_line_count": 0, "event_count": 99, "output": "/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/codex-workbench-transcript-019e798a-ac37-7771-b982-e38084fcd22e-1780165314771.json", "thread_id": "019e798a-ac37-7771-b982-e38084fcd22e", "unknown_event_count": 0, "warning_count": 7}
+{"bad_json_line_count": 0, "event_count": 103, "output": "/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/codex-workbench-transcript-019e798a-f9d4-7922-8da8-1b6a8dbd6769-1780165363791.json", "thread_id": "019e798a-f9d4-7922-8da8-1b6a8dbd6769", "unknown_event_count": 2, "warning_count": 11}
+{"bad_json_line_count": 0, "event_count": 30, "output": "/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/codex-workbench-transcript-019e798b-2ee7-7f90-beb2-9031f6ad3e05-1780165383926.json", "thread_id": "019e798b-2ee7-7f90-beb2-9031f6ad3e05", "unknown_event_count": 0, "warning_count": 2}
+{"bad_json_line_count": 0, "event_count": 36, "output": "/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/codex-workbench-transcript-019e798a-6ce5-76c3-b8ee-33bd0fda841f-1780165405731.json", "thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f", "unknown_event_count": 0, "warning_count": 3}
+{"bad_json_line_count": 0, "event_count": 119, "output": "/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/codex-workbench-transcript-019e798a-ac37-7771-b982-e38084fcd22e-1780165438429.json", "thread_id": "019e798a-ac37-7771-b982-e38084fcd22e", "unknown_event_count": 0, "warning_count": 8}
+{"bad_json_line_count": 0, "event_count": 132, "output": "/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/codex-workbench-transcript-019e798a-f9d4-7922-8da8-1b6a8dbd6769-1780165472268.json", "thread_id": "019e798a-f9d4-7922-8da8-1b6a8dbd6769", "unknown_event_count": 2, "warning_count": 12}
+{"bad_json_line_count": 0, "event_count": 38, "output": "/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/codex-workbench-transcript-019e798b-2ee7-7f90-beb2-9031f6ad3e05-1780165491187.json", "thread_id": "019e798b-2ee7-7f90-beb2-9031f6ad3e05", "unknown_event_count": 0, "warning_count": 2}
+{"bad_json_line_count": 0, "event_count": 44, "output": "/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/codex-workbench-transcript-019e798a-6ce5-76c3-b8ee-33bd0fda841f-1780165504097.json", "thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f", "unknown_event_count": 0, "warning_count": 3}
+{
+  "message": "工作流机器达到最大轮次，仍需总指导继续下一轮。",
+  "path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state/workflow-state.v0.json",
+  "backup_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state/backups/workflow-state.v0.1780164875113.json",
+  "audit_event_id": "audit:workflow-machine-run-finished:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume",
+  "run_id": "workflow-machine-run:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780164875113",
+  "final_state": "needs_changes",
+  "rounds_completed": 3,
+  "steps": [
+    {
+      "step_id": "local-workflow-machine-step:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-1:director",
+      "role_id": "director",
+      "role_label": "总指导",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+      "native_thread_id": "local-workflow-machine-director-plan",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "本地合成首轮总指导计划：开发线创建静态马里奥 demo，验证线检查文件和玩法，回收线判断是否通过。WORKFLOW_MACHINE_STEP_STATUS: completed",
+      "warnings": [
+        "local_director_plan_step_after_real_director_timeout"
+      ]
+    },
+    {
+      "step_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780164875173",
+      "role_id": "codex-dev",
+      "role_label": "开发线",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+      "native_thread_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "已完成开发线实现。 结论：项目目录内已新增可直接打开的静态马里奥 demo。依据：`ls -la index.html styles.css game.js README.md` 显示四个目标文件都存在。 已做验证： - `game.js` 语法检查通过。依据：`node --check game.js` 退出码为 0，无报错输出。 - Git 状态显示四个新增文件未跟踪。依据：`git status --short` 输出 `?? README.md`、`?? game.j",
+      "warnings": []
+    },
+    {
+      "step_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165080597",
+      "role_id": "validation",
+      "role_label": "验证线",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:validation",
+      "native_thread_id": "019e798a-f9d4-7922-8da8-1b6a8dbd6769",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "我的验证结论：当前可判定为通过；没有发现需要开发线返工的问题。 已知和依据： 1. 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la index.html styles.css game.js README.md` 均有输出。 2. 页面是可直接打开的静态网页结构。依据：`index.html` 只引用本地 `styles.css` 和 `game.js`，没有依赖服务端、构建工具或外部网络",
+      "warnings": []
+    },
+    {
+      "step_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165196682",
+      "role_id": "review",
+      "role_label": "回收线",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:review",
+      "native_thread_id": "019e798b-2ee7-7f90-beb2-9031f6ad3e05",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "我的判断：通过。 依据： - 开发线已创建目标四文件：`index.html`、`styles.css`、`game.js`、`README.md`。 - 开发线已做 `game.js` 语法检查，结果通过。 - 验证线确认四个目标文件存在。 - 验证线确认页面只引用本地 `styles.css` 和 `game.js`，可作为静态网页直接打开。 - 验证线结论是“当前可判定为通过；没有发现需要开发线返工的问题”。 还缺什么： - 从当前摘要看，没有阻塞项。 - 不确定项是我",
+      "warnings": []
+    },
+    {
+      "step_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165218542",
+      "role_id": "director",
+      "role_label": "总指导",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+      "native_thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "理解：你要我作为总指导，只根据三条线的摘要判断是否进入下一轮，不修改文件。最新请求覆盖前一个“制定第一轮计划”的请求。 已知： - 开发线已完成四个目标文件：`index.html`、`styles.css`、`game.js`、`README.md`。依据：上一环节摘要中开发线和验证线都确认四文件存在。 - `game.js` 语法检查通过。依据：开发线摘要写明 `node --check game.js` 退出码为 0。 - 页面可直接作为静态网页打开。依据：验证线确认 ",
+      "warnings": [
+        "first_round_director_uses_local_plan_fallback"
+      ]
+    },
+    {
+      "step_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165252608",
+      "role_id": "codex-dev",
+      "role_label": "开发线",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+      "native_thread_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "已完成本轮开发线复核和修复。 发现并修复的问题：`重新开始` 原来没有把敌人位置恢复到初始位置，只恢复了存活状态和速度方向。依据是 `resetGame()` 里之前没有重置 `enemy.x`。已在 `/Users/yoyi/Documents/mario test/game.js` 中为敌人保存 `startX` 和 `startVx`，重开时恢复初始位置和速度。 验证结果： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`",
+      "warnings": []
+    },
+    {
+      "step_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165314912",
+      "role_id": "validation",
+      "role_label": "验证线",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:validation",
+      "native_thread_id": "019e798a-f9d4-7922-8da8-1b6a8dbd6769",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "理解：本轮是第 2 轮验证线，只检查开发线修复后的结果，不修改文件。 已知： 1. 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la index.html styles.css game.js README.md` 有完整输出。 2. `game.js` 语法通过。依据：`node --check game.js` 退出码为 0，无报错输出。 3. 开发线提到的重开修复成立。依据：`gam",
+      "warnings": []
+    },
+    {
+      "step_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165363932",
+      "role_id": "review",
+      "role_label": "回收线",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:review",
+      "native_thread_id": "019e798b-2ee7-7f90-beb2-9031f6ad3e05",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "我的判断：通过。 依据： - 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 2 轮验证线摘要确认。 - `game.js` 语法检查通过。依据：第 2 轮验证线摘要确认 `node --check game.js` 退出码为 0。 - 第 2 轮开发线已修复“重新开始”没有重置敌人位置的问题。依据：开发线摘要说明已为敌人保存 `startX` 和 `startVx`，重开时恢复初始位置和速度。 -",
+      "warnings": []
+    },
+    {
+      "step_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165384068",
+      "role_id": "director",
+      "role_label": "总指导",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+      "native_thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "理解：你要我作为总指导，只根据第 2 轮各线结果判断是否还需要下一轮，不读取、不修改文件。 已知： - 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 2 轮验证线摘要确认。 - `game.js` 语法检查通过。依据：第 2 轮验证线摘要确认 `node --check game.js` 退出码为 0。 - 第 2 轮开发线修复了“重新开始不重置敌人位置”的问题。依据：开发线摘要说明已保存 `st",
+      "warnings": [
+        "first_round_director_uses_local_plan_fallback"
+      ]
+    },
+    {
+      "step_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165405880",
+      "role_id": "codex-dev",
+      "role_label": "开发线",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+      "native_thread_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "本轮开发线复核完成，未做新改动。 结论：当前没有发现需要返工的问题。依据： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。 - `game.js` 语法检查通过：`node --check game.js` 无报错。 - `index.html` 只引用本地 `styles.css` 和 `game.js`，符合可直接打开的静态网页要求。 - 上轮修复仍在：敌人有 `startX` / `startVx`",
+      "warnings": []
+    },
+    {
+      "step_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165438583",
+      "role_id": "validation",
+      "role_label": "验证线",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:validation",
+      "native_thread_id": "019e798a-f9d4-7922-8da8-1b6a8dbd6769",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "理解：第 3 轮验证线只读复核，不修改文件。 已知和依据： 1. 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la` 对四个文件均有结果。 2. `game.js` 语法通过。依据：`node --check game.js` 退出码为 0，无报错。 3. 静态网页条件满足。依据：`index.html` 只引用本地 `styles.css` 和 `game.js`；README 写明直接打",
+      "warnings": []
+    },
+    {
+      "step_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165472416",
+      "role_id": "review",
+      "role_label": "回收线",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:review",
+      "native_thread_id": "019e798b-2ee7-7f90-beb2-9031f6ad3e05",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "我的判断：通过。 依据： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 3 轮开发线和验证线摘要均确认。 - `game.js` 语法检查通过。依据：第 3 轮开发线和验证线摘要均确认 `node --check game.js` 无报错。 - 静态网页条件满足。依据：第 3 轮验证线摘要确认 `index.html` 只引用本地 `styles.css` 和 `game.js`，README ",
+      "warnings": []
+    },
+    {
+      "step_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165491334",
+      "role_id": "director",
+      "role_label": "总指导",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+      "native_thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+      "state": "completed",
+      "exit_code": 0,
+      "last_message_summary": "理解：你要我作为总指导，只依据第 3 轮开发线、验证线、回收线摘要判断是否继续，不读取或修改文件。 已知： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 3 轮开发线、验证线、回收线摘要均确认。 - `game.js` 语法检查通过。依据：第 3 轮开发线和验证线摘要确认 `node --check game.js` 无报错。 - 静态网页条件满足。依据：第 3 轮验证线摘要确认 `index.",
+      "warnings": [
+        "first_round_director_uses_local_plan_fallback"
+      ]
+    }
+  ],
+  "snapshot": {
+    "exists": true,
+    "path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state/workflow-state.v0.json",
+    "schema_version": "workflow_state_v0",
+    "workflow_version": 1,
+    "workspace_id": "workspace:yoyi-workspace",
+    "updated_at": "1780165504213",
+    "initialized": true,
+    "counts": {
+      "projects": 4,
+      "agent_adapters": 1,
+      "workflows": 4,
+      "nodes": 28,
+      "edges": 25,
+      "work_items": 8,
+      "artifacts": 1,
+      "reviews": 5,
+      "audit_events": 132,
+      "capabilities": 0,
+      "harness_resources": 0
+    },
+    "project_workflows": [
+      {
+        "project_id": "project:users-yoyi-gameai-agent-world",
+        "project_root": "/Users/yoyi/gameai/agent world",
+        "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+        "title": "agent world 默认工作流草稿",
+        "state": "draft",
+        "node_count": 7,
+        "edge_count": 6,
+        "task_draft_count": 1,
+        "task_drafts": [
+          {
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "title": "task draft他日smoke",
+            "state": "ready_for_review",
+            "assigned_role_id": "codex-dev",
+            "current_node_id": "workflow:users-yoyi-gameai-agent-world:default:node:review",
+            "next_states": [
+              "accepted",
+              "needs_changes",
+              "paused"
+            ],
+            "next_action_label": "下一步：接受或要求修改",
+            "artifact_type": "task_package",
+            "artifact_path": "/Users/yoyi/workspace/product-line/tasks/2026-05-29-generated-task-draft-smoke.md",
+            "recent_audit_events": [
+              {
+                "event_id": "audit:workflow-mario-test-started:1780112848434",
+                "event_type": "workflow_user_reviewed_instruction_dispatched",
+                "before_state": "needs_changes",
+                "after_state": "running",
+                "created_at": "1780112848434",
+                "reason": "用户要求用新建测试项目验证工作流能否跑通；本记录只声明控制项开始，实际项目文件应由绑定 Codex 会话创建。"
+              },
+              {
+                "event_id": "audit:workflow-mario-test-started:1780112784013",
+                "event_type": "workflow_user_reviewed_instruction_dispatched",
+                "before_state": "needs_changes",
+                "after_state": "running",
+                "created_at": "1780112784013",
+                "reason": "用户要求用新建测试项目验证工作流能否跑通；本记录只声明控制项开始，实际项目文件应由绑定 Codex 会话创建。"
+              },
+              {
+                "event_id": "audit:workflow-mario-test-started:1780112518043",
+                "event_type": "workflow_user_reviewed_instruction_dispatched",
+                "before_state": "needs_changes",
+                "after_state": "running",
+                "created_at": "1780112518043",
+                "reason": "用户要求用新建测试项目验证工作流能否跑通；本记录只声明控制项开始，实际项目文件应由绑定 Codex 会话创建。"
+              }
+            ]
+          }
+        ],
+        "node_session_bindings": [
+          {
+            "binding_id": "binding:workflow-users-yoyi-gameai-agent-world-default:workflow-users-yoyi-gameai-agent-world-default-node-codex-dev:work-item-workflow-users-yoyi-gameai-agent-world-default-1780032043420",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "node_id": "workflow:users-yoyi-gameai-agent-world:default:node:codex-dev",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e76d9-0f67-7433-81eb-72da585d28a4",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T11-06-37-019e76d9-0f67-7433-81eb-72da585d28a4.jsonl",
+            "session_title": "请只回复这一句：BUSINESS_SESSION_READY_2026_05_30。不要读取、列出、修改任何文件，不要运行任何命令。",
+            "session_updated_at_ms": 1780110401206,
+            "rollout_exists": true,
+            "project_binding_source": "index_inferred",
+            "binding_source": "workflow_bound",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780073411272,
+            "updated_at_ms": 1780111013102,
+            "warnings": []
+          }
+        ],
+        "node_dispatches": [
+          {
+            "dispatch_id": "dispatch:workflow-users-yoyi-gameai-agent-world-default:work-item-workflow-users-yoyi-gameai-agent-world-default-1780032043420:1780074921611:running",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "node_id": "workflow:users-yoyi-gameai-agent-world:default:node:codex-dev",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "binding_id": "binding:workflow-users-yoyi-gameai-agent-world-default:workflow-users-yoyi-gameai-agent-world-default-node-codex-dev:work-item-workflow-users-yoyi-gameai-agent-world-default-1780032043420",
+            "native_thread_id": "019e7389-349a-7f02-aa31-a4a90b24e865",
+            "prompt_preview": "请只回复这一句：WORKFLOW_NODE_DISPATCH_OK_2026_05_29",
+            "prompt_kind": "safe_probe",
+            "offline_role_dispatch": null,
+            "user_reviewed_instruction": null,
+            "state": "completed",
+            "started_at_ms": 1780074921611,
+            "ended_at_ms": 1780075042172,
+            "exit_code": 0,
+            "last_message_path": "/private/tmp/codex-workflow-node-safe-probe-real-dispatch-v1/dispatch-workflow-users-yoyi-gameai-agent-world-default-work-item-workflow-users-yoyi-gameai-age-last-message.txt",
+            "last_message_summary": "WORKFLOW_NODE_DISPATCH_OK_2026_05_29",
+            "transcript_event_count": 32,
+            "transcript_target_hits": 4,
+            "warnings": [
+              "session_not_found_in_current_index",
+              "session_cwd_differs_from_project_root",
+              "test_session_cwd:/private/tmp/codex-control-probe-v2",
+              "confirmed_test_session_not_business_session",
+              "codex_plugin_catalog_auth_warning",
+              "mcp_shutdown_warning",
+              "transcript_warning_count:3",
+              "transcript_encrypted_content_event_count:2"
+            ]
+          },
+          {
+            "dispatch_id": "dispatch:workflow-users-yoyi-gameai-agent-world-default:work-item-workflow-users-yoyi-gameai-agent-world-default-1780032043420:1780074921611:prepared",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "node_id": "workflow:users-yoyi-gameai-agent-world:default:node:codex-dev",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "binding_id": "binding:workflow-users-yoyi-gameai-agent-world-default:workflow-users-yoyi-gameai-agent-world-default-node-codex-dev:work-item-workflow-users-yoyi-gameai-agent-world-default-1780032043420",
+            "native_thread_id": "019e7389-349a-7f02-aa31-a4a90b24e865",
+            "prompt_preview": "请只回复这一句：WORKFLOW_NODE_DISPATCH_OK_2026_05_29",
+            "prompt_kind": "safe_probe",
+            "offline_role_dispatch": null,
+            "user_reviewed_instruction": null,
+            "state": "prepared",
+            "started_at_ms": null,
+            "ended_at_ms": null,
+            "exit_code": null,
+            "last_message_path": null,
+            "last_message_summary": null,
+            "transcript_event_count": null,
+            "transcript_target_hits": null,
+            "warnings": [
+              "session_not_found_in_current_index",
+              "session_cwd_differs_from_project_root",
+              "test_session_cwd:/private/tmp/codex-control-probe-v2",
+              "confirmed_test_session_not_business_session"
+            ]
+          }
+        ],
+        "director_reviews": [
+          {
+            "review_id": "review:workflow-users-yoyi-gameai-agent-world-default:work-item-workflow-users-yoyi-gameai-agent-world-default-1780032043420:1780077009723",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "dispatch_id": "dispatch:workflow-users-yoyi-gameai-agent-world-default:work-item-workflow-users-yoyi-gameai-agent-world-default-1780032043420:1780074921611:running",
+            "reviewer_role": "director",
+            "decision": "accepted",
+            "summary": "接受为“无业务 safe probe 派发闭环已跑通一次”；不接受为“真实业务自动工作流完成”。",
+            "evidence_refs": [
+              "/Users/yoyi/workspace/product-line/evidence/2026-05-30-workflow-node-safe-probe-real-confirmed-dispatch-v1.md"
+            ],
+            "handoff_refs": [
+              "/Users/yoyi/workspace/product-line/handoffs/2026-05-30-workflow-node-safe-probe-real-confirmed-dispatch-v1-result.md"
+            ],
+            "created_at": "1780077009723",
+            "updated_at": "1780077009723",
+            "warnings": [
+              "session_not_found_in_current_index",
+              "session_cwd_differs_from_project_root",
+              "test_session_cwd:/private/tmp/codex-control-probe-v2",
+              "confirmed_test_session_not_business_session",
+              "codex_plugin_catalog_auth_warning",
+              "mcp_shutdown_warning",
+              "transcript_warning_count:3",
+              "transcript_encrypted_content_event_count:2"
+            ]
+          }
+        ],
+        "execution_controls": [
+          {
+            "control_id": "control:workflow-mario-test-project:1780112848434",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "control_state": "completed",
+            "long_task_state": "completed",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": 900,
+            "cancel_requested_at": null,
+            "failure_reason": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "user-reviewed-instruction:workflow-mario-test-project-v1",
+              "summary": "在 /Users/yoyi 下创建测试专用静态网页小游戏项目，用于验证工作流真实写入和回收。",
+              "objective": "验证工作流能否向绑定 Codex 会话派发一个小型真实写入任务，并完成结果回收。",
+              "execution_cwd": "",
+              "sandbox_mode": "",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/codex-workflow-mario-test 下本次创建的 index.html、styles.css、game.js、README.md"
+              ],
+              "allowed_writes": [
+                "/Users/yoyi/codex-workflow-mario-test",
+                "/Users/yoyi/codex-workflow-mario-test/index.html",
+                "/Users/yoyi/codex-workflow-mario-test/styles.css",
+                "/Users/yoyi/codex-workflow-mario-test/game.js",
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不修改 /Users/yoyi/gameai/agent world",
+                "不修改 /Users/yoyi/workspace/product-line",
+                "不安装依赖、不联网、不运行 harness",
+                "不删除、移动、归档任何 Codex 会话"
+              ],
+              "required_return": [
+                "薄弱点",
+                "创建了哪些文件",
+                "是否写了允许范围外的文件",
+                "是否读取了敏感文件",
+                "如何运行",
+                "自检结果"
+              ],
+              "approval_state": "user_requested_execution",
+              "preview_markdown": "工作流测试：在 /Users/yoyi/codex-workflow-mario-test 创建一个无依赖静态网页跳跃小游戏。"
+            },
+            "audit_event_types": [
+              "workflow_user_reviewed_instruction_dispatched",
+              "workflow_execution_attempt_started"
+            ],
+            "warnings": [
+              "codex_exit_code:0",
+              "created_files:4",
+              "extra_files:0"
+            ]
+          },
+          {
+            "control_id": "control:workflow-mario-test-project:1780112784013",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "control_state": "needs_changes",
+            "long_task_state": "completed_with_boundary_warning",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": 900,
+            "cancel_requested_at": null,
+            "failure_reason": "Codex 会话未按允许文件清单完整创建测试项目，或出现允许范围外文件。",
+            "user_reviewed_instruction": {
+              "instruction_id": "user-reviewed-instruction:workflow-mario-test-project-v1",
+              "summary": "在 /Users/yoyi 下创建测试专用静态网页小游戏项目，用于验证工作流真实写入和回收。",
+              "objective": "验证工作流能否向绑定 Codex 会话派发一个小型真实写入任务，并完成结果回收。",
+              "execution_cwd": "",
+              "sandbox_mode": "",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/codex-workflow-mario-test 下本次创建的 index.html、styles.css、game.js、README.md"
+              ],
+              "allowed_writes": [
+                "/Users/yoyi/codex-workflow-mario-test",
+                "/Users/yoyi/codex-workflow-mario-test/index.html",
+                "/Users/yoyi/codex-workflow-mario-test/styles.css",
+                "/Users/yoyi/codex-workflow-mario-test/game.js",
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不修改 /Users/yoyi/gameai/agent world",
+                "不修改 /Users/yoyi/workspace/product-line",
+                "不安装依赖、不联网、不运行 harness",
+                "不删除、移动、归档任何 Codex 会话"
+              ],
+              "required_return": [
+                "薄弱点",
+                "创建了哪些文件",
+                "是否写了允许范围外的文件",
+                "是否读取了敏感文件",
+                "如何运行",
+                "自检结果"
+              ],
+              "approval_state": "user_requested_execution",
+              "preview_markdown": "工作流测试：在 /Users/yoyi/codex-workflow-mario-test 创建一个无依赖静态网页跳跃小游戏。"
+            },
+            "audit_event_types": [
+              "workflow_user_reviewed_instruction_dispatched",
+              "workflow_execution_attempt_started"
+            ],
+            "warnings": [
+              "codex_exit_code:0",
+              "created_files:0",
+              "extra_files:0"
+            ]
+          },
+          {
+            "control_id": "control:workflow-mario-test-project:1780112518043",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "control_state": "needs_changes",
+            "long_task_state": "completed_with_boundary_warning",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": 900,
+            "cancel_requested_at": null,
+            "failure_reason": "Codex 会话未按允许文件清单完整创建测试项目，或出现允许范围外文件。",
+            "user_reviewed_instruction": {
+              "instruction_id": "user-reviewed-instruction:workflow-mario-test-project-v1",
+              "summary": "在 /Users/yoyi 下创建测试专用静态网页小游戏项目，用于验证工作流真实写入和回收。",
+              "objective": "验证工作流能否向绑定 Codex 会话派发一个小型真实写入任务，并完成结果回收。",
+              "execution_cwd": "",
+              "sandbox_mode": "",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/codex-workflow-mario-test 下本次创建的 index.html、styles.css、game.js、README.md"
+              ],
+              "allowed_writes": [
+                "/Users/yoyi/codex-workflow-mario-test/index.html",
+                "/Users/yoyi/codex-workflow-mario-test/styles.css",
+                "/Users/yoyi/codex-workflow-mario-test/game.js",
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不修改 /Users/yoyi/gameai/agent world",
+                "不修改 /Users/yoyi/workspace/product-line",
+                "不安装依赖、不联网、不运行 harness",
+                "不删除、移动、归档任何 Codex 会话"
+              ],
+              "required_return": [
+                "薄弱点",
+                "创建了哪些文件",
+                "是否写了允许范围外的文件",
+                "是否读取了敏感文件",
+                "如何运行",
+                "自检结果"
+              ],
+              "approval_state": "user_requested_execution",
+              "preview_markdown": "工作流测试：在 /Users/yoyi/codex-workflow-mario-test 创建一个无依赖静态网页跳跃小游戏。"
+            },
+            "audit_event_types": [
+              "workflow_user_reviewed_instruction_dispatched",
+              "workflow_execution_attempt_started"
+            ],
+            "warnings": [
+              "codex_exit_code:0",
+              "created_files:0",
+              "extra_files:0"
+            ]
+          },
+          {
+            "control_id": "control:first-readonly-project-check:1780111503495",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "control_state": "needs_changes",
+            "long_task_state": "completed_with_boundary_warning",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": 600,
+            "cancel_requested_at": null,
+            "failure_reason": "业务会话执行了 find/stat 目录元数据命令；这超出“需要执行命令时先停止并回传”的权限规则。",
+            "user_reviewed_instruction": {
+              "instruction_id": "user-reviewed-instruction:first-tiny-business-readonly-project-check-v1",
+              "summary": "只读体检目标项目目录顶层结构，不修改业务文件。",
+              "objective": "确认目标项目目录是否已有可用业务文件、入口线索和明显风险，为后续真实业务任务做准备。",
+              "execution_cwd": "",
+              "sandbox_mode": "",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/gameai/agent world 的目录元数据和顶层文件/目录名称"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不修改业务文件",
+                "不读取敏感文件或完整 transcript",
+                "不写 /Users/yoyi/.codex",
+                "不运行 harness",
+                "需要执行命令时停止并回传"
+              ],
+              "required_return": [
+                "薄弱点",
+                "读取了哪些范围",
+                "项目结构摘要",
+                "入口猜测和依据",
+                "风险点",
+                "需要用户确认的问题",
+                "下一步建议"
+              ],
+              "approval_state": "executed_with_boundary_warning",
+              "preview_markdown": "第一条极小业务试跑：只读体检 /Users/yoyi/gameai/agent world 顶层结构；不读取正文、不修改文件。"
+            },
+            "audit_event_types": [
+              "workflow_user_reviewed_instruction_dispatched",
+              "workflow_execution_attempt_recorded",
+              "workflow_permission_requested"
+            ],
+            "warnings": [
+              "target_directory_top_level_empty",
+              "business_session_executed_directory_metadata_command",
+              "permission_policy_command_boundary_violation",
+              "plugin_catalog_auth_warning",
+              "mcp_shutdown_warning"
+            ]
+          }
+        ],
+        "permission_requests": [
+          {
+            "request_id": "permission:first-readonly-project-check-command-boundary:1780111503495",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "dispatch_id": null,
+            "permission_kind": "directory_metadata_command_policy",
+            "reason": "业务试跑需要明确是否允许使用 find/stat 这类只读命令读取目录元数据；本次已发生，需总指导回收并由用户确认后续策略。",
+            "status": "pending",
+            "requested_at": "1780111503495",
+            "decided_at": null,
+            "decision": null,
+            "warnings": [
+              "created_after_boundary_warning"
+            ]
+          }
+        ],
+        "execution_attempts": [
+          {
+            "attempt_id": "attempt:workflow-mario-test-project:1780112848434",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "dispatch_id": null,
+            "attempt_no": 1,
+            "state": "completed",
+            "started_at": "1780112848434",
+            "ended_at": "1780112971435",
+            "failure_reason": null,
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": [
+              "target_dir:/Users/yoyi/codex-workflow-mario-test",
+              "native_thread_id:019e76d9-0f67-7433-81eb-72da585d28a4",
+              "codex_exec_resume_will_write_codex_home",
+              "second_attempt_should_use_cd_users_yoyi_if_target_parent_write_is_needed",
+              "last_message_path:/Users/yoyi/workspace/product-line/tmp/workflow-mario-test/last-message-3.md",
+              "target_exists:True",
+              "existing_files:index.html,styles.css,game.js,README.md",
+              "extra_files:"
+            ]
+          },
+          {
+            "attempt_id": "attempt:workflow-mario-test-project:1780112784013",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "dispatch_id": null,
+            "attempt_no": 1,
+            "state": "needs_changes",
+            "started_at": "1780112784013",
+            "ended_at": "1780112825638",
+            "failure_reason": "创建结果不满足四文件静态项目验收。",
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": [
+              "target_dir:/Users/yoyi/codex-workflow-mario-test",
+              "native_thread_id:019e76d9-0f67-7433-81eb-72da585d28a4",
+              "codex_exec_resume_will_write_codex_home",
+              "second_attempt_should_use_cd_users_yoyi_if_target_parent_write_is_needed",
+              "last_message_path:/Users/yoyi/workspace/product-line/tmp/workflow-mario-test/last-message-2.md",
+              "target_exists:False",
+              "existing_files:",
+              "extra_files:"
+            ]
+          },
+          {
+            "attempt_id": "attempt:workflow-mario-test-project:1780112518043",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "dispatch_id": null,
+            "attempt_no": 1,
+            "state": "needs_changes",
+            "started_at": "1780112518043",
+            "ended_at": "1780112585415",
+            "failure_reason": "创建结果不满足四文件静态项目验收。",
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": [
+              "target_dir:/Users/yoyi/codex-workflow-mario-test",
+              "native_thread_id:019e76d9-0f67-7433-81eb-72da585d28a4",
+              "codex_exec_resume_will_write_codex_home",
+              "last_message_path:/Users/yoyi/workspace/product-line/tmp/workflow-mario-test/last-message.md",
+              "target_exists:False",
+              "existing_files:",
+              "extra_files:"
+            ]
+          },
+          {
+            "attempt_id": "attempt:first-readonly-project-check:1780111503495",
+            "project_id": "project:users-yoyi-gameai-agent-world",
+            "workflow_id": "workflow:users-yoyi-gameai-agent-world:default",
+            "work_item_id": "work-item:workflow:users-yoyi-gameai-agent-world:default:1780032043420",
+            "dispatch_id": null,
+            "attempt_no": 1,
+            "state": "needs_changes",
+            "started_at": "1780111503495",
+            "ended_at": "1780111503495",
+            "failure_reason": "只读结果显示目标目录顶层为空；但执行过程中使用 find/stat 命令读取目录元数据，违反“执行命令前先停下回传”的权限规则。",
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": [
+              "top_level_count:0",
+              "command_executed:find_stat",
+              "no_file_content_read",
+              "no_business_file_modified",
+              "wrote_codex_home_via_resume"
+            ]
+          }
+        ]
+      },
+      {
+        "project_id": "project:users-yoyi-codex-workflow-mario-test",
+        "project_root": "/Users/yoyi/codex-workflow-mario-test",
+        "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+        "title": "codex-workflow-mario-test 默认工作流草稿",
+        "state": "draft",
+        "node_count": 7,
+        "edge_count": 6,
+        "task_draft_count": 3,
+        "task_drafts": [
+          {
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:readme-smoke",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "title": "README smoke 极小验证",
+            "state": "ready_for_review",
+            "assigned_role_id": "codex-dev",
+            "current_node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:review",
+            "next_states": [
+              "accepted",
+              "needs_changes",
+              "paused"
+            ],
+            "next_action_label": "下一步：接受或要求修改",
+            "artifact_type": null,
+            "artifact_path": null,
+            "recent_audit_events": [
+              {
+                "event_id": "audit:workflow-node-dispatch-readback:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflo:1780122306967",
+                "event_type": "workflow_node_dispatch_readback_completed",
+                "before_state": "running",
+                "after_state": "readback_completed",
+                "created_at": "1780122306967",
+                "reason": "本轮只读取 last-message 摘要和 README/hash 复核；没有读取完整 transcript。"
+              },
+              {
+                "event_id": "audit:workflow-node-dispatch-completed:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflo:1780122306967",
+                "event_type": "workflow_node_dispatch_completed",
+                "before_state": "running",
+                "after_state": "ready_for_review",
+                "created_at": "1780122306967",
+                "reason": "Codex resume 完成；已写最终回复摘要，没有保存完整 transcript。"
+              },
+              {
+                "event_id": "audit:workflow-node-dispatch-started:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflo:1780122197766",
+                "event_type": "workflow_node_dispatch_started",
+                "before_state": "ready_to_dispatch",
+                "after_state": "running",
+                "created_at": "1780122197766",
+                "reason": "用户确认向绑定 Codex 会话发送用户审核业务指令；会写 /Users/yoyi/.codex、工作台 workflow state 和用户允许的业务路径。"
+              }
+            ]
+          },
+          {
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:state-closure-retest",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "title": "状态收口真实派发复测",
+            "state": "timed_out",
+            "assigned_role_id": "codex-dev",
+            "current_node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+            "next_states": [
+              "retry_pending",
+              "needs_changes",
+              "paused"
+            ],
+            "next_action_label": "下一步：安排重试或要求修改",
+            "artifact_type": null,
+            "artifact_path": null,
+            "recent_audit_events": [
+              {
+                "event_id": "audit:workflow-node-dispatch-failed:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflo:1780129407652",
+                "event_type": "workflow_node_dispatch_failed",
+                "before_state": "running",
+                "after_state": "timed_out",
+                "created_at": "1780129407652",
+                "reason": "Codex resume 状态收口复测超过任务超时上限，已停止并按超时收口。"
+              },
+              {
+                "event_id": "audit:workflow-node-dispatch-started:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflo:1780128642387",
+                "event_type": "workflow_node_dispatch_started",
+                "before_state": "ready_to_dispatch",
+                "after_state": "running",
+                "created_at": "1780128642387",
+                "reason": "用户确认向绑定 Codex 会话发送状态收口复测业务指令；会写 /Users/yoyi/.codex、工作台 workflow state 和用户允许的 README。"
+              },
+              {
+                "event_id": "audit:workflow-node-dispatch-prepared:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflo:1780128642386",
+                "event_type": "workflow_node_dispatch_prepared",
+                "before_state": "ready_to_dispatch",
+                "after_state": "prepared",
+                "created_at": "1780128642386",
+                "reason": "用户确认准备状态收口真实复测派发；只写工作台状态，不发送消息。"
+              }
+            ]
+          },
+          {
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:state-closure-retest-v2",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "title": "状态收口真实派发复测 retry v2",
+            "state": "ready_for_review",
+            "assigned_role_id": "codex-dev",
+            "current_node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:review",
+            "next_states": [
+              "accepted",
+              "needs_changes",
+              "paused"
+            ],
+            "next_action_label": "下一步：接受或要求修改",
+            "artifact_type": null,
+            "artifact_path": null,
+            "recent_audit_events": [
+              {
+                "event_id": "audit:workflow-node-dispatch-readback:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflow-mario-test-default-state-closure-retest-v2-1780135214052:1780135354486",
+                "event_type": "workflow_node_dispatch_readback_completed",
+                "before_state": "running",
+                "after_state": "readback_completed",
+                "created_at": "1780135354486",
+                "reason": "本轮只读取 last-message 摘要和 README/hash 复核；没有读取完整 transcript。"
+              },
+              {
+                "event_id": "audit:workflow-node-dispatch-completed:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflow-mario-test-default-state-closure-retest-v2-1780135214052:1780135354486",
+                "event_type": "workflow_node_dispatch_completed",
+                "before_state": "running",
+                "after_state": "ready_for_review",
+                "created_at": "1780135354486",
+                "reason": "Codex resume v2 完成并返回 README_UPDATED_STATE_CLOSURE_RETEST_V2；已写最终回复摘要，没有保存完整 transcript。"
+              },
+              {
+                "event_id": "audit:workflow-node-dispatch-started:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflow-mario-test-default-state-closure-retest-v2-1780135214052:1780135214052",
+                "event_type": "workflow_node_dispatch_started",
+                "before_state": "ready_to_dispatch",
+                "after_state": "running",
+                "created_at": "1780135214052",
+                "reason": "用户确认向绑定 Codex 会话发送状态收口复测 v2 指令；会写 /Users/yoyi/.codex、工作台 workflow state 和测试 README。"
+              }
+            ]
+          }
+        ],
+        "node_session_bindings": [
+          {
+            "binding_id": "binding:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-node-codex-dev:workflow-users-yoyi-codex-workflow-mario-test-default-readme-smoke",
+            "project_id": "project:users-yoyi-codex-workflow-mario-test",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:readme-smoke",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e7738-5e29-74e0-a22f-5c2481b64c38",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T12-50-43-019e7738-5e29-74e0-a22f-5c2481b64c38.jsonl",
+            "session_title": "请只回复这一句：WORKFLOW_MARIO_TEST_SESSION_READY_2026_05_30。不要读取、列出、修改任何文件，不要运行任何命令。",
+            "session_updated_at_ms": 1780116647633,
+            "rollout_exists": true,
+            "project_binding_source": "index_project_root_matched",
+            "binding_source": "workflow_bound",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780119961972,
+            "updated_at_ms": 1780119961972,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-node-codex-dev:workflow-users-yoyi-codex-workflow-mario-test-default-state-closure-retest",
+            "project_id": "project:users-yoyi-codex-workflow-mario-test",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:state-closure-retest",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e7738-5e29-74e0-a22f-5c2481b64c38",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T12-50-43-019e7738-5e29-74e0-a22f-5c2481b64c38.jsonl",
+            "session_title": "请只回复这一句：WORKFLOW_MARIO_TEST_SESSION_READY_2026_05_30。不要读取、列出、修改任何文件，不要运行任何命令。",
+            "session_updated_at_ms": 1780116647633,
+            "rollout_exists": true,
+            "project_binding_source": "index_project_root_matched",
+            "binding_source": "workflow_bound",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780127457937,
+            "updated_at_ms": 1780127457937,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-node-codex-dev:workflow-users-yoyi-codex-workflow-mario-test-default-state-closure-retest-v2",
+            "project_id": "project:users-yoyi-codex-workflow-mario-test",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:state-closure-retest-v2",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e7738-5e29-74e0-a22f-5c2481b64c38",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T12-50-43-019e7738-5e29-74e0-a22f-5c2481b64c38.jsonl",
+            "session_title": "请只回复这一句：WORKFLOW_MARIO_TEST_SESSION_READY_2026_05_30。不要读取、列出、修改任何文件，不要运行任何命令。",
+            "session_updated_at_ms": 1780116647633,
+            "rollout_exists": true,
+            "project_binding_source": "index_project_root_matched",
+            "binding_source": "workflow_bound",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780131018244,
+            "updated_at_ms": 1780131018244,
+            "warnings": [
+              "prepared_after_previous_timeout"
+            ]
+          }
+        ],
+        "node_dispatches": [
+          {
+            "dispatch_id": "dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-state-closure-retest:1780128642387",
+            "project_id": "project:users-yoyi-codex-workflow-mario-test",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:state-closure-retest",
+            "binding_id": "binding:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-node-codex-dev:workflow-users-yoyi-codex-workflow-mario-test-default-state-closure-retest",
+            "native_thread_id": "019e7738-5e29-74e0-a22f-5c2481b64c38",
+            "prompt_preview": "请执行用户审核业务指令。只能完成以下目标，不要扩展任务。\n\n目标：在 /Users/yoyi/codex-workflow-mario-test/README.md 末尾追加一行：Workflow dispatch state closure retest passed.\n\n边界：\n- 只允许读取 /Users/yoyi/codex-workflow-mario-test/README.md。\n- 只允许修改 /Users/yoyi/codex-workflow-mario-test/README.md。\n- 不修改 index.html、styles.css、game.js。\n- 不修改 /Users/yoyi/gameai/agent world。\n- 不读取 auth.json、.env、密钥、token 或授权文件。\n- 不读取完整 transcript。\n- 不运行 harness。\n- 不联网安装依赖。\n\n执行要求：\n- 如果目标行已经存在，不要重复追加。\n- 完成后只做必要自检：确认 README 中存在目标行；不要扫描全仓库。\n\n回传必须包含：薄弱点、是否修改 README、是否修改允许范围外文件、是否读取敏感文件、最终文件摘要、自检结果。",
+            "prompt_kind": "user_reviewed_instruction",
+            "offline_role_dispatch": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "user-reviewed-instruction:state-closure-retest-v1",
+              "summary": "向测试项目 README 追加一行状态收口复测标记。",
+              "objective": "验证修复后的工作流状态收口路径在真实派发后不会让 codex-dev 节点残留 running。",
+              "execution_cwd": "/Users/yoyi",
+              "sandbox_mode": "workspace-write",
+              "allowed_write_roots": [
+                "/Users/yoyi/codex-workflow-mario-test"
+              ],
+              "allowed_reads": [
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "allowed_writes": [
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不修改 index.html、styles.css、game.js",
+                "不修改 /Users/yoyi/gameai/agent world",
+                "不运行 harness",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "是否修改 README",
+                "是否修改允许范围外文件",
+                "是否读取敏感文件",
+                "最终文件摘要",
+                "自检结果"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n向测试项目 README 追加一行状态收口复测标记。\n\n## 目标\n验证修复后的工作流状态收口路径在真实派发后不会让 codex-dev 节点残留 running。\n\n## 执行目录\n/Users/yoyi\n\n## 沙箱模式\nworkspace-write\n\n## 允许写入根目录\n- /Users/yoyi/codex-workflow-mario-test\n\n## 允许读取\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n## 允许写入\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不修改 index.html、styles.css、game.js\n- 不修改 /Users/yoyi/gameai/agent world\n- 不运行 harness\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 是否修改 README\n- 是否修改允许范围外文件\n- 是否读取敏感文件\n- 最终文件摘要\n- 自检结果"
+            },
+            "state": "failed",
+            "started_at_ms": 1780128642387,
+            "ended_at_ms": 1780129407652,
+            "exit_code": -1,
+            "last_message_path": "/tmp/codex-workflow-node-dispatch-v1/dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflo-1780128642387-last-message.txt",
+            "last_message_summary": "",
+            "transcript_event_count": null,
+            "transcript_target_hits": null,
+            "warnings": [
+              "timeout"
+            ]
+          },
+          {
+            "dispatch_id": "dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-state-closure-retest:1780128642386",
+            "project_id": "project:users-yoyi-codex-workflow-mario-test",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:state-closure-retest",
+            "binding_id": "binding:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-node-codex-dev:workflow-users-yoyi-codex-workflow-mario-test-default-state-closure-retest",
+            "native_thread_id": "019e7738-5e29-74e0-a22f-5c2481b64c38",
+            "prompt_preview": "请执行用户审核业务指令。只能完成以下目标，不要扩展任务。\n\n目标：在 /Users/yoyi/codex-workflow-mario-test/README.md 末尾追加一行：Workflow dispatch state closure retest passed.\n\n边界：\n- 只允许读取 /Users/yoyi/codex-workflow-mario-test/README.md。\n- 只允许修改 /Users/yoyi/codex-workflow-mario-test/README.md。\n- 不修改 index.html、styles.css、game.js。\n- 不修改 /Users/yoyi/gameai/agent world。\n- 不读取 auth.json、.env、密钥、token 或授权文件。\n- 不读取完整 transcript。\n- 不运行 harness。\n- 不联网安装依赖。\n\n执行要求：\n- 如果目标行已经存在，不要重复追加。\n- 完成后只做必要自检：确认 README 中存在目标行；不要扫描全仓库。\n\n回传必须包含：薄弱点、是否修改 README、是否修改允许范围外文件、是否读取敏感文件、最终文件摘要、自检结果。",
+            "prompt_kind": "user_reviewed_instruction",
+            "offline_role_dispatch": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "user-reviewed-instruction:state-closure-retest-v1",
+              "summary": "向测试项目 README 追加一行状态收口复测标记。",
+              "objective": "验证修复后的工作流状态收口路径在真实派发后不会让 codex-dev 节点残留 running。",
+              "execution_cwd": "/Users/yoyi",
+              "sandbox_mode": "workspace-write",
+              "allowed_write_roots": [
+                "/Users/yoyi/codex-workflow-mario-test"
+              ],
+              "allowed_reads": [
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "allowed_writes": [
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不修改 index.html、styles.css、game.js",
+                "不修改 /Users/yoyi/gameai/agent world",
+                "不运行 harness",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "是否修改 README",
+                "是否修改允许范围外文件",
+                "是否读取敏感文件",
+                "最终文件摘要",
+                "自检结果"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n向测试项目 README 追加一行状态收口复测标记。\n\n## 目标\n验证修复后的工作流状态收口路径在真实派发后不会让 codex-dev 节点残留 running。\n\n## 执行目录\n/Users/yoyi\n\n## 沙箱模式\nworkspace-write\n\n## 允许写入根目录\n- /Users/yoyi/codex-workflow-mario-test\n\n## 允许读取\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n## 允许写入\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不修改 index.html、styles.css、game.js\n- 不修改 /Users/yoyi/gameai/agent world\n- 不运行 harness\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 是否修改 README\n- 是否修改允许范围外文件\n- 是否读取敏感文件\n- 最终文件摘要\n- 自检结果"
+            },
+            "state": "prepared",
+            "started_at_ms": null,
+            "ended_at_ms": null,
+            "exit_code": null,
+            "last_message_path": null,
+            "last_message_summary": null,
+            "transcript_event_count": null,
+            "transcript_target_hits": null,
+            "warnings": []
+          },
+          {
+            "dispatch_id": "dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-readme-smoke:1780122197766",
+            "project_id": "project:users-yoyi-codex-workflow-mario-test",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:readme-smoke",
+            "binding_id": "binding:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-node-codex-dev:workflow-users-yoyi-codex-workflow-mario-test-default-readme-smoke",
+            "native_thread_id": "019e7738-5e29-74e0-a22f-5c2481b64c38",
+            "prompt_preview": "你将执行一条用户审核过的真实业务指令。\n\n指令 ID：user-reviewed-instruction:readme-smoke-v1\n摘要：向测试项目 README 追加一行 smoke 标记。\n\n目标：\n验证桌面壳用户审核业务派发能真实修改允许范围内的文件，并完成回收。\n\n具体修改：\n只在 /Users/yoyi/codex-workflow-mario-test/README.md 末尾追加一行：Workflow dispatch smoke passed.\n\n执行目录：\n/Users/yoyi\n\n沙箱模式：\nworkspace-write\n\n允许读取：\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n允许写入：\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n允许写入根目录：\n- /Users/yoyi/codex-workflow-mario-test\n\n禁止事项：\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不修改 index.html、styles.css、game.js\n- 不修改 /Users/yoyi/gameai/agent world\n- 不运行 harness\n- 不联网安装依赖\n\n超时秒数：300\n最大重试：0\n\n必须回传：\n- 薄弱点\n- 是否修改 README\n- 是否修改允许范围外文件\n- 是否读取敏感文件\n- 最终文件摘要\n- 自检结果",
+            "prompt_kind": "user_reviewed_instruction",
+            "offline_role_dispatch": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "user-reviewed-instruction:readme-smoke-v1",
+              "summary": "向测试项目 README 追加一行 smoke 标记。",
+              "objective": "验证桌面壳用户审核业务派发能真实修改允许范围内的文件，并完成回收。",
+              "execution_cwd": "/Users/yoyi",
+              "sandbox_mode": "workspace-write",
+              "allowed_write_roots": [
+                "/Users/yoyi/codex-workflow-mario-test"
+              ],
+              "allowed_reads": [
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "allowed_writes": [
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不修改 index.html、styles.css、game.js",
+                "不修改 /Users/yoyi/gameai/agent world",
+                "不运行 harness",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "是否修改 README",
+                "是否修改允许范围外文件",
+                "是否读取敏感文件",
+                "最终文件摘要",
+                "自检结果"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n向测试项目 README 追加一行 smoke 标记。\n\n## 目标\n验证桌面壳用户审核业务派发能真实修改允许范围内的文件，并完成回收。\n\n## 执行目录\n/Users/yoyi\n\n## 沙箱模式\nworkspace-write\n\n## 允许写入根目录\n- /Users/yoyi/codex-workflow-mario-test\n\n## 允许读取\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n## 允许写入\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不修改 index.html、styles.css、game.js\n- 不修改 /Users/yoyi/gameai/agent world\n- 不运行 harness\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 是否修改 README\n- 是否修改允许范围外文件\n- 是否读取敏感文件\n- 最终文件摘要\n- 自检结果"
+            },
+            "state": "completed",
+            "started_at_ms": 1780122197766,
+            "ended_at_ms": 1780122306967,
+            "exit_code": 0,
+            "last_message_path": "/tmp/codex-workflow-node-dispatch-v1/dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflo-1780122197766-last-message.txt",
+            "last_message_summary": "薄弱点：只能基于允许读取的 `README.md` 做验证；没有读取全仓库状态，所以“不修改允许范围外文件”是基于本轮实际执行动作判断，不是全仓库扫描结论。 是否修改 README：是。已在 `/Users/yoyi/codex-workflow-mario-test/README.md` 末尾追加 `Workflow dispatch smoke passed.` 是否修改允许范围外文件：否。依据：本轮只调用了对该 README 的读取和一次 `apply_patch` 修",
+            "transcript_event_count": null,
+            "transcript_target_hits": null,
+            "warnings": []
+          },
+          {
+            "dispatch_id": "dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-readme-smoke:1780122197765",
+            "project_id": "project:users-yoyi-codex-workflow-mario-test",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:readme-smoke",
+            "binding_id": "binding:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-node-codex-dev:workflow-users-yoyi-codex-workflow-mario-test-default-readme-smoke",
+            "native_thread_id": "019e7738-5e29-74e0-a22f-5c2481b64c38",
+            "prompt_preview": "你将执行一条用户审核过的真实业务指令。\n\n指令 ID：user-reviewed-instruction:readme-smoke-v1\n摘要：向测试项目 README 追加一行 smoke 标记。\n\n目标：\n验证桌面壳用户审核业务派发能真实修改允许范围内的文件，并完成回收。\n\n具体修改：\n只在 /Users/yoyi/codex-workflow-mario-test/README.md 末尾追加一行：Workflow dispatch smoke passed.\n\n执行目录：\n/Users/yoyi\n\n沙箱模式：\nworkspace-write\n\n允许读取：\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n允许写入：\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n允许写入根目录：\n- /Users/yoyi/codex-workflow-mario-test\n\n禁止事项：\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不修改 index.html、styles.css、game.js\n- 不修改 /Users/yoyi/gameai/agent world\n- 不运行 harness\n- 不联网安装依赖\n\n超时秒数：300\n最大重试：0\n\n必须回传：\n- 薄弱点\n- 是否修改 README\n- 是否修改允许范围外文件\n- 是否读取敏感文件\n- 最终文件摘要\n- 自检结果",
+            "prompt_kind": "user_reviewed_instruction",
+            "offline_role_dispatch": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "user-reviewed-instruction:readme-smoke-v1",
+              "summary": "向测试项目 README 追加一行 smoke 标记。",
+              "objective": "验证桌面壳用户审核业务派发能真实修改允许范围内的文件，并完成回收。",
+              "execution_cwd": "/Users/yoyi",
+              "sandbox_mode": "workspace-write",
+              "allowed_write_roots": [
+                "/Users/yoyi/codex-workflow-mario-test"
+              ],
+              "allowed_reads": [
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "allowed_writes": [
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不修改 index.html、styles.css、game.js",
+                "不修改 /Users/yoyi/gameai/agent world",
+                "不运行 harness",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "是否修改 README",
+                "是否修改允许范围外文件",
+                "是否读取敏感文件",
+                "最终文件摘要",
+                "自检结果"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n向测试项目 README 追加一行 smoke 标记。\n\n## 目标\n验证桌面壳用户审核业务派发能真实修改允许范围内的文件，并完成回收。\n\n## 执行目录\n/Users/yoyi\n\n## 沙箱模式\nworkspace-write\n\n## 允许写入根目录\n- /Users/yoyi/codex-workflow-mario-test\n\n## 允许读取\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n## 允许写入\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不修改 index.html、styles.css、game.js\n- 不修改 /Users/yoyi/gameai/agent world\n- 不运行 harness\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 是否修改 README\n- 是否修改允许范围外文件\n- 是否读取敏感文件\n- 最终文件摘要\n- 自检结果"
+            },
+            "state": "prepared",
+            "started_at_ms": null,
+            "ended_at_ms": null,
+            "exit_code": null,
+            "last_message_path": null,
+            "last_message_summary": null,
+            "transcript_event_count": null,
+            "transcript_target_hits": null,
+            "warnings": []
+          }
+        ],
+        "director_reviews": [],
+        "execution_controls": [
+          {
+            "control_id": "control:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflo:1780129407652",
+            "project_id": "project:users-yoyi-codex-workflow-mario-test",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:state-closure-retest",
+            "control_state": "timed_out",
+            "long_task_state": "timed_out",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": 300,
+            "cancel_requested_at": null,
+            "failure_reason": "timeout",
+            "user_reviewed_instruction": {
+              "instruction_id": "user-reviewed-instruction:state-closure-retest-v1",
+              "summary": "向测试项目 README 追加一行状态收口复测标记。",
+              "objective": "验证修复后的工作流状态收口路径在真实派发后不会让 codex-dev 节点残留 running。",
+              "execution_cwd": "/Users/yoyi",
+              "sandbox_mode": "workspace-write",
+              "allowed_write_roots": [
+                "/Users/yoyi/codex-workflow-mario-test"
+              ],
+              "allowed_reads": [
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "allowed_writes": [
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不修改 index.html、styles.css、game.js",
+                "不修改 /Users/yoyi/gameai/agent world",
+                "不运行 harness",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "是否修改 README",
+                "是否修改允许范围外文件",
+                "是否读取敏感文件",
+                "最终文件摘要",
+                "自检结果"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n向测试项目 README 追加一行状态收口复测标记。\n\n## 目标\n验证修复后的工作流状态收口路径在真实派发后不会让 codex-dev 节点残留 running。\n\n## 执行目录\n/Users/yoyi\n\n## 沙箱模式\nworkspace-write\n\n## 允许写入根目录\n- /Users/yoyi/codex-workflow-mario-test\n\n## 允许读取\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n## 允许写入\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不修改 index.html、styles.css、game.js\n- 不修改 /Users/yoyi/gameai/agent world\n- 不运行 harness\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 是否修改 README\n- 是否修改允许范围外文件\n- 是否读取敏感文件\n- 最终文件摘要\n- 自检结果"
+            },
+            "audit_event_types": [
+              "workflow_node_dispatch_started",
+              "workflow_node_dispatch_failed"
+            ],
+            "warnings": [
+              "timeout"
+            ]
+          },
+          {
+            "control_id": "control:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflo:1780122306967",
+            "project_id": "project:users-yoyi-codex-workflow-mario-test",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:readme-smoke",
+            "control_state": "ready_for_review",
+            "long_task_state": "completed",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": 300,
+            "cancel_requested_at": null,
+            "failure_reason": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "user-reviewed-instruction:readme-smoke-v1",
+              "summary": "向测试项目 README 追加一行 smoke 标记。",
+              "objective": "验证桌面壳用户审核业务派发能真实修改允许范围内的文件，并完成回收。",
+              "execution_cwd": "/Users/yoyi",
+              "sandbox_mode": "workspace-write",
+              "allowed_write_roots": [
+                "/Users/yoyi/codex-workflow-mario-test"
+              ],
+              "allowed_reads": [
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "allowed_writes": [
+                "/Users/yoyi/codex-workflow-mario-test/README.md"
+              ],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不修改 index.html、styles.css、game.js",
+                "不修改 /Users/yoyi/gameai/agent world",
+                "不运行 harness",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "是否修改 README",
+                "是否修改允许范围外文件",
+                "是否读取敏感文件",
+                "最终文件摘要",
+                "自检结果"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n向测试项目 README 追加一行 smoke 标记。\n\n## 目标\n验证桌面壳用户审核业务派发能真实修改允许范围内的文件，并完成回收。\n\n## 执行目录\n/Users/yoyi\n\n## 沙箱模式\nworkspace-write\n\n## 允许写入根目录\n- /Users/yoyi/codex-workflow-mario-test\n\n## 允许读取\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n## 允许写入\n- /Users/yoyi/codex-workflow-mario-test/README.md\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不修改 index.html、styles.css、game.js\n- 不修改 /Users/yoyi/gameai/agent world\n- 不运行 harness\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 是否修改 README\n- 是否修改允许范围外文件\n- 是否读取敏感文件\n- 最终文件摘要\n- 自检结果"
+            },
+            "audit_event_types": [
+              "workflow_node_dispatch_started",
+              "workflow_node_dispatch_completed"
+            ],
+            "warnings": []
+          }
+        ],
+        "permission_requests": [],
+        "execution_attempts": [
+          {
+            "attempt_id": "attempt:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflo:1780129407652",
+            "project_id": "project:users-yoyi-codex-workflow-mario-test",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:state-closure-retest",
+            "dispatch_id": "dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-state-closure-retest:1780128642387",
+            "attempt_no": 1,
+            "state": "timed_out",
+            "started_at": null,
+            "ended_at": "1780129407652",
+            "failure_reason": "timeout",
+            "retry_scheduled_at": null,
+            "timed_out_at": "1780129407652",
+            "cancel_requested_at": null,
+            "warnings": [
+              "timeout"
+            ]
+          },
+          {
+            "attempt_id": "attempt:dispatch-workflow-users-yoyi-codex-workflow-mario-test-default-workflow-users-yoyi-codex-workflo:1780122306967",
+            "project_id": "project:users-yoyi-codex-workflow-mario-test",
+            "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-codex-workflow-mario-test:default:readme-smoke",
+            "dispatch_id": "dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:workflow-users-yoyi-codex-workflow-mario-test-default-readme-smoke:1780122197766",
+            "attempt_no": 1,
+            "state": "completed",
+            "started_at": "1780122197766",
+            "ended_at": "1780122306967",
+            "failure_reason": null,
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": []
+          }
+        ]
+      },
+      {
+        "project_id": "project:users-yoyi-workspace",
+        "project_root": "/Users/yoyi/workspace",
+        "workflow_id": "workflow:users-yoyi-workspace:default",
+        "title": "workspace 默认工作流草稿",
+        "state": "draft",
+        "node_count": 7,
+        "edge_count": 6,
+        "task_draft_count": 0,
+        "task_drafts": [],
+        "node_session_bindings": [],
+        "node_dispatches": [],
+        "director_reviews": [],
+        "execution_controls": [],
+        "permission_requests": [],
+        "execution_attempts": []
+      },
+      {
+        "project_id": "project:users-yoyi-documents-mario-test",
+        "project_root": "/Users/yoyi/Documents/mario test",
+        "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+        "title": "mario test 四角色编排测试工作流",
+        "state": "draft",
+        "node_count": 7,
+        "edge_count": 7,
+        "task_draft_count": 4,
+        "task_drafts": [
+          {
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v1",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "title": "创建马里奥 demo 的总指导计划",
+            "state": "failed",
+            "assigned_role_id": "director",
+            "current_node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+            "next_states": [
+              "retry_pending",
+              "needs_changes",
+              "paused"
+            ],
+            "next_action_label": "下一步：安排重试或要求修改",
+            "artifact_type": null,
+            "artifact_path": null,
+            "recent_audit_events": [
+              {
+                "event_id": "audit:workflow-machine-run-finished:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:1780162567062",
+                "event_type": "workflow_machine_run_finished",
+                "before_state": "running",
+                "after_state": "failed",
+                "created_at": "1780162567062",
+                "reason": "工作流机器结束：state=failed, rounds=1, steps=1"
+              },
+              {
+                "event_id": "audit:workflow-machine-step-reset:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:1780162567050",
+                "event_type": "workflow_machine_step_ready_for_next_role",
+                "before_state": "ready_for_review",
+                "after_state": "failed",
+                "created_at": "1780162567050",
+                "reason": "工作流机器完成 director 步骤后，为下一角色继续派发重置工作项状态。"
+              },
+              {
+                "event_id": "audit:workflow-node-dispatch-failed:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780162567021",
+                "event_type": "workflow_node_dispatch_failed",
+                "before_state": "running",
+                "after_state": "timed_out",
+                "created_at": "1780162567021",
+                "reason": "Codex resume 未成功完成，exit_code=-1。"
+              }
+            ]
+          },
+          {
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v2",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "title": "创建马里奥 demo 的四角色闭环重试 v2",
+            "state": "failed",
+            "assigned_role_id": "director",
+            "current_node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+            "next_states": [
+              "retry_pending",
+              "needs_changes",
+              "paused"
+            ],
+            "next_action_label": "下一步：安排重试或要求修改",
+            "artifact_type": null,
+            "artifact_path": null,
+            "recent_audit_events": [
+              {
+                "event_id": "audit:workflow-machine-run-finished:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:1780163764910",
+                "event_type": "workflow_machine_run_finished",
+                "before_state": "running",
+                "after_state": "failed",
+                "created_at": "1780163764910",
+                "reason": "工作流机器结束：state=failed, rounds=1, steps=1"
+              },
+              {
+                "event_id": "audit:workflow-machine-step-reset:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:1780163764897",
+                "event_type": "workflow_machine_step_ready_for_next_role",
+                "before_state": "ready_for_review",
+                "after_state": "failed",
+                "created_at": "1780163764897",
+                "reason": "工作流机器完成 director 步骤后，为下一角色继续派发重置工作项状态。"
+              },
+              {
+                "event_id": "audit:workflow-node-dispatch-failed:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780163764867",
+                "event_type": "workflow_node_dispatch_failed",
+                "before_state": "running",
+                "after_state": "timed_out",
+                "created_at": "1780163764867",
+                "reason": "Codex resume 未成功完成，exit_code=-1。"
+              }
+            ]
+          },
+          {
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v3",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "title": "创建马里奥 demo 的四角色闭环重试 v3",
+            "state": "failed",
+            "assigned_role_id": "director",
+            "current_node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+            "next_states": [
+              "retry_pending",
+              "needs_changes",
+              "paused"
+            ],
+            "next_action_label": "下一步：安排重试或要求修改",
+            "artifact_type": null,
+            "artifact_path": null,
+            "recent_audit_events": [
+              {
+                "event_id": "audit:workflow-machine-run-finished:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:1780164644929",
+                "event_type": "workflow_machine_run_finished",
+                "before_state": "running",
+                "after_state": "failed",
+                "created_at": "1780164644929",
+                "reason": "工作流机器结束：state=failed, rounds=1, steps=2"
+              },
+              {
+                "event_id": "audit:workflow-machine-step-reset:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:1780164644916",
+                "event_type": "workflow_machine_step_ready_for_next_role",
+                "before_state": "ready_for_review",
+                "after_state": "failed",
+                "created_at": "1780164644916",
+                "reason": "工作流机器完成 codex-dev 步骤后，为下一角色继续派发重置工作项状态。"
+              },
+              {
+                "event_id": "audit:workflow-node-dispatch-failed:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780164644884",
+                "event_type": "workflow_node_dispatch_failed",
+                "before_state": "running",
+                "after_state": "timed_out",
+                "created_at": "1780164644884",
+                "reason": "Codex resume 未成功完成，exit_code=-1。"
+              }
+            ]
+          },
+          {
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "title": "创建马里奥 demo 的四角色闭环重试 v4",
+            "state": "needs_changes",
+            "assigned_role_id": "director",
+            "current_node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+            "next_states": [
+              "ready_to_dispatch",
+              "paused"
+            ],
+            "next_action_label": "下一步：重新标记待派发",
+            "artifact_type": null,
+            "artifact_path": null,
+            "recent_audit_events": [
+              {
+                "event_id": "audit:workflow-machine-run-finished:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:1780165504213",
+                "event_type": "workflow_machine_run_finished",
+                "before_state": "running",
+                "after_state": "needs_changes",
+                "created_at": "1780165504213",
+                "reason": "工作流机器结束：state=needs_changes, rounds=3, steps=13"
+              },
+              {
+                "event_id": "audit:workflow-machine-step-reset:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:1780165504193",
+                "event_type": "workflow_machine_step_ready_for_next_role",
+                "before_state": "ready_for_review",
+                "after_state": "ready_to_dispatch",
+                "created_at": "1780165504193",
+                "reason": "工作流机器完成 director 步骤后，为下一角色继续派发重置工作项状态。"
+              },
+              {
+                "event_id": "audit:workflow-node-dispatch-readback:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165504155",
+                "event_type": "workflow_node_dispatch_readback_completed",
+                "before_state": "running",
+                "after_state": "readback_completed",
+                "created_at": "1780165504155",
+                "reason": "transcript reader 只回填统计：events=44 hits=0"
+              }
+            ]
+          }
+        ],
+        "node_session_bindings": [
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-director:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v1",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v1",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-39-35-019e798a-6ce5-76c3-b8ee-33bd0fda841f.jsonl",
+            "session_title": "总指导",
+            "session_updated_at_ms": 1780155634047,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_bound_four_role_test",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780156724812,
+            "updated_at_ms": 1780156724812,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-codex-dev:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v1",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v1",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-39-51-019e798a-ac37-7771-b982-e38084fcd22e.jsonl",
+            "session_title": "开发线",
+            "session_updated_at_ms": 1780155637613,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_bound_four_role_test",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780156724812,
+            "updated_at_ms": 1780156724812,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-validation:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v1",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:validation",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v1",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798a-f9d4-7922-8da8-1b6a8dbd6769",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-40-11-019e798a-f9d4-7922-8da8-1b6a8dbd6769.jsonl",
+            "session_title": "验证线",
+            "session_updated_at_ms": 1780155652304,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_bound_four_role_test",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780156724812,
+            "updated_at_ms": 1780156724812,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-review:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v1",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:review",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v1",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798b-2ee7-7f90-beb2-9031f6ad3e05",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-40-25-019e798b-2ee7-7f90-beb2-9031f6ad3e05.jsonl",
+            "session_title": "回收线",
+            "session_updated_at_ms": 1780155681286,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_bound_four_role_test",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780156724812,
+            "updated_at_ms": 1780156724812,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-director:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v2",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v2",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-39-35-019e798a-6ce5-76c3-b8ee-33bd0fda841f.jsonl",
+            "session_title": "总指导",
+            "session_updated_at_ms": 1780155634047,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_machine_retry_v2_after_director_timeout",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780163101569,
+            "updated_at_ms": 1780163101569,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-codex-dev:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v2",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v2",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-39-51-019e798a-ac37-7771-b982-e38084fcd22e.jsonl",
+            "session_title": "开发线",
+            "session_updated_at_ms": 1780155637613,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_machine_retry_v2_after_director_timeout",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780163101569,
+            "updated_at_ms": 1780163101569,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-validation:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v2",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:validation",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v2",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798a-f9d4-7922-8da8-1b6a8dbd6769",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-40-11-019e798a-f9d4-7922-8da8-1b6a8dbd6769.jsonl",
+            "session_title": "验证线",
+            "session_updated_at_ms": 1780155652304,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_machine_retry_v2_after_director_timeout",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780163101569,
+            "updated_at_ms": 1780163101569,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-review:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v2",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:review",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v2",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798b-2ee7-7f90-beb2-9031f6ad3e05",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-40-25-019e798b-2ee7-7f90-beb2-9031f6ad3e05.jsonl",
+            "session_title": "回收线",
+            "session_updated_at_ms": 1780155681286,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_machine_retry_v2_after_director_timeout",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780163101569,
+            "updated_at_ms": 1780163101569,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-director:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v3",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v3",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-39-35-019e798a-6ce5-76c3-b8ee-33bd0fda841f.jsonl",
+            "session_title": "总指导",
+            "session_updated_at_ms": 1780155634047,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_machine_retry_v3_local_director_plan_fallback",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780164001639,
+            "updated_at_ms": 1780164001639,
+            "warnings": [
+              "first_round_director_uses_local_plan_fallback"
+            ]
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-codex-dev:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v3",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v3",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-39-51-019e798a-ac37-7771-b982-e38084fcd22e.jsonl",
+            "session_title": "开发线",
+            "session_updated_at_ms": 1780155637613,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_machine_retry_v3_local_director_plan_fallback",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780164001639,
+            "updated_at_ms": 1780164001639,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-validation:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v3",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:validation",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v3",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798a-f9d4-7922-8da8-1b6a8dbd6769",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-40-11-019e798a-f9d4-7922-8da8-1b6a8dbd6769.jsonl",
+            "session_title": "验证线",
+            "session_updated_at_ms": 1780155652304,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_machine_retry_v3_local_director_plan_fallback",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780164001639,
+            "updated_at_ms": 1780164001639,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-review:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v3",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:review",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v3",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798b-2ee7-7f90-beb2-9031f6ad3e05",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-40-25-019e798b-2ee7-7f90-beb2-9031f6ad3e05.jsonl",
+            "session_title": "回收线",
+            "session_updated_at_ms": 1780155681286,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_machine_retry_v3_local_director_plan_fallback",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780164001639,
+            "updated_at_ms": 1780164001639,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-director:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-39-35-019e798a-6ce5-76c3-b8ee-33bd0fda841f.jsonl",
+            "session_title": "总指导",
+            "session_updated_at_ms": 1780155634047,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_machine_retry_v4_runner_stdin_close_fix",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780164837994,
+            "updated_at_ms": 1780164837994,
+            "warnings": [
+              "first_round_director_uses_local_plan_fallback"
+            ]
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-codex-dev:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-39-51-019e798a-ac37-7771-b982-e38084fcd22e.jsonl",
+            "session_title": "开发线",
+            "session_updated_at_ms": 1780155637613,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_machine_retry_v4_runner_stdin_close_fix",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780164837994,
+            "updated_at_ms": 1780164837994,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-validation:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:validation",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798a-f9d4-7922-8da8-1b6a8dbd6769",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-40-11-019e798a-f9d4-7922-8da8-1b6a8dbd6769.jsonl",
+            "session_title": "验证线",
+            "session_updated_at_ms": 1780155652304,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_machine_retry_v4_runner_stdin_close_fix",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780164837994,
+            "updated_at_ms": 1780164837994,
+            "warnings": []
+          },
+          {
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-review:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:review",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "agent_type": "codex",
+            "adapter_id": "codex-local",
+            "native_thread_id": "019e798b-2ee7-7f90-beb2-9031f6ad3e05",
+            "native_rollout_path": "/Users/yoyi/.codex/sessions/2026/05/30/rollout-2026-05-30T23-40-25-019e798b-2ee7-7f90-beb2-9031f6ad3e05.jsonl",
+            "session_title": "回收线",
+            "session_updated_at_ms": 1780155681286,
+            "rollout_exists": true,
+            "project_binding_source": "index_exact_project_root_and_title",
+            "binding_source": "workflow_machine_retry_v4_runner_stdin_close_fix",
+            "binding_mode": "select_existing_session",
+            "lifecycle": "active",
+            "created_at_ms": 1780164837994,
+            "updated_at_ms": 1780164837994,
+            "warnings": []
+          }
+        ],
+        "node_dispatches": [
+          {
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165491334",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-director:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4",
+            "native_thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+            "prompt_preview": "你是总指导。请根据开发线、验证线、回收线的结果判断是否进入下一轮。若目标已完成，必须明确给出最终结论。不要修改文件。\n\n总目标：\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n项目目录：\n/Users/yoyi/Documents/mario test\n\n运行 ID：workflow-machine-run:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780164875113\n轮次：3\n角色：director\n\n上一环节摘要：\n- 总指导 / director / completed：本地合成首轮总指导计划：开发线创建静态马里奥 demo，验证线检查文件和玩法，回收线判断是否通过。WORKFLOW_MACHINE_STEP_STATUS: completed\n- 开发线 / codex-dev / completed：已完成开发线实现。 结论：项目目录内已新增可直接打开的静态马里奥 demo。依据：`ls -la index.html styles.css game.js README.md` 显示四个目标文件都存在。 已做验证： - `game.js` 语法检查通过。依据：`node --check game.js` 退出码为 0，无报错输出。 - Git 状态显示四个新增文件未跟踪。依据：`git status --short` 输出 `?? README.md`、`?? game.j\n- 验证线 / validation / completed：我的验证结论：当前可判定为通过；没有发现需要开发线返工的问题。 已知和依据： 1. 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la index.html styles.css game.js README.md` 均有输出。 2. 页面是可直接打开的静态网页结构。依据：`index.html` 只引用本地 `styles.css` 和 `game.js`，没有依赖服务端、构建工具或外部网络\n- 回收线 / review / completed：我的判断：通过。 依据： - 开发线已创建目标四文件：`index.html`、`styles.css`、`game.js`、`README.md`。 - 开发线已做 `game.js` 语法检查，结果通过。 - 验证线确认四个目标文件存在。 - 验证线确认页面只引用本地 `styles.css` 和 `game.js`，可作为静态网页直接打开。 - 验证线结论是“当前可判定为通过；没有发现需要开发线返工的问题”。 还缺什么： - 从当前摘要看，没有阻塞项。 - 不确定项是我\n- 总指导 / director / completed：理解：你要我作为总指导，只根据三条线的摘要判断是否进入下一轮，不修改文件。最新请求覆盖前一个“制定第一轮计划”的请求。 已知： - 开发线已完成四个目标文件：`index.html`、`styles.css`、`game.js`、`README.md`。依据：上一环节摘要中开发线和验证线都确认四文件存在。 - `game.js` 语法检查通过。依据：开发线摘要写明 `node --check game.js` 退出码为 0。 - 页面可直接作为静态网页打开。依据：验证线确认 \n- 开发线 / codex-dev / completed：已完成本轮开发线复核和修复。 发现并修复的问题：`重新开始` 原来没有把敌人位置恢复到初始位置，只恢复了存活状态和速度方向。依据是 `resetGame()` 里之前没有重置 `enemy.x`。已在 `/Users/yoyi/Documents/mario test/game.js` 中为敌人保存 `startX` 和 `startVx`，重开时恢复初始位置和速度。 验证结果： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`\n- 验证线 / validation / completed：理解：本轮是第 2 轮验证线，只检查开发线修复后的结果，不修改文件。 已知： 1. 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la index.html styles.css game.js README.md` 有完整输出。 2. `game.js` 语法通过。依据：`node --check game.js` 退出码为 0，无报错输出。 3. 开发线提到的重开修复成立。依据：`gam\n- 回收线 / review / completed：我的判断：通过。 依据： - 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 2 轮验证线摘要确认。 - `game.js` 语法检查通过。依据：第 2 轮验证线摘要确认 `node --check game.js` 退出码为 0。 - 第 2 轮开发线已修复“重新开始”没有重置敌人位置的问题。依据：开发线摘要说明已为敌人保存 `startX` 和 `startVx`，重开时恢复初始位置和速度。 -\n- 总指导 / director / completed：理解：你要我作为总指导，只根据第 2 轮各线结果判断是否还需要下一轮，不读取、不修改文件。 已知： - 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 2 轮验证线摘要确认。 - `game.js` 语法检查通过。依据：第 2 轮验证线摘要确认 `node --check game.js` 退出码为 0。 - 第 2 轮开发线修复了“重新开始不重置敌人位置”的问题。依据：开发线摘要说明已保存 `st\n- 开发线 / codex-dev / completed：本轮开发线复核完成，未做新改动。 结论：当前没有发现需要返工的问题。依据： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。 - `game.js` 语法检查通过：`node --check game.js` 无报错。 - `index.html` 只引用本地 `styles.css` 和 `game.js`，符合可直接打开的静态网页要求。 - 上轮修复仍在：敌人有 `startX` / `startVx`\n- 验证线 / validation / completed：理解：第 3 轮验证线只读复核，不修改文件。 已知和依据： 1. 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la` 对四个文件均有结果。 2. `game.js` 语法通过。依据：`node --check game.js` 退出码为 0，无报错。 3. 静态网页条件满足。依据：`index.html` 只引用本地 `styles.css` 和 `game.js`；README 写明直接打\n- 回收线 / review / completed：我的判断：通过。 依据： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 3 轮开发线和验证线摘要均确认。 - `game.js` 语法检查通过。依据：第 3 轮开发线和验证线摘要均确认 `node --check game.js` 无报错。 - 静态网页条件满足。依据：第 3 轮验证线摘要确认 `index.html` 只引用本地 `styles.css` 和 `game.js`，README \n\n边界：\n- 不读取 auth.json、.env、密钥、token、授权文件。\n- 不读取完整 transcript。\n- 不触碰其他业务项目。\n- 不删除、移动、归档 Codex 会话。\n- 只有开发线允许写项目目录；其他角色只读。\n\n如果确认最终目标完成，请在最后单独输出一行：WORKFLOW_MACHINE_FINAL_ACCEPTED；否则输出：WORKFLOW_MACHINE_CONTINUE。",
+            "prompt_kind": "user_reviewed_instruction",
+            "offline_role_dispatch": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-3:director",
+              "summary": "工作流机器第 3 轮：director",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 3 轮：director\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "state": "completed",
+            "started_at_ms": 1780165491334,
+            "ended_at_ms": 1780165504155,
+            "exit_code": 0,
+            "last_message_path": "/tmp/codex-workflow-node-dispatch-v1/dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te-1780165491334-last-message.txt",
+            "last_message_summary": "理解：你要我作为总指导，只依据第 3 轮开发线、验证线、回收线摘要判断是否继续，不读取或修改文件。 已知： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 3 轮开发线、验证线、回收线摘要均确认。 - `game.js` 语法检查通过。依据：第 3 轮开发线和验证线摘要确认 `node --check game.js` 无报错。 - 静态网页条件满足。依据：第 3 轮验证线摘要确认 `index.",
+            "transcript_event_count": 44,
+            "transcript_target_hits": 0,
+            "warnings": [
+              "first_round_director_uses_local_plan_fallback"
+            ]
+          },
+          {
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165491302",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-director:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4",
+            "native_thread_id": "019e798a-6ce5-76c3-b8ee-33bd0fda841f",
+            "prompt_preview": "你是总指导。请根据开发线、验证线、回收线的结果判断是否进入下一轮。若目标已完成，必须明确给出最终结论。不要修改文件。\n\n总目标：\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n项目目录：\n/Users/yoyi/Documents/mario test\n\n运行 ID：workflow-machine-run:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780164875113\n轮次：3\n角色：director\n\n上一环节摘要：\n- 总指导 / director / completed：本地合成首轮总指导计划：开发线创建静态马里奥 demo，验证线检查文件和玩法，回收线判断是否通过。WORKFLOW_MACHINE_STEP_STATUS: completed\n- 开发线 / codex-dev / completed：已完成开发线实现。 结论：项目目录内已新增可直接打开的静态马里奥 demo。依据：`ls -la index.html styles.css game.js README.md` 显示四个目标文件都存在。 已做验证： - `game.js` 语法检查通过。依据：`node --check game.js` 退出码为 0，无报错输出。 - Git 状态显示四个新增文件未跟踪。依据：`git status --short` 输出 `?? README.md`、`?? game.j\n- 验证线 / validation / completed：我的验证结论：当前可判定为通过；没有发现需要开发线返工的问题。 已知和依据： 1. 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la index.html styles.css game.js README.md` 均有输出。 2. 页面是可直接打开的静态网页结构。依据：`index.html` 只引用本地 `styles.css` 和 `game.js`，没有依赖服务端、构建工具或外部网络\n- 回收线 / review / completed：我的判断：通过。 依据： - 开发线已创建目标四文件：`index.html`、`styles.css`、`game.js`、`README.md`。 - 开发线已做 `game.js` 语法检查，结果通过。 - 验证线确认四个目标文件存在。 - 验证线确认页面只引用本地 `styles.css` 和 `game.js`，可作为静态网页直接打开。 - 验证线结论是“当前可判定为通过；没有发现需要开发线返工的问题”。 还缺什么： - 从当前摘要看，没有阻塞项。 - 不确定项是我\n- 总指导 / director / completed：理解：你要我作为总指导，只根据三条线的摘要判断是否进入下一轮，不修改文件。最新请求覆盖前一个“制定第一轮计划”的请求。 已知： - 开发线已完成四个目标文件：`index.html`、`styles.css`、`game.js`、`README.md`。依据：上一环节摘要中开发线和验证线都确认四文件存在。 - `game.js` 语法检查通过。依据：开发线摘要写明 `node --check game.js` 退出码为 0。 - 页面可直接作为静态网页打开。依据：验证线确认 \n- 开发线 / codex-dev / completed：已完成本轮开发线复核和修复。 发现并修复的问题：`重新开始` 原来没有把敌人位置恢复到初始位置，只恢复了存活状态和速度方向。依据是 `resetGame()` 里之前没有重置 `enemy.x`。已在 `/Users/yoyi/Documents/mario test/game.js` 中为敌人保存 `startX` 和 `startVx`，重开时恢复初始位置和速度。 验证结果： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`\n- 验证线 / validation / completed：理解：本轮是第 2 轮验证线，只检查开发线修复后的结果，不修改文件。 已知： 1. 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la index.html styles.css game.js README.md` 有完整输出。 2. `game.js` 语法通过。依据：`node --check game.js` 退出码为 0，无报错输出。 3. 开发线提到的重开修复成立。依据：`gam\n- 回收线 / review / completed：我的判断：通过。 依据： - 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 2 轮验证线摘要确认。 - `game.js` 语法检查通过。依据：第 2 轮验证线摘要确认 `node --check game.js` 退出码为 0。 - 第 2 轮开发线已修复“重新开始”没有重置敌人位置的问题。依据：开发线摘要说明已为敌人保存 `startX` 和 `startVx`，重开时恢复初始位置和速度。 -\n- 总指导 / director / completed：理解：你要我作为总指导，只根据第 2 轮各线结果判断是否还需要下一轮，不读取、不修改文件。 已知： - 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 2 轮验证线摘要确认。 - `game.js` 语法检查通过。依据：第 2 轮验证线摘要确认 `node --check game.js` 退出码为 0。 - 第 2 轮开发线修复了“重新开始不重置敌人位置”的问题。依据：开发线摘要说明已保存 `st\n- 开发线 / codex-dev / completed：本轮开发线复核完成，未做新改动。 结论：当前没有发现需要返工的问题。依据： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。 - `game.js` 语法检查通过：`node --check game.js` 无报错。 - `index.html` 只引用本地 `styles.css` 和 `game.js`，符合可直接打开的静态网页要求。 - 上轮修复仍在：敌人有 `startX` / `startVx`\n- 验证线 / validation / completed：理解：第 3 轮验证线只读复核，不修改文件。 已知和依据： 1. 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la` 对四个文件均有结果。 2. `game.js` 语法通过。依据：`node --check game.js` 退出码为 0，无报错。 3. 静态网页条件满足。依据：`index.html` 只引用本地 `styles.css` 和 `game.js`；README 写明直接打\n- 回收线 / review / completed：我的判断：通过。 依据： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 3 轮开发线和验证线摘要均确认。 - `game.js` 语法检查通过。依据：第 3 轮开发线和验证线摘要均确认 `node --check game.js` 无报错。 - 静态网页条件满足。依据：第 3 轮验证线摘要确认 `index.html` 只引用本地 `styles.css` 和 `game.js`，README \n\n边界：\n- 不读取 auth.json、.env、密钥、token、授权文件。\n- 不读取完整 transcript。\n- 不触碰其他业务项目。\n- 不删除、移动、归档 Codex 会话。\n- 只有开发线允许写项目目录；其他角色只读。\n\n如果确认最终目标完成，请在最后单独输出一行：WORKFLOW_MACHINE_FINAL_ACCEPTED；否则输出：WORKFLOW_MACHINE_CONTINUE。",
+            "prompt_kind": "user_reviewed_instruction",
+            "offline_role_dispatch": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-3:director",
+              "summary": "工作流机器第 3 轮：director",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 3 轮：director\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "state": "prepared",
+            "started_at_ms": null,
+            "ended_at_ms": null,
+            "exit_code": null,
+            "last_message_path": null,
+            "last_message_summary": null,
+            "transcript_event_count": null,
+            "transcript_target_hits": null,
+            "warnings": [
+              "first_round_director_uses_local_plan_fallback"
+            ]
+          },
+          {
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165472416",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:review",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-review:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4",
+            "native_thread_id": "019e798b-2ee7-7f90-beb2-9031f6ad3e05",
+            "prompt_preview": "你是回收线。请根据开发线和验证线结果给出是否通过、还缺什么、是否应该回到总指导继续下一轮。不要修改文件。\n\n总目标：\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n项目目录：\n/Users/yoyi/Documents/mario test\n\n运行 ID：workflow-machine-run:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780164875113\n轮次：3\n角色：review\n\n上一环节摘要：\n- 总指导 / director / completed：本地合成首轮总指导计划：开发线创建静态马里奥 demo，验证线检查文件和玩法，回收线判断是否通过。WORKFLOW_MACHINE_STEP_STATUS: completed\n- 开发线 / codex-dev / completed：已完成开发线实现。 结论：项目目录内已新增可直接打开的静态马里奥 demo。依据：`ls -la index.html styles.css game.js README.md` 显示四个目标文件都存在。 已做验证： - `game.js` 语法检查通过。依据：`node --check game.js` 退出码为 0，无报错输出。 - Git 状态显示四个新增文件未跟踪。依据：`git status --short` 输出 `?? README.md`、`?? game.j\n- 验证线 / validation / completed：我的验证结论：当前可判定为通过；没有发现需要开发线返工的问题。 已知和依据： 1. 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la index.html styles.css game.js README.md` 均有输出。 2. 页面是可直接打开的静态网页结构。依据：`index.html` 只引用本地 `styles.css` 和 `game.js`，没有依赖服务端、构建工具或外部网络\n- 回收线 / review / completed：我的判断：通过。 依据： - 开发线已创建目标四文件：`index.html`、`styles.css`、`game.js`、`README.md`。 - 开发线已做 `game.js` 语法检查，结果通过。 - 验证线确认四个目标文件存在。 - 验证线确认页面只引用本地 `styles.css` 和 `game.js`，可作为静态网页直接打开。 - 验证线结论是“当前可判定为通过；没有发现需要开发线返工的问题”。 还缺什么： - 从当前摘要看，没有阻塞项。 - 不确定项是我\n- 总指导 / director / completed：理解：你要我作为总指导，只根据三条线的摘要判断是否进入下一轮，不修改文件。最新请求覆盖前一个“制定第一轮计划”的请求。 已知： - 开发线已完成四个目标文件：`index.html`、`styles.css`、`game.js`、`README.md`。依据：上一环节摘要中开发线和验证线都确认四文件存在。 - `game.js` 语法检查通过。依据：开发线摘要写明 `node --check game.js` 退出码为 0。 - 页面可直接作为静态网页打开。依据：验证线确认 \n- 开发线 / codex-dev / completed：已完成本轮开发线复核和修复。 发现并修复的问题：`重新开始` 原来没有把敌人位置恢复到初始位置，只恢复了存活状态和速度方向。依据是 `resetGame()` 里之前没有重置 `enemy.x`。已在 `/Users/yoyi/Documents/mario test/game.js` 中为敌人保存 `startX` 和 `startVx`，重开时恢复初始位置和速度。 验证结果： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`\n- 验证线 / validation / completed：理解：本轮是第 2 轮验证线，只检查开发线修复后的结果，不修改文件。 已知： 1. 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la index.html styles.css game.js README.md` 有完整输出。 2. `game.js` 语法通过。依据：`node --check game.js` 退出码为 0，无报错输出。 3. 开发线提到的重开修复成立。依据：`gam\n- 回收线 / review / completed：我的判断：通过。 依据： - 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 2 轮验证线摘要确认。 - `game.js` 语法检查通过。依据：第 2 轮验证线摘要确认 `node --check game.js` 退出码为 0。 - 第 2 轮开发线已修复“重新开始”没有重置敌人位置的问题。依据：开发线摘要说明已为敌人保存 `startX` 和 `startVx`，重开时恢复初始位置和速度。 -\n- 总指导 / director / completed：理解：你要我作为总指导，只根据第 2 轮各线结果判断是否还需要下一轮，不读取、不修改文件。 已知： - 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 2 轮验证线摘要确认。 - `game.js` 语法检查通过。依据：第 2 轮验证线摘要确认 `node --check game.js` 退出码为 0。 - 第 2 轮开发线修复了“重新开始不重置敌人位置”的问题。依据：开发线摘要说明已保存 `st\n- 开发线 / codex-dev / completed：本轮开发线复核完成，未做新改动。 结论：当前没有发现需要返工的问题。依据： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。 - `game.js` 语法检查通过：`node --check game.js` 无报错。 - `index.html` 只引用本地 `styles.css` 和 `game.js`，符合可直接打开的静态网页要求。 - 上轮修复仍在：敌人有 `startX` / `startVx`\n- 验证线 / validation / completed：理解：第 3 轮验证线只读复核，不修改文件。 已知和依据： 1. 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la` 对四个文件均有结果。 2. `game.js` 语法通过。依据：`node --check game.js` 退出码为 0，无报错。 3. 静态网页条件满足。依据：`index.html` 只引用本地 `styles.css` 和 `game.js`；README 写明直接打\n\n边界：\n- 不读取 auth.json、.env、密钥、token、授权文件。\n- 不读取完整 transcript。\n- 不触碰其他业务项目。\n- 不删除、移动、归档 Codex 会话。\n- 只有开发线允许写项目目录；其他角色只读。\n\n请在最后单独输出一行：WORKFLOW_MACHINE_STEP_STATUS: completed 或 WORKFLOW_MACHINE_STEP_STATUS: needs_changes。",
+            "prompt_kind": "user_reviewed_instruction",
+            "offline_role_dispatch": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-3:review",
+              "summary": "工作流机器第 3 轮：review",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 3 轮：review\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "state": "completed",
+            "started_at_ms": 1780165472416,
+            "ended_at_ms": 1780165491240,
+            "exit_code": 0,
+            "last_message_path": "/tmp/codex-workflow-node-dispatch-v1/dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te-1780165472416-last-message.txt",
+            "last_message_summary": "我的判断：通过。 依据： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 3 轮开发线和验证线摘要均确认。 - `game.js` 语法检查通过。依据：第 3 轮开发线和验证线摘要均确认 `node --check game.js` 无报错。 - 静态网页条件满足。依据：第 3 轮验证线摘要确认 `index.html` 只引用本地 `styles.css` 和 `game.js`，README ",
+            "transcript_event_count": 38,
+            "transcript_target_hits": 0,
+            "warnings": []
+          },
+          {
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165472386",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:review",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-review:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4",
+            "native_thread_id": "019e798b-2ee7-7f90-beb2-9031f6ad3e05",
+            "prompt_preview": "你是回收线。请根据开发线和验证线结果给出是否通过、还缺什么、是否应该回到总指导继续下一轮。不要修改文件。\n\n总目标：\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n项目目录：\n/Users/yoyi/Documents/mario test\n\n运行 ID：workflow-machine-run:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780164875113\n轮次：3\n角色：review\n\n上一环节摘要：\n- 总指导 / director / completed：本地合成首轮总指导计划：开发线创建静态马里奥 demo，验证线检查文件和玩法，回收线判断是否通过。WORKFLOW_MACHINE_STEP_STATUS: completed\n- 开发线 / codex-dev / completed：已完成开发线实现。 结论：项目目录内已新增可直接打开的静态马里奥 demo。依据：`ls -la index.html styles.css game.js README.md` 显示四个目标文件都存在。 已做验证： - `game.js` 语法检查通过。依据：`node --check game.js` 退出码为 0，无报错输出。 - Git 状态显示四个新增文件未跟踪。依据：`git status --short` 输出 `?? README.md`、`?? game.j\n- 验证线 / validation / completed：我的验证结论：当前可判定为通过；没有发现需要开发线返工的问题。 已知和依据： 1. 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la index.html styles.css game.js README.md` 均有输出。 2. 页面是可直接打开的静态网页结构。依据：`index.html` 只引用本地 `styles.css` 和 `game.js`，没有依赖服务端、构建工具或外部网络\n- 回收线 / review / completed：我的判断：通过。 依据： - 开发线已创建目标四文件：`index.html`、`styles.css`、`game.js`、`README.md`。 - 开发线已做 `game.js` 语法检查，结果通过。 - 验证线确认四个目标文件存在。 - 验证线确认页面只引用本地 `styles.css` 和 `game.js`，可作为静态网页直接打开。 - 验证线结论是“当前可判定为通过；没有发现需要开发线返工的问题”。 还缺什么： - 从当前摘要看，没有阻塞项。 - 不确定项是我\n- 总指导 / director / completed：理解：你要我作为总指导，只根据三条线的摘要判断是否进入下一轮，不修改文件。最新请求覆盖前一个“制定第一轮计划”的请求。 已知： - 开发线已完成四个目标文件：`index.html`、`styles.css`、`game.js`、`README.md`。依据：上一环节摘要中开发线和验证线都确认四文件存在。 - `game.js` 语法检查通过。依据：开发线摘要写明 `node --check game.js` 退出码为 0。 - 页面可直接作为静态网页打开。依据：验证线确认 \n- 开发线 / codex-dev / completed：已完成本轮开发线复核和修复。 发现并修复的问题：`重新开始` 原来没有把敌人位置恢复到初始位置，只恢复了存活状态和速度方向。依据是 `resetGame()` 里之前没有重置 `enemy.x`。已在 `/Users/yoyi/Documents/mario test/game.js` 中为敌人保存 `startX` 和 `startVx`，重开时恢复初始位置和速度。 验证结果： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`\n- 验证线 / validation / completed：理解：本轮是第 2 轮验证线，只检查开发线修复后的结果，不修改文件。 已知： 1. 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la index.html styles.css game.js README.md` 有完整输出。 2. `game.js` 语法通过。依据：`node --check game.js` 退出码为 0，无报错输出。 3. 开发线提到的重开修复成立。依据：`gam\n- 回收线 / review / completed：我的判断：通过。 依据： - 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 2 轮验证线摘要确认。 - `game.js` 语法检查通过。依据：第 2 轮验证线摘要确认 `node --check game.js` 退出码为 0。 - 第 2 轮开发线已修复“重新开始”没有重置敌人位置的问题。依据：开发线摘要说明已为敌人保存 `startX` 和 `startVx`，重开时恢复初始位置和速度。 -\n- 总指导 / director / completed：理解：你要我作为总指导，只根据第 2 轮各线结果判断是否还需要下一轮，不读取、不修改文件。 已知： - 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 2 轮验证线摘要确认。 - `game.js` 语法检查通过。依据：第 2 轮验证线摘要确认 `node --check game.js` 退出码为 0。 - 第 2 轮开发线修复了“重新开始不重置敌人位置”的问题。依据：开发线摘要说明已保存 `st\n- 开发线 / codex-dev / completed：本轮开发线复核完成，未做新改动。 结论：当前没有发现需要返工的问题。依据： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。 - `game.js` 语法检查通过：`node --check game.js` 无报错。 - `index.html` 只引用本地 `styles.css` 和 `game.js`，符合可直接打开的静态网页要求。 - 上轮修复仍在：敌人有 `startX` / `startVx`\n- 验证线 / validation / completed：理解：第 3 轮验证线只读复核，不修改文件。 已知和依据： 1. 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la` 对四个文件均有结果。 2. `game.js` 语法通过。依据：`node --check game.js` 退出码为 0，无报错。 3. 静态网页条件满足。依据：`index.html` 只引用本地 `styles.css` 和 `game.js`；README 写明直接打\n\n边界：\n- 不读取 auth.json、.env、密钥、token、授权文件。\n- 不读取完整 transcript。\n- 不触碰其他业务项目。\n- 不删除、移动、归档 Codex 会话。\n- 只有开发线允许写项目目录；其他角色只读。\n\n请在最后单独输出一行：WORKFLOW_MACHINE_STEP_STATUS: completed 或 WORKFLOW_MACHINE_STEP_STATUS: needs_changes。",
+            "prompt_kind": "user_reviewed_instruction",
+            "offline_role_dispatch": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-3:review",
+              "summary": "工作流机器第 3 轮：review",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 3 轮：review\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "state": "prepared",
+            "started_at_ms": null,
+            "ended_at_ms": null,
+            "exit_code": null,
+            "last_message_path": null,
+            "last_message_summary": null,
+            "transcript_event_count": null,
+            "transcript_target_hits": null,
+            "warnings": []
+          },
+          {
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165438583",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "node_id": "workflow:users-yoyi-documents-mario-test:default:node:validation",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "binding_id": "binding:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-node-validation:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4",
+            "native_thread_id": "019e798a-f9d4-7922-8da8-1b6a8dbd6769",
+            "prompt_preview": "你是验证线。请检查文件是否存在、功能是否自洽、是否满足马里奥 demo 目标。不要修改文件。\n\n总目标：\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n项目目录：\n/Users/yoyi/Documents/mario test\n\n运行 ID：workflow-machine-run:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780164875113\n轮次：3\n角色：validation\n\n上一环节摘要：\n- 总指导 / director / completed：本地合成首轮总指导计划：开发线创建静态马里奥 demo，验证线检查文件和玩法，回收线判断是否通过。WORKFLOW_MACHINE_STEP_STATUS: completed\n- 开发线 / codex-dev / completed：已完成开发线实现。 结论：项目目录内已新增可直接打开的静态马里奥 demo。依据：`ls -la index.html styles.css game.js README.md` 显示四个目标文件都存在。 已做验证： - `game.js` 语法检查通过。依据：`node --check game.js` 退出码为 0，无报错输出。 - Git 状态显示四个新增文件未跟踪。依据：`git status --short` 输出 `?? README.md`、`?? game.j\n- 验证线 / validation / completed：我的验证结论：当前可判定为通过；没有发现需要开发线返工的问题。 已知和依据： 1. 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la index.html styles.css game.js README.md` 均有输出。 2. 页面是可直接打开的静态网页结构。依据：`index.html` 只引用本地 `styles.css` 和 `game.js`，没有依赖服务端、构建工具或外部网络\n- 回收线 / review / completed：我的判断：通过。 依据： - 开发线已创建目标四文件：`index.html`、`styles.css`、`game.js`、`README.md`。 - 开发线已做 `game.js` 语法检查，结果通过。 - 验证线确认四个目标文件存在。 - 验证线确认页面只引用本地 `styles.css` 和 `game.js`，可作为静态网页直接打开。 - 验证线结论是“当前可判定为通过；没有发现需要开发线返工的问题”。 还缺什么： - 从当前摘要看，没有阻塞项。 - 不确定项是我\n- 总指导 / director / completed：理解：你要我作为总指导，只根据三条线的摘要判断是否进入下一轮，不修改文件。最新请求覆盖前一个“制定第一轮计划”的请求。 已知： - 开发线已完成四个目标文件：`index.html`、`styles.css`、`game.js`、`README.md`。依据：上一环节摘要中开发线和验证线都确认四文件存在。 - `game.js` 语法检查通过。依据：开发线摘要写明 `node --check game.js` 退出码为 0。 - 页面可直接作为静态网页打开。依据：验证线确认 \n- 开发线 / codex-dev / completed：已完成本轮开发线复核和修复。 发现并修复的问题：`重新开始` 原来没有把敌人位置恢复到初始位置，只恢复了存活状态和速度方向。依据是 `resetGame()` 里之前没有重置 `enemy.x`。已在 `/Users/yoyi/Documents/mario test/game.js` 中为敌人保存 `startX` 和 `startVx`，重开时恢复初始位置和速度。 验证结果： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`\n- 验证线 / validation / completed：理解：本轮是第 2 轮验证线，只检查开发线修复后的结果，不修改文件。 已知： 1. 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la index.html styles.css game.js README.md` 有完整输出。 2. `game.js` 语法通过。依据：`node --check game.js` 退出码为 0，无报错输出。 3. 开发线提到的重开修复成立。依据：`gam\n- 回收线 / review / completed：我的判断：通过。 依据： - 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 2 轮验证线摘要确认。 - `game.js` 语法检查通过。依据：第 2 轮验证线摘要确认 `node --check game.js` 退出码为 0。 - 第 2 轮开发线已修复“重新开始”没有重置敌人位置的问题。依据：开发线摘要说明已为敌人保存 `startX` 和 `startVx`，重开时恢复初始位置和速度。 -\n- 总指导 / director / completed：理解：你要我作为总指导，只根据第 2 轮各线结果判断是否还需要下一轮，不读取、不修改文件。 已知： - 四个目标文件仍存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：第 2 轮验证线摘要确认。 - `game.js` 语法检查通过。依据：第 2 轮验证线摘要确认 `node --check game.js` 退出码为 0。 - 第 2 轮开发线修复了“重新开始不重置敌人位置”的问题。依据：开发线摘要说明已保存 `st\n- 开发线 / codex-dev / completed：本轮开发线复核完成，未做新改动。 结论：当前没有发现需要返工的问题。依据： - 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。 - `game.js` 语法检查通过：`node --check game.js` 无报错。 - `index.html` 只引用本地 `styles.css` 和 `game.js`，符合可直接打开的静态网页要求。 - 上轮修复仍在：敌人有 `startX` / `startVx`\n\n边界：\n- 不读取 auth.json、.env、密钥、token、授权文件。\n- 不读取完整 transcript。\n- 不触碰其他业务项目。\n- 不删除、移动、归档 Codex 会话。\n- 只有开发线允许写项目目录；其他角色只读。\n\n请在最后单独输出一行：WORKFLOW_MACHINE_STEP_STATUS: completed 或 WORKFLOW_MACHINE_STEP_STATUS: needs_changes。",
+            "prompt_kind": "user_reviewed_instruction",
+            "offline_role_dispatch": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-3:validation",
+              "summary": "工作流机器第 3 轮：validation",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 3 轮：validation\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "state": "completed",
+            "started_at_ms": 1780165438583,
+            "ended_at_ms": 1780165472329,
+            "exit_code": 0,
+            "last_message_path": "/tmp/codex-workflow-node-dispatch-v1/dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te-1780165438583-last-message.txt",
+            "last_message_summary": "理解：第 3 轮验证线只读复核，不修改文件。 已知和依据： 1. 四个目标文件存在：`index.html`、`styles.css`、`game.js`、`README.md`。依据：`ls -la` 对四个文件均有结果。 2. `game.js` 语法通过。依据：`node --check game.js` 退出码为 0，无报错。 3. 静态网页条件满足。依据：`index.html` 只引用本地 `styles.css` 和 `game.js`；README 写明直接打",
+            "transcript_event_count": 132,
+            "transcript_target_hits": 0,
+            "warnings": []
+          }
+        ],
+        "director_reviews": [
+          {
+            "review_id": "review:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:workflow-machine:1780165504213",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "dispatch_id": "workflow-machine-run:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780164875113",
+            "reviewer_role": "director",
+            "decision": "needs_changes",
+            "summary": "工作流机器收口：state=needs_changes, rounds=3, steps=13",
+            "evidence_refs": [],
+            "handoff_refs": [],
+            "created_at": "1780165504213",
+            "updated_at": "1780165504213",
+            "warnings": []
+          },
+          {
+            "review_id": "review:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v3:workflow-machine:1780164644929",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v3",
+            "dispatch_id": "workflow-machine-run:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v3:1780164044707",
+            "reviewer_role": "director",
+            "decision": "needs_changes",
+            "summary": "工作流机器收口：state=failed, rounds=1, steps=2",
+            "evidence_refs": [],
+            "handoff_refs": [],
+            "created_at": "1780164644929",
+            "updated_at": "1780164644929",
+            "warnings": []
+          },
+          {
+            "review_id": "review:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v2:workflow-machine:1780163764910",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v2",
+            "dispatch_id": "workflow-machine-run:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v2:1780163164802",
+            "reviewer_role": "director",
+            "decision": "needs_changes",
+            "summary": "工作流机器收口：state=failed, rounds=1, steps=1",
+            "evidence_refs": [],
+            "handoff_refs": [],
+            "created_at": "1780163764910",
+            "updated_at": "1780163764910",
+            "warnings": []
+          },
+          {
+            "review_id": "review:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v1:workflow-machine:1780162567062",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v1",
+            "dispatch_id": "workflow-machine-run:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v1:1780161966864",
+            "reviewer_role": "director",
+            "decision": "needs_changes",
+            "summary": "工作流机器收口：state=failed, rounds=1, steps=1",
+            "evidence_refs": [],
+            "handoff_refs": [],
+            "created_at": "1780162567062",
+            "updated_at": "1780162567062",
+            "warnings": []
+          }
+        ],
+        "execution_controls": [
+          {
+            "control_id": "control:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165504155",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "control_state": "ready_for_review",
+            "long_task_state": "completed",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": null,
+            "cancel_requested_at": null,
+            "failure_reason": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-3:director",
+              "summary": "工作流机器第 3 轮：director",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 3 轮：director\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "audit_event_types": [
+              "workflow_node_dispatch_started",
+              "workflow_node_dispatch_completed"
+            ],
+            "warnings": []
+          },
+          {
+            "control_id": "control:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165491240",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "control_state": "ready_for_review",
+            "long_task_state": "completed",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": null,
+            "cancel_requested_at": null,
+            "failure_reason": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-3:review",
+              "summary": "工作流机器第 3 轮：review",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 3 轮：review\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "audit_event_types": [
+              "workflow_node_dispatch_started",
+              "workflow_node_dispatch_completed"
+            ],
+            "warnings": []
+          },
+          {
+            "control_id": "control:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165472329",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "control_state": "ready_for_review",
+            "long_task_state": "completed",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": null,
+            "cancel_requested_at": null,
+            "failure_reason": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-3:validation",
+              "summary": "工作流机器第 3 轮：validation",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 3 轮：validation\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "audit_event_types": [
+              "workflow_node_dispatch_started",
+              "workflow_node_dispatch_completed"
+            ],
+            "warnings": []
+          },
+          {
+            "control_id": "control:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165438498",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "control_state": "ready_for_review",
+            "long_task_state": "completed",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": null,
+            "cancel_requested_at": null,
+            "failure_reason": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-3:codex-dev",
+              "summary": "工作流机器第 3 轮：codex-dev",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "workspace-write",
+              "allowed_write_roots": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 3 轮：codex-dev\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nworkspace-write\n\n## 允许写入根目录\n- /Users/yoyi/Documents/mario test\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- /Users/yoyi/Documents/mario test\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "audit_event_types": [
+              "workflow_node_dispatch_started",
+              "workflow_node_dispatch_completed"
+            ],
+            "warnings": []
+          },
+          {
+            "control_id": "control:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165405798",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "control_state": "ready_for_review",
+            "long_task_state": "completed",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": null,
+            "cancel_requested_at": null,
+            "failure_reason": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-2:director",
+              "summary": "工作流机器第 2 轮：director",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 2 轮：director\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "audit_event_types": [
+              "workflow_node_dispatch_started",
+              "workflow_node_dispatch_completed"
+            ],
+            "warnings": []
+          },
+          {
+            "control_id": "control:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165383990",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "control_state": "ready_for_review",
+            "long_task_state": "completed",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": null,
+            "cancel_requested_at": null,
+            "failure_reason": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-2:review",
+              "summary": "工作流机器第 2 轮：review",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 2 轮：review\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "audit_event_types": [
+              "workflow_node_dispatch_started",
+              "workflow_node_dispatch_completed"
+            ],
+            "warnings": []
+          },
+          {
+            "control_id": "control:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165363863",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "control_state": "ready_for_review",
+            "long_task_state": "completed",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": null,
+            "cancel_requested_at": null,
+            "failure_reason": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-2:validation",
+              "summary": "工作流机器第 2 轮：validation",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 2 轮：validation\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "audit_event_types": [
+              "workflow_node_dispatch_started",
+              "workflow_node_dispatch_completed"
+            ],
+            "warnings": []
+          },
+          {
+            "control_id": "control:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165314839",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "control_state": "ready_for_review",
+            "long_task_state": "completed",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": null,
+            "cancel_requested_at": null,
+            "failure_reason": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-2:codex-dev",
+              "summary": "工作流机器第 2 轮：codex-dev",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "workspace-write",
+              "allowed_write_roots": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 2 轮：codex-dev\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nworkspace-write\n\n## 允许写入根目录\n- /Users/yoyi/Documents/mario test\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- /Users/yoyi/Documents/mario test\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "audit_event_types": [
+              "workflow_node_dispatch_started",
+              "workflow_node_dispatch_completed"
+            ],
+            "warnings": []
+          },
+          {
+            "control_id": "control:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165252543",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "control_state": "ready_for_review",
+            "long_task_state": "completed",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": null,
+            "cancel_requested_at": null,
+            "failure_reason": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-1:director",
+              "summary": "工作流机器第 1 轮：director",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 1 轮：director\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "audit_event_types": [
+              "workflow_node_dispatch_started",
+              "workflow_node_dispatch_completed"
+            ],
+            "warnings": []
+          },
+          {
+            "control_id": "control:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165218476",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "control_state": "ready_for_review",
+            "long_task_state": "completed",
+            "retry_count": 0,
+            "max_retries": 0,
+            "timeout_seconds": null,
+            "cancel_requested_at": null,
+            "failure_reason": null,
+            "user_reviewed_instruction": {
+              "instruction_id": "workflow-machine:workflow-machine-run-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-docume:round-1:review",
+              "summary": "工作流机器第 1 轮：review",
+              "objective": "完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。",
+              "execution_cwd": "/Users/yoyi/Documents/mario test",
+              "sandbox_mode": "read-only",
+              "allowed_write_roots": [],
+              "allowed_reads": [
+                "/Users/yoyi/Documents/mario test"
+              ],
+              "allowed_writes": [],
+              "forbidden_actions": [
+                "不读取 auth.json、.env、密钥、token、授权文件",
+                "不读取完整 transcript",
+                "不触碰其他业务项目",
+                "不删除、移动、归档 Codex 会话",
+                "不联网安装依赖"
+              ],
+              "required_return": [
+                "薄弱点",
+                "本步做了什么",
+                "改了哪些文件",
+                "验证结果",
+                "下一步建议",
+                "WORKFLOW_MACHINE_STEP_STATUS"
+              ],
+              "approval_state": "draft",
+              "preview_markdown": "# 用户审核业务指令预览\n\n## 摘要\n工作流机器第 1 轮：review\n\n## 目标\n完成马里奥 demo：在项目目录内创建可直接打开的静态网页小游戏，包含 index.html、styles.css、game.js、README.md；验证线和回收线通过后由总指导输出最终结论。\n\n## 执行目录\n/Users/yoyi/Documents/mario test\n\n## 沙箱模式\nread-only\n\n## 允许写入根目录\n- 待补充\n\n## 允许读取\n- /Users/yoyi/Documents/mario test\n\n## 允许写入\n- 待补充\n\n## 禁止事项\n- 不读取 auth.json、.env、密钥、token、授权文件\n- 不读取完整 transcript\n- 不触碰其他业务项目\n- 不删除、移动、归档 Codex 会话\n- 不联网安装依赖\n\n## 必须回传\n- 薄弱点\n- 本步做了什么\n- 改了哪些文件\n- 验证结果\n- 下一步建议\n- WORKFLOW_MACHINE_STEP_STATUS"
+            },
+            "audit_event_types": [
+              "workflow_node_dispatch_started",
+              "workflow_node_dispatch_completed"
+            ],
+            "warnings": []
+          }
+        ],
+        "permission_requests": [],
+        "execution_attempts": [
+          {
+            "attempt_id": "attempt:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165504155",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165491334",
+            "attempt_no": 1,
+            "state": "completed",
+            "started_at": null,
+            "ended_at": "1780165504155",
+            "failure_reason": null,
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": []
+          },
+          {
+            "attempt_id": "attempt:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165491240",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165472416",
+            "attempt_no": 1,
+            "state": "completed",
+            "started_at": null,
+            "ended_at": "1780165491240",
+            "failure_reason": null,
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": []
+          },
+          {
+            "attempt_id": "attempt:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165472329",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165438583",
+            "attempt_no": 1,
+            "state": "completed",
+            "started_at": null,
+            "ended_at": "1780165472329",
+            "failure_reason": null,
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": []
+          },
+          {
+            "attempt_id": "attempt:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165438498",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165405880",
+            "attempt_no": 1,
+            "state": "completed",
+            "started_at": null,
+            "ended_at": "1780165438498",
+            "failure_reason": null,
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": []
+          },
+          {
+            "attempt_id": "attempt:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165405798",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165384068",
+            "attempt_no": 1,
+            "state": "completed",
+            "started_at": null,
+            "ended_at": "1780165405798",
+            "failure_reason": null,
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": []
+          },
+          {
+            "attempt_id": "attempt:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165383990",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165363932",
+            "attempt_no": 1,
+            "state": "completed",
+            "started_at": null,
+            "ended_at": "1780165383990",
+            "failure_reason": null,
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": []
+          },
+          {
+            "attempt_id": "attempt:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165363863",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165314912",
+            "attempt_no": 1,
+            "state": "completed",
+            "started_at": null,
+            "ended_at": "1780165363863",
+            "failure_reason": null,
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": []
+          },
+          {
+            "attempt_id": "attempt:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165314839",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165252608",
+            "attempt_no": 1,
+            "state": "completed",
+            "started_at": null,
+            "ended_at": "1780165314839",
+            "failure_reason": null,
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": []
+          },
+          {
+            "attempt_id": "attempt:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165252543",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165218542",
+            "attempt_no": 1,
+            "state": "completed",
+            "started_at": null,
+            "ended_at": "1780165252543",
+            "failure_reason": null,
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": []
+          },
+          {
+            "attempt_id": "attempt:dispatch-workflow-users-yoyi-documents-mario-test-default-workflow-users-yoyi-documents-mario-te:1780165218476",
+            "project_id": "project:users-yoyi-documents-mario-test",
+            "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+            "work_item_id": "workflow:users-yoyi-documents-mario-test:default:create-mario-demo-v4",
+            "dispatch_id": "dispatch:workflow-users-yoyi-documents-mario-test-default:workflow-users-yoyi-documents-mario-test-default-create-mario-demo-v4:1780165196682",
+            "attempt_no": 1,
+            "state": "completed",
+            "started_at": null,
+            "ended_at": "1780165218476",
+            "failure_reason": null,
+            "retry_scheduled_at": null,
+            "timed_out_at": null,
+            "cancel_requested_at": null,
+            "warnings": []
+          }
+        ]
+      }
+    ],
+    "warnings": [
+      "状态文件已读取；只展示元数据，不展示正文。"
+    ]
+  }
+}

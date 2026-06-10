@@ -1,0 +1,37 @@
+[
+  {
+    "id": "exact-task-and-slug",
+    "taskId": "T-CONTEXT-PACK",
+    "slug": "context-pack-task",
+    "aliases": [],
+    "expectedFiles": [
+      "docs/current-state.md",
+      "docs/task-queue.md",
+      "docs/evidence/context-pack-task/summary.md"
+    ],
+    "expectedTerms": [
+      "T-CONTEXT-PACK",
+      "context-pack-task"
+    ],
+    "k": 12
+  },
+  {
+    "id": "alias-renamed-task",
+    "taskId": "T-CONTEXT-PACK-RENAMED",
+    "slug": "context-pack-task-renamed",
+    "aliases": [
+      "T-CONTEXT-PACK",
+      "context-pack-task",
+      "R-CONTEXT-PACK"
+    ],
+    "expectedFiles": [
+      "docs/task-queue.md",
+      "docs/evidence/context-pack-task/summary.md"
+    ],
+    "expectedTerms": [
+      "T-CONTEXT-PACK",
+      "context-pack-task"
+    ],
+    "k": 12
+  }
+]

@@ -1,0 +1,180 @@
+{
+  "schema_version": "runtime_log_store.v1",
+  "store_version": 1,
+  "storage_kind": "sidecar_json_v0",
+  "scope": {
+    "scope_kind": "workflow_state_sidecar",
+    "workflow_state_path": "/Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture/.workbench/h3-b-runs/run-1780858797592229000/workflow-state.v0.json",
+    "sidecar_path": "/Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture/.workbench/h3-b-runs/run-1780858797592229000/runtime-logs.v1.json",
+    "project_roots": [
+      "/Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture"
+    ]
+  },
+  "revision": 1,
+  "last_write_id": "write-h3-b-real-run",
+  "generated_by": "runtime_log_store_explicit_append_v1",
+  "created_at": "2026-06-08T00:11:00Z",
+  "updated_at": "2026-06-08T00:11:00Z",
+  "boundary": {
+    "runtime_log_definition": "Runtime log records operational timing, status, category, source refs and safe summaries.",
+    "audit_event_definition": "Audit event records accountable decisions, actor, permission, before and after state.",
+    "separation_rule": "Runtime log 与 audit event 不能互相替代；日志只引用 audit_refs，不内嵌 audit event 本体。",
+    "redaction_rule": "Only redacted summaries are displayable; sensitive material and conversation bodies are omitted.",
+    "forbidden_payloads": [
+      "credential_material",
+      "conversation_body",
+      "raw_provider_material",
+      "environment_material",
+      "system_authorization_material"
+    ]
+  },
+  "entries": [
+    {
+      "entry_version": 1,
+      "entry_id": "runtime-log:workflow-run:session-continuation:v1:685a88b8254a24d75415f554348f83e3bb74f22ec976fbceebe4be9a64f66368",
+      "category": "workflow_run",
+      "status": "failed",
+      "severity": "warning",
+      "started_at": "2026-06-08T00:10:00Z",
+      "finished_at": "2026-06-08T00:11:00Z",
+      "duration_ms": null,
+      "project_id": "project:h3-b-fixture",
+      "workflow_id": "workflow:h3-b-fixture",
+      "node_id": "node:h3-b-new-session",
+      "session_id": "",
+      "adapter_id": "codex-local",
+      "summary": "Workflow run workflow:h3-b-fixture is failed via codex_local_phase_b_real_process_runner.",
+      "detail": "Runtime log keeps run status and refs; command and prompt bodies are omitted.",
+      "source_refs": [
+        {
+          "source_kind": "controlled_session_continuation",
+          "source_id": "session-continuation:v1:685a88b8254a24d75415f554348f83e3bb74f22ec976fbceebe4be9a64f66368",
+          "label": "controlled continuation"
+        }
+      ],
+      "audit_refs": [
+        "audit:session-continuation-confirmed:2026-06-08T00:10:00Z:1d7901b98b380da6",
+        "audit:session-continuation-h3-b-completed:2026-06-08T00:11:00Z:1d7901b98b380da6",
+        "audit:session-continuation-h3-b-started:2026-06-08T00:11:00Z:1d7901b98b380da6"
+      ],
+      "redaction_status": "redacted_safe_summary",
+      "sensitive_omissions": [
+        "command_body",
+        "prompt_body"
+      ],
+      "user_visible": true,
+      "warnings": []
+    },
+    {
+      "entry_version": 1,
+      "entry_id": "runtime-log:dispatch-attempt:session-continuation-attempt:h3-b:2026-06-08T00:11:00Z:1d7901b98b380da6",
+      "category": "dispatch_attempt",
+      "status": "failed",
+      "severity": "warning",
+      "started_at": "2026-06-08T00:11:00Z",
+      "finished_at": "2026-06-08T00:11:00Z",
+      "duration_ms": 120000,
+      "project_id": "project:h3-b-fixture",
+      "workflow_id": "workflow:h3-b-fixture",
+      "node_id": "node:h3-b-new-session",
+      "session_id": "",
+      "adapter_id": "codex-local",
+      "summary": "Dispatch attempt session-continuation-attempt:h3-b:2026-06-08T00:11:00Z:1d7901b98b380da6 ended as failed; runner codex_local_phase_b_real_process_runner.",
+      "detail": "Dispatch runtime entry omits command preview, prompt text and raw runner output.",
+      "source_refs": [
+        {
+          "source_kind": "session_continuation_attempt",
+          "source_id": "session-continuation-attempt:h3-b:2026-06-08T00:11:00Z:1d7901b98b380da6",
+          "label": "dispatch attempt"
+        }
+      ],
+      "audit_refs": [
+        "audit:session-continuation-h3-b-started:2026-06-08T00:11:00Z:1d7901b98b380da6",
+        "audit:session-continuation-h3-b-completed:2026-06-08T00:11:00Z:1d7901b98b380da6"
+      ],
+      "redaction_status": "redacted_safe_summary",
+      "sensitive_omissions": [
+        "command_body",
+        "runner_output"
+      ],
+      "user_visible": true,
+      "warnings": [
+        "runtime_log_redacted_summary_only"
+      ]
+    },
+    {
+      "entry_version": 1,
+      "entry_id": "runtime-log:readback:session-continuation-attempt:h3-b:2026-06-08T00:11:00Z:1d7901b98b380da6",
+      "category": "readback",
+      "status": "readback_failed",
+      "severity": "warning",
+      "started_at": "2026-06-08T00:11:00Z",
+      "finished_at": "2026-06-08T00:11:00Z",
+      "duration_ms": null,
+      "project_id": "project:h3-b-fixture",
+      "workflow_id": "workflow:h3-b-fixture",
+      "node_id": "node:h3-b-new-session",
+      "session_id": "",
+      "adapter_id": "codex-local",
+      "summary": "Readback status is readback_failed; result_count=unavailable.",
+      "detail": "Readback runtime entry never treats unavailable as zero results and omits conversation bodies.",
+      "source_refs": [
+        {
+          "source_kind": "session_continuation_attempt",
+          "source_id": "session-continuation-attempt:h3-b:2026-06-08T00:11:00Z:1d7901b98b380da6",
+          "label": "readback boundary"
+        }
+      ],
+      "audit_refs": [
+        "audit:session-continuation-h3-b-started:2026-06-08T00:11:00Z:1d7901b98b380da6",
+        "audit:session-continuation-h3-b-completed:2026-06-08T00:11:00Z:1d7901b98b380da6"
+      ],
+      "redaction_status": "redacted_safe_summary",
+      "sensitive_omissions": [
+        "conversation_body",
+        "provider_material"
+      ],
+      "user_visible": true,
+      "warnings": [
+        "readback_unavailable_is_not_zero_results"
+      ]
+    }
+  ],
+  "summaries": [
+    {
+      "category": "dispatch_attempt",
+      "status": "failed",
+      "severity": "warning",
+      "entry_count": 1,
+      "latest_entry_ids": [
+        "runtime-log:dispatch-attempt:session-continuation-attempt:h3-b:2026-06-08T00:11:00Z:1d7901b98b380da6"
+      ],
+      "warnings": []
+    },
+    {
+      "category": "readback",
+      "status": "readback_failed",
+      "severity": "warning",
+      "entry_count": 1,
+      "latest_entry_ids": [
+        "runtime-log:readback:session-continuation-attempt:h3-b:2026-06-08T00:11:00Z:1d7901b98b380da6"
+      ],
+      "warnings": []
+    },
+    {
+      "category": "workflow_run",
+      "status": "failed",
+      "severity": "warning",
+      "entry_count": 1,
+      "latest_entry_ids": [
+        "runtime-log:workflow-run:session-continuation:v1:685a88b8254a24d75415f554348f83e3bb74f22ec976fbceebe4be9a64f66368"
+      ],
+      "warnings": []
+    }
+  ],
+  "warnings": [
+    "runtime_log_sidecar_explicitly_written",
+    "runtime_log_does_not_replace_audit_event",
+    "audit_event_does_not_replace_runtime_log"
+  ]
+}

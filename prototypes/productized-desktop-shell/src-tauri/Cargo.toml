@@ -1,0 +1,25 @@
+[package]
+name = "codex-governance-workbench"
+version = "0.1.0"
+description = "Codex governance workbench desktop shell"
+authors = ["Codex"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "codex_governance_workbench_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.2", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+sha2 = "0.10"
+log = "0.4"
+tauri = { version = "2.11.2", features = [] }
+tauri-plugin-log = "2"
+rusqlite = { version = "0.32", features = ["bundled"] }

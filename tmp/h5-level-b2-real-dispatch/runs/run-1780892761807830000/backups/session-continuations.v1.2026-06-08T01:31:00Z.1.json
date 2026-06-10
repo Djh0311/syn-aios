@@ -1,0 +1,95 @@
+{
+  "schema_version": "session_continuation_store.v1",
+  "store_version": 1,
+  "storage_kind": "sidecar_json_v0",
+  "scope": {
+    "scope_kind": "workflow_state_sidecar",
+    "workflow_state_path": "/Users/yoyi/workspace/product-line/tmp/h5-level-b2-real-dispatch/runs/run-1780892761807830000/workflow-state.v0.json",
+    "sidecar_path": "/Users/yoyi/workspace/product-line/tmp/h5-level-b2-real-dispatch/runs/run-1780892761807830000/session-continuations.v1.json",
+    "project_roots": [
+      "/Users/yoyi/Documents/mario test"
+    ]
+  },
+  "revision": 1,
+  "last_write_id": "write-h5-level-b2-real-confirm",
+  "generated_by": "control_core",
+  "created_at": "2026-06-08T01:30:00Z",
+  "updated_at": "2026-06-08T01:30:00Z",
+  "continuations": [
+    {
+      "record_version": 1,
+      "continuation_id": "session-continuation:v1:e6f3d9d580033c0f236b3a33079986031083d854a95afd706f4d3c8465a535d5",
+      "preview_id": "session-continuation-preview:h5-level-b2:mario-test:codex-dev:resume",
+      "adapter_id": "codex-local",
+      "operation_id": "resume",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "project_root": "/Users/yoyi/Documents/mario test",
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+      "session_id": "019e798a-ac37-7771-b982-e38084fcd22e",
+      "work_item_id": "work-item:h5-level-b2:mario-test:codex-dev:write-probe:v1",
+      "target_cwd": "/Users/yoyi/Documents/mario test/.workbench/h5-b2",
+      "allowed_write_roots": [
+        "/Users/yoyi/Documents/mario test/.workbench/h5-b2"
+      ],
+      "sandbox": "workspace-write",
+      "prompt_source_kind": "workbench_managed_h5_level_b2_task_package_prompt_ref",
+      "prompt_summary": "H5 Level B2 project-workflow-bound workspace-write dispatch probe for mario test codex-dev worker.",
+      "command_preview": "Level A preview only: codex exec resume --skip-git-repo-check --json --output-last-message <workbench-managed> -C /Users/yoyi/Documents/mario test/.workbench/h5-b2 --sandbox workspace-write 019e798a-ac37-7771-b982-e38084fcd22e",
+      "readback_strategy": "required",
+      "status": "preview_confirmed",
+      "execution_level": "level_a_stub_only",
+      "runner_kind": "stub",
+      "user_confirmation_state": "confirmed",
+      "guard_status": "needs_user_confirmation",
+      "requested_by": "workbench_h5_level_b2_project_director",
+      "confirmed_by": "user_and_global_supervisor",
+      "confirmation_reason": "用户和全局主管授权 H5-Level-B2 mario test 开发线 worker session 的一次 workspace-write project workflow write probe。",
+      "created_at": "2026-06-08T01:30:00Z",
+      "updated_at": "2026-06-08T01:30:00Z",
+      "audit_refs": [
+        "audit:session-continuation-confirmed:2026-06-08T01:30:00Z:becb82205578f5e1"
+      ],
+      "warnings": [
+        "codex_local_only",
+        "controlled_session_continuation_only",
+        "level_a_stub_only",
+        "level_b_real_execution_requires_user_approval",
+        "no_planned_adapter_execution",
+        "prompt_sent_false",
+        "real_codex_executed_false",
+        "requires_project_workflow_node_session_binding",
+        "writes_codex_home_false"
+      ]
+    }
+  ],
+  "attempts": [],
+  "audit_events": [
+    {
+      "event_version": 1,
+      "event_id": "audit:session-continuation-confirmed:2026-06-08T01:30:00Z:becb82205578f5e1",
+      "event_type": "session_continuation_preview_confirmed",
+      "continuation_id": "session-continuation:v1:e6f3d9d580033c0f236b3a33079986031083d854a95afd706f4d3c8465a535d5",
+      "attempt_id": null,
+      "preview_id": "session-continuation-preview:h5-level-b2:mario-test:codex-dev:resume",
+      "actor_role": "user_and_global_supervisor",
+      "before_status": null,
+      "after_status": "preview_confirmed",
+      "store_revision": 1,
+      "reason": "用户和全局主管授权 H5-Level-B2 mario test 开发线 worker session 的一次 workspace-write project workflow write probe。",
+      "created_at": "2026-06-08T01:30:00Z",
+      "warnings": [
+        "codex_local_only",
+        "controlled_session_continuation_only",
+        "level_a_stub_only",
+        "level_b_real_execution_requires_user_approval",
+        "no_planned_adapter_execution",
+        "prompt_sent_false",
+        "real_codex_executed_false",
+        "requires_project_workflow_node_session_binding",
+        "writes_codex_home_false"
+      ]
+    }
+  ],
+  "warnings": []
+}

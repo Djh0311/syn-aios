@@ -1,0 +1,15 @@
+{
+  "projects": [
+    {
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "project_root": "/Users/yoyi/Documents/mario test"
+    }
+  ],
+  "revision": 1,
+  "schema_version": "workflow-state.v0",
+  "stage": "stage-k-k2-real-execution-probe",
+  "warnings": [
+    "stage_k_k2_real_execution_probe_state",
+    "prompt_body_not_persisted_in_product_command_sidecar"
+  ]
+}

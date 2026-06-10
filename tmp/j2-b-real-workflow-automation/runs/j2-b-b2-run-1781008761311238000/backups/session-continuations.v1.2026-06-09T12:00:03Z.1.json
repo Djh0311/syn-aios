@@ -1,0 +1,95 @@
+{
+  "schema_version": "session_continuation_store.v1",
+  "store_version": 1,
+  "storage_kind": "sidecar_json_v0",
+  "scope": {
+    "scope_kind": "workflow_state_sidecar",
+    "workflow_state_path": "/Users/yoyi/workspace/product-line/tmp/j2-b-real-workflow-automation/runs/j2-b-b2-run-1781008761311238000/workflow-state.v0.json",
+    "sidecar_path": "/Users/yoyi/workspace/product-line/tmp/j2-b-real-workflow-automation/runs/j2-b-b2-run-1781008761311238000/session-continuations.v1.json",
+    "project_roots": [
+      "/Users/yoyi/workspace/product-line/tmp/stage-j-j2-b-isolated-project"
+    ]
+  },
+  "revision": 1,
+  "last_write_id": "write-j2-b-b2-real-new-session-phase-a-confirm-continuation",
+  "generated_by": "control_core",
+  "created_at": "2026-06-09T12:00:03Z",
+  "updated_at": "2026-06-09T12:00:03Z",
+  "continuations": [
+    {
+      "record_version": 1,
+      "continuation_id": "session-continuation:v1:ab246dba122a4afe7f76475af041a54393737f77151abdfecbc4ea5be43d5f2c",
+      "preview_id": "session-continuation-preview:pcr4:real-exec-command:codex-control:b7c65a1f0ee6",
+      "adapter_id": "codex-local",
+      "operation_id": "new_session",
+      "project_id": "project:stage-j-j2-b-isolated-project",
+      "project_root": "/Users/yoyi/workspace/product-line/tmp/stage-j-j2-b-isolated-project",
+      "workflow_id": "workflow:stage-j-j2-b-isolated-project:default",
+      "node_id": "workflow:stage-j-j2-b-isolated-project:default:node:codex-dev",
+      "session_id": "",
+      "work_item_id": "work-item:j2:workflow-stage-j-j2-b-isolated-project-default:j2-b-isolated-project-developer-run-unit-workspace-write-real-probe",
+      "target_cwd": "/Users/yoyi/workspace/product-line/tmp/stage-j-j2-b-isolated-project",
+      "allowed_write_roots": [
+        "/Users/yoyi/workspace/product-line/tmp/stage-j-j2-b-isolated-project/.workbench/stage-j/j2-b"
+      ],
+      "sandbox": "workspace-write",
+      "prompt_source_kind": "product_command_prompt_ref",
+      "prompt_summary": "J2-B isolated project developer run unit workspace-write real probe.",
+      "command_preview": "H3.1 preview only: codex exec --skip-git-repo-check --json --output-last-message <workbench-managed> -C /Users/yoyi/workspace/product-line/tmp/stage-j-j2-b-isolated-project --sandbox workspace-write <stdin:workbench-managed-prompt>",
+      "readback_strategy": "required",
+      "status": "preview_confirmed",
+      "execution_level": "level_a_stub_only",
+      "runner_kind": "stub",
+      "user_confirmation_state": "confirmed",
+      "guard_status": "ready_for_phase_a_noop",
+      "requested_by": "user",
+      "confirmed_by": "user",
+      "confirmation_reason": "PCR4 Phase A no-op follows approved product command decision.",
+      "created_at": "2026-06-09T12:00:03Z",
+      "updated_at": "2026-06-09T12:00:03Z",
+      "audit_refs": [
+        "audit:session-continuation-confirmed:2026-06-09T12:00:03Z:2c5e1500737685e9"
+      ],
+      "warnings": [
+        "codex_local_only",
+        "controlled_session_continuation_only",
+        "level_a_stub_only",
+        "level_b_real_execution_requires_user_approval",
+        "no_planned_adapter_execution",
+        "prompt_sent_false",
+        "real_codex_executed_false",
+        "requires_project_workflow_node_session_binding",
+        "writes_codex_home_false"
+      ]
+    }
+  ],
+  "attempts": [],
+  "audit_events": [
+    {
+      "event_version": 1,
+      "event_id": "audit:session-continuation-confirmed:2026-06-09T12:00:03Z:2c5e1500737685e9",
+      "event_type": "session_continuation_preview_confirmed",
+      "continuation_id": "session-continuation:v1:ab246dba122a4afe7f76475af041a54393737f77151abdfecbc4ea5be43d5f2c",
+      "attempt_id": null,
+      "preview_id": "session-continuation-preview:pcr4:real-exec-command:codex-control:b7c65a1f0ee6",
+      "actor_role": "user",
+      "before_status": null,
+      "after_status": "preview_confirmed",
+      "store_revision": 1,
+      "reason": "PCR4 Phase A no-op follows approved product command decision.",
+      "created_at": "2026-06-09T12:00:03Z",
+      "warnings": [
+        "codex_local_only",
+        "controlled_session_continuation_only",
+        "level_a_stub_only",
+        "level_b_real_execution_requires_user_approval",
+        "no_planned_adapter_execution",
+        "prompt_sent_false",
+        "real_codex_executed_false",
+        "requires_project_workflow_node_session_binding",
+        "writes_codex_home_false"
+      ]
+    }
+  ],
+  "warnings": []
+}

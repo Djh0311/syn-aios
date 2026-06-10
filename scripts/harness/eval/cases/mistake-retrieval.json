@@ -1,0 +1,40 @@
+[
+  {
+    "id": "auth-token-repeat",
+    "query": {
+      "title": "Fix login token regression",
+      "description": "Production auth retry failed after changing token refresh",
+      "paths": [
+        "apps/api/src/auth/token.ts"
+      ],
+      "riskTags": [
+        "auth",
+        "security"
+      ]
+    },
+    "expected": [
+      "M-001"
+    ],
+    "k": 3,
+    "ledger": "## M-001: Auth Token Refresh Regression\n\nDate: 2026-05-16\nAffected Area: auth\nSignature Keywords: auth, login, token, refresh, regression\nSignature Paths: apps/api/src/auth/token.ts\nRisk Tags: auth, security, verification\n\n### Actual Root Cause\n\n- Token refresh tests did not cover expired-session retry.\n\n### Prevention\n\n- Add regression coverage before changing auth token flows.\n\nStatus: Encoded In Test\n\n## M-002: Browser Screenshot Missed Console Error\n\nDate: 2026-05-16\nAffected Area: ui\nSignature Keywords: browser, screenshot, console, ui\nSignature Paths: apps/web/src/settings/page.tsx\nRisk Tags: ui, verification\n\n### Actual Root Cause\n\n- UI completion relied on screenshot only.\n\nStatus: Encoded In Test\n"
+  },
+  {
+    "id": "ui-browser-repeat",
+    "query": {
+      "title": "Settings page browser verification missed console error",
+      "description": "UI looked correct but console network evidence was missing",
+      "paths": [
+        "apps/web/src/settings/page.tsx"
+      ],
+      "riskTags": [
+        "ui",
+        "verification"
+      ]
+    },
+    "expected": [
+      "M-002"
+    ],
+    "k": 3,
+    "ledger": "## M-001: Auth Token Refresh Regression\n\nDate: 2026-05-16\nAffected Area: auth\nSignature Keywords: auth, login, token, refresh, regression\nSignature Paths: apps/api/src/auth/token.ts\nRisk Tags: auth, security, verification\n\n### Actual Root Cause\n\n- Token refresh tests did not cover expired-session retry.\n\nStatus: Encoded In Test\n\n## M-002: Browser Screenshot Missed Console Error\n\nDate: 2026-05-16\nAffected Area: ui\nSignature Keywords: browser, screenshot, console, ui\nSignature Paths: apps/web/src/settings/page.tsx\nRisk Tags: ui, verification\n\n### Actual Root Cause\n\n- UI completion relied on screenshot only.\n\n### Prevention\n\n- Require console and network evidence for UI completion.\n\nStatus: Encoded In Test\n"
+  }
+]

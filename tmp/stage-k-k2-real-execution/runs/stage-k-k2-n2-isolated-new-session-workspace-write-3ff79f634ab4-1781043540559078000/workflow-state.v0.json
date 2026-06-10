@@ -1,0 +1,15 @@
+{
+  "projects": [
+    {
+      "project_id": "project:users-yoyi-workspace-product-line-test-fixtures-stage-k-isolated-project",
+      "project_root": "/Users/yoyi/workspace/product-line/test-fixtures/stage-k-isolated-project"
+    }
+  ],
+  "revision": 1,
+  "schema_version": "workflow-state.v0",
+  "stage": "stage-k-k2-real-execution-probe",
+  "warnings": [
+    "stage_k_k2_real_execution_probe_state",
+    "prompt_body_not_persisted_in_product_command_sidecar"
+  ]
+}

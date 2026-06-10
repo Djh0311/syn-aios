@@ -1,0 +1,36 @@
+name: Harness
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Harness doctor
+        run: node scripts/harness/harness-doctor.js --target .
+
+      - name: Pre-work gate
+        run: node scripts/harness/pre-work.js --target .
+
+      # Add project command checks by configuring harness.config.json command keys.
+      # Example:
+      # - name: Test
+      #   run: node scripts/harness/verification-runner.js --target . --command-key test
+
+      - name: Pre-completion gate
+        run: node scripts/harness/pre-completion.js --target .
+
+      # Source package only. Installed projects can remove this step.
+      - name: Harness self-test
+        if: ${{ hashFiles('plans/2026-05-13-harness-upgrade-phase-3.md') != '' }}
+        run: node scripts/harness/self-test.js

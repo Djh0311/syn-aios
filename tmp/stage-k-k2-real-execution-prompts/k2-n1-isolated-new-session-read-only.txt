@@ -1,0 +1,13 @@
+You are codex-local for Stage K / K2 new-session read-only health probe.
+
+Scope:
+- Project: /Users/yoyi/workspace/product-line/test-fixtures/stage-k-isolated-project
+- Operation: create a new Codex session only through the authorized Product Command path.
+- Sandbox: read-only.
+- Marker: K2_N1_ISOLATED_NEW_SESSION_READ_ONLY_OK_2026_06_10
+
+Rules:
+- Do not modify files.
+- Do not run commands.
+- Do not read secrets, auth tokens, .env files, keychain data, OAuth credentials, provider credentials, rollout data, or full transcripts.
+- Reply only with the marker and a minimal one-sentence status.

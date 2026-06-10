@@ -1,0 +1,59 @@
+export type ViewKey =
+  | "home"
+  | "projects"
+  | "ideas"
+  | "proposal"
+  | "workflow"
+  | "runningWorkflows"
+  | "agents"
+  | "knowledge"
+  | "memory"
+  | "skills"
+  | "harness"
+  | "tools"
+  | "models"
+  | "settings";
+
+export type RightPanelKey = "notifications" | "todos" | "audit" | "running" | "secretary";
+
+export type WorkbenchNavItem = {
+  key: ViewKey;
+  label: string;
+  glyph: string;
+};
+
+export const homeNavItem: WorkbenchNavItem = { key: "home", label: "首页", glyph: "⌂" };
+
+export const primaryNavItems: WorkbenchNavItem[] = [
+  { key: "projects", label: "项目", glyph: "▤" },
+  { key: "agents", label: "智能体", glyph: "◍" },
+  { key: "ideas", label: "想法箱", glyph: "✎" },
+  { key: "knowledge", label: "知识库", glyph: "▢" },
+  { key: "memory", label: "记忆层", glyph: "◐" },
+  { key: "skills", label: "Skill", glyph: "✦" },
+  { key: "harness", label: "Harness", glyph: "⬡" },
+  { key: "runningWorkflows", label: "运行中工作流", glyph: "≋" },
+];
+
+export const settingsNavItem: WorkbenchNavItem = { key: "settings", label: "设置", glyph: "…" };
+
+export const devNavItems: WorkbenchNavItem[] = [
+  { key: "proposal", label: "建议方案", glyph: "≣" },
+  { key: "workflow", label: "实验画布", glyph: "⊹" },
+  { key: "tools", label: "工具", glyph: "⚙" },
+  { key: "models", label: "模型/凭据", glyph: "◇" },
+];
+
+export const navItems: WorkbenchNavItem[] = [
+  homeNavItem,
+  ...primaryNavItems,
+  settingsNavItem,
+];
+
+export const workspaceRailItems = [
+  { key: "secretary", label: "秘书", glyph: "秘" },
+  { key: "notifications", label: "通知", glyph: "知" },
+  { key: "todos", label: "待办", glyph: "待" },
+  { key: "running", label: "运行中", glyph: "行" },
+  { key: "audit", label: "管理", glyph: "管" },
+] as const;

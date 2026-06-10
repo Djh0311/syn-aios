@@ -1,0 +1,410 @@
+{
+  "agent_adapters": [
+    {
+      "adapter_id": "codex-local",
+      "agent_id": "codex-local",
+      "agent_type": "codex",
+      "capabilities": [
+        "codex_index_read",
+        "workflow_state_v0"
+      ],
+      "display_name": "Codex",
+      "permission_level": "read_only",
+      "provider": "local-codex-index",
+      "source_kind": "workspace_state",
+      "status": "available"
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "task-package:stage-k:k3:b1:mario-test",
+      "artifact_type": "task_package",
+      "brief": "Stage K K3-B1 read-only project workflow probe for mario test codex-dev worker.",
+      "created_at": "2026-06-10T03:00:03Z",
+      "path": null,
+      "permission_level": "real_execution_product_command",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "source_kind": "stage_k_k3_b_real_workflow_execution_bridge",
+      "source_ref": "work-item:stage-k:k3:b1:mario-test:developer-read-only",
+      "stale": false,
+      "stale_reasons": [],
+      "title": "K3-B 字段冻结任务包：stage-k-k3-b1-mario-test-workflow-read-only",
+      "updated_at": "2026-06-10T03:00:03Z",
+      "version": 1,
+      "warnings": [
+        "k3_b_task_package_summary_no_raw_prompt",
+        "real_execution_requires_separate_user_authorization"
+      ]
+    }
+  ],
+  "audit_events": [
+    {
+      "actor_ref": "user_confirmed_desktop_shell",
+      "after_state": "initialized",
+      "before_state": "missing_state_no_backup",
+      "created_at": "1781062927272",
+      "event_id": "audit:init:1781062927272",
+      "event_type": "workflow_state_initialized",
+      "permission_level": "user_confirmed_write",
+      "reason": "用户确认首次初始化工作流事实层 v0；此前无旧文件可备份。",
+      "source_kind": "workspace_state",
+      "target_ref": "/Users/yoyi/workspace/product-line/tmp/k3-b-real-workflow-automation/runs/k3-b1-run-1781062927271794000/workflow-state.v0.json"
+    },
+    {
+      "actor_ref": "user_confirmed_desktop_shell",
+      "after_state": "draft",
+      "before_state": "missing_project_workflow",
+      "created_at": "1781062927272",
+      "event_id": "audit:bootstrap:users-yoyi-documents-mario-test:1781062927272",
+      "event_type": "project_default_workflow_bootstrapped",
+      "permission_level": "user_confirmed_write",
+      "reason": "用户确认给索引内项目创建默认工作流草稿：/Users/yoyi/Documents/mario test",
+      "source_kind": "workspace_state",
+      "target_ref": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "actor_ref": "user",
+      "after_state": "ready_to_dispatch",
+      "backup_ref": "/Users/yoyi/workspace/product-line/tmp/k3-b-real-workflow-automation/runs/k3-b1-run-1781062927271794000/backups/workflow-state.v0.2026-06-10T03:00:03Z.json",
+      "created_at": "2026-06-10T03:00:03Z",
+      "event_id": "audit:k3-b-work-item:work-item-stage-k-k3-b1-mario-test-developer-read-only:2026-06-10T03:00:03Z",
+      "event_type": "project_workflow_automation_k3_b_work_item_created",
+      "execution_point_id": "stage-k-k3-b1-mario-test-workflow-read-only",
+      "permission_level": "real_execution_product_command",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "reason": "K3-B0 创建 K3-B 专用 work item；本事件不代表真实 Codex 已执行。",
+      "run_unit_id": "run-unit:stage-k:k3:b1:mario-test:developer_execution",
+      "source_kind": "stage_k_k3_b_real_workflow_execution_bridge",
+      "target_ref": "work-item:stage-k:k3:b1:mario-test:developer-read-only",
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "actor_ref": "user",
+      "allowed_write_path": null,
+      "allowed_write_roots": [],
+      "backup_ref": "/Users/yoyi/workspace/product-line/tmp/k3-b-real-workflow-automation/runs/k3-b1-run-1781062927271794000/backups/workflow-state.v0.2026-06-10T03:00:03Z.json",
+      "baseline_refs": [
+        "mario:index.html:f08427fd9510ff2037742c4062052c0b38a3f05bff876d17b3228ff49ce6f7bf",
+        "mario:styles.css:6864e759c7cf53698a6225c121d53b1e14dc06a4d70930efb546822fafe3ad1f",
+        "mario:game.js:814d4fc9e6ab7585c48c55b702f290d899aba05444607fd8f8c38843f47bc8cd",
+        "mario:README.md:02792d82ffd3b9cfc435da4389f0d064d2134a0b76a3f43056f0e23f0af573b5"
+      ],
+      "continuation_id": "session-continuation:v1:e257fc3affda8b43ef60ca10ab45fbe4a4b6d76aac024afd6adbe76fa44f416b",
+      "created_at": "2026-06-10T03:00:03Z",
+      "denied_paths": [
+        "/Users/yoyi/.codex",
+        "secret material",
+        "token material",
+        ".env files",
+        "keychain material",
+        "OAuth material",
+        "provider credential",
+        "full transcript material",
+        "rollout material"
+      ],
+      "event_id": "audit:k3-b-project-workflow-automation:real-exec-command-codex-control-84c982798304:2026-06-10T03:00:03Z",
+      "event_type": "project_workflow_automation_k3_b1_phase_b_recorded",
+      "execution_point_id": "stage-k-k3-b1-mario-test-workflow-read-only",
+      "manifest_requirements": [
+        "read_only_core_hashes_must_match_before_after",
+        "allowed_write_roots_must_be_empty"
+      ],
+      "operation_id": "resume",
+      "permission_envelope_ref": "permission:stage-k:k3:b1",
+      "permission_level": "real_execution_product_command",
+      "phase_a_attempt_ref": "real-exec-command-attempt:phase-a:real-exec-command:codex-control:84c982798304:3",
+      "phase_b_attempt_ref": "real-exec-command-attempt:phase-b:real-exec-command:codex-control:84c982798304:4",
+      "product_command_id": "real-exec-command:codex-control:84c982798304",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "prompt_body_persisted": false,
+      "prompt_hash": "ab0442e86e75900ab47b293328e4a2b46512ae68868799b94e8608ffedd57039",
+      "prompt_ref": "prompt:stage-k:k3:b1:mario-test-workflow-read-only",
+      "prompt_summary": "Stage K K3-B1 read-only project workflow probe for mario test codex-dev worker.",
+      "readback_marker": "K3_B1_MARIO_TEST_WORKFLOW_READ_ONLY_OK_2026_06_10",
+      "readback_result_count": null,
+      "readback_status": "readback_failed",
+      "result_status": "phase_b_completed",
+      "run_unit_id": "run-unit:stage-k:k3:b1:mario-test:developer_execution",
+      "runtime_log_ref": "runtime-log:dispatch-attempt:session-continuation-attempt:h2-phase-b:2026-06-10T03:00:03Z:7b024c80fc1c4d5e",
+      "sandbox": "read-only",
+      "source_kind": "stage_k_k3_b_real_workflow_execution_bridge",
+      "target_ref": "project-workflow-automation:workflow-users-yoyi-documents-mario-test-default:stage-k-k3-b1-read-only-project-workflow-probe-for-mario-test-codex-dev-worker",
+      "task_memory_packet_ref": "memory-packet:stage-k:k3:b1:mario-test",
+      "task_package_ref": "task-package:stage-k:k3:b1:mario-test",
+      "warnings": [
+        "k3_b_bridge_uses_unified_product_command_phase_b",
+        "prompt_body_runtime_only_not_persisted",
+        "readback_full_transcript_forbidden",
+        "readback_unavailable_is_not_zero_results",
+        "worker_report_capture_followup_not_formal_memory"
+      ],
+      "work_item_id": "work-item:stage-k:k3:b1:mario-test:developer-read-only",
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+      "workflow_node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev"
+    }
+  ],
+  "capabilities": [],
+  "created_at": "1781062927272",
+  "edges": [
+    {
+      "created_at": "1781062927272",
+      "edge_id": "workflow:users-yoyi-documents-mario-test:default:edge:assigns_task",
+      "edge_type": "decomposes_to",
+      "from_node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+      "permission_level": "user_confirmed_write",
+      "source_kind": "derived",
+      "state": "draft",
+      "to_node_id": "workflow:users-yoyi-documents-mario-test:default:node:task",
+      "updated_at": "1781062927272",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "created_at": "1781062927272",
+      "edge_id": "workflow:users-yoyi-documents-mario-test:default:edge:assigned_to_codex",
+      "edge_type": "assigned_to",
+      "from_node_id": "workflow:users-yoyi-documents-mario-test:default:node:task",
+      "permission_level": "user_confirmed_write",
+      "source_kind": "derived",
+      "state": "draft",
+      "to_node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+      "updated_at": "1781062927272",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "created_at": "1781062927272",
+      "edge_id": "workflow:users-yoyi-documents-mario-test:default:edge:produces_handoff",
+      "edge_type": "produces",
+      "from_node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+      "permission_level": "user_confirmed_write",
+      "source_kind": "derived",
+      "state": "draft",
+      "to_node_id": "workflow:users-yoyi-documents-mario-test:default:node:handoff",
+      "updated_at": "1781062927272",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "created_at": "1781062927272",
+      "edge_id": "workflow:users-yoyi-documents-mario-test:default:edge:produces_evidence",
+      "edge_type": "produces",
+      "from_node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+      "permission_level": "user_confirmed_write",
+      "source_kind": "derived",
+      "state": "draft",
+      "to_node_id": "workflow:users-yoyi-documents-mario-test:default:node:evidence",
+      "updated_at": "1781062927272",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "created_at": "1781062927272",
+      "edge_id": "workflow:users-yoyi-documents-mario-test:default:edge:validates_artifacts",
+      "edge_type": "validates",
+      "from_node_id": "workflow:users-yoyi-documents-mario-test:default:node:validation",
+      "permission_level": "user_confirmed_write",
+      "source_kind": "derived",
+      "state": "draft",
+      "to_node_id": "workflow:users-yoyi-documents-mario-test:default:node:evidence",
+      "updated_at": "1781062927272",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "created_at": "1781062927272",
+      "edge_id": "workflow:users-yoyi-documents-mario-test:default:edge:reviews_handoff",
+      "edge_type": "reviews",
+      "from_node_id": "workflow:users-yoyi-documents-mario-test:default:node:review",
+      "permission_level": "user_confirmed_write",
+      "source_kind": "derived",
+      "state": "draft",
+      "to_node_id": "workflow:users-yoyi-documents-mario-test:default:node:handoff",
+      "updated_at": "1781062927272",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    }
+  ],
+  "harness_resources": [],
+  "nodes": [
+    {
+      "adapter_id": null,
+      "agent_type": null,
+      "artifact_type": null,
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:director",
+      "node_type": "director",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 120,
+        "y": 120
+      },
+      "source_kind": "derived",
+      "source_ref": "role:director",
+      "state": "draft",
+      "title": "总指导 / Director",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "adapter_id": "codex-local",
+      "agent_type": "codex",
+      "artifact_type": null,
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+      "node_type": "actor",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 340,
+        "y": 120
+      },
+      "source_kind": "workspace_state",
+      "source_ref": "adapter:codex-local",
+      "state": "draft",
+      "title": "Codex 开发线",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "adapter_id": null,
+      "agent_type": null,
+      "artifact_type": null,
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:validation",
+      "node_type": "validation",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 560,
+        "y": 120
+      },
+      "source_kind": "derived",
+      "source_ref": "role:tester",
+      "state": "draft",
+      "title": "验证线",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "adapter_id": null,
+      "agent_type": null,
+      "artifact_type": "task",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:task",
+      "node_type": "task",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 780,
+        "y": 120
+      },
+      "source_kind": "derived",
+      "source_ref": "artifact:task-package",
+      "state": "draft",
+      "title": "任务包",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "adapter_id": null,
+      "agent_type": null,
+      "artifact_type": "handoff",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:handoff",
+      "node_type": "artifact",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 120,
+        "y": 300
+      },
+      "source_kind": "derived",
+      "source_ref": "artifact:handoff",
+      "state": "draft",
+      "title": "Handoff",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "adapter_id": null,
+      "agent_type": null,
+      "artifact_type": "evidence",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:evidence",
+      "node_type": "artifact",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 340,
+        "y": 300
+      },
+      "source_kind": "derived",
+      "source_ref": "artifact:evidence",
+      "state": "draft",
+      "title": "Evidence",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    },
+    {
+      "adapter_id": null,
+      "agent_type": null,
+      "artifact_type": "review",
+      "node_id": "workflow:users-yoyi-documents-mario-test:default:node:review",
+      "node_type": "review",
+      "permission_level": "user_confirmed_write",
+      "position": {
+        "x": 560,
+        "y": 300
+      },
+      "source_kind": "derived",
+      "source_ref": "artifact:review",
+      "state": "draft",
+      "title": "Review",
+      "warnings": [],
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    }
+  ],
+  "permission_level": "user_confirmed_write",
+  "projects": [
+    {
+      "created_at": "1781062927272",
+      "display_name": "J2A Fixture",
+      "permission_level": "read_only",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "root_path": "/Users/yoyi/Documents/mario test",
+      "source_kind": "codex_index",
+      "updated_at": "1781062927272",
+      "warnings": []
+    }
+  ],
+  "reviews": [],
+  "schema_version": "workflow_state_v0",
+  "source_kind": "workspace_state",
+  "updated_at": "2026-06-10T03:00:03Z",
+  "work_items": [
+    {
+      "adapter_id": "codex-local",
+      "agent_type": "codex",
+      "assigned_role_id": "developer_execution",
+      "created_at": "2026-06-10T03:00:03Z",
+      "current_node_id": "workflow:users-yoyi-documents-mario-test:default:node:codex-dev",
+      "permission_level": "real_execution_product_command",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "source_kind": "stage_k_k3_b_real_workflow_execution_bridge",
+      "source_ref": "task-package:stage-k:k3:b1:mario-test",
+      "state": "ready_to_dispatch",
+      "title": "K3-B 真实执行前置：stage-k-k3-b1-mario-test-workflow-read-only",
+      "updated_at": "2026-06-10T03:00:03Z",
+      "work_item_id": "work-item:stage-k:k3:b1:mario-test:developer-read-only",
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default"
+    }
+  ],
+  "workflow_node_dispatches": [],
+  "workflow_node_session_bindings": [],
+  "workflow_version": 1,
+  "workflows": [
+    {
+      "created_at": "1781062927272",
+      "model_policy": "none",
+      "permission_level": "user_confirmed_write",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "source_kind": "workspace_state",
+      "state": "draft",
+      "title": "J2A Fixture 默认工作流草稿",
+      "updated_at": "1781062927272",
+      "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+      "workflow_version": 1
+    }
+  ],
+  "workspace_id": "workspace:yoyi-workspace"
+}

@@ -1,0 +1,321 @@
+{
+  "schema_version": "real_execution_product_commands.v1",
+  "revision": 4,
+  "created_at": "2026-06-10T01:00:00Z",
+  "updated_at": "2026-06-10T01:00:03Z",
+  "last_write_id": "product_new_session_phase_b:real-exec-command:codex-control:d2b94844b620:4",
+  "commands": [
+    {
+      "product_command_id": "real-exec-command:codex-control:d2b94844b620",
+      "command_family": "real_execution_product_command",
+      "operation_id": "new_session",
+      "project_id": "project:users-yoyi-workspace-product-line-test-fixtures-stage-k-isolated-project",
+      "project_root": "/Users/yoyi/workspace/product-line/test-fixtures/stage-k-isolated-project",
+      "workflow_id": "workflow:stage-k:k2:isolated",
+      "node_id": "node:stage-k:k2:n1",
+      "work_item_id": "run-unit:stage-k:k2:n1",
+      "task_package_ref": "task-package:stage-k-k2-n1-isolated-new-session-read-only",
+      "memory_packet_ref": "memory-packet:stage-k:k2:n1:isolated",
+      "adapter_id": "codex-local",
+      "session_mode": "new_session_execution_point",
+      "target_session_id": null,
+      "sandbox": "read-only",
+      "prompt_summary": "Stage K K2 new-session/read-only health probe in isolated project.",
+      "prompt_ref": "prompt:stage-k:k2:n1:isolated-new-session-read-only",
+      "prompt_hash": "b19d41bf5e37cd41af5630cd71241f729e576ed4409574b10594c56e2d359833",
+      "allowed_write_roots": [],
+      "denied_paths": [
+        "secret",
+        "token",
+        ".env",
+        "auth",
+        "keychain",
+        "OAuth",
+        "provider credential",
+        "full transcript",
+        "rollout",
+        "product-line paths outside the fixture"
+      ],
+      "readback_plan": "Expect marker K2_N1_ISOLATED_NEW_SESSION_READ_ONLY_OK_2026_06_10; unavailable, failed, or timed_out readback keeps result_count=null.",
+      "timeout_ms": 120000,
+      "requested_by": "user",
+      "created_at": "2026-06-10T01:00:00Z"
+    }
+  ],
+  "previews": [
+    {
+      "preview_id": "real-exec-preview:codex-control:b515600df521",
+      "request": {
+        "product_command_id": "real-exec-command:codex-control:d2b94844b620",
+        "command_family": "real_execution_product_command",
+        "operation_id": "new_session",
+        "project_id": "project:users-yoyi-workspace-product-line-test-fixtures-stage-k-isolated-project",
+        "project_root": "/Users/yoyi/workspace/product-line/test-fixtures/stage-k-isolated-project",
+        "workflow_id": "workflow:stage-k:k2:isolated",
+        "node_id": "node:stage-k:k2:n1",
+        "work_item_id": "run-unit:stage-k:k2:n1",
+        "task_package_ref": "task-package:stage-k-k2-n1-isolated-new-session-read-only",
+        "memory_packet_ref": "memory-packet:stage-k:k2:n1:isolated",
+        "adapter_id": "codex-local",
+        "session_mode": "new_session_execution_point",
+        "target_session_id": null,
+        "sandbox": "read-only",
+        "prompt_summary": "Stage K K2 new-session/read-only health probe in isolated project.",
+        "prompt_ref": "prompt:stage-k:k2:n1:isolated-new-session-read-only",
+        "prompt_hash": "b19d41bf5e37cd41af5630cd71241f729e576ed4409574b10594c56e2d359833",
+        "allowed_write_roots": [],
+        "denied_paths": [
+          "secret",
+          "token",
+          ".env",
+          "auth",
+          "keychain",
+          "OAuth",
+          "provider credential",
+          "full transcript",
+          "rollout",
+          "product-line paths outside the fixture"
+        ],
+        "readback_plan": "Expect marker K2_N1_ISOLATED_NEW_SESSION_READ_ONLY_OK_2026_06_10; unavailable, failed, or timed_out readback keeps result_count=null.",
+        "timeout_ms": 120000,
+        "requested_by": "user",
+        "created_at": "2026-06-10T01:00:00Z"
+      },
+      "permission_envelope": {
+        "envelope_id": "permission-envelope:real-exec-command:codex-control:d2b94844b620",
+        "product_command_id": "real-exec-command:codex-control:d2b94844b620",
+        "status": "awaiting_user_confirmation",
+        "explicit_user_confirmation_required": true,
+        "approved_for_real_execution": false,
+        "confirmed_by": null,
+        "allowed_write_roots": [],
+        "denied_paths": [
+          "secret",
+          "token",
+          ".env",
+          "auth",
+          "keychain",
+          "OAuth",
+          "provider credential",
+          "full transcript",
+          "rollout",
+          "product-line paths outside the fixture"
+        ],
+        "risk_summary": "J1-A preview only; user decision, Phase A no-op, and later Level B authorization are required.",
+        "warnings": [
+          "confirmed_by_user_required_for_high_impact_operation",
+          "prompt_body_not_stored_in_product_command"
+        ]
+      },
+      "readiness": {
+        "status": "ready_for_pcr3_decision_preview_only",
+        "runner_call_allowed": false,
+        "level_b_authorization_required": true,
+        "blocked_reasons": [],
+        "warnings": [
+          "j1a_prepare_does_not_execute",
+          "j1b_required_for_real_codex_resume"
+        ]
+      },
+      "guard_preview": {
+        "status": "ready_for_pcr3_decision_no_runner",
+        "runner_call_allowed": false,
+        "blocks_execution": false,
+        "reasons": [],
+        "required_fixes": [],
+        "warnings": [
+          "codex_control_guard_preview_only",
+          "no_cli_command_exposed_to_ordinary_ui"
+        ]
+      },
+      "diagnostics_summary": {
+        "status": "not_evaluated_j1a_preview",
+        "blocks_real_execution": false,
+        "degraded_reasons": [],
+        "warnings": [
+          "diagnostics_not_probed_in_j1a_preview"
+        ]
+      },
+      "duplicate_scope": {
+        "scope_id": "codex-control:new_session:021180336893:new-session",
+        "active_attempt_count": 0,
+        "duplicate_blocked": false,
+        "warnings": [
+          "duplicate_scope_preview_only_checked_again_in_phase_a"
+        ]
+      },
+      "runtime_log_preview": {
+        "status": "preview_only_not_written",
+        "runtime_log_refs": [],
+        "redaction_status": "prompt_body_redacted_summary_ref_hash_only",
+        "warnings": [
+          "runtime_log_will_store_summary_ref_hash_only"
+        ]
+      },
+      "audit_preview": {
+        "status": "preview_only_not_written",
+        "audit_refs": [],
+        "warnings": [
+          "audit_will_store_decision_and_refs_not_prompt_body"
+        ]
+      },
+      "readback_boundary": {
+        "status": "readback_unavailable",
+        "attempted": false,
+        "real_readback_performed": false,
+        "result_count": null,
+        "unavailable_reason": "j1a_no_real_readback_before_phase_b",
+        "warnings": [
+          "readback_unavailable_is_not_zero_results"
+        ]
+      },
+      "warnings": [
+        "j1_codex_control_preview_not_h5_dispatch",
+        "prompt_body_runtime_only_not_persisted",
+        "j1a_no_real_codex_execution",
+        "phase_b_requires_separate_execution_point_authorization",
+        "memory_capture_observation_candidate_only_not_formal_memory",
+        "new_session_execution_point_requires_phase_b_authorization"
+      ],
+      "blocked_reasons": [],
+      "prompt_sent": false,
+      "real_codex_executed": false,
+      "writes_codex_home": false,
+      "writes_project_files": false,
+      "writes_workbench_state": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "real-exec-decision:real-exec-command:codex-control:d2b94844b620:2",
+      "product_command_id": "real-exec-command:codex-control:d2b94844b620",
+      "decision": "approved",
+      "confirmed_by": "user",
+      "confirmed_at": "2026-06-10T01:00:01Z",
+      "store_revision": 2,
+      "risk_acknowledgement": "User authorized this K2 execution point once through Product Command.",
+      "allowed_once": true,
+      "reason": "K2 execution point follows prepare -> user decision -> Phase A -> Phase B."
+    }
+  ],
+  "attempts": [
+    {
+      "attempt_id": "real-exec-command-attempt:phase-a:real-exec-command:codex-control:d2b94844b620:3",
+      "product_command_id": "real-exec-command:codex-control:d2b94844b620",
+      "continuation_id": "session-continuation:v1:5413dfb0ff1bf9cc0d8d97f8450cc482ef7bc1fbb868b1e70937eb37fecf7350",
+      "adapter_id": "codex-local",
+      "operation_id": "new_session",
+      "status": "phase_a_noop_completed",
+      "started_at": "2026-06-10T01:00:02Z",
+      "completed_at": "2026-06-10T01:00:02Z",
+      "runner_call_allowed": false,
+      "prompt_sent": false,
+      "real_codex_executed": false,
+      "writes_codex_home": false,
+      "writes_project_files": false,
+      "runtime_log_ref": null,
+      "audit_refs": [
+        "audit:session-continuation-confirmed:2026-06-10T01:00:02Z:fd52605849c25291"
+      ],
+      "readback_summary": {
+        "status": "readback_unavailable",
+        "attempted": false,
+        "real_readback_performed": false,
+        "result_count": null,
+        "unavailable_reason": "pcr4_phase_a_no_real_readback",
+        "warnings": [
+          "pcr4_phase_a_no_real_readback",
+          "readback_unavailable_is_not_zero_results"
+        ]
+      },
+      "failure_reason": null,
+      "warnings": [
+        "pcr4_phase_a_noop_completed_for_new_session",
+        "runner_call_allowed_false_phase_a_noop_only",
+        "prompt_not_sent",
+        "real_codex_executed_false",
+        "codex_home_not_touched",
+        "project_files_not_written",
+        "readback_unavailable_is_not_zero_results"
+      ]
+    },
+    {
+      "attempt_id": "real-exec-command-attempt:phase-b-new-session:real-exec-command:codex-control:d2b94844b620:4",
+      "product_command_id": "real-exec-command:codex-control:d2b94844b620",
+      "continuation_id": "session-continuation:v1:5413dfb0ff1bf9cc0d8d97f8450cc482ef7bc1fbb868b1e70937eb37fecf7350",
+      "adapter_id": "codex-local",
+      "operation_id": "new_session",
+      "status": "phase_b_real_new_session_executed",
+      "started_at": "2026-06-10T01:00:03Z",
+      "completed_at": "2026-06-10T01:00:03Z",
+      "runner_call_allowed": true,
+      "prompt_sent": true,
+      "real_codex_executed": true,
+      "writes_codex_home": true,
+      "writes_project_files": false,
+      "runtime_log_ref": "runtime-log:dispatch-attempt:session-continuation-attempt:h3-b:2026-06-10T01:00:03Z:fd52605849c25291",
+      "audit_refs": [
+        "audit:session-continuation-confirmed:2026-06-10T01:00:02Z:fd52605849c25291",
+        "audit:session-continuation-h3-b-completed:2026-06-10T01:00:03Z:fd52605849c25291",
+        "audit:session-continuation-h3-b-started:2026-06-10T01:00:03Z:fd52605849c25291"
+      ],
+      "readback_summary": {
+        "status": "succeeded",
+        "attempted": true,
+        "real_readback_performed": true,
+        "result_count": 1,
+        "unavailable_reason": null,
+        "warnings": [
+          "readback_unavailable_or_failed_is_not_zero_results",
+          "raw_transcript_not_read_in_h3_b"
+        ]
+      },
+      "failure_reason": null,
+      "warnings": [
+        "pcr9a_product_command_phase_b_bridge",
+        "stdin_prompt_runtime_only_not_persisted",
+        "continuation_phase_b_status:succeeded",
+        "authorization_status:h3_b_real_new_session_executed",
+        "argv_only_no_shell",
+        "codex_local_attempt_ref:codex-local-attempt:h3-b:2026-06-10T01:00:03Z:2a21e84464ce3a46",
+        "command_family:controlled_session_continuation",
+        "h3_b_real_codex_new_session_authorized",
+        "h3_b_real_new_session_runner_path",
+        "h5_unified_product_command_boundary",
+        "operation_id:new_session",
+        "phase_b_exit_code_redacted:Some(0)",
+        "phase_b_real_codex_process_spawned",
+        "planned_adapters_not_connected",
+        "product_command:run_controlled_session_continuation_real_new_session_h3_b",
+        "product_gate_status:authorized_for_real_runner",
+        "project_file_diff_must_be_verified_by_hash",
+        "prompt_body_not_persisted_by_runner",
+        "prompt_body_sent_via_stdin_not_persisted",
+        "prompt_via_stdin_only",
+        "raw_stdout_stderr_not_persisted",
+        "raw_transcript_not_read",
+        "readback_required_by_product_gate",
+        "readback_unavailable_or_failed_is_not_zero_results",
+        "real_execution_command_gate_v1",
+        "runner_call_allowed_after_unified_product_gate",
+        "stderr_summary:Reading prompt from stdin... 2026-06-09T22:18:00.185969Z WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported 2026-06-09T22:18:00.325467Z ERROR rmcp::transport::worker: worker quit with fatal: Deserialize error: data did not match any variant of untagged enum JsonRpcMessage, when send initialized notification 2026-06-09T22:18:00.348489Z WARN codex_rm",
+        "workbench_managed_last_message_ref:/Users/yoyi/workspace/product-line/tmp/stage-k-k2-real-execution/runs/stage-k-k2-n1-isolated-new-session-read-only-b19d41bf5e37-1781043480047061000/runtime/product-command-phase-b/2026-06-10T01:00:03Z.b515600df521.last-message.txt",
+        "writes_workbench_state_true"
+      ]
+    }
+  ],
+  "audit_refs": [
+    "audit:session-continuation-confirmed:2026-06-10T01:00:02Z:fd52605849c25291",
+    "audit:session-continuation-h3-b-completed:2026-06-10T01:00:03Z:fd52605849c25291",
+    "audit:session-continuation-h3-b-started:2026-06-10T01:00:03Z:fd52605849c25291",
+    "real-exec-command-audit:real-exec-command:codex-control:d2b94844b620:real-exec-decision:real-exec-command:codex-control:d2b94844b620:2"
+  ],
+  "warnings": [
+    "pcr1_store_skeleton_only",
+    "no_real_execution_product_command_sidecar_written_by_pcr1",
+    "pcr2_prepare_wrote_command_and_preview_only",
+    "pcr3_decision_recorded_no_runner_no_attempt",
+    "pcr4_phase_a_new_session_noop_attempt_recorded_no_real_codex",
+    "product_new_session_phase_b_attempt_recorded_from_product_command_bridge"
+  ]
+}

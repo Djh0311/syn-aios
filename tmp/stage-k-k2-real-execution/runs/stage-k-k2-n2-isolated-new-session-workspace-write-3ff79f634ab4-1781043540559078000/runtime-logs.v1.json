@@ -1,0 +1,180 @@
+{
+  "schema_version": "runtime_log_store.v1",
+  "store_version": 1,
+  "storage_kind": "sidecar_json_v0",
+  "scope": {
+    "scope_kind": "workflow_state_sidecar",
+    "workflow_state_path": "/Users/yoyi/workspace/product-line/tmp/stage-k-k2-real-execution/runs/stage-k-k2-n2-isolated-new-session-workspace-write-3ff79f634ab4-1781043540559078000/workflow-state.v0.json",
+    "sidecar_path": "/Users/yoyi/workspace/product-line/tmp/stage-k-k2-real-execution/runs/stage-k-k2-n2-isolated-new-session-workspace-write-3ff79f634ab4-1781043540559078000/runtime-logs.v1.json",
+    "project_roots": [
+      "/Users/yoyi/workspace/product-line/test-fixtures/stage-k-isolated-project"
+    ]
+  },
+  "revision": 1,
+  "last_write_id": "K2_N2-phase-b-continuation-new-session-phase-b",
+  "generated_by": "runtime_log_store_explicit_append_v1",
+  "created_at": "2026-06-10T01:00:03Z",
+  "updated_at": "2026-06-10T01:00:03Z",
+  "boundary": {
+    "runtime_log_definition": "Runtime log records operational timing, status, category, source refs and safe summaries.",
+    "audit_event_definition": "Audit event records accountable decisions, actor, permission, before and after state.",
+    "separation_rule": "Runtime log 与 audit event 不能互相替代；日志只引用 audit_refs，不内嵌 audit event 本体。",
+    "redaction_rule": "Only redacted summaries are displayable; sensitive material and conversation bodies are omitted.",
+    "forbidden_payloads": [
+      "credential_material",
+      "conversation_body",
+      "raw_provider_material",
+      "environment_material",
+      "system_authorization_material"
+    ]
+  },
+  "entries": [
+    {
+      "entry_version": 1,
+      "entry_id": "runtime-log:workflow-run:session-continuation:v1:3834773ab516790d830bbebc6bebb51cf5853dd029ceabfbf871e0e7091b762a",
+      "category": "workflow_run",
+      "status": "succeeded",
+      "severity": "info",
+      "started_at": "2026-06-10T01:00:02Z",
+      "finished_at": "2026-06-10T01:00:03Z",
+      "duration_ms": null,
+      "project_id": "project:users-yoyi-workspace-product-line-test-fixtures-stage-k-isolated-project",
+      "workflow_id": "workflow:stage-k:k2:isolated",
+      "node_id": "node:stage-k:k2:n2",
+      "session_id": "",
+      "adapter_id": "codex-local",
+      "summary": "Workflow run workflow:stage-k:k2:isolated is succeeded via codex_local_phase_b_real_process_runner.",
+      "detail": "Runtime log keeps run status and refs; command and prompt bodies are omitted.",
+      "source_refs": [
+        {
+          "source_kind": "controlled_session_continuation",
+          "source_id": "session-continuation:v1:3834773ab516790d830bbebc6bebb51cf5853dd029ceabfbf871e0e7091b762a",
+          "label": "controlled continuation"
+        }
+      ],
+      "audit_refs": [
+        "audit:session-continuation-confirmed:2026-06-10T01:00:02Z:b285c5375a2dbb31",
+        "audit:session-continuation-h3-b-completed:2026-06-10T01:00:03Z:b285c5375a2dbb31",
+        "audit:session-continuation-h3-b-started:2026-06-10T01:00:03Z:b285c5375a2dbb31"
+      ],
+      "redaction_status": "redacted_safe_summary",
+      "sensitive_omissions": [
+        "command_body",
+        "prompt_body"
+      ],
+      "user_visible": true,
+      "warnings": []
+    },
+    {
+      "entry_version": 1,
+      "entry_id": "runtime-log:dispatch-attempt:session-continuation-attempt:h3-b:2026-06-10T01:00:03Z:b285c5375a2dbb31",
+      "category": "dispatch_attempt",
+      "status": "succeeded",
+      "severity": "info",
+      "started_at": "2026-06-10T01:00:03Z",
+      "finished_at": "2026-06-10T01:00:03Z",
+      "duration_ms": 120000,
+      "project_id": "project:users-yoyi-workspace-product-line-test-fixtures-stage-k-isolated-project",
+      "workflow_id": "workflow:stage-k:k2:isolated",
+      "node_id": "node:stage-k:k2:n2",
+      "session_id": "",
+      "adapter_id": "codex-local",
+      "summary": "Dispatch attempt session-continuation-attempt:h3-b:2026-06-10T01:00:03Z:b285c5375a2dbb31 ended as succeeded; runner codex_local_phase_b_real_process_runner.",
+      "detail": "Dispatch runtime entry omits command preview, prompt text and raw runner output.",
+      "source_refs": [
+        {
+          "source_kind": "session_continuation_attempt",
+          "source_id": "session-continuation-attempt:h3-b:2026-06-10T01:00:03Z:b285c5375a2dbb31",
+          "label": "dispatch attempt"
+        }
+      ],
+      "audit_refs": [
+        "audit:session-continuation-h3-b-started:2026-06-10T01:00:03Z:b285c5375a2dbb31",
+        "audit:session-continuation-h3-b-completed:2026-06-10T01:00:03Z:b285c5375a2dbb31"
+      ],
+      "redaction_status": "redacted_safe_summary",
+      "sensitive_omissions": [
+        "command_body",
+        "runner_output"
+      ],
+      "user_visible": true,
+      "warnings": [
+        "runtime_log_redacted_summary_only"
+      ]
+    },
+    {
+      "entry_version": 1,
+      "entry_id": "runtime-log:readback:session-continuation-attempt:h3-b:2026-06-10T01:00:03Z:b285c5375a2dbb31",
+      "category": "readback",
+      "status": "succeeded",
+      "severity": "info",
+      "started_at": "2026-06-10T01:00:03Z",
+      "finished_at": "2026-06-10T01:00:03Z",
+      "duration_ms": null,
+      "project_id": "project:users-yoyi-workspace-product-line-test-fixtures-stage-k-isolated-project",
+      "workflow_id": "workflow:stage-k:k2:isolated",
+      "node_id": "node:stage-k:k2:n2",
+      "session_id": "",
+      "adapter_id": "codex-local",
+      "summary": "Readback status is succeeded; result_count=1.",
+      "detail": "Readback runtime entry never treats unavailable as zero results and omits conversation bodies.",
+      "source_refs": [
+        {
+          "source_kind": "session_continuation_attempt",
+          "source_id": "session-continuation-attempt:h3-b:2026-06-10T01:00:03Z:b285c5375a2dbb31",
+          "label": "readback boundary"
+        }
+      ],
+      "audit_refs": [
+        "audit:session-continuation-h3-b-started:2026-06-10T01:00:03Z:b285c5375a2dbb31",
+        "audit:session-continuation-h3-b-completed:2026-06-10T01:00:03Z:b285c5375a2dbb31"
+      ],
+      "redaction_status": "redacted_safe_summary",
+      "sensitive_omissions": [
+        "conversation_body",
+        "provider_material"
+      ],
+      "user_visible": true,
+      "warnings": [
+        "readback_unavailable_is_not_zero_results"
+      ]
+    }
+  ],
+  "summaries": [
+    {
+      "category": "dispatch_attempt",
+      "status": "succeeded",
+      "severity": "info",
+      "entry_count": 1,
+      "latest_entry_ids": [
+        "runtime-log:dispatch-attempt:session-continuation-attempt:h3-b:2026-06-10T01:00:03Z:b285c5375a2dbb31"
+      ],
+      "warnings": []
+    },
+    {
+      "category": "readback",
+      "status": "succeeded",
+      "severity": "info",
+      "entry_count": 1,
+      "latest_entry_ids": [
+        "runtime-log:readback:session-continuation-attempt:h3-b:2026-06-10T01:00:03Z:b285c5375a2dbb31"
+      ],
+      "warnings": []
+    },
+    {
+      "category": "workflow_run",
+      "status": "succeeded",
+      "severity": "info",
+      "entry_count": 1,
+      "latest_entry_ids": [
+        "runtime-log:workflow-run:session-continuation:v1:3834773ab516790d830bbebc6bebb51cf5853dd029ceabfbf871e0e7091b762a"
+      ],
+      "warnings": []
+    }
+  ],
+  "warnings": [
+    "runtime_log_sidecar_explicitly_written",
+    "runtime_log_does_not_replace_audit_event",
+    "audit_event_does_not_replace_runtime_log"
+  ]
+}

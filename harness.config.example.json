@@ -1,0 +1,280 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "example-project",
+    "type": "other",
+    "description": "Replace with a short project description."
+  },
+  "commands": {
+    "packageManager": "pnpm | npm | yarn | bun | none",
+    "install": "",
+    "lint": "",
+    "typecheck": "",
+    "test": "",
+    "testUnit": "",
+    "testIntegration": "",
+    "testE2E": "",
+    "build": "",
+    "dev": ""
+  },
+  "ecosystemDetection": {
+    "plannedOnly": true,
+    "commonEntrypoints": [
+      "package.json",
+      "pyproject.toml",
+      "requirements.txt",
+      "pytest.ini",
+      "Cargo.toml",
+      "go.mod",
+      "pom.xml",
+      "build.gradle",
+      "build.gradle.kts",
+      "gradlew",
+      "Makefile",
+      "Dockerfile",
+      "docker-compose.yml",
+      "compose.yaml",
+      ".github/workflows"
+    ],
+    "inferredCommands": [
+      "pytest",
+      "cargo test",
+      "cargo build",
+      "cargo check",
+      "go test ./...",
+      "mvn test",
+      "mvn package",
+      "./gradlew test",
+      "./gradlew build",
+      "make test",
+      "make lint",
+      "make build",
+      "docker compose config"
+    ]
+  },
+  "runtimeDocs": {
+    "templateSource": "templates/docs",
+    "projectTarget": "docs",
+    "protected": [
+      "docs/current-state.md",
+      "docs/requirements-matrix.md",
+      "docs/task-queue.md",
+      "docs/decisions.md",
+      "docs/open-questions.md",
+      "docs/context-checkpoints.md",
+      "docs/sprint-contract.md",
+      "docs/agent-mistake-ledger.md",
+      "docs/tooling-and-mcp-registry.md",
+      "docs/evidence/**",
+      "docs/plans/**"
+    ]
+  },
+  "protectedPaths": [
+    ".env",
+    ".env.*",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock"
+  ],
+  "policy": {
+    "mode": "balanced",
+    "git": {
+      "requireRepository": false,
+      "blockProtectedPathChanges": true,
+      "allowDirtyWorktree": true
+    },
+    "ci": {
+      "required": false,
+      "providers": ["github", "gitlab"]
+    },
+    "evidence": {
+      "requireFreshForCompletion": true,
+      "maxAgeHours": 24,
+      "writeIndexOnFinish": false,
+      "retentionMaxAgeDays": 30,
+      "retentionDryRunByDefault": true,
+      "compactMaxLines": 120,
+      "protectStrictFailedSecurity": true
+    },
+    "ui": {
+      "requireRealBrowserEvidence": true,
+      "allowHttpOnlyReachability": false
+    },
+    "hooks": {
+      "enabled": false,
+      "preCommit": "advisory",
+      "prePush": "advisory"
+    },
+    "disabledChecks": []
+  },
+  "ui": {
+    "targets": [
+      {
+        "name": "local-app",
+        "url": "http://localhost:3000",
+        "viewports": ["desktop", "mobile"],
+        "requiredEvidence": ["route", "viewport", "interaction", "console", "network", "screenshot-or-dom"]
+      }
+    ]
+  },
+  "tools": {
+    "browser": {
+      "preferred": "Chrome DevTools MCP",
+      "fallbacks": ["Codex in-app Browser", "Playwright MCP", "project E2E runner", "manual user verification"]
+    },
+    "mcp": {
+      "required": [],
+      "preferred": ["Chrome DevTools MCP"],
+      "optional": ["GitHub MCP", "Figma MCP", "Sentry MCP", "DB MCP"]
+    }
+  },
+  "gates": {
+    "hard": [
+      "no-false-completion",
+      "no-runtime-doc-overwrite",
+      "no-unauthorized-write-scope",
+      "fresh-verification-for-completion",
+      "browser-evidence-for-ui-completion"
+    ],
+    "soft": [
+      "prefer-tdd-for-behavior-changes",
+      "prefer-durable-evidence-for-strict-work",
+      "prefer-evaluator-review-for-high-risk-work"
+    ],
+    "escapeHatch": {
+      "requiresExplicitUserConfirmation": true,
+      "recordReason": true
+    }
+  },
+  "preWork": {
+    "recommendedChecks": [
+      "node scripts/harness/harness-doctor.js --target .",
+      "node scripts/harness/config-check.js --target .",
+      "node scripts/harness/capability-scan.js --target .",
+      "node scripts/harness/skill-recommend.js --text \"Task title or request\"",
+      "node scripts/harness/verification-plan.js --target .",
+      "node scripts/harness/mcp-doctor.js --target .",
+      "node scripts/harness/git-gate.js --target .",
+      "node scripts/harness/ci-gate.js --target .",
+      "node scripts/harness/managed-files-audit.js --target .",
+      "node scripts/harness/runtime-docs-diff.js --target .",
+      "node scripts/harness/stale-control-check.js --target .",
+      "node scripts/harness/status-snapshot.js --target .",
+      "node scripts/harness/guard-state-files.js --target ."
+    ],
+    "strictPathRecommendedChecks": [
+      "node scripts/harness/config-check.js --target . --strict",
+      "node scripts/harness/verification-plan.js --target . --strict",
+      "node scripts/harness/installed-health.js --target . --strict",
+      "node scripts/harness/guard-state-files.js --target . --strict"
+    ]
+  },
+  "preCompletion": {
+    "recommendedChecks": [
+      "node scripts/harness/rules-lint.js .",
+      "node scripts/harness/capability-scan.js --target .",
+      "node scripts/harness/verification-runner.js --target . --command-key test",
+      "node scripts/harness/mcp-doctor.js --target .",
+      "node scripts/harness/ui-verify.js --target .",
+      "node scripts/harness/evidence-freshness.js --target .",
+      "node scripts/harness/evidence-retention.js --target .",
+      "node scripts/harness/browser-evidence-check.js --target .",
+      "node scripts/harness/git-gate.js --target .",
+      "node scripts/harness/ci-gate.js --target .",
+      "node scripts/harness/managed-files-audit.js --target .",
+      "node scripts/harness/runtime-docs-diff.js --target .",
+      "node scripts/harness/stale-control-check.js --target .",
+      "node scripts/harness/status-snapshot.js --target .",
+      "node scripts/harness/guard-state-files.js --target .",
+      "node scripts/harness/evidence-check.js --target .",
+      "node scripts/harness/mistake-check.js --target .",
+      "node scripts/harness/harness-doctor.js --target ."
+    ],
+    "strictPathRecommendedChecks": [
+      "node scripts/harness/rules-lint.js .",
+      "node scripts/harness/verification-runner.js --target . --command-key test --strict",
+      "node scripts/harness/capability-scan.js --target . --strict",
+      "node scripts/harness/mcp-doctor.js --target . --strict",
+      "node scripts/harness/ui-verify.js --target . --strict",
+      "node scripts/harness/evidence-freshness.js --target . --strict",
+      "node scripts/harness/evidence-retention.js --target .",
+      "node scripts/harness/browser-evidence-check.js --target . --strict",
+      "node scripts/harness/git-gate.js --target . --strict",
+      "node scripts/harness/ci-gate.js --target . --strict",
+      "node scripts/harness/managed-files-audit.js --target . --strict",
+      "node scripts/harness/runtime-docs-diff.js --target . --strict",
+      "node scripts/harness/stale-control-check.js --target . --strict",
+      "node scripts/harness/status-snapshot.js --target . --strict",
+      "node scripts/harness/guard-state-files.js --target . --strict",
+      "node scripts/harness/evidence-check.js --target . --strict",
+      "node scripts/harness/mistake-check.js --target . --strict",
+      "node scripts/harness/installed-health.js --target . --strict"
+    ]
+  },
+  "autoRisk": {
+    "enabled": true,
+    "defaultConfigPreset": "auto",
+    "defaultTaskPath": "auto",
+    "configInit": {
+      "presetSource": "example",
+      "selectedPreset": "balanced",
+      "recommendedPreset": "auto",
+      "rationale": "config-init defaults to auto and records the selected project preset when materializing harness.config.json."
+    },
+    "taskStart": {
+      "pathSource": "auto",
+      "overrideFlag": "--path fast|standard|strict",
+      "taskRiskCommand": "node scripts/harness/task-risk.js --target . --title \"Task title\""
+    }
+  },
+  "completionProtocol": {
+    "preCompletionIsAggregateCheck": true,
+    "preCompletionDoesNotReplaceFreshVerification": true,
+    "requiredBeforeStrictCompletion": [
+      "Create a task evidence archive with evidence-new --write.",
+      "Run the relevant real verification command with verification-runner --write.",
+      "For UI work, record real browser evidence with Chrome DevTools MCP, the Codex in-app Browser, Playwright, or the project E2E runner.",
+      "Run pre-completion --strict after fresh evidence exists."
+    ],
+    "uiVerifyMode": "HTTP-only reachability evidence; not a substitute for browser console, interaction, screenshot, or network inspection."
+  },
+  "memoryIntegration": {
+    "enabled": false,
+    "provider": "agentmemory",
+    "mode": "governed",
+    "endpoint": "http://127.0.0.1:3111",
+    "auth": {
+      "secretEnv": "AGENTMEMORY_SECRET"
+    },
+    "readPolicy": {
+      "maxMemoriesPerTask": 5,
+      "maxMemoryChars": 1200,
+      "requireProvenance": true,
+      "allowUnverified": false,
+      "staleAfterDays": 30,
+      "respectProjectDocsOverMemory": true
+    },
+    "writePolicy": {
+      "autoWrite": false,
+      "candidateQueue": true,
+      "requirePromotion": true,
+      "blockSecrets": true,
+      "quarantinePromptInjection": true
+    },
+    "retention": {
+      "reviewAfterDays": 30,
+      "expireAfterDays": 180
+    }
+  },
+  "verificationRunner": {
+    "dryRunExample": "node scripts/harness/verification-runner.js --target . --command-key test",
+    "writeExample": "node scripts/harness/verification-runner.js --target . --slug verification-run --command-key test --write",
+    "requiresExistingEvidenceDirectory": true,
+    "refusesCommandKeys": ["dev"]
+  },
+  "taskLifecycle": {
+    "startExample": "node scripts/harness/task-start.js --target . --title \"Task title\" --write",
+    "finishExample": "node scripts/harness/task-finish.js --target . --slug task-title --keys lint,typecheck,test --write --strict",
+    "suiteExample": "node scripts/harness/verification-suite.js --target . --slug task-title --keys lint,typecheck,test,build --write"
+  }
+}

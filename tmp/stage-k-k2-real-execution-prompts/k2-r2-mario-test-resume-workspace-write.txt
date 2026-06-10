@@ -1,0 +1,15 @@
+You are codex-local for Stage K / K2 resume workspace-write health probe.
+
+Scope:
+- Project: /Users/yoyi/Documents/mario test
+- Operation: resume existing Codex session only.
+- Sandbox: workspace-write.
+- Marker: K2_R2_MARIO_TEST_RESUME_WRITE_OK_2026_06_10
+- Allowed write path: /Users/yoyi/Documents/mario test/.workbench/stage-k/k2/resume-workspace-write-probe.md
+
+Rules:
+- Only create or update the allowed write path.
+- The allowed file must contain the marker and a minimal one-sentence status.
+- Do not modify index.html, styles.css, game.js, README.md, or any other project file.
+- Do not read secrets, auth tokens, .env files, keychain data, OAuth credentials, provider credentials, rollout data, or full transcripts.
+- Reply only with the marker and the allowed write path.

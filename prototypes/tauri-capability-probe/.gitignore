@@ -1,0 +1,4 @@
+.cargo-home/
+.cargo-target/
+.tauri-cli/
+src-tauri/target/

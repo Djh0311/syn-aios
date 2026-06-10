@@ -1,0 +1,214 @@
+{
+  "schema_version": "session_continuation_store.v1",
+  "store_version": 1,
+  "storage_kind": "sidecar_json_v0",
+  "scope": {
+    "scope_kind": "workflow_state_sidecar",
+    "workflow_state_path": "/Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture/.workbench/h3-b-runs/run-1780858797592229000/workflow-state.v0.json",
+    "sidecar_path": "/Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture/.workbench/h3-b-runs/run-1780858797592229000/session-continuations.v1.json",
+    "project_roots": [
+      "/Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture"
+    ]
+  },
+  "revision": 2,
+  "last_write_id": "write-h3-b-real-run",
+  "generated_by": "control_core",
+  "created_at": "2026-06-08T00:10:00Z",
+  "updated_at": "2026-06-08T00:11:00Z",
+  "continuations": [
+    {
+      "record_version": 1,
+      "continuation_id": "session-continuation:v1:685a88b8254a24d75415f554348f83e3bb74f22ec976fbceebe4be9a64f66368",
+      "preview_id": "session-continuation-preview:codex-local:new-session:h3-b",
+      "adapter_id": "codex-local",
+      "operation_id": "new_session",
+      "project_id": "project:h3-b-fixture",
+      "project_root": "/Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture",
+      "workflow_id": "workflow:h3-b-fixture",
+      "node_id": "node:h3-b-new-session",
+      "session_id": "",
+      "work_item_id": "work-item:h3-b",
+      "target_cwd": "/Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture",
+      "allowed_write_roots": [
+        "/Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture"
+      ],
+      "sandbox": "workspace-write",
+      "prompt_source_kind": "h3_new_session_task_package",
+      "prompt_summary": "H3 real new session safe probe",
+      "command_preview": "H3.1 preview only: codex exec --json --output-last-message <workbench-managed> -C /Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture --sandbox workspace-write <stdin:workbench-managed-prompt>",
+      "readback_strategy": "required",
+      "status": "failed",
+      "execution_level": "h3_b_real_codex_new_session",
+      "runner_kind": "codex_local_phase_b_real_process_runner",
+      "user_confirmation_state": "confirmed",
+      "guard_status": "needs_user_confirmation",
+      "requested_by": "workbench_h3_b_fixture",
+      "confirmed_by": "user_and_global_supervisor",
+      "confirmation_reason": "用户授权 H3-B 隔离 fixture、allowed write roots、Codex home 最小新会话副作用和一次真实 codex exec new_session probe。",
+      "created_at": "2026-06-08T00:10:00Z",
+      "updated_at": "2026-06-08T00:11:00Z",
+      "audit_refs": [
+        "audit:session-continuation-confirmed:2026-06-08T00:10:00Z:1d7901b98b380da6",
+        "audit:session-continuation-h3-b-completed:2026-06-08T00:11:00Z:1d7901b98b380da6",
+        "audit:session-continuation-h3-b-started:2026-06-08T00:11:00Z:1d7901b98b380da6"
+      ],
+      "warnings": [
+        "codex_local_only",
+        "controlled_session_continuation_only",
+        "no_planned_adapter_execution",
+        "requires_project_workflow_node_session_binding",
+        "argv_only_no_shell",
+        "codex_local_attempt_ref:codex-local-attempt:h3-b:2026-06-08T00:11:00Z:c25dbd59c049d371",
+        "h3_b_real_codex_new_session_authorized",
+        "h3_b_real_new_session_runner_path",
+        "phase_b_exit_code_redacted:Some(1)",
+        "phase_b_real_codex_process_spawned",
+        "planned_adapters_not_connected",
+        "project_file_diff_must_be_verified_by_hash",
+        "prompt_body_not_persisted_by_runner",
+        "prompt_body_sent_via_stdin_not_persisted",
+        "prompt_via_stdin_only",
+        "raw_stdout_stderr_not_persisted",
+        "raw_transcript_not_read",
+        "readback_unavailable_or_failed_is_not_zero_results",
+        "stderr_summary:Reading prompt from stdin... Not inside a trusted directory and --skip-git-repo-check was not specified.",
+        "workbench_managed_last_message_ref:/Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture/.workbench/h3-b-runs/run-1780858797592229000/runtime/h3-b/2026-06-08T00:11:00Z.1d7901b98b380da6.last-message.txt",
+        "writes_workbench_state_true"
+      ]
+    }
+  ],
+  "attempts": [
+    {
+      "attempt_version": 1,
+      "attempt_id": "session-continuation-attempt:h3-b:2026-06-08T00:11:00Z:1d7901b98b380da6",
+      "continuation_id": "session-continuation:v1:685a88b8254a24d75415f554348f83e3bb74f22ec976fbceebe4be9a64f66368",
+      "runner_kind": "codex_local_phase_b_real_process_runner",
+      "execution_level": "h3_b_real_codex_new_session",
+      "status": "failed",
+      "started_at": "2026-06-08T00:11:00Z",
+      "finished_at": "2026-06-08T00:11:00Z",
+      "timeout_ms": 120000,
+      "command_preview": "H3.1 preview only: codex exec --json --output-last-message <workbench-managed> -C /Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture --sandbox workspace-write <stdin:workbench-managed-prompt>",
+      "prompt_sent": true,
+      "real_codex_executed": true,
+      "writes_codex_home": true,
+      "writes_workbench_state": true,
+      "readback_summary": {
+        "status": "readback_failed",
+        "source_kind": "h3_b_workbench_managed_last_message",
+        "result_count": null,
+        "unavailable_reason": "H3-B readback unavailable/failed/timed_out 不等于 0 条结果。",
+        "warnings": [
+          "readback_unavailable_or_failed_is_not_zero_results",
+          "raw_transcript_not_read_in_h3_b"
+        ]
+      },
+      "failure_reason": "H2 Phase B codex process ended as failed; exit_code=1.",
+      "audit_refs": [
+        "audit:session-continuation-h3-b-started:2026-06-08T00:11:00Z:1d7901b98b380da6",
+        "audit:session-continuation-h3-b-completed:2026-06-08T00:11:00Z:1d7901b98b380da6"
+      ],
+      "warnings": [
+        "argv_only_no_shell",
+        "codex_local_attempt_ref:codex-local-attempt:h3-b:2026-06-08T00:11:00Z:c25dbd59c049d371",
+        "h3_b_real_codex_new_session_authorized",
+        "h3_b_real_new_session_runner_path",
+        "phase_b_exit_code_redacted:Some(1)",
+        "phase_b_real_codex_process_spawned",
+        "planned_adapters_not_connected",
+        "project_file_diff_must_be_verified_by_hash",
+        "prompt_body_not_persisted_by_runner",
+        "prompt_body_sent_via_stdin_not_persisted",
+        "prompt_via_stdin_only",
+        "raw_stdout_stderr_not_persisted",
+        "raw_transcript_not_read",
+        "readback_unavailable_or_failed_is_not_zero_results",
+        "stderr_summary:Reading prompt from stdin... Not inside a trusted directory and --skip-git-repo-check was not specified.",
+        "workbench_managed_last_message_ref:/Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture/.workbench/h3-b-runs/run-1780858797592229000/runtime/h3-b/2026-06-08T00:11:00Z.1d7901b98b380da6.last-message.txt",
+        "writes_workbench_state_true"
+      ]
+    }
+  ],
+  "audit_events": [
+    {
+      "event_version": 1,
+      "event_id": "audit:session-continuation-confirmed:2026-06-08T00:10:00Z:1d7901b98b380da6",
+      "event_type": "session_continuation_preview_confirmed",
+      "continuation_id": "session-continuation:v1:685a88b8254a24d75415f554348f83e3bb74f22ec976fbceebe4be9a64f66368",
+      "attempt_id": null,
+      "preview_id": "session-continuation-preview:codex-local:new-session:h3-b",
+      "actor_role": "user_and_global_supervisor",
+      "before_status": null,
+      "after_status": "preview_confirmed",
+      "store_revision": 1,
+      "reason": "用户授权 H3-B 隔离 fixture、allowed write roots、Codex home 最小新会话副作用和一次真实 codex exec new_session probe。",
+      "created_at": "2026-06-08T00:10:00Z",
+      "warnings": [
+        "codex_local_only",
+        "controlled_session_continuation_only",
+        "level_a_stub_only",
+        "level_b_real_execution_requires_user_approval",
+        "no_planned_adapter_execution",
+        "prompt_sent_false",
+        "real_codex_executed_false",
+        "requires_project_workflow_node_session_binding",
+        "writes_codex_home_false"
+      ]
+    },
+    {
+      "event_version": 1,
+      "event_id": "audit:session-continuation-h3-b-started:2026-06-08T00:11:00Z:1d7901b98b380da6",
+      "event_type": "session_continuation_h3_b_started",
+      "continuation_id": "session-continuation:v1:685a88b8254a24d75415f554348f83e3bb74f22ec976fbceebe4be9a64f66368",
+      "attempt_id": "session-continuation-attempt:h3-b:2026-06-08T00:11:00Z:1d7901b98b380da6",
+      "preview_id": "session-continuation-preview:codex-local:new-session:h3-b",
+      "actor_role": "global_supervisor",
+      "before_status": "preview_confirmed",
+      "after_status": "running_h3_b",
+      "store_revision": 2,
+      "reason": "H3-B real codex new_session started; prompt body is sent via stdin and is not persisted.",
+      "created_at": "2026-06-08T00:11:00Z",
+      "warnings": [
+        "h3_b_real_codex_new_session_authorized",
+        "h3_b_real_new_session_runner_path",
+        "prompt_body_sent_via_stdin_not_persisted",
+        "readback_unavailable_or_failed_is_not_zero_results",
+        "writes_workbench_state_true"
+      ]
+    },
+    {
+      "event_version": 1,
+      "event_id": "audit:session-continuation-h3-b-completed:2026-06-08T00:11:00Z:1d7901b98b380da6",
+      "event_type": "session_continuation_h3_b_completed",
+      "continuation_id": "session-continuation:v1:685a88b8254a24d75415f554348f83e3bb74f22ec976fbceebe4be9a64f66368",
+      "attempt_id": "session-continuation-attempt:h3-b:2026-06-08T00:11:00Z:1d7901b98b380da6",
+      "preview_id": "session-continuation-preview:codex-local:new-session:h3-b",
+      "actor_role": "global_supervisor",
+      "before_status": "running_h3_b",
+      "after_status": "failed",
+      "store_revision": 2,
+      "reason": "H3-B real runner completed as failed; prompt_sent=true, real_codex_executed=true, writes_codex_home=true.",
+      "created_at": "2026-06-08T00:11:00Z",
+      "warnings": [
+        "argv_only_no_shell",
+        "codex_local_attempt_ref:codex-local-attempt:h3-b:2026-06-08T00:11:00Z:c25dbd59c049d371",
+        "h3_b_real_codex_new_session_authorized",
+        "h3_b_real_new_session_runner_path",
+        "phase_b_exit_code_redacted:Some(1)",
+        "phase_b_real_codex_process_spawned",
+        "planned_adapters_not_connected",
+        "project_file_diff_must_be_verified_by_hash",
+        "prompt_body_not_persisted_by_runner",
+        "prompt_body_sent_via_stdin_not_persisted",
+        "prompt_via_stdin_only",
+        "raw_stdout_stderr_not_persisted",
+        "raw_transcript_not_read",
+        "readback_unavailable_or_failed_is_not_zero_results",
+        "stderr_summary:Reading prompt from stdin... Not inside a trusted directory and --skip-git-repo-check was not specified.",
+        "workbench_managed_last_message_ref:/Users/yoyi/workspace/product-line/tmp/h3-new-session-fixture/.workbench/h3-b-runs/run-1780858797592229000/runtime/h3-b/2026-06-08T00:11:00Z.1d7901b98b380da6.last-message.txt",
+        "writes_workbench_state_true"
+      ]
+    }
+  ],
+  "warnings": []
+}

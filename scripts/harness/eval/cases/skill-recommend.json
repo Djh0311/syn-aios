@@ -1,0 +1,46 @@
+[
+  {
+    "id": "browser-failure-completion",
+    "query": "Fix failing browser UI test before completion",
+    "expected": [
+      "using-superpowers",
+      "systematic-debugging",
+      "test-driven-development",
+      "ui-browser-verification",
+      "verification-before-completion"
+    ],
+    "k": 8
+  },
+  {
+    "id": "public-api-payment-refactor",
+    "query": "Refactor payment service webhook behavior and update public API contract",
+    "expected": [
+      "using-superpowers",
+      "test-driven-development",
+      "evaluator-acceptance-review",
+      "verification-before-completion"
+    ],
+    "k": 8
+  },
+  {
+    "id": "review-feedback-architecture-tests",
+    "query": "Apply reviewer feedback about architecture and tests",
+    "expected": [
+      "using-superpowers",
+      "receiving-code-review",
+      "test-driven-development",
+      "verification-before-completion"
+    ],
+    "k": 8
+  },
+  {
+    "id": "plan-execution",
+    "query": "Execute the existing multi-step implementation plan with checkpoints",
+    "expected": [
+      "using-superpowers",
+      "executing-plans",
+      "verification-before-completion"
+    ],
+    "k": 8
+  }
+]

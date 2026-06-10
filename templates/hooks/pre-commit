@@ -1,0 +1,15 @@
+#!/bin/sh
+# HARNESS MANAGED HOOK: pre-commit
+# Managed by scripts/harness/hook-install.js. Edit outside the managed markers only.
+
+set -eu
+
+ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$ROOT_DIR"
+
+if [ ! -f "scripts/harness/pre-work.js" ]; then
+  echo "harness pre-commit: scripts/harness/pre-work.js not found; skipping"
+  exit 0
+fi
+
+node scripts/harness/pre-work.js --target .
