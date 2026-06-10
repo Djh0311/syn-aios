@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前阶段已经从“最终工作台骨架执行”切到“中间版本开发”，并在 G5、H-I、PCR10、Stage J、Stage K 和 Stage L/L0 后进入 Root Treatment / Stage R 治理阶段。R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review 和 R3-P0 SQLite schema / importer / rollback contract freeze 已完成；R3-P0 completion commit 为 `7022f03d20c77c56a84e9cc9bd2b32aca9b786e6`。R2-B10 已让 `lib.rs` 达成第一阶段 `<= 15,000` 水位线；R3-P0 只接受为 R3 合同冻结，不接受为 SQLite schema / importer 实现或真实迁移。当前下一步是创建并执行 R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures 任务包。Stage K 当前最终结论冻结为 `accepted_with_deferred_items`；Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`，不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2。治理收口后再回到 Stage L / Stage K 继续处理 K3-B1、K3-B2、真实恢复、操作控制、记忆闭环和日常硬化。治理期不授权真实 Codex 执行、`.codex` 读写、K3-B1 retry、K3-B2、planned adapters 真实接入或 backlog 功能解冻。
+当前阶段已经从“最终工作台骨架执行”切到“中间版本开发”，并在 G5、H-I、PCR10、Stage J、Stage K 和 Stage L/L0 后进入 Root Treatment / Stage R 治理阶段。R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review 和 R3-P0 SQLite schema / importer / rollback contract freeze 已完成；R3-P0 completion commit 为 `7022f03d20c77c56a84e9cc9bd2b32aca9b786e6`。R2-B10 已让 `lib.rs` 达成第一阶段 `<= 15,000` 水位线；R3-P0 只接受为 R3 合同冻结，不接受为 SQLite schema / importer 实现或真实迁移。R3-A1 任务包已创建，当前下一步是执行 R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures。Stage K 当前最终结论冻结为 `accepted_with_deferred_items`；Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`，不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2。治理收口后再回到 Stage L / Stage K 继续处理 K3-B1、K3-B2、真实恢复、操作控制、记忆闭环和日常硬化。治理期不授权真实 Codex 执行、`.codex` 读写、K3-B1 retry、K3-B2、planned adapters 真实接入或 backlog 功能解冻。
 
 中间版本核心目标已经以 `accepted_with_deferred_items` 收口：
 
