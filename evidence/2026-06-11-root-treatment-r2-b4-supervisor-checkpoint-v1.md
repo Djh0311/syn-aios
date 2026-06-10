@@ -26,7 +26,7 @@ R2-B4 已由主管线回收为 `accepted_with_p2`。
 
 - R2-B4 start commit：`83b9219e464d51549ae470bde480fb7e81cff19b`
 - R2-B4 completion commit：`66a0cff5a4fb94101c1830a174dc908448ec8dba`
-- 本 supervisor checkpoint 提交：待提交后回填。
+- 本 supervisor checkpoint 提交：`1a9dcae521777f08e97ebe866a6d5563d1d902a8`
 
 ## 复核文件
 
