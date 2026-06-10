@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R2 第四批治理任务包，用于把 `src-tauri/src/lib.rs` 中 workflow run check、work item state、session binding 和 legacy workflow node dispatch 入口物理抽出到独立 helper 文件，继续验证小批次、行为不变、可回滚的 `lib.rs` 解体路径。
+状态：已完成，主管线回收为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R2 第四批治理任务包，用于把 `src-tauri/src/lib.rs` 中 workflow run check、work item state、session binding 和 legacy workflow node dispatch 入口物理抽出到独立 helper 文件，继续验证小批次、行为不变、可回滚的 `lib.rs` 解体路径。
 
 R2-B4 是行为不变的形状治理任务，不新增产品能力，不执行真实 Codex，不迁移 SQLite，不读写 `/Users/yoyi/.codex`。
 
@@ -118,7 +118,7 @@ R2-B4 禁止：
 - 是否新增 sidecar JSON 种类：否。
 - 是否需要 shape gate 豁免：否。
 - 本任务基线 commit：主管线派发时填写。
-- 本任务完成 commit：待完成后记录。
+- 本任务完成 commit：`66a0cff5a4fb94101c1830a174dc908448ec8dba`。
 
 ## 7. 验收标准
 
