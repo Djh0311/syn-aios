@@ -2,9 +2,17 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R3-P0 任务包，用于在 R2 closing / R3 preflight review 后冻结 SQLite 统一存储的 schema、importer、幂等键、回滚 / 导出和 fixture 合同。
+状态：已完成。本文是 Root Treatment / Stage R 的 R3-P0 任务包，用于在 R2 closing / R3 preflight review 后冻结 SQLite 统一存储的 schema、importer、幂等键、回滚 / 导出和 fixture 合同。
 
 本任务只做合同冻结和任务准备，不创建 SQLite schema，不迁移真实数据，不改产品源码，不改 workflow state JSON，不新增 sidecar，不执行真实 Codex，不读写 `/Users/yoyi/.codex`。
+
+完成记录：
+
+- completion commit：`7022f03d20c77c56a84e9cc9bd2b32aca9b786e6`
+- 合同文档：`docs/plans/2026-06-11-root-treatment-r3-sqlite-schema-importer-rollback-contract-v1.md`
+- evidence：`evidence/2026-06-11-root-treatment-r3-p0-sqlite-schema-importer-rollback-contract-freeze-v1.md`
+- handoff：`handoffs/2026-06-11-root-treatment-r3-p0-sqlite-schema-importer-rollback-contract-freeze-v1-result.md`
+- 下一步：创建并执行 R3-A1 最小 schema + idempotent importer dry-run 任务包。
 
 ## 0. 全局主管理解
 
@@ -146,7 +154,7 @@
 - 是否新增 sidecar JSON 种类：否。
 - 是否需要 shape gate 豁免：否。
 - 本任务基线 commit：`126ee5d47e1b17c540e4e2f8e961198f3ffeceb6`。
-- 本任务完成 commit：待完成后记录。
+- 本任务完成 commit：`7022f03d20c77c56a84e9cc9bd2b32aca9b786e6`。
 
 ## 7. 合同文档必须包含
 
