@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前阶段已经从“最终工作台骨架执行”切到“中间版本开发”，并在 G5、H-I、PCR10、Stage J、Stage K 和 Stage L/L0 后进入 Root Treatment / Stage R 治理阶段。当前处于 R-Preflight：先同步权威入口、建立版本控制前置，再拆 R0 / R1 任务包执行。Stage K 当前最终结论冻结为 `accepted_with_deferred_items`；Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`，不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2。治理收口后再回到 Stage L / Stage K 继续处理 K3-B1、K3-B2、真实恢复、操作控制、记忆闭环和日常硬化。治理期不授权真实 Codex 执行、`.codex` 读写、K3-B1 retry、K3-B2、planned adapters 真实接入或 backlog 功能解冻。
+当前阶段已经从“最终工作台骨架执行”切到“中间版本开发”，并在 G5、H-I、PCR10、Stage J、Stage K 和 Stage L/L0 后进入 Root Treatment / Stage R 治理阶段。R-Preflight 已完成权威入口同步和 git baseline 建立，baseline commit 为 `ed01c6f281e3fd7a38548da948046e8366cc368d`；当前下一步是拆 R0 / R1 任务包并开始执行。Stage K 当前最终结论冻结为 `accepted_with_deferred_items`；Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`，不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2。治理收口后再回到 Stage L / Stage K 继续处理 K3-B1、K3-B2、真实恢复、操作控制、记忆闭环和日常硬化。治理期不授权真实 Codex 执行、`.codex` 读写、K3-B1 retry、K3-B2、planned adapters 真实接入或 backlog 功能解冻。
 
 中间版本核心目标已经以 `accepted_with_deferred_items` 收口：
 
@@ -44,7 +44,7 @@ Root Treatment / Stage R 治理计划：
 
 - `docs/plans/2026-06-10-root-treatment-official-development-plan-v1.md`
 - `decisions/2026-06-10-stage-l-root-treatment-freeze-relationship-v1.md`
-- 当前执行 R-Preflight：同步权威入口、建立版本控制前置、拆 R0 / R1 任务包。
+- R-Preflight 已完成权威入口同步和 git baseline 建立；当前进入 R0 / R1 任务包创建和执行。
 - R0 目标是 shape gate、任务包形状影响节、治理任务包类型和解冻后 `1:3` 治理配额。
 - R1 目标是 workflow state 写入锁和备份保留策略。
 - R3 SQLite 收口是多 agent 并行真实执行的硬门槛。

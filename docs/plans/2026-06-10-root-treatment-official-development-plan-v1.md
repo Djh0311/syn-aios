@@ -34,7 +34,8 @@ Stage L 中纯文档、权威入口、蓝图口径同步项可在 R5 中并入�
 执行前置：
 
 - “治理阶段 R 插队、Stage L 暂挂 deferred”已写入 `decisions/2026-06-10-stage-l-root-treatment-freeze-relationship-v1.md`。
-- R-Preflight 必须先同步 `CURRENT.md` / `AUTHORITY.md` / `STAGE_PLAN.md` / `tasks/README.md` / `README.md`。
+- R-Preflight 已同步 `CURRENT.md` / `AUTHORITY.md` / `STAGE_PLAN.md` / `tasks/README.md` / `README.md`。
+- R-Preflight 已建立 git baseline commit：`ed01c6f281e3fd7a38548da948046e8366cc368d`。
 - 不关闭 L1 任务包，只把它标为治理期暂停 / deferred。
 
 ## 1. 总目标
@@ -691,9 +692,8 @@ R0 可接受不跑全量 cargo，但必须说明原因；R1 改 Rust 存储逻�
 
 1. 完成 `decisions/2026-06-10-stage-l-root-treatment-freeze-relationship-v1.md`。
 2. 完成 `CURRENT.md` / `tasks/README.md` / `AUTHORITY.md` / `STAGE_PLAN.md` / `README.md` 同步。
-3. 写版本控制前置 decision 或直接确认默认 git baseline 路径。
-4. 写 R0 / R1 任务包。
-5. R0 / R1 并行执行，回交后由全局主管复核。
+3. 写 R0 / R1 任务包。
+4. R0 / R1 并行执行，回交后由全局主管复核。
 
 R-Preflight 期间：
 
