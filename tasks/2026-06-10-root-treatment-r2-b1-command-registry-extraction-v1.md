@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R2 第一批治理任务包，用于把 Tauri command registry 从 `src-tauri/src/lib.rs` 的 `run()` 中拆出，验证 R0 shape gate / git 分批治理流程，并为后续 `lib.rs` 解体建立低风险入口。
+状态：已完成，主管线收口为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R2 第一批治理任务包，用于把 Tauri command registry 从 `src-tauri/src/lib.rs` 的 `run()` 中拆出，验证 R0 shape gate / git 分批治理流程，并为后续 `lib.rs` 解体建立低风险入口。
 
 R2-B1 是行为不变的形状治理任务，不新增产品能力，不执行真实 Codex，不迁移 SQLite，不读写 `/Users/yoyi/.codex`。
 
@@ -101,7 +101,7 @@ R2-B1 禁止：
 - 是否新增 sidecar JSON 种类：否。
 - 是否需要 shape gate 豁免：否。
 - 本任务基线 commit：`b0a6447`。
-- 本任务完成 commit：待完成后记录。
+- 本任务完成 commit：`13016917442070fc2f59a130b2748eb0cba06a34`
 
 ## 7. 验收标准
 

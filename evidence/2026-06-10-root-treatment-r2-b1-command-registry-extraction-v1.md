@@ -21,7 +21,7 @@ R2-B1 不接受为：R2 `lib.rs <= 15,000` 水位线完成、command surface 重
 
 - R2-B1 supervisor 指定 start commit：`c9b99632beb91255e05a4facf8a6e337a23a3d77`
 - 任务包内历史基线说明 commit：`b0a6447`
-- R2-B1 completion commit：本 R2-B1 提交承载；提交后真实 hash 由回交记录。
+- R2-B1 completion commit：`13016917442070fc2f59a130b2748eb0cba06a34`
 
 ## 改动文件
 

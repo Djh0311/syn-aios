@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1 已完成，当前下一步是 R2 `lib.rs` 解体任务包准备与分批执行。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
+状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1 已完成，当前下一步是 R2-B2 lib map and workflow state helper extraction。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
 
 本文不是任务包，不授权真实 `codex exec` / `codex exec resume`，不授权读写 `/Users/yoyi/.codex`，不授权 Stage L 的 K3-B1 retry / K3-B2，不授权 planned adapters 真实接入，不授权 backlog 解冻后功能开工。
 
@@ -388,6 +388,11 @@ R1 禁止：
 ### 5.4 R2 执行步骤：lib.rs 解体
 
 R2 只做行为保持型拆分，每批都必须让 `lib.rs` 行数下降。
+
+当前 R2 checkpoint：
+
+- R2-B1 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-10-root-treatment-r2-b1-command-registry-extraction-v1.md`，completion commit `13016917442070fc2f59a130b2748eb0cba06a34`。接受为 command registry 从 `lib.rs::run()` 物理拆出，不接受为 R2 完成。
+- R2-B2 当前任务包：`tasks/2026-06-11-root-treatment-r2-b2-lib-map-and-workflow-state-helper-extraction-v1.md`，目标是补 R2 代码地图并抽出 workflow state JSON helper。
 
 | 批次 | 做什么 | 主要落点 | 验收 |
 | --- | --- | --- | --- |

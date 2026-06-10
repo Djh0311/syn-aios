@@ -45,7 +45,7 @@ R2-B1 本轮可接受为：`tauri::generate_handler![...]` command registry 已�
 ## Commit 记录
 
 - Start commit：`c9b99632beb91255e05a4facf8a6e337a23a3d77`
-- End commit：本 R2-B1 提交承载；提交后真实 hash 由回交记录。
+- End commit：`13016917442070fc2f59a130b2748eb0cba06a34`
 
 ## 边界
 
