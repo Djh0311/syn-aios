@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R2 第六批治理任务包，用于把 `src-tauri/src/lib.rs` 中 workflow dispatch execution control、offline role dispatch 和 workflow machine 相关逻辑物理抽出到独立 helper 文件，继续推进小批次、行为不变、可回滚的 `lib.rs` 解体路径。
+状态：已完成，主管线回收为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R2 第六批治理任务包，用于把 `src-tauri/src/lib.rs` 中 workflow dispatch execution control、offline role dispatch 和 workflow machine 相关逻辑物理抽出到独立 helper 文件，继续推进小批次、行为不变、可回滚的 `lib.rs` 解体路径。
 
 R2-B6 是行为不变的形状治理任务，不新增产品能力，不执行真实 Codex，不迁移 SQLite，不读写 `/Users/yoyi/.codex`。
 
@@ -16,7 +16,8 @@ R2-B6 是行为不变的形状治理任务，不新增产品能力，不执行�
 - R2-B3 已完成 workflow state lifecycle and task package chain extraction，completion commit `208fabaa4cae8aeda45cdce4c66cbe7f2cf8e6c3`。
 - R2-B4 已完成 workflow run binding and legacy dispatch entrypoints extraction，completion commit `66a0cff5a4fb94101c1830a174dc908448ec8dba`。
 - R2-B5 已完成 workflow read model dispatch summary and readback stats extraction，completion commit `35cacc22ec813152e9357a42bc82e7ef581d2509`。
-- 当前 `lib.rs` 为 21,463 行；workflow dispatch execution control、offline role dispatch 和 workflow machine 仍留在中段。
+- R2-B6 已完成 workflow execution control offline role and machine extraction，completion commit `2dd766be84e977d75e77f31ec2dbf9d463f45690`。
+- 当前 `lib.rs` 为 19,401 行；workflow dispatch execution control、offline role dispatch 和 workflow machine 已抽出到 `workflow_execution_entrypoints.rs`。
 
 R2-B6 的核心判断：
 
@@ -111,8 +112,8 @@ R2-B6 禁止：
 - 是否新增 Tauri command：否。
 - 是否新增 sidecar JSON 种类：否。
 - 是否需要 shape gate 豁免：否。
-- 本任务基线 commit：主管线派发时填写。
-- 本任务完成 commit：待完成后记录。
+- 本任务基线 commit：`93c20bb5b515ced0f0306ec57d61b222a592a08a`。
+- 本任务完成 commit：`2dd766be84e977d75e77f31ec2dbf9d463f45690`。
 
 ## 7. 验收标准
 
