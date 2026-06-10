@@ -9,7 +9,7 @@ R2-B6 已回收为 `accepted_with_p2`。本轮接受为 workflow dispatch execut
 ## 主管复核结果
 
 - HEAD 复核时为 `2dd766be84e977d75e77f31ec2dbf9d463f45690`。
-- 本 supervisor checkpoint 提交：待提交后回填。
+- 本 supervisor checkpoint 提交：`7e77fffe8339d553cfa4fcac3f09f503da43f8d5`。
 - `lib.rs`：21,463 lines -> 19,401 lines。
 - `workflow_execution_entrypoints.rs`：新增 2,068 lines。
 - Tauri command registry：96 total，`lib.rs` 内 `#[tauri::command]` 为 0。
