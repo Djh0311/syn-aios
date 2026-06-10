@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R2 第二批治理任务包，用于补齐 R2 代码地图，并把 `src-tauri/src/lib.rs` 中 workflow state JSON helper 物理抽出到独立 helper 文件，继续验证小批次、行为不变、可回滚的 `lib.rs` 解体路径。
+状态：已完成，主管线收口为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R2 第二批治理任务包，用于补齐 R2 代码地图，并把 `src-tauri/src/lib.rs` 中 workflow state JSON helper 物理抽出到独立 helper 文件，继续验证小批次、行为不变、可回滚的 `lib.rs` 解体路径。
 
 R2-B2 是行为不变的形状治理任务，不新增产品能力，不执行真实 Codex，不迁移 SQLite，不读写 `/Users/yoyi/.codex`。
 
@@ -113,8 +113,8 @@ R2-B2 禁止：
 - 是否新增 Tauri command：否。
 - 是否新增 sidecar JSON 种类：否。
 - 是否需要 shape gate 豁免：否。
-- 本任务基线 commit：主管线派发时填写。
-- 本任务完成 commit：待完成后记录。
+- 本任务基线 commit：`d737c78eb9e9ce1e1f8e620390d595c498a70e0f`
+- 本任务完成 commit：`76ed0ef46d9b0a2a83f6e77ce533d6c8741c93cf`
 
 ## 7. 验收标准
 

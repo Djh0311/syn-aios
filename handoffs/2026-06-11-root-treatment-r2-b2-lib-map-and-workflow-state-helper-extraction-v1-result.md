@@ -50,7 +50,7 @@ R2-B2 本轮可接受为：R2 `lib.rs` 代码地图已补齐，任务包点名�
 ## Commit 记录
 
 - Start commit：`d737c78eb9e9ce1e1f8e620390d595c498a70e0f`
-- End commit：本 R2-B2 提交承载；提交后真实 hash 由回交记录。
+- End commit：`76ed0ef46d9b0a2a83f6e77ce533d6c8741c93cf`
 
 ## 边界
 
