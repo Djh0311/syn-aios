@@ -37,6 +37,7 @@ mod session_continuation_store;
 mod task_memory_injection;
 mod task_memory_packet_builder;
 mod workbench_sqlite_apply;
+mod workbench_sqlite_dual_write;
 mod workbench_sqlite_exporter;
 mod workbench_sqlite_importer;
 mod workbench_sqlite_schema;

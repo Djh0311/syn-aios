@@ -1,0 +1,19 @@
+{
+  "schema_version": "memory_observation.v1",
+  "revision": 1,
+  "observations": [
+    {
+      "observation_key": "observation:r3-a2:core",
+      "observation_id": "observation-id:r3-a2:core",
+      "candidate_key": "candidate:r3-a2:core",
+      "status": "candidate_created"
+    }
+  ],
+  "events": [
+    {
+      "audit_ref_id": "observation-audit:r3-a2:core",
+      "observation_key": "observation:r3-a2:core",
+      "event_kind": "candidate_linked"
+    }
+  ]
+}

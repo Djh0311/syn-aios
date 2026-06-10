@@ -1,0 +1,32 @@
+{
+  "schema_version": "real_execution_product_commands.v1",
+  "revision": 1,
+  "commands": [
+    {
+      "product_command_id": "product-command:r3-a2:core",
+      "status": "phase_a_noop_completed",
+      "prompt_hash": "sha256:r3-a2-safe-summary"
+    }
+  ],
+  "previews": [
+    {
+      "preview_id": "product-preview:r3-a2:core",
+      "product_command_id": "product-command:r3-a2:core",
+      "preview_hash": "sha256:r3-a2-preview"
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "product-decision:r3-a2:core",
+      "product_command_id": "product-command:r3-a2:core",
+      "decision": "approved_for_noop"
+    }
+  ],
+  "attempts": [
+    {
+      "attempt_id": "product-attempt:r3-a2:core",
+      "product_command_id": "product-command:r3-a2:core",
+      "status": "not_attempted_stub"
+    }
+  ]
+}
