@@ -1,0 +1,19 @@
+{
+  "schema_version": "memory_observation.v1",
+  "revision": 1,
+  "observations": [
+    {
+      "observation_key": "observation:r3-a1:process-fact",
+      "observation_id": "observation-id:r3-a1:process-fact",
+      "source_kind": "process_fact",
+      "status": "recorded"
+    }
+  ],
+  "events": [
+    {
+      "audit_ref_id": "observation-audit:r3-a1:process-fact",
+      "observation_key": "observation:r3-a1:process-fact",
+      "event_kind": "process_fact_recorded"
+    }
+  ]
+}

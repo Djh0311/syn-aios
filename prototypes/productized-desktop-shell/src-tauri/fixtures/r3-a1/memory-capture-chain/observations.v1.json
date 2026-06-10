@@ -1,0 +1,13 @@
+{
+  "schema_version": "memory_observation.v1",
+  "revision": 1,
+  "observations": [
+    {
+      "observation_key": "observation:r3-a1:capture",
+      "observation_id": "observation-id:r3-a1:capture",
+      "candidate_key": "candidate:r3-a1:capture",
+      "status": "recorded"
+    }
+  ],
+  "events": []
+}

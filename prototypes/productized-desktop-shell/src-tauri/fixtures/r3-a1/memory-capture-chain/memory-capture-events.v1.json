@@ -1,0 +1,12 @@
+{
+  "schema_version": "memory_capture_events.v1",
+  "revision": 1,
+  "events": [
+    {
+      "event_key": "capture:r3-a1:chain",
+      "capture_event_id": "capture-id:r3-a1:chain",
+      "observation_key": "observation:r3-a1:capture",
+      "candidate_key": "candidate:r3-a1:capture"
+    }
+  ]
+}

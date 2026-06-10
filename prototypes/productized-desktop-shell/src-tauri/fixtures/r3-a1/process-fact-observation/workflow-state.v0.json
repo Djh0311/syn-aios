@@ -1,0 +1,28 @@
+{
+  "schema_version": "workflow_state_v0",
+  "workflow_version": 1,
+  "revision": 1,
+  "projects": [],
+  "agent_adapters": [],
+  "workflows": [],
+  "nodes": [],
+  "edges": [],
+  "work_items": [],
+  "artifacts": [],
+  "reviews": [
+    {
+      "review_id": "review:r3-a1:process-fact",
+      "status": "accepted"
+    }
+  ],
+  "audit_events": [
+    {
+      "event_id": "audit:r3-a1:process-fact",
+      "event_kind": "process_fact_decision"
+    }
+  ],
+  "capabilities": [],
+  "harness_resources": [],
+  "workflow_node_session_bindings": [],
+  "workflow_node_dispatches": []
+}

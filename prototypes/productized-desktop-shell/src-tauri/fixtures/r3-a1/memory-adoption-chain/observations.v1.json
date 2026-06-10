@@ -1,0 +1,19 @@
+{
+  "schema_version": "memory_observation.v1",
+  "revision": 1,
+  "observations": [
+    {
+      "observation_key": "observation:r3-a1:adoption",
+      "observation_id": "observation-id:r3-a1:adoption",
+      "candidate_key": "candidate:r3-a1:adoption",
+      "status": "candidate_created"
+    }
+  ],
+  "events": [
+    {
+      "audit_ref_id": "observation-audit:r3-a1:adoption",
+      "observation_key": "observation:r3-a1:adoption",
+      "event_kind": "candidate_linked"
+    }
+  ]
+}

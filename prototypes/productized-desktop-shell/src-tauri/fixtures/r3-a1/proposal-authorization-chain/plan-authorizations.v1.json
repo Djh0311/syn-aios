@@ -1,0 +1,18 @@
+{
+  "schema_version": "plan_authorizations.v1",
+  "revision": 1,
+  "authorizations": [
+    {
+      "authorization_id": "authorization:r3-a1:chain",
+      "source_proposal_id": "proposal:r3-a1:chain",
+      "status": "active"
+    }
+  ],
+  "audit_events": [
+    {
+      "audit_event_id": "authorization-audit:r3-a1:chain",
+      "authorization_id": "authorization:r3-a1:chain",
+      "event_kind": "global_boundary_approved"
+    }
+  ]
+}

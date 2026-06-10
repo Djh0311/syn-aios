@@ -1,0 +1,25 @@
+{
+  "schema_version": "session_continuation_store.v1",
+  "revision": 1,
+  "continuations": [
+    {
+      "continuation_id": "continuation:r3-a1:chain",
+      "product_command_id": "product-command:r3-a1:chain",
+      "status": "preview_confirmed"
+    }
+  ],
+  "attempts": [
+    {
+      "attempt_id": "continuation-attempt:r3-a1:chain",
+      "continuation_id": "continuation:r3-a1:chain",
+      "status": "not_attempted_stub"
+    }
+  ],
+  "audit_events": [
+    {
+      "event_id": "continuation-audit:r3-a1:chain",
+      "continuation_id": "continuation:r3-a1:chain",
+      "event_kind": "preview_confirmed"
+    }
+  ]
+}

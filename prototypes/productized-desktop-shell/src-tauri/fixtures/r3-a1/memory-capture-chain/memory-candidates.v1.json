@@ -1,0 +1,12 @@
+{
+  "schema_version": "memory_governance.v1",
+  "revision": 1,
+  "candidates": [
+    {
+      "candidate_key": "candidate:r3-a1:capture",
+      "candidate_id": "candidate-id:r3-a1:capture",
+      "status": "candidate_needs_review"
+    }
+  ],
+  "events": []
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": "memory_governance.v1",
+  "revision": 1,
+  "records": [
+    {
+      "memory_id": "memory:r3-a1:adopted",
+      "status": "active",
+      "claim": "R3-A1 importer keeps adopted memory refs."
+    }
+  ],
+  "versions": [
+    {
+      "version_id": "memory-version:r3-a1:adopted:1",
+      "memory_id": "memory:r3-a1:adopted",
+      "status": "current"
+    }
+  ],
+  "audit_events": [
+    {
+      "audit_event_id": "memory-audit:r3-a1:adopted",
+      "memory_id": "memory:r3-a1:adopted",
+      "event_kind": "candidate_adopted"
+    }
+  ]
+}

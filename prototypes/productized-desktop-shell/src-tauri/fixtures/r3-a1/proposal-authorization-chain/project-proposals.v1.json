@@ -1,0 +1,26 @@
+{
+  "schema_version": "project_proposals.v1",
+  "revision": 1,
+  "proposals": [
+    {
+      "proposal_id": "proposal:r3-a1:chain",
+      "project_id": "project:r3-a1:proposal",
+      "workflow_id": "workflow:r3-a1:proposal",
+      "status": "user_confirmed"
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "proposal-decision:r3-a1:chain",
+      "proposal_id": "proposal:r3-a1:chain",
+      "decision": "approved"
+    }
+  ],
+  "audit_events": [
+    {
+      "audit_event_id": "proposal-audit:r3-a1:chain",
+      "proposal_id": "proposal:r3-a1:chain",
+      "event_kind": "user_decision_recorded"
+    }
+  ]
+}
