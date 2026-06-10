@@ -9,6 +9,7 @@ R2-B3 已回收为 `accepted_with_p2`。本轮接受为 workflow state 生命周
 ## 主管复核结果
 
 - HEAD 复核时为 `208fabaa4cae8aeda45cdce4c66cbe7f2cf8e6c3`。
+- 本 supervisor checkpoint 提交：`87b04ec55c8bdc57d20f1e81ab96f0f2eeccda8d`。
 - `lib.rs`：25,643 lines -> 24,635 lines。
 - `workflow_state_lifecycle_task_package.rs`：新增 1,012 lines。
 - Tauri command registry：96 total，`lib.rs` 内 `#[tauri::command]` 为 0。

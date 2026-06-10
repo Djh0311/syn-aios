@@ -26,7 +26,7 @@ R2-B3 已由主管线回收为 `accepted_with_p2`。
 
 - R2-B3 start commit：`446c1832b3d4e63d7bed5667814d47919277d342`
 - R2-B3 completion commit：`208fabaa4cae8aeda45cdce4c66cbe7f2cf8e6c3`
-- 本 supervisor checkpoint 提交：由本 evidence 所在提交承载；提交后真实 hash 由回交记录。
+- 本 supervisor checkpoint 提交：`87b04ec55c8bdc57d20f1e81ab96f0f2eeccda8d`
 
 ## 复核文件
 
