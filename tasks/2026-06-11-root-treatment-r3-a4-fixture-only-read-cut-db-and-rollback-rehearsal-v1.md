@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R3-A4 任务包，用于在 R3-A3 fixture-only dual-write transaction rehearsal 基础上，演练 fixture-only read-cut DB、JSON fallback、export hash verification 和 rollback recovery dry-run。R3-A4 仍不是生产读切，不创建生产 DB，不切真实产品读写路径，不迁移真实 JSON / sidecar。
+状态：已完成，主管线收口结论为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R3-A4 任务包，用于在 R3-A3 fixture-only dual-write transaction rehearsal 基础上，演练 fixture-only read-cut DB、JSON fallback、export hash verification 和 rollback recovery dry-run。R3-A4 仍不是生产读切，不创建生产 DB，不切真实产品读写路径，不迁移真实 JSON / sidecar。完成 commit：`d1343e87f2e62fe959f622f68037714218ed6c13`；主管 checkpoint 见 `evidence/2026-06-11-root-treatment-r3-a4-supervisor-checkpoint-v1.md` 与 `handoffs/2026-06-11-root-treatment-r3-a4-supervisor-checkpoint-v1-result.md`。
 
 ## 0. 全局主管理解
 

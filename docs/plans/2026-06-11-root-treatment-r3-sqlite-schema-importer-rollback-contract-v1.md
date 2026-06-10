@@ -414,7 +414,7 @@ Later R3 implementation:
 | R3-A1 | schema file + dry-run importer + fixture reports, no read/write path cut | dual-write, DB read path, JSON stopped |
 | R3-A2 | idempotent apply importer into temp DB, no real user data mutation | production migration |
 | R3-A3 | dual-write behind explicit flag / fixture only | read-cut DB |
-| R3-A4 | read-cut DB with rollback rehearsal | JSON permanently removed |
+| R3-A4 | fixture-only read-cut DB rehearsal with rollback dry-run | production read-cut DB, JSON permanently removed |
 | R3-A5 | observation period + rollback/export verified | multi agent real execution unlocked unless supervisor says so |
 
 ## 8. R3-A1 Suggested Task Package
