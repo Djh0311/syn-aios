@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1、R2-B2 已完成，当前下一步是 R2-B3 workflow state lifecycle and task package chain extraction。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
+状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1、R2-B2、R2-B3 已完成，当前下一步是 R2-B4 workflow run binding and legacy dispatch entrypoints extraction。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
 
 本文不是任务包，不授权真实 `codex exec` / `codex exec resume`，不授权读写 `/Users/yoyi/.codex`，不授权 Stage L 的 K3-B1 retry / K3-B2，不授权 planned adapters 真实接入，不授权 backlog 解冻后功能开工。
 
@@ -200,11 +200,13 @@ R2 按批次治理，每批一个治理任务包，禁止一次性大拆。
 
 推荐批次：
 
-1. 命令注册 / 分发出 `lib.rs`，按领域归入 `commands/` 子模块。
-2. workflow 读模型派生逻辑与 `workflow_read_model.rs` 汇合。
-3. 记忆领域与 formal memory / candidate / observation / lint / mature pattern 等模块汇合。
-4. runtime / diagnostics 领域出 `lib.rs`。
-5. 剩余清扫。
+1. 命令注册 / 分发出 `lib.rs`，按领域归入 `commands/` 子模块。已由 R2-B1 完成。
+2. workflow state JSON helper、workflow state lifecycle 和 task package 写入链分批抽出。已由 R2-B2 / R2-B3 完成。
+3. workflow run check / binding / legacy dispatch entrypoints 分批抽出。当前 R2-B4 执行。
+4. workflow 读模型派生逻辑与 `workflow_read_model.rs` 汇合。
+5. 记忆领域与 formal memory / candidate / observation / lint / mature pattern 等模块汇合。
+6. runtime / diagnostics 领域出 `lib.rs`。
+7. 剩余清扫。
 
 水位线：
 
@@ -393,7 +395,8 @@ R2 只做行为保持型拆分，每批都必须让 `lib.rs` 行数下降。
 
 - R2-B1 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-10-root-treatment-r2-b1-command-registry-extraction-v1.md`，completion commit `13016917442070fc2f59a130b2748eb0cba06a34`。接受为 command registry 从 `lib.rs::run()` 物理拆出，不接受为 R2 完成。
 - R2-B2 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b2-lib-map-and-workflow-state-helper-extraction-v1.md`，completion commit `76ed0ef46d9b0a2a83f6e77ce533d6c8741c93cf`。接受为补 R2 代码地图并抽出 workflow state JSON helper，不接受为 R2 完成。
-- R2-B3 当前任务包：`tasks/2026-06-11-root-treatment-r2-b3-workflow-state-lifecycle-and-task-package-chain-extraction-v1.md`，目标是抽出 workflow state 生命周期入口和 task package 写入链。
+- R2-B3 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b3-workflow-state-lifecycle-and-task-package-chain-extraction-v1.md`，completion commit `208fabaa4cae8aeda45cdce4c66cbe7f2cf8e6c3`。接受为抽出 workflow state 生命周期入口和 task package 写入链，不接受为 R2 完成。
+- R2-B4 当前任务包：`tasks/2026-06-11-root-treatment-r2-b4-workflow-run-binding-and-legacy-dispatch-entrypoints-extraction-v1.md`，目标是抽出 workflow run check、work item state、session binding 和 legacy workflow node dispatch 入口。
 
 | 批次 | 做什么 | 主要落点 | 验收 |
 | --- | --- | --- | --- |

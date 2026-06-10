@@ -6,7 +6,7 @@
 
 本文是 Root Treatment / Stage R / R2 的静态代码地图，用于指导后续 `lib.rs` 解体批次。它不授权新增产品功能，不授权真实 Codex 执行，不授权 UI / SQLite / workflow read model 之外的顺手拆分。
 
-行号基于 R2-B2 helper 抽出后的 `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`，当前总行数为 25,643。后续 R2 批次继续移动代码后，行号会漂移，应在新的治理任务包 evidence 中记录新的前后指标。
+初始行号基于 R2-B2 helper 抽出后的 `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`，当时总行数为 25,643。R2-B3 已完成后，`lib.rs` 当前为 24,635 行。后续 R2 批次继续移动代码后，行号会漂移，应在新的治理任务包 evidence 中记录新的前后指标。
 
 ## 当前结构
 
@@ -39,13 +39,14 @@
 ## R2 批次建议
 
 1. R2-B2：已抽出 `workflow_state_json_helpers.rs`，保持 `include!`，只搬 workflow state JSON helper。
-2. R2-B3：优先把 workflow state 生命周期入口和 task package 写入链拆成 crate-root include 或小模块；测试落点为 `cargo test --lib workflow_state` 与 task package filters。
-3. R2-B4：把 workflow read model / dispatch summary / readback stats 与既有 `workflow_read_model.rs` 汇合；测试落点为 workflow read model、dispatch readback 和 snapshot tests。
-4. R2-B5：把 workflow dispatch 执行控制、offline role dispatch、workflow machine 分域；测试落点为 dispatch、permission、offline role、workflow machine filters。
-5. R2-B6：把 memory / observation / task memory context guard 从 `lib.rs` 汇合到对应 memory 模块；测试落点为 memory candidate、formal memory、observation、task packet filters。
-6. R2-B7：把 diagnostics、provider availability、session continuation 和 adapter descriptors 分域；测试落点为 diagnostics、provider、continuation、adapter filters。
-7. R2-B8：整理 index parsing、allowed paths、host OS helper 和 app assembly；目标是让 `lib.rs` 只保留模块声明、include / mod 装配、`AppState` 和 `run()`。
-8. R2 后段：测试模块按被抽出的领域逐步迁移，避免 `lib.rs` 代码下降但测试仍保持巨石。
+2. R2-B3：已把 workflow state 生命周期入口和 task package 写入链拆成 crate-root include；测试落点为 `cargo test --lib workflow_state`、task package filters 和 workflow run check。
+3. R2-B4：先把前段连续 workflow run check / binding / legacy dispatch entrypoints 拆成 crate-root include；这是主管线基于风险的顺序调整，workflow read model 汇合顺延。
+4. R2-B5：把 workflow read model / dispatch summary / readback stats 与既有 `workflow_read_model.rs` 汇合；测试落点为 workflow read model、dispatch readback 和 snapshot tests。
+5. R2-B6：把 workflow dispatch 执行控制、offline role dispatch、workflow machine 分域；测试落点为 dispatch、permission、offline role、workflow machine filters。
+6. R2-B7：把 memory / observation / task memory context guard 从 `lib.rs` 汇合到对应 memory 模块；测试落点为 memory candidate、formal memory、observation、task packet filters。
+7. R2-B8：把 diagnostics、provider availability、session continuation 和 adapter descriptors 分域；测试落点为 diagnostics、provider、continuation、adapter filters。
+8. R2-B9：整理 index parsing、allowed paths、host OS helper 和 app assembly；目标是让 `lib.rs` 只保留模块声明、include / mod 装配、`AppState` 和 `run()`。
+9. R2 后段：测试模块按被抽出的领域逐步迁移，避免 `lib.rs` 代码下降但测试仍保持巨石。
 
 ## P2
 

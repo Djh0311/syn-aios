@@ -65,7 +65,7 @@ R2-B3 本轮可接受为：任务包点名的 workflow state 生命周期入口�
 ## Commit 记录
 
 - Start commit：`446c1832b3d4e63d7bed5667814d47919277d342`
-- End commit：本 R2-B3 提交承载；提交后真实 hash 由回交记录。
+- End commit：`208fabaa4cae8aeda45cdce4c66cbe7f2cf8e6c3`
 
 ## 边界
 

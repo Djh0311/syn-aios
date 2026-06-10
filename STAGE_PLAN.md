@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前阶段已经从“最终工作台骨架执行”切到“中间版本开发”，并在 G5、H-I、PCR10、Stage J、Stage K 和 Stage L/L0 后进入 Root Treatment / Stage R 治理阶段。R-Preflight、R0、R1、R2-B1、R2-B2 已完成：baseline commit `ed01c6f281e3fd7a38548da948046e8366cc368d`，R0 commit `7563e6a9d11a92217e1baf34ed71b70722bbc17c`，R1 commit `7a1ac89173306b50868064b64fb852f57c0550af`，R2-B1 commit `13016917442070fc2f59a130b2748eb0cba06a34`，R2-B2 commit `76ed0ef46d9b0a2a83f6e77ce533d6c8741c93cf`。当前下一步是 R2-B3 workflow state lifecycle and task package chain extraction。Stage K 当前最终结论冻结为 `accepted_with_deferred_items`；Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`，不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2。治理收口后再回到 Stage L / Stage K 继续处理 K3-B1、K3-B2、真实恢复、操作控制、记忆闭环和日常硬化。治理期不授权真实 Codex 执行、`.codex` 读写、K3-B1 retry、K3-B2、planned adapters 真实接入或 backlog 功能解冻。
+当前阶段已经从“最终工作台骨架执行”切到“中间版本开发”，并在 G5、H-I、PCR10、Stage J、Stage K 和 Stage L/L0 后进入 Root Treatment / Stage R 治理阶段。R-Preflight、R0、R1、R2-B1、R2-B2、R2-B3 已完成：baseline commit `ed01c6f281e3fd7a38548da948046e8366cc368d`，R0 commit `7563e6a9d11a92217e1baf34ed71b70722bbc17c`，R1 commit `7a1ac89173306b50868064b64fb852f57c0550af`，R2-B1 commit `13016917442070fc2f59a130b2748eb0cba06a34`，R2-B2 commit `76ed0ef46d9b0a2a83f6e77ce533d6c8741c93cf`，R2-B3 commit `208fabaa4cae8aeda45cdce4c66cbe7f2cf8e6c3`。当前下一步是 R2-B4 workflow run binding and legacy dispatch entrypoints extraction。Stage K 当前最终结论冻结为 `accepted_with_deferred_items`；Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`，不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2。治理收口后再回到 Stage L / Stage K 继续处理 K3-B1、K3-B2、真实恢复、操作控制、记忆闭环和日常硬化。治理期不授权真实 Codex 执行、`.codex` 读写、K3-B1 retry、K3-B2、planned adapters 真实接入或 backlog 功能解冻。
 
 中间版本核心目标已经以 `accepted_with_deferred_items` 收口：
 
@@ -44,12 +44,13 @@ Root Treatment / Stage R 治理计划：
 
 - `docs/plans/2026-06-10-root-treatment-official-development-plan-v1.md`
 - `decisions/2026-06-10-stage-l-root-treatment-freeze-relationship-v1.md`
-- R-Preflight 已完成权威入口同步和 git baseline 建立；R0 / R1 / R2-B1 / R2-B2 已完成并提交。
+- R-Preflight 已完成权威入口同步和 git baseline 建立；R0 / R1 / R2-B1 / R2-B2 / R2-B3 已完成并提交。
 - R0 已建立 workbench shape gate、任务包形状影响节、治理任务包类型和解冻后 `1:3` 治理配额。
 - R1 已为 workflow state 最终写入 / rename 增加文件级 StoreLock、corrupt guard 和测试夹具 backup retention；完整 read-modify-write 串行化仍是 P2，等待 R2/R3 后续治理。
 - R2-B1 command registry extraction 已完成：`tasks/2026-06-10-root-treatment-r2-b1-command-registry-extraction-v1.md`；只接受为 command registry 物理拆分，不接受为 R2 完成。
 - R2-B2 lib map and workflow state helper extraction 已完成：`tasks/2026-06-11-root-treatment-r2-b2-lib-map-and-workflow-state-helper-extraction-v1.md`；只接受为 R2 代码地图和 workflow state JSON helper 抽出，不接受为 R2 完成。
-- 当前下一步是 R2-B3 workflow state lifecycle and task package chain extraction：`tasks/2026-06-11-root-treatment-r2-b3-workflow-state-lifecycle-and-task-package-chain-extraction-v1.md`。
+- R2-B3 workflow state lifecycle and task package chain extraction 已完成：`tasks/2026-06-11-root-treatment-r2-b3-workflow-state-lifecycle-and-task-package-chain-extraction-v1.md`；只接受为 workflow state 生命周期入口和 task package 写入链物理抽出，不接受为 R2 完成。
+- 当前下一步是 R2-B4 workflow run binding and legacy dispatch entrypoints extraction：`tasks/2026-06-11-root-treatment-r2-b4-workflow-run-binding-and-legacy-dispatch-entrypoints-extraction-v1.md`。
 - R3 SQLite 收口是多 agent 并行真实执行的硬门槛。
 
 H-I 当前原则：
