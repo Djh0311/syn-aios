@@ -9,7 +9,7 @@ R2-B5 已回收为 `accepted_with_p2`。本轮接受为 workflow read model、di
 ## 主管复核结果
 
 - HEAD 复核时为 `35cacc22ec813152e9357a42bc82e7ef581d2509`。
-- 本 supervisor checkpoint 提交：待本提交生成后回填。
+- 本 supervisor checkpoint 提交：`315bd1a8f07861b8fffdd467849ec7f68389207f`
 - `lib.rs`：23,524 lines -> 21,463 lines。
 - `workflow_read_model_entrypoints.rs`：新增 2,066 lines。
 - Tauri command registry：96 total，`lib.rs` 内 `#[tauri::command]` 为 0。

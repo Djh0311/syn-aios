@@ -26,7 +26,7 @@ R2-B5 已由主管线回收为 `accepted_with_p2`。
 
 - R2-B5 start commit：`86ce04032cce9ec1b1bd2970c78cd6be587b3cd9`
 - R2-B5 completion commit：`35cacc22ec813152e9357a42bc82e7ef581d2509`
-- 本 supervisor checkpoint 提交：待本提交生成后回填。
+- 本 supervisor checkpoint 提交：`315bd1a8f07861b8fffdd467849ec7f68389207f`
 
 ## 复核文件
 
