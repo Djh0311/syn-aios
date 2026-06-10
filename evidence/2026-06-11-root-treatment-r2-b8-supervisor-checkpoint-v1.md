@@ -27,7 +27,7 @@ R2-B8 已由主管线回收为 `accepted_with_p2`。
 
 - R2-B8 start commit：`385fe41d91cc0738b4e8c0d21c142a903c13ae0c`
 - R2-B8 completion commit：`9935dac822ab41bce2391b8f6a54d6b42eeb4f95`
-- 本 supervisor checkpoint 提交：待提交后回填。
+- 本 supervisor checkpoint 提交：`68c7d4afc135b730eb94a4bbaa790bdb06a3bb6e`。
 
 ## 复核文件
 

@@ -9,7 +9,7 @@ R2-B8 已回收为 `accepted_with_p2`。本轮接受为 diagnostics、store inte
 ## 主管复核结果
 
 - HEAD 复核时为 `9935dac822ab41bce2391b8f6a54d6b42eeb4f95`。
-- 本 supervisor checkpoint 提交：待提交后回填。
+- 本 supervisor checkpoint 提交：`68c7d4afc135b730eb94a4bbaa790bdb06a3bb6e`。
 - `lib.rs`：18,932 lines -> 17,042 lines。
 - `diagnostics_provider_session_entrypoints.rs`：新增 1,894 lines。
 - Tauri command registry：96 total，`lib.rs` 内 `#[tauri::command]` 为 0。
