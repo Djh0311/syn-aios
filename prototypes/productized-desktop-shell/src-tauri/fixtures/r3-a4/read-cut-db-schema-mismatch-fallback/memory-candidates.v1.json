@@ -1,0 +1,19 @@
+{
+  "schema_version": "memory_governance.v1",
+  "revision": 1,
+  "candidates": [
+    {
+      "candidate_key": "candidate:r3-a2:core",
+      "candidate_id": "candidate-id:r3-a2:core",
+      "status": "adopted",
+      "formal_memory_id": "memory:r3-a2:core"
+    }
+  ],
+  "events": [
+    {
+      "audit_ref_id": "candidate-audit:r3-a2:core",
+      "candidate_key": "candidate:r3-a2:core",
+      "event_kind": "adopted_to_formal_memory"
+    }
+  ]
+}

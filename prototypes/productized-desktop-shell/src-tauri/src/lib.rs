@@ -40,6 +40,7 @@ mod workbench_sqlite_apply;
 mod workbench_sqlite_dual_write;
 mod workbench_sqlite_exporter;
 mod workbench_sqlite_importer;
+mod workbench_sqlite_read_cut;
 mod workbench_sqlite_schema;
 mod worker_protocol;
 mod workflow_audit;
