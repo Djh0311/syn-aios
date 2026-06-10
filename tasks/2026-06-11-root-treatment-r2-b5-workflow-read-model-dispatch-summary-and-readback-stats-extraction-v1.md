@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R2 第五批治理任务包，用于把 `src-tauri/src/lib.rs` 中 workflow read model、dispatch summary、readback stats 和相邻 workflow surface 派生逻辑物理抽出到独立 helper 文件或既有 `workflow_read_model.rs` 边界，继续推进小批次、行为不变、可回滚的 `lib.rs` 解体路径。
+状态：已完成，主管线回收为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R2 第五批治理任务包，用于把 `src-tauri/src/lib.rs` 中 workflow read model、dispatch summary、readback stats 和相邻 workflow surface 派生逻辑物理抽出到独立 helper 文件或既有 `workflow_read_model.rs` 边界，继续推进小批次、行为不变、可回滚的 `lib.rs` 解体路径。
 
 R2-B5 是行为不变的形状治理任务，不新增产品能力，不执行真实 Codex，不迁移 SQLite，不读写 `/Users/yoyi/.codex`。
 
@@ -15,7 +15,8 @@ R2-B5 是行为不变的形状治理任务，不新增产品能力，不执行�
 - R2-B2 已完成 lib map and workflow state JSON helper extraction，completion commit `76ed0ef46d9b0a2a83f6e77ce533d6c8741c93cf`。
 - R2-B3 已完成 workflow state lifecycle and task package chain extraction，completion commit `208fabaa4cae8aeda45cdce4c66cbe7f2cf8e6c3`。
 - R2-B4 已完成 workflow run binding and legacy dispatch entrypoints extraction，completion commit `66a0cff5a4fb94101c1830a174dc908448ec8dba`。
-- 当前 `lib.rs` 仍有 23,524 行，workflow read model / dispatch summary / readback stats 仍集中在中段并与既有 `workflow_read_model.rs` 只有少量 helper 调用关系。
+- R2-B5 已完成 workflow read model dispatch summary and readback stats extraction，completion commit `35cacc22ec813152e9357a42bc82e7ef581d2509`。
+- R2-B5 完成后 `lib.rs` 为 21,463 行，workflow read model / dispatch summary / readback stats 已抽到 `workflow_read_model_entrypoints.rs`。
 
 R2-B5 的核心判断：
 

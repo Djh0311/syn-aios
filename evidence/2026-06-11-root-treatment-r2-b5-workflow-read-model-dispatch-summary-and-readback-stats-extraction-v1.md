@@ -18,7 +18,7 @@ R2-B5 不接受为：R2 全部完成、`lib.rs <= 15,000` 或 `<= 3,000` 目标�
 ## Commit 记录
 
 - Start commit：`86ce04032cce9ec1b1bd2970c78cd6be587b3cd9`
-- End commit：本 R2-B5 提交承载；提交后真实 hash 由回交记录。
+- End commit：`35cacc22ec813152e9357a42bc82e7ef581d2509`
 
 ## 改动文件
 

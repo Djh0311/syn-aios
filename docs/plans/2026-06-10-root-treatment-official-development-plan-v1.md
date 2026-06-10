@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1、R2-B2、R2-B3、R2-B4 已完成，当前下一步是 R2-B5 workflow read model dispatch summary and readback stats extraction。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
+状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1、R2-B2、R2-B3、R2-B4、R2-B5 已完成，当前下一步是 R2-B6 workflow execution control offline role and machine extraction。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
 
 本文不是任务包，不授权真实 `codex exec` / `codex exec resume`，不授权读写 `/Users/yoyi/.codex`，不授权 Stage L 的 K3-B1 retry / K3-B2，不授权 planned adapters 真实接入，不授权 backlog 解冻后功能开工。
 
@@ -397,7 +397,8 @@ R2 只做行为保持型拆分，每批都必须让 `lib.rs` 行数下降。
 - R2-B2 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b2-lib-map-and-workflow-state-helper-extraction-v1.md`，completion commit `76ed0ef46d9b0a2a83f6e77ce533d6c8741c93cf`。接受为补 R2 代码地图并抽出 workflow state JSON helper，不接受为 R2 完成。
 - R2-B3 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b3-workflow-state-lifecycle-and-task-package-chain-extraction-v1.md`，completion commit `208fabaa4cae8aeda45cdce4c66cbe7f2cf8e6c3`。接受为抽出 workflow state 生命周期入口和 task package 写入链，不接受为 R2 完成。
 - R2-B4 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b4-workflow-run-binding-and-legacy-dispatch-entrypoints-extraction-v1.md`，completion commit `66a0cff5a4fb94101c1830a174dc908448ec8dba`。接受为抽出 workflow run check、work item state、session binding 和 legacy workflow node dispatch 入口，不接受为 R2 完成。
-- R2-B5 当前任务包：`tasks/2026-06-11-root-treatment-r2-b5-workflow-read-model-dispatch-summary-and-readback-stats-extraction-v1.md`，目标是抽出 workflow read model、dispatch summary 和 readback stats 相关派生逻辑。
+- R2-B5 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b5-workflow-read-model-dispatch-summary-and-readback-stats-extraction-v1.md`，completion commit `35cacc22ec813152e9357a42bc82e7ef581d2509`。接受为抽出 workflow read model、dispatch summary 和 readback stats 相关派生逻辑，不接受为 R2 完成。
+- R2-B6 当前任务包：`tasks/2026-06-11-root-treatment-r2-b6-workflow-execution-control-offline-role-and-machine-extraction-v1.md`，目标是抽出 workflow dispatch execution control、offline role dispatch 和 workflow machine 相关逻辑。
 
 | 批次 | 做什么 | 主要落点 | 验收 |
 | --- | --- | --- | --- |
@@ -698,15 +699,17 @@ R0 可接受不跑全量 cargo，但必须说明原因；R1 改 Rust 存储逻�
 
 ## 11. 下一步
 
-当前按用户要求进入 R-Preflight，下一步：
+当前按用户要求继续 Root Treatment / Stage R，下一步：
 
-1. 完成 `decisions/2026-06-10-stage-l-root-treatment-freeze-relationship-v1.md`。
-2. 完成 `CURRENT.md` / `tasks/README.md` / `AUTHORITY.md` / `STAGE_PLAN.md` / `README.md` 同步。
-3. 执行 R0 / R1，回交后由全局主管复核。
+1. 执行 R2-B6：`tasks/2026-06-11-root-treatment-r2-b6-workflow-execution-control-offline-role-and-machine-extraction-v1.md`。
+2. R2-B6 完成后由全局主管 fresh verify、写 supervisor checkpoint，并只在 checkpoint 同步入口文档。
+3. 继续按 R2 小批次治理推进，直到 `lib.rs` 达到阶段性水位线或主管线决定转入 R3 前置审查。
 
-R-Preflight 期间：
+R2-B6 期间：
 
-- 不执行 R0 / R1。
-- 不修改产品代码。
 - 不执行真实 Codex。
+- 不发送 prompt。
 - 不读写 `/Users/yoyi/.codex`。
+- 不启动 Tauri / Browser / Chrome / Vite / 截图工具。
+- 不启动 Stage L / K3-B1 retry / K3-B2。
+- 不解冻 backlog 功能。
