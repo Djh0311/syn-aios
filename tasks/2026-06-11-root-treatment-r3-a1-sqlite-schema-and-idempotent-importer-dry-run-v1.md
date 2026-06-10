@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R3-A1 任务包，用于按 R3-P0 合同实现最小 SQLite schema file、临时 DB initializer、idempotent dry-run importer 和专用 fixtures。
+状态：已完成。本文是 Root Treatment / Stage R 的 R3-A1 任务包，用于按 R3-P0 合同实现最小 SQLite schema file、临时 DB initializer、idempotent dry-run importer 和专用 fixtures。completion commit：`c6cb5634e79edd9ddba1b1b737c1953806649069`。
 
 本任务只做 schema / dry-run importer 的开发准备和离线验证；不创建生产 DB，不迁移真实 JSON / sidecar，不双写，不切 DB 读路径，不改 workflow state 顶层 schema，不执行真实 Codex，不读写 `/Users/yoyi/.codex`。
 

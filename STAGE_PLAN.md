@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前阶段已经从“最终工作台骨架执行”切到“中间版本开发”，并在 G5、H-I、PCR10、Stage J、Stage K 和 Stage L/L0 后进入 Root Treatment / Stage R 治理阶段。R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review 和 R3-P0 SQLite schema / importer / rollback contract freeze 已完成；R3-P0 completion commit 为 `7022f03d20c77c56a84e9cc9bd2b32aca9b786e6`。R2-B10 已让 `lib.rs` 达成第一阶段 `<= 15,000` 水位线；R3-P0 只接受为 R3 合同冻结，不接受为 SQLite schema / importer 实现或真实迁移。R3-A1 任务包已创建，当前下一步是执行 R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures。Stage K 当前最终结论冻结为 `accepted_with_deferred_items`；Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`，不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2。治理收口后再回到 Stage L / Stage K 继续处理 K3-B1、K3-B2、真实恢复、操作控制、记忆闭环和日常硬化。治理期不授权真实 Codex 执行、`.codex` 读写、K3-B1 retry、K3-B2、planned adapters 真实接入或 backlog 功能解冻。
+当前阶段已经从“最终工作台骨架执行”切到“中间版本开发”，并在 G5、H-I、PCR10、Stage J、Stage K 和 Stage L/L0 后进入 Root Treatment / Stage R 治理阶段。R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R3-P0 SQLite schema / importer / rollback contract freeze 和 R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures 已完成；R3-A1 completion commit 为 `c6cb5634e79edd9ddba1b1b737c1953806649069`。R2-B10 已让 `lib.rs` 达成第一阶段 `<= 15,000` 水位线；R3-A1 只接受为最小 schema module、临时 / fixture DB initializer 和离线 dry-run importer 完成，不接受为 R3 SQLite 迁移开始或完成。当前下一步是准备并执行 R3-A2 apply importer contract tests、schema constraint hardening、transaction crash fixtures 和 DB -> JSON export dry-run；仍不得生产迁移、双写、读切 DB 或创建生产 DB。Stage K 当前最终结论冻结为 `accepted_with_deferred_items`；Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`，不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2。治理收口后再回到 Stage L / Stage K 继续处理 K3-B1、K3-B2、真实恢复、操作控制、记忆闭环和日常硬化。治理期不授权真实 Codex 执行、`.codex` 读写、K3-B1 retry、K3-B2、planned adapters 真实接入或 backlog 功能解冻。
 
 中间版本核心目标已经以 `accepted_with_deferred_items` 收口：
 
@@ -57,7 +57,7 @@ Root Treatment / Stage R 治理计划：
 - R2-B8 diagnostics provider continuation adapter boundary extraction 已完成：`tasks/2026-06-11-root-treatment-r2-b8-diagnostics-provider-continuation-adapter-boundary-extraction-v1.md`；只接受为 diagnostics / provider / continuation / adapter / session operation descriptor helper 物理拆分，不接受为 R2 完成。
 - R2-B9 index host app assembly extraction 已完成：`tasks/2026-06-11-root-treatment-r2-b9-index-host-app-assembly-extraction-v1.md`；只接受为 index parsing / allowed paths / host OS helper / Tauri app assembly 尾段物理拆分，不接受为 R2 完成。
 - R2-B10 C4-C6 automation workflow governance extraction 已完成：`tasks/2026-06-11-root-treatment-r2-b10-c4-c6-automation-workflow-governance-extraction-v1.md`；只接受为 C4-C6 自动化工作流治理连续区块物理拆分和第一阶段 `lib.rs <= 15,000` 水位线达成，不接受为 R2 完成。
-- R2 closing / R3 preflight review 已完成，结论为 `DONE_WITH_CONCERNS`：只读复核了剩余 `lib.rs` 结构、inline tests 巨石和 R3 SQLite 前置风险；R3-P0 SQLite schema / importer / rollback contract freeze 也已完成，当前下一步是 R3-A1 最小 schema + dry-run importer，不直接迁移写路径。
+- R2 closing / R3 preflight review 已完成，结论为 `DONE_WITH_CONCERNS`：只读复核了剩余 `lib.rs` 结构、inline tests 巨石和 R3 SQLite 前置风险；R3-P0 SQLite schema / importer / rollback contract freeze 和 R3-A1 最小 schema + dry-run importer 已完成，当前下一步是 R3-A2 apply importer contract tests / schema hardening / export dry-run，不直接迁移写路径。
 - R3 SQLite 收口是多 agent 并行真实执行的硬门槛。
 
 H-I 当前原则：

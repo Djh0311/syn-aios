@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review 和 R3-P0 SQLite schema / importer / rollback contract freeze 已完成；R3-A1 任务包已创建，当前下一步是执行 R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
+状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R3-P0 SQLite schema / importer / rollback contract freeze 和 R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures 已完成；R3-A1 completion commit 为 `c6cb5634e79edd9ddba1b1b737c1953806649069`。当前下一步是准备并执行 R3-A2 apply importer contract tests、schema constraint hardening、transaction crash fixtures 和 DB -> JSON export dry-run。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
 
 本文不是任务包，不授权真实 `codex exec` / `codex exec resume`，不授权读写 `/Users/yoyi/.codex`，不授权 Stage L 的 K3-B1 retry / K3-B2，不授权 planned adapters 真实接入，不授权 backlog 解冻后功能开工。
 
@@ -404,7 +404,7 @@ R2 只做行为保持型拆分，每批都必须让 `lib.rs` 行数下降。
 - R2-B8 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b8-diagnostics-provider-continuation-adapter-boundary-extraction-v1.md`，completion commit `9935dac822ab41bce2391b8f6a54d6b42eeb4f95`。接受为抽出 diagnostics、store integrity、provider availability、session continuation preview / guard、agent adapter descriptors 和 session operation descriptors，不接受为 R2 完成。
 - R2-B9 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b9-index-host-app-assembly-extraction-v1.md`，completion commit `bd63d7f5a12a29443d4d0c97713c1c6b1921cf20`。接受为抽出 index parsing、allowed paths、host OS helper 和 Tauri app assembly 尾段，不接受为 R2 完成。
 - R2-B10 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b10-c4-c6-automation-workflow-governance-extraction-v1.md`，completion commit `d5f423d97c1f2dac4bca33f84c34e46b0b4716a6`。接受为抽出 C4-C6 自动化工作流治理连续区块，并确认 `lib.rs` 已从 16,457 行降到 13,949 行，达成第一阶段 `lib.rs <= 15,000` 水位线；不接受为 R2 完成。
-- R2 closing / R3 preflight review 已完成，结论为 `DONE_WITH_CONCERNS`：只读复核剩余 `lib.rs` 结构、inline tests 巨石、R3 SQLite 前置风险和后续拆分/迁移顺序；R3-P0 contract freeze 也已完成，completion commit 为 `7022f03d20c77c56a84e9cc9bd2b32aca9b786e6`，当前下一步是 R3-A1 最小 schema + dry-run importer。
+- R2 closing / R3 preflight review 已完成，结论为 `DONE_WITH_CONCERNS`：只读复核剩余 `lib.rs` 结构、inline tests 巨石、R3 SQLite 前置风险和后续拆分/迁移顺序；R3-P0 contract freeze 和 R3-A1 最小 schema + dry-run importer 均已完成，当前下一步是 R3-A2 apply importer contract tests / schema hardening / export dry-run。
 
 | 批次 | 做什么 | 主要落点 | 验收 |
 | --- | --- | --- | --- |
@@ -707,11 +707,11 @@ R0 可接受不跑全量 cargo，但必须说明原因；R1 改 Rust 存储逻�
 
 当前按用户要求继续 Root Treatment / Stage R，下一步：
 
-1. 执行 `tasks/2026-06-11-root-treatment-r3-a1-sqlite-schema-and-idempotent-importer-dry-run-v1.md`。
-2. 按 `docs/plans/2026-06-11-root-treatment-r3-sqlite-schema-importer-rollback-contract-v1.md` 实现最小 schema file、temp DB initializer、idempotent dry-run importer 和 fixtures。
-3. R3-A1 只允许 dry-run 和临时 DB 验证；不得直接开始真实数据迁移、双写、读切 DB 或生产 DB 创建。
+1. 准备并执行 R3-A2 任务包。
+2. 在 R3-A1 schema / dry-run importer 基础上补 apply importer contract tests、schema constraint hardening、transaction crash fixtures 和 DB -> JSON export dry-run。
+3. R3-A2 仍只允许临时 DB、fixture 和 dry-run / contract tests；不得直接开始真实数据迁移、双写、读切 DB 或生产 DB 创建。
 
-R3-A1 期间：
+R3-A2 期间：
 
 - 不执行真实 Codex。
 - 不发送 prompt。
