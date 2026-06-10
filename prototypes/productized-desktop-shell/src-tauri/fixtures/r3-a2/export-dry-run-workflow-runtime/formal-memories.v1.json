@@ -1,0 +1,13 @@
+{
+  "schema_version": "memory_governance.v1",
+  "revision": 1,
+  "records": [
+    {
+      "memory_id": "memory:r3-a2:export",
+      "status": "active",
+      "claim": "R3-A2 export dry-run can project memory records."
+    }
+  ],
+  "versions": [],
+  "audit_events": []
+}

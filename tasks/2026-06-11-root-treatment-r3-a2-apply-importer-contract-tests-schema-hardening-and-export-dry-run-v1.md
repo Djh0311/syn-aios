@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R3-A2 任务包，用于在 R3-A1 schema / dry-run importer 基础上，补齐临时 DB apply importer 合同测试、schema constraint hardening、transaction crash fixtures 和 DB -> JSON export dry-run。
+状态：已完成。本文是 Root Treatment / Stage R 的 R3-A2 任务包，用于在 R3-A1 schema / dry-run importer 基础上，补齐临时 DB apply importer 合同测试、schema constraint hardening、transaction crash fixtures 和 DB -> JSON export dry-run。completion commit：待主管线提交后记录。
 
 本任务仍然只做临时 DB / fixture / dry-run / contract tests；不创建生产 DB，不迁移真实 JSON / sidecar，不双写，不切 DB 读写路径，不改 workflow state 顶层 schema，不执行真实 Codex，不读写 `/Users/yoyi/.codex`。
 

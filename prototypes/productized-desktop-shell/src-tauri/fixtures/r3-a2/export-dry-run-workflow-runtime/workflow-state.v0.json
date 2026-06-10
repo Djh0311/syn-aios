@@ -1,0 +1,30 @@
+{
+  "schema_version": "workflow_state_v0",
+  "workflow_version": 1,
+  "revision": 1,
+  "projects": [
+    {
+      "project_id": "project:r3-a2:export",
+      "project_root": "/tmp/r3-a2/export",
+      "display_name": "R3 A2 Export"
+    }
+  ],
+  "agent_adapters": [],
+  "workflows": [
+    {
+      "workflow_id": "workflow:r3-a2:export",
+      "project_id": "project:r3-a2:export",
+      "status": "prepared"
+    }
+  ],
+  "nodes": [],
+  "edges": [],
+  "work_items": [],
+  "artifacts": [],
+  "reviews": [],
+  "audit_events": [],
+  "capabilities": [],
+  "harness_resources": [],
+  "workflow_node_session_bindings": [],
+  "workflow_node_dispatches": []
+}

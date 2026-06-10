@@ -6,10 +6,10 @@ use std::fs;
 use std::path::Path;
 
 pub(crate) const WORKBENCH_SQLITE_IMPORTER_VERSION: &str = "workbench_sqlite_importer_dry_run_v0";
-const PRIMARY_WORKFLOW_STATE: &str = "workflow-state.v0.json";
-const CANONICAL_RUNTIME_LOG: &str = "runtime-logs.v1.json";
-const LEGACY_RUNTIME_LOG_ALIAS: &str = "runtime-log.v1.json";
-const OPTIONAL_SIDECARS: &[&str] = &[
+pub(crate) const PRIMARY_WORKFLOW_STATE: &str = "workflow-state.v0.json";
+pub(crate) const CANONICAL_RUNTIME_LOG: &str = "runtime-logs.v1.json";
+pub(crate) const LEGACY_RUNTIME_LOG_ALIAS: &str = "runtime-log.v1.json";
+pub(crate) const OPTIONAL_SIDECARS: &[&str] = &[
     "blackboard-candidates.v1.json",
     "formal-memories.v1.json",
     "memory-candidates.v1.json",
@@ -1047,7 +1047,7 @@ fn source_kind_for_name(name: &str) -> &'static str {
     }
 }
 
-fn canonical_json_hash(value: &Value) -> String {
+pub(crate) fn canonical_json_hash(value: &Value) -> String {
     let canonical = canonical_json(value);
     sha256_hex(canonical.as_bytes())
 }

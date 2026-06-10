@@ -1,0 +1,13 @@
+{
+  "schema_version": "session_continuation_store.v1",
+  "revision": 1,
+  "continuations": [
+    {
+      "continuation_id": "continuation:r3-a2:export",
+      "product_command_id": "product-command:r3-a2:export",
+      "status": "preview_confirmed"
+    }
+  ],
+  "attempts": [],
+  "audit_events": []
+}
