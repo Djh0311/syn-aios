@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：正式开发计划已创建，用户已要求按全计划开发推进；当前进入 R-Preflight，先同步权威入口、建立版本控制前置，再拆 R0 / R1 任务包执行。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
+状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1 已完成，当前下一步是 R2 `lib.rs` 解体任务包准备与分批执行。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
 
 本文不是任务包，不授权真实 `codex exec` / `codex exec resume`，不授权读写 `/Users/yoyi/.codex`，不授权 Stage L 的 K3-B1 retry / K3-B2，不授权 planned adapters 真实接入，不授权 backlog 解冻后功能开工。
 

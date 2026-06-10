@@ -18,7 +18,8 @@ R0 可接受为制度前置上线，不接受为 R1、R2、R3、R4、R5、Stage 
 - R-Preflight baseline commit：`ed01c6f281e3fd7a38548da948046e8366cc368d`
 - R-Preflight 收口 commit：`b409ab92d36b44f63911a4f12b057e5577f8aeb5`
 - R0 任务包创建 / 本线实际 start commit：`a40b7b56ab949cd26b145ba0eccf9f3921886ea0`
-- R0 completion commit：未创建。原因是最终 `git status --short` 发现共享工作树里存在非 R0 变更 `prototypes/productized-desktop-shell/src-tauri/src/workflow_state_store.rs`，按主管追加边界不得硬提交。
+- R0 development-line completion commit：未由 R0 分线创建。原因是最终 `git status --short` 发现共享工作树里存在非 R0 变更 `prototypes/productized-desktop-shell/src-tauri/src/workflow_state_store.rs`，按主管追加边界不得硬提交。
+- R0 supervisor partition commit：`7563e6a9d11a92217e1baf34ed71b70722bbc17c`。
 
 ## Shape Gate Baseline 摘要
 

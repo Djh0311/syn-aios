@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R0 任务包，用于建立工作台开发的“形状治理”制度前置：shape gate、任务包“形状影响”必填节、治理任务包类型、解冻后 `1:3` 治理配额和 evidence / handoff 的 commit hash 记录要求。
+状态：已完成，结论为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R0 任务包，用于建立工作台开发的“形状治理”制度前置：shape gate、任务包“形状影响”必填节、治理任务包类型、解冻后 `1:3` 治理配额和 evidence / handoff 的 commit hash 记录要求。完成 commit：`7563e6a9d11a92217e1baf34ed71b70722bbc17c`。
 
 R0 不改业务行为，不执行真实 Codex，不读写 `/Users/yoyi/.codex`，不启动 Stage L / K3-B1 / K3-B2，不解冻 backlog 功能。
 

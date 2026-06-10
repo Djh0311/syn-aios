@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R1 任务包，用于给 `workflow-state.v0.json` 写入路径补 StoreLock 和备份保留策略，先降低 JSON 事实层的并发写、备份膨胀和半写风险。
+状态：已完成，结论为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R1 任务包，用于给 `workflow-state.v0.json` 写入路径补 StoreLock 和备份保留策略，先降低 JSON 事实层的并发写、备份膨胀和半写风险。完成 commit：`7a1ac89173306b50868064b64fb852f57c0550af`。
 
 R1 是“立即止血”任务，不是 SQLite 迁移，不改 workflow state 顶层 schema，不做 UI，不执行真实 Codex。
 

@@ -89,7 +89,7 @@ lock path：
 
 - R-Preflight baseline：`ed01c6f281e3fd7a38548da948046e8366cc368d`
 - R0 completion / R1 start：`7563e6a9d11a92217e1baf34ed71b70722bbc17c`
-- R1 completion commit：本 handoff 随 R1 commit 一起提交；实际 hash 由最终回交记录。
+- R1 completion commit：`7a1ac89173306b50868064b64fb852f57c0550af`。
 
 ## 边界
 

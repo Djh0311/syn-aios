@@ -22,7 +22,7 @@ R1 不接受为：完整 read-modify-write 事务串行化、R3 SQLite 迁移、
 
 - R-Preflight baseline commit：`ed01c6f281e3fd7a38548da948046e8366cc368d`
 - R0 completion commit / R1 本轮实际 start commit：`7563e6a9d11a92217e1baf34ed71b70722bbc17c`
-- R1 completion commit：本 evidence 文件会随 R1 commit 一起提交；commit hash 不能在同一提交内自引用冻结，实际 hash 由本线最终回交记录。
+- R1 completion commit：`7a1ac89173306b50868064b64fb852f57c0550af`。
 
 ## 改动文件
 
