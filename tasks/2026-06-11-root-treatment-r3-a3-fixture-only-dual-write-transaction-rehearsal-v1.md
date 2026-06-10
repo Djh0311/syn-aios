@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R3-A3 任务包，用于在 R3-A2 temp DB apply importer / export dry-run 基础上，做 fixture-only dual-write transaction rehearsal：证明 DB 写入与 JSON projection / rollback manifest 可以在临时目录中保持一致。R3-A3 仍不是生产双写期，不切真实产品读写路径，不迁移真实 JSON / sidecar。
+状态：已完成，主管线收口结论为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R3-A3 任务包，用于在 R3-A2 temp DB apply importer / export dry-run 基础上，做 fixture-only dual-write transaction rehearsal：证明 DB 写入与 JSON projection / rollback manifest 可以在临时目录中保持一致。R3-A3 仍不是生产双写期，不切真实产品读写路径，不迁移真实 JSON / sidecar。完成 commit：`d9e5f0fd637daf7cbb6b117d7a8bac15448c9d8f`；主管 checkpoint 见 `evidence/2026-06-11-root-treatment-r3-a3-supervisor-checkpoint-v1.md` 与 `handoffs/2026-06-11-root-treatment-r3-a3-supervisor-checkpoint-v1-result.md`。
 
 ## 0. 全局主管理解
 

@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前阶段已经从“最终工作台骨架执行”切到“中间版本开发”，并在 G5、H-I、PCR10、Stage J、Stage K 和 Stage L/L0 后进入 Root Treatment / Stage R 治理阶段。R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R3-P0 SQLite schema / importer / rollback contract freeze、R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures，以及 R3-A2 temp DB apply importer / schema hardening / transaction failure injection / DB -> JSON export dry-run 已完成；R3-A2 completion commit 为 `ea982932cd3510487187e710991f20fb9d7467db`。R2-B10 已让 `lib.rs` 达成第一阶段 `<= 15,000` 水位线；R3-A2 只接受为临时 DB / fixture apply importer、schema 约束加固、failure injection 和 export dry-run 完成，不接受为 R3 SQLite 迁移开始或完成。R3-A3 任务包已创建，当前下一步是执行 fixture-only dual-write transaction rehearsal；仍不得生产迁移、生产双写、读切 DB 或创建生产 DB。Stage K 当前最终结论冻结为 `accepted_with_deferred_items`；Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`，不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2。治理收口后再回到 Stage L / Stage K 继续处理 K3-B1、K3-B2、真实恢复、操作控制、记忆闭环和日常硬化。治理期不授权真实 Codex 执行、`.codex` 读写、K3-B1 retry、K3-B2、planned adapters 真实接入或 backlog 功能解冻。
+当前阶段已经从“最终工作台骨架执行”切到“中间版本开发”，并在 G5、H-I、PCR10、Stage J、Stage K 和 Stage L/L0 后进入 Root Treatment / Stage R 治理阶段。R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R3-P0 SQLite schema / importer / rollback contract freeze、R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures、R3-A2 temp DB apply importer / schema hardening / transaction failure injection / DB -> JSON export dry-run，以及 R3-A3 fixture-only dual-write transaction rehearsal 均已完成；R3-A3 completion commit 为 `d9e5f0fd637daf7cbb6b117d7a8bac15448c9d8f`。R2-B10 已让 `lib.rs` 达成第一阶段 `<= 15,000` 水位线；R3-A3 只接受为临时 DB + 临时 JSON projection root + R3-A3 fixture root 内的双写事务演练、projection cleanup、rollback manifest 和 recovery dry-run 完成，不接受为 R3 SQLite 迁移开始或完成、生产 DB、生产双写期、读切 DB 或 JSON / sidecar 停写。当前下一步是准备 R3-A4 任务包 / 合同冻结；R3-A4 未冻结前，不得开始生产 DB、生产双写或读切 DB。Stage K 当前最终结论冻结为 `accepted_with_deferred_items`；Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`，不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2。治理收口后再回到 Stage L / Stage K 继续处理 K3-B1、K3-B2、真实恢复、操作控制、记忆闭环和日常硬化。治理期不授权真实 Codex 执行、`.codex` 读写、K3-B1 retry、K3-B2、planned adapters 真实接入或 backlog 功能解冻。
 
 中间版本核心目标已经以 `accepted_with_deferred_items` 收口：
 
@@ -57,7 +57,7 @@ Root Treatment / Stage R 治理计划：
 - R2-B8 diagnostics provider continuation adapter boundary extraction 已完成：`tasks/2026-06-11-root-treatment-r2-b8-diagnostics-provider-continuation-adapter-boundary-extraction-v1.md`；只接受为 diagnostics / provider / continuation / adapter / session operation descriptor helper 物理拆分，不接受为 R2 完成。
 - R2-B9 index host app assembly extraction 已完成：`tasks/2026-06-11-root-treatment-r2-b9-index-host-app-assembly-extraction-v1.md`；只接受为 index parsing / allowed paths / host OS helper / Tauri app assembly 尾段物理拆分，不接受为 R2 完成。
 - R2-B10 C4-C6 automation workflow governance extraction 已完成：`tasks/2026-06-11-root-treatment-r2-b10-c4-c6-automation-workflow-governance-extraction-v1.md`；只接受为 C4-C6 自动化工作流治理连续区块物理拆分和第一阶段 `lib.rs <= 15,000` 水位线达成，不接受为 R2 完成。
-- R2 closing / R3 preflight review 已完成，结论为 `DONE_WITH_CONCERNS`：只读复核了剩余 `lib.rs` 结构、inline tests 巨石和 R3 SQLite 前置风险；R3-P0、R3-A1 和 R3-A2 已完成，当前下一步是 R3-A3 fixture-only dual-write transaction rehearsal，不直接迁移写路径。
+- R2 closing / R3 preflight review 已完成，结论为 `DONE_WITH_CONCERNS`：只读复核了剩余 `lib.rs` 结构、inline tests 巨石和 R3 SQLite 前置风险；R3-P0、R3-A1、R3-A2 和 R3-A3 已完成，当前下一步是准备 R3-A4 任务包 / 合同冻结，不直接迁移写路径。
 - R3 SQLite 收口是多 agent 并行真实执行的硬门槛。
 
 H-I 当前原则：
