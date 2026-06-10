@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R2 第九批治理任务包，用于把 `src-tauri/src/lib.rs` 中 `software_key_of_session` 到 Tauri `run()` 之前的剩余尾段边界物理抽出到独立 helper 文件，继续推进小批次、行为不变、可回滚的 `lib.rs` 解体路径。
+状态：已完成，主管线收口为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R2 第九批治理任务包，用于把 `src-tauri/src/lib.rs` 中 `software_key_of_session` 到 Tauri `run()` 之前的剩余尾段边界物理抽出到独立 helper 文件，继续推进小批次、行为不变、可回滚的 `lib.rs` 解体路径。
 
 R2-B9 是行为不变的形状治理任务，不新增产品能力，不执行真实 Codex，不迁移 SQLite，不读写 `/Users/yoyi/.codex`。
 
@@ -156,7 +156,7 @@ R2-B9 禁止：
 - 是否新增 sidecar JSON 种类：否。
 - 是否需要 shape gate 豁免：否。
 - 本任务基线 commit：`080907c41936d88bb028d8869cc02610038b47c2`。
-- 本任务完成 commit：待完成后记录。
+- 本任务完成 commit：`bd63d7f5a12a29443d4d0c97713c1c6b1921cf20`。
 
 ## 7. 验收标准
 

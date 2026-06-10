@@ -6,7 +6,7 @@
 
 本文是 Root Treatment / Stage R / R2 的静态代码地图，用于指导后续 `lib.rs` 解体批次。它不授权新增产品功能，不授权真实 Codex 执行，不授权 UI / SQLite / workflow read model 之外的顺手拆分。
 
-初始行号基于 R2-B2 helper 抽出后的 `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`，当时总行数为 25,643。R2-B3 完成后为 24,635 行；R2-B4 完成后为 23,524 行；R2-B5 完成后为 21,463 行；R2-B6 完成后为 19,401 行；R2-B7 完成后为 18,932 行；R2-B8 完成后为 17,042 行。后续 R2 批次继续移动代码后，行号会漂移，应在新的治理任务包 evidence 中记录新的前后指标。
+初始行号基于 R2-B2 helper 抽出后的 `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`，当时总行数为 25,643。R2-B3 完成后为 24,635 行；R2-B4 完成后为 23,524 行；R2-B5 完成后为 21,463 行；R2-B6 完成后为 19,401 行；R2-B7 完成后为 18,932 行；R2-B8 完成后为 17,042 行；R2-B9 完成后为 16,457 行。后续 R2 批次继续移动代码后，行号会漂移，应在新的治理任务包 evidence 中记录新的前后指标。
 
 ## 当前结构
 
@@ -26,10 +26,8 @@
 | 3723-3806 | atomic path / time helpers | JSON write helper、default paths、timestamps | workflow state store helper tests |
 | 3807-4205 | workbench snapshot assembly | `WorkbenchSnapshot` assembly and session source overlay | snapshot tests |
 | 4206 | R2-B8 diagnostics / provider / continuation / adapter include | `diagnostics_provider_session_entrypoints.rs` 在 crate root 展开 | diagnostics / provider / continuation / adapter / session operation filters |
-| 4208-4728 | index parsing / allowed paths | session loading, project/session/skill/plugin/task parsing, allowed path derivation | parsing / allowed path tests |
-| 4729-4777 | host OS helper boundary | clipboard and `open` command wrappers | path / open command guarded tests |
-| 4778-4796 | Tauri app assembly | builder, state management, invoke handler, setup | compile + shape gate |
-| 4797-17042 | inline tests | broad historical test module covering many domains | `cargo test --lib`, focused filters by domain |
+| 4209 | R2-B9 index / host / app include | `index_host_app_entrypoints.rs` 在 crate root 展开 | transcript / snapshot / workflow state tests |
+| 4211-16457 | inline tests | broad historical test module covering many domains | `cargo test --lib`, focused filters by domain |
 
 ## R2 批次建议
 
@@ -40,8 +38,9 @@
 5. R2-B6：已把 workflow dispatch 执行控制、offline role dispatch、workflow machine 分域；测试落点为 dispatch、permission、offline role、workflow machine filters。
 6. R2-B7：已把 memory / observation / task memory context guard 从 `lib.rs` 抽出到 `memory_context_entrypoints.rs`；测试落点为 memory candidate、formal memory、observation、task packet filters。
 7. R2-B8：已把 diagnostics、provider availability、session continuation 和 adapter descriptors 分域；测试落点为 diagnostics、provider、continuation、adapter、session operation filters。
-8. R2-B9：下一步整理 index parsing、allowed paths、host OS helper 和 app assembly；目标是让 `lib.rs` 只保留模块声明、include / mod 装配、`AppState` 和 `run()`。
-9. R2 后段：测试模块按被抽出的领域逐步迁移，避免 `lib.rs` 代码下降但测试仍保持巨石。
+8. R2-B9：已把 index parsing、allowed paths、host OS helper 和 app assembly 尾段抽出到 `index_host_app_entrypoints.rs`；测试落点为 transcript、snapshot、workflow state 和全量 lib tests。
+9. R2-B10：下一步整理 C4-C6 自动化工作流治理；建议限定 project director plan、authorized dispatch、worker report、process fact、final review、user decision、acceptance summary。
+10. R2 后段：测试模块按被抽出的领域逐步迁移，避免 `lib.rs` 代码下降但测试仍保持巨石。
 
 ## P2
 
