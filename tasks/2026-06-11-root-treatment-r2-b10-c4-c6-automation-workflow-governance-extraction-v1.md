@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R2 第十批治理任务包，用于把 `src-tauri/src/lib.rs` 中 C4-C6 自动化工作流治理连续区块物理抽出到独立 helper 文件，继续推进小批次、行为不变、可回滚的 `lib.rs` 解体路径。
+状态：已完成，主管线回收为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R2 第十批治理任务包，用于把 `src-tauri/src/lib.rs` 中 C4-C6 自动化工作流治理连续区块物理抽出到独立 helper 文件，继续推进小批次、行为不变、可回滚的 `lib.rs` 解体路径。
 
 R2-B10 是行为不变的形状治理任务，不新增产品能力，不执行真实 Codex，不迁移 SQLite，不读写 `/Users/yoyi/.codex`。
 
@@ -186,8 +186,9 @@ R2-B10 禁止：
 - 是否新增 Tauri command：否。
 - 是否新增 sidecar JSON 种类：否。
 - 是否需要 shape gate 豁免：否。
-- 本任务基线 commit：`f025fcdd4450171a1308102d6de4d4924ae40c09`。
-- 本任务完成 commit：待完成后记录。
+- 本任务基线 commit：`b3392b09b1a2907fd75f6d81f75199d1a2da2b7b`。
+- 本任务完成 commit：`d5f423d97c1f2dac4bca33f84c34e46b0b4716a6`。
+- 主管 checkpoint：`evidence/2026-06-11-root-treatment-r2-b10-supervisor-checkpoint-v1.md`。
 
 ## 7. 验收标准
 
@@ -213,7 +214,7 @@ R2-B10 可接受为：
 R2-B10 不接受为：
 
 - R2 全部完成。
-- `lib.rs <= 15,000` 目标完成，除非实际达到并由主管线单独确认。
+- R2 第二阶段 `lib.rs <= 8,000`、第三阶段 `lib.rs <= 3,000` 或理想目标 `lib.rs <= 1,500` 完成。
 - C4-C6 产品能力新增或语义变更。
 - project workflow automation 真实执行产品化新增。
 - worker_protocol / real_execution_command / project_workflow_automation 模块内部重构完成。
@@ -280,5 +281,5 @@ P2 示例：
 
 - 仍使用 `include!` 过渡。
 - 相关 tests 仍留在 `lib.rs` inline tests。
-- R2-B10 完成后仍未达到 R2 水位线。
-- 即使 `lib.rs <= 15,000`，也仍需主管线单独判断 R2 是否继续后段拆分或转入 R3 前置审查。
+- R2-B10 完成后仍未达到 R2 第二阶段 / 第三阶段水位线。
+- 即使第一阶段 `lib.rs <= 15,000` 已达成，也仍需主管线单独判断 R2 是否继续后段拆分或转入 R3 前置审查。

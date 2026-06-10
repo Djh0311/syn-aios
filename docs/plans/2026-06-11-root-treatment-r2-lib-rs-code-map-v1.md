@@ -6,7 +6,7 @@
 
 本文是 Root Treatment / Stage R / R2 的静态代码地图，用于指导后续 `lib.rs` 解体批次。它不授权新增产品功能，不授权真实 Codex 执行，不授权 UI / SQLite / workflow read model 之外的顺手拆分。
 
-初始行号基于 R2-B2 helper 抽出后的 `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`，当时总行数为 25,643。R2-B3 完成后为 24,635 行；R2-B4 完成后为 23,524 行；R2-B5 完成后为 21,463 行；R2-B6 完成后为 19,401 行；R2-B7 完成后为 18,932 行；R2-B8 完成后为 17,042 行；R2-B9 完成后为 16,457 行。后续 R2 批次继续移动代码后，行号会漂移，应在新的治理任务包 evidence 中记录新的前后指标。
+初始行号基于 R2-B2 helper 抽出后的 `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`，当时总行数为 25,643。R2-B3 完成后为 24,635 行；R2-B4 完成后为 23,524 行；R2-B5 完成后为 21,463 行；R2-B6 完成后为 19,401 行；R2-B7 完成后为 18,932 行；R2-B8 完成后为 17,042 行；R2-B9 完成后为 16,457 行；R2-B10 完成后为 13,949 行，已达成 R2 第一阶段 `lib.rs <= 15,000` 水位线。后续 R2 批次继续移动代码后，行号会漂移，应在新的治理任务包 evidence 中记录新的前后指标。
 
 ## 当前结构
 
@@ -16,18 +16,18 @@
 | 119-243 | index / transcript 读取 | index JSON 读取、sqlite/index transcript fallback | transcript catalog / reader tests |
 | 244 | R2-B3 workflow state lifecycle / task package include | `workflow_state_lifecycle_task_package.rs` 在 crate root 展开 | workflow state / task package tests |
 | 246 | R2-B4 workflow run / binding / legacy dispatch include | `workflow_run_dispatch_entrypoints.rs` 在 crate root 展开 | workflow run / dispatch tests |
-| 248-2759 | C4-C6 自动化工作流治理 | project director plan、authorized dispatch、worker report、process fact、final review、user decision、acceptance summary | C4 / C5 / C6 tests |
-| 2760 | R2-B6 workflow execution include | `workflow_execution_entrypoints.rs` 在 crate root 展开 | dispatch / permission / offline role / workflow machine filters |
-| 2762-3374 | task package 渲染 / finder helper | work item / artifact finder、render fields、markdown、user reviewed instruction preview | task package render tests |
-| 3375 | R2-B2 workflow state JSON helper include | `workflow_state_json_helpers.rs` 在 crate root 展开 | `cargo test --lib workflow_state` |
-| 3378 | R2-B7 memory command bridge / context guard include | `memory_context_entrypoints.rs` 在 crate root 展开 | memory / observation / task packet tests |
-| 3380-3720 | shared workflow utility | state transitions、node IDs、index project lookup、stable IDs、task package path helpers | workflow transition / generated task tests |
-| 3721 | R2-B5 workflow read model include | `workflow_read_model_entrypoints.rs` 在 crate root 展开 | workflow read model / readback / snapshot tests |
-| 3723-3806 | atomic path / time helpers | JSON write helper、default paths、timestamps | workflow state store helper tests |
-| 3807-4205 | workbench snapshot assembly | `WorkbenchSnapshot` assembly and session source overlay | snapshot tests |
-| 4206 | R2-B8 diagnostics / provider / continuation / adapter include | `diagnostics_provider_session_entrypoints.rs` 在 crate root 展开 | diagnostics / provider / continuation / adapter / session operation filters |
-| 4209 | R2-B9 index / host / app include | `index_host_app_entrypoints.rs` 在 crate root 展开 | transcript / snapshot / workflow state tests |
-| 4211-16457 | inline tests | broad historical test module covering many domains | `cargo test --lib`, focused filters by domain |
+| 248 | R2-B10 C4-C6 automation workflow governance include | `c4_c6_workflow_governance_entrypoints.rs` 在 crate root 展开 | C4 / C5 / C6 tests |
+| 251 | R2-B6 workflow execution include | `workflow_execution_entrypoints.rs` 在 crate root 展开 | dispatch / permission / offline role / workflow machine filters |
+| 254-866 | task package 渲染 / finder helper | work item / artifact finder、render fields、markdown、user reviewed instruction preview | task package render tests |
+| 867 | R2-B2 workflow state JSON helper include | `workflow_state_json_helpers.rs` 在 crate root 展开 | `cargo test --lib workflow_state` |
+| 870 | R2-B7 memory command bridge / context guard include | `memory_context_entrypoints.rs` 在 crate root 展开 | memory / observation / task packet tests |
+| 872-1212 | shared workflow utility | state transitions、node IDs、index project lookup、stable IDs、task package path helpers | workflow transition / generated task tests |
+| 1213 | R2-B5 workflow read model include | `workflow_read_model_entrypoints.rs` 在 crate root 展开 | workflow read model / readback / snapshot tests |
+| 1215-1298 | atomic path / time helpers | JSON write helper、default paths、timestamps | workflow state store helper tests |
+| 1299-1697 | workbench snapshot assembly | `WorkbenchSnapshot` assembly and session source overlay | snapshot tests |
+| 1698 | R2-B8 diagnostics / provider / continuation / adapter include | `diagnostics_provider_session_entrypoints.rs` 在 crate root 展开 | diagnostics / provider / continuation / adapter / session operation filters |
+| 1701 | R2-B9 index / host / app include | `index_host_app_entrypoints.rs` 在 crate root 展开 | transcript / snapshot / workflow state tests |
+| 1703-13949 | inline tests | broad historical test module covering many domains | `cargo test --lib`, focused filters by domain |
 
 ## R2 批次建议
 
@@ -39,8 +39,9 @@
 6. R2-B7：已把 memory / observation / task memory context guard 从 `lib.rs` 抽出到 `memory_context_entrypoints.rs`；测试落点为 memory candidate、formal memory、observation、task packet filters。
 7. R2-B8：已把 diagnostics、provider availability、session continuation 和 adapter descriptors 分域；测试落点为 diagnostics、provider、continuation、adapter、session operation filters。
 8. R2-B9：已把 index parsing、allowed paths、host OS helper 和 app assembly 尾段抽出到 `index_host_app_entrypoints.rs`；测试落点为 transcript、snapshot、workflow state 和全量 lib tests。
-9. R2-B10：下一步整理 C4-C6 自动化工作流治理；建议限定 project director plan、authorized dispatch、worker report、process fact、final review、user decision、acceptance summary。
-10. R2 后段：测试模块按被抽出的领域逐步迁移，避免 `lib.rs` 代码下降但测试仍保持巨石。
+9. R2-B10：已把 C4-C6 自动化工作流治理连续区块抽出到 `c4_c6_workflow_governance_entrypoints.rs`；测试落点为 project director、worker report、process fact、global final review、user result decision、stage C acceptance summary、workflow state 和全量 lib tests。
+10. R2 closing / R3 preflight review：下一步只读复核剩余 `lib.rs` 结构、inline tests 巨石、R3 SQLite 前置风险和后续拆分/迁移顺序。
+11. R2 后段：测试模块按被抽出的领域逐步迁移，避免 `lib.rs` 代码下降但测试仍保持巨石。
 
 ## P2
 
