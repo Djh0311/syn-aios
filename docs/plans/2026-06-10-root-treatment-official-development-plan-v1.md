@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1、R2-B2、R2-B3、R2-B4、R2-B5、R2-B6 已完成，当前下一步是 R2-B7 memory domain extraction 任务包准备与执行。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
+状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1、R2-B2、R2-B3、R2-B4、R2-B5、R2-B6、R2-B7 已完成，当前下一步是 R2-B8 任务包准备与执行。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
 
 本文不是任务包，不授权真实 `codex exec` / `codex exec resume`，不授权读写 `/Users/yoyi/.codex`，不授权 Stage L 的 K3-B1 retry / K3-B2，不授权 planned adapters 真实接入，不授权 backlog 解冻后功能开工。
 
@@ -205,7 +205,7 @@ R2 按批次治理，每批一个治理任务包，禁止一次性大拆。
 3. workflow run check / binding / legacy dispatch entrypoints 分批抽出。已由 R2-B4 完成。
 4. workflow 读模型派生逻辑与 `workflow_read_model.rs` 汇合。已由 R2-B5 完成。
 5. workflow dispatch execution control、offline role dispatch、workflow machine 逻辑抽出。已由 R2-B6 完成。
-6. 记忆领域与 formal memory / candidate / observation / lint / mature pattern 等模块汇合。当前下一步 R2-B7。
+6. 记忆领域与 formal memory / candidate / observation / lint / mature pattern 等模块汇合。R2-B7 已完成 memory command bridge / observation bridge / task memory packet preview bridge / context guard 抽出；更深的 memory store / lifecycle 内部重构仍是后续治理。
 7. runtime / diagnostics 领域出 `lib.rs`。
 8. 剩余清扫。
 
@@ -400,7 +400,8 @@ R2 只做行为保持型拆分，每批都必须让 `lib.rs` 行数下降。
 - R2-B4 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b4-workflow-run-binding-and-legacy-dispatch-entrypoints-extraction-v1.md`，completion commit `66a0cff5a4fb94101c1830a174dc908448ec8dba`。接受为抽出 workflow run check、work item state、session binding 和 legacy workflow node dispatch 入口，不接受为 R2 完成。
 - R2-B5 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b5-workflow-read-model-dispatch-summary-and-readback-stats-extraction-v1.md`，completion commit `35cacc22ec813152e9357a42bc82e7ef581d2509`。接受为抽出 workflow read model、dispatch summary 和 readback stats 相关派生逻辑，不接受为 R2 完成。
 - R2-B6 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b6-workflow-execution-control-offline-role-and-machine-extraction-v1.md`，completion commit `2dd766be84e977d75e77f31ec2dbf9d463f45690`。接受为抽出 workflow dispatch execution control、offline role dispatch 和 workflow machine 相关逻辑，不接受为 R2 完成。
-- R2-B7 当前下一步：memory domain extraction 任务包准备与执行。
+- R2-B7 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b7-memory-command-bridge-and-context-guard-extraction-v1.md`，completion commit `9cd10bb51fe828ae5b2b72501414b5cf025b77a9`。接受为抽出 memory command bridge、observation bridge、task memory packet preview bridge 和 context binding guard，不接受为 R2 完成。
+- R2-B8 当前下一步：diagnostics / provider availability / session continuation / adapter descriptors 等剩余边界的行为不变物理抽出任务包准备与执行。
 
 | 批次 | 做什么 | 主要落点 | 验收 |
 | --- | --- | --- | --- |
@@ -703,11 +704,11 @@ R0 可接受不跑全量 cargo，但必须说明原因；R1 改 Rust 存储逻�
 
 当前按用户要求继续 Root Treatment / Stage R，下一步：
 
-1. 创建并执行 R2-B7 memory domain extraction 任务包。
-2. R2-B7 完成后由全局主管 fresh verify、写 supervisor checkpoint，并只在 checkpoint 同步入口文档。
+1. 创建并执行 R2-B8 剩余边界抽出任务包，建议限定 diagnostics / provider availability / session continuation / adapter descriptors。
+2. R2-B8 完成后由全局主管 fresh verify、写 supervisor checkpoint，并只在 checkpoint 同步入口文档。
 3. 继续按 R2 小批次治理推进，直到 `lib.rs` 达到阶段性水位线或主管线决定转入 R3 前置审查。
 
-R2-B7 期间：
+R2-B8 期间：
 
 - 不执行真实 Codex。
 - 不发送 prompt。
