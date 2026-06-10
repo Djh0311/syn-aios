@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R2 第八批治理任务包，用于把 `src-tauri/src/lib.rs` 中 diagnostics、provider availability、session continuation preview / guard、agent adapter descriptors 和 session operation descriptors 相关边界物理抽出到独立 helper 文件，继续推进小批次、行为不变、可回滚的 `lib.rs` 解体路径。
+状态：已完成，经主管线回收为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R2 第八批治理任务包，用于把 `src-tauri/src/lib.rs` 中 diagnostics、provider availability、session continuation preview / guard、agent adapter descriptors 和 session operation descriptors 相关边界物理抽出到独立 helper 文件，继续推进小批次、行为不变、可回滚的 `lib.rs` 解体路径。
 
 R2-B8 是行为不变的形状治理任务，不新增产品能力，不执行真实 Codex，不迁移 SQLite，不读写 `/Users/yoyi/.codex`。
 
