@@ -32,7 +32,7 @@ R2-B10 已由主管线回收为 `accepted_with_p2`。
 
 - R2-B10 start commit：`b3392b09b1a2907fd75f6d81f75199d1a2da2b7b`
 - R2-B10 completion commit：`d5f423d97c1f2dac4bca33f84c34e46b0b4716a6`
-- 本 supervisor checkpoint 提交：待提交后回填。
+- 本 supervisor checkpoint 提交：`5339987ad2bc3510039140e92429327116d78988`。
 
 ## 复核文件
 

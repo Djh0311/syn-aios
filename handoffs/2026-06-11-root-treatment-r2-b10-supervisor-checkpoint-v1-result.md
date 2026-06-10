@@ -11,7 +11,7 @@ R2-B10 已回收为 `accepted_with_p2`。本轮接受为 C4-C6 自动化工作�
 ## 主管复核结果
 
 - HEAD 复核时为 `d5f423d97c1f2dac4bca33f84c34e46b0b4716a6`。
-- 本 supervisor checkpoint 提交：待提交后回填。
+- 本 supervisor checkpoint 提交：`5339987ad2bc3510039140e92429327116d78988`。
 - `lib.rs`：16,457 lines -> 13,949 lines。
 - `c4_c6_workflow_governance_entrypoints.rs`：新增 2,509 lines。
 - Tauri command registry：96 total，`lib.rs` 内 `#[tauri::command]` 为 0。
