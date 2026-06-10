@@ -692,8 +692,7 @@ R0 可接受不跑全量 cargo，但必须说明原因；R1 改 Rust 存储逻�
 
 1. 完成 `decisions/2026-06-10-stage-l-root-treatment-freeze-relationship-v1.md`。
 2. 完成 `CURRENT.md` / `tasks/README.md` / `AUTHORITY.md` / `STAGE_PLAN.md` / `README.md` 同步。
-3. 写 R0 / R1 任务包。
-4. R0 / R1 并行执行，回交后由全局主管复核。
+3. 执行 R0 / R1，回交后由全局主管复核。
 
 R-Preflight 期间：
 

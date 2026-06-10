@@ -10,7 +10,7 @@
 
 ## 当前定位
 
-Root Treatment / Stage R 已切为当前治理主线，R-Preflight 已完成权威入口同步和 git baseline 建立，baseline commit 为 `ed01c6f281e3fd7a38548da948046e8366cc368d`；当前下一步拆 R0 / R1 任务包并开始执行。正式计划见 `docs/plans/2026-06-10-root-treatment-official-development-plan-v1.md`，决策锚点见 `decisions/2026-06-10-stage-l-root-treatment-freeze-relationship-v1.md`。Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`；L1 任务包已创建但当前暂停执行：`tasks/2026-06-10-stage-l-l1-k3-b1-blocked-recovery-product-path-v1.md`。这不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2；治理收口后再回到 Stage L / Stage K。治理期不授权真实 Codex 执行、不读写 `/Users/yoyi/.codex`、不启动 K3-B1 retry 或 K3-B2，不解冻 backlog 功能。
+Root Treatment / Stage R 已切为当前治理主线，R-Preflight 已完成权威入口同步和 git baseline 建立，baseline commit 为 `ed01c6f281e3fd7a38548da948046e8366cc368d`；R0 / R1 任务包已创建并可开始并行执行。正式计划见 `docs/plans/2026-06-10-root-treatment-official-development-plan-v1.md`，决策锚点见 `decisions/2026-06-10-stage-l-root-treatment-freeze-relationship-v1.md`。Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`；L1 任务包已创建但当前暂停执行：`tasks/2026-06-10-stage-l-l1-k3-b1-blocked-recovery-product-path-v1.md`。这不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2；治理收口后再回到 Stage L / Stage K。治理期不授权真实 Codex 执行、不读写 `/Users/yoyi/.codex`、不启动 K3-B1 retry 或 K3-B2，不解冻 backlog 功能。
 
 Stage K / K6 Final Tauri Dogfood Core Path Screenshot Acceptance 已完成，结论为 `accepted_with_deferred_items`。记录见 `evidence/2026-06-10-stage-k-k6-final-tauri-dogfood-core-path-screenshot-acceptance-v1.md` 与 `handoffs/2026-06-10-stage-k-k6-final-tauri-dogfood-core-path-screenshot-acceptance-v1-result.md`。本轮使用真实 Tauri 桌面壳和 ScreenCaptureKit window-only harness 补齐核心入口截图：首页、智能体、运行中工作流、项目、记忆层、知识库、设置、想法箱、Skill 和 Harness。K6 接受为真实 Tauri dogfood 核心入口验收和 Stage K acceptance freeze；Stage K 当前冻结为 `accepted_with_deferred_items`，不接受为严格无缺口完成。K3-B1 retry 申请被安全审查再次拒绝的事实不变：K3-B1 仍未完成，K3-B2 仍不得启动。
 
@@ -143,7 +143,7 @@ H2.8 real execution permission dialog / audit summary / readiness decision surfa
 
 ## 下一步
 
-当前下一步按 `docs/plans/2026-06-10-root-treatment-official-development-plan-v1.md` 创建并执行 R0 / R1。Stage K 已完成 K0-K6 并冻结为 `accepted_with_deferred_items`；Stage L / L0 已完成，L1-L6 治理期暂停。若要恢复 K3-B1/K3-B2 真实执行线，必须等治理收口后在 Stage L 中设计合法恢复路径，并由用户手动执行 exact command 并回交，或重新取得风险批准；K3-B1 未成功前不得进入 K3-B2。
+当前下一步按 `docs/plans/2026-06-10-root-treatment-official-development-plan-v1.md` 执行 R0 / R1。Stage K 已完成 K0-K6 并冻结为 `accepted_with_deferred_items`；Stage L / L0 已完成，L1-L6 治理期暂停。若要恢复 K3-B1/K3-B2 真实执行线，必须等治理收口后在 Stage L 中设计合法恢复路径，并由用户手动执行 exact command 并回交，或重新取得风险批准；K3-B1 未成功前不得进入 K3-B2。
 
 J4 已消费 J1 / J2 / J3 已形成的 Product Command、run unit、runtime log、readback、capture event、observation / candidate refs，统一 running / waiting_user / blocked_by_guard / failed / readback_unavailable / timed_out / duplicate_blocked，并保持用户确认和 audit 边界。
 
