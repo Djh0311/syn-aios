@@ -1,12 +1,27 @@
 import type {
   AgentAdapterDescriptor,
+  FormalMemoryStoreV1,
+  MaturePatternPreviewOutput,
+  MemoryCaptureStoreV1,
+  MemoryCandidateStoreV1,
+  MemoryEntityRelationPreviewOutput,
+  MemoryEntityRelationStoreV1,
+  MemoryLintStoreV1,
+  MemoryPatternStoreV1,
+  ObservationStoreV1,
   ProjectRecord,
+  ProjectWorkflowAutomationReadModel,
+  ProjectWorkflowSummary,
+  RealExecutionProductCommandReadModel,
+  RuntimeSessionAttention,
   SessionRecord,
   SessionOperationDescriptor,
   ProviderAvailabilitySummary,
   WorkbenchSnapshot,
   WorkflowStateSnapshot,
 } from "./types";
+import { deriveMemoryManagementSummary, type MemoryManagementSummary } from "./memoryCenter";
+import { deriveRunQueueReadModel, type RunQueueReadModel } from "./runQueue";
 
 export type PageSelectorSourceBoundary = {
   generated_from: "workbench_snapshot_selector";
@@ -74,6 +89,107 @@ export type AgentsPageReadModel = {
   conversation_first: true;
   developer_details_collapsed: true;
   user_facing_summary: string;
+  warnings: string[];
+};
+
+export type RunningWorkflowsPageReadModel = {
+  schema_version: "running_workflows_page_read_model.v1";
+  selector_id: "running_workflows_page_selector_v1";
+  source_boundary: PageSelectorSourceBoundary;
+  workflow_count: number;
+  workflow_focus_count: number;
+  running_attention_count: number;
+  runtime_attention_count: number;
+  waiting_permission_count: number;
+  readback_issue_count: number;
+  readback_unknown_result_count: number;
+  run_queue: {
+    item_count: number;
+    running_count: number;
+    waiting_user_count: number;
+    blocked_count: number;
+    failed_count: number;
+    failure_control_count: number;
+    duplicate_blocked_count: number;
+    capture_compensation_count: number;
+  };
+  operation_control: {
+    confirmation_required_count: number;
+    retry_proposal_count: number;
+    stop_request_count: number;
+    restart_readiness_count: number;
+    resume_readiness_count: number;
+    readback_issue_count: number;
+    manual_review_count: number;
+    blocked_by_guard_count: number;
+    duplicate_blocked_count: number;
+    stale_cleanup_count: number;
+  };
+  memory_pending: {
+    confirmation_count: number;
+    capture_count: number;
+    pending_candidate_count: number;
+  };
+  product_command: {
+    command_count: number;
+    pending_decision_count: number;
+    blocked_attempt_count: number;
+    running_attempt_count: number;
+    readback_issue_count: number;
+  };
+  automation: {
+    run_unit_count: number;
+    waiting_user_count: number;
+    blocked_count: number;
+    readback_unknown_count: number;
+  };
+  user_facing_summary: string;
+  developer_details_collapsed: true;
+  warnings: string[];
+};
+
+export type MemoryCenterPageReadModel = {
+  schema_version: "memory_center_page_read_model.v1";
+  selector_id: "memory_center_page_selector_v1";
+  source_boundary: PageSelectorSourceBoundary;
+  snapshot_status_label: string;
+  boundary: string;
+  formal_memory: {
+    record_count: number;
+    active_count: number;
+  };
+  candidate_memory: {
+    candidate_count: number;
+  };
+  observation: {
+    observation_count: number;
+  };
+  lint: {
+    open_count: number;
+    blocking_count: number;
+  };
+  maintenance: {
+    blocking_count: number;
+    needs_review_count: number;
+    info_count: number;
+  };
+  mature_pattern: {
+    candidate_count: number;
+    user_confirmation_required_count: number;
+  };
+  task_package: {
+    snapshot_count: number;
+  };
+  memory_workbench: {
+    action_count: number;
+    capture_count: number;
+    observation_count: number;
+    candidate_count: number;
+    confirmed_pending_formalization_count: number;
+    capture_compensation_count: number;
+  };
+  user_facing_summary: string;
+  developer_details_collapsed: true;
   warnings: string[];
 };
 
@@ -201,6 +317,241 @@ export function deriveAgentsPageReadModelFromParts({
   };
 }
 
+export function deriveRunningWorkflowsPageReadModel({
+  snapshot,
+  workflowState,
+  memoryCaptureStore,
+  memoryCandidateStore,
+}: {
+  snapshot: WorkbenchSnapshot;
+  workflowState?: WorkflowStateSnapshot | null;
+  memoryCaptureStore?: MemoryCaptureStoreV1 | null;
+  memoryCandidateStore?: MemoryCandidateStoreV1 | null;
+}): RunningWorkflowsPageReadModel {
+  const runQueue = deriveRunQueueReadModel({ snapshot, workflowState, memoryCaptureStore, memoryCandidateStore });
+  return deriveRunningWorkflowsPageReadModelFromParts({
+    workflows: workflowState?.project_workflows ?? [],
+    runtimeAttention: snapshot.runtime_session_attention,
+    runQueue,
+    productCommandReadModel: snapshot.real_execution_product_commands ?? null,
+    automation: snapshot.project_workflow_automation ?? null,
+    memoryCaptureStore,
+    memoryCandidateStore,
+  });
+}
+
+export function deriveRunningWorkflowsPageReadModelFromParts({
+  workflows,
+  runtimeAttention,
+  runQueue,
+  productCommandReadModel,
+  automation,
+  memoryCaptureStore,
+  memoryCandidateStore,
+}: {
+  workflows: ProjectWorkflowSummary[];
+  runtimeAttention: RuntimeSessionAttention[];
+  runQueue: RunQueueReadModel;
+  productCommandReadModel?: RealExecutionProductCommandReadModel | null;
+  automation?: ProjectWorkflowAutomationReadModel | null;
+  memoryCaptureStore?: MemoryCaptureStoreV1 | null;
+  memoryCandidateStore?: MemoryCandidateStoreV1 | null;
+}): RunningWorkflowsPageReadModel {
+  const workflowFocusCount = workflows.filter(isWorkflowInRunningFocus).length;
+  const waitingPermissionCount = workflows.reduce(
+    (count, workflow) => count + workflow.task_drafts.filter((task) => task.state === "waiting_for_permission").length,
+    0,
+  );
+  const runtimeAttentionInFocus = runtimeAttention.filter(
+    (item) => item.requires_user_action || item.blocks_continuation || runningFocusStates.has(item.status),
+  );
+  const readbackIssueCount = runtimeAttention.filter((item) =>
+    item.readback_boundary.status === "readback_unavailable" || item.readback_boundary.status === "readback_failed",
+  ).length;
+  const readbackUnknownResultCount = runQueue.run_queue_items.filter((item) =>
+    (item.readback_status === "readback_unavailable" ||
+      item.readback_status === "readback_failed" ||
+      item.readback_status === "timed_out" ||
+      item.readback_status === "unknown") &&
+    item.readback_result_count == null,
+  ).length;
+  const operationControl = runQueue.operation_control_summary;
+  const memoryConfirmationCount = runQueue.user_confirmation_queue.filter((item) =>
+    item.kind === "memory_candidate_confirmation" ||
+    item.kind === "memory_formalization_confirmation" ||
+    item.kind === "capture_compensation_confirmation",
+  ).length;
+  const pendingMemoryCandidateCount = (memoryCandidateStore?.candidates ?? []).filter((candidate) =>
+    candidate.status === "candidate_draft" || candidate.status === "candidate_needs_review" ||
+    (candidate.status === "candidate_confirmed" && !candidate.adoption),
+  ).length;
+  const failureStopRetry = productCommandReadModel?.failure_stop_retry_summary ?? null;
+
+  return {
+    schema_version: "running_workflows_page_read_model.v1",
+    selector_id: "running_workflows_page_selector_v1",
+    source_boundary: selectorSourceBoundary(),
+    workflow_count: workflows.length,
+    workflow_focus_count: workflowFocusCount,
+    running_attention_count: workflowFocusCount + runtimeAttentionInFocus.length,
+    runtime_attention_count: runtimeAttentionInFocus.length,
+    waiting_permission_count: waitingPermissionCount,
+    readback_issue_count: readbackIssueCount,
+    readback_unknown_result_count: readbackUnknownResultCount,
+    run_queue: {
+      item_count: runQueue.run_queue_items.length,
+      running_count: runQueue.running_count,
+      waiting_user_count: runQueue.waiting_user_count,
+      blocked_count: runQueue.blocked_count,
+      failed_count: runQueue.failed_count,
+      failure_control_count: runQueue.failure_control_summaries.length,
+      duplicate_blocked_count: runQueue.duplicate_blocked_count,
+      capture_compensation_count: runQueue.capture_compensation_count,
+    },
+    operation_control: {
+      confirmation_required_count: operationControl.confirmation_required_count,
+      retry_proposal_count: operationControl.retry_proposal_count,
+      stop_request_count: operationControl.stop_request_count,
+      restart_readiness_count: operationControl.restart_readiness_count,
+      resume_readiness_count: operationControl.resume_readiness_count,
+      readback_issue_count: operationControl.readback_issue_count,
+      manual_review_count: operationControl.manual_review_count,
+      blocked_by_guard_count: operationControl.blocked_by_guard_count,
+      duplicate_blocked_count: operationControl.duplicate_blocked_count,
+      stale_cleanup_count: operationControl.stale_cleanup_count,
+    },
+    memory_pending: {
+      confirmation_count: memoryConfirmationCount,
+      capture_count: memoryCaptureStore?.events.length ?? 0,
+      pending_candidate_count: pendingMemoryCandidateCount,
+    },
+    product_command: {
+      command_count: productCommandReadModel?.command_count ?? 0,
+      pending_decision_count: productCommandReadModel?.pending_decision_count ?? 0,
+      blocked_attempt_count: productCommandReadModel?.blocked_attempt_count ?? 0,
+      running_attempt_count: productCommandReadModel?.running_attempt_count ?? 0,
+      readback_issue_count: failureStopRetry?.readback_issue_count ?? 0,
+    },
+    automation: {
+      run_unit_count: automation?.run_unit_count ?? 0,
+      waiting_user_count: automation?.waiting_user_count ?? 0,
+      blocked_count: automation?.blocked_count ?? 0,
+      readback_unknown_count: automation?.readback_unknown_count ?? 0,
+    },
+    user_facing_summary: `${workflows.length} 条工作流，${workflowFocusCount + runtimeAttentionInFocus.length} 条运行关注，${waitingPermissionCount} 条等待权限`,
+    developer_details_collapsed: true,
+    warnings: [
+      "r4_a5_selector_only_page_ui_not_migrated",
+      "workbench_snapshot_still_active",
+      "readback_unavailable_must_not_render_as_zero",
+      ...runQueue.warnings.slice(0, 5),
+    ],
+  };
+}
+
+export function deriveMemoryCenterPageReadModel({
+  projects,
+  workflowState,
+  formalMemoryStore,
+  memoryCaptureStore,
+  memoryCandidateStore,
+  observationStore,
+  memoryLintStore,
+  memoryEntityRelationStore,
+  memoryEntityRelationPreview,
+  memoryPatternStore,
+  maturePatternPreview,
+  hasRealSnapshot,
+}: {
+  projects: ProjectRecord[];
+  workflowState?: WorkflowStateSnapshot | null;
+  formalMemoryStore?: FormalMemoryStoreV1 | null;
+  memoryCaptureStore?: MemoryCaptureStoreV1 | null;
+  memoryCandidateStore?: MemoryCandidateStoreV1 | null;
+  observationStore?: ObservationStoreV1 | null;
+  memoryLintStore?: MemoryLintStoreV1 | null;
+  memoryEntityRelationStore?: MemoryEntityRelationStoreV1 | null;
+  memoryEntityRelationPreview?: MemoryEntityRelationPreviewOutput | null;
+  memoryPatternStore?: MemoryPatternStoreV1 | null;
+  maturePatternPreview?: MaturePatternPreviewOutput | null;
+  hasRealSnapshot: boolean;
+}): MemoryCenterPageReadModel {
+  const summary = deriveMemoryManagementSummary({
+    projects,
+    workflowState: workflowState ?? null,
+    formalMemoryStore,
+    memoryCaptureStore,
+    memoryCandidateStore,
+    observationStore,
+    memoryLintStore,
+    memoryEntityRelationStore,
+    memoryEntityRelationPreview,
+    memoryPatternStore,
+    maturePatternPreview,
+  });
+  return deriveMemoryCenterPageReadModelFromParts({ summary, hasRealSnapshot });
+}
+
+export function deriveMemoryCenterPageReadModelFromParts({
+  summary,
+  hasRealSnapshot,
+}: {
+  summary: MemoryManagementSummary;
+  hasRealSnapshot: boolean;
+}): MemoryCenterPageReadModel {
+  return {
+    schema_version: "memory_center_page_read_model.v1",
+    selector_id: "memory_center_page_selector_v1",
+    source_boundary: selectorSourceBoundary(),
+    snapshot_status_label: hasRealSnapshot ? "只读读模型" : "未读取真实索引",
+    boundary: summary.boundary,
+    formal_memory: {
+      record_count: summary.formal_summary.record_count,
+      active_count: summary.formal_summary.active_count,
+    },
+    candidate_memory: {
+      candidate_count: summary.candidate_summary.candidate_count,
+    },
+    observation: {
+      observation_count: summary.observation_summary.observation_count,
+    },
+    lint: {
+      open_count: summary.lint_summary.open_count,
+      blocking_count: summary.lint_summary.blocking_count,
+    },
+    maintenance: {
+      blocking_count: summary.maintenance_summary.blocking_count,
+      needs_review_count: summary.maintenance_summary.needs_review_count,
+      info_count: summary.maintenance_summary.info_count,
+    },
+    mature_pattern: {
+      candidate_count: summary.mature_pattern_summary.mature_pattern_candidate_count,
+      user_confirmation_required_count: summary.mature_pattern_summary.user_confirmation_required_count,
+    },
+    task_package: {
+      snapshot_count: summary.task_package_summary.snapshot_count,
+    },
+    memory_workbench: {
+      action_count: summary.memory_workbench_summary.action_count,
+      capture_count: summary.memory_workbench_summary.capture_count,
+      observation_count: summary.memory_workbench_summary.observation_count,
+      candidate_count: summary.memory_workbench_summary.candidate_count,
+      confirmed_pending_formalization_count: summary.memory_workbench_summary.confirmed_pending_formalization_count,
+      capture_compensation_count: summary.memory_workbench_summary.capture_compensation_count,
+    },
+    user_facing_summary:
+      `正式 ${summary.formal_summary.record_count}，候选 ${summary.candidate_summary.candidate_count}，` +
+      `观察 ${summary.observation_summary.observation_count}，待处理 ${summary.memory_workbench_summary.action_count}`,
+    developer_details_collapsed: true,
+    warnings: [
+      "r4_a5_selector_only_page_ui_not_migrated",
+      "workbench_snapshot_still_active",
+      "candidate_and_observation_are_not_formal_memory",
+      ...summary.warnings.slice(0, 5),
+    ],
+  };
+}
+
 function selectorSourceBoundary(): PageSelectorSourceBoundary {
   return {
     generated_from: "workbench_snapshot_selector",
@@ -305,6 +656,22 @@ function countBoundaries(operations: SessionOperationDescriptor[]): number {
 
 function countProviderBoundaries(providers: ProviderAvailabilitySummary[]): number {
   return providers.filter((provider) => provider.requires_future_task || provider.requires_user_configuration).length;
+}
+
+const runningFocusStates = new Set([
+  "running",
+  "waiting_for_permission",
+  "ready_to_dispatch",
+  "ready_for_review",
+  "retry_pending",
+  "blocked_by_guard",
+  "readback_unavailable",
+  "readback_failed",
+  "timed_out",
+]);
+
+function isWorkflowInRunningFocus(workflow: ProjectWorkflowSummary): boolean {
+  return runningFocusStates.has(workflow.state) || workflow.task_drafts.some((task) => runningFocusStates.has(task.state));
 }
 
 function tail(value: string): string {

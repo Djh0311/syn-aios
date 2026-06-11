@@ -2,8 +2,10 @@ import type { WorkbenchSnapshot, WorkflowStateSnapshot } from "../src/lib/types"
 import {
   deriveAgentsPageReadModel,
   deriveAgentsPageReadModelFromParts,
+  deriveMemoryCenterPageReadModelFromParts,
   deriveProjectsPageReadModel,
   deriveProjectsPageReadModelFromParts,
+  deriveRunningWorkflowsPageReadModelFromParts,
 } from "../src/lib/pageSelectors";
 
 const snapshot = {
@@ -244,6 +246,120 @@ const splitAgentsModel = deriveAgentsPageReadModelFromParts({
   sessionOperationDescriptors: snapshot.session_operations,
   providerAvailabilitySummaries: snapshot.provider_availability,
 });
+const runningModel = deriveRunningWorkflowsPageReadModelFromParts({
+  workflows: [
+    {
+      ...workflowState.project_workflows[0],
+      state: "running",
+      task_drafts: [{ work_item_id: "task-permission", state: "waiting_for_permission", title: "Need permission" }],
+    },
+  ] as any,
+  runtimeAttention: [
+    {
+      attention_id: "attn-readback",
+      status: "readback_unavailable",
+      requires_user_action: true,
+      blocks_continuation: false,
+      readback_boundary: {
+        status: "readback_unavailable",
+        result_count: null,
+        reason: "fixture readback unavailable",
+      },
+    },
+  ] as any,
+  runQueue: {
+    schema_version: "run_queue_read_model.v1",
+    generated_from: "workbench_snapshot",
+    run_queue_items: [
+      {
+        queue_item_id: "queue-readback",
+        status: "readback_unavailable",
+        readback_status: "readback_unavailable",
+        readback_result_count: null,
+      },
+    ],
+    user_confirmation_queue: [
+      {
+        confirmation_item_id: "memory-confirmation",
+        kind: "memory_candidate_confirmation",
+      },
+    ],
+    failure_control_summaries: [{ failure_id: "failure-duplicate", classification: "duplicate_blocked" }],
+    operation_control_summary: {
+      schema_version: "operation_control_summary.v1",
+      retry_proposal_count: 1,
+      stop_request_count: 0,
+      restart_readiness_count: 0,
+      resume_readiness_count: 1,
+      readback_issue_count: 1,
+      duplicate_blocked_count: 1,
+      blocked_by_guard_count: 0,
+      stale_cleanup_count: 0,
+      manual_review_count: 1,
+      confirmation_required_count: 2,
+      true_operation_available: false,
+      retry_boundary: "retry requires confirmation",
+      stop_boundary: "stop is controlled",
+      restart_boundary: "restart is future",
+      resume_boundary: "resume requires authorization",
+      readback_boundary: "unknown remains null",
+      stale_cleanup_boundary: "workbench state only",
+      user_message: "fixture",
+      recommended_next_step: "review",
+      warnings: [],
+    },
+    running_count: 0,
+    waiting_user_count: 1,
+    blocked_count: 0,
+    failed_count: 0,
+    readback_issue_count: 1,
+    duplicate_blocked_count: 1,
+    capture_compensation_count: 0,
+    warnings: ["unknown_readback_result_count_must_remain_null"],
+  } as any,
+  productCommandReadModel: {
+    command_count: 2,
+    pending_decision_count: 1,
+    blocked_attempt_count: 1,
+    running_attempt_count: 0,
+    failure_stop_retry_summary: { readback_issue_count: 1 },
+  } as any,
+  automation: {
+    run_unit_count: 3,
+    waiting_user_count: 1,
+    blocked_count: 0,
+    readback_unknown_count: 1,
+  } as any,
+  memoryCaptureStore: { events: [{ capture_event_id: "capture-1" }] } as any,
+  memoryCandidateStore: {
+    candidates: [
+      { candidate_key: "candidate-1", status: "candidate_draft" },
+      { candidate_key: "candidate-2", status: "candidate_confirmed", adoption: null },
+    ],
+  } as any,
+});
+const memoryModel = deriveMemoryCenterPageReadModelFromParts({
+  hasRealSnapshot: true,
+  summary: {
+    boundary: "记忆中心 fixture boundary",
+    formal_summary: { record_count: 1, active_count: 1 },
+    candidate_summary: { candidate_count: 2 },
+    observation_summary: { observation_count: 3 },
+    lint_summary: { open_count: 4, blocking_count: 1 },
+    maintenance_summary: { blocking_count: 1, needs_review_count: 2, info_count: 3 },
+    mature_pattern_summary: { mature_pattern_candidate_count: 2, user_confirmation_required_count: 1 },
+    task_package_summary: { snapshot_count: 5 },
+    memory_workbench_summary: {
+      action_count: 6,
+      capture_count: 7,
+      observation_count: 3,
+      candidate_count: 2,
+      confirmed_pending_formalization_count: 1,
+      capture_compensation_count: 1,
+    },
+    warnings: [],
+  } as any,
+});
 
 assert(projectsModel.schema_version === "projects_page_read_model.v1", "projects selector schema should be stable");
 assert(agentsModel.schema_version === "agents_page_read_model.v1", "agents selector schema should be stable");
@@ -287,8 +403,34 @@ assert(agentsModel.operation_boundary_count === 1, "agents selector should count
 assert(agentsModel.provider_boundary_count === 1, "agents selector should count provider boundaries");
 assert(agentsModel.conversation_first, "agents selector should preserve conversation-first page intent");
 assert(agentsModel.developer_details_collapsed, "developer details should stay collapsed");
+assert(runningModel.schema_version === "running_workflows_page_read_model.v1", "running selector schema should be stable");
+assert(memoryModel.schema_version === "memory_center_page_read_model.v1", "memory selector schema should be stable");
+assert(runningModel.source_boundary.generated_from === "workbench_snapshot_selector", "running selector source should be explicit");
+assert(memoryModel.source_boundary.generated_from === "workbench_snapshot_selector", "memory selector source should be explicit");
+assert(runningModel.source_boundary.workbench_snapshot_active, "running selector must keep WorkbenchSnapshot active");
+assert(memoryModel.source_boundary.workbench_snapshot_active, "memory selector must keep WorkbenchSnapshot active");
+assert(!runningModel.source_boundary.page_ui_migrated, "running page must not claim UI migration");
+assert(!memoryModel.source_boundary.page_ui_migrated, "memory page must not claim UI migration");
+assert(!runningModel.source_boundary.tauri_command_consumed, "running selector must not claim Tauri command consumption");
+assert(!memoryModel.source_boundary.tauri_command_consumed, "memory selector must not claim Tauri command consumption");
+assert(!runningModel.source_boundary.writes_stores, "running selector must be read-only");
+assert(!memoryModel.source_boundary.writes_stores, "memory selector must be read-only");
+assert(runningModel.workflow_count === 1, "running selector should count workflow summaries");
+assert(runningModel.workflow_focus_count === 1, "running selector should count focused workflows");
+assert(runningModel.waiting_permission_count === 1, "running selector should count waiting permissions");
+assert(runningModel.readback_issue_count === 1, "running selector should count readback issues");
+assert(runningModel.readback_unknown_result_count === 1, "running selector should keep unknown readback result count distinct");
+assert(runningModel.memory_pending.confirmation_count === 1, "running selector should count memory confirmations");
+assert(runningModel.memory_pending.pending_candidate_count === 2, "running selector should count pending candidates");
+assert(runningModel.product_command.command_count === 2, "running selector should count product commands");
+assert(runningModel.automation.run_unit_count === 3, "running selector should count automation units");
+assert(memoryModel.formal_memory.record_count === 1, "memory selector should count formal memories");
+assert(memoryModel.candidate_memory.candidate_count === 2, "memory selector should keep candidates separate from formal memory");
+assert(memoryModel.observation.observation_count === 3, "memory selector should keep observations separate from formal memory");
+assert(memoryModel.memory_workbench.action_count === 6, "memory selector should count workbench actions");
+assert(memoryModel.snapshot_status_label === "只读读模型", "memory selector should preserve snapshot status label");
 
-const serialized = JSON.stringify({ projectsModel, agentsModel });
+const serialized = JSON.stringify({ projectsModel, agentsModel, runningModel, memoryModel });
 for (const forbidden of ["raw transcript", "full transcript", "secret", "token", "prompt_body"]) {
   assert(!serialized.toLowerCase().includes(forbidden), `selector output should not expose ${forbidden}`);
 }

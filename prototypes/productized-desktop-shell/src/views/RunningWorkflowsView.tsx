@@ -1,5 +1,6 @@
 import { Badge } from "../components/Badge";
 import { pathTail } from "../lib/format";
+import { deriveRunningWorkflowsPageReadModelFromParts } from "../lib/pageSelectors";
 import { deriveRunQueueReadModel } from "../lib/runQueue";
 import type { MemoryCandidateStoreV1, MemoryCaptureStoreV1, ProjectWorkflowSummary, SessionRunStatusSummary, WorkbenchSnapshot, WorkflowStateSnapshot } from "../lib/types";
 import type { ViewKey } from "../lib/workbenchNavigation";
@@ -46,33 +47,25 @@ export function RunningWorkflowsView({
   const runtimeAttention = snapshot.runtime_session_attention.filter(
     (item) => item.requires_user_action || item.blocks_continuation || focusStates.has(item.status),
   );
-  const waitingPermissionCount = workflows.reduce(
-    (count, workflow) => count + workflow.task_drafts.filter((task) => task.state === "waiting_for_permission").length,
-    0,
-  );
-  const readbackIssueCount = snapshot.runtime_session_attention.filter((item) =>
-    item.readback_boundary.status === "readback_unavailable" || item.readback_boundary.status === "readback_failed",
-  ).length;
   const productCommandReadModel = snapshot.real_execution_product_commands;
   const failureStopRetry = productCommandReadModel?.failure_stop_retry_summary ?? null;
   const failureStopRetryItems = failureStopRetry?.items ?? [];
   const automation = snapshot.project_workflow_automation ?? null;
   const automationUnits = automation?.latest_plan?.run_units ?? [];
   const runQueue = deriveRunQueueReadModel({ snapshot, workflowState, memoryCaptureStore, memoryCandidateStore });
+  const pageReadModel = deriveRunningWorkflowsPageReadModelFromParts({
+    workflows,
+    runtimeAttention: snapshot.runtime_session_attention,
+    runQueue,
+    productCommandReadModel,
+    automation,
+    memoryCaptureStore,
+    memoryCandidateStore,
+  });
   const operationControl = runQueue.operation_control_summary;
   const leadQueueItems = runQueue.run_queue_items.slice(0, 6);
   const leadConfirmations = runQueue.user_confirmation_queue.slice(0, 12);
   const leadFailures = runQueue.failure_control_summaries.slice(0, 6);
-  const memoryConfirmationCount = runQueue.user_confirmation_queue.filter((item) =>
-    item.kind === "memory_candidate_confirmation" ||
-    item.kind === "memory_formalization_confirmation" ||
-    item.kind === "capture_compensation_confirmation",
-  ).length;
-  const memoryCaptureCount = memoryCaptureStore?.events.length ?? 0;
-  const pendingMemoryCandidateCount = (memoryCandidateStore?.candidates ?? []).filter((candidate) =>
-    candidate.status === "candidate_draft" || candidate.status === "candidate_needs_review" ||
-    (candidate.status === "candidate_confirmed" && !candidate.adoption),
-  ).length;
 
   return (
     <section className="stage-pad running-workflows-view">
@@ -82,45 +75,45 @@ export function RunningWorkflowsView({
           <h1 className="pg-title">运行中工作流</h1>
         </div>
         <div className="pg-meta">
-          <div className="big">{runningWorkflows.length} 关注 · {waitingPermissionCount} 等权限</div>
+          <div className="big">{pageReadModel.workflow_focus_count} 关注 · {pageReadModel.waiting_permission_count} 等权限</div>
           <div>只显示运行、等待、复核、重试和读回异常摘要。</div>
         </div>
       </div>
 
       <div className="running-summary-grid">
-        <SummaryTile label="工作流" value={`${workflowState?.counts.workflows ?? 0}`} hint="事实层当前可见数量" />
-        <SummaryTile label="运行关注" value={`${runningWorkflows.length + runtimeAttention.length}`} hint="项目工作流和会话运行关注" />
-        <SummaryTile label="等权限" value={`${waitingPermissionCount}`} hint="需要用户处理时进入待办" />
-        <SummaryTile label="读回异常" value={`${readbackIssueCount}`} hint="未知 / 不可用不显示成 0 条结果" />
+        <SummaryTile label="工作流" value={`${pageReadModel.workflow_count}`} hint="事实层当前可见数量" />
+        <SummaryTile label="运行关注" value={`${pageReadModel.running_attention_count}`} hint="项目工作流和会话运行关注" />
+        <SummaryTile label="等权限" value={`${pageReadModel.waiting_permission_count}`} hint="需要用户处理时进入待办" />
+        <SummaryTile label="读回异常" value={`${pageReadModel.readback_issue_count}`} hint="未知 / 不可用不显示成 0 条结果" />
         <SummaryTile
           label="运行队列"
-          value={`${runQueue.run_queue_items.length}`}
-          hint={`${runQueue.waiting_user_count} 待确认 · ${runQueue.blocked_count} 阻断`}
+          value={`${pageReadModel.run_queue.item_count}`}
+          hint={`${pageReadModel.run_queue.waiting_user_count} 待确认 · ${pageReadModel.run_queue.blocked_count} 阻断`}
         />
         <SummaryTile
           label="失败控制"
-          value={`${runQueue.failure_control_summaries.length}`}
-          hint={`${runQueue.duplicate_blocked_count} 重复阻断 · ${runQueue.capture_compensation_count} 捕获补偿`}
+          value={`${pageReadModel.run_queue.failure_control_count}`}
+          hint={`${pageReadModel.run_queue.duplicate_blocked_count} 重复阻断 · ${pageReadModel.run_queue.capture_compensation_count} 捕获补偿`}
         />
         <SummaryTile
           label="操作控制"
-          value={`${operationControl.confirmation_required_count}`}
-          hint={`${operationControl.readback_issue_count} 读回异常 · ${operationControl.manual_review_count} 需人工`}
+          value={`${pageReadModel.operation_control.confirmation_required_count}`}
+          hint={`${pageReadModel.operation_control.readback_issue_count} 读回异常 · ${pageReadModel.operation_control.manual_review_count} 需人工`}
         />
         <SummaryTile
           label="记忆待处理"
-          value={`${memoryConfirmationCount}`}
-          hint={`${memoryCaptureCount} 捕获 · ${pendingMemoryCandidateCount} 候选/正式化`}
+          value={`${pageReadModel.memory_pending.confirmation_count}`}
+          hint={`${pageReadModel.memory_pending.capture_count} 捕获 · ${pageReadModel.memory_pending.pending_candidate_count} 候选/正式化`}
         />
         <SummaryTile
           label="统一执行"
-          value={`${productCommandReadModel?.command_count ?? 0}`}
-          hint={`${productCommandReadModel?.pending_decision_count ?? 0} 等确认 · ${failureStopRetry?.readback_issue_count ?? 0} 读回异常`}
+          value={`${pageReadModel.product_command.command_count}`}
+          hint={`${pageReadModel.product_command.pending_decision_count} 等确认 · ${pageReadModel.product_command.readback_issue_count} 读回异常`}
         />
         <SummaryTile
           label="自动编排"
-          value={`${automation?.run_unit_count ?? 0}`}
-          hint={`${automation?.waiting_user_count ?? 0} 等确认 · ${automation?.readback_unknown_count ?? 0} 读回未知`}
+          value={`${pageReadModel.automation.run_unit_count}`}
+          hint={`${pageReadModel.automation.waiting_user_count} 等确认 · ${pageReadModel.automation.readback_unknown_count} 读回未知`}
         />
       </div>
 
@@ -168,7 +161,7 @@ export function RunningWorkflowsView({
             <Badge tone={leadConfirmations.length ? "warning" : "neutral"}>{runQueue.user_confirmation_queue.length} 项</Badge>
           </div>
           <p className="muted small-note">
-            其中记忆事项 {memoryConfirmationCount} 项：候选确认、正式化或捕获补证都不会自动写正式记忆。
+            其中记忆事项 {pageReadModel.memory_pending.confirmation_count} 项：候选确认、正式化或捕获补证都不会自动写正式记忆。
           </p>
           <div className="running-workflow-list">
             {leadConfirmations.length ? (

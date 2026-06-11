@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Badge } from "../components/Badge";
 import { deriveMemoryManagementSummary, type FormalMemoryListItem, type MemoryCandidateListItem } from "../lib/memoryCenter";
+import { deriveMemoryCenterPageReadModelFromParts } from "../lib/pageSelectors";
 import type {
   FormalMemoryLifecycleInput,
   FormalMemoryLifecycleOperationKind,
@@ -108,6 +109,10 @@ export function MemoryCenterView({
   );
   const primaryFormalMemory = summary.formal_memories[0] ?? null;
   const primaryCandidate = summary.candidate_memories[0] ?? null;
+  const pageReadModel = useMemo(
+    () => deriveMemoryCenterPageReadModelFromParts({ summary, hasRealSnapshot }),
+    [summary, hasRealSnapshot],
+  );
 
   async function requestLifecycleAction(item: FormalMemoryListItem, operationKind: FormalMemoryLifecycleOperationKind) {
     if (!onRequestAction || !onPreviewFormalMemoryLifecycle) {
@@ -342,20 +347,20 @@ export function MemoryCenterView({
           <h1 className="pg-title">记忆</h1>
         </div>
         <div className="pg-meta">
-          <div className="big">{hasRealSnapshot ? "只读读模型" : "未读取真实索引"}</div>
-          <div>{summary.boundary}</div>
+          <div className="big">{pageReadModel.snapshot_status_label}</div>
+          <div>{pageReadModel.boundary}</div>
         </div>
       </div>
 
       <div className="stat-strip memory-center-stats">
-        <StatCell label="正式" value={`${summary.formal_summary.record_count}`} helper="正式记忆" />
-        <StatCell label="活跃" value={`${summary.formal_summary.active_count}`} helper="可评估入包" />
-        <StatCell label="候选" value={`${summary.candidate_summary.candidate_count}`} helper="候选记忆" />
-        <StatCell label="观察" value={`${summary.observation_summary.observation_count}`} helper="观察来源" />
-        <StatCell label="检查" value={`${summary.lint_summary.open_count}`} helper={`阻断 ${summary.lint_summary.blocking_count}`} warn={summary.lint_summary.blocking_count > 0} />
-        <StatCell label="维护" value={`${summary.maintenance_summary.blocking_count}`} helper={`复核 ${summary.maintenance_summary.needs_review_count} / 信息 ${summary.maintenance_summary.info_count}`} warn={summary.maintenance_summary.blocking_count > 0} />
-        <StatCell label="成熟模式" value={`${summary.mature_pattern_summary.mature_pattern_candidate_count}`} helper={`确认 ${summary.mature_pattern_summary.user_confirmation_required_count}`} warn={summary.mature_pattern_summary.user_confirmation_required_count > 0} />
-        <StatCell label="任务包" value={`${summary.task_package_summary.snapshot_count}`} helper="冻结快照" />
+        <StatCell label="正式" value={`${pageReadModel.formal_memory.record_count}`} helper="正式记忆" />
+        <StatCell label="活跃" value={`${pageReadModel.formal_memory.active_count}`} helper="可评估入包" />
+        <StatCell label="候选" value={`${pageReadModel.candidate_memory.candidate_count}`} helper="候选记忆" />
+        <StatCell label="观察" value={`${pageReadModel.observation.observation_count}`} helper="观察来源" />
+        <StatCell label="检查" value={`${pageReadModel.lint.open_count}`} helper={`阻断 ${pageReadModel.lint.blocking_count}`} warn={pageReadModel.lint.blocking_count > 0} />
+        <StatCell label="维护" value={`${pageReadModel.maintenance.blocking_count}`} helper={`复核 ${pageReadModel.maintenance.needs_review_count} / 信息 ${pageReadModel.maintenance.info_count}`} warn={pageReadModel.maintenance.blocking_count > 0} />
+        <StatCell label="成熟模式" value={`${pageReadModel.mature_pattern.candidate_count}`} helper={`确认 ${pageReadModel.mature_pattern.user_confirmation_required_count}`} warn={pageReadModel.mature_pattern.user_confirmation_required_count > 0} />
+        <StatCell label="任务包" value={`${pageReadModel.task_package.snapshot_count}`} helper="冻结快照" />
       </div>
 
       <div className="memory-center-grid">
@@ -365,16 +370,16 @@ export function MemoryCenterView({
               <p className="eyebrow">记忆工作台</p>
               <h3>捕获 / 候选 / 任务记忆包</h3>
             </div>
-            <Badge tone={summary.memory_workbench_summary.action_count ? "warning" : "candidate"}>
-              {summary.memory_workbench_summary.action_count} 待处理
+            <Badge tone={pageReadModel.memory_workbench.action_count ? "warning" : "candidate"}>
+              {pageReadModel.memory_workbench.action_count} 待处理
             </Badge>
           </div>
           <div className="memory-workbench-strip" aria-label="记忆工作台关键数字">
-            <MiniMetric label="捕获" value={`${summary.memory_workbench_summary.capture_count}`} />
-            <MiniMetric label="观察" value={`${summary.memory_workbench_summary.observation_count}`} />
-            <MiniMetric label="候选" value={`${summary.memory_workbench_summary.candidate_count}`} />
-            <MiniMetric label="待正式化" value={`${summary.memory_workbench_summary.confirmed_pending_formalization_count}`} />
-            <MiniMetric label="需补证" value={`${summary.memory_workbench_summary.capture_compensation_count}`} warn={summary.memory_workbench_summary.capture_compensation_count > 0} />
+            <MiniMetric label="捕获" value={`${pageReadModel.memory_workbench.capture_count}`} />
+            <MiniMetric label="观察" value={`${pageReadModel.memory_workbench.observation_count}`} />
+            <MiniMetric label="候选" value={`${pageReadModel.memory_workbench.candidate_count}`} />
+            <MiniMetric label="待正式化" value={`${pageReadModel.memory_workbench.confirmed_pending_formalization_count}`} />
+            <MiniMetric label="需补证" value={`${pageReadModel.memory_workbench.capture_compensation_count}`} warn={pageReadModel.memory_workbench.capture_compensation_count > 0} />
           </div>
           <div className="workflow-compact-list">
             <div className="workflow-compact-item memory-workbench-lede">
