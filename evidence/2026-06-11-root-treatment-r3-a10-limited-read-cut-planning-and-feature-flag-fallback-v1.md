@@ -122,4 +122,4 @@ Review fix notes:
 
 ## Next
 
-建议主管线先做只读复核。复核通过后可进入 R3-A11 production observation / export verification 规划，或另行决策是否需要 A10 Level B。不得直接进入 stop-write JSON。
+主管线已完成只读复核、fresh verify 和 implementation commit 记录。下一步可进入 R3-A11 production observation / export verification 任务包准备；如要执行 A10 Level B，必须另写 execution record。不得直接进入 stop-write JSON。

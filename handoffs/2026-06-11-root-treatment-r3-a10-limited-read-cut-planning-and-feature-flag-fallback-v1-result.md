@@ -40,4 +40,4 @@ R3-A10 Level A 已完成。Level B 未执行。
 
 ## Next
 
-建议主管线只读复核后再提交。后续可准备 R3-A11 observation / export verification，或单独决策 A10 Level B；不得跳过任务包直接 stop-write。
+主管线已完成只读复核、fresh verify 和 implementation commit 记录。后续可准备 R3-A11 observation / export verification，或单独决策 A10 Level B；不得跳过任务包直接 stop-write。

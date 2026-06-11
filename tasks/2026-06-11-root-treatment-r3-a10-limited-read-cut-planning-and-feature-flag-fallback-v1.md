@@ -10,7 +10,7 @@
 - handoff：`handoffs/2026-06-11-root-treatment-r3-a10-limited-read-cut-planning-and-feature-flag-fallback-v1-result.md`
 - planning baseline commit：`9196b04ad861b01e56132fba9b2f5fc170661ccc`
 - task package freeze commit：`b8ecc19885f6fd2cef79c907db95fab4a76053d5`
-- implementation commit：待主管线提交后由 checkpoint 记录。
+- implementation commit：`b18424c38bf0f36f8c9b8ee783a0010598ca9683`
 
 ## 0. 全局主管理解
 
