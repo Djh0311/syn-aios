@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：执行中。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 Planning baseline commit：`8552993912465d9f06ff9fd659b2c64ba95aca06`
 
-Implementation commit：待回填。
+Implementation commit：`067098a33ee993b526b2f23558e4454f7eaa22a4`
 
-Review result：待复核；复核线程继续复用 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`。
+Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填。
+Checkpoint commit：`9dd9d2b318744f90305e51f5d6ab7663ada78374`
 
 本文是 Root Treatment / Stage R 的 R4-A45 任务包；R4-A45 继续对应官方计划 R4-6：离线交互测试按域拆分。R4-A45 只接受为 workflow action 相关纯 fixture builder 从 `offlineTaskFieldTestUtils.ts` 抽离到独立 helper；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B、真实 Codex 执行或 backlog 功能解冻。
 
