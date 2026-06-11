@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R4-A1 任务包，用于在 R3-A13 Level A transaction acceptance / cutover gap matrix 完成后，启动 R4 read model / frontend slimming。R4-A1 只做页面数据需求盘点、按页读模型合同和最小后端/前端类型边界准备；不改视觉风格、不实际重做布局、不实现 MCP 看图工具、不切 SQLite production DB、不解冻 backlog 功能。
+状态：已完成。本文是 Root Treatment / Stage R 的 R4-A1 任务包，用于在 R3-A13 Level A transaction acceptance / cutover gap matrix 完成后，启动 R4 read model / frontend slimming。R4-A1 只做页面数据需求盘点、按页读模型合同和最小后端/前端类型边界准备；不改视觉风格、不实际重做布局、不实现 MCP 看图工具、不切 SQLite production DB、不解冻 backlog 功能。
 
 规划基线 commit：`6786faf`
 
@@ -161,7 +161,7 @@ R4-A1 禁止声明：
 
 ## 8. 形状预算
 
-- 是否允许新增 Rust 文件：默认否；优先在既有 snapshot 派生区域加最小 helper。
+- 是否允许新增 Rust 文件：已新增小模块 `src-tauri/src/page_read_model.rs`，用于满足 shape gate 不增长巨型文件的治理要求。
 - `lib.rs` 新增行数目标：`<= 120`。
 - `types.rs` 新增行数目标：`<= 120`。
 - `types.ts` 新增行数目标：`<= 120`。
@@ -169,9 +169,35 @@ R4-A1 禁止声明：
 - 是否允许新增 Tauri command：否。
 - 是否允许新增 sidecar JSON 种类：否。
 - 本任务规划基线 commit：`6786faf`
-- 本任务完成 commit：待 implementation commit 后回填。
+- 本任务 implementation commit：`93bc0f2ec5eb2f6e18297e43b5731afa4344876e`
+- 本任务 checkpoint commit：待入口同步提交后回填。
 
-## 9. 交接要求
+执行说明：
+
+- 实现时新增 `src-tauri/src/page_read_model.rs`、`src/lib/pageReadModel.ts`、`tests/fixtures/pageReadModelFixture.ts` 和 `tests/r4-page-read-model-settings.test.tsx`。
+- 该调整偏离“默认不新增 Rust 文件”的初始偏好，但原因是 `workbench-shape-gate` 禁止 `types.rs` / `types.ts` / `offline-permission-dialog.test.tsx` 继续增长；新增小模块比继续喂大文件更符合 Root Treatment 治理目标。
+- R4-A1 仍未新增 Tauri command、未新增 sidecar JSON、未切页面真实数据来源。
+
+## 9. 完成结果
+
+完成项：
+
+- 后端新增 `page_read_model` 小模块，输出 `WorkbenchPageReadModelInventory` / `PageReadModelContract`。
+- `WorkbenchSnapshot.page_read_model_inventory` 输出 9 个页面合同：Home、Projects、Agents、Running Workflows、Memory、Knowledge、Settings、Skill、Harness。
+- 前端新增 `pageReadModel.ts` 类型模块；`SettingsView` 开发者区只读展示页面读模型合同摘要。
+- 离线测试 runner 支持多个测试入口，并新增 R4-A1 设置页合同展示小测试。
+- shape gate 保持 ratchet 文件不增长：`types.rs`、`types.ts`、`offline-permission-dialog.test.tsx` 均回到水位线。
+
+未完成项：
+
+- 未新增按页 Tauri command。
+- 未把任何页面迁移到按页查询。
+- 未拆 `ProjectsView.tsx` / `AgentView.tsx`。
+- 未改 UI 视觉风格 / 布局。
+- 未做真实 Tauri / 截图验收。
+- 未执行 R3 Level B。
+
+## 10. 交接要求
 
 完成后必须写：
 

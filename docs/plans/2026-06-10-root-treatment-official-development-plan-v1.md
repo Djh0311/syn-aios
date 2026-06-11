@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R3-P0 SQLite schema / importer / rollback contract freeze、R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures、R3-A2 temp DB apply importer / schema hardening / transaction failure injection / DB -> JSON export dry-run、R3-A3 fixture-only dual-write transaction rehearsal、R3-A4 fixture-only read-cut DB / JSON fallback / rollback recovery dry-run rehearsal、R3-A5 fixture-only observation / export / rollback verification rehearsal、R3-A6 production cutover / rollback operator contract freeze、R3-A7 production preflight scanner / report、R3-A8 copied snapshot temp DB apply / export / rollback boundary、R3-A9 production DB initializer + apply with backup manifest / no read-cut Level A、R3-A10 limited read-cut planning / feature flag fallback Level A、R3-A11 production observation / export verification Level A、R3-A12 stop-write JSON decision / rollback drill Level A，以及 R3-A13 transaction acceptance / cutover gap matrix Level A 均已完成。R3-A13 接受为 fixture / temp SQLite transaction acceptance 和 cutover gap matrix Level A 完成；implementation commit 为 `d96ed042341fa816e62b149f0ea451516f0e5ad2`。Level B 未执行，真实 workbench state root 未读取，真实 workbench-owned production DB 未创建，不切 app startup / Tauri command / UI / 产品全局读写路径，不停写 JSON / sidecar，不接受为 R3 全量完成、production apply、production read-cut、production observation、JSON / sidecar stop-write、rollback production workflow 或多 agent 并行真实执行解锁。当前下一步是进入 R4 read model / frontend slimming，或另行决策是否先执行 R3 Level B；如要执行任何 Level B，必须另写 execution record、allowed roots、rollback strategy 和 fresh verify。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
+状态：正式开发计划已创建，用户已要求按全计划开发推进；R4-A1 Page Read Model Inventory And Query Contract 已完成，implementation commit 为 `93bc0f2ec5eb2f6e18297e43b5731afa4344876e`。R4-A1 接受为页面数据需求矩阵、`WorkbenchSnapshot.page_read_model_inventory` 合同输出、前后端类型边界和设置页开发者区只读展示完成；不接受为 R4 完成、按页 Tauri command 完成、页面数据来源迁移完成、`WorkbenchSnapshot` 废弃、UI 重做、真实 Tauri / 截图验收完成、R3 Level B 或多 agent 并行真实执行解锁。R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R3-P0 SQLite schema / importer / rollback contract freeze、R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures、R3-A2 temp DB apply importer / schema hardening / transaction failure injection / DB -> JSON export dry-run、R3-A3 fixture-only dual-write transaction rehearsal、R3-A4 fixture-only read-cut DB / JSON fallback / rollback recovery dry-run rehearsal、R3-A5 fixture-only observation / export / rollback verification rehearsal、R3-A6 production cutover / rollback operator contract freeze、R3-A7 production preflight scanner / report、R3-A8 copied snapshot temp DB apply / export / rollback boundary、R3-A9 production DB initializer + apply with backup manifest / no read-cut Level A、R3-A10 limited read-cut planning / feature flag fallback Level A、R3-A11 production observation / export verification Level A、R3-A12 stop-write JSON decision / rollback drill Level A，以及 R3-A13 transaction acceptance / cutover gap matrix Level A 均已完成。R3 Level B 未执行，真实 workbench state root 未读取，真实 workbench-owned production DB 未创建，不切 app startup / Tauri command / UI / 产品全局读写路径，不停写 JSON / sidecar。当前下一步是 R4-A2：后端按页查询 skeleton / selector contract，或先做 Projects / Agents 首批页面 selector 分域；如要执行任何 R3 Level B，必须另写 execution record、allowed roots、rollback strategy 和 fresh verify。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
 
 本文不是任务包，不授权真实 `codex exec` / `codex exec resume`，不授权读写 `/Users/yoyi/.codex`，不授权 Stage L 的 K3-B1 retry / K3-B2，不授权 planned adapters 真实接入，不授权 backlog 解冻后功能开工。
 
@@ -470,7 +470,7 @@ R4 只拆读模型和前端结构，不改布局风格。
 
 | 步骤 | 做什么 | 产物 | 验收 |
 | --- | --- | --- | --- |
-| R4-0 | 页面数据需求盘点 | 页面读模型矩阵 | 项目 / 智能体 / 运行中 / 记忆 / 知识库 / 设置字段边界清楚 |
+| R4-0 / R4-A1 | 页面数据需求盘点 | 页面读模型矩阵 + `WorkbenchSnapshot.page_read_model_inventory` 合同 skeleton | 已完成；9 个页面合同已冻结，设置页开发者区只读展示 |
 | R4-1 | 后端按页查询 | Tauri commands / read models | 不再依赖一个巨型 WorkbenchSnapshot 覆盖全部页面 |
 | R4-2 | TS 类型分域 | frontend type modules | `types.ts` 行数下降 |
 | R4-3 | ProjectsView 拆分 | project page components | 行数下降，页面行为不变 |
@@ -717,7 +717,7 @@ R0 可接受不跑全量 cargo，但必须说明原因；R1 改 Rust 存储逻�
 
 当前按用户要求继续 Root Treatment / Stage R，下一步：
 
-1. 准备 R4 read model / frontend slimming 任务包，或另行决策是否先执行 R3 Level B。
+1. 准备 R4-A2：后端按页查询 skeleton / selector contract，或先做 Projects / Agents 首批页面 selector 分域。
 2. R4 必须按页查询和前端结构瘦身，不改视觉风格、不实际重做布局、不实现 MCP 看图工具。
 3. 如要执行 R3 Level B，必须先写单独 execution record，明确 allowed source root、production DB path、backup / report / rollback manifest、before / after source hashes、rollback / recovery，不得跳过 fresh verify。
 
