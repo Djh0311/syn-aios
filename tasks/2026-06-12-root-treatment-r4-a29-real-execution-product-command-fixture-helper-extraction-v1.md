@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：复核通过，待 implementation / checkpoint hash 回填。本文是 Root Treatment / Stage R 的 R4-A29 任务包；R4-A29 继续对应官方计划 R4-6：离线测试拆分。R4-A29 只接受为 Real Execution Product Command / Project Workflow Automation 相关离线 read model fixture helper 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B、真实 Codex 执行或 backlog 功能解冻。
+状态：已完成，implementation / checkpoint hash 已回填。本文是 Root Treatment / Stage R 的 R4-A29 任务包；R4-A29 继续对应官方计划 R4-6：离线测试拆分。R4-A29 只接受为 Real Execution Product Command / Project Workflow Automation 相关离线 read model fixture helper 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B、真实 Codex 执行或 backlog 功能解冻。
 
 Planning baseline commit：`e050e89`
 
-Implementation commit：待回填
+Implementation commit：`c2e116768b02a622c98cce4bd56b057f0be1555f`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：待回填
+Checkpoint commit：`2075b5da871261429185c0e3cbdfb8c58100a8b2`
 
 ## 0. 全局主管理解
 
