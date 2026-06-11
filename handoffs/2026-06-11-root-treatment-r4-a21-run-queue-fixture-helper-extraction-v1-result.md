@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-11-root-treatment-r4-a21-run-queue-fixture-helper-e
 
 Planning baseline commit：`83fec43e24b054c1745e7d1d435811403d631f4b`
 
-Implementation commit：`TBD`
+Implementation commit：`d2dc118783fce41162dc3eb5860d021c7b787e9c`
 
-Review result：`STATUS: CLEAR_WITH_P2`；P0 / P1 无，P2 为 commit hash 元数据待回填，按 checkpoint hash backfill 流程关闭。
+Review result：`STATUS: CLEAR_WITH_P2`；P0 / P1 无，P2 为 commit hash 元数据回填项，已按 checkpoint hash backfill 流程关闭。
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`172861d5b3341677c07fb481ec8dd31d4502e9b1`
 
 ## 1. 交接结论
 
@@ -56,7 +56,7 @@ shape gate 只有既有 warning：
 STATUS: CLEAR_WITH_P2
 P0: 无
 P1: 无
-P2: commit hash 元数据待回填
+P2: commit hash 元数据回填项，已关闭
 ```
 
 复核确认 diff 只限任务包、测试 helper、主测试 fixture 初始化，以及 evidence / handoff；helper 是纯对象构造；主测试未改 run queue/read model/UI/secretary/right rail 断言语义；`backlog.md` 未被纳入本轮改动。
