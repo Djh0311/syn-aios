@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：实现完成，复核线 `STATUS: CLEAR`，等待 implementation commit。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-11-root-treatment-r4-a23-memory-center-core-store-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-11-root-treatment-r4-a23-memory-center-core-store-f
 
 Planning baseline commit：`a06751ca23bea40fa22dfd2a792fa1992164afaa`
 
-Implementation commit：`TBD`
+Implementation commit：`214343e6e02e1eebe63f7b335d92d2f7e599dfd3`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`fd3bf420be0797d850fe39929384b17ecacdb847`
 
 ## 1. 交接结论
 

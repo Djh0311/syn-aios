@@ -2,15 +2,15 @@
 
 日期：2026-06-11
 
-状态：实现完成，复核线 `STATUS: CLEAR`，等待 implementation commit。本文是 Root Treatment / Stage R 的 R4-A23 任务包；R4-A23 继续对应官方计划 R4-6：离线测试拆分。R4-A23 只接受为 memory center core store 相关离线 fixture helper 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B 或 backlog 功能解冻。
+状态：已完成，implementation / checkpoint hash 已回填。本文是 Root Treatment / Stage R 的 R4-A23 任务包；R4-A23 继续对应官方计划 R4-6：离线测试拆分。R4-A23 只接受为 memory center core store 相关离线 fixture helper 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B 或 backlog 功能解冻。
 
 Planning baseline commit：`a06751ca23bea40fa22dfd2a792fa1992164afaa`
 
-Implementation commit：`TBD`
+Implementation commit：`214343e6e02e1eebe63f7b335d92d2f7e599dfd3`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`fd3bf420be0797d850fe39929384b17ecacdb847`
 
 ## 0. 全局主管理解
 
