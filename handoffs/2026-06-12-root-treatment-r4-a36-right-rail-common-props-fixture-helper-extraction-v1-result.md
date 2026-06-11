@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a36-right-rail-common-props-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a36-right-rail-common-props-fi
 
 Planning baseline commit：`62f9b0e888e06d55e37610be46d68ecdd6e51d1a`
 
-Implementation commit：待回填
+Implementation commit：`49543338fdb071242e75f0932d8f208bf361a43f`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`c72fedd83e73e996d21e781521603afbf6b3b7ef`
 
 ## 1. 完成内容
 
@@ -77,11 +77,8 @@ P2: None
 
 ## 5. 下一步
 
-1. 提交 implementation commit。
-2. 同步 checkpoint 入口文档到 R4-A36 完成、下一步 R4-A37。
-3. 提交 checkpoint commit。
-4. 回填 implementation / checkpoint hash。
-5. 准备 R4-A37，继续中等粒度 fixture cluster 拆分。
+1. A36 implementation commit、checkpoint commit 和 hash backfill 已完成。
+2. 准备 R4-A37，继续中等粒度 fixture cluster 拆分。
 
 ## 6. 不能声明
 

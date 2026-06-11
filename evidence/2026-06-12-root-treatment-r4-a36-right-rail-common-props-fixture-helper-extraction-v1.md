@@ -2,17 +2,17 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a36-right-rail-common-props-fixture-helper-extraction-v1.md`
 
 Planning baseline commit：`62f9b0e888e06d55e37610be46d68ecdd6e51d1a`
 
-Implementation commit：待回填
+Implementation commit：`49543338fdb071242e75f0932d8f208bf361a43f`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`c72fedd83e73e996d21e781521603afbf6b3b7ef`
 
 ## 1. 本轮目标
 
