@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R3-A6 任务包，用于在 R3-A1 到 R3-A5 fixture-only SQLite rehearsal 之后，冻结生产路径前置门槛、cutover contract、rollback operator contract、allowed roots / denied paths、backup / recovery 和 dry-run / apply 分界。R3-A6 默认不实现生产 DB、不迁移真实 JSON / sidecar、不切真实产品读写路径、不停写 JSON / sidecar。
+状态：已完成，待主管 checkpoint 同步。本文是 Root Treatment / Stage R 的 R3-A6 任务包，用于在 R3-A1 到 R3-A5 fixture-only SQLite rehearsal 之后，冻结生产路径前置门槛、cutover contract、rollback operator contract、allowed roots / denied paths、backup / recovery 和 dry-run / apply 分界。R3-A6 默认不实现生产 DB、不迁移真实 JSON / sidecar、不切真实产品读写路径、不停写 JSON / sidecar。合同见 `docs/plans/2026-06-11-root-treatment-r3-production-cutover-and-rollback-operator-contract-v1.md`；记录见 `evidence/2026-06-11-root-treatment-r3-a6-production-cutover-contract-and-rollback-operator-freeze-v1.md` 与 `handoffs/2026-06-11-root-treatment-r3-a6-production-cutover-contract-and-rollback-operator-freeze-v1-result.md`。
 
 ## 0. 全局主管理解
 
