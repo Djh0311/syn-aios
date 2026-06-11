@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { PageReadModelQueryInput, PageReadModelQueryResult } from "./pageReadModel";
 import type {
   AdoptMemoryCandidateInput,
   AdoptMemoryCandidateOutput,
@@ -135,6 +136,13 @@ import type {
 export function loadWorkbenchSnapshot(): Promise<WorkbenchSnapshot> {
   ensureTauriRuntime();
   return invoke<WorkbenchSnapshot>("load_workbench_snapshot");
+}
+
+export function queryWorkbenchPageReadModel(
+  request: PageReadModelQueryInput,
+): Promise<PageReadModelQueryResult> {
+  ensureTauriRuntime();
+  return invoke<PageReadModelQueryResult>("query_workbench_page_read_model", { request });
 }
 
 export function loadSessionContinuationStore(): Promise<SessionContinuationStoreV1> {

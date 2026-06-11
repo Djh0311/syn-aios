@@ -9,6 +9,16 @@ fn load_workbench_snapshot(state: tauri::State<'_, AppState>) -> Result<Workbenc
 }
 
 #[tauri::command]
+fn query_workbench_page_read_model(
+    request: page_read_model::PageReadModelQueryInput,
+    state: tauri::State<'_, AppState>,
+) -> Result<page_read_model::PageReadModelQueryResult, String> {
+    let index = read_index(&state)?;
+    let generated_at = optional_string(&index, "generated_at").unwrap_or_else(unix_timestamp_string);
+    page_read_model::query_page_read_model(&request, &generated_at)
+}
+
+#[tauri::command]
 fn load_codex_session_transcript(
     thread_id: String,
     state: tauri::State<'_, AppState>,

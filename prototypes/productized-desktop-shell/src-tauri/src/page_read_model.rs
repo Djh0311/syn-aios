@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PageReadModelContract {
@@ -20,6 +20,44 @@ pub(crate) struct WorkbenchPageReadModelInventory {
     pub(crate) status: String,
     pub(crate) source_policy: String,
     pub(crate) contracts: Vec<PageReadModelContract>,
+    pub(crate) warnings: Vec<String>,
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PageReadModelQueryInput {
+    pub(crate) page_id: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PageReadModelSelectorPlan {
+    pub(crate) selector_id: String,
+    pub(crate) selector_kind: String,
+    pub(crate) planned_read_model: String,
+    pub(crate) data_migration_status: String,
+    pub(crate) ui_consumption_status: String,
+    pub(crate) next_step: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PageReadModelSourceBoundary {
+    pub(crate) current_source: String,
+    pub(crate) workbench_snapshot_active: bool,
+    pub(crate) returns_business_data: bool,
+    pub(crate) writes_stores: bool,
+    pub(crate) tauri_command_migrates_page: bool,
+    pub(crate) warnings: Vec<String>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PageReadModelQueryResult {
+    pub(crate) schema_version: String,
+    pub(crate) generated_at: String,
+    pub(crate) status: String,
+    pub(crate) requested_page_id: String,
+    pub(crate) page_label: String,
+    pub(crate) contract: PageReadModelContract,
+    pub(crate) selector_plan: PageReadModelSelectorPlan,
+    pub(crate) source_boundary: PageReadModelSourceBoundary,
     pub(crate) warnings: Vec<String>,
 }
 
@@ -50,6 +88,57 @@ pub(crate) fn derive_page_read_model_inventory(
             "no_visual_redesign_no_layout_change".to_string(),
         ],
     }
+}
+
+pub(crate) fn query_page_read_model(
+    input: &PageReadModelQueryInput,
+    generated_at: &str,
+) -> Result<PageReadModelQueryResult, String> {
+    let page_id = input.page_id.trim();
+    if page_id.is_empty() {
+        return Err("page_id_required".to_string());
+    }
+
+    let inventory = derive_page_read_model_inventory(generated_at);
+    let contract = inventory
+        .contracts
+        .into_iter()
+        .find(|contract| contract.page_id == page_id)
+        .ok_or_else(|| format!("unknown_page_id:{page_id}"))?;
+
+    Ok(PageReadModelQueryResult {
+        schema_version: "workbench_page_read_model_query.v1".to_string(),
+        generated_at: generated_at.to_string(),
+        status: "selector_contract_only".to_string(),
+        requested_page_id: page_id.to_string(),
+        page_label: contract.page_label.clone(),
+        selector_plan: PageReadModelSelectorPlan {
+            selector_id: format!("{}_selector_contract", contract.page_id),
+            selector_kind: "page_read_model_selector_contract".to_string(),
+            planned_read_model: contract.planned_read_model.clone(),
+            data_migration_status: "not_migrated".to_string(),
+            ui_consumption_status: "not_connected_to_pages".to_string(),
+            next_step: contract.next_step.clone(),
+        },
+        source_boundary: PageReadModelSourceBoundary {
+            current_source: contract.current_source.clone(),
+            workbench_snapshot_active: true,
+            returns_business_data: false,
+            writes_stores: false,
+            tauri_command_migrates_page: false,
+            warnings: vec![
+                "r4_a2_selector_contract_only_no_business_data".to_string(),
+                "workbench_snapshot_still_active".to_string(),
+                "page_ui_not_migrated".to_string(),
+            ],
+        },
+        contract,
+        warnings: vec![
+            "r4_a2_skeleton_no_page_data_query".to_string(),
+            "workbench_snapshot_still_active".to_string(),
+            "do_not_claim_workbench_snapshot_deprecated".to_string(),
+        ],
+    })
 }
 
 fn contract(
@@ -120,5 +209,54 @@ mod tests {
             .expect("agents contract exists")
             .must_not_show_as_primary
             .contains(&"控制中心式全量边界面板".to_string()));
+    }
+
+    #[test]
+    fn page_read_model_query_returns_selector_contract_for_known_page() {
+        let output = query_page_read_model(
+            &PageReadModelQueryInput {
+                page_id: "agents".to_string(),
+            },
+            "2026-06-11T00:00:00Z",
+        )
+        .expect("known page should resolve");
+
+        assert_eq!(output.schema_version, "workbench_page_read_model_query.v1");
+        assert_eq!(output.status, "selector_contract_only");
+        assert_eq!(output.requested_page_id, "agents");
+        assert_eq!(output.page_label, "智能体");
+        assert_eq!(output.contract.current_source, "workbench_snapshot");
+        assert_eq!(
+            output.selector_plan.ui_consumption_status,
+            "not_connected_to_pages"
+        );
+        assert!(output.source_boundary.workbench_snapshot_active);
+        assert!(!output.source_boundary.returns_business_data);
+        assert!(!output.source_boundary.writes_stores);
+        assert!(!output.source_boundary.tauri_command_migrates_page);
+        assert!(output
+            .warnings
+            .contains(&"do_not_claim_workbench_snapshot_deprecated".to_string()));
+    }
+
+    #[test]
+    fn page_read_model_query_rejects_unknown_or_empty_page() {
+        let unknown = query_page_read_model(
+            &PageReadModelQueryInput {
+                page_id: "missing".to_string(),
+            },
+            "2026-06-11T00:00:00Z",
+        )
+        .expect_err("unknown page should be rejected");
+        assert_eq!(unknown, "unknown_page_id:missing");
+
+        let empty = query_page_read_model(
+            &PageReadModelQueryInput {
+                page_id: "  ".to_string(),
+            },
+            "2026-06-11T00:00:00Z",
+        )
+        .expect_err("empty page should be rejected");
+        assert_eq!(empty, "page_id_required");
     }
 }

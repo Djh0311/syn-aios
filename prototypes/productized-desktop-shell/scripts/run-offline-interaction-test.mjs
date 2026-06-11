@@ -8,6 +8,7 @@ const tempDir = await mkdtemp(join(tmpdir(), "codex-workbench-offline-test-"));
 const testEntries = [
   "tests/offline-permission-dialog.test.tsx",
   "tests/r4-page-read-model-settings.test.tsx",
+  "tests/r4-page-read-model-query-contract.test.ts",
 ];
 
 try {
