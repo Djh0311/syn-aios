@@ -14,9 +14,15 @@ import { runPermissionScenario } from "./helpers/offlinePermissionScenarioUtils"
 import type { CapturedActionState, OfflinePermissionScenario } from "./helpers/offlinePermissionScenarioUtils";
 import { authorizationWorkflowFixtures } from "./helpers/offlineAuthorizationWorkflowFixtures";
 import {
+  buildBootstrapProjectWorkflowAction,
+  buildCopyTaskPreviewAction,
+  buildCreateTaskDraftAction,
   buildCorrectDispatchFieldsAction,
+  buildGenerateTaskFileAction,
   buildNotReadyDispatchReadiness,
   buildUpdateTaskFieldsAction,
+  taskDraftFormValues,
+  taskFieldCorrectionFixtures,
 } from "./helpers/offlineTaskFieldTestUtils";
 import {
   runtimeAttentionFixture,
@@ -129,7 +135,6 @@ import type {
   ProjectConsultationProposalStoreV1,
   RuntimeSessionAttention,
   SessionRunStatusSummary,
-  TaskPackageFields,
   WorkbenchSnapshot,
   WorkflowStateSnapshot,
 } from "../src/lib/types";
@@ -3246,14 +3251,7 @@ function runShellScenario() {
   bootstrap({ preventDefault() {}, stopPropagation() {} });
   assertDeepEqual(
     capturedAction,
-    {
-      kind: "bootstrap-project-workflow",
-      label: "创建项目默认工作流草稿",
-      path: project.project_root,
-      source: "索引内项目路径",
-      boundary:
-        "给工作台自己的 workflow-state.v0.json 写入项目、workflow、默认节点、默认边和 audit；不写 .codex、不写 Codex 状态库、不写项目业务目录。",
-    },
+    buildBootstrapProjectWorkflowAction(project.project_root),
     "创建默认工作流待确认动作不匹配",
   );
   const bootstrapDialog = (
@@ -4242,10 +4240,7 @@ function runShellScenario() {
   assert(taskDraftForm, "任务草稿区缺少创建表单");
   const createTask = taskDraftForm.props?.onSubmit;
   assert(typeof createTask === "function", "创建任务包草稿表单没有 onSubmit");
-  const formValues = new Map<string, string>([
-    ["task-title", "登记任务包草稿"],
-    ["task-objective", "写入 work_items 和 artifacts"],
-  ]);
+  const formValues = taskDraftFormValues();
   const originalFormData = globalThis.FormData;
   globalThis.FormData = class {
     get(name: string) {
@@ -4262,19 +4257,7 @@ function runShellScenario() {
   }
   assertDeepEqual(
     capturedAction,
-    {
-      kind: "create-task-draft",
-      label: "创建任务包草稿",
-      path: project.project_root,
-      source: "索引内项目路径",
-      boundary: "只登记到工作台自己的 workflow-state.v0.json；不生成真实任务包文件、不派发真实 Codex 会话、不启动 Codex 命令行。",
-      taskDraft: {
-        projectRoot: project.project_root,
-        title: "登记任务包草稿",
-        objective: "写入 work_items 和 artifacts",
-        assignedRole: "codex-dev",
-      },
-    },
+    buildCreateTaskDraftAction(project.project_root),
     "创建任务包草稿待确认动作不匹配",
   );
   let taskCreateConfirmed = false;
@@ -4310,17 +4293,7 @@ function runShellScenario() {
   assert(capturedAction === null, "取消创建任务包草稿不应保留待确认动作");
   assert(!taskCreateConfirmed, "取消确认不应调用创建动作");
 
-  capturedAction = {
-    kind: "copy-task-preview",
-    label: "复制任务包 Markdown 预览",
-    path: project.project_root,
-    source: "索引内项目路径",
-    boundary: "只复制预览文本到剪贴板；不写真实任务文件、不派发真实 Codex 会话。",
-    taskPreview: {
-      projectRoot: project.project_root,
-      workItemId: selectedSecondDraft.work_item_id,
-    },
-  };
+  capturedAction = buildCopyTaskPreviewAction(project.project_root, selectedSecondDraft.work_item_id);
   let copyPreviewConfirmed = false;
   const copyPreviewDialog = (
     <PermissionDialog
@@ -4371,18 +4344,7 @@ function runShellScenario() {
   generateTaskFile({ preventDefault() {}, stopPropagation() {} });
   assertDeepEqual(
     capturedAction,
-    {
-      kind: "generate-task-file",
-      label: "生成任务包文件",
-      path: project.project_root,
-      source: "索引内项目路径",
-      boundary:
-        "写入 /Users/yoyi/workspace/product-line/tasks/ 下的新 Markdown 文件，并更新工作台自己的 workflow-state.v0.json；不覆盖已有任务包、不派发真实 Codex 会话、不启动 Codex 命令行、不运行运行器、不写 .codex 或 Codex 状态库。",
-      taskFileGeneration: {
-        project_root: project.project_root,
-        work_item_id: "work-item:offline:001",
-      },
-    },
+    buildGenerateTaskFileAction(project.project_root, "work-item:offline:001"),
     "生成任务包文件待确认动作不匹配",
   );
   let generateConfirmed = false;
@@ -4477,24 +4439,12 @@ function runShellScenario() {
     assert(renderedNotReady.includes(expectedText), `not_ready 原因展示缺少 ${expectedText}`);
   }
 
-  const correctionFields: TaskPackageFields = {
-    task_name: "派发准备字段修正",
-    assigned_line: "桌面应用线",
-    background: ["用户提供真实背景。"],
-    goals: ["用户提供真实目标。"],
-    allowed_read: [project.project_root],
-    allowed_write: ["product-line/prototypes/productized-desktop-shell/src/"],
-    forbidden_actions: ["不派发真实 Codex 会话。", "不运行运行器。"],
-    acceptance_criteria: ["字段保存后可复检 readiness。"],
-    required_return: ["做了什么", "改了哪些文件", "验证命令和结果", "风险和下一步建议"],
-    review_focus: ["确认没有编造业务目标。"],
-  };
+  const { correctionFields, missingPreviewFields, fieldValues } = taskFieldCorrectionFixtures(project.project_root);
   const correctionPreviewText = visibleText(<TaskFieldCorrectionPreview fields={correctionFields} />);
   for (const expectedText of ["字段级预览", "字段已填写，可复检 readiness", "派发准备字段修正", "用户提供真实目标。"]) {
     assert(correctionPreviewText.includes(expectedText), `字段修正预览缺少 ${expectedText}`);
   }
   assertDeepEqual(missingCorrectionFields(correctionFields), [], "完整字段不应有缺失提示");
-  const missingPreviewFields = { ...correctionFields, goals: [], allowed_write: [] };
   const missingPreviewText = visibleText(<TaskFieldCorrectionPreview fields={missingPreviewFields} />);
   for (const expectedText of ["仍有字段缺失", "目标缺失", "允许写入缺失"]) {
     assert(missingPreviewText.includes(expectedText), `缺字段预览缺少 ${expectedText}`);
@@ -4569,18 +4519,6 @@ function runShellScenario() {
   assert(!correctionConfirmed, "取消派发字段修正不应执行保存");
 
   capturedAction = null;
-  const fieldValues = new Map<string, string>([
-    ["task_name", "字段编辑任务"],
-    ["assigned_line", "桌面应用线"],
-    ["background", "来自结构化字段。"],
-    ["goals", "完成字段编辑。"],
-    ["allowed_read", "/tmp/indexed-project"],
-    ["allowed_write", "工作台状态文件"],
-    ["forbidden_actions", "不生成真实任务文件。"],
-    ["acceptance_criteria", "预览使用新字段。"],
-    ["required_return", "做了什么"],
-    ["review_focus", "确认结构化字段。"],
-  ]);
   capturedAction = buildUpdateTaskFieldsAction(project.project_root, selectedSecondDraft.work_item_id, fieldValues);
   assertDeepEqual(
     capturedAction,

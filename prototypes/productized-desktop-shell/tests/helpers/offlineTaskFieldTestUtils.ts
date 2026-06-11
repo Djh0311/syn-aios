@@ -1,5 +1,16 @@
 import type { PendingAction, TaskPackageDispatchReadiness, TaskPackageFields } from "../../src/lib/types";
 
+export function buildBootstrapProjectWorkflowAction(projectRoot: string): PendingAction {
+  return {
+    kind: "bootstrap-project-workflow",
+    label: "创建项目默认工作流草稿",
+    path: projectRoot,
+    source: "索引内项目路径",
+    boundary:
+      "给工作台自己的 workflow-state.v0.json 写入项目、workflow、默认节点、默认边和 audit；不写 .codex、不写 Codex 状态库、不写项目业务目录。",
+  };
+}
+
 export function buildNotReadyDispatchReadiness(projectRoot: string): TaskPackageDispatchReadiness {
   return {
     project_root: projectRoot,
@@ -24,6 +35,58 @@ export function buildNotReadyDispatchReadiness(projectRoot: string): TaskPackage
       display_text:
         "任务包记忆注入摘要：尚未生成任务包记忆快照。仅活跃正式记忆可进入任务包；候选 / 观察仅作为待审查材料；任务包内容不会回灌成正式记忆。",
       warnings: ["task_memory_packet_snapshot_missing"],
+    },
+  };
+}
+
+export function taskDraftFormValues(): Map<string, string> {
+  return new Map<string, string>([
+    ["task-title", "登记任务包草稿"],
+    ["task-objective", "写入 work_items 和 artifacts"],
+  ]);
+}
+
+export function buildCreateTaskDraftAction(projectRoot: string): PendingAction {
+  return {
+    kind: "create-task-draft",
+    label: "创建任务包草稿",
+    path: projectRoot,
+    source: "索引内项目路径",
+    boundary: "只登记到工作台自己的 workflow-state.v0.json；不生成真实任务包文件、不派发真实 Codex 会话、不启动 Codex 命令行。",
+    taskDraft: {
+      projectRoot,
+      title: "登记任务包草稿",
+      objective: "写入 work_items 和 artifacts",
+      assignedRole: "codex-dev",
+    },
+  };
+}
+
+export function buildCopyTaskPreviewAction(projectRoot: string, workItemId: string): PendingAction {
+  return {
+    kind: "copy-task-preview",
+    label: "复制任务包 Markdown 预览",
+    path: projectRoot,
+    source: "索引内项目路径",
+    boundary: "只复制预览文本到剪贴板；不写真实任务文件、不派发真实 Codex 会话。",
+    taskPreview: {
+      projectRoot,
+      workItemId,
+    },
+  };
+}
+
+export function buildGenerateTaskFileAction(projectRoot: string, workItemId: string): PendingAction {
+  return {
+    kind: "generate-task-file",
+    label: "生成任务包文件",
+    path: projectRoot,
+    source: "索引内项目路径",
+    boundary:
+      "写入 /Users/yoyi/workspace/product-line/tasks/ 下的新 Markdown 文件，并更新工作台自己的 workflow-state.v0.json；不覆盖已有任务包、不派发真实 Codex 会话、不启动 Codex 命令行、不运行运行器、不写 .codex 或 Codex 状态库。",
+    taskFileGeneration: {
+      project_root: projectRoot,
+      work_item_id: workItemId,
     },
   };
 }
@@ -56,6 +119,40 @@ export function buildUpdateTaskFieldsAction(
       },
     },
   };
+}
+
+export function taskFieldCorrectionFixtures(projectRoot: string): {
+  correctionFields: TaskPackageFields;
+  missingPreviewFields: TaskPackageFields;
+  fieldValues: Map<string, string>;
+} {
+  const correctionFields: TaskPackageFields = {
+    task_name: "派发准备字段修正",
+    assigned_line: "桌面应用线",
+    background: ["用户提供真实背景。"],
+    goals: ["用户提供真实目标。"],
+    allowed_read: [projectRoot],
+    allowed_write: ["product-line/prototypes/productized-desktop-shell/src/"],
+    forbidden_actions: ["不派发真实 Codex 会话。", "不运行运行器。"],
+    acceptance_criteria: ["字段保存后可复检 readiness。"],
+    required_return: ["做了什么", "改了哪些文件", "验证命令和结果", "风险和下一步建议"],
+    review_focus: ["确认没有编造业务目标。"],
+  };
+  const missingPreviewFields: TaskPackageFields = { ...correctionFields, goals: [], allowed_write: [] };
+  const fieldValues = new Map<string, string>([
+    ["task_name", "字段编辑任务"],
+    ["assigned_line", "桌面应用线"],
+    ["background", "来自结构化字段。"],
+    ["goals", "完成字段编辑。"],
+    ["allowed_read", "/tmp/indexed-project"],
+    ["allowed_write", "工作台状态文件"],
+    ["forbidden_actions", "不生成真实任务文件。"],
+    ["acceptance_criteria", "预览使用新字段。"],
+    ["required_return", "做了什么"],
+    ["review_focus", "确认结构化字段。"],
+  ]);
+
+  return { correctionFields, missingPreviewFields, fieldValues };
 }
 
 export function buildCorrectDispatchFieldsAction(
