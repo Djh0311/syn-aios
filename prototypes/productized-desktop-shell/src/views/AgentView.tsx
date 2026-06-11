@@ -8,6 +8,7 @@ import {
   deriveH2RealResumeAuthorizationReadiness,
   deriveH2RealResumeExecutionDecisionSurface,
 } from "../lib/h2RealResumeAuthorization";
+import { deriveAgentsPageReadModelFromParts } from "../lib/pageSelectors";
 import { deriveProviderAvailabilitySummaries } from "../lib/providerAvailability";
 import { deriveSessionContinuationPreviews } from "../lib/sessionContinuation";
 import { deriveSessionOperationDescriptors } from "../lib/sessionOperations";
@@ -145,31 +146,6 @@ export function softwareGroupsForSessions(sessions: SessionRecord[]) {
     return a.label.localeCompare(b.label);
   });
   return arr;
-}
-
-function agentProjectOptions(projects: ProjectRecord[], sessions: SessionRecord[]) {
-  const map = new Map<string, ProjectRecord>();
-  for (const project of projects) map.set(project.project_root, project);
-  for (const session of sessions) {
-    if (!session.project_root || map.has(session.project_root)) continue;
-    map.set(session.project_root, {
-      project_root: session.project_root,
-      name: pathTail(session.project_root),
-      active_hint: true,
-      thread_count: 1,
-      active_thread_count: session.archived ? 0 : 1,
-      archived_thread_count: session.archived ? 1 : 0,
-      latest_updated_at_ms: session.updated_at_ms ?? null,
-      authority_files: [],
-      handoff_files: [],
-      evidence_files: [],
-      harness_candidates: [],
-      harness_resources: [],
-      context_warnings: ["由会话索引派生的项目候选"],
-      warnings: [],
-    });
-  }
-  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 type AgentViewProps = {
@@ -468,7 +444,18 @@ export function AgentSessionCenter({
   const [k2Operation, setK2Operation] = useState<"resume" | "new_session">("resume");
   const [developerOpen, setDeveloperOpen] = useState(false);
   const conversationMode = !showSoftware;
-  const projectOptions = useMemo(() => agentProjectOptions(projects, sessions), [projects, sessions]);
+  const pageReadModel = useMemo(
+    () =>
+      deriveAgentsPageReadModelFromParts({
+        projects,
+        sessions,
+        adapterDescriptors,
+        sessionOperationDescriptors,
+        providerAvailabilitySummaries,
+      }),
+    [adapterDescriptors, projects, providerAvailabilitySummaries, sessionOperationDescriptors, sessions],
+  );
+  const projectOptions = pageReadModel.project_options;
   const [selectedProjectRoot, setSelectedProjectRoot] = useState(
     selectedSession?.project_root ?? projectOptions[0]?.project_root ?? "",
   );
@@ -938,7 +925,7 @@ export function AgentSessionCenter({
               <option value="">全部项目</option>
               {projectOptions.map((project) => (
                 <option key={project.project_root} value={project.project_root}>
-                  {project.name || pathTail(project.project_root)}
+                  {project.label || pathTail(project.project_root)}
                 </option>
               ))}
             </select>
@@ -1340,9 +1327,17 @@ function CodexControlEntryPanel({
   realExecutionProductCommands: RealExecutionProductCommandReadModel | null;
   workflowState: WorkflowStateSnapshot | null;
 }) {
-  const projectOptions = useMemo(() => {
-    return agentProjectOptions(projects, sessions);
-  }, [projects, sessions]);
+  const projectOptions = useMemo(
+    () =>
+      deriveAgentsPageReadModelFromParts({
+        projects,
+        sessions,
+        adapterDescriptors: [],
+        sessionOperationDescriptors: [],
+        providerAvailabilitySummaries: [],
+      }).project_options,
+    [projects, sessions],
+  );
   const initialProjectRoot = selectedSession?.project_root ?? projectOptions[0]?.project_root ?? "";
   const [projectRoot, setProjectRoot] = useState(initialProjectRoot);
   const [operationId, setOperationId] = useState<"resume" | "new_session">("resume");
@@ -1535,7 +1530,7 @@ function CodexControlEntryPanel({
             <option value="">选择项目</option>
             {projectOptions.map((project) => (
               <option key={project.project_root} value={project.project_root}>
-                {project.name || pathTail(project.project_root)}
+                {project.label || pathTail(project.project_root)}
               </option>
             ))}
           </select>

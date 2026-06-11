@@ -95,6 +95,7 @@ import {
   type ProjectWorkflowCanvasReadModel,
 } from "../lib/projectCanvas";
 import { projectWorkflowCanvasBoundary, type CanvasSurfaceBoundary } from "../lib/canvasSurfaceBoundaries";
+import { deriveProjectsPageReadModelFromParts } from "../lib/pageSelectors";
 
 type ProjectsViewProps = {
   projects: ProjectRecord[];
@@ -289,13 +290,16 @@ function ProjectGallery({
   workflowState: WorkflowStateSnapshot | null;
   onSelectProject: (projectRoot: string) => void;
 }) {
-  const sortedProjects = useMemo(
-    () => [...projects].sort((a, b) => (b.latest_updated_at_ms ?? 0) - (a.latest_updated_at_ms ?? 0)),
-    [projects],
+  const pageReadModel = useMemo(
+    () => deriveProjectsPageReadModelFromParts({ projects, sessions, workflowState }),
+    [projects, sessions, workflowState],
   );
-  const workflowProjectRoots = new Set(workflowState?.project_workflows.map((workflow) => workflow.project_root) ?? []);
-  const totalSessions = projects.reduce((sum, project) => sum + project.thread_count, 0);
-  const totalWarnings = projects.reduce((sum, project) => sum + projectWarnings(project), 0);
+  const sortedProjects = useMemo(
+    () => [...pageReadModel.projects].sort((a, b) => (b.latest_updated_at_ms ?? 0) - (a.latest_updated_at_ms ?? 0)),
+    [pageReadModel.projects],
+  );
+  const workflowProjectCount = pageReadModel.projects.filter((project) => project.workflow_count > 0).length;
+  const totalWarnings = pageReadModel.projects.reduce((sum, project) => sum + project.warning_count, 0);
 
   return (
     <section className="project-gallery stage-pad">
@@ -305,18 +309,14 @@ function ProjectGallery({
           <h1 className="pg-title">项 目 入 口</h1>
         </div>
         <div className="pg-meta">
-          <div className="big">{projects.length} 项目 · {totalSessions} 会话</div>
-          <div>{workflowProjectRoots.size} 个项目有工作流草稿 · {totalWarnings} 个警告</div>
+          <div className="big">{pageReadModel.project_count} 项目 · {pageReadModel.total_session_count} 会话</div>
+          <div>{workflowProjectCount} 个项目有工作流草稿 · {totalWarnings} 个警告</div>
         </div>
       </div>
 
       <div className="project-card-grid" aria-label="项目方块列表">
         {sortedProjects.map((project) => {
-          const projectSessions = filterProjectSessionsForProject(sessions, project);
-          const workflowCount =
-            workflowState?.project_workflows.filter((workflow) => workflow.project_root === project.project_root).length ?? 0;
-          const fileCount = project.authority_files.length + project.handoff_files.length + project.evidence_files.length;
-          const warningCount = projectWarnings(project);
+          const fileCount = project.authority_count + project.handoff_count + project.evidence_count;
           return (
             <button
               className={`project-tile ${project.active_hint ? "active" : ""}`}
@@ -335,10 +335,10 @@ function ProjectGallery({
                 <em>{formatDate(project.latest_updated_at_ms)}</em>
               </span>
               <span className="project-tile-stats">
-                <span><b>{projectSessions.length || project.thread_count}</b> 会话</span>
-                <span><b>{workflowCount}</b> 工作流</span>
+                <span><b>{project.session_count}</b> 会话</span>
+                <span><b>{project.workflow_count}</b> 工作流</span>
                 <span><b>{fileCount}</b> 文件</span>
-                <span><b>{warningCount}</b> 警告</span>
+                <span><b>{project.warning_count}</b> 警告</span>
               </span>
             </button>
           );

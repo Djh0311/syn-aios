@@ -84,9 +84,25 @@ export function deriveProjectsPageReadModel({
   snapshot: WorkbenchSnapshot;
   workflowState?: WorkflowStateSnapshot | null;
 }): ProjectsPageReadModel {
-  const sessionsByProject = groupSessionsByProject(snapshot.sessions);
+  return deriveProjectsPageReadModelFromParts({
+    projects: snapshot.projects,
+    sessions: snapshot.sessions,
+    workflowState,
+  });
+}
+
+export function deriveProjectsPageReadModelFromParts({
+  projects: sourceProjects,
+  sessions,
+  workflowState,
+}: {
+  projects: ProjectRecord[];
+  sessions: SessionRecord[];
+  workflowState?: WorkflowStateSnapshot | null;
+}): ProjectsPageReadModel {
+  const sessionsByProject = groupSessionsByProject(sessions);
   const workflowsByProject = groupWorkflowsByProject(workflowState);
-  const projects = snapshot.projects.map((project) => {
+  const projects = sourceProjects.map((project) => {
     const sessions = sessionsByProject.get(project.project_root) ?? [];
     const workflowCount = workflowsByProject.get(project.project_root) ?? 0;
     return {
@@ -116,17 +132,17 @@ export function deriveProjectsPageReadModel({
     source_boundary: selectorSourceBoundary(),
     project_count: projects.length,
     active_project_count: projects.filter((project) => project.active_hint).length,
-    total_session_count: snapshot.sessions.length,
+    total_session_count: sessions.length,
     workflow_summary_count: workflowState?.project_workflows.length ?? 0,
     projects,
     user_facing_summary: projects.length
-      ? `${projects.length} 个项目，${snapshot.sessions.length} 个会话，${workflowState?.project_workflows.length ?? 0} 条工作流摘要`
+      ? `${projects.length} 个项目，${sessions.length} 个会话，${workflowState?.project_workflows.length ?? 0} 条工作流摘要`
       : "暂无项目；页面仍等待工作台索引提供真实数据",
     developer_details_collapsed: true,
     warnings: [
       "r4_a3_selector_only_page_ui_not_migrated",
       "workbench_snapshot_still_active",
-      ...snapshot.projects.flatMap((project) => project.warnings).slice(0, 5),
+      ...sourceProjects.flatMap((project) => project.warnings).slice(0, 5),
     ],
   };
 }
@@ -136,9 +152,31 @@ export function deriveAgentsPageReadModel({
 }: {
   snapshot: WorkbenchSnapshot;
 }): AgentsPageReadModel {
-  const projectOptions = deriveAgentProjectOptions(snapshot.projects, snapshot.sessions);
-  const sessionSummary = summarizeSessions(snapshot.sessions);
-  const adapterSummary = summarizeAdapters(snapshot.agent_adapters);
+  return deriveAgentsPageReadModelFromParts({
+    projects: snapshot.projects,
+    sessions: snapshot.sessions,
+    adapterDescriptors: snapshot.agent_adapters,
+    sessionOperationDescriptors: snapshot.session_operations,
+    providerAvailabilitySummaries: snapshot.provider_availability,
+  });
+}
+
+export function deriveAgentsPageReadModelFromParts({
+  projects,
+  sessions,
+  adapterDescriptors,
+  sessionOperationDescriptors,
+  providerAvailabilitySummaries,
+}: {
+  projects: ProjectRecord[];
+  sessions: SessionRecord[];
+  adapterDescriptors: AgentAdapterDescriptor[];
+  sessionOperationDescriptors: SessionOperationDescriptor[];
+  providerAvailabilitySummaries: ProviderAvailabilitySummary[];
+}): AgentsPageReadModel {
+  const projectOptions = deriveAgentProjectOptions(projects, sessions);
+  const sessionSummary = summarizeSessions(sessions);
+  const adapterSummary = summarizeAdapters(adapterDescriptors);
 
   return {
     schema_version: "agents_page_read_model.v1",
@@ -146,11 +184,11 @@ export function deriveAgentsPageReadModel({
     source_boundary: selectorSourceBoundary(),
     project_options: projectOptions,
     session_summary: sessionSummary,
-    adapter_count: snapshot.agent_adapters.length,
+    adapter_count: adapterDescriptors.length,
     available_adapter_count: adapterSummary.available,
     planned_adapter_count: adapterSummary.planned,
-    operation_boundary_count: countBoundaries(snapshot.session_operations),
-    provider_boundary_count: countProviderBoundaries(snapshot.provider_availability),
+    operation_boundary_count: countBoundaries(sessionOperationDescriptors),
+    provider_boundary_count: countProviderBoundaries(providerAvailabilitySummaries),
     conversation_first: true,
     developer_details_collapsed: true,
     user_facing_summary: `${sessionSummary.total_count} 个会话，${sessionSummary.readable_count} 个可读取，${adapterSummary.available} 个可用 adapter`,
@@ -158,7 +196,7 @@ export function deriveAgentsPageReadModel({
       "r4_a3_selector_only_page_ui_not_migrated",
       "workbench_snapshot_still_active",
       "developer_boundary_data_must_stay_collapsed",
-      ...snapshot.sessions.flatMap((session) => session.warnings).slice(0, 5),
+      ...sessions.flatMap((session) => session.warnings).slice(0, 5),
     ],
   };
 }

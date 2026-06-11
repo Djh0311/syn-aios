@@ -1,5 +1,10 @@
 import type { WorkbenchSnapshot, WorkflowStateSnapshot } from "../src/lib/types";
-import { deriveAgentsPageReadModel, deriveProjectsPageReadModel } from "../src/lib/pageSelectors";
+import {
+  deriveAgentsPageReadModel,
+  deriveAgentsPageReadModelFromParts,
+  deriveProjectsPageReadModel,
+  deriveProjectsPageReadModelFromParts,
+} from "../src/lib/pageSelectors";
 
 const snapshot = {
   summary: {
@@ -227,9 +232,29 @@ const workflowState = {
 
 const projectsModel = deriveProjectsPageReadModel({ snapshot, workflowState });
 const agentsModel = deriveAgentsPageReadModel({ snapshot });
+const splitProjectsModel = deriveProjectsPageReadModelFromParts({
+  projects: snapshot.projects,
+  sessions: snapshot.sessions,
+  workflowState,
+});
+const splitAgentsModel = deriveAgentsPageReadModelFromParts({
+  projects: snapshot.projects,
+  sessions: snapshot.sessions,
+  adapterDescriptors: snapshot.agent_adapters,
+  sessionOperationDescriptors: snapshot.session_operations,
+  providerAvailabilitySummaries: snapshot.provider_availability,
+});
 
 assert(projectsModel.schema_version === "projects_page_read_model.v1", "projects selector schema should be stable");
 assert(agentsModel.schema_version === "agents_page_read_model.v1", "agents selector schema should be stable");
+assert(
+  JSON.stringify(projectsModel) === JSON.stringify(splitProjectsModel),
+  "split projects selector should match snapshot wrapper",
+);
+assert(
+  JSON.stringify(agentsModel) === JSON.stringify(splitAgentsModel),
+  "split agents selector should match snapshot wrapper",
+);
 assert(projectsModel.source_boundary.generated_from === "workbench_snapshot_selector", "projects selector source should be explicit");
 assert(agentsModel.source_boundary.generated_from === "workbench_snapshot_selector", "agents selector source should be explicit");
 assert(projectsModel.source_boundary.workbench_snapshot_active, "projects selector must keep WorkbenchSnapshot active");
@@ -242,9 +267,20 @@ assert(projectsModel.project_count === 2, "projects selector should count projec
 assert(projectsModel.workflow_summary_count === 1, "projects selector should count workflow summaries");
 assert(projectsModel.projects[0]?.name === "mario test", "active project should sort first");
 assert(projectsModel.projects[0]?.session_count === 2, "project session count should come from sessions");
+assert(
+  splitProjectsModel.projects[0]?.authority_count === 1 &&
+    splitProjectsModel.projects[0]?.handoff_count === 1 &&
+    splitProjectsModel.projects[0]?.evidence_count === 1,
+  "split projects selector should provide page card file counts",
+);
 assert(agentsModel.session_summary.readable_count === 1, "agents selector should count readable sessions");
 assert(agentsModel.session_summary.missing_rollout_count === 1, "agents selector should keep missing rollout distinct");
 assert(agentsModel.session_summary.archived_count === 1, "agents selector should count archived sessions");
+assert(agentsModel.project_options[0]?.label === "archived-only", "agents selector should add session-only project options");
+assert(
+  agentsModel.project_options.some((project) => project.project_root === "/tmp/mario-test" && project.session_count === 2),
+  "agents selector project options should include page selection counts",
+);
 assert(agentsModel.available_adapter_count === 1, "agents selector should count available adapter");
 assert(agentsModel.planned_adapter_count === 1, "agents selector should count planned adapter");
 assert(agentsModel.operation_boundary_count === 1, "agents selector should count operation boundaries");
