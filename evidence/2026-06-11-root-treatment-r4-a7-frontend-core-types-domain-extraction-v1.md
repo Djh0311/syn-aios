@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：已实现，待复核线回收。
+状态：已完成并通过复核线 `STATUS: CLEAR`。
 
 任务包：`tasks/2026-06-11-root-treatment-r4-a7-frontend-core-types-domain-extraction-v1.md`
 
@@ -11,6 +11,8 @@ Planning baseline commit：`272307fab0dfd5a595b052c7551e23df31187d2a`
 Implementation commit：`a60c4f001c312ab72bd4a37c0c490a4295914e89`
 
 Implementation hash backfill commit：`b76eb9deff5e89394b869940f30fcea8496be119`
+
+Review result：`STATUS: CLEAR`，无 P0 / P1 / P2。
 
 ## 1. Scope
 
