@@ -2,13 +2,13 @@
 
 日期：2026-06-11
 
-状态：执行中。本文是 Root Treatment / Stage R 的 R4-A15 任务包；R4-A14 已完成并通过复核线 `STATUS: CLEAR`。R4-A15 继续对应官方计划 R4-6：离线测试拆分。R4-A15 只接受为 worker protocol 相关离线 fixture builder 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、视觉重做、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B 或 backlog 功能解冻。
+状态：已完成并通过复核线 `STATUS: CLEAR`。本文是 Root Treatment / Stage R 的 R4-A15 任务包；R4-A15 继续对应官方计划 R4-6：离线测试拆分。R4-A15 只接受为 worker protocol 相关离线 fixture builder 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、视觉重做、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B 或 backlog 功能解冻。
 
-Planning baseline commit：`624b223d7fc6e08dd4c476a59e61f82d4ab02919`
+Planning baseline commit：`624b22332b4951bf48351c7a9949c54318590222`
 
-Implementation commit：待回填。
+Implementation commit：`99087175c570ba6a6296cb596b4b4544a75a8d20`
 
-Review result：待复核。
+Review result：`STATUS: CLEAR`；无 P0 / P1 / P2。
 
 Checkpoint commit：待回填。
 
