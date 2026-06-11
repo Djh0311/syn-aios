@@ -10,6 +10,8 @@ Planning baseline commit：`272307fab0dfd5a595b052c7551e23df31187d2a`
 
 Implementation commit：`a60c4f001c312ab72bd4a37c0c490a4295914e89`
 
+Implementation hash backfill commit：`b76eb9deff5e89394b869940f30fcea8496be119`
+
 ## 1. Scope
 
 R4-A7 只实现前端 `types.ts` 第一批基础类型分域抽取。

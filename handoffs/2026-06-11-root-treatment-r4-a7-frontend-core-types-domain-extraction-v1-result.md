@@ -12,6 +12,8 @@ Planning baseline commit：`272307fab0dfd5a595b052c7551e23df31187d2a`
 
 Implementation commit：`a60c4f001c312ab72bd4a37c0c490a4295914e89`
 
+Implementation hash backfill commit：`b76eb9deff5e89394b869940f30fcea8496be119`
+
 ## 1. Result
 
 R4-A7 已完成实现侧工作：前端基础索引 / 会话 / transcript / project record 类型已从 `types.ts` 抽到 `workbenchCoreTypes.ts`，`types.ts` 保持 re-export 兼容，行数从 5,149 降到 4,998。
@@ -44,9 +46,9 @@ R4-A7 已完成实现侧工作：前端基础索引 / 会话 / transcript / proj
 
 主管线下一步：
 
-1. 提交 implementation commit 并回填 hash。
-2. 复用复核线 `019eb51c-61fe-7fc3-8973-b22a4ce58911` 做只读审查。
-3. 若复核 `STATUS: CLEAR`，再同步入口文档并做 checkpoint commit。
+1. 继续等待复核线 `019eb51c-61fe-7fc3-8973-b22a4ce58911` 的只读审查最终 `STATUS`。
+2. 若复核 `STATUS: CLEAR`，回填 review result、同步入口文档并做 checkpoint commit。
+3. 若复核发现 P1 / P2，先窄修并回回复核线，不提前同步入口文档。
 
 不能声明：
 
