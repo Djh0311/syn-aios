@@ -8,6 +8,8 @@ DONE
 
 本轮只完成 R3-A8 Level A：fixture / temp copied snapshot apply + temp DB + export + rollback boundary verification。Level B 未执行；未读取真实 workbench state root，未复制真实 production snapshot。
 
+Implementation commit：`ce631c1cd23dadb367288885d61a331b88b83511`
+
 ## READ / WRITE SCOPE
 
 读取范围：
@@ -166,6 +168,32 @@ Notes:
 
 - Cargo emitted existing warning: `mcp::protocol::JsonRpcError::invalid_params` is unused.
 - Initial shape gate failed because two temp manifest names used `*.v1.json` and looked like new sidecar kinds. Fixed by renaming them to non-sidecar manifest names; final shape gate passed.
+
+## SUPERVISOR FRESH VERIFY
+
+主管线在开发线 `STATUS: DONE` 回交后复跑：
+
+| Command | Result |
+| --- | --- |
+| `node scripts/harness/workbench-shape-gate.js --mode check` | pass; 0 errors / 0 warnings |
+| `cargo test --lib sqlite_snapshot` | pass; 13 passed |
+| `cargo test --lib sqlite_preflight` | pass; 8 passed |
+| `cargo test --lib sqlite_apply` | pass; 6 passed |
+| `cargo test --lib sqlite_export` | pass; 3 passed |
+| `cargo test --lib sqlite_observation` | pass; 15 passed |
+| `cargo test --lib workflow_state` | pass; 11 passed |
+| `cargo test --lib` | pass; 412 passed / 16 ignored |
+| `cargo fmt -- --check` | pass |
+| `git diff --check` | pass |
+
+Supervisor scans：
+
+- Forbidden true-flag scan：no hits。
+- Sensitive marker scan：hits are helper denied-marker constants and evidence / handoff boundary text only。
+- Hidden fixture scan：no hits after forced inclusion of the fixture-only `.env` denied-marker file。
+- Real execution / command scan：no Tauri command or `Command::new(...)`; hits are legacy runtime-log rejection text and boundary wording only。
+
+Supervisor review conclusion：accepted for R3-A8 Level A with no P0 / P1. This does not accept Level B or any production migration.
 
 ## SCANS
 

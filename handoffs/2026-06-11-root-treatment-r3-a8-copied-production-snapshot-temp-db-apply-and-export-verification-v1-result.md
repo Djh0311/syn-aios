@@ -2,6 +2,8 @@
 
 STATUS: DONE
 
+Implementation commit: `ce631c1cd23dadb367288885d61a331b88b83511`
+
 ## CHANGED_FILES
 
 - `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`
@@ -102,4 +104,4 @@ Confirmed no Level B, no real workbench state root read, no production DB, no pr
 
 ## REQUESTS
 
-Supervisor should run fresh verify, review, and commit if accepted. Do not claim R3 completion or production apply from this result.
+Supervisor fresh verify completed and accepted R3-A8 Level A with no P0 / P1. Do not claim R3 completion or production apply from this result.

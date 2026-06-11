@@ -2,14 +2,14 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R3-A8 任务包，用于在 R3-A6 production cutover / rollback operator contract freeze 和 R3-A7 production preflight scanner / report 基础上，实现 copied production snapshot temp DB apply / export / rollback boundary 验证。R3-A8 默认先完成 Level A fixture / temp snapshot 能力；如要执行真实工作台 state root 的复制快照演练，必须作为 Level B 在本任务内单独记录 allowed source root、copy destination、report path、hash manifest、cleanup / rollback boundary 和 denied paths。
+状态：已完成。本文是 Root Treatment / Stage R 的 R3-A8 任务包，用于在 R3-A6 production cutover / rollback operator contract freeze 和 R3-A7 production preflight scanner / report 基础上，实现 copied production snapshot temp DB apply / export / rollback boundary 验证。R3-A8 已完成 Level A fixture / temp snapshot 能力；Level B 未执行。如要执行真实工作台 state root 的复制快照演练，必须另行记录 allowed source root、copy destination、report path、hash manifest、cleanup / rollback boundary 和 denied paths。
 
 完成记录：
 
 - evidence：`evidence/2026-06-11-root-treatment-r3-a8-copied-production-snapshot-temp-db-apply-and-export-verification-v1.md`
 - handoff：`handoffs/2026-06-11-root-treatment-r3-a8-copied-production-snapshot-temp-db-apply-and-export-verification-v1-result.md`
 - planning baseline commit：`7ef100767b63369bfb62dd87c08b59db6f58f7ca`
-- implementation commit：待主管线回收后记录。
+- implementation commit：`ce631c1cd23dadb367288885d61a331b88b83511`
 
 ## 0. 全局主管理解
 
@@ -219,7 +219,7 @@ R3-A8 禁止：
 - 是否新增 sidecar JSON 种类：否。
 - 是否需要 shape gate 豁免：否。
 - 本任务规划基线 commit：`7ef100767b63369bfb62dd87c08b59db6f58f7ca`
-- 本任务完成 commit：待主管线回收后记录。
+- 本任务完成 commit：`ce631c1cd23dadb367288885d61a331b88b83511`
 
 ## 8. 验收标准
 
