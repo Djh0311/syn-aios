@@ -6,11 +6,11 @@
 
 Planning baseline commit：`47bd235220bb03b092b8211b489d5ea108ac8a40`
 
-Implementation commit：`TBD`
+Implementation commit：`4af2e62160622a21e38e9515845350f3984f89d4`
 
 Review result：`STATUS: CLEAR`；P0 / P1 / P2 无。
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`dc4f34c8fb6213ea333b84336e927c7d200616a6`
 
 ## 0. 全局主管理解
 
