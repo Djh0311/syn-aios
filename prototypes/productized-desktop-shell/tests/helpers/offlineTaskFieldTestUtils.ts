@@ -240,6 +240,36 @@ export function expectedUpdateTaskFieldsAction(projectRoot: string, workItemId: 
   };
 }
 
+export function expectedCorrectDispatchFieldsAction(
+  projectRoot: string,
+  workItemId: string,
+  fields: TaskPackageFields,
+): PendingAction {
+  return {
+    kind: "correct-dispatch-fields",
+    label: "保存派发字段修正",
+    path: projectRoot,
+    source: "索引内项目路径",
+    boundary:
+      "只写工作台自己的 workflow-state.v0.json；不生成真实任务包文件、不派发真实 Codex 会话、不启动 Codex 命令行、不运行运行器、不写 .codex 或 Codex 状态库。",
+    dispatchFields: {
+      project_root: projectRoot,
+      work_item_id: workItemId,
+      fields,
+    },
+  };
+}
+
+export function expectedInitializeWorkflowStateAction(workflowStatePath: string): PendingAction {
+  return {
+    kind: "initialize-workflow-state",
+    label: "初始化工作流事实层",
+    path: workflowStatePath,
+    source: "Tauri 应用数据目录",
+    boundary: "只写 workflow-state.v0.json 和同目录备份；不写 .codex、不写 Codex 状态库、不写项目业务目录。",
+  };
+}
+
 export function taskFieldCorrectionFixtures(projectRoot: string): {
   correctionFields: TaskPackageFields;
   missingPreviewFields: TaskPackageFields;

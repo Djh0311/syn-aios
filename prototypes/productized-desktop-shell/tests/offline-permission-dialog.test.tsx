@@ -32,6 +32,8 @@ import {
   buildUpdateTaskFieldsAction,
   buildUnbindNodeSessionAction,
   buildUserReviewedInstructionPreviewAction,
+  expectedCorrectDispatchFieldsAction,
+  expectedInitializeWorkflowStateAction,
   expectedUpdateTaskFieldsAction,
   taskDraftFormDataFixture,
   taskDraftFormValues,
@@ -3280,19 +3282,11 @@ function runShellScenario() {
   );
   assertDeepEqual(
     capturedAction,
-    {
-      kind: "correct-dispatch-fields",
-      label: "保存派发字段修正",
-      path: project.project_root,
-      source: "索引内项目路径",
-      boundary:
-        "只写工作台自己的 workflow-state.v0.json；不生成真实任务包文件、不派发真实 Codex 会话、不启动 Codex 命令行、不运行运行器、不写 .codex 或 Codex 状态库。",
-      dispatchFields: {
-        project_root: project.project_root,
-        work_item_id: "work-item:offline:001",
-        fields: correctionFields,
-      },
-    },
+    expectedCorrectDispatchFieldsAction(
+      project.project_root,
+      workflowStateWithGeneratedTaskFile.project_workflows[0].task_drafts[0].work_item_id,
+      correctionFields,
+    ),
     "派发字段修正待确认动作不匹配",
   );
   let correctionConfirmed = false;
@@ -3383,13 +3377,7 @@ function runShellScenario() {
   init({ preventDefault() {}, stopPropagation() {} });
   assertDeepEqual(
     capturedAction,
-    {
-      kind: "initialize-workflow-state",
-      label: "初始化工作流事实层",
-      path: workflowState.path,
-      source: "Tauri 应用数据目录",
-      boundary: "只写 workflow-state.v0.json 和同目录备份；不写 .codex、不写 Codex 状态库、不写项目业务目录。",
-    },
+    expectedInitializeWorkflowStateAction(workflowState.path),
     "初始化待确认动作不匹配",
   );
 
