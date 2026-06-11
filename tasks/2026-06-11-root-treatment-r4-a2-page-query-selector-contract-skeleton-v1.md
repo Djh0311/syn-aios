@@ -7,6 +7,7 @@
 规划基线 commit：`03fd247`
 任务包准备 commit：`e727e3dc928bd658926944d11cb83ee8c602e4af`
 Implementation commit：`bcc59c53ab871401aac17d1cc79ba2c84a7cd5b2`
+Checkpoint commit：`cb9bb80`
 
 ## 0. 全局主管理解
 

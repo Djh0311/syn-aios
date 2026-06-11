@@ -18,6 +18,7 @@ R4-A2 已完成为 page query selector contract skeleton。接受范围是只读
 - Task package：`tasks/2026-06-11-root-treatment-r4-a2-page-query-selector-contract-skeleton-v1.md`
 - Task package preparation commit：`e727e3dc928bd658926944d11cb83ee8c602e4af`
 - Implementation commit：`bcc59c53ab871401aac17d1cc79ba2c84a7cd5b2`
+- Checkpoint commit：`cb9bb80`
 - 后端 query contract：`prototypes/productized-desktop-shell/src-tauri/src/page_read_model.rs`
 - Tauri command wrapper：`prototypes/productized-desktop-shell/src-tauri/src/commands.rs`
 - Tauri command registry：`prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs`
