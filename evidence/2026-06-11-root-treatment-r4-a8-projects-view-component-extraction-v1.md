@@ -12,6 +12,8 @@ Implementation commit：`2caf66a6b4ec24ddd22e17b0824f515f087b770f`。
 
 Review result：`STATUS: CLEAR`，无 P0 / P1 / P2。
 
+Checkpoint commit：`22e0eda97a7ac2e0931d7e8693f4a56cd3f9b108`。
+
 ## 1. Scope
 
 R4-A8 只实现 `ProjectsView.tsx` 第一批低风险组件抽取。
