@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：复核通过，待 implementation / checkpoint hash 回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a30-session-continuation-store-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a30-session-continuation-store
 
 Planning baseline commit：`7e0ad01`
 
-Implementation commit：待回填
+Implementation commit：`8b1bb5b8773f9a4d39515a40feec9eaf9fc10ee9`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：待回填
+Checkpoint commit：`d5c6b41961da7e42504ce3406e55cbd48e78d89b`
 
 ## 1. 交接结论
 
