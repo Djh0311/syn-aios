@@ -12,7 +12,7 @@ Implementation commit：`cf16668eba573283598f3b4d60890e3a948b51cd`。
 
 Review result：`STATUS: CLEAR`；无 P0 / P1 / P2。
 
-Checkpoint commit：待回填。
+Checkpoint commit：`6e92704a3fa98870eac7761d3a1c085e2a371b09`。
 
 ## 1. Scope
 
