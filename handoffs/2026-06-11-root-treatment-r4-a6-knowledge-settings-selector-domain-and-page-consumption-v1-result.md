@@ -10,7 +10,7 @@ Evidence：`evidence/2026-06-11-root-treatment-r4-a6-knowledge-settings-selector
 
 Planning baseline commit：`c248f9bb390458ba64f2a809ec6876c543b5ff91`
 
-Implementation commit：待回填。
+Implementation commit：`9a175ff22e3177511e5b7749b7bf0c79eb47db98`
 
 ## 1. Result
 
