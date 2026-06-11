@@ -170,7 +170,7 @@ R4-A1 禁止声明：
 - 是否允许新增 sidecar JSON 种类：否。
 - 本任务规划基线 commit：`6786faf`
 - 本任务 implementation commit：`93bc0f2ec5eb2f6e18297e43b5731afa4344876e`
-- 本任务 checkpoint commit：待入口同步提交后回填。
+- 本任务 checkpoint commit：`6519ad3`
 
 执行说明：
 
