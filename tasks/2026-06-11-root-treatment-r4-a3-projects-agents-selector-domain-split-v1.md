@@ -2,9 +2,10 @@
 
 日期：2026-06-11
 
-状态：执行中。本文是 Root Treatment / Stage R 的 R4-A3 任务包；R4-A2 已完成并通过复核线 `STATUS: CLEAR`。R4-A3 只接受为 Projects / Agents 首批前端 selector 分域完成，不接受为页面真实数据来源迁移、R4 完成、`WorkbenchSnapshot` 废弃、UI 重做或真实执行解锁。
+状态：实现完成，待复核线回收。本文是 Root Treatment / Stage R 的 R4-A3 任务包；R4-A2 已完成并通过复核线 `STATUS: CLEAR`。R4-A3 只接受为 Projects / Agents 首批前端 selector 分域完成，不接受为页面真实数据来源迁移、R4 完成、`WorkbenchSnapshot` 废弃、UI 重做或真实执行解锁。
 
 规划基线 commit：`882b079b42b7f152f38820b40460ef3c652fad7c`
+Implementation commit：`c7ced1abcbf6c33a9cf8271a2450850cfdb5b491`
 
 ## 0. 全局主管理解
 
@@ -152,3 +153,31 @@ R4-A3 禁止声明：
 - 真实 Tauri / 截图验收完成。
 - R3 Level B 已执行。
 - 多 agent 并行真实执行已解锁。
+
+## 10. 实现结果
+
+完成项：
+
+- 新增 `prototypes/productized-desktop-shell/src/lib/pageSelectors.ts`。
+- 新增 `ProjectsPageReadModel` / `AgentsPageReadModel` 前端纯 selector。
+- selector 明确 `generated_from="workbench_snapshot_selector"`、`workbench_snapshot_active=true`、`page_ui_migrated=false`、`writes_stores=false`。
+- 新增 `prototypes/productized-desktop-shell/tests/r4-page-selectors.test.ts`。
+- 离线测试 runner 已纳入 R4-A3 selector 测试。
+
+未完成项：
+
+- 未让 `ProjectsView.tsx` / `AgentView.tsx` 消费新 selector。
+- 未迁移页面真实数据来源。
+- 未废弃或弱化 `WorkbenchSnapshot` / `load_workbench_snapshot`。
+- 未新增 Tauri command、sidecar 或 DB migration。
+- 未改 UI 视觉 / 布局 / CSS。
+- 未启动 Tauri / Browser / Chrome / Vite dev / 截图工具。
+- 未执行真实 Codex，未读写 `/Users/yoyi/.codex`。
+
+验证：
+
+- `node scripts/harness/workbench-shape-gate.js --mode check`：通过，0 errors / 1 warning；warning 为 R4-A2 已知 `tauri_command_total_increased`。
+- `npm run typecheck`：通过。
+- `npm run test:offline-interaction`：通过，`offline interaction tests passed: 14`，包含 `r4 page selectors test passed`。
+- `npm run build`：通过，仅既有 Vite chunk-size warning。
+- `git diff --check`：通过。
