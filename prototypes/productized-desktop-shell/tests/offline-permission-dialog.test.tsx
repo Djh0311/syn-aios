@@ -27,6 +27,7 @@ import {
 import { projectWorkflowStateFixtures } from "./helpers/offlineProjectWorkflowStateFixtures";
 import { derivedWorkflowStateFixtures } from "./helpers/offlineDerivedWorkflowFixtures";
 import { c6ResultSummaryFixtures } from "./helpers/offlineC6ResultSummaryFixtures";
+import { candidateGovernanceFixtures } from "./helpers/offlineCandidateGovernanceFixtures";
 import { stageJRunQueueFixtures } from "./helpers/offlineRunQueueFixtures";
 import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
 import {
@@ -113,7 +114,6 @@ import type {
   MemoryEntityRelationPreviewOutput,
   MemoryEntityRelationStoreV1,
   MemoryCaptureStoreV1,
-  MemoryCandidate,
   MemoryCandidateStoreV1,
   MemoryLintStoreV1,
   MemoryPatternStoreV1,
@@ -128,7 +128,6 @@ import type {
   SessionContinuationStoreV1,
   SessionRunStatusSummary,
   SkillRecord,
-  TaskMemoryPacketBuildOutput,
   TaskPackageFields,
   WorkbenchSnapshot,
   WorkflowStateSnapshot,
@@ -2497,85 +2496,26 @@ function runRuntimeLogBoundaryScenario() {
 }
 
 function runCandidateGovernanceScenario() {
+  const {
+    blackboardCandidateStore,
+    confirmedMemoryCandidateStore,
+    adoptedMemoryCandidateStore,
+    observationStore,
+    emptyMemoryCandidateStore,
+    formalMemoryStore,
+    adoptedFormalMemoryStore,
+    memoryLintStore,
+    taskMemoryPacketPreview,
+  } = candidateGovernanceFixtures(project.project_root);
   const blackboardOverlay = buildBlackboardCandidateOverlay({
-    store: {
-      schema_version: "blackboard_candidate_persistence.v1",
-      store_version: 1,
-      storage_kind: "sidecar_json_v0",
-      revision: 3,
-      records: [
-        {
-          candidate_key: "bbcand:v1:offline-report",
-          project_id: project.project_root,
-          workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-          source_entry_id: "blackboard:offline:report:001",
-          entry_kind: "subagent_report",
-          target_kind: "workflow_fact",
-          state: "candidate_confirmed_for_followup",
-          title_snapshot: "离线子汇报",
-          summary_snapshot: "只确认后续处理，不写正式事实。",
-          source_refs: [{ source_kind: "subagent_report", source_id: "report:offline:001", label: "子智能体汇报" }],
-          updated_at: "2026-06-03T00:00:00Z",
-          warnings: [],
-        },
-      ],
-      audit_events: [],
-      updated_at: "2026-06-03T00:00:00Z",
-      warnings: [],
-    },
+    store: blackboardCandidateStore,
     entries: workflowStateWithDerivedWorkflow.project_blackboards?.[0].entries ?? [],
   });
   assert(blackboardOverlay.status_by_entry_id["blackboard:offline:report:001"] === "candidate_confirmed_for_followup", "黑板候选 overlay 应能按 source_entry_id 映射确认状态");
   assert(blackboardOverlay.sidecar_name === "blackboard-candidates.v1.json", "黑板候选 sidecar 文件名不匹配");
   assert(!blackboardOverlay.warnings.includes("writes_formal_memory"), "黑板 overlay 不应写正式记忆 warning");
 
-  const confirmedMemoryCandidate: MemoryCandidate = {
-    candidate_id: "memcand:offline:001",
-    candidate_key: "memcand:v1:offline-preference",
-    schema_version: "memory_governance.v1",
-    scope: {
-      scope_id: "scope:user:yoyi",
-      scope_type: "user_preference",
-      role_ids: [],
-      document_refs: [],
-      model_export_policy: "local_only",
-      valid_from: "2026-06-03T00:00:00Z",
-    },
-    memory_type: "user_preference",
-    claim: "用户要求先指出风险。",
-    body: "候选已确认保留，但不是正式长期记忆。",
-    source_refs: [
-      {
-        source_ref_id: "source:user-confirmed:001",
-        source_type: "user_confirmed_proposal",
-        source_id: "task:offline",
-        source_title: "离线确认",
-        captured_at: "2026-06-03T00:00:00Z",
-        authority_level: "user_confirmed",
-        sensitive_level: "private",
-      },
-    ],
-    generated_by_role: "user",
-    generated_from: "explicit_user_confirmation",
-    status: "candidate_confirmed",
-    risk_level: "low",
-    sensitive_level: "private",
-    requires_user_confirmation: true,
-    review_reason: "离线候选治理测试",
-    conflicts: [],
-    audit_refs: [],
-    adoption: null,
-    created_at: "2026-06-03T00:00:00Z",
-    updated_at: "2026-06-03T00:00:00Z",
-  };
-
-  const memorySummary = summarizeMemoryCandidateStore({
-    store_version: "memory_candidate_store.v1",
-    revision: 2,
-    candidates: [confirmedMemoryCandidate],
-    events: [],
-    updated_at: "2026-06-03T00:00:00Z",
-  });
+  const memorySummary = summarizeMemoryCandidateStore(confirmedMemoryCandidateStore);
   assert(memorySummary.sidecar_name === "memory-candidates.v1.json", "记忆候选 sidecar 文件名不匹配");
   assert(memorySummary.confirmed_count === 1, "记忆候选确认保留计数不匹配");
   assert(memorySummary.formal_memory_count === 0, "候选确认不应生成正式记忆");
@@ -2583,135 +2523,13 @@ function runCandidateGovernanceScenario() {
   assert(!memorySummary.display_text.includes("已记住"), "记忆候选 UI 文案不能说已记住");
   assert(!memorySummary.display_text.includes("正式记忆已写入"), "记忆候选 UI 文案不能说正式记忆已写入");
 
-  const adoptedMemorySummary = summarizeMemoryCandidateStore({
-    store_version: "memory_candidate_store.v1",
-    revision: 3,
-    candidates: [
-      {
-        ...confirmedMemoryCandidate,
-        candidate_id: "memcand:offline:002",
-        candidate_key: "memcand:v1:offline-project",
-        adoption: {
-          adopted_memory_id: "mem:formal:offline:002",
-          adopted_version_id: "memver:formal:offline:002",
-          adopted_audit_event_id: "audit:formal:offline:002",
-          adopted_at: "2026-06-03T00:00:02Z",
-          adopted_by_role: "project_director",
-          adoption_reason: "项目主管采纳低风险本项目记忆候选。",
-        },
-      },
-    ],
-    events: [],
-    updated_at: "2026-06-03T00:00:02Z",
-  });
+  const adoptedMemorySummary = summarizeMemoryCandidateStore(adoptedMemoryCandidateStore);
   assert(adoptedMemorySummary.adopted_count === 1, "已采纳候选计数不匹配");
   assert(adoptedMemorySummary.formal_memory_count === 0, "候选 sidecar 不应把采纳候选改成正式状态");
   assert(adoptedMemorySummary.first_adoption?.adopted_memory_id === "mem:formal:offline:002", "采纳摘要缺少 adopted_memory_id");
   assert(adoptedMemorySummary.first_adoption?.adopted_version_id === "memver:formal:offline:002", "采纳摘要缺少 adopted_version_id");
   assert(adoptedMemorySummary.first_adoption?.adopted_audit_event_id === "audit:formal:offline:002", "采纳摘要缺少 adopted_audit_event_id");
 
-  const observationStore = {
-    store_version: "observation_store.v1" as const,
-    project_id: "project:offline-fixture-projects-codex-workbench",
-    workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-    revision: 2,
-    observations: [
-      {
-        observation_id: "obs:v1:offline:001",
-        observation_key: "obs:v1:offline-recorded",
-        schema_version: "memory_observation.v1" as const,
-        project_id: "project:offline-fixture-projects-codex-workbench",
-        workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-        scope: {
-          scope_id: "scope:project:offline",
-          scope_type: "project" as const,
-          project_id: "project:offline-fixture-projects-codex-workbench",
-          role_ids: [],
-          document_refs: [],
-          model_export_policy: "local_only" as const,
-          valid_from: "2026-06-04T00:00:00Z",
-        },
-        observation_type: "worker_report" as const,
-        summary: "开发线汇报：观察入口已经写入 sidecar。",
-        source_refs: [
-          {
-            source_ref_id: "obs-source:offline:001",
-            source_kind: "worker_report" as const,
-            source_id: "worker-report:offline:001",
-            project_id: "project:offline-fixture-projects-codex-workbench",
-            workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-            summary: "工作者汇报摘要，不复制完整会话记录。",
-            sensitive_level: "internal" as const,
-            created_at: "2026-06-04T00:00:00Z",
-          },
-        ],
-        status: "recorded" as const,
-        generated_by_role: "worker",
-        actor_id: "codex-dev",
-        risk_level: "low" as const,
-        sensitive_level: "internal" as const,
-        candidate_key: null,
-        audit_refs: [],
-        created_at: "2026-06-04T00:00:00Z",
-        updated_at: "2026-06-04T00:00:00Z",
-      },
-      {
-        observation_id: "obs:v1:offline:002",
-        observation_key: "obs:v1:offline-candidate-created",
-        schema_version: "memory_observation.v1" as const,
-        project_id: "project:offline-fixture-projects-codex-workbench",
-        workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-        scope: {
-          scope_id: "scope:project:offline",
-          scope_type: "project" as const,
-          project_id: "project:offline-fixture-projects-codex-workbench",
-          role_ids: [],
-          document_refs: [],
-          model_export_policy: "local_only" as const,
-          valid_from: "2026-06-04T00:00:00Z",
-        },
-        observation_type: "project_director_confirmation" as const,
-        summary: "项目主管确认 observation 可生成候选。",
-        source_refs: [
-          {
-            source_ref_id: "obs-source:offline:002",
-            source_kind: "director_review" as const,
-            source_id: "director-review:offline:002",
-            project_id: "project:offline-fixture-projects-codex-workbench",
-            workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-            summary: "项目主管确认摘要。",
-            sensitive_level: "internal" as const,
-            created_at: "2026-06-04T00:00:02Z",
-          },
-        ],
-        status: "candidate_created" as const,
-        generated_by_role: "project_director",
-        actor_id: "project-director-offline",
-        risk_level: "low" as const,
-        sensitive_level: "internal" as const,
-        candidate_key: "memcand:v1:from-observation",
-        audit_refs: [],
-        created_at: "2026-06-04T00:00:02Z",
-        updated_at: "2026-06-04T00:00:03Z",
-      },
-    ],
-    events: [
-      {
-        audit_ref_id: "audit:observation-candidate-created:offline",
-        event_type: "observation_candidate_created" as const,
-        actor_id: "project-director-offline",
-        actor_role: "project_director",
-        target_kind: "observation" as const,
-        target_id: "obs:v1:offline:002",
-        before_status: "recorded" as const,
-        after_status: "candidate_created" as const,
-        reason: "项目主管确认生成候选。",
-        created_at: "2026-06-04T00:00:03Z",
-      },
-    ],
-    updated_at: "2026-06-04T00:00:03Z",
-    warnings: [],
-  };
   const observationSummary = summarizeObservationStore(observationStore);
   assert(observationSummary.sidecar_name === "observations.v1.json", "observation sidecar 文件名不匹配");
   assert(observationSummary.recorded_count === 1, "recorded observation 计数不匹配");
@@ -2726,13 +2544,7 @@ function runCandidateGovernanceScenario() {
       sessions={[session]}
       workflowState={workflowStateWithDerivedWorkflow}
       observationStore={observationStore}
-      memoryCandidateStore={{
-        store_version: "memory_candidate_store.v1",
-        revision: 0,
-        candidates: [],
-        events: [],
-        updated_at: "2026-06-04T00:00:00Z",
-      }}
+      memoryCandidateStore={emptyMemoryCandidateStore}
       selectedTool="workflow"
       onRequestAction={captureAction}
     />
@@ -2756,110 +2568,7 @@ function runCandidateGovernanceScenario() {
     assert(!observationWorkflowText.includes(forbiddenText), `工作流观察 UI 不应出现越界文案：${forbiddenText}`);
   }
 
-  const formalMemorySummary = summarizeFormalMemoryStore({
-    store_version: "formal_memory_store.v1",
-    project_id: "project:offline",
-    workflow_id: "workflow:offline:default",
-    revision: 4,
-    records: [
-      {
-        memory_id: "mem:formal:offline:001",
-        schema_version: "memory_governance.v1",
-        record_version: 1,
-        scope: {
-          scope_id: "scope:project:offline",
-          scope_type: "project",
-          project_id: "project:offline",
-          workflow_id: "workflow:offline:default",
-          role_ids: [],
-          document_refs: [],
-          model_export_policy: "local_only",
-          valid_from: "2026-06-03T00:00:00Z",
-        },
-        memory_type: "project_memory",
-        claim: "正式记忆创建必须写 version 和 audit。",
-        body: "M1 只验证正式记忆骨架，不做任务包注入。",
-        source_refs: [
-          {
-            source_ref_id: "source:offline:formal:001",
-            source_type: "stage_report",
-            source_id: "stage:offline",
-            source_title: "离线正式记忆测试",
-            captured_at: "2026-06-03T00:00:00Z",
-            authority_level: "evidence",
-            sensitive_level: "project",
-          },
-        ],
-        status: "memory_active",
-        supersedes_memory_id: null,
-        superseded_by_memory_id: null,
-        conflict_refs: [],
-        audit_refs: [],
-        created_at: "2026-06-03T00:00:00Z",
-        updated_at: "2026-06-03T00:00:00Z",
-      },
-    ],
-    versions: [
-      {
-        version_id: "memver:formal:offline:001",
-        memory_id: "mem:formal:offline:001",
-        version_number: 1,
-        change_type: "created",
-        change_summary: "创建正式记忆第一版。",
-        record_snapshot: {
-          memory_id: "mem:formal:offline:001",
-          schema_version: "memory_governance.v1",
-          record_version: 1,
-          scope: {
-            scope_id: "scope:project:offline",
-            scope_type: "project",
-            project_id: "project:offline",
-            workflow_id: "workflow:offline:default",
-            role_ids: [],
-            document_refs: [],
-            model_export_policy: "local_only",
-            valid_from: "2026-06-03T00:00:00Z",
-          },
-          memory_type: "project_memory",
-          claim: "正式记忆创建必须写 version 和 audit。",
-          body: "M1 只验证正式记忆骨架，不做任务包注入。",
-          source_refs: [],
-          status: "memory_active",
-          supersedes_memory_id: null,
-          superseded_by_memory_id: null,
-          conflict_refs: [],
-          audit_refs: [],
-          created_at: "2026-06-03T00:00:00Z",
-          updated_at: "2026-06-03T00:00:00Z",
-        },
-        source_refs: [],
-        changed_by_role: "project_director",
-        reviewed_by: null,
-        created_at: "2026-06-03T00:00:00Z",
-      },
-    ],
-    audit_events: [
-      {
-        audit_event_id: "audit:formal:offline:001",
-        event_type: "memory_record_created",
-        actor_id: "project-director-offline",
-        actor_role: "project_director",
-        project_id: "project:offline",
-        workflow_id: "workflow:offline:default",
-        session_id: null,
-        target_kind: "memory_record",
-        target_id: "mem:formal:offline:001",
-        before_state: null,
-        after_state: "memory_active",
-        reason: "离线正式记忆测试",
-        source_refs: [],
-        status: "succeeded",
-        created_at: "2026-06-03T00:00:00Z",
-      },
-    ],
-    updated_at: "2026-06-03T00:00:00Z",
-    warnings: [],
-  });
+  const formalMemorySummary = summarizeFormalMemoryStore(formalMemoryStore);
   assert(formalMemorySummary.sidecar_name === "formal-memories.v1.json", "正式记忆 sidecar 文件名不匹配");
   assert(formalMemorySummary.record_count === 1, "正式记忆 record 计数不匹配");
   assert(formalMemorySummary.version_count === 1, "正式记忆 version 计数不匹配");
@@ -2871,122 +2580,11 @@ function runCandidateGovernanceScenario() {
     assert(!formalMemorySummary.display_text.includes(forbiddenText), `正式记忆摘要不应出现越界文案：${forbiddenText}`);
   }
 
-  const adoptedFormalMemorySummary = summarizeFormalMemoryStore({
-    store_version: "formal_memory_store.v1",
-    project_id: "project:offline",
-    workflow_id: "workflow:offline:default",
-    revision: 5,
-    records: [],
-    versions: [],
-    audit_events: [
-      {
-        audit_event_id: "audit:formal:offline:002",
-        event_type: "memory_candidate_adopted_to_formal_memory",
-        actor_id: "project-director-offline",
-        actor_role: "project_director",
-        project_id: "project:offline",
-        workflow_id: "workflow:offline:default",
-        session_id: null,
-        target_kind: "memory_record",
-        target_id: "mem:formal:offline:002",
-        before_state: null,
-        after_state: "memory_active",
-        reason: "项目主管采纳低风险本项目记忆候选。",
-        source_refs: [],
-        status: "succeeded",
-        created_at: "2026-06-03T00:00:02Z",
-      },
-    ],
-    updated_at: "2026-06-03T00:00:02Z",
-    warnings: [],
-  });
+  const adoptedFormalMemorySummary = summarizeFormalMemoryStore(adoptedFormalMemoryStore);
   assert(adoptedFormalMemorySummary.recent_audit_event?.event_type === "memory_candidate_adopted_to_formal_memory", "正式记忆摘要应识别候选采纳审计");
   assert(adoptedFormalMemorySummary.display_text.includes("候选受控采纳审计已记录"), "正式记忆摘要应显示候选受控采纳审计");
   assert(!adoptedFormalMemorySummary.display_text.includes("M1 不包含候选采纳"), "采纳事件出现后不应继续显示 M1 候选采纳缺口文案");
 
-  const memoryLintStore: MemoryLintStoreV1 = {
-    store_version: "memory_lint_store.v1",
-    project_id: "project:offline-fixture-projects-codex-workbench",
-    workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-    revision: 2,
-    findings: [
-      {
-        finding_id: "memlint:v1:offline:blocking",
-        schema_version: "memory_governance.v1",
-        finding_type: "source_permission_revoked",
-        severity: "blocking",
-        status: "open",
-        source_kind: "memory_record",
-        source_id: "mem:formal:offline:revoked",
-        target_memory_id: "mem:formal:offline:revoked",
-        target_candidate_key: null,
-        scope_type: "project",
-        memory_type: "project_memory",
-        claim: "撤回来源不能进入任务记忆包。",
-        summary: "来源权限撤回产生 open blocking finding。",
-        recommended_action: "exclude_from_task_packet",
-        evidence_refs: [],
-        audit_event_id: null,
-        created_at: "2026-06-04T02:00:00Z",
-        updated_at: "2026-06-04T02:00:00Z",
-      },
-      {
-        finding_id: "memlint:v1:offline:review",
-        schema_version: "memory_governance.v1",
-        finding_type: "duplicate_claim",
-        severity: "needs_review",
-        status: "open",
-        source_kind: "memory_record",
-        source_id: "mem:formal:offline:duplicate",
-        target_memory_id: "mem:formal:offline:duplicate",
-        target_candidate_key: null,
-        scope_type: "project",
-        memory_type: "project_memory",
-        claim: "重复 claim 需要人工复核。",
-        summary: "重复 claim 只生成 needs_review finding。",
-        recommended_action: "review_and_deprecate",
-        evidence_refs: [],
-        audit_event_id: null,
-        created_at: "2026-06-04T02:00:01Z",
-        updated_at: "2026-06-04T02:00:01Z",
-      },
-      {
-        finding_id: "memlint:v1:offline:resolved",
-        schema_version: "memory_governance.v1",
-        finding_type: "candidate_conflicts_with_active_memory",
-        severity: "blocking",
-        status: "resolved",
-        source_kind: "memory_candidate",
-        source_id: "memcand:v1:offline-resolved",
-        target_memory_id: "mem:formal:offline:old",
-        target_candidate_key: "memcand:v1:offline-resolved",
-        scope_type: "project",
-        memory_type: "project_memory",
-        claim: "已解决 finding 不应计入 open blocking。",
-        summary: "resolved blocking finding 不计入 open blocking 摘要。",
-        recommended_action: "block_adoption",
-        evidence_refs: [],
-        audit_event_id: null,
-        created_at: "2026-06-04T02:00:02Z",
-        updated_at: "2026-06-04T02:00:02Z",
-      },
-    ],
-    runs: [
-      {
-        run_id: "memlint-run:v1:offline",
-        lint_intent: "candidate_adoption_guard",
-        actor_id: "project-director-offline",
-        actor_role: "project_director",
-        finding_ids: ["memlint:v1:offline:blocking"],
-        blocking_count: 1,
-        status: "blocked",
-        reason: "candidate_adoption_guard blocked by 1 blocking finding",
-        created_at: "2026-06-04T02:00:03Z",
-      },
-    ],
-    updated_at: "2026-06-04T02:00:03Z",
-    warnings: ["memory_lint_findings_only_no_formal_memory_mutation"],
-  };
   const memoryLintSummary = summarizeMemoryLintStore(memoryLintStore);
   assert(memoryLintSummary.sidecar_name === "memory-lint.v1.json", "记忆 lint sidecar 文件名不匹配");
   assert(memoryLintSummary.finding_count === 3, "记忆 lint finding 计数不匹配");
@@ -3003,73 +2601,6 @@ function runCandidateGovernanceScenario() {
     assert(memoryLintSummary.display_text.includes(expectedText), `记忆 lint 摘要缺少 ${expectedText}`);
   }
 
-  const taskMemoryPacketPreview: TaskMemoryPacketBuildOutput = {
-    preview: {
-      packet_id: "task-memory-packet-preview:v1:offline",
-      schema_version: "task_memory_packet.v1",
-      project_id: "project:offline-fixture-projects-codex-workbench",
-      workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-      task_id: "work-item:offline:001",
-      role_id: "codex-dev",
-      retrieval_intent: "worker_task",
-      included_memories: [
-        {
-          memory_id: "mem:formal:offline:included",
-          memory_type: "project_memory",
-          scope_type: "project",
-          claim: "接口验收必须保留控制核心边界。",
-    body: "活跃正式记忆可以进入任务记忆包预览。",
-          source_refs: [],
-          retrieval_reason: "active formal memory matched task goal by 接口；scope=project",
-          estimated_tokens: 28,
-          model_export_policy: "local_only",
-        },
-      ],
-      excluded_items: [
-        {
-          source_kind: "memory_candidate",
-          source_id: "memcand:v1:offline-packet",
-          claim: "候选还没有受控采纳。",
-          reason: "candidate_unconfirmed",
-          detail: "记忆候选不是正式记忆；不会进入任务记忆包入选列表",
-        },
-        {
-          source_kind: "observation",
-          source_id: "obs:v1:offline-packet",
-          claim: "观察只作为待审查材料。",
-          reason: "observation_not_formal_memory",
-          detail: "观察不是正式记忆；不会进入任务记忆包入选列表",
-        },
-      ],
-      review_materials: [
-        {
-          source_kind: "memory_candidate",
-          source_id: "memcand:v1:offline-packet",
-          title: "候选还没有受控采纳。",
-          reason: "candidate_unconfirmed",
-        },
-        {
-          source_kind: "observation",
-          source_id: "obs:v1:offline-packet",
-          title: "观察只作为待审查材料。",
-          reason: "observation_not_formal_memory",
-        },
-      ],
-      estimated_tokens: 28,
-      max_estimated_tokens: 8000,
-      generated_at: "2026-06-04T01:00:00Z",
-      warnings: [
-        "preview_only_not_injected",
-        "worker_has_not_received_memory_packet",
-        "candidate_and_observation_review_materials_only",
-      ],
-    },
-    formal_store_revision: 4,
-    candidate_store_revision: 3,
-    observation_store_revision: 2,
-    lint_store_revision: 5,
-    warnings: ["preview_only_not_injected"],
-  };
   const taskMemoryPacketSummary = summarizeTaskMemoryPacketPreview(taskMemoryPacketPreview);
   assert(taskMemoryPacketSummary.included_count === 1, "任务记忆包预览 included 计数不匹配");
   assert(taskMemoryPacketSummary.excluded_count === 2, "任务记忆包预览 excluded 计数不匹配");
