@@ -41,6 +41,7 @@ mod workbench_sqlite_dual_write;
 mod workbench_sqlite_exporter;
 mod workbench_sqlite_importer;
 mod workbench_sqlite_observation_period;
+mod workbench_sqlite_preflight;
 mod workbench_sqlite_read_cut;
 mod workbench_sqlite_schema;
 mod worker_protocol;

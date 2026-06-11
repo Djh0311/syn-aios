@@ -2,7 +2,13 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R3-A7 任务包，用于在 R3-A6 production cutover / rollback operator contract freeze 基础上，实现 production preflight scanner / report 的只读工具和 fixture 验证。R3-A7 默认只实现 scanner 模块和测试，不默认扫描真实生产 root；如要扫描真实工作台 state root，必须由主管线在本任务内明确 allowed root、report path、读取字段和不读取项。
+状态：已完成。本文是 Root Treatment / Stage R 的 R3-A7 任务包，用于在 R3-A6 production cutover / rollback operator contract freeze 基础上，实现 production preflight scanner / report 的只读工具和 fixture 验证。R3-A7 默认只实现 scanner 模块和测试，不默认扫描真实生产 root；如要扫描真实工作台 state root，必须由主管线在本任务内明确 allowed root、report path、读取字段和不读取项。
+
+完成记录：
+
+- evidence：`evidence/2026-06-11-root-treatment-r3-a7-production-preflight-scanner-and-report-v1.md`
+- handoff：`handoffs/2026-06-11-root-treatment-r3-a7-production-preflight-scanner-and-report-v1-result.md`
+- implementation commit：待主管线提交后回填。
 
 ## 0. 全局主管理解
 
