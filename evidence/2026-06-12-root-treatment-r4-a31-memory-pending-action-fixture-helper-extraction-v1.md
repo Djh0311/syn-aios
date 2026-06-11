@@ -2,17 +2,17 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a31-memory-pending-action-fixture-helper-extraction-v1.md`
 
 Planning baseline commit：`f317a7c`
 
-Implementation commit：`待回填`
+Implementation commit：`bd3c30065dfff6d91d1b06b795503a0aff88753f`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：`待回填`
+Checkpoint commit：`167dad16aeb5072a816052f6b0d195abf79470de`
 
 ## 1. 本轮目标
 
