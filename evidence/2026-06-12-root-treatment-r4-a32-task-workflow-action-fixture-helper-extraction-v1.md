@@ -110,7 +110,7 @@ git diff --check
 
 过程偏差：
 
-- hash 回填扫描时有一条 `rg` 命令误把带反引号的 pattern 放进 shell 双引号，zsh 触发了两次字面量 `pending` 命令替换并返回 `command not found`。
+- hash 回填扫描和收尾旧口径扫描时，各有一条 `rg` 命令误把带反引号的 pattern 放进 shell 双引号，zsh 分别触发了两次字面量 `pending` 命令替换并返回 `command not found`。
 - 随后已用单引号 pattern 重跑安全扫描，hash placeholder 无命中。
 - 该偏差未修改文件，未启动 Tauri / Browser / Chrome / Vite dev，未执行真实 Codex，未读写 `/Users/yoyi/.codex`。
 
