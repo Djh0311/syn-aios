@@ -2,17 +2,17 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a47-derived-project-workflow-fixture-helper-extraction-v1.md`
 
 Planning baseline commit：`03fa13e80c69c807911f553541702b062e11d7e2`
 
-Implementation commit：待回填。
+Implementation commit：`3c3e256e9f605f3b27e71041b26182909d58752e`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填。
+Checkpoint commit：`9accd736a3a79b01aeb7e90bf4bbd39f99fdefb1`
 
 ## 1. 本轮目标
 
