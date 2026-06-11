@@ -14,7 +14,7 @@ Implementation commit：`a37fba01d183e6751199e2910c90c09a69923c6c`。
 
 Review result：`STATUS: CLEAR_WITH_P2`；无 P0 / P1。
 
-Checkpoint commit：`TBD`。
+Checkpoint commit：`475409e764e905b5a06f7f4257883d2a03bd6386`。
 
 ## 1. Result
 
@@ -74,7 +74,7 @@ R4-A19 相关改动：
 - `STATUS: CLEAR_WITH_P2`
 - P0：无。
 - P1：无。
-- P2-1：任务包元数据回填；本 checkpoint 收尾处理该项。
+- P2-1：任务包元数据回填；已在 checkpoint hash backfill 中关闭。
 - P2-2：helper 629 行略超 600 软阈值；不阻断，后续若继续增长再拆。
 
 复核线确认：

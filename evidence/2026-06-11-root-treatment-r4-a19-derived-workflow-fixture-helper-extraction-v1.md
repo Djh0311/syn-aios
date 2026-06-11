@@ -12,7 +12,7 @@ Implementation commit：`a37fba01d183e6751199e2910c90c09a69923c6c`。
 
 Review result：`STATUS: CLEAR_WITH_P2`；无 P0 / P1。
 
-Checkpoint commit：`TBD`。
+Checkpoint commit：`475409e764e905b5a06f7f4257883d2a03bd6386`。
 
 ## 1. Scope
 
@@ -122,7 +122,7 @@ R4-A19 相关改动：
 - `STATUS: CLEAR_WITH_P2`
 - P0：无。
 - P1：无。
-- P2-1：任务包元数据未回填；本 checkpoint 收尾处理该项。
+- P2-1：复核时指出任务包元数据需要回填；已在 checkpoint hash backfill 中关闭。
 - P2-2：helper 629 行略超 600 软阈值。复核线确认它仍属于一个连贯 pure fixture cluster，不作为阻断；若后续继续增长，再拆成 `pendingWorkflowResultSummary` 与 `derivedWorkflowState` 两个更窄 helper。
 
 复核结论：

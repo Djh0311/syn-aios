@@ -8,9 +8,9 @@ Planning baseline commit：`0f7a7b6500e660ab2376ac7602512c8b390b9750`
 
 Implementation commit：`a37fba01d183e6751199e2910c90c09a69923c6c`
 
-Review result：`STATUS: CLEAR_WITH_P2`；P0 / P1 无。P2-1 为任务包元数据回填，已在 checkpoint 收尾中处理；P2-2 为 helper 629 行略超 600 软阈值，记录为后续增长时再拆，不阻断本轮。
+Review result：`STATUS: CLEAR_WITH_P2`；P0 / P1 无。P2-1 为任务包元数据回填，已在 checkpoint hash backfill 中关闭；P2-2 为 helper 629 行略超 600 软阈值，记录为后续增长时再拆，不阻断本轮。
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`475409e764e905b5a06f7f4257883d2a03bd6386`
 
 ## 0. 全局主管理解
 
