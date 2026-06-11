@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-结论：已完成并通过复核线 `STATUS: CLEAR`。R4-A5 已实现 Running Workflows / Memory Center 首批页面 selector 分域和页面最小消费，implementation commit 为 `955783f4629176d930fd0b2fb1d881aa6a289c0d`。
+结论：已完成并通过复核线 `STATUS: CLEAR`。R4-A5 已实现 Running Workflows / Memory Center 首批页面 selector 分域和页面最小消费，implementation commit 为 `955783f4629176d930fd0b2fb1d881aa6a289c0d`，checkpoint commit 为 `8fb7fa360d6f5074b77728f493fa73eaf68363c3`。
 
 ## 必读文件
 

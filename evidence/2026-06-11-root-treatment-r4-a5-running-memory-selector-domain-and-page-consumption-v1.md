@@ -8,7 +8,7 @@ Planning baseline commit：`930bde34bffe551fb7ec7840313576e1f3ad9493`
 Task package commit：`e44cdf4f18e82b25b08d9bbb1d34f33eb4641008`
 Implementation commit：`955783f4629176d930fd0b2fb1d881aa6a289c0d`
 Review result：`STATUS: CLEAR`，复核线 `019eb51c-61fe-7fc3-8973-b22a4ce58911`，P0/P1/P2 均无。
-Checkpoint commit：待回填。
+Checkpoint commit：`8fb7fa360d6f5074b77728f493fa73eaf68363c3`
 
 ## 1. Scope
 
