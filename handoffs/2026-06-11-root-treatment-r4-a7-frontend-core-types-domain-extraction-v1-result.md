@@ -10,7 +10,7 @@ Evidence：`evidence/2026-06-11-root-treatment-r4-a7-frontend-core-types-domain-
 
 Planning baseline commit：`272307fab0dfd5a595b052c7551e23df31187d2a`
 
-Implementation commit：待回填。
+Implementation commit：`a60c4f001c312ab72bd4a37c0c490a4295914e89`
 
 ## 1. Result
 
