@@ -1,4 +1,5 @@
 import { Badge } from "../components/Badge";
+import { deriveSettingsPageReadModelFromParts } from "../lib/pageSelectors";
 import type { WorkbenchSnapshot, WorkflowStateSnapshot } from "../lib/types";
 import type { ViewKey, WorkbenchNavItem } from "../lib/workbenchNavigation";
 
@@ -31,7 +32,18 @@ export function SettingsView({
   const diagnosticCount = snapshot.diagnostic_summary.degraded_states.length;
   const runtimeLogCount = snapshot.runtime_log_store.entries.length;
   const pageReadModelInventory = snapshot.page_read_model_inventory;
-  const pageContractCount = pageReadModelInventory.contracts.length;
+  const pageReadModel = deriveSettingsPageReadModelFromParts({
+    summary: snapshot.summary,
+    workflowCount: workflowState?.counts.workflows ?? 0,
+    workflowStateError,
+    hasRealSnapshot,
+    developerItems,
+    adapterCount,
+    providerCount,
+    diagnosticCount,
+    runtimeLogCount,
+    pageReadModelInventory,
+  });
 
   return (
     <section className="stage-pad settings-view">
@@ -41,8 +53,8 @@ export function SettingsView({
           <h1 className="pg-title">工作台设置</h1>
         </div>
         <div className="pg-meta">
-          <div className="big">{hasRealSnapshot ? "索引已读取" : "未接真实数据"}</div>
-          <div>设置页只整理入口和边界，不读取凭据、不触发执行。</div>
+          <div className="big">{pageReadModel.snapshot_status_label}</div>
+          <div>{pageReadModel.boundary_text}</div>
         </div>
       </div>
 
@@ -53,10 +65,10 @@ export function SettingsView({
             <Badge tone={workflowStateError ? "warning" : "neutral"}>{workflowStateError ? "事实层异常" : "只读"}</Badge>
           </div>
           <div className="settings-fact-grid">
-            <SettingFact label="项目" value={`${snapshot.summary.project_count}`} />
-            <SettingFact label="智能体会话" value={`${snapshot.summary.session_count}`} />
-            <SettingFact label="Skill" value={`${snapshot.summary.skill_count}`} />
-            <SettingFact label="工作流" value={`${workflowState?.counts.workflows ?? 0}`} />
+            <SettingFact label="项目" value={`${pageReadModel.general.project_count}`} />
+            <SettingFact label="智能体会话" value={`${pageReadModel.general.session_count}`} />
+            <SettingFact label="Skill" value={`${pageReadModel.general.skill_count}`} />
+            <SettingFact label="工作流" value={`${pageReadModel.general.workflow_count}`} />
           </div>
           <p className="muted small-note">
             普通主导航展示项目、智能体、想法箱、知识库、记忆层、Skill、Harness、运行中工作流；开发和内部边界统一从本页进入。
@@ -97,12 +109,12 @@ export function SettingsView({
         <div className="developer-boundary-grid">
           <BoundaryItem
             title="适配器 / 供应方"
-            value={`${adapterCount} 个适配器 · ${providerCount} 个供应方摘要`}
+            value={`${pageReadModel.developer_boundary.adapter_count} 个适配器 · ${pageReadModel.developer_boundary.provider_count} 个供应方摘要`}
             note="这里只说明可见边界；不验证模型、不读取密钥、不发起供应方调用。"
           />
           <BoundaryItem
             title="边车文件 / 原始状态"
-            value={`${runtimeLogCount} 条运行日志索引 · ${diagnosticCount} 条诊断状态`}
+            value={`${pageReadModel.developer_boundary.runtime_log_count} 条运行日志索引 · ${pageReadModel.developer_boundary.diagnostic_count} 条诊断状态`}
             note="详细原始状态、诊断和日志摘要放在开发者区或右侧管理；普通首页不铺开。"
           />
           <BoundaryItem
@@ -129,8 +141,8 @@ export function SettingsView({
         <div className="developer-boundary-grid">
           <BoundaryItem
             title="合同数量"
-            value={`${pageContractCount} 个页面合同`}
-            note={`状态：${pageReadModelInventory.status}；来源：${pageReadModelInventory.source_policy}`}
+            value={`${pageReadModel.page_contract.count} 个页面合同`}
+            note={`状态：${pageReadModel.page_contract.status}；来源：${pageReadModel.page_contract.source_policy}`}
           />
           <BoundaryItem
             title="迁移边界"

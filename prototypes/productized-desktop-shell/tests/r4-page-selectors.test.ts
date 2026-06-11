@@ -2,10 +2,12 @@ import type { WorkbenchSnapshot, WorkflowStateSnapshot } from "../src/lib/types"
 import {
   deriveAgentsPageReadModel,
   deriveAgentsPageReadModelFromParts,
+  deriveKnowledgeBasePageReadModelFromParts,
   deriveMemoryCenterPageReadModelFromParts,
   deriveProjectsPageReadModel,
   deriveProjectsPageReadModelFromParts,
   deriveRunningWorkflowsPageReadModelFromParts,
+  deriveSettingsPageReadModelFromParts,
 } from "../src/lib/pageSelectors";
 
 const snapshot = {
@@ -360,6 +362,52 @@ const memoryModel = deriveMemoryCenterPageReadModelFromParts({
     warnings: [],
   } as any,
 });
+const knowledgeModel = deriveKnowledgeBasePageReadModelFromParts({
+  hasRealSnapshot: true,
+  summary: {
+    source_kind: "frontend_read_model",
+    document_count: 3,
+    formal_memory_link_count: 1,
+    candidate_link_count: 2,
+    task_reference_count: 4,
+    capture_event_count: 5,
+    recent_capture_events: [],
+    documents: [],
+    obsidian_boundary: {
+      label: "Obsidian-compatible 占位",
+      native_sync_status: "未执行 Obsidian 原生同步",
+      vault_scan_status: "未自动扫描 vault",
+      display_text: "知识库 fixture boundary",
+      forbidden_text: "知识命中不能绕过候选、正式记忆、来源、版本、审计和权限治理。",
+    },
+    warnings: [],
+  } as any,
+});
+const settingsModel = deriveSettingsPageReadModelFromParts({
+  summary: snapshot.summary,
+  workflowCount: 1,
+  workflowStateError: "fixture workflow state read error",
+  hasRealSnapshot: true,
+  developerItems: [{ key: "proposal", label: "建议方案", glyph: "案" }] as any,
+  adapterCount: snapshot.agent_adapters.length,
+  providerCount: snapshot.provider_availability.length,
+  diagnosticCount: snapshot.diagnostic_summary.degraded_states.length,
+  runtimeLogCount: snapshot.runtime_log_store.entries.length,
+  pageReadModelInventory: {
+    ...snapshot.page_read_model_inventory,
+    status: "contract_only",
+    source_policy: "fixture",
+    contracts: [
+      {
+        page_id: "settings",
+        page_label: "设置",
+        planned_read_model: "settings_page_read_model.v1",
+        user_facing_data: ["常规统计"],
+        must_not_show_as_primary: ["凭据", "原始日志"],
+      },
+    ],
+  } as any,
+});
 
 assert(projectsModel.schema_version === "projects_page_read_model.v1", "projects selector schema should be stable");
 assert(agentsModel.schema_version === "agents_page_read_model.v1", "agents selector schema should be stable");
@@ -405,16 +453,28 @@ assert(agentsModel.conversation_first, "agents selector should preserve conversa
 assert(agentsModel.developer_details_collapsed, "developer details should stay collapsed");
 assert(runningModel.schema_version === "running_workflows_page_read_model.v1", "running selector schema should be stable");
 assert(memoryModel.schema_version === "memory_center_page_read_model.v1", "memory selector schema should be stable");
+assert(knowledgeModel.schema_version === "knowledge_base_page_read_model.v1", "knowledge selector schema should be stable");
+assert(settingsModel.schema_version === "settings_page_read_model.v1", "settings selector schema should be stable");
 assert(runningModel.source_boundary.generated_from === "workbench_snapshot_selector", "running selector source should be explicit");
 assert(memoryModel.source_boundary.generated_from === "workbench_snapshot_selector", "memory selector source should be explicit");
+assert(knowledgeModel.source_boundary.generated_from === "workbench_snapshot_selector", "knowledge selector source should be explicit");
+assert(settingsModel.source_boundary.generated_from === "workbench_snapshot_selector", "settings selector source should be explicit");
 assert(runningModel.source_boundary.workbench_snapshot_active, "running selector must keep WorkbenchSnapshot active");
 assert(memoryModel.source_boundary.workbench_snapshot_active, "memory selector must keep WorkbenchSnapshot active");
+assert(knowledgeModel.source_boundary.workbench_snapshot_active, "knowledge selector must keep WorkbenchSnapshot active");
+assert(settingsModel.source_boundary.workbench_snapshot_active, "settings selector must keep WorkbenchSnapshot active");
 assert(!runningModel.source_boundary.page_ui_migrated, "running page must not claim UI migration");
 assert(!memoryModel.source_boundary.page_ui_migrated, "memory page must not claim UI migration");
+assert(!knowledgeModel.source_boundary.page_ui_migrated, "knowledge page must not claim UI migration");
+assert(!settingsModel.source_boundary.page_ui_migrated, "settings page must not claim UI migration");
 assert(!runningModel.source_boundary.tauri_command_consumed, "running selector must not claim Tauri command consumption");
 assert(!memoryModel.source_boundary.tauri_command_consumed, "memory selector must not claim Tauri command consumption");
+assert(!knowledgeModel.source_boundary.tauri_command_consumed, "knowledge selector must not claim Tauri command consumption");
+assert(!settingsModel.source_boundary.tauri_command_consumed, "settings selector must not claim Tauri command consumption");
 assert(!runningModel.source_boundary.writes_stores, "running selector must be read-only");
 assert(!memoryModel.source_boundary.writes_stores, "memory selector must be read-only");
+assert(!knowledgeModel.source_boundary.writes_stores, "knowledge selector must be read-only");
+assert(!settingsModel.source_boundary.writes_stores, "settings selector must be read-only");
 assert(runningModel.workflow_count === 1, "running selector should count workflow summaries");
 assert(runningModel.workflow_focus_count === 1, "running selector should count focused workflows");
 assert(runningModel.waiting_permission_count === 1, "running selector should count waiting permissions");
@@ -429,8 +489,24 @@ assert(memoryModel.candidate_memory.candidate_count === 2, "memory selector shou
 assert(memoryModel.observation.observation_count === 3, "memory selector should keep observations separate from formal memory");
 assert(memoryModel.memory_workbench.action_count === 6, "memory selector should count workbench actions");
 assert(memoryModel.snapshot_status_label === "只读读模型", "memory selector should preserve snapshot status label");
+assert(knowledgeModel.document_count === 3, "knowledge selector should count documents");
+assert(knowledgeModel.formal_memory_link_count === 1, "knowledge selector should keep formal memory links separate");
+assert(knowledgeModel.candidate_link_count === 2, "knowledge selector should keep candidate links separate");
+assert(
+  knowledgeModel.warnings.includes("knowledge_hit_and_candidate_are_not_formal_memory"),
+  "knowledge selector should warn that candidates are not formal memory",
+);
+assert(settingsModel.general.workflow_count === 1, "settings selector should count workflows");
+assert(settingsModel.developer_boundary.developer_item_count === 1, "settings selector should count developer items");
+assert(settingsModel.developer_boundary.page_contract_count === 1, "settings selector should count page contracts");
+assert(!settingsModel.developer_boundary.credential_display_allowed, "settings selector must not allow credential display");
+assert(!settingsModel.developer_boundary.execution_from_settings_allowed, "settings selector must not allow execution");
+assert(
+  settingsModel.warnings.includes("settings_page_must_not_read_credentials_or_trigger_execution"),
+  "settings selector should preserve credential and execution warning",
+);
 
-const serialized = JSON.stringify({ projectsModel, agentsModel, runningModel, memoryModel });
+const serialized = JSON.stringify({ projectsModel, agentsModel, runningModel, memoryModel, knowledgeModel, settingsModel });
 for (const forbidden of ["raw transcript", "full transcript", "secret", "token", "prompt_body"]) {
   assert(!serialized.toLowerCase().includes(forbidden), `selector output should not expose ${forbidden}`);
 }

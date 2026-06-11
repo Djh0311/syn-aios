@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R4-A6 任务包；R4-A5 已完成并通过复核线 `STATUS: CLEAR`。R4-A6 只接受为 Knowledge Base / Settings 首批前端纯 selector 分域和页面最小消费；不接受为页面真实数据来源迁移、R4 完成、`query_workbench_page_read_model` 被页面真实消费、UI 重做、真实 Tauri 验收、R3 Level B 或多 agent 并行真实执行解锁。
+状态：已实现，待复核线回收。本文是 Root Treatment / Stage R 的 R4-A6 任务包；R4-A5 已完成并通过复核线 `STATUS: CLEAR`。R4-A6 只接受为 Knowledge Base / Settings 首批前端纯 selector 分域和页面最小消费；不接受为页面真实数据来源迁移、R4 完成、`query_workbench_page_read_model` 被页面真实消费、UI 重做、真实 Tauri 验收、R3 Level B 或多 agent 并行真实执行解锁。
 
 Planning baseline commit：`c248f9bb390458ba64f2a809ec6876c543b5ff91`
 Implementation commit：待回填。

@@ -1,5 +1,6 @@
 import { Badge } from "../components/Badge";
 import { deriveKnowledgeBaseSummary, type KnowledgeDocumentReadModel, type KnowledgeMemoryLink } from "../lib/knowledgeBase";
+import { deriveKnowledgeBasePageReadModelFromParts } from "../lib/pageSelectors";
 import type {
   FormalMemoryStoreV1,
   MemoryCaptureStoreV1,
@@ -33,6 +34,7 @@ export function KnowledgeBaseView({
     memoryCaptureStore,
     memoryCandidateStore,
   });
+  const pageReadModel = deriveKnowledgeBasePageReadModelFromParts({ summary, hasRealSnapshot });
 
   return (
     <section className="stage-pad knowledge-base" aria-label="知识库最小入口">
@@ -42,17 +44,17 @@ export function KnowledgeBaseView({
           <h1 className="pg-title">知识库资料</h1>
         </div>
         <div className="pg-meta">
-          <div className="big">{hasRealSnapshot ? "权威文件读模型" : "未读取真实索引"}</div>
-          <div>{summary.obsidian_boundary.display_text}</div>
+          <div className="big">{pageReadModel.snapshot_status_label}</div>
+          <div>{pageReadModel.boundary_text}</div>
         </div>
       </div>
 
       <div className="stat-strip knowledge-base-stats">
-        <StatCell label="资料" value={`${summary.document_count}`} helper="知识库资料" />
-        <StatCell label="正式记忆" value={`${summary.formal_memory_link_count}`} helper="关联正式记忆" />
-        <StatCell label="候选" value={`${summary.candidate_link_count}`} helper="关联候选" />
-        <StatCell label="任务引用" value={`${summary.task_reference_count}`} helper="任务包知识引用" />
-        <StatCell label="捕获" value={`${summary.capture_event_count}`} helper="记忆捕获来源" />
+        <StatCell label="资料" value={`${pageReadModel.document_count}`} helper="知识库资料" />
+        <StatCell label="正式记忆" value={`${pageReadModel.formal_memory_link_count}`} helper="关联正式记忆" />
+        <StatCell label="候选" value={`${pageReadModel.candidate_link_count}`} helper="关联候选" />
+        <StatCell label="任务引用" value={`${pageReadModel.task_reference_count}`} helper="任务包知识引用" />
+        <StatCell label="捕获" value={`${pageReadModel.capture_event_count}`} helper="记忆捕获来源" />
       </div>
 
       <div className="knowledge-base-grid">
@@ -86,15 +88,15 @@ export function KnowledgeBaseView({
           <div className="panel-heading">
             <div>
               <p className="eyebrow">边界</p>
-              <h3>{summary.obsidian_boundary.label}</h3>
+              <h3>{pageReadModel.obsidian_boundary.label}</h3>
             </div>
             <Badge tone="unknown">占位</Badge>
           </div>
           <div className="workflow-compact-list">
             <div className="workflow-compact-item">
-              <strong>{summary.obsidian_boundary.native_sync_status}</strong>
-              <span>{summary.obsidian_boundary.vault_scan_status}</span>
-              <em>{summary.obsidian_boundary.forbidden_text}</em>
+              <strong>{pageReadModel.obsidian_boundary.native_sync_status}</strong>
+              <span>{pageReadModel.obsidian_boundary.vault_scan_status}</span>
+              <em>{pageReadModel.obsidian_boundary.forbidden_text}</em>
             </div>
             <div className="workflow-compact-item">
               <strong>知识库和正式记忆</strong>

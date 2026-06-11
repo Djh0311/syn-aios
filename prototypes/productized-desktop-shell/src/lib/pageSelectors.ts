@@ -20,8 +20,10 @@ import type {
   WorkbenchSnapshot,
   WorkflowStateSnapshot,
 } from "./types";
+import { deriveKnowledgeBaseSummary, type KnowledgeBaseSummary } from "./knowledgeBase";
 import { deriveMemoryManagementSummary, type MemoryManagementSummary } from "./memoryCenter";
 import { deriveRunQueueReadModel, type RunQueueReadModel } from "./runQueue";
+import type { WorkbenchNavItem } from "./workbenchNavigation";
 
 export type PageSelectorSourceBoundary = {
   generated_from: "workbench_snapshot_selector";
@@ -187,6 +189,60 @@ export type MemoryCenterPageReadModel = {
     candidate_count: number;
     confirmed_pending_formalization_count: number;
     capture_compensation_count: number;
+  };
+  user_facing_summary: string;
+  developer_details_collapsed: true;
+  warnings: string[];
+};
+
+export type KnowledgeBasePageReadModel = {
+  schema_version: "knowledge_base_page_read_model.v1";
+  selector_id: "knowledge_base_page_selector_v1";
+  source_boundary: PageSelectorSourceBoundary;
+  snapshot_status_label: string;
+  boundary_text: string;
+  document_count: number;
+  formal_memory_link_count: number;
+  candidate_link_count: number;
+  task_reference_count: number;
+  capture_event_count: number;
+  obsidian_boundary: {
+    label: string;
+    native_sync_status: string;
+    vault_scan_status: string;
+    forbidden_text: string;
+  };
+  user_facing_summary: string;
+  developer_details_collapsed: true;
+  warnings: string[];
+};
+
+export type SettingsPageReadModel = {
+  schema_version: "settings_page_read_model.v1";
+  selector_id: "settings_page_selector_v1";
+  source_boundary: PageSelectorSourceBoundary;
+  snapshot_status_label: string;
+  boundary_text: string;
+  general: {
+    project_count: number;
+    session_count: number;
+    skill_count: number;
+    workflow_count: number;
+  };
+  developer_boundary: {
+    developer_item_count: number;
+    adapter_count: number;
+    provider_count: number;
+    diagnostic_count: number;
+    runtime_log_count: number;
+    page_contract_count: number;
+    credential_display_allowed: false;
+    execution_from_settings_allowed: false;
+  };
+  page_contract: {
+    count: number;
+    status: string;
+    source_policy: string;
   };
   user_facing_summary: string;
   developer_details_collapsed: true;
@@ -548,6 +604,158 @@ export function deriveMemoryCenterPageReadModelFromParts({
       "workbench_snapshot_still_active",
       "candidate_and_observation_are_not_formal_memory",
       ...summary.warnings.slice(0, 5),
+    ],
+  };
+}
+
+export function deriveKnowledgeBasePageReadModel({
+  projects,
+  workflowState,
+  formalMemoryStore,
+  memoryCaptureStore,
+  memoryCandidateStore,
+  hasRealSnapshot,
+}: {
+  projects: ProjectRecord[];
+  workflowState?: WorkflowStateSnapshot | null;
+  formalMemoryStore?: FormalMemoryStoreV1 | null;
+  memoryCaptureStore?: MemoryCaptureStoreV1 | null;
+  memoryCandidateStore?: MemoryCandidateStoreV1 | null;
+  hasRealSnapshot: boolean;
+}): KnowledgeBasePageReadModel {
+  const summary = deriveKnowledgeBaseSummary({
+    projects,
+    workflowState: workflowState ?? null,
+    formalMemoryStore,
+    memoryCaptureStore,
+    memoryCandidateStore,
+  });
+  return deriveKnowledgeBasePageReadModelFromParts({ summary, hasRealSnapshot });
+}
+
+export function deriveKnowledgeBasePageReadModelFromParts({
+  summary,
+  hasRealSnapshot,
+}: {
+  summary: KnowledgeBaseSummary;
+  hasRealSnapshot: boolean;
+}): KnowledgeBasePageReadModel {
+  return {
+    schema_version: "knowledge_base_page_read_model.v1",
+    selector_id: "knowledge_base_page_selector_v1",
+    source_boundary: selectorSourceBoundary(),
+    snapshot_status_label: hasRealSnapshot ? "权威文件读模型" : "未读取真实索引",
+    boundary_text: summary.obsidian_boundary.display_text,
+    document_count: summary.document_count,
+    formal_memory_link_count: summary.formal_memory_link_count,
+    candidate_link_count: summary.candidate_link_count,
+    task_reference_count: summary.task_reference_count,
+    capture_event_count: summary.capture_event_count,
+    obsidian_boundary: {
+      label: summary.obsidian_boundary.label,
+      native_sync_status: summary.obsidian_boundary.native_sync_status,
+      vault_scan_status: summary.obsidian_boundary.vault_scan_status,
+      forbidden_text: summary.obsidian_boundary.forbidden_text,
+    },
+    user_facing_summary:
+      `资料 ${summary.document_count}，正式记忆关联 ${summary.formal_memory_link_count}，` +
+      `候选关联 ${summary.candidate_link_count}，捕获 ${summary.capture_event_count}`,
+    developer_details_collapsed: true,
+    warnings: [
+      "r4_a6_selector_only_page_ui_not_migrated",
+      "workbench_snapshot_still_active",
+      "knowledge_hit_and_candidate_are_not_formal_memory",
+      ...summary.warnings.slice(0, 5),
+    ],
+  };
+}
+
+export function deriveSettingsPageReadModel({
+  snapshot,
+  workflowState,
+  workflowStateError,
+  hasRealSnapshot,
+  developerItems,
+}: {
+  snapshot: WorkbenchSnapshot;
+  workflowState?: WorkflowStateSnapshot | null;
+  workflowStateError?: string | null;
+  hasRealSnapshot: boolean;
+  developerItems: WorkbenchNavItem[];
+}): SettingsPageReadModel {
+  return deriveSettingsPageReadModelFromParts({
+    summary: snapshot.summary,
+    workflowCount: workflowState?.counts.workflows ?? 0,
+    workflowStateError,
+    hasRealSnapshot,
+    developerItems,
+    adapterCount: snapshot.agent_adapters.length,
+    providerCount: snapshot.provider_availability.length,
+    diagnosticCount: snapshot.diagnostic_summary.degraded_states.length,
+    runtimeLogCount: snapshot.runtime_log_store.entries.length,
+    pageReadModelInventory: snapshot.page_read_model_inventory,
+  });
+}
+
+export function deriveSettingsPageReadModelFromParts({
+  summary,
+  workflowCount,
+  workflowStateError,
+  hasRealSnapshot,
+  developerItems,
+  adapterCount,
+  providerCount,
+  diagnosticCount,
+  runtimeLogCount,
+  pageReadModelInventory,
+}: {
+  summary: WorkbenchSnapshot["summary"];
+  workflowCount: number;
+  workflowStateError?: string | null;
+  hasRealSnapshot: boolean;
+  developerItems: WorkbenchNavItem[];
+  adapterCount: number;
+  providerCount: number;
+  diagnosticCount: number;
+  runtimeLogCount: number;
+  pageReadModelInventory: WorkbenchSnapshot["page_read_model_inventory"];
+}): SettingsPageReadModel {
+  return {
+    schema_version: "settings_page_read_model.v1",
+    selector_id: "settings_page_selector_v1",
+    source_boundary: selectorSourceBoundary(),
+    snapshot_status_label: hasRealSnapshot ? "索引已读取" : "未接真实数据",
+    boundary_text: "设置页只整理入口和边界，不读取凭据、不触发执行。",
+    general: {
+      project_count: summary.project_count,
+      session_count: summary.session_count,
+      skill_count: summary.skill_count,
+      workflow_count: workflowCount,
+    },
+    developer_boundary: {
+      developer_item_count: developerItems.length,
+      adapter_count: adapterCount,
+      provider_count: providerCount,
+      diagnostic_count: diagnosticCount,
+      runtime_log_count: runtimeLogCount,
+      page_contract_count: pageReadModelInventory.contracts.length,
+      credential_display_allowed: false,
+      execution_from_settings_allowed: false,
+    },
+    page_contract: {
+      count: pageReadModelInventory.contracts.length,
+      status: pageReadModelInventory.status,
+      source_policy: pageReadModelInventory.source_policy,
+    },
+    user_facing_summary:
+      `${summary.project_count} 个项目，${summary.session_count} 个会话，` +
+      `${pageReadModelInventory.contracts.length} 个页面合同，${diagnosticCount} 条诊断状态`,
+    developer_details_collapsed: true,
+    warnings: [
+      "r4_a6_selector_only_page_ui_not_migrated",
+      "workbench_snapshot_still_active",
+      "settings_page_must_not_read_credentials_or_trigger_execution",
+      ...(workflowStateError ? ["workflow_state_read_error_visible"] : []),
     ],
   };
 }
