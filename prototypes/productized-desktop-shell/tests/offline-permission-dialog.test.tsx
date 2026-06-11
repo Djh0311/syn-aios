@@ -85,6 +85,7 @@ import { executionRunQueueTextFixtures } from "./helpers/offlineExecutionRunQueu
 import { agentBoundaryTextFixtures } from "./helpers/offlineAgentBoundaryTextFixtures";
 import { memoryKnowledgeTextFixtures } from "./helpers/offlineMemoryKnowledgeTextFixtures";
 import { projectRuntimeTranscriptRoleTextFixtures } from "./helpers/offlineProjectRuntimeTranscriptRoleTextFixtures";
+import { readModelContractFixtures } from "./helpers/offlineReadModelContractFixtures";
 import { stageJRunQueueFixtures } from "./helpers/offlineRunQueueFixtures";
 import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
 import {
@@ -414,7 +415,7 @@ function runRealExecutionProductCommandBoundaryScenario() {
   );
   assert(
     secretaryContext.suggestions.every((suggestion) =>
-      !["approve", "dispatch", "retry", "stop", "restart", "resume", "send"].includes(suggestion.kind),
+      !readModelContractFixtures.executionForbiddenSuggestionKinds.includes(suggestion.kind),
     ),
     "PCR7 秘书 suggestion kind 不应变成执行类动作",
   );
@@ -491,18 +492,27 @@ function runStageJRunQueueScenario() {
     readModel.operation_control_summary.warnings.includes("no_auto_retry_stop_restart_resume"),
     "K5 操作控制必须声明不会自动重试/停止/重启/恢复",
   );
-  assert(readModel.run_queue_items.some((item) => item.status === "readback_unavailable" && item.readback_result_count === null), "J4 readback_unavailable 应保持 result_count=null");
-  assert(readModel.run_queue_items.some((item) => item.status === "readback_failed" && item.readback_result_count === null), "J4 readback_failed 应保持 result_count=null");
-  assert(readModel.failure_control_summaries.some((item) => item.status === "timed_out" && item.readback_result_count === null), "J4 timed_out 应保持 result_count=null");
-  assert(readModel.failure_control_summaries.some((item) => item.classification === "duplicate_blocked"), "J4 duplicate blocked 应进入失败控制");
-  assert(readModel.user_confirmation_queue.some((item) => item.kind === "execute_confirmation"), "J4 应包含执行确认");
-  assert(readModel.user_confirmation_queue.some((item) => item.kind === "retry_confirmation"), "J4 应包含重试确认");
-  assert(readModel.user_confirmation_queue.some((item) => item.kind === "stop_cancel_confirmation"), "J4 应包含停止 / 取消确认");
-  assert(readModel.user_confirmation_queue.some((item) => item.kind === "result_confirmation"), "J4 应包含结果确认");
-  assert(readModel.user_confirmation_queue.some((item) => item.kind === "process_fact_confirmation"), "J4 应包含过程事实确认");
-  assert(readModel.user_confirmation_queue.some((item) => item.kind === "memory_candidate_confirmation"), "J4 应包含记忆候选确认");
-  assert(readModel.user_confirmation_queue.some((item) => item.kind === "memory_formalization_confirmation"), "J4 应包含正式化确认");
-  assert(readModel.user_confirmation_queue.some((item) => item.kind === "capture_compensation_confirmation"), "J4 应包含 capture 补偿确认");
+  for (const status of readModelContractFixtures.runQueueReadbackNullStatuses) {
+    assert(
+      readModel.run_queue_items.some((item) => item.status === status && item.readback_result_count === null),
+      `J4 ${status} 应保持 result_count=null`,
+    );
+  }
+  for (const status of readModelContractFixtures.runQueueFailureNullStatuses) {
+    assert(
+      readModel.failure_control_summaries.some((item) => item.status === status && item.readback_result_count === null),
+      `J4 ${status} 应保持 result_count=null`,
+    );
+  }
+  for (const classification of readModelContractFixtures.runQueueFailureClassifications) {
+    assert(
+      readModel.failure_control_summaries.some((item) => item.classification === classification),
+      `J4 ${classification} 应进入失败控制`,
+    );
+  }
+  for (const kind of readModelContractFixtures.runQueueConfirmationKinds) {
+    assert(readModel.user_confirmation_queue.some((item) => item.kind === kind), `J4 应包含确认队列类型 ${kind}`);
+  }
   assert(readModel.capture_compensation_count === 1, "J4 capture 半完成状态应进入补偿摘要");
   assert(
     readModel.user_confirmation_queue.every((item) => item.confirmation_command_kind !== "runner_call"),
@@ -542,7 +552,7 @@ function runStageJRunQueueScenario() {
   );
   assert(secretaryContext.suggestions.some((suggestion) => suggestion.kind === "inspect_run_queue"), "J4 秘书建议应包含查看运行队列");
   assert(
-    secretaryContext.action_proposals.every((proposal) => !["retry", "stop", "restart", "resume", "send"].includes(proposal.kind)),
+    secretaryContext.action_proposals.every((proposal) => !readModelContractFixtures.runQueueForbiddenActionProposalKinds.includes(proposal.kind)),
     "J4 秘书 action proposal 不应变成执行动作",
   );
 
@@ -643,15 +653,12 @@ function runProjectCanvasReadModelScenario() {
   assert(model.status_reason.label === "等待权限", "画布缺少状态原因标签");
   assert(model.attention_items.some((item) => item.kind === "waiting_for_permission"), "画布 attention 缺少权限待处理");
   assert(model.attention_items.some((item) => item.kind === "readback_unavailable"), "画布 attention 缺少 readback unavailable");
-  assert(model.nodes.some((node) => node.node_type === "project_goal"), "项目画布缺少项目目标节点");
-  assert(model.nodes.some((node) => node.node_type === "director"), "项目画布缺少总指导节点");
-  assert(model.nodes.some((node) => node.node_type === "dev_line"), "项目画布缺少开发线节点");
-  assert(model.nodes.some((node) => node.node_type === "validation_line"), "项目画布缺少验证线节点");
-  assert(model.nodes.some((node) => node.node_type === "review_line"), "项目画布缺少回收线节点");
-  assert(model.nodes.some((node) => node.node_type === "permission_request"), "项目画布缺少权限请求 sidecar 节点");
-  assert(model.nodes.some((node) => node.node_type === "blackboard_candidate"), "项目画布缺少黑板候选 sidecar 节点");
-  assert(model.edges.some((edge) => edge.edge_type === "responsibility_flow"), "项目画布缺少责任流转边");
-  assert(model.edges.some((edge) => edge.edge_type === "blocking_relation"), "项目画布缺少阻塞关系边");
+  for (const nodeType of readModelContractFixtures.projectCanvasNodeTypes) {
+    assert(model.nodes.some((node) => node.node_type === nodeType), `项目画布缺少节点 ${nodeType}`);
+  }
+  for (const edgeType of readModelContractFixtures.projectCanvasEdgeTypes) {
+    assert(model.edges.some((edge) => edge.edge_type === edgeType), `项目画布缺少边 ${edgeType}`);
+  }
   assert(model.viewport_hint.selected_node_id.includes(":canvas:codex-dev"), "默认选中节点应落在当前派发角色");
   assert(model.edit_boundary.source_kind === "frontend_read_model", "F3 编辑边界应来自前端只读模型");
   assert(model.edit_boundary.layout_boundary.react_flow_source_of_truth === false, "画布渲染层不应成为 workflow authority");
@@ -665,7 +672,7 @@ function runProjectCanvasReadModelScenario() {
     model.edit_boundary.capabilities.some((capability) => capability.kind === "personal_layout_preference" && capability.status === "requires_future_task"),
     "F3 不应实现个人布局持久化",
   );
-  for (const mutationKind of ["workflow_node_mutation", "workflow_edge_mutation"] as const) {
+  for (const mutationKind of readModelContractFixtures.projectCanvasPreviewMutationKinds) {
     assert(
       model.edit_boundary.capabilities.some(
         (capability) =>
@@ -803,11 +810,12 @@ function runAdapterCapabilityScenario() {
   assert(codex.credential_status === "not_read", "Codex descriptor 不应读取凭据");
   assert(codex.model_access_status === "local_read_model_only", "Codex 模型状态只能是本地读模型摘要");
   assert(codex.warnings.includes("adapter_descriptor_frontend_fallback_used"), "前端派生 helper 应声明 fallback 警告");
-  assert(codex.hidden_unimplemented_adapters.includes("openclaw"), "未实现 OpenClaw 应隐藏");
-  assert(codex.hidden_unimplemented_adapters.includes("claude-code"), "未实现 Claude Code 应隐藏");
-  assert(codex.hidden_unimplemented_adapters.includes("opencode-like"), "OpenCode-like 应进入未实现清单");
-  assert(codex.implemented_action_kinds.includes("bind-node-session"), "Codex adapter 缺少节点绑定动作声明");
-  assert(codex.implemented_action_kinds.includes("execute-node-dispatch"), "Codex adapter 缺少派发动作声明");
+  for (const adapterId of readModelContractFixtures.adapterHiddenUnimplementedIds) {
+    assert(codex.hidden_unimplemented_adapters.includes(adapterId), `未实现 adapter 应隐藏：${adapterId}`);
+  }
+  for (const actionKind of readModelContractFixtures.adapterImplementedActionKinds) {
+    assert(codex.implemented_action_kinds.includes(actionKind), `Codex adapter 缺少动作声明 ${actionKind}`);
+  }
   const plannedAdapters = descriptors.filter((descriptor) => descriptor.adapter_id !== "codex-local");
   assert(plannedAdapters.length === 4, "应包含四个计划中的 adapter descriptor");
   for (const planned of plannedAdapters) {
@@ -819,16 +827,7 @@ function runAdapterCapabilityScenario() {
     assert(planned.capabilities.every((capability) => capability.status !== "available"), `${planned.adapter_id} 不能有 available 能力`);
     assert(planned.warnings.includes("no_execution_button"), `${planned.adapter_id} 必须声明无执行按钮边界`);
   }
-  for (const expectedCapability of [
-    "session_index_read",
-    "session_transcript_read",
-    "workflow_node_binding",
-    "safe_probe_dispatch",
-    "user_reviewed_dispatch",
-    "workflow_machine_run",
-    "permission_decision_record",
-    "harness_resource_index",
-  ]) {
+  for (const expectedCapability of readModelContractFixtures.adapterExpectedCapabilityKinds) {
     assert(
       codex.capabilities.some((capability) => capability.kind === expectedCapability),
       `Codex adapter 缺少能力声明 ${expectedCapability}`,
@@ -837,7 +836,11 @@ function runAdapterCapabilityScenario() {
   assert(
     codex.capabilities
       .filter((capability) => capability.status === "requires_confirmation")
-      .every((capability) => capability.boundary.includes("本轮只声明能力") || capability.boundary.includes("控制核心") || capability.boundary.includes("工作流状态")),
+      .every((capability) =>
+        readModelContractFixtures.adapterConfirmationBoundaryFragments.some((fragment) =>
+          capability.boundary.includes(fragment),
+        ),
+      ),
     "需确认能力必须标明声明边界或控制核心边界",
   );
 }
@@ -851,25 +854,19 @@ function runSessionOperationBoundaryScenario() {
   const operations = deriveSessionOperationDescriptors(descriptors);
   assert(operations.length === 40, "H3.1 后应为 5 个 adapter 派生 40 条会话操作边界");
 
-  const expectedOperationIds = ["new_session", "send_message", "stop", "restart", "resume", "export", "delete", "favorite"] as const;
-  for (const operationId of expectedOperationIds) {
+  for (const operationId of readModelContractFixtures.sessionOperationIds) {
     assert(
       operations.filter((operation) => operation.operation_id === operationId).length === 5,
       `E2 缺少 ${operationId} per-adapter 边界`,
     );
   }
   assert(
-    operations.every((operation) => !["available", "available_to_execute", "executable"].includes(operation.current_status)),
+    operations.every((operation) => !readModelContractFixtures.blockedSessionOperationStatuses.includes(operation.current_status)),
     "E2 不允许任何会话操作进入可执行状态",
   );
-  assert(
-    operations.every((operation) => operation.warnings.includes("session_operation_boundary_read_model_only")),
-    "会话操作必须声明只读边界",
-  );
-  assert(
-    operations.every((operation) => operation.warnings.includes("no_session_operation_execution_in_e2")),
-    "会话操作必须声明 E2 不执行",
-  );
+  for (const warning of readModelContractFixtures.sessionOperationRequiredWarnings) {
+    assert(operations.every((operation) => operation.warnings.includes(warning)), `会话操作必须声明 ${warning}`);
+  }
 
   const codexNewSession = operations.find((operation) => operation.adapter_id === "codex-local" && operation.operation_id === "new_session");
   assert(codexNewSession?.current_status === "requires_future_task", "Codex 新会话必须需要后续任务");
@@ -967,18 +964,9 @@ function runProviderAvailabilityBoundaryScenario() {
   const summaries = deriveProviderAvailabilitySummaries(descriptors, operations);
   assert(summaries.length === 5, "E3 应为 5 个 adapter 派生 provider availability 摘要");
   assert(summaries.every((summary) => summary.safe_to_display), "E3 摘要必须可安全展示");
-  assert(
-    summaries.every((summary) => summary.warnings.includes("provider_availability_read_model_only")),
-    "E3 摘要必须声明只读 provider availability",
-  );
-  assert(
-    summaries.every((summary) => summary.warnings.includes("credential_secret_not_read")),
-    "E3 摘要必须声明不读取 secret",
-  );
-  assert(
-    summaries.every((summary) => summary.warnings.includes("provider_availability_not_project_authorization")),
-    "E3 摘要必须声明不等于项目授权",
-  );
+  for (const warning of readModelContractFixtures.providerSummaryRequiredWarnings) {
+    assert(summaries.every((summary) => summary.warnings.includes(warning)), `E3 摘要必须声明 ${warning}`);
+  }
 
   const codex = summaries.find((summary) => summary.adapter_id === "codex-local");
   assert(codex, "E3 缺少 codex-local provider 摘要");
@@ -994,11 +982,11 @@ function runProviderAvailabilityBoundaryScenario() {
   assert(
     plannedSummaries.every(
       (summary) =>
-        summary.availability_status === "planned" &&
-        summary.credential_status === "credential_missing" &&
-        summary.model_status === "model_unverified" &&
-        summary.external_call_status === "external_call_blocked" &&
-        summary.cost_risk_status === "blocked_until_authorized",
+        summary.availability_status === readModelContractFixtures.plannedProviderBoundary.availabilityStatus &&
+        summary.credential_status === readModelContractFixtures.plannedProviderBoundary.credentialStatus &&
+        summary.model_status === readModelContractFixtures.plannedProviderBoundary.modelStatus &&
+        summary.external_call_status === readModelContractFixtures.plannedProviderBoundary.externalCallStatus &&
+        summary.cost_risk_status === readModelContractFixtures.plannedProviderBoundary.costRiskStatus,
     ),
     "planned adapters 必须保持未配置、未验证和外发阻断",
   );
@@ -1082,7 +1070,9 @@ function runAdapterSdkCliDiagnosticsBoundaryScenario() {
     "planned adapter contract 必须保持阻断或预留",
   );
   assert(
-    plannedChecklists.every((checklist) => checklist.missing_items.includes("runtime_connection_not_implemented")),
+    plannedChecklists.every((checklist) =>
+      readModelContractFixtures.adapterContractMissingItems.every((item) => checklist.missing_items.includes(item)),
+    ),
     "planned adapter contract 必须明确缺 runtime connection",
   );
   assert(
@@ -1090,7 +1080,9 @@ function runAdapterSdkCliDiagnosticsBoundaryScenario() {
     "CLI parity 必须阻断 universal API backdoor",
   );
   assert(
-    workerProtocol.diagnostic_event_schemas.every((schema) => schema.redaction_policy === "no_secret_no_raw_transcript_no_provider_payload"),
+    workerProtocol.diagnostic_event_schemas.every(
+      (schema) => schema.redaction_policy === readModelContractFixtures.adapterDiagnosticRedactionPolicy,
+    ),
     "diagnostic schema 必须脱敏，不允许 secret/raw transcript/provider payload",
   );
   assert(
@@ -1106,7 +1098,9 @@ function runAdapterSdkCliDiagnosticsBoundaryScenario() {
     "planned adapter degraded mode 必须阻断真实执行",
   );
   assert(
-    workerProtocol.adapter_data_locations.every((location) => location.secret_policy === "never_read_auth_token_env_keychain_oauth_provider_credentials"),
+    workerProtocol.adapter_data_locations.every(
+      (location) => location.secret_policy === readModelContractFixtures.adapterDataLocationSecretPolicy,
+    ),
     "data location descriptor 不能允许读取 secret",
   );
 
@@ -1148,7 +1142,10 @@ function runSessionContinuationPreviewScenario() {
     providerAvailabilitySummaries: summaries,
     workflowState: workflowStateWithProjectWorkflow,
   });
-  assert(previews.length === 15, "H3.1 后应为 5 个 adapter 的 new_session / send_message / resume 派生预览");
+  assert(
+    previews.length === descriptors.length * readModelContractFixtures.continuationOperationIds.length,
+    "H3.1 后应为每个 adapter 的 new_session / send_message / resume 派生预览",
+  );
   assert(
     previews.every((preview) => preview.user_visible_warnings.includes("session_continuation_preview_only")),
     "E4 preview 必须声明只预览",
@@ -1163,7 +1160,10 @@ function runSessionContinuationPreviewScenario() {
   );
 
   const codexPreviews = previews.filter((preview) => preview.adapter_id === "codex-local");
-  assert(codexPreviews.length === 3, "codex-local 应有 new_session / send_message / resume 三条预览");
+  assert(
+    codexPreviews.length === readModelContractFixtures.continuationOperationIds.length,
+    "codex-local 应有 new_session / send_message / resume 三条预览",
+  );
   assert(
     codexPreviews.every((preview) => preview.guard_result.status === "needs_user_confirmation"),
     "完整绑定的 codex-local 预览应停在需要用户确认",
@@ -1196,11 +1196,17 @@ function runSessionContinuationPreviewScenario() {
 
   const plannedPreviews = previews.filter((preview) => preview.adapter_id !== "codex-local");
   assert(
-    plannedPreviews.every((preview) => preview.guard_result.status === "blocked" || preview.guard_result.status === "requires_future_task"),
+    plannedPreviews.every((preview) =>
+      readModelContractFixtures.plannedContinuationGuardStatuses.includes(preview.guard_result.status),
+    ),
     "planned adapters 必须保持阻断或后续任务状态",
   );
   assert(
-    plannedPreviews.every((preview) => preview.guard_result.reasons.some((reason) => reason.includes("planned_adapter_blocked"))),
+    plannedPreviews.every((preview) =>
+      readModelContractFixtures.plannedContinuationReasonFragments.every((fragment) =>
+        preview.guard_result.reasons.some((reason) => reason.includes(fragment)),
+      ),
+    ),
     "planned adapter continuation preview 必须包含 planned_adapter_blocked 原因",
   );
 
@@ -1424,14 +1430,12 @@ function runH2RealResumeAuthorizationReadinessScenario() {
   assert(readiness.missing_count > 0, "H2.2 readiness 必须暴露缺失授权项");
   assert(decisionSurface.status.startsWith("blocked_"), "H2.8 decision surface 默认必须保持阻断态");
   assert(!decisionSurface.final_approval_allowed, "H2.8 decision surface 不得允许 final approval");
-  assert(
-    decisionSurface.decision_checks.some((check) => check.check_id === "codex_home_scope" && check.blocks_final_approval),
-    "H2.8 decision surface 必须把 .codex 最小范围列为阻断",
-  );
-  assert(
-    decisionSurface.decision_checks.some((check) => check.check_id === "rollback" && check.blocks_final_approval),
-    "H2.8 decision surface 必须把 rollback 缺失列为阻断",
-  );
+  for (const checkId of readModelContractFixtures.h2DecisionBlockingCheckIds) {
+    assert(
+      decisionSurface.decision_checks.some((check) => check.check_id === checkId && check.blocks_final_approval),
+      `H2.8 decision surface 必须把 ${checkId} 列为阻断`,
+    );
+  }
   assert(
     decisionSurface.readback_boundary.result_count === null &&
       decisionSurface.readback_boundary.warnings.includes("readback_not_attempted_is_not_zero_results"),
@@ -1465,22 +1469,12 @@ function runH2RealResumeAuthorizationReadinessScenario() {
     missingSessionSurface.decision_checks.some((check) => check.check_id === "target_session" && check.blocks_final_approval),
     "H2.8 decision surface 必须把 target session 缺失列为阻断",
   );
-  assert(
-    readiness.readiness_items.some((item) => item.item_id === "prompt_hash_ref" && item.status === "missing"),
-    "H2.2 readiness 必须缺少 prompt hash/ref",
-  );
-  assert(
-    readiness.readiness_items.some((item) => item.item_id === "codex_home_scope" && item.status === "missing"),
-    "H2.2 readiness 必须缺少 .codex 最小范围",
-  );
-  assert(
-    readiness.readiness_items.some((item) => item.item_id === "user_confirmation" && item.status === "missing"),
-    "H2.2 readiness 必须缺少用户确认",
-  );
-  assert(
-    readiness.readiness_items.some((item) => item.item_id === "global_supervisor_confirmation" && item.status === "missing"),
-    "H2.2 readiness 必须缺少全局主管确认",
-  );
+  for (const itemId of readModelContractFixtures.h2MissingReadinessItemIds) {
+    assert(
+      readiness.readiness_items.some((item) => item.item_id === itemId && item.status === "missing"),
+      `H2.2 readiness 必须缺少 ${itemId}`,
+    );
+  }
 
   const agentView = (
     <AgentView
@@ -2112,7 +2106,7 @@ function runRightRailSecretarySurfaceScenario() {
     workflowState: workflowStateWithDerivedWorkflow,
     secretaryContext,
   });
-  for (const activePanel of ["notifications", "todos", "audit", "running"] as const) {
+  for (const activePanel of readModelContractFixtures.rightRailNonSecretaryPanelIds) {
     const panelText = visibleText(<RightDetailPanel activePanel={activePanel} {...commonProps} />);
     assert(panelText.includes(rightRailPanelSummaryTitles[activePanel]), `${activePanel} 详情应保留自己的职责摘要列表`);
     assert(!panelText.includes("动态"), `${activePanel} 详情不应再使用泛化动态标题`);
@@ -2149,7 +2143,7 @@ function runTranscriptCleaningScenario() {
 
   const turns = conversationTurns(events);
   const ids = turns.map((event) => event.event_id);
-  assertDeepEqual(ids, ["e2", "e3"], "对话清洗应只保留 event_msg 的非空人/Agent消息");
+  assertDeepEqual(ids, readModelContractFixtures.transcriptCleaningExpectedIds.eventMessages, "对话清洗应只保留 event_msg 的非空人/Agent消息");
   assert(
     !turns.some((event) => (event.text ?? "").includes("environment_context")),
     "对话清洗不应带出系统提示词/环境上下文注入",
@@ -2157,20 +2151,20 @@ function runTranscriptCleaningScenario() {
 
   assertDeepEqual(
     conversationTurns(mixedStream).map((event) => event.event_id),
-    ["m1", "m2"],
+    readModelContractFixtures.transcriptCleaningExpectedIds.mixedTextParts,
     "event_msg 不完整时应补 response_item 中缺失的人/Agent轮次",
   );
 
   // Fallback: a rollout with no event_msg stream still shows its response_item turns.
   assertDeepEqual(
     conversationTurns(onlyResponseItems).map((event) => event.event_id),
-    ["r1", "r2"],
+    readModelContractFixtures.transcriptCleaningExpectedIds.responseItems,
     "没有 event_msg 流时应回退到 response_item 对话",
   );
 
   assertDeepEqual(
     conversationTurns(noisyFallback).map((event) => event.event_id),
-    ["n4", "n5"],
+    readModelContractFixtures.transcriptCleaningExpectedIds.normalizedTurns,
     "response_item 回退也应过滤 thinking、system 注入和工具事件",
   );
 }
