@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，等待 implementation / checkpoint hash 回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a28-workbench-base-snapshot-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a28-workbench-base-snapshot-fi
 
 Planning baseline commit：`2c8ce06`
 
-Implementation commit：`TBD`
+Implementation commit：`53c5a1f16473e38d59d3889ee3da21eafa183282`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`469b6f7420b33bb33c50f088de1e077ed84eb994`
 
 ## 1. 交接结论
 
