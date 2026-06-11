@@ -15,12 +15,18 @@ import type { CapturedActionState, OfflinePermissionScenario } from "./helpers/o
 import { authorizationWorkflowFixtures } from "./helpers/offlineAuthorizationWorkflowFixtures";
 import {
   buildBootstrapProjectWorkflowAction,
+  buildAdvanceWorkItemStateAction,
+  buildBindNodeSessionAction,
   buildCopyTaskPreviewAction,
   buildCreateTaskDraftAction,
   buildCorrectDispatchFieldsAction,
   buildGenerateTaskFileAction,
   buildNotReadyDispatchReadiness,
+  buildPermissionDecisionAction,
   buildUpdateTaskFieldsAction,
+  buildUnbindNodeSessionAction,
+  buildUserReviewedInstructionPreviewAction,
+  taskDraftFormDataFixture,
   taskDraftFormValues,
   taskFieldCorrectionFixtures,
 } from "./helpers/offlineTaskFieldTestUtils";
@@ -3752,17 +3758,11 @@ function runShellScenario() {
   const previewInstruction = instructionBoundaryButton.props?.onClick;
   assert(typeof previewInstruction === "function", "确认指令边界按钮没有 onClick");
   previewInstruction({ preventDefault() {}, stopPropagation() {} });
+  const userReviewedInstruction = workflowStateWithProjectWorkflow.project_workflows[0].execution_controls[0].user_reviewed_instruction;
+  assert(userReviewedInstruction, "用户审核业务指令 fixture 缺失");
   assertDeepEqual(
     capturedAction,
-    {
-      kind: "preview-user-reviewed-instruction",
-      label: "确认用户审核业务指令边界",
-      path: project.project_root,
-      source: "索引内项目路径",
-      boundary:
-        "只确认用户审核业务指令的结构化预览和边界；本版本不执行 codex exec resume、不发送 Codex 消息、不写 /Users/yoyi/.codex、不读取完整会话记录。",
-      userReviewedInstruction: workflowStateWithProjectWorkflow.project_workflows[0].execution_controls[0].user_reviewed_instruction,
-    },
+    buildUserReviewedInstructionPreviewAction(project.project_root, userReviewedInstruction),
     "用户审核业务指令边界动作不匹配",
   );
   const instructionDialogText = visibleText(
@@ -3968,20 +3968,7 @@ function runShellScenario() {
   approvePermission({ preventDefault() {}, stopPropagation() {} });
   assertDeepEqual(
     capturedAction,
-    {
-      kind: "record-permission-decision",
-      label: "记录权限结论：批准",
-      path: project.project_root,
-      source: "索引内项目路径",
-      boundary:
-        "只在用户确认后通过控制核心记录权限请求结论并追加审计事件；不启动 Codex、不恢复会话、不发送消息、不写 /Users/yoyi/.codex。",
-      permissionDecision: {
-        project_root: project.project_root,
-        work_item_id: "work-item:offline:001",
-        request_id: "permission:offline:001",
-        decision: "approved",
-      },
-    },
+    buildPermissionDecisionAction(project.project_root),
     "权限结论动作不匹配",
   );
   const permissionDialogText = visibleText(
@@ -4105,20 +4092,7 @@ function runShellScenario() {
   bindSession({ preventDefault() {}, stopPropagation() {} });
   assertDeepEqual(
     capturedAction,
-    {
-      kind: "bind-node-session",
-      label: "绑定节点 Codex 会话",
-      path: project.project_root,
-      source: "索引内项目路径",
-      boundary:
-        "只把已有索引 Codex 会话绑定到工作台自己的 workflow-state.v0.json；不启动 Codex、不发送消息、不恢复会话、不读取完整会话正文、不写 Codex 状态库。",
-      nodeSessionBinding: {
-        project_root: project.project_root,
-        node_id: "workflow:offline-fixture-projects-codex-workbench:default:node:codex-dev",
-        work_item_id: "work-item:offline:001",
-        thread_id: "offline-thread-001",
-      },
-    },
+    buildBindNodeSessionAction(project.project_root),
     "绑定节点会话待确认动作不匹配",
   );
   const bindDialogText = visibleText(
@@ -4135,18 +4109,7 @@ function runShellScenario() {
   unbind({ preventDefault() {}, stopPropagation() {} });
   assertDeepEqual(
     capturedAction,
-    {
-      kind: "unbind-node-session",
-      label: "解除节点会话绑定",
-      path: project.project_root,
-      source: "索引内项目路径",
-      boundary:
-        "只解除工作台自己的 workflow-state.v0.json 绑定并追加审计事件；不删除、不移动、不归档 Codex 原始会话；不写 .codex 或 Codex 状态库。",
-      nodeSessionUnbinding: {
-        project_root: project.project_root,
-        binding_id: "binding:offline:codex-dev",
-      },
-    },
+    buildUnbindNodeSessionAction(project.project_root),
     "解除节点会话绑定待确认动作不匹配",
   );
   const unbindDialogText = visibleText(
@@ -4173,19 +4136,7 @@ function runShellScenario() {
   advance({ preventDefault() {}, stopPropagation() {} });
   assertDeepEqual(
     capturedAction,
-    {
-      kind: "advance-work-item-state",
-      label: "推进工作项到执行中",
-      path: project.project_root,
-      source: "索引内项目路径",
-      boundary:
-        "只写工作台自己的 workflow-state.v0.json；追加审计事件；不启动 Codex 命令行、不恢复会话、不派发真实 Codex 会话、不运行运行器、不写 .codex 或 Codex 状态库。",
-      workItemStateUpdate: {
-        project_root: project.project_root,
-        work_item_id: "work-item:offline:001",
-        next_state: "running",
-      },
-    },
+    buildAdvanceWorkItemStateAction(project.project_root),
     "推进工作项状态待确认动作不匹配",
   );
   const advanceDialogText = visibleText(
@@ -4209,11 +4160,7 @@ function runShellScenario() {
   assert(typeof createTask === "function", "创建任务包草稿表单没有 onSubmit");
   const formValues = taskDraftFormValues();
   const originalFormData = globalThis.FormData;
-  globalThis.FormData = class {
-    get(name: string) {
-      return formValues.get(name) ?? null;
-    }
-  } as unknown as typeof FormData;
+  globalThis.FormData = taskDraftFormDataFixture(formValues);
   try {
     createTask({
       preventDefault() {},
