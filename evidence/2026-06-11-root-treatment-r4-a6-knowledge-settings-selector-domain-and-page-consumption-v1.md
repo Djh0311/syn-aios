@@ -12,6 +12,8 @@ Implementation commit：`9a175ff22e3177511e5b7749b7bf0c79eb47db98`
 
 Review result：`STATUS: CLEAR`，复核线 `019eb51c-61fe-7fc3-8973-b22a4ce58911`。
 
+Checkpoint commit：`2492e9ee4920696e488c314338d8925e3e097d9c`
+
 ## 1. Scope
 
 R4-A6 只实现 Knowledge Base / Settings 两个页面的首批前端纯 selector 分域和页面最小消费。

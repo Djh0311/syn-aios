@@ -14,6 +14,8 @@ Implementation commit：`9a175ff22e3177511e5b7749b7bf0c79eb47db98`
 
 Review result：`STATUS: CLEAR`，复核线 `019eb51c-61fe-7fc3-8973-b22a4ce58911`。
 
+Checkpoint commit：`2492e9ee4920696e488c314338d8925e3e097d9c`
+
 ## 1. Result
 
 R4-A6 已完成实现侧工作并通过复核线 `STATUS: CLEAR`：Knowledge Base / Settings 两页已有首批前端纯 selector 分域，并让页面最小消费 selector 输出。
