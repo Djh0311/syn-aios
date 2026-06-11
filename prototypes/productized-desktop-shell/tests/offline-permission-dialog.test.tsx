@@ -35,6 +35,10 @@ import {
   knowledgeBaseBoundaryFixtures,
   secretaryReadModelFixtures,
 } from "./helpers/offlineKnowledgeSecretaryFixtures";
+import {
+  sessionCenterHardeningFixtures,
+  transcriptCleaningFixtures,
+} from "./helpers/offlineTranscriptSessionFixtures";
 import { stageJRunQueueFixtures } from "./helpers/offlineRunQueueFixtures";
 import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
 import {
@@ -3318,50 +3322,12 @@ function runTranscriptCleaningScenario() {
   // A codex rollout carries the same turns twice: the clean event_msg stream and
   // the raw response_item stream that injects the system prompt / environment
   // context as a fake user turn. conversationTurns must keep only event_msg.
-  const events = [
-    {
-      event_id: "e1",
-      event_type: "user_message",
-      text: "<environment_context>cwd=/x system prompt 注入</environment_context>",
-      metadata: { raw_type: "response_item" },
-      warnings: [],
-    },
-    {
-      event_id: "e2",
-      event_type: "user_message",
-      text: "帮我修复登录 bug",
-      metadata: { raw_type: "event_msg" },
-      warnings: [],
-    },
-    {
-      event_id: "e3",
-      event_type: "assistant_message",
-      text: "好的，我先看一下代码",
-      metadata: { raw_type: "event_msg" },
-      warnings: [],
-    },
-    {
-      event_id: "e4",
-      event_type: "assistant_message",
-      text: "好的，我先看一下代码",
-      metadata: { raw_type: "response_item" },
-      warnings: [],
-    },
-    {
-      event_id: "e5",
-      event_type: "tool_call",
-      text: "",
-      metadata: { raw_type: "response_item" },
-      warnings: [],
-    },
-    {
-      event_id: "e6",
-      event_type: "assistant_message",
-      text: "   ",
-      metadata: { raw_type: "event_msg" },
-      warnings: [],
-    },
-  ] as unknown as Parameters<typeof conversationTurns>[0];
+  const {
+    events,
+    mixedStream,
+    noisyFallback,
+    onlyResponseItems,
+  } = transcriptCleaningFixtures();
 
   const turns = conversationTurns(events);
   const ids = turns.map((event) => event.event_id);
@@ -3371,11 +3337,6 @@ function runTranscriptCleaningScenario() {
     "对话清洗不应带出系统提示词/环境上下文注入",
   );
 
-  const mixedStream = [
-    { event_id: "m1", event_type: "user_message", text: "用户消息在 event_msg", metadata: { raw_type: "event_msg" }, warnings: [] },
-    { event_id: "m2", event_type: "assistant_message", text: "Agent 回复在 response_item", metadata: { raw_type: "response_item" }, warnings: [] },
-    { event_id: "m3", event_type: "tool_call", text: "tool", metadata: { raw_type: "response_item" }, warnings: [] },
-  ] as unknown as Parameters<typeof conversationTurns>[0];
   assertDeepEqual(
     conversationTurns(mixedStream).map((event) => event.event_id),
     ["m1", "m2"],
@@ -3383,23 +3344,12 @@ function runTranscriptCleaningScenario() {
   );
 
   // Fallback: a rollout with no event_msg stream still shows its response_item turns.
-  const onlyResponseItems = [
-    { event_id: "r1", event_type: "user_message", text: "只有 response_item 的会话", metadata: { raw_type: "response_item" }, warnings: [] },
-    { event_id: "r2", event_type: "assistant_message", text: "回复", metadata: { raw_type: "response_item" }, warnings: [] },
-  ] as unknown as Parameters<typeof conversationTurns>[0];
   assertDeepEqual(
     conversationTurns(onlyResponseItems).map((event) => event.event_id),
     ["r1", "r2"],
     "没有 event_msg 流时应回退到 response_item 对话",
   );
 
-  const noisyFallback = [
-    { event_id: "n1", event_type: "user_message", text: "<environment_context>cwd=/tmp</environment_context>", metadata: { raw_type: "response_item" }, warnings: [] },
-    { event_id: "n2", event_type: "assistant_message", text: "thinking hidden", metadata: { raw_type: "response_item", payload_type: "reasoning" }, warnings: [] },
-    { event_id: "n3", event_type: "tool_call", text: "tool", metadata: { raw_type: "response_item" }, warnings: [] },
-    { event_id: "n4", event_type: "user_message", text: "真实旧会话用户消息", metadata: { raw_type: "response_item" }, warnings: [] },
-    { event_id: "n5", event_type: "assistant_message", text: "真实旧会话回复", metadata: { raw_type: "response_item" }, warnings: [] },
-  ] as unknown as Parameters<typeof conversationTurns>[0];
   assertDeepEqual(
     conversationTurns(noisyFallback).map((event) => event.event_id),
     ["n4", "n5"],
@@ -3408,22 +3358,12 @@ function runTranscriptCleaningScenario() {
 }
 
 function runSessionCenterHardeningScenario() {
-  const missingSession: SessionRecord = {
-    ...session,
-    thread_id: "offline-thread-missing",
-    title: "Missing rollout fixture",
-    rollout_exists: false,
-    rollout_path: null,
-    warnings: ["rollout_missing_on_disk"],
-  };
-  const archivedSession: SessionRecord = {
-    ...session,
-    thread_id: "offline-thread-archived",
-    title: "Archived fixture",
-    archived: true,
-    rollout_path: "/offline-fixture/rollouts/offline-thread-archived.jsonl",
-  };
-  const sessions = [session, otherProjectSession, missingSession, archivedSession];
+  const {
+    archivedSession,
+    missingSession,
+    sessions,
+    transcript,
+  } = sessionCenterHardeningFixtures(project, session, otherProjectSession);
 
   assertDeepEqual(
     filterAgentSessions(sessions, "readable", "Offline interaction").map((item) => item.thread_id),
@@ -3468,70 +3408,6 @@ function runSessionCenterHardeningScenario() {
   }
   assert(centerMarkup.includes("<button") && centerMarkup.includes("session-card"), "会话卡必须是可键盘聚焦的 button");
 
-  const longMessage = Array.from({ length: 14 }, (_, index) => `line ${index + 1}`).join("\n");
-  const transcript = {
-    thread_id: session.thread_id,
-    rollout_path: "/offline-fixture/rollouts/transcript-hardening.jsonl",
-    project_path: project.project_root,
-    title: "Transcript hardening",
-    created_at_ms: null,
-    updated_at_ms: null,
-    viewer_boundary: {
-      view_kind: "session_history_viewer",
-      reads_session_history: true,
-      is_execution_readback: false,
-      real_execution_readback_performed: false,
-      execution_readback_scope: "not_execution_readback",
-      warnings: ["test_fixture_session_history_is_not_readback"],
-    },
-    events: [
-      ...Array.from({ length: 13 }, (_, index) => ({
-        event_id: `old-${index}`,
-        event_type: index % 2 === 0 ? "user_message" : "assistant_message",
-        actor: index % 2 === 0 ? "user" : "assistant",
-        role: index % 2 === 0 ? "user" : "assistant",
-        text: `较早消息 ${index}`,
-        metadata: { raw_type: "event_msg" },
-        warnings: [],
-      })),
-      {
-        event_id: "long",
-        event_type: "assistant_message",
-        actor: "assistant",
-        role: "assistant",
-        text: longMessage,
-        metadata: { raw_type: "event_msg" },
-        warnings: [],
-      },
-      {
-        event_id: "code",
-        event_type: "assistant_message",
-        actor: "assistant",
-        role: "assistant",
-        text: "```ts\nconst ok = true;\n```",
-        metadata: { raw_type: "event_msg" },
-        warnings: [],
-      },
-      {
-        event_id: "tool",
-        event_type: "tool_call",
-        actor: "assistant",
-        text: "should be internal",
-        metadata: { raw_type: "response_item" },
-        warnings: [],
-      },
-    ],
-    summary: {
-      total_events: 16,
-      event_type_counts: {},
-      unknown_event_count: 0,
-      warning_count: 0,
-      encrypted_content_event_count: 0,
-      sensitive_like_event_count: 0,
-    },
-    warnings: [],
-    source_stats: {},
-  };
   const transcriptText = visibleText(<ChatTranscript transcript={transcript} />);
   for (const expectedText of ["已收纳较早 3 条消息", "展开全部", "展开", "开发者详情：过程事件", "复制", "const ok = true;"]) {
     assert(transcriptText.includes(expectedText), `Transcript 展示硬化缺少 ${expectedText}`);
