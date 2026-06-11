@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 Planning baseline commit：`9c8568f0eb7762fc4e3b3eef719a16db31f4d4c3`
 
-Implementation commit：待回填
+Implementation commit：`80648a18829af06d10810cd08c997a763f72f000`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`b5d0a65f269d819932d730a91395f562b0a3b83a`
 
 本文是 Root Treatment / Stage R 的 R4-A37 任务包；R4-A37 继续对应官方计划 R4-6：离线测试拆分。R4-A37 只接受为 `runShellScenario` 中 Shell / Agent / Project / Workflow / Skill / Harness 相关 expected / forbidden text 和导航期望数据的纯测试 fixture 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B、真实 Codex 执行或 backlog 功能解冻。
 

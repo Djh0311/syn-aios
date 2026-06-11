@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a37-shell-agent-project-text-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a37-shell-agent-project-text-f
 
 Planning baseline commit：`9c8568f0eb7762fc4e3b3eef719a16db31f4d4c3`
 
-Implementation commit：待回填
+Implementation commit：`80648a18829af06d10810cd08c997a763f72f000`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`b5d0a65f269d819932d730a91395f562b0a3b83a`
 
 ## 1. 完成内容
 
@@ -77,11 +77,8 @@ P2: None
 
 ## 5. 下一步
 
-1. 提交 implementation commit。
-2. 同步 checkpoint 入口文档到 R4-A37 完成、下一步 R4-A38。
-3. 提交 checkpoint commit。
-4. 回填 implementation / checkpoint hash。
-5. 准备 R4-A38，继续中等粒度 fixture cluster 拆分。
+1. A37 implementation / checkpoint / hash backfill 已闭合。
+2. 准备 R4-A38，继续中等粒度 fixture cluster 拆分。
 
 ## 6. 不能声明
 

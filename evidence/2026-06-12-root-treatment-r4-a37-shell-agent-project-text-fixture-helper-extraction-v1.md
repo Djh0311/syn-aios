@@ -2,17 +2,17 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a37-shell-agent-project-text-fixture-helper-extraction-v1.md`
 
 Planning baseline commit：`9c8568f0eb7762fc4e3b3eef719a16db31f4d4c3`
 
-Implementation commit：待回填
+Implementation commit：`80648a18829af06d10810cd08c997a763f72f000`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`b5d0a65f269d819932d730a91395f562b0a3b83a`
 
 ## 1. 本轮目标
 
