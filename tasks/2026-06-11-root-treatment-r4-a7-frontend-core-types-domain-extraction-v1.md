@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R4-A7 任务包；R4-A6 已完成并通过复核线 `STATUS: CLEAR`。R4-A7 只接受为前端 `types.ts` 第一批基础类型分域抽取；不接受为 R4 完成、页面真实数据来源迁移、`query_workbench_page_read_model` 被页面真实消费、UI 重做、真实 Tauri 验收、R3 Level B 或多 agent 并行真实执行解锁。
+状态：已实现，待复核线回收。本文是 Root Treatment / Stage R 的 R4-A7 任务包；R4-A6 已完成并通过复核线 `STATUS: CLEAR`。R4-A7 只接受为前端 `types.ts` 第一批基础类型分域抽取；不接受为 R4 完成、页面真实数据来源迁移、`query_workbench_page_read_model` 被页面真实消费、UI 重做、真实 Tauri 验收、R3 Level B 或多 agent 并行真实执行解锁。
 
 Planning baseline commit：`272307fab0dfd5a595b052c7551e23df31187d2a`
 Implementation commit：待回填。
