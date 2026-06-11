@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a38-execution-run-queue-text-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a38-execution-run-queue-text-f
 
 Planning baseline commit：`5515d7f102bde8fc995b629b5bd8485d7ac4ca99`
 
-Implementation commit：待回填
+Implementation commit：`78265e5b3bc4b65b9acbcc00d7f8a76ed7fea9ea`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`d32d7ccaff46faa52b8b9268fb05d5ef30b09269`
 
 ## 1. 完成内容
 
@@ -75,11 +75,8 @@ P2: None
 
 ## 5. 下一步
 
-1. 提交 implementation commit。
-2. 同步 checkpoint 入口文档到 R4-A38 完成、下一步 R4-A39。
-3. 提交 checkpoint commit。
-4. 回填 implementation / checkpoint hash。
-5. 准备 R4-A39，继续中等粒度 fixture cluster 拆分。
+1. A38 implementation / checkpoint / hash backfill 已闭合。
+2. 准备 R4-A39，继续中等粒度 fixture cluster 拆分。
 
 ## 6. 不能声明
 

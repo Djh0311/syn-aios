@@ -2,17 +2,17 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a38-execution-run-queue-text-fixture-helper-extraction-v1.md`
 
 Planning baseline commit：`5515d7f102bde8fc995b629b5bd8485d7ac4ca99`
 
-Implementation commit：待回填
+Implementation commit：`78265e5b3bc4b65b9acbcc00d7f8a76ed7fea9ea`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`d32d7ccaff46faa52b8b9268fb05d5ef30b09269`
 
 ## 1. 本轮目标
 
