@@ -7,6 +7,7 @@
 规划基线 commit：`882b079b42b7f152f38820b40460ef3c652fad7c`
 Implementation commit：`c7ced1abcbf6c33a9cf8271a2450850cfdb5b491`
 Evidence/docs commit：`8ba90f6dcbea1d3dc94d4d226d5aec723ac3f069`
+Checkpoint sync commit：`275527a0e2a2aa309cd17207e159363976b17167`
 Review result：`STATUS: CLEAR`，无 P0/P1/P2。
 
 ## 0. 全局主管理解

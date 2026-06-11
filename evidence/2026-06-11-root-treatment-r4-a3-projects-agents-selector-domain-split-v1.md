@@ -18,6 +18,7 @@ R4-A3 已实现 Projects / Agents 首批前端 selector 分域。接受范围是
 - Planning baseline commit：`882b079b42b7f152f38820b40460ef3c652fad7c`
 - Implementation commit：`c7ced1abcbf6c33a9cf8271a2450850cfdb5b491`
 - Evidence/docs commit：`8ba90f6dcbea1d3dc94d4d226d5aec723ac3f069`
+- Checkpoint sync commit：`275527a0e2a2aa309cd17207e159363976b17167`
 - Review result：`STATUS: CLEAR`
 - Selector module：`prototypes/productized-desktop-shell/src/lib/pageSelectors.ts`
 - Offline test：`prototypes/productized-desktop-shell/tests/r4-page-selectors.test.ts`

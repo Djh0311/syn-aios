@@ -21,6 +21,7 @@
 
 Implementation commit：`c7ced1abcbf6c33a9cf8271a2450850cfdb5b491`
 Evidence/docs commit：`8ba90f6dcbea1d3dc94d4d226d5aec723ac3f069`
+Checkpoint sync commit：`275527a0e2a2aa309cd17207e159363976b17167`
 
 ## 关键文件
 
