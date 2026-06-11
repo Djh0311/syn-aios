@@ -2,17 +2,17 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a43-offline-scenario-environment-fixture-helper-extraction-v1.md`
 
 Planning baseline commit：`d2135d17018a3ecf8c1d8926401552a6f1bb89ef`
 
-Implementation commit：待回填
+Implementation commit：`c5588774b30f833055b26c44b0cd8dd2e9df5879`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`95c7da1271489864e8e3c1de232a7ea8075c47c4`
 
 ## 1. 本轮目标
 
