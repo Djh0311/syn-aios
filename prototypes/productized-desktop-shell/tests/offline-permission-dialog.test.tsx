@@ -14,6 +14,14 @@ import { runPermissionScenario } from "./helpers/offlinePermissionScenarioUtils"
 import type { CapturedActionState, OfflinePermissionScenario } from "./helpers/offlinePermissionScenarioUtils";
 import { authorizationWorkflowFixtures } from "./helpers/offlineAuthorizationWorkflowFixtures";
 import {
+  directorReviewActionFixture,
+  globalBoundaryReviewPayloadFixture,
+  globalBoundaryReviewSummary,
+  projectConsultationProposalDecisionPayloadFixture,
+  projectConsultationProposalDecisionSummary,
+  projectDirectorTaskPlanRequestFixture,
+} from "./helpers/offlineProjectPlanningActionFixtures";
+import {
   buildBootstrapProjectWorkflowAction,
   buildAdvanceWorkItemStateAction,
   buildBindNodeSessionAction,
@@ -3379,7 +3387,7 @@ function runShellScenario() {
     project,
     proposal: projectConsultationProposalStore.proposals[0],
     decision: "confirm",
-    summary: "用户确认项目咨询方案范围；仍需全局主管复核后才可自动推进，本轮不会启动真实工作者。",
+    summary: projectConsultationProposalDecisionSummary,
     proposalStoreRevision: projectConsultationProposalStore.revision,
     planAuthorizationRevision: planAuthorizationStore.revision,
   });
@@ -3390,15 +3398,7 @@ function runShellScenario() {
   );
   assertDeepEqual(
     proposalAction.projectConsultationProposalDecision,
-    {
-      project_root: project.project_root,
-      proposal_id: "proposal:offline:c2:pending",
-      actor_id: "user",
-      decision: "confirm",
-      summary: "用户确认项目咨询方案范围；仍需全局主管复核后才可自动推进，本轮不会启动真实工作者。",
-      expected_proposal_store_revision: 1,
-      expected_plan_authorization_store_revision: 4,
-    },
+    projectConsultationProposalDecisionPayloadFixture(project.project_root),
     "确认方案范围 action payload 不匹配",
   );
   const proposalDialogText = visibleText(
@@ -3455,34 +3455,13 @@ function runShellScenario() {
     proposal: projectConsultationProposalStoreConfirmed.proposals[0],
     authorization: planAuthorizationStorePendingGlobal.authorizations[0],
     reviewStatus: "approved",
-    summary: "全局主管复核通过方案边界；授权有效，仍未派发工作者。",
+    summary: globalBoundaryReviewSummary,
     authorizationRevision: planAuthorizationStorePendingGlobal.revision,
   });
   assert(globalReviewAction.kind === "record-global-boundary-review", "批准并生效应生成全局边界复核 action");
   assertDeepEqual(
     globalReviewAction.globalBoundaryReview,
-    {
-      project_root: project.project_root,
-      project_id: "project:offline-fixture-projects-codex-workbench",
-      workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-      proposal_id: "proposal:offline:c3:confirmed",
-      authorization_id: "plan-auth:offline:pending-global",
-      actor_id: "global_director",
-      review_status: "approved",
-      summary: "全局主管复核通过方案边界；授权有效，仍未派发工作者。",
-      checklist: {
-        architecture_boundary_checked: true,
-        cross_project_impact_checked: true,
-        permission_scope_checked: true,
-        read_write_scope_checked: true,
-        tool_and_check_scope_checked: true,
-        memory_boundary_checked: true,
-        stop_conditions_checked: true,
-        acceptance_criteria_checked: true,
-      },
-      findings: [],
-      expected_authorization_revision: 5,
-    },
+    globalBoundaryReviewPayloadFixture(project.project_root),
     "批准并生效 action payload 不匹配",
   );
   const globalReviewDialogText = visibleText(
@@ -3506,15 +3485,10 @@ function runShellScenario() {
     assert(globalReviewDialogText.includes(expectedText), `全局边界复核确认弹层缺少 ${expectedText}`);
   }
 
-  const projectDirectorTaskPlanRequest = {
-    project_root: project.project_root,
-    project_id: "project:offline-fixture-projects-codex-workbench",
-    workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-    proposal_id: "proposal:offline:c4:confirmed",
-    authorization_id: "plan-auth:offline:active",
-    actor_id: "project_director",
-    expected_authorization_revision: planAuthorizationStore.revision,
-  };
+  const projectDirectorTaskPlanRequest = projectDirectorTaskPlanRequestFixture(
+    project.project_root,
+    planAuthorizationStore.revision,
+  );
   capturedAction = null;
   const projectDirectorTaskPlanCard = (
     <ProjectDirectorTaskPlanCard
@@ -4047,21 +4021,7 @@ function runShellScenario() {
   requestDirectorAccept({ preventDefault() {}, stopPropagation() {} });
   assertDeepEqual(
     capturedAction,
-    {
-      kind: "record-director-review",
-      label: "记录总指导回收：接受",
-      path: project.project_root,
-      source: "索引内项目路径",
-      boundary:
-        "只写真实 workflow-state.v0.json 的复核记录和审计事件；不启动 Codex、不恢复会话、不发送消息、不写 /Users/yoyi/.codex、不读取完整会话记录。",
-      directorReview: {
-        project_root: project.project_root,
-        work_item_id: "work-item:offline:001",
-        dispatch_id: "dispatch:offline:001",
-        decision: "accepted",
-        summary: "总指导回收：接受；派发结果：WORKFLOW_NODE_DISPATCH_OK_2026_05_29",
-      },
-    },
+    directorReviewActionFixture(project.project_root),
     "总指导回收待确认动作不匹配",
   );
   const directorDialogText = visibleText(
