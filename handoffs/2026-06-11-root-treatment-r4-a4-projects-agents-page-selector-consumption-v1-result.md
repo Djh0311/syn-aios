@@ -4,6 +4,8 @@
 
 结论：R4-A4 implementation 已完成，状态为 `implemented_pending_review`。
 
+Implementation commit：`58804f43cb3a666ddae66eecd1390def253c2ed2`
+
 ## 做了什么
 
 - `pageSelectors.ts` 新增 split-input selector wrappers：

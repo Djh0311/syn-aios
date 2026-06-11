@@ -10,6 +10,7 @@ R4-A4 已实现 Projects / Agents 页面以最小 diff 消费 R4-A3 前端纯 se
 
 - Task package：`tasks/2026-06-11-root-treatment-r4-a4-projects-agents-page-selector-consumption-v1.md`
 - Planning baseline commit：`17dd1243e1b62e8ef86b9bb865d964a6cceae02f`
+- Implementation commit：`58804f43cb3a666ddae66eecd1390def253c2ed2`
 - Selector module：`prototypes/productized-desktop-shell/src/lib/pageSelectors.ts`
 - Projects page：`prototypes/productized-desktop-shell/src/views/ProjectsView.tsx`
 - Agents page：`prototypes/productized-desktop-shell/src/views/AgentView.tsx`
