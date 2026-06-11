@@ -12,7 +12,7 @@ Implementation commit：`cdb71a6dbdc9e216fc39da921c0cb77caa21e6b6`。
 
 Review result：`STATUS: CLEAR`；无 P0 / P1 / P2。
 
-Checkpoint commit：`TBD`。
+Checkpoint commit：`b5ae36120c80709f8639b4a71248cbc5b3ef1954`。
 
 ## 1. Scope
 
