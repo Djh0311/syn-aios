@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 Planning baseline commit：`e49866d04b666f5bb75af4dff99f72e32ee90405`
 
-Implementation commit：待回填
+Implementation commit：`645e92430c826863d6b713a75fdd7c512921a82f`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`7773a2fb3ec2fd5274e2c64811a154f03302e2b0`
 
 本文是 Root Treatment / Stage R 的 R4-A41 任务包；R4-A41 继续对应官方计划 R4-6：离线测试拆分。R4-A41 只接受为 Project Canvas / Runtime Log / Transcript Session / Offline Role 相关 text / class / id list fixture 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B、真实 Codex 执行或 backlog 功能解冻。
 

@@ -2,17 +2,17 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a41-project-runtime-transcript-role-text-fixture-helper-extraction-v1.md`
 
 Planning baseline commit：`e49866d04b666f5bb75af4dff99f72e32ee90405`
 
-Implementation commit：待回填
+Implementation commit：`645e92430c826863d6b713a75fdd7c512921a82f`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`7773a2fb3ec2fd5274e2c64811a154f03302e2b0`
 
 ## 1. 本轮目标
 
