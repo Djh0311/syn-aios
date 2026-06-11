@@ -10,7 +10,7 @@ Implementation commit：`a69bf7f4b74c4d47c43d3880caa93bd65612bfcd`
 
 Review result：`STATUS: CLEAR`；无 P0 / P1 / P2。
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`5f6c846798c4e7070c30e942821c4d4729f2d99e`
 
 ## 0. 全局主管理解
 
