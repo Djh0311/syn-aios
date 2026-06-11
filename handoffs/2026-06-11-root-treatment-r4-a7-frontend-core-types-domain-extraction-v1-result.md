@@ -16,6 +16,8 @@ Implementation hash backfill commit：`b76eb9deff5e89394b869940f30fcea8496be119`
 
 Review result：`STATUS: CLEAR`，无 P0 / P1 / P2。
 
+Checkpoint commit：`5238158a66b41618e99e9cdb3edb8561062db30c`
+
 ## 1. Result
 
 R4-A7 已完成实现侧工作：前端基础索引 / 会话 / transcript / project record 类型已从 `types.ts` 抽到 `workbenchCoreTypes.ts`，`types.ts` 保持 re-export 兼容，行数从 5,149 降到 4,998。
