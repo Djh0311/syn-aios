@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：implementation 完成，复核 `STATUS: CLEAR`；checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a26-knowledge-secretary-fixture-helper-extraction-v1.md`
 
@@ -12,7 +12,7 @@ Implementation commit：`0c50fc9204b59dac1328952c9c36a6a231f480c6`
 
 Review result：`STATUS: CLEAR`；P0/P1 none；P2 文档状态 / handoff 收口缺口已关闭；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`485a2030d187cc50e2c6301008cbc2d058349ab1`
 
 ## 1. 本轮目标
 
