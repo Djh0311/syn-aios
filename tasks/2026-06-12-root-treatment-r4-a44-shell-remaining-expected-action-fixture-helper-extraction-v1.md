@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 Planning baseline commit：`2488ac146a615ee5399f19807a10eeed3a7d5af7`
 
-Implementation commit：待回填
+Implementation commit：`e26aac0af5494fb91bf65b99dc795e4d93a7fe97`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`cd16d89cf21d91b928b53598a2ffdfe848e2b2cd`
 
 本文是 Root Treatment / Stage R 的 R4-A44 任务包；R4-A44 继续对应官方计划 R4-6：离线测试拆分。R4-A44 只接受为 offline interaction 主测试中 Shell 剩余 expected action object fixture 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B、真实 Codex 执行或 backlog 功能解冻。
 
