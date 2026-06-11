@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a32-task-workflow-action-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a32-task-workflow-action-fixtu
 
 Planning baseline commit：`e209cef`
 
-Implementation commit：`pending`
+Implementation commit：`03dfa4d68fda2fea8047116c1380de74f8ee2716`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：`pending`
+Checkpoint commit：`9296298af0334aeeb3dbf794bfac95dedac6fc67`
 
 ## 1. 完成内容
 
@@ -68,6 +68,12 @@ shape gate 继承既有 warning：
 ```text
 tauri_command_total_increased: current 97 / baseline 96
 ```
+
+过程偏差：
+
+- hash 回填扫描时有一条 `rg` 命令误把带反引号的 pattern 放进 shell 双引号，zsh 触发了两次字面量 `pending` 命令替换并返回 `command not found`。
+- 随后已用单引号 pattern 重跑安全扫描，hash placeholder 无命中。
+- 该偏差未修改文件，未启动 Tauri / Browser / Chrome / Vite dev，未执行真实 Codex，未读写 `/Users/yoyi/.codex`。
 
 未运行：
 
