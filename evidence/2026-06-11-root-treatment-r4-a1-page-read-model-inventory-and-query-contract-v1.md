@@ -9,6 +9,8 @@ R4-A1 已完成为页面读模型 inventory / contract skeleton。接受范围�
 ## Implementation
 
 - Implementation commit：`93bc0f2ec5eb2f6e18297e43b5731afa4344876e`
+- Checkpoint commit：`6519ad3`
+- Checkpoint hash 回填 commit：`03fd247`
 - Task package：`tasks/2026-06-11-root-treatment-r4-a1-page-read-model-inventory-and-query-contract-v1.md`
 - 新增后端模块：`prototypes/productized-desktop-shell/src-tauri/src/page_read_model.rs`
 - 新增前端类型模块：`prototypes/productized-desktop-shell/src/lib/pageReadModel.ts`

@@ -171,6 +171,7 @@ R4-A1 禁止声明：
 - 本任务规划基线 commit：`6786faf`
 - 本任务 implementation commit：`93bc0f2ec5eb2f6e18297e43b5731afa4344876e`
 - 本任务 checkpoint commit：`6519ad3`
+- 本任务 checkpoint hash 回填 commit：`03fd247`
 
 执行说明：
 

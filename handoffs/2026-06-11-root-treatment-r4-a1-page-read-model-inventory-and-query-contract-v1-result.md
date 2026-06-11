@@ -14,6 +14,8 @@
 - 通过 shape gate，且没有让 `types.rs`、`types.ts`、`offline-permission-dialog.test.tsx` 超过水位线。
 
 Implementation commit：`93bc0f2ec5eb2f6e18297e43b5731afa4344876e`
+Checkpoint commit：`6519ad3`
+Checkpoint hash 回填 commit：`03fd247`
 
 ## 关键文件
 
