@@ -12,7 +12,6 @@ import {
 import type { ReactElementLike } from "./helpers/offlineInteractionTestUtils";
 import { runPermissionScenario } from "./helpers/offlinePermissionScenarioUtils";
 import type { CapturedActionState, OfflinePermissionScenario } from "./helpers/offlinePermissionScenarioUtils";
-import { authorizationWorkflowFixtures } from "./helpers/offlineAuthorizationWorkflowFixtures";
 import {
   directorReviewActionFixture,
   globalBoundaryReviewPayloadFixture,
@@ -29,11 +28,11 @@ import {
   buildCreateTaskDraftAction,
   buildCorrectDispatchFieldsAction,
   buildGenerateTaskFileAction,
-  buildNotReadyDispatchReadiness,
   buildPermissionDecisionAction,
   buildUpdateTaskFieldsAction,
   buildUnbindNodeSessionAction,
   buildUserReviewedInstructionPreviewAction,
+  expectedUpdateTaskFieldsAction,
   taskDraftFormDataFixture,
   taskDraftFormValues,
   taskFieldCorrectionFixtures,
@@ -50,10 +49,10 @@ import {
   missingOfflineRoleDispatchFormDataFixture,
   offlineRoleDispatchFormDataFixture,
 } from "./helpers/offlineRoleOrchestrationFixtures";
-import { workbenchBaseFixtures } from "./helpers/offlineWorkbenchBaseFixtures";
-import { projectWorkflowStateFixtures } from "./helpers/offlineProjectWorkflowStateFixtures";
-import { derivedWorkflowStateFixtures } from "./helpers/offlineDerivedWorkflowFixtures";
-import { c6ResultSummaryFixtures } from "./helpers/offlineC6ResultSummaryFixtures";
+import {
+  offlineScenarioEnvironmentFixtures,
+  preparedProjectWorkflowFixture,
+} from "./helpers/offlineScenarioEnvironmentFixtures";
 import { candidateGovernanceFixtures } from "./helpers/offlineCandidateGovernanceFixtures";
 import { memoryCenterCoreFixtures } from "./helpers/offlineMemoryCenterCoreFixtures";
 import { memoryCenterGovernanceFixtures } from "./helpers/offlineMemoryCenterGovernanceFixtures";
@@ -88,12 +87,6 @@ import { projectRuntimeTranscriptRoleTextFixtures } from "./helpers/offlineProje
 import { readModelContractFixtures } from "./helpers/offlineReadModelContractFixtures";
 import { stageJRunQueueFixtures } from "./helpers/offlineRunQueueFixtures";
 import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
-import {
-  workflowStateReadyForReviewFixture,
-  workflowStateWithCompletedOfflineDispatchFixture,
-  workflowStateWithGeneratedTaskFileFixture,
-  workflowStateWithPreparedOfflineDispatchFixture,
-} from "./helpers/offlineWorkflowStateVariantFixtures";
 import { AgentSessionCenter, AgentView, ChatTranscript, filterAgentSessions } from "../src/views/AgentView";
 import { HomeView } from "../src/views/HomeView";
 import { RunningWorkflowsView } from "../src/views/RunningWorkflowsView";
@@ -108,8 +101,6 @@ import {
 } from "../src/lib/h2RealResumeAuthorization";
 import { deriveSessionContinuationPreviews, inspectSessionContinuationGuard } from "../src/lib/sessionContinuation";
 import { deriveSessionOperationDescriptors } from "../src/lib/sessionOperations";
-import { summarizePlanAuthorizationStore } from "../src/lib/planAuthorization";
-import { summarizeProjectConsultationProposalStore } from "../src/lib/projectConsultationProposal";
 import {
   buildOfflineRoleDispatchAction,
   buildOfflineStubResult,
@@ -170,7 +161,6 @@ import type {
   ProjectConsultationProposalStoreV1,
   RuntimeSessionAttention,
   WorkbenchSnapshot,
-  WorkflowStateSnapshot,
 } from "../src/lib/types";
 
 const {
@@ -184,13 +174,8 @@ const {
   session,
   skill,
   snapshot,
-  workflowId,
-  workflowProjectId,
-} = workbenchBaseFixtures();
-
-const { workflowState, workflowStateWithProjectWorkflow } = projectWorkflowStateFixtures(project.project_root, session);
-
-const {
+  workflowState,
+  workflowStateWithProjectWorkflow,
   blockedWorkflowRunCheck,
   planAuthorizationStore,
   projectConsultationProposalStore,
@@ -199,47 +184,16 @@ const {
   projectConsultationProposalStoreActive,
   projectDirectorTaskPlan,
   runnableWorkflowRunCheck,
-} = authorizationWorkflowFixtures(project.project_root, session.thread_id, workflowProjectId, workflowId);
-
-const planAuthorizationSummary = summarizePlanAuthorizationStore(planAuthorizationStore, workflowProjectId, workflowId);
-const projectConsultationProposalSummary = summarizeProjectConsultationProposalStore(
-  projectConsultationProposalStoreActive,
-  planAuthorizationStore,
-  workflowProjectId,
-  workflowId,
-);
-
-const { pendingWorkflowResultSummary, workflowStateWithDerivedWorkflow } = derivedWorkflowStateFixtures({
-  projectRoot: project.project_root,
-  sessionThreadId: session.thread_id,
-  workflowProjectId,
-  workflowId,
-  workflowStateWithProjectWorkflow,
-});
-const { workflowStateWithC6ResultSummary } = c6ResultSummaryFixtures({
-  workflowProjectId,
-  workflowId,
-  pendingWorkflowResultSummary,
+  planAuthorizationSummary,
+  projectConsultationProposalSummary,
   workflowStateWithDerivedWorkflow,
-});
-
-const workflowStateReadyForReview: WorkflowStateSnapshot =
-  workflowStateReadyForReviewFixture(workflowStateWithProjectWorkflow);
-
-const workflowStateWithPreparedOfflineDispatch: WorkflowStateSnapshot = workflowStateWithPreparedOfflineDispatchFixture(
-  workflowStateWithProjectWorkflow,
-  project.project_root,
-);
-
-const workflowStateWithCompletedOfflineDispatch: WorkflowStateSnapshot = workflowStateWithCompletedOfflineDispatchFixture(
-  workflowStateWithProjectWorkflow,
-  project.project_root,
-);
-
-const workflowStateWithGeneratedTaskFile: WorkflowStateSnapshot =
-  workflowStateWithGeneratedTaskFileFixture(workflowStateWithProjectWorkflow);
-
-const notReadyDispatchReadiness = buildNotReadyDispatchReadiness(project.project_root);
+  workflowStateWithC6ResultSummary,
+  workflowStateReadyForReview,
+  workflowStateWithPreparedOfflineDispatch,
+  workflowStateWithCompletedOfflineDispatch,
+  workflowStateWithGeneratedTaskFile,
+  notReadyDispatchReadiness,
+} = offlineScenarioEnvironmentFixtures();
 
 const scenarios: OfflinePermissionScenario[] = [];
 
@@ -759,22 +713,7 @@ function runProjectCanvasReadModelScenario() {
   assert(examples.some((example) => example.status === "prepared"), "状态样例缺少 prepared 态");
   assert(examples.some((example) => example.status === "readback_unavailable"), "状态样例缺少 readback unavailable 态");
 
-  const preparedWorkflow = {
-    ...projectWorkflow,
-    permission_requests: [],
-    execution_attempts: [],
-    task_drafts: [{ ...selectedTask, state: "prepared" }],
-    node_dispatches: [
-      {
-        ...projectWorkflow.node_dispatches[0],
-        state: "prepared",
-        last_message_summary: null,
-        transcript_event_count: null,
-        transcript_target_hits: null,
-        warnings: ["prepared_dispatch_is_not_worker_execution"],
-      },
-    ],
-  };
+  const preparedWorkflow = preparedProjectWorkflowFixture(projectWorkflow, selectedTask);
   const preparedModel = deriveProjectWorkflowCanvasReadModel({
     project,
     projectWorkflow: preparedWorkflow,
@@ -3385,29 +3324,7 @@ function runShellScenario() {
   capturedAction = buildUpdateTaskFieldsAction(project.project_root, selectedSecondDraft.work_item_id, fieldValues);
   assertDeepEqual(
     capturedAction,
-    {
-      kind: "update-task-fields",
-      label: "保存任务包字段",
-      path: project.project_root,
-      source: "索引内项目路径",
-      boundary: "写入工作台自己的 workflow-state.v0.json；不生成真实任务文件、不派发真实 Codex 会话。",
-      taskFields: {
-        project_root: project.project_root,
-        work_item_id: "work-item:offline:002",
-        fields: {
-          task_name: "字段编辑任务",
-          assigned_line: "桌面应用线",
-          background: ["来自结构化字段。"],
-          goals: ["完成字段编辑。"],
-          allowed_read: ["/tmp/indexed-project"],
-          allowed_write: ["工作台状态文件"],
-          forbidden_actions: ["不生成真实任务文件。"],
-          acceptance_criteria: ["预览使用新字段。"],
-          required_return: ["做了什么"],
-          review_focus: ["确认结构化字段。"],
-        },
-      },
-    },
+    expectedUpdateTaskFieldsAction(project.project_root, selectedSecondDraft.work_item_id),
     "保存任务字段待确认动作不匹配",
   );
   let saveFieldsConfirmed = false;

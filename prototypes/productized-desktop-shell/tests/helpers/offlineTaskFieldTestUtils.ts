@@ -214,6 +214,32 @@ export function buildUpdateTaskFieldsAction(
   };
 }
 
+export function expectedUpdateTaskFieldsAction(projectRoot: string, workItemId: string): PendingAction {
+  return {
+    kind: "update-task-fields",
+    label: "保存任务包字段",
+    path: projectRoot,
+    source: "索引内项目路径",
+    boundary: "写入工作台自己的 workflow-state.v0.json；不生成真实任务文件、不派发真实 Codex 会话。",
+    taskFields: {
+      project_root: projectRoot,
+      work_item_id: workItemId,
+      fields: {
+        task_name: "字段编辑任务",
+        assigned_line: "桌面应用线",
+        background: ["来自结构化字段。"],
+        goals: ["完成字段编辑。"],
+        allowed_read: ["/tmp/indexed-project"],
+        allowed_write: ["工作台状态文件"],
+        forbidden_actions: ["不生成真实任务文件。"],
+        acceptance_criteria: ["预览使用新字段。"],
+        required_return: ["做了什么"],
+        review_focus: ["确认结构化字段。"],
+      },
+    },
+  };
+}
+
 export function taskFieldCorrectionFixtures(projectRoot: string): {
   correctionFields: TaskPackageFields;
   missingPreviewFields: TaskPackageFields;
