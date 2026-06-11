@@ -44,6 +44,7 @@ mod workbench_sqlite_observation_period;
 mod workbench_sqlite_preflight;
 mod workbench_sqlite_read_cut;
 mod workbench_sqlite_schema;
+mod workbench_sqlite_snapshot_apply;
 mod worker_protocol;
 mod workflow_audit;
 mod workflow_read_model;
