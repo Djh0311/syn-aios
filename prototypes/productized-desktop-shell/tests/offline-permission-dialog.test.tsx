@@ -24,6 +24,12 @@ import {
   runtimeLogStoreFixture,
 } from "./helpers/offlineRuntimeDiagnosticFixtures";
 import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
+import {
+  workflowStateReadyForReviewFixture,
+  workflowStateWithCompletedOfflineDispatchFixture,
+  workflowStateWithGeneratedTaskFileFixture,
+  workflowStateWithPreparedOfflineDispatchFixture,
+} from "./helpers/offlineWorkflowStateVariantFixtures";
 import { AgentSessionCenter, AgentView, ChatTranscript, filterAgentSessions } from "../src/views/AgentView";
 import { HomeView } from "../src/views/HomeView";
 import { RunningWorkflowsView } from "../src/views/RunningWorkflowsView";
@@ -1737,150 +1743,21 @@ const workflowStateWithC6ResultSummary: WorkflowStateSnapshot = {
   ],
 };
 
-const workflowStateReadyForReview: WorkflowStateSnapshot = {
-  ...workflowStateWithProjectWorkflow,
-  counts: {
-    ...workflowStateWithProjectWorkflow.counts,
-    reviews: 0,
-  },
-  project_workflows: [
-    {
-      ...workflowStateWithProjectWorkflow.project_workflows[0],
-      task_drafts: [
-        {
-          ...workflowStateWithProjectWorkflow.project_workflows[0].task_drafts[0],
-          state: "ready_for_review",
-          current_node_id: "workflow:offline-fixture-projects-codex-workbench:default:node:review",
-          next_states: ["accepted", "needs_changes", "paused"],
-          next_action_label: "下一步：接受或要求修改",
-        },
-        workflowStateWithProjectWorkflow.project_workflows[0].task_drafts[1],
-      ],
-    },
-  ],
-};
+const workflowStateReadyForReview: WorkflowStateSnapshot =
+  workflowStateReadyForReviewFixture(workflowStateWithProjectWorkflow);
 
-const workflowStateWithPreparedOfflineDispatch: WorkflowStateSnapshot = {
-  ...workflowStateWithProjectWorkflow,
-  project_workflows: [
-    {
-      ...workflowStateWithProjectWorkflow.project_workflows[0],
-      node_dispatches: [
-        {
-          dispatch_id: "offline-dispatch:fixture:prepared",
-          project_id: "project:offline-fixture-projects-codex-workbench",
-          workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-          node_id: "workflow:offline-fixture-projects-codex-workbench:default:node:codex-dev",
-          work_item_id: "work-item:offline:001",
-          binding_id: "offline-role-binding:codex-dev",
-          native_thread_id: "offline-role:codex-dev",
-          prompt_preview: "派发给：开发线\n任务名：已落账离线派发\n目标：验证回传使用已落账派发块。",
-          prompt_kind: "offline_role_dispatch",
-          offline_role_dispatch: {
-            project_root: project.project_root,
-            work_item_id: "work-item:offline:001",
-            target_role_id: "codex-dev",
-            target_role_label: "开发线",
-            task_title: "已落账离线派发",
-            objective: "验证回传使用已落账派发块。",
-            execution_cwd: project.project_root,
-            allowed_reads: [project.project_root],
-            allowed_writes: [`${project.project_root}/README.md`],
-            forbidden_actions: ["不执行 codex exec resume"],
-            acceptance_criteria: ["角色回传摘要包含已落账任务名"],
-            timeout_seconds: 600,
-            required_return: ["薄弱点", "验证结果"],
-            raw_block: "派发给：开发线\n任务名：已落账离线派发\n目标：验证回传使用已落账派发块。",
-          },
-          state: "prepared",
-          started_at_ms: null,
-          ended_at_ms: null,
-          exit_code: null,
-          last_message_path: null,
-          last_message_summary: null,
-          transcript_event_count: null,
-          transcript_target_hits: null,
-          warnings: ["offline_only_no_codex_resume"],
-        },
-        ...workflowStateWithProjectWorkflow.project_workflows[0].node_dispatches,
-      ],
-    },
-  ],
-};
+const workflowStateWithPreparedOfflineDispatch: WorkflowStateSnapshot = workflowStateWithPreparedOfflineDispatchFixture(
+  workflowStateWithProjectWorkflow,
+  project.project_root,
+);
 
-const workflowStateWithCompletedOfflineDispatch: WorkflowStateSnapshot = {
-  ...workflowStateWithProjectWorkflow,
-  project_workflows: [
-    {
-      ...workflowStateWithProjectWorkflow.project_workflows[0],
-      task_drafts: [
-        {
-          ...workflowStateWithProjectWorkflow.project_workflows[0].task_drafts[0],
-          state: "ready_for_review",
-          current_node_id: "workflow:offline-fixture-projects-codex-workbench:default:node:review",
-          next_states: ["accepted", "needs_changes", "paused"],
-          next_action_label: "下一步：接受或要求修改",
-        },
-        workflowStateWithProjectWorkflow.project_workflows[0].task_drafts[1],
-      ],
-      node_dispatches: [
-        {
-          dispatch_id: "offline-dispatch:fixture:completed",
-          project_id: "project:offline-fixture-projects-codex-workbench",
-          workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-          node_id: "workflow:offline-fixture-projects-codex-workbench:default:node:codex-dev",
-          work_item_id: "work-item:offline:001",
-          binding_id: "offline-role-binding:codex-dev",
-          native_thread_id: "offline-role:codex-dev",
-          prompt_preview: "派发给：开发线\n任务名：已完成离线派发\n目标：验证总指导回收。",
-          prompt_kind: "offline_role_dispatch",
-          offline_role_dispatch: {
-            project_root: project.project_root,
-            work_item_id: "work-item:offline:001",
-            target_role_id: "codex-dev",
-            target_role_label: "开发线",
-            task_title: "已完成离线派发",
-            objective: "验证总指导回收。",
-            execution_cwd: project.project_root,
-            allowed_reads: [project.project_root],
-            allowed_writes: [`${project.project_root}/README.md`],
-            forbidden_actions: ["不执行 codex exec resume"],
-            acceptance_criteria: ["总指导回收按钮可用"],
-            timeout_seconds: 600,
-            required_return: ["薄弱点", "验证结果"],
-            raw_block: "派发给：开发线\n任务名：已完成离线派发\n目标：验证总指导回收。",
-          },
-          state: "completed",
-          started_at_ms: null,
-          ended_at_ms: 1_764_000_004_000,
-          exit_code: 0,
-          last_message_path: null,
-          last_message_summary: "离线桩结果：已接收任务，没有执行真实 Codex 会话。",
-          transcript_event_count: 0,
-          transcript_target_hits: 0,
-          warnings: ["offline_only_no_codex_resume"],
-        },
-        ...workflowStateWithProjectWorkflow.project_workflows[0].node_dispatches,
-      ],
-    },
-  ],
-};
+const workflowStateWithCompletedOfflineDispatch: WorkflowStateSnapshot = workflowStateWithCompletedOfflineDispatchFixture(
+  workflowStateWithProjectWorkflow,
+  project.project_root,
+);
 
-const workflowStateWithGeneratedTaskFile: WorkflowStateSnapshot = {
-  ...workflowStateWithProjectWorkflow,
-  project_workflows: [
-    {
-      ...workflowStateWithProjectWorkflow.project_workflows[0],
-      task_drafts: [
-        {
-          ...workflowStateWithProjectWorkflow.project_workflows[0].task_drafts[0],
-          artifact_path: "/Users/yoyi/workspace/product-line/tasks/2026-05-29-generated-task-package-offline-001.md",
-        },
-        workflowStateWithProjectWorkflow.project_workflows[0].task_drafts[1],
-      ],
-    },
-  ],
-};
+const workflowStateWithGeneratedTaskFile: WorkflowStateSnapshot =
+  workflowStateWithGeneratedTaskFileFixture(workflowStateWithProjectWorkflow);
 
 const notReadyDispatchReadiness = buildNotReadyDispatchReadiness(project.project_root);
 
