@@ -2,17 +2,17 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a40-memory-knowledge-secretary-text-fixture-helper-extraction-v1.md`
 
 Planning baseline commit：`dc3409686bd324bddfd5849a84ff0dc7c991896a`
 
-Implementation commit：待回填
+Implementation commit：`b2802795de657da80fc6f38cf6df39cc6f969af2`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`126f93054ce68ca945f2545c10302081e7ebe2cf`
 
 ## 1. 本轮目标
 
@@ -163,4 +163,3 @@ P2: None
 - R3 Level B 或真实生产 DB read-cut。
 - 真实 Codex 执行、`.codex` 读写、真实 Tauri / 截图验收。
 - backlog 功能解冻。
-

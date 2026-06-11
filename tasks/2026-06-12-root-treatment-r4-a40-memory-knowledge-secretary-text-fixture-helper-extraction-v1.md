@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 Planning baseline commit：`dc3409686bd324bddfd5849a84ff0dc7c991896a`
 
-Implementation commit：待回填
+Implementation commit：`b2802795de657da80fc6f38cf6df39cc6f969af2`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`126f93054ce68ca945f2545c10302081e7ebe2cf`
 
 本文是 Root Treatment / Stage R 的 R4-A40 任务包；R4-A40 继续对应官方计划 R4-6：离线测试拆分。R4-A40 只接受为记忆治理、记忆中心、知识库、秘书只读入口相关 expected / forbidden / class text fixture 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B、真实 Codex 执行或 backlog 功能解冻。
 

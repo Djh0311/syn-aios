@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a40-memory-knowledge-secretary-text-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a40-memory-knowledge-secretary
 
 Planning baseline commit：`dc3409686bd324bddfd5849a84ff0dc7c991896a`
 
-Implementation commit：待回填
+Implementation commit：`b2802795de657da80fc6f38cf6df39cc6f969af2`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`126f93054ce68ca945f2545c10302081e7ebe2cf`
 
 ## 1. 完成内容
 
@@ -85,4 +85,3 @@ P2: None
 4. 回填 implementation / checkpoint hash。
 
 R4-A41 建议继续抽剩余中等粒度 text fixture cluster，例如 runtime log / transcript-session / project canvas text fixture；仍不得改产品行为、视觉、Rust/Tauri、DB/schema 或真实执行路径。
-
