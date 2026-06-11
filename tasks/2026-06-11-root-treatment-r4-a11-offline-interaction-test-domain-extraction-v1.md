@@ -10,7 +10,7 @@ Implementation commit：`40cc37b9e3bf862e03468f7ce2063712e0ccfa96`。
 
 Review result：`STATUS: CLEAR_WITH_P2`；无 P0 / P1。P2 为 evidence / handoff 中 `git diff --check` 记录过期，已回填为最终状态。
 
-Checkpoint commit：待回填。
+Checkpoint commit：`50770de327c7ede65e029b5a0d0aead3aa385396`。
 
 ## 0. 全局主管理解
 
