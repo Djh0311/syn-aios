@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成，等待 implementation / checkpoint hash 回填。本文是 Root Treatment / Stage R 的 R4-A27 任务包；R4-A27 继续对应官方计划 R4-6：离线测试拆分。R4-A27 只接受为 Transcript Cleaning / Session Center Hardening 相关离线 fixture helper 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B 或 backlog 功能解冻。
+状态：已完成，implementation / checkpoint hash 已回填。本文是 Root Treatment / Stage R 的 R4-A27 任务包；R4-A27 继续对应官方计划 R4-6：离线测试拆分。R4-A27 只接受为 Transcript Cleaning / Session Center Hardening 相关离线 fixture helper 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B 或 backlog 功能解冻。
 
 Planning baseline commit：`0bb2764`
 
-Implementation commit：`TBD`
+Implementation commit：`722a2b469dd7a8112a56010fcf7cba0b3524f99b`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`3476b5c793b7fc17c787a3e132aef30463738117`
 
 ## 0. 全局主管理解
 

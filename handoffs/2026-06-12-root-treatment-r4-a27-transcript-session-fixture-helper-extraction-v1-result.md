@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，等待 implementation / checkpoint hash 回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a27-transcript-session-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a27-transcript-session-fixture
 
 Planning baseline commit：`0bb2764`
 
-Implementation commit：`TBD`
+Implementation commit：`722a2b469dd7a8112a56010fcf7cba0b3524f99b`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`3476b5c793b7fc17c787a3e132aef30463738117`
 
 ## 1. 交接结论
 
