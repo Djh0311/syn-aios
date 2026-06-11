@@ -81,6 +81,7 @@ import {
   shellProposalDialogExpectedTexts,
   shellScenarioTextFixtures,
 } from "./helpers/offlineShellScenarioTextFixtures";
+import { executionRunQueueTextFixtures } from "./helpers/offlineExecutionRunQueueTextFixtures";
 import { stageJRunQueueFixtures } from "./helpers/offlineRunQueueFixtures";
 import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
 import {
@@ -322,7 +323,7 @@ function runRealExecutionProductCommandBoundaryScenario() {
   );
   const agentText = visibleText(agentNode);
   const agentMarkup = renderToStaticMarkup(agentNode);
-  for (const expectedText of ["项目", "对话", "可以开始对话", "任务输入", "生成发送预览"]) {
+  for (const expectedText of executionRunQueueTextFixtures.agentConversationExpectedTexts) {
     assert(agentText.includes(expectedText), `J5 Agent 对话工作区缺少 ${expectedText}`);
   }
   assert(agentMarkup.includes("agent-conversation-bar"), "J5 Agent 普通区应有项目 / 对话选择条");
@@ -331,39 +332,16 @@ function runRealExecutionProductCommandBoundaryScenario() {
     agentMarkup.indexOf("agent-conversation-bar") < agentMarkup.indexOf("agent-boundary-details"),
     "J5 Agent 普通对话区必须排在开发者详情前面",
   );
-  for (const expectedText of ["统一执行链路", "2 条统一命令", "等待确认：1", "受控记录：1", "阻断：1", "读回边界：未知 / 不可用"]) {
+  for (const expectedText of executionRunQueueTextFixtures.agentUnifiedExecutionExpectedTexts) {
     assert(agentText.includes(expectedText), `PCR6 Agent 统一执行链路缺少 ${expectedText}`);
   }
-  for (const expectedText of ["自动编排：Level A 闭环已记录", "编排 run units：5", "编排读回未知：5", "编排捕获来源：1", "worker report 已回收"]) {
+  for (const expectedText of executionRunQueueTextFixtures.agentAutomationExpectedTexts) {
     assert(agentText.includes(expectedText), `K3 Agent 自动编排摘要缺少 ${expectedText}`);
   }
-  for (const expectedText of [
-    "Codex 控制",
-    "J1-A · 产品命令入口 · 非真实执行",
-    "生成预览",
-    "写入准备",
-    "用户确认",
-    "记录 Phase A（不真实执行）",
-    "任务正文保存策略",
-    "观察 / 候选来源",
-    "不会自动写正式记忆",
-    "临时运行绑定",
-  ]) {
+  for (const expectedText of executionRunQueueTextFixtures.agentCodexControlExpectedTexts) {
     assert(agentText.includes(expectedText), `J1-A Agent Codex 控制入口缺少 ${expectedText}`);
   }
-  for (const expectedText of [
-    "需要重新确认",
-    "用户已拒绝",
-    "被安全边界阻断",
-    "被诊断阻断",
-    "重复执行已阻断",
-    "记忆包缺失或过期",
-    "读回不可用",
-    "读回失败",
-    "执行超时",
-    "运行失败",
-    "停止请求需受控处理",
-  ]) {
+  for (const expectedText of executionRunQueueTextFixtures.agentFailureBoundaryExpectedTexts) {
     assert(agentText.includes(expectedText), `PCR7 Agent 统一执行链路缺少 ${expectedText}`);
   }
   assert(agentText.includes("结果数：未知/不可用"), "PCR7 Agent readback null 应显示未知 / 不可用");
@@ -379,13 +357,13 @@ function runRealExecutionProductCommandBoundaryScenario() {
       onNavigate={() => {}}
     />,
   );
-  for (const expectedText of ["统一执行命令", "2", "1 等确认", "最近状态", "受控记录已写入", "不等于真实 Codex 自由运行", "未知 / 不可用不显示成 0"]) {
+  for (const expectedText of executionRunQueueTextFixtures.runningUnifiedExecutionExpectedTexts) {
     assert(runningText.includes(expectedText), `PCR6 Running 统一执行链路缺少 ${expectedText}`);
   }
-  for (const expectedText of ["自动编排", "5", "0 等确认", "5 读回未知", "worker report", "捕获来源", "过程观察", "主管复核"]) {
+  for (const expectedText of executionRunQueueTextFixtures.runningAutomationExpectedTexts) {
     assert(runningText.includes(expectedText), `K3 Running 自动编排摘要缺少 ${expectedText}`);
   }
-  for (const expectedText of ["失败", "读回异常", "停止请求", "需要重新确认", "读回结果：未知 / 不可用"]) {
+  for (const expectedText of executionRunQueueTextFixtures.runningFailureBoundaryExpectedTexts) {
     assert(runningText.includes(expectedText), `PCR7 Running 统一执行链路缺少 ${expectedText}`);
   }
 
@@ -400,28 +378,7 @@ function runRealExecutionProductCommandBoundaryScenario() {
       onRequestAction={captureAction}
     />,
   );
-  for (const expectedText of [
-    "统一执行链路",
-    "统一命令状态",
-    "运行关注",
-    "旧派发记录",
-    "历史派发记录可见，不是统一产品命令",
-    "读回边界",
-    "未知 / 不可用",
-    "开发者详情：统一命令读模型",
-    "失败 / 阻断 / 读回",
-    "重新确认",
-    "停止请求",
-    "读回结果：未知 / 不可用",
-    "自动编排",
-    "自动编排阶段",
-    "编排捕获",
-    "编排读回",
-    "项目自动编排目标",
-    "生成 Level A 编排记录",
-    "确认后只写工作台记录、捕获来源和 observation",
-    "主管复核",
-  ]) {
+  for (const expectedText of executionRunQueueTextFixtures.projectDetailUnifiedExecutionExpectedTexts) {
     assert(projectDetailText.includes(expectedText), `PCR6 Projects 统一执行链路缺少 ${expectedText}`);
   }
 
@@ -458,7 +415,7 @@ function runRealExecutionProductCommandBoundaryScenario() {
     ),
     "PCR7 秘书 suggestion kind 不应变成执行类动作",
   );
-  for (const forbiddenProposalText of ["批准", "派发", "重试", "stop", "resume", "停止", "恢复"]) {
+  for (const forbiddenProposalText of executionRunQueueTextFixtures.secretaryActionProposalForbiddenTexts) {
     assert(
       !secretaryContext.action_proposals.some((proposal) => proposal.title.toLowerCase().includes(forbiddenProposalText.toLowerCase())),
       `PCR6 秘书 action proposal 不应生成执行动作：${forbiddenProposalText}`,
@@ -479,10 +436,10 @@ function runRealExecutionProductCommandBoundaryScenario() {
       onReloadWorkflowState={() => {}}
     />,
   );
-  for (const expectedText of ["统一执行链路", "统一执行命令状态", "最近状态：受控记录已写入", "读回未知 / 不可用不能显示成 0"]) {
+  for (const expectedText of executionRunQueueTextFixtures.rightRailUnifiedExecutionExpectedTexts) {
     assert(rightPanelText.includes(expectedText), `PCR6 Right rail 统一执行链路缺少 ${expectedText}`);
   }
-  for (const expectedText of ["失败", "读回异常", "需确认", "停止请求", "停止请求需受控处理", "读回结果：未知 / 不可用"]) {
+  for (const expectedText of executionRunQueueTextFixtures.rightRailFailureExpectedTexts) {
     assert(rightPanelText.includes(expectedText), `PCR7 Right rail 统一执行链路缺少 ${expectedText}`);
   }
 
@@ -499,18 +456,7 @@ function runRealExecutionProductCommandBoundaryScenario() {
       />
     </>,
   );
-  for (const forbiddenText of [
-    "H5 命令",
-    "H6 真实执行状态",
-    "允许一次",
-    "结果数：0",
-    "runRealExecutionProductCommandPhaseA",
-    "runRealExecutionProductCommandPhaseB",
-    "run_real_execution_product_command_phase_b",
-    "confirmRealExecutionProductCommand",
-    "recordRealExecutionProductCommandDecision",
-    "prepareRealExecutionProductCommand",
-  ]) {
+  for (const forbiddenText of executionRunQueueTextFixtures.combinedMarkupForbiddenTexts) {
     assert(!combinedMarkup.includes(forbiddenText), `PCR6 UI 不应暴露 ${forbiddenText}`);
   }
 }
@@ -576,31 +522,7 @@ function runStageJRunQueueScenario() {
       onNavigate={() => {}}
     />,
   );
-  for (const expectedText of [
-    "运行队列",
-    "待确认",
-    "失败控制",
-    "操作控制 / 恢复建议",
-    "重试提案",
-    "停止请求",
-    "重启准备",
-    "恢复准备",
-    "只读建议",
-    "后续任务",
-    "单独授权",
-    "不执行真实恢复命令",
-    "不清理真实 Codex 本地状态",
-    "重试确认",
-    "停止 / 取消确认",
-    "过程事实确认",
-    "记忆候选确认",
-    "正式化确认",
-    "捕获补偿确认",
-    "重复执行已阻断",
-    "候选不是正式记忆",
-    "结果数：未知 / 不可用",
-    "不会自动调用 runner",
-  ]) {
+  for (const expectedText of executionRunQueueTextFixtures.stageJRunningExpectedTexts) {
     assert(runningText.includes(expectedText), `K5 Running UI 缺少 ${expectedText}`);
   }
 
@@ -637,7 +559,7 @@ function runStageJRunQueueScenario() {
       onReloadWorkflowState={() => {}}
     />,
   );
-  for (const expectedText of ["运行队列", "待确认", "失败控制", "捕获补偿", "不自动执行", "记忆候选确认", "正式化确认", "捕获补偿确认"]) {
+  for (const expectedText of executionRunQueueTextFixtures.stageJRightRailExpectedTexts) {
     assert(rightPanelText.includes(expectedText), `J4 Right rail 缺少 ${expectedText}`);
   }
 
@@ -669,7 +591,7 @@ function runStageJRunQueueScenario() {
       />
     </>,
   );
-  for (const forbiddenText of ["自动重试中", "已自动修复", "已写正式记忆", "结果数：0", "runner_call", "codex exec resume", "已停止", "已重启", "已恢复", "已 resume"]) {
+  for (const forbiddenText of executionRunQueueTextFixtures.stageJCombinedForbiddenTexts) {
     assert(!combinedMarkup.includes(forbiddenText), `K5 UI 不应出现误导文案：${forbiddenText}`);
   }
 }
