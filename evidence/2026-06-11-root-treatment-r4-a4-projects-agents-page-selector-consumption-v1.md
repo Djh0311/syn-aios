@@ -13,7 +13,7 @@ R4-A4 已实现 Projects / Agents 页面以最小 diff 消费 R4-A3 前端纯 se
 - Implementation commit：`58804f43cb3a666ddae66eecd1390def253c2ed2`
 - Implementation hash backfill commit：`d04a28a`
 - Review result：`STATUS: CLEAR`，无 P0 / P1 / P2。
-- Checkpoint commit：待回填。
+- Checkpoint commit：`0edb6c4a76e579c03f1b12ad80feba14f0a93bf6`
 - Selector module：`prototypes/productized-desktop-shell/src/lib/pageSelectors.ts`
 - Projects page：`prototypes/productized-desktop-shell/src/views/ProjectsView.tsx`
 - Agents page：`prototypes/productized-desktop-shell/src/views/AgentView.tsx`
