@@ -10,7 +10,7 @@ Evidence：`evidence/2026-06-11-root-treatment-r4-a12-offline-permission-scenari
 
 Planning baseline commit：`fe49ed8c25ed30628a029686f25f885e3316fad5`
 
-Implementation commit：待回填。
+Implementation commit：`f1b12530e6f37c74d8447e1b189c2ab4d055c23b`。
 
 Review result：`STATUS: CLEAR_WITH_P2`；无 P0 / P1。P2 为 `git diff --check` 记录偏旧，已回填为最终状态。
 
