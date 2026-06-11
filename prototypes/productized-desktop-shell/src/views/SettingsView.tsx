@@ -30,6 +30,8 @@ export function SettingsView({
   const providerCount = snapshot.provider_availability.length;
   const diagnosticCount = snapshot.diagnostic_summary.degraded_states.length;
   const runtimeLogCount = snapshot.runtime_log_store.entries.length;
+  const pageReadModelInventory = snapshot.page_read_model_inventory;
+  const pageContractCount = pageReadModelInventory.contracts.length;
 
   return (
     <section className="stage-pad settings-view">
@@ -113,6 +115,38 @@ export function SettingsView({
             value="不从设置页触发"
             note="设置页不运行真实执行或会话恢复命令，不写工作流状态，不替代权限弹层。"
           />
+        </div>
+      </section>
+
+      <section className="panel settings-section developer-boundary-section">
+        <div className="panel-h">
+          页面读模型合同
+          <Badge tone="unknown">R4-A1</Badge>
+        </div>
+        <p className="muted small-note">
+          当前只冻结每个页面该读取什么、哪些内部材料不能放到首屏；页面仍使用既有 WorkbenchSnapshot，尚未切到按页查询。
+        </p>
+        <div className="developer-boundary-grid">
+          <BoundaryItem
+            title="合同数量"
+            value={`${pageContractCount} 个页面合同`}
+            note={`状态：${pageReadModelInventory.status}；来源：${pageReadModelInventory.source_policy}`}
+          />
+          <BoundaryItem
+            title="迁移边界"
+            value="contract only"
+            note="R4-A1 不新增 Tauri command，不拆页面大组件，不重做视觉或布局。"
+          />
+        </div>
+        <div className="developer-boundary-grid" aria-label="页面读模型合同清单">
+          {pageReadModelInventory.contracts.map((contract) => (
+            <BoundaryItem
+              key={contract.page_id}
+              title={contract.page_label}
+              value={contract.planned_read_model}
+              note={`用户数据：${contract.user_facing_data.join(" / ")}；首屏禁止：${contract.must_not_show_as_primary.join(" / ")}`}
+            />
+          ))}
         </div>
       </section>
     </section>

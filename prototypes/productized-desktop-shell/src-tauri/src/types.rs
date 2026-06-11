@@ -2053,10 +2053,10 @@ struct WorkbenchSnapshot {
     worker_protocol: WorkerProtocolReadModel,
     real_execution_product_commands: RealExecutionProductCommandReadModel,
     project_workflow_automation: ProjectWorkflowAutomationReadModel,
+    page_read_model_inventory: page_read_model::WorkbenchPageReadModelInventory,
     diagnostic_summary: DiagnosticSummary,
     diagnostics: Diagnostics,
 }
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SessionSourceMode {
     RealWithSqliteFallback,

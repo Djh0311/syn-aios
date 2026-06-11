@@ -188,6 +188,14 @@ const emptySnapshot: WorkbenchSnapshot = {
     worker_report_candidates: [],
     warnings: ["empty_worker_protocol_read_model"],
   },
+  page_read_model_inventory: {
+    schema_version: "workbench_page_read_model_inventory.v1",
+    generated_at: "未读取",
+    status: "empty_frontend_fallback",
+    source_policy: "空 snapshot 只用于前端兜底；真实合同来自后端 WorkbenchSnapshot。",
+    contracts: [],
+    warnings: ["empty_page_read_model_inventory"],
+  },
   diagnostic_summary: {
     status: "degraded_readonly",
     generated_at: "未读取",

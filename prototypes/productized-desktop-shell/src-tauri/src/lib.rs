@@ -27,6 +27,7 @@ mod memory_entity_relation_store;
 mod memory_lint_engine;
 mod memory_lint_store;
 mod observation_store;
+mod page_read_model;
 mod plan_authorization_store;
 mod project_consultation_proposal_store;
 mod project_workflow_automation;
@@ -1394,6 +1395,8 @@ fn build_snapshot_with_session_source(
             &state.workflow_state_path,
             &runtime_generated_at,
         );
+    let page_read_model_inventory =
+        page_read_model::derive_page_read_model_inventory(&runtime_generated_at);
     let allowed = allowed_paths_with_sessions(index, &sessions);
     let top_level_warning_count = array_len(index, "warnings") + sqlite_warnings.len();
     let context_warning_count = projects
@@ -1686,6 +1689,7 @@ fn build_snapshot_with_session_source(
         worker_protocol,
         real_execution_product_commands,
         project_workflow_automation,
+        page_read_model_inventory,
         diagnostic_summary,
         diagnostics: Diagnostics {
             index_path: state.index_path.display().to_string(),

@@ -2008,10 +2008,10 @@ export type WorkbenchSnapshot = {
   worker_protocol: WorkerProtocolReadModel;
   real_execution_product_commands?: RealExecutionProductCommandReadModel | null;
   project_workflow_automation?: ProjectWorkflowAutomationReadModel | null;
+  page_read_model_inventory: import("./pageReadModel").WorkbenchPageReadModelInventory;
   diagnostic_summary: DiagnosticSummary;
   diagnostics: Diagnostics;
 };
-
 export type PlanAuthorizationStatus =
   | "draft"
   | "pending_user_confirmation"

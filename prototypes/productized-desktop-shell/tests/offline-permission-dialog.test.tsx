@@ -557,8 +557,7 @@ const snapshot: WorkbenchSnapshot = {
     available: false,
     generated_at: "2026-06-09T00:00:00Z",
     latest_automation_id: null,
-    latest_status: null,
-    latest_plan: null,
+    latest_status: null, latest_plan: null,
     run_unit_count: 0,
     waiting_user_count: 0,
     blocked_count: 0,
@@ -569,6 +568,7 @@ const snapshot: WorkbenchSnapshot = {
     next_step: null,
     warnings: ["project_workflow_automation_not_recorded"],
   },
+  page_read_model_inventory: { schema_version: "workbench_page_read_model_inventory.v1", generated_at: "2026-06-11T00:00:00Z", status: "contract_only", source_policy: "offline fixture", contracts: [], warnings: [] },
   diagnostic_summary: diagnosticSummaryFixture(),
   diagnostics: {
     index_path: "/offline-fixture/index.json",
