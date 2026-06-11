@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：实现完成，复核线 `STATUS: CLEAR`，等待 implementation commit。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a25-memory-pattern-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a25-memory-pattern-fixture-hel
 
 Planning baseline commit：`16734924dbf8b8c58d2110b6e2e88af0f2405b21`
 
-Implementation commit：`TBD`
+Implementation commit：`2c5c0788b9eacbd706aeb6a4423e14eee4a9447e`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`2c576b1f0606ae18aeb1fb1b0f6c6cf0dc0d5a3f`
 
 ## 1. 交接结论
 
