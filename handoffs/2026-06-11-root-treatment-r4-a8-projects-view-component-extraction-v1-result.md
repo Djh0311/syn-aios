@@ -10,7 +10,7 @@ Evidence：`evidence/2026-06-11-root-treatment-r4-a8-projects-view-component-ext
 
 Planning baseline commit：`a8c5a725dea505e485a90e7d30b08f7650b31549`
 
-Implementation commit：待回填。
+Implementation commit：`2caf66a6b4ec24ddd22e17b0824f515f087b770f`。
 
 Review result：`STATUS: CLEAR`，无 P0 / P1 / P2。
 
