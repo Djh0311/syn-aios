@@ -84,6 +84,7 @@ import {
 import { executionRunQueueTextFixtures } from "./helpers/offlineExecutionRunQueueTextFixtures";
 import { agentBoundaryTextFixtures } from "./helpers/offlineAgentBoundaryTextFixtures";
 import { memoryKnowledgeTextFixtures } from "./helpers/offlineMemoryKnowledgeTextFixtures";
+import { projectRuntimeTranscriptRoleTextFixtures } from "./helpers/offlineProjectRuntimeTranscriptRoleTextFixtures";
 import { stageJRunQueueFixtures } from "./helpers/offlineRunQueueFixtures";
 import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
 import {
@@ -602,20 +603,7 @@ function runProjectCanvasReadModelScenario() {
   const boundaryText = JSON.stringify([experimentCanvasBoundary, projectWorkflowCanvasBoundary]);
   assert(experimentCanvasBoundary.context_kind === "experiment_canvas", "F4 一级画布边界应声明 experiment canvas 语境");
   assert(projectWorkflowCanvasBoundary.context_kind === "project_workflow_canvas", "F4 项目画布边界应声明 project workflow canvas 语境");
-  for (const expectedText of [
-    "实验 / 模板画布",
-    "experiment / template / canvas library",
-    "不会写项目事实",
-    "不会写正式记忆",
-    "不会写项目工作流状态",
-    "不是项目 workflow 事实源",
-    "MCP canvas run 非默认项目工作流",
-    "项目工作流画布",
-    "工作流状态派生读模型",
-    "方案授权 / 控制核心 / 权限 / 审计",
-    "React Flow 仅负责渲染",
-    "实验画布不会写入本项目事实",
-  ]) {
+  for (const expectedText of projectRuntimeTranscriptRoleTextFixtures.projectCanvasBoundaryExpectedTexts) {
     assert(boundaryText.includes(expectedText), `F4 画布边界声明缺少 ${expectedText}`);
   }
   for (const forbiddenText of canvasBoundaryForbiddenPhrases) {
@@ -719,14 +707,14 @@ function runProjectCanvasReadModelScenario() {
   assert(detail, "默认选中节点缺少详情面板");
   const detailKinds = detail?.sections.map((section) => section.kind) ?? [];
   const detailLayers = detail?.sections.map((section) => section.layer) ?? [];
-  for (const expectedLayer of ["user_summary", "project_director", "technical_details"]) {
+  for (const expectedLayer of projectRuntimeTranscriptRoleTextFixtures.projectCanvasDetailLayers) {
     assert(detailLayers.includes(expectedLayer as never), `节点详情缺少 ${expectedLayer} 层`);
   }
-  for (const expectedKind of ["summary", "task_package", "memory_packet", "session_binding", "dispatch", "readback", "permission_requests", "blackboard_entries", "completion_gate", "audit_refs"]) {
+  for (const expectedKind of projectRuntimeTranscriptRoleTextFixtures.projectCanvasDetailKinds) {
     assert(detailKinds.includes(expectedKind as never), `节点详情缺少 ${expectedKind}`);
   }
   const userSummary = detail?.sections.find((section) => section.layer === "user_summary");
-  for (const expectedLabel of ["当前节点", "当前状态", "为什么停下", "谁能处理", "下一步"]) {
+  for (const expectedLabel of projectRuntimeTranscriptRoleTextFixtures.projectCanvasUserSummaryLabels) {
     assert(userSummary?.items.some((item) => item.label === expectedLabel), `用户摘要缺少 ${expectedLabel}`);
   }
   assert(
@@ -756,7 +744,7 @@ function runProjectCanvasReadModelScenario() {
   const examples = projectCanvasStateExamples();
   assertDeepEqual(
     examples.map((example) => example.example_id),
-    ["empty", "four_roles", "prepared", "running", "needs_review", "waiting_permission", "blocked", "failed", "timed_out", "readback_unavailable", "reviewing", "accepted"],
+    projectRuntimeTranscriptRoleTextFixtures.projectCanvasStateExampleIds,
     "画布组件状态样例清单不匹配",
   );
   assert(examples.some((example) => example.permission_queue === "pending"), "状态样例缺少权限队列 pending 态");
@@ -1662,26 +1650,7 @@ function runRuntimeLogBoundaryScenario() {
   });
   const managementPanelText = visibleText(<RightDetailPanel activePanel="audit" {...commonProps} />);
 
-  for (const expectedText of [
-    "管理",
-    "管理摘要",
-    "原始材料仍在开发者区或详情中查看",
-    "健康 / 诊断边界",
-    "degraded_readonly",
-    "工作流事实层",
-    "读回不可用不是 0 条结果",
-    "不自动修复 store",
-    "诊断 bundle",
-    "日志 / 审计边界",
-    "运行日志与审计事件不能互相替代",
-    "应用会话",
-    "工作流运行",
-    "派发尝试",
-    "读回",
-    "权限等待",
-    "诊断事件",
-    "审计引用 1",
-  ]) {
+  for (const expectedText of projectRuntimeTranscriptRoleTextFixtures.runtimeLogManagementExpectedTexts) {
     assert(managementPanelText.includes(expectedText), `G1 管理入口运行日志摘要缺少 ${expectedText}`);
   }
 
@@ -1691,17 +1660,7 @@ function runRuntimeLogBoundaryScenario() {
   assert(!workspaceRailItems.some((item) => item.label.includes("诊断") && item.key !== "audit"), "不应新增右侧诊断顶级入口");
 
   const serialized = JSON.stringify(runtimeStore);
-  for (const forbiddenText of [
-    "sk-test-secret",
-    "raw provider credential",
-    "完整 transcript",
-    "full transcript",
-    "OAuth",
-    "auth.json",
-    ".env",
-    "keychain",
-    "provider credential",
-  ]) {
+  for (const forbiddenText of projectRuntimeTranscriptRoleTextFixtures.runtimeLogSensitiveForbiddenTexts) {
     assert(!serialized.includes(forbiddenText), `G1 runtime log store 不应包含敏感内容：${forbiddenText}`);
     assert(!managementPanelText.includes(forbiddenText), `G1 管理入口不应显示敏感内容：${forbiddenText}`);
   }
@@ -2258,17 +2217,17 @@ function runSessionCenterHardeningScenario() {
     />
   );
   const centerText = visibleText(center);
-  for (const expectedText of ["搜索会话", "可读取", "缺回放记录", "已归档", "路径被安全边界拒绝", "rollout_outside_allowed_dirs"]) {
+  for (const expectedText of projectRuntimeTranscriptRoleTextFixtures.sessionCenterExpectedTexts) {
     assert(centerText.includes(expectedText), `会话中心硬化缺少 ${expectedText}`);
   }
   const centerMarkup = renderToStaticMarkup(center);
-  for (const expectedClass of ["agent-session-shell", "agent-session-list", "agent-transcript-panel", "session-state-filter"]) {
+  for (const expectedClass of projectRuntimeTranscriptRoleTextFixtures.sessionCenterExpectedClasses) {
     assert(centerMarkup.includes(expectedClass), `会话中心固定布局缺少 class ${expectedClass}`);
   }
   assert(centerMarkup.includes("<button") && centerMarkup.includes("session-card"), "会话卡必须是可键盘聚焦的 button");
 
   const transcriptText = visibleText(<ChatTranscript transcript={transcript} />);
-  for (const expectedText of ["已收纳较早 3 条消息", "展开全部", "展开", "开发者详情：过程事件", "复制", "const ok = true;"]) {
+  for (const expectedText of projectRuntimeTranscriptRoleTextFixtures.transcriptExpectedTexts) {
     assert(transcriptText.includes(expectedText), `Transcript 展示硬化缺少 ${expectedText}`);
   }
   assert(!transcriptText.includes("should be internal"), "工具事件不应默认进入主对话流");
@@ -2303,7 +2262,7 @@ function runOfflineRoleOrchestrationScenario() {
 
   const missing = parseOfflineDispatchBlock(missingOfflineDispatchBlock, project.project_root);
   assert(!missing.ok, "缺字段派发块不应解析成功");
-  for (const expectedMissing of ["目标", "执行目录", "允许读取", "允许写入", "禁止事项", "验收标准", "超时", "回传要求"]) {
+  for (const expectedMissing of projectRuntimeTranscriptRoleTextFixtures.offlineRoleMissingFieldLabels) {
     assert(missing.missing.includes(expectedMissing), `缺字段派发块没有提示 ${expectedMissing}`);
   }
 
@@ -2316,19 +2275,7 @@ function runOfflineRoleOrchestrationScenario() {
   const actionDialogText = visibleText(
     <PermissionDialog action={action} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of [
-    "离线派发给开发线",
-    "目标角色",
-    "开发线",
-    "任务名",
-    "README 极小修改验证",
-    "必须回传",
-    "验证结果",
-    "不启动 Codex",
-    "不执行 codex exec resume",
-    "不写 /Users/yoyi/.codex",
-    "工作流状态",
-  ]) {
+  for (const expectedText of projectRuntimeTranscriptRoleTextFixtures.offlineRoleDispatchDialogExpectedTexts) {
     assert(actionDialogText.includes(expectedText), `离线派发确认弹层缺少 ${expectedText}`);
   }
 
@@ -2408,27 +2355,7 @@ function runOfflineRoleOrchestrationScenario() {
     />
   );
   const rolePanelText = visibleText(rolePanel);
-  for (const expectedText of [
-    "Codex 角色编排",
-    "总指导派发闭环",
-    "总指导",
-    "开发线",
-    "验证线",
-    "回收线",
-    "总指导回复里的派发块",
-    "写入离线派发",
-    "写入角色回传",
-    "写入总指导回收",
-    "账本锚点",
-    "已有任务草稿",
-    "派发预览",
-    "角色回传",
-    "回传总指导",
-    "不启动 Codex",
-    "不写 /Users/yoyi/.codex",
-    "离线编排账本",
-    "预览来自默认示例",
-  ]) {
+  for (const expectedText of projectRuntimeTranscriptRoleTextFixtures.offlineRolePanelExpectedTexts) {
     assert(rolePanelText.includes(expectedText), `离线角色编排区缺少 ${expectedText}`);
   }
 
