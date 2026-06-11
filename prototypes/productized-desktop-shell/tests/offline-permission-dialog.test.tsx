@@ -83,6 +83,7 @@ import {
 } from "./helpers/offlineShellScenarioTextFixtures";
 import { executionRunQueueTextFixtures } from "./helpers/offlineExecutionRunQueueTextFixtures";
 import { agentBoundaryTextFixtures } from "./helpers/offlineAgentBoundaryTextFixtures";
+import { memoryKnowledgeTextFixtures } from "./helpers/offlineMemoryKnowledgeTextFixtures";
 import { stageJRunQueueFixtures } from "./helpers/offlineRunQueueFixtures";
 import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
 import {
@@ -1770,21 +1771,10 @@ function runCandidateGovernanceScenario() {
     />
   );
   const observationWorkflowText = visibleText(observationWorkflowProject);
-  for (const expectedText of [
-    "工作流观察",
-    "observations.v1.json",
-    "recorded 1",
-    "candidate_created 1",
-    "observation_candidate_created",
-    "memcand:v1:from-observation",
-    "观察可生成候选",
-    "从工作流观察生成候选",
-    "候选仍需确认 / 采纳",
-    "observation 不是正式记忆",
-  ]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.observationWorkflowExpectedTexts) {
     assert(observationWorkflowText.includes(expectedText), `工作流观察 UI 缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["系统已记住", "自动学习完成", "observation 已成为正式记忆", "已注入任务包"]) {
+  for (const forbiddenText of memoryKnowledgeTextFixtures.observationWorkflowForbiddenTexts) {
     assert(!observationWorkflowText.includes(forbiddenText), `工作流观察 UI 不应出现越界文案：${forbiddenText}`);
   }
 
@@ -1796,7 +1786,7 @@ function runCandidateGovernanceScenario() {
   assert(formalMemorySummary.active_count === 1, "正式记忆 active 计数不匹配");
   assert(formalMemorySummary.recent_audit_event?.event_type === "memory_record_created", "正式记忆最近审计事件不匹配");
   assert(formalMemorySummary.display_text.includes("创建时写入 version 和 audit"), "正式记忆摘要应说明 version/audit 骨架");
-  for (const forbiddenText of ["AI 自动记住", "候选已记住", "秘书已批准", "worker 已写入正式记忆", "完整记忆层完成", "系统已学习", "任务包注入已完成", "正式记忆完整完成"]) {
+  for (const forbiddenText of memoryKnowledgeTextFixtures.formalMemorySummaryForbiddenTexts) {
     assert(!formalMemorySummary.display_text.includes(forbiddenText), `正式记忆摘要不应出现越界文案：${forbiddenText}`);
   }
 
@@ -1812,12 +1802,7 @@ function runCandidateGovernanceScenario() {
   assert(memoryLintSummary.blocking_count === 1, "记忆 lint blocking 计数不匹配");
   assert(memoryLintSummary.needs_review_count === 1, "记忆 lint needs_review 计数不匹配");
   assert(memoryLintSummary.recent_run?.status === "blocked", "记忆 lint 最近 run 状态不匹配");
-  for (const expectedText of [
-    "记忆 lint 阻断摘要",
-    "blocking finding 会阻止进入任务包",
-    "lint 只生成待处理 finding",
-    "不会自动修改正式记忆",
-  ]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.memoryLintSummaryExpectedTexts) {
     assert(memoryLintSummary.display_text.includes(expectedText), `记忆 lint 摘要缺少 ${expectedText}`);
   }
 
@@ -1837,12 +1822,7 @@ function runCandidateGovernanceScenario() {
   assert(taskPackageMemoryInjectionSummary.excluded_count === 2, "任务包记忆注入 excluded 计数不匹配");
   assert(taskPackageMemoryInjectionSummary.review_material_count === 2, "任务包记忆注入 review materials 计数不匹配");
   assert(!taskPackageMemoryInjectionSummary.stale, "任务包记忆注入 fixture 应为 fresh");
-  for (const expectedText of [
-    "任务包记忆注入摘要",
-    "仅活跃正式记忆可进入任务包",
-    "候选 / 观察仅作为待审查材料",
-    "任务包内容不会回灌成正式记忆",
-  ]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.taskPackageMemoryInjectionSummaryExpectedTexts) {
     assert(taskPackageMemoryInjectionSummary.display_text.includes(expectedText), `任务包记忆注入摘要缺少 ${expectedText}`);
   }
 
@@ -1857,55 +1837,10 @@ function runCandidateGovernanceScenario() {
       onRequestAction={captureAction}
     />,
   );
-  for (const expectedText of [
-    "任务记忆包预览",
-    "入选 1",
-    "排除 2",
-    "待审查材料 2",
-    "估算 token 28/8000",
-    "candidate_unconfirmed",
-    "observation_not_formal_memory",
-    "仅启用态正式记忆可入选",
-    "候选 / 观察仅作为待审查材料",
-    "不进入正式记忆列表",
-    "preview_only_not_injected",
-    "记忆 lint sidecar",
-    "memory-lint.v1.json",
-    "记忆 lint 阻断摘要",
-    "任务包记忆注入摘要",
-    "task-package-memory-packet-snapshot:v1:offline:001",
-    "入选正式记忆",
-    "快照状态",
-    "新鲜",
-    "仅启用态正式记忆可进入任务包",
-    "任务包内容不会回灌成正式记忆",
-    "open 2",
-    "blocking 1",
-    "needs_review 1",
-    "最近检查运行",
-    "来源权限撤回",
-    "blocking finding 会阻止进入任务包",
-    "lint 只生成待处理 finding",
-    "不会自动修改正式记忆",
-  ]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.taskMemoryPacketWorkflowExpectedTexts) {
     assert(taskMemoryPacketWorkflowText.includes(expectedText), `任务记忆包预览 UI 缺少 ${expectedText}`);
   }
-  for (const forbiddenText of [
-    "系统已记住",
-    "自动学习完成",
-    "候选已进入任务包",
-    "observation 已注入任务包",
-    "worker 已收到记忆包",
-    "真实 worker 已执行",
-    "系统已自动记住",
-    "任务包内容已写入正式记忆",
-    "任务包注入已完成",
-    "中间版本记忆层完成",
-    "AI 已自动解决冲突",
-    "系统已废弃旧记忆",
-    "旧记忆已自动更新",
-    "正式记忆生命周期完成",
-  ]) {
+  for (const forbiddenText of memoryKnowledgeTextFixtures.taskMemoryPacketWorkflowForbiddenTexts) {
     assert(!taskMemoryPacketWorkflowText.includes(forbiddenText), `任务记忆包预览 UI 不应出现越界文案：${forbiddenText}`);
   }
 }
@@ -1999,111 +1934,10 @@ function runMemoryManagementCenterScenario() {
       hasRealSnapshot
     />,
   );
-  for (const expectedText of [
-    "正式记忆",
-    "记忆工作台",
-    "捕获 / 候选 / 任务记忆包",
-    "记忆链路",
-    "捕获 2 / 观察 1 / 候选 2 / 正式 2",
-    "待正式化 1",
-    "需补证 1",
-    "任务记忆包快照 1 个",
-    "确认正式化",
-    "补齐捕获链路",
-    "候选和观察不会冒充正式记忆",
-    "候选记忆",
-    "来源",
-    "版本 v1",
-    "审计 memory_record_created",
-    "权限策略未记录",
-    "外发 local_only",
-    "外发 blocked",
-    "可进入任务包",
-    "任务包冻结快照已引用",
-    "被检查阻断",
-    "未关闭阻断",
-    "待审查材料",
-    "候选已被受控采纳",
-    "观察来源",
-    "观察不是正式记忆",
-    "任务包冻结快照",
-    "入选 1",
-    "排除 2",
-    "待审材料 2",
-    "项目相关记忆摘要",
-    "codex-workbench",
-    "生命周期",
-    "编辑提案",
-    "废弃",
-    "冻结",
-    "解冻",
-    "归档",
-    "合并",
-    "拆分",
-    "上升为全局",
-    "下沉为项目",
-    "编辑会创建新版本，不覆盖旧版本",
-    "实体候选",
-    "关系候选",
-    "已确认关系",
-    "刷新实体 / 关系候选",
-    "相似度命中仅作候选",
-    "LLM 推断仅作候选",
-    "已确认关系用于解释召回原因",
-    "关系候选不会影响任务包入选清单",
-    "维护任务",
-    "维护任务摘要",
-    "运行维护任务",
-    "索引状态 stale",
-    "维护任务只生成发现",
-    "阻断级发现会阻止召回",
-    "成熟模式 / 跨项目主题",
-    "刷新成熟模式候选",
-    "成熟模式候选",
-    "跨项目重复边界：控制核心写入必须走确认",
-    "需要用户确认",
-    "候选未确认，不会进入任务包",
-    "用户确认为正式记忆",
-    "隔离",
-    "要求补来源",
-    "跨项目主题报告",
-    "报告可下钻来源，但不是正式事实",
-    "M1-M12 门禁摘要",
-    "尚未生成 M12 预览",
-    "最终权威验收仍在后续阶段",
-  ]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.memoryCenterExpectedTexts) {
     assert(memoryCenterText.includes(expectedText), `记忆中心 UI 缺少 ${expectedText}`);
   }
-  for (const forbiddenText of [
-    "已记住",
-    "系统已长期记住",
-    "候选已成为正式记忆",
-    "观察已成为正式记忆",
-    "worker 已收到记忆包",
-    "中间版本记忆层已完成",
-    "编辑正式记忆",
-    "删除正式记忆",
-    "归档正式记忆",
-    "自动合并实体",
-    "自动确认关系",
-    "图谱已证明",
-    "LLM 已确认关系",
-    "相似度已合并实体",
-    "GraphRAG 已接入",
-    "关系候选已成为事实",
-    "自动清理记忆",
-    "自动修复记忆",
-    "维护任务已改正式记忆",
-    "成熟模式已自动成为规则",
-    "自动成为技能",
-    "自动成为全局规则",
-    "自动写入全局记忆",
-    "跨项目摘要已注入任务包",
-    "聚类报告就是事实",
-    "成熟模式已生效",
-    "M13 已完成",
-    "中间版本记忆系统最终验收完成",
-  ]) {
+  for (const forbiddenText of memoryKnowledgeTextFixtures.memoryCenterForbiddenTexts) {
     assert(!memoryCenterText.includes(forbiddenText), `记忆中心 UI 不应出现越界文案：${forbiddenText}`);
   }
 
@@ -2121,7 +1955,7 @@ function runMemoryManagementCenterScenario() {
       hasRealSnapshot
     />,
   );
-  for (const expectedClass of ["memory-center", "memory-workbench-panel", "formal-memory-item", "candidate-memory-item", "memory-detail-panel", "memory-entity-relation-panel", "memory-maintenance-panel", "memory-mature-pattern-panel"]) {
+  for (const expectedClass of memoryKnowledgeTextFixtures.memoryCenterExpectedClasses) {
     assert(memoryCenterMarkup.includes(expectedClass), `记忆中心布局缺少 class ${expectedClass}`);
   }
 
@@ -2145,46 +1979,23 @@ function runMemoryManagementCenterScenario() {
   const lifecycleDialogText = visibleText(
     <PermissionDialog action={lifecycleAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of [
-    "正式记忆 废弃",
-    "formal-memories.v1.json",
-    "确认权",
-    "project_director_or_user_confirmation",
-    "影响 1 条正式记忆",
-    "非活跃记忆默认不进任务包",
-    "原版本 v1 / 新版本 v2",
-    "会新增版本和审计",
-  ]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.lifecycleDialogExpectedTexts) {
     assert(lifecycleDialogText.includes(expectedText), `正式记忆 lifecycle 确认弹层缺少 ${expectedText}`);
   }
   const relationDialogText = visibleText(
     <PermissionDialog action={relationAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of [
-    "确认关系候选",
-    "memory-entity-relations.v1.json",
-    "接口验收必须保留控制核心边界。",
-    "接口契约资料",
-    "已确认关系用于解释召回原因",
-    "关系候选不会作为正式事实影响工作者",
-  ]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.relationDialogExpectedTexts) {
     assert(relationDialogText.includes(expectedText), `关系候选确认弹层缺少 ${expectedText}`);
   }
 
   const maintenanceDialogText = visibleText(
     <PermissionDialog action={maintenanceAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of [
-    "运行记忆维护任务",
-    "memory-lint.v1.json",
-    "维护运行",
-    "维护任务只生成发现 / 报告",
-    "阻断级发现会阻止召回",
-    "不会自动修改正式记忆",
-  ]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.maintenanceDialogExpectedTexts) {
     assert(maintenanceDialogText.includes(expectedText), `维护任务确认弹层缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["自动清理记忆", "自动修复记忆", "自动合并重复记忆", "维护任务已改正式记忆"]) {
+  for (const forbiddenText of memoryKnowledgeTextFixtures.maintenanceDialogForbiddenTexts) {
     assert(!maintenanceDialogText.includes(forbiddenText), `维护任务确认弹层不应出现越界文案：${forbiddenText}`);
   }
 
@@ -2198,25 +2009,17 @@ function runMemoryManagementCenterScenario() {
   const maturePatternDialogText = visibleText(
     <PermissionDialog action={maturePatternAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of [
-    "用户确认成熟模式候选",
-    "memory-patterns.v1.json / formal-memories.v1.json",
-    "跨项目重复边界：控制核心写入必须走确认",
-    "用户确认写入正式记忆",
-    "候选和跨项目主题报告未确认不进入任务包",
-    "写版本、审计和来源引用",
-    "只有用户确认正式化时才会联动 formal-memories.v1.json",
-  ]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.maturePatternDialogExpectedTexts) {
     assert(maturePatternDialogText.includes(expectedText), `成熟模式确认弹层缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["自动成为技能", "自动成为全局规则", "自动写入全局记忆", "跨项目摘要已注入任务包", "成熟模式已生效"]) {
+  for (const forbiddenText of memoryKnowledgeTextFixtures.maturePatternDialogForbiddenTexts) {
     assert(!maturePatternDialogText.includes(forbiddenText), `成熟模式确认弹层不应出现越界文案：${forbiddenText}`);
   }
 
   const quarantineDialogText = visibleText(
     <PermissionDialog action={quarantineMaturePatternAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of ["隔离成熟模式候选", "memory-patterns.v1.json", "隔离候选", "未确认正式化", "候选和跨项目主题报告未确认不进入任务包"]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.quarantineDialogExpectedTexts) {
     assert(quarantineDialogText.includes(expectedText), `成熟模式隔离弹层缺少 ${expectedText}`);
   }
   assert(!quarantineDialogText.includes("memory-patterns.v1.json / formal-memories.v1.json"), "隔离动作不应声明写 formal store");
@@ -2257,31 +2060,10 @@ function runKnowledgeBaseBoundaryScenario() {
     />
   );
   const knowledgeText = visibleText(knowledgeView);
-  for (const expectedText of [
-    "知识库资料",
-    "Obsidian-compatible 占位",
-    "未执行 Obsidian 原生同步",
-    "知识库是材料和笔记空间",
-    "正式记忆是经过确认、来源、版本、审计和权限治理的行为上下文",
-    "接口契约资料",
-    "关联正式记忆 1",
-    "关联候选 1",
-    "任务包知识引用 1",
-    "正式记忆引用了该知识库来源",
-    "提出记忆候选",
-    "只生成候选，不写正式记忆",
-  ]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.knowledgeViewExpectedTexts) {
     assert(knowledgeText.includes(expectedText), `知识库 UI 缺少 ${expectedText}`);
   }
-  for (const forbiddenText of [
-    "已接入 Obsidian 原生同步",
-    "vault 已自动扫描",
-    "知识库已自动记住",
-    "文档已成为正式记忆",
-    "知识命中已成为正式记忆",
-    "知识命中已注入任务包",
-    "中间版本记忆层已完成",
-  ]) {
+  for (const forbiddenText of memoryKnowledgeTextFixtures.knowledgeViewForbiddenTexts) {
     assert(!knowledgeText.includes(forbiddenText), `知识库 UI 不应出现越界文案：${forbiddenText}`);
   }
 
@@ -2303,7 +2085,7 @@ function runKnowledgeBaseBoundaryScenario() {
   const actionDialogText = visibleText(
     <PermissionDialog action={knowledgeCandidateAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of ["提出记忆候选", "memory-candidates.v1.json", "只生成候选，不写正式记忆", "knowledge_doc", "接口契约资料"]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.knowledgeCandidateDialogExpectedTexts) {
     assert(actionDialogText.includes(expectedText), `知识库候选确认弹层缺少 ${expectedText}`);
   }
 }
@@ -2346,10 +2128,10 @@ function runSecretaryReadModelScenario() {
   assert(context.memory_candidates.some((candidate) => candidate.boundary === "候选不等于工作台已经长期记住。"), "秘书记忆候选必须显示候选边界");
 
   const secretaryText = visibleText(<SecretaryBrief context={context} />);
-  for (const expectedText of ["秘书只读摘要", "需要你确认", "候选，不是正式记忆", "建议，不是事实变更"]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.secretaryBriefExpectedTexts) {
     assert(secretaryText.includes(expectedText), `秘书摘要缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["秘书已处理", "秘书已执行", "已记住", "正式事实已写入"]) {
+  for (const forbiddenText of memoryKnowledgeTextFixtures.secretaryBriefForbiddenTexts) {
     assert(!secretaryText.includes(forbiddenText), `秘书摘要不应出现越界文案：${forbiddenText}`);
   }
 }
@@ -2382,10 +2164,10 @@ function runRightRailSecretarySurfaceScenario() {
 
   const secretaryPanel = <RightDetailPanel activePanel="secretary" {...commonProps} />;
   const secretaryText = visibleText(secretaryPanel);
-  for (const expectedText of ["秘书只读摘要", "建议，不是事实变更", "候选，不是正式记忆", "秘书模型只读"]) {
+  for (const expectedText of memoryKnowledgeTextFixtures.secretaryPanelExpectedTexts) {
     assert(secretaryText.includes(expectedText), `秘书独立入口缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["动态", "确认执行", "重新读取事实层"]) {
+  for (const forbiddenText of memoryKnowledgeTextFixtures.secretaryPanelForbiddenTexts) {
     assert(!secretaryText.includes(forbiddenText), `秘书独立入口不应出现写入或其他中心操作：${forbiddenText}`);
   }
   const secretaryActionButton = findElement(
