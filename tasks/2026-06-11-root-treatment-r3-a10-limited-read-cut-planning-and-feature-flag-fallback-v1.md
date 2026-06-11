@@ -2,7 +2,15 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R3-A10 任务包，用于在 R3-A9 Level A production DB initializer + apply with backup manifest / no read-cut 之后，冻结并实现“有限读切”合同的 Level A fixture / temp rehearsal。R3-A10 默认不执行真实 production read-cut，不停写 JSON / sidecar，不让真实 app startup / Tauri command / UI 读取 SQLite，不执行真实 Codex，不读写 `/Users/yoyi/.codex`。
+状态：Level A 已完成；Level B 未执行。本文是 Root Treatment / Stage R 的 R3-A10 任务包，用于在 R3-A9 Level A production DB initializer + apply with backup manifest / no read-cut 之后，冻结并实现“有限读切”合同的 Level A fixture / temp rehearsal。R3-A10 默认不执行真实 production read-cut，不停写 JSON / sidecar，不让真实 app startup / Tauri command / UI 读取 SQLite，不执行真实 Codex，不读写 `/Users/yoyi/.codex`。
+
+完成记录：
+
+- evidence：`evidence/2026-06-11-root-treatment-r3-a10-limited-read-cut-planning-and-feature-flag-fallback-v1.md`
+- handoff：`handoffs/2026-06-11-root-treatment-r3-a10-limited-read-cut-planning-and-feature-flag-fallback-v1-result.md`
+- planning baseline commit：`9196b04ad861b01e56132fba9b2f5fc170661ccc`
+- task package freeze commit：`b8ecc19885f6fd2cef79c907db95fab4a76053d5`
+- implementation commit：待主管线提交后由 checkpoint 记录。
 
 ## 0. 全局主管理解
 
