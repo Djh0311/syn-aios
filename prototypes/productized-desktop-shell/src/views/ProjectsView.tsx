@@ -41,7 +41,8 @@ import {
   summarizeProjectConsultationProposalStore,
 } from "../lib/projectConsultationProposal";
 import { AgentSessionCenter } from "./AgentView";
-import type { FileCandidate } from "../lib/types";
+import { ProjectGallery } from "./projects/ProjectGallery";
+import { ProjectHandoffEvidencePanel, ProjectResourcesPanel } from "./projects/ProjectReferencePanels";
 import type {
   AutoDispatchGuardInput,
   AutoDispatchGuardResult,
@@ -95,7 +96,6 @@ import {
   type ProjectWorkflowCanvasReadModel,
 } from "../lib/projectCanvas";
 import { projectWorkflowCanvasBoundary, type CanvasSurfaceBoundary } from "../lib/canvasSurfaceBoundaries";
-import { deriveProjectsPageReadModelFromParts } from "../lib/pageSelectors";
 
 type ProjectsViewProps = {
   projects: ProjectRecord[];
@@ -277,75 +277,6 @@ export function ProjectsView({
 
 export function filterProjectSessionsForProject(sessions: SessionRecord[], project: ProjectRecord) {
   return sessions.filter((session) => session.project_root === project.project_root);
-}
-
-function ProjectGallery({
-  projects,
-  sessions,
-  workflowState,
-  onSelectProject,
-}: {
-  projects: ProjectRecord[];
-  sessions: SessionRecord[];
-  workflowState: WorkflowStateSnapshot | null;
-  onSelectProject: (projectRoot: string) => void;
-}) {
-  const pageReadModel = useMemo(
-    () => deriveProjectsPageReadModelFromParts({ projects, sessions, workflowState }),
-    [projects, sessions, workflowState],
-  );
-  const sortedProjects = useMemo(
-    () => [...pageReadModel.projects].sort((a, b) => (b.latest_updated_at_ms ?? 0) - (a.latest_updated_at_ms ?? 0)),
-    [pageReadModel.projects],
-  );
-  const workflowProjectCount = pageReadModel.projects.filter((project) => project.workflow_count > 0).length;
-  const totalWarnings = pageReadModel.projects.reduce((sum, project) => sum + project.warning_count, 0);
-
-  return (
-    <section className="project-gallery stage-pad">
-      <div className="pg-head">
-        <div>
-          <p className="pg-sub">项目 · 方块入口</p>
-          <h1 className="pg-title">项 目 入 口</h1>
-        </div>
-        <div className="pg-meta">
-          <div className="big">{pageReadModel.project_count} 项目 · {pageReadModel.total_session_count} 会话</div>
-          <div>{workflowProjectCount} 个项目有工作流草稿 · {totalWarnings} 个警告</div>
-        </div>
-      </div>
-
-      <div className="project-card-grid" aria-label="项目方块列表">
-        {sortedProjects.map((project) => {
-          const fileCount = project.authority_count + project.handoff_count + project.evidence_count;
-          return (
-            <button
-              className={`project-tile ${project.active_hint ? "active" : ""}`}
-              key={project.project_root}
-              type="button"
-              onClick={() => onSelectProject(project.project_root)}
-              title={project.project_root}
-            >
-              <span className="project-tile-seal" aria-hidden="true">{projectInitials(project.name)}</span>
-              <span className="project-tile-main">
-                <strong>{project.name}</strong>
-                <span className="project-tile-path">{project.project_root}</span>
-              </span>
-              <span className="project-tile-meta">
-                <span>最近更新</span>
-                <em>{formatDate(project.latest_updated_at_ms)}</em>
-              </span>
-              <span className="project-tile-stats">
-                <span><b>{project.session_count}</b> 会话</span>
-                <span><b>{project.workflow_count}</b> 工作流</span>
-                <span><b>{fileCount}</b> 文件</span>
-                <span><b>{project.warning_count}</b> 警告</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
 }
 
 export function ProjectDetail({
@@ -647,111 +578,8 @@ function ProjectAgentMovedPanel({
   );
 }
 
-function ProjectHandoffEvidencePanel({
-  project,
-  compact = false,
-}: {
-  project: ProjectRecord;
-  compact?: boolean;
-}) {
-  return (
-    <section className={`project-evidence-panel ${compact ? "compact" : ""}`}>
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">交接 / 证据 / 权威</p>
-          <h3>{compact ? "最近资料摘要" : "项目资料索引"}</h3>
-        </div>
-        <Badge tone="unknown">
-          {project.handoff_files.length + project.evidence_files.length + project.authority_files.length} 文件
-        </Badge>
-      </div>
-      <div className="project-file-columns">
-        <ProjectFileList title="当前权威" files={project.authority_files} emptyText="没有 authority 文件索引" />
-        <ProjectFileList title="交接" files={project.handoff_files} emptyText="没有交接文件索引" />
-        <ProjectFileList title="证据" files={project.evidence_files} emptyText="没有证据文件索引" />
-      </div>
-    </section>
-  );
-}
-
-function ProjectResourcesPanel({ project }: { project: ProjectRecord }) {
-  return (
-    <section className="project-resources-panel">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">资源</p>
-          <h3>技能、运行器和项目级设置分散在对应资源里</h3>
-        </div>
-        <Badge tone="unknown">{project.harness_resources.length + project.harness_candidates.length} 项</Badge>
-      </div>
-      <div className="project-resource-grid">
-        <article>
-          <strong>运行器资源</strong>
-          {project.harness_resources.length ? (
-            project.harness_resources.slice(0, 4).map((resource) => (
-              <span key={resource.root_path}>{resource.display_name ?? resource.root_path}</span>
-            ))
-          ) : (
-            <span>没有运行器资源索引</span>
-          )}
-        </article>
-        <article>
-          <strong>运行器候选</strong>
-          {project.harness_candidates.length ? (
-            project.harness_candidates.slice(0, 4).map((candidate) => (
-              <span key={candidate.path}>{candidate.name ?? candidate.path}</span>
-            ))
-          ) : (
-            <span>没有运行器候选索引</span>
-          )}
-        </article>
-        <article>
-          <strong>项目设置</strong>
-          <span>路径：{project.project_root}</span>
-          <span>上下文警告：{project.context_warnings.length}</span>
-          <span>项目警告：{project.warnings.length}</span>
-        </article>
-      </div>
-    </section>
-  );
-}
-
-function ProjectFileList({
-  title,
-  files,
-  emptyText,
-}: {
-  title: string;
-  files: FileCandidate[];
-  emptyText: string;
-}) {
-  return (
-    <article className="project-file-list">
-      <strong>{title}</strong>
-      {files.length ? (
-        files.slice(0, 6).map((file) => (
-          <span key={file.path} title={file.path}>
-            {file.name ?? file.path}
-            {file.warnings.length ? <em>{file.warnings.join(", ")}</em> : null}
-          </span>
-        ))
-      ) : (
-        <span>{emptyText}</span>
-      )}
-    </article>
-  );
-}
-
 function projectWarnings(project: ProjectRecord) {
   return project.context_warnings.length + project.warnings.length;
-}
-
-function projectInitials(name: string) {
-  const clean = name.trim();
-  if (!clean) return "项";
-  const asciiParts = clean.split(/[-_\s/]+/).filter(Boolean);
-  if (asciiParts.length > 1) return asciiParts.slice(0, 2).map((part) => part[0]).join("").toUpperCase();
-  return clean.slice(0, 2).toUpperCase();
 }
 
 function ProjectAgentSessionsPanel({
