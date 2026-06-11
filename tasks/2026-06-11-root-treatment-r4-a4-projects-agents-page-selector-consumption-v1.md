@@ -2,16 +2,19 @@
 
 日期：2026-06-11
 
-状态：执行中。本文是 Root Treatment / Stage R 的 R4-A4 任务包；R4-A3 已完成并通过复核线 `STATUS: CLEAR`。R4-A4 只接受为 Projects / Agents 页面以最小 diff 消费 R4-A3 前端纯 selector，不接受为页面真实数据来源迁移、R4 完成、`WorkbenchSnapshot` 废弃、UI 重做或真实执行解锁。
+状态：已完成，复核线 `STATUS: CLEAR`。本文是 Root Treatment / Stage R 的 R4-A4 任务包；R4-A3 已完成并通过复核线 `STATUS: CLEAR`。R4-A4 只接受为 Projects / Agents 页面以最小 diff 消费 R4-A3 前端纯 selector，不接受为页面真实数据来源迁移、R4 完成、`WorkbenchSnapshot` 废弃、UI 重做或真实执行解锁。
 
 规划基线 commit：`17dd1243e1b62e8ef86b9bb865d964a6cceae02f`
 Implementation commit：`58804f43cb3a666ddae66eecd1390def253c2ed2`
+Implementation hash backfill commit：`d04a28a`
+Review result：`STATUS: CLEAR`，无 P0 / P1 / P2。
+Checkpoint commit：待回填。
 
 ## 0. 全局主管理解
 
 已知事实：
 
-- R4-A3 新增 `pageSelectors.ts` 和 `r4-page-selectors.test.ts`，但 `ProjectsView.tsx` / `AgentView.tsx` 尚未消费 selector。
+- R4-A3 新增 `pageSelectors.ts` 和 `r4-page-selectors.test.ts`；R4-A4 已让 `ProjectsView.tsx` / `AgentView.tsx` 以最小 diff 消费 selector。
 - `ProjectsView.tsx` / `AgentView.tsx` 当前仍从 `App.tsx` 接收 `WorkbenchSnapshot` 拆出的 props。
 - R4 目标是读模型和前端瘦身，不是视觉重做、布局重做或真实执行能力开发。
 

@@ -2,9 +2,12 @@
 
 日期：2026-06-11
 
-结论：R4-A4 implementation 已完成，状态为 `implemented_pending_review`。
+结论：R4-A4 已完成并通过复核线 `STATUS: CLEAR`，状态为 `accepted`。
 
 Implementation commit：`58804f43cb3a666ddae66eecd1390def253c2ed2`
+Implementation hash backfill commit：`d04a28a`
+Review result：`STATUS: CLEAR`，无 P0 / P1 / P2。
+Checkpoint commit：待回填。
 
 ## 做了什么
 
@@ -55,29 +58,12 @@ Implementation commit：`58804f43cb3a666ddae66eecd1390def253c2ed2`
 - 不能声明 R3 Level B 已执行。
 - 不能声明多 agent 并行真实执行已解锁。
 
-## 给复核线
+## 复核线结果
 
-请只读复核：
-
-- R4-A4 是否符合任务包范围。
-- Projects / Agents 页面是否真的消费 R4-A3 selectors。
-- selector split-input wrappers 是否保持 snapshot wrappers 兼容。
-- 是否误改视觉、CSS、布局、Tauri command、sidecar、DB、真实执行路径或敏感读取路径。
-- shape gate warning 是否确为 R4-A2 遗留 command total warning，而非 R4-A4 新增。
-
-建议输出单行结论：
-
-```text
-STATUS: CLEAR
-```
-
-或：
-
-```text
-STATUS: BLOCKED
-```
-
-如有问题，请按 P0/P1/P2 分级，并给出文件 / 行号。
+- 复核线程：`019eb51c-61fe-7fc3-8973-b22a4ce58911`
+- 结果：`STATUS: CLEAR`
+- P0 / P1 / P2：均无。
+- 结论：R4-A4 符合任务包范围；Projects / Agents 页面已消费 R4-A3 selectors；selector split-input wrappers 保持 snapshot wrappers 兼容；未误改视觉、CSS、布局、Tauri command、sidecar、DB、真实执行路径或敏感读取路径；shape gate warning 仍为 R4-A2 遗留 command total warning。
 
 ## 下一步建议
 
