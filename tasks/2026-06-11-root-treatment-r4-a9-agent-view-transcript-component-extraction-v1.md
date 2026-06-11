@@ -10,6 +10,8 @@ Implementation commit：`886d3cf9bf7bb70fb37bedfe6fc7d6ec6be3f347`。
 
 Review result：`STATUS: CLEAR`，无 P0 / P1 / P2。
 
+Checkpoint commit：`efe798b8007ff90e77cb8a67ba3649083eed3dc7`。
+
 ## 0. 全局主管理解
 
 已知事实：

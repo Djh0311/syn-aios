@@ -14,6 +14,8 @@ Implementation commit：`886d3cf9bf7bb70fb37bedfe6fc7d6ec6be3f347`。
 
 Review result：`STATUS: CLEAR`，无 P0 / P1 / P2。
 
+Checkpoint commit：`efe798b8007ff90e77cb8a67ba3649083eed3dc7`。
+
 ## 1. Result
 
 R4-A9 实现侧已完成：`AgentView.tsx` 第一批 transcript 展示组件已抽到 `src/views/agent/TranscriptViews.tsx`，主文件行数从 3,360 降到 3,118。
