@@ -10,7 +10,7 @@ Evidence：`evidence/2026-06-11-root-treatment-r4-a9-agent-view-transcript-compo
 
 Planning baseline commit：`a863c61ac272dce9a28baf00a18c9694f9aba422`
 
-Implementation commit：待回填。
+Implementation commit：`886d3cf9bf7bb70fb37bedfe6fc7d6ec6be3f347`。
 
 Review result：`STATUS: CLEAR`，无 P0 / P1 / P2。
 
