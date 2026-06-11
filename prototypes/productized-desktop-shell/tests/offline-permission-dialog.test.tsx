@@ -30,6 +30,7 @@ import { c6ResultSummaryFixtures } from "./helpers/offlineC6ResultSummaryFixture
 import { candidateGovernanceFixtures } from "./helpers/offlineCandidateGovernanceFixtures";
 import { memoryCenterCoreFixtures } from "./helpers/offlineMemoryCenterCoreFixtures";
 import { memoryCenterGovernanceFixtures } from "./helpers/offlineMemoryCenterGovernanceFixtures";
+import { memoryPendingActionFixtures } from "./helpers/offlineMemoryPendingActionFixtures";
 import { memoryPatternFixtures } from "./helpers/offlineMemoryPatternFixtures";
 import {
   knowledgeBaseBoundaryFixtures,
@@ -124,7 +125,6 @@ import { deriveSecretaryContext } from "../src/lib/secretaryReadModel";
 import { KnowledgeBaseView } from "../src/views/KnowledgeBaseView";
 import { MemoryCenterView } from "../src/views/MemoryCenterView";
 import type {
-  FormalMemoryLifecyclePreview,
   PendingAction,
   ProjectConsultationProposalStoreV1,
   RuntimeSessionAttention,
@@ -2371,74 +2371,23 @@ function runMemoryManagementCenterScenario() {
     assert(memoryCenterMarkup.includes(expectedClass), `记忆中心布局缺少 class ${expectedClass}`);
   }
 
-  const lifecyclePreview: FormalMemoryLifecyclePreview = {
-    preview_id: "formal-memory-lifecycle-preview:test",
-    operation_kind: "deprecate",
-    store_revision: formalMemoryStore.revision,
-    target_memory_ids: [includedMemory.memory_id],
-    impact: {
-      affected_memory_ids: [includedMemory.memory_id],
-      created_memory_ids: [],
-      status_changes: [
-        {
-          memory_id: includedMemory.memory_id,
-          before_status: "memory_active",
-          after_status: "memory_deprecated",
-        },
-      ],
-      created_memory_count: 0,
-      new_version_count: 1,
-      task_packet_eligibility_change: "非活跃记忆默认不进任务包入选列表。",
-      source_ref_count: includedMemory.record.source_refs.length,
-      display_text: "影响 1 条正式记忆，新增 1 个版本；非活跃记忆默认不进任务包入选列表。",
-      warnings: ["formal_memory_lifecycle_versions_and_audit_recorded"],
-    },
-    required_approval: {
-      required: true,
-      approval_kind: "project_director_or_user_confirmation",
-      required_actor_role: "project_director_or_user",
-      reason: "项目内正式记忆 lifecycle 需要项目主管或用户确认。",
-    },
-    before_records: [includedMemory.record],
-    proposed_records: [
-      {
-        ...includedMemory.record,
-        record_version: includedMemory.record.record_version + 1,
-        status: "memory_deprecated",
-      },
-    ],
-    display_text: "废弃预览：影响 1 条 / 新版本 1 个",
-    warnings: ["formal_memory_lifecycle_versions_and_audit_recorded"],
-  };
-  const lifecycleAction: PendingAction = {
-    kind: "record-formal-memory-lifecycle-operation",
-    label: "正式记忆 废弃",
-    path: project.project_root,
-    source: "Tauri 应用数据目录",
-    boundary: "编辑会创建新版本，不覆盖旧版本；废弃不是移除实体；非活跃记忆默认不进任务包。",
-    formalMemoryLifecycle: {
-      project_root: project.project_root,
-      project_id: "project:offline-fixture-projects-codex-workbench",
-      workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-      operation_kind: "deprecate",
-      memory_id: includedMemory.memory_id,
-      memory_ids: [],
-      revise: null,
-      merge: null,
-      split: null,
-      scope_change: null,
-      actor_id: "project-director-ui",
-      actor_role: "project_director",
-      reason: "废弃正式记忆测试。",
-      expected_store_revision: formalMemoryStore.revision,
-      expected_record_versions: {
-        [includedMemory.memory_id]: includedMemory.record.record_version,
-      },
-      confirmed_by: "project-director-ui",
-      confirmation_summary: "已查看影响面。",
-    },
-    formalMemoryLifecyclePreview: lifecyclePreview,
-  };
+  const {
+    lifecycleAction,
+    relationAction,
+    maintenanceAction,
+    maturePatternAction,
+    quarantineMaturePatternAction,
+  } = memoryPendingActionFixtures({
+    projectRoot: project.project_root,
+    formalMemoryStoreRevision: formalMemoryStore.revision,
+    memoryCandidateStoreRevision: memoryCandidateStore.revision,
+    memoryLintStoreRevision: memoryLintStore.revision,
+    memoryEntityRelationStoreRevision: memoryEntityRelationStore.revision,
+    memoryPatternStoreRevision: memoryPatternStore.revision,
+    includedMemory,
+    relationCandidate: memoryEntityRelationPreview.relation_candidates[0],
+    maturePatternCandidate: memoryPatternStore.mature_pattern_candidates[0],
+  });
   const lifecycleDialogText = visibleText(
     <PermissionDialog action={lifecycleAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
@@ -2454,24 +2403,6 @@ function runMemoryManagementCenterScenario() {
   ]) {
     assert(lifecycleDialogText.includes(expectedText), `正式记忆 lifecycle 确认弹层缺少 ${expectedText}`);
   }
-  const relationAction: PendingAction = {
-    kind: "record-memory-relation-candidate-decision",
-    label: "确认关系候选",
-    path: project.project_root,
-    source: "Tauri 应用数据目录",
-    boundary: "只写 memory-entity-relations.v1.json；已确认关系只用于解释召回原因，不改变任务包入选列表。",
-    memoryRelationCandidateDecision: {
-      project_root: project.project_root,
-      relation_candidate_id: "relation-candidate:v1:contract",
-      decision: "confirm_relation",
-      actor_id: "project-director-memory-center",
-      actor_role: "project_director",
-      confirmed_by: "project_director",
-      reason: "项目主管确认关系候选。",
-      expected_store_revision: memoryEntityRelationStore.revision,
-    },
-    memoryRelationCandidate: memoryEntityRelationPreview.relation_candidates[0],
-  };
   const relationDialogText = visibleText(
     <PermissionDialog action={relationAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
@@ -2486,28 +2417,6 @@ function runMemoryManagementCenterScenario() {
     assert(relationDialogText.includes(expectedText), `关系候选确认弹层缺少 ${expectedText}`);
   }
 
-  const maintenanceAction: PendingAction = {
-    kind: "run-memory-maintenance",
-    label: "运行记忆维护任务",
-    path: project.project_root,
-    source: "Tauri 应用数据目录",
-    boundary: "只写 memory-lint.v1.json 的维护运行 / 发现项 / 报告；不会自动修改正式记忆、候选、观察、实体关系或工作流状态。",
-    memoryMaintenanceRun: {
-      project_root: project.project_root,
-      project_id: "project:offline-fixture-projects-codex-workbench",
-      workflow_id: "workflow:offline-fixture-projects-codex-workbench:default",
-      actor_id: "project-director-memory-center",
-      actor_role: "project_director",
-      lint_intent: "maintenance_run",
-      candidate_key: null,
-      task_id: "memory-maintenance:m11",
-      revoked_source_ids: [],
-      expected_formal_store_revision: formalMemoryStore.revision,
-      expected_candidate_store_revision: memoryCandidateStore.revision,
-      expected_lint_store_revision: memoryLintStore.revision,
-      dry_run: false,
-    },
-  };
   const maintenanceDialogText = visibleText(
     <PermissionDialog action={maintenanceAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
@@ -2525,25 +2434,6 @@ function runMemoryManagementCenterScenario() {
     assert(!maintenanceDialogText.includes(forbiddenText), `维护任务确认弹层不应出现越界文案：${forbiddenText}`);
   }
 
-  const maturePatternAction: PendingAction = {
-    kind: "record-mature-pattern-decision",
-    label: "用户确认成熟模式候选",
-    path: project.project_root,
-    source: "Tauri 应用数据目录",
-    boundary: "用户确认后写 memory-patterns.v1.json，并通过正式记忆受控路径写 formal-memories.v1.json；候选和报告未确认不进入任务包。",
-    maturePatternDecision: {
-      project_root: project.project_root,
-      candidate_id: "mature-pattern-candidate:v1:control-core-boundary",
-      decision: "confirm_as_formal_memory",
-      actor_id: "user-memory-center",
-      actor_role: "user",
-      confirmed_by: "user",
-      reason: "用户确认成熟模式候选。",
-      expected_pattern_store_revision: memoryPatternStore.revision,
-      expected_formal_store_revision: formalMemoryStore.revision,
-    },
-    maturePatternCandidate: memoryPatternStore.mature_pattern_candidates[0],
-  };
   assert(maturePatternAction?.kind === "record-mature-pattern-decision", "成熟模式确认按钮应生成 record-mature-pattern-decision action");
   assert(maturePatternAction.maturePatternDecision?.decision === "confirm_as_formal_memory", "成熟模式确认 action 决定类型不匹配");
   assert(maturePatternAction.maturePatternDecision.actor_role === "user", "成熟模式正式化必须由用户角色确认");
@@ -2569,25 +2459,6 @@ function runMemoryManagementCenterScenario() {
     assert(!maturePatternDialogText.includes(forbiddenText), `成熟模式确认弹层不应出现越界文案：${forbiddenText}`);
   }
 
-  const quarantineMaturePatternAction: PendingAction = {
-    kind: "record-mature-pattern-decision",
-    label: "隔离成熟模式候选",
-    path: project.project_root,
-    source: "Tauri 应用数据目录",
-    boundary: "只写 memory-patterns.v1.json 的候选决定；不写正式记忆，不改来源材料，不影响任务包入选列表。",
-    maturePatternDecision: {
-      project_root: project.project_root,
-      candidate_id: "mature-pattern-candidate:v1:control-core-boundary",
-      decision: "quarantine",
-      actor_id: "user-memory-center",
-      actor_role: "user",
-      confirmed_by: null,
-      reason: "用户隔离成熟模式候选。",
-      expected_pattern_store_revision: memoryPatternStore.revision,
-      expected_formal_store_revision: null,
-    },
-    maturePatternCandidate: memoryPatternStore.mature_pattern_candidates[0],
-  };
   const quarantineDialogText = visibleText(
     <PermissionDialog action={quarantineMaturePatternAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
