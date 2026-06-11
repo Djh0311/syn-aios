@@ -4,9 +4,11 @@
 
 ## STATUS
 
-`DONE_PENDING_IMPLEMENTATION_COMMIT_HASH`
+`DONE`
 
 R3-A11 Level A 已实现并通过复核。Level B 未执行。
+
+Implementation commit：`a7d715c49888b9d3ec67c36c3e431f07e14af12a`
 
 ## Summary
 
@@ -59,4 +61,4 @@ R3-A11 Level A 已实现并通过复核。Level B 未执行。
 
 ## Next
 
-主管线提交 implementation 后，更新 R3-A11 task package、evidence/handoff commit 字段和 checkpoint 入口。R3-A11 Level B 或 R3-A12 stop-write JSON decision 仍需单独任务包 / execution record。
+R3-A11 checkpoint 已具备入口同步条件。R3-A11 Level B 或 R3-A12 stop-write JSON decision 仍需单独任务包 / execution record；不得把本轮 Level A 说成 production observation Level B、production read-cut、JSON / sidecar stop-write 或 R3 完成。

@@ -4,9 +4,11 @@
 
 ## STATUS
 
-`DONE_PENDING_IMPLEMENTATION_COMMIT_HASH`
+`DONE`
 
 R3-A11 Level A 已实现并通过复核：production observation / export verification contract 的 fixture + temp rehearsal。Level B 未执行。
+
+Implementation commit：`a7d715c49888b9d3ec67c36c3e431f07e14af12a`
 
 ## Scope
 
@@ -128,8 +130,8 @@ Forbidden true-flag scan:
 
 - 当前 `workbench_sqlite_observation_period.rs` 从约 1,045 行增至 2,405 行，主要增量是 A11 合同 helper 和测试矩阵。任务包允许优先扩展该文件以避免新增平行 observation 模块，但复核线应检查是否需要在后续 R3/R5 做结构校准。
 - 复核线结论：`CLEAR`，P0/P1/P2 均无，可提交。
-- 当前 implementation commit 尚未写入；等待主管线提交并回填。
+- Implementation commit 已回填：`a7d715c49888b9d3ec67c36c3e431f07e14af12a`。
 
 ## Next
 
-等待复核线只读审查。若 clear，主管线提交 R3-A11 implementation 并更新任务包状态 / checkpoint 文档。R3-A11 Level B 如需执行必须另写 execution record；不得直接进入 stop-write JSON。
+R3-A11 Level B 如需执行必须另写 execution record；不得直接进入 stop-write JSON。默认下一步是准备 R3-A12 stop-write JSON decision 任务包，或由主管线先单独决策是否需要 A11 Level B。
