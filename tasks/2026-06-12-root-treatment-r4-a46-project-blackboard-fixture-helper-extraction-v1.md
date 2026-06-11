@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 Planning baseline commit：`4c22573a941110a6b410fdf6dfc9e75d67384004`
 
-Implementation commit：待回填。
+Implementation commit：`4c10149278ca0a1d0324504ba54dc79f6cd1eb8c`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`。
 
-Checkpoint commit：待回填。
+Checkpoint commit：`1a0d2f4d2f1f1e523dc9a1884ed0cab5c988e749`
 
 本文是 Root Treatment / Stage R 的 R4-A46 任务包；R4-A46 继续对应官方计划 R4-6：离线交互测试按域拆分。R4-A46 只接受为 `offlineDerivedWorkflowFixtures.ts` 中 project blackboard 纯测试数据 cluster 抽离到独立 helper；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B、真实 Codex 执行或 backlog 功能解冻。
 

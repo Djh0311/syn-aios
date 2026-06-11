@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a46-project-blackboard-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a46-project-blackboard-fixture
 
 Planning baseline commit：`4c22573a941110a6b410fdf6dfc9e75d67384004`
 
-Implementation commit：待回填。
+Implementation commit：`4c10149278ca0a1d0324504ba54dc79f6cd1eb8c`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填。
+Checkpoint commit：`1a0d2f4d2f1f1e523dc9a1884ed0cab5c988e749`
 
 ## 1. 完成内容
 
