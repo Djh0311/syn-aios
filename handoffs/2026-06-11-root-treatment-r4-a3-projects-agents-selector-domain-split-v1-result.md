@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-结论：R4-A3 implementation 已完成，状态为 `implemented_pending_review`。
+结论：R4-A3 已完成并通过复核线 `STATUS: CLEAR`。
 
 ## 做了什么
 
@@ -20,6 +20,7 @@
 - 新增 `r4-page-selectors.test.ts` 并接入 offline runner。
 
 Implementation commit：`c7ced1abcbf6c33a9cf8271a2450850cfdb5b491`
+Evidence/docs commit：`8ba90f6dcbea1d3dc94d4d226d5aec723ac3f069`
 
 ## 关键文件
 
@@ -56,33 +57,13 @@ Implementation commit：`c7ced1abcbf6c33a9cf8271a2450850cfdb5b491`
 - 不能声明 R3 Level B 已执行。
 - 不能声明多 agent 并行真实执行已解锁。
 
-## 给复核线
+## 复核结果
 
-请只读复核：
-
-- R4-A3 是否符合任务包范围。
-- 新 selector 是否保持 read-only / pure function。
-- 是否误碰 `ProjectsView.tsx` / `AgentView.tsx` / `types.ts` / `styles.css` 等棘轮大文件。
-- 是否有冒领页面迁移、`WorkbenchSnapshot` 废弃、真实执行或 UI 重做。
-- shape gate warning 是否确为 R4-A2 遗留 command total warning，而非 R4-A3 新增。
-
-建议输出单行结论：
-
-```text
-STATUS: CLEAR
-```
-
-或：
-
-```text
-STATUS: BLOCKED
-```
-
-如有问题，请按 P0/P1/P2 分级，并给出文件 / 行号。
+- 复核线：`019eb51c-61fe-7fc3-8973-b22a4ce58911`
+- 结论：`STATUS: CLEAR`
+- P0/P1/P2：无。
+- 确认 R4-A3 符合任务包范围，新 selector 保持 read-only / pure function，没有冒领页面迁移、`WorkbenchSnapshot` 废弃、真实执行或 UI 重做。
 
 ## 下一步建议
 
-若复核线 CLEAR，主管线可 checkpoint 同步入口文档。下一步建议 R4-A4 二选一：
-
-- 让 Projects / Agents 页面以最小 diff 消费 selectors，但仍不改视觉。
-- 继续补 Running / Memory 首批 selector 分域，再统一做页面消费。
+下一步建议 R4-A4：让 Projects / Agents 页面以最小 diff 消费 selectors，但仍不改视觉、不迁移真实数据来源、不废弃 `WorkbenchSnapshot`。

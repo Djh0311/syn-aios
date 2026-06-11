@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-结论：`implemented_pending_review`
+结论：`accepted`
 
 R4-A3 已实现 Projects / Agents 首批前端 selector 分域。接受范围是新增前端纯 selector、轻量 page read model 类型和离线测试；不接受为页面真实数据来源迁移、R4 完成、`WorkbenchSnapshot` 废弃、`ProjectsView` / `AgentView` 拆分完成、UI 重做、真实 Tauri / 截图验收、R3 Level B 或多 agent 并行真实执行解锁。
 
@@ -17,6 +17,8 @@ R4-A3 已实现 Projects / Agents 首批前端 selector 分域。接受范围是
 - Task package：`tasks/2026-06-11-root-treatment-r4-a3-projects-agents-selector-domain-split-v1.md`
 - Planning baseline commit：`882b079b42b7f152f38820b40460ef3c652fad7c`
 - Implementation commit：`c7ced1abcbf6c33a9cf8271a2450850cfdb5b491`
+- Evidence/docs commit：`8ba90f6dcbea1d3dc94d4d226d5aec723ac3f069`
+- Review result：`STATUS: CLEAR`
 - Selector module：`prototypes/productized-desktop-shell/src/lib/pageSelectors.ts`
 - Offline test：`prototypes/productized-desktop-shell/tests/r4-page-selectors.test.ts`
 - Offline runner：`prototypes/productized-desktop-shell/scripts/run-offline-interaction-test.mjs`
@@ -76,6 +78,13 @@ Rust 未运行说明：
 
 - R4-A3 未改 Rust 后端、Tauri command、Rust type、DB、sidecar 或 runner。
 - 本轮验证重点为 shape gate、TS typecheck、离线 selector 测试和 build。
+
+## Review Result
+
+- 复核线：`019eb51c-61fe-7fc3-8973-b22a4ce58911`
+- 结论：`STATUS: CLEAR`
+- P0/P1/P2：无。
+- 复核确认 R4-A3 只新增前端纯 selector 和测试，没有新增 Tauri command、sidecar、DB migration、真实执行路径或 UI 视觉改动。
 
 ## Scans
 

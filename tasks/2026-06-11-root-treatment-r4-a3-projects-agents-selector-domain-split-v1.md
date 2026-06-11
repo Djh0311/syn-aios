@@ -2,10 +2,12 @@
 
 日期：2026-06-11
 
-状态：实现完成，待复核线回收。本文是 Root Treatment / Stage R 的 R4-A3 任务包；R4-A2 已完成并通过复核线 `STATUS: CLEAR`。R4-A3 只接受为 Projects / Agents 首批前端 selector 分域完成，不接受为页面真实数据来源迁移、R4 完成、`WorkbenchSnapshot` 废弃、UI 重做或真实执行解锁。
+状态：已完成，并通过复核线 `STATUS: CLEAR`。本文是 Root Treatment / Stage R 的 R4-A3 任务包；R4-A2 已完成并通过复核线 `STATUS: CLEAR`。R4-A3 只接受为 Projects / Agents 首批前端 selector 分域完成，不接受为页面真实数据来源迁移、R4 完成、`WorkbenchSnapshot` 废弃、UI 重做或真实执行解锁。
 
 规划基线 commit：`882b079b42b7f152f38820b40460ef3c652fad7c`
 Implementation commit：`c7ced1abcbf6c33a9cf8271a2450850cfdb5b491`
+Evidence/docs commit：`8ba90f6dcbea1d3dc94d4d226d5aec723ac3f069`
+Review result：`STATUS: CLEAR`，无 P0/P1/P2。
 
 ## 0. 全局主管理解
 
@@ -181,3 +183,9 @@ R4-A3 禁止声明：
 - `npm run test:offline-interaction`：通过，`offline interaction tests passed: 14`，包含 `r4 page selectors test passed`。
 - `npm run build`：通过，仅既有 Vite chunk-size warning。
 - `git diff --check`：通过。
+
+复核：
+
+- 复核线：`019eb51c-61fe-7fc3-8973-b22a4ce58911`
+- 结论：`STATUS: CLEAR`
+- P0/P1/P2：无。
