@@ -474,6 +474,7 @@ R4 只拆读模型和前端结构，不改布局风格。
 | R4-1 | 后端按页查询 | Tauri commands / read models | R4-A2 已完成只读 selector contract skeleton；真实页面仍未迁移，后续还需逐页接入 |
 | R4-A3 | Projects / Agents selector 分域 | 前端纯 selector / tests | 已完成并通过复核线 `STATUS: CLEAR` |
 | R4-A4 | Projects / Agents 页面消费 selector | `ProjectsView.tsx` / `AgentView.tsx` 最小 diff 接线 | 已完成并通过复核线 `STATUS: CLEAR`；页面仍未迁移真实数据源 |
+| R4-A5 | Running / Memory selector 分域和页面消费 | `RunningWorkflowsView.tsx` / `MemoryCenterView.tsx` 首屏摘要最小 diff 接线 | 已完成并通过复核线 `STATUS: CLEAR`；页面仍未迁移真实数据源 |
 | R4-2 | TS 类型分域 | frontend type modules | `types.ts` 行数下降 |
 | R4-3 | ProjectsView 拆分 | project page components | 行数下降，页面行为不变 |
 | R4-4 | AgentView 拆分 | agent page components | 对话工作区行为不变 |
