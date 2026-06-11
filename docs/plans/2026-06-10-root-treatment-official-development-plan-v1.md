@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R3-P0 SQLite schema / importer / rollback contract freeze、R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures、R3-A2 temp DB apply importer / schema hardening / transaction failure injection / DB -> JSON export dry-run、R3-A3 fixture-only dual-write transaction rehearsal，以及 R3-A4 fixture-only read-cut DB / JSON fallback / rollback recovery dry-run rehearsal 均已完成；R3-A4 completion commit 为 `d1343e87f2e62fe959f622f68037714218ed6c13`。当前下一步是准备 R3-A5 任务包；R3-A5 未冻结前，不得开始生产 DB、生产读切、JSON / sidecar 停写或多 agent 并行真实执行。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
+状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R3-P0 SQLite schema / importer / rollback contract freeze、R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures、R3-A2 temp DB apply importer / schema hardening / transaction failure injection / DB -> JSON export dry-run、R3-A3 fixture-only dual-write transaction rehearsal、R3-A4 fixture-only read-cut DB / JSON fallback / rollback recovery dry-run rehearsal，以及 R3-A5 fixture-only observation / export / rollback verification rehearsal 均已完成；R3-A5 implementation commit 为 `0e8255a8248601caf7b1d513131f43e4bb157589`。当前下一步是准备 R3-A6 生产路径前置门槛 / cutover contract / rollback operator contract freeze；R3-A6 未冻结前，不得开始生产 DB、生产读切、JSON / sidecar 停写或多 agent 并行真实执行。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
 
 本文不是任务包，不授权真实 `codex exec` / `codex exec resume`，不授权读写 `/Users/yoyi/.codex`，不授权 Stage L 的 K3-B1 retry / K3-B2，不授权 planned adapters 真实接入，不授权 backlog 解冻后功能开工。
 
@@ -406,6 +406,7 @@ R2 只做行为保持型拆分，每批都必须让 `lib.rs` 行数下降。
 - R2-B10 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r2-b10-c4-c6-automation-workflow-governance-extraction-v1.md`，completion commit `d5f423d97c1f2dac4bca33f84c34e46b0b4716a6`。接受为抽出 C4-C6 自动化工作流治理连续区块，并确认 `lib.rs` 已从 16,457 行降到 13,949 行，达成第一阶段 `lib.rs <= 15,000` 水位线；不接受为 R2 完成。
 - R2 closing / R3 preflight review 已完成，结论为 `DONE_WITH_CONCERNS`：只读复核剩余 `lib.rs` 结构、inline tests 巨石、R3 SQLite 前置风险和后续拆分/迁移顺序；R3-P0、R3-A1、R3-A2 和 R3-A3 均已完成。
 - R3-A4 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r3-a4-fixture-only-read-cut-db-and-rollback-rehearsal-v1.md`，completion commit `d1343e87f2e62fe959f622f68037714218ed6c13`。接受为 fixture-only read-cut DB / JSON fallback / rollback recovery dry-run 演练，不接受为生产 DB、生产读切、JSON / sidecar 停写或多 agent 并行真实执行解锁。
+- R3-A5 已完成并由主管线收口为 `accepted_with_p2`：`tasks/2026-06-11-root-treatment-r3-a5-fixture-only-observation-export-and-rollback-verification-v1.md`，implementation commit `0e8255a8248601caf7b1d513131f43e4bb157589`。接受为 fixture-only observation period、export verification、two-sample stability 和 rollback recovery dry-run 演练，不接受为生产 DB、生产读切、JSON / sidecar 停写或多 agent 并行真实执行解锁。
 
 | 批次 | 做什么 | 主要落点 | 验收 |
 | --- | --- | --- | --- |
@@ -708,11 +709,11 @@ R0 可接受不跑全量 cargo，但必须说明原因；R1 改 Rust 存储逻�
 
 当前按用户要求继续 Root Treatment / Stage R，下一步：
 
-1. 准备 R3-A5 任务包。
-2. 在进入任何生产路径前明确 R3-A5 是 observation / export / rollback verified task，还是继续拆成多个 fixture-only 连续任务包。
-3. R3-A5 必须写清 observation period、export hash verification、fallback / degraded 状态、rollback recovery verification、敏感数据和 no-real-Codex 边界；未冻结前不得开始生产 DB、生产读切、JSON / sidecar 停写或多 agent 并行真实执行。
+1. 准备 R3-A6 任务包。
+2. 在进入任何生产路径前冻结 production cutover contract、rollback operator contract、allowed roots / denied paths、backup / recovery、dry-run / apply 分界和 evidence / handoff 验收矩阵。
+3. R3-A6 必须写清哪些路径仍停留 fixture-only、哪些路径允许进入生产前置演练；未冻结前不得开始生产 DB、生产读切、JSON / sidecar 停写或多 agent 并行真实执行。
 
-R3-A5 准备期间：
+R3-A6 准备期间：
 
 - 不执行真实 Codex。
 - 不发送 prompt。
@@ -720,4 +721,4 @@ R3-A5 准备期间：
 - 不启动 Tauri / Browser / Chrome / Vite / 截图工具。
 - 不启动 Stage L / K3-B1 retry / K3-B2。
 - 不解冻 backlog 功能。
-- 不创建生产 SQLite DB，不迁移 JSON / sidecar，不把 R3-A4 fixture-only rehearsal 冒充为生产读切、JSON / sidecar 停写或 R3 完成。
+- 不创建生产 SQLite DB，不迁移 JSON / sidecar，不把 R3-A5 fixture-only rehearsal 冒充为生产读切、JSON / sidecar 停写或 R3 完成。

@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R3-A5 任务包，用于在 R3-A4 fixture-only read-cut DB / JSON fallback / rollback recovery dry-run rehearsal 基础上，演练 fixture-only observation period、DB -> JSON export verification、degraded / rollback readiness 和 recovery verification。R3-A5 仍不是生产 DB、不是生产读切、不是 JSON / sidecar 停写，不创建生产 DB，不切真实产品读写路径，不迁移真实 JSON / sidecar。
+状态：已完成，主管线回收结论为 `accepted_with_p2`。本文是 Root Treatment / Stage R 的 R3-A5 任务包，用于在 R3-A4 fixture-only read-cut DB / JSON fallback / rollback recovery dry-run rehearsal 基础上，演练 fixture-only observation period、DB -> JSON export verification、degraded / rollback readiness 和 recovery verification。R3-A5 仍不是生产 DB、不是生产读切、不是 JSON / sidecar 停写，不创建生产 DB，不切真实产品读写路径，不迁移真实 JSON / sidecar。实现提交：`0e8255a8248601caf7b1d513131f43e4bb157589`；主管 checkpoint 见 `evidence/2026-06-11-root-treatment-r3-a5-supervisor-checkpoint-v1.md` 与 `handoffs/2026-06-11-root-treatment-r3-a5-supervisor-checkpoint-v1-result.md`。
 
 ## 0. 全局主管理解
 
