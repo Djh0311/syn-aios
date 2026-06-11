@@ -47,6 +47,7 @@ mod workbench_sqlite_read_cut;
 mod workbench_sqlite_schema;
 mod workbench_sqlite_snapshot_apply;
 mod workbench_sqlite_stop_write;
+mod workbench_sqlite_transaction_acceptance;
 mod worker_protocol;
 mod workflow_audit;
 mod workflow_read_model;

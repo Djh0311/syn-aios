@@ -1,0 +1,18 @@
+{
+  "schema_version": "memory_governance.v1",
+  "revision": 1,
+  "candidates": [
+    {
+      "candidate_key": "candidate:r3-a13:transaction",
+      "candidate_id": "candidate-id:r3-a13:transaction",
+      "status": "pending_review"
+    }
+  ],
+  "events": [
+    {
+      "audit_ref_id": "candidate-audit:r3-a13:created",
+      "candidate_key": "candidate:r3-a13:transaction",
+      "event_kind": "candidate_created"
+    }
+  ]
+}

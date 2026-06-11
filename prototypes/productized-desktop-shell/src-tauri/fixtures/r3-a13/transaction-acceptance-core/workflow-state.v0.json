@@ -1,0 +1,42 @@
+{
+  "schema_version": "workflow_state_v0",
+  "workflow_version": 1,
+  "revision": 1,
+  "projects": [
+    {
+      "project_id": "project:r3-a13:core",
+      "project_root": "/tmp/r3-a13/core",
+      "display_name": "R3 A13 Core"
+    }
+  ],
+  "workflows": [
+    {
+      "workflow_id": "workflow:r3-a13:core",
+      "project_id": "project:r3-a13:core",
+      "status": "prepared"
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "node:r3-a13:core:memory-review",
+      "workflow_id": "workflow:r3-a13:core",
+      "role": "memory_reviewer"
+    }
+  ],
+  "work_items": [
+    {
+      "work_item_id": "work-item:r3-a13:core",
+      "workflow_id": "workflow:r3-a13:core",
+      "node_id": "node:r3-a13:core:memory-review",
+      "state": "prepared"
+    }
+  ],
+  "audit_events": [
+    {
+      "event_id": "audit:r3-a13:core:prepared",
+      "target_kind": "workflow",
+      "target_id": "workflow:r3-a13:core",
+      "event_kind": "fixture_prepared"
+    }
+  ]
+}
