@@ -2,14 +2,14 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R3-A9 任务包，用于在 R3-A6 production cutover / rollback operator contract、R3-A7 production preflight scanner / report、R3-A8 copied snapshot temp DB apply / export / rollback boundary 之后，进入首个受控 production DB initializer + apply 任务。R3-A9 允许在任务包严格边界内创建工作台自有 production SQLite DB 并导入工作台自有 JSON / sidecar 快照；但仍不得切产品读路径到 DB，不得停写 JSON / sidecar，不得执行真实 Codex，不得读写 `/Users/yoyi/.codex`。
+状态：Level A 已完成；Level B 未执行。本文是 Root Treatment / Stage R 的 R3-A9 任务包，用于在 R3-A6 production cutover / rollback operator contract、R3-A7 production preflight scanner / report、R3-A8 copied snapshot temp DB apply / export / rollback boundary 之后，进入首个受控 production DB initializer + apply 任务。R3-A9 Level A 已完成 fixture / temp production DB initializer + apply 合同验证；但仍不得切产品读路径到 DB，不得停写 JSON / sidecar，不得执行真实 Codex，不得读写 `/Users/yoyi/.codex`。
 
 完成记录：
 
-- evidence：待创建 `evidence/2026-06-11-root-treatment-r3-a9-production-db-initializer-apply-with-backup-manifest-no-read-cut-v1.md`
-- handoff：待创建 `handoffs/2026-06-11-root-treatment-r3-a9-production-db-initializer-apply-with-backup-manifest-no-read-cut-v1-result.md`
+- evidence：`evidence/2026-06-11-root-treatment-r3-a9-production-db-initializer-apply-with-backup-manifest-no-read-cut-v1.md`
+- handoff：`handoffs/2026-06-11-root-treatment-r3-a9-production-db-initializer-apply-with-backup-manifest-no-read-cut-v1-result.md`
 - planning baseline commit：`b0d9b3b294af4d4883e4bdd16b2cf0c1f3f110d0`
-- implementation commit：待主管线回收后记录
+- implementation commit：待主管线提交后由 checkpoint 记录
 
 ## 0. 全局主管理解
 
@@ -275,11 +275,11 @@ git status --short
 必须跑扫描：
 
 ```bash
-rg -n "read_cut_enabled=true|stop_write_json=true|production_restore_performed=true|codex_home_touched=true|product_read_path_changed=true|source_json_written=true" prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_production_apply.rs evidence/2026-06-11-root-treatment-r3-a9-production-db-initializer-apply-with-backup-manifest-no-read-cut-v1.md handoffs/2026-06-11-root-treatment-r3-a9-production-db-initializer-apply-with-backup-manifest-no-read-cut-v1-result.md
-rg -n "/Users/yoyi/.codex|\\.env|token|secret|credential|keychain|oauth|provider credential|full transcript|rollout|prompt_body" prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_production_apply.rs evidence/2026-06-11-root-treatment-r3-a9-production-db-initializer-apply-with-backup-manifest-no-read-cut-v1.md handoffs/2026-06-11-root-treatment-r3-a9-production-db-initializer-apply-with-backup-manifest-no-read-cut-v1-result.md
+rg -n "read_cut_enabled[:=] true|stop_write_json[:=] true|production_restore_performed[:=] true|codex_home_touched[:=] true|product_read_path_changed[:=] true|source_json_written[:=] true|production_root_written[:=] true" prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_production_apply.rs prototypes/productized-desktop-shell/src-tauri/fixtures/r3-a9
+rg --hidden -n "/Users/yoyi/.codex|\\.env|token|secret|credential|keychain|oauth|provider credential|full transcript|rollout|prompt_body" prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_production_apply.rs prototypes/productized-desktop-shell/src-tauri/fixtures/r3-a9
 ```
 
-命中必须分类：guard / denied marker / redaction / forbidden scan text / fixture label，不得存在真实 secret、真实 `.codex` 读取或 prompt body 持久化。
+命中必须分类：guard / denied marker / redaction / fixture label，不得存在真实 secret、真实 `.codex` 读取或 prompt body 持久化。Evidence / handoff 中的边界文案可另行人工分类，但不应纳入“无命中”机械扫描范围，避免扫描命令文本自命中。
 
 ## 10. Evidence / Handoff 结构
 

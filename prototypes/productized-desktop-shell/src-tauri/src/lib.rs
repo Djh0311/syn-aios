@@ -42,6 +42,7 @@ mod workbench_sqlite_exporter;
 mod workbench_sqlite_importer;
 mod workbench_sqlite_observation_period;
 mod workbench_sqlite_preflight;
+mod workbench_sqlite_production_apply;
 mod workbench_sqlite_read_cut;
 mod workbench_sqlite_schema;
 mod workbench_sqlite_snapshot_apply;
