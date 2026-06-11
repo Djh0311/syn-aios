@@ -265,7 +265,7 @@ Recommended next tasks:
 | R3-A12 | stop-write JSON decision and rollback drill | yes, if approved | yes |
 | R3-A13 | transaction acceptance across memory + audit and R3 final acceptance | yes, scoped | possible final |
 
-R3-A7 is the recommended immediate next task. R3-A7 must still avoid reading secret / `.codex` / full transcript and must not write production DB.
+R3-A7 and R3-A8 are complete. R3-A9 is the recommended immediate next task. R3-A9 must still avoid reading secret / `.codex` / full transcript, must not cut product reads to DB, and must not stop JSON / sidecar writes.
 
 ## 9. Boundary Confirmation
 
