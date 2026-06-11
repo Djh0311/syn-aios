@@ -2,13 +2,13 @@
 
 日期：2026-06-11
 
-状态：执行中。本文是 Root Treatment / Stage R 的 R4-A16 任务包；R4-A16 继续对应官方计划 R4-6：离线测试拆分。R4-A16 只接受为 workflow state 变体离线 fixture helper 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、视觉重做、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B 或 backlog 功能解冻。
+状态：已完成并通过复核线 `STATUS: CLEAR`。本文是 Root Treatment / Stage R 的 R4-A16 任务包；R4-A16 继续对应官方计划 R4-6：离线测试拆分。R4-A16 只接受为 workflow state 变体离线 fixture helper 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、视觉重做、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B 或 backlog 功能解冻。
 
 Planning baseline commit：`f64897fdf08907be456d4d7081054a23cda434ac`
 
-Implementation commit：`TBD`
+Implementation commit：`cdb71a6dbdc9e216fc39da921c0cb77caa21e6b6`
 
-Review result：`TBD`
+Review result：`STATUS: CLEAR`；无 P0 / P1 / P2。
 
 Checkpoint commit：`TBD`
 
