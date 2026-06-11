@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 Planning baseline commit：`95312f2a85a5dc97f6770860dad7d04b360cd318`
 
-Implementation commit：待回填
+Implementation commit：`aa3cfc420a9487d7afe3adbccc898bd5772c2fdb`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`9f2f96b0703a9e1fb858a187d56e35d858c66617`
 
 本文是 Root Treatment / Stage R 的 R4-A39 任务包；R4-A39 继续对应官方计划 R4-6：离线测试拆分。R4-A39 只接受为 Agent 相关边界场景的 expected / forbidden / button / proposal text fixture 抽离完成，覆盖会话操作边界、Provider / 模型 / 凭据边界、Adapter SDK / CLI diagnostics 边界、Session Continuation preview、E5 Level A、H2 real resume readiness、E6 runtime attention；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B、真实 Codex 执行或 backlog 功能解冻。
 
