@@ -72,6 +72,10 @@ import {
   controlledSessionContinuationLevelAStoreFixture,
   h2DuplicateSessionContinuationStoreFixture,
 } from "./helpers/offlineSessionContinuationStoreFixtures";
+import {
+  rightDetailPanelCommonPropsFixture,
+  rightRailPanelSummaryTitles,
+} from "./helpers/offlineRightRailFixtures";
 import { stageJRunQueueFixtures } from "./helpers/offlineRunQueueFixtures";
 import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
 import {
@@ -1866,17 +1870,11 @@ function runRuntimeSessionAttentionScenario() {
     );
   }
 
-  const commonProps = {
+  const commonProps = rightDetailPanelCommonPropsFixture({
     snapshot: runtimeSnapshot,
     workflowState: workflowStateWithProjectWorkflow,
-    notice: "offline notice",
-    error: false,
-    workflowStateError: null,
     secretaryContext,
-    onClose: () => {},
-    onNavigate: () => {},
-    onReloadWorkflowState: () => {},
-  };
+  });
   const runningPanelText = visibleText(<RightDetailPanel activePanel="running" {...commonProps} />);
   assert(runningPanelText.includes("运行中摘要"), "运行中入口应使用职责化摘要标题");
   assert(runningPanelText.includes("不停止、恢复、重试或启动真实执行"), "运行中入口应声明只汇总不执行");
@@ -1899,20 +1897,14 @@ function runRuntimeLogBoundaryScenario() {
     ...snapshot,
     runtime_log_store: runtimeStore,
   };
-  const commonProps = {
+  const commonProps = rightDetailPanelCommonPropsFixture({
     snapshot: runtimeSnapshot,
     workflowState: workflowStateWithProjectWorkflow,
-    notice: "offline notice",
-    error: false,
-    workflowStateError: null,
     secretaryContext: deriveSecretaryContext({
       snapshot: runtimeSnapshot,
       workflowState: workflowStateWithProjectWorkflow,
     }),
-    onClose: () => {},
-    onNavigate: () => {},
-    onReloadWorkflowState: () => {},
-  };
+  });
   const managementPanelText = visibleText(<RightDetailPanel activePanel="audit" {...commonProps} />);
 
   for (const expectedText of [
@@ -2620,26 +2612,14 @@ function runRightRailSecretarySurfaceScenario() {
   assert(secretaryRailItem, "右侧竖栏缺少秘书独立入口");
   assert(secretaryRailItem.label === "秘书", "秘书入口 label 应保持为独立秘书入口");
 
-  const commonProps = {
+  const commonProps = rightDetailPanelCommonPropsFixture({
     snapshot,
     workflowState: workflowStateWithDerivedWorkflow,
-    notice: "offline notice",
-    error: false,
-    workflowStateError: null,
     secretaryContext,
-    onClose: () => {},
-    onNavigate: () => {},
-    onReloadWorkflowState: () => {},
-  };
-  const panelSummaryTitles = {
-    notifications: "通知摘要",
-    todos: "待处理事项",
-    audit: "管理摘要",
-    running: "运行中摘要",
-  };
+  });
   for (const activePanel of ["notifications", "todos", "audit", "running"] as const) {
     const panelText = visibleText(<RightDetailPanel activePanel={activePanel} {...commonProps} />);
-    assert(panelText.includes(panelSummaryTitles[activePanel]), `${activePanel} 详情应保留自己的职责摘要列表`);
+    assert(panelText.includes(rightRailPanelSummaryTitles[activePanel]), `${activePanel} 详情应保留自己的职责摘要列表`);
     assert(!panelText.includes("动态"), `${activePanel} 详情不应再使用泛化动态标题`);
     assert(!panelText.includes("秘书只读摘要"), `${activePanel} 详情不应渲染秘书只读摘要`);
     assert(!panelText.includes("建议，不是事实变更"), `${activePanel} 详情不应渲染秘书边界文案`);
