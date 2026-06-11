@@ -46,9 +46,9 @@ R4-A6 已完成实现侧工作：Knowledge Base / Settings 两页已有首批前
 
 主管线下一步：
 
-1. 提交 implementation commit 并回填 hash。
-2. 复用复核线 `019eb51c-61fe-7fc3-8973-b22a4ce58911` 做只读审查。
-3. 若复核 `STATUS: CLEAR`，再同步入口文档并做 checkpoint commit。
+1. 复用复核线 `019eb51c-61fe-7fc3-8973-b22a4ce58911` 完成只读审查。
+2. 若复核 `STATUS: CLEAR`，回填 review result，同步入口文档并做 checkpoint commit。
+3. 若复核发现 P1/P2，先修补并重新交给复核线。
 
 不能声明：
 
