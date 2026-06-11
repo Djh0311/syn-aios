@@ -1,0 +1,101 @@
+{
+  "schema_version": "workflow_state_v0",
+  "workflow_version": 1,
+  "revision": 1,
+  "projects": [
+    {
+      "project_id": "project:r3-a2:core",
+      "project_root": "/tmp/r3-a2/core",
+      "display_name": "R3 A2 Core"
+    }
+  ],
+  "agent_adapters": [
+    {
+      "adapter_id": "adapter:r3-a2:codex-local",
+      "status": "planned_descriptor_only"
+    }
+  ],
+  "workflows": [
+    {
+      "workflow_id": "workflow:r3-a2:core",
+      "project_id": "project:r3-a2:core",
+      "status": "prepared"
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "node:r3-a2:core:director",
+      "workflow_id": "workflow:r3-a2:core",
+      "role": "project_director"
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "edge:r3-a2:core:director-worker",
+      "workflow_id": "workflow:r3-a2:core",
+      "source_node_id": "node:r3-a2:core:director",
+      "target_node_id": "node:r3-a2:core:worker",
+      "edge_type": "dispatch"
+    }
+  ],
+  "work_items": [
+    {
+      "work_item_id": "work-item:r3-a2:core",
+      "workflow_id": "workflow:r3-a2:core",
+      "node_id": "node:r3-a2:core:director",
+      "state": "prepared"
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "artifact:r3-a2:core:task-package",
+      "work_item_id": "work-item:r3-a2:core",
+      "artifact_kind": "task_package"
+    }
+  ],
+  "reviews": [
+    {
+      "review_id": "review:r3-a2:core",
+      "workflow_id": "workflow:r3-a2:core",
+      "work_item_id": "work-item:r3-a2:core",
+      "status": "accepted"
+    }
+  ],
+  "audit_events": [
+    {
+      "event_id": "audit:r3-a2:core:created",
+      "target_kind": "workflow",
+      "target_id": "workflow:r3-a2:core",
+      "event_kind": "fixture_created"
+    }
+  ],
+  "capabilities": [
+    {
+      "capability_id": "capability:r3-a2:apply"
+    }
+  ],
+  "harness_resources": [
+    {
+      "resource_id": "harness:r3-a2:fixture"
+    }
+  ],
+  "workflow_node_session_bindings": [
+    {
+      "binding_id": "binding:r3-a2:core",
+      "workflow_id": "workflow:r3-a2:core",
+      "node_id": "node:r3-a2:core:director",
+      "work_item_id": "work-item:r3-a2:core",
+      "lifecycle": "fixture",
+      "session_id": "session:r3-a2:core"
+    }
+  ],
+  "workflow_node_dispatches": [
+    {
+      "dispatch_id": "dispatch:r3-a2:core",
+      "workflow_id": "workflow:r3-a2:core",
+      "node_id": "node:r3-a2:core:director",
+      "work_item_id": "work-item:r3-a2:core",
+      "state": "prepared"
+    }
+  ]
+}
