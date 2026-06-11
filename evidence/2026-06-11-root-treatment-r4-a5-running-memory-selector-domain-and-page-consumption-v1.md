@@ -2,12 +2,12 @@
 
 日期：2026-06-11
 
-状态：implemented_pending_review。本文记录 R4-A5 Running Workflows / Memory Center 首批页面 selector 分域和页面最小消费。R4-A5 只接受为前端纯 selector 和两个页面首屏摘要消费完成；不接受为 R4 完成、页面真实数据来源迁移、`query_workbench_page_read_model` 真实消费、UI 重做、真实 Tauri / 截图验收、R3 Level B 或多 agent 并行真实执行解锁。
+状态：已完成并通过复核线 `STATUS: CLEAR`。本文记录 R4-A5 Running Workflows / Memory Center 首批页面 selector 分域和页面最小消费。R4-A5 只接受为前端纯 selector 和两个页面首屏摘要消费完成；不接受为 R4 完成、页面真实数据来源迁移、`query_workbench_page_read_model` 真实消费、UI 重做、真实 Tauri / 截图验收、R3 Level B 或多 agent 并行真实执行解锁。
 
 Planning baseline commit：`930bde34bffe551fb7ec7840313576e1f3ad9493`
 Task package commit：`e44cdf4f18e82b25b08d9bbb1d34f33eb4641008`
 Implementation commit：`955783f4629176d930fd0b2fb1d881aa6a289c0d`
-Review result：待回填。
+Review result：`STATUS: CLEAR`，复核线 `019eb51c-61fe-7fc3-8973-b22a4ce58911`，P0/P1/P2 均无。
 Checkpoint commit：待回填。
 
 ## 1. Scope
@@ -133,3 +133,24 @@ Running Workflows / Memory Center 首批前端纯 selector 分域和页面最小
 - 真实 Tauri / 截图验收。
 - R3 Level B。
 - 多 agent 并行真实执行。
+
+## 8. Review Result
+
+复核线：`019eb51c-61fe-7fc3-8973-b22a4ce58911`
+
+结论：`STATUS: CLEAR`
+
+发现：
+
+- P0：无。
+- P1：无。
+- P2：无。
+
+复核确认：
+
+- Running / Memory 页面确实消费新增 selector 输出。
+- selector 保持前端纯函数和 source boundary。
+- 未新增 Tauri command、sidecar、DB migration、真实执行路径或 workflow state 顶层结构。
+- 未改 CSS、视觉风格或页面布局结构。
+- readback unavailable / failed / timed out 的 unknown/null 没有被显示或统计成真实 0 条结果。
+- candidate / observation 未被当作 formal memory。
