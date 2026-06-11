@@ -125,7 +125,7 @@ pub(crate) fn scan_workbench_state_root_preflight_with_config(
     let denied_path_markers = effective_denied_path_markers(config);
     validate_source_root(source_root, &denied_path_markers)?;
     if let Some(path) = report_path {
-        validate_report_path(path, &denied_path_markers)?;
+        validate_report_path(path, source_root, &denied_path_markers)?;
     }
 
     let mut file_reports = Vec::new();
@@ -147,6 +147,14 @@ pub(crate) fn scan_workbench_state_root_preflight_with_config(
     for entry in entries {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
+        if denied_path_hit(&path, &denied_path_markers)
+            || denied_name_hit(&name, &denied_path_markers)
+        {
+            let report = rejected_path_report(source_root, &path, "denied_path_or_name")?;
+            blocked_reasons.push(format!("{} rejected", report.path_ref));
+            file_reports.push(report);
+            continue;
+        }
         if path.is_dir() {
             if name != "backups" {
                 warnings.push(format!("directory_ignored:{name}"));
@@ -344,7 +352,11 @@ fn validate_source_root(path: &Path, denied_path_markers: &[String]) -> Result<(
     Ok(())
 }
 
-fn validate_report_path(path: &Path, denied_path_markers: &[String]) -> Result<(), String> {
+fn validate_report_path(
+    path: &Path,
+    source_root: &Path,
+    denied_path_markers: &[String],
+) -> Result<(), String> {
     if !path.is_absolute() {
         return Err(format!(
             "preflight_report_path_must_be_absolute: {}",
@@ -353,6 +365,12 @@ fn validate_report_path(path: &Path, denied_path_markers: &[String]) -> Result<(
     }
     if denied_path_hit(path, denied_path_markers) {
         return Err(format!("preflight_report_path_denied: {}", path.display()));
+    }
+    if path.starts_with(source_root) {
+        return Err(format!(
+            "preflight_report_path_inside_source_root_denied: {}",
+            path.display()
+        ));
     }
     Ok(())
 }
@@ -546,6 +564,18 @@ fn write_report(path: &Path, report: &SqliteProductionPreflightReport) -> Result
         .map_err(|error| format!("preflight_report_write_failed:{}:{error}", path.display()))
 }
 
+fn rejected_path_report(
+    source_root: &Path,
+    path: &Path,
+    reason: &str,
+) -> Result<SqlitePreflightFileReport, String> {
+    let path_ref = path_ref(source_root, path)?;
+    let size_bytes = fs::metadata(path)
+        .map_err(|error| format!("preflight_path_metadata_failed:{}:{error}", path.display()))?
+        .len();
+    Ok(rejected_file(path_ref, size_bytes, reason))
+}
+
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
@@ -584,7 +614,7 @@ mod tests {
             &root.join("backups/workflow-state.v0.2026-06-11T00-00-00.json"),
             &json!({"schema_version": "workflow_state_v0", "revision": 6}),
         );
-        let report_path = root.join("reports/preflight.json");
+        let report_path = temp_test_dir("valid-report").join("preflight.json");
 
         let report = scan_workbench_state_root_preflight(&root, Some(&report_path))
             .expect("preflight should scan");
@@ -675,6 +705,47 @@ mod tests {
             .expect_err("codex home must be denied");
 
         assert!(err.contains("preflight_source_root_denied"));
+    }
+
+    #[test]
+    fn sqlite_preflight_denied_dotfile_and_directory_block_before_ignore() {
+        let root = temp_test_dir("denied-dotfile-dir");
+        write_json(
+            &root.join(PRIMARY_WORKFLOW_STATE),
+            &json!({"schema_version": "workflow_state_v0", "revision": 1}),
+        );
+        fs::write(root.join(".env"), b"SECRET=value").expect("write denied dotfile");
+        fs::create_dir_all(root.join(".codex")).expect("write denied dir");
+
+        let report =
+            scan_workbench_state_root_preflight(&root, None).expect("preflight should scan");
+
+        assert_eq!(report.status, "preflight_blocked");
+        assert!(report
+            .blocked_reasons
+            .iter()
+            .any(|reason| reason.contains(".env")));
+        assert!(report
+            .blocked_reasons
+            .iter()
+            .any(|reason| reason.contains(".codex")));
+        let serialized = serde_json::to_string(&report).expect("serialize");
+        assert!(!serialized.contains("SECRET=value"));
+    }
+
+    #[test]
+    fn sqlite_preflight_denies_report_path_inside_source_root() {
+        let root = temp_test_dir("report-inside-source");
+        write_json(
+            &root.join(PRIMARY_WORKFLOW_STATE),
+            &json!({"schema_version": "workflow_state_v0", "revision": 1}),
+        );
+
+        let err =
+            scan_workbench_state_root_preflight(&root, Some(&root.join("reports/preflight.json")))
+                .expect_err("report path inside source root should be denied");
+
+        assert!(err.contains("preflight_report_path_inside_source_root_denied"));
     }
 
     #[test]

@@ -10,6 +10,8 @@ R3-A7 已实现 production preflight scanner / report 的只读模块和 fixture
 
 本轮未执行真实 production root scan；只使用 Rust 单测创建的 temp fixture roots。
 
+Implementation commit：`7949253c91c8e688dc48e03c47a952f00fcd6fda`。
+
 ## READ / WRITE SCOPE
 
 ### 读取
@@ -33,7 +35,7 @@ R3-A7 已实现 production preflight scanner / report 的只读模块和 fixture
 
 新增模块：
 
-- `workbench_sqlite_preflight.rs`，763 行，低于 Rust 新文件 3,000 行上限。
+- `workbench_sqlite_preflight.rs`，834 行，低于 Rust 新文件 3,000 行上限。
 
 核心入口：
 
@@ -72,7 +74,25 @@ R3-A7 已实现 production preflight scanner / report 的只读模块和 fixture
 - unknown JSON blocks without body output。
 - denied sensitive file name blocks without reading body。
 - `/Users/yoyi/.codex` source root denied。
+- denied `.env` file and `.codex` directory block before dotfile / directory ignore and do not output body。
+- report path inside source root is denied。
 - explicit sidecar list + explicit denied markers：允许自定义 allowed sidecar，同时自定义 forbidden key 仍阻断且不输出 body。
+
+## REVIEW FIXES
+
+R3-A7 implementation commit 后，Stage R 复核线提出 2 个 P1，并已由主管线修补：
+
+1. P1：`.env` / `.codex` dotfile 或敏感目录可能先被 ignore，绕过 denied marker 检查。
+2. P1：`report_path` 允许落在 `source_root` 内，违反 production root read-only contract。
+
+修补结果：
+
+- denied marker check 现在先于 directory / dotfile ignore 执行。
+- denied `.env` 文件和 `.codex` 目录会生成 rejected file report 和 blocked reason，不输出 body。
+- `validate_report_path` 现在拒绝 `source_root` 内的 report path。
+- valid report path 测试改为写到 source root 外部 temp dir。
+- 新增回归测试：`sqlite_preflight_denied_dotfile_and_directory_block_before_ignore`。
+- 新增回归测试：`sqlite_preflight_denies_report_path_inside_source_root`。
 
 ## REAL PRODUCTION PREFLIGHT STATUS
 
@@ -90,12 +110,12 @@ R3-A7 已实现 production preflight scanner / report 的只读模块和 fixture
 
 - `cargo fmt`：pass。
 - `cargo fmt -- --check`：pass。
-- `cargo test --lib sqlite_preflight`：pass，6 passed。
+- `cargo test --lib sqlite_preflight`：pass，8 passed。
 - `node scripts/harness/workbench-shape-gate.js --mode check`：pass，0 errors / 0 warnings；sidecar JSON kinds 14 allowed / 0 unknown；Tauri commands 96 total / 0 in `lib.rs`。
 - `cargo test --lib sqlite_schema`：pass，3 passed。
 - `cargo test --lib sqlite_observation`：pass，15 passed。
 - `cargo test --lib workflow_state`：pass，11 passed。
-- `cargo test --lib`：pass，397 passed / 16 ignored。
+- `cargo test --lib`：pass，399 passed / 16 ignored。
 - `git diff --check`：pass。
 
 Known warning：
@@ -106,6 +126,7 @@ Known warning：
 
 - P0：无。
 - P1：无。
+- P1 review fixes：复核线提出的 2 个 P1 已修补并有回归测试覆盖。
 - P2：R3-A7 只是 scanner module + temp fixture validation，不是 production root scan。
 - P2：Scanner 目前没有 Tauri command / CLI command / UI；这是本任务的安全边界，不是缺陷。
 - P2：后续 R3-A8 copied production snapshot temp DB apply 必须先消费 A7 report 或重新运行显式 production preflight，不能跳过。

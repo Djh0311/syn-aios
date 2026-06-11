@@ -8,7 +8,7 @@
 
 - evidence：`evidence/2026-06-11-root-treatment-r3-a7-production-preflight-scanner-and-report-v1.md`
 - handoff：`handoffs/2026-06-11-root-treatment-r3-a7-production-preflight-scanner-and-report-v1-result.md`
-- implementation commit：待主管线提交后回填。
+- implementation commit：`7949253c91c8e688dc48e03c47a952f00fcd6fda`
 
 ## 0. 全局主管理解
 
@@ -151,7 +151,8 @@ R3-A7 禁止：
 - 是否新增 sidecar JSON 种类：否。
 - 是否需要 shape gate 豁免：否。
 - 本任务规划基线 commit：`330ec20937209633cd823bdf4bd69e04f95e01f6`。
-- 本任务完成 commit：待主管线回收后记录。
+- 本任务 implementation commit：`7949253c91c8e688dc48e03c47a952f00fcd6fda`。
+- 本任务 checkpoint / review-fix commit：以主管线最终回交为准。
 
 ## 8. 验收标准
 

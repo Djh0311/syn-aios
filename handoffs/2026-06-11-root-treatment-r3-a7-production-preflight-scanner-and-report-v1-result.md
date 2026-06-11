@@ -6,29 +6,37 @@
 
 `DONE_WITH_CONCERNS`
 
-R3-A7 production preflight scanner / report 已实现并通过 temp fixture 验证，等待主管 checkpoint / 入口同步 / commit。
+R3-A7 production preflight scanner / report 已实现并通过 temp fixture 验证，implementation commit 为 `7949253c91c8e688dc48e03c47a952f00fcd6fda`；主管 checkpoint 已回收，复核线提出的 2 个 P1 已修补并加回归测试。
 
 ## IMPLEMENTED
 
-- 新增 `workbench_sqlite_preflight.rs`，763 行。
+- 新增 `workbench_sqlite_preflight.rs`，834 行。
+- implementation commit：`7949253c91c8e688dc48e03c47a952f00fcd6fda`。
 - `lib.rs` 仅新增 `mod workbench_sqlite_preflight;`。
 - 默认 scanner 入口：`scan_workbench_state_root_preflight`。
 - 显式 config scanner 入口：`scan_workbench_state_root_preflight_with_config`。
 - Scanner 输出 metadata / hash / schema / revision / top-level keys / record count estimate / backup readiness / sidecar readiness。
 - Scanner flags 固定保持 `production_db_created=false`、`production_root_written=false`、`read_cut_enabled=false`、`stop_write_json=false`、`codex_home_touched=false`。
 - 自定义 config 不能移除默认硬拒绝 markers。
+- denied marker check 先于 dotfile / directory ignore；`.env` 文件和 `.codex` 目录会 blocked / rejected 且不输出 body。
+- `report_path` 位于 `source_root` 内会被硬拒绝。
 
 ## VERIFIED
 
 - `cargo fmt`：pass。
 - `cargo fmt -- --check`：pass。
-- `cargo test --lib sqlite_preflight`：6 passed。
+- `cargo test --lib sqlite_preflight`：8 passed。
 - `node scripts/harness/workbench-shape-gate.js --mode check`：pass，0 errors / 0 warnings。
 - `cargo test --lib sqlite_schema`：3 passed。
 - `cargo test --lib sqlite_observation`：15 passed。
 - `cargo test --lib workflow_state`：11 passed。
-- `cargo test --lib`：397 passed / 16 ignored。
+- `cargo test --lib`：399 passed / 16 ignored。
 - `git diff --check`：pass。
+
+Review fixes verified：
+
+- `sqlite_preflight_denied_dotfile_and_directory_block_before_ignore` 覆盖 sensitive dotfile / directory 先于 ignore 被 blocked。
+- `sqlite_preflight_denies_report_path_inside_source_root` 覆盖 report path inside source root 被拒绝。
 
 Known warning：既有 `JsonRpcError::invalid_params` dead_code warning；非 R3-A7 引入。
 
