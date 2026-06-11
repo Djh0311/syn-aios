@@ -12,7 +12,7 @@ Implementation commit：`f1b12530e6f37c74d8447e1b189c2ab4d055c23b`。
 
 Review result：`STATUS: CLEAR_WITH_P2`；无 P0 / P1。P2 为 `git diff --check` 记录偏旧，已回填为最终状态。
 
-Checkpoint commit：待回填。
+Checkpoint commit：`e8fb35a24a5573979173f51accf2a41a6b9b216d`。
 
 ## 1. Scope
 
