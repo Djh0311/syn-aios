@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a34-workflow-control-action-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a34-workflow-control-action-fi
 
 Planning baseline commit：`d509004`
 
-Implementation commit：待回填
+Implementation commit：`994a207d38d7b1213240924f068e235694a64dff`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：待回填
+Checkpoint commit：`02f847d6660bc075e570e04259ac55f9c150d248`
 
 ## 1. 完成内容
 
@@ -121,12 +121,7 @@ tauri_command_total_increased: current 97 / baseline 96
 
 ## 6. 下一步建议
 
-复核已通过，下一步：
-
-1. 提交 implementation commit。
-2. 同步 checkpoint 入口文档到 R4-A34 完成、下一步 R4-A35。
-3. 提交 checkpoint commit。
-4. 回填 commit hashes 并提交 hash backfill。
+复核已通过，implementation commit、checkpoint 入口同步、checkpoint commit 和 hash 回填均已完成。
 
 如果后续继续 R4-A35：
 
