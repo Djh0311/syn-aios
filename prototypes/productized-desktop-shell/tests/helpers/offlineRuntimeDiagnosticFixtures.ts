@@ -1,4 +1,9 @@
-import type { DiagnosticSummary, RuntimeLogStoreV1, RuntimeSessionAttention } from "../../src/lib/types";
+import type {
+  DiagnosticSummary,
+  RuntimeLogStoreV1,
+  RuntimeSessionAttention,
+  SessionRunStatusSummary,
+} from "../../src/lib/types";
 
 export function diagnosticSummaryFixture(): DiagnosticSummary {
   return {
@@ -153,6 +158,25 @@ export function runtimeAttentionFixtures(sessionId: string): RuntimeSessionAtten
     runtimeAttentionFixture(sessionId, "readback-unavailable", "readback_unavailable", "warning", "readback_unavailable", "not_attempted_stub", true, false),
     runtimeAttentionFixture(sessionId, "readback-failed", "readback_failed", "needs_user", "readback_failed", "readback_parser_failed", true, true),
   ];
+}
+
+export function runtimeSessionSummaryFixture(sessionId: string, attention: RuntimeSessionAttention[]): SessionRunStatusSummary {
+  return {
+    session_id: sessionId,
+    adapter_id: "codex-local",
+    project_id: "project:offline",
+    workflow_id: "workflow:offline",
+    node_id: "node:offline",
+    current_status: "blocked_by_guard",
+    current_status_label: "边界保护阻断",
+    attention_count: attention.length,
+    blocking_count: 2,
+    needs_user_count: 3,
+    readback_status: "readback_unavailable",
+    latest_attention_ids: attention.slice(0, 4).map((item) => item.attention_id),
+    source_refs: attention.flatMap((item) => item.source_refs).slice(0, 4),
+    warnings: [],
+  };
 }
 
 export function runtimeAttentionFixture(

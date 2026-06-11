@@ -27,8 +27,15 @@ import {
 import {
   runtimeAttentionFixture,
   runtimeAttentionFixtures,
+  runtimeSessionSummaryFixture,
   runtimeLogStoreFixture,
 } from "./helpers/offlineRuntimeDiagnosticFixtures";
+import {
+  expectedOfflineRoleDispatchAction,
+  missingOfflineDispatchBlock,
+  missingOfflineRoleDispatchFormDataFixture,
+  offlineRoleDispatchFormDataFixture,
+} from "./helpers/offlineRoleOrchestrationFixtures";
 import { workbenchBaseFixtures } from "./helpers/offlineWorkbenchBaseFixtures";
 import { projectWorkflowStateFixtures } from "./helpers/offlineProjectWorkflowStateFixtures";
 import { derivedWorkflowStateFixtures } from "./helpers/offlineDerivedWorkflowFixtures";
@@ -134,7 +141,6 @@ import type {
   PendingAction,
   ProjectConsultationProposalStoreV1,
   RuntimeSessionAttention,
-  SessionRunStatusSummary,
   WorkbenchSnapshot,
   WorkflowStateSnapshot,
 } from "../src/lib/types";
@@ -1773,24 +1779,7 @@ function runH2RealResumeAuthorizationReadinessScenario() {
 
 function runRuntimeSessionAttentionScenario() {
   const attention = runtimeAttentionFixtures(session.thread_id);
-  const summaries: SessionRunStatusSummary[] = [
-    {
-      session_id: session.thread_id,
-      adapter_id: "codex-local",
-      project_id: "project:offline",
-      workflow_id: "workflow:offline",
-      node_id: "node:offline",
-      current_status: "blocked_by_guard",
-      current_status_label: "边界保护阻断",
-      attention_count: attention.length,
-      blocking_count: 2,
-      needs_user_count: 3,
-      readback_status: "readback_unavailable",
-      latest_attention_ids: attention.slice(0, 4).map((item) => item.attention_id),
-      source_refs: attention.flatMap((item) => item.source_refs).slice(0, 4),
-      warnings: [],
-    },
-  ];
+  const summaries = [runtimeSessionSummaryFixture(session.thread_id, attention)];
   const runtimeSnapshot: WorkbenchSnapshot = {
     ...snapshot,
     runtime_session_attention: attention,
@@ -2782,7 +2771,7 @@ function runOfflineRoleOrchestrationScenario() {
   assert(parsed.proposal.task_title === "README 极小修改验证", "默认派发块任务名解析不匹配");
   assert(parsed.proposal.required_return.includes("验证结果"), "默认派发块缺少验证结果回传要求");
 
-  const missing = parseOfflineDispatchBlock("派发给：开发线\n任务名：缺字段测试", project.project_root);
+  const missing = parseOfflineDispatchBlock(missingOfflineDispatchBlock, project.project_root);
   assert(!missing.ok, "缺字段派发块不应解析成功");
   for (const expectedMissing of ["目标", "执行目录", "允许读取", "允许写入", "禁止事项", "验收标准", "超时", "回传要求"]) {
     assert(missing.missing.includes(expectedMissing), `缺字段派发块没有提示 ${expectedMissing}`);
@@ -2791,18 +2780,7 @@ function runOfflineRoleOrchestrationScenario() {
   const action = buildOfflineRoleDispatchAction(project.project_root, "work-item:offline:001", parsed.proposal);
   assertDeepEqual(
     action,
-    {
-      kind: "offline-role-dispatch",
-      label: "离线派发给开发线",
-      path: project.project_root,
-      source: "索引内项目路径",
-      boundary:
-        "只把角色派发块写入工作台自己的 workflow-state.v0.json；不启动 Codex、不执行 codex exec resume、不发送消息、不写 /Users/yoyi/.codex、不运行运行器。",
-      offlineRoleDispatch: {
-        ...parsed.proposal,
-        work_item_id: "work-item:offline:001",
-      },
-    },
+    expectedOfflineRoleDispatchAction(project.project_root, "work-item:offline:001", parsed.proposal),
     "离线角色派发 action 不匹配",
   );
   const actionDialogText = visibleText(
@@ -2934,13 +2912,7 @@ function runOfflineRoleOrchestrationScenario() {
   const submitOfflineDispatch = offlineForm.props?.onSubmit;
   assert(typeof submitOfflineDispatch === "function", "离线角色派发表单没有 onSubmit");
   const originalFormData = globalThis.FormData;
-  globalThis.FormData = class {
-    get(name: string) {
-      if (name === "dispatch-block") return defaultOfflineDispatchBlock;
-      if (name === "director-request") return "请总指导拆给开发线。";
-      return null;
-    }
-  } as unknown as typeof FormData;
+  globalThis.FormData = offlineRoleDispatchFormDataFixture(defaultOfflineDispatchBlock);
   try {
     submitOfflineDispatch({
       preventDefault() {},
@@ -2952,12 +2924,7 @@ function runOfflineRoleOrchestrationScenario() {
   assertDeepEqual(capturedAction, action, "离线角色派发表单提交 action 不匹配");
 
   capturedAction = null;
-  globalThis.FormData = class {
-    get(name: string) {
-      if (name === "dispatch-block") return "派发给：开发线\n任务名：缺字段测试";
-      return null;
-    }
-  } as unknown as typeof FormData;
+  globalThis.FormData = missingOfflineRoleDispatchFormDataFixture();
   try {
     submitOfflineDispatch({
       preventDefault() {},
