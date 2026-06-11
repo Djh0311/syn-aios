@@ -76,6 +76,11 @@ import {
   rightDetailPanelCommonPropsFixture,
   rightRailPanelSummaryTitles,
 } from "./helpers/offlineRightRailFixtures";
+import {
+  shellDerivedWorkflowExpectedTexts,
+  shellProposalDialogExpectedTexts,
+  shellScenarioTextFixtures,
+} from "./helpers/offlineShellScenarioTextFixtures";
 import { stageJRunQueueFixtures } from "./helpers/offlineRunQueueFixtures";
 import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
 import {
@@ -2931,35 +2936,27 @@ function runOfflineRoleOrchestrationScenario() {
 }
 
 function runShellScenario() {
+  const shellTexts = shellScenarioTextFixtures;
   const visited: string[] = [];
   const home = <HomeView snapshot={snapshot} onNavigate={(view) => visited.push(view)} />;
   const homeText = visibleText(home);
-  for (const expectedText of ["项目", "智能体", "Skill", "Harness", "运行中工作流", "不是真实使用事件"]) {
+  for (const expectedText of shellTexts.homeExpectedTexts) {
     assert(homeText.includes(expectedText), `首页缺少 ${expectedText}`);
   }
   assertDeepEqual(
     primaryNavItems.map((item) => item.label),
-    ["项目", "智能体", "想法箱", "知识库", "记忆层", "Skill", "Harness", "运行中工作流"],
+    shellTexts.primaryNavLabels,
     "普通主导航应暴露产品级工作对象和素材/记忆入口",
   );
   assertDeepEqual(
     primaryNavItems.map((item) => [item.key, item.glyph]),
-    [
-      ["projects", "▤"],
-      ["agents", "◍"],
-      ["ideas", "✎"],
-      ["knowledge", "▢"],
-      ["memory", "◐"],
-      ["skills", "✦"],
-      ["harness", "⬡"],
-      ["runningWorkflows", "≋"],
-    ],
+    shellTexts.primaryNavGlyphs,
     "左侧主导航应沿用 inkwash-full.html 的水墨 rail 图标语言",
   );
   for (const internalLabel of devNavItems.map((item) => item.label)) {
     assert(!primaryNavItems.some((item) => item.label === internalLabel), `普通主导航不应暴露开发者入口：${internalLabel}`);
   }
-  for (const forbiddenText of ["系统", "Skills 1", "Plugins 1"]) {
+  for (const forbiddenText of shellTexts.homeForbiddenTexts) {
     assert(!homeText.includes(forbiddenText), `首页不应显示数量：${forbiddenText}`);
   }
 
@@ -2973,22 +2970,10 @@ function runShellScenario() {
       onNavigate={(view) => visited.push(view)}
     />,
   );
-  for (const expectedText of [
-    "开发者",
-    "建议方案",
-    "实验画布",
-    "模型/凭据",
-    "适配器",
-    "供应方",
-    "边车文件",
-    "原始状态",
-    "诊断",
-    "不读取凭据",
-    "不从设置页触发",
-  ]) {
+  for (const expectedText of shellTexts.settingsExpectedTexts) {
     assert(settingsText.includes(expectedText), `设置开发者区缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["执行 codex", "恢复会话", "密钥值", "令牌值", "读取并展示"]) {
+  for (const forbiddenText of shellTexts.settingsForbiddenTexts) {
     assert(!settingsText.includes(forbiddenText), `设置开发者区不应出现执行或凭据读取文案：${forbiddenText}`);
   }
 
@@ -3002,7 +2987,7 @@ function runShellScenario() {
       onNavigate={(view) => visited.push(view)}
     />,
   );
-  for (const expectedText of ["运行中工作流", "只显示运行、等待、复核、重试和读回异常摘要", "读回异常", "未知 / 不可用不显示成 0 条结果"]) {
+  for (const expectedText of shellTexts.runningWorkflowsExpectedTexts) {
     assert(runningWorkflowsText.includes(expectedText), `运行中工作流页缺少 ${expectedText}`);
   }
 
@@ -3026,15 +3011,7 @@ function runShellScenario() {
       onRequestAction={captureAction}
     />,
   );
-  for (const expectedText of [
-    "Codex 会话中心",
-    "会 话 层",
-    "当前会话",
-    "Offline interaction fixture",
-    "重新读取",
-    "定位回放记录",
-    "OpenClaw",
-  ]) {
+  for (const expectedText of shellTexts.agentSessionExpectedTexts) {
     assert(agentText.includes(expectedText), `Agent 页缺少 ${expectedText}`);
   }
   assert(!agentText.includes("启动 OpenClaw"), "未接入 agent 不应出现操作能力");
@@ -3050,45 +3027,7 @@ function runShellScenario() {
   );
   const agentViewText = visibleText(agentViewNode);
   const agentViewMarkup = renderToStaticMarkup(agentViewNode);
-  for (const expectedText of [
-    "智能体",
-    "项目",
-    "对话",
-    "可以开始对话",
-    "新建对话",
-    "只生成预览，不直接创建",
-    "任务输入",
-    "生成发送预览",
-    "Offline interaction fixture",
-    "offline-model",
-    "codex-workbench",
-    "开发者详情",
-    "适配器能力",
-    "Codex",
-    "codex-local",
-    "会话索引读取",
-    "会话正文只读",
-    "工作流节点绑定",
-    "安全测试派发",
-    "用户审核业务派发",
-    "四角色工作流机器",
-    "权限结论记录",
-    "运行器资源索引",
-    "未实现适配器清单",
-    "openclaw",
-    "claude-code",
-    "OpenCode-like",
-    "计划中",
-    "当前不可执行",
-    "凭据：未配置",
-    "模型：未验证",
-    "已实现动作：无",
-    "planned_adapter_not_connected",
-    "no_execution_button",
-    "backend_read_model",
-    "adapter_descriptor_is_backend_read_model_only",
-    "does_not_change_codex_execution_semantics",
-  ]) {
+  for (const expectedText of shellTexts.agentViewExpectedTexts) {
     assert(agentViewText.includes(expectedText), `AgentView 新方向缺少 ${expectedText}`);
   }
   assert(agentViewMarkup.includes("agent-conversation-bar"), "AgentView 新方向应有项目 / 对话选择条");
@@ -3106,19 +3045,17 @@ function runShellScenario() {
     />,
   );
   assert(fallbackAgentViewText.includes("adapter_descriptor_frontend_fallback_used"), "AgentView 没有后端 descriptor 时应保留前端 fallback");
-  assert(!agentViewText.includes("请进入对应项目查看具体会话与正文"), "智能体页不应再把会话正文导回项目页");
-  assert(!agentViewText.includes("选 择 智 能 体"), "智能体页不应再强制先选软件层");
-  assert(!agentViewText.includes("启动 OpenClaw"), "未实现 OpenClaw 不应出现启动按钮");
-  assert(!agentViewText.includes("绑定 Claude"), "未实现 Claude Code 不应出现绑定按钮");
-  assert(!agentViewText.includes("凭据已配置"), "未实现 adapter 不能显示凭据已配置");
+  for (const forbiddenText of shellTexts.agentViewForbiddenTexts) {
+    assert(!agentViewText.includes(forbiddenText), `AgentView 新方向不应出现 ${forbiddenText}`);
+  }
 
   const projectText = visibleText(<ProjectDetail project={project} sessions={[session]} onRequestAction={captureAction} />);
-  for (const expectedText of ["总览", "工作流", "交接", "资源", "设置", "项目概览", "智能体入口", "会话列表和对话界面已放到智能体页", "缺少项目默认 workflow"]) {
+  for (const expectedText of shellTexts.projectOverviewExpectedTexts) {
     assert(projectText.includes(expectedText), `项目工作流缺少 ${expectedText}`);
   }
-  assert(!projectText.includes("任务包"), "项目工作台主导航不应出现任务包");
-  assert(!projectText.includes("Codex 角色编排"), "工作流页不应混入离线角色编排面板");
-  assert(!projectText.includes("任务包 Markdown 预览"), "没有 workflow 时任务包字段区不应占据主流程中心");
+  for (const forbiddenText of shellTexts.projectOverviewForbiddenTexts) {
+    assert(!projectText.includes(forbiddenText), `项目工作台主导航不应出现 ${forbiddenText}`);
+  }
 
   const projectAgentButton = findButtonByText(
     <ProjectDetail project={project} sessions={[session]} onRequestAction={captureAction} />,
@@ -3147,18 +3084,11 @@ function runShellScenario() {
       onRequestAction={captureAction}
     />,
   );
-  for (const expectedText of [
-    "项目内 Agent 会话",
-    "project_root 等于当前项目",
-    "索引推断",
-    "Offline interaction fixture",
-    "codex-workbench",
-    "重新读取",
-  ]) {
+  for (const expectedText of shellTexts.projectAgentSessionExpectedTexts) {
     assert(projectAgentSessionText.includes(expectedText), `项目 Agent 会话面板缺少 ${expectedText}`);
   }
   assert(!projectAgentSessionText.includes(otherProjectSession.title), "项目 Agent 会话面板不应显示其他项目会话");
-  for (const forbiddenText of ["发送消息", "新建会话", "codex resume", "删除会话", "移动会话"]) {
+  for (const forbiddenText of shellTexts.projectAgentSessionForbiddenTexts) {
     assert(!projectAgentSessionText.includes(forbiddenText), `项目 Agent 会话面板不应出现危险入口：${forbiddenText}`);
   }
 
@@ -3181,7 +3111,7 @@ function runShellScenario() {
       onRequestAction={captureAction}
     />,
   );
-  for (const expectedText of ["没有索引推断关联的 Codex 会话", "当前项目没有索引推断关联的 Codex 会话。"]) {
+  for (const expectedText of shellTexts.emptyProjectAgentSessionExpectedTexts) {
     assert(emptyProjectAgentSessionText.includes(expectedText), `空项目 Agent 会话面板缺少 ${expectedText}`);
   }
 
@@ -3196,13 +3126,7 @@ function runShellScenario() {
     />
   );
   const workflowProjectText = visibleText(workflowProject);
-  for (const expectedText of [
-    "项目工作流草稿",
-    "当前项目还没有本地工作流草稿",
-    "创建默认工作流草稿",
-    "请先创建默认工作流草稿，再登记任务包草稿",
-    "不会派发给真实 Codex 会话",
-  ]) {
+  for (const expectedText of shellTexts.workflowProjectDraftExpectedTexts) {
     assert(workflowProjectText.includes(expectedText), `项目工作流草稿区缺少 ${expectedText}`);
   }
   const bootstrapButton = findButtonByText(workflowProject, "创建默认工作流草稿");
@@ -3228,7 +3152,7 @@ function runShellScenario() {
     />
   );
   const bootstrapDialogText = visibleText(bootstrapDialog);
-  for (const expectedText of ["目标路径", project.project_root, "写入边界", "默认节点", "默认边", "不写 Codex 状态库"]) {
+  for (const expectedText of [project.project_root, ...shellTexts.bootstrapDialogExpectedTexts]) {
     assert(bootstrapDialogText.includes(expectedText), `创建默认工作流确认弹层缺少 ${expectedText}`);
   }
   const cancelBootstrap = findButtonByText(bootstrapDialog, "取消");
@@ -3249,22 +3173,7 @@ function runShellScenario() {
     />
   );
   const workflowProjectWithDraftText = visibleText(workflowProjectWithDraft);
-  for (const expectedText of [
-    "当前项目已有本地工作流草稿",
-    "任务草稿",
-    "2 个",
-    "创建任务包草稿",
-    "Codex 开发线",
-    "已有任务草稿",
-    "第二个任务草稿",
-    "task_package",
-    "当前选中",
-    "选择",
-    "任务包 Markdown 预览",
-    "预览，不是已派发任务包",
-    "有任务草稿时可以点“预览 Markdown”查看只读文本",
-    "编辑字段表单会绑定当前选中的任务草稿",
-  ]) {
+  for (const expectedText of shellTexts.workflowProjectWithDraftExpectedTexts) {
     assert(workflowProjectWithDraftText.includes(expectedText), `任务草稿区缺少 ${expectedText}`);
   }
 
@@ -3280,87 +3189,10 @@ function runShellScenario() {
     />
   );
   const workflowCanvasWithDraftText = visibleText(workflowCanvasWithDraft);
-  for (const expectedText of [
-    "项目工作流主入口",
-    "waiting_for_permission",
-    "6 nodes",
-    "1 pending",
-    "项目目标",
-    "总指导",
-    "开发线",
-    "验证线",
-    "回收线",
-    "权限",
-    "节点详情",
-    "节点状态",
-    "当前任务",
-    "会话绑定",
-    "派发摘要",
-    "权限请求",
-    "最近审计",
-    "当前工作项",
-    "负责角色",
-    "当前位置",
-    "派发位置",
-    "Codex 开发线",
-    "下一步：标记执行中",
-    "节点会话绑定",
-    "派发位置已有绑定",
-    "Offline interaction fixture",
-    "项目归属来源：index_inferred",
-    "读取状态：可读取",
-    "打开会话",
-    "解除绑定",
-    "派发指令",
-    "旧安全派发已封存",
-    "请只回复这一句：WORKFLOW_NODE_DISPATCH_OK_2026_05_29",
-    "旧入口已封存",
-    "执行目录：/Users/yoyi",
-    "沙箱模式：workspace-write",
-    "允许写入根目录：/Users/yoyi/codex-workflow-mario-test",
-    "旧业务派发已封存",
-    "dispatch:offline:001",
-    "事件：12 / 命中：1",
-    "可控执行协议",
-    "重试",
-    "1/0",
-    "超时",
-    "900 秒",
-    "用户审核业务指令",
-    "用户审核业务指令夹具",
-    "验证协议预览，不执行真实业务任务。",
-    "确认指令边界",
-    "权限请求队列",
-    "待确认 / write_workflow_state",
-    "需要用户确认是否允许写协议字段。",
-    "项目咨询方案草案",
-    "待用户确认；步骤 3 / 风险 1 / 停止条件 1",
-    "确认任务包、角色、读写范围、工具和停止条件后，再进入全局复核。",
-    "确认方案范围",
-    "要求修改",
-    "拒绝方案",
-    "C2 只记录方案草案和用户决定",
-    "方案授权摘要",
-    "授权有效；角色 1 / agent 1 / 读 1 / 写 1 / 工具 1 / 检查 0 / 停止条件 1",
-    "plan-authorizations.v1.json / rev 4",
-    "plan-auth:offline:active",
-    "blocked / 写入范围超出方案授权",
-    "audit:auto-dispatch-scope-checked:offline",
-    "本摘要只读",
-    "本轮未执行真实工作者",
-    "批准",
-    "拒绝",
-    "失败 / 重试 / 超时 / 取消",
-    "第 1 次 / 失败",
-    "离线夹具失败原因。",
-    "第 2 次 / 已超时",
-    "离线夹具超时。",
-    "最近审计事件",
-    "task_draft_created",
-  ]) {
+  for (const expectedText of shellTexts.workflowCanvasWithDraftExpectedTexts) {
     assert(workflowCanvasWithDraftText.includes(expectedText), `工作流画布缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["组件状态样例", "后续画布开发基准", "空画布", "四角色", "工作者已执行", "工作者已启动", "已自动执行"]) {
+  for (const forbiddenText of shellTexts.workflowCanvasWithDraftForbiddenTexts) {
     assert(!workflowCanvasWithDraftText.includes(forbiddenText), `项目工作流页不应显示开发样例文案：${forbiddenText}`);
   }
   const proposalAction = buildProjectConsultationProposalDecisionAction({
@@ -3384,21 +3216,7 @@ function runShellScenario() {
   const proposalDialogText = visibleText(
     <PermissionDialog action={proposalAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of [
-    "确认方案范围",
-    "目标摘要",
-    "允许读取",
-    project.project_root,
-    "允许写入",
-    "/offline-fixture/projects/codex-workbench/src",
-    "工具 / 检查",
-    "read_file / npm run typecheck",
-    "停止条件",
-    "超出读写范围或需要权限升级时必须停下。",
-    "待全局复核",
-    "不会启动真实工作者",
-    "不写 /Users/yoyi/.codex",
-  ]) {
+  for (const expectedText of shellProposalDialogExpectedTexts(project.project_root)) {
     assert(proposalDialogText.includes(expectedText), `项目咨询方案确认弹层缺少 ${expectedText}`);
   }
 
@@ -3415,19 +3233,10 @@ function runShellScenario() {
     />
   );
   const workflowCanvasWithConfirmedProposalText = visibleText(workflowCanvasWithConfirmedProposal);
-  for (const expectedText of [
-    "全局边界复核",
-    "方案已由用户确认；等待全局主管复核",
-    "待全局复核",
-    "plan-auth:offline:pending-global",
-    "批准并生效",
-    "要求修改",
-    "阻断方案",
-    "C3 只记录全局边界复核和授权状态；不会启动工作者",
-  ]) {
+  for (const expectedText of shellTexts.confirmedProposalExpectedTexts) {
     assert(workflowCanvasWithConfirmedProposalText.includes(expectedText), `全局边界复核卡片缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["工作者已执行", "自动派发已开始"]) {
+  for (const forbiddenText of shellTexts.confirmedProposalForbiddenTexts) {
     assert(!workflowCanvasWithConfirmedProposalText.includes(forbiddenText), `全局边界复核卡片不应显示 ${forbiddenText}`);
   }
   const globalReviewAction = buildGlobalBoundaryReviewAction({
@@ -3447,21 +3256,7 @@ function runShellScenario() {
   const globalReviewDialogText = visibleText(
     <PermissionDialog action={globalReviewAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of [
-    "批准并生效",
-    "复核结论",
-    "复核摘要",
-    "授权对象",
-    "方案标题",
-    "目标摘要",
-    "读写范围",
-    "工具 / 检查",
-    "停止条件",
-    "无阻断发现",
-    "只让授权有效",
-    "仍未派发工作者",
-    "不写 /Users/yoyi/.codex",
-  ]) {
+  for (const expectedText of shellTexts.globalReviewDialogExpectedTexts) {
     assert(globalReviewDialogText.includes(expectedText), `全局边界复核确认弹层缺少 ${expectedText}`);
   }
 
@@ -3483,26 +3278,10 @@ function runShellScenario() {
     />
   );
   const projectDirectorTaskPlanCardText = visibleText(projectDirectorTaskPlanCard);
-  for (const expectedText of [
-    "项目主管拆任务",
-    "授权范围内可准备",
-    "planned",
-    "prepared",
-    "needs_binding",
-    "阻断",
-    "任务包记忆快照",
-    "C4 准备态子任务",
-    "授权检查通过",
-    "生成拆任务草案",
-    "准备授权范围内派发",
-    "只创建准备记录",
-    "不启动工作者",
-    "不执行 codex exec resume",
-    "不写 /Users/yoyi/.codex",
-  ]) {
+  for (const expectedText of shellTexts.projectDirectorTaskPlanCardExpectedTexts) {
     assert(projectDirectorTaskPlanCardText.includes(expectedText), `C4 项目主管卡片缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["工作者已执行", "自动派发已开始", "Codex 已收到任务"]) {
+  for (const forbiddenText of shellTexts.projectDirectorTaskPlanCardForbiddenTexts) {
     assert(!projectDirectorTaskPlanCardText.includes(forbiddenText), `C4 项目主管卡片不应出现 ${forbiddenText}`);
   }
   const prepareAuthorizedButton = findButtonByText(projectDirectorTaskPlanCard, "准备授权范围内派发");
@@ -3520,25 +3299,10 @@ function runShellScenario() {
   const prepareAuthorizedDialogText = visibleText(
     <PermissionDialog action={capturedAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of [
-    "准备授权范围内派发",
-    "授权对象",
-    "plan-auth:offline:active",
-    "方案对象",
-    "proposal:offline:c4:confirmed",
-    "计划摘要",
-    "任务计数",
-    "planned 1 / prepared 0 / blocked 0 / needs_binding 0",
-    "记忆快照",
-    "只创建准备记录",
-    "不启动工作者",
-    "不执行 codex exec resume",
-    "不写 /Users/yoyi/.codex",
-    "仍未执行工作者",
-  ]) {
+  for (const expectedText of shellTexts.prepareAuthorizedDialogExpectedTexts) {
     assert(prepareAuthorizedDialogText.includes(expectedText), `C4 准备派发确认弹层缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["工作者已执行", "自动派发已开始", "Codex 已收到任务"]) {
+  for (const forbiddenText of shellTexts.prepareAuthorizedDialogForbiddenTexts) {
     assert(!prepareAuthorizedDialogText.includes(forbiddenText), `C4 准备派发确认弹层不应出现 ${forbiddenText}`);
   }
 
@@ -3553,60 +3317,7 @@ function runShellScenario() {
     />
   );
   const workflowProjectWithDerivedText = visibleText(workflowProjectWithDerived);
-  for (const expectedText of [
-    "项目工作流主入口",
-    "candidates",
-    "黑板候选",
-    "工作流详情摘要",
-    "任务包",
-    "账本",
-    "子汇报",
-    "审查",
-    "异常",
-    "完成闸门",
-    "任务包、账本、状态机、子汇报和黑板候选只在详情侧展示",
-    "画布状态原因",
-    "attention",
-    "用户摘要",
-    "项目主管信息",
-    "技术详情",
-    "为什么停下",
-    "谁能处理",
-    "下一步",
-    "来源引用、审计、证据、交接",
-    "需确认弹层",
-    "项目工作流画布",
-    "工作流状态派生读模型",
-    "方案授权 / 控制核心 / 权限 / 审计",
-    "实验画布不会写入本项目事实",
-    "编辑 / 布局边界",
-    "仅视图布局",
-    "未保存为事实",
-    "React Flow 仅负责渲染",
-    "需要生成提案",
-    "需要确认弹层",
-    "需要控制核心",
-    "需要审计",
-    "读回摘要",
-    "任务记忆包摘要",
-    "节点详情",
-    "权限请求",
-    "candidate_pending_control_core",
-    "运行前检查",
-    "只阻止运行，不阻止查看草稿",
-    "当前运行器",
-    "只读展示；不会自动运行运行器",
-    "模型",
-    "missing: model_id",
-    "允许读取",
-    project.project_root,
-    "允许写入",
-    "missing: allowed_write_scope",
-    "验收标准",
-    "missing: acceptance_criteria",
-    "acceptance_criteria_met",
-    "derived_from_workflow_state_v0_missing_fields_are_not_guessed",
-  ]) {
+  for (const expectedText of shellDerivedWorkflowExpectedTexts(project.project_root)) {
     assert(workflowProjectWithDerivedText.includes(expectedText), `派生工作流展示缺少 ${expectedText}`);
   }
   const workflowProjectWithDerivedMarkup = renderToStaticMarkup(workflowProjectWithDerived);
@@ -3619,33 +3330,19 @@ function runShellScenario() {
     "候选治理仍应保留为项目画布侧栏详情卡",
   );
   for (const forbiddenText of [
-    "拖拽已保存",
-    "连线已保存",
-    "节点已删除",
-    "已修改 workflow 事实",
-    "画布编辑器已完成",
+    ...shellTexts.derivedWorkflowForbiddenTexts,
     ...canvasBoundaryForbiddenPhrases,
   ]) {
     assert(!workflowProjectWithDerivedText.includes(forbiddenText), `F3/F4 项目画布不应出现误导文案 ${forbiddenText}`);
   }
 
   const blockedRunCheckText = visibleText(<WorkflowRunCheckDetails runCheck={blockedWorkflowRunCheck} />);
-  for (const expectedText of [
-    "缺模型；系统不会自动选择模型。",
-    "没有读范围；不能运行。",
-    "会写文件但没有写范围；不能运行。",
-    "节点没有声明工具；工具白名单为空。",
-    "模型",
-    "阻断",
-    "读取范围",
-    "工具白名单",
-    "警告",
-  ]) {
+  for (const expectedText of shellTexts.blockedRunCheckExpectedTexts) {
     assert(blockedRunCheckText.includes(expectedText), `blocked 运行前检查展示缺少 ${expectedText}`);
   }
 
   const runnableRunCheckText = visibleText(<WorkflowRunCheckDetails runCheck={runnableWorkflowRunCheck} />);
-  for (const expectedText of ["模型", "通过", "任务包已显式指定模型。", "记忆引用", "任务包没有声明需要记忆引用。"]) {
+  for (const expectedText of shellTexts.runnableRunCheckExpectedTexts) {
     assert(runnableRunCheckText.includes(expectedText), `runnable 运行前检查展示缺少 ${expectedText}`);
   }
   assert(!runnableRunCheckText.includes("自动选择模型"), "runnable 检查不应出现自动补模型文案");
@@ -3661,16 +3358,7 @@ function runShellScenario() {
       }}
     />,
   );
-  for (const expectedText of [
-    "项 目 入 口",
-    "方块入口",
-    "codex-workbench",
-    "最近更新",
-    "会话",
-    "工作流",
-    "文件",
-    "警告",
-  ]) {
+  for (const expectedText of shellTexts.projectsViewExpectedTexts) {
     assert(projectsViewText.includes(expectedText), `ProjectsView 项目入口缺少 ${expectedText}`);
   }
   assert(!projectsViewText.includes("节点会话绑定"), "ProjectsView 默认入口不应直接进入项目工作台");
@@ -3722,44 +3410,15 @@ function runShellScenario() {
   const instructionDialogText = visibleText(
     <PermissionDialog action={capturedAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of [
-    "确认用户审核业务指令边界",
-    "指令摘要",
-    "用户审核业务指令夹具",
-    "审核状态",
-    "reviewed",
-    "不执行真实业务任务",
-    "不启动 Codex",
-    "不恢复会话",
-    "不发送消息",
-    "不写 /Users/yoyi/.codex",
-  ]) {
+  for (const expectedText of shellTexts.instructionDialogExpectedTexts) {
     assert(instructionDialogText.includes(expectedText), `用户审核业务指令确认弹层缺少 ${expectedText}`);
   }
 
   const c5PanelText = visibleText(workflowControlCardWithDraft);
-  for (const expectedText of [
-    "C5 工作者汇报 / 过程事实",
-    "待主管确认",
-    "汇报数量",
-    "待确认事实",
-    "已确认事实",
-    "读回",
-    "读取成功",
-    "权限",
-    "等待权限",
-    "失败",
-    "超时",
-    "离线桩结果：已接收任务，没有执行真实 Codex 会话。",
-    "方向风险",
-    "记录汇报",
-    "确认为过程事实",
-    "要求返工",
-    "阻断并上报",
-  ]) {
+  for (const expectedText of shellTexts.c5PanelExpectedTexts) {
     assert(c5PanelText.includes(expectedText), `C5 过程事实面板缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["工作者汇报已成为正式事实", "系统已记住", "最终结果已通过", "自动化工作流已完成"]) {
+  for (const forbiddenText of shellTexts.c5PanelForbiddenTexts) {
     assert(!c5PanelText.includes(forbiddenText), `C5 面板不应显示 ${forbiddenText}`);
   }
 
@@ -3785,27 +3444,10 @@ function runShellScenario() {
     />
   );
   const c6PanelText = visibleText(workflowC6ControlCard);
-  for (const expectedText of [
-    "C6 结果 / 阶段验收",
-    "阶段 C 验收门禁已通过",
-    "最终复核",
-    "最终复核通过",
-    "用户决定",
-    "用户已接受",
-    "阶段门禁",
-    "过程事实",
-    "全局主管已完成最终复核",
-    "用户已查看结果并作出决定",
-    "阶段 C 验收门禁已通过",
-    "仍不代表中间版本整体完成",
-    "真实工作者 / Codex 执行仍需单独授权任务包。",
-    "记录最终复核通过",
-    "记录用户接受",
-    "生成验收摘要",
-  ]) {
+  for (const expectedText of shellTexts.c6PanelExpectedTexts) {
     assert(c6PanelText.includes(expectedText), `C6 结果摘要面板缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["中间版本已完成", "完整记忆系统已完成", "工作者汇报已成为正式事实", "系统已记住", "真实工作者已执行"]) {
+  for (const forbiddenText of shellTexts.c6PanelForbiddenTexts) {
     assert(!c6PanelText.includes(forbiddenText), `C6 面板不应显示越界文案：${forbiddenText}`);
   }
 
@@ -3826,7 +3468,7 @@ function runShellScenario() {
   const globalFinalReviewDialogText = visibleText(
     <PermissionDialog action={globalFinalReviewAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of ["记录全局最终复核", "复核结论", "最终复核通过", "过程事实", "不代表用户已接受", "不写正式记忆", "不代表中间版本整体完成"]) {
+  for (const expectedText of shellTexts.globalFinalReviewDialogExpectedTexts) {
     assert(globalFinalReviewDialogText.includes(expectedText), `C6 全局最终复核确认弹层缺少 ${expectedText}`);
   }
 
@@ -3845,7 +3487,7 @@ function runShellScenario() {
   const userDecisionDialogText = visibleText(
     <PermissionDialog action={userDecisionAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of ["记录用户结果决定", "用户决定", "用户已接受", "关联复核", "只记录本次结果决定", "不代表未来任务默认接受", "不写正式记忆"]) {
+  for (const expectedText of shellTexts.userDecisionDialogExpectedTexts) {
     assert(userDecisionDialogText.includes(expectedText), `C6 用户结果决定确认弹层缺少 ${expectedText}`);
   }
 
@@ -3863,10 +3505,10 @@ function runShellScenario() {
   const stageSummaryDialogText = visibleText(
     <PermissionDialog action={stageSummaryAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of ["生成阶段 C 验收摘要", "产物", "审计事件", "生成门禁摘要和后置项", "不执行真实工作者", "不写正式记忆", "不代表中间版本整体完成"]) {
+  for (const expectedText of shellTexts.stageSummaryDialogExpectedTexts) {
     assert(stageSummaryDialogText.includes(expectedText), `C6 阶段 C 验收摘要确认弹层缺少 ${expectedText}`);
   }
-  for (const forbiddenText of ["中间版本已完成", "完整记忆系统已完成", "工作者汇报已成为正式事实", "系统已记住", "真实工作者已执行"]) {
+  for (const forbiddenText of shellTexts.c6PanelForbiddenTexts) {
     assert(!globalFinalReviewDialogText.includes(forbiddenText), `C6 全局最终复核弹层不应显示越界文案：${forbiddenText}`);
     assert(!userDecisionDialogText.includes(forbiddenText), `C6 用户结果决定弹层不应显示越界文案：${forbiddenText}`);
     assert(!stageSummaryDialogText.includes(forbiddenText), `C6 阶段 C 验收摘要弹层不应显示越界文案：${forbiddenText}`);
@@ -3889,7 +3531,7 @@ function runShellScenario() {
   const workerReportDialogText = visibleText(
     <PermissionDialog action={workerReportAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of ["记录工作者结构化汇报", "汇报摘要", "证据", "只记录工作者汇报", "不把汇报写成正式事实或正式记忆", "不启动 Codex"]) {
+  for (const expectedText of shellTexts.workerReportDialogExpectedTexts) {
     assert(workerReportDialogText.includes(expectedText), `C5 工作者汇报确认弹层缺少 ${expectedText}`);
   }
 
@@ -3910,7 +3552,7 @@ function runShellScenario() {
   const processFactDialogText = visibleText(
     <PermissionDialog action={processFactAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of ["确认为过程事实", "确认事实", "确认后只记录过程事实观察", "不写正式记忆", "不完成最终验收"]) {
+  for (const expectedText of shellTexts.processFactDialogExpectedTexts) {
     assert(processFactDialogText.includes(expectedText), `C5 过程事实确认弹层缺少 ${expectedText}`);
   }
 
@@ -3928,20 +3570,7 @@ function runShellScenario() {
   const permissionDialogText = visibleText(
     <PermissionDialog action={capturedAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of [
-    "记录权限结论：批准",
-    "权限请求",
-    "permission:offline:001",
-    "权限结论",
-    "批准",
-    "控制核心",
-    "写入工作台自己的工作流状态",
-    "审计事件",
-    "不启动 Codex",
-    "不恢复会话",
-    "不发送消息",
-    "不写 /Users/yoyi/.codex",
-  ]) {
+  for (const expectedText of shellTexts.permissionDialogExpectedTexts) {
     assert(permissionDialogText.includes(expectedText), `权限结论确认弹层缺少 ${expectedText}`);
   }
   capturedAction = null;
@@ -3957,20 +3586,7 @@ function runShellScenario() {
     />
   );
   const workflowReviewProjectText = visibleText(workflowReviewProject);
-  for (const expectedText of [
-    "总指导回收",
-    "记录派发结果判断",
-    "待回收",
-    "WORKFLOW_NODE_DISPATCH_OK_2026_05_29",
-    "派发：dispatch:offline:001",
-    "事件：12",
-    "命中：1",
-    "警告：session_cwd_differs_from_project_root",
-    "接受",
-    "需要修改",
-    "暂停",
-    "废弃",
-  ]) {
+  for (const expectedText of shellTexts.workflowReviewProjectExpectedTexts) {
     assert(workflowReviewProjectText.includes(expectedText), `总指导回收区缺少 ${expectedText}`);
   }
   const workflowReviewControlCard = (
@@ -4007,20 +3623,7 @@ function runShellScenario() {
   const directorDialogText = visibleText(
     <PermissionDialog action={capturedAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of [
-    "记录总指导回收：接受",
-    "派发记录",
-    "dispatch:offline:001",
-    "回收结论",
-    "接受",
-    "复核记录",
-    "审计事件",
-    "不启动 Codex",
-    "不恢复会话",
-    "不发送消息",
-    "不写 /Users/yoyi/.codex",
-    "不读取完整会话记录",
-  ]) {
+  for (const expectedText of shellTexts.directorDialogExpectedTexts) {
     assert(directorDialogText.includes(expectedText), `总指导回收确认弹层缺少 ${expectedText}`);
   }
   capturedAction = null;
@@ -4038,7 +3641,7 @@ function runShellScenario() {
   const bindDialogText = visibleText(
     <PermissionDialog action={capturedAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of ["绑定节点 Codex 会话", "Codex 会话", "offline-thread-001", "不启动 Codex", "不发送消息", "不读取完整会话正文"]) {
+  for (const expectedText of shellTexts.bindDialogExpectedTexts) {
     assert(bindDialogText.includes(expectedText), `绑定节点会话确认弹层缺少 ${expectedText}`);
   }
   capturedAction = null;
@@ -4055,7 +3658,7 @@ function runShellScenario() {
   const unbindDialogText = visibleText(
     <PermissionDialog action={capturedAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of ["解除节点会话绑定", "绑定对象", "binding:offline:codex-dev", "不删除", "不移动", "不归档"]) {
+  for (const expectedText of shellTexts.unbindDialogExpectedTexts) {
     assert(unbindDialogText.includes(expectedText), `解除节点会话确认弹层缺少 ${expectedText}`);
   }
   capturedAction = null;
@@ -4082,15 +3685,7 @@ function runShellScenario() {
   const advanceDialogText = visibleText(
     <PermissionDialog action={capturedAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of [
-    "推进工作项到执行中",
-    "目标状态",
-    "执行中",
-    "推进工作台自己的工作项状态并追加审计事件",
-    "不启动 Codex 命令行",
-    "不恢复会话",
-    "不运行运行器",
-  ]) {
+  for (const expectedText of shellTexts.advanceDialogExpectedTexts) {
     assert(advanceDialogText.includes(expectedText), `推进状态确认弹层缺少 ${expectedText}`);
   }
   capturedAction = null;
@@ -4128,15 +3723,7 @@ function runShellScenario() {
     />
   );
   const taskDraftDialogText = visibleText(taskDraftDialog);
-  for (const expectedText of [
-    "不生成真实任务包文件、不派发真实 Codex 会话",
-    "任务标题",
-    "登记任务包草稿",
-    "目标说明",
-    "写入 work_items 和 artifacts",
-    "默认指派",
-    "codex-dev",
-  ]) {
+  for (const expectedText of shellTexts.taskDraftDialogExpectedTexts) {
     assert(taskDraftDialogText.includes(expectedText), `创建任务包草稿确认弹层缺少 ${expectedText}`);
   }
   const cancelTaskDraft = findButtonByText(taskDraftDialog, "取消");
@@ -4162,13 +3749,7 @@ function runShellScenario() {
     />
   );
   const copyPreviewDialogText = visibleText(copyPreviewDialog);
-  for (const expectedText of [
-    "复制任务包 Markdown 预览",
-    "复制对象",
-    "work-item:offline:002",
-    "只复制预览文本",
-    "不写真实任务文件、不派发真实 Codex 会话",
-  ]) {
+  for (const expectedText of shellTexts.copyPreviewDialogExpectedTexts) {
     assert(copyPreviewDialogText.includes(expectedText), `复制预览确认弹层缺少 ${expectedText}`);
   }
   const cancelCopyPreview = findButtonByText(copyPreviewDialog, "取消");
@@ -4188,7 +3769,7 @@ function runShellScenario() {
     />
   );
   const taskFileGenerationText = visibleText(taskFileGenerationPanel);
-  for (const expectedText of ["真实任务包文件", "从当前草稿生成文件", "生成任务包文件"]) {
+  for (const expectedText of shellTexts.taskFileGenerationExpectedTexts) {
     assert(taskFileGenerationText.includes(expectedText), `任务文件生成区缺少 ${expectedText}`);
   }
   const generateButton = findButtonByText(taskFileGenerationPanel, "生成任务包文件");
@@ -4215,16 +3796,7 @@ function runShellScenario() {
     />
   );
   const generateDialogText = visibleText(generateDialog);
-  for (const expectedText of [
-    "生成任务包文件",
-    "生成对象",
-    "work-item:offline:001",
-    "写入目录",
-    "/Users/yoyi/workspace/product-line/tasks/",
-    "不派发真实 Codex 会话",
-    "不运行运行器",
-    "不写 /Users/yoyi/.codex 或 Codex 状态库",
-  ]) {
+  for (const expectedText of shellTexts.generateDialogExpectedTexts) {
     assert(generateDialogText.includes(expectedText), `生成任务包文件确认弹层缺少 ${expectedText}`);
   }
   const cancelGenerate = findButtonByText(generateDialog, "取消");
@@ -4243,11 +3815,7 @@ function runShellScenario() {
     />
   );
   const generatedTaskFileText = visibleText(generatedTaskFilePanel);
-  for (const expectedText of [
-    "该草稿已有生成文件",
-    "已生成",
-    "/Users/yoyi/workspace/product-line/tasks/2026-05-29-generated-task-package-offline-001.md",
-  ]) {
+  for (const expectedText of shellTexts.generatedTaskFileExpectedTexts) {
     assert(generatedTaskFileText.includes(expectedText), `已有 path 时 UI 缺少 ${expectedText}`);
   }
   const generatedButton = findButtonByText(generatedTaskFilePanel, "已生成");
@@ -4277,7 +3845,7 @@ function runShellScenario() {
     />
   );
   const notReadyShellText = visibleText(notReadyShell);
-  for (const expectedText of ["派发准备", "任务包还不能派发", "not_ready", "检查派发准备", "生成可派发版本"]) {
+  for (const expectedText of shellTexts.notReadyShellExpectedTexts) {
     assert(notReadyShellText.includes(expectedText), `派发准备展示缺少 ${expectedText}`);
   }
   const readyFileButton = findButtonByText(notReadyShell, "生成可派发版本");
@@ -4285,22 +3853,18 @@ function runShellScenario() {
   assert(readyFileButton.props?.disabled === true, "not_ready 时生成可派发版本按钮应禁用");
 
   const renderedNotReady = visibleText(<TaskDispatchReadinessDetails readiness={notReadyDispatchReadiness} />);
-  for (const expectedText of [
-    "任务名为空、待补充或仍像测试草稿。",
-    "禁止事项仍包含和当前生成行为冲突的历史禁令。",
-    "/Users/yoyi/workspace/product-line/tasks/2026-05-29-generated-task-package-offline-001.md",
-  ]) {
+  for (const expectedText of shellTexts.renderedNotReadyExpectedTexts) {
     assert(renderedNotReady.includes(expectedText), `not_ready 原因展示缺少 ${expectedText}`);
   }
 
   const { correctionFields, missingPreviewFields, fieldValues } = taskFieldCorrectionFixtures(project.project_root);
   const correctionPreviewText = visibleText(<TaskFieldCorrectionPreview fields={correctionFields} />);
-  for (const expectedText of ["字段级预览", "字段已填写，可复检 readiness", "派发准备字段修正", "用户提供真实目标。"]) {
+  for (const expectedText of shellTexts.correctionPreviewExpectedTexts) {
     assert(correctionPreviewText.includes(expectedText), `字段修正预览缺少 ${expectedText}`);
   }
   assertDeepEqual(missingCorrectionFields(correctionFields), [], "完整字段不应有缺失提示");
   const missingPreviewText = visibleText(<TaskFieldCorrectionPreview fields={missingPreviewFields} />);
-  for (const expectedText of ["仍有字段缺失", "目标缺失", "允许写入缺失"]) {
+  for (const expectedText of shellTexts.missingPreviewExpectedTexts) {
     assert(missingPreviewText.includes(expectedText), `缺字段预览缺少 ${expectedText}`);
   }
 
@@ -4314,7 +3878,7 @@ function runShellScenario() {
     />
   );
   const correctionEditorText = visibleText(correctionEditor);
-  for (const expectedText of ["修正任务字段", "保存前先看字段预览", "不自动补编", "保存派发字段修正"]) {
+  for (const expectedText of shellTexts.correctionEditorExpectedTexts) {
     assert(correctionEditorText.includes(expectedText), `字段修正入口缺少 ${expectedText}`);
   }
 
@@ -4354,14 +3918,7 @@ function runShellScenario() {
     />
   );
   const correctionDialogText = visibleText(correctionDialog);
-  for (const expectedText of [
-    "保存派发字段修正",
-    "修正对象",
-    "work-item:offline:001",
-    "不生成真实任务包文件",
-    "不派发真实 Codex 会话",
-    "不运行运行器",
-  ]) {
+  for (const expectedText of shellTexts.correctionDialogExpectedTexts) {
     assert(correctionDialogText.includes(expectedText), `派发字段修正确认弹层缺少 ${expectedText}`);
   }
   const cancelCorrection = findButtonByText(correctionDialog, "取消");
@@ -4415,13 +3972,7 @@ function runShellScenario() {
     />
   );
   const saveFieldsDialogText = visibleText(saveFieldsDialog);
-  for (const expectedText of [
-    "保存任务包字段",
-    "更新对象",
-    "work-item:offline:002",
-    "字段编辑任务",
-    "不生成真实任务文件、不派发真实 Codex 会话",
-  ]) {
+  for (const expectedText of shellTexts.saveFieldsDialogExpectedTexts) {
     assert(saveFieldsDialogText.includes(expectedText), `保存字段确认弹层缺少 ${expectedText}`);
   }
   const cancelSaveFields = findButtonByText(saveFieldsDialog, "取消");
@@ -4446,19 +3997,7 @@ function runShellScenario() {
     />
   );
   const stateText = visibleText(statePanel);
-  for (const expectedText of [
-    "本地事实层 v0",
-    "存在状态",
-    "不存在",
-    "结构版本",
-    "工作流版本",
-    "工作流",
-    "节点",
-    "连线",
-    "复核",
-    "审计事件",
-    "状态文件不存在；不会自动创建。",
-  ]) {
+  for (const expectedText of shellTexts.statePanelExpectedTexts) {
     assert(stateText.includes(expectedText), `事实层面板缺少 ${expectedText}`);
   }
   const reloadButton = findButtonByText(statePanel, "重新读取事实层");
@@ -4488,46 +4027,17 @@ function runShellScenario() {
   const initDialogText = visibleText(
     <PermissionDialog action={capturedAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
   );
-  for (const expectedText of ["写入边界", "workflow-state.v0.json", "备份", "不写 .codex", "追加审计事件", "原子替换"]) {
+  for (const expectedText of shellTexts.initDialogExpectedTexts) {
     assert(initDialogText.includes(expectedText), `初始化确认弹层缺少 ${expectedText}`);
   }
 
   const skillText = visibleText(<SkillsBoardView skills={[skill]} plugins={[plugin]} projects={[project]} />);
-  for (const expectedText of ["Skill 能力库", "可复用能力", "适用场景", "最近使用", "当前可用性", "开发者详情：来源和字段缺口"]) {
+  for (const expectedText of shellTexts.skillExpectedTexts) {
     assert(skillText.includes(expectedText), `Skill 看板缺少 ${expectedText}`);
   }
 
   const harnessText = visibleText(<HarnessBoardView projects={[project]} />);
-  for (const expectedText of [
-    "Harness 能力库",
-    "运行器能力",
-    "可运行范围",
-    "最近运行",
-    "等待配置 / 不可用原因",
-    "开发者详情：资源字段和候选入口",
-    "文件夹级运行器资源",
-    "文件级运行器候选",
-    "显示名",
-    "根路径",
-    "运行器类型",
-    "智能体类型",
-    "适配器编号",
-    "来源类型",
-    "能力",
-    "清单路径",
-    "说明路径",
-    "版本",
-    "入口",
-    "node_script:check.js",
-    "权限级别",
-    "缺清单",
-    "缺说明",
-    "缺入口",
-    "缺版本",
-    "不新增运行按钮",
-    "不自动运行运行器",
-    "不代表可运行或已验证",
-  ]) {
+  for (const expectedText of shellTexts.harnessExpectedTexts) {
     assert(harnessText.includes(expectedText), `Harness 看板缺少 ${expectedText}`);
   }
 }
