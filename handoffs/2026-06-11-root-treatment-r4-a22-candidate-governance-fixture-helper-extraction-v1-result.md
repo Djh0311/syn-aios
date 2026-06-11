@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-11-root-treatment-r4-a22-candidate-governance-fixtu
 
 Planning baseline commit：`06e6959b040bf56e1be714580d0634fbe1b0f6d1`
 
-Implementation commit：`TBD`
+Implementation commit：`069236a4534a926fd0a5af79c0c29bd8a59423db`
 
 Review result：`STATUS: CLEAR`；P0 / P1 / P2 无。
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`decf73b38e8b5c5a90172c7f93720beb288d0268`
 
 ## 1. 交接结论
 
