@@ -2,17 +2,17 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a33-offline-role-runtime-fixture-helper-extraction-v1.md`
 
 Planning baseline commit：`f86f53e`
 
-Implementation commit：待回填
+Implementation commit：`faf98d7bec02c1abff379bdcf5b0b96861a80678`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb51c-61fe-7fc3-8973-b22a4ce58911`
 
-Checkpoint commit：待回填
+Checkpoint commit：`dd8c1a423f5c17b8b46d509047ecf0e0cf38d4b3`
 
 ## 1. 本轮目标
 
