@@ -2,17 +2,17 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a48-candidate-memory-lifecycle-fixture-helper-extraction-v1.md`
 
 Planning baseline commit：`d4c4bb9d05d1096303738b98dfbc41aee63c66a1`
 
-Implementation commit：待回填。
+Implementation commit：`a89b1142b572a665dbd7964d15cb6af7e3a2d949`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填。
+Checkpoint commit：`f73e14493acd18784a7be014c0caee5c3714c5bf`
 
 ## 1. 本轮目标
 
