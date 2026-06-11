@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：已实现，待复核线回收。
+状态：已完成并通过复核线 `STATUS: CLEAR`。
 
 任务包：`tasks/2026-06-11-root-treatment-r4-a6-knowledge-settings-selector-domain-and-page-consumption-v1.md`
 
@@ -12,9 +12,11 @@ Planning baseline commit：`c248f9bb390458ba64f2a809ec6876c543b5ff91`
 
 Implementation commit：`9a175ff22e3177511e5b7749b7bf0c79eb47db98`
 
+Review result：`STATUS: CLEAR`，复核线 `019eb51c-61fe-7fc3-8973-b22a4ce58911`。
+
 ## 1. Result
 
-R4-A6 已完成实现侧工作：Knowledge Base / Settings 两页已有首批前端纯 selector 分域，并让页面最小消费 selector 输出。当前等待复核线只读审查。
+R4-A6 已完成实现侧工作并通过复核线 `STATUS: CLEAR`：Knowledge Base / Settings 两页已有首批前端纯 selector 分域，并让页面最小消费 selector 输出。
 
 ## 2. Files
 
@@ -46,9 +48,9 @@ R4-A6 已完成实现侧工作：Knowledge Base / Settings 两页已有首批前
 
 主管线下一步：
 
-1. 复用复核线 `019eb51c-61fe-7fc3-8973-b22a4ce58911` 完成只读审查。
-2. 若复核 `STATUS: CLEAR`，回填 review result，同步入口文档并做 checkpoint commit。
-3. 若复核发现 P1/P2，先修补并重新交给复核线。
+1. 同步入口文档并做 checkpoint commit。
+2. 回填 checkpoint commit。
+3. 准备 R4-A7（对应计划 R4-2）TS 类型分域 / 页面瘦身任务包。
 
 不能声明：
 
