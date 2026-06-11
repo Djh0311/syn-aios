@@ -2,7 +2,7 @@
 
 日期：2026-06-10
 
-状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R3-P0 SQLite schema / importer / rollback contract freeze、R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures、R3-A2 temp DB apply importer / schema hardening / transaction failure injection / DB -> JSON export dry-run、R3-A3 fixture-only dual-write transaction rehearsal、R3-A4 fixture-only read-cut DB / JSON fallback / rollback recovery dry-run rehearsal、R3-A5 fixture-only observation / export / rollback verification rehearsal、R3-A6 production cutover / rollback operator contract freeze、R3-A7 production preflight scanner / report，以及 R3-A8 copied snapshot temp DB apply / export / rollback boundary 均已完成。当前下一步是准备 R3-A9 production DB initializer + apply with backup manifest, no read-cut；R3-A9 允许在任务包严格边界内创建生产 DB 并应用备份 manifest，但不得切产品读路径、不得停写 JSON / sidecar、不得执行真实 Codex、不得读写 `/Users/yoyi/.codex`。R3-A8 只接受为 Level A fixture / temp copied snapshot apply、temp DB、export verification 和 rollback dry-run boundary 完成；Level B 未执行，真实 workbench state root 未读取，真实 production snapshot 未复制。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
+状态：正式开发计划已创建，用户已要求按全计划开发推进；R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R3-P0 SQLite schema / importer / rollback contract freeze、R3-A1 SQLite schema file + temp DB initializer + idempotent dry-run importer + fixtures、R3-A2 temp DB apply importer / schema hardening / transaction failure injection / DB -> JSON export dry-run、R3-A3 fixture-only dual-write transaction rehearsal、R3-A4 fixture-only read-cut DB / JSON fallback / rollback recovery dry-run rehearsal、R3-A5 fixture-only observation / export / rollback verification rehearsal、R3-A6 production cutover / rollback operator contract freeze、R3-A7 production preflight scanner / report、R3-A8 copied snapshot temp DB apply / export / rollback boundary，以及 R3-A9 production DB initializer + apply with backup manifest / no read-cut Level A 均已完成。R3-A9 接受为 fixture / temp production DB initializer + apply contract 完成；Level B 未执行，真实 workbench state root 未读取，真实 workbench-owned production DB 未创建，不接受为 production read-cut、JSON / sidecar stop-write、rollback production workflow、R3 完成或多 agent 并行真实执行解锁。当前下一步是由主管线决定是否先准备 R3-A10 limited read-cut planning / task package，或另行执行 R3-A9 Level B；无论哪条路，都不得跳过任务包、回滚策略和 fresh verify。本文承接 `2026-06-10-root-treatment-plan-v1.md` 和 `handoffs/2026-06-10-root-treatment-plan-claude-to-codex-kickoff-v1.md`，用于把“冻结新功能，集中治理”的治本方案转成 Codex 全局主管可派发、可复核、可验收的开发计划。
 
 本文不是任务包，不授权真实 `codex exec` / `codex exec resume`，不授权读写 `/Users/yoyi/.codex`，不授权 Stage L 的 K3-B1 retry / K3-B2，不授权 planned adapters 真实接入，不授权 backlog 解冻后功能开工。
 
@@ -410,6 +410,7 @@ R2 只做行为保持型拆分，每批都必须让 `lib.rs` 行数下降。
 - R3-A6 已完成，结论为 `DONE_WITH_CONCERNS`：`tasks/2026-06-11-root-treatment-r3-a6-production-cutover-contract-and-rollback-operator-freeze-v1.md`。接受为 production cutover contract、rollback operator contract、allowed roots / denied paths、backup / recovery 和 dry-run / apply 分界冻结，不接受为生产 DB、生产读切、JSON / sidecar 停写或多 agent 并行真实执行解锁。
 - R3-A7 已完成，结论为 `DONE_WITH_CONCERNS`：`tasks/2026-06-11-root-treatment-r3-a7-production-preflight-scanner-and-report-v1.md`，implementation commit `7949253c91c8e688dc48e03c47a952f00fcd6fda`。接受为 production preflight scanner / report 模块和 temp fixture validation 完成；真实 production root scan 未执行，不接受为生产 DB、production apply、生产 read-cut、JSON / sidecar 停写或多 agent 并行真实执行解锁。
 - R3-A8 已完成，结论为 `DONE`：`tasks/2026-06-11-root-treatment-r3-a8-copied-production-snapshot-temp-db-apply-and-export-verification-v1.md`，implementation commit `ce631c1cd23dadb367288885d61a331b88b83511`，主管验收回填 commit `81815be171899bca8e98cd70cd9ea9464c5f2556`。接受为 Level A fixture / temp copied snapshot apply、temp DB、export verification 和 rollback dry-run boundary 完成；Level B 未执行，真实 workbench state root 未读取，真实 production snapshot 未复制，不接受为 production DB、production apply、生产 read-cut、JSON / sidecar 停写或多 agent 并行真实执行解锁。
+- R3-A9 Level A 已完成，结论为 `DONE`：`tasks/2026-06-11-root-treatment-r3-a9-production-db-initializer-apply-with-backup-manifest-no-read-cut-v1.md`，implementation commit `52d6b4b73dcb49e4ffc582dac500d9ad6a8ee4df`。接受为 fixture / temp production DB initializer + apply with backup manifest / export verification / rollback boundary 合同完成；Level B 未执行，真实 workbench state root 未读取，真实 workbench-owned production DB 未创建，不接受为 production read-cut、JSON / sidecar stop-write、rollback production workflow、R3 完成或多 agent 并行真实执行解锁。
 
 | 批次 | 做什么 | 主要落点 | 验收 |
 | --- | --- | --- | --- |
@@ -712,11 +713,11 @@ R0 可接受不跑全量 cargo，但必须说明原因；R1 改 Rust 存储逻�
 
 当前按用户要求继续 Root Treatment / Stage R，下一步：
 
-1. 准备 R3-A9 任务包。
-2. R3-A9 只能做 production DB initializer + apply with backup manifest, no read-cut：创建生产 DB、应用经过备份 manifest 约束的生产快照、记录 recovery / rollback 边界。
-3. R3-A9 不得切产品读路径，不得停写 JSON / sidecar，不得执行真实 Codex，不得读写 `/Users/yoyi/.codex`，不得读取 secret / transcript；未完成前不得进入 production read-cut 或 stop-write。
+1. 由主管线决定是否先准备 R3-A10 limited read-cut planning / task package，或另行执行 R3-A9 Level B real workbench-owned production DB apply。
+2. 如果走 R3-A10，必须保持 feature flag / fallback / no stop-write 边界，不能把 A9 Level A 冒充为真实 production DB 已创建。
+3. 如果走 R3-A9 Level B，必须先写单独 execution record，明确 allowed source root、production DB path、backup / report / rollback manifest、before / after source hashes、rollback / recovery，不得切产品读路径或停写 JSON / sidecar。
 
-R3-A9 准备期间：
+下一步准备期间：
 
 - 不执行真实 Codex。
 - 不发送 prompt。
@@ -724,4 +725,4 @@ R3-A9 准备期间：
 - 不启动 Tauri / Browser / Chrome / Vite / 截图工具。
 - 不启动 Stage L / K3-B1 retry / K3-B2。
 - 不解冻 backlog 功能。
-- 不切产品读路径，不停写 JSON / sidecar，不把 R3-A8 copied snapshot rehearsal 冒充为 production apply、生产读切、JSON / sidecar 停写或 R3 完成。
+- 不切产品读路径，不停写 JSON / sidecar，不把 R3-A8 copied snapshot rehearsal 或 R3-A9 Level A fixture / temp rehearsal 冒充为真实 production apply、生产读切、JSON / sidecar 停写或 R3 完成。

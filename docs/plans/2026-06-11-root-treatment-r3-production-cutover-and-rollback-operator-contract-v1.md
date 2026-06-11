@@ -265,7 +265,7 @@ Recommended next tasks:
 | R3-A12 | stop-write JSON decision and rollback drill | yes, if approved | yes |
 | R3-A13 | transaction acceptance across memory + audit and R3 final acceptance | yes, scoped | possible final |
 
-R3-A7 and R3-A8 are complete. R3-A9 is the recommended immediate next task. R3-A9 must still avoid reading secret / `.codex` / full transcript, must not cut product reads to DB, and must not stop JSON / sidecar writes.
+R3-A7 and R3-A8 are complete. R3-A9 Level A is complete as fixture / temp production DB initializer + apply contract rehearsal; Level B real workbench-owned production DB apply has not executed. The next supervisor decision is whether to prepare R3-A10 limited read-cut planning / task package first, or to run a separately recorded R3-A9 Level B. Neither path may read secret / `.codex` / full transcript, cut product reads to DB, or stop JSON / sidecar writes without a new task package and rollback evidence.
 
 ## 9. Boundary Confirmation
 
