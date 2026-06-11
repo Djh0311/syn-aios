@@ -82,6 +82,7 @@ import {
   shellScenarioTextFixtures,
 } from "./helpers/offlineShellScenarioTextFixtures";
 import { executionRunQueueTextFixtures } from "./helpers/offlineExecutionRunQueueTextFixtures";
+import { agentBoundaryTextFixtures } from "./helpers/offlineAgentBoundaryTextFixtures";
 import { stageJRunQueueFixtures } from "./helpers/offlineRunQueueFixtures";
 import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
 import {
@@ -933,32 +934,14 @@ function runSessionOperationBoundaryScenario() {
     />
   );
   const agentViewText = visibleText(agentView);
-  for (const expectedText of [
-    "会话操作边界",
-    "只读历史浏览器",
-    "新会话预览",
-    "H3.1 只实现新会话 request",
-    "发消息",
-    "需要后续任务",
-    "停止",
-    "当前不可执行",
-    "resume",
-    "会话中心通用 resume",
-    "导出",
-    "计划中",
-    "删除",
-    "破坏性阻断",
-    "收藏",
-    "计划中不可执行",
-    "不执行新建会话、发消息、停止、重启、恢复、导出、删除或收藏",
-  ]) {
+  for (const expectedText of agentBoundaryTextFixtures.sessionOperationExpectedTexts) {
     assert(agentViewText.includes(expectedText), `会话操作边界 UI 缺少 ${expectedText}`);
   }
   const agentViewMarkup = renderToStaticMarkup(agentView);
-  for (const forbiddenButtonText of ["新建会话", "新会话预览", "发消息", "停止", "重启", "resume", "导出", "删除", "收藏"]) {
+  for (const forbiddenButtonText of agentBoundaryTextFixtures.sessionOperationForbiddenButtonTexts) {
     assert(!buttonTextsInMarkup(agentViewMarkup).includes(forbiddenButtonText), `会话操作边界不应渲染可点击按钮：${forbiddenButtonText}`);
   }
-  for (const forbiddenText of ["真实新会话已创建", "已创建真实会话", "已发送", "已停止", "已重启", "已 resume", "已导出", "已删除", "已收藏"]) {
+  for (const forbiddenText of agentBoundaryTextFixtures.sessionOperationForbiddenTexts) {
     assert(!agentViewText.includes(forbiddenText), `会话操作边界不应出现误导文案：${forbiddenText}`);
   }
 
@@ -977,7 +960,7 @@ function runSessionOperationBoundaryScenario() {
     secretaryContext.suggestions.some((suggestion) => suggestion.kind === "inspect_session_operation_boundary"),
     "秘书建议应包含查看会话操作边界",
   );
-  for (const forbiddenProposalText of ["新建会话", "发消息", "停止", "重启", "resume", "导出", "删除", "收藏"]) {
+  for (const forbiddenProposalText of agentBoundaryTextFixtures.sessionOperationForbiddenProposalTexts) {
     assert(
       !secretaryContext.action_proposals.some((proposal) => proposal.title.includes(forbiddenProposalText)),
       `秘书 action proposal 不应变成会话操作：${forbiddenProposalText}`,
@@ -1036,7 +1019,7 @@ function runProviderAvailabilityBoundaryScenario() {
   );
 
   const serializedSummaries = JSON.stringify(summaries);
-  for (const forbiddenFragment of ["api_key", "oauth", "keychain", ".env", "available_to_execute", "provider_verified"]) {
+  for (const forbiddenFragment of agentBoundaryTextFixtures.providerSerializedForbiddenFragments) {
     assert(!serializedSummaries.toLowerCase().includes(forbiddenFragment), `E3 摘要不应包含 ${forbiddenFragment}`);
   }
 
@@ -1052,36 +1035,14 @@ function runProviderAvailabilityBoundaryScenario() {
     />
   );
   const agentViewText = visibleText(agentView);
-  for (const expectedText of [
-    "供应方 / 模型 / 凭据边界",
-    "只读供应方可用性",
-    "不等于项目授权",
-    "Codex 本地 CLI",
-    "本地 CLI 管理",
-    "工作台不读取",
-    "模型未验证",
-    "外发调用已阻断",
-    "授权前阻断",
-    "planned_adapter_not_connected",
-    "provider_availability_not_project_authorization",
-    "no_external_provider_call_in_e3",
-  ]) {
+  for (const expectedText of agentBoundaryTextFixtures.providerExpectedTexts) {
     assert(agentViewText.includes(expectedText), `Provider availability UI 缺少 ${expectedText}`);
   }
-  for (const forbiddenText of [
-    "已配置凭据",
-    "模型已验证",
-    "外部模型已可用",
-    "Claude Code 已接入",
-    "OpenClaw 已接入",
-    "OpenCode 已接入",
-    "provider 已验证",
-    "测试调用成功",
-  ]) {
+  for (const forbiddenText of agentBoundaryTextFixtures.providerForbiddenTexts) {
     assert(!agentViewText.includes(forbiddenText), `Provider availability UI 不应出现误导文案：${forbiddenText}`);
   }
   const agentViewMarkup = renderToStaticMarkup(agentView);
-  for (const forbiddenButtonText of ["配置凭据", "验证模型", "测试 provider", "调用模型", "dispatch"]) {
+  for (const forbiddenButtonText of agentBoundaryTextFixtures.providerForbiddenButtonTexts) {
     assert(!buttonTextsInMarkup(agentViewMarkup).includes(forbiddenButtonText), `Provider availability 不应渲染可点击按钮：${forbiddenButtonText}`);
   }
 
@@ -1102,7 +1063,7 @@ function runProviderAvailabilityBoundaryScenario() {
     secretaryContext.suggestions.some((suggestion) => suggestion.kind === "inspect_provider_availability_boundary"),
     "秘书建议应包含查看模型与凭据边界",
   );
-  for (const forbiddenProposalText of ["配置凭据", "验证模型", "调用模型", "provider"]) {
+  for (const forbiddenProposalText of agentBoundaryTextFixtures.providerForbiddenProposalTexts) {
     assert(
       !secretaryContext.action_proposals.some((proposal) => proposal.title.includes(forbiddenProposalText)),
       `秘书 action proposal 不应变成 provider/model/credential 动作：${forbiddenProposalText}`,
@@ -1172,48 +1133,14 @@ function runAdapterSdkCliDiagnosticsBoundaryScenario() {
     />
   );
   const agentViewText = visibleText(agentView);
-  for (const expectedText of [
-    "适配器 SDK / 命令行 / 诊断预留",
-    "只定义未来适配器接入的契约",
-    "不提供通用执行接口",
-    "不绕过控制核心",
-    "运行日志",
-    "审计",
-    "阻断或预留",
-    "阻断通用 API 后门",
-    "诊断结构",
-    "数据位置",
-    "契约材料齐备",
-    "阻断或预留",
-    "runtime_connection_not_implemented",
-    "model_boundary_or_verification_missing",
-    "data_location_reserved_not_connected",
-    "contract_parity_requires_guard",
-    "reserved_no_runtime_parity",
-    "required_before_runner",
-    "explicit_user_confirmation_required_for_real_execution",
-    "runtime_log_and_audit_refs_required",
-    "后门阻断：是",
-    "adapter_health_read_model_only",
-    "adapter_data_location_descriptor_read_model_only",
-  ]) {
+  for (const expectedText of agentBoundaryTextFixtures.adapterDiagnosticsExpectedTexts) {
     assert(agentViewText.includes(expectedText), `I5 Adapter SDK / CLI diagnostics UI 缺少 ${expectedText}`);
   }
-  for (const forbiddenText of [
-    "SDK 已接入",
-    "CLI 已可执行",
-    "通用真实 send/resume 已完成",
-    "provider 已验证",
-    "凭据已配置",
-    "模型已验证",
-    "外部 adapter 已接入",
-    "自动派发已开始",
-    "worker 执行中",
-  ]) {
+  for (const forbiddenText of agentBoundaryTextFixtures.adapterDiagnosticsForbiddenTexts) {
     assert(!agentViewText.includes(forbiddenText), `I5 UI 不应出现误导文案：${forbiddenText}`);
   }
   const agentViewMarkup = renderToStaticMarkup(agentView);
-  for (const forbiddenButtonText of ["配置 SDK", "执行 CLI", "验证 provider", "配置凭据", "测试模型", "send", "resume", "dispatch", "重试"]) {
+  for (const forbiddenButtonText of agentBoundaryTextFixtures.adapterDiagnosticsForbiddenButtonTexts) {
     assert(!buttonTextsInMarkup(agentViewMarkup).includes(forbiddenButtonText), `I5 不应渲染可执行按钮：${forbiddenButtonText}`);
   }
 }
@@ -1370,46 +1297,15 @@ function runSessionContinuationPreviewScenario() {
     />
   );
   const agentViewText = visibleText(agentView);
-  for (const expectedText of [
-    "会话继续预览 / 权限预览",
-    "E4 / H3.1 预览协议",
-    "新会话预览",
-    "不会创建真实新会话",
-    "不会发送提示词",
-    "不会执行恢复",
-    "不会写 Codex 原生状态",
-    "工作项：work-item:offline:001",
-    "执行边界摘要：工作目录",
-    "运行器：H3.1 空操作",
-    "提示词发送状态：否",
-    "真实 Codex 执行状态：否",
-    "写入 Codex 主目录：否",
-    "需要用户确认",
-    "读回：必需",
-    "审计影响：仅预览不执行",
-    "供应方：只读可见",
-    "planned_adapter_blocked",
-    "h3_1_no_real_new_session",
-    "no_prompt_sent_in_e4",
-    "no_codex_home_write_in_e4",
-  ]) {
+  for (const expectedText of agentBoundaryTextFixtures.sessionContinuationExpectedTexts) {
     assert(agentViewText.includes(expectedText), `会话继续预览 UI 缺少 ${expectedText}`);
   }
   assert(!agentViewText.includes("命令计划：codex exec -C"), "会话继续普通 UI 不应暴露裸 codex exec 命令");
-  for (const forbiddenText of [
-    "真实新会话已创建",
-    "已创建真实会话",
-    "已发送",
-    "已 resume",
-    "Codex 已收到任务",
-    "自动派发已开始",
-    "worker 执行中",
-    "readback 已完成",
-  ]) {
+  for (const forbiddenText of agentBoundaryTextFixtures.sessionContinuationForbiddenTexts) {
     assert(!agentViewText.includes(forbiddenText), `会话继续预览 UI 不应出现误导文案：${forbiddenText}`);
   }
   const agentViewMarkup = renderToStaticMarkup(agentView);
-  for (const forbiddenButtonText of ["新建会话", "发消息", "发送", "resume", "申请确认", "执行", "重试"]) {
+  for (const forbiddenButtonText of agentBoundaryTextFixtures.sessionContinuationForbiddenButtonTexts) {
     assert(!buttonTextsInMarkup(agentViewMarkup).includes(forbiddenButtonText), `会话继续预览不应渲染可点击按钮：${forbiddenButtonText}`);
   }
 
@@ -1431,7 +1327,7 @@ function runSessionContinuationPreviewScenario() {
     secretaryContext.suggestions.some((suggestion) => suggestion.kind === "inspect_session_continuation_preview"),
     "秘书建议应包含查看会话继续预览",
   );
-  for (const forbiddenProposalText of ["新建会话", "发送", "发消息", "resume", "批准", "确认预览", "重试"]) {
+  for (const forbiddenProposalText of agentBoundaryTextFixtures.sessionContinuationForbiddenProposalTexts) {
     assert(
       !secretaryContext.action_proposals.some((proposal) => proposal.title.includes(forbiddenProposalText)),
       `秘书 action proposal 不应变成 continuation 执行动作：${forbiddenProposalText}`,
@@ -1475,33 +1371,14 @@ function runControlledSessionContinuationLevelAScenario() {
     />
   );
   const agentViewText = visibleText(agentView);
-  for (const expectedText of [
-    "受控会话继续 / E5 Level A",
-    "桩验收",
-    "真实执行未授权",
-    "读回不可用",
-    "readback_unavailable_is_not_zero_results",
-    "提示词发送状态：否",
-    "真实 Codex 执行状态：否",
-    "写入 Codex 主目录：否",
-    "session-continuations.v1.json",
-  ]) {
+  for (const expectedText of agentBoundaryTextFixtures.controlledContinuationLevelAExpectedTexts) {
     assert(agentViewText.includes(expectedText), `E5 Level A UI 缺少 ${expectedText}`);
   }
-  for (const forbiddenText of [
-    "已发送",
-    "已 resume",
-    "Codex 已收到任务",
-    "真实 Codex 已执行",
-    "worker 执行中",
-    "readback 已完成",
-    "0 条读回",
-    "0 条结果",
-  ]) {
+  for (const forbiddenText of agentBoundaryTextFixtures.controlledContinuationLevelAForbiddenTexts) {
     assert(!agentViewText.includes(forbiddenText), `E5 Level A UI 不应出现误导文案：${forbiddenText}`);
   }
   const agentViewMarkup = renderToStaticMarkup(agentView);
-  for (const forbiddenButtonText of ["发消息", "发送", "resume", "执行", "重试", "stub 验收"]) {
+  for (const forbiddenButtonText of agentBoundaryTextFixtures.controlledContinuationLevelAForbiddenButtonTexts) {
     assert(!buttonTextsInMarkup(agentViewMarkup).includes(forbiddenButtonText), `E5 Level A 不应渲染可执行按钮：${forbiddenButtonText}`);
   }
 
@@ -1524,7 +1401,7 @@ function runControlledSessionContinuationLevelAScenario() {
     secretaryContext.suggestions.some((suggestion) => suggestion.kind === "inspect_controlled_session_continuation"),
     "秘书建议应包含查看 E5 controlled continuation",
   );
-  for (const forbiddenProposalText of ["发送", "发消息", "resume", "批准", "确认", "重试", "stub"]) {
+  for (const forbiddenProposalText of agentBoundaryTextFixtures.controlledContinuationLevelAForbiddenProposalTexts) {
     assert(
       !secretaryContext.action_proposals.some((proposal) => proposal.title.includes(forbiddenProposalText)),
       `秘书 action proposal 不应变成 E5 continuation 执行动作：${forbiddenProposalText}`,
@@ -1630,43 +1507,14 @@ function runH2RealResumeAuthorizationReadinessScenario() {
     />
   );
   const agentViewText = visibleText(agentView);
-  for (const expectedText of [
-    "H2 真实恢复授权准备",
-    "H2.8 最终批准决策面",
-    "当前不可批准",
-    "权限弹层预览",
-    "审计 / 运行日志 / 读回预览",
-    "未尝试读回",
-    "结果数：未知/不可用",
-    "permission_preview_is_not_approval",
-    "h2_phase_b_final_approval_not_granted",
-    "等待授权矩阵",
-    "不会发送提示词",
-    "不会执行 codex exec resume",
-    "不会读写 /Users/yoyi/.codex",
-    "目标会话",
-    ".codex 最小范围",
-    "提示词引用 / 哈希",
-    "回滚：",
-    "h2_readiness_is_not_execution_authorization",
-  ]) {
+  for (const expectedText of agentBoundaryTextFixtures.h2ReadinessExpectedTexts) {
     assert(agentViewText.includes(expectedText), `H2.2 readiness UI 缺少 ${expectedText}`);
   }
-  for (const forbiddenText of [
-    "Codex 已收到任务",
-    "真实 Codex 已执行",
-    "prompt 已发送",
-    ".codex 已读写",
-    "H2 已完成",
-    "H3 可开始",
-    "readback 0 条",
-    "0 条读回",
-    "final approval 已批准",
-  ]) {
+  for (const forbiddenText of agentBoundaryTextFixtures.h2ReadinessForbiddenTexts) {
     assert(!agentViewText.includes(forbiddenText), `H2.2 readiness UI 不应出现误导文案：${forbiddenText}`);
   }
   const agentViewMarkup = renderToStaticMarkup(agentView);
-  for (const forbiddenButtonText of ["执行", "resume", "发送", "确认", "授权", "重试"]) {
+  for (const forbiddenButtonText of agentBoundaryTextFixtures.h2ReadinessForbiddenButtonTexts) {
     assert(
       !buttonTextsInMarkup(agentViewMarkup).includes(forbiddenButtonText),
       `H2.2 readiness 不应渲染执行或授权按钮：${forbiddenButtonText}`,
@@ -1691,7 +1539,7 @@ function runH2RealResumeAuthorizationReadinessScenario() {
     secretaryContext.suggestions.some((suggestion) => suggestion.kind === "inspect_h2_real_resume_decision_surface"),
     "秘书建议应包含查看 H2.8 final approval 决策面",
   );
-  for (const forbiddenProposalText of ["发送", "发消息", "resume", "批准", "确认", "重试"]) {
+  for (const forbiddenProposalText of agentBoundaryTextFixtures.h2ReadinessForbiddenProposalTexts) {
     assert(
       !secretaryContext.action_proposals.some((proposal) => proposal.title.includes(forbiddenProposalText)),
       `秘书 action proposal 不应变成 H2.8 执行动作：${forbiddenProposalText}`,
@@ -1746,35 +1594,14 @@ function runRuntimeSessionAttentionScenario() {
     />
   );
   const agentText = visibleText(agentView);
-  for (const expectedText of [
-    "运行关注 / E6",
-    "等待确认",
-    "边界保护阻断",
-    "读回不可用",
-    "读回失败",
-    "结果数：未知/不可用",
-    "真实读回：否",
-  ]) {
+  for (const expectedText of agentBoundaryTextFixtures.runtimeAttentionExpectedTexts) {
     assert(agentText.includes(expectedText), `E6 runtime attention UI 缺少 ${expectedText}`);
   }
-  for (const forbiddenText of [
-    "已自动重试",
-    "已停止 agent",
-    "已重启 agent",
-    "真实派发已完成",
-    "真实 prompt 已发送",
-    "Codex 已收到任务",
-    "真实 readback 已完成",
-    "readback 0 条",
-    "失败已自动恢复",
-    "Claude Code 已接管",
-    "OpenClaw 已运行",
-    "OpenCode 已 resume",
-  ]) {
+  for (const forbiddenText of agentBoundaryTextFixtures.runtimeAttentionForbiddenTexts) {
     assert(!agentText.includes(forbiddenText), `E6 runtime attention UI 不应出现误导文案：${forbiddenText}`);
   }
   const agentMarkup = renderToStaticMarkup(agentView);
-  for (const forbiddenButtonText of ["发送", "resume", "重试", "停止", "重启"]) {
+  for (const forbiddenButtonText of agentBoundaryTextFixtures.runtimeAttentionForbiddenButtonTexts) {
     assert(!buttonTextsInMarkup(agentMarkup).includes(forbiddenButtonText), `E6 不应渲染执行类按钮：${forbiddenButtonText}`);
   }
 
@@ -1790,7 +1617,7 @@ function runRuntimeSessionAttentionScenario() {
     secretaryContext.suggestions.some((suggestion) => suggestion.kind === "inspect_runtime_session_attention"),
     "秘书建议应包含查看 E6 runtime attention",
   );
-  for (const forbiddenProposalText of ["发送", "resume", "批准", "确认", "重试", "停止", "重启"]) {
+  for (const forbiddenProposalText of agentBoundaryTextFixtures.runtimeAttentionForbiddenProposalTexts) {
     assert(
       !secretaryContext.action_proposals.some((proposal) => proposal.title.includes(forbiddenProposalText)),
       `秘书 action proposal 不应变成 E6 执行动作：${forbiddenProposalText}`,
