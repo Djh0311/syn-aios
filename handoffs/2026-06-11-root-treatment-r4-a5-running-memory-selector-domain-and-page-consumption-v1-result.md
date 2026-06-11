@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-结论：implemented_pending_review。R4-A5 已实现 Running Workflows / Memory Center 首批页面 selector 分域和页面最小消费，等待复核线只读审查。
+结论：implemented_pending_review。R4-A5 已实现 Running Workflows / Memory Center 首批页面 selector 分域和页面最小消费，implementation commit 为 `955783f4629176d930fd0b2fb1d881aa6a289c0d`，等待复核线只读审查。
 
 ## 必读文件
 
