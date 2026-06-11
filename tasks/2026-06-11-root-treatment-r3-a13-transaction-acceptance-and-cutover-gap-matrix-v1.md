@@ -205,7 +205,7 @@ R3-A13 禁止声明：
 - 是否允许新增 sidecar JSON 种类：否。
 - 是否需要 shape gate 豁免：否。
 - 本任务规划基线 commit：`d1e2ce1c139f392437928a367a9744411eb7ecc4`
-- 本任务完成 commit：`d96ed041a16ce05da3219b38053e75843e8339ec`
+- 本任务完成 commit：`d96ed042341fa816e62b149f0ea451516f0e5ad2`
 
 ## 8.1 完成摘要
 
@@ -218,7 +218,7 @@ R3-A13 Level A 已完成：
 - after-commit-before-report 分类为 `committed_but_report_failed`，不冒充完整完成。
 - cutover gap matrix 明确 R3-A9 / A10 / A11 / A12 仍只有 Level A，Level B pending。
 
-Implementation commit：`d96ed041a16ce05da3219b38053e75843e8339ec`。
+Implementation commit：`d96ed042341fa816e62b149f0ea451516f0e5ad2`。
 
 ## 8. 交接要求
 
