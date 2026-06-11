@@ -8,7 +8,7 @@
 
 Planning baseline commit：`7dedb792b563ed6842becefc1a72d1454d8dd286`
 
-Implementation commit：待回填。
+Implementation commit：`40cc37b9e3bf862e03468f7ce2063712e0ccfa96`。
 
 Review result：`STATUS: CLEAR_WITH_P2`；无 P0 / P1。P2 为 `git diff --check` 记录过期，已回填为最终状态。
 
