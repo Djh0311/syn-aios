@@ -8,7 +8,7 @@
 
 R3-A12 Level A 已实现。Level B 未执行。
 
-Implementation commit：待回填
+Implementation commit：`eacfad7c4a916f1307e633a37a6084a9fc2927e6`
 
 ## Summary
 

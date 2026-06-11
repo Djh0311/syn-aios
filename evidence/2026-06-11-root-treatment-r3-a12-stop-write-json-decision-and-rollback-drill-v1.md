@@ -10,7 +10,7 @@ R3-A12 Level A 已实现：stop-write JSON / sidecar decision contract 和 fixtu
 
 Planning baseline commit：`be8dac4430066705b5c400d255830f3f31887d60`
 
-Implementation commit：待回填
+Implementation commit：`eacfad7c4a916f1307e633a37a6084a9fc2927e6`
 
 ## Scope
 

@@ -251,7 +251,7 @@ R3-A12 禁止：
 - 是否新增 sidecar JSON 种类：否。
 - 是否需要 shape gate 豁免：否。
 - 本任务规划基线 commit：`be8dac4430066705b5c400d255830f3f31887d60`
-- 本任务完成 commit：待 implementation commit 后回填。
+- 本任务完成 commit：`eacfad7c4a916f1307e633a37a6084a9fc2927e6`
 
 ## 8. Fixture 矩阵
 
