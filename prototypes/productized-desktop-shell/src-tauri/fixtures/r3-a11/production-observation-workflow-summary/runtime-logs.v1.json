@@ -1,0 +1,21 @@
+{
+  "schema_version": "runtime_log_store.v1",
+  "revision": 1,
+  "entries": [
+    {
+      "entry_id": "runtime-log:r3-a11:core",
+      "category": "observation",
+      "status": "not_attempted_stub",
+      "severity": "info",
+      "summary": "R3-A11 production observation fixture runtime log."
+    }
+  ],
+  "summaries": [
+    {
+      "summary_id": "runtime-summary:r3-a11:core",
+      "category": "observation",
+      "status": "not_attempted_stub",
+      "severity": "info"
+    }
+  ]
+}

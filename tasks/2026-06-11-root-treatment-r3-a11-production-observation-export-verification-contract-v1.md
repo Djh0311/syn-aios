@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：待执行。本文是 Root Treatment / Stage R 的 R3-A11 任务包，用于在 R3-A10 Level A limited read-cut contract / feature flag fallback 完成后，冻结并实现“production observation / export verification”合同的 Level A fixture / temp rehearsal。这里的 `production observation` 只表示生产切换前必须具备的合同语义和证据结构，不是授权真实生产观察动作。R3-A11 默认不执行真实 production observation，不读取真实 workbench state root，不创建真实 production DB，不切 app startup / Tauri command / UI / 产品全局读路径，不停写 JSON / sidecar，不执行真实 Codex，不读写 `/Users/yoyi/.codex`。
+状态：Level A 已实现并通过复核，等待 implementation commit 回填。本文是 Root Treatment / Stage R 的 R3-A11 任务包，用于在 R3-A10 Level A limited read-cut contract / feature flag fallback 完成后，冻结并实现“production observation / export verification”合同的 Level A fixture / temp rehearsal。这里的 `production observation` 只表示生产切换前必须具备的合同语义和证据结构，不是授权真实生产观察动作。R3-A11 默认不执行真实 production observation，不读取真实 workbench state root，不创建真实 production DB，不切 app startup / Tauri command / UI / 产品全局读路径，不停写 JSON / sidecar，不执行真实 Codex，不读写 `/Users/yoyi/.codex`。
 
 规划基线 commit：`eda6a4968839a9c470de03ab360f586a0a8060e1`
 
@@ -253,7 +253,14 @@ R3-A11 禁止：
 - 是否新增 sidecar JSON 种类：否。
 - 是否需要 shape gate 豁免：否。
 - 本任务规划基线 commit：`eda6a4968839a9c470de03ab360f586a0a8060e1`
-- 本任务完成 commit：待主管线回收后记录。
+- 本任务完成 commit：待 implementation commit 后回填。
+
+## 7.1 实施回收记录
+
+- Level A 已实现：`rehearse_production_observation_level_a(...)`、R3-A11 fixture、focused tests、evidence / handoff。
+- Level B 未执行。
+- 复核线结论：`CLEAR`，P0/P1/P2 均无；允许提交。
+- 仍不接受为 production observation Level B、production read-cut、JSON / sidecar stop-write、rollback production workflow、R3 完成或多 agent 并行真实执行解锁。
 
 ## 8. Fixture 矩阵
 

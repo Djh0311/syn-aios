@@ -1,0 +1,55 @@
+{
+  "schema_version": "workflow_state_v0",
+  "workflow_version": 1,
+  "revision": 1,
+  "projects": [
+    {
+      "project_id": "project:r3-a11:core",
+      "project_root": "/tmp/r3-a11/core",
+      "display_name": "R3 A11 Core"
+    }
+  ],
+  "agent_adapters": [
+    {
+      "adapter_id": "adapter:r3-a11:codex-local",
+      "status": "planned_descriptor_only"
+    }
+  ],
+  "workflows": [
+    {
+      "workflow_id": "workflow:r3-a11:core",
+      "project_id": "project:r3-a11:core",
+      "status": "prepared"
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "node:r3-a11:core:director",
+      "workflow_id": "workflow:r3-a11:core",
+      "role": "project_director"
+    }
+  ],
+  "edges": [],
+  "work_items": [
+    {
+      "work_item_id": "work-item:r3-a11:core",
+      "workflow_id": "workflow:r3-a11:core",
+      "node_id": "node:r3-a11:core:director",
+      "state": "prepared"
+    }
+  ],
+  "artifacts": [],
+  "reviews": [],
+  "audit_events": [
+    {
+      "event_id": "audit:r3-a11:core:created",
+      "target_kind": "workflow",
+      "target_id": "workflow:r3-a11:core",
+      "event_kind": "fixture_created"
+    }
+  ],
+  "capabilities": [],
+  "harness_resources": [],
+  "workflow_node_session_bindings": [],
+  "workflow_node_dispatches": []
+}
