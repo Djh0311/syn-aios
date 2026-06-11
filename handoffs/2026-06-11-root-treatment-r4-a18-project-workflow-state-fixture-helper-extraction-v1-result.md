@@ -12,9 +12,9 @@ Planning baseline commit：`5c5c80b0608fda5acff6b59391b4c035400a58bf`
 
 Implementation commit：`e677930ac26eccaa4f66c977abab78b70ce0c13b`。
 
-Review result：`STATUS: CLEAR`；无 P0 / P1，P2 为任务包元数据回填。
+Review result：`STATUS: CLEAR`；无 P0 / P1，P2 为任务包元数据回填，已在 checkpoint hash backfill 中关闭。
 
-Checkpoint commit：`TBD`。
+Checkpoint commit：`cff1373803d3287e5b89d3a9d3c39ef19669a9af`。
 
 ## 1. Result
 
@@ -74,7 +74,7 @@ R4-A18 相关改动：
 - `STATUS: CLEAR`
 - P0：无。
 - P1：无。
-- P2：任务包元数据回填；本 checkpoint 收尾处理该项。
+- P2：任务包元数据回填；已在 checkpoint hash backfill 中关闭。
 
 复核线确认：
 
