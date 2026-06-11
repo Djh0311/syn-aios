@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 Planning baseline commit：`b85be57d1f214d02b90a72f24d93104cd8c8f65e`
 
-Implementation commit：待回填
+Implementation commit：`0d4271a67d2a3fd88d0b5655cee0b367691b5009`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`a78b20455929e4f0366a38f11ea9fa7a2226fe15`
 
 本文是 Root Treatment / Stage R 的 R4-A35 任务包；R4-A35 继续对应官方计划 R4-6：离线测试拆分。R4-A35 只接受为项目咨询 / 全局边界复核 / 项目主管计划 / 总指导回收相关纯 action 与 request fixture 抽离完成；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B、真实 Codex 执行或 backlog 功能解冻。
 

@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a35-project-planning-action-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a35-project-planning-action-fi
 
 Planning baseline commit：`b85be57d1f214d02b90a72f24d93104cd8c8f65e`
 
-Implementation commit：待回填
+Implementation commit：`0d4271a67d2a3fd88d0b5655cee0b367691b5009`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`a78b20455929e4f0366a38f11ea9fa7a2226fe15`
 
 ## 1. 完成内容
 
@@ -54,6 +54,7 @@ R4-A35 延续 R4-6 offline interaction test splitting，抽离项目咨询 / 全
 - shape gate 保留既有 warning：`tauri_command_total_increased 97/96`。
 - `offline-permission-dialog.test.tsx`：4,595 -> 4,555。
 - `offlineProjectPlanningActionFixtures.ts`：新增 83 行。
+- checkpoint stale scan 曾有一条 `rg` 命令因 shell 双引号包住 Markdown 反引号触发命令替换，输出 `zsh:1: command not found: STATUS:`；随后已用单引号重跑扫描。该偏差没有执行真实 Codex、发送 prompt、读写 `/Users/yoyi/.codex` 或修改产品代码。
 
 ## 3. 复核结果
 
@@ -83,11 +84,7 @@ P2: None
 
 ## 5. 下一步
 
-1. 提交 implementation commit。
-2. 同步 checkpoint 入口文档到 R4-A35 完成、下一步 R4-A36。
-3. 提交 checkpoint commit。
-4. 回填 implementation / checkpoint hash。
-5. 准备 R4-A36，继续中等粒度 fixture cluster 拆分。
+implementation commit、checkpoint 入口同步、checkpoint commit 和 hash 回填均已完成。下一步准备 R4-A36，继续中等粒度 fixture cluster 拆分。
 
 ## 6. 不能声明
 

@@ -2,17 +2,17 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a35-project-planning-action-fixture-helper-extraction-v1.md`
 
 Planning baseline commit：`b85be57d1f214d02b90a72f24d93104cd8c8f65e`
 
-Implementation commit：待回填
+Implementation commit：`0d4271a67d2a3fd88d0b5655cee0b367691b5009`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填
+Checkpoint commit：`a78b20455929e4f0366a38f11ea9fa7a2226fe15`
 
 ## 1. 本轮目标
 
@@ -112,6 +112,11 @@ git diff --check
 ```
 
 结果：通过，无输出。
+
+过程偏差：
+
+- checkpoint stale scan 曾有一条 `rg` 命令把含 Markdown 反引号的 pattern 放进 shell 双引号，触发 shell 命令替换并输出 `zsh:1: command not found: STATUS:`。
+- 该偏差没有执行真实 Codex、没有发送 prompt、没有读写 `/Users/yoyi/.codex`，也没有修改产品代码；随后已改用单引号重新扫描。
 
 ## 5. 行数
 
