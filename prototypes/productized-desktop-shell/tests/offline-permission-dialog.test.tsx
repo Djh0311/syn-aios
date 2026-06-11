@@ -23,6 +23,7 @@ import {
   runtimeAttentionFixtures,
   runtimeLogStoreFixture,
 } from "./helpers/offlineRuntimeDiagnosticFixtures";
+import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
 import { AgentSessionCenter, AgentView, ChatTranscript, filterAgentSessions } from "../src/views/AgentView";
 import { HomeView } from "../src/views/HomeView";
 import { RunningWorkflowsView } from "../src/views/RunningWorkflowsView";
@@ -123,7 +124,6 @@ import type {
   TaskPackageFields,
   WorkflowRunCheck,
   WorkbenchSnapshot,
-  WorkerProtocolReadModel,
   WorkflowStateSnapshot,
 } from "../src/lib/types";
 
@@ -277,181 +277,6 @@ const backendProviderAvailabilitySummaries = deriveProviderAvailabilitySummaries
   backendAgentAdapterDescriptors,
   backendSessionOperationDescriptors,
 );
-
-function workerProtocolFixtureForAdapters(
-  descriptors: AgentAdapterDescriptor[],
-  operations = backendSessionOperationDescriptors,
-): WorkerProtocolReadModel {
-  const workerAdapters = descriptors.map((descriptor) => {
-    const provider = backendProviderAvailabilitySummaries.find((summary) => summary.adapter_id === descriptor.adapter_id);
-    const providerId = provider?.provider_id ?? descriptor.provider;
-    return {
-      worker_adapter_id: `worker-adapter:${descriptor.adapter_id}`,
-      adapter_id: descriptor.adapter_id,
-      worker_kind: descriptor.adapter_id === "codex-local" ? "local_cli_agent" : "external_cli_agent_planned",
-      display_name: descriptor.display_name,
-      provider_id: providerId,
-      lifecycle_status: descriptor.status === "available" ? "available_with_guard" : "planned",
-      execution_status: descriptor.execution_status,
-      credential_status: provider?.credential_status ?? descriptor.credential_status,
-      model_status: provider?.model_status ?? descriptor.model_access_status,
-      source_policy:
-        descriptor.adapter_id === "codex-local"
-          ? "codex-local maps into neutral WorkerAdapter; protocol must remain adapter-neutral."
-          : "planned descriptor only; no provider call, credential check, or runtime connection.",
-      capability_descriptors: descriptor.capabilities.map((capability) => ({
-        capability_id: `worker-capability:${descriptor.adapter_id}:${capability.kind}`,
-        capability_kind: capability.kind,
-        label: capability.label,
-        status: capability.status,
-        risk_level: capability.kind.includes("dispatch") || capability.kind.includes("run") ? "high" : "medium",
-        execution_boundary: capability.boundary,
-        provider_id: providerId,
-        credential_requirement_id: `credential-requirement:${descriptor.adapter_id}`,
-        risk_envelope_id: `external-call-risk:${descriptor.adapter_id}:${capability.kind}`,
-        project_policy_status: descriptor.adapter_id === "codex-local" ? "allowed_with_confirmation" : "blocked_planned_adapter",
-        source_refs: [{ source_kind: "adapter_capability", source_id: capability.capability_id, label: capability.label }],
-        warnings: capability.warnings,
-      })),
-      source_refs: [{ source_kind: "agent_adapter_descriptor", source_id: descriptor.adapter_id, label: descriptor.display_name }],
-      warnings: descriptor.warnings,
-    };
-  });
-  const credentialRequirements = descriptors.map((descriptor) => ({
-    requirement_id: `credential-requirement:${descriptor.adapter_id}`,
-    adapter_id: descriptor.adapter_id,
-    provider_id: descriptor.provider,
-    credential_status: descriptor.adapter_id === "codex-local" ? "not_required_by_workbench" : "credential_missing",
-    required_for_real_execution: descriptor.adapter_id !== "codex-local",
-    read_policy: "never_read_secret_material_in_worker_protocol",
-    verification_status: descriptor.adapter_id === "codex-local" ? "workbench_does_not_verify_local_cli_credentials" : "not_verified",
-    user_action_required: descriptor.adapter_id !== "codex-local",
-    source_refs: [{ source_kind: "provider_availability", source_id: descriptor.adapter_id, label: descriptor.display_name }],
-    warnings: ["credential_descriptor_does_not_read_secret"],
-  }));
-  const externalCallRiskEnvelopes = workerAdapters.flatMap((adapter) =>
-    adapter.capability_descriptors.map((capability) => ({
-      envelope_id: `external-call-risk:${adapter.adapter_id}:${capability.capability_kind}`,
-      adapter_id: adapter.adapter_id,
-      provider_id: adapter.provider_id,
-      capability_kind: capability.capability_kind,
-      external_call_status: adapter.adapter_id === "codex-local" ? "not_needed_for_readonly" : "external_call_blocked",
-      data_egress_risk: "prompt_and_project_context_egress_risk",
-      cost_risk: adapter.adapter_id === "codex-local" ? "unknown" : "blocked_until_authorized",
-      credential_risk: adapter.adapter_id === "codex-local" ? "managed_outside_workbench" : "missing",
-      model_risk: adapter.adapter_id === "codex-local" ? "managed_outside_workbench" : "unverified",
-      project_policy_status: capability.project_policy_status,
-      user_visible_summary: `${adapter.display_name} / ${capability.label} requires policy, permission, audit, and runtime log before real execution.`,
-      source_refs: capability.source_refs,
-      warnings: ["external_call_risk_envelope_read_model_only"],
-    })),
-  );
-  const adapterContractChecklists = workerAdapters.map((adapter) => {
-    const planned = adapter.adapter_id !== "codex-local";
-    return {
-      checklist_id: `adapter-contract-checklist:${adapter.adapter_id}`,
-      adapter_id: adapter.adapter_id,
-      status: planned ? "blocked_or_reserved_contract" : "ready_for_controlled_adapter_contract",
-      protocol_surface_ready: adapter.capability_descriptors.length > 0,
-      control_core_required: true,
-      permission_required: true,
-      audit_required: true,
-      runtime_log_required: true,
-      credential_boundary_defined: true,
-      model_boundary_defined: !planned,
-      data_location_defined: !planned,
-      missing_items: planned
-        ? ["runtime_connection_not_implemented", "model_boundary_or_verification_missing", "data_location_reserved_not_connected"]
-        : [],
-      source_refs: adapter.source_refs,
-      warnings: ["adapter_contract_checklist_read_model_only"],
-    };
-  });
-  return {
-    schema_version: "worker_protocol_read_model.v1",
-    generated_at: "2026-06-08T00:00:00Z",
-    source_policy: "offline fixture; no worker execution.",
-    worker_adapters: workerAdapters,
-    work_threads: [],
-    run_units: [],
-    credential_requirements: credentialRequirements,
-    external_call_risk_envelopes: externalCallRiskEnvelopes,
-    project_capability_policies: [],
-    run_relations: [],
-    worker_lanes: [],
-    multi_worker_dispatch_plans: [],
-    adapter_contract_checklists: adapterContractChecklists,
-    controlled_api_cli_semantics: workerAdapters.map((adapter) => ({
-      semantics_id: `controlled-api-cli-semantics:${adapter.adapter_id}`,
-      adapter_id: adapter.adapter_id,
-      cli_surface: adapter.adapter_id === "codex-local" ? "codex CLI command preview only" : "planned CLI descriptor only",
-      api_surface: "Workbench controlled API must call control_core, permission envelope, runtime log, and audit before any real execution.",
-      parity_status: adapter.adapter_id === "codex-local" ? "contract_parity_requires_guard" : "reserved_no_runtime_parity",
-      control_core_path: "required_before_runner",
-      permission_path: "explicit_user_confirmation_required_for_real_execution",
-      audit_path: "runtime_log_and_audit_refs_required",
-      universal_api_backdoor_blocked: true,
-      supported_operation_ids: operations.filter((operation) => operation.adapter_id === adapter.adapter_id).map((operation) => operation.operation_id),
-      source_refs: adapter.source_refs,
-      warnings: ["cli_parity_read_model_only", "no_universal_app_api_backdoor", "control_core_permission_audit_required"],
-    })),
-    diagnostic_event_schemas: workerAdapters.map((adapter) => ({
-      schema_id: `diagnostic-event-schema:${adapter.adapter_id}`,
-      adapter_id: adapter.adapter_id,
-      event_kinds: ["adapter_health", "dispatch_guard", "permission_decision", "runner_attempt", "readback_boundary", "degraded_mode"],
-      severity_levels: ["info", "warning", "degraded", "blocking"],
-      required_fields: ["event_id", "adapter_id", "event_kind", "severity", "redacted_summary", "source_refs", "audit_refs", "created_at"],
-      redaction_policy: "no_secret_no_raw_transcript_no_provider_payload",
-      export_policy: "diagnostic_bundle_requires_separate_authorized_task",
-      source_refs: adapter.source_refs,
-      warnings: ["diagnostic_event_schema_reserved_read_model_only"],
-    })),
-    adapter_health_summaries: workerAdapters.map((adapter) => ({
-      health_id: `adapter-health:${adapter.adapter_id}`,
-      adapter_id: adapter.adapter_id,
-      status: adapter.adapter_id === "codex-local" ? "available_with_guard" : "planned_unavailable",
-      severity: adapter.adapter_id === "codex-local" ? "info" : "warning",
-      credential_status: adapter.credential_status,
-      model_status: adapter.model_status,
-      runtime_status: "no_runtime_attempt",
-      degraded_reason: adapter.adapter_id === "codex-local" ? null : "adapter_runtime_not_implemented",
-      source_refs: adapter.source_refs,
-      warnings: ["adapter_health_read_model_only", "does_not_probe_provider_or_credentials"],
-    })),
-    adapter_degraded_modes: workerAdapters.map((adapter) => ({
-      degraded_mode_id: `adapter-degraded-mode:${adapter.adapter_id}`,
-      adapter_id: adapter.adapter_id,
-      mode: adapter.adapter_id === "codex-local" ? "guarded_execution_possible_only_after_permission" : "readonly_or_blocked",
-      blocks_real_execution: adapter.adapter_id !== "codex-local",
-      user_visible_summary: `${adapter.display_name} remains guarded or read-only; no universal API backdoor.`,
-      allowed_surfaces: ["read_model", "diagnostic_summary", "permission_preview"],
-      blocked_surfaces: ["universal_api_backdoor", "provider_probe"],
-      recovery_requirement: adapter.adapter_id === "codex-local" ? "execution_point_user_authorization_required" : "separate_adapter_task_with_credentials_model_runtime_and_policy_review",
-      source_refs: adapter.source_refs,
-      warnings: ["adapter_degraded_mode_read_model_only"],
-    })),
-    adapter_data_locations: workerAdapters.map((adapter) => ({
-      data_location_id: `adapter-data-location:${adapter.adapter_id}`,
-      adapter_id: adapter.adapter_id,
-      persistence_kind: "descriptor_only",
-      workbench_store_refs: ["workbench_snapshot.worker_protocol"],
-      adapter_home_policy: adapter.adapter_id === "codex-local" ? "no_codex_home_read_write_without_execution_point_authorization" : "no_adapter_home_known_or_accessed",
-      project_write_policy: "project_file_write_requires_permission_envelope_and_allowed_write_roots",
-      transcript_policy: "metadata_only_by_default_no_full_transcript",
-      secret_policy: "never_read_auth_token_env_keychain_oauth_provider_credentials",
-      source_refs: adapter.source_refs,
-      warnings: ["adapter_data_location_descriptor_read_model_only"],
-    })),
-    dispatch_requests: [],
-    dispatch_guards: [],
-    permission_envelopes: [],
-    task_memory_packet_refs: [],
-    worker_handoffs: [],
-    readback_results: [],
-    worker_report_candidates: [],
-    warnings: ["worker_protocol_read_model_only", "cli_parity_requires_control_core_permission_audit"],
-  };
-}
 
 const emptyProject: ProjectRecord = {
   ...project,
@@ -3443,7 +3268,7 @@ function runAdapterSdkCliDiagnosticsBoundaryScenario() {
     workflowState: workflowStateWithProjectWorkflow,
   });
   const operations = deriveSessionOperationDescriptors(descriptors);
-  const workerProtocol = workerProtocolFixtureForAdapters(descriptors, operations);
+  const workerProtocol = workerProtocolFixtureForAdapters(descriptors, backendProviderAvailabilitySummaries, operations);
   assert(
     workerProtocol.adapter_contract_checklists.length === descriptors.length,
     "I5 每个 adapter 都应有 contract checklist",
