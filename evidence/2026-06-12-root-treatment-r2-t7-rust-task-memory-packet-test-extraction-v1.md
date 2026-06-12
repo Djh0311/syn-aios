@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成本地验证，待复核线审查。
+状态：已完成并复核通过，checkpoint 待同步。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t7-rust-task-memory-packet-test-extraction-v1.md`
 
@@ -11,6 +11,8 @@ Planning baseline commit：`d7d9d3520495425f1c0e8ce5ce3b681970b360be`
 Task package commit：`b417e83f7365d57f963abb3e0fd921cbfb2fa36a`
 
 Implementation commit：`04172eb8f8ee59ee3d311c20552eac02c52bd2ca`
+
+Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
 
 ## 1. 本轮目标
 
@@ -85,7 +87,13 @@ Implementation commit：`04172eb8f8ee59ee3d311c20552eac02c52bd2ca`
 
 ## 7. 复核状态
 
-待复核线只读审查。
+复核线只读审查已通过：
+
+- 复核线程：`019eb850-0698-7f70-a9b2-e7d0d668ccf5`
+- 最终结论：`STATUS: CLEAR`
+- P0/P1/P2：无。
+- 复核确认新 include 只包含 10 个 task memory packet preview tests，未迁移 helper；memory entity relation、formal memory adoption、workflow execution、workflow machine 和 stub runner/factory 仍留在 `lib.rs`；shape gate waterline `9610` 与当前 `wc -l lib.rs` 一致。
+- 复核确认旧 `lib.rs` 测试块与新 include 的 `diff -w` 仅有末尾空白行差异，无测试体 / 断言语义差异；`git diff --check` 与 `git diff --check 04172eb^ HEAD` 均无输出。
 
 ## 8. 不接受为
 

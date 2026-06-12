@@ -2,13 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成本地验证，待复核线审查。
+状态：已完成并复核通过，checkpoint 待同步。
 
 Planning baseline commit：`d7d9d3520495425f1c0e8ce5ce3b681970b360be`
 
 Task package commit：`b417e83f7365d57f963abb3e0fd921cbfb2fa36a`
 
 Implementation commit：`04172eb8f8ee59ee3d311c20552eac02c52bd2ca`
+
+Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
 
 本文是 Root Treatment / Stage R 的 R2-T7 任务包，承接 R4-A50 新策略和 R2-T6 inline tests 迁移结果，继续迁移能实际降低 `lib.rs` 棘轮指标的低风险 Rust inline tests。
 
@@ -91,7 +93,7 @@ Implementation commit：`04172eb8f8ee59ee3d311c20552eac02c52bd2ca`
 
 ## 6. 执行记录
 
-本轮已完成实现和本地验证，待复核线只读审查。
+本轮已完成实现、本地验证和复核线只读审查。
 
 实际改动：
 
@@ -116,3 +118,10 @@ Implementation commit：`04172eb8f8ee59ee3d311c20552eac02c52bd2ca`
 保留既有 warning：
 
 - `src/mcp/protocol.rs` 中 `JsonRpcError::invalid_params` dead_code warning。本轮未触碰该文件。
+
+复核结论：
+
+- `STATUS: CLEAR`
+- 复核线程：`019eb850-0698-7f70-a9b2-e7d0d668ccf5`
+- P0/P1/P2：无。
+- 复核确认新 include 只包含 10 个 task memory packet preview tests，未迁移 helper；memory entity relation、formal memory adoption、workflow execution、workflow machine 和 stub runner/factory 仍留在 `lib.rs`；shape gate waterline `9610` 与当前 `wc -l lib.rs` 一致。
