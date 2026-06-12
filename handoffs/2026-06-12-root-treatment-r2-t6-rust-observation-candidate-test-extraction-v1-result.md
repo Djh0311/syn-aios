@@ -10,7 +10,7 @@ Evidence：`evidence/2026-06-12-root-treatment-r2-t6-rust-observation-candidate-
 
 Planning baseline commit：`092dceba6f9dd2896053267b8ffc65702484e0a3`
 
-Implementation commit：`TBD`
+Implementation commit：`abd10f1e6fd11cd94f3ad9d7dca2b5902204c816`
 
 Review result：`TBD`
 
