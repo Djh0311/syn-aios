@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成并复核通过，checkpoint 待回填。
+状态：已完成并复核通过，checkpoint 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t6-rust-observation-candidate-test-extraction-v1.md`
 
@@ -14,7 +14,7 @@ Implementation commit：`abd10f1e6fd11cd94f3ad9d7dca2b5902204c816`
 
 Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`2e8923bd61a7e76bf2fbb704fc01f23741e63d8f`
 
 ## 1. 完成内容
 
