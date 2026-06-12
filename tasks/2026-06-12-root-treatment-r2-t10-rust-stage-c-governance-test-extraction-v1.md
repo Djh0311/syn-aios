@@ -2,9 +2,13 @@
 
 日期：2026-06-12
 
-状态：待执行。
+状态：已完成本地验证，待复核。
 
 Planning baseline commit：`bcf17fa72928a4f772022f67194bb67f2d2f08bc`
+
+Task package commit：`a75ceeefb1cd122e1b65232955aec60e6ba675e5`
+
+Implementation commit：`6fd18a5a7c701e7bfc6aaaa9a970241a6cba250e`
 
 本文是 Root Treatment / Stage R 的 R2-T10 任务包，承接 R2-T9 和 2026-06-12 新策略，只迁移能实际降低 `lib.rs` 棘轮指标的低风险 Rust inline tests。
 
@@ -96,3 +100,42 @@ Planning baseline commit：`bcf17fa72928a4f772022f67194bb67f2d2f08bc`
 - workflow execution runner / workflow machine / K3-B guard 迁移完成
 - UI / 产品行为修改
 - backlog 功能解冻
+
+## 6. 执行记录
+
+本轮已完成实现和本地验证，等待复核线只读审查。
+
+实际改动：
+
+- 新增 `prototypes/productized-desktop-shell/src-tauri/src/lib_stage_c_governance_tests.rs`
+- `prototypes/productized-desktop-shell/src-tauri/src/lib.rs` 原测试块替换为 `include!("lib_stage_c_governance_tests.rs");`
+- `scripts/harness/workbench-shape-gate.js` 的 `lib.rs` waterline 更新为 `8045`
+
+实际形状收益：
+
+- `lib.rs`：`8893 -> 8045`，下降 `848` 行。
+- 新增 include 文件：`849` 行，低于 `.rs` 新文件上限 `3000`。
+
+验证已通过：
+
+- `cargo test --lib project_director_task_plan`：3 passed。
+- `cargo test --lib authorized_prepared_dispatch`：2 passed。
+- `cargo test --lib worker_structured_report`：2 passed。
+- `cargo test --lib process_fact`：3 passed。
+- `cargo test --lib global_final_result_review`：3 passed。
+- `cargo test --lib user_result_decision`：1 passed。
+- `cargo test --lib stage_c_acceptance_summary`：1 passed。
+- `cargo test --lib`：471 passed，16 ignored。
+- `cargo fmt -- --check`：通过。
+- `node scripts/harness/workbench-shape-gate.js --mode check`：pass，0 errors，0 warnings。
+- `git diff --check`：通过。
+
+保留既有 warning：
+
+- `src/mcp/protocol.rs` 中 `JsonRpcError::invalid_params` dead_code warning。本轮未触碰该文件。
+
+范围扫描：
+
+- 新 include 只包含任务包允许的 15 个 tests。
+- 新 include 未命中 `workflow_machine`、`memory_candidate_adoption`、`formal_memory_adoption`、`K3`、`real_state`、`stub`、`runner`。
+- helper / fixture builder 仍留在 `lib.rs`。
