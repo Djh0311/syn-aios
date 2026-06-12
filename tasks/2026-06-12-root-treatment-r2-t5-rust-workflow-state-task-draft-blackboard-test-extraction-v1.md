@@ -2,13 +2,15 @@
 
 日期：2026-06-12
 
-状态：实现完成，待复核，hash 待回填。
+状态：已完成并复核通过，checkpoint 待回填。
 
 Planning baseline commit：`8cd4ee6569dd6131c46ae5ed3e4ead7a3d5e6fb3`
 
 Implementation commit：`3465e4dc96c5141861513d9add37cf7cbddf1440`
 
-Review result：`TBD`
+Implementation fixup commit：`f2a5e36c450e8ab4275d7d356c6cc78925bb93b7`
+
+Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。初次复核发现新 include EOF 空行 P2，已由 fixup commit `f2a5e36c450e8ab4275d7d356c6cc78925bb93b7` 修复并通过最终复核。
 
 Checkpoint commit：`TBD`
 
@@ -104,7 +106,7 @@ Checkpoint commit：`TBD`
 
 ## 6. 执行记录
 
-本轮已完成实现和本地验证，等待复核线只读审查。
+本轮已完成实现、本地验证和复核线只读审查。
 
 实际改动：
 
@@ -128,6 +130,14 @@ Checkpoint commit：`TBD`
 - `cargo fmt -- --check`：通过。
 - `node scripts/harness/workbench-shape-gate.js --mode check`：pass，0 errors，0 warnings。
 - `git diff --check`：通过。
+- `git diff --check 3465e4d^`：EOF fixup 后通过。
+
+复核结论：
+
+- `STATUS: CLEAR`
+- 复核线程：`019eb850-0698-7f70-a9b2-e7d0d668ccf5`
+- P0/P1/P2：无。
+- 初次复核发现新 include EOF 空行 P2；主管线已用 `f2a5e36c450e8ab4275d7d356c6cc78925bb93b7` 修复，最终复核确认 clean worktree、新 include 664 行、shape gate waterline `10279`，无边界越界。
 
 保留既有 warning：
 
