@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a49-authorization-workflow-fixture-helper-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r4-a49-authorization-workflow-fix
 
 Planning baseline commit：`5325579935f6300100a8abf2d2041a9bb1c50118`
 
-Implementation commit：待回填。
+Implementation commit：`ae89584e057eb809cfe6ade176704021a115a73d`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填。
+Checkpoint commit：`61eb2665724d838f05d3ded0ab17fbb9d99c45ba`
 
 ## 1. 完成内容
 

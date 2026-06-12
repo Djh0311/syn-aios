@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 Planning baseline commit：`5325579935f6300100a8abf2d2041a9bb1c50118`
 
-Implementation commit：待回填。
+Implementation commit：`ae89584e057eb809cfe6ade176704021a115a73d`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`。
 
-Checkpoint commit：待回填。
+Checkpoint commit：`61eb2665724d838f05d3ded0ab17fbb9d99c45ba`
 
 本文是 Root Treatment / Stage R 的 R4-A49 任务包；R4-A49 继续对应官方计划 R4-6：离线交互测试按域拆分。R4-A49 只接受为 authorization / proposal / project director / run check 纯测试数据 cluster 从 `offlineAuthorizationWorkflowFixtures.ts` 抽离到独立 helper；不接受为 R4 完成、离线测试全部按域拆分完成、产品 UI 行为修改、真实 Tauri / 截图验收、页面真实数据来源迁移、R3 Level B、真实 Codex 执行或 backlog 功能解冻。
 
