@@ -2,9 +2,13 @@
 
 日期：2026-06-12
 
-状态：待执行。
+状态：已完成本地验证，待复核。
 
 Planning baseline commit：`83441187fef4f3b6acd1ae67a17174f28d4b3823`
+
+Task package commit：`d564febc857c4a51c97d819b295ee66a29218858`
+
+Implementation commit：`8776e95ef005a3a6e1e8e8ff2a21357818564817`
 
 本文是 Root Treatment / Stage R 的 R2-T9 任务包，承接 R2-T8 和 2026-06-12 新策略，只迁移能实际降低 `lib.rs` 棘轮指标的低风险 Rust inline tests。
 
@@ -88,3 +92,39 @@ Planning baseline commit：`83441187fef4f3b6acd1ae67a17174f28d4b3823`
 - task memory packet 产品能力新增或语义变更
 - UI / 产品行为修改
 - backlog 功能解冻
+
+## 6. 执行记录
+
+本轮已完成实现和本地验证，等待复核线只读审查。
+
+实际改动：
+
+- 新增 `prototypes/productized-desktop-shell/src-tauri/src/lib_memory_store_context_tests.rs`
+- `prototypes/productized-desktop-shell/src-tauri/src/lib.rs` 原测试块替换为 `include!("lib_memory_store_context_tests.rs");`
+- `scripts/harness/workbench-shape-gate.js` 的 `lib.rs` waterline 更新为 `8893`
+
+实际形状收益：
+
+- `lib.rs`：`9232 -> 8893`，下降 `339` 行。
+- 新增 include 文件：`340` 行，低于 `.rs` 新文件上限 `3000`。
+
+验证已通过：
+
+- `cargo test --lib memory_candidate_store`：1 passed。
+- `cargo test --lib formal_memory_store`：6 passed。
+- `cargo test --lib formal_memory_context`：6 passed。
+- `cargo test --lib task_memory_packet`：10 passed。
+- `cargo test --lib`：471 passed，16 ignored。
+- `cargo fmt -- --check`：通过。
+- `node scripts/harness/workbench-shape-gate.js --mode check`：pass，0 errors，0 warnings。
+- `git diff --check`：通过。
+
+保留既有 warning：
+
+- `src/mcp/protocol.rs` 中 `JsonRpcError::invalid_params` dead_code warning。本轮未触碰该文件。
+
+范围扫描：
+
+- 新 include 只包含任务包允许的 9 个 tests。
+- `memory_candidate_adoption_project_director_low_risk_project_memory` 仍留在 `lib.rs`。
+- 新 include 中 `codex-workbench` 仅为 fixture `project_root` 字符串，不是 Codex 执行路径。
