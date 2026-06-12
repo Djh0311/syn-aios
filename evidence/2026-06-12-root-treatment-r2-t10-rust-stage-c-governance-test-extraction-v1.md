@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成并复核通过，checkpoint 待同步。
+状态：已完成并复核通过，checkpoint 已同步。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t10-rust-stage-c-governance-test-extraction-v1.md`
 
@@ -11,6 +11,8 @@ Planning baseline commit：`bcf17fa72928a4f772022f67194bb67f2d2f08bc`
 Task package commit：`a75ceeefb1cd122e1b65232955aec60e6ba675e5`
 
 Implementation commit：`6fd18a5a7c701e7bfc6aaaa9a970241a6cba250e`
+
+Authority sync commit：`f946e88907a30f7686eed5f4f7a719b95357b2e6`
 
 Review result：`CLEAR`；复核线程 `019ebb31-ccb7-7072-b105-6b80f37b997f`；P0/P1/P2 无。
 
