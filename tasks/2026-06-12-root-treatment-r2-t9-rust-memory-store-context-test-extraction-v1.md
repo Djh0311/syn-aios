@@ -2,13 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成本地验证，待复核。
+状态：已完成并复核通过，checkpoint 待同步。
 
 Planning baseline commit：`83441187fef4f3b6acd1ae67a17174f28d4b3823`
 
 Task package commit：`d564febc857c4a51c97d819b295ee66a29218858`
 
 Implementation commit：`8776e95ef005a3a6e1e8e8ff2a21357818564817`
+
+Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
 
 本文是 Root Treatment / Stage R 的 R2-T9 任务包，承接 R2-T8 和 2026-06-12 新策略，只迁移能实际降低 `lib.rs` 棘轮指标的低风险 Rust inline tests。
 
@@ -95,7 +97,7 @@ Implementation commit：`8776e95ef005a3a6e1e8e8ff2a21357818564817`
 
 ## 6. 执行记录
 
-本轮已完成实现和本地验证，等待复核线只读审查。
+本轮已完成实现、本地验证和复核线只读审查。
 
 实际改动：
 
@@ -128,3 +130,10 @@ Implementation commit：`8776e95ef005a3a6e1e8e8ff2a21357818564817`
 - 新 include 只包含任务包允许的 9 个 tests。
 - `memory_candidate_adoption_project_director_low_risk_project_memory` 仍留在 `lib.rs`。
 - 新 include 中 `codex-workbench` 仅为 fixture `project_root` 字符串，不是 Codex 执行路径。
+
+复核结论：
+
+- `STATUS: CLEAR`
+- 复核线程：`019eb850-0698-7f70-a9b2-e7d0d668ccf5`
+- P0/P1/P2：无。
+- 复核确认新 include 只包含任务包允许的 9 个 store/context tests；`memory_candidate_adoption_*`、dispatch readiness、workflow execution、workflow machine、K3-B guard、stub runner/factory 仍留在 `lib.rs`；shape gate waterline `8893` 与当前 `wc -l lib.rs` 一致。

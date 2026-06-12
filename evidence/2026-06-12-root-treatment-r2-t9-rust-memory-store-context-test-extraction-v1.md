@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成本地验证，待复核。
+状态：已完成并复核通过，checkpoint 待同步。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t9-rust-memory-store-context-test-extraction-v1.md`
 
@@ -11,6 +11,8 @@ Planning baseline commit：`83441187fef4f3b6acd1ae67a17174f28d4b3823`
 Task package commit：`d564febc857c4a51c97d819b295ee66a29218858`
 
 Implementation commit：`8776e95ef005a3a6e1e8e8ff2a21357818564817`
+
+Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
 
 ## 1. 本轮目标
 
@@ -104,3 +106,13 @@ Implementation commit：`8776e95ef005a3a6e1e8e8ff2a21357818564817`
 - task memory packet 产品能力新增或语义变更
 - UI / 产品行为修改
 - backlog 功能解冻
+
+## 9. 复核结论
+
+复核线只读审查已通过：
+
+- 复核线程：`019eb850-0698-7f70-a9b2-e7d0d668ccf5`
+- 最终结论：`STATUS: CLEAR`
+- P0/P1/P2：无。
+- 复核确认新 include 只包含任务包允许的 9 个 store/context tests，未迁移 helper；`memory_candidate_adoption_*` tests 仍在 `lib.rs`；dispatch readiness、workflow execution、workflow machine、K3-B guard、stub runner/factory 仍留在 `lib.rs`。
+- 复核确认 shape gate waterline `8893` 与当前 `wc -l lib.rs` 一致，`git diff --check` 与 `git diff --check 8776e95^ HEAD` 均无输出。

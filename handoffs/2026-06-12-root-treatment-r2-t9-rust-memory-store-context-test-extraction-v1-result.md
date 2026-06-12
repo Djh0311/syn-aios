@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成本地验证，待复核。
+状态：已完成并复核通过，checkpoint 待同步。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t9-rust-memory-store-context-test-extraction-v1.md`
 
@@ -13,6 +13,8 @@ Planning baseline commit：`83441187fef4f3b6acd1ae67a17174f28d4b3823`
 Task package commit：`d564febc857c4a51c97d819b295ee66a29218858`
 
 Implementation commit：`8776e95ef005a3a6e1e8e8ff2a21357818564817`
+
+Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
 
 ## 1. 完成内容
 
@@ -59,15 +61,16 @@ R2-T9 按新策略继续做能降低 `lib.rs` 棘轮指标的低风险 inline te
 - 修改 UI / CSS / TS
 - 修改 Tauri command、DB/schema、sidecar schema、workflow state JSON schema
 
-## 5. 待复核重点
+## 5. 复核结论
 
-请复核线只读确认：
+复核线只读审查已通过：
 
-- 新 include 只包含任务包允许的 9 个 tests。
-- `memory_candidate_adoption_*` tests 没有迁移。
-- `lib.rs` 只新增 `include!("lib_memory_store_context_tests.rs");`，没有改产品函数签名、可见性或语义。
-- shape gate waterline `8893` 与当前 `wc -l lib.rs` 一致。
-- 本轮没有真实执行、`.codex` 接触、UI/CSS/TS、DB/schema/sidecar/workflow state schema 改动。
+- 复核线程：`019eb850-0698-7f70-a9b2-e7d0d668ccf5`
+- 最终结论：`STATUS: CLEAR`
+- P0/P1/P2：无。
+- 复核确认新 include 只包含任务包允许的 9 个 store/context tests，`memory_candidate_adoption_*` tests 没有迁移。
+- 复核确认 `lib.rs` 只新增 `include!("lib_memory_store_context_tests.rs");` 替换该测试块，没有改产品函数签名、可见性或语义。
+- 复核确认 shape gate waterline `8893` 与当前 `wc -l lib.rs` 一致；本轮没有真实执行、`.codex` 接触、UI/CSS/TS、DB/schema/sidecar/workflow state schema 改动。
 
 ## 6. 不接受为
 
