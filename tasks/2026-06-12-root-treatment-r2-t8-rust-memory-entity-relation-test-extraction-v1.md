@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成并复核通过，checkpoint 待同步。
+状态：已完成并复核通过，checkpoint 已同步。
 
 Planning baseline commit：`515eca4abae963eeb94cc898375e956be448ef41`
 
@@ -11,6 +11,8 @@ Task package commit：`7d95a4f09e9fa01454bbba87ec579130e6bba33e`
 Implementation commit：`677833f43321723a92e919d81bc49e32aa3cd9fc`
 
 Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
+
+Checkpoint authority sync commit：`1e9b0e8aed8a5b518aa9460ab92cdc801cfd7c1d`
 
 本文是 Root Treatment / Stage R 的 R2-T8 任务包，承接 R2-T7 和 2026-06-12 新策略，只迁移能实际降低 `lib.rs` 棘轮指标的低风险 Rust inline tests。
 
