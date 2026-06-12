@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成并复核通过，checkpoint 待同步。
+状态：已完成并复核通过，checkpoint 已同步。
 
 Planning baseline commit：`d45fd0adaf437eecfbbb1258ff0f095b502b45f1`
 
@@ -13,6 +13,8 @@ Task package hash backfill commit：`5ea9fba80b609b49fee110e32363e44f137c9d18`
 Implementation commit：`6a0640a9088445f196282f8c0b657c4ec079872b`
 
 P2 fix commit：`e07fe3411b1a18e01ffff43c9b9443c39dcbdb9a`
+
+Authority sync commit：`fe7f40b3a94fce0227bcc28c4380942e9ad2aadc`
 
 Review result：`CLEAR`；复核线程 `019ebb31-ccb7-7072-b105-6b80f37b997f`；P0/P1/P2 无。
 
