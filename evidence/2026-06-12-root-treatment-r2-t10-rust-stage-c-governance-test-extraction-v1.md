@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成本地验证，待复核。
+状态：已完成并复核通过，checkpoint 待同步。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t10-rust-stage-c-governance-test-extraction-v1.md`
 
@@ -11,6 +11,8 @@ Planning baseline commit：`bcf17fa72928a4f772022f67194bb67f2d2f08bc`
 Task package commit：`a75ceeefb1cd122e1b65232955aec60e6ba675e5`
 
 Implementation commit：`6fd18a5a7c701e7bfc6aaaa9a970241a6cba250e`
+
+Review result：`CLEAR`；复核线程 `019ebb31-ccb7-7072-b105-6b80f37b997f`；P0/P1/P2 无。
 
 ## 1. 本轮目标
 
@@ -108,12 +110,12 @@ Implementation commit：`6fd18a5a7c701e7bfc6aaaa9a970241a6cba250e`
 - UI / 产品行为修改
 - backlog 功能解冻
 
-## 9. 待复核重点
+## 9. 复核结论
 
-请复核线只读确认：
+复核线只读审查已通过：
 
-- 新 include 只包含任务包允许的 15 个 Stage C governance tests。
-- `lib.rs` 只新增 `include!("lib_stage_c_governance_tests.rs");` 替换该测试块，没有改产品函数签名、可见性或语义。
-- helper / fixture builder 没有迁移。
-- 禁止迁移的 workflow machine、runner、K3-B、real-state、memory candidate adoption、formal memory adoption、cross-store adoption 相关 tests 没有迁入新 include。
-- shape gate waterline `8045` 与当前 `wc -l lib.rs` 一致。
+- 复核线程：`019ebb31-ccb7-7072-b105-6b80f37b997f`
+- 最终结论：`STATUS: CLEAR`
+- P0/P1/P2：无。
+- 复核确认新 include 只包含任务包允许的 15 个 Stage C governance tests；旧 `lib.rs` 被删测试块与新 include 文件内容一致；helper 仍留在 `lib.rs`；禁止迁移的 workflow machine、runner/stub、K3、real-state、memory/formal/cross-store adoption tests 没有迁入新 include。
+- 复核确认 shape gate waterline `8045` 与当前 `wc -l lib.rs` 一致，`git diff --check a75ceeef..6fd18a5` 与当前 `git diff --check` 均无输出。
