@@ -2,11 +2,19 @@
 
 日期：2026-06-12
 
-状态：待执行。
+状态：已完成并复核通过，checkpoint 待同步。
 
 Planning baseline commit：`d45fd0adaf437eecfbbb1258ff0f095b502b45f1`
 
 Task package commit：`9e1b6abbf46c7203cb90b906900226d9e3a592fe`
+
+Task package hash backfill commit：`5ea9fba80b609b49fee110e32363e44f137c9d18`
+
+Implementation commit：`6a0640a9088445f196282f8c0b657c4ec079872b`
+
+P2 fix commit：`e07fe3411b1a18e01ffff43c9b9443c39dcbdb9a`
+
+Review result：`CLEAR`；复核线程 `019ebb31-ccb7-7072-b105-6b80f37b997f`；P0/P1/P2 无。
 
 本文是 Root Treatment / Stage R 的 R2-T11 任务包，承接 R2-T10 和 2026-06-12 新策略，只迁移能实际降低 `lib.rs` 棘轮指标的低风险 Rust inline tests。
 
@@ -117,3 +125,38 @@ Task package commit：`9e1b6abbf46c7203cb90b906900226d9e3a592fe`
 - formal memory adoption 迁移完成
 - UI / 产品行为修改
 - backlog 功能解冻
+
+## 6. 执行记录
+
+本轮已完成实现、本地验证、P2 whitespace 修补和复核线只读审查。
+
+实际改动：
+
+- 新增 `prototypes/productized-desktop-shell/src-tauri/src/lib_task_package_dispatch_preparation_tests.rs`
+- `prototypes/productized-desktop-shell/src-tauri/src/lib.rs` 原测试块替换为 `include!("lib_task_package_dispatch_preparation_tests.rs");`
+- `scripts/harness/workbench-shape-gate.js` 的 `lib.rs` waterline 更新为 `6544`
+
+实际形状收益：
+
+- `lib.rs`：`8045 -> 6544`，下降 `1501` 行。
+- 新增 include 文件：`1503` 行，低于 `.rs` 新文件上限 `3000`。
+- 旧测试块与新 include 字节级一致；P2 fix 只删除末尾空白。
+
+验证已通过：
+
+- `cargo test --lib workflow_run_check`：2 passed。
+- `cargo test --lib task_package`：29 passed，1 ignored。
+- `cargo test --lib task_memory_injection`：5 passed。
+- `cargo test --lib dispatch_field_correction`：5 passed。
+- `cargo test --lib`：471 passed，16 ignored。
+- `cargo fmt -- --check`：通过。
+- `node scripts/harness/workbench-shape-gate.js --mode check`：pass，0 errors，0 warnings。
+- `git diff --check`：通过。
+- `git diff --check 5ea9fba80b609b49fee110e32363e44f137c9d18..HEAD`：通过。
+
+复核结论：
+
+- `STATUS: CLEAR`
+- 复核线程：`019ebb31-ccb7-7072-b105-6b80f37b997f`
+- P0/P1/P2：无。
+- 复核确认新 include 只包含任务包允许的 32 个 tests；禁止关键词扫描无命中；shape gate waterline `6544` 与当前 `wc -l lib.rs` 一致。

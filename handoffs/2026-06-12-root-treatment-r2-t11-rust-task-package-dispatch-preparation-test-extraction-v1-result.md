@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：实现和本地验证已完成，复核待进行。
+状态：已完成并复核通过，checkpoint 待同步。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t11-rust-task-package-dispatch-preparation-test-extraction-v1.md`
 
@@ -16,7 +16,9 @@ Task package hash backfill commit：`5ea9fba80b609b49fee110e32363e44f137c9d18`
 
 Implementation commit：`6a0640a9088445f196282f8c0b657c4ec079872b`
 
-Review result：待复核。
+P2 fix commit：`e07fe3411b1a18e01ffff43c9b9443c39dcbdb9a`
+
+Review result：`CLEAR`；复核线程 `019ebb31-ccb7-7072-b105-6b80f37b997f`；P0/P1/P2 无。
 
 ## 1. 完成内容
 
@@ -68,15 +70,16 @@ R2-T11 按新策略继续做能降低 `lib.rs` 棘轮指标的低风险 inline t
 
 - 一次旧口径扫描命令曾因双引号内 Markdown 反引号触发 shell 命令替换，输出 `zsh: command not found: lib.rs`；该误扫没有执行 Codex、没有触碰 `/Users/yoyi/.codex`，随后已用单引号固定短语重跑扫描。
 
-## 5. 复核待办
+## 5. 复核结论
 
-复核线需只读确认：
+复核线只读审查已通过：
 
-- 新 include 只包含任务包允许的 32 个 tests。
-- 旧 `lib.rs` 被删测试块与新 include 文件内容一致。
-- helper / fixture builder 没有迁移。
-- workflow node dispatch execute/readback、workflow machine、runner/stub、K3、real-state、memory/formal/cross-store adoption、offline role dispatch tests 没有迁入新 include。
-- shape gate waterline `6544` 与当前 `wc -l lib.rs` 一致。
+- 复核线程：`019ebb31-ccb7-7072-b105-6b80f37b997f`
+- 最终结论：`STATUS: CLEAR`
+- P0/P1/P2：无。
+- 初审唯一 P2 为新 include EOF 空白；已用 `e07fe3411b1a18e01ffff43c9b9443c39dcbdb9a` 窄修。
+- 复核确认 `git show --check e07fe3411b1a18e01ffff43c9b9443c39dcbdb9a` 无 whitespace 报告，`git diff --check 5ea9fba80b609b49fee110e32363e44f137c9d18..HEAD` 无输出。
+- 复核确认新 include 仍为 32 个 tests，禁止关键词扫描无命中，shape gate waterline `6544` 与当前 `wc -l lib.rs` 一致。
 
 ## 6. 不接受为
 
