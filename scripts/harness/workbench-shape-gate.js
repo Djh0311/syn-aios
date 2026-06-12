@@ -7,7 +7,10 @@ const path = require('path');
 const PRODUCT_ROOT = 'prototypes/productized-desktop-shell';
 const R_PREFLIGHT_BASELINE_COMMIT = 'ed01c6f281e3fd7a38548da948046e8366cc368d';
 const R0_PACKAGE_COMMIT = 'a40b7b56ab949cd26b145ba0eccf9f3921886ea0';
-const COMMAND_BASELINE_TOTAL = 96;
+const RATCHET_POLICY = 'historical_lowest_closed_value';
+const COMMAND_BASELINE_TOTAL = 97;
+const COMMAND_BASELINE_TOTAL_DECISION =
+  'R4-A2 query_workbench_page_read_model introduced one read-only skeleton Tauri command; strategy review P2-3 accepted 97 as the current command baseline.';
 const COMMAND_BASELINE_LIB_RS = 0;
 const JS_GATE_SOFT_LIMIT = 500;
 
@@ -32,16 +35,16 @@ const KEY_METRIC_FILES = [
 ];
 
 const RATCHET_WATERLINES = new Map([
-  ['prototypes/productized-desktop-shell/src-tauri/src/lib.rs', 25925],
-  ['prototypes/productized-desktop-shell/tests/offline-permission-dialog.test.tsx', 9369],
+  ['prototypes/productized-desktop-shell/src-tauri/src/lib.rs', 13965],
+  ['prototypes/productized-desktop-shell/tests/offline-permission-dialog.test.tsx', 3404],
   ['prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs', 8763],
   ['prototypes/productized-desktop-shell/src/styles.css', 8464],
-  ['prototypes/productized-desktop-shell/src/views/ProjectsView.tsx', 6069],
+  ['prototypes/productized-desktop-shell/src/views/ProjectsView.tsx', 5897],
   ['prototypes/productized-desktop-shell/src-tauri/src/types.rs', 5386],
   ['prototypes/productized-desktop-shell/src-tauri/src/session_continuation_store.rs', 5237],
-  ['prototypes/productized-desktop-shell/src/lib/types.ts', 5149],
+  ['prototypes/productized-desktop-shell/src/lib/types.ts', 4998],
   ['prototypes/productized-desktop-shell/src-tauri/src/project_workflow_automation.rs', 5059],
-  ['prototypes/productized-desktop-shell/src/views/AgentView.tsx', 3365],
+  ['prototypes/productized-desktop-shell/src/views/AgentView.tsx', 3118],
   ['prototypes/productized-desktop-shell/src-tauri/src/worker_protocol.rs', 2429],
   ['prototypes/productized-desktop-shell/src/lib/projectCanvas.ts', 2050]
 ]);
@@ -263,7 +266,9 @@ function buildReport(args) {
     baselines: {
       r_preflight_baseline_commit: R_PREFLIGHT_BASELINE_COMMIT,
       r0_package_commit: R0_PACKAGE_COMMIT,
+      ratchet_policy: RATCHET_POLICY,
       command_total: COMMAND_BASELINE_TOTAL,
+      command_total_decision: COMMAND_BASELINE_TOTAL_DECISION,
       lib_rs_command_count: COMMAND_BASELINE_LIB_RS,
       new_file_limits: Object.fromEntries(NEW_FILE_LIMITS),
       sidecar_json_kinds: Array.from(ALLOWED_SIDECAR_JSON).sort()
@@ -300,7 +305,7 @@ function buildReport(args) {
     if (entry.status === 'missing') {
       addFinding(report, 'warn', 'ratchet_file_missing', 'A ratchet file is missing; confirm this is an intentional governance change.', entry);
     } else if (entry.status === 'increased') {
-      addFinding(report, 'error', 'ratchet_file_increased', 'A ratchet file is above its R0 waterline.', entry);
+      addFinding(report, 'error', 'ratchet_file_increased', 'A ratchet file is above its historical-low ratchet waterline.', entry);
     } else if (entry.lines > (NEW_FILE_LIMITS.get(path.extname(entry.file)) || Infinity) || entry.file.endsWith('styles.css')) {
       addFinding(report, 'info', 'ratchet_file_existing_debt', 'Existing oversized file is tracked as ratchet debt and must not grow.', entry);
     }
@@ -363,6 +368,7 @@ function printReport(report) {
   console.log(`Warnings: ${report.summary.warning_count}`);
   console.log(`Info: ${report.summary.info_count}`);
   console.log(`Git HEAD: ${report.git.head || 'unavailable'}`);
+  console.log(`Ratchet policy: ${report.baselines.ratchet_policy}`);
   console.log('');
   console.log('Key metrics:');
   for (const entry of report.metrics.lines.metric_files) {

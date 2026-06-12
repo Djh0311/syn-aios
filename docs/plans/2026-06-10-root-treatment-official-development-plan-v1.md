@@ -480,8 +480,17 @@ R4 只拆读模型和前端结构，不改布局风格。
 | R4-3 / R4-A8 | ProjectsView 拆分 | project page components | 已完成并通过复核线 `STATUS: CLEAR`；`ProjectsView.tsx` 从 6,069 行降到 5,897，项目入口和资料 / 资源面板抽出，页面行为不变 |
 | R4-4 / R4-A9 | AgentView 拆分 | agent page components | 已完成并通过复核线 `STATUS: CLEAR`；`AgentView.tsx` 从 3,360 行降到 3,118，transcript 展示组件抽出，对话工作区行为不变 |
 | R4-5 / R4-A10 | styles.css 风格资产提炼 | ink style tokens / docs | 已完成并通过复核线 `STATUS: CLEAR`；新增 `docs/design/2026-06-11-root-treatment-r4-a10-ink-style-assets-v1.md`，只接受为风格资产清单和后续 CSS 治理依据，不接受为 CSS 源码拆分或 UI 重做 |
-| R4-6 / R4-A11 到 R4-A49 | 离线测试拆分 | tests by domain | R4-A11 到 R4-A49 已完成；A11/A12/A19/A21 通过复核线 `STATUS: CLEAR_WITH_P2` 且 P2 均已处理或进入 hash backfill，A13/A14/A15/A16/A17/A18/A20/A22/A23/A24/A25/A26/A27/A28/A29/A30/A31/A32/A33/A34/A35/A36/A37/A38/A39/A40/A41/A42/A43/A44/A45/A46/A47/A48/A49 通过复核线 `STATUS: CLEAR`；主测试通用 helper、权限弹层场景 runner、任务字段 / 派发准备 helper、runtime / diagnostic fixture helper、worker protocol fixture helper、workflow state 变体 fixture helper、authorization workflow fixture helper、基础 workflow state / project workflow fixture helper、derived workflow fixture helper、C6 result summary fixture helper、run queue fixture helper、candidate governance fixture helper、memory center core store fixture helper、memory center governance fixture helper、memory pattern fixture helper、KnowledgeBase / Secretary fixture helper、Transcript / Session fixture helper、Workbench base snapshot fixture helper、Real Execution Product Command / Project Workflow Automation fixture helper、Session Continuation Store fixture helper、Memory Center pending action fixture helper、Task Workflow Action fixture helper、Offline Role Runtime fixture helper、Workflow Control Action fixture helper、Project Planning Action fixture helper、Right Rail Common Props fixture helper、Shell / Agent / Project Text fixture helper、Execution / Run Queue Text fixture helper、Agent Boundary Text fixture helper、Memory / Knowledge / Secretary Text fixture helper、Project / Runtime / Transcript / Role Text fixture helper、Read Model Contract Id fixture helper、Offline Scenario Environment fixture helper、Shell Remaining Expected Action fixture helper、Workflow Action fixture helper、Project Blackboard fixture helper、Derived Project Workflow fixture helper、Candidate Memory Lifecycle fixture helper、Authorization Workflow Cluster fixture helper 已抽出，`offline-permission-dialog.test.tsx` 从 9,369 行到 3,404 行，测试仍绿；R4-6 后续仍需继续按域拆分 |
+| R4-6 / R4-A11 到 R4-A49 | 离线测试拆分 | tests by domain | R4-A11 到 R4-A49 已完成；A11/A12/A19/A21 通过复核线 `STATUS: CLEAR_WITH_P2` 且 P2 均已处理或进入 hash backfill，A13/A14/A15/A16/A17/A18/A20/A22/A23/A24/A25/A26/A27/A28/A29/A30/A31/A32/A33/A34/A35/A36/A37/A38/A39/A40/A41/A42/A43/A44/A45/A46/A47/A48/A49 通过复核线 `STATUS: CLEAR`；主测试通用 helper、权限弹层场景 runner、任务字段 / 派发准备 helper、runtime / diagnostic fixture helper、worker protocol fixture helper、workflow state 变体 fixture helper、authorization workflow fixture helper、基础 workflow state / project workflow fixture helper、derived workflow fixture helper、C6 result summary fixture helper、run queue fixture helper、candidate governance fixture helper、memory center core store fixture helper、memory center governance fixture helper、memory pattern fixture helper、KnowledgeBase / Secretary fixture helper、Transcript / Session fixture helper、Workbench base snapshot fixture helper、Real Execution Product Command / Project Workflow Automation fixture helper、Session Continuation Store fixture helper、Memory Center pending action fixture helper、Task Workflow Action fixture helper、Offline Role Runtime fixture helper、Workflow Control Action fixture helper、Project Planning Action fixture helper、Right Rail Common Props fixture helper、Shell / Agent / Project Text fixture helper、Execution / Run Queue Text fixture helper、Agent Boundary Text fixture helper、Memory / Knowledge / Secretary Text fixture helper、Project / Runtime / Transcript / Role Text fixture helper、Read Model Contract Id fixture helper、Offline Scenario Environment fixture helper、Shell Remaining Expected Action fixture helper、Workflow Action fixture helper、Project Blackboard fixture helper、Derived Project Workflow fixture helper、Candidate Memory Lifecycle fixture helper、Authorization Workflow Cluster fixture helper 已抽出，`offline-permission-dialog.test.tsx` 从 9,369 行到 3,404 行，测试仍绿；按 2026-06-12 策略审查，后续 R4-6 仅允许立项能降低棘轮指标的拆分包 |
+| R4-A50 | 策略调整与 shape gate 硬化 | `workbench-shape-gate.js` / plan update | 当前任务；把 ratchet 水位改为历史最低收口值，固化 Tauri command 97 基线，补 R4-6 停止线 |
 | R4-7 | UI 边界复核 | evidence / screenshots if needed | 不实际重做布局，不动视觉风格 |
+
+R4-6 停止线和立项规则（2026-06-12 策略审查后立即生效）：
+
+- R4-6 完成判据：主文件 `offline-permission-dialog.test.tsx` ≤ 2,000 行，或剩余内容已属单一域不可再拆，以先到者为准。
+- 后续任何 R4-6 包必须在任务包中写明“预计使哪个棘轮指标下降多少行”。
+- 不降低任何棘轮指标的拆分包不得立项。
+- 已低于 2,000 行新文件上限的 helper 文件不再单独作为拆分对象；确需的准备工作并入能降低棘轮指标的任务包。
+- 原“准备 R4-A50 继续中等粒度离线交互测试按域拆分”已取消；R4-A50 改为策略调整与 shape gate 硬化。
 
 R4 必须为解冻后 UI 预留：
 
@@ -721,9 +730,12 @@ R0 可接受不跑全量 cargo，但必须说明原因；R1 改 Rust 存储逻�
 
 当前按用户要求继续 Root Treatment / Stage R，下一步：
 
-1. 准备 R4-A50：继续中等粒度离线交互测试按域拆分任务包。
-2. R4 必须按页查询和前端结构瘦身，不改视觉风格、不实际重做布局、不实现 MCP 看图工具。
-3. 如要执行 R3 Level B，必须先写单独 execution record，明确 allowed source root、production DB path、backup / report / rollback manifest、before / after source hashes、rollback / recovery，不得跳过 fresh verify。
+1. 收口 R4-A50：策略调整与 shape gate 硬化，取消无棘轮收益的 helper 拆分方向。
+2. 准备 R2 后段 inline tests 迁移复评：以 R3-A13 完成为输入，明确继续挂起或解锁的理由和复评触发点。
+3. 准备 R3 Level B 窗口计划：只写计划，不执行；执行窗口由用户另行排期拍板。
+4. 准备 checkpoint 轮转方案：只写方案，动权威入口结构前必须用户确认。
+5. R4 后续必须转向硬目标：types.ts 分域 / snapshot 按页查询、ProjectsView / AgentView 按目标布局区块拆分；不改视觉风格、不实际重做布局、不实现 MCP 看图工具。
+6. 如要执行 R3 Level B，必须先写单独 execution record，明确 allowed source root、production DB path、backup / report / rollback manifest、before / after source hashes、rollback / recovery，不得跳过 fresh verify。
 
 下一步准备期间：
 
