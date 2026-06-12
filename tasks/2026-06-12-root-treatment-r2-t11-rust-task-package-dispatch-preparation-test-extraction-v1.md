@@ -6,7 +6,7 @@
 
 Planning baseline commit：`d45fd0adaf437eecfbbb1258ff0f095b502b45f1`
 
-Task package commit：待回填。
+Task package commit：`9e1b6abbf46c7203cb90b906900226d9e3a592fe`
 
 本文是 Root Treatment / Stage R 的 R2-T11 任务包，承接 R2-T10 和 2026-06-12 新策略，只迁移能实际降低 `lib.rs` 棘轮指标的低风险 Rust inline tests。
 
