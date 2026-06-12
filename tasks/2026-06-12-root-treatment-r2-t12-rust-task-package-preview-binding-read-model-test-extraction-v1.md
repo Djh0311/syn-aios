@@ -8,9 +8,13 @@ Supervisor：Claude（claude-fable-5，临时代班，依据 `handoffs/2026-06-1
 
 Planning baseline commit：`435c21471ad056bd7ed1b44681ad52f285883b5c`
 
-Task package commit：随 commit 序列回填
+Takeover docs commit：`6fba75ef3facbaf03f81f19c3f235df5981b2875`
 
-Implementation commit：随 commit 序列回填
+Task package commit：`7d5333936b46c2532c4811c70c99233e31125b9d`
+
+Implementation commit：`a3fce1f7385616bae3d0b19a1ec0907b5943ea47`
+
+Evidence commit：`86827770f13f6c91155f415fd9b2ff7c28e83158`
 
 Review result：`CLEAR`；复核结论文件 `evidence/2026-06-12-root-treatment-r2-t12-rust-task-package-preview-binding-read-model-test-extraction-v1-review-claude-v1.md`（Reviewer：claude-opus-4-8，复核线临时代班）；P0/P1/P2 无
 
