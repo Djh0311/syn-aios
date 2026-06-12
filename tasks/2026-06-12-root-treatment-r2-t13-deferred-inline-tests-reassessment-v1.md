@@ -8,6 +8,10 @@ Supervisor：Claude（claude-fable-5，临时代班，依据 `handoffs/2026-06-1
 
 Planning baseline commit：`dd39c8254f9ef9ed45e0e2e641e7bd81130322e4`
 
+Task package commit：`82d30751771b77aa99d16fb21d2ef02e8eeb5ada`
+
+Evidence commit：`f3ad6e3779b16c01643213eedc612c85014699f9`
+
 Review result：`CLEAR`；复核结论文件 `evidence/2026-06-12-root-treatment-r2-t13-deferred-inline-tests-reassessment-v1-review-claude-v1.md`（Reviewer：claude-opus-4-8，复核线临时代班）；P0/P1/P2 无。复核线另以产品函数控制流核对确认：`record_workflow_dispatch_director_review_at` 全函数（含成功路径）无 runner 构造与调用，director review 组"一迁一禁"为依赖画像差异而非名称裁剪
 
 本文是 Root Treatment / Stage R 的 R2-T13 评估任务包，落实 R2-T12 §6 的复评触发点：对 T12 标记为 deferred 的 11 个 `lib.rs` inline tests 逐测试核对 runner fixture / store / 冻结语义依赖，写成显式裁决。
