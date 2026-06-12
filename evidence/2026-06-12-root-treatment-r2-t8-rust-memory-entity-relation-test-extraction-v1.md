@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成本地验证，复核待回收。
+状态：已完成并复核通过，checkpoint 待同步。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t8-rust-memory-entity-relation-test-extraction-v1.md`
 
@@ -11,6 +11,8 @@ Planning baseline commit：`515eca4abae963eeb94cc898375e956be448ef41`
 Task package commit：`7d95a4f09e9fa01454bbba87ec579130e6bba33e`
 
 Implementation commit：`677833f43321723a92e919d81bc49e32aa3cd9fc`
+
+Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
 
 ## 1. 本轮目标
 
@@ -78,11 +80,20 @@ Implementation commit：`677833f43321723a92e919d81bc49e32aa3cd9fc`
 - 修改 UI / CSS / TS。
 - 修改 Tauri command、DB/schema、sidecar schema、workflow state JSON schema。
 
-关键词扫描待复核线补充只读确认；主管线本轮改动限定在新增 include、`lib.rs` include 位置和 shape gate waterline。
+复核线关键词扫描确认：
+
+- 新 include 未迁移 helper；未命中 `use/mod/pub/struct/enum/impl`、`std::process`、Tauri command、网络、真实 Codex、`.codex`、`.env`、keychain、OAuth、provider credential、full transcript 等越界形状。
+- `secret` 只出现在 `memory_entity_relation_secret_relation_source_is_not_exported_to_task_packet` 的 fixture 文案中，用于验证 secret source 不导出，不是读取凭据。
 
 ## 7. 复核状态
 
-复核线待回收。
+复核线只读审查已通过：
+
+- 复核线程：`019eb850-0698-7f70-a9b2-e7d0d668ccf5`
+- 最终结论：`STATUS: CLEAR`
+- P0/P1/P2：无。
+- 复核确认新 include 只包含 5 个任务包允许的 `memory_entity_relation_*` tests，未迁移 helper；memory candidate/formal memory adoption、dispatch readiness、workflow execution、workflow machine、K3-B guard 和 stub runner/factory 仍留在 `lib.rs`；shape gate waterline `9232` 与当前 `wc -l lib.rs` 一致。
+- 复核确认 `git diff --check` 与 `git diff --check 677833f^ HEAD` 均无输出。
 
 ## 8. 不接受为
 

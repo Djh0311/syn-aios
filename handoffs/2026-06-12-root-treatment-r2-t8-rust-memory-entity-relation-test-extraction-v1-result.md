@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成本地验证，复核待回收。
+状态：已完成并复核通过，checkpoint 待同步。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t8-rust-memory-entity-relation-test-extraction-v1.md`
 
@@ -13,6 +13,8 @@ Planning baseline commit：`515eca4abae963eeb94cc898375e956be448ef41`
 Task package commit：`7d95a4f09e9fa01454bbba87ec579130e6bba33e`
 
 Implementation commit：`677833f43321723a92e919d81bc49e32aa3cd9fc`
+
+Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
 
 ## 1. 完成内容
 
@@ -57,15 +59,15 @@ R2-T8 按新策略继续做能降低 `lib.rs` 棘轮指标的低风险 inline te
 - 修改 UI / CSS / TS
 - 修改 Tauri command、DB/schema、sidecar schema、workflow state JSON schema
 
-## 5. 复核请求
+## 5. 复核结论
 
-请复核线只读审查：
+复核线只读审查已通过：
 
-- 新 include 是否只包含任务包允许的 5 个 `memory_entity_relation_*` tests。
-- `lib.rs` 是否只在原位置改为 `include!("lib_memory_entity_relation_tests.rs");`，共享 helper 是否仍留在 `lib.rs`。
-- 是否误迁 formal memory adoption、memory candidate adoption、task package、dispatch readiness、workflow execution runner、workflow machine、K3-B runtime prompt guard、ignored real-state tests、cross-store memory adoption 或共享 stub runner / factory。
-- shape gate waterline `9232` 是否与当前 `wc -l lib.rs` 一致。
-- 是否存在真实 Codex 执行、`.codex` 读写、Tauri command / DB / sidecar / workflow state schema / UI 修改。
+- 复核线程：`019eb850-0698-7f70-a9b2-e7d0d668ccf5`
+- 最终结论：`STATUS: CLEAR`
+- P0/P1/P2：无。
+- 复核确认新 include 只包含 5 个任务包允许的 `memory_entity_relation_*` tests，未迁移 helper；memory candidate/formal memory adoption、dispatch readiness、workflow execution、workflow machine、K3-B guard 和 stub runner/factory 仍留在 `lib.rs`。
+- 复核确认 shape gate waterline `9232` 与当前 `wc -l lib.rs` 一致，`git diff --check` 与 `git diff --check 677833f^ HEAD` 均无输出。
 
 ## 6. 不接受为
 
