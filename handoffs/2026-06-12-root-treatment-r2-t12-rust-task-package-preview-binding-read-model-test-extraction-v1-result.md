@@ -4,7 +4,7 @@
 
 Supervisor：Claude（claude-fable-5，临时代班，依据 `handoffs/2026-06-12-supervisor-line-temporary-takeover-codex-to-claude-v1.md`）
 
-状态：已完成并通过复核线 `STATUS: CLEAR`；用户已放行，commit 序列执行中，checkpoint 同步随后。
+状态：已完成并复核通过，checkpoint 已同步。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t12-rust-task-package-preview-binding-read-model-test-extraction-v1.md`
 
@@ -17,6 +17,10 @@ Takeover docs commit：`6fba75ef3facbaf03f81f19c3f235df5981b2875`
 Task package commit：`7d5333936b46c2532c4811c70c99233e31125b9d`
 
 Implementation commit：`a3fce1f7385616bae3d0b19a1ec0907b5943ea47`
+
+复核清除 commit：`bcb8864b0f4684f44bce6819e81b7ac5c5cbd9fe`
+
+Authority sync commit：`cf47fb8524f6ed795b3eee8a712573449cd752e1`
 
 Review result：`CLEAR`；复核结论文件 `evidence/2026-06-12-root-treatment-r2-t12-rust-task-package-preview-binding-read-model-test-extraction-v1-review-claude-v1.md`（Reviewer：claude-opus-4-8，复核线临时代班）；P0/P1/P2 无；详见第 5 节
 
