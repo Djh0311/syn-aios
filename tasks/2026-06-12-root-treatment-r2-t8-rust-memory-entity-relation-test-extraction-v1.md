@@ -2,9 +2,13 @@
 
 日期：2026-06-12
 
-状态：待执行。
+状态：已完成本地验证，复核待回收。
 
 Planning baseline commit：`515eca4abae963eeb94cc898375e956be448ef41`
+
+Task package commit：`7d95a4f09e9fa01454bbba87ec579130e6bba33e`
+
+Implementation commit：`677833f43321723a92e919d81bc49e32aa3cd9fc`
 
 本文是 Root Treatment / Stage R 的 R2-T8 任务包，承接 R2-T7 和 2026-06-12 新策略，只迁移能实际降低 `lib.rs` 棘轮指标的低风险 Rust inline tests。
 
@@ -80,3 +84,31 @@ Planning baseline commit：`515eca4abae963eeb94cc898375e956be448ef41`
 - formal memory adoption 迁移完成
 - UI / 产品行为修改
 - backlog 功能解冻
+
+## 6. 执行记录
+
+本轮已完成实现和本地验证，复核线待回收。
+
+实际改动：
+
+- 新增 `prototypes/productized-desktop-shell/src-tauri/src/lib_memory_entity_relation_tests.rs`
+- `prototypes/productized-desktop-shell/src-tauri/src/lib.rs` 原测试块替换为 `include!("lib_memory_entity_relation_tests.rs");`
+- `scripts/harness/workbench-shape-gate.js` 的 `lib.rs` waterline 更新为 `9232`
+
+实际形状收益：
+
+- `lib.rs`：`9610 -> 9232`，下降 `378` 行。
+- 新增 include 文件：`379` 行，低于 `.rs` 新文件上限 `3000`。
+
+验证已通过：
+
+- `cargo test --lib memory_entity_relation`：5 passed。
+- `cargo test --lib task_memory_packet`：10 passed。
+- `cargo test --lib`：471 passed，16 ignored。
+- `cargo fmt -- --check`：通过。
+- `node scripts/harness/workbench-shape-gate.js --mode check`：pass，0 errors，0 warnings。
+- `git diff --check`：通过。
+
+保留既有 warning：
+
+- `src/mcp/protocol.rs` 中 `JsonRpcError::invalid_params` dead_code warning。本轮未触碰该文件。
