@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：复核通过，hash 待回填。
+状态：已完成，hash 已回填。
 
 Planning baseline commit：`56e59569abbe7e3e160ac4f6229ef5ed1525649d`
 
-Implementation commit：`TBD`
+Implementation commit：`e428c98c5e04f24282d5ae10cdb46d20b850e588`
 
 Review result：`CLEAR`，P0/P1/P2 无；复核线程继续复用 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`。
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`bda6c096ec1ad6c5f653d3eb06ec778bf1fd78dc`
 
 本文是 Root Treatment / Stage R 的 R2-T3 任务包，承接新策略调整、R4-A50 shape gate 硬化、R2-T0 `PARTIALLY_UNLOCKED_WITH_GUARDS` 裁决、R2-T1 / R2-T2 inline tests 迁移结果，继续迁移低风险 Rust inline tests，并把 `lib.rs` 历史最低水位线继续下压。
 

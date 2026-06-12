@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：复核通过，hash 待回填。
+状态：已完成，hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t3-rust-authorization-proposal-boundary-test-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r2-t3-rust-authorization-proposal
 
 Planning baseline commit：`56e59569abbe7e3e160ac4f6229ef5ed1525649d`
 
-Implementation commit：`TBD`
+Implementation commit：`e428c98c5e04f24282d5ae10cdb46d20b850e588`
 
 Review result：`CLEAR`，P0/P1/P2 无；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`bda6c096ec1ad6c5f653d3eb06ec778bf1fd78dc`
 
 ## 1. 本轮做了什么
 
