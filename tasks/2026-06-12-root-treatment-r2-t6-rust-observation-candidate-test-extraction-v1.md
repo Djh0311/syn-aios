@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：待执行。
+状态：实现完成，待复核，hash 待回填。
 
 Planning baseline commit：`092dceba6f9dd2896053267b8ffc65702484e0a3`
 
@@ -88,3 +88,31 @@ Checkpoint commit：`TBD`
 - task memory packet / formal memory adoption 迁移完成
 - UI / 产品行为修改
 - backlog 功能解冻
+
+## 6. 执行记录
+
+本轮已完成实现和本地验证，等待复核线只读审查。
+
+实际改动：
+
+- 新增 `prototypes/productized-desktop-shell/src-tauri/src/lib_observation_candidate_tests.rs`
+- `prototypes/productized-desktop-shell/src-tauri/src/lib.rs` 原测试块替换为 `include!("lib_observation_candidate_tests.rs");`
+- `scripts/harness/workbench-shape-gate.js` 的 `lib.rs` waterline 更新为 `9996`
+
+实际形状收益：
+
+- `lib.rs`：`10279 -> 9996`，下降 `283` 行。
+- 新增 include 文件：`284` 行，低于 `.rs` 新文件上限 `3000`。
+
+验证已通过：
+
+- `cargo test --lib observation`：40 passed。
+- `cargo test --lib task_memory_packet`：10 passed。
+- `cargo test --lib`：471 passed，16 ignored。
+- `cargo fmt -- --check`：通过。
+- `node scripts/harness/workbench-shape-gate.js --mode check`：pass，0 errors，0 warnings。
+- `git diff --check`：通过。
+
+保留既有 warning：
+
+- `src/mcp/protocol.rs` 中 `JsonRpcError::invalid_params` dead_code warning。本轮未触碰该文件。
