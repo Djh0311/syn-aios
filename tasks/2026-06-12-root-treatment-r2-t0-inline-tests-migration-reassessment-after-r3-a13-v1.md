@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，hash 已回填。
 
 Planning baseline commit：`329b2d9bda1adcd6b67356a6fe752d8cca472817`
 
-Implementation commit：待回填。
+Implementation commit：`05ccd9fe5e7a794a95b3bd7648be332895ab97ad`
 
 Review result：`CLEAR`，P0/P1/P2 无；复核线程继续复用 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`。
 
-Checkpoint commit：待回填。
+Checkpoint commit：`53a8d2aee4236eb216f4798cfe3f1ccd15ba9687`
 
 本文是 Root Treatment / Stage R 的 R2 后段 inline tests 迁移复评任务包。它落实 `handoffs/2026-06-12-root-treatment-execution-strategy-review-claude-to-codex-v1.md` 的 P1-2 要求：以 R3-A13 Level A 事务采纳完成为输入，重新判定 `lib.rs` inline tests 迁移是否解锁，并写成显式决定。
 

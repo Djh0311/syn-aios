@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t0-inline-tests-migration-reassessment-after-r3-a13-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r2-t0-inline-tests-migration-reas
 
 Planning baseline commit：`329b2d9bda1adcd6b67356a6fe752d8cca472817`
 
-Implementation commit：待回填。
+Implementation commit：`05ccd9fe5e7a794a95b3bd7648be332895ab97ad`
 
 Review result：`CLEAR`，P0/P1/P2 无；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填。
+Checkpoint commit：`53a8d2aee4236eb216f4798cfe3f1ccd15ba9687`
 
 ## 1. 完成内容
 
