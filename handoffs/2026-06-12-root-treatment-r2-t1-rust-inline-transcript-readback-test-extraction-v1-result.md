@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t1-rust-inline-transcript-readback-test-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r2-t1-rust-inline-transcript-read
 
 Planning baseline commit：`f49fb4d60210464084b674218eb11ef4e3c99eb9`
 
-Implementation commit：待回填。
+Implementation commit：`1a470f4578934d398218a4b8eaed34b307fb329d`
 
 Review result：`CLEAR`，P0/P1/P2 无；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填。
+Checkpoint commit：`521acd55263c6f77490172dff8e93983dcc914be`
 
 ## 1. 完成内容
 
