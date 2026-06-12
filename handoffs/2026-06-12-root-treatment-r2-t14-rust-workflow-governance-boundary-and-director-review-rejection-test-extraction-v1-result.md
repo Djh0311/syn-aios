@@ -4,7 +4,7 @@
 
 Supervisor：Claude（claude-fable-5，临时代班，依据 `handoffs/2026-06-12-supervisor-line-temporary-takeover-codex-to-claude-v1.md`）
 
-状态：已完成并通过复核线 `STATUS: CLEAR`；用户已放行，commit 序列执行中，checkpoint 同步随后。
+状态：已完成并复核通过，checkpoint 已同步；T 系列可迁切片到底，代班清单已留档。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t14-rust-workflow-governance-boundary-and-director-review-rejection-test-extraction-v1.md`
 
@@ -15,6 +15,12 @@ Planning baseline commit：`cdfd7f225bc182287ee58cfe765067a1aedb9916`
 Task package commit：`bd4522a80b092b54cf6fef89fcfb1eac93f0a534`
 
 Implementation commit：`a61c8f973a2b4a274fdf0aaf8f1b0c027a385b0c`
+
+复核清除 commit：`50fcbcf61603dc2d4f08f3f00ecac90625456f01`
+
+代班清单 commit：`12ae9006270bd00a2cd362f5d96bd7112098fd36`
+
+Authority sync commit：`c757538bdab32c8703880cdba7a698f68b9d8467`
 
 Review result：`CLEAR`；复核结论文件 `evidence/2026-06-12-root-treatment-r2-t14-rust-workflow-governance-boundary-and-director-review-rejection-test-extraction-v1-review-claude-v1.md`（Reviewer：claude-opus-4-8，复核线临时代班）；P0/P1/P2 无；详见第 4 节
 
