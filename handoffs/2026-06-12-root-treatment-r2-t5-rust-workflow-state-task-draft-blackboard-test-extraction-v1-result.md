@@ -10,7 +10,7 @@ Evidence：`evidence/2026-06-12-root-treatment-r2-t5-rust-workflow-state-task-dr
 
 Planning baseline commit：`8cd4ee6569dd6131c46ae5ed3e4ead7a3d5e6fb3`
 
-Implementation commit：`TBD`
+Implementation commit：`3465e4dc96c5141861513d9add37cf7cbddf1440`
 
 Review result：`TBD`
 
