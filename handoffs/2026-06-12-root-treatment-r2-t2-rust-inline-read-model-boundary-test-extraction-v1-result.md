@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成，待 hash 回填。
+状态：已完成，hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t2-rust-inline-read-model-boundary-test-extraction-v1.md`
 
@@ -10,11 +10,11 @@ Evidence：`evidence/2026-06-12-root-treatment-r2-t2-rust-inline-read-model-boun
 
 Planning baseline commit：`3e65ee7c528c06a78bd7e28849bc5751f266522e`
 
-Implementation commit：`TBD`
+Implementation commit：`818b887a46cf1ddac62c276c5788be37a9474647`
 
 Review result：`CLEAR`，P0/P1/P2 无；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`3123ec510daa5532d7663dd4b99ed66db4003d13`
 
 ## 1. 完成内容
 
@@ -69,6 +69,10 @@ R2-T2 已把第二批低风险 read-model boundary inline tests 从 `lib.rs` 迁
 本轮没有执行真实 `codex exec` / `codex exec resume`，没有发送 prompt，没有读写 `/Users/yoyi/.codex`，没有读取 secret/token/`.env`/keychain/OAuth/provider credential/full transcript。
 
 本轮没有启动 Tauri / Browser / Chrome / Vite dev / screenshot。
+
+收尾过程偏差：
+
+- hash 回填扫描第一次误把 Markdown 反引号放在 shell 双引号内，zsh 尝试执行 `TBD` 并返回 `command not found: TBD`；未触发真实 Codex、未读写 `/Users/yoyi/.codex`、未改文件。随后已用单引号安全重跑扫描，无 `TBD` / `待 hash 回填` 残留。
 
 本轮不接受为 `lib.rs <= 3,000`、R2 全部完成、R3 Level B、生产 SQLite 迁移、read-cut、stop-write、多 agent 并行真实执行解锁、真实 Codex、`.codex` 读写、UI / 产品行为修改或 backlog 功能解冻。
 

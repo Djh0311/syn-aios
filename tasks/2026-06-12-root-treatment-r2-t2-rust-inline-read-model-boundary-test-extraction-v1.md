@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成，待 hash 回填。
+状态：已完成，hash 已回填。
 
 Planning baseline commit：`3e65ee7c528c06a78bd7e28849bc5751f266522e`
 
-Implementation commit：`TBD`
+Implementation commit：`818b887a46cf1ddac62c276c5788be37a9474647`
 
 Review result：`CLEAR`，P0/P1/P2 无；复核线程继续复用 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`。
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`3123ec510daa5532d7663dd4b99ed66db4003d13`
 
 本文是 Root Treatment / Stage R 的 R2-T2 任务包，承接 R2-T0 的 `PARTIALLY_UNLOCKED_WITH_GUARDS` 裁决和 R2-T1 的首批 inline tests 迁移结果，继续迁移低风险 Rust inline tests，并把 `lib.rs` 历史最低水位线继续下压。
 
