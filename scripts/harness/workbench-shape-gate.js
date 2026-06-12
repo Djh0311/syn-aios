@@ -35,7 +35,7 @@ const KEY_METRIC_FILES = [
 ];
 
 const RATCHET_WATERLINES = new Map([
-  ['prototypes/productized-desktop-shell/src-tauri/src/lib.rs', 9996],
+  ['prototypes/productized-desktop-shell/src-tauri/src/lib.rs', 9610],
   ['prototypes/productized-desktop-shell/tests/offline-permission-dialog.test.tsx', 3404],
   ['prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs', 8763],
   ['prototypes/productized-desktop-shell/src/styles.css', 8464],
