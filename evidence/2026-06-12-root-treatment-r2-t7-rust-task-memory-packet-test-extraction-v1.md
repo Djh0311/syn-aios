@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成并复核通过，checkpoint 待同步。
+状态：已完成并复核通过，checkpoint 已同步。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t7-rust-task-memory-packet-test-extraction-v1.md`
 
@@ -13,6 +13,8 @@ Task package commit：`b417e83f7365d57f963abb3e0fd921cbfb2fa36a`
 Implementation commit：`04172eb8f8ee59ee3d311c20552eac02c52bd2ca`
 
 Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
+
+Checkpoint authority sync commit：`b00d6c80210b2166b66f21214d9e392d00f645e9`
 
 ## 1. 本轮目标
 
