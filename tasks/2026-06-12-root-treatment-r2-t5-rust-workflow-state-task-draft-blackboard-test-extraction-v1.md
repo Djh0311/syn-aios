@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成并复核通过，checkpoint 待回填。
+状态：已完成并复核通过，checkpoint 已回填。
 
 Planning baseline commit：`8cd4ee6569dd6131c46ae5ed3e4ead7a3d5e6fb3`
 
@@ -12,7 +12,7 @@ Implementation fixup commit：`f2a5e36c450e8ab4275d7d356c6cc78925bb93b7`
 
 Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。初次复核发现新 include EOF 空行 P2，已由 fixup commit `f2a5e36c450e8ab4275d7d356c6cc78925bb93b7` 修复并通过最终复核。
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`7c7898a02b8ab6c6c9197afd30da4a7c7babbdd3`
 
 本文是 Root Treatment / Stage R 的 R2-T5 任务包，承接 R4-A50 新策略和 R2-T1 到 R2-T4 inline tests 迁移结果，继续迁移能实际降低 `lib.rs` 棘轮指标的低风险 Rust inline tests。
 

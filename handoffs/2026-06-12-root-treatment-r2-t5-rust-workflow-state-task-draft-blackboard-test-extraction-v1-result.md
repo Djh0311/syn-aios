@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：已完成并复核通过，checkpoint 待回填。
+状态：已完成并复核通过，checkpoint 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t5-rust-workflow-state-task-draft-blackboard-test-extraction-v1.md`
 
@@ -16,7 +16,7 @@ Implementation fixup commit：`f2a5e36c450e8ab4275d7d356c6cc78925bb93b7`
 
 Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。初次复核发现新 include EOF 空行 P2，已由 fixup commit `f2a5e36c450e8ab4275d7d356c6cc78925bb93b7` 修复并通过最终复核。
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`7c7898a02b8ab6c6c9197afd30da4a7c7babbdd3`
 
 ## 1. 完成内容
 
