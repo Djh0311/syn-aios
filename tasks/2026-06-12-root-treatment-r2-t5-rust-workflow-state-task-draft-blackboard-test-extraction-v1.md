@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：任务包已创建，待执行。
+状态：实现完成，待复核，hash 待回填。
 
 Planning baseline commit：`8cd4ee6569dd6131c46ae5ed3e4ead7a3d5e6fb3`
 
@@ -101,3 +101,34 @@ Checkpoint commit：`TBD`
 - 真实 Codex 执行
 - UI / 产品行为修改
 - backlog 功能解冻
+
+## 6. 执行记录
+
+本轮已完成实现和本地验证，等待复核线只读审查。
+
+实际改动：
+
+- 新增 `prototypes/productized-desktop-shell/src-tauri/src/lib_workflow_state_task_draft_blackboard_tests.rs`
+- `prototypes/productized-desktop-shell/src-tauri/src/lib.rs` 原测试块替换为 `include!("lib_workflow_state_task_draft_blackboard_tests.rs");`
+- `scripts/harness/workbench-shape-gate.js` 的 `lib.rs` waterline 更新为 `10279`
+
+实际形状收益：
+
+- `lib.rs`：`10943 -> 10279`，下降 `664` 行。
+- 新增 include 文件：`666` 行，低于 `.rs` 新文件上限 `3000`。
+
+验证已通过：
+
+- `cargo test --lib workflow_state`：11 passed。
+- `cargo test --lib task_draft`：6 passed。
+- `cargo test --lib work_item_state`：4 passed。
+- `cargo test --lib workflow_audit`：2 passed。
+- `cargo test --lib blackboard_candidate`：2 passed。
+- `cargo test --lib`：471 passed，16 ignored。
+- `cargo fmt -- --check`：通过。
+- `node scripts/harness/workbench-shape-gate.js --mode check`：pass，0 errors，0 warnings。
+- `git diff --check`：通过。
+
+保留既有 warning：
+
+- `src/mcp/protocol.rs` 中 `JsonRpcError::invalid_params` dead_code warning。本轮未触碰该文件。
