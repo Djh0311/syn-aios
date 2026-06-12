@@ -2,15 +2,15 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 Planning baseline commit：`f3382efc5f3d87e7d21eef91c945a2d0516ce77f`
 
-Implementation commit：待回填。
+Implementation commit：`b18071e26f42f127f48202651377b132e7ec0dbe`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`。
 
-Checkpoint commit：待回填。
+Checkpoint commit：`810d2e62e61622c028976753e2fed7ebf29c7cd9`
 
 本文是 Root Treatment / Stage R 的 R4-A50 任务包。R4-A50 不再继续做低产出的 helper 拆分，而是落实 `handoffs/2026-06-12-root-treatment-execution-strategy-review-claude-to-codex-v1.md` 中已经授权的 P1-1 / P1-3 / P2-3 调整：补定 R4-6 停止线、取消“不降低棘轮指标”的 A50 拆分方向、把 shape gate 改为历史最低收口值水位线，并把已裁决的 Tauri command 97 写入基线。
 

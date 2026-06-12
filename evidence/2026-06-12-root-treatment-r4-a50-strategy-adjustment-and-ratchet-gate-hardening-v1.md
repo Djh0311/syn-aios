@@ -2,17 +2,17 @@
 
 日期：2026-06-12
 
-状态：已完成，implementation / checkpoint hash 待回填。
+状态：已完成，implementation / checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r4-a50-strategy-adjustment-and-ratchet-gate-hardening-v1.md`
 
 Planning baseline commit：`f3382efc5f3d87e7d21eef91c945a2d0516ce77f`
 
-Implementation commit：待回填。
+Implementation commit：`b18071e26f42f127f48202651377b132e7ec0dbe`
 
 Review result：`STATUS: CLEAR`；P0/P1/P2 none；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：待回填。
+Checkpoint commit：`810d2e62e61622c028976753e2fed7ebf29c7cd9`
 
 ## 1. 本轮目标
 
