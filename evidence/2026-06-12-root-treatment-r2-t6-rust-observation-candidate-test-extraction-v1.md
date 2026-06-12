@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：实现完成，待复核，hash 待回填。
+状态：已完成并复核通过，checkpoint 待回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t6-rust-observation-candidate-test-extraction-v1.md`
 
@@ -10,7 +10,7 @@ Planning baseline commit：`092dceba6f9dd2896053267b8ffc65702484e0a3`
 
 Implementation commit：`abd10f1e6fd11cd94f3ad9d7dca2b5902204c816`
 
-Review result：`TBD`
+Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
 
 Checkpoint commit：`TBD`
 
@@ -86,7 +86,12 @@ Checkpoint commit：`TBD`
 
 ## 7. 复核状态
 
-待复核线只读审查。
+复核线只读审查已通过：
+
+- 复核线程：`019eb850-0698-7f70-a9b2-e7d0d668ccf5`
+- 最终结论：`STATUS: CLEAR`
+- P0/P1/P2：无。
+- 复核确认新 include 只包含 9 个允许 tests，未迁移 helper；observation helpers 和后续 task memory packet / formal memory / dispatch execution / workflow machine tests 仍留在 `lib.rs`；shape gate waterline `9996` 与当前 `wc -l lib.rs` 一致。
 
 ## 8. 不接受为
 

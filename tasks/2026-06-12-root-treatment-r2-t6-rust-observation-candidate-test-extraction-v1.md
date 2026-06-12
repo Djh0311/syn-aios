@@ -2,13 +2,13 @@
 
 日期：2026-06-12
 
-状态：实现完成，待复核，hash 待回填。
+状态：已完成并复核通过，checkpoint 待回填。
 
 Planning baseline commit：`092dceba6f9dd2896053267b8ffc65702484e0a3`
 
 Implementation commit：`abd10f1e6fd11cd94f3ad9d7dca2b5902204c816`
 
-Review result：`TBD`
+Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
 
 Checkpoint commit：`TBD`
 
@@ -91,7 +91,7 @@ Checkpoint commit：`TBD`
 
 ## 6. 执行记录
 
-本轮已完成实现和本地验证，等待复核线只读审查。
+本轮已完成实现、本地验证和复核线只读审查。
 
 实际改动：
 
@@ -112,6 +112,13 @@ Checkpoint commit：`TBD`
 - `cargo fmt -- --check`：通过。
 - `node scripts/harness/workbench-shape-gate.js --mode check`：pass，0 errors，0 warnings。
 - `git diff --check`：通过。
+
+复核结论：
+
+- `STATUS: CLEAR`
+- 复核线程：`019eb850-0698-7f70-a9b2-e7d0d668ccf5`
+- P0/P1/P2：无。
+- 复核确认新 include 只包含 9 个允许 tests，未迁移 helper；observation helpers 和后续 task memory packet / formal memory / dispatch execution / workflow machine tests 仍留在 `lib.rs`；shape gate waterline `9996` 与当前 `wc -l lib.rs` 一致。
 
 保留既有 warning：
 

@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：实现完成，待复核，hash 待回填。
+状态：已完成并复核通过，checkpoint 待回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t6-rust-observation-candidate-test-extraction-v1.md`
 
@@ -12,7 +12,7 @@ Planning baseline commit：`092dceba6f9dd2896053267b8ffc65702484e0a3`
 
 Implementation commit：`abd10f1e6fd11cd94f3ad9d7dca2b5902204c816`
 
-Review result：`TBD`
+Review result：`CLEAR`；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`；P0/P1/P2 无。
 
 Checkpoint commit：`TBD`
 
@@ -61,16 +61,14 @@ R2-T6 按新策略继续做能降低 `lib.rs` 棘轮指标的低风险 inline te
 
 新增 Rust include 文件关键词扫描无命中：`codex exec`、`codex exec resume`、`/Users/yoyi/.codex`、`K3-B`、`workflow_machine`、`workflow execution`、`std::process`、`#[tauri::command]`、`pub struct`、`pub enum`、`impl`、`task_memory_packet`、`adopt_memory_candidate`、`run_workflow_machine`。
 
-## 5. 等待复核
+## 5. 复核结论
 
-请复核线只读审查：
+复核线只读审查已通过：
 
-- diff 范围是否只限 R2-T6。
-- 新 include 是否只包含任务包允许的 9 个 tests。
-- `lib.rs` 是否只保留 include，且 task memory packet / formal memory adoption / workflow machine / runner tests 仍留在原文件。
-- observation helper 是否仍在 `lib.rs` 且语义未改。
-- shape gate waterline `9996` 是否与当前 `wc -l lib.rs` 一致。
-- 是否存在真实 Codex、`.codex`、Tauri command、DB/schema、UI 或产品语义越界。
+- 复核线程：`019eb850-0698-7f70-a9b2-e7d0d668ccf5`
+- 最终结论：`STATUS: CLEAR`
+- P0/P1/P2：无。
+- 复核确认新 include 只包含 9 个允许 tests，未迁移 helper；observation helpers 和后续 task memory packet / formal memory / dispatch execution / workflow machine tests 仍留在 `lib.rs`；shape gate waterline `9996` 与当前 `wc -l lib.rs` 一致。
 
 ## 6. 不接受为
 
