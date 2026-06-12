@@ -4,11 +4,15 @@
 
 Supervisor：Claude（claude-fable-5，临时代班，依据 `handoffs/2026-06-12-supervisor-line-temporary-takeover-codex-to-claude-v1.md`）
 
-状态：评估完成并通过复核线 `STATUS: CLEAR`；用户已放行 commit 序列，序列执行中；本包零代码改动。
+状态：已完成并复核通过，checkpoint 已同步；本包零代码改动。
 
 Planning baseline commit：`dd39c8254f9ef9ed45e0e2e641e7bd81130322e4`
 
 Task package commit：`82d30751771b77aa99d16fb21d2ef02e8eeb5ada`
+
+复核清除 commit：`0f99690c2aee50b3eed8cb59adbb54c3b62abc03`
+
+Authority sync commit：`0895f56a9906509071951a685e673e527d6d174f`
 
 Evidence commit：`f3ad6e3779b16c01643213eedc612c85014699f9`
 
