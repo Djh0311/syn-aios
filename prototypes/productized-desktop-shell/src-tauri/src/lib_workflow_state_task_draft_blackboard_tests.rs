@@ -14,7 +14,6 @@
         assert_eq!(snapshot.counts.audit_events, 0);
         assert!(!path.exists());
     }
-
     #[test]
     fn initializes_workflow_state_with_audit_event() {
         let dir =
@@ -663,4 +662,3 @@
         .unwrap_err();
         assert!(conflict.contains("blackboard_candidate_store_conflict"));
     }
-

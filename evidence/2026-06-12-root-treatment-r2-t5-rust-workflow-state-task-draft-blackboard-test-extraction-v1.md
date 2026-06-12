@@ -51,7 +51,7 @@ Checkpoint commit：`TBD`
 ## 4. 形状收益
 
 - `lib.rs`：`10943 -> 10279`，下降 `664` 行。
-- 新增 `lib_workflow_state_task_draft_blackboard_tests.rs`：`666` 行，低于 `.rs` 新文件上限 `3000`。
+- 新增 `lib_workflow_state_task_draft_blackboard_tests.rs`：`664` 行，低于 `.rs` 新文件上限 `3000`。
 - shape gate 输出：`lib.rs: 10279/10279 (same)`，0 errors，0 warnings。
 
 ## 5. 验证

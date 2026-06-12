@@ -29,7 +29,7 @@ R2-T5 按新策略继续做能降低 `lib.rs` 棘轮指标的低风险 inline te
 ## 2. 形状指标
 
 - `lib.rs`：`10943 -> 10279`，下降 `664` 行。
-- 新 include 文件：`666` 行，低于 `.rs` 新文件上限 `3000`。
+- 新 include 文件：`664` 行，低于 `.rs` 新文件上限 `3000`。
 - shape gate：pass，0 errors，0 warnings；`lib.rs: 10279/10279 (same)`。
 
 ## 3. 验证
