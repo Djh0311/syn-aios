@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：复核通过，hash 待回填。
+状态：已完成，checkpoint hash 已回填。
 
 任务包：`tasks/2026-06-12-root-treatment-r2-t4-rust-memory-lint-mature-pattern-test-extraction-v1.md`
 
@@ -12,7 +12,7 @@ Implementation commit：`4d35b3b3e042cd738c0ebd92267508ed5e93fe31`
 
 Review result：`CLEAR`，P0/P1/P2 无；复核线程 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`f49393269069c95035d9bcf3a5c1c8d7fd31f8ac`
 
 ## 1. 本轮目标
 

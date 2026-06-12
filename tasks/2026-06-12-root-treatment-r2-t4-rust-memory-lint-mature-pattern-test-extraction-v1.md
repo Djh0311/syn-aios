@@ -2,7 +2,7 @@
 
 日期：2026-06-12
 
-状态：复核通过，hash 待回填。
+状态：已完成，checkpoint hash 已回填。
 
 Planning baseline commit：`fe1b69c70058e3316c7a6f3020552279757f7397`
 
@@ -10,7 +10,7 @@ Implementation commit：`4d35b3b3e042cd738c0ebd92267508ed5e93fe31`
 
 Review result：`CLEAR`，P0/P1/P2 无；复核线程继续复用 `019eb850-0698-7f70-a9b2-e7d0d668ccf5`。
 
-Checkpoint commit：`TBD`
+Checkpoint commit：`f49393269069c95035d9bcf3a5c1c8d7fd31f8ac`
 
 本文是 Root Treatment / Stage R 的 R2-T4 任务包，承接 R4-A50 新策略和 R2-T1 / R2-T2 / R2-T3 inline tests 迁移结果，继续迁移能实际降低 `lib.rs` 棘轮指标的低风险 Rust inline tests。
 
