@@ -48,7 +48,6 @@
 
         let _ = fs::remove_dir_all(dir);
     }
-
     #[test]
     fn workflow_run_check_allows_runnable_fixture_without_auto_filling_optional_refs() {
         let dir = std::env::temp_dir().join(format!(
@@ -1500,4 +1499,3 @@
 
         let _ = fs::remove_dir_all(dir);
     }
-
