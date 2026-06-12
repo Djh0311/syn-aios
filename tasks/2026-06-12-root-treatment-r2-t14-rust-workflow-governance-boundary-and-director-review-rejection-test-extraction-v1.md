@@ -8,9 +8,11 @@ Supervisor：Claude（claude-fable-5，临时代班，依据 `handoffs/2026-06-1
 
 Planning baseline commit：`cdfd7f225bc182287ee58cfe765067a1aedb9916`
 
-Task package commit：随 commit 序列回填
+Task package commit：`bd4522a80b092b54cf6fef89fcfb1eac93f0a534`
 
-Implementation commit：随 commit 序列回填
+Implementation commit：`a61c8f973a2b4a274fdf0aaf8f1b0c027a385b0c`
+
+Evidence commit：`08d9ce3abc9854713f2b40b4fac08ee9a435c781`
 
 Review result：`CLEAR`；复核结论文件 `evidence/2026-06-12-root-treatment-r2-t14-rust-workflow-governance-boundary-and-director-review-rejection-test-extraction-v1-review-claude-v1.md`（Reviewer：claude-opus-4-8，复核线临时代班）；P0/P1/P2 无。复核线以反向重构对账（两行 include 展开后与 HEAD `lib.rs` 逐字节比对 RECONSTRUCT_EXACT_MATCH）锁死纯搬运与产品代码零改动；确认禁迁 records 测试与 deferred marker 测试原位保留、`#[test]` 守恒 44 = 35 + 8 + 1
 
