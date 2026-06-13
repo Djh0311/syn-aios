@@ -2,7 +2,7 @@
 
 日期：2026-06-14
 
-状态：待执行。
+状态：已完成。
 
 性质：R-U 后端 util 去重。本包只把规则完全相同的 Rust `normalize(value)` helper 收敛到 `src-tauri/src/utils/normalization.rs`；规则不同或触及业务语义的 normalization 记 deferred，不硬合。
 
@@ -150,4 +150,4 @@ pub(crate) fn normalize_slash_lowercase(value: &str) -> String {
 
 ## 9. 停止点
 
-任务包提交后进入实现；实现经独立复核 CLEAR、implementation commit 和 checkpoint commit 后，停在 U4 复核点，继续 U-Gate 草稿。
+任务包已完成；实现经独立复核 Hilbert `STATUS: CLEAR_WITH_P2`，P2 已补正、不阻断，implementation commit 为 `16e96bd`，checkpoint commit 待写入。

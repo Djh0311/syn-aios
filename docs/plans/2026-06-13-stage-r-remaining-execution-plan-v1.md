@@ -36,7 +36,7 @@ R4-H 前端硬目标（进行中）
 - **U1 ✅** `sha256_hex` / `short_hash` → `utils/hash.rs`，已完成并经独立复核 `STATUS: CLEAR`，implementation commit `e6325e8`。
 - **U2 ✅** `sidecar_path`（加 `store_name` 参数）→ `utils/store_paths.rs`，已完成并经独立复核 `STATUS: CLEAR_WITH_P2`，P2 已补齐，implementation commit `1ba8f01`。
 - **U3 ✅** `remove_file_if_exists` / `fixture_dir` → `utils/fs_ops.rs`，已完成并经独立复核 `STATUS: CLEAR_WITH_P2`，P2 已补齐，implementation commit `bc436dd`。
-- **U4** `normalize` + 特化 → `utils/normalization.rs`
+- **U4 ✅** `normalize` + 特化 → `utils/normalization.rs`，已完成并经独立复核 `STATUS: CLEAR_WITH_P2`，P2 已补正，implementation commit `16e96bd`；规则不同 / 业务特化项保持 deferred。
 - **U5 ✅** 前端 `DetailLine` / `SummaryTile` → `src/components/`，已完成并经独立复核 `STATUS: CLEAR`，implementation commit `c4335e1`。
 - **U-Gate** 查重门形态先写草稿（2-3 种方案 + 推荐），暂不实现、不接入 harness / CI。
 

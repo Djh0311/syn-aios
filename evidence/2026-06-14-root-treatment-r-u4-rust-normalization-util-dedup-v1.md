@@ -2,11 +2,13 @@
 
 日期：2026-06-14
 
-状态：实现与本地验证完成，独立复核待回收。
+状态：完成，独立复核 Hilbert `STATUS: CLEAR_WITH_P2`；P2 已补正，不阻断。
 
 Planning baseline：`0a27b91`
 
 Task package commit：`b5964b6 docs: add r-u4 normalization util dedup package`
+
+Implementation commit：`16e96bd refactor: deduplicate rust normalization helpers`
 
 ## 1. 本包目标
 
@@ -264,9 +266,15 @@ git diff --check
 
 注：`git diff --stat` 不显示未跟踪的新文件；新文件见 `git status --short`。
 
-## 7. 待复核
+## 7. 独立复核
 
-独立复核线需要确认：
+复核线：Hilbert (`019ec1e4-f49c-7d90-9166-ffd8b1bb1a42`)
+
+结论：`STATUS: CLEAR_WITH_P2`
+
+P2：shape gate 中 `session_continuation_store.rs` 行数摘要记录不够精确，已补正为 `5218/5237 (decreased)`，不阻断。
+
+复核线确认：
 
 - 公共 helper 行为等于原同形规则。
 - 同形本地 normalize 归一，剩余本地 normalize 均在 deferred 范围内。
