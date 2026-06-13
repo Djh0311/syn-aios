@@ -1,4 +1,5 @@
 use crate::utils::hash::{sha256_hex, short_hash};
+use crate::utils::store_paths;
 use crate::{
     BlackboardCandidateAuditEvent, BlackboardCandidateDecision, BlackboardCandidateRecord,
     BlackboardCandidateSourceRef, BlackboardCandidateState, BlackboardCandidateStoreScope,
@@ -16,15 +17,7 @@ const SIDECAR_NAME: &str = "blackboard-candidates.v1.json";
 const LOCK_NAME: &str = ".blackboard-candidates.v1.lock";
 
 pub(crate) fn sidecar_path(workflow_state_path: &Path) -> Result<PathBuf, String> {
-    Ok(workflow_state_path
-        .parent()
-        .ok_or_else(|| {
-            format!(
-                "workflow state 路径没有父目录，无法推导黑板候选 sidecar：{}",
-                workflow_state_path.display()
-            )
-        })?
-        .join(SIDECAR_NAME))
+    store_paths::sidecar_path(workflow_state_path, SIDECAR_NAME, "黑板候选")
 }
 
 pub(crate) fn load_store(

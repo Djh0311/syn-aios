@@ -1,3 +1,4 @@
+use crate::utils::store_paths;
 use crate::{
     AuthorizedExecutionScope, AutoDispatchGuardInput, AutoDispatchGuardResult,
     CreatePlanAuthorizationInput, CreatePlanAuthorizationOutput, GlobalBoundaryReviewChecklist,
@@ -20,15 +21,7 @@ const SIDECAR_NAME: &str = "plan-authorizations.v1.json";
 const LOCK_NAME: &str = ".plan-authorizations.v1.lock";
 
 pub(crate) fn sidecar_path(workflow_state_path: &Path) -> Result<PathBuf, String> {
-    Ok(workflow_state_path
-        .parent()
-        .ok_or_else(|| {
-            format!(
-                "workflow state 路径没有父目录，无法推导方案授权 sidecar：{}",
-                workflow_state_path.display()
-            )
-        })?
-        .join(SIDECAR_NAME))
+    store_paths::sidecar_path(workflow_state_path, SIDECAR_NAME, "方案授权")
 }
 
 pub(crate) fn load_store(

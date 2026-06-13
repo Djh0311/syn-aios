@@ -1,4 +1,5 @@
 use crate::utils::hash::short_hash;
+use crate::utils::store_paths;
 use crate::{
     FormalMemoryStoreV1, MemoryCandidateStoreV1, MemoryLintFindingSeverity,
     MemoryLintFindingStatus, MemoryLintRunInput, MemoryLintRunIntent, MemoryLintRunOutput,
@@ -14,15 +15,7 @@ const SIDECAR_NAME: &str = "memory-lint.v1.json";
 const LOCK_NAME: &str = ".memory-lint.v1.lock";
 
 pub(crate) fn sidecar_path(workflow_state_path: &Path) -> Result<PathBuf, String> {
-    Ok(workflow_state_path
-        .parent()
-        .ok_or_else(|| {
-            format!(
-                "workflow state 路径没有父目录，无法推导 memory lint sidecar：{}",
-                workflow_state_path.display()
-            )
-        })?
-        .join(SIDECAR_NAME))
+    store_paths::sidecar_path(workflow_state_path, SIDECAR_NAME, "memory lint")
 }
 
 pub(crate) fn load_store(

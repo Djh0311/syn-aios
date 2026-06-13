@@ -1,4 +1,5 @@
 use crate::utils::hash::{sha256_hex, short_hash};
+use crate::utils::store_paths;
 use crate::{
     codex_local_runner, real_execution_command, runtime_log_store,
     CleanupSessionContinuationStaleAttemptInput, CleanupSessionContinuationStaleAttemptOutput,
@@ -30,15 +31,7 @@ const SIDECAR_NAME: &str = "session-continuations.v1.json";
 const LOCK_NAME: &str = ".session-continuations.v1.lock";
 
 pub(crate) fn sidecar_path(workflow_state_path: &Path) -> Result<PathBuf, String> {
-    Ok(workflow_state_path
-        .parent()
-        .ok_or_else(|| {
-            format!(
-                "workflow state 路径没有父目录，无法推导 continuation sidecar：{}",
-                workflow_state_path.display()
-            )
-        })?
-        .join(SIDECAR_NAME))
+    store_paths::sidecar_path(workflow_state_path, SIDECAR_NAME, "continuation")
 }
 
 pub(crate) fn load_store(

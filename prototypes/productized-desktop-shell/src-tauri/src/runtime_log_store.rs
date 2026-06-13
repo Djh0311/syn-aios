@@ -1,3 +1,4 @@
+use crate::utils::store_paths;
 use crate::{
     ControlledSessionContinuation, RuntimeLogBoundary, RuntimeLogEntry, RuntimeLogSourceRef,
     RuntimeLogStoreScope, RuntimeLogStoreV1, RuntimeLogSummary, RuntimeSessionAttention,
@@ -14,15 +15,7 @@ const SIDECAR_NAME: &str = "runtime-logs.v1.json";
 const LOCK_NAME: &str = ".runtime-logs.v1.lock";
 
 pub(crate) fn sidecar_path(workflow_state_path: &Path) -> Result<PathBuf, String> {
-    Ok(workflow_state_path
-        .parent()
-        .ok_or_else(|| {
-            format!(
-                "workflow state 路径没有父目录，无法推导 runtime log sidecar：{}",
-                workflow_state_path.display()
-            )
-        })?
-        .join(SIDECAR_NAME))
+    store_paths::sidecar_path(workflow_state_path, SIDECAR_NAME, "runtime log")
 }
 
 pub(crate) fn load_store_or_derive(

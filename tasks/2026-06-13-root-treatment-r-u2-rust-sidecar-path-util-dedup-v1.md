@@ -2,7 +2,7 @@
 
 日期：2026-06-13
 
-状态：待执行。
+状态：已完成。
 
 性质：R-U 后端 util 去重第 2 包。本包只把 12 个 Rust 后端重复 `sidecar_path(workflow_state_path: &Path)` helper 收敛到 `src-tauri/src/utils/store_paths.rs`，由各 store 文件继续保留自己的 `SIDECAR_NAME` 原值和店标签；严格无行为变化。
 
@@ -188,9 +188,11 @@ format!(
 - `rg -n "const SIDECAR_NAME" <12 个 store 文件>`
 - `git diff -- prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_schema.rs prototypes/productized-desktop-shell/src-tauri/src/workflow_state_store.rs prototypes/productized-desktop-shell/src-tauri/src/workflow_state_json_helpers.rs`
 
-## 8. 复核要求
+## 8. 复核结果
 
-独立复核线需只读确认：
+独立复核 agent `Poincare`（`019ec19f-6366-7cf0-9a17-ecb07722429e`）回交 `STATUS: CLEAR_WITH_P2`，P0/P1 无；唯一 P2 为 evidence 的 `git status --short` 记录漏写 task/evidence/handoff 文件。该 P2 已补齐，不影响代码行为或提交放行；记录见 `evidence/2026-06-13-root-treatment-r-u2-rust-sidecar-path-util-dedup-v1-review-poincare-v1.md`。
+
+复核确认：
 
 - 12 个 store wrapper 是否仍存在且外部调用入口不变。
 - 公共 helper 是否只做 parent error + join sidecar_name。
