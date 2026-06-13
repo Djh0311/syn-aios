@@ -108,15 +108,21 @@ const backendPayloadResult: PageReadModelQueryResult = {
     data: {
       adapter_count: 2,
       conversation_first: true,
+      snapshot_slice: {
+        projects: [],
+        sessions: [],
+        agent_adapters: [],
+      },
     },
-    warnings: ["backend_page_payload_read_only", "frontend_page_consumption_not_migrated"],
+    warnings: ["backend_page_payload_read_only", "snapshot_slice_read_only"],
   },
-  warnings: ["h2_2_backend_page_payload_ready", "frontend_page_consumption_not_migrated"],
+  warnings: ["h2_2_backend_page_payload_ready", "h2_3_page_query_payload_supports_frontend_consumption"],
 };
 
 assert(backendPayloadResult.status === "page_data_ready", "H2-2 backend query should expose page_data_ready");
 assert(backendPayloadResult.source_boundary.returns_business_data, "H2-2 backend query should return business data");
 assert(backendPayloadResult.page_payload?.generated_from === "workbench_page_query", "payload source should be explicit");
+assert(Boolean(backendPayloadResult.page_payload?.data.snapshot_slice), "H2-3 payload should expose a read-only snapshot slice");
 assert(!backendPayloadResult.source_boundary.writes_stores, "H2-2 backend query must stay read-only");
 assert(!backendPayloadResult.source_boundary.tauri_command_migrates_page, "H2-2 must not claim page UI migration");
 

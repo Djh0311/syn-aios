@@ -29,7 +29,6 @@ import {
   loadObservationStore,
   loadPlanAuthorizationStore,
   loadProjectConsultationProposalStore,
-  loadWorkbenchSnapshot,
   loadWorkflowStateSnapshot,
   prepareAuthorizedAutoDispatch,
   prepareOfflineRoleDispatch,
@@ -53,6 +52,7 @@ import {
   recordOfflineRoleResultHandoff,
   recordProjectConsultationProposalDecision,
   recordUserResultDecision,
+  queryWorkbenchPageReadModel,
   renderTaskPackagePreview,
   previewFormalMemoryLifecycleOperation,
   previewTaskMemoryPacket,
@@ -63,6 +63,8 @@ import {
   updateWorkItemState,
   unbindWorkflowNodeCodexSession,
 } from "./lib/tauri";
+import { emptySnapshot } from "./lib/emptySnapshot";
+import { loadWorkbenchSnapshotFromPageQueries } from "./lib/pageReadModelRuntime";
 import { deriveSecretaryContext } from "./lib/secretaryReadModel";
 import type { BlackboardCandidateStoreV1, FormalMemoryStoreV1, MemoryCaptureStoreV1, MemoryCandidateStoreV1, MemoryEntityRelationStoreV1, MemoryLintStoreV1, MemoryPatternStoreV1, ObservationStoreV1, PendingAction, PlanAuthorizationStoreV1, PreviewProjectDirectorTaskPlanInput, ProjectConsultationProposalStoreV1, ProjectDirectorTaskPlan, WorkbenchSnapshot, TaskMemoryPacketBuildInput, TaskMemoryPacketBuildOutput, WorkflowStateSnapshot } from "./lib/types";
 import { devNavItems, homeNavItem, primaryNavItems, settingsNavItem, workspaceRailItems } from "./lib/workbenchNavigation";
@@ -92,147 +94,6 @@ function stageKInitialView(): ViewKey {
   if (!requested) return "home";
   return stageKInitialViewKeys.has(requested as ViewKey) ? (requested as ViewKey) : "home";
 }
-
-const emptySnapshot: WorkbenchSnapshot = {
-  summary: {
-    generated_at: null,
-    project_count: 0,
-    session_count: 0,
-    skill_count: 0,
-    plugin_count: 0,
-    task_count: 0,
-    warning_count: 0,
-  },
-  projects: [],
-  sessions: [],
-  skills: [],
-  plugins: [],
-  tasks: [],
-  agent_adapters: [],
-  session_operations: [],
-  provider_availability: [],
-  session_continuation_previews: [],
-  session_continuation_store: {
-    schema_version: "session_continuation_store.v1",
-    store_version: 1,
-    storage_kind: "sidecar_json_v0",
-    scope: {
-      scope_kind: "workflow_state_sidecar",
-      workflow_state_path: null,
-      sidecar_path: null,
-      project_roots: [],
-    },
-    revision: 0,
-    last_write_id: null,
-    generated_by: "empty_snapshot",
-    created_at: "未读取",
-    updated_at: "未读取",
-    continuations: [],
-    attempts: [],
-    audit_events: [],
-    warnings: [],
-  },
-  runtime_session_attention: [],
-  session_run_status_summaries: [],
-  runtime_log_store: {
-    schema_version: "runtime_log_store.v1",
-    store_version: 1,
-    storage_kind: "sidecar_json_v0",
-    scope: {
-      scope_kind: "workflow_state_sidecar",
-      workflow_state_path: null,
-      sidecar_path: null,
-      project_roots: [],
-    },
-    revision: 0,
-    last_write_id: null,
-    generated_by: "empty_snapshot",
-    created_at: "未读取",
-    updated_at: "未读取",
-    boundary: {
-      runtime_log_definition: "运行日志记录运行状态、耗时、分类和脱敏摘要。",
-      audit_event_definition: "审计事件记录可追责的决定、权限、操作者和状态变化。",
-      separation_rule: "运行日志与审计事件不能互相替代；日志只引用审计引用。",
-      redaction_rule: "只展示脱敏摘要，不展示正文、凭据或原始会话记录。",
-      forbidden_payloads: ["credential_material", "conversation_body", "raw_provider_material"],
-    },
-    entries: [],
-    summaries: [],
-    warnings: [],
-  },
-  worker_protocol: {
-    schema_version: "worker_protocol_read_model.v1",
-    generated_at: "未读取",
-    source_policy: "empty frontend fallback; no worker execution.",
-    worker_adapters: [],
-    work_threads: [],
-    run_units: [],
-    credential_requirements: [],
-    external_call_risk_envelopes: [],
-    project_capability_policies: [],
-    run_relations: [],
-    worker_lanes: [],
-    multi_worker_dispatch_plans: [],
-    adapter_contract_checklists: [],
-    controlled_api_cli_semantics: [],
-    diagnostic_event_schemas: [],
-    adapter_health_summaries: [],
-    adapter_degraded_modes: [],
-    adapter_data_locations: [],
-    dispatch_requests: [],
-    dispatch_guards: [],
-    permission_envelopes: [],
-    task_memory_packet_refs: [],
-    worker_handoffs: [],
-    readback_results: [],
-    worker_report_candidates: [],
-    warnings: ["empty_worker_protocol_read_model"],
-  },
-  page_read_model_inventory: {
-    schema_version: "workbench_page_read_model_inventory.v1",
-    generated_at: "未读取",
-    status: "empty_frontend_fallback",
-    source_policy: "空 snapshot 只用于前端兜底；真实合同来自后端 WorkbenchSnapshot。",
-    contracts: [],
-    warnings: ["empty_page_read_model_inventory"],
-  },
-  diagnostic_summary: {
-    status: "degraded_readonly",
-    generated_at: "未读取",
-    overall_severity: "warning",
-    healthy_count: 0,
-    warning_count: 1,
-    degraded_count: 0,
-    blocked_count: 0,
-    store_integrity: [],
-    degraded_states: [
-      {
-        state_id: "empty_snapshot",
-        kind: "empty_snapshot",
-        severity: "warning",
-        title: "当前没有真实诊断数据",
-        summary: "空 snapshot 只用于前端兜底展示。",
-        user_action_required: false,
-        blocks_real_execution: false,
-        source_refs: ["empty_snapshot"],
-        recommended_next_step: "重新读取索引和事实层。",
-      },
-    ],
-    recent_error_summaries: [],
-    boundary_notes: ["G2 诊断只读展示，不自动修复、不自动重试。"],
-  },
-  diagnostics: {
-    index_path: "未读取",
-    tasks_path: "未读取",
-    generated_at: null,
-    top_level_warning_count: 0,
-    context_warning_count: 0,
-    allowed_project_path_count: 0,
-    allowed_rollout_path_count: 0,
-    release_bundle_enabled: false,
-    notes: ["当前没有真实索引数据。"],
-  },
-};
 
 export function App() {
   const [snapshot, setSnapshot] = useState<WorkbenchSnapshot | null>(null);
@@ -280,7 +141,7 @@ export function App() {
     setNotice("正在读取索引。");
     setError(false);
     try {
-      const nextSnapshot = await loadWorkbenchSnapshot();
+      const { snapshot: nextSnapshot } = await loadWorkbenchSnapshotFromPageQueries(queryWorkbenchPageReadModel);
       setSnapshot(nextSnapshot);
       setNotice("");
       void reloadWorkflowState();
@@ -608,7 +469,7 @@ export function App() {
           throw new Error("项目自动编排缺少待写入对象");
         }
         const result = await runProjectWorkflowAutomationPhaseA(pendingAction.projectWorkflowAutomation);
-        const nextSnapshot = await loadWorkbenchSnapshot();
+        const { snapshot: nextSnapshot } = await loadWorkbenchSnapshotFromPageQueries(queryWorkbenchPageReadModel);
         setSnapshot(nextSnapshot);
         await reloadWorkflowState();
         setNotice(

@@ -9,6 +9,7 @@ const testEntries = [
   "tests/offline-permission-dialog.test.tsx",
   "tests/r4-page-read-model-settings.test.tsx",
   "tests/r4-page-read-model-query-contract.test.ts",
+  "tests/r4-page-read-model-runtime.test.ts",
   "tests/r4-page-selectors.test.ts",
 ];
 

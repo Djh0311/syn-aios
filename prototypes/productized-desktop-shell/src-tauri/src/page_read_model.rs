@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
@@ -400,18 +400,24 @@ pub(crate) fn query_page_read_model_with_snapshot_value(
     };
 
     output.status = "page_data_ready".to_string();
+    output.target_schema = output.target_schema.map(|mut schema| {
+        schema.migration_status = "page_query_payload_ready".to_string();
+        schema.returns_business_data = true;
+        schema.page_ui_migrated = true;
+        schema
+    });
     output.selector_plan.data_migration_status = "backend_page_query_ready".to_string();
-    output.selector_plan.ui_consumption_status = "not_connected_to_pages".to_string();
+    output.selector_plan.ui_consumption_status = "page_query_payload_ready".to_string();
     output.source_boundary.returns_business_data = true;
     output.source_boundary.warnings = vec![
         "h2_2_backend_page_payload_ready".to_string(),
-        "page_ui_not_migrated".to_string(),
+        "h2_3_snapshot_slice_available".to_string(),
         "writes_stores_false".to_string(),
     ];
     output.page_payload = Some(payload);
     output.warnings = vec![
         "h2_2_backend_page_payload_ready".to_string(),
-        "frontend_page_consumption_not_migrated".to_string(),
+        "h2_3_page_query_payload_supports_frontend_consumption".to_string(),
         "do_not_claim_workbench_snapshot_deprecated".to_string(),
     ];
     Ok(output)
@@ -423,7 +429,7 @@ fn derive_page_payload(
     snapshot: &Value,
     workflow_state: Option<&Value>,
 ) -> Option<PageReadModelPayload> {
-    let data = match schema.page_id.as_str() {
+    let mut data = match schema.page_id.as_str() {
         "projects" => projects_payload(snapshot, workflow_state),
         "agents" => agents_payload(snapshot),
         "running_workflows" => running_workflows_payload(snapshot, workflow_state),
@@ -432,6 +438,12 @@ fn derive_page_payload(
         "settings" => settings_payload(snapshot),
         _ => return None,
     };
+    if let Value::Object(data) = &mut data {
+        data.insert(
+            "snapshot_slice".to_string(),
+            snapshot_slice_for_schema(schema, snapshot),
+        );
+    }
 
     Some(PageReadModelPayload {
         page_id: schema.page_id.clone(),
@@ -440,9 +452,20 @@ fn derive_page_payload(
         data,
         warnings: vec![
             "backend_page_payload_read_only".to_string(),
-            "frontend_page_consumption_not_migrated".to_string(),
+            "snapshot_slice_read_only".to_string(),
         ],
     })
+}
+
+fn snapshot_slice_for_schema(schema: &PageReadModelSchemaContract, snapshot: &Value) -> Value {
+    let mut slice = Map::new();
+    for field_name in &schema.snapshot_fields {
+        slice.insert(
+            field_name.clone(),
+            snapshot.get(field_name).cloned().unwrap_or(Value::Null),
+        );
+    }
+    Value::Object(slice)
 }
 
 fn projects_payload(snapshot: &Value, workflow_state: Option<&Value>) -> Value {
@@ -1224,9 +1247,28 @@ mod tests {
             assert_eq!(payload.page_id, page_id);
             assert_eq!(payload.generated_from, "workbench_page_query");
             assert!(payload.data.is_object());
+            let snapshot_slice = payload
+                .data
+                .get("snapshot_slice")
+                .expect("payload should carry snapshot slice");
+            let target_schema = output
+                .target_schema
+                .expect("batch-one page should have target schema");
+            assert!(target_schema.returns_business_data);
+            assert!(target_schema.page_ui_migrated);
+            for field_name in target_schema.snapshot_fields {
+                assert!(
+                    snapshot_slice.get(&field_name).is_some(),
+                    "snapshot_slice should include {field_name} for {page_id}"
+                );
+            }
+            assert_eq!(
+                output.selector_plan.ui_consumption_status,
+                "page_query_payload_ready"
+            );
             assert!(output
                 .warnings
-                .contains(&"frontend_page_consumption_not_migrated".to_string()));
+                .contains(&"h2_3_page_query_payload_supports_frontend_consumption".to_string()));
         }
     }
 
