@@ -2,11 +2,13 @@
 
 日期：2026-06-13
 
-状态：待执行。
+状态：已完成。
 
 性质：R4 硬目标 / H3 View 按目标布局区块拆分的 ProjectsView 第 3 包，也是 H3 最后一包。本包只拆项目工作流右侧详情 / 治理 / 记忆 / 执行面板：抽出 `ProjectWorkflowSidePanel`、`ProjectWorkflowGovernancePanels`、`ProjectWorkflowMemoryPanels`、`ProjectWorkflowExecutionPanels` 和纯展示 helper；右侧面板按当前顺序渲染，不重排信息层级。
 
 Planning baseline：`5c853fd`。
+
+Implementation review：备用独立复核线 `019eb850-0698-7f70-a9b2-e7d0d668ccf5` 返回 `STATUS: CLEAR`，记录见 `../evidence/2026-06-13-root-treatment-r4-h3-3-project-workflow-side-panel-domain-split-v1-review-v1.md`。
 
 ## 0. 全局主管理解
 
