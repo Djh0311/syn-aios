@@ -2,11 +2,13 @@
 
 日期：2026-06-14
 
-状态：实现与本地验证完成，独立复核待回收。
+状态：完成，独立复核 Hilbert `STATUS: CLEAR`。
 
 Planning baseline：`df2ed51`
 
 Task package commit：`8abd89a docs: add r-u5 frontend primitives package`
+
+Implementation commit：`c4335e1 refactor: deduplicate frontend detail primitives`
 
 ## 1. 本包目标
 
@@ -213,9 +215,13 @@ git diff --check
 
 注：`git diff --stat` 不显示未跟踪的新文件；新文件见 `git status --short`。
 
-## 6. 待复核
+## 6. 独立复核
 
-独立复核线需要确认：
+复核线：Hilbert (`019ec1e4-f49c-7d90-9166-ffd8b1bb1a42`)
+
+结论：`STATUS: CLEAR`
+
+复核线确认：
 
 - 公共组件 DOM 结构和 className 与原本一致。
 - `SummaryTile` 本地定义归零，只剩公共组件。

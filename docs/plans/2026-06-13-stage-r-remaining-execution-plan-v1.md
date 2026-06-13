@@ -37,8 +37,8 @@ R4-H 前端硬目标（进行中）
 - **U2 ✅** `sidecar_path`（加 `store_name` 参数）→ `utils/store_paths.rs`，已完成并经独立复核 `STATUS: CLEAR_WITH_P2`，P2 已补齐，implementation commit `1ba8f01`。
 - **U3 ✅** `remove_file_if_exists` / `fixture_dir` → `utils/fs_ops.rs`，已完成并经独立复核 `STATUS: CLEAR_WITH_P2`，P2 已补齐，implementation commit `bc436dd`。
 - **U4** `normalize` + 特化 → `utils/normalization.rs`
-- **U5** 前端 `DetailLine` / `SummaryTile` → `src/components/`
-- **U-Gate** 加 harness 查重门（写新函数先查 `utils/`），防再造——不加这道门，抽完迟早又长回去。
+- **U5 ✅** 前端 `DetailLine` / `SummaryTile` → `src/components/`，已完成并经独立复核 `STATUS: CLEAR`，implementation commit `c4335e1`。
+- **U-Gate** 查重门形态先写草稿（2-3 种方案 + 推荐），暂不实现、不接入 harness / CI。
 
 不做：store 模式（`load_store` / `empty_store` / `validate_store`）**不强行合并**——每店数据结构 / 业务规则不同，合并会碰状态机 / JSON，违反 `decisions/2026-06-01-architecture-module-split-guardrail-v1.md`。
 

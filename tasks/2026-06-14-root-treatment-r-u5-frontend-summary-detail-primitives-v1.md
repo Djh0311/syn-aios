@@ -2,7 +2,7 @@
 
 日期：2026-06-14
 
-状态：待执行。
+状态：已完成。
 
 性质：R-U 前端 util / component 去重。本包只把重复 `SummaryTile` / `DetailLine` 纯展示组件收敛到 `src/components/`；严格行为和视觉零变更。
 
@@ -144,4 +144,4 @@ export function DetailLine({ label, value, emptyValue }: { label: string; value:
 
 ## 9. 停止点
 
-任务包提交后进入实现；实现经独立复核 CLEAR、implementation commit 和 checkpoint commit 后，停在 U5 复核点，继续 U4。
+任务包已完成；实现经独立复核 Hilbert `STATUS: CLEAR`，implementation commit 为 `c4335e1`，checkpoint commit 待写入。
