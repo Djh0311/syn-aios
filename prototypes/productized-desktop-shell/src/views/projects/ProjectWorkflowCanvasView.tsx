@@ -14,6 +14,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Badge } from "../../components/Badge";
+import { DetailLine } from "../../components/WorkbenchPrimitives";
 import {
   buildBlackboardCandidateOverlay,
   summarizeFormalMemoryStore,
@@ -858,13 +859,4 @@ function canvasNodeTypeLabel(type: ProjectCanvasNode["node_type"]) {
 function messageOf(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
-}
-
-function DetailLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="detail-line">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
 }

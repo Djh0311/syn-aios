@@ -1,4 +1,5 @@
 import { Badge } from "../../components/Badge";
+import { DetailLine } from "../../components/WorkbenchPrimitives";
 import { formatDate } from "../../lib/format";
 import type {
   BlackboardCandidateStoreV1,
@@ -9,6 +10,8 @@ import type {
   WorkflowStateSnapshot,
 } from "../../lib/types";
 import { ProjectHandoffEvidencePanel } from "./ProjectReferencePanels";
+
+export { DetailLine };
 
 type ProjectOverviewSelectTool = "workflow" | "handoff-evidence" | "resources";
 
@@ -170,15 +173,6 @@ export function ProjectToolPlaceholder({ project, label }: { project: ProjectRec
       </div>
       <p className="muted small-note">{project.name}</p>
     </section>
-  );
-}
-
-export function DetailLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="detail-line">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
   );
 }
 

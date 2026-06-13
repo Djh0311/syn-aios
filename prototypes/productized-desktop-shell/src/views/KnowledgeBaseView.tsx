@@ -1,4 +1,5 @@
 import { Badge } from "../components/Badge";
+import { DetailLine } from "../components/WorkbenchPrimitives";
 import { deriveKnowledgeBaseSummary, type KnowledgeDocumentReadModel, type KnowledgeMemoryLink } from "../lib/knowledgeBase";
 import { deriveKnowledgeBasePageReadModelFromParts } from "../lib/pageSelectors";
 import type {
@@ -237,15 +238,6 @@ function StatCell({ label, value, helper }: { label: string; value: string; help
       <div className="lbl">{label}</div>
       <div className="val mono">{value}</div>
       <div className="memory-stat-helper">{helper}</div>
-    </div>
-  );
-}
-
-function DetailLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="detail-line">
-      <span>{label}</span>
-      <strong>{value}</strong>
     </div>
   );
 }

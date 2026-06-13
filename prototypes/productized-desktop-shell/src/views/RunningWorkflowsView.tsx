@@ -1,4 +1,5 @@
 import { Badge } from "../components/Badge";
+import { SummaryTile } from "../components/WorkbenchPrimitives";
 import { pathTail } from "../lib/format";
 import { deriveRunningWorkflowsPageReadModelFromParts } from "../lib/pageSelectors";
 import { deriveRunQueueReadModel } from "../lib/runQueue";
@@ -409,16 +410,6 @@ function RuntimeSummaryCard({ summary, onNavigate }: { summary: SessionRunStatus
       <span>{summary.current_status_label} · 关注 {summary.attention_count}</span>
       <em>读回 {readbackStatusLabel(summary.readback_status)}</em>
     </button>
-  );
-}
-
-function SummaryTile({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="summary-tile">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <em>{hint}</em>
-    </div>
   );
 }
 

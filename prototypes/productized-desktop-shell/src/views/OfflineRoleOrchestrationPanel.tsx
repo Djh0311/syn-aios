@@ -1,4 +1,5 @@
 import { Badge } from "../components/Badge";
+import { DetailLine } from "../components/WorkbenchPrimitives";
 import type { OfflineRoleDispatchProposal, PendingAction, ProjectRecord, ProjectWorkflowSummary, SessionRecord } from "../lib/types";
 
 type RoleDefinition = {
@@ -275,11 +276,11 @@ export function OfflineDispatchProposalPreview({ proposal }: { proposal: Offline
         <Badge tone="candidate">{proposal.target_role_label}</Badge>
       </div>
       <div className="workflow-draft-grid">
-        <DetailLine label="目标角色" value={`${proposal.target_role_label} / ${proposal.target_role_id}`} />
-        <DetailLine label="执行目录" value={proposal.execution_cwd} />
-        <DetailLine label="超时" value={`${proposal.timeout_seconds} 秒`} />
-        <DetailLine label="允许读取" value={proposal.allowed_reads.join("；")} />
-        <DetailLine label="允许写入" value={proposal.allowed_writes.join("；")} />
+        <DetailLine label="目标角色" value={`${proposal.target_role_label} / ${proposal.target_role_id}`} emptyValue="未登记" />
+        <DetailLine label="执行目录" value={proposal.execution_cwd} emptyValue="未登记" />
+        <DetailLine label="超时" value={`${proposal.timeout_seconds} 秒`} emptyValue="未登记" />
+        <DetailLine label="允许读取" value={proposal.allowed_reads.join("；")} emptyValue="未登记" />
+        <DetailLine label="允许写入" value={proposal.allowed_writes.join("；")} emptyValue="未登记" />
       </div>
       <div className="dispatch-preview-block">
         <span>目标</span>
@@ -458,13 +459,4 @@ function selectedOfflineWorkItem(projectWorkflow: ProjectWorkflowSummary | null)
 function workItemForDispatch(projectWorkflow: ProjectWorkflowSummary, dispatch: { work_item_id: string } | undefined) {
   if (!dispatch) return null;
   return projectWorkflow.task_drafts.find((taskDraft) => taskDraft.work_item_id === dispatch.work_item_id) ?? null;
-}
-
-function DetailLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="detail-line">
-      <span>{label}</span>
-      <strong>{value || "未登记"}</strong>
-    </div>
-  );
 }

@@ -1,4 +1,5 @@
 import { Badge } from "../components/Badge";
+import { SummaryTile } from "../components/WorkbenchPrimitives";
 import { formatDate } from "../lib/format";
 import type { HarnessCandidate, HarnessResource, ProjectRecord } from "../lib/types";
 
@@ -312,16 +313,6 @@ function WarningRow({ warnings }: { warnings: string[] }) {
           {warningNameLabel(warning)}
         </Badge>
       ))}
-    </div>
-  );
-}
-
-function SummaryTile({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="summary-tile">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <em>{hint}</em>
     </div>
   );
 }

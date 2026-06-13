@@ -1,4 +1,5 @@
 import { Badge } from "../components/Badge";
+import { SummaryTile } from "../components/WorkbenchPrimitives";
 import type { PluginRecord, ProjectRecord, SkillRecord } from "../lib/types";
 
 type SkillsBoardViewProps = {
@@ -110,16 +111,6 @@ export function SkillsBoardView({ skills, plugins, projects }: SkillsBoardViewPr
         </article>
       </details>
     </section>
-  );
-}
-
-function SummaryTile({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="summary-tile">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <em>{hint}</em>
-    </div>
   );
 }
 

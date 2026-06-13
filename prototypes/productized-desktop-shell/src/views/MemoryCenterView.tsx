@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Badge } from "../components/Badge";
+import { DetailLine } from "../components/WorkbenchPrimitives";
 import { deriveMemoryManagementSummary, type FormalMemoryListItem, type MemoryCandidateListItem } from "../lib/memoryCenter";
 import { deriveMemoryCenterPageReadModelFromParts } from "../lib/pageSelectors";
 import type {
@@ -1041,15 +1042,6 @@ function memoryWorkbenchActionLabel(kind: string): string {
   if (kind === "review_task_memory_packet") return "任务包";
   if (kind === "resolve_memory_blocker") return "阻断";
   return kind;
-}
-
-function DetailLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="detail-line">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
 }
 
 function sourceText(sources: FormalMemoryListItem["source_summaries"] | MemoryCandidateListItem["source_summaries"]) {

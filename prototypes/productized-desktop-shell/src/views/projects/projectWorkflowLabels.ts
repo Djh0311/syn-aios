@@ -1,4 +1,5 @@
 import { createElement } from "react";
+export { DetailLine } from "../../components/WorkbenchPrimitives";
 import type { WorkflowRunCheck } from "../../lib/types";
 
 export function stateLabel(state: string) {
@@ -69,15 +70,6 @@ export function runCheckItemStatusLabel(status: string) {
 
 export function listText(values: string[], emptyText: string) {
   return values.length ? values.join("；") : emptyText;
-}
-
-export function DetailLine({ label, value }: { label: string; value: string }) {
-  return createElement(
-    "div",
-    { className: "detail-line" },
-    createElement("span", null, label),
-    createElement("strong", null, value),
-  );
 }
 
 export function WorkflowNode({
