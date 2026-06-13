@@ -38,7 +38,7 @@ R4-H 前端硬目标（进行中）
 - **U3 ✅** `remove_file_if_exists` / `fixture_dir` → `utils/fs_ops.rs`，已完成并经独立复核 `STATUS: CLEAR_WITH_P2`，P2 已补齐，implementation commit `bc436dd`。
 - **U4 ✅** `normalize` + 特化 → `utils/normalization.rs`，已完成并经独立复核 `STATUS: CLEAR_WITH_P2`，P2 已补正，implementation commit `16e96bd`；规则不同 / 业务特化项保持 deferred。
 - **U5 ✅** 前端 `DetailLine` / `SummaryTile` → `src/components/`，已完成并经独立复核 `STATUS: CLEAR`，implementation commit `c4335e1`。
-- **U-Gate** 查重门形态先写草稿（2-3 种方案 + 推荐），暂不实现、不接入 harness / CI。
+- **U-Gate ✅ 草稿** 查重门形态草稿已完成并经独立复核 `STATUS: CLEAR`，草稿 commit `6364519`；推荐短期“文档规则 + shape gate warning-only”，中期视复发升级 AST / 指纹门。注意：本轮未实现查重门，未接入 harness / CI / shape gate。
 
 不做：store 模式（`load_store` / `empty_store` / `validate_store`）**不强行合并**——每店数据结构 / 业务规则不同，合并会碰状态机 / JSON，违反 `decisions/2026-06-01-architecture-module-split-guardrail-v1.md`。
 
