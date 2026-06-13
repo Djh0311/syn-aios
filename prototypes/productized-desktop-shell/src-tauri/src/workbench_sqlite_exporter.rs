@@ -326,13 +326,15 @@ fn manifest_counts(manifest: &SqliteExportDryRunManifest) -> BTreeMap<String, us
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::fs_ops::fixture_dir;
+
     use super::*;
     use crate::workbench_sqlite_apply::apply_fixture_dir_to_temp_db;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn sqlite_export_dry_run_projects_workflow_runtime_and_product_command_without_writes() {
-        let fixture = fixture_dir("export-dry-run-workflow-runtime");
+        let fixture = fixture_dir("r3-a2", "export-dry-run-workflow-runtime");
         let db_path = temp_db("export-dry-run-workflow-runtime");
         apply_fixture_dir_to_temp_db(&fixture, &db_path, None).expect("apply fixture");
 
@@ -362,7 +364,7 @@ mod tests {
 
     #[test]
     fn sqlite_export_dry_run_omits_forbidden_sensitive_fields() {
-        let fixture = fixture_dir("export-dry-run-workflow-runtime");
+        let fixture = fixture_dir("r3-a2", "export-dry-run-workflow-runtime");
         let db_path = temp_db("export-redaction");
         apply_fixture_dir_to_temp_db(&fixture, &db_path, None).expect("apply fixture");
 
@@ -383,7 +385,7 @@ mod tests {
 
     #[test]
     fn sqlite_export_dry_run_uses_canonical_runtime_log_alias_policy() {
-        let fixture = fixture_dir("runtime-log-alias-export-policy");
+        let fixture = fixture_dir("r3-a2", "runtime-log-alias-export-policy");
         let db_path = temp_db("runtime-log-alias-export-policy");
         apply_fixture_dir_to_temp_db(&fixture, &db_path, None).expect("apply fixture");
 
@@ -401,13 +403,6 @@ mod tests {
         assert!(manifest
             .runtime_log_alias_policy
             .contains("canonical runtime-logs.v1.json"));
-    }
-
-    fn fixture_dir(name: &str) -> std::path::PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures")
-            .join("r3-a2")
-            .join(name)
     }
 
     fn temp_db(name: &str) -> std::path::PathBuf {

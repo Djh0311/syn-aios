@@ -1,3 +1,4 @@
+use crate::utils::fs_ops::remove_file_if_exists;
 use crate::utils::hash::sha256_hex_bytes as sha256_hex;
 use crate::workbench_sqlite_apply::{apply_fixture_dir_to_temp_db, table_count};
 use crate::workbench_sqlite_exporter::{export_temp_db_to_json_dry_run, SqliteProjectedFile};
@@ -1464,14 +1465,6 @@ fn write_json_file(path: &Path, value: &Value) -> Result<(), String> {
     fs::write(path, bytes).map_err(|error| format!("write json failed {}: {error}", path.display()))
 }
 
-fn remove_file_if_exists(path: &Path) -> Result<(), String> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("remove file failed {}: {error}", path.display())),
-    }
-}
-
 fn remove_legacy_runtime_log_alias(projection_root: &Path) -> Result<(), String> {
     remove_file_if_exists(&projection_root.join("runtime-log.v1.json"))
 }
@@ -1544,6 +1537,8 @@ fn manifest_r3_a5_fixture_root() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::fs_ops::fixture_dir;
+
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -1937,7 +1932,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_stable_verifies_two_samples_and_writes_report() {
-        let fixture = fixture_dir("observation-export-valid-core-chain");
+        let fixture = fixture_dir("r3-a5", "observation-export-valid-core-chain");
         let paths = prepare_paths("stable");
 
         let report = rehearse_fixture_observation_period(
@@ -1966,7 +1961,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_idempotent_rerun_keeps_stable_report_text() {
-        let fixture = fixture_dir("observation-export-idempotent-rerun");
+        let fixture = fixture_dir("r3-a5", "observation-export-idempotent-rerun");
         let paths = prepare_paths("idempotent");
 
         rehearse_fixture_observation_period(
@@ -1997,7 +1992,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_export_hash_mismatch_blocks_without_stable_report() {
-        let fixture = fixture_dir("observation-export-hash-mismatch-blocked");
+        let fixture = fixture_dir("r3-a5", "observation-export-hash-mismatch-blocked");
         let paths = prepare_paths("export-hash-mismatch");
 
         let err = rehearse_fixture_observation_period(
@@ -2016,7 +2011,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_projection_missing_blocks_without_stable_report() {
-        let fixture = fixture_dir("observation-projection-missing-blocked");
+        let fixture = fixture_dir("r3-a5", "observation-projection-missing-blocked");
         let paths = prepare_paths("projection-missing");
 
         let err = rehearse_fixture_observation_period(
@@ -2035,7 +2030,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_projection_corrupt_blocks_without_stable_report() {
-        let fixture = fixture_dir("observation-projection-missing-blocked");
+        let fixture = fixture_dir("r3-a5", "observation-projection-missing-blocked");
         let paths = prepare_paths("projection-corrupt");
 
         let err = rehearse_fixture_observation_period(
@@ -2054,7 +2049,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_missing_manifest_blocks_without_stable_report() {
-        let fixture = fixture_dir("observation-manifest-missing-blocked");
+        let fixture = fixture_dir("r3-a5", "observation-manifest-missing-blocked");
         let paths = prepare_paths("missing-manifest");
 
         let err = rehearse_fixture_observation_period(
@@ -2073,7 +2068,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_incomplete_manifest_blocks_without_stable_report() {
-        let fixture = fixture_dir("observation-manifest-incomplete-blocked");
+        let fixture = fixture_dir("r3-a5", "observation-manifest-incomplete-blocked");
         let paths = prepare_paths("incomplete-manifest");
 
         let err = rehearse_fixture_observation_period(
@@ -2093,7 +2088,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_db_integrity_failure_is_degraded_and_has_no_stable_report() {
-        let fixture = fixture_dir("observation-db-integrity-failure-degraded");
+        let fixture = fixture_dir("r3-a5", "observation-db-integrity-failure-degraded");
         let paths = prepare_paths("db-integrity");
 
         let err = rehearse_fixture_observation_period(
@@ -2113,7 +2108,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_drift_between_samples_blocks_without_stable_report() {
-        let fixture = fixture_dir("observation-export-valid-core-chain");
+        let fixture = fixture_dir("r3-a5", "observation-export-valid-core-chain");
         let paths = prepare_paths("drift");
 
         let err = rehearse_fixture_observation_period(
@@ -2132,7 +2127,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_failure_before_sample_creates_no_outputs() {
-        let fixture = fixture_dir("observation-export-valid-core-chain");
+        let fixture = fixture_dir("r3-a5", "observation-export-valid-core-chain");
         let paths = prepare_paths("before-sample");
 
         let err = rehearse_fixture_observation_period(
@@ -2152,7 +2147,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_failure_after_first_export_before_second_sample_creates_no_report() {
-        let fixture = fixture_dir("observation-export-valid-core-chain");
+        let fixture = fixture_dir("r3-a5", "observation-export-valid-core-chain");
         let paths = prepare_paths("after-first-export");
 
         let err = rehearse_fixture_observation_period(
@@ -2171,7 +2166,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_failure_after_rollback_selected_before_report_commit_creates_no_report() {
-        let fixture = fixture_dir("rollback-export-recovery-verification-dry-run");
+        let fixture = fixture_dir("r3-a5", "rollback-export-recovery-verification-dry-run");
         let paths = prepare_paths("rollback-before-report");
 
         let err = rehearse_fixture_observation_period(
@@ -2191,7 +2186,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_rollback_verification_is_dry_run_only() {
-        let fixture = fixture_dir("rollback-export-recovery-verification-dry-run");
+        let fixture = fixture_dir("r3-a5", "rollback-export-recovery-verification-dry-run");
         let paths = prepare_paths("rollback-dry-run");
 
         let report = rehearse_fixture_observation_period(
@@ -2241,7 +2236,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_report_projection_and_manifest_omit_forbidden_sensitive_fields() {
-        let fixture = fixture_dir("observation-sensitive-redaction");
+        let fixture = fixture_dir("r3-a5", "observation-sensitive-redaction");
         let paths = prepare_paths("sensitive");
 
         rehearse_fixture_observation_period(
@@ -2272,7 +2267,7 @@ mod tests {
 
     #[test]
     fn sqlite_observation_export_records_per_file_verification_fields() {
-        let fixture = fixture_dir("observation-export-valid-core-chain");
+        let fixture = fixture_dir("r3-a5", "observation-export-valid-core-chain");
         let paths = prepare_paths("per-file");
 
         let report = rehearse_fixture_observation_period(
@@ -2345,7 +2340,7 @@ mod tests {
 
     fn copy_a11_fixture_to_root(root: &Path) {
         fs::create_dir_all(root).expect("create fallback root");
-        let fixture_root = fixture_dir_r3_a11("production-observation-workflow-summary");
+        let fixture_root = fixture_dir("r3-a11", "production-observation-workflow-summary");
         for file_name in ["workflow-state.v0.json", "runtime-logs.v1.json"] {
             fs::copy(fixture_root.join(file_name), root.join(file_name))
                 .unwrap_or_else(|error| panic!("copy fallback fixture {file_name}: {error}"));
@@ -2360,20 +2355,6 @@ mod tests {
 
     fn allowed_production_read_models() -> BTreeSet<String> {
         BTreeSet::from([WORKFLOW_STATE_SUMMARY_READ_MODEL.to_string()])
-    }
-
-    fn fixture_dir(name: &str) -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures")
-            .join("r3-a5")
-            .join(name)
-    }
-
-    fn fixture_dir_r3_a11(name: &str) -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures")
-            .join("r3-a11")
-            .join(name)
     }
 
     fn temp_db(name: &str) -> PathBuf {

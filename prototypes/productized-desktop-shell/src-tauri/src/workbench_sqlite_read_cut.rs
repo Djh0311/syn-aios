@@ -1,3 +1,4 @@
+use crate::utils::fs_ops::remove_file_if_exists;
 use crate::utils::hash::sha256_hex_bytes as sha256_hex;
 use crate::workbench_sqlite_apply::{apply_fixture_dir_to_temp_db, table_count};
 use crate::workbench_sqlite_exporter::{export_temp_db_to_json_dry_run, SqliteProjectedFile};
@@ -1369,14 +1370,6 @@ fn write_json_file(path: &Path, value: &Value) -> Result<(), String> {
     fs::write(path, bytes).map_err(|error| format!("write json failed {}: {error}", path.display()))
 }
 
-fn remove_file_if_exists(path: &Path) -> Result<(), String> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("remove file failed {}: {error}", path.display())),
-    }
-}
-
 fn redaction_policy() -> Vec<String> {
     vec![
         "prompt_body:omitted".to_string(),
@@ -1394,12 +1387,14 @@ fn manifest_r3_a4_fixture_root() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::fs_ops::fixture_dir;
+
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn sqlite_read_cut_db_authoritative_success_uses_db_projection_hash() {
-        let fixture = fixture_dir("read-cut-valid-core-chain");
+        let fixture = fixture_dir("r3-a4", "read-cut-valid-core-chain");
         let paths = prepare_paths("db-success");
 
         let report = rehearse_fixture_read_cut(
@@ -1424,7 +1419,7 @@ mod tests {
 
     #[test]
     fn sqlite_read_cut_idempotent_rerun_keeps_stable_report() {
-        let fixture = fixture_dir("read-cut-idempotent-rerun");
+        let fixture = fixture_dir("r3-a4", "read-cut-idempotent-rerun");
         let paths = prepare_paths("idempotent");
 
         rehearse_fixture_read_cut(
@@ -1453,7 +1448,7 @@ mod tests {
 
     #[test]
     fn sqlite_read_cut_db_unavailable_uses_verified_json_projection_fallback() {
-        let fixture = fixture_dir("read-cut-db-unavailable-json-fallback");
+        let fixture = fixture_dir("r3-a4", "read-cut-db-unavailable-json-fallback");
         let paths = prepare_paths("db-unavailable");
         prepare_projection_manifest(&fixture, &paths);
         fs::remove_file(&paths.db_path).expect("remove db for unavailable fallback");
@@ -1478,7 +1473,7 @@ mod tests {
 
     #[test]
     fn sqlite_read_cut_schema_mismatch_fallback_is_degraded_not_db_success() {
-        let fixture = fixture_dir("read-cut-db-schema-mismatch-fallback");
+        let fixture = fixture_dir("r3-a4", "read-cut-db-schema-mismatch-fallback");
         let paths = prepare_paths("schema-mismatch");
         prepare_projection_manifest(&fixture, &paths);
 
@@ -1502,7 +1497,7 @@ mod tests {
 
     #[test]
     fn sqlite_read_cut_projection_hash_mismatch_blocks_without_completed_report() {
-        let fixture = fixture_dir("read-cut-projection-hash-mismatch-blocked");
+        let fixture = fixture_dir("r3-a4", "read-cut-projection-hash-mismatch-blocked");
         let paths = prepare_paths("hash-mismatch");
 
         let err = rehearse_fixture_read_cut(
@@ -1521,7 +1516,7 @@ mod tests {
 
     #[test]
     fn sqlite_read_cut_missing_manifest_blocks_without_completed_report() {
-        let fixture = fixture_dir("read-cut-missing-manifest-blocked");
+        let fixture = fixture_dir("r3-a4", "read-cut-missing-manifest-blocked");
         let paths = prepare_paths("missing-manifest");
 
         let err = rehearse_fixture_read_cut(
@@ -1540,7 +1535,7 @@ mod tests {
 
     #[test]
     fn sqlite_read_cut_incomplete_manifest_blocks_without_completed_report() {
-        let fixture = fixture_dir("read-cut-incomplete-manifest-blocked");
+        let fixture = fixture_dir("r3-a4", "read-cut-incomplete-manifest-blocked");
         let paths = prepare_paths("incomplete-manifest");
 
         let err = rehearse_fixture_read_cut(
@@ -1560,7 +1555,7 @@ mod tests {
 
     #[test]
     fn sqlite_read_cut_failure_injection_before_db_read_creates_no_report() {
-        let fixture = fixture_dir("read-cut-valid-core-chain");
+        let fixture = fixture_dir("r3-a4", "read-cut-valid-core-chain");
         let paths = prepare_paths("before-db-read");
 
         let err = rehearse_fixture_read_cut(
@@ -1579,7 +1574,7 @@ mod tests {
 
     #[test]
     fn sqlite_read_cut_failure_after_db_read_before_verification_creates_no_report() {
-        let fixture = fixture_dir("read-cut-valid-core-chain");
+        let fixture = fixture_dir("r3-a4", "read-cut-valid-core-chain");
         let paths = prepare_paths("after-db-read");
 
         let err = rehearse_fixture_read_cut(
@@ -1598,7 +1593,7 @@ mod tests {
 
     #[test]
     fn sqlite_read_cut_failure_after_fallback_before_report_commit_creates_no_report() {
-        let fixture = fixture_dir("read-cut-db-unavailable-json-fallback");
+        let fixture = fixture_dir("r3-a4", "read-cut-db-unavailable-json-fallback");
         let paths = prepare_paths("fallback-before-report");
         prepare_projection_manifest(&fixture, &paths);
 
@@ -1618,7 +1613,7 @@ mod tests {
 
     #[test]
     fn sqlite_read_cut_report_and_projection_omit_forbidden_sensitive_fields() {
-        let fixture = fixture_dir("read-cut-sensitive-redaction");
+        let fixture = fixture_dir("r3-a4", "read-cut-sensitive-redaction");
         let paths = prepare_paths("sensitive");
 
         rehearse_fixture_read_cut(
@@ -1647,7 +1642,7 @@ mod tests {
 
     #[test]
     fn sqlite_read_cut_recovery_dry_run_does_not_restore_outputs() {
-        let fixture = fixture_dir("rollback-read-cut-recovery-dry-run");
+        let fixture = fixture_dir("r3-a4", "rollback-read-cut-recovery-dry-run");
         let paths = prepare_paths("recovery");
 
         let report = rehearse_fixture_read_cut(
@@ -2144,13 +2139,6 @@ mod tests {
         .expect("prepare projection manifest");
     }
 
-    fn fixture_dir(name: &str) -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures")
-            .join("r3-a4")
-            .join(name)
-    }
-
     fn temp_db(name: &str) -> PathBuf {
         let nanos = unique_nanos();
         std::env::temp_dir().join(format!("r3-a4-{name}-{nanos}.sqlite"))
@@ -2193,7 +2181,8 @@ mod tests {
     fn prepare_limited_fallback(paths: &LimitedPaths) {
         fs::create_dir_all(&paths.fallback_root).expect("create fallback root");
         fs::copy(
-            fixture_dir_a10("limited-read-cut-workflow-summary").join("workflow-state.v0.json"),
+            fixture_dir("r3-a10", "limited-read-cut-workflow-summary")
+                .join("workflow-state.v0.json"),
             paths.fallback_root.join("workflow-state.v0.json"),
         )
         .expect("copy fallback workflow state");
@@ -2207,12 +2196,5 @@ mod tests {
 
     fn limited_allowed_models() -> BTreeSet<String> {
         BTreeSet::from([WORKFLOW_STATE_SUMMARY_READ_MODEL.to_string()])
-    }
-
-    fn fixture_dir_a10(name: &str) -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures")
-            .join("r3-a10")
-            .join(name)
     }
 }

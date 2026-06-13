@@ -2,7 +2,7 @@
 
 日期：2026-06-14
 
-状态：待执行。
+状态：已完成。
 
 性质：R-U 后端 util 去重第 3 包。本包只把重复文件删除 helper 与同形状测试 fixture 路径 helper 收敛到 `src-tauri/src/utils/fs_ops.rs`；严格无行为变化。
 
@@ -214,3 +214,7 @@ Deferred 理由：强行合并会牵出 `manifest_r3_aX_fixture_root` / `r3_aX_f
 ## 9. 停止点
 
 任务包提交后进入实现；实现经独立复核 CLEAR、implementation commit 和 checkpoint commit 后，停在 U3 复核点，不得顺手进入 U4。
+
+## 10. 复核结果
+
+独立复核 agent `Hilbert`（`019ec1e4-f49c-7d90-9166-ffd8b1bb1a42`）回交 `STATUS: CLEAR_WITH_P2`。P0/P1 无；P2 为 evidence 验证执行目录记录不够精确，shape gate 应从仓库根执行而不是 `src-tauri`。该 P2 已在 evidence 中修正，不影响代码行为或放行。

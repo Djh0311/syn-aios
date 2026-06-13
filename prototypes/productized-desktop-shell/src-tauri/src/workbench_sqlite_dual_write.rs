@@ -1,3 +1,4 @@
+use crate::utils::fs_ops::remove_file_if_exists;
 use crate::workbench_sqlite_apply::{apply_fixture_dir_to_temp_db, table_count};
 use crate::workbench_sqlite_exporter::{export_temp_db_to_json_dry_run, SqliteProjectedFile};
 use crate::workbench_sqlite_importer::canonical_json_hash;
@@ -296,14 +297,6 @@ fn clear_incomplete_markers(projection_root: &Path, manifest_path: &Path) -> Res
     remove_file_if_exists(&temp_manifest_path(manifest_path))
 }
 
-fn remove_file_if_exists(path: &Path) -> Result<(), String> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("remove file failed {}: {error}", path.display())),
-    }
-}
-
 fn temp_manifest_path(path: &Path) -> PathBuf {
     path.with_extension("json.tmp")
 }
@@ -316,6 +309,8 @@ fn manifest_r3_a3_fixture_root() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::fs_ops::fixture_dir;
+
     use super::*;
     use std::fs;
     use std::path::Path;
@@ -323,7 +318,7 @@ mod tests {
 
     #[test]
     fn sqlite_dual_write_rehearsal_writes_projection_and_completed_manifest() {
-        let fixture = fixture_dir("dual-write-valid-core-chain");
+        let fixture = fixture_dir("r3-a3", "dual-write-valid-core-chain");
         let db_path = temp_db("success");
         let projection_root = temp_projection_root("success");
         let manifest_path = projection_root.join("rollback-manifest.json");
@@ -344,7 +339,7 @@ mod tests {
 
     #[test]
     fn sqlite_dual_write_rehearsal_is_idempotent_for_same_fixture_and_projection_root() {
-        let fixture = fixture_dir("dual-write-idempotent-rerun");
+        let fixture = fixture_dir("r3-a3", "dual-write-idempotent-rerun");
         let db_path = temp_db("idempotent");
         let projection_root = temp_projection_root("idempotent");
         let manifest_path = projection_root.join("rollback-manifest.json");
@@ -365,7 +360,7 @@ mod tests {
 
     #[test]
     fn sqlite_dual_write_after_db_before_projection_failure_keeps_db_without_projection() {
-        let fixture = fixture_dir("dual-write-after-db-before-projection-failure");
+        let fixture = fixture_dir("r3-a3", "dual-write-after-db-before-projection-failure");
         let db_path = temp_db("after-db-before-projection");
         let projection_root = temp_projection_root("after-db-before-projection");
         let manifest_path = projection_root.join("rollback-manifest.json");
@@ -390,7 +385,7 @@ mod tests {
 
     #[test]
     fn sqlite_dual_write_before_db_apply_failure_creates_no_outputs() {
-        let fixture = fixture_dir("dual-write-valid-core-chain");
+        let fixture = fixture_dir("r3-a3", "dual-write-valid-core-chain");
         let db_path = temp_db("before-db-apply");
         let projection_root = temp_projection_root("before-db-apply");
         let manifest_path = projection_root.join("rollback-manifest.json");
@@ -411,7 +406,10 @@ mod tests {
 
     #[test]
     fn sqlite_dual_write_projection_failure_cleans_partial_files_before_manifest() {
-        let fixture = fixture_dir("dual-write-after-first-projection-before-manifest-failure");
+        let fixture = fixture_dir(
+            "r3-a3",
+            "dual-write-after-first-projection-before-manifest-failure",
+        );
         let db_path = temp_db("projection-partial");
         let projection_root = temp_projection_root("projection-partial");
         let manifest_path = projection_root.join("rollback-manifest.json");
@@ -435,7 +433,7 @@ mod tests {
 
     #[test]
     fn sqlite_dual_write_before_manifest_commit_marks_incomplete_without_completed_manifest() {
-        let fixture = fixture_dir("dual-write-before-manifest-commit-failure");
+        let fixture = fixture_dir("r3-a3", "dual-write-before-manifest-commit-failure");
         let db_path = temp_db("manifest-incomplete");
         let projection_root = temp_projection_root("manifest-incomplete");
         let manifest_path = projection_root.join("rollback-manifest.json");
@@ -458,7 +456,7 @@ mod tests {
 
     #[test]
     fn sqlite_dual_write_after_manifest_commit_keeps_completed_manifest_and_reports_failure() {
-        let fixture = fixture_dir("dual-write-after-manifest-commit");
+        let fixture = fixture_dir("r3-a3", "dual-write-after-manifest-commit");
         let db_path = temp_db("after-manifest");
         let projection_root = temp_projection_root("after-manifest");
         let manifest_path = projection_root.join("rollback-manifest.json");
@@ -480,7 +478,7 @@ mod tests {
 
     #[test]
     fn sqlite_dual_write_projection_redacts_forbidden_sensitive_fields() {
-        let fixture = fixture_dir("dual-write-sensitive-redaction");
+        let fixture = fixture_dir("r3-a3", "dual-write-sensitive-redaction");
         let db_path = temp_db("sensitive-redaction");
         let projection_root = temp_projection_root("sensitive-redaction");
         let manifest_path = projection_root.join("rollback-manifest.json");
@@ -509,7 +507,7 @@ mod tests {
 
     #[test]
     fn sqlite_dual_write_recovery_dry_run_reads_completed_manifest_without_mutating_files() {
-        let fixture = fixture_dir("rollback-manifest-recovery-dry-run");
+        let fixture = fixture_dir("r3-a3", "rollback-manifest-recovery-dry-run");
         let db_path = temp_db("recovery");
         let projection_root = temp_projection_root("recovery");
         let manifest_path = projection_root.join("rollback-manifest.json");
@@ -536,7 +534,7 @@ mod tests {
 
     #[test]
     fn sqlite_dual_write_rejects_non_temp_projection_root() {
-        let fixture = fixture_dir("dual-write-valid-core-chain");
+        let fixture = fixture_dir("r3-a3", "dual-write-valid-core-chain");
         let db_path = temp_db("bad-projection-root");
         let projection_root = Path::new("/var/r3-a3-projection");
         let manifest_path = projection_root.join("rollback-manifest.json");
@@ -546,13 +544,6 @@ mod tests {
                 .expect_err("non-temp projection root should reject");
 
         assert!(err.contains("temp_or_r3_a3_fixture_path_required"));
-    }
-
-    fn fixture_dir(name: &str) -> std::path::PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures")
-            .join("r3-a3")
-            .join(name)
     }
 
     fn temp_db(name: &str) -> std::path::PathBuf {

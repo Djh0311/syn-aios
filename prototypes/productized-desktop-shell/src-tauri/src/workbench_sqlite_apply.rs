@@ -886,12 +886,14 @@ pub(crate) fn table_count(db_path: &Path, table: &str) -> Result<i64, String> {
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::fs_ops::fixture_dir;
+
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn sqlite_apply_importer_applies_valid_chain_and_reapply_is_idempotent() {
-        let fixture = fixture_dir("apply-valid-core-chain");
+        let fixture = fixture_dir("r3-a2", "apply-valid-core-chain");
         let db_path = temp_db("apply-valid-core-chain");
 
         let first = apply_fixture_dir_to_temp_db(&fixture, &db_path, None).expect("first apply");
@@ -921,7 +923,7 @@ mod tests {
             "apply-sensitive-reject",
         ] {
             let db_path = temp_db(name);
-            let err = apply_fixture_dir_to_temp_db(&fixture_dir(name), &db_path, None)
+            let err = apply_fixture_dir_to_temp_db(&fixture_dir("r3-a2", name), &db_path, None)
                 .expect_err("fixture should reject");
             assert!(err.contains("dry_run_batch_not_applyable") || err.contains("rejected"));
             if db_path.exists() {
@@ -949,7 +951,7 @@ mod tests {
         ] {
             let db_path = temp_db(&format!("failure-{point:?}"));
             let err = apply_fixture_dir_to_temp_db(
-                &fixture_dir("crash-after-domain-before-commit"),
+                &fixture_dir("r3-a2", "crash-after-domain-before-commit"),
                 &db_path,
                 Some(point),
             )
@@ -969,7 +971,7 @@ mod tests {
     fn sqlite_apply_importer_rejects_before_db_begin_without_creating_db() {
         let db_path = temp_db("failure-before-db-begin");
         let err = apply_fixture_dir_to_temp_db(
-            &fixture_dir("apply-valid-core-chain"),
+            &fixture_dir("r3-a2", "apply-valid-core-chain"),
             &db_path,
             Some(SqliteApplyFailurePoint::BeforeDbBegin),
         )
@@ -986,7 +988,7 @@ mod tests {
     fn sqlite_apply_importer_after_commit_injection_keeps_committed_rows() {
         let db_path = temp_db("failure-after-commit");
         let err = apply_fixture_dir_to_temp_db(
-            &fixture_dir("crash-after-source-before-domain"),
+            &fixture_dir("r3-a2", "crash-after-source-before-domain"),
             &db_path,
             Some(SqliteApplyFailurePoint::AfterCommitBeforeExportManifest),
         )
@@ -1002,19 +1004,12 @@ mod tests {
     #[test]
     fn sqlite_apply_importer_rejects_non_temp_db_path() {
         let err = apply_fixture_dir_to_temp_db(
-            &fixture_dir("apply-valid-core-chain"),
+            &fixture_dir("r3-a2", "apply-valid-core-chain"),
             Path::new("/var/r3-a2.sqlite"),
             None,
         )
         .expect_err("non-temp db should reject");
         assert!(err.contains("temp_or_fixture_path_required"));
-    }
-
-    fn fixture_dir(name: &str) -> std::path::PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures")
-            .join("r3-a2")
-            .join(name)
     }
 
     fn temp_db(name: &str) -> std::path::PathBuf {

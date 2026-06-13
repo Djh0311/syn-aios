@@ -1,3 +1,4 @@
+use crate::utils::fs_ops::remove_file_if_exists;
 use crate::utils::hash::sha256_hex_bytes as sha256_hex;
 use crate::workbench_sqlite_exporter::{export_temp_db_to_json_dry_run, SqliteProjectedFile};
 use crate::workbench_sqlite_importer::canonical_json_hash;
@@ -639,14 +640,6 @@ fn write_json_file(path: &Path, value: &Value) -> Result<(), String> {
     let bytes =
         serde_json::to_vec(value).map_err(|error| format!("serialize json failed: {error}"))?;
     fs::write(path, bytes).map_err(|error| format!("write json failed {}: {error}", path.display()))
-}
-
-fn remove_file_if_exists(path: &Path) -> Result<(), String> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("remove file failed {}: {error}", path.display())),
-    }
 }
 
 fn effective_denied_markers(markers: &[String]) -> Vec<String> {

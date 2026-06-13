@@ -1090,12 +1090,13 @@ fn sorted_fixture_entries(root: &Path) -> Result<Vec<fs::DirEntry>, String> {
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::fs_ops::fixture_dir;
+
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn sqlite_importer_dry_run_reports_valid_fixture_deterministically() {
-        let fixture = fixture_dir("valid-workflow-core");
+        let fixture = fixture_dir("r3-a1", "valid-workflow-core");
         let first = dry_run_import_fixture_dir(&fixture).expect("first dry-run");
         let second = dry_run_import_fixture_dir(&fixture).expect("second dry-run");
 
@@ -1124,7 +1125,7 @@ mod tests {
             ("process-fact-observation", Some("observation")),
             ("product-command-runtime-chain", Some("product_command")),
         ] {
-            let report = dry_run_import_fixture_dir(&fixture_dir(name)).expect(name);
+            let report = dry_run_import_fixture_dir(&fixture_dir("r3-a1", name)).expect(name);
             assert_eq!(report.batch_status, "accepted", "{name}");
             assert!(
                 report
@@ -1147,7 +1148,7 @@ mod tests {
 
     #[test]
     fn sqlite_importer_dry_run_rejects_sensitive_fixture() {
-        let fixture = fixture_dir("forbidden-sensitive-field");
+        let fixture = fixture_dir("r3-a1", "forbidden-sensitive-field");
         let report = dry_run_import_fixture_dir(&fixture).expect("dry-run");
         assert_eq!(report.batch_status, "rejected_sensitive");
         assert_eq!(report.counts.proposed_inserts, 0);
@@ -1160,19 +1161,22 @@ mod tests {
     #[test]
     fn sqlite_importer_dry_run_classifies_duplicate_and_revision_conflicts() {
         let duplicate_same =
-            dry_run_import_fixture_dir(&fixture_dir("duplicate-same-hash")).expect("dry-run");
+            dry_run_import_fixture_dir(&fixture_dir("r3-a1", "duplicate-same-hash"))
+                .expect("dry-run");
         assert!(duplicate_same
             .record_summaries
             .iter()
             .any(|record| record.classification == "skipped_duplicate"));
 
         let duplicate_different =
-            dry_run_import_fixture_dir(&fixture_dir("duplicate-different-hash")).expect("dry-run");
+            dry_run_import_fixture_dir(&fixture_dir("r3-a1", "duplicate-different-hash"))
+                .expect("dry-run");
         assert_eq!(duplicate_different.batch_status, "conflict");
         assert!(duplicate_different.counts.conflicts > 0);
 
         let revision_conflict =
-            dry_run_import_fixture_dir(&fixture_dir("revision-conflict")).expect("dry-run");
+            dry_run_import_fixture_dir(&fixture_dir("r3-a1", "revision-conflict"))
+                .expect("dry-run");
         assert_eq!(revision_conflict.batch_status, "conflict");
         assert!(revision_conflict
             .conflicts
@@ -1183,23 +1187,26 @@ mod tests {
     #[test]
     fn sqlite_importer_dry_run_classifies_corrupt_unknown_and_alias_sources() {
         let corrupt_primary =
-            dry_run_import_fixture_dir(&fixture_dir("corrupt-primary")).expect("dry-run");
+            dry_run_import_fixture_dir(&fixture_dir("r3-a1", "corrupt-primary")).expect("dry-run");
         assert_eq!(corrupt_primary.batch_status, "rejected_corrupt_primary");
 
         let corrupt_optional =
-            dry_run_import_fixture_dir(&fixture_dir("corrupt-optional-sidecar")).expect("dry-run");
+            dry_run_import_fixture_dir(&fixture_dir("r3-a1", "corrupt-optional-sidecar"))
+                .expect("dry-run");
         assert!(corrupt_optional.source_inventory.iter().any(|source| {
             source.source_path == "memory-candidates.v1.json"
                 && source.classification == "rejected_corrupt"
         }));
 
-        let unknown = dry_run_import_fixture_dir(&fixture_dir("unknown-sidecar")).expect("dry-run");
+        let unknown =
+            dry_run_import_fixture_dir(&fixture_dir("r3-a1", "unknown-sidecar")).expect("dry-run");
         assert!(unknown
             .source_inventory
             .iter()
             .any(|source| source.classification == "rejected_unknown"));
 
-        let alias = dry_run_import_fixture_dir(&fixture_dir("runtime-log-alias")).expect("dry-run");
+        let alias = dry_run_import_fixture_dir(&fixture_dir("r3-a1", "runtime-log-alias"))
+            .expect("dry-run");
         assert!(alias.runtime_log_alias.canonical_present);
         assert!(alias.runtime_log_alias.legacy_alias_present);
         assert_eq!(
@@ -1210,7 +1217,7 @@ mod tests {
 
     #[test]
     fn sqlite_importer_dry_run_second_pass_marks_same_hash_as_skipped() {
-        let fixture = fixture_dir("valid-workflow-core");
+        let fixture = fixture_dir("r3-a1", "valid-workflow-core");
         let first = dry_run_import_fixture_dir(&fixture).expect("first dry-run");
         let second = dry_run_import_fixture_dir_with_previous(&fixture, Some(&first))
             .expect("second dry-run");
@@ -1219,12 +1226,5 @@ mod tests {
             .record_summaries
             .iter()
             .any(|record| record.classification == "skipped_duplicate"));
-    }
-
-    fn fixture_dir(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures")
-            .join("r3-a1")
-            .join(name)
     }
 }

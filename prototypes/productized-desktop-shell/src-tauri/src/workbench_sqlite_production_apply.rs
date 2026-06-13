@@ -1,3 +1,4 @@
+use crate::utils::fs_ops::remove_file_if_exists;
 use crate::utils::hash::sha256_hex_bytes as sha256_hex;
 use crate::workbench_sqlite_apply::{
     apply_fixture_dir_to_temp_db, table_count, SqliteApplyFailurePoint,
@@ -930,14 +931,6 @@ fn reset_dir(path: &Path) -> Result<(), String> {
     }
     fs::create_dir_all(path)
         .map_err(|error| format!("create temp dir failed {}: {error}", path.display()))
-}
-
-fn remove_file_if_exists(path: &Path) -> Result<(), String> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("remove file failed {}: {error}", path.display())),
-    }
 }
 
 fn sorted_entries(root: &Path) -> Result<Vec<fs::DirEntry>, String> {
