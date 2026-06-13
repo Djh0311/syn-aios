@@ -1,0 +1,870 @@
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Background,
+  Controls,
+  Handle,
+  MarkerType,
+  MiniMap,
+  Position,
+  ReactFlow,
+  ReactFlowProvider,
+  type Edge,
+  type Node,
+  type NodeProps,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { Badge } from "../../components/Badge";
+import {
+  buildBlackboardCandidateOverlay,
+  summarizeFormalMemoryStore,
+  summarizeMemoryCandidateStore,
+  summarizeMemoryLintStore,
+  summarizeObservationStore,
+} from "../../lib/candidateGovernance";
+import { summarizePlanAuthorizationStore } from "../../lib/planAuthorization";
+import { summarizeProjectConsultationProposalStore } from "../../lib/projectConsultationProposal";
+import {
+  deriveProjectWorkflowCanvasReadModel,
+  type ProjectCanvasEdge,
+  type ProjectCanvasNode,
+  type ProjectCanvasStatus,
+  type ProjectWorkflowCanvasReadModel,
+} from "../../lib/projectCanvas";
+import type { CanvasSurfaceBoundary } from "../../lib/canvasSurfaceBoundaries";
+import type {
+  AutoDispatchGuardInput,
+  AutoDispatchGuardResult,
+  BlackboardCandidateStoreV1,
+  FormalMemoryStoreV1,
+  MemoryCandidateStoreV1,
+  MemoryLintStoreV1,
+  ObservationStoreV1,
+  PendingAction,
+  PlanAuthorizationStoreV1,
+  PreviewProjectDirectorTaskPlanInput,
+  ProjectBlackboard,
+  ProjectConsultationProposalStoreV1,
+  ProjectDirectorTaskPlan,
+  ProjectRecord,
+  ProjectWorkflowAutomationReadModel,
+  RealExecutionProductCommandReadModel,
+  RuntimeSessionAttention,
+  SessionRecord,
+  TaskDraftSummary,
+  TaskMemoryPacketBuildInput,
+  TaskMemoryPacketBuildOutput,
+  TaskPackage,
+  WorkflowRunCheck,
+  WorkflowStateSnapshot,
+} from "../../lib/types";
+import { selectedTaskDraftFor } from "./ProjectWorkspaceShell";
+
+export type ProjectWorkflowCanvasSidePanelProps = {
+  canvasModel: ProjectWorkflowCanvasReadModel;
+  selectedNodeId: string;
+  project: ProjectRecord;
+  projectId: string;
+  sessions: SessionRecord[];
+  projectWorkflow: WorkflowStateSnapshot["project_workflows"][number] | null;
+  derivedWorkflow: NonNullable<WorkflowStateSnapshot["project_workflows"][number]["derived_workflow"]> | null;
+  selectedTask: TaskDraftSummary | null;
+  selectedTaskPackage: TaskPackage | null;
+  projectBlackboard: ProjectBlackboard | null;
+  blackboardOverlay: ReturnType<typeof buildBlackboardCandidateOverlay>;
+  observationSummary: ReturnType<typeof summarizeObservationStore>;
+  observationStoreRevision: number;
+  observations: ObservationStoreV1["observations"];
+  memorySummary: ReturnType<typeof summarizeMemoryCandidateStore>;
+  formalSummary: ReturnType<typeof summarizeFormalMemoryStore>;
+  memoryLintSummary: ReturnType<typeof summarizeMemoryLintStore>;
+  memoryLintFindings: MemoryLintStoreV1["findings"];
+  projectConsultationProposalSummary: ReturnType<typeof summarizeProjectConsultationProposalStore>;
+  planAuthorizationSummary: ReturnType<typeof summarizePlanAuthorizationStore>;
+  projectDirectorTaskPlanRequest: PreviewProjectDirectorTaskPlanInput | null;
+  projectDirectorTaskPlan: ProjectDirectorTaskPlan | null;
+  projectDirectorTaskPlanLoading: boolean;
+  projectDirectorTaskPlanError: string | null;
+  onPreviewProjectDirectorTaskPlan: () => void;
+  autoDispatchGuardResult: AutoDispatchGuardResult | null;
+  autoDispatchGuardError: string | null;
+  workflowRevision: number | null;
+  blackboardStoreRevision: number;
+  memoryStoreRevision: number;
+  memoryCandidates: MemoryCandidateStoreV1["candidates"];
+  runtimeSessionAttention: RuntimeSessionAttention[];
+  realExecutionProductCommands: RealExecutionProductCommandReadModel | null;
+  projectWorkflowAutomation: ProjectWorkflowAutomationReadModel | null;
+  taskMemoryPacketPreview: TaskMemoryPacketBuildOutput | null;
+  taskMemoryPacketLoading: boolean;
+  taskMemoryPacketError: string | null;
+  onRequestAction: (action: PendingAction) => void;
+  onOpenAgentSession: (threadId: string) => void;
+  onInspectWorkflowRunCheck?: (projectRoot: string, workflowId?: string | null) => Promise<WorkflowRunCheck>;
+};
+
+type ProjectWorkflowCanvasViewProps = {
+  project: ProjectRecord;
+  sessions: SessionRecord[];
+  workflowState: WorkflowStateSnapshot | null;
+  blackboardCandidateStore: BlackboardCandidateStoreV1 | null;
+  planAuthorizationStore: PlanAuthorizationStoreV1 | null;
+  projectConsultationProposalStore: ProjectConsultationProposalStoreV1 | null;
+  observationStore: ObservationStoreV1 | null;
+  memoryCandidateStore: MemoryCandidateStoreV1 | null;
+  formalMemoryStore: FormalMemoryStoreV1 | null;
+  memoryLintStore: MemoryLintStoreV1 | null;
+  runtimeSessionAttention: RuntimeSessionAttention[];
+  realExecutionProductCommands?: RealExecutionProductCommandReadModel | null;
+  projectWorkflowAutomation?: ProjectWorkflowAutomationReadModel | null;
+  onRequestAction: (action: PendingAction) => void;
+  onOpenAgentSession: (threadId: string) => void;
+  onInspectWorkflowRunCheck?: (projectRoot: string, workflowId?: string | null) => Promise<WorkflowRunCheck>;
+  onInspectAutoDispatchAuthorization?: (request: AutoDispatchGuardInput) => Promise<AutoDispatchGuardResult>;
+  onPreviewTaskMemoryPacket?: (request: TaskMemoryPacketBuildInput) => Promise<TaskMemoryPacketBuildOutput>;
+  onPreviewProjectDirectorTaskPlan?: (request: PreviewProjectDirectorTaskPlanInput) => Promise<ProjectDirectorTaskPlan>;
+  initialTaskMemoryPacketPreview?: TaskMemoryPacketBuildOutput | null;
+  renderSidePanel: (props: ProjectWorkflowCanvasSidePanelProps) => ReactNode;
+};
+
+export function ProjectWorkflowCanvasView({
+  project,
+  sessions,
+  workflowState,
+  blackboardCandidateStore,
+  planAuthorizationStore,
+  projectConsultationProposalStore,
+  observationStore,
+  memoryCandidateStore,
+  formalMemoryStore,
+  memoryLintStore,
+  runtimeSessionAttention,
+  realExecutionProductCommands,
+  projectWorkflowAutomation,
+  onRequestAction,
+  onOpenAgentSession,
+  onInspectWorkflowRunCheck,
+  onInspectAutoDispatchAuthorization,
+  onPreviewTaskMemoryPacket,
+  onPreviewProjectDirectorTaskPlan,
+  initialTaskMemoryPacketPreview,
+  renderSidePanel,
+}: ProjectWorkflowCanvasViewProps) {
+  const projectWorkflow = workflowState?.project_workflows.find((workflow) => workflow.project_root === project.project_root) ?? null;
+  const selectedTask = selectedTaskDraftFor(projectWorkflow?.task_drafts ?? [], null);
+  const derivedWorkflow = projectWorkflow?.derived_workflow ?? null;
+  const selectedTaskPackage = selectedTaskPackageFor(derivedWorkflow?.task_packages ?? [], selectedTask);
+  const projectBlackboard =
+    workflowState?.project_blackboards?.find(
+      (blackboard) =>
+        blackboard.project_root === project.project_root &&
+        (!projectWorkflow || blackboard.workflow_id === projectWorkflow.workflow_id),
+    ) ?? null;
+  const canvasModel = useMemo(
+    () =>
+      deriveProjectWorkflowCanvasReadModel({
+        project,
+        projectWorkflow,
+        projectBlackboard,
+        selectedTask,
+        workflowStatePath: workflowState?.path ?? null,
+        workflowStateUpdatedAt: workflowState?.updated_at ?? null,
+        runtimeSessionAttention,
+      }),
+    [project, projectWorkflow, projectBlackboard, selectedTask, workflowState?.path, workflowState?.updated_at, runtimeSessionAttention],
+  );
+  const [selectedCanvasNodeId, setSelectedCanvasNodeId] = useState<string | null>(canvasModel.viewport_hint.selected_node_id);
+  const blackboardOverlay = useMemo(
+    () =>
+      buildBlackboardCandidateOverlay({
+        store: blackboardCandidateStore,
+        entries: projectBlackboard?.entries ?? [],
+      }),
+    [blackboardCandidateStore, projectBlackboard?.entries],
+  );
+  const memorySummary = useMemo(() => summarizeMemoryCandidateStore(memoryCandidateStore), [memoryCandidateStore]);
+  const observationSummary = useMemo(() => summarizeObservationStore(observationStore), [observationStore]);
+  const formalSummary = useMemo(() => summarizeFormalMemoryStore(formalMemoryStore), [formalMemoryStore]);
+  const memoryLintSummary = useMemo(() => summarizeMemoryLintStore(memoryLintStore), [memoryLintStore]);
+  const planAuthorizationSummary = useMemo(
+    () => summarizePlanAuthorizationStore(planAuthorizationStore, projectWorkflow?.project_id, projectWorkflow?.workflow_id),
+    [planAuthorizationStore, projectWorkflow?.project_id, projectWorkflow?.workflow_id],
+  );
+  const projectConsultationProposalSummary = useMemo(
+    () =>
+      summarizeProjectConsultationProposalStore(
+        projectConsultationProposalStore,
+        planAuthorizationStore,
+        projectWorkflow?.project_id,
+        projectWorkflow?.workflow_id,
+      ),
+    [projectConsultationProposalStore, planAuthorizationStore, projectWorkflow?.project_id, projectWorkflow?.workflow_id],
+  );
+  const [autoDispatchGuardResult, setAutoDispatchGuardResult] = useState<AutoDispatchGuardResult | null>(null);
+  const [autoDispatchGuardError, setAutoDispatchGuardError] = useState<string | null>(null);
+  const [taskMemoryPacketPreview, setTaskMemoryPacketPreview] = useState<TaskMemoryPacketBuildOutput | null>(
+    initialTaskMemoryPacketPreview ?? null,
+  );
+  const [taskMemoryPacketLoading, setTaskMemoryPacketLoading] = useState(false);
+  const [taskMemoryPacketError, setTaskMemoryPacketError] = useState<string | null>(null);
+  const projectDirectorTaskPlanRequest = useMemo(
+    () =>
+      buildProjectDirectorTaskPlanRequest({
+        project,
+        projectWorkflow,
+        proposalSummary: projectConsultationProposalSummary,
+        authorizationSummary: planAuthorizationSummary,
+      }),
+    [project, projectWorkflow, projectConsultationProposalSummary, planAuthorizationSummary],
+  );
+  const [projectDirectorTaskPlan, setProjectDirectorTaskPlan] = useState<ProjectDirectorTaskPlan | null>(null);
+  const [projectDirectorTaskPlanLoading, setProjectDirectorTaskPlanLoading] = useState(false);
+  const [projectDirectorTaskPlanError, setProjectDirectorTaskPlanError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedCanvasNodeId((current) =>
+      current && canvasModel.nodes.some((node) => node.node_id === current)
+        ? current
+        : canvasModel.viewport_hint.selected_node_id,
+    );
+  }, [canvasModel]);
+
+  useEffect(() => {
+    if (initialTaskMemoryPacketPreview) {
+      setTaskMemoryPacketPreview(initialTaskMemoryPacketPreview);
+      setTaskMemoryPacketError(null);
+    }
+  }, [initialTaskMemoryPacketPreview]);
+
+  async function refreshProjectDirectorTaskPlan() {
+    if (!projectDirectorTaskPlanRequest) {
+      setProjectDirectorTaskPlan(null);
+      setProjectDirectorTaskPlanError("等待用户确认方案和全局边界复核通过后才能生成拆任务草案。");
+      return;
+    }
+    if (!onPreviewProjectDirectorTaskPlan) {
+      setProjectDirectorTaskPlan(null);
+      setProjectDirectorTaskPlanError("当前运行环境没有接入项目主管拆任务预览入口。");
+      return;
+    }
+    setProjectDirectorTaskPlanLoading(true);
+    setProjectDirectorTaskPlanError(null);
+    try {
+      setProjectDirectorTaskPlan(await onPreviewProjectDirectorTaskPlan(projectDirectorTaskPlanRequest));
+    } catch (previewError) {
+      setProjectDirectorTaskPlan(null);
+      setProjectDirectorTaskPlanError(messageOf(previewError));
+    } finally {
+      setProjectDirectorTaskPlanLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    setProjectDirectorTaskPlan(null);
+    setProjectDirectorTaskPlanError(null);
+    if (!projectDirectorTaskPlanRequest || !onPreviewProjectDirectorTaskPlan) {
+      setProjectDirectorTaskPlanLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setProjectDirectorTaskPlanLoading(true);
+    void onPreviewProjectDirectorTaskPlan(projectDirectorTaskPlanRequest)
+      .then((plan) => {
+        if (!cancelled) {
+          setProjectDirectorTaskPlan(plan);
+        }
+      })
+      .catch((previewError) => {
+        if (!cancelled) {
+          setProjectDirectorTaskPlan(null);
+          setProjectDirectorTaskPlanError(messageOf(previewError));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setProjectDirectorTaskPlanLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onPreviewProjectDirectorTaskPlan, projectDirectorTaskPlanRequest]);
+
+  useEffect(() => {
+    if (initialTaskMemoryPacketPreview) return;
+    if (!onPreviewTaskMemoryPacket || !projectWorkflow || !selectedTask) {
+      setTaskMemoryPacketPreview(null);
+      setTaskMemoryPacketError(null);
+      setTaskMemoryPacketLoading(false);
+      return;
+    }
+
+    const request = buildTaskMemoryPacketRequest({
+      projectRoot: project.project_root,
+      projectId: projectWorkflow.project_id,
+      workflowId: projectWorkflow.workflow_id,
+      selectedTask,
+      selectedTaskPackage,
+      formalStoreRevision: formalMemoryStore?.revision ?? null,
+      candidateStoreRevision: memoryCandidateStore?.revision ?? null,
+      observationStoreRevision: observationStore?.revision ?? null,
+    });
+    let cancelled = false;
+    setTaskMemoryPacketLoading(true);
+    setTaskMemoryPacketError(null);
+    void onPreviewTaskMemoryPacket(request)
+      .then((output) => {
+        if (!cancelled) {
+          setTaskMemoryPacketPreview(output);
+        }
+      })
+      .catch((previewError) => {
+        if (!cancelled) {
+          setTaskMemoryPacketPreview(null);
+          setTaskMemoryPacketError(messageOf(previewError));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setTaskMemoryPacketLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    initialTaskMemoryPacketPreview,
+    onPreviewTaskMemoryPacket,
+    project.project_root,
+    projectWorkflow,
+    selectedTask,
+    selectedTaskPackage,
+    formalMemoryStore?.revision,
+    memoryCandidateStore?.revision,
+    observationStore?.revision,
+  ]);
+
+  useEffect(() => {
+    if (!onInspectAutoDispatchAuthorization || !projectWorkflow || !selectedTask) {
+      setAutoDispatchGuardResult(null);
+      setAutoDispatchGuardError(null);
+      return;
+    }
+    const request = buildAutoDispatchGuardInput({
+      projectWorkflow,
+      selectedTask,
+      selectedTaskPackage,
+    });
+    let cancelled = false;
+    setAutoDispatchGuardError(null);
+    void onInspectAutoDispatchAuthorization(request)
+      .then((result) => {
+        if (!cancelled) setAutoDispatchGuardResult(result);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setAutoDispatchGuardResult(null);
+          setAutoDispatchGuardError(messageOf(error));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [onInspectAutoDispatchAuthorization, projectWorkflow, selectedTask, selectedTaskPackage]);
+
+  return (
+    <section className="workflow-canvas" aria-label="项目级工作流画布">
+      <div className="workflow-orchestration-head">
+        <div>
+          <p className="eyebrow">项目工作流主入口</p>
+          <h3>{projectWorkflow ? projectWorkflow.title : "当前项目还没有默认工作流"}</h3>
+          <p className="path-text">{project.project_root}</p>
+        </div>
+        <Badge tone={projectWorkflow ? "candidate" : "warning"}>{projectWorkflow ? projectWorkflow.state : "缺 workflow"}</Badge>
+      </div>
+
+      <div className="project-canvas-shell">
+        <ProjectWorkflowReactFlowCanvas
+          canvasModel={canvasModel}
+          selectedNodeId={selectedCanvasNodeId ?? canvasModel.viewport_hint.selected_node_id}
+          onSelectNode={setSelectedCanvasNodeId}
+        />
+        {renderSidePanel({
+          canvasModel,
+          selectedNodeId: selectedCanvasNodeId ?? canvasModel.viewport_hint.selected_node_id,
+          project,
+          projectId: canvasModel.project_id,
+          sessions,
+          projectWorkflow,
+          derivedWorkflow,
+          selectedTask,
+          selectedTaskPackage,
+          projectBlackboard,
+          blackboardOverlay,
+          observationSummary,
+          observationStoreRevision: observationStore?.revision ?? 0,
+          observations: observationStore?.observations ?? [],
+          memorySummary,
+          formalSummary,
+          memoryLintSummary,
+          memoryLintFindings: memoryLintStore?.findings ?? [],
+          projectConsultationProposalSummary,
+          planAuthorizationSummary,
+          projectDirectorTaskPlanRequest,
+          projectDirectorTaskPlan,
+          projectDirectorTaskPlanLoading,
+          projectDirectorTaskPlanError,
+          onPreviewProjectDirectorTaskPlan: () => void refreshProjectDirectorTaskPlan(),
+          autoDispatchGuardResult,
+          autoDispatchGuardError,
+          workflowRevision: workflowState?.workflow_version ?? null,
+          blackboardStoreRevision: blackboardCandidateStore?.revision ?? 0,
+          memoryStoreRevision: memoryCandidateStore?.revision ?? 0,
+          memoryCandidates: memoryCandidateStore?.candidates ?? [],
+          runtimeSessionAttention,
+          realExecutionProductCommands: realExecutionProductCommands ?? null,
+          projectWorkflowAutomation: projectWorkflowAutomation ?? null,
+          taskMemoryPacketPreview,
+          taskMemoryPacketLoading,
+          taskMemoryPacketError,
+          onRequestAction,
+          onOpenAgentSession,
+          onInspectWorkflowRunCheck,
+        })}
+      </div>
+    </section>
+  );
+}
+
+type ProjectCanvasFlowNodeData = {
+  canvasNode: ProjectCanvasNode;
+  selected: boolean;
+};
+
+type ProjectCanvasFlowNode = Node<ProjectCanvasFlowNodeData, "projectCanvasNode">;
+type ProjectCanvasFlowEdge = Edge<{ canvasEdge: ProjectCanvasEdge }>;
+
+const projectCanvasNodeTypes = {
+  projectCanvasNode: ProjectCanvasFlowNodeView,
+};
+
+function ProjectWorkflowReactFlowCanvas({
+  canvasModel,
+  selectedNodeId,
+  onSelectNode,
+}: {
+  canvasModel: ProjectWorkflowCanvasReadModel;
+  selectedNodeId: string;
+  onSelectNode: (nodeId: string) => void;
+}) {
+  const flowNodes = useMemo<ProjectCanvasFlowNode[]>(
+    () =>
+      canvasModel.nodes.map((node) => ({
+        id: node.node_id,
+        type: "projectCanvasNode",
+        position: {
+          x: node.position_hint?.x ?? 0,
+          y: node.position_hint?.y ?? 0,
+        },
+        data: {
+          canvasNode: node,
+          selected: node.node_id === selectedNodeId,
+        },
+        selectable: true,
+        draggable: false,
+      })),
+    [canvasModel.nodes, selectedNodeId],
+  );
+  const flowEdges = useMemo<ProjectCanvasFlowEdge[]>(
+    () =>
+      canvasModel.edges.map((edge) => ({
+        id: edge.edge_id,
+        source: edge.source_node_id,
+        target: edge.target_node_id,
+        label: edge.label ?? undefined,
+        type: "smoothstep",
+        animated: edge.status === "active",
+        markerEnd: { type: MarkerType.ArrowClosed },
+        data: { canvasEdge: edge },
+        className: `project-canvas-edge ${edge.status}`,
+      })),
+    [canvasModel.edges],
+  );
+
+  if (typeof window === "undefined") {
+    return <ProjectCanvasStaticStage canvasModel={canvasModel} selectedNodeId={selectedNodeId} onSelectNode={onSelectNode} />;
+  }
+
+  return (
+    <div className="project-flow-stage" aria-label="项目工作流画布">
+      <div className="project-canvas-status-bar" aria-label="画布全局状态">
+        {canvasModel.global_badges.map((badgeItem) => (
+          <span className={`project-canvas-status-pill ${badgeItem.tone}`} key={badgeItem.badge_id}>
+            {badgeItem.label}
+          </span>
+        ))}
+      </div>
+      <ProjectCanvasAttentionStrip canvasModel={canvasModel} />
+      <ReactFlowProvider>
+        <ReactFlow
+          nodes={flowNodes}
+          edges={flowEdges}
+          nodeTypes={projectCanvasNodeTypes}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable
+          fitView
+          fitViewOptions={{ padding: 0.14 }}
+          minZoom={0.35}
+          maxZoom={1.5}
+          onNodeClick={(_, node) => onSelectNode(node.id)}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background gap={28} />
+          <Controls showInteractive={false} />
+          <MiniMap pannable zoomable nodeStrokeWidth={3} />
+        </ReactFlow>
+      </ReactFlowProvider>
+    </div>
+  );
+}
+
+function ProjectCanvasStaticStage({
+  canvasModel,
+  selectedNodeId,
+  onSelectNode,
+}: {
+  canvasModel: ProjectWorkflowCanvasReadModel;
+  selectedNodeId: string;
+  onSelectNode: (nodeId: string) => void;
+}) {
+  return (
+    <div className="project-flow-stage static" aria-label="项目画布静态状态样例">
+      <div className="project-canvas-status-bar" aria-label="画布全局状态">
+        {canvasModel.global_badges.map((badgeItem) => (
+          <span className={`project-canvas-status-pill ${badgeItem.tone}`} key={badgeItem.badge_id}>
+            {badgeItem.label}
+          </span>
+        ))}
+      </div>
+      <ProjectCanvasAttentionStrip canvasModel={canvasModel} />
+      <div className="project-canvas-static-lanes">
+        {canvasModel.nodes.map((node) => (
+          <button
+            className={`project-canvas-static-node ${node.node_type} ${node.status} ${node.node_id === selectedNodeId ? "selected" : ""}`}
+            key={node.node_id}
+            type="button"
+            onClick={() => onSelectNode(node.node_id)}
+          >
+            <span>{canvasNodeTypeLabel(node.node_type)}</span>
+            <strong>{node.title}</strong>
+            <em>{node.subtitle ?? node.status}</em>
+            <small>{stateLabel(node.status)}</small>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProjectCanvasAttentionStrip({ canvasModel }: { canvasModel: ProjectWorkflowCanvasReadModel }) {
+  const visibleItems = canvasModel.attention_items.slice(0, 2);
+  return (
+    <div className="project-canvas-attention-strip" aria-label="画布关注摘要">
+      <strong>{canvasModel.status_reason.label}</strong>
+      <span>{canvasModel.status_reason.summary}</span>
+      {visibleItems.map((item) => (
+        <em className={item.severity} key={item.attention_id}>{item.title}</em>
+      ))}
+    </div>
+  );
+}
+
+export function ProjectCanvasAttentionPanel({ canvasModel }: { canvasModel: ProjectWorkflowCanvasReadModel }) {
+  return (
+    <section className="project-canvas-detail-card project-canvas-attention-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">画布状态原因</p>
+          <h3>{canvasModel.status_reason.label}</h3>
+          <p className="path-text">{canvasModel.status_reason.summary}</p>
+        </div>
+        <Badge tone={badgeToneForCanvasStatus(canvasModel.status)}>{canvasModel.attention_items.length} 项</Badge>
+      </div>
+      {canvasModel.attention_items.length ? (
+        <div className="workflow-compact-list">
+          {canvasModel.attention_items.slice(0, 6).map((item) => (
+            <div className={`workflow-compact-item ${item.severity}`} key={item.attention_id}>
+              <strong>{item.title}</strong>
+              <span>{stateLabel(item.status)}</span>
+              <em>{item.summary}</em>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="muted small-note">当前画布没有额外关注项；React Flow 只负责渲染，不保存事实。</p>
+      )}
+    </section>
+  );
+}
+
+export function ProjectCanvasEditBoundaryPanel({ boundary }: { boundary: ProjectWorkflowCanvasReadModel["edit_boundary"] }) {
+  const layout = boundary.layout_boundary;
+  return (
+    <section className="project-canvas-detail-card project-canvas-edit-boundary-panel" aria-label="编辑 / 布局边界">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">受控编辑边界</p>
+          <h3>编辑 / 布局边界</h3>
+          <p className="path-text">{layout.summary}</p>
+        </div>
+        <Badge tone="unknown">只读</Badge>
+      </div>
+      <div className="workflow-draft-grid">
+        <DetailLine label="布局" value="仅视图布局" />
+        <DetailLine label="保存" value="未保存为事实" />
+        <DetailLine label="事实源" value="React Flow 仅负责渲染" />
+        <DetailLine label="工作流状态" value="不会写入" />
+      </div>
+      <div className="workflow-compact-list" aria-label="工作流编辑提案预览">
+        {boundary.proposal_previews.map((preview) => (
+          <div className={`workflow-compact-item ${preview.status === "blocked" ? "warning" : ""}`} key={preview.preview_id}>
+            <strong>{preview.label}</strong>
+            <span>{projectCanvasEditStatusLabel(preview.status)}</span>
+            <em>
+              {preview.summary}
+              {preview.requires_proposal ? " 需要生成提案。" : ""}
+              {preview.requires_confirmation ? " 需要确认弹层。" : ""}
+              {preview.requires_control_core ? " 需要控制核心。" : ""}
+              {preview.requires_audit ? " 需要审计。" : ""}
+            </em>
+          </div>
+        ))}
+      </div>
+      <div className="project-canvas-edit-capabilities" aria-label="画布编辑能力矩阵">
+        {boundary.capabilities.map((capability) => (
+          <span className={capability.status} key={capability.capability_id} title={capability.summary}>
+            <strong>{capability.label}</strong>
+            <em>{projectCanvasEditStatusLabel(capability.status)}</em>
+          </span>
+        ))}
+      </div>
+      <p className="muted small-note">
+        本面板只解释边界；节点、边、权限、模型、工具或执行变更都不会从画布直接写成 workflow 事实。
+      </p>
+    </section>
+  );
+}
+
+export function ProjectCanvasSurfaceBoundaryPanel({ boundary }: { boundary: CanvasSurfaceBoundary }) {
+  return (
+    <section className="project-canvas-detail-card project-canvas-surface-boundary-panel" aria-label="项目画布 / 实验画布边界">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">{boundary.eyebrow}</p>
+          <h3>{boundary.title}</h3>
+          <p className="path-text">{boundary.summary}</p>
+        </div>
+        <Badge tone="candidate">项目边界</Badge>
+      </div>
+      <div className="workflow-draft-grid">
+        {boundary.items.map((item) => (
+          <DetailLine key={item.item_id} label={item.label} value={item.value} />
+        ))}
+      </div>
+      <div className="project-canvas-boundary-badges" aria-label="项目画布边界摘要">
+        {boundary.badges.map((badge) => (
+          <span key={badge}>{badge}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ProjectCanvasFlowNodeView({ data }: NodeProps<ProjectCanvasFlowNode>) {
+  const node = data.canvasNode;
+  return (
+    <div className={`project-flow-node ${node.node_type} ${node.status} ${data.selected ? "selected" : ""}`}>
+      <Handle type="target" position={Position.Left} />
+      <div className="project-flow-node-head">
+        <span>{canvasNodeTypeLabel(node.node_type)}</span>
+        <b>{stateLabel(node.status)}</b>
+      </div>
+      <strong>{node.title}</strong>
+      <em>{node.subtitle ?? "无摘要"}</em>
+      <div className="project-flow-node-badges">
+        {node.badges.slice(0, 3).map((badgeItem) => (
+          <span className={badgeItem.tone} key={badgeItem.badge_id}>{badgeItem.label}</span>
+        ))}
+      </div>
+      <Handle type="source" position={Position.Right} />
+    </div>
+  );
+}
+
+function buildTaskMemoryPacketRequest({
+  projectRoot,
+  projectId,
+  workflowId,
+  selectedTask,
+  selectedTaskPackage,
+  formalStoreRevision,
+  candidateStoreRevision,
+  observationStoreRevision,
+}: {
+  projectRoot: string;
+  projectId?: string | null;
+  workflowId?: string | null;
+  selectedTask: TaskDraftSummary;
+  selectedTaskPackage: TaskPackage | null;
+  formalStoreRevision: number | null;
+  candidateStoreRevision: number | null;
+  observationStoreRevision: number | null;
+}): TaskMemoryPacketBuildInput {
+  return {
+    project_root: projectRoot,
+    project_id: projectId ?? null,
+    workflow_id: workflowId ?? null,
+    task_id: selectedTask.work_item_id,
+    role_id: selectedTask.assigned_role_id?.trim() || selectedTaskPackage?.target_role?.trim() || "project_director",
+    task_goal: selectedTaskPackage?.task_goal?.trim() || selectedTask.title,
+    retrieval_intent: "worker_task",
+    target_model_id: selectedTaskPackage?.model_id ?? null,
+    model_context_policy: "local_only",
+    max_memory_items: 20,
+    max_estimated_tokens: 8000,
+    expected_formal_store_revision: formalStoreRevision,
+    expected_candidate_store_revision: candidateStoreRevision,
+    expected_observation_store_revision: observationStoreRevision,
+  };
+}
+
+function buildAutoDispatchGuardInput({
+  projectWorkflow,
+  selectedTask,
+  selectedTaskPackage,
+}: {
+  projectWorkflow: WorkflowStateSnapshot["project_workflows"][number];
+  selectedTask: TaskDraftSummary;
+  selectedTaskPackage: TaskPackage | null;
+}): AutoDispatchGuardInput {
+  return {
+    project_id: projectWorkflow.project_id,
+    workflow_id: projectWorkflow.workflow_id,
+    work_item_id: selectedTask.work_item_id,
+    task_package_id: selectedTaskPackage?.task_package_id ?? selectedTask.artifact_type ?? null,
+    task_package_kind: selectedTaskPackage ? "task_package" : selectedTask.artifact_type ?? "task_package",
+    target_role_id: selectedTaskPackage?.target_role?.trim() || selectedTask.assigned_role_id?.trim() || "project_director",
+    target_agent_id: selectedTaskPackage?.target_session_id ?? null,
+    requested_read_roots: selectedTaskPackage?.allowed_read_scope ?? [],
+    requested_write_roots: selectedTaskPackage?.allowed_write_scope ?? [],
+    requested_tools: selectedTaskPackage?.callable_tool_capabilities ?? [],
+    requested_checks: selectedTaskPackage?.harness_requirements ?? [],
+    triggered_stop_conditions: [],
+    dispatch_kind: "inspect_only",
+  };
+}
+
+function buildProjectDirectorTaskPlanRequest({
+  project,
+  projectWorkflow,
+  proposalSummary,
+  authorizationSummary,
+}: {
+  project: ProjectRecord;
+  projectWorkflow: WorkflowStateSnapshot["project_workflows"][number] | null;
+  proposalSummary: ReturnType<typeof summarizeProjectConsultationProposalStore>;
+  authorizationSummary: ReturnType<typeof summarizePlanAuthorizationStore>;
+}): PreviewProjectDirectorTaskPlanInput | null {
+  const proposal = proposalSummary.latest_proposal;
+  const authorization = proposalSummary.linked_plan_authorization;
+  if (!projectWorkflow || !proposal || proposal.status !== "user_confirmed") return null;
+  if (!authorization || authorization.status !== "active") return null;
+  if (authorization.authorization_id !== authorizationSummary.active_authorization_id) return null;
+  if (authorization.global_boundary_review?.status !== "approved") return null;
+  return {
+    project_root: project.project_root,
+    project_id: projectWorkflow.project_id,
+    workflow_id: projectWorkflow.workflow_id,
+    proposal_id: proposal.proposal_id,
+    authorization_id: authorization.authorization_id,
+    actor_id: "project_director",
+    expected_authorization_revision: authorizationSummary.revision,
+  };
+}
+
+function selectedTaskPackageFor(taskPackages: TaskPackage[], selectedTask: TaskDraftSummary | null): TaskPackage | null {
+  if (!selectedTask) return taskPackages[0] ?? null;
+  return (
+    taskPackages.find((taskPackage) => taskPackage.workflow_node_id === selectedTask.current_node_id) ??
+    taskPackages.find((taskPackage) => taskPackage.task_goal === selectedTask.title) ??
+    taskPackages[0] ??
+    null
+  );
+}
+
+function stateLabel(state: string) {
+  if (state === "empty") return "空态";
+  if (state === "idle") return "空闲";
+  if (state === "draft") return "草稿";
+  if (state === "prepared") return "准备派发";
+  if (state === "ready_to_dispatch") return "待派发";
+  if (state === "running") return "执行中";
+  if (state === "waiting_for_permission") return "等待权限";
+  if (state === "needs_review") return "待复核";
+  if (state === "retry_pending") return "待重试";
+  if (state === "failed") return "失败";
+  if (state === "timed_out") return "已超时";
+  if (state === "readback_unavailable") return "读回不可用";
+  if (state === "cancelled") return "已取消";
+  if (state === "ready_for_review") return "待回收";
+  if (state === "accepted") return "已接受";
+  if (state === "needs_changes") return "需修改";
+  if (state === "paused") return "暂停";
+  return state || "未知";
+}
+
+export function badgeToneForCanvasStatus(status: ProjectCanvasStatus): "candidate" | "warning" | "unknown" {
+  if (status === "accepted" || status === "ready_to_dispatch" || status === "ready_for_review" || status === "prepared") return "candidate";
+  if (status === "running") return "candidate";
+  if (status === "waiting_for_permission" || status === "blocked" || status === "failed" || status === "timed_out" || status === "needs_changes" || status === "needs_review" || status === "readback_unavailable") {
+    return "warning";
+  }
+  return "unknown";
+}
+
+function projectCanvasEditStatusLabel(status: ProjectWorkflowCanvasReadModel["edit_boundary"]["capabilities"][number]["status"]) {
+  if (status === "allowed") return "允许查看";
+  if (status === "preview_only") return "仅预览";
+  if (status === "requires_future_task") return "后续任务";
+  return "已阻断";
+}
+
+function canvasNodeTypeLabel(type: ProjectCanvasNode["node_type"]) {
+  if (type === "project_goal") return "项目目标";
+  if (type === "director") return "总指导";
+  if (type === "dev_line") return "开发线";
+  if (type === "validation_line") return "验证线";
+  if (type === "review_line") return "回收线";
+  if (type === "permission_request") return "权限";
+  if (type === "blackboard_candidate") return "黑板候选";
+  if (type === "evidence_ref") return "证据";
+  if (type === "audit_ref") return "审计";
+  return type;
+}
+
+function messageOf(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function DetailLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="detail-line">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}

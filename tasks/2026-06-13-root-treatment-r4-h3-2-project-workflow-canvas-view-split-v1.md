@@ -2,7 +2,7 @@
 
 日期：2026-06-13
 
-状态：待执行。
+状态：已完成。
 
 性质：R4 硬目标 / H3 View 按目标布局区块拆分的 ProjectsView 第 2 包。本包只拆项目中央工作流画布：`WorkflowCanvas` 的画布装配、React Flow 渲染、static fallback、node view、关注条和画布边界卡迁入 `ProjectWorkflowCanvasView.tsx`；右侧节点详情 / 治理 / 记忆 / 执行面板仍留在 `ProjectsView.tsx`，等待 H3-3。
 
