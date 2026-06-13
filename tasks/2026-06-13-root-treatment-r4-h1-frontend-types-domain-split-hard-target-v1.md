@@ -128,7 +128,7 @@ R4-A7 曾做过一次前端类型分域，当前 `src/lib/types.ts` 仍为 4,998
 - 新增 `src/lib/types/agentSession.ts`，946 行。
 - 新增 `src/lib/types/execution.ts`，869 行。
 - 新增 `src/lib/types/memory.ts`，1,391 行。
-- 新增 `src/lib/types/workflow.ts`，1,741 行。
+- 新增 `src/lib/types/workflow.ts`，1,746 行。
 - 现有 `src/lib/types/canvas.ts` 保持不变，127 行。
 
 验证已通过：

@@ -29,7 +29,7 @@
 - `agentSession.ts`：946 行。
 - `execution.ts`：869 行。
 - `memory.ts`：1,391 行。
-- `workflow.ts`：1,741 行。
+- `workflow.ts`：1,746 行。
 - `canvas.ts`：127 行，未改。
 
 兼容性：

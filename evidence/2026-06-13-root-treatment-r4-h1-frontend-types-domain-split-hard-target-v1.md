@@ -53,7 +53,7 @@
 946  prototypes/productized-desktop-shell/src/lib/types/agentSession.ts
 869  prototypes/productized-desktop-shell/src/lib/types/execution.ts
 1391 prototypes/productized-desktop-shell/src/lib/types/memory.ts
-1741 prototypes/productized-desktop-shell/src/lib/types/workflow.ts
+1746 prototypes/productized-desktop-shell/src/lib/types/workflow.ts
 127  prototypes/productized-desktop-shell/src/lib/types/canvas.ts
 ```
 
