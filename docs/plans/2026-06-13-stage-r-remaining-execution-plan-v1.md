@@ -24,7 +24,7 @@ R4-H 前端硬目标（进行中）
 进度：
 - **H1 ✅** `types.ts` 分域（4,998 → 93）。
 - **H2 ✅** WorkbenchSnapshot 按页查询（批一，前端切按页取，`types.rs` 降到 5,229）。
-- **H3 进行中** View 按目标布局区块拆分（批二）——设计稿 `docs/plans/2026-06-13-root-treatment-r4-h3-project-agent-view-layout-block-split-design-v1.md` 已确认；顺序：先 AgentView（**H3-4 ✅** 对话区 / **H3-5** 开发者面板，已确认执行）→ 后 ProjectsView（H3-1 / H3-2 / H3-3）。
+- **H3 ✅** View 按目标布局区块拆分（批二）已完成——设计稿 `docs/plans/2026-06-13-root-treatment-r4-h3-project-agent-view-layout-block-split-design-v1.md` 已确认；已按顺序完成 AgentView（**H3-4 ✅** 对话区 / **H3-5 ✅** 开发者面板）与 ProjectsView（**H3-1 ✅** 壳和概览 / **H3-2 ✅** 中央工作流画布 / **H3-3 ✅** 右侧详情、治理、记忆和执行面板）。
 
 边界：只拆结构、行为视觉零变更；不碰 store / Rust 业务 / 真实执行。拆分基准按 Xuanji §16 目标布局区块，不按现状外观。
 
