@@ -1,4 +1,5 @@
 use crate::utils::hash::{sha256_hex, short_hash};
+use crate::utils::normalization::normalize_slash_lowercase as normalize;
 use crate::utils::store_paths;
 use crate::{
     BlackboardCandidateAuditEvent, BlackboardCandidateDecision, BlackboardCandidateRecord,
@@ -459,10 +460,6 @@ fn merge_warnings(existing: Vec<String>, next: Vec<String>) -> Vec<String> {
         .chain(next)
         .filter(|warning| seen.insert(warning.clone()))
         .collect()
-}
-
-fn normalize(value: &str) -> String {
-    value.trim().replace('\\', "/").to_lowercase()
 }
 
 fn normalize_source_refs(source_refs: &[BlackboardCandidateSourceRef]) -> String {

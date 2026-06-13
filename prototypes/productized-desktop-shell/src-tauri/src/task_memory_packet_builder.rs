@@ -1,4 +1,5 @@
 use crate::utils::hash::short_hash;
+use crate::utils::normalization::normalize_slash_lowercase as normalize;
 use crate::{
     FormalMemoryStoreV1, MemoryCandidateStoreV1, MemoryEntityRelationStoreV1, MemoryLintStoreV1,
     MemoryRecord, MemoryRelation, MemoryRelationSourceKind, MemoryRelationStatus,
@@ -500,10 +501,6 @@ fn expand_goal_token(token: &str) -> Vec<String> {
 
 fn estimate_tokens(claim: &str, body: &str) -> usize {
     ((claim.chars().count() + body.chars().count()) / 4).max(1) + 16
-}
-
-fn normalize(value: &str) -> String {
-    value.trim().replace('\\', "/").to_lowercase()
 }
 
 fn alias_key(value: &str) -> String {

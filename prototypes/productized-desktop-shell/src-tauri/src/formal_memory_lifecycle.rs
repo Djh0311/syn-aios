@@ -1,4 +1,5 @@
 use crate::utils::hash::short_hash;
+use crate::utils::normalization::normalize_slash_lowercase as normalize;
 use crate::{
     FormalMemoryLifecycleImpactSummary, FormalMemoryLifecycleInput,
     FormalMemoryLifecycleOperationKind, FormalMemoryLifecycleOutput, FormalMemoryLifecyclePreview,
@@ -1278,10 +1279,6 @@ fn status_name(status: MemoryLifecycleStatus) -> &'static str {
         MemoryLifecycleStatus::MemoryFrozen => "memory_frozen",
         MemoryLifecycleStatus::MemoryArchived => "memory_archived",
     }
-}
-
-fn normalize(value: &str) -> String {
-    value.trim().replace('\\', "/").to_lowercase()
 }
 
 #[cfg(test)]

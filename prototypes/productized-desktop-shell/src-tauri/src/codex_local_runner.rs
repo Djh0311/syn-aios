@@ -1,4 +1,5 @@
 use crate::utils::hash::{sha256_hex, short_hash};
+use crate::utils::normalization::normalize_slash_lowercase as normalize;
 use crate::{
     CodexLocalActiveAttempt, CodexLocalAuditRef, CodexLocalCommandPlan, CodexLocalExecutionAttempt,
     CodexLocalExecutionGuard, CodexLocalExecutionRequest, CodexLocalFailureReason,
@@ -1442,10 +1443,6 @@ fn contains_sensitive_fragment(value: &str) -> bool {
         || normalized.contains("\\auth")
         || normalized.contains("full transcript")
         || normalized.contains("完整 transcript")
-}
-
-fn normalize(value: &str) -> String {
-    value.trim().replace('\\', "/").to_lowercase()
 }
 
 #[cfg(test)]

@@ -1,4 +1,5 @@
 use crate::utils::hash::{sha256_hex, short_hash};
+use crate::utils::normalization::normalize_slash_lowercase as normalize;
 use crate::utils::store_paths;
 use crate::{
     CreateFormalMemoryRecordInput, CreateFormalMemoryRecordOutput, FormalMemoryStoreSummary,
@@ -371,10 +372,6 @@ fn memory_status_name(status: MemoryLifecycleStatus) -> &'static str {
         MemoryLifecycleStatus::MemoryFrozen => "memory_frozen",
         MemoryLifecycleStatus::MemoryArchived => "memory_archived",
     }
-}
-
-fn normalize(value: &str) -> String {
-    value.trim().replace('\\', "/").to_lowercase()
 }
 
 pub(crate) struct StoreLock {

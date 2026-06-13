@@ -1,4 +1,5 @@
 use crate::utils::hash::{sha256_hex, short_hash};
+use crate::utils::normalization::normalize_slash_lowercase as normalize;
 use crate::utils::store_paths;
 use crate::{
     codex_local_runner, real_execution_command, runtime_log_store,
@@ -2908,10 +2909,6 @@ fn path_within_scope(path: &str, root: &str) -> bool {
     let path = Path::new(path);
     let root = Path::new(root);
     path == root || path.starts_with(root)
-}
-
-fn normalize(value: &str) -> String {
-    value.trim().replace('\\', "/").to_lowercase()
 }
 
 struct StoreLock {

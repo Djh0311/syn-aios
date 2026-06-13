@@ -1,4 +1,5 @@
 use crate::utils::hash::{sha256_hex, short_hash};
+use crate::utils::normalization::normalize_slash_lowercase as normalize;
 use crate::utils::store_paths;
 use crate::{
     CreateMemoryCandidateFromObservationInput, CreateMemoryCandidateFromObservationOutput,
@@ -648,10 +649,6 @@ fn count_status(statuses: &[ObservationStatus], status: ObservationStatus) -> us
         .iter()
         .filter(|candidate| **candidate == status)
         .count()
-}
-
-fn normalize(value: &str) -> String {
-    value.trim().replace('\\', "/").to_lowercase()
 }
 
 struct StoreLock {

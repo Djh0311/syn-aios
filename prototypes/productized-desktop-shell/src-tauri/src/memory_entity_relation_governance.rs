@@ -1,4 +1,5 @@
 use crate::utils::hash::short_hash;
+use crate::utils::normalization::normalize_slash_lowercase as normalize;
 use crate::{
     MemoryEntity, MemoryEntityAlias, MemoryEntityAliasDecisionKind, MemoryEntityCandidate,
     MemoryEntityKind, MemoryEntityMergeCandidate, MemoryEntityMergeDecisionKind,
@@ -1198,10 +1199,6 @@ fn alias_key(value: &str) -> String {
         .replace("模型", "model");
     normalized.retain(|character| character.is_alphanumeric() || !character.is_ascii());
     normalized
-}
-
-fn normalize(value: &str) -> String {
-    value.trim().replace('\\', "/").to_lowercase()
 }
 
 fn dedupe(values: Vec<String>) -> Vec<String> {

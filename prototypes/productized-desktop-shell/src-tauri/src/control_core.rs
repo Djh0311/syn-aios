@@ -2,6 +2,7 @@
 // These helpers centralize state, permission, dispatch, review, and blackboard
 // boundary checks without changing the workflow-state JSON shape.
 
+use crate::utils::normalization::normalize_slash_lowercase;
 use std::path::{Component, Path, PathBuf};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -623,7 +624,7 @@ fn stop_condition_requires_user(
 }
 
 fn normalize_symbol(value: &str) -> String {
-    value.trim().replace('\\', "/").to_lowercase()
+    normalize_slash_lowercase(value)
 }
 
 pub(crate) fn validate_memory_candidate_create(

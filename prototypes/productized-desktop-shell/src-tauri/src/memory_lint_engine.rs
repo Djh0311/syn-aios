@@ -1,4 +1,5 @@
 use crate::utils::hash::short_hash;
+use crate::utils::normalization::normalize_slash_lowercase as normalize;
 use crate::{
     FormalMemoryStoreV1, MemoryCandidate, MemoryCandidateStoreV1, MemoryEntityRelationStoreV1,
     MemoryLifecycleStatus, MemoryLintFinding, MemoryLintFindingSeverity, MemoryLintFindingStatus,
@@ -1138,8 +1139,4 @@ fn finding_type_name(finding_type: MemoryLintFindingType) -> &'static str {
         MemoryLintFindingType::DerivedIndexStale => "derived_index_stale",
         MemoryLintFindingType::MaturePatternSignal => "mature_pattern_signal",
     }
-}
-
-fn normalize(value: &str) -> String {
-    value.trim().replace('\\', "/").to_lowercase()
 }
