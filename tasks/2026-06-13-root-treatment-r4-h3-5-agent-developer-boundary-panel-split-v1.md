@@ -2,7 +2,7 @@
 
 日期：2026-06-13
 
-状态：待执行。
+状态：已完成。
 
 性质：R4 硬目标 / 批二 `AgentView` 优先拆分的第 2 包。本包只拆智能体页开发者边界面板和相关展示 helper，目标是在 H3-4 已完成的普通对话区拆分基础上继续降低 `AgentView.tsx` 棘轮水位；不做 UI 重做，不改真实执行逻辑。
 
@@ -186,3 +186,45 @@ H3-4 后当前结构：
 任务包写成后，主管线必须停在实现前，等待用户确认或明确“开始做 H3-5”。实现完成后必须交给独立复核线复核；主管线不得自审替代复核线结论。
 
 H3-5 完成并 checkpoint 后，下一步才允许进入 ProjectsView 拆分序列；按用户已确认的顺序是 H3-1、H3-2、H3-3。
+
+## 12. 实现记录
+
+实现日期：2026-06-13。
+
+实现结果：
+
+- `AgentView.tsx` 从 1974 行降到 285 行，低于本包目标 1000 行。
+- 新增 `src/views/agent/AgentDeveloperPanels.tsx`，承接开发者 details 总容器和面板顺序编排。
+- 新增 `src/views/agent/AgentExecutionPanels.tsx`，承接 `CodexControlEntryPanel`、`UnifiedExecutionStatusPanel` 和真实执行产品命令相关展示。
+- 新增 `src/views/agent/AgentAdapterBoundaryPanels.tsx`，承接 adapter / provider / session operation 只读边界面板。
+- 新增 `src/views/agent/AgentContinuationBoundaryPanels.tsx`，承接 continuation / H2 readiness / runtime attention / I5 diagnostics 面板。
+- 新增 `src/views/agent/agentLabels.ts`，承接开发者面板使用的 label / tone / grouping helper。
+- `AgentView.tsx` 保留顶层数据派生、会话选择状态、`AgentSessionCenter` 装配、兼容导出和 `developerDetails` 插槽输入。
+- `workbench-shape-gate.js` 的 `AgentView.tsx` waterline 更新为 285。
+
+验证已通过：
+
+- `npm run typecheck`
+- `npm run test:offline-interaction`，14 passed
+- `npm run build`，通过，仅既有 Vite chunk size warning
+- `node scripts/harness/workbench-shape-gate.js --mode check`，pass，0 errors，0 warnings
+- `git diff --check`
+
+边界确认：
+
+- 未修改 `styles.css`。
+- 未修改 `ProjectsView.tsx`。
+- 未修改 Rust / Tauri / DB / sidecar schema / workflow state schema。
+- 未执行真实 `codex exec` / `codex exec resume`。
+- 未发送 prompt。
+- 未读写 `/Users/yoyi/.codex`。
+- 未启动 Tauri / Browser / Chrome / Vite dev / screenshot。
+- 未进入 R3 Level B，未解冻 backlog。
+
+复核结论：
+
+- 独立复核线 Singer 已回交 `STATUS: CLEAR`。
+- P0 / P1 / P2：无。
+- Review：`evidence/2026-06-13-root-treatment-r4-h3-5-agent-developer-boundary-panel-split-v1-review-singer-v1.md`
+- Evidence：`evidence/2026-06-13-root-treatment-r4-h3-5-agent-developer-boundary-panel-split-v1.md`
+- Handoff：`handoffs/2026-06-13-root-treatment-r4-h3-5-agent-developer-boundary-panel-split-v1-result.md`
