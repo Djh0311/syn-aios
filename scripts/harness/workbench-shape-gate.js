@@ -44,7 +44,7 @@ const RATCHET_WATERLINES = new Map([
   ['prototypes/productized-desktop-shell/src-tauri/src/session_continuation_store.rs', 5237],
   ['prototypes/productized-desktop-shell/src/lib/types.ts', 4998],
   ['prototypes/productized-desktop-shell/src-tauri/src/project_workflow_automation.rs', 5059],
-  ['prototypes/productized-desktop-shell/src/views/AgentView.tsx', 3118],
+  ['prototypes/productized-desktop-shell/src/views/AgentView.tsx', 1974],
   ['prototypes/productized-desktop-shell/src-tauri/src/worker_protocol.rs', 2429],
   ['prototypes/productized-desktop-shell/src/lib/projectCanvas.ts', 2050]
 ]);
