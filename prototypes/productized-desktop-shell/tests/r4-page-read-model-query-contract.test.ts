@@ -15,6 +15,42 @@ const result: PageReadModelQueryResult = {
   requested_page_id: request.page_id,
   page_label: agentsContract.page_label,
   contract: agentsContract,
+  target_schema: {
+    page_id: "agents",
+    page_label: "智能体",
+    read_model_type: "AgentsPageReadModel",
+    schema_version: "agents_page_read_model.v1",
+    snapshot_fields: [
+      "projects",
+      "sessions",
+      "agent_adapters",
+      "session_operations",
+      "provider_availability",
+      "session_continuation_previews",
+      "session_continuation_store",
+      "runtime_session_attention",
+      "session_run_status_summaries",
+      "worker_protocol",
+      "real_execution_product_commands",
+    ],
+    workflow_state_fields: ["project_workflows", "session_bindings"],
+    external_store_inputs: ["session-continuations.v1.json", "real-execution-product-commands.v1.json"],
+    output_sections: ["project picker", "session picker", "conversation readiness", "collapsed developer boundary"],
+    migration_status: "schema_only",
+    workbench_snapshot_active: true,
+    returns_business_data: false,
+    page_ui_migrated: false,
+    next_step: "H2-2 should keep the agents page conversation-first while exposing boundary data as page data.",
+  },
+  snapshot_field_coverage: [
+    {
+      field_name: "sessions",
+      covered_by_pages: ["projects", "agents", "running_workflows"],
+      coverage_status: "covered_by_page_schema",
+      notes: "fixture coverage",
+    },
+  ],
+  uncovered_snapshot_fields: [],
   selector_plan: {
     selector_id: "agents_selector_contract",
     selector_kind: "page_read_model_selector_contract",
@@ -45,6 +81,10 @@ const result: PageReadModelQueryResult = {
 assert(result.status === "selector_contract_only", "R4-A2 result should stay contract-only");
 assert(result.source_boundary.workbench_snapshot_active, "WorkbenchSnapshot should remain active");
 assert(!result.source_boundary.returns_business_data, "R4-A2 skeleton must not return business data");
+assert(result.target_schema?.schema_version === "agents_page_read_model.v1", "H2-1 should attach page schema");
+assert(!result.target_schema.returns_business_data, "H2-1 schema must not claim business payload");
+assert(result.target_schema.snapshot_fields.includes("session_continuation_store"), "schema should list agent page snapshot fields");
+assert(result.uncovered_snapshot_fields?.length === 0, "H2-1 coverage should not leave snapshot fields uncovered");
 assert(!result.source_boundary.writes_stores, "R4-A2 skeleton must not write stores");
 assert(!result.source_boundary.tauri_command_migrates_page, "R4-A2 skeleton must not migrate page UI");
 assert(

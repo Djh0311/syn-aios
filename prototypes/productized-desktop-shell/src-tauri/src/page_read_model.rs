@@ -29,6 +29,43 @@ pub(crate) struct PageReadModelQueryInput {
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PageReadModelSchemaContract {
+    pub(crate) page_id: String,
+    pub(crate) page_label: String,
+    pub(crate) read_model_type: String,
+    pub(crate) schema_version: String,
+    pub(crate) snapshot_fields: Vec<String>,
+    pub(crate) workflow_state_fields: Vec<String>,
+    pub(crate) external_store_inputs: Vec<String>,
+    pub(crate) output_sections: Vec<String>,
+    pub(crate) migration_status: String,
+    pub(crate) workbench_snapshot_active: bool,
+    pub(crate) returns_business_data: bool,
+    pub(crate) page_ui_migrated: bool,
+    pub(crate) next_step: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PageSnapshotFieldCoverage {
+    pub(crate) field_name: String,
+    pub(crate) covered_by_pages: Vec<String>,
+    pub(crate) coverage_status: String,
+    pub(crate) notes: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WorkbenchPageReadModelSchemaCatalog {
+    pub(crate) schema_version: String,
+    pub(crate) generated_at: String,
+    pub(crate) status: String,
+    pub(crate) target_pages: Vec<String>,
+    pub(crate) schemas: Vec<PageReadModelSchemaContract>,
+    pub(crate) snapshot_field_coverage: Vec<PageSnapshotFieldCoverage>,
+    pub(crate) uncovered_snapshot_fields: Vec<String>,
+    pub(crate) warnings: Vec<String>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PageReadModelSelectorPlan {
     pub(crate) selector_id: String,
     pub(crate) selector_kind: String,
@@ -56,6 +93,9 @@ pub(crate) struct PageReadModelQueryResult {
     pub(crate) requested_page_id: String,
     pub(crate) page_label: String,
     pub(crate) contract: PageReadModelContract,
+    pub(crate) target_schema: Option<PageReadModelSchemaContract>,
+    pub(crate) snapshot_field_coverage: Vec<PageSnapshotFieldCoverage>,
+    pub(crate) uncovered_snapshot_fields: Vec<String>,
     pub(crate) selector_plan: PageReadModelSelectorPlan,
     pub(crate) source_boundary: PageReadModelSourceBoundary,
     pub(crate) warnings: Vec<String>,
@@ -90,6 +130,187 @@ pub(crate) fn derive_page_read_model_inventory(
     }
 }
 
+pub(crate) fn derive_page_read_model_schema_catalog(
+    generated_at: &str,
+) -> WorkbenchPageReadModelSchemaCatalog {
+    let schemas = vec![
+        schema(
+            "projects",
+            "项目",
+            "ProjectsPageReadModel",
+            "projects_page_read_model.v1",
+            &[
+                "summary",
+                "projects",
+                "sessions",
+                "tasks",
+                "project_workflow_automation",
+            ],
+            &["project_workflows"],
+            &["workflow-state.v0.json"],
+            &[
+                "project list",
+                "project detail summary",
+                "workflow summary counts",
+                "task package status",
+            ],
+            "H2-2 should return projects page data through query_workbench_page_read_model.",
+        ),
+        schema(
+            "agents",
+            "智能体",
+            "AgentsPageReadModel",
+            "agents_page_read_model.v1",
+            &[
+                "projects",
+                "sessions",
+                "agent_adapters",
+                "session_operations",
+                "provider_availability",
+                "session_continuation_previews",
+                "session_continuation_store",
+                "runtime_session_attention",
+                "session_run_status_summaries",
+                "worker_protocol",
+                "real_execution_product_commands",
+            ],
+            &["project_workflows", "session_bindings"],
+            &["session-continuations.v1.json", "real-execution-product-commands.v1.json"],
+            &[
+                "project picker",
+                "session picker",
+                "conversation readiness",
+                "collapsed developer boundary",
+            ],
+            "H2-2 should keep the agents page conversation-first while exposing boundary data as page data.",
+        ),
+        schema(
+            "running_workflows",
+            "运行中工作流",
+            "RunningWorkflowsPageReadModel",
+            "running_workflows_page_read_model.v1",
+            &[
+                "summary",
+                "sessions",
+                "session_continuation_previews",
+                "session_continuation_store",
+                "runtime_session_attention",
+                "session_run_status_summaries",
+                "runtime_log_store",
+                "worker_protocol",
+                "real_execution_product_commands",
+                "project_workflow_automation",
+                "diagnostic_summary",
+            ],
+            &["project_workflows", "task_drafts", "recent_execution_attempts"],
+            &[
+                "runtime-log.v1.json",
+                "session-continuations.v1.json",
+                "real-execution-product-commands.v1.json",
+            ],
+            &[
+                "run queue",
+                "permission queue",
+                "failure and readback summary",
+                "operation control summary",
+            ],
+            "H2-2 should preserve unknown readback result_count as null in page data.",
+        ),
+        schema(
+            "memory",
+            "记忆层",
+            "MemoryCenterPageReadModel",
+            "memory_center_page_read_model.v1",
+            &["projects", "tasks"],
+            &["project_workflows", "task_packages", "memory_injection_summary"],
+            &[
+                "formal-memories.v1.json",
+                "memory-candidates.v1.json",
+                "observations.v1.json",
+                "memory-lint.v1.json",
+                "memory-patterns.v1.json",
+            ],
+            &[
+                "formal memory summary",
+                "candidate memory summary",
+                "observation summary",
+                "lint and maintenance summary",
+                "task memory packet summary",
+            ],
+            "H2-2 should keep candidate and observation data distinct from formal memory.",
+        ),
+        schema(
+            "knowledge",
+            "知识库",
+            "KnowledgeBasePageReadModel",
+            "knowledge_base_page_read_model.v1",
+            &["projects", "tasks"],
+            &["project_workflows", "task_package_references"],
+            &[
+                "formal-memories.v1.json",
+                "memory-capture-events.v1.json",
+                "memory-candidates.v1.json",
+            ],
+            &[
+                "document summary",
+                "formal memory links",
+                "candidate links",
+                "task references",
+                "Obsidian-compatible boundary",
+            ],
+            "H2-2 should keep knowledge hits from being displayed as formal memories.",
+        ),
+        schema(
+            "settings",
+            "设置",
+            "SettingsPageReadModel",
+            "settings_page_read_model.v1",
+            &[
+                "summary",
+                "skills",
+                "plugins",
+                "tasks",
+                "agent_adapters",
+                "session_operations",
+                "provider_availability",
+                "runtime_log_store",
+                "page_read_model_inventory",
+                "diagnostic_summary",
+                "diagnostics",
+            ],
+            &["counts", "workflow_state_error"],
+            &["runtime-log.v1.json"],
+            &[
+                "general settings summary",
+                "developer entry summary",
+                "system health",
+                "page contract inventory",
+            ],
+            "H2-2 should keep settings non-executing and credential-free.",
+        ),
+    ];
+    let snapshot_field_coverage = derive_snapshot_field_coverage();
+    let uncovered_snapshot_fields = uncovered_snapshot_fields(&snapshot_field_coverage);
+
+    WorkbenchPageReadModelSchemaCatalog {
+        schema_version: "workbench_page_read_model_schema_catalog.v1".to_string(),
+        generated_at: generated_at.to_string(),
+        status: "schema_defined_no_query_migration".to_string(),
+        target_pages: schemas
+            .iter()
+            .map(|schema| schema.page_id.clone())
+            .collect(),
+        schemas,
+        snapshot_field_coverage,
+        uncovered_snapshot_fields,
+        warnings: vec![
+            "h2_1_schema_only_no_business_page_payload".to_string(),
+            "workbench_snapshot_still_active".to_string(),
+            "page_ui_not_migrated".to_string(),
+        ],
+    }
+}
+
 pub(crate) fn query_page_read_model(
     input: &PageReadModelQueryInput,
     generated_at: &str,
@@ -105,6 +326,12 @@ pub(crate) fn query_page_read_model(
         .into_iter()
         .find(|contract| contract.page_id == page_id)
         .ok_or_else(|| format!("unknown_page_id:{page_id}"))?;
+    let schema_catalog = derive_page_read_model_schema_catalog(generated_at);
+    let target_schema = schema_catalog
+        .schemas
+        .iter()
+        .find(|schema| schema.page_id == page_id)
+        .cloned();
 
     Ok(PageReadModelQueryResult {
         schema_version: "workbench_page_read_model_query.v1".to_string(),
@@ -112,6 +339,9 @@ pub(crate) fn query_page_read_model(
         status: "selector_contract_only".to_string(),
         requested_page_id: page_id.to_string(),
         page_label: contract.page_label.clone(),
+        target_schema,
+        snapshot_field_coverage: schema_catalog.snapshot_field_coverage,
+        uncovered_snapshot_fields: schema_catalog.uncovered_snapshot_fields,
         selector_plan: PageReadModelSelectorPlan {
             selector_id: format!("{}_selector_contract", contract.page_id),
             selector_kind: "page_read_model_selector_contract".to_string(),
@@ -134,11 +364,40 @@ pub(crate) fn query_page_read_model(
         },
         contract,
         warnings: vec![
+            "h2_1_schema_defined_no_query_migration".to_string(),
             "r4_a2_skeleton_no_page_data_query".to_string(),
             "workbench_snapshot_still_active".to_string(),
             "do_not_claim_workbench_snapshot_deprecated".to_string(),
         ],
     })
+}
+
+fn schema(
+    page_id: &str,
+    page_label: &str,
+    read_model_type: &str,
+    schema_version: &str,
+    snapshot_fields: &[&str],
+    workflow_state_fields: &[&str],
+    external_store_inputs: &[&str],
+    output_sections: &[&str],
+    next_step: &str,
+) -> PageReadModelSchemaContract {
+    PageReadModelSchemaContract {
+        page_id: page_id.to_string(),
+        page_label: page_label.to_string(),
+        read_model_type: read_model_type.to_string(),
+        schema_version: schema_version.to_string(),
+        snapshot_fields: strings(snapshot_fields),
+        workflow_state_fields: strings(workflow_state_fields),
+        external_store_inputs: strings(external_store_inputs),
+        output_sections: strings(output_sections),
+        migration_status: "schema_only".to_string(),
+        workbench_snapshot_active: true,
+        returns_business_data: false,
+        page_ui_migrated: false,
+        next_step: next_step.to_string(),
+    }
 }
 
 fn contract(
@@ -161,6 +420,157 @@ fn contract(
         migration_status: "contract_only".to_string(),
         next_step: next_step.to_string(),
     }
+}
+
+fn derive_snapshot_field_coverage() -> Vec<PageSnapshotFieldCoverage> {
+    vec![
+        coverage(
+            "summary",
+            &["projects", "running_workflows", "settings"],
+            "Counts, generated_at, and warning totals feed page summaries.",
+        ),
+        coverage(
+            "projects",
+            &["projects", "agents", "memory", "knowledge"],
+            "Project context feeds primary project, conversation, memory, and knowledge surfaces.",
+        ),
+        coverage(
+            "sessions",
+            &["projects", "agents", "running_workflows"],
+            "Sessions feed project counts, agent conversation selection, and runtime summaries.",
+        ),
+        coverage(
+            "skills",
+            &["settings"],
+            "Skill inventory is covered by settings during the six-page batch; Skill board query is outside batch one.",
+        ),
+        coverage(
+            "plugins",
+            &["settings"],
+            "Plugin inventory is covered by settings developer inventory during batch one.",
+        ),
+        coverage(
+            "tasks",
+            &["projects", "memory", "knowledge", "settings"],
+            "Task package and task reference counts feed project, memory, knowledge, and settings summaries.",
+        ),
+        coverage(
+            "agent_adapters",
+            &["agents", "settings"],
+            "Adapter availability is visible on agents and counted in settings developer details.",
+        ),
+        coverage(
+            "session_operations",
+            &["agents", "settings"],
+            "Session operation boundary is visible on agents and counted in settings developer details.",
+        ),
+        coverage(
+            "provider_availability",
+            &["agents", "settings"],
+            "Provider and credential boundary is visible on agents and counted in settings developer details.",
+        ),
+        coverage(
+            "session_continuation_previews",
+            &["agents", "running_workflows"],
+            "Continuation previews feed conversation readiness and running workflow attention.",
+        ),
+        coverage(
+            "session_continuation_store",
+            &["agents", "running_workflows"],
+            "Continuation store feeds attempts, audit refs, and runtime queue state.",
+        ),
+        coverage(
+            "runtime_session_attention",
+            &["agents", "running_workflows"],
+            "Runtime attention feeds conversation warnings and running workflow focus.",
+        ),
+        coverage(
+            "session_run_status_summaries",
+            &["agents", "running_workflows"],
+            "Run status summaries feed session status and running workflow rollups.",
+        ),
+        coverage(
+            "runtime_log_store",
+            &["running_workflows", "settings"],
+            "Runtime log summaries feed running workflow state and settings health.",
+        ),
+        coverage(
+            "worker_protocol",
+            &["agents", "running_workflows"],
+            "Worker protocol feeds adapter/work-thread boundary and run unit diagnostics.",
+        ),
+        coverage(
+            "real_execution_product_commands",
+            &["agents", "running_workflows"],
+            "Product command state feeds execution readiness and run control summaries.",
+        ),
+        coverage(
+            "project_workflow_automation",
+            &["projects", "running_workflows"],
+            "Automation plans feed project workflow summaries and running queue state.",
+        ),
+        coverage(
+            "page_read_model_inventory",
+            &["settings"],
+            "Page contract inventory belongs in settings developer details.",
+        ),
+        coverage(
+            "diagnostic_summary",
+            &["running_workflows", "settings"],
+            "Degraded state summaries feed running workflow attention and settings health.",
+        ),
+        coverage(
+            "diagnostics",
+            &["settings"],
+            "Diagnostics detail remains developer-facing in settings.",
+        ),
+    ]
+}
+
+fn workbench_snapshot_field_names() -> Vec<&'static str> {
+    vec![
+        "summary",
+        "projects",
+        "sessions",
+        "skills",
+        "plugins",
+        "tasks",
+        "agent_adapters",
+        "session_operations",
+        "provider_availability",
+        "session_continuation_previews",
+        "session_continuation_store",
+        "runtime_session_attention",
+        "session_run_status_summaries",
+        "runtime_log_store",
+        "worker_protocol",
+        "real_execution_product_commands",
+        "project_workflow_automation",
+        "page_read_model_inventory",
+        "diagnostic_summary",
+        "diagnostics",
+    ]
+}
+
+fn coverage(field_name: &str, covered_by_pages: &[&str], notes: &str) -> PageSnapshotFieldCoverage {
+    PageSnapshotFieldCoverage {
+        field_name: field_name.to_string(),
+        covered_by_pages: strings(covered_by_pages),
+        coverage_status: "covered_by_page_schema".to_string(),
+        notes: notes.to_string(),
+    }
+}
+
+fn uncovered_snapshot_fields(coverage: &[PageSnapshotFieldCoverage]) -> Vec<String> {
+    workbench_snapshot_field_names()
+        .into_iter()
+        .filter(|field_name| {
+            !coverage
+                .iter()
+                .any(|entry| entry.field_name == *field_name && !entry.covered_by_pages.is_empty())
+        })
+        .map(|field_name| field_name.to_string())
+        .collect()
 }
 
 fn strings(items: &[&str]) -> Vec<String> {
@@ -225,6 +635,16 @@ mod tests {
         assert_eq!(output.status, "selector_contract_only");
         assert_eq!(output.requested_page_id, "agents");
         assert_eq!(output.page_label, "智能体");
+        let target_schema = output
+            .target_schema
+            .expect("agents target schema should be returned");
+        assert_eq!(target_schema.schema_version, "agents_page_read_model.v1");
+        assert!(target_schema
+            .snapshot_fields
+            .contains(&"session_continuation_store".to_string()));
+        assert!(!target_schema.returns_business_data);
+        assert!(!target_schema.page_ui_migrated);
+        assert!(output.uncovered_snapshot_fields.is_empty());
         assert_eq!(output.contract.current_source, "workbench_snapshot");
         assert_eq!(
             output.selector_plan.ui_consumption_status,
@@ -234,6 +654,9 @@ mod tests {
         assert!(!output.source_boundary.returns_business_data);
         assert!(!output.source_boundary.writes_stores);
         assert!(!output.source_boundary.tauri_command_migrates_page);
+        assert!(output
+            .warnings
+            .contains(&"h2_1_schema_defined_no_query_migration".to_string()));
         assert!(output
             .warnings
             .contains(&"do_not_claim_workbench_snapshot_deprecated".to_string()));
@@ -258,5 +681,57 @@ mod tests {
         )
         .expect_err("empty page should be rejected");
         assert_eq!(empty, "page_id_required");
+    }
+
+    #[test]
+    fn page_read_model_schema_catalog_defines_batch_one_six_pages() {
+        let catalog = derive_page_read_model_schema_catalog("2026-06-13T00:00:00Z");
+        let page_ids: Vec<&str> = catalog
+            .schemas
+            .iter()
+            .map(|schema| schema.page_id.as_str())
+            .collect();
+
+        assert_eq!(
+            page_ids,
+            vec![
+                "projects",
+                "agents",
+                "running_workflows",
+                "memory",
+                "knowledge",
+                "settings",
+            ]
+        );
+        assert_eq!(catalog.status, "schema_defined_no_query_migration");
+        assert!(catalog.schemas.iter().all(|schema| {
+            schema.workbench_snapshot_active
+                && !schema.returns_business_data
+                && !schema.page_ui_migrated
+        }));
+    }
+
+    #[test]
+    fn page_read_model_schema_catalog_covers_workbench_snapshot_fields() {
+        let catalog = derive_page_read_model_schema_catalog("2026-06-13T00:00:00Z");
+        let covered_fields: Vec<&str> = catalog
+            .snapshot_field_coverage
+            .iter()
+            .map(|coverage| coverage.field_name.as_str())
+            .collect();
+
+        assert_eq!(workbench_snapshot_field_names().len(), 20);
+        assert_eq!(catalog.snapshot_field_coverage.len(), 20);
+        assert!(catalog.uncovered_snapshot_fields.is_empty());
+        for field_name in workbench_snapshot_field_names() {
+            assert!(
+                covered_fields.contains(&field_name),
+                "missing snapshot field coverage for {field_name}"
+            );
+        }
+        assert!(catalog.snapshot_field_coverage.iter().all(|coverage| {
+            coverage.coverage_status == "covered_by_page_schema"
+                && !coverage.covered_by_pages.is_empty()
+        }));
     }
 }
