@@ -14,8 +14,24 @@ fn query_workbench_page_read_model(
     state: tauri::State<'_, AppState>,
 ) -> Result<page_read_model::PageReadModelQueryResult, String> {
     let index = read_index(&state)?;
+    let tasks_text = fs::read_to_string(&state.tasks_path).unwrap_or_default();
+    let snapshot = build_snapshot(&state, &index, &tasks_text);
+    let snapshot_value =
+        serde_json::to_value(&snapshot).map_err(|error| format!("snapshot_serialize_failed:{error}"))?;
+    let workflow_state_value = read_workflow_state_snapshot(&state.workflow_state_path)
+        .ok()
+        .map(|snapshot| {
+            serde_json::to_value(snapshot)
+                .map_err(|error| format!("workflow_state_serialize_failed:{error}"))
+        })
+        .transpose()?;
     let generated_at = optional_string(&index, "generated_at").unwrap_or_else(unix_timestamp_string);
-    page_read_model::query_page_read_model(&request, &generated_at)
+    page_read_model::query_page_read_model_with_snapshot_value(
+        &request,
+        &generated_at,
+        &snapshot_value,
+        workflow_state_value.as_ref(),
+    )
 }
 
 #[tauri::command]

@@ -57,6 +57,14 @@ export type WorkbenchPageReadModelSchemaCatalog = {
   warnings: string[];
 };
 
+export type PageReadModelPayload = {
+  page_id: string;
+  schema_version: string;
+  generated_from: "workbench_page_query" | string;
+  data: Record<string, unknown>;
+  warnings: string[];
+};
+
 export type PageReadModelSelectorPlan = {
   selector_id: string;
   selector_kind: string;
@@ -85,6 +93,7 @@ export type PageReadModelQueryResult = {
   target_schema?: PageReadModelSchemaContract | null;
   snapshot_field_coverage?: PageSnapshotFieldCoverage[];
   uncovered_snapshot_fields?: string[];
+  page_payload?: PageReadModelPayload | null;
   selector_plan: PageReadModelSelectorPlan;
   source_boundary: PageReadModelSourceBoundary;
   warnings: string[];

@@ -2034,29 +2034,7 @@ struct RealExecutionProductCommandPhaseBOutput {
     warnings: Vec<String>,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
-struct WorkbenchSnapshot {
-    summary: IndexSummary,
-    projects: Vec<ProjectRecord>,
-    sessions: Vec<SessionRecord>,
-    skills: Vec<SkillRecord>,
-    plugins: Vec<PluginRecord>,
-    tasks: Vec<TaskEntry>,
-    agent_adapters: Vec<AgentAdapterDescriptor>,
-    session_operations: Vec<SessionOperationDescriptor>,
-    provider_availability: Vec<ProviderAvailabilitySummary>,
-    session_continuation_previews: Vec<SessionContinuationPreview>,
-    session_continuation_store: SessionContinuationStoreV1,
-    runtime_session_attention: Vec<RuntimeSessionAttention>,
-    session_run_status_summaries: Vec<SessionRunStatusSummary>,
-    runtime_log_store: RuntimeLogStoreV1,
-    worker_protocol: WorkerProtocolReadModel,
-    real_execution_product_commands: RealExecutionProductCommandReadModel,
-    project_workflow_automation: ProjectWorkflowAutomationReadModel,
-    page_read_model_inventory: page_read_model::WorkbenchPageReadModelInventory,
-    diagnostic_summary: DiagnosticSummary,
-    diagnostics: Diagnostics,
-}
+include!("workbench_snapshot_types.rs");
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SessionSourceMode {
     RealWithSqliteFallback,

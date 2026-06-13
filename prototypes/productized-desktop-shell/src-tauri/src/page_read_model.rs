@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PageReadModelContract {
@@ -66,6 +68,15 @@ pub(crate) struct WorkbenchPageReadModelSchemaCatalog {
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PageReadModelPayload {
+    pub(crate) page_id: String,
+    pub(crate) schema_version: String,
+    pub(crate) generated_from: String,
+    pub(crate) data: Value,
+    pub(crate) warnings: Vec<String>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PageReadModelSelectorPlan {
     pub(crate) selector_id: String,
     pub(crate) selector_kind: String,
@@ -96,6 +107,7 @@ pub(crate) struct PageReadModelQueryResult {
     pub(crate) target_schema: Option<PageReadModelSchemaContract>,
     pub(crate) snapshot_field_coverage: Vec<PageSnapshotFieldCoverage>,
     pub(crate) uncovered_snapshot_fields: Vec<String>,
+    pub(crate) page_payload: Option<PageReadModelPayload>,
     pub(crate) selector_plan: PageReadModelSelectorPlan,
     pub(crate) source_boundary: PageReadModelSourceBoundary,
     pub(crate) warnings: Vec<String>,
@@ -342,6 +354,7 @@ pub(crate) fn query_page_read_model(
         target_schema,
         snapshot_field_coverage: schema_catalog.snapshot_field_coverage,
         uncovered_snapshot_fields: schema_catalog.uncovered_snapshot_fields,
+        page_payload: None,
         selector_plan: PageReadModelSelectorPlan {
             selector_id: format!("{}_selector_contract", contract.page_id),
             selector_kind: "page_read_model_selector_contract".to_string(),
@@ -370,6 +383,380 @@ pub(crate) fn query_page_read_model(
             "do_not_claim_workbench_snapshot_deprecated".to_string(),
         ],
     })
+}
+
+pub(crate) fn query_page_read_model_with_snapshot_value(
+    input: &PageReadModelQueryInput,
+    generated_at: &str,
+    snapshot: &Value,
+    workflow_state: Option<&Value>,
+) -> Result<PageReadModelQueryResult, String> {
+    let mut output = query_page_read_model(input, generated_at)?;
+    let Some(schema) = output.target_schema.clone() else {
+        return Ok(output);
+    };
+    let Some(payload) = derive_page_payload(&schema, generated_at, snapshot, workflow_state) else {
+        return Ok(output);
+    };
+
+    output.status = "page_data_ready".to_string();
+    output.selector_plan.data_migration_status = "backend_page_query_ready".to_string();
+    output.selector_plan.ui_consumption_status = "not_connected_to_pages".to_string();
+    output.source_boundary.returns_business_data = true;
+    output.source_boundary.warnings = vec![
+        "h2_2_backend_page_payload_ready".to_string(),
+        "page_ui_not_migrated".to_string(),
+        "writes_stores_false".to_string(),
+    ];
+    output.page_payload = Some(payload);
+    output.warnings = vec![
+        "h2_2_backend_page_payload_ready".to_string(),
+        "frontend_page_consumption_not_migrated".to_string(),
+        "do_not_claim_workbench_snapshot_deprecated".to_string(),
+    ];
+    Ok(output)
+}
+
+fn derive_page_payload(
+    schema: &PageReadModelSchemaContract,
+    _generated_at: &str,
+    snapshot: &Value,
+    workflow_state: Option<&Value>,
+) -> Option<PageReadModelPayload> {
+    let data = match schema.page_id.as_str() {
+        "projects" => projects_payload(snapshot, workflow_state),
+        "agents" => agents_payload(snapshot),
+        "running_workflows" => running_workflows_payload(snapshot, workflow_state),
+        "memory" => memory_payload(snapshot),
+        "knowledge" => knowledge_payload(snapshot),
+        "settings" => settings_payload(snapshot),
+        _ => return None,
+    };
+
+    Some(PageReadModelPayload {
+        page_id: schema.page_id.clone(),
+        schema_version: schema.schema_version.clone(),
+        generated_from: "workbench_page_query".to_string(),
+        data,
+        warnings: vec![
+            "backend_page_payload_read_only".to_string(),
+            "frontend_page_consumption_not_migrated".to_string(),
+        ],
+    })
+}
+
+fn projects_payload(snapshot: &Value, workflow_state: Option<&Value>) -> Value {
+    let sessions_by_project = count_by_optional_string(items(snapshot, "sessions"), "project_root");
+    let workflows_by_project = count_by_optional_string(
+        items_opt(workflow_state, "project_workflows"),
+        "project_root",
+    );
+    let projects: Vec<Value> = items(snapshot, "projects")
+        .into_iter()
+        .map(|project| {
+            let root = string_field(project, "project_root");
+            let session_count = sessions_by_project
+                .get(&root)
+                .copied()
+                .unwrap_or_else(|| usize_field(project, "thread_count"));
+            json!({
+                "project_root": root,
+                "name": string_field(project, "name"),
+                "active_hint": bool_field(project, "active_hint"),
+                "session_count": session_count,
+                "active_session_count": usize_field(project, "active_thread_count"),
+                "archived_session_count": usize_field(project, "archived_thread_count"),
+                "workflow_count": workflows_by_project.get(&root).copied().unwrap_or(0),
+                "evidence_count": array_field_len(project, "evidence_files"),
+                "handoff_count": array_field_len(project, "handoff_files"),
+                "authority_count": array_field_len(project, "authority_files"),
+                "warning_count": array_field_len(project, "context_warnings") + array_field_len(project, "warnings"),
+                "latest_updated_at_ms": project.get("latest_updated_at_ms").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect();
+
+    json!({
+        "schema_version": "projects_page_read_model.v1",
+        "project_count": projects.len(),
+        "active_project_count": projects.iter().filter(|project| project.get("active_hint").and_then(Value::as_bool).unwrap_or(false)).count(),
+        "total_session_count": array_len(snapshot, "sessions"),
+        "workflow_summary_count": items_opt(workflow_state, "project_workflows").len(),
+        "projects": projects,
+        "user_facing_summary": format!(
+            "{} 个项目，{} 个会话，{} 条工作流摘要",
+            array_len(snapshot, "projects"),
+            array_len(snapshot, "sessions"),
+            items_opt(workflow_state, "project_workflows").len()
+        ),
+        "developer_details_collapsed": true,
+    })
+}
+
+fn agents_payload(snapshot: &Value) -> Value {
+    let sessions = items(snapshot, "sessions");
+    let readable_count = sessions
+        .iter()
+        .filter(|session| bool_field(session, "rollout_exists"))
+        .count();
+    let archived_count = sessions
+        .iter()
+        .filter(|session| bool_field(session, "archived"))
+        .count();
+    let project_options = agent_project_options(snapshot);
+    let adapter_count = array_len(snapshot, "agent_adapters");
+    let available_adapter_count = items(snapshot, "agent_adapters")
+        .iter()
+        .filter(|adapter| string_field(adapter, "status") == "available")
+        .count();
+    let planned_adapter_count = items(snapshot, "agent_adapters")
+        .iter()
+        .filter(|adapter| string_field(adapter, "status") == "planned")
+        .count();
+
+    json!({
+        "schema_version": "agents_page_read_model.v1",
+        "project_options": project_options,
+        "session_summary": {
+            "readable_count": readable_count,
+            "missing_rollout_count": sessions.len().saturating_sub(readable_count),
+            "archived_count": archived_count,
+            "total_count": sessions.len(),
+        },
+        "adapter_count": adapter_count,
+        "available_adapter_count": available_adapter_count,
+        "planned_adapter_count": planned_adapter_count,
+        "operation_boundary_count": array_len(snapshot, "session_operations"),
+        "provider_boundary_count": array_len(snapshot, "provider_availability"),
+        "continuation_preview_count": array_len(snapshot, "session_continuation_previews"),
+        "worker_thread_count": array_field_len(snapshot.get("worker_protocol").unwrap_or(&Value::Null), "work_threads"),
+        "conversation_first": true,
+        "developer_details_collapsed": true,
+        "user_facing_summary": format!(
+            "{} 个会话，{} 个可读取，{} 个可用 adapter",
+            sessions.len(),
+            readable_count,
+            available_adapter_count
+        ),
+    })
+}
+
+fn running_workflows_payload(snapshot: &Value, workflow_state: Option<&Value>) -> Value {
+    let workflows = items_opt(workflow_state, "project_workflows");
+    let workflow_focus_count = workflows
+        .iter()
+        .filter(|workflow| {
+            matches!(
+                string_field(workflow, "state").as_str(),
+                "running" | "prepared" | "waiting_for_permission" | "blocked" | "failed"
+            )
+        })
+        .count();
+    let waiting_permission_count: usize = workflows
+        .iter()
+        .map(|workflow| {
+            items_from_value(workflow, "task_drafts")
+                .iter()
+                .filter(|task| string_field(task, "state") == "waiting_for_permission")
+                .count()
+        })
+        .sum();
+    let runtime_attention = items(snapshot, "runtime_session_attention");
+    let runtime_attention_count = runtime_attention
+        .iter()
+        .filter(|item| {
+            bool_field(item, "requires_user_action")
+                || bool_field(item, "blocks_continuation")
+                || matches!(
+                    string_field(item, "status").as_str(),
+                    "running"
+                        | "waiting_permission"
+                        | "blocked_by_guard"
+                        | "readback_unavailable"
+                        | "readback_failed"
+                )
+        })
+        .count();
+    let readback_issue_count = runtime_attention
+        .iter()
+        .filter(|item| {
+            let status = item
+                .get("readback_boundary")
+                .map(|boundary| string_field(boundary, "status"))
+                .unwrap_or_default();
+            status == "readback_unavailable" || status == "readback_failed"
+        })
+        .count();
+    let product_commands = snapshot
+        .get("real_execution_product_commands")
+        .unwrap_or(&Value::Null);
+    let automation = snapshot
+        .get("project_workflow_automation")
+        .unwrap_or(&Value::Null);
+
+    json!({
+        "schema_version": "running_workflows_page_read_model.v1",
+        "workflow_count": workflows.len(),
+        "workflow_focus_count": workflow_focus_count,
+        "running_attention_count": workflow_focus_count + runtime_attention_count,
+        "runtime_attention_count": runtime_attention_count,
+        "waiting_permission_count": waiting_permission_count,
+        "readback_issue_count": readback_issue_count,
+        "session_run_status_count": array_len(snapshot, "session_run_status_summaries"),
+        "runtime_log": {
+            "entry_count": array_field_len(snapshot.get("runtime_log_store").unwrap_or(&Value::Null), "entries"),
+            "summary_count": array_field_len(snapshot.get("runtime_log_store").unwrap_or(&Value::Null), "summaries"),
+        },
+        "product_command": {
+            "command_count": usize_field(product_commands, "command_count"),
+            "pending_decision_count": usize_field(product_commands, "pending_decision_count"),
+            "blocked_attempt_count": usize_field(product_commands, "blocked_attempt_count"),
+            "running_attempt_count": usize_field(product_commands, "running_attempt_count"),
+        },
+        "automation": {
+            "run_unit_count": usize_field(automation, "run_unit_count"),
+            "waiting_user_count": usize_field(automation, "waiting_user_count"),
+            "blocked_count": usize_field(automation, "blocked_count"),
+            "readback_unknown_count": usize_field(automation, "readback_unknown_count"),
+        },
+        "diagnostic": {
+            "degraded_count": array_field_len(snapshot.get("diagnostic_summary").unwrap_or(&Value::Null), "degraded_states"),
+        },
+        "user_facing_summary": format!(
+            "{} 条工作流，{} 条运行关注，{} 条等待权限",
+            workflows.len(),
+            workflow_focus_count + runtime_attention_count,
+            waiting_permission_count
+        ),
+        "developer_details_collapsed": true,
+    })
+}
+
+fn memory_payload(snapshot: &Value) -> Value {
+    json!({
+        "schema_version": "memory_center_page_read_model.v1",
+        "snapshot_status_label": "后端按页读模型",
+        "snapshot_context": {
+            "project_count": array_len(snapshot, "projects"),
+            "task_count": array_len(snapshot, "tasks"),
+        },
+        "external_store_inputs": [
+            "formal-memories.v1.json",
+            "memory-candidates.v1.json",
+            "observations.v1.json",
+            "memory-lint.v1.json",
+            "memory-patterns.v1.json"
+        ],
+        "formal_memory": { "source": "external_store_required" },
+        "candidate_memory": { "source": "external_store_required" },
+        "observation": { "source": "external_store_required" },
+        "lint": { "source": "external_store_required" },
+        "user_facing_summary": "记忆页后端查询已提供 snapshot 上下文；正式记忆 / 候选 / 观察仍来自记忆 store。",
+        "developer_details_collapsed": true,
+    })
+}
+
+fn knowledge_payload(snapshot: &Value) -> Value {
+    let document_count: usize = items(snapshot, "projects")
+        .iter()
+        .map(|project| {
+            array_field_len(project, "authority_files")
+                + array_field_len(project, "handoff_files")
+                + array_field_len(project, "evidence_files")
+        })
+        .sum();
+    json!({
+        "schema_version": "knowledge_base_page_read_model.v1",
+        "snapshot_status_label": "后端按页读模型",
+        "document_count": document_count,
+        "task_reference_count": array_len(snapshot, "tasks"),
+        "formal_memory_link_count": 0,
+        "candidate_link_count": 0,
+        "capture_event_count": 0,
+        "obsidian_boundary": {
+            "label": "Obsidian-compatible 占位",
+            "native_sync_status": "未执行 Obsidian 原生同步",
+            "vault_scan_status": "未自动扫描 vault",
+            "forbidden_text": "知识命中不能绕过候选、正式记忆、来源、版本、审计和权限治理。"
+        },
+        "user_facing_summary": format!("资料 {}，任务引用 {}", document_count, array_len(snapshot, "tasks")),
+        "developer_details_collapsed": true,
+    })
+}
+
+fn settings_payload(snapshot: &Value) -> Value {
+    let summary = snapshot.get("summary").unwrap_or(&Value::Null);
+    let page_inventory = snapshot
+        .get("page_read_model_inventory")
+        .unwrap_or(&Value::Null);
+    let diagnostic_summary = snapshot.get("diagnostic_summary").unwrap_or(&Value::Null);
+
+    json!({
+        "schema_version": "settings_page_read_model.v1",
+        "snapshot_status_label": "后端按页读模型",
+        "boundary_text": "设置页只整理入口和边界，不读取凭据、不触发执行。",
+        "general": {
+            "project_count": usize_field(summary, "project_count"),
+            "session_count": usize_field(summary, "session_count"),
+            "skill_count": usize_field(summary, "skill_count"),
+            "workflow_count": 0,
+        },
+        "developer_boundary": {
+            "adapter_count": array_len(snapshot, "agent_adapters"),
+            "provider_count": array_len(snapshot, "provider_availability"),
+            "diagnostic_count": array_field_len(diagnostic_summary, "degraded_states"),
+            "runtime_log_count": array_field_len(snapshot.get("runtime_log_store").unwrap_or(&Value::Null), "entries"),
+            "page_contract_count": array_field_len(page_inventory, "contracts"),
+            "credential_display_allowed": false,
+            "execution_from_settings_allowed": false,
+        },
+        "page_contract": {
+            "count": array_field_len(page_inventory, "contracts"),
+            "status": string_field(page_inventory, "status"),
+            "source_policy": string_field(page_inventory, "source_policy"),
+        },
+        "user_facing_summary": format!(
+            "{} 个项目，{} 个会话，{} 个页面合同",
+            usize_field(summary, "project_count"),
+            usize_field(summary, "session_count"),
+            array_field_len(page_inventory, "contracts")
+        ),
+        "developer_details_collapsed": true,
+    })
+}
+
+fn agent_project_options(snapshot: &Value) -> Vec<Value> {
+    let sessions = items(snapshot, "sessions");
+    let mut sessions_by_project = count_by_optional_string(sessions, "project_root");
+    let mut known_roots = BTreeSet::new();
+    let mut options: Vec<Value> = items(snapshot, "projects")
+        .into_iter()
+        .map(|project| {
+            let root = string_field(project, "project_root");
+            known_roots.insert(root.clone());
+            let session_count = sessions_by_project
+                .remove(&root)
+                .unwrap_or_else(|| usize_field(project, "thread_count"));
+            json!({
+                "project_root": root,
+                "label": string_field(project, "name"),
+                "session_count": session_count,
+                "active_session_count": usize_field(project, "active_thread_count"),
+            })
+        })
+        .collect();
+    for (root, count) in sessions_by_project {
+        if known_roots.contains(&root) {
+            continue;
+        }
+        options.push(json!({
+            "project_root": root,
+            "label": tail(&root),
+            "session_count": count,
+            "active_session_count": count,
+        }));
+    }
+    options
 }
 
 fn schema(
@@ -573,6 +960,77 @@ fn uncovered_snapshot_fields(coverage: &[PageSnapshotFieldCoverage]) -> Vec<Stri
         .collect()
 }
 
+fn items<'a>(value: &'a Value, key: &str) -> Vec<&'a Value> {
+    items_from_value(value, key)
+}
+
+fn items_opt<'a>(value: Option<&'a Value>, key: &str) -> Vec<&'a Value> {
+    value
+        .map(|value| items_from_value(value, key))
+        .unwrap_or_default()
+}
+
+fn items_from_value<'a>(value: &'a Value, key: &str) -> Vec<&'a Value> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|items| items.iter().collect())
+        .unwrap_or_default()
+}
+
+fn array_len(value: &Value, key: &str) -> usize {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0)
+}
+
+fn array_field_len(value: &Value, key: &str) -> usize {
+    array_len(value, key)
+}
+
+fn string_field(value: &Value, key: &str) -> String {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn bool_field(value: &Value, key: &str) -> bool {
+    value.get(key).and_then(Value::as_bool).unwrap_or(false)
+}
+
+fn usize_field(value: &Value, key: &str) -> usize {
+    value
+        .get(key)
+        .and_then(Value::as_u64)
+        .map(|value| value as usize)
+        .unwrap_or(0)
+}
+
+fn count_by_optional_string(items: Vec<&Value>, key: &str) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for item in items {
+        let Some(value) = item.get(key).and_then(Value::as_str) else {
+            continue;
+        };
+        if value.is_empty() {
+            continue;
+        }
+        *counts.entry(value.to_string()).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn tail(path: &str) -> String {
+    path.rsplit('/')
+        .find(|part| !part.is_empty())
+        .unwrap_or(path)
+        .to_string()
+}
+
 fn strings(items: &[&str]) -> Vec<String> {
     items.iter().map(|item| item.to_string()).collect()
 }
@@ -733,5 +1191,145 @@ mod tests {
             coverage.coverage_status == "covered_by_page_schema"
                 && !coverage.covered_by_pages.is_empty()
         }));
+    }
+
+    #[test]
+    fn page_read_model_query_with_snapshot_returns_payload_for_batch_one_pages() {
+        let snapshot = fixture_snapshot_value();
+        let workflow_state = fixture_workflow_state_value();
+
+        for page_id in [
+            "projects",
+            "agents",
+            "running_workflows",
+            "memory",
+            "knowledge",
+            "settings",
+        ] {
+            let output = query_page_read_model_with_snapshot_value(
+                &PageReadModelQueryInput {
+                    page_id: page_id.to_string(),
+                },
+                "2026-06-13T00:00:00Z",
+                &snapshot,
+                Some(&workflow_state),
+            )
+            .expect("batch-one page should resolve");
+
+            assert_eq!(output.status, "page_data_ready");
+            assert!(output.source_boundary.returns_business_data);
+            assert!(!output.source_boundary.writes_stores);
+            assert!(!output.source_boundary.tauri_command_migrates_page);
+            let payload = output.page_payload.expect("payload should exist");
+            assert_eq!(payload.page_id, page_id);
+            assert_eq!(payload.generated_from, "workbench_page_query");
+            assert!(payload.data.is_object());
+            assert!(output
+                .warnings
+                .contains(&"frontend_page_consumption_not_migrated".to_string()));
+        }
+    }
+
+    #[test]
+    fn page_read_model_query_with_snapshot_keeps_non_batch_pages_contract_only() {
+        let snapshot = fixture_snapshot_value();
+        let output = query_page_read_model_with_snapshot_value(
+            &PageReadModelQueryInput {
+                page_id: "home".to_string(),
+            },
+            "2026-06-13T00:00:00Z",
+            &snapshot,
+            None,
+        )
+        .expect("home contract should still resolve");
+
+        assert_eq!(output.status, "selector_contract_only");
+        assert!(!output.source_boundary.returns_business_data);
+        assert!(output.page_payload.is_none());
+        assert!(output.target_schema.is_none());
+    }
+
+    fn fixture_snapshot_value() -> Value {
+        serde_json::json!({
+            "summary": {
+                "generated_at": "2026-06-13T00:00:00Z",
+                "project_count": 1,
+                "session_count": 2,
+                "skill_count": 1,
+                "plugin_count": 1,
+                "task_count": 1,
+                "warning_count": 0
+            },
+            "projects": [{
+                "project_root": "/tmp/mario-test",
+                "name": "mario test",
+                "active_hint": true,
+                "thread_count": 2,
+                "active_thread_count": 1,
+                "archived_thread_count": 1,
+                "latest_updated_at_ms": 100,
+                "authority_files": [{"path": "AUTHORITY.md"}],
+                "handoff_files": [{"path": "handoff.md"}],
+                "evidence_files": [{"path": "evidence.md"}],
+                "context_warnings": [],
+                "warnings": []
+            }],
+            "sessions": [
+                {"thread_id": "s1", "project_root": "/tmp/mario-test", "archived": false, "rollout_exists": true},
+                {"thread_id": "s2", "project_root": "/tmp/mario-test", "archived": true, "rollout_exists": false}
+            ],
+            "skills": [{"skill_id": "skill-1"}],
+            "plugins": [{"plugin_name": "plugin-1"}],
+            "tasks": [{"status": "done", "title": "fixture task"}],
+            "agent_adapters": [
+                {"adapter_id": "codex-local", "status": "available"},
+                {"adapter_id": "claude-code-planned", "status": "planned"}
+            ],
+            "session_operations": [{"operation_id": "resume"}],
+            "provider_availability": [{"provider_id": "claude"}],
+            "session_continuation_previews": [{"preview_id": "preview-1"}],
+            "session_continuation_store": {"continuations": [], "attempts": [], "audit_events": []},
+            "runtime_session_attention": [{
+                "attention_id": "attn-1",
+                "status": "readback_unavailable",
+                "requires_user_action": true,
+                "blocks_continuation": false,
+                "readback_boundary": {"status": "readback_unavailable", "result_count": null}
+            }],
+            "session_run_status_summaries": [{"session_id": "s1"}],
+            "runtime_log_store": {"entries": [{"entry_id": "runtime-1"}], "summaries": []},
+            "worker_protocol": {"work_threads": [{"thread_id": "worker-1"}]},
+            "real_execution_product_commands": {
+                "command_count": 1,
+                "pending_decision_count": 1,
+                "blocked_attempt_count": 0,
+                "running_attempt_count": 0
+            },
+            "project_workflow_automation": {
+                "run_unit_count": 1,
+                "waiting_user_count": 1,
+                "blocked_count": 0,
+                "readback_unknown_count": 1
+            },
+            "page_read_model_inventory": {
+                "status": "contract_only",
+                "source_policy": "fixture",
+                "contracts": [{"page_id": "projects"}]
+            },
+            "diagnostic_summary": {"degraded_states": [{"state_id": "diag-1"}]},
+            "diagnostics": {"notes": []}
+        })
+    }
+
+    fn fixture_workflow_state_value() -> Value {
+        serde_json::json!({
+            "project_workflows": [{
+                "project_root": "/tmp/mario-test",
+                "workflow_id": "wf-1",
+                "state": "running",
+                "task_drafts": [{"work_item_id": "task-1", "state": "waiting_for_permission"}],
+                "recent_execution_attempts": []
+            }]
+        })
     }
 }

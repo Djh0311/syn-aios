@@ -92,6 +92,34 @@ assert(
   "R4-A2 should warn against claiming WorkbenchSnapshot deprecation",
 );
 
+const backendPayloadResult: PageReadModelQueryResult = {
+  ...result,
+  status: "page_data_ready",
+  source_boundary: {
+    ...result.source_boundary,
+    returns_business_data: true,
+    writes_stores: false,
+    tauri_command_migrates_page: false,
+  },
+  page_payload: {
+    page_id: "agents",
+    schema_version: "agents_page_read_model.v1",
+    generated_from: "workbench_page_query",
+    data: {
+      adapter_count: 2,
+      conversation_first: true,
+    },
+    warnings: ["backend_page_payload_read_only", "frontend_page_consumption_not_migrated"],
+  },
+  warnings: ["h2_2_backend_page_payload_ready", "frontend_page_consumption_not_migrated"],
+};
+
+assert(backendPayloadResult.status === "page_data_ready", "H2-2 backend query should expose page_data_ready");
+assert(backendPayloadResult.source_boundary.returns_business_data, "H2-2 backend query should return business data");
+assert(backendPayloadResult.page_payload?.generated_from === "workbench_page_query", "payload source should be explicit");
+assert(!backendPayloadResult.source_boundary.writes_stores, "H2-2 backend query must stay read-only");
+assert(!backendPayloadResult.source_boundary.tauri_command_migrates_page, "H2-2 must not claim page UI migration");
+
 console.log("r4 page read model query contract test passed");
 
 function assert(condition: unknown, message: string): asserts condition {
