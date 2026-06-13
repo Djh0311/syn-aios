@@ -1,3 +1,4 @@
+use crate::utils::hash::sha256_hex;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -3239,12 +3240,6 @@ fn automation_id_for(workflow_id: &str, user_goal: &str) -> String {
         stable_id(workflow_id),
         stable_id(user_goal)
     )
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
 }
 
 fn sensitive_denied_paths() -> Vec<String> {

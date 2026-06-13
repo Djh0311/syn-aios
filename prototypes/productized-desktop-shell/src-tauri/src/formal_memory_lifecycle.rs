@@ -1,3 +1,4 @@
+use crate::utils::hash::short_hash;
 use crate::{
     FormalMemoryLifecycleImpactSummary, FormalMemoryLifecycleInput,
     FormalMemoryLifecycleOperationKind, FormalMemoryLifecycleOutput, FormalMemoryLifecyclePreview,
@@ -7,7 +8,6 @@ use crate::{
     MemoryAuditRef, MemoryLifecycleStatus, MemoryRecord, MemoryScope, MemorySourceRef,
     MemoryVersion,
 };
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
@@ -1282,16 +1282,6 @@ fn status_name(status: MemoryLifecycleStatus) -> &'static str {
 
 fn normalize(value: &str) -> String {
     value.trim().replace('\\', "/").to_lowercase()
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-fn short_hash(value: &str) -> String {
-    sha256_hex(value).chars().take(16).collect()
 }
 
 #[cfg(test)]

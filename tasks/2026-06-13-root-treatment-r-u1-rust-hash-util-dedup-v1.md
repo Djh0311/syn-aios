@@ -2,11 +2,13 @@
 
 日期：2026-06-13
 
-状态：待执行。
+状态：已完成。
 
 性质：R-U 后端 util 去重第 1 包。本包只把 Rust 后端重复的 `sha256_hex` / `short_hash` 私有 helper 收敛到 `src-tauri/src/utils/hash.rs`，并将调用点改为公共 helper；严格无行为变化。
 
 Planning baseline：`c8b3a1e`。
+
+Task package commit：`5a295e0`。
 
 ## 0. 主管线理解
 
@@ -124,9 +126,11 @@ Planning baseline：`c8b3a1e`。
 - `rg -n "short_hash12|short_hash\\(" prototypes/productized-desktop-shell/src-tauri/src`
 - `git diff -- prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_schema.rs prototypes/productized-desktop-shell/src-tauri/src/workflow_state_store.rs prototypes/productized-desktop-shell/src-tauri/src/workflow_state_json_helpers.rs`
 
-## 7. 复核要求
+## 7. 复核结果
 
-独立复核线需确认：
+独立复核线 `Wegener`（agent `019ec175-e945-7401-b634-7673af5ef255`）已于 2026-06-13 回交 `STATUS: CLEAR`，P0/P1/P2 均无；记录见 `evidence/2026-06-13-root-treatment-r-u1-rust-hash-util-dedup-v1-review-wegener-v1.md`。
+
+复核确认：
 
 - 23 个 `sha256_hex` 重复定义是否归零或只剩公共 helper。
 - 14 个 `short_hash` 重复定义是否归零或只剩公共 helper。

@@ -1,3 +1,4 @@
+use crate::utils::hash::{sha256_hex, short_hash};
 use crate::{
     codex_local_runner, real_execution_command, runtime_log_store,
     CleanupSessionContinuationStaleAttemptInput, CleanupSessionContinuationStaleAttemptOutput,
@@ -2918,16 +2919,6 @@ fn path_within_scope(path: &str, root: &str) -> bool {
 
 fn normalize(value: &str) -> String {
     value.trim().replace('\\', "/").to_lowercase()
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-fn short_hash(value: &str) -> String {
-    sha256_hex(value).chars().take(16).collect()
 }
 
 struct StoreLock {

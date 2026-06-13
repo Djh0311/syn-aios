@@ -1,3 +1,4 @@
+use crate::utils::hash::short_hash;
 use crate::{
     MemoryEntity, MemoryEntityAlias, MemoryEntityAliasDecisionKind, MemoryEntityCandidate,
     MemoryEntityKind, MemoryEntityMergeCandidate, MemoryEntityMergeDecisionKind,
@@ -9,7 +10,6 @@ use crate::{
     RecordMemoryEntityMergeDecisionOutput, RecordMemoryRelationCandidateDecisionInput,
     RecordMemoryRelationCandidateDecisionOutput,
 };
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -1250,14 +1250,4 @@ fn source_kind_name(kind: MemoryRelationSourceKind) -> &'static str {
         MemoryRelationSourceKind::LlmInferred => "llm_inferred",
         MemoryRelationSourceKind::SimilarityHit => "similarity_hit",
     }
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-fn short_hash(value: &str) -> String {
-    sha256_hex(value).chars().take(16).collect()
 }

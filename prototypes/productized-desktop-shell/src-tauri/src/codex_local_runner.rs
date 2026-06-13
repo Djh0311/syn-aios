@@ -1,9 +1,9 @@
+use crate::utils::hash::{sha256_hex, short_hash};
 use crate::{
     CodexLocalActiveAttempt, CodexLocalAuditRef, CodexLocalCommandPlan, CodexLocalExecutionAttempt,
     CodexLocalExecutionGuard, CodexLocalExecutionRequest, CodexLocalFailureReason,
     CodexLocalReadbackResult, CodexLocalRuntimeLogRef,
 };
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Write;
 use std::path::{Component, Path};
@@ -1446,16 +1446,6 @@ fn contains_sensitive_fragment(value: &str) -> bool {
 
 fn normalize(value: &str) -> String {
     value.trim().replace('\\', "/").to_lowercase()
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-fn short_hash(value: &str) -> String {
-    sha256_hex(value).chars().take(16).collect()
 }
 
 #[cfg(test)]

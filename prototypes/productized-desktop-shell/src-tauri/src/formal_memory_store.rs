@@ -1,9 +1,9 @@
+use crate::utils::hash::{sha256_hex, short_hash};
 use crate::{
     CreateFormalMemoryRecordInput, CreateFormalMemoryRecordOutput, FormalMemoryStoreSummary,
     FormalMemoryStoreV1, MemoryAuditEvent, MemoryAuditRef, MemoryLifecycleStatus, MemoryRecord,
     MemoryVersion,
 };
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -382,16 +382,6 @@ fn memory_status_name(status: MemoryLifecycleStatus) -> &'static str {
 
 fn normalize(value: &str) -> String {
     value.trim().replace('\\', "/").to_lowercase()
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-fn short_hash(value: &str) -> String {
-    sha256_hex(value).chars().take(16).collect()
 }
 
 pub(crate) struct StoreLock {

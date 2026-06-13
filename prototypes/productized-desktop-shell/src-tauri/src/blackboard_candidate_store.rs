@@ -1,10 +1,10 @@
+use crate::utils::hash::{sha256_hex, short_hash};
 use crate::{
     BlackboardCandidateAuditEvent, BlackboardCandidateDecision, BlackboardCandidateRecord,
     BlackboardCandidateSourceRef, BlackboardCandidateState, BlackboardCandidateStoreScope,
     BlackboardCandidateStoreV1, RecordBlackboardCandidateDecisionInput,
     RecordBlackboardCandidateDecisionOutput,
 };
-use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
@@ -487,16 +487,6 @@ fn normalize_source_refs(source_refs: &[BlackboardCandidateSourceRef]) -> String
     refs.sort();
     refs.dedup();
     refs.join("\n")
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-fn short_hash(value: &str) -> String {
-    sha256_hex(value).chars().take(16).collect()
 }
 
 struct StoreLock {

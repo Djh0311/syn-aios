@@ -1,3 +1,4 @@
+use crate::utils::hash::short_hash;
 use crate::{
     FormalMemoryStoreV1, MemoryCandidateStoreV1, MemoryEntityRelationStoreV1, MemoryLintStoreV1,
     MemoryRecord, MemoryRelation, MemoryRelationSourceKind, MemoryRelationStatus,
@@ -5,7 +6,6 @@ use crate::{
     TaskMemoryPacketBuildOutput, TaskMemoryPacketExcludedItem, TaskMemoryPacketExclusionReason,
     TaskMemoryPacketItem, TaskMemoryPacketPreview, TaskMemoryPacketReviewMaterial,
 };
-use sha2::{Digest, Sha256};
 use std::path::Path;
 
 pub(crate) fn build_preview(
@@ -515,14 +515,4 @@ fn alias_key(value: &str) -> String {
         .replace("模型", "model");
     normalized.retain(|character| character.is_alphanumeric() || !character.is_ascii());
     normalized
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-fn short_hash(value: &str) -> String {
-    sha256_hex(value).chars().take(16).collect()
 }

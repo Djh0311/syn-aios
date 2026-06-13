@@ -1,6 +1,6 @@
+use crate::utils::hash::sha256_hex_bytes as sha256_hex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
@@ -1077,12 +1077,6 @@ fn canonical_json(value: &Value) -> String {
             format!("{{{}}}", fields.join(","))
         }
     }
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
 }
 
 fn sorted_fixture_entries(root: &Path) -> Result<Vec<fs::DirEntry>, String> {

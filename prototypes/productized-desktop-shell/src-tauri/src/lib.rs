@@ -37,6 +37,7 @@ mod runtime_session_attention;
 mod session_continuation_store;
 mod task_memory_injection;
 mod task_memory_packet_builder;
+mod utils;
 mod workbench_sqlite_apply;
 mod workbench_sqlite_dual_write;
 mod workbench_sqlite_exporter;
@@ -54,7 +55,6 @@ mod workflow_audit;
 mod workflow_read_model;
 mod workflow_state_store;
 pub use mcp::run_mcp_server_cli;
-
 #[derive(Clone)]
 struct AppState {
     index_path: PathBuf,

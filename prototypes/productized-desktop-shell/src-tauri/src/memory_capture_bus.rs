@@ -1,8 +1,8 @@
+use crate::utils::hash::{sha256_hex, short_hash12 as short_hash};
 use crate::{
     CaptureMemoryEventInput, CaptureMemoryEventOutput, CreateMemoryCandidateFromObservationInput,
     CreateObservationInput, MemoryCaptureEventRecord, MemoryCaptureStoreV1, ObservationSourceRef,
 };
-use sha2::{Digest, Sha256};
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 
@@ -542,16 +542,6 @@ fn write_store_atomic(
             sidecar.display()
         )
     })
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-fn short_hash(value: &str) -> String {
-    sha256_hex(value).chars().take(12).collect()
 }
 
 fn normalize(value: &str) -> String {

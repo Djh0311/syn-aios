@@ -1,10 +1,10 @@
+use crate::utils::hash::sha256_hex;
 use crate::{
     TaskMemoryPacketBuildOutput, TaskMemoryPacketExcludedItem, TaskMemoryPacketExclusionReason,
     TaskMemoryPacketItem, TaskPackageMemoryInjectionSummary, TaskPackageMemoryPacketSnapshot,
     TaskPackageMemoryPacketStoreRevisions,
 };
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -439,10 +439,4 @@ fn dedupe(values: Vec<String>) -> Vec<String> {
         }
     }
     output
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
 }

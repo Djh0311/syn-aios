@@ -1,3 +1,4 @@
+use crate::utils::hash::{sha256_hex, short_hash12 as short_hash};
 use crate::{
     codex_local_runner, h5_project_dispatch_bridge, runtime_log_store, session_continuation_store,
     CodexControlCommandInput, ConfirmControlledSessionContinuationInput,
@@ -2929,16 +2930,6 @@ fn pcr9a_product_command_sandbox(request: &RealExecutionProductCommandRequest) -
 fn same_string_set(left: &[String], right: &[String]) -> bool {
     left.iter().map(String::as_str).collect::<BTreeSet<_>>()
         == right.iter().map(String::as_str).collect::<BTreeSet<_>>()
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-fn short_hash(value: &str) -> String {
-    sha256_hex(value).chars().take(12).collect()
 }
 
 fn pcr4_phase_a_blocked_reasons(

@@ -1,3 +1,4 @@
+use crate::utils::hash::sha256_hex_bytes as sha256_hex;
 use crate::workbench_sqlite_apply::{
     apply_fixture_dir_to_temp_db, table_count, SqliteApplyFailurePoint,
 };
@@ -978,13 +979,6 @@ fn report_hash<T: Serialize>(value: &T) -> Result<String, String> {
 
 fn path_hash(path: &Path) -> String {
     canonical_json_hash(&json!({ "path": path.display().to_string() }))
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
 }
 
 fn manifest_r3_a9_fixture_root() -> PathBuf {

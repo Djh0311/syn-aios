@@ -1,10 +1,10 @@
+use crate::utils::hash::sha256_hex_bytes as sha256_hex;
 use crate::workbench_sqlite_apply::{apply_fixture_dir_to_temp_db, table_count};
 use crate::workbench_sqlite_exporter::{export_temp_db_to_json_dry_run, SqliteProjectedFile};
 use crate::workbench_sqlite_importer::canonical_json_hash;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -974,16 +974,6 @@ fn dir_hash(root: &Path) -> Result<String, String> {
 
 fn path_hash(path: &Path) -> String {
     canonical_json_hash(&json!({ "path_ref": path.display().to_string() }))
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    let digest = hasher.finalize();
-    digest
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>()
 }
 
 fn production_redaction_policy() -> Vec<String> {

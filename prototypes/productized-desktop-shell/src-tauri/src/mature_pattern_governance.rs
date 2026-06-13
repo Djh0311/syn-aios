@@ -1,3 +1,4 @@
+use crate::utils::hash::short_hash;
 use crate::{
     CreateFormalMemoryRecordInput, CreateFormalMemoryRecordOutput, FormalMemoryStoreV1,
     MaturePatternAuditEvent, MaturePatternCandidate, MaturePatternCandidateStatus,
@@ -8,7 +9,6 @@ use crate::{
     MemorySystemAcceptanceSummary, ObservationStoreV1, PreviewMaturePatternsInput,
     RecordMaturePatternDecisionInput, RecordMaturePatternDecisionOutput,
 };
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -983,14 +983,4 @@ fn decision_name(decision: MaturePatternDecisionKind) -> &'static str {
         MaturePatternDecisionKind::Quarantine => "quarantine",
         MaturePatternDecisionKind::RequestChanges => "request_changes",
     }
-}
-
-fn short_hash(value: &str) -> String {
-    sha256_hex(value).chars().take(16).collect()
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
 }

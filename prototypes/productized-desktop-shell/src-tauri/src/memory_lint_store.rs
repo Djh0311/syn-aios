@@ -1,9 +1,9 @@
+use crate::utils::hash::short_hash;
 use crate::{
     FormalMemoryStoreV1, MemoryCandidateStoreV1, MemoryLintFindingSeverity,
     MemoryLintFindingStatus, MemoryLintRunInput, MemoryLintRunIntent, MemoryLintRunOutput,
     MemoryLintRunRecord, MemoryLintRunStatus, MemoryLintStoreSummary, MemoryLintStoreV1,
 };
-use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
@@ -417,16 +417,6 @@ fn is_maintenance_intent(intent: MemoryLintRunIntent) -> bool {
         intent,
         MemoryLintRunIntent::MaintenancePreview | MemoryLintRunIntent::MaintenanceRun
     )
-}
-
-fn sha256_hex(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-fn short_hash(value: &str) -> String {
-    sha256_hex(value).chars().take(16).collect()
 }
 
 struct StoreLock {

@@ -1,9 +1,9 @@
+use crate::utils::hash::sha256_hex_bytes as sha256_hex;
 use crate::workbench_sqlite_importer::{
     CANONICAL_RUNTIME_LOG, LEGACY_RUNTIME_LOG_ALIAS, OPTIONAL_SIDECARS, PRIMARY_WORKFLOW_STATE,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -574,12 +574,6 @@ fn rejected_path_report(
         .map_err(|error| format!("preflight_path_metadata_failed:{}:{error}", path.display()))?
         .len();
     Ok(rejected_file(path_ref, size_bytes, reason))
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
 }
 
 #[cfg(test)]

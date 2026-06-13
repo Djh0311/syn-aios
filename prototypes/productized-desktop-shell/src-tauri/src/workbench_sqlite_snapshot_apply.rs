@@ -1,3 +1,4 @@
+use crate::utils::hash::sha256_hex_bytes as sha256_hex;
 use crate::workbench_sqlite_apply::{apply_fixture_dir_to_temp_db, table_count};
 use crate::workbench_sqlite_exporter::{export_temp_db_to_json_dry_run, SqliteProjectedFile};
 use crate::workbench_sqlite_importer::{
@@ -906,13 +907,6 @@ fn sorted_entries(root: &Path) -> Result<Vec<fs::DirEntry>, String> {
         .map_err(|error| format!("read dir entry failed {}: {error}", root.display()))?;
     entries.sort_by_key(|entry| entry.file_name());
     Ok(entries)
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
 }
 
 fn manifest_r3_a8_fixture_root() -> PathBuf {
