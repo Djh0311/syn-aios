@@ -39,7 +39,7 @@ const RATCHET_WATERLINES = new Map([
   ['prototypes/productized-desktop-shell/tests/offline-permission-dialog.test.tsx', 3404],
   ['prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs', 8763],
   ['prototypes/productized-desktop-shell/src/styles.css', 8464],
-  ['prototypes/productized-desktop-shell/src/views/ProjectsView.tsx', 5897],
+  ['prototypes/productized-desktop-shell/src/views/ProjectsView.tsx', 4867],
   ['prototypes/productized-desktop-shell/src-tauri/src/types.rs', 5386],
   ['prototypes/productized-desktop-shell/src-tauri/src/session_continuation_store.rs', 5237],
   ['prototypes/productized-desktop-shell/src/lib/types.ts', 4998],

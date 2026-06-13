@@ -2,7 +2,7 @@
 
 日期：2026-06-13
 
-状态：待执行。
+状态：已完成。
 
 性质：R4 硬目标 / H3 View 按目标布局区块拆分的 ProjectsView 第 1 包。本包只拆项目壳与项目概览区块，目标是在 H3-4 / H3-5 已完成 AgentView 拆分后，开始降低 `ProjectsView.tsx` 棘轮水位；不做 UI 重做，不改产品行为，不进入画布 / 右侧治理面板拆分。
 
@@ -33,6 +33,7 @@ H3 设计稿 `docs/plans/2026-06-13-root-treatment-r4-h3-project-agent-view-layo
 - `ProjectsView.tsx` 从 5897 行下降到 5200 行以下，至少下降 500 行；若未低于 5200 行，不得收口为完成。
 - 新增 `src/views/projects/ProjectWorkspaceShell.tsx`，承接 `ProjectDetail`、项目头部、项目 tab、项目工具路由，以及空状态壳层。
 - 新增 `src/views/projects/ProjectOverviewPanels.tsx`，承接 `ProjectOverview`、`ProjectAgentMovedPanel`、`ProjectToolPlaceholder` 和只服务概览 / 壳层的纯展示 helper。
+- `ProjectWorkspaceShell.tsx` 同时承接旧 `task-packages` 路由下的 `ProjectWorkflowDraftPanel` 与任务草稿控制器。该路由属于项目壳内的历史 tab 分支，不属于 H3-2 中央画布，也不属于 H3-3 右侧治理 / 记忆 / 执行面板；迁入它是为了达成 H3-1 水位目标，同时保持 UI / 行为不变。
 - `ProjectsView.tsx` 保留 `ProjectsView` 顶层状态：selected project root、selected tool、project sessions 派生、空项目 / 项目列表 / 项目详情路由装配。
 - 既有 `ProjectGallery`、`ProjectHandoffEvidencePanel`、`ProjectResourcesPanel` 继续复用，不迁回 `ProjectsView.tsx`。
 - 视觉、DOM class、项目 tab 数量、默认 tab、按钮文案、交互顺序和测试断言保持不变。
@@ -57,7 +58,7 @@ H3 设计稿 `docs/plans/2026-06-13-root-treatment-r4-h3-project-agent-view-layo
 - `WorkflowCanvas`
 - 项目画布、右侧详情、治理、记忆、执行和 label helper 等大量后续 H3-2 / H3-3 内容
 
-本包只处理 `ProjectDetail` / `ProjectOverview` / `ProjectAgentMovedPanel` / `ProjectToolPlaceholder` 及其最小依赖，后续画布和右侧面板留给 H3-2 / H3-3。
+本包只处理 `ProjectDetail` / `ProjectOverview` / `ProjectAgentMovedPanel` / `ProjectToolPlaceholder` / 旧 `task-packages` 草稿面板及其最小依赖，后续中央画布和右侧面板留给 H3-2 / H3-3。
 
 ## 3. 形状影响
 
@@ -109,9 +110,10 @@ H3 设计稿 `docs/plans/2026-06-13-root-treatment-r4-h3-project-agent-view-layo
 1. 新建 `ProjectOverviewPanels.tsx`，迁出 `ProjectOverview`、`ProjectAgentMovedPanel`、`ProjectToolPlaceholder`。
 2. 将概览区需要的最小纯展示 helper 一并迁出；若 helper 被 H3-2 / H3-3 大量依赖，暂留 `ProjectsView.tsx`，避免反向耦合。
 3. 新建 `ProjectWorkspaceShell.tsx`，迁出 `ProjectDetail`，保持项目 header、tab nav 和 selected tool 路由顺序不变。
-4. `ProjectWorkspaceShell.tsx` 继续调用现有 `WorkflowCanvas`、`ProjectWorkflowDraftPanel`、`ProjectHandoffEvidencePanel`、`ProjectResourcesPanel`，但这些重型组件定义仍保留在 `ProjectsView.tsx`，等待 H3-2 / H3-3。
-5. `ProjectsView.tsx` 改为 import `ProjectWorkspaceShell`，并保留顶层 selected project / selected tool / project sessions 装配。
-6. 更新 shape gate `ProjectsView.tsx` waterline 到本包完成后的新低水位。
+4. `ProjectWorkspaceShell.tsx` 通过 `workflowPanel` slot 继续渲染现有 `WorkflowCanvas`，但 `WorkflowCanvas` 定义仍保留在 `ProjectsView.tsx`，等待 H3-2。
+5. 将旧 `task-packages` 路由下的 `ProjectWorkflowDraftPanel` 与任务草稿控制器迁入 `ProjectWorkspaceShell.tsx`；保持 action payload、权限边界文案、测试 import 兼容 re-export 不变。
+6. `ProjectsView.tsx` 改为 import `ProjectWorkspaceShell`，并保留顶层 selected project / selected tool / project sessions 装配。
+7. 更新 shape gate `ProjectsView.tsx` waterline 到本包完成后的新低水位。
 
 ## 7. 兼容要求
 
@@ -151,6 +153,7 @@ H3 设计稿 `docs/plans/2026-06-13-root-treatment-r4-h3-project-agent-view-layo
 - 是否只是迁移项目壳 / 项目概览代码，不改 UI / CSS / 文案 / 交互。
 - 项目 tab 数量和默认 tab 是否保持不变。
 - H3-2 / H3-3 的画布、右侧治理、记忆和执行面板是否未被提前迁移或改语义。
+- 旧 `task-packages` 草稿面板是否只是迁入壳层，action payload 和权限边界是否保持不变。
 - 是否未修改 `AgentView.tsx`、Rust / Tauri / DB / sidecar / workflow state schema。
 - 是否未接触 `.codex`、未执行真实 Codex、未启动 Tauri / Browser / Chrome / Vite dev。
 
@@ -173,3 +176,43 @@ H3 设计稿 `docs/plans/2026-06-13-root-treatment-r4-h3-project-agent-view-layo
 实现完成后必须交给独立复核线复核；主管线不得自审替代复核线结论。
 
 H3-1 完成并 checkpoint 后，下一步才允许进入 H3-2 项目中央工作流画布拆分；不得顺手进入 H3-2 / H3-3 或 R-U。
+
+## 12. 实现记录
+
+实现日期：2026-06-13。
+
+实现结果：
+
+- `ProjectsView.tsx` 从 5897 行降到 4867 行，低于本包目标 5200 行。
+- 新增 `src/views/projects/ProjectOverviewPanels.tsx`，承接 `ProjectOverview`、`ProjectAgentMovedPanel`、`ProjectToolPlaceholder` 和概览区纯展示 helper。
+- 新增 `src/views/projects/ProjectWorkspaceShell.tsx`，承接项目详情壳、项目 header、tab nav、项目工具路由、旧 `task-packages` 草稿面板和任务草稿控制器。
+- `ProjectsView.tsx` 保留 `ProjectsView` 顶层状态、`ProjectDetail` 兼容包装、`WorkflowCanvas` 及后续 H3-2 / H3-3 的画布 / 右侧面板实现。
+- `ProjectDetail` 仍从 `ProjectsView.tsx` 导出；任务草稿相关测试 import 通过 `ProjectsView.tsx` re-export 保持兼容。
+- `workbench-shape-gate.js` 的 `ProjectsView.tsx` waterline 更新为 4867。
+
+验证已通过：
+
+- `npm run typecheck`
+- `npm run test:offline-interaction`，14 passed，含 R4 page read model settings / query contract / runtime / selectors 测试
+- `npm run build`，通过，仅既有 Vite chunk size warning
+- `node scripts/harness/workbench-shape-gate.js --mode check`，pass，0 errors，0 warnings
+- `git diff --check`
+
+边界确认：
+
+- 未修改 `styles.css`。
+- 未修改 `AgentView.tsx`。
+- 未修改 Rust / Tauri / DB / sidecar schema / workflow state schema。
+- 未执行真实 `codex exec` / `codex exec resume`。
+- 未发送 prompt。
+- 未读写 `/Users/yoyi/.codex`。
+- 未启动 Tauri / Browser / Chrome / Vite dev / screenshot。
+- 未进入 R-U / R3 Level B，未解冻 backlog。
+
+复核结论：
+
+- 独立复核线 `019ebf65-d9c0-7410-8cad-820fcf57cdab` 已回交 `STATUS: CLEAR`。
+- P0 / P1 / P2：无。
+- Review：`evidence/2026-06-13-root-treatment-r4-h3-1-project-shell-and-overview-panel-split-v1-review-v1.md`
+- Evidence：`evidence/2026-06-13-root-treatment-r4-h3-1-project-shell-and-overview-panel-split-v1.md`
+- Handoff：`handoffs/2026-06-13-root-treatment-r4-h3-1-project-shell-and-overview-panel-split-v1-result.md`
