@@ -3,7 +3,7 @@
 > 用得上的脚本索引。**动用或改造任何 `scripts/harness/` 脚本前先查这里**，避免重造已存在但没接线的工具。
 
 - 生成日期：2026-06-14（HG-1）｜数据源：[只读审计附录命中表](harness-script-audit-2026-06-14.md)（另见[上游源码包审计](harness-source-package-audit-2026-06-14.md)）
-- 范围：66 个顶层 `.js` + 13 个 `lib/*.js` = **79** 条。索引随包演进：HG-2 已把接通的 5 组（14 个脚本）从`未接`翻成`已接`、把 `capability-map` 翻成`退役`（文件留着）。
+- 范围：67 个顶层 `.js` + 13 个 `lib/*.js` = **80** 条。索引随包演进：HG-2 已把接通的 5 组（14 个脚本）从`未接`翻成`已接`、把 `capability-map` 翻成`退役`（文件留着）；HG-3 自测脚本 `workbench-shape-gate.dedup.selftest.js` 也登记在内。
 
 ## 一句话判据
 
@@ -20,11 +20,11 @@
 | `已接` | 已接进 AGENTS.md 流程（手动调用点，hooks 仍关） | 用 |
 | `退役` / `退役候选` | 被取代/重复 | 别用；文件留着不删 |
 
-统计（HG-2 后）：`承重` 2 ｜ `休眠` 11 ｜ `休眠·待定` 9 ｜ `未接` 42（含元工具）｜ `已接` 14（HG-2 五组）｜ `退役` 1。
+统计（HG-2 后）：`承重` 2 ｜ `配套自测` 1（HG-3 selftest）｜ `休眠` 11 ｜ `休眠·待定` 9 ｜ `未接` 42（含元工具）｜ `已接` 14（HG-2 五组）｜ `退役` 1。合计 80。
 
 > 「怎么调」列统一省略前缀 `node scripts/harness/`；`--target .` 为常用默认。`lib/` 为内部库，被 `require`，不单独 CLI 调。37 个命令另可经 `node scripts/harness/harness.js <子命令>` 路由（`harness.js --help` 看全表）。
 
-## 顶层脚本（66）
+## 顶层脚本（67）
 
 | 脚本 | 干啥（一行） | 状态 | 怎么调 |
 | --- | --- | --- | --- |
@@ -93,6 +93,7 @@
 | verification-plan.js | 规划验证命令 | 未接 | `harness.js verify plan` |
 | verification-runner.js | 跑单条验证命令 | 未接 | `harness.js verify run` |
 | verification-suite.js | 跑验证套件 | 未接 | `harness.js verify suite` |
+| workbench-shape-gate.dedup.selftest.js | HG-3 去重门自测（临时夹具验证 dup→warn、白名单→不报） | shape-gate 配套自测 | `workbench-shape-gate.dedup.selftest.js` |
 | workbench-shape-gate.js | 产品形状/ratchet 门（HG-3 加去重 warning check） | **承重**（审计 371 次） | `workbench-shape-gate.js --mode baseline\|check` |
 
 ## 内部库 `lib/`（13，require-only）
