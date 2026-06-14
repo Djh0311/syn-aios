@@ -30,6 +30,7 @@ Project-specific rules:
 - Do not read `auth.json`, `.env`, keys, tokens, authorization files, or private session content unless the user explicitly authorizes that exact read.
 - Harness checks may advise, but task direction follows `CURRENT.md`, `tasks/README.md`, and the latest user instruction.
 - For backend or workflow work, report the product-visible state: what can be operated now, what is only a code path, what is only a probe, and what remains unverified.
+- 动用或改造任何 `scripts/harness/` 治理脚本前，先查 `docs/harness-catalog.md`（脚本索引：每个脚本干啥/哪桶/接没接/怎么调），避免重造已存在但没接线的工具。(HG-1, 2026-06-14)
 - Any document that asks the user to ratify something must open with a plain-language ratification summary (拍板摘要): what is being approved, what it costs, what happens if not approved. (User rule, 2026-06-12)
 - Every institution/rule document must carry a one-sentence decision criterion (一句话判据) that turns its core judgment into a sequential check the user can apply without holding the whole structure in mind. (User rule, 2026-06-12)
 
