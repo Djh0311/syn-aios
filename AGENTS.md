@@ -49,6 +49,16 @@ This source package stores runtime document templates under `templates/docs/`. I
 
 When working on this standard rule source package itself, do not create or update runtime state under `docs/**`. Source-package development plans, design notes, and migration plans belong under repo-root `plans/**`. The `templates/docs/**` tree is only the template source for installed projects.
 
+### Harness 脚本调用点（HG-2 接线，2026-06-14）
+
+以下是**手动调用点引用**（hooks/CI 仍关闭、不自动执行；脚本全表与状态见 `docs/harness-catalog.md`）。每组脚本均已实跑通过（默认只读 / dry-run，不写文件）：
+
+- 受保护文件守卫：完成前、或改动受保护文件（`CURRENT.md` / `STAGE_PLAN.md` / `tasks/**` / `evidence/**` / `handoffs/**` / `decisions/**` 等）前，跑 `node scripts/harness/guard-state-files.js --target .`（配套 `status-snapshot.js`、`stale-control-check.js` 看状态与控制文件新鲜度）。
+- 错误账本（learning-from-mistakes）：调试失败 / 重复错误 / 被纠正时，先 `node scripts/harness/mistake-check.js --target .` 查相关历史失败、`mistake-query.js` 检索；记录用 `node scripts/harness/mistake-new.js --target .`（默认 dry-run，`--write` 落库）。
+- 证据新鲜度（收口前）：完成前跑 `node scripts/harness/evidence-freshness.js --target .` 与 `node scripts/harness/evidence-check.js --target .` 查证据是否过期 / 齐全（`evidence-new.js` / `evidence-index.js` / `evidence-query.js` 为新建 / 索引 / 查询，默认 dry-run）。
+- 配置校验：改 `harness.config.json` 后，跑 `node scripts/harness/config-check.js --target .`（policy 细则 `config-policy.js`）。
+- 能力普查（pre-work）：开工前跑 `node scripts/harness/capability-scan.js --target .` 普查工具 / 命令能力；它已取代 `capability-map.js`（后者在 catalog 标退役，文件保留不删）。
+
 ---
 
 ## Scope And Confirmation Rules
