@@ -66,6 +66,40 @@ const ALLOWED_SIDECAR_JSON = new Set([
   'session-continuations.v1.json'
 ]);
 
+// U-Gate dedup check (HG-3, additive; warning-only, never blocks).
+// These helpers were converged into src-tauri/src/utils/. A redefinition OUTSIDE utils/
+// is a duplicate and gets a WARNING. DEDUP_DEFER_WHITELIST holds `${helper}|${repoRelPath}`
+// entries R-U intentionally deferred. Current deferred set (audit 2026-06-14): the 12
+// per-store SIDECAR_NAME + thin `sidecar_path` delegating wrappers that still call
+// utils::store_paths::sidecar_path. Other R-U-deferred items (divergent local `fn normalize`
+// in mature_pattern_governance/memory_capture_bus; test-only `fixture_dir` /
+// `manifest_*_fixture_root` clusters) are differently named and are not matched by the
+// exact-name scan, so they need no whitelist entry.
+const DEDUP_HELPERS = [
+  'sha256_hex',
+  'sha256_hex_bytes',
+  'short_hash',
+  'short_hash12',
+  'sidecar_path',
+  'remove_file_if_exists',
+  'normalize_slash_lowercase'
+];
+const DEDUP_EXTENSIONS = new Set(['.rs', '.ts', '.tsx']);
+const DEDUP_DEFER_WHITELIST = new Set([
+  'sidecar_path|prototypes/productized-desktop-shell/src-tauri/src/blackboard_candidate_store.rs',
+  'sidecar_path|prototypes/productized-desktop-shell/src-tauri/src/formal_memory_store.rs',
+  'sidecar_path|prototypes/productized-desktop-shell/src-tauri/src/mature_pattern_store.rs',
+  'sidecar_path|prototypes/productized-desktop-shell/src-tauri/src/memory_candidate_store.rs',
+  'sidecar_path|prototypes/productized-desktop-shell/src-tauri/src/memory_capture_bus.rs',
+  'sidecar_path|prototypes/productized-desktop-shell/src-tauri/src/memory_entity_relation_store.rs',
+  'sidecar_path|prototypes/productized-desktop-shell/src-tauri/src/memory_lint_store.rs',
+  'sidecar_path|prototypes/productized-desktop-shell/src-tauri/src/observation_store.rs',
+  'sidecar_path|prototypes/productized-desktop-shell/src-tauri/src/plan_authorization_store.rs',
+  'sidecar_path|prototypes/productized-desktop-shell/src-tauri/src/project_consultation_proposal_store.rs',
+  'sidecar_path|prototypes/productized-desktop-shell/src-tauri/src/runtime_log_store.rs',
+  'sidecar_path|prototypes/productized-desktop-shell/src-tauri/src/session_continuation_store.rs'
+]);
+
 function parseArgs(argv) {
   const args = {
     target: process.cwd(),
@@ -257,6 +291,38 @@ function scanLines(root) {
   };
 }
 
+function scanHelperDuplicates(root) {
+  const scanRoots = [
+    path.join(root, PRODUCT_ROOT, 'src-tauri', 'src'),
+    path.join(root, PRODUCT_ROOT, 'src')
+  ];
+  const duplicates = [];
+  const deferred = [];
+  for (const scanRoot of scanRoots) {
+    for (const filePath of walkFiles(scanRoot)) {
+      const ext = path.extname(filePath);
+      if (!DEDUP_EXTENSIONS.has(ext)) continue;
+      const relative = rel(root, filePath);
+      if (relative.split('/').includes('utils')) continue; // canonical home; not a duplicate
+      const lines = readText(filePath).split('\n');
+      for (const helper of DEDUP_HELPERS) {
+        const patterns = ext === '.rs'
+          ? [new RegExp(`\\bfn\\s+${helper}\\s*[(<]`)]
+          : [new RegExp(`\\bfunction\\s+${helper}\\s*[(<]`), new RegExp(`\\bconst\\s+${helper}\\s*[:=]`)];
+        for (let i = 0; i < lines.length; i += 1) {
+          if (patterns.some((re) => re.test(lines[i]))) {
+            const hit = { helper, file: relative, line: i + 1 };
+            if (DEDUP_DEFER_WHITELIST.has(`${helper}|${relative}`)) deferred.push(hit);
+            else duplicates.push(hit);
+          }
+        }
+      }
+    }
+  }
+  duplicates.sort((a, b) => `${a.file}:${a.helper}`.localeCompare(`${b.file}:${b.helper}`));
+  return { duplicates, deferred };
+}
+
 function buildReport(args) {
   const report = {
     target: args.target,
@@ -285,6 +351,7 @@ function buildReport(args) {
   report.metrics.lines = scanLines(args.target);
   report.metrics.commands = scanCommands(args.target);
   report.metrics.sidecars = scanSidecars(args.target);
+  report.metrics.helper_duplicates = scanHelperDuplicates(args.target);
 
   const scriptPath = path.join(args.target, 'scripts/harness/workbench-shape-gate.js');
   if (fs.existsSync(scriptPath)) {
@@ -343,6 +410,10 @@ function buildReport(args) {
     });
   }
 
+  for (const hit of report.metrics.helper_duplicates.duplicates) {
+    addFinding(report, 'warn', 'converged_helper_redefined', 'A converged helper is redefined outside src-tauri/src/utils/; converge it into utils/ or add it to DEDUP_DEFER_WHITELIST with a reason. Warning only; does not block.', hit);
+  }
+
   const errors = report.findings.filter((finding) => finding.severity === 'error');
   const warnings = report.findings.filter((finding) => finding.severity === 'warn');
   report.summary = {
@@ -378,6 +449,7 @@ function printReport(report) {
   console.log(`- Sidecar JSON kinds: ${report.metrics.sidecars.detected_count} detected; ${report.metrics.sidecars.unknown.length} unknown`);
   console.log(`- Ratchet files: ${report.metrics.lines.ratchet_files.length}`);
   console.log(`- Gate script lines: ${report.metrics.gate_script_lines || 'unavailable'}`);
+  console.log(`- Converged-helper dups outside utils/: ${report.metrics.helper_duplicates.duplicates.length} (${report.metrics.helper_duplicates.deferred.length} deferred-whitelisted)`);
   console.log('');
   console.log('Ratchet waterlines:');
   for (const entry of report.metrics.lines.ratchet_files) {
