@@ -3,7 +3,7 @@
 > 用得上的脚本索引。**动用或改造任何 `scripts/harness/` 脚本前先查这里**，避免重造已存在但没接线的工具。
 
 - 生成日期：2026-06-14（HG-1）｜数据源：[只读审计附录命中表](harness-script-audit-2026-06-14.md)（另见[上游源码包审计](harness-source-package-audit-2026-06-14.md)）
-- 范围：67 个顶层 `.js` + 13 个 `lib/*.js` = **80** 条。索引随包演进：HG-2 已把接通的 5 组（14 个脚本）从`未接`翻成`已接`、把 `capability-map` 翻成`退役`（文件留着）；HG-3 自测脚本 `workbench-shape-gate.dedup.selftest.js` 也登记在内。
+- 范围：69 个顶层 `.js` + 13 个 `lib/*.js` = **82** 条。索引随包演进：HG-2 已把接通的 5 组（14 个脚本）从`未接`翻成`已接`、把 `capability-map` 翻成`退役`（文件留着）；HG-3 自测 `workbench-shape-gate.dedup.selftest.js` 与 C4 `checkpoint-audit.js` + `checkpoint-audit.selftest.js` 也登记在内。
 
 ## 一句话判据
 
@@ -20,17 +20,19 @@
 | `已接` | 已接进 AGENTS.md 流程（手动调用点，hooks 仍关） | 用 |
 | `退役` / `退役候选` | 被取代/重复 | 别用；文件留着不删 |
 
-统计（HG-2 后；agentmem 退役 2026-06-14）：`承重` 2 ｜ `配套自测` 1（HG-3 selftest）｜ `休眠` 11 ｜ `休眠·待定` 0 ｜ `未接` 42（含元工具）｜ `已接` 14（HG-2 五组）｜ `退役` 10（capability-map + agentmem 簇 9）。合计 80。
+统计（HG-2 后；agentmem 退役 2026-06-14）：`承重` 2 ｜ `配套自测` 2（HG-3 + C4 selftest）｜ `休眠` 11 ｜ `休眠·待定` 0 ｜ `未接` 42（含元工具）｜ `已接` 15（HG-2 五组 + C4 checkpoint-audit）｜ `退役` 10（capability-map + agentmem 簇 9）。合计 82。
 
 > 「怎么调」列统一省略前缀 `node scripts/harness/`；`--target .` 为常用默认。`lib/` 为内部库，被 `require`，不单独 CLI 调。37 个命令另可经 `node scripts/harness/harness.js <子命令>` 路由（`harness.js --help` 看全表）。
 
-## 顶层脚本（67）
+## 顶层脚本（69）
 
 | 脚本 | 干啥（一行） | 状态 | 怎么调 |
 | --- | --- | --- | --- |
 | browser-evidence-check.js | 校验 UI 完成是否带真实浏览器证据（route/interaction/console/network/截图） | 休眠 | `browser-evidence-check.js --target .` |
 | capability-map.js | 扫项目可用工具/命令能力，输出能力图 | **退役**·被 capability-scan 取代（HG-2 ⑩；文件留着不删） | `harness.js capabilities` |
 | capability-scan.js | 扫项目能力信号（preWork 用） | 已接·HG-2⑩ | `capability-scan.js --target .` |
+| checkpoint-audit.js | 拿 git 实物核完成报告：声称的 commit/复核 STATUS/写入边界/CURRENT.md 逐条对账，对不上标红、假报告 fail（只验机械事实，判断仍是人的活） | 已接·C4 | `checkpoint-audit.js --package <slug>` |
+| checkpoint-audit.selftest.js | C4 自测（临时 git 仓验证 好包→pass、假报告→fail） | 配套自测 | `checkpoint-audit.selftest.js` |
 | ci-gate.js | CI 内跑的聚合门 | 休眠（CI 关） | `ci-gate.js --target .` |
 | ci-init.js | 从模板初始化 CI 配置 | 休眠（CI 关） | `harness.js init ci` |
 | ci-validate.js | 校验 CI 配置 | 休眠（CI 关） | `ci-validate.js --target .` |
