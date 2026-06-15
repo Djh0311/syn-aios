@@ -36,6 +36,34 @@ pub(crate) fn export_temp_db_to_json_dry_run(
             db_path.display()
         ));
     }
+    export_db_to_json_dry_run(db_path, target_root_ref)
+}
+
+pub(crate) fn export_confirmed_db_to_json_dry_run(
+    db_path: &Path,
+    confirmed_db_path: &Path,
+    target_root_ref: &str,
+) -> Result<SqliteExportDryRunManifest, String> {
+    if db_path != confirmed_db_path {
+        return Err(format!(
+            "confirmed_export_db_path_mismatch: expected {} got {}",
+            confirmed_db_path.display(),
+            db_path.display()
+        ));
+    }
+    if !db_path.is_absolute() {
+        return Err(format!(
+            "confirmed_export_db_path_absolute_required:{}",
+            db_path.display()
+        ));
+    }
+    export_db_to_json_dry_run(db_path, target_root_ref)
+}
+
+fn export_db_to_json_dry_run(
+    db_path: &Path,
+    target_root_ref: &str,
+) -> Result<SqliteExportDryRunManifest, String> {
     let connection = Connection::open(db_path).map_err(|error| {
         format!(
             "open sqlite export db failed {}: {error}",

@@ -143,20 +143,43 @@ pub(crate) fn initialize_temp_workbench_sqlite_db(path: &Path) -> Result<(), Str
             path.display()
         ));
     }
+    initialize_workbench_sqlite_db(path, "temp")
+}
 
+pub(crate) fn initialize_confirmed_workbench_sqlite_db(
+    path: &Path,
+    confirmed_path: &Path,
+) -> Result<(), String> {
+    if path != confirmed_path {
+        return Err(format!(
+            "confirmed_db_path_mismatch: expected {} got {}",
+            confirmed_path.display(),
+            path.display()
+        ));
+    }
+    if !path.is_absolute() {
+        return Err(format!(
+            "confirmed_db_path_absolute_required:{}",
+            path.display()
+        ));
+    }
+    initialize_workbench_sqlite_db(path, "confirmed")
+}
+
+fn initialize_workbench_sqlite_db(path: &Path, path_kind: &str) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| format!("sqlite db path has no parent: {}", path.display()))?;
     fs::create_dir_all(parent).map_err(|error| {
         format!(
-            "create sqlite temp parent failed {}: {error}",
+            "create sqlite {path_kind} parent failed {}: {error}",
             parent.display()
         )
     })?;
 
     let connection = Connection::open(path).map_err(|error| {
         format!(
-            "open temp workbench sqlite failed {}: {error}",
+            "open {path_kind} workbench sqlite failed {}: {error}",
             path.display()
         )
     })?;

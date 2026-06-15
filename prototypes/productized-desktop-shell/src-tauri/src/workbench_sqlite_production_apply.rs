@@ -1,9 +1,13 @@
 use crate::utils::fs_ops::remove_file_if_exists;
 use crate::utils::hash::sha256_hex_bytes as sha256_hex;
 use crate::workbench_sqlite_apply::{
-    apply_fixture_dir_to_temp_db, table_count, SqliteApplyFailurePoint,
+    apply_confirmed_workbench_state_root_to_confirmed_db, apply_fixture_dir_to_temp_db,
+    table_count, SqliteApplyFailurePoint, SqliteApplyImportReport,
 };
-use crate::workbench_sqlite_exporter::{export_temp_db_to_json_dry_run, SqliteProjectedFile};
+use crate::workbench_sqlite_exporter::{
+    export_confirmed_db_to_json_dry_run, export_temp_db_to_json_dry_run,
+    SqliteExportDryRunManifest, SqliteProjectedFile,
+};
 use crate::workbench_sqlite_importer::{
     canonical_json_hash, OPTIONAL_SIDECARS, PRIMARY_WORKFLOW_STATE,
 };
@@ -21,6 +25,7 @@ use std::path::{Path, PathBuf};
 
 const MODE: &str = "production_apply";
 const LEVEL_A: &str = "level_a_fixture";
+const LEVEL_B_WORKBENCH_OWNED_STATE: &str = "level_b_workbench_owned_state";
 const PRODUCTION_APPLY_SCHEMA_VERSION: &str = "workbench_sqlite_production_apply.v1";
 const BACKUP_MANIFEST_NAME: &str = "production-apply-backup-manifest.json";
 const APPLY_MANIFEST_NAME: &str = "production-apply-manifest.json";
@@ -79,6 +84,16 @@ impl Default for SqliteProductionApplyConfig {
             expected_copied_snapshot_report_hash: None,
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SqliteProductionApplyLevelBConfig {
+    pub(crate) apply_config: SqliteProductionApplyConfig,
+    pub(crate) confirmed_source_state_root: PathBuf,
+    pub(crate) confirmed_production_db_path: PathBuf,
+    pub(crate) confirmed_backup_root: PathBuf,
+    pub(crate) confirmed_report_path: PathBuf,
+    pub(crate) confirmed_rollback_manifest_path: PathBuf,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -203,9 +218,82 @@ pub(crate) fn rehearse_production_db_apply_level_a(
     config: &SqliteProductionApplyConfig,
     failure_point: Option<SqliteProductionApplyFailurePoint>,
 ) -> Result<SqliteProductionApplyReport, String> {
+    rehearse_production_db_apply(
+        LEVEL_A,
+        source_state_root,
+        production_db_path,
+        backup_root,
+        report_path,
+        rollback_manifest_path,
+        config,
+        failure_point,
+        |source, denied| validate_level_a_source_root(source, denied),
+        |source, db, backup, report, rollback, denied| {
+            validate_level_a_output_paths(source, db, backup, report, rollback, denied)
+        },
+        |source, db, failure| apply_fixture_dir_to_temp_db(source, db, failure),
+        |db, backup| export_verification(db, backup),
+    )
+}
+
+pub(crate) fn rehearse_production_db_apply_level_b_workbench_owned_state(
+    source_state_root: &Path,
+    production_db_path: &Path,
+    backup_root: &Path,
+    report_path: &Path,
+    rollback_manifest_path: &Path,
+    config: &SqliteProductionApplyLevelBConfig,
+    failure_point: Option<SqliteProductionApplyFailurePoint>,
+) -> Result<SqliteProductionApplyReport, String> {
+    rehearse_production_db_apply(
+        LEVEL_B_WORKBENCH_OWNED_STATE,
+        source_state_root,
+        production_db_path,
+        backup_root,
+        report_path,
+        rollback_manifest_path,
+        &config.apply_config,
+        failure_point,
+        |source, denied| {
+            validate_level_b_source_root(source, &config.confirmed_source_state_root, denied)
+        },
+        |source, db, backup, report, rollback, denied| {
+            validate_level_b_output_paths(source, db, backup, report, rollback, config, denied)
+        },
+        |source, db, failure| {
+            apply_confirmed_workbench_state_root_to_confirmed_db(
+                source,
+                &config.confirmed_source_state_root,
+                db,
+                &config.confirmed_production_db_path,
+                failure,
+            )
+        },
+        |db, backup| export_verification_level_b(db, backup, &config.confirmed_production_db_path),
+    )
+}
+
+fn rehearse_production_db_apply(
+    level: &str,
+    source_state_root: &Path,
+    production_db_path: &Path,
+    backup_root: &Path,
+    report_path: &Path,
+    rollback_manifest_path: &Path,
+    config: &SqliteProductionApplyConfig,
+    failure_point: Option<SqliteProductionApplyFailurePoint>,
+    validate_source_root: impl Fn(&Path, &[String]) -> Result<(), String>,
+    validate_output_paths: impl Fn(&Path, &Path, &Path, &Path, &Path, &[String]) -> Result<(), String>,
+    apply_source_to_db: impl Fn(
+        &Path,
+        &Path,
+        Option<SqliteApplyFailurePoint>,
+    ) -> Result<SqliteApplyImportReport, String>,
+    export_db: impl Fn(&Path, &Path) -> Result<SqliteProductionExportVerification, String>,
+) -> Result<SqliteProductionApplyReport, String> {
     let denied_path_markers = effective_denied_path_markers(config);
-    validate_level_a_source_root(source_state_root, &denied_path_markers)?;
-    validate_level_a_output_paths(
+    validate_source_root(source_state_root, &denied_path_markers)?;
+    validate_output_paths(
         source_state_root,
         production_db_path,
         backup_root,
@@ -255,6 +343,7 @@ pub(crate) fn rehearse_production_db_apply_level_a(
         return Err("injected_failure_backup_manifest_write_before_db_create".to_string());
     }
     let backup_manifest_hash = write_backup_manifest(
+        level,
         source_state_root,
         backup_root,
         &before_source_hashes,
@@ -270,7 +359,7 @@ pub(crate) fn rehearse_production_db_apply_level_a(
                 production_db_path.display()
             )
         })?;
-        let err = apply_fixture_dir_to_temp_db(source_state_root, production_db_path, None)
+        let err = apply_source_to_db(source_state_root, production_db_path, None)
             .expect_err("db initialize failure must error");
         return Err(format!(
             "production_apply_failed:db_initialize_failure:{err}"
@@ -284,11 +373,12 @@ pub(crate) fn rehearse_production_db_apply_level_a(
         return apply_failure_without_report(
             &temp_corrupt_root,
             production_db_path,
+            apply_source_to_db,
             Some("corrupt_snapshot"),
         );
     }
     if failure_point == Some(SqliteProductionApplyFailurePoint::TransactionRollbackBeforeCommit) {
-        let result = apply_fixture_dir_to_temp_db(
+        let result = apply_source_to_db(
             source_state_root,
             production_db_path,
             Some(SqliteApplyFailurePoint::BeforeCommit),
@@ -303,7 +393,7 @@ pub(crate) fn rehearse_production_db_apply_level_a(
         return Err(format!("production_apply_failed:{err}"));
     }
 
-    let apply_report = apply_fixture_dir_to_temp_db(source_state_root, production_db_path, None)?;
+    let apply_report = apply_source_to_db(source_state_root, production_db_path, None)?;
     let table_counts = db_row_counts(production_db_path)?;
     let source_record_counts = source_record_counts(source_state_root, config)?;
     let import_batch_hash = canonical_json_hash(&json!({
@@ -318,11 +408,11 @@ pub(crate) fn rehearse_production_db_apply_level_a(
     if failure_point == Some(SqliteProductionApplyFailurePoint::AfterDbCommitBeforeManifestCommit) {
         let after_source_hashes = source_file_hashes(source_state_root, config)?;
         let rollback_boundary = rollback_boundary();
-        let export_verification = export_verification(production_db_path, backup_root)?;
+        let export_verification = export_db(production_db_path, backup_root)?;
         let failed_report = SqliteProductionApplyReport {
             schema_version: PRODUCTION_APPLY_SCHEMA_VERSION.to_string(),
             mode: MODE.to_string(),
-            level: LEVEL_A.to_string(),
+            level: level.to_string(),
             status: "failed_classified".to_string(),
             source_root_ref: source_state_root.display().to_string(),
             source_root_hash: preflight.source_root_hash,
@@ -352,7 +442,7 @@ pub(crate) fn rehearse_production_db_apply_level_a(
         return Err("injected_failure_after_db_commit_before_manifest_commit".to_string());
     }
 
-    let mut export_verification = export_verification(production_db_path, backup_root)?;
+    let mut export_verification = export_db(production_db_path, backup_root)?;
     if failure_point == Some(SqliteProductionApplyFailurePoint::ExportHashMismatch) {
         export_verification.db_export_hash = "injected_export_hash_mismatch".to_string();
     }
@@ -364,6 +454,7 @@ pub(crate) fn rehearse_production_db_apply_level_a(
         rollback_manifest_path,
         &rollback_boundary,
         &backup_manifest_hash,
+        level,
     )?;
     if failure_point == Some(SqliteProductionApplyFailurePoint::RollbackManifestMissing) {
         remove_file_if_exists(rollback_manifest_path)?;
@@ -388,7 +479,7 @@ pub(crate) fn rehearse_production_db_apply_level_a(
     let report = SqliteProductionApplyReport {
         schema_version: PRODUCTION_APPLY_SCHEMA_VERSION.to_string(),
         mode: MODE.to_string(),
-        level: LEVEL_A.to_string(),
+        level: level.to_string(),
         status: "completed".to_string(),
         source_root_ref: source_state_root.display().to_string(),
         source_root_hash: preflight.source_root_hash,
@@ -422,9 +513,14 @@ pub(crate) fn rehearse_production_db_apply_level_a(
 fn apply_failure_without_report<T>(
     source_root: &Path,
     production_db_path: &Path,
+    apply_source_to_db: impl Fn(
+        &Path,
+        &Path,
+        Option<SqliteApplyFailurePoint>,
+    ) -> Result<SqliteApplyImportReport, String>,
     label: Option<&str>,
 ) -> Result<T, String> {
-    let err = apply_fixture_dir_to_temp_db(source_root, production_db_path, None)
+    let err = apply_source_to_db(source_root, production_db_path, None)
         .expect_err("apply failure must error");
     Err(format!(
         "production_apply_failed:{}:{err}",
@@ -462,6 +558,7 @@ fn ensure_preflight_ready(report: &SqliteProductionPreflightReport) -> Result<()
 }
 
 fn write_backup_manifest(
+    level: &str,
     source_state_root: &Path,
     backup_root: &Path,
     before_hashes: &[SqliteProductionSourceFileHash],
@@ -472,7 +569,7 @@ fn write_backup_manifest(
     let manifest = json!({
         "schema_version": PRODUCTION_APPLY_SCHEMA_VERSION,
         "mode": MODE,
-        "level": LEVEL_A,
+        "level": level,
         "status": "completed",
         "source_root_ref": source_state_root.display().to_string(),
         "source_root_hash": preflight.source_root_hash,
@@ -519,7 +616,28 @@ fn export_verification(
     verify_db_integrity(production_db_path)?;
     let manifest =
         export_temp_db_to_json_dry_run(production_db_path, &backup_root.display().to_string())?;
-    verify_runtime_log_alias_policy(&manifest.projected_files)?;
+    export_verification_from_manifest(manifest, true)
+}
+
+fn export_verification_level_b(
+    production_db_path: &Path,
+    backup_root: &Path,
+    confirmed_production_db_path: &Path,
+) -> Result<SqliteProductionExportVerification, String> {
+    verify_db_integrity(production_db_path)?;
+    let manifest = export_confirmed_db_to_json_dry_run(
+        production_db_path,
+        confirmed_production_db_path,
+        &backup_root.display().to_string(),
+    )?;
+    export_verification_from_manifest(manifest, false)
+}
+
+fn export_verification_from_manifest(
+    manifest: SqliteExportDryRunManifest,
+    require_canonical_runtime_logs: bool,
+) -> Result<SqliteProductionExportVerification, String> {
+    verify_runtime_log_alias_policy(&manifest.projected_files, require_canonical_runtime_logs)?;
     let projected_files = production_projected_files(&manifest.projected_files);
     let projection_hash = projection_hash(&projected_files);
     Ok(SqliteProductionExportVerification {
@@ -594,12 +712,13 @@ fn write_rollback_manifest(
     rollback_manifest_path: &Path,
     boundary: &SqliteProductionRollbackBoundary,
     backup_manifest_hash: &str,
+    level: &str,
 ) -> Result<String, String> {
     let manifest = json!({
         "schema_version": PRODUCTION_APPLY_SCHEMA_VERSION,
         "status": "completed",
         "mode": MODE,
-        "level": LEVEL_A,
+        "level": level,
         "backup_manifest_hash": backup_manifest_hash,
         "rollback_boundary": boundary,
         "production_restore_performed": false
@@ -712,11 +831,16 @@ fn projection_hash(files: &[SqliteProductionProjectedFile]) -> String {
     canonical_json_hash(&json!({ "projected_files": files }))
 }
 
-fn verify_runtime_log_alias_policy(files: &[SqliteProjectedFile]) -> Result<(), String> {
+fn verify_runtime_log_alias_policy(
+    files: &[SqliteProjectedFile],
+    require_canonical_runtime_logs: bool,
+) -> Result<(), String> {
     if files.iter().any(|file| file.path == "runtime-log.v1.json") {
         return Err("production_apply_blocked:legacy_runtime_log_alias_exported".to_string());
     }
-    if !files.iter().any(|file| file.path == "runtime-logs.v1.json") {
+    if require_canonical_runtime_logs
+        && !files.iter().any(|file| file.path == "runtime-logs.v1.json")
+    {
         return Err(
             "production_apply_blocked:canonical_runtime_logs_projection_missing".to_string(),
         );
@@ -834,6 +958,196 @@ fn validate_level_a_output_paths(
         return Err("production_apply_report_or_rollback_path_invalid".to_string());
     }
     Ok(())
+}
+
+fn validate_level_b_source_root(
+    path: &Path,
+    confirmed_source_state_root: &Path,
+    denied_path_markers: &[String],
+) -> Result<(), String> {
+    if path != confirmed_source_state_root {
+        return Err(format!(
+            "production_apply_level_b_source_root_mismatch:expected={}:actual={}",
+            confirmed_source_state_root.display(),
+            path.display()
+        ));
+    }
+    if !path.is_absolute() || !path.is_dir() {
+        return Err(format!(
+            "production_apply_source_root_required:{}",
+            path.display()
+        ));
+    }
+    let canonical_path = canonical_existing_dir(path, "source_root")?;
+    let canonical_confirmed =
+        canonical_existing_dir(confirmed_source_state_root, "confirmed_source_root")?;
+    if canonical_path != canonical_confirmed || path != canonical_path.as_path() {
+        return Err(format!(
+            "production_apply_level_b_source_root_must_be_canonical:expected={}:actual={}",
+            canonical_confirmed.display(),
+            path.display()
+        ));
+    }
+    if denied_path_hit(path, denied_path_markers) {
+        return Err(format!(
+            "production_apply_source_root_denied:{}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn validate_level_b_output_paths(
+    source_state_root: &Path,
+    production_db_path: &Path,
+    backup_root: &Path,
+    report_path: &Path,
+    rollback_manifest_path: &Path,
+    config: &SqliteProductionApplyLevelBConfig,
+    denied_path_markers: &[String],
+) -> Result<(), String> {
+    for (label, actual, expected) in [
+        (
+            "production_db_path",
+            production_db_path,
+            config.confirmed_production_db_path.as_path(),
+        ),
+        (
+            "backup_root",
+            backup_root,
+            config.confirmed_backup_root.as_path(),
+        ),
+        (
+            "report_path",
+            report_path,
+            config.confirmed_report_path.as_path(),
+        ),
+        (
+            "rollback_manifest_path",
+            rollback_manifest_path,
+            config.confirmed_rollback_manifest_path.as_path(),
+        ),
+    ] {
+        if actual != expected {
+            return Err(format!(
+                "production_apply_level_b_confirmed_path_mismatch:{label}:expected={}:actual={}",
+                expected.display(),
+                actual.display()
+            ));
+        }
+        if !actual.is_absolute() {
+            return Err(format!(
+                "production_apply_absolute_path_required:{}",
+                actual.display()
+            ));
+        }
+        require_clean_confirmed_output_path(label, actual)?;
+        let canonical_actual = canonicalize_existing_or_parent(actual, label)?;
+        let canonical_source_root = canonical_existing_dir(source_state_root, "source_root")?;
+        if actual != canonical_actual.as_path() {
+            return Err(format!(
+                "production_apply_level_b_confirmed_path_must_be_canonical:{label}:expected={}:actual={}",
+                canonical_actual.display(),
+                actual.display()
+            ));
+        }
+        if canonical_actual.starts_with(&canonical_source_root) {
+            return Err(format!(
+                "production_apply_blocked:path_inside_source_root_denied:{}",
+                actual.display()
+            ));
+        }
+        if denied_path_hit(actual, denied_path_markers) {
+            return Err(format!(
+                "production_apply_blocked:denied_path_marker:{}",
+                actual.display()
+            ));
+        }
+    }
+    if report_path.starts_with(backup_root) || rollback_manifest_path.starts_with(source_state_root)
+    {
+        return Err("production_apply_report_or_rollback_path_invalid".to_string());
+    }
+    let canonical_backup = canonicalize_existing_or_parent(backup_root, "backup_root")?;
+    let canonical_report = canonicalize_existing_or_parent(report_path, "report_path")?;
+    let canonical_rollback =
+        canonicalize_existing_or_parent(rollback_manifest_path, "rollback_manifest_path")?;
+    let canonical_source = canonical_existing_dir(source_state_root, "source_root")?;
+    if canonical_report.starts_with(&canonical_backup)
+        || canonical_rollback.starts_with(&canonical_source)
+    {
+        return Err("production_apply_report_or_rollback_path_invalid".to_string());
+    }
+    Ok(())
+}
+
+fn require_clean_confirmed_output_path(label: &str, path: &Path) -> Result<(), String> {
+    if path.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir | std::path::Component::CurDir
+        )
+    }) {
+        return Err(format!(
+            "production_apply_level_b_confirmed_path_must_be_clean:{label}:{}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn canonical_existing_dir(path: &Path, label: &str) -> Result<PathBuf, String> {
+    let canonical = fs::canonicalize(path).map_err(|error| {
+        format!(
+            "production_apply_level_b_canonicalize_failed:{label}:{}:{error}",
+            path.display()
+        )
+    })?;
+    if !canonical.is_dir() {
+        return Err(format!(
+            "production_apply_level_b_canonical_dir_required:{label}:{}",
+            path.display()
+        ));
+    }
+    Ok(canonical)
+}
+
+fn canonicalize_existing_or_parent(path: &Path, label: &str) -> Result<PathBuf, String> {
+    if path.exists() {
+        return fs::canonicalize(path).map_err(|error| {
+            format!(
+                "production_apply_level_b_canonicalize_failed:{label}:{}:{error}",
+                path.display()
+            )
+        });
+    }
+    let mut ancestor = path.parent().ok_or_else(|| {
+        format!(
+            "production_apply_level_b_parent_required:{label}:{}",
+            path.display()
+        )
+    })?;
+    while !ancestor.exists() {
+        ancestor = ancestor.parent().ok_or_else(|| {
+            format!(
+                "production_apply_level_b_existing_parent_required:{label}:{}",
+                path.display()
+            )
+        })?;
+    }
+    let canonical_ancestor = fs::canonicalize(ancestor).map_err(|error| {
+        format!(
+            "production_apply_level_b_parent_canonicalize_failed:{label}:{}:{error}",
+            ancestor.display()
+        )
+    })?;
+    let suffix = path.strip_prefix(ancestor).map_err(|error| {
+        format!(
+            "production_apply_level_b_suffix_failed:{label}:{}:{error}",
+            path.display()
+        )
+    })?;
+    Ok(canonical_ancestor.join(suffix))
 }
 
 fn effective_denied_path_markers(config: &SqliteProductionApplyConfig) -> Vec<String> {
@@ -1310,6 +1624,245 @@ mod tests {
         assert!(err.contains("source_root_hash_mismatch"));
     }
 
+    #[test]
+    fn sqlite_production_level_b_accepts_confirmed_root_and_paths() {
+        let source = copied_confirmed_source("level-b-success", false);
+        let paths = prepare_level_b_paths("level-b-success");
+        let config = level_b_config(&source, &paths);
+
+        let report = rehearse_production_db_apply_level_b_workbench_owned_state(
+            &source,
+            &paths.db_path,
+            &paths.backup_root,
+            &paths.report_path,
+            &paths.rollback_manifest_path,
+            &config,
+            None,
+        )
+        .expect("level b confirmed apply");
+
+        assert_eq!(report.level, LEVEL_B_WORKBENCH_OWNED_STATE);
+        assert_eq!(report.status, "completed");
+        assert!(report.safety_flags.production_db_created);
+        assert!(report.safety_flags.production_apply_performed);
+        assert!(!report.safety_flags.read_cut_enabled);
+        assert!(!report.safety_flags.stop_write_json);
+        assert!(!report.safety_flags.source_json_written);
+        assert_eq!(report.before_source_hashes, report.after_source_hashes);
+        assert!(paths.db_path.exists());
+        assert!(paths.backup_root.join(BACKUP_MANIFEST_NAME).exists());
+        assert!(paths.rollback_manifest_path.exists());
+    }
+
+    #[test]
+    fn sqlite_production_level_b_missing_optional_sidecars_warns_not_fails() {
+        let source = copied_confirmed_source("level-b-sparse-sidecars", true);
+        let paths = prepare_level_b_paths("level-b-sparse-sidecars");
+        let config = level_b_config(&source, &paths);
+
+        let report = rehearse_production_db_apply_level_b_workbench_owned_state(
+            &source,
+            &paths.db_path,
+            &paths.backup_root,
+            &paths.report_path,
+            &paths.rollback_manifest_path,
+            &config,
+            None,
+        )
+        .expect("sparse sidecar source should still apply");
+
+        assert_eq!(report.level, LEVEL_B_WORKBENCH_OWNED_STATE);
+        assert_eq!(report.status, "completed");
+        assert_eq!(report.source_record_counts.len(), 1);
+        assert!(report
+            .source_record_counts
+            .contains_key(PRIMARY_WORKFLOW_STATE));
+        assert_eq!(report.before_source_hashes, report.after_source_hashes);
+    }
+
+    #[test]
+    fn sqlite_production_level_b_rejects_unconfirmed_source_root() {
+        let source = copied_confirmed_source("level-b-source", false);
+        let other_source = copied_confirmed_source("level-b-other-source", false);
+        let paths = prepare_level_b_paths("level-b-source-mismatch");
+        let config = level_b_config(&source, &paths);
+
+        let err = rehearse_production_db_apply_level_b_workbench_owned_state(
+            &other_source,
+            &paths.db_path,
+            &paths.backup_root,
+            &paths.report_path,
+            &paths.rollback_manifest_path,
+            &config,
+            None,
+        )
+        .expect_err("unconfirmed source root must reject");
+
+        assert!(err.contains("source_root_mismatch"));
+        assert!(!paths.db_path.exists());
+        assert!(!paths.report_path.exists());
+    }
+
+    #[test]
+    fn sqlite_production_level_b_rejects_unconfirmed_output_paths() {
+        let source = copied_confirmed_source("level-b-output", false);
+        let paths = prepare_level_b_paths("level-b-output");
+        let config = level_b_config(&source, &paths);
+
+        for (db_path, backup_root, report_path, rollback_path, expected) in [
+            (
+                paths.db_path.with_file_name("other.sqlite"),
+                paths.backup_root.clone(),
+                paths.report_path.clone(),
+                paths.rollback_manifest_path.clone(),
+                "production_db_path",
+            ),
+            (
+                paths.db_path.clone(),
+                paths.backup_root.with_file_name("other-backup"),
+                paths.report_path.clone(),
+                paths.rollback_manifest_path.clone(),
+                "backup_root",
+            ),
+            (
+                paths.db_path.clone(),
+                paths.backup_root.clone(),
+                paths.report_path.with_file_name("other-report.json"),
+                paths.rollback_manifest_path.clone(),
+                "report_path",
+            ),
+            (
+                paths.db_path.clone(),
+                paths.backup_root.clone(),
+                paths.report_path.clone(),
+                paths
+                    .rollback_manifest_path
+                    .with_file_name("other-rollback.json"),
+                "rollback_manifest_path",
+            ),
+        ] {
+            let err = rehearse_production_db_apply_level_b_workbench_owned_state(
+                &source,
+                &db_path,
+                &backup_root,
+                &report_path,
+                &rollback_path,
+                &config,
+                None,
+            )
+            .expect_err("unconfirmed output path must reject");
+            assert!(err.contains("confirmed_path_mismatch"));
+            assert!(err.contains(expected));
+        }
+    }
+
+    #[test]
+    fn sqlite_production_level_b_rejects_denied_output_path_marker() {
+        let source = copied_confirmed_source("level-b-denied-output", false);
+        let temp_dir = fs::canonicalize(std::env::temp_dir()).expect("canonical temp dir");
+        let root = temp_dir.join(unique_label("workbench-r3-b1-secret"));
+        let paths = Paths {
+            db_path: root.join("secret").join("production.sqlite"),
+            backup_root: root.join("backup"),
+            report_path: root.join("reports").join("production-apply-report.json"),
+            rollback_manifest_path: root.join("rollback").join("rollback-manifest.json"),
+        };
+        let config = level_b_config(&source, &paths);
+
+        let err = rehearse_production_db_apply_level_b_workbench_owned_state(
+            &source,
+            &paths.db_path,
+            &paths.backup_root,
+            &paths.report_path,
+            &paths.rollback_manifest_path,
+            &config,
+            None,
+        )
+        .expect_err("denied marker must reject");
+
+        assert!(err.contains("denied_path_marker"));
+    }
+
+    #[test]
+    fn sqlite_production_level_b_rejects_output_inside_source_root() {
+        let source = copied_confirmed_source("level-b-inside-source", false);
+        let paths = Paths {
+            db_path: source.join("production.sqlite"),
+            backup_root: std::env::temp_dir().join(unique_label("level-b-backup")),
+            report_path: std::env::temp_dir()
+                .join(unique_label("level-b-report"))
+                .join("report.json"),
+            rollback_manifest_path: std::env::temp_dir()
+                .join(unique_label("level-b-rollback"))
+                .join("rollback.json"),
+        };
+        let config = level_b_config(&source, &paths);
+
+        let err = rehearse_production_db_apply_level_b_workbench_owned_state(
+            &source,
+            &paths.db_path,
+            &paths.backup_root,
+            &paths.report_path,
+            &paths.rollback_manifest_path,
+            &config,
+            None,
+        )
+        .expect_err("inside source output must reject");
+
+        assert!(err.contains("path_inside_source_root_denied"));
+        assert!(!paths.db_path.exists());
+    }
+
+    #[test]
+    fn sqlite_production_level_b_rejects_parent_dir_output_escape_into_source_root() {
+        let source = copied_confirmed_source("level-b-parent-dir-source", false);
+        let paths = prepare_level_b_paths("level-b-parent-dir-source");
+        let db_path = source
+            .join("outside")
+            .join("..")
+            .join("production-via-parent.sqlite");
+        let paths = Paths { db_path, ..paths };
+        let config = level_b_config(&source, &paths);
+
+        let err = rehearse_production_db_apply_level_b_workbench_owned_state(
+            &source,
+            &paths.db_path,
+            &paths.backup_root,
+            &paths.report_path,
+            &paths.rollback_manifest_path,
+            &config,
+            None,
+        )
+        .expect_err("parent-dir output into source root must reject");
+
+        assert!(err.contains("confirmed_path_must_be_clean"));
+        assert!(!source.join("production-via-parent.sqlite").exists());
+    }
+
+    #[test]
+    fn sqlite_production_level_a_still_rejects_non_temp_output_path() {
+        let source = fixture_dir("production-valid-core-chain");
+        let paths = Paths {
+            db_path: PathBuf::from("/var/workbench-r3-b1-enable.sqlite"),
+            backup_root: PathBuf::from("/var/workbench-r3-b1-backup"),
+            report_path: PathBuf::from("/var/workbench-r3-b1-report.json"),
+            rollback_manifest_path: PathBuf::from("/var/workbench-r3-b1-rollback.json"),
+        };
+
+        let err = rehearse_production_db_apply_level_a(
+            &source,
+            &paths.db_path,
+            &paths.backup_root,
+            &paths.report_path,
+            &paths.rollback_manifest_path,
+            &SqliteProductionApplyConfig::default(),
+            None,
+        )
+        .expect_err("level a must keep temp path guard");
+
+        assert!(err.contains("production_apply_temp_paths_required"));
+    }
+
     struct Paths {
         db_path: PathBuf,
         backup_root: PathBuf,
@@ -1324,6 +1877,17 @@ mod tests {
     fn prepare_paths(label: &str) -> Paths {
         let unique = unique_label(label);
         let root = std::env::temp_dir().join(format!("workbench-r3-a9-{unique}"));
+        prepare_paths_under_root(root)
+    }
+
+    fn prepare_level_b_paths(label: &str) -> Paths {
+        let unique = unique_label(label);
+        let temp_dir = fs::canonicalize(std::env::temp_dir()).expect("canonical temp dir");
+        let root = temp_dir.join(format!("workbench-r3-a9-{unique}"));
+        prepare_paths_under_root(root)
+    }
+
+    fn prepare_paths_under_root(root: PathBuf) -> Paths {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("temp root");
         Paths {
@@ -1332,6 +1896,43 @@ mod tests {
             report_path: root.join("reports").join("production-apply-report.json"),
             rollback_manifest_path: root.join("rollback").join("rollback-manifest.json"),
         }
+    }
+
+    fn level_b_config(source: &Path, paths: &Paths) -> SqliteProductionApplyLevelBConfig {
+        SqliteProductionApplyLevelBConfig {
+            apply_config: SqliteProductionApplyConfig::default(),
+            confirmed_source_state_root: source.to_path_buf(),
+            confirmed_production_db_path: paths.db_path.clone(),
+            confirmed_backup_root: paths.backup_root.clone(),
+            confirmed_report_path: paths.report_path.clone(),
+            confirmed_rollback_manifest_path: paths.rollback_manifest_path.clone(),
+        }
+    }
+
+    fn copied_confirmed_source(label: &str, sparse_sidecars: bool) -> PathBuf {
+        let temp_dir = fs::canonicalize(std::env::temp_dir()).expect("canonical temp dir");
+        let root = temp_dir.join(format!(
+            "workbench-r3-b1-confirmed-source-{}",
+            unique_label(label)
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("confirmed source root");
+        for entry in
+            fs::read_dir(fixture_dir("production-valid-core-chain")).expect("read source fixture")
+        {
+            let entry = entry.expect("source fixture entry");
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let name = entry.file_name();
+            let name_text = name.to_string_lossy();
+            if sparse_sidecars && name_text.as_ref() != PRIMARY_WORKFLOW_STATE {
+                continue;
+            }
+            fs::copy(&path, root.join(name)).expect("copy confirmed source file");
+        }
+        root
     }
 
     fn unique_label(label: &str) -> String {

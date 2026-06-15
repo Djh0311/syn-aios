@@ -2,7 +2,9 @@ use crate::workbench_sqlite_importer::{
     canonical_json_hash, dry_run_import_fixture_dir, CANONICAL_RUNTIME_LOG,
     LEGACY_RUNTIME_LOG_ALIAS, OPTIONAL_SIDECARS, PRIMARY_WORKFLOW_STATE,
 };
-use crate::workbench_sqlite_schema::initialize_temp_workbench_sqlite_db;
+use crate::workbench_sqlite_schema::{
+    initialize_confirmed_workbench_sqlite_db, initialize_temp_workbench_sqlite_db,
+};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -47,11 +49,53 @@ pub(crate) fn apply_fixture_dir_to_temp_db(
             db_path.display()
         ));
     }
+    apply_source_root_to_db(fixture_root, db_path, failure_point, |path| {
+        initialize_temp_workbench_sqlite_db(path)
+    })
+}
+
+pub(crate) fn apply_confirmed_workbench_state_root_to_confirmed_db(
+    source_root: &Path,
+    confirmed_source_root: &Path,
+    db_path: &Path,
+    confirmed_db_path: &Path,
+    failure_point: Option<SqliteApplyFailurePoint>,
+) -> Result<SqliteApplyImportReport, String> {
+    if source_root != confirmed_source_root {
+        return Err(format!(
+            "confirmed_source_root_mismatch: expected {} got {}",
+            confirmed_source_root.display(),
+            source_root.display()
+        ));
+    }
+    if !source_root.is_absolute() || !source_root.is_dir() {
+        return Err(format!(
+            "confirmed_source_root_required:{}",
+            source_root.display()
+        ));
+    }
+    if db_path != confirmed_db_path {
+        return Err(format!(
+            "confirmed_db_path_mismatch: expected {} got {}",
+            confirmed_db_path.display(),
+            db_path.display()
+        ));
+    }
+    apply_source_root_to_db(source_root, db_path, failure_point, |path| {
+        initialize_confirmed_workbench_sqlite_db(path, confirmed_db_path)
+    })
+}
+
+fn apply_source_root_to_db(
+    source_root: &Path,
+    db_path: &Path,
+    failure_point: Option<SqliteApplyFailurePoint>,
+    initialize_db: impl Fn(&Path) -> Result<(), String>,
+) -> Result<SqliteApplyImportReport, String> {
     if failure_point == Some(SqliteApplyFailurePoint::BeforeDbBegin) {
         return Err("injected_failure_before_db_begin".to_string());
     }
-
-    let dry_run = dry_run_import_fixture_dir(fixture_root)?;
+    let dry_run = dry_run_import_fixture_dir(source_root)?;
     if dry_run.batch_status != "accepted" && dry_run.batch_status != "accepted_with_rejections" {
         return Err(format!(
             "dry_run_batch_not_applyable:{}",
@@ -70,7 +114,7 @@ pub(crate) fn apply_fixture_dir_to_temp_db(
         ));
     }
 
-    initialize_temp_workbench_sqlite_db(db_path)?;
+    initialize_db(db_path)?;
     let mut connection = Connection::open(db_path)
         .map_err(|error| format!("open temp workbench sqlite apply db failed: {error}"))?;
     connection
@@ -142,7 +186,7 @@ pub(crate) fn apply_fixture_dir_to_temp_db(
     let mut records_inserted = 0usize;
     let mut records_skipped = 0usize;
     let mut first_domain_insert_seen = false;
-    let fixture_files = load_fixture_values(fixture_root)?;
+    let fixture_files = load_fixture_values(source_root)?;
     for (source_name, value) in fixture_files {
         let source_kind = source_kind_for_file(&source_name);
         if source_kind == "runtime_log_legacy_alias" {
