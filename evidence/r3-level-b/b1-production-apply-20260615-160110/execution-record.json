@@ -1,0 +1,175 @@
+{
+  "schema_version": "root_treatment_r3_level_b_execution_record.v1",
+  "window_id": "r3-level-b-b1-production-apply-20260615-160110",
+  "phase": "B1_production_apply",
+  "status": "completed",
+  "supervisor": "codex-global-supervisor",
+  "user_present_required": true,
+  "user_confirmation_ref": "user-thread-2026-06-15-r3-b0-hash-calibration-and-b1-retry-prep",
+  "git_head_before": "91b22250e41b2ad39fec5b35bc4d646f4e0c13dc",
+  "git_head_after": "91b22250e41b2ad39fec5b35bc4d646f4e0c13dc",
+  "allowed_roots": [
+    "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state",
+    "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615",
+    "/Users/yoyi/workspace/product-line/evidence/r3-level-b/b1-production-apply-20260615-160110"
+  ],
+  "denied_paths": [
+    "/Users/yoyi/.codex",
+    "secret",
+    "token",
+    ".env",
+    "keychain",
+    "OAuth",
+    "provider credential",
+    "full transcript",
+    "rollout body",
+    "prompt body"
+  ],
+  "confirmed_paths": {
+    "workbench_state_root": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state",
+    "production_db_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615/workbench-state.v1.sqlite",
+    "backup_root": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615/backup",
+    "report_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615/reports/production-apply-report.json",
+    "rollback_manifest_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615/rollback/rollback-manifest.json"
+  },
+  "source_root_hash_before": "31cdea623d928ea2dc13d0a02eaefd23f2df1a27f454d5d7ea17d51fe3b4b801",
+  "source_root_hash_after": "31cdea623d928ea2dc13d0a02eaefd23f2df1a27f454d5d7ea17d51fe3b4b801",
+  "source_root_hash_algorithm": "workbench_source_aggregate_hash.v1:preflight_path_ref_file_hash_classification_concat",
+  "source_inventory_before_after": [
+    {
+      "relative_path": "plan-authorizations.v1.json",
+      "sha256_before": "6962e4781f49246525d4cde37d3133924a66faa12b8aab90db106c3c9f401b0e",
+      "sha256_after": "6962e4781f49246525d4cde37d3133924a66faa12b8aab90db106c3c9f401b0e",
+      "size_bytes": 15211
+    },
+    {
+      "relative_path": "workflow-state.v0.json",
+      "sha256_before": "4bd5434fdca9e82c8fafc42989e1a267ed7d677bfe2972273fb3afaa26829972",
+      "sha256_after": "4bd5434fdca9e82c8fafc42989e1a267ed7d677bfe2972273fb3afaa26829972",
+      "size_bytes": 2060497
+    }
+  ],
+  "production_db_path_hash": "b557ddc1d1143fdf16f0beb6ea436151e1fcf464ecb9bb3e237b1768a24b0c6e",
+  "production_db_hash_before": "missing_before=true",
+  "production_db_hash_after": "12d65f21ae383b72afd1b23347548974502ba60ca6a4143ca6b6fc94270f03ba",
+  "backup_root_hash": "d25c47c58a6a60d7ead5a3e4e1616a9de295902eda74aeaaa0f37b71c341d2bb",
+  "backup_manifest_hash": "a83f3684d106e2d3be778ef4f30b22f9a4bfabaf014710ee9a4889c09e69d1ae",
+  "backup_manifest_file_sha256": "c85de30aed3a57b9b40027c90ad55c8a26ed847bcb6e2e2b7fefbb248b0fd0c6",
+  "apply_manifest_file_sha256": "88bee7590b528d4494b359730b0d5c642a31e75d4937a2699933e30c429f182e",
+  "export_manifest_file_sha256": "a3a74c52745b5839baac388d3f8f9452d7ac52cd176c3487d139f780f972f323",
+  "rollback_manifest_hash": "c6bdef0eba5353f705c2e87ecd8cd40642cc7da90f6d1285846fe0febac7ba0b",
+  "rollback_manifest_file_sha256": "bda58a4308c9f7932629b990df3ffaf141b97646821a1ffecbce6674f9defcd6",
+  "report_hash": "5a11a54790da73756d5394bd82f9c0b7234434e875b512c441245ed1528c0df2",
+  "post_apply_preflight_report_hash": "c96ccd90ad6837e6a8e434ceb74a8ad1202f6a32f6bdaad22ccb61b62f3c8dc4",
+  "export_verification_hash": "d3fcca756c1d663df2b46495708e18c61a503a34c10bf36b0d46fc1c92a40a3d",
+  "export_verification_status": "verified",
+  "db_schema_version": "workbench_sqlite_schema_v0",
+  "table_counts": {
+    "formal_memory_records": 0,
+    "import_batches": 1,
+    "import_sources": 2,
+    "memory_candidates": 0,
+    "observations": 0,
+    "product_commands": 0,
+    "projects": 5,
+    "runtime_log_entries": 0,
+    "schema_migrations": 1,
+    "session_continuations": 0,
+    "source_records": 627,
+    "workflows": 5
+  },
+  "read_cut_scope": "none",
+  "stop_write_json": false,
+  "source_json_written": false,
+  "sidecar_written": false,
+  "codex_home_touched": false,
+  "product_global_read_path_changed": false,
+  "product_global_write_path_changed": false,
+  "rollback_or_recovery_performed": false,
+  "fresh_verify": [
+    {
+      "name": "git rev-parse HEAD",
+      "status": "pass",
+      "evidence": "91b22250e41b2ad39fec5b35bc4d646f4e0c13dc"
+    },
+    {
+      "name": "git status --short before apply",
+      "status": "pass",
+      "evidence": "empty output"
+    },
+    {
+      "name": "cargo test --lib sqlite_apply",
+      "status": "pass",
+      "evidence": "6 passed; 0 failed"
+    },
+    {
+      "name": "cargo test --lib sqlite_export",
+      "status": "pass",
+      "evidence": "3 passed; 0 failed"
+    },
+    {
+      "name": "cargo test --lib sqlite_production",
+      "status": "pass",
+      "evidence": "29 passed; 0 failed; 1 ignored"
+    },
+    {
+      "name": "cargo fmt -- --check",
+      "status": "pass",
+      "evidence": "empty output"
+    },
+    {
+      "name": "node scripts/harness/workbench-shape-gate.js --mode check before apply",
+      "status": "pass",
+      "evidence": "Status: pass; Errors: 0; Warnings: 0"
+    },
+    {
+      "name": "git diff --check before apply",
+      "status": "pass",
+      "evidence": "empty output"
+    },
+    {
+      "name": "B1 confirmed-path production apply runner",
+      "status": "pass",
+      "evidence": "R3_B1_SOURCE_ROOT_HASH=31cdea623d928ea2dc13d0a02eaefd23f2df1a27f454d5d7ea17d51fe3b4b801; R3_B1_EXPORT_HASH=d3fcca756c1d663df2b46495708e18c61a503a34c10bf36b0d46fc1c92a40a3d"
+    },
+    {
+      "name": "post-apply source preflight",
+      "status": "pass",
+      "evidence": "R3_B0_CANONICAL_SOURCE_ROOT_HASH=31cdea623d928ea2dc13d0a02eaefd23f2df1a27f454d5d7ea17d51fe3b4b801"
+    },
+    {
+      "name": "cargo test --lib after apply",
+      "status": "pass",
+      "evidence": "492 passed; 0 failed; 18 ignored"
+    },
+    {
+      "name": "node scripts/harness/workbench-shape-gate.js --mode check after apply",
+      "status": "pass",
+      "evidence": "Status: pass; Errors: 0; Warnings: 0"
+    },
+    {
+      "name": "git diff --check after apply",
+      "status": "pass",
+      "evidence": "empty output"
+    }
+  ],
+  "independent_review": {
+    "review_line": "Beauvoir",
+    "agent_id": "019eca53-354e-7072-89ea-997304f506fb",
+    "status": "CLEAR_WITH_P2",
+    "p2": [
+      "do_not_claim includes forbidden-claim phrases as an explicit prohibition list; mechanical grep may false-positive."
+    ],
+    "p2_status": "accepted_as_audit_field_no_execution_scope_change",
+    "evidence": "evidence/r3-level-b/b1-production-apply-20260615-160110/review-beauvoir-v1.md"
+  },
+  "do_not_claim": [
+    "read-cut executed",
+    "stop-write executed",
+    "full storage migration completed",
+    "R3 Level B complete",
+    "multi-agent parallel real execution unlocked",
+    "real Codex execution performed",
+    "/Users/yoyi/.codex touched"
+  ]
+}
