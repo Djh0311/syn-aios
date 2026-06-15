@@ -58,7 +58,7 @@ When working on this standard rule source package itself, do not create or updat
 - 证据新鲜度（收口前）：完成前跑 `node scripts/harness/evidence-freshness.js --target .` 与 `node scripts/harness/evidence-check.js --target .` 查证据是否过期 / 齐全（`evidence-new.js` / `evidence-index.js` / `evidence-query.js` 为新建 / 索引 / 查询，默认 dry-run）。
 - 配置校验：改 `harness.config.json` 后，跑 `node scripts/harness/config-check.js --target .`（policy 细则 `config-policy.js`）。
 - 能力普查（pre-work）：开工前跑 `node scripts/harness/capability-scan.js --target .` 普查工具 / 命令能力；它已取代 `capability-map.js`（后者在 catalog 标退役，文件保留不删）。
-- 复核 / 收口完成报告时（C4，2026-06-15）：跑 `node scripts/harness/checkpoint-audit.js --package <slug>`（或 `--commit <sha> --allow <globs>`）把报告声称的 commit / 复核 STATUS / 写入边界 / CURRENT.md 引用逐条对 git 实物核，对不上标红、假报告 fail。**只验机械事实**（commit 可达 / 树净 / 文件越没越界 / 复核文件含 STATUS / shape-gate 绿）；diff 是否真无行为变化、有没有踩坑**仍是人的活**。
+- 复核 / 收口完成报告时（C4，2026-06-15）：跑 `node scripts/harness/checkpoint-audit.js --package <slug>`（或 `--commit <sha> --allow <globs>`；核证据 JSON 里 hash 字段格式加 `--record <json,...>`）把报告声称的 commit / 复核 STATUS / 写入边界 / CURRENT.md 引用逐条对 git 实物核，对不上标红、假报告 fail。**只验机械事实**（commit 可达 / 树净 / 文件越没越界 / 复核文件含 STATUS / shape-gate 绿 / 证据 hash 字段 64 位小写 hex）；diff 是否真无行为变化、有没有踩坑**仍是人的活**。
 
 ---
 

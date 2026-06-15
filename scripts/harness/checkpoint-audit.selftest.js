@@ -28,9 +28,17 @@ function runAudit(extraArgs) {
   } catch (error) {
     stdout = error.stdout ? error.stdout.toString() : '';
   }
-  return JSON.parse(stdout);
+  try { return JSON.parse(stdout); }
+  catch (_e) { return { verdict: 'PARSE_ERROR', failed_checks: [], checks: [], _raw: stdout }; }
 }
-function checkOf(report, id) { return report.checks.find((c) => c.id === id) || {}; }
+function checkOf(report, id) { return (report.checks || []).find((c) => c.id === id) || {}; }
+function writeTmpJson(obj) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ckpt-audit-json-'));
+  tmps.push(dir);
+  const f = path.join(dir, 'record.json');
+  fs.writeFileSync(f, JSON.stringify(obj, null, 2));
+  return f;
+}
 
 const results = [];
 function expect(name, cond, detail) {
@@ -73,6 +81,7 @@ try {
     expect('good: review_status PASS (CLEAR)', checkOf(r, 'review_status').status === 'pass' && checkOf(r, 'review_status').detail.status === 'CLEAR');
     expect('good: current_md_refs PASS', checkOf(r, 'current_md_refs').status === 'pass');
     expect('good: files_within_allow PASS (parsed docs/**)', checkOf(r, 'files_within_allow').status === 'pass');
+    expect('good: evidence_hash_format NA (no --record, zero regression)', checkOf(r, 'evidence_hash_format').status === 'na');
     void impl;
   }
 
@@ -127,6 +136,60 @@ try {
     const r = runAudit(['--target', repo, '--package', SLUG]);
     expect('review without STATUS -> review_status FAIL', checkOf(r, 'review_status').status === 'fail');
     expect('review without STATUS -> verdict FAIL', r.verdict === 'FAIL');
+  }
+
+  // 6) NEW (C4 hardening): evidence_hash_format — check (7). Scans hash-named string
+  //    fields in --record JSON: must be 64-lowercase-hex or a non-hex sentinel; a
+  //    "looks like hash but isn't 64 hex" value (e.g. the real B1 59-char defect) -> FAIL.
+  {
+    const { repo } = buildGoodRepo(); tmps.push(repo);
+    const HEX64 = 'a'.repeat(64);
+    const HEX64B = 'b'.repeat(64);
+
+    // 6a) zero false positives (most critical): valid 64-hex + sentinels + *_algorithm
+    //     + 40-char git_head_* (key has no hash -> not picked) + uuid + nested sha256.
+    const cleanRecord = writeTmpJson({
+      source_root_hash_before: HEX64,
+      source_root_hash_after: HEX64,
+      source_root_hash_algorithm: 'workbench_source_aggregate_hash.v1:preflight_path_ref_file_hash_classification',
+      production_db_hash_before: 'missing_before=true',
+      production_db_hash_after: HEX64,
+      pending_hash: 'pending_before=true',
+      created_hash: 'not_created',
+      b0_report_hash: 'not_applicable_b0',
+      pre_commit_hash: 'not_recorded_before_report_commit',
+      git_head_before: 'a'.repeat(40),
+      git_head_after: 'f'.repeat(40),
+      agent_id: '019ec1e4-f49c-7d90-9166-42c8a0b1d2e3',
+      source_inventory_before_after: [{ sha256_before: HEX64B, sha256_after: HEX64B }],
+      manifests: { backup_manifest_file_sha256: HEX64 }
+    });
+    const rOk = runAudit(['--target', repo, '--package', SLUG, '--record', cleanRecord]);
+    expect('hash 6a: clean record -> evidence_hash_format PASS (zero false positives)',
+      checkOf(rOk, 'evidence_hash_format').status === 'pass', JSON.stringify(checkOf(rOk, 'evidence_hash_format').detail));
+    expect('hash 6a: clean record -> verdict PASS', rOk.verdict === 'PASS', rOk.failed_checks.join(','));
+
+    // 6b) truncated 59-char hex in a *_hash field -> FAIL, detail names field + reason.
+    const truncRecord = writeTmpJson({
+      report_hash: HEX64,
+      post_apply_preflight_report_hash: 'a'.repeat(59)
+    });
+    const rTrunc = runAudit(['--target', repo, '--package', SLUG, '--record', truncRecord]);
+    const cT = checkOf(rTrunc, 'evidence_hash_format');
+    expect('hash 6b: 59-char hash -> evidence_hash_format FAIL', cT.status === 'fail');
+    expect('hash 6b: detail names the field + reason not_64_lowercase_hex',
+      JSON.stringify(cT.detail || '').includes('post_apply_preflight_report_hash') && JSON.stringify(cT.detail || '').includes('not_64_lowercase_hex'));
+    expect('hash 6b: -> verdict FAIL', rTrunc.verdict === 'FAIL');
+
+    // 6c) 64-char but UPPERCASE hex -> FAIL.
+    const upperRecord = writeTmpJson({ export_verification_hash: 'A'.repeat(64) });
+    const rUp = runAudit(['--target', repo, '--package', SLUG, '--record', upperRecord]);
+    expect('hash 6c: uppercase 64-hex -> evidence_hash_format FAIL', checkOf(rUp, 'evidence_hash_format').status === 'fail');
+    expect('hash 6c: -> verdict FAIL', rUp.verdict === 'FAIL');
+
+    // 6d) comma-separated --record, one clean + one bad -> FAIL.
+    const rMulti = runAudit(['--target', repo, '--package', SLUG, '--record', `${cleanRecord},${truncRecord}`]);
+    expect('hash 6d: multi --record with one bad -> evidence_hash_format FAIL', checkOf(rMulti, 'evidence_hash_format').status === 'fail');
   }
 } finally {
   for (const t of tmps) fs.rmSync(t, { recursive: true, force: true });

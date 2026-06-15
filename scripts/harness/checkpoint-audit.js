@@ -31,7 +31,8 @@ function parseArgs(argv) {
     allow: null,
     allowDirty: false,
     skipGates: false,
-    json: false
+    json: false,
+    record: null
   };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -44,6 +45,7 @@ function parseArgs(argv) {
     else if (a === '--allow') args.allow = argv[++i];
     else if (a === '--allow-dirty') args.allowDirty = true;
     else if (a === '--skip-gates') args.skipGates = true;
+    else if (a === '--record') args.record = argv[++i];
     else if (a === '--json') args.json = true;
     else if (a === '--help' || a === '-h') { printHelp(); process.exit(0); }
     else throw new Error(`Unknown argument: ${a}`);
@@ -69,12 +71,14 @@ Options:
   --allow <globs>         Comma-separated write-scope globs for the file-boundary check (e.g. "docs/**,AGENTS.md").
   --allow-dirty           Do not fail on a dirty working tree (declare expected dirtiness).
   --skip-gates            Skip check (6) (do not spawn shape-gate / verification-suite).
+  --record <p[,p...]>     Comma-separated evidence JSON files; check (7) verifies that
+                          hash-named string fields are 64-lowercase-hex or a non-hex sentinel.
   --target <dir>          Repo root (default: cwd).
   --json                  Emit JSON.
 
 Boundary: mechanical facts only (commit reachable / tree clean / files in allow-list /
-review+STATUS present / gates green). It does NOT judge whether the diff is behaviorally
-safe or pitfall-free — that stays human review.`);
+review+STATUS present / gates green / evidence hash-field format). It does NOT judge whether
+the diff is behaviorally safe or pitfall-free — that stays human review.`);
 }
 
 function git(target, gitArgs) {
@@ -252,6 +256,59 @@ function checkGates(target, skipGates) {
 
 // --- orchestration ------------------------------------------------------------
 
+// Check (7): mechanically classify hash-named string fields inside evidence JSON.
+// A value is OK if it is 64-char lowercase hex (sha256) OR a non-hex sentinel string
+// (e.g. "missing_before=true", "not_created"). A value that looks like a hash but is
+// not 64 lowercase hex (wrong length like the real B1 59-char case, or uppercase) is a
+// defect. Key heuristic is intentionally narrow: only keys matching /(sha256|hash)/i are
+// inspected, so git_head_* (40-hex) and agent_id (uuid) are never picked up.
+function classifyHashValue(value) {
+  if (/^[0-9a-f]{64}$/.test(value)) return { ok: true };
+  if (/^[0-9a-fA-F]{8,}$/.test(value)) return { ok: false, reason: 'not_64_lowercase_hex' };
+  return { ok: true };
+}
+
+function collectHashFields(node, key, segs, out) {
+  if (typeof node === 'string') {
+    if (key && /(sha256|hash)/i.test(key)) out.push({ keyPath: segs.join('.'), key, value: node });
+    return;
+  }
+  if (Array.isArray(node)) {
+    node.forEach((el, i) => collectHashFields(el, key, segs.concat(`[${i}]`), out)); // keep enclosing key
+    return;
+  }
+  if (node && typeof node === 'object') {
+    for (const k of Object.keys(node)) collectHashFields(node[k], k, segs.concat(k), out);
+  }
+}
+
+function checkEvidenceHashFormat(target, recordPaths) {
+  if (!recordPaths || !recordPaths.length) {
+    return { id: 'evidence_hash_format', status: 'na', detail: 'no --record; evidence JSON hash fields not inspected' };
+  }
+  const violations = [];
+  const errors = [];
+  let fieldsChecked = 0;
+  for (const rel of recordPaths) {
+    const abs = path.isAbsolute(rel) ? rel : path.join(target, rel);
+    const text = readIf(abs);
+    if (text === null) { errors.push({ file: rel, reason: 'record_unreadable' }); continue; }
+    let data;
+    try { data = JSON.parse(text); } catch (_e) { errors.push({ file: rel, reason: 'record_unparseable' }); continue; }
+    const fields = [];
+    collectHashFields(data, null, [], fields);
+    for (const f of fields) {
+      fieldsChecked += 1;
+      const cls = classifyHashValue(f.value);
+      if (!cls.ok) violations.push({ file: rel, keyPath: f.keyPath, value: f.value, reason: cls.reason });
+    }
+  }
+  if (violations.length || errors.length) {
+    return { id: 'evidence_hash_format', status: 'fail', detail: { violations, errors, fields_checked: fieldsChecked } };
+  }
+  return { id: 'evidence_hash_format', status: 'pass', detail: { files_checked: recordPaths.length, hash_fields_checked: fieldsChecked } };
+}
+
 function audit(args) {
   const slug = args.package;
   const cmPara = slug ? currentMdParagraphForSlug(args.target, slug) : null;
@@ -268,21 +325,23 @@ function audit(args) {
   const allowGlobs = args.allow ? args.allow.split(',').map((s) => s.trim()).filter(Boolean)
     : parseAllowFromTaskPackage(args.target, taskRel);
 
+  const recordPaths = args.record ? args.record.split(',').map((s) => s.trim()).filter(Boolean) : null;
   const checks = [
     checkCommitsReachable(args.target, claims),
     checkTreeClean(args.target, args.allowDirty),
     checkReviewStatus(args.target, claims.reviewFile),
     checkCurrentRefs(args.target, slug, claims, cmPara),
     checkFilesWithinAllow(args.target, claims, allowGlobs),
-    checkGates(args.target, args.skipGates)
+    checkGates(args.target, args.skipGates),
+    checkEvidenceHashFormat(args.target, recordPaths)
   ];
 
   const failed = checks.filter((c) => c.status === 'fail');
   return {
     target: args.target,
-    boundary: 'MECHANICAL facts only (commit reachable / tree clean / files in allow-list / review+STATUS present / gates green). Does NOT judge behavior-change or pitfalls — human review still required.',
+    boundary: 'MECHANICAL facts only (commit reachable / tree clean / files in allow-list / review+STATUS present / gates green / evidence hash-field format). Does NOT judge behavior-change or pitfalls — human review still required.',
     package: slug,
-    resolved: { claims, allow: allowGlobs, task_package: taskRel, current_md_block_found: !!cmPara },
+    resolved: { claims, allow: allowGlobs, record: recordPaths, task_package: taskRel, current_md_block_found: !!cmPara },
     checks,
     verdict: failed.length ? 'FAIL' : 'PASS',
     failed_checks: failed.map((c) => c.id)
@@ -300,6 +359,7 @@ function printReport(r) {
   console.log(`- review file:   ${r.resolved.claims.reviewFile || '(none)'}`);
   console.log(`- review STATUS: ${r.resolved.claims.status || '(parsed at check)'}`);
   console.log(`- allow-list:    ${r.resolved.allow ? r.resolved.allow.join(', ') : '(none)'}`);
+  console.log(`- record files:  ${r.resolved.record ? r.resolved.record.join(', ') : '(none)'}`);
   console.log(`- CURRENT.md block found: ${r.resolved.current_md_block_found}`);
   console.log('');
   console.log('Checks:');
