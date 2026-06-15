@@ -1,16 +1,20 @@
 use crate::utils::fs_ops::remove_file_if_exists;
 use crate::utils::hash::sha256_hex_bytes as sha256_hex;
 use crate::workbench_sqlite_apply::{apply_fixture_dir_to_temp_db, table_count};
-use crate::workbench_sqlite_exporter::{export_temp_db_to_json_dry_run, SqliteProjectedFile};
+use crate::workbench_sqlite_exporter::{
+    export_confirmed_db_to_json_dry_run, export_temp_db_to_json_dry_run,
+    SqliteExportDryRunManifest, SqliteProjectedFile,
+};
 use crate::workbench_sqlite_importer::canonical_json_hash;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 const LEVEL_A: &str = "level_a_fixture";
+const LEVEL_B_WORKBENCH_OWNED_STATE: &str = "level_b_workbench_owned_state";
 const PRODUCTION_OBSERVATION_MODE: &str = "production_observation_export_verification";
 const PRODUCTION_OBSERVATION_SCHEMA_VERSION: &str = "workbench_sqlite_production_observation.v1";
 const LEVEL_A_OBSERVATION_MODE: &str = "level_a_fixture_temp";
@@ -215,6 +219,16 @@ struct ProductionObservationDbRead {
     export_verification: SqliteExportVerification,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SqliteObservationLevelBConfig {
+    pub(crate) confirmed_db_path: PathBuf,
+    pub(crate) confirmed_fallback_root: PathBuf,
+    pub(crate) confirmed_work_dir: PathBuf,
+    pub(crate) confirmed_projection_root: PathBuf,
+    pub(crate) confirmed_rollback_manifest_path: PathBuf,
+    pub(crate) confirmed_observation_report_path: PathBuf,
+}
+
 pub(crate) fn rehearse_production_observation_level_a(
     observation_mode: &str,
     feature_flag_enabled: bool,
@@ -230,10 +244,107 @@ pub(crate) fn rehearse_production_observation_level_a(
     denied_path_markers: &[String],
     failure_point: Option<SqliteProductionObservationFailurePoint>,
 ) -> Result<SqliteProductionObservationReport, String> {
+    rehearse_production_observation(
+        LEVEL_A,
+        observation_mode,
+        feature_flag_enabled,
+        read_model_name,
+        db_path,
+        json_fallback_root,
+        projection_root,
+        observation_report_path,
+        rollback_manifest_path,
+        expected_db_hash,
+        expected_fallback_hash,
+        allowed_read_models,
+        denied_path_markers,
+        failure_point,
+        |db, fallback, projection, rollback, report, denied| {
+            validate_production_observation_paths(
+                db, fallback, projection, rollback, report, denied,
+            )
+        },
+        |db, projection, rollback, failure| {
+            read_production_observation_db(db, projection, rollback, failure)
+        },
+    )
+}
+
+pub(crate) fn rehearse_production_observation_level_b_workbench_owned_state(
+    observation_mode: &str,
+    feature_flag_enabled: bool,
+    read_model_name: &str,
+    db_path: &Path,
+    json_fallback_root: &Path,
+    projection_root: &Path,
+    observation_report_path: &Path,
+    rollback_manifest_path: &Path,
+    expected_db_hash: Option<&str>,
+    expected_fallback_hash: Option<&str>,
+    allowed_read_models: &BTreeSet<String>,
+    denied_path_markers: &[String],
+    config: &SqliteObservationLevelBConfig,
+    failure_point: Option<SqliteProductionObservationFailurePoint>,
+) -> Result<SqliteProductionObservationReport, String> {
+    rehearse_production_observation(
+        LEVEL_B_WORKBENCH_OWNED_STATE,
+        observation_mode,
+        feature_flag_enabled,
+        read_model_name,
+        db_path,
+        json_fallback_root,
+        projection_root,
+        observation_report_path,
+        rollback_manifest_path,
+        expected_db_hash,
+        expected_fallback_hash,
+        allowed_read_models,
+        denied_path_markers,
+        failure_point,
+        |db, fallback, projection, rollback, report, denied| {
+            validate_level_b_production_observation_paths(
+                db, fallback, projection, rollback, report, config, denied,
+            )
+        },
+        |db, projection, rollback, failure| {
+            read_confirmed_production_observation_db(
+                db,
+                &config.confirmed_db_path,
+                projection,
+                rollback,
+                failure,
+            )
+        },
+    )
+}
+
+fn rehearse_production_observation(
+    level: &str,
+    observation_mode: &str,
+    feature_flag_enabled: bool,
+    read_model_name: &str,
+    db_path: &Path,
+    json_fallback_root: &Path,
+    projection_root: &Path,
+    observation_report_path: &Path,
+    rollback_manifest_path: &Path,
+    expected_db_hash: Option<&str>,
+    expected_fallback_hash: Option<&str>,
+    allowed_read_models: &BTreeSet<String>,
+    denied_path_markers: &[String],
+    failure_point: Option<SqliteProductionObservationFailurePoint>,
+    validate_paths: impl Fn(&Path, &Path, &Path, &Path, &Path, &[String]) -> Result<(), String>,
+    read_db: impl Fn(
+        &Path,
+        &Path,
+        &Path,
+        Option<SqliteProductionObservationFailurePoint>,
+    ) -> Result<ProductionObservationDbRead, String>,
+) -> Result<SqliteProductionObservationReport, String> {
     validate_production_observation_mode(observation_mode)?;
     validate_production_observation_read_model(read_model_name, allowed_read_models)?;
     let denied_markers = effective_production_observation_denied_markers(denied_path_markers);
-    validate_production_observation_paths(
+    validate_paths(
         db_path,
         json_fallback_root,
         projection_root,
@@ -244,6 +355,7 @@ pub(crate) fn rehearse_production_observation_level_a(
     remove_file_if_exists(observation_report_path)?;
 
     let fallback = verified_production_observation_fallback(
+        level,
         json_fallback_root,
         read_model_name,
         expected_fallback_hash,
@@ -253,6 +365,7 @@ pub(crate) fn rehearse_production_observation_level_a(
 
     if !feature_flag_enabled {
         let report = production_observation_report(
+            level,
             "feature_flag_disabled_json_fallback_observation",
             observation_mode,
             read_model_name,
@@ -326,7 +439,7 @@ pub(crate) fn rehearse_production_observation_level_a(
         })?;
     }
 
-    match read_production_observation_db(
+    match read_db(
         db_path,
         projection_root,
         rollback_manifest_path,
@@ -334,6 +447,7 @@ pub(crate) fn rehearse_production_observation_level_a(
     ) {
         Ok(db_observation) => {
             let report = production_observation_report(
+                level,
                 "stable_verified",
                 observation_mode,
                 read_model_name,
@@ -353,7 +467,11 @@ pub(crate) fn rehearse_production_observation_level_a(
                 db_observation.counts,
                 db_observation.samples,
                 Some(db_observation.export_verification),
-                SqliteProductionObservationSafetyFlags::for_db_success(),
+                if level == LEVEL_B_WORKBENCH_OWNED_STATE {
+                    SqliteProductionObservationSafetyFlags::for_fallback()
+                } else {
+                    SqliteProductionObservationSafetyFlags::for_db_success()
+                },
                 failure_point,
             );
             write_production_observation_report(observation_report_path, &report)?;
@@ -369,6 +487,7 @@ pub(crate) fn rehearse_production_observation_level_a(
                 );
             }
             let report = production_observation_report(
+                level,
                 "fallback_degraded",
                 observation_mode,
                 read_model_name,
@@ -494,7 +613,80 @@ fn validate_production_observation_paths(
     Ok(())
 }
 
+#[rustfmt::skip]
+fn validate_level_b_production_observation_paths(
+    db_path: &Path,
+    json_fallback_root: &Path,
+    projection_root: &Path,
+    rollback_manifest_path: &Path,
+    observation_report_path: &Path,
+    config: &SqliteObservationLevelBConfig,
+    denied_markers: &[String],
+) -> Result<(), String> {
+    let prelude = |label: &str, actual: &Path, confirmed: Option<&Path>| -> Result<(), String> {
+        if let Some(confirmed) = confirmed {
+            if actual != confirmed {
+                return Err(format!("production_observation_level_b_confirmed_path_mismatch:{label}:expected={}:actual={}", confirmed.display(), actual.display()));
+            }
+        }
+        if !actual.is_absolute() {
+            return Err(format!("production_observation_blocked:absolute_path_required:{}", actual.display()));
+        }
+        if actual.components().any(|component| matches!(component, Component::ParentDir | Component::CurDir)) {
+            return Err(format!("production_observation_level_b_confirmed_path_must_be_clean:{label}:{}", actual.display()));
+        }
+        reject_production_denied_path_markers(actual, denied_markers)
+    };
+    let canonical_dir = |path: &Path, label: &str| -> Result<PathBuf, String> {
+        fs::canonicalize(path).map_err(|error| format!("production_observation_level_b_canonicalize_failed:{label}:{}:{error}", path.display()))
+            .and_then(|canonical| canonical.is_dir().then_some(canonical).ok_or_else(|| format!("production_observation_level_b_dir_required:{label}:{}", path.display())))
+    };
+    let existing = |label: &str, actual: &Path, confirmed: &Path, file_required: bool| -> Result<PathBuf, String> {
+        prelude(label, actual, Some(confirmed))?;
+        let actual_canonical = fs::canonicalize(actual).map_err(|error| format!("production_observation_level_b_canonicalize_failed:{label}:{}:{error}", actual.display()))?;
+        let confirmed_canonical = fs::canonicalize(confirmed).map_err(|error| format!("production_observation_level_b_canonicalize_failed:confirmed_{label}:{}:{error}", confirmed.display()))?;
+        if actual_canonical != confirmed_canonical || actual != actual_canonical.as_path() { return Err(format!("production_observation_level_b_confirmed_path_must_be_canonical:{label}:expected={}:actual={}", confirmed_canonical.display(), actual.display())); }
+        match (file_required, actual_canonical.is_file(), actual_canonical.is_dir()) {
+            (true, false, _) => Err(format!("production_observation_level_b_file_required:{label}:{}", actual.display())),
+            (false, _, false) => Err(format!("production_observation_level_b_dir_required:{label}:{}", actual.display())),
+            _ => Ok(actual_canonical),
+        }
+    };
+    let work_dir = |work_dir: &Path, fallback_root: &Path| -> Result<PathBuf, String> {
+        prelude("work_dir", work_dir, None)?;
+        let canonical_work_dir = canonical_dir(work_dir, "work_dir")?;
+        if work_dir != canonical_work_dir.as_path() {
+            return Err(format!("production_observation_level_b_confirmed_path_must_be_canonical:work_dir:expected={}:actual={}", canonical_work_dir.display(), work_dir.display()));
+        }
+        let canonical_fallback = canonical_dir(fallback_root, "fallback_root")?;
+        if canonical_work_dir.starts_with(&canonical_fallback) {
+            return Err(format!("production_observation_blocked:path_inside_fallback_root_denied:{}", work_dir.display()));
+        }
+        Ok(canonical_work_dir)
+    };
+    let output = |label: &str, actual: &Path, confirmed: &Path, work_dir: &Path, fallback_root: &Path, db_path: &Path| -> Result<(), String> {
+        prelude(label, actual, Some(confirmed))?;
+        let canonical_actual = canonicalize_existing_or_parent_observation(actual, label)?;
+        let canonical_confirmed = canonicalize_existing_or_parent_observation(confirmed, label)?;
+        let canonical_work_dir = canonical_dir(work_dir, "work_dir")?;
+        let canonical_db_dir = db_path.parent().ok_or_else(|| format!("production_observation_level_b_db_parent_required:{}", db_path.display())).and_then(|parent| canonical_dir(parent, "db_parent"))?;
+        if canonical_actual != canonical_confirmed || actual != canonical_actual.as_path() { return Err(format!("production_observation_level_b_confirmed_path_must_be_canonical:{label}:expected={}:actual={}", canonical_confirmed.display(), actual.display())); }
+        if canonical_actual.starts_with(fallback_root) { return Err(format!("production_observation_blocked:path_inside_fallback_root_denied:{}", actual.display())); }
+        if canonical_actual.starts_with(&canonical_db_dir) { return Err(format!("production_observation_blocked:path_inside_db_dir_denied:{}", actual.display())); }
+        if !canonical_actual.starts_with(&canonical_work_dir) { return Err(format!("production_observation_blocked:path_outside_confirmed_work_dir:{label}:{}", actual.display())); }
+        Ok(())
+    };
+    let _db = existing("db_path", db_path, &config.confirmed_db_path, true)?;
+    let fallback = existing("fallback_root", json_fallback_root, &config.confirmed_fallback_root, false)?;
+    let work = work_dir(&config.confirmed_work_dir, &fallback)?;
+    for (label, actual, confirmed) in [("projection_root", projection_root, &config.confirmed_projection_root), ("rollback_manifest_path", rollback_manifest_path, &config.confirmed_rollback_manifest_path), ("observation_report_path", observation_report_path, &config.confirmed_observation_report_path)] {
+        output(label, actual, confirmed, &work, &fallback, db_path)?;
+    }
+    Ok(())
+}
+
 fn verified_production_observation_fallback(
+    level: &str,
     fallback_root: &Path,
     read_model_name: &str,
     expected_fallback_hash: Option<&str>,
@@ -521,7 +713,7 @@ fn verified_production_observation_fallback(
     let export_manifest = json!({
         "schema_version": PRODUCTION_OBSERVATION_SCHEMA_VERSION,
         "mode": PRODUCTION_OBSERVATION_MODE,
-        "level": LEVEL_A,
+        "level": level,
         "status": "verified_json_fallback",
         "read_model_name": read_model_name,
         "fallback_root_hash": fallback_root_hash,
@@ -533,7 +725,7 @@ fn verified_production_observation_fallback(
     let rollback_manifest = json!({
         "schema_version": PRODUCTION_OBSERVATION_SCHEMA_VERSION,
         "mode": PRODUCTION_OBSERVATION_MODE,
-        "level": LEVEL_A,
+        "level": level,
         "status": "fallback_recovery_dry_run_only",
         "projection_hash": projection_hash,
         "recovery_dry_run": production_observation_recovery_plan("json_fallback", &projection_hash)
@@ -553,17 +745,53 @@ fn read_production_observation_db(
     rollback_manifest_path: &Path,
     failure_point: Option<SqliteProductionObservationFailurePoint>,
 ) -> Result<ProductionObservationDbRead, String> {
+    read_production_observation_db_with(
+        LEVEL_A,
+        db_path,
+        projection_root,
+        rollback_manifest_path,
+        failure_point,
+        |label| observation_sample(db_path, projection_root, label),
+        || write_projection_files(db_path, projection_root),
+    )
+}
+
+fn read_confirmed_production_observation_db(
+    db_path: &Path,
+    confirmed_db_path: &Path,
+    projection_root: &Path,
+    rollback_manifest_path: &Path,
+    failure_point: Option<SqliteProductionObservationFailurePoint>,
+) -> Result<ProductionObservationDbRead, String> {
+    read_production_observation_db_with(
+        LEVEL_B_WORKBENCH_OWNED_STATE,
+        db_path,
+        projection_root,
+        rollback_manifest_path,
+        failure_point,
+        |label| observation_sample_confirmed(db_path, confirmed_db_path, projection_root, label),
+        || write_confirmed_projection_files(db_path, confirmed_db_path, projection_root),
+    )
+}
+
+fn read_production_observation_db_with(
+    level: &str,
+    db_path: &Path,
+    projection_root: &Path,
+    rollback_manifest_path: &Path,
+    failure_point: Option<SqliteProductionObservationFailurePoint>,
+    sample: impl Fn(&str) -> Result<SqliteObservationSample, String>,
+    write_projection: impl Fn() -> Result<(), String>,
+) -> Result<ProductionObservationDbRead, String> {
     verify_production_db_integrity(db_path)
         .map_err(|reason| format!("production_observation_fallback:{reason}"))?;
-    let sample_one = observation_sample(db_path, projection_root, "sample_1")
-        .map_err(production_observation_error)?;
+    let sample_one = sample("sample_1").map_err(production_observation_error)?;
     if failure_point
         == Some(SqliteProductionObservationFailurePoint::AfterFirstSampleBeforeSecondSample)
     {
         return Err("injected_failure_after_first_sample_before_second_sample".to_string());
     }
-    let mut sample_two = observation_sample(db_path, projection_root, "sample_2")
-        .map_err(production_observation_error)?;
+    let mut sample_two = sample("sample_2").map_err(production_observation_error)?;
     if failure_point
         == Some(SqliteProductionObservationFailurePoint::ObservationDriftBetweenSamples)
     {
@@ -578,7 +806,7 @@ fn read_production_observation_db(
     verify_export_hashes(&export_verification, &sample_two)
         .map_err(production_observation_error)?;
 
-    write_projection_files(db_path, projection_root).map_err(production_observation_error)?;
+    write_projection().map_err(production_observation_error)?;
     if failure_point == Some(SqliteProductionObservationFailurePoint::ProjectionFileMissing) {
         if let Some(file) = sample_two.projected_files.first() {
             remove_file_if_exists(&projection_root.join(&file.path))?;
@@ -598,6 +826,7 @@ fn read_production_observation_db(
         .map_err(production_observation_error)?;
 
     let manifest_hash = write_production_observation_rollback_manifest(
+        level,
         rollback_manifest_path,
         db_path,
         projection_root,
@@ -638,6 +867,7 @@ fn verify_production_db_integrity(db_path: &Path) -> Result<(), String> {
 }
 
 fn production_observation_report(
+    level: &str,
     status: &str,
     observation_mode: &str,
     read_model_name: &str,
@@ -663,7 +893,7 @@ fn production_observation_report(
     SqliteProductionObservationReport {
         schema_version: PRODUCTION_OBSERVATION_SCHEMA_VERSION.to_string(),
         mode: PRODUCTION_OBSERVATION_MODE.to_string(),
-        level: LEVEL_A.to_string(),
+        level: level.to_string(),
         status: status.to_string(),
         observation_mode: observation_mode.to_string(),
         read_model_name: read_model_name.to_string(),
@@ -715,7 +945,10 @@ fn write_production_observation_report(
     {
         return Err("production_observation_forbidden_safety_flag_true".to_string());
     }
-    if report.status == "stable_verified" && !report.safety_flags.production_observation_enabled {
+    if report.status == "stable_verified"
+        && report.level != LEVEL_B_WORKBENCH_OWNED_STATE
+        && !report.safety_flags.production_observation_enabled
+    {
         return Err("production_observation_stable_report_requires_enabled_flag".to_string());
     }
     if report.status != "stable_verified" && report.safety_flags.production_observation_enabled {
@@ -729,6 +962,7 @@ fn write_production_observation_report(
 }
 
 fn write_production_observation_rollback_manifest(
+    level: &str,
     path: &Path,
     db_path: &Path,
     projection_root: &Path,
@@ -739,7 +973,7 @@ fn write_production_observation_rollback_manifest(
     let payload = json!({
         "schema_version": PRODUCTION_OBSERVATION_SCHEMA_VERSION,
         "mode": PRODUCTION_OBSERVATION_MODE,
-        "level": LEVEL_A,
+        "level": level,
         "status": "completed",
         "db_path_hash": path_hash(db_path),
         "projection_root_hash": path_hash(projection_root),
@@ -818,7 +1052,8 @@ fn production_observation_recovery_plan(
             "would use verified JSON fallback or the last verified JSON projection".to_string(),
             "would preserve SQLite DB for audit".to_string(),
             "would require supervisor decision before any production restore".to_string(),
-            "production restore is not performed by this Level A fixture rehearsal".to_string(),
+            "production restore is not performed by this production observation rehearsal"
+                .to_string(),
         ],
     }
 }
@@ -977,6 +1212,47 @@ fn path_hash(path: &Path) -> String {
     canonical_json_hash(&json!({ "path_ref": path.display().to_string() }))
 }
 
+fn canonicalize_existing_or_parent_observation(
+    path: &Path,
+    label: &str,
+) -> Result<PathBuf, String> {
+    if path.exists() {
+        return fs::canonicalize(path).map_err(|error| {
+            format!(
+                "production_observation_level_b_canonicalize_failed:{label}:{}:{error}",
+                path.display()
+            )
+        });
+    }
+    let mut ancestor = path.parent().ok_or_else(|| {
+        format!(
+            "production_observation_level_b_parent_required:{label}:{}",
+            path.display()
+        )
+    })?;
+    while !ancestor.exists() {
+        ancestor = ancestor.parent().ok_or_else(|| {
+            format!(
+                "production_observation_level_b_existing_parent_required:{label}:{}",
+                path.display()
+            )
+        })?;
+    }
+    let canonical_ancestor = fs::canonicalize(ancestor).map_err(|error| {
+        format!(
+            "production_observation_level_b_parent_canonicalize_failed:{label}:{}:{error}",
+            ancestor.display()
+        )
+    })?;
+    let suffix = path.strip_prefix(ancestor).map_err(|error| {
+        format!(
+            "production_observation_level_b_suffix_failed:{label}:{}:{error}",
+            path.display()
+        )
+    })?;
+    Ok(canonical_ancestor.join(suffix))
+}
+
 fn production_redaction_policy() -> Vec<String> {
     vec![
         "prompt_body:omitted".to_string(),
@@ -1126,6 +1402,29 @@ fn observation_sample(
 ) -> Result<SqliteObservationSample, String> {
     verify_db_integrity(db_path)?;
     let manifest = export_temp_db_to_json_dry_run(db_path, &projection_root.display().to_string())?;
+    observation_sample_from_manifest(db_path, label, manifest)
+}
+
+fn observation_sample_confirmed(
+    db_path: &Path,
+    confirmed_db_path: &Path,
+    projection_root: &Path,
+    label: &str,
+) -> Result<SqliteObservationSample, String> {
+    verify_db_integrity(db_path)?;
+    let manifest = export_confirmed_db_to_json_dry_run(
+        db_path,
+        confirmed_db_path,
+        &projection_root.display().to_string(),
+    )?;
+    observation_sample_from_manifest(db_path, label, manifest)
+}
+
+fn observation_sample_from_manifest(
+    db_path: &Path,
+    label: &str,
+    manifest: SqliteExportDryRunManifest,
+) -> Result<SqliteObservationSample, String> {
     verify_runtime_log_alias_policy(&manifest.projected_files)?;
     let projected_files = observation_projected_files(&manifest.projected_files);
     let projection_hash = projection_hash(&projected_files);
@@ -1229,6 +1528,26 @@ fn projection_hash(files: &[SqliteObservationProjectedFile]) -> String {
 
 fn write_projection_files(db_path: &Path, projection_root: &Path) -> Result<(), String> {
     let manifest = export_temp_db_to_json_dry_run(db_path, &projection_root.display().to_string())?;
+    write_projection_files_from_manifest(projection_root, manifest)
+}
+
+fn write_confirmed_projection_files(
+    db_path: &Path,
+    confirmed_db_path: &Path,
+    projection_root: &Path,
+) -> Result<(), String> {
+    let manifest = export_confirmed_db_to_json_dry_run(
+        db_path,
+        confirmed_db_path,
+        &projection_root.display().to_string(),
+    )?;
+    write_projection_files_from_manifest(projection_root, manifest)
+}
+
+fn write_projection_files_from_manifest(
+    projection_root: &Path,
+    manifest: SqliteExportDryRunManifest,
+) -> Result<(), String> {
     fs::create_dir_all(projection_root).map_err(|error| {
         format!(
             "create sqlite observation projection root failed {}: {error}",
@@ -1536,841 +1855,4 @@ fn manifest_r3_a5_fixture_root() -> PathBuf {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::utils::fs_ops::fixture_dir;
-
-    use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    #[test]
-    fn sqlite_production_observation_feature_flag_disabled_uses_fallback_without_db() {
-        let paths = prepare_production_paths("flag-off");
-        copy_a11_fixture_to_root(&paths.fallback_root);
-        let fallback_hash = expected_fallback_hash(&paths.fallback_root);
-
-        let report = rehearse_production_observation_level_a(
-            LEVEL_A_OBSERVATION_MODE,
-            false,
-            WORKFLOW_STATE_SUMMARY_READ_MODEL,
-            &paths.db_path,
-            &paths.fallback_root,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            None,
-            Some(&fallback_hash),
-            &allowed_production_read_models(),
-            &[],
-            None,
-        )
-        .expect("flag disabled fallback observation");
-
-        assert_eq!(
-            report.status,
-            "feature_flag_disabled_json_fallback_observation"
-        );
-        assert_eq!(report.observation_source, "json_fallback");
-        assert!(report.degraded);
-        assert!(!paths.db_path.exists());
-        assert!(!report.safety_flags.production_observation_enabled);
-        assert!(!report.safety_flags.product_global_read_path_changed);
-        assert!(paths.observation_report_path.exists());
-    }
-
-    #[test]
-    fn sqlite_production_observation_db_stable_success_verifies_two_samples() {
-        let paths = prepare_production_paths("db-stable");
-        copy_a11_fixture_to_root(&paths.fallback_root);
-        apply_fixture_dir_to_temp_db(&paths.fallback_root, &paths.db_path, None).expect("temp db");
-        let db_hash = file_hash(&paths.db_path).expect("db hash");
-        let fallback_hash = expected_fallback_hash(&paths.fallback_root);
-
-        let report = rehearse_production_observation_level_a(
-            LEVEL_A_OBSERVATION_MODE,
-            true,
-            WORKFLOW_STATE_SUMMARY_READ_MODEL,
-            &paths.db_path,
-            &paths.fallback_root,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(&db_hash),
-            Some(&fallback_hash),
-            &allowed_production_read_models(),
-            &[],
-            None,
-        )
-        .expect("db stable observation");
-
-        assert_eq!(report.status, "stable_verified");
-        assert_eq!(report.observation_source, "db_limited_observation");
-        assert!(!report.degraded);
-        assert!(report.safety_flags.production_observation_enabled);
-        assert_eq!(report.samples.len(), 2);
-        assert_eq!(report.samples[0].export_hash, report.samples[1].export_hash);
-        assert_eq!(
-            report.samples[0].projection_hash,
-            report.samples[1].projection_hash
-        );
-        assert!(report.export_verification.is_some());
-        assert!(paths.projection_root.join("runtime-logs.v1.json").exists());
-        assert!(!paths.projection_root.join("runtime-log.v1.json").exists());
-    }
-
-    #[test]
-    fn sqlite_production_observation_db_unavailable_falls_back_degraded() {
-        let paths = prepare_production_paths("db-unavailable");
-        copy_a11_fixture_to_root(&paths.fallback_root);
-        let fallback_hash = expected_fallback_hash(&paths.fallback_root);
-
-        let report = rehearse_production_observation_level_a(
-            LEVEL_A_OBSERVATION_MODE,
-            true,
-            WORKFLOW_STATE_SUMMARY_READ_MODEL,
-            &paths.db_path,
-            &paths.fallback_root,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            None,
-            Some(&fallback_hash),
-            &allowed_production_read_models(),
-            &[],
-            Some(SqliteProductionObservationFailurePoint::DbUnavailable),
-        )
-        .expect("db unavailable fallback");
-
-        assert_eq!(report.status, "fallback_degraded");
-        assert_eq!(report.observation_source, "json_fallback");
-        assert!(report.fallback_decision.contains("db_unavailable"));
-        assert!(!report.safety_flags.production_observation_enabled);
-    }
-
-    #[test]
-    fn sqlite_production_observation_schema_mismatch_falls_back_degraded() {
-        let paths = prepare_production_paths("schema-mismatch");
-        copy_a11_fixture_to_root(&paths.fallback_root);
-        let fallback_hash = expected_fallback_hash(&paths.fallback_root);
-
-        let report = rehearse_production_observation_level_a(
-            LEVEL_A_OBSERVATION_MODE,
-            true,
-            WORKFLOW_STATE_SUMMARY_READ_MODEL,
-            &paths.db_path,
-            &paths.fallback_root,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            None,
-            Some(&fallback_hash),
-            &allowed_production_read_models(),
-            &[],
-            Some(SqliteProductionObservationFailurePoint::DbSchemaMismatch),
-        )
-        .expect("schema mismatch fallback");
-
-        assert_eq!(report.status, "fallback_degraded");
-        assert!(report.fallback_decision.contains("db_schema_mismatch"));
-    }
-
-    #[test]
-    fn sqlite_production_observation_integrity_failure_falls_back_degraded() {
-        let paths = prepare_production_paths("integrity-failure");
-        copy_a11_fixture_to_root(&paths.fallback_root);
-        let fallback_hash = expected_fallback_hash(&paths.fallback_root);
-
-        let report = rehearse_production_observation_level_a(
-            LEVEL_A_OBSERVATION_MODE,
-            true,
-            WORKFLOW_STATE_SUMMARY_READ_MODEL,
-            &paths.db_path,
-            &paths.fallback_root,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            None,
-            Some(&fallback_hash),
-            &allowed_production_read_models(),
-            &[],
-            Some(SqliteProductionObservationFailurePoint::DbIntegrityFailure),
-        )
-        .expect("integrity failure fallback");
-
-        assert_eq!(report.status, "fallback_degraded");
-        assert!(report.fallback_decision.contains("db_integrity_failure"));
-    }
-
-    #[test]
-    fn sqlite_production_observation_hash_projection_manifest_and_drift_failures_block() {
-        for (name, failure, expected) in [
-            (
-                "db-hash",
-                SqliteProductionObservationFailurePoint::DbHashMismatch,
-                "production_observation_blocked:db_hash_mismatch",
-            ),
-            (
-                "fallback-hash",
-                SqliteProductionObservationFailurePoint::FallbackHashMismatch,
-                "production_observation_blocked:fallback_hash_mismatch",
-            ),
-            (
-                "export-hash",
-                SqliteProductionObservationFailurePoint::ExportHashMismatch,
-                "production_observation_blocked:export_hash_mismatch",
-            ),
-            (
-                "projection-missing",
-                SqliteProductionObservationFailurePoint::ProjectionFileMissing,
-                "production_observation_blocked:projection_file_missing",
-            ),
-            (
-                "projection-corrupt",
-                SqliteProductionObservationFailurePoint::ProjectionFileCorrupt,
-                "production_observation_blocked:projection_file_corrupt",
-            ),
-            (
-                "drift",
-                SqliteProductionObservationFailurePoint::ObservationDriftBetweenSamples,
-                "production_observation_blocked:projection_hash_drift",
-            ),
-            (
-                "manifest-missing",
-                SqliteProductionObservationFailurePoint::RollbackManifestMissing,
-                "production_observation_blocked:rollback_manifest_missing",
-            ),
-            (
-                "manifest-incomplete",
-                SqliteProductionObservationFailurePoint::RollbackManifestIncomplete,
-                "production_observation_blocked:rollback_manifest_incomplete",
-            ),
-        ] {
-            let paths = prepare_production_paths(name);
-            copy_a11_fixture_to_root(&paths.fallback_root);
-            apply_fixture_dir_to_temp_db(&paths.fallback_root, &paths.db_path, None)
-                .expect("temp db");
-            let db_hash = file_hash(&paths.db_path).expect("db hash");
-            let fallback_hash = expected_fallback_hash(&paths.fallback_root);
-
-            let err = rehearse_production_observation_level_a(
-                LEVEL_A_OBSERVATION_MODE,
-                true,
-                WORKFLOW_STATE_SUMMARY_READ_MODEL,
-                &paths.db_path,
-                &paths.fallback_root,
-                &paths.projection_root,
-                &paths.observation_report_path,
-                &paths.rollback_manifest_path,
-                Some(&db_hash),
-                Some(&fallback_hash),
-                &allowed_production_read_models(),
-                &[],
-                Some(failure),
-            )
-            .expect_err("failure must block");
-
-            assert!(err.contains(expected), "{name} unexpected error: {err}");
-            assert!(
-                !paths.observation_report_path.exists(),
-                "{name} report leaked"
-            );
-        }
-    }
-
-    #[test]
-    fn sqlite_production_observation_mid_commit_failures_leave_no_stable_report() {
-        for (name, failure, expected) in [
-            (
-                "after-first-sample",
-                SqliteProductionObservationFailurePoint::AfterFirstSampleBeforeSecondSample,
-                "after_first_sample_before_second_sample",
-            ),
-            (
-                "after-fallback",
-                SqliteProductionObservationFailurePoint::AfterFallbackSelectedBeforeReportCommit,
-                "after_fallback_selected_before_report_commit",
-            ),
-            (
-                "after-rollback",
-                SqliteProductionObservationFailurePoint::AfterRollbackSelectedBeforeReportCommit,
-                "after_rollback_selected_before_report_commit",
-            ),
-        ] {
-            let paths = prepare_production_paths(name);
-            copy_a11_fixture_to_root(&paths.fallback_root);
-            if failure
-                != SqliteProductionObservationFailurePoint::AfterFallbackSelectedBeforeReportCommit
-            {
-                apply_fixture_dir_to_temp_db(&paths.fallback_root, &paths.db_path, None)
-                    .expect("temp db");
-            }
-            let db_hash = if paths.db_path.exists() {
-                Some(file_hash(&paths.db_path).expect("db hash"))
-            } else {
-                None
-            };
-            let fallback_hash = expected_fallback_hash(&paths.fallback_root);
-
-            let err = rehearse_production_observation_level_a(
-                LEVEL_A_OBSERVATION_MODE,
-                true,
-                WORKFLOW_STATE_SUMMARY_READ_MODEL,
-                &paths.db_path,
-                &paths.fallback_root,
-                &paths.projection_root,
-                &paths.observation_report_path,
-                &paths.rollback_manifest_path,
-                db_hash.as_deref(),
-                Some(&fallback_hash),
-                &allowed_production_read_models(),
-                &[],
-                Some(failure),
-            )
-            .expect_err("mid commit failure");
-
-            assert!(err.contains(expected), "{name} unexpected error: {err}");
-            assert!(
-                !paths.observation_report_path.exists(),
-                "{name} report leaked"
-            );
-        }
-    }
-
-    #[test]
-    fn sqlite_production_observation_sensitive_redaction_omits_forbidden_values() {
-        let paths = prepare_production_paths("sensitive");
-        copy_a11_fixture_to_root(&paths.fallback_root);
-        apply_fixture_dir_to_temp_db(&paths.fallback_root, &paths.db_path, None).expect("temp db");
-        let db_hash = file_hash(&paths.db_path).expect("db hash");
-        let fallback_hash = expected_fallback_hash(&paths.fallback_root);
-
-        rehearse_production_observation_level_a(
-            LEVEL_A_OBSERVATION_MODE,
-            true,
-            WORKFLOW_STATE_SUMMARY_READ_MODEL,
-            &paths.db_path,
-            &paths.fallback_root,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(&db_hash),
-            Some(&fallback_hash),
-            &allowed_production_read_models(),
-            &[],
-            None,
-        )
-        .expect("sensitive production observation");
-
-        let mut text = fs::read_to_string(&paths.observation_report_path).expect("report");
-        text.push_str(&fs::read_to_string(&paths.rollback_manifest_path).expect("manifest"));
-        for entry in fs::read_dir(&paths.projection_root).expect("projection") {
-            let entry = entry.expect("projection entry");
-            if entry.path().extension().and_then(|value| value.to_str()) == Some("json") {
-                text.push_str(&fs::read_to_string(entry.path()).expect("projection file"));
-            }
-        }
-        for forbidden in [
-            "provider credential value",
-            "full transcript body",
-            "rollout body payload",
-            "\"prompt_body\"",
-            "\"token\"",
-            "\"secret\"",
-        ] {
-            assert!(
-                !text.contains(forbidden),
-                "forbidden value leaked: {forbidden}"
-            );
-        }
-        assert!(text.contains("prompt_body:omitted"));
-    }
-
-    #[test]
-    fn sqlite_production_observation_idempotent_rerun_keeps_report_text() {
-        let paths = prepare_production_paths("idempotent");
-        copy_a11_fixture_to_root(&paths.fallback_root);
-        apply_fixture_dir_to_temp_db(&paths.fallback_root, &paths.db_path, None).expect("temp db");
-        let db_hash = file_hash(&paths.db_path).expect("db hash");
-        let fallback_hash = expected_fallback_hash(&paths.fallback_root);
-
-        rehearse_production_observation_level_a(
-            LEVEL_A_OBSERVATION_MODE,
-            true,
-            WORKFLOW_STATE_SUMMARY_READ_MODEL,
-            &paths.db_path,
-            &paths.fallback_root,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(&db_hash),
-            Some(&fallback_hash),
-            &allowed_production_read_models(),
-            &[],
-            None,
-        )
-        .expect("first production observation");
-        let first = fs::read_to_string(&paths.observation_report_path).expect("first report");
-        rehearse_production_observation_level_a(
-            LEVEL_A_OBSERVATION_MODE,
-            true,
-            WORKFLOW_STATE_SUMMARY_READ_MODEL,
-            &paths.db_path,
-            &paths.fallback_root,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(&db_hash),
-            Some(&fallback_hash),
-            &allowed_production_read_models(),
-            &[],
-            None,
-        )
-        .expect("second production observation");
-        let second = fs::read_to_string(&paths.observation_report_path).expect("second report");
-
-        assert_eq!(first, second);
-    }
-
-    #[test]
-    fn sqlite_observation_stable_verifies_two_samples_and_writes_report() {
-        let fixture = fixture_dir("r3-a5", "observation-export-valid-core-chain");
-        let paths = prepare_paths("stable");
-
-        let report = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            None,
-        )
-        .expect("stable observation");
-
-        assert_eq!(report.observation_status, "stable_verified");
-        assert!(report.stable_verified);
-        assert!(!report.degraded);
-        assert_eq!(report.sample_one.export_hash, report.sample_two.export_hash);
-        assert_eq!(
-            report.sample_one.projection_hash,
-            report.sample_two.projection_hash
-        );
-        assert!(paths.observation_report_path.exists());
-        assert!(paths.rollback_manifest_path.exists());
-        assert!(paths.projection_root.join("runtime-logs.v1.json").exists());
-        assert!(!paths.projection_root.join("runtime-log.v1.json").exists());
-    }
-
-    #[test]
-    fn sqlite_observation_idempotent_rerun_keeps_stable_report_text() {
-        let fixture = fixture_dir("r3-a5", "observation-export-idempotent-rerun");
-        let paths = prepare_paths("idempotent");
-
-        rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            None,
-        )
-        .expect("first observation");
-        let first_report =
-            fs::read_to_string(&paths.observation_report_path).expect("first report");
-        rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            None,
-        )
-        .expect("second observation");
-        let second_report =
-            fs::read_to_string(&paths.observation_report_path).expect("second report");
-
-        assert_eq!(first_report, second_report);
-    }
-
-    #[test]
-    fn sqlite_observation_export_hash_mismatch_blocks_without_stable_report() {
-        let fixture = fixture_dir("r3-a5", "observation-export-hash-mismatch-blocked");
-        let paths = prepare_paths("export-hash-mismatch");
-
-        let err = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(SqliteObservationFailurePoint::ExportHashMismatch),
-        )
-        .expect_err("export hash mismatch must block");
-
-        assert!(err.contains("observation_blocked:export_hash_mismatch"));
-        assert!(!paths.observation_report_path.exists());
-    }
-
-    #[test]
-    fn sqlite_observation_projection_missing_blocks_without_stable_report() {
-        let fixture = fixture_dir("r3-a5", "observation-projection-missing-blocked");
-        let paths = prepare_paths("projection-missing");
-
-        let err = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(SqliteObservationFailurePoint::ProjectionFileMissing),
-        )
-        .expect_err("missing projection must block");
-
-        assert!(err.contains("observation_blocked:projection_file_missing"));
-        assert!(!paths.observation_report_path.exists());
-    }
-
-    #[test]
-    fn sqlite_observation_projection_corrupt_blocks_without_stable_report() {
-        let fixture = fixture_dir("r3-a5", "observation-projection-missing-blocked");
-        let paths = prepare_paths("projection-corrupt");
-
-        let err = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(SqliteObservationFailurePoint::ProjectionFileCorrupt),
-        )
-        .expect_err("corrupt projection must block");
-
-        assert!(err.contains("observation_blocked:projection_file_corrupt"));
-        assert!(!paths.observation_report_path.exists());
-    }
-
-    #[test]
-    fn sqlite_observation_missing_manifest_blocks_without_stable_report() {
-        let fixture = fixture_dir("r3-a5", "observation-manifest-missing-blocked");
-        let paths = prepare_paths("missing-manifest");
-
-        let err = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(SqliteObservationFailurePoint::RollbackManifestMissing),
-        )
-        .expect_err("missing manifest must block");
-
-        assert!(err.contains("observation_blocked:rollback_manifest_missing"));
-        assert!(!paths.observation_report_path.exists());
-    }
-
-    #[test]
-    fn sqlite_observation_incomplete_manifest_blocks_without_stable_report() {
-        let fixture = fixture_dir("r3-a5", "observation-manifest-incomplete-blocked");
-        let paths = prepare_paths("incomplete-manifest");
-
-        let err = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(SqliteObservationFailurePoint::RollbackManifestIncomplete),
-        )
-        .expect_err("incomplete manifest must block");
-
-        assert!(err.contains("observation_blocked:rollback_manifest_incomplete"));
-        assert!(!paths.observation_report_path.exists());
-        assert!(!paths.rollback_manifest_path.exists());
-    }
-
-    #[test]
-    fn sqlite_observation_db_integrity_failure_is_degraded_and_has_no_stable_report() {
-        let fixture = fixture_dir("r3-a5", "observation-db-integrity-failure-degraded");
-        let paths = prepare_paths("db-integrity");
-
-        let err = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(SqliteObservationFailurePoint::DbIntegrityOrSchemaMismatch),
-        )
-        .expect_err("db integrity failure must degrade");
-
-        assert!(err.contains("observation_degraded"));
-        assert!(!err.contains("stable_verified"));
-        assert!(!paths.observation_report_path.exists());
-    }
-
-    #[test]
-    fn sqlite_observation_drift_between_samples_blocks_without_stable_report() {
-        let fixture = fixture_dir("r3-a5", "observation-export-valid-core-chain");
-        let paths = prepare_paths("drift");
-
-        let err = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(SqliteObservationFailurePoint::ObservationDriftBetweenSamples),
-        )
-        .expect_err("observation drift must block");
-
-        assert!(err.contains("observation_blocked:projection_hash_drift"));
-        assert!(!paths.observation_report_path.exists());
-    }
-
-    #[test]
-    fn sqlite_observation_failure_before_sample_creates_no_outputs() {
-        let fixture = fixture_dir("r3-a5", "observation-export-valid-core-chain");
-        let paths = prepare_paths("before-sample");
-
-        let err = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(SqliteObservationFailurePoint::BeforeObservationSample),
-        )
-        .expect_err("before sample failure");
-
-        assert!(err.contains("injected_failure_before_observation_sample"));
-        assert!(!paths.db_path.exists());
-        assert!(!paths.observation_report_path.exists());
-    }
-
-    #[test]
-    fn sqlite_observation_failure_after_first_export_before_second_sample_creates_no_report() {
-        let fixture = fixture_dir("r3-a5", "observation-export-valid-core-chain");
-        let paths = prepare_paths("after-first-export");
-
-        let err = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(SqliteObservationFailurePoint::AfterFirstExportBeforeSecondSample),
-        )
-        .expect_err("after first export failure");
-
-        assert!(err.contains("after_first_export_before_second_sample"));
-        assert!(!paths.observation_report_path.exists());
-    }
-
-    #[test]
-    fn sqlite_observation_failure_after_rollback_selected_before_report_commit_creates_no_report() {
-        let fixture = fixture_dir("r3-a5", "rollback-export-recovery-verification-dry-run");
-        let paths = prepare_paths("rollback-before-report");
-
-        let err = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            Some(SqliteObservationFailurePoint::AfterRollbackSelectedBeforeReportCommit),
-        )
-        .expect_err("after rollback selected failure");
-
-        assert!(err.contains("after_rollback_selected_before_report_commit"));
-        assert!(paths.rollback_manifest_path.exists());
-        assert!(!paths.observation_report_path.exists());
-    }
-
-    #[test]
-    fn sqlite_observation_rollback_verification_is_dry_run_only() {
-        let fixture = fixture_dir("r3-a5", "rollback-export-recovery-verification-dry-run");
-        let paths = prepare_paths("rollback-dry-run");
-
-        let report = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            None,
-        )
-        .expect("rollback dry-run");
-
-        assert_eq!(
-            report.rollback_recovery_verification.status,
-            "rollback_recovery_verification_dry_run_only"
-        );
-        assert!(
-            report
-                .rollback_recovery_verification
-                .would_disable_db_read_cut
-        );
-        assert!(
-            report
-                .rollback_recovery_verification
-                .would_use_last_verified_json_projection
-        );
-        assert!(
-            report
-                .rollback_recovery_verification
-                .would_preserve_db_for_audit
-        );
-        assert!(
-            report
-                .rollback_recovery_verification
-                .would_require_supervisor_decision
-        );
-        assert!(
-            !report
-                .rollback_recovery_verification
-                .production_restore_performed
-        );
-        let manifest_text =
-            fs::read_to_string(&paths.rollback_manifest_path).expect("read manifest");
-        assert!(manifest_text.contains("\"production_restore_performed\":false"));
-        assert!(!manifest_text.contains("\"production_restore_performed\":true"));
-    }
-
-    #[test]
-    fn sqlite_observation_report_projection_and_manifest_omit_forbidden_sensitive_fields() {
-        let fixture = fixture_dir("r3-a5", "observation-sensitive-redaction");
-        let paths = prepare_paths("sensitive");
-
-        rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            None,
-        )
-        .expect("sensitive observation");
-
-        let mut text =
-            fs::read_to_string(&paths.observation_report_path).expect("read observation report");
-        text.push_str(&fs::read_to_string(&paths.rollback_manifest_path).expect("read manifest"));
-        for entry in fs::read_dir(&paths.projection_root).expect("read projection") {
-            let entry = entry.expect("projection entry");
-            if entry.path().extension().and_then(|value| value.to_str()) == Some("json") {
-                text.push_str(&fs::read_to_string(entry.path()).expect("read projection file"));
-            }
-        }
-        assert!(!text.contains("provider credential value"));
-        assert!(!text.contains("full transcript body"));
-        assert!(!text.contains("rollout body payload"));
-        assert!(!text.contains("\"prompt_body\""));
-        assert!(text.contains("prompt_body:omitted"));
-    }
-
-    #[test]
-    fn sqlite_observation_export_records_per_file_verification_fields() {
-        let fixture = fixture_dir("r3-a5", "observation-export-valid-core-chain");
-        let paths = prepare_paths("per-file");
-
-        let report = rehearse_fixture_observation_period(
-            &fixture,
-            &paths.db_path,
-            &paths.projection_root,
-            &paths.observation_report_path,
-            &paths.rollback_manifest_path,
-            None,
-        )
-        .expect("per-file verification");
-
-        for file in &report.export_verification.projected_files {
-            assert!(!file.path.is_empty());
-            assert!(file.hash.len() >= 64);
-            assert!(file.record_count > 0 || file.path == "workflow-state.v0.json");
-            assert_eq!(file.redaction_status, "forbidden_sensitive_fields_omitted");
-        }
-        assert!(report
-            .export_verification
-            .projected_files
-            .iter()
-            .any(|file| file.path == "runtime-logs.v1.json"));
-        assert!(!report
-            .export_verification
-            .projected_files
-            .iter()
-            .any(|file| file.path == "runtime-log.v1.json"));
-    }
-
-    struct ObservationPaths {
-        db_path: PathBuf,
-        projection_root: PathBuf,
-        observation_report_path: PathBuf,
-        rollback_manifest_path: PathBuf,
-    }
-
-    struct ProductionObservationPaths {
-        db_path: PathBuf,
-        fallback_root: PathBuf,
-        projection_root: PathBuf,
-        observation_report_path: PathBuf,
-        rollback_manifest_path: PathBuf,
-    }
-
-    fn prepare_paths(name: &str) -> ObservationPaths {
-        let projection_root = temp_projection_root(name);
-        ObservationPaths {
-            db_path: temp_db(name),
-            observation_report_path: projection_root.join("observation-report.json"),
-            rollback_manifest_path: projection_root.join("rollback-manifest.json"),
-            projection_root,
-        }
-    }
-
-    fn prepare_production_paths(name: &str) -> ProductionObservationPaths {
-        let nanos = unique_nanos();
-        let fallback_root = std::env::temp_dir().join(format!("r3-a11-fallback-{name}-{nanos}"));
-        let projection_root =
-            std::env::temp_dir().join(format!("r3-a11-projection-{name}-{nanos}"));
-        ProductionObservationPaths {
-            db_path: std::env::temp_dir().join(format!("r3-a11-{name}-{nanos}.sqlite")),
-            fallback_root,
-            observation_report_path: projection_root.join("production-observation-report.json"),
-            rollback_manifest_path: projection_root
-                .join("production-observation-rollback-manifest.json"),
-            projection_root,
-        }
-    }
-
-    fn copy_a11_fixture_to_root(root: &Path) {
-        fs::create_dir_all(root).expect("create fallback root");
-        let fixture_root = fixture_dir("r3-a11", "production-observation-workflow-summary");
-        for file_name in ["workflow-state.v0.json", "runtime-logs.v1.json"] {
-            fs::copy(fixture_root.join(file_name), root.join(file_name))
-                .unwrap_or_else(|error| panic!("copy fallback fixture {file_name}: {error}"));
-        }
-    }
-
-    fn expected_fallback_hash(root: &Path) -> String {
-        let workflow = load_production_workflow_state_from_root(root).expect("fallback workflow");
-        let summary = workflow_state_summary(&workflow).expect("summary");
-        canonical_json_hash(&summary)
-    }
-
-    fn allowed_production_read_models() -> BTreeSet<String> {
-        BTreeSet::from([WORKFLOW_STATE_SUMMARY_READ_MODEL.to_string()])
-    }
-
-    fn temp_db(name: &str) -> PathBuf {
-        let nanos = unique_nanos();
-        std::env::temp_dir().join(format!("r3-a5-{name}-{nanos}.sqlite"))
-    }
-
-    fn temp_projection_root(name: &str) -> PathBuf {
-        let nanos = unique_nanos();
-        std::env::temp_dir().join(format!("r3-a5-{name}-{nanos}"))
-    }
-
-    fn unique_nanos() -> u128 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time")
-            .as_nanos()
-    }
-}
+mod tests;
