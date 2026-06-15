@@ -16,7 +16,7 @@
 - [ ] B2 R5 文档与蓝图对齐 → Stage R 收口。
 
 ## C 线 · 尾巴（与 B 并行安全）
-- [ ] **C1** 研究报告落盘 → `syn-research/`（kickoff 已写，待发研究线）
+- [x] **C1** 研究报告落盘 ✅ → `syn-research/2026-06-14-memory-agent-research-v2.md`（266 行/24KB，含完整 DDL/核实/来源；研究线已存，2026-06-15 咨询线核实）。注：syn-research 非 git 跟踪，durability 待定（见下）
 - [x] **C2** 冲突报告落盘 → `docs/research/2026-06-14-three-projects-vs-canon-conflict-report-v1.md`
 - [x] **C3** agentmemory 9 件退役（catalog 已改；AgentMemory 设计点已入 `memory-layer-design §3.5`，退役的只是没接线的脚本）
 - [ ] **C4** checkpoint-audit 工具（kickoff 已写；排在 C1 收口后发，**不依赖 R3**）
