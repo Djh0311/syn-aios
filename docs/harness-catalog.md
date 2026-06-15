@@ -15,12 +15,12 @@
 | --- | --- | --- |
 | `承重` | 几乎每包都跑 | 用 |
 | `休眠` | 被 config/阶段关掉（hooks/CI/UI/MCP） | 本阶段别依赖；**别删**，换阶段会用 |
-| `休眠·待定` | agentmemory 簇；config `memoryIntegration.enabled=false`，且产品已改走文件记忆 | 别依赖；**是否永久退役待用户拍，本包不决定** |
+| `休眠·待定` | （已清空 2026-06-14：agentmem 簇经用户决定转 `退役`，见特别标注） | — |
 | `未接` | 装好从没接上电（能力在、没 wire 进 hook/CI/流程） | 可补的缺口；接线后可用。后缀 `HG-2①②③④⑩`=本轮接线目标；`元`=只服务 harness 自身、采用后才谈得上 |
 | `已接` | 已接进 AGENTS.md 流程（手动调用点，hooks 仍关） | 用 |
 | `退役` / `退役候选` | 被取代/重复 | 别用；文件留着不删 |
 
-统计（HG-2 后）：`承重` 2 ｜ `配套自测` 1（HG-3 selftest）｜ `休眠` 11 ｜ `休眠·待定` 9 ｜ `未接` 42（含元工具）｜ `已接` 14（HG-2 五组）｜ `退役` 1。合计 80。
+统计（HG-2 后；agentmem 退役 2026-06-14）：`承重` 2 ｜ `配套自测` 1（HG-3 selftest）｜ `休眠` 11 ｜ `休眠·待定` 0 ｜ `未接` 42（含元工具）｜ `已接` 14（HG-2 五组）｜ `退役` 10（capability-map + agentmem 簇 9）。合计 80。
 
 > 「怎么调」列统一省略前缀 `node scripts/harness/`；`--target .` 为常用默认。`lib/` 为内部库，被 `require`，不单独 CLI 调。37 个命令另可经 `node scripts/harness/harness.js <子命令>` 路由（`harness.js --help` 看全表）。
 
@@ -60,13 +60,13 @@
 | installed-health.js | 检查已安装 harness 的健康/漂移 | 未接·元 | `installed-health.js --target .` |
 | managed-files-audit.js | 审计 manifest 托管文件是否被本地改动 | 未接·元 | `managed-files-audit.js --target .` |
 | mcp-doctor.js | 检查 MCP 工具可用性/健康 | 休眠（本阶段无 MCP） | `mcp-doctor.js --target .` |
-| memory-agentmemory-query.js | 经治理包装查询 agentmemory | 休眠·待定 | `harness.js memory agentmemory query` |
-| memory-agentmemory-save.js | 把批准的记忆写入 agentmemory | 休眠·待定 | `harness.js memory agentmemory save` |
-| memory-candidate-lint.js | lint 治理记忆候选 | 休眠·待定 | `harness.js memory candidate lint` |
-| memory-candidate-new.js | 新建治理记忆候选 | 休眠·待定 | `harness.js memory candidate new` |
-| memory-maintenance.js | 记忆 lint/staleness/后端健康聚合 | 休眠·待定 | `harness.js memory maintenance` |
-| memory-review.js | 复核/改记忆候选状态 | 休眠·待定 | `harness.js memory review` |
-| memory-stale-check.js | 查记忆候选过期 | 休眠·待定 | `harness.js memory stale-check` |
+| memory-agentmemory-query.js | 经治理包装查询 agentmemory | 退役·agentmem | `harness.js memory agentmemory query` |
+| memory-agentmemory-save.js | 把批准的记忆写入 agentmemory | 退役·agentmem | `harness.js memory agentmemory save` |
+| memory-candidate-lint.js | lint 治理记忆候选 | 退役·agentmem | `harness.js memory candidate lint` |
+| memory-candidate-new.js | 新建治理记忆候选 | 退役·agentmem | `harness.js memory candidate new` |
+| memory-maintenance.js | 记忆 lint/staleness/后端健康聚合 | 退役·agentmem | `harness.js memory maintenance` |
+| memory-review.js | 复核/改记忆候选状态 | 退役·agentmem | `harness.js memory review` |
+| memory-stale-check.js | 查记忆候选过期 | 退役·agentmem | `harness.js memory stale-check` |
 | mistake-check.js | 查错误账本里相关历史失败 | 已接·HG-2② | `mistake-check.js --target .` |
 | mistake-new.js | 新建错误账本条目 | 已接·HG-2② | `mistake-new.js --target .` |
 | mistake-query.js | 查询错误账本 | 已接·HG-2② | `harness.js mistake query` |
@@ -100,13 +100,13 @@
 
 | 脚本 | 干啥（一行） | 状态 | 被谁调 |
 | --- | --- | --- | --- |
-| lib/agentmemory-client.js | agentmemory HTTP 客户端 | 休眠·待定 | memory-agentmemory-* |
+| lib/agentmemory-client.js | agentmemory HTTP 客户端 | 退役·agentmem | memory-agentmemory-* |
 | lib/check-runner.js | 检查执行器（聚合门共用） | 未接·元 | doctor/pre-work/pre-completion |
 | lib/config-loader.js | 加载 harness.config.json | 未接·元 | 几乎所有脚本 |
 | lib/context-pack.js | context-pack 核心逻辑 | 未接 | context-pack.js |
 | lib/evidence-audit.js | 证据审计核心逻辑 | 未接 | evidence-check/-freshness |
 | lib/manifest.js | 读写 .harness/manifest.json | 未接·元 | install/sync/managed-files-audit |
-| lib/memory-governance.js | 记忆治理核心逻辑 | 休眠·待定 | memory-* |
+| lib/memory-governance.js | 记忆治理核心逻辑 | 退役·agentmem | memory-* |
 | lib/mistake-retrieval.js | 错误账本检索核心逻辑 | 未接 | mistake-check/-query |
 | lib/project-kind.js | 探测项目类型 | 未接·元 | project-profile/risk |
 | lib/risk-classifier.js | 风险分类器 | 未接·元 | task-risk |
@@ -116,7 +116,7 @@
 
 ## 特别标注（本包不替用户决定）
 
-- **agentmemory 9 件**（memory-agentmemory-query/-save、memory-candidate-new/-lint、memory-review、memory-stale-check、memory-maintenance、lib/agentmemory-client、lib/memory-governance）：`休眠·待定`。config `memoryIntegration.enabled=false`，且产品已改走 Claude 文件记忆 + `handoffs/`，agentmemory 可能**永久不启用**。**是否永久退役待用户拍**——本索引只登记，不决定。
+- **agentmemory 9 件**（memory-agentmemory-query/-save、memory-candidate-new/-lint、memory-review、memory-stale-check、memory-maintenance、lib/agentmemory-client、lib/memory-governance）：**`退役`（用户已决定 2026-06-14）**。config `memoryIntegration.enabled=false`，产品已改走 Claude 文件记忆 + `handoffs/`。**文件留着不删**。AgentMemory 项目的设计点（自动观察层、生命周期钩子、raw→语义压缩、混合召回、session replay）**已吸收进 `docs/memory-layer-design-v1.md §3.5`**——退役的是没接线的集成脚本，不是那些点子。
 - **capability-map.js**：`退役`（HG-2 ⑩ 已落实）。与 `capability-scan.js` 目标重复（都扫项目能力，arg 解析近乎雷同）；`capability-scan` 已接进 pre-work 调用点并取代它。**文件留着不删**，仅在本索引与 AGENTS.md 标退役。
 
 ## 维护约定
