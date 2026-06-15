@@ -72,6 +72,58 @@ Status: Open
 
 ## Active Mistakes
 
+## M-0003: Copied Previous Window Result Into B3b Execution Record
+
+Date: 2026-06-16
+Task / Requirement: R3 Level B / B3b controlled observation ledger closure
+Affected Area: Evidence ledger / execution-record accuracy
+Detected By: User correction before commit
+
+### Symptom
+
+- `execution-record.json` for B3b contained a `read_cut_results[0]` flag-off entry claiming `feature_flag_disabled_fallback`.
+- B3b runner actually ran only Pass A hash discovery and Pass B flag-on DB limited observation.
+- No flag-off B3b report or artifact existed.
+
+### Wrong Assumption
+
+- The agent reused the B2b execution-record shape and assumed the flag-off / flag-on pair applied to B3b as well.
+
+### Wrong Action
+
+- Wrote a result entry for an execution that did not happen.
+- Used the copied field name `read_cut_results` for an observation window.
+
+### Actual Root Cause
+
+- The B3b observation window was not the same execution shape as B2b read-cut.
+- The evidence ledger was templated from the previous window without proving each result row against a real runner pass and artifact.
+
+### Detection Evidence
+
+- User correction on 2026-06-16: B3b only had one report `9cd28f...`, and no flag-off run or product existed.
+
+### Correct Fix
+
+- Replace `read_cut_results` with `observation_results`.
+- Remove the fake flag-off result.
+- Keep only the true flag-on `stable_verified` observation result and its two stable samples.
+
+### Regression Protection
+
+- Test/check added: process check only; B3b review was rerun with explicit requirement to match every result row to a real run and artifact.
+- Evidence location: `evidence/r3-level-b/b3-observation-20260615-225700/review-parfit-v1.md`.
+
+### Prevention
+
+- Before closing any execution record, verify every result entry answers: "Was this actually run?" and "Which artifact proves it?"
+- Do not copy result array names across windows unless the execution shape is identical.
+- If an execution record is template-derived, list every copied result field and delete the ones that do not have a matching runner pass and artifact.
+
+Status: Open
+
+---
+
 ## M-0002: Markdown Backticks Triggered Shell Command Substitution During H3-B Scan
 
 Date: 2026-06-07

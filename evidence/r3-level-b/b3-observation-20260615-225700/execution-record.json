@@ -1,0 +1,177 @@
+{
+  "schema_version": "root_treatment_r3_level_b_execution_record.v1",
+  "window_id": "r3-level-b-b3-observation-20260615-225700",
+  "phase": "B3_observation",
+  "status": "completed",
+  "supervisor": "codex-global-supervisor",
+  "user_present_required": true,
+  "user_confirmation_ref": "user-thread-2026-06-15-b3b-true-observation-window",
+  "git_head_before": "1a2db175141becf020fc042de8a51a32d06808e8",
+  "git_head_after": "1a2db175141becf020fc042de8a51a32d06808e8",
+  "allowed_roots": [
+    "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state",
+    "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615",
+    "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b3-observation-20260615",
+    "/Users/yoyi/workspace/product-line/evidence/r3-level-b/b3-observation-20260615-225700"
+  ],
+  "denied_paths": [
+    "/Users/yoyi/.codex",
+    "secret",
+    "token",
+    ".env",
+    "keychain",
+    "OAuth",
+    "provider credential",
+    "full transcript",
+    "rollout body",
+    "prompt body"
+  ],
+  "confirmed_paths": {
+    "workbench_state_root": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state",
+    "production_db_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615/workbench-state.v1.sqlite",
+    "fallback_root": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state",
+    "work_dir": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b3-observation-20260615",
+    "projection_root": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b3-observation-20260615/projection",
+    "rollback_manifest_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b3-observation-20260615/rollback/production-observation-rollback-manifest.json",
+    "report_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b3-observation-20260615/reports/production-observation-report.json"
+  },
+  "source_root_hash_before": "861b720fd0a8f4cb47a50cca16801134146c8f66198369ad7d3b74546ae1c1f4",
+  "source_root_hash_after": "861b720fd0a8f4cb47a50cca16801134146c8f66198369ad7d3b74546ae1c1f4",
+  "source_root_hash_algorithm": "limited_read_cut_dir_hash.v1:sorted_filename_and_sha256_json_manifest",
+  "record_counts": {
+    "projects": 5,
+    "workflows": 5,
+    "work_items": 12,
+    "audit_events": 356,
+    "source_records": 627,
+    "memory_records": 0,
+    "memory_candidates": 0,
+    "observations": 0
+  },
+  "source_inventory_before_after": [
+    {
+      "relative_path": "workflow-state.v0.json",
+      "sha256_before": "4bd5434fdca9e82c8fafc42989e1a267ed7d677bfe2972273fb3afaa26829972",
+      "sha256_after": "4bd5434fdca9e82c8fafc42989e1a267ed7d677bfe2972273fb3afaa26829972",
+      "size_bytes": 2060497
+    },
+    {
+      "relative_path": "plan-authorizations.v1.json",
+      "sha256_before": "6962e4781f49246525d4cde37d3133924a66faa12b8aab90db106c3c9f401b0e",
+      "sha256_after": "6962e4781f49246525d4cde37d3133924a66faa12b8aab90db106c3c9f401b0e",
+      "size_bytes": 15211
+    }
+  ],
+  "production_db_path_hash": "b557ddc1d1143fdf16f0beb6ea436151e1fcf464ecb9bb3e237b1768a24b0c6e",
+  "production_db_hash_before": "12d65f21ae383b72afd1b23347548974502ba60ca6a4143ca6b6fc94270f03ba",
+  "production_db_hash_after": "12d65f21ae383b72afd1b23347548974502ba60ca6a4143ca6b6fc94270f03ba",
+  "report_file_sha256": "9cd28f032c8bcd1b7ef9725cd1d8c92db05321a6656aa63834d0247304e1a8d8",
+  "rollback_manifest_file_sha256": "3df9887ccee02e23cd6e5ab62de9d7314570fc7f143bca84666b9bed445d3841",
+  "projection_file_sha256": "02c6db07f0c3f347e09ba30fb43695b6429c7e5c1a1a3f606325fcab357301e4",
+  "read_cut_scope": "none",
+  "observation_scope": "workflow_state_summary",
+  "observation_mode": "level_b_workbench_owned_state",
+  "observation_results": [
+    {
+      "runner_pass": "pass_b",
+      "result_executed": true,
+      "status": "stable_verified",
+      "observation_source": "db_limited_observation",
+      "actual_db_hash": "12d65f21ae383b72afd1b23347548974502ba60ca6a4143ca6b6fc94270f03ba",
+      "report_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b3-observation-20260615/reports/production-observation-report.json",
+      "report_hash": "9cd28f032c8bcd1b7ef9725cd1d8c92db05321a6656aa63834d0247304e1a8d8",
+      "projection_hash": "0a79ba13d818bda886eea4b2abb0faa7710cd0c51b7018c37bd49c87405cb590",
+      "sample_projection_hashes": [
+        "0a79ba13d818bda886eea4b2abb0faa7710cd0c51b7018c37bd49c87405cb590",
+        "0a79ba13d818bda886eea4b2abb0faa7710cd0c51b7018c37bd49c87405cb590"
+      ],
+      "sample_export_hashes": [
+        "1aef44c8ae3a046497be70a878720ea45c26e390bbb1edda2b5649b18f908326",
+        "1aef44c8ae3a046497be70a878720ea45c26e390bbb1edda2b5649b18f908326"
+      ],
+      "sample_hashes_match": true,
+      "counts": {
+        "projects": 5,
+        "workflows": 5,
+        "work_items": 12,
+        "audit_events": 356
+      },
+      "safety_flags": {
+        "app_startup_reads_db": false,
+        "codex_home_touched": false,
+        "new_write_path_added": false,
+        "product_global_read_path_changed": false,
+        "production_observation_enabled": false,
+        "production_restore_performed": false,
+        "source_json_written": false,
+        "stop_write_json": false,
+        "tauri_command_reads_db": false,
+        "ui_reads_db": false
+      }
+    }
+  ],
+  "artifact_copies": [
+    {
+      "source_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b3-observation-20260615/reports/production-observation-report.json",
+      "evidence_path": "artifacts/production-observation-report.json",
+      "sha256": "9cd28f032c8bcd1b7ef9725cd1d8c92db05321a6656aa63834d0247304e1a8d8"
+    },
+    {
+      "source_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b3-observation-20260615/rollback/production-observation-rollback-manifest.json",
+      "evidence_path": "artifacts/production-observation-rollback-manifest.json",
+      "sha256": "3df9887ccee02e23cd6e5ab62de9d7314570fc7f143bca84666b9bed445d3841"
+    },
+    {
+      "source_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b3-observation-20260615/projection/workflow-state.v0.json",
+      "evidence_path": "artifacts/workflow-state.v0.json",
+      "sha256": "02c6db07f0c3f347e09ba30fb43695b6429c7e5c1a1a3f606325fcab357301e4"
+    }
+  ],
+  "production_db_created": false,
+  "production_root_written": false,
+  "stop_write_json": false,
+  "source_json_written": false,
+  "sidecar_written": false,
+  "codex_home_touched": false,
+  "product_global_read_path_changed": false,
+  "product_global_write_path_changed": false,
+  "rollback_or_recovery_performed": false,
+  "fresh_verify": [
+    {
+      "name": "B3 runner pass A with discover placeholder for fallback expectation",
+      "status": "blocked_as_expected",
+      "evidence": "production_observation_blocked:fallback_hash_mismatch:expected=discover:actual=dc0524de763f785891148c71cde9a97ef0c451395199a5adffaf1a50fa70e0d5"
+    },
+    {
+      "name": "B3 runner pass B with expected fallback hash from pass A",
+      "status": "pass",
+      "evidence": "test result: ok. 1 passed; 0 failed; 0 ignored"
+    },
+    {
+      "name": "node scripts/harness/checkpoint-audit.js --commit HEAD --review evidence/r3-level-b/b3-observation-20260615-225700/review-parfit-v1.md --allow-dirty --skip-gates --allow CURRENT.md,evidence/**,docs/**,tasks/**,prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_observation_period.rs,prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_observation_period/tests.rs --record evidence/r3-level-b/b3-observation-20260615-225700/execution-record.json",
+      "status": "pass",
+      "evidence": "review_status=CLEAR (checkpoint-audit parser normalizes CLEAR_WITH_NOTE to CLEAR); evidence_hash_format=PASS; files_checked=1; hash_fields_checked=23"
+    }
+  ],
+  "independent_review": {
+    "review_line": "Parfit",
+    "agent_id": "019ecc10-98a6-7eb2-aeaf-4729a2830f06",
+    "status": "CLEAR_WITH_NOTE",
+    "p2": [],
+    "p2_status": "none",
+    "notes": [
+      "The B3b execution record now has exactly one observation_results row and it maps to the real Pass B flag-on DB limited observation report; no flag-off row or flag-off artifact is claimed.",
+      "The archived production observation report still contains a top-level observation_mode value of level_a_fixture_temp while also recording level=level_b_workbench_owned_state, feature_flag_enabled=true, status=stable_verified, and observation_source=db_limited_observation. This is a non-blocking misleading residual field in the artifact, not evidence of a fixture/temp run."
+    ],
+    "evidence": "evidence/r3-level-b/b3-observation-20260615-225700/review-parfit-v1.md"
+  },
+  "do_not_claim": [
+    "read-cut executed",
+    "stop-write executed",
+    "full storage migration completed",
+    "R3 Level B complete",
+    "multi-agent parallel real execution unlocked",
+    "real Codex execution performed",
+    "/Users/yoyi/.codex touched"
+  ]
+}
