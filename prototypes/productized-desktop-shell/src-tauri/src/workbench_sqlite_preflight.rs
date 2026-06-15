@@ -1,4 +1,7 @@
-use crate::utils::hash::sha256_hex_bytes as sha256_hex;
+use crate::utils::hash::{
+    sha256_hex_bytes as sha256_hex, workbench_source_aggregate_hash,
+    WorkbenchSourceAggregateHashEntry, WORKBENCH_SOURCE_AGGREGATE_HASH_ALGORITHM,
+};
 use crate::workbench_sqlite_importer::{
     CANONICAL_RUNTIME_LOG, LEGACY_RUNTIME_LOG_ALIAS, OPTIONAL_SIDECARS, PRIMARY_WORKFLOW_STATE,
 };
@@ -52,6 +55,7 @@ pub(crate) struct SqliteProductionPreflightReport {
     pub(crate) status: String,
     pub(crate) source_root_ref: String,
     pub(crate) source_root_hash: String,
+    pub(crate) source_root_hash_algorithm: String,
     pub(crate) files: Vec<SqlitePreflightFileReport>,
     pub(crate) counts: SqlitePreflightCounts,
     pub(crate) backup_readiness: SqlitePreflightBackupReadiness,
@@ -230,6 +234,7 @@ pub(crate) fn scan_workbench_state_root_preflight_with_config(
         status: status.to_string(),
         source_root_ref: source_root.display().to_string(),
         source_root_hash,
+        source_root_hash_algorithm: WORKBENCH_SOURCE_AGGREGATE_HASH_ALGORITHM.to_string(),
         files: file_reports,
         counts,
         backup_readiness,
@@ -523,15 +528,11 @@ fn contains_forbidden_top_level_key(value: &Value, denied_path_markers: &[String
 }
 
 fn source_root_hash(files: &[SqlitePreflightFileReport]) -> String {
-    let mut input = String::new();
-    for file in files {
-        input.push_str(&file.path_ref);
-        if let Some(hash) = &file.file_hash {
-            input.push_str(hash);
-        }
-        input.push_str(&file.classification);
-    }
-    sha256_hex(input.as_bytes())
+    workbench_source_aggregate_hash(files.iter().map(|file| WorkbenchSourceAggregateHashEntry {
+        path_ref: &file.path_ref,
+        file_hash: file.file_hash.as_deref(),
+        classification: &file.classification,
+    }))
 }
 
 fn denied_path_hit(path: &Path, denied_path_markers: &[String]) -> bool {
@@ -637,6 +638,44 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("missing_optional")));
+    }
+
+    #[test]
+    fn sqlite_preflight_source_root_hash_uses_canonical_aggregate_helper() {
+        let root = temp_test_dir("canonical-aggregate");
+        write_json(
+            &root.join(PRIMARY_WORKFLOW_STATE),
+            &json!({
+                "schema_version": "workflow_state_v0",
+                "revision": 1,
+                "projects": []
+            }),
+        );
+        write_json(
+            &root.join("plan-authorizations.v1.json"),
+            &json!({
+                "schema_version": "plan_authorization_store.v1",
+                "revision": 2,
+                "authorizations": [],
+                "audit_events": []
+            }),
+        );
+
+        let report =
+            scan_workbench_state_root_preflight(&root, None).expect("preflight should scan");
+        let canonical_hash = workbench_source_aggregate_hash(report.files.iter().map(|file| {
+            WorkbenchSourceAggregateHashEntry {
+                path_ref: &file.path_ref,
+                file_hash: file.file_hash.as_deref(),
+                classification: &file.classification,
+            }
+        }));
+
+        assert_eq!(
+            report.source_root_hash_algorithm,
+            WORKBENCH_SOURCE_AGGREGATE_HASH_ALGORITHM
+        );
+        assert_eq!(report.source_root_hash, canonical_hash);
     }
 
     #[test]
@@ -791,6 +830,59 @@ mod tests {
             .is_none());
     }
 
+    #[test]
+    #[ignore = "requires explicit R3 B0 hash calibration authorization and real workbench state root"]
+    fn r3_b0_hash_calibration_real_workbench_state_root_requires_env_authorization() {
+        let confirmation = std::env::var("R3_B0_HASH_CALIBRATION_CONFIRM")
+            .expect("R3_B0_HASH_CALIBRATION_CONFIRM is required for real B0 hash calibration");
+        assert_eq!(confirmation, "CONFIRMED_READONLY_2026_06_15");
+        let source = canonical_env_path("R3_B0_SOURCE_STATE_ROOT");
+        let report_path = canonical_parent_env_path("R3_B0_PREFLIGHT_REPORT_PATH");
+        let expected_workflow_hash = std::env::var("R3_B0_EXPECTED_WORKFLOW_STATE_HASH")
+            .expect("R3_B0_EXPECTED_WORKFLOW_STATE_HASH is required");
+        let expected_authorization_hash = std::env::var("R3_B0_EXPECTED_PLAN_AUTHORIZATIONS_HASH")
+            .expect("R3_B0_EXPECTED_PLAN_AUTHORIZATIONS_HASH is required");
+
+        let report = scan_workbench_state_root_preflight(&source, Some(&report_path))
+            .expect("B0 hash calibration preflight must complete");
+        let workflow = report
+            .files
+            .iter()
+            .find(|file| file.path_ref == PRIMARY_WORKFLOW_STATE)
+            .expect("workflow state file must be present");
+        let plan_authorizations = report
+            .files
+            .iter()
+            .find(|file| file.path_ref == "plan-authorizations.v1.json")
+            .expect("plan authorizations file must be present");
+
+        assert_eq!(
+            workflow.file_hash.as_deref(),
+            Some(expected_workflow_hash.as_str())
+        );
+        assert_eq!(
+            plan_authorizations.file_hash.as_deref(),
+            Some(expected_authorization_hash.as_str())
+        );
+        assert_eq!(report.counts.files_seen, 2);
+        assert_eq!(report.counts.files_accepted, 2);
+        assert_eq!(report.counts.files_rejected, 0);
+        assert_eq!(report.counts.blocked_reasons, 0);
+        assert_eq!(
+            report.source_root_hash_algorithm,
+            WORKBENCH_SOURCE_AGGREGATE_HASH_ALGORITHM
+        );
+        println!(
+            "R3_B0_CANONICAL_SOURCE_ROOT_HASH={}",
+            report.source_root_hash
+        );
+        println!(
+            "R3_B0_SOURCE_ROOT_HASH_ALGORITHM={}",
+            report.source_root_hash_algorithm
+        );
+        println!("R3_B0_PREFLIGHT_REPORT_PATH={}", report_path.display());
+    }
+
     trait ReportAssertions {
         fn report_flags_stay_false(&self) -> bool;
         fn report_contains_file(&self, path_ref: &str) -> bool;
@@ -818,6 +910,41 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("r3-a7-{label}-{nonce}"));
         fs::create_dir_all(&dir).expect("temp dir");
         dir
+    }
+
+    fn canonical_env_path(name: &str) -> PathBuf {
+        let value = std::env::var(name).unwrap_or_else(|_| panic!("{name} is required"));
+        fs::canonicalize(&value)
+            .unwrap_or_else(|error| panic!("canonicalize {name} failed for {value}: {error}"))
+    }
+
+    fn canonical_parent_env_path(name: &str) -> PathBuf {
+        let value = std::env::var(name).unwrap_or_else(|_| panic!("{name} is required"));
+        let path = PathBuf::from(&value);
+        if path.exists() {
+            return fs::canonicalize(&path).unwrap_or_else(|error| {
+                panic!("canonicalize existing {name} failed for {value}: {error}")
+            });
+        }
+        let parent = path
+            .parent()
+            .unwrap_or_else(|| panic!("{name} has no parent: {value}"));
+        let mut ancestor = parent;
+        while !ancestor.exists() {
+            ancestor = ancestor
+                .parent()
+                .unwrap_or_else(|| panic!("{name} has no existing ancestor: {value}"));
+        }
+        let canonical_ancestor = fs::canonicalize(ancestor).unwrap_or_else(|error| {
+            panic!(
+                "canonicalize existing ancestor for {name} failed {}: {error}",
+                ancestor.display()
+            )
+        });
+        let suffix = path
+            .strip_prefix(ancestor)
+            .unwrap_or_else(|error| panic!("strip prefix for {name} failed: {error}"));
+        canonical_ancestor.join(suffix)
     }
 
     fn write_json(path: &Path, value: &Value) {

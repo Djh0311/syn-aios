@@ -1,0 +1,127 @@
+{
+  "schema_version": "root_treatment_r3_level_b_execution_record.v1",
+  "window_id": "r3-level-b-b0-hash-calibration-20260615-152136",
+  "phase": "B0_hash_calibration_refreeze",
+  "status": "completed",
+  "supervisor": "codex-global-supervisor",
+  "user_present_required": false,
+  "user_confirmation_ref": "user-thread-2026-06-15-r3-b0-hash-calibration-and-b1-retry-prep",
+  "git_head_before": "97ec465",
+  "git_head_after": "pending_before_commit",
+  "allowed_roots": [
+    "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state",
+    "/Users/yoyi/workspace/product-line/evidence/r3-level-b/b0-hash-calibration-20260615-152136"
+  ],
+  "denied_paths": [
+    "/Users/yoyi/.codex",
+    "secret",
+    "token",
+    ".env",
+    "keychain",
+    "OAuth",
+    "provider credential",
+    "full transcript",
+    "rollout body",
+    "prompt body"
+  ],
+  "old_b0_source_root_hash": "2fbdb7bfdc71b30d5b4d2bec2dfdde50de98ab24942c8ba550d29b6b539d3b53",
+  "canonical_source_root_hash": "31cdea623d928ea2dc13d0a02eaefd23f2df1a27f454d5d7ea17d51fe3b4b801",
+  "source_root_hash_before": "31cdea623d928ea2dc13d0a02eaefd23f2df1a27f454d5d7ea17d51fe3b4b801",
+  "source_root_hash_after": "31cdea623d928ea2dc13d0a02eaefd23f2df1a27f454d5d7ea17d51fe3b4b801",
+  "source_root_hash_algorithm": "workbench_source_aggregate_hash.v1:preflight_path_ref_file_hash_classification_concat",
+  "calibration_classification": "aggregate_hash_algorithm_divergence_not_source_content_drift",
+  "source_inventory": [
+    {
+      "relative_path": "plan-authorizations.v1.json",
+      "exists": true,
+      "size_bytes": 15211,
+      "sha256": "6962e4781f49246525d4cde37d3133924a66faa12b8aab90db106c3c9f401b0e",
+      "classification": "accepted",
+      "revision": 14
+    },
+    {
+      "relative_path": "workflow-state.v0.json",
+      "exists": true,
+      "size_bytes": 2060497,
+      "sha256": "4bd5434fdca9e82c8fafc42989e1a267ed7d677bfe2972273fb3afaa26829972",
+      "classification": "accepted",
+      "revision": null
+    }
+  ],
+  "preflight_report_path": "evidence/r3-level-b/b0-hash-calibration-20260615-152136/preflight-report.json",
+  "preflight_report_hash": "c96ccd90ad6837e6a8e434ceb74a8ad1202f6a32f6bdaad22ccb61b62f3c8dc4",
+  "source_root_file_count": 2,
+  "missing_optional_sidecars": 13,
+  "production_db_path_hash": "not_applicable_b0_hash_calibration",
+  "production_db_hash_before": "missing_before=true",
+  "production_db_hash_after": "not_created",
+  "backup_manifest_hash": "not_created",
+  "rollback_manifest_hash": "not_created",
+  "report_hash": "not_applicable_b0_hash_calibration",
+  "read_cut_scope": "none",
+  "stop_write_json": false,
+  "source_json_written": false,
+  "sidecar_written": false,
+  "codex_home_touched": false,
+  "product_global_read_path_changed": false,
+  "product_global_write_path_changed": false,
+  "rollback_or_recovery_performed": false,
+  "fresh_verify": [
+    {
+      "name": "B0 canonical hash runner",
+      "status": "pass",
+      "evidence": "R3_B0_CANONICAL_SOURCE_ROOT_HASH=31cdea623d928ea2dc13d0a02eaefd23f2df1a27f454d5d7ea17d51fe3b4b801"
+    },
+    {
+      "name": "cargo fmt -- --check",
+      "status": "pass",
+      "evidence": "empty output"
+    },
+    {
+      "name": "cargo test --lib sqlite_preflight -- --nocapture",
+      "status": "pass",
+      "evidence": "9 passed; 0 failed; 1 ignored"
+    },
+    {
+      "name": "cargo test --lib sqlite_production -- --nocapture",
+      "status": "pass",
+      "evidence": "29 passed; 0 failed; 1 ignored"
+    },
+    {
+      "name": "cargo test --lib",
+      "status": "pass",
+      "evidence": "492 passed; 0 failed; 18 ignored"
+    },
+    {
+      "name": "node scripts/harness/workbench-shape-gate.js --mode check",
+      "status": "pass",
+      "evidence": "Status: pass; Errors: 0; Warnings: 0; Git HEAD: 97ec46504027f92dc897bf9afb43dea418f8ca35"
+    },
+    {
+      "name": "git diff --check",
+      "status": "pass",
+      "evidence": "empty output"
+    }
+  ],
+  "independent_review": {
+    "review_line": "Ampere",
+    "agent_id": "019eca2b-6f24-7d11-bf3a-0dd74066ea85",
+    "status": "CLEAR_WITH_P2",
+    "p2_status": "fixed_or_clarified",
+    "evidence": "evidence/r3-level-b/b0-hash-calibration-20260615-152136/review-ampere-v1.md"
+  },
+  "next_required_decision": "B1 retry may only start after user reconfirms the canonical expected source hash and the same confirmed output paths.",
+  "do_not_claim": [
+    "B1 production apply executed",
+    "production DB created",
+    "backup manifest created",
+    "rollback manifest created",
+    "read-cut executed",
+    "stop-write executed",
+    "full storage migration completed",
+    "R3 Level B complete",
+    "multi-agent parallel real execution unlocked",
+    "real Codex execution performed",
+    "/Users/yoyi/.codex touched"
+  ]
+}
