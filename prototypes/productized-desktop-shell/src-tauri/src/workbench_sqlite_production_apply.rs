@@ -30,6 +30,7 @@ const PRODUCTION_APPLY_SCHEMA_VERSION: &str = "workbench_sqlite_production_apply
 const BACKUP_MANIFEST_NAME: &str = "production-apply-backup-manifest.json";
 const APPLY_MANIFEST_NAME: &str = "production-apply-manifest.json";
 const EXPORT_MANIFEST_NAME: &str = "production-apply-export-manifest.json";
+const BACKUP_SOURCE_DIR_NAME: &str = "source-files";
 const DEFAULT_DENIED_PATH_MARKERS: &[&str] = &[
     "/users/yoyi/.codex",
     ".codex",
@@ -330,6 +331,9 @@ fn rehearse_production_db_apply(
 
     let before_source_hashes = source_file_hashes(source_state_root, config)?;
     reset_dir(backup_root)?;
+    if level == LEVEL_B_WORKBENCH_OWNED_STATE {
+        copy_source_files_to_backup(source_state_root, backup_root, &before_source_hashes)?;
+    }
     if failure_point
         == Some(SqliteProductionApplyFailurePoint::BackupManifestWriteFailureBeforeDbCreate)
     {
@@ -584,6 +588,51 @@ fn write_backup_manifest(
     value["backup_manifest_hash"] = Value::String(manifest_hash.clone());
     write_json_file(&backup_root.join(BACKUP_MANIFEST_NAME), &value)?;
     Ok(manifest_hash)
+}
+
+fn copy_source_files_to_backup(
+    source_state_root: &Path,
+    backup_root: &Path,
+    source_hashes: &[SqliteProductionSourceFileHash],
+) -> Result<(), String> {
+    let backup_source_root = backup_root.join(BACKUP_SOURCE_DIR_NAME);
+    fs::create_dir_all(&backup_source_root).map_err(|error| {
+        format!(
+            "create production apply source backup dir failed {}: {error}",
+            backup_source_root.display()
+        )
+    })?;
+    for source_file in source_hashes {
+        if source_file.path_ref.contains('/') || source_file.path_ref.contains('\\') {
+            return Err(format!(
+                "production_apply_blocked:backup_source_path_must_be_flat:{}",
+                source_file.path_ref
+            ));
+        }
+        let source_path = source_state_root.join(&source_file.path_ref);
+        let backup_path = backup_source_root.join(&source_file.path_ref);
+        fs::copy(&source_path, &backup_path).map_err(|error| {
+            format!(
+                "copy production apply source backup failed {} -> {}: {error}",
+                source_path.display(),
+                backup_path.display()
+            )
+        })?;
+        let copied = fs::read(&backup_path).map_err(|error| {
+            format!(
+                "read production apply source backup failed {}: {error}",
+                backup_path.display()
+            )
+        })?;
+        let copied_hash = sha256_hex(&copied);
+        if copied_hash != source_file.file_hash {
+            return Err(format!(
+                "production_apply_blocked:backup_source_hash_mismatch:{}",
+                source_file.path_ref
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn write_apply_manifest(
@@ -1651,6 +1700,11 @@ mod tests {
         assert_eq!(report.before_source_hashes, report.after_source_hashes);
         assert!(paths.db_path.exists());
         assert!(paths.backup_root.join(BACKUP_MANIFEST_NAME).exists());
+        assert!(paths
+            .backup_root
+            .join(BACKUP_SOURCE_DIR_NAME)
+            .join(PRIMARY_WORKFLOW_STATE)
+            .exists());
         assert!(paths.rollback_manifest_path.exists());
     }
 
@@ -1863,6 +1917,79 @@ mod tests {
         assert!(err.contains("production_apply_temp_paths_required"));
     }
 
+    #[test]
+    #[ignore = "requires explicit R3 B1 production apply authorization and confirmed paths"]
+    fn r3_b1_production_apply_confirmed_paths_requires_env_authorization() {
+        let confirmation = std::env::var("R3_B1_APPLY_CONFIRM")
+            .expect("R3_B1_APPLY_CONFIRM is required for real B1 apply");
+        assert_eq!(confirmation, "CONFIRMED_USER_PRESENT_2026_06_15");
+        let expected_source_hash = std::env::var("R3_B1_EXPECTED_SOURCE_ROOT_HASH")
+            .expect("R3_B1_EXPECTED_SOURCE_ROOT_HASH is required for real B1 apply");
+        let source = canonical_env_path("R3_B1_SOURCE_STATE_ROOT");
+        let paths = Paths {
+            db_path: canonical_parent_env_path("R3_B1_PRODUCTION_DB_PATH"),
+            backup_root: canonical_parent_env_path("R3_B1_BACKUP_ROOT"),
+            report_path: canonical_parent_env_path("R3_B1_REPORT_PATH"),
+            rollback_manifest_path: canonical_parent_env_path("R3_B1_ROLLBACK_MANIFEST_PATH"),
+        };
+        let config = SqliteProductionApplyLevelBConfig {
+            apply_config: SqliteProductionApplyConfig {
+                expected_source_root_hash: Some(expected_source_hash),
+                ..SqliteProductionApplyConfig::default()
+            },
+            confirmed_source_state_root: source.clone(),
+            confirmed_production_db_path: paths.db_path.clone(),
+            confirmed_backup_root: paths.backup_root.clone(),
+            confirmed_report_path: paths.report_path.clone(),
+            confirmed_rollback_manifest_path: paths.rollback_manifest_path.clone(),
+        };
+
+        let report = rehearse_production_db_apply_level_b_workbench_owned_state(
+            &source,
+            &paths.db_path,
+            &paths.backup_root,
+            &paths.report_path,
+            &paths.rollback_manifest_path,
+            &config,
+            None,
+        )
+        .expect("R3 B1 real production apply must complete");
+
+        assert_eq!(report.level, LEVEL_B_WORKBENCH_OWNED_STATE);
+        assert_eq!(report.status, "completed");
+        assert!(report.safety_flags.production_db_created);
+        assert!(report.safety_flags.production_apply_performed);
+        assert!(!report.safety_flags.read_cut_enabled);
+        assert!(!report.safety_flags.stop_write_json);
+        assert!(!report.safety_flags.source_json_written);
+        assert!(!report.safety_flags.codex_home_touched);
+        assert_eq!(report.before_source_hashes, report.after_source_hashes);
+        assert!(paths.db_path.exists());
+        assert!(paths.backup_root.join(BACKUP_MANIFEST_NAME).exists());
+        assert!(paths.backup_root.join(APPLY_MANIFEST_NAME).exists());
+        assert!(paths.backup_root.join(EXPORT_MANIFEST_NAME).exists());
+        assert!(paths.rollback_manifest_path.exists());
+        assert!(paths.report_path.exists());
+        println!(
+            "R3_B1_PRODUCTION_APPLY_REPORT_PATH={}",
+            paths.report_path.display()
+        );
+        println!("R3_B1_PRODUCTION_DB_PATH={}", paths.db_path.display());
+        println!(
+            "R3_B1_BACKUP_MANIFEST_PATH={}",
+            paths.backup_root.join(BACKUP_MANIFEST_NAME).display()
+        );
+        println!(
+            "R3_B1_ROLLBACK_MANIFEST_PATH={}",
+            paths.rollback_manifest_path.display()
+        );
+        println!("R3_B1_SOURCE_ROOT_HASH={}", report.source_root_hash);
+        println!(
+            "R3_B1_EXPORT_HASH={}",
+            report.export_verification.db_export_hash
+        );
+    }
+
     struct Paths {
         db_path: PathBuf,
         backup_root: PathBuf,
@@ -1933,6 +2060,41 @@ mod tests {
             fs::copy(&path, root.join(name)).expect("copy confirmed source file");
         }
         root
+    }
+
+    fn canonical_env_path(name: &str) -> PathBuf {
+        let value = std::env::var(name).unwrap_or_else(|_| panic!("{name} is required"));
+        fs::canonicalize(&value)
+            .unwrap_or_else(|error| panic!("canonicalize {name} failed for {value}: {error}"))
+    }
+
+    fn canonical_parent_env_path(name: &str) -> PathBuf {
+        let value = std::env::var(name).unwrap_or_else(|_| panic!("{name} is required"));
+        let path = PathBuf::from(&value);
+        if path.exists() {
+            return fs::canonicalize(&path).unwrap_or_else(|error| {
+                panic!("canonicalize existing {name} failed for {value}: {error}")
+            });
+        }
+        let parent = path
+            .parent()
+            .unwrap_or_else(|| panic!("{name} has no parent: {value}"));
+        let mut ancestor = parent;
+        while !ancestor.exists() {
+            ancestor = ancestor
+                .parent()
+                .unwrap_or_else(|| panic!("{name} has no existing ancestor: {value}"));
+        }
+        let canonical_ancestor = fs::canonicalize(ancestor).unwrap_or_else(|error| {
+            panic!(
+                "canonicalize existing ancestor for {name} failed {}: {error}",
+                ancestor.display()
+            )
+        });
+        let suffix = path
+            .strip_prefix(ancestor)
+            .unwrap_or_else(|error| panic!("strip prefix for {name} failed: {error}"));
+        canonical_ancestor.join(suffix)
     }
 
     fn unique_label(label: &str) -> String {

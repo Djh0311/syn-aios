@@ -1,0 +1,138 @@
+{
+  "schema_version": "root_treatment_r3_level_b_execution_record.v1",
+  "window_id": "r3-level-b-b1-production-apply-20260615-150005",
+  "phase": "B1_production_apply",
+  "status": "failed_classified",
+  "supervisor": "codex-global-supervisor",
+  "user_present_required": true,
+  "user_confirmation_ref": "user-thread-2026-06-15-confirm-paths-and-start-b1-apply",
+  "git_head_before": "370acd3b1eb004ce589881570ba54f794fbf4dea",
+  "git_head_after": "370acd3b1eb004ce589881570ba54f794fbf4dea",
+  "runtime_worktree_changes": [
+    "prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_production_apply.rs"
+  ],
+  "allowed_roots": [
+    "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state",
+    "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615"
+  ],
+  "denied_paths": [
+    "/Users/yoyi/.codex",
+    "secret",
+    "token",
+    ".env",
+    "keychain",
+    "OAuth",
+    "provider credential",
+    "full transcript",
+    "rollout body",
+    "prompt body"
+  ],
+  "confirmed_paths": {
+    "workbench_state_root": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state",
+    "production_db_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615/workbench-state.v1.sqlite",
+    "backup_root": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615/backup",
+    "report_root": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615/reports",
+    "report_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615/reports/production-apply-report.json",
+    "rollback_manifest_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615/rollback/rollback-manifest.json"
+  },
+  "source_root_hash_before": "2fbdb7bfdc71b30d5b4d2bec2dfdde50de98ab24942c8ba550d29b6b539d3b53",
+  "source_root_hash_after": "2fbdb7bfdc71b30d5b4d2bec2dfdde50de98ab24942c8ba550d29b6b539d3b53",
+  "level_b_preflight_actual_source_root_hash": "31cdea623d928ea2dc13d0a02eaefd23f2df1a27f454d5d7ea17d51fe3b4b801",
+  "classification": "blocked_before_db_create_due_source_root_hash_mismatch",
+  "classification_evidence": [
+    "B1 runner stopped with production_apply_blocked:source_root_hash_mismatch before DB create.",
+    "Direct file hashes for workflow-state.v0.json and plan-authorizations.v1.json still match B0.",
+    "WORKBENCH_STATE_ROOT currently contains only those two files.",
+    "r3-migration-work did not exist after the failed attempt.",
+    "Current preflight hash implementation uses path_ref + file_hash + classification, while B0 README documented path_sha256 + file_sha256 + relative_path."
+  ],
+  "source_inventory_after_failed_attempt": [
+    {
+      "relative_path": "workflow-state.v0.json",
+      "exists": true,
+      "sha256": "4bd5434fdca9e82c8fafc42989e1a267ed7d677bfe2972273fb3afaa26829972"
+    },
+    {
+      "relative_path": "plan-authorizations.v1.json",
+      "exists": true,
+      "sha256": "6962e4781f49246525d4cde37d3133924a66faa12b8aab90db106c3c9f401b0e"
+    }
+  ],
+  "production_db_path_hash": "not_recorded_failed_before_db_create",
+  "production_db_hash_before": "missing_before=true",
+  "production_db_hash_after": "not_created",
+  "backup_manifest_hash": "not_created",
+  "rollback_manifest_hash": "not_created",
+  "report_hash": "not_created",
+  "read_cut_scope": "none",
+  "stop_write_json": false,
+  "source_json_written": false,
+  "sidecar_written": false,
+  "codex_home_touched": false,
+  "product_global_read_path_changed": false,
+  "product_global_write_path_changed": false,
+  "rollback_or_recovery_performed": false,
+  "fresh_verify": [
+    {
+      "name": "cargo test --lib sqlite_apply -- --nocapture",
+      "status": "pass",
+      "evidence": "6 passed; 0 failed"
+    },
+    {
+      "name": "cargo test --lib sqlite_export -- --nocapture",
+      "status": "pass",
+      "evidence": "3 passed; 0 failed"
+    },
+    {
+      "name": "cargo test --lib sqlite_production -- --nocapture",
+      "status": "pass",
+      "evidence": "29 passed; 0 failed; 1 ignored"
+    },
+    {
+      "name": "cargo fmt -- --check",
+      "status": "pass",
+      "evidence": "empty output"
+    },
+    {
+      "name": "node scripts/harness/workbench-shape-gate.js --mode check",
+      "status": "pass",
+      "evidence": "Status: pass; Errors: 0; Warnings: 0; Git HEAD: 370acd3b1eb004ce589881570ba54f794fbf4dea"
+    },
+    {
+      "name": "git diff --check",
+      "status": "pass",
+      "evidence": "empty output"
+    },
+    {
+      "name": "cargo test --lib",
+      "status": "pass",
+      "evidence": "490 passed; 0 failed; 17 ignored"
+    },
+    {
+      "name": "B1 ignored runner",
+      "status": "failed_classified",
+      "evidence": "source_root_hash_mismatch expected=2fbdb7bfdc71b30d5b4d2bec2dfdde50de98ab24942c8ba550d29b6b539d3b53 actual=31cdea623d928ea2dc13d0a02eaefd23f2df1a27f454d5d7ea17d51fe3b4b801"
+    }
+  ],
+  "independent_review": {
+    "review_line": "Jason",
+    "agent_id": "019eca11-45c0-7ef2-bebb-ab64e77358b6",
+    "status": "CLEAR",
+    "scope": "static review of B1 runner and source backup diff before real apply"
+  },
+  "next_required_decision": "Do not retry B1 with a substituted hash. First run a B0 hash-algorithm calibration or B0-refresh window, then re-confirm the B1 expected source hash.",
+  "do_not_claim": [
+    "B1 production apply completed",
+    "production DB created",
+    "backup manifest created",
+    "rollback manifest created",
+    "report created by production apply",
+    "read-cut executed",
+    "stop-write executed",
+    "full storage migration completed",
+    "R3 Level B complete",
+    "multi-agent parallel real execution unlocked",
+    "real Codex execution performed",
+    "/Users/yoyi/.codex touched"
+  ]
+}
