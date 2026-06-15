@@ -1,16 +1,20 @@
 use crate::utils::fs_ops::remove_file_if_exists;
 use crate::utils::hash::sha256_hex_bytes as sha256_hex;
 use crate::workbench_sqlite_apply::{apply_fixture_dir_to_temp_db, table_count};
-use crate::workbench_sqlite_exporter::{export_temp_db_to_json_dry_run, SqliteProjectedFile};
+use crate::workbench_sqlite_exporter::{
+    export_confirmed_db_to_json_dry_run, export_temp_db_to_json_dry_run,
+    SqliteExportDryRunManifest, SqliteProjectedFile,
+};
 use crate::workbench_sqlite_importer::canonical_json_hash;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 const LEVEL_A: &str = "level_a_fixture";
+const LEVEL_B_WORKBENCH_OWNED_STATE: &str = "level_b_workbench_owned_state";
 const LIMITED_READ_CUT_MODE: &str = "limited_read_cut";
 const LIMITED_READ_CUT_SCHEMA_VERSION: &str = "workbench_sqlite_limited_read_cut.v1";
 const WORKFLOW_STATE_SUMMARY_READ_MODEL: &str = "workflow_state_summary";
@@ -123,6 +127,16 @@ pub(crate) struct SqliteLimitedReadCutReport {
     pub(crate) redaction_policy: Vec<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SqliteLimitedReadCutLevelBConfig {
+    pub(crate) confirmed_db_path: PathBuf,
+    pub(crate) confirmed_fallback_root: PathBuf,
+    pub(crate) confirmed_work_dir: PathBuf,
+    pub(crate) confirmed_projection_root: PathBuf,
+    pub(crate) confirmed_rollback_manifest_path: PathBuf,
+    pub(crate) confirmed_read_cut_report_path: PathBuf,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct SqliteLimitedReadCutRecoveryDryRun {
     pub(crate) status: String,
@@ -191,9 +205,98 @@ pub(crate) fn rehearse_limited_read_cut_level_a(
     denied_path_markers: &[String],
     failure_point: Option<SqliteLimitedReadCutFailurePoint>,
 ) -> Result<SqliteLimitedReadCutReport, String> {
+    rehearse_limited_read_cut(
+        LEVEL_A,
+        read_model_name,
+        feature_flag_enabled,
+        db_path,
+        json_fallback_root,
+        projection_root,
+        rollback_manifest_path,
+        read_cut_report_path,
+        expected_db_hash,
+        expected_fallback_hash,
+        allowed_read_models,
+        denied_path_markers,
+        failure_point,
+        |db, fallback, projection, rollback, report, denied| {
+            validate_limited_read_cut_paths(db, fallback, projection, rollback, report, denied)
+        },
+        |db, model, projection, failure| read_limited_db_model(db, model, projection, failure),
+    )
+}
+
+pub(crate) fn rehearse_limited_read_cut_level_b_workbench_owned_state(
+    read_model_name: &str,
+    feature_flag_enabled: bool,
+    db_path: &Path,
+    json_fallback_root: &Path,
+    projection_root: &Path,
+    rollback_manifest_path: &Path,
+    read_cut_report_path: &Path,
+    expected_db_hash: Option<&str>,
+    expected_fallback_hash: Option<&str>,
+    allowed_read_models: &BTreeSet<String>,
+    denied_path_markers: &[String],
+    config: &SqliteLimitedReadCutLevelBConfig,
+    failure_point: Option<SqliteLimitedReadCutFailurePoint>,
+) -> Result<SqliteLimitedReadCutReport, String> {
+    rehearse_limited_read_cut(
+        LEVEL_B_WORKBENCH_OWNED_STATE,
+        read_model_name,
+        feature_flag_enabled,
+        db_path,
+        json_fallback_root,
+        projection_root,
+        rollback_manifest_path,
+        read_cut_report_path,
+        expected_db_hash,
+        expected_fallback_hash,
+        allowed_read_models,
+        denied_path_markers,
+        failure_point,
+        |db, fallback, projection, rollback, report, denied| {
+            validate_level_b_limited_read_cut_paths(
+                db, fallback, projection, rollback, report, config, denied,
+            )
+        },
+        |db, model, projection, failure| {
+            read_limited_confirmed_db_model(
+                db,
+                &config.confirmed_db_path,
+                model,
+                projection,
+                failure,
+            )
+        },
+    )
+}
+
+fn rehearse_limited_read_cut(
+    level: &str,
+    read_model_name: &str,
+    feature_flag_enabled: bool,
+    db_path: &Path,
+    json_fallback_root: &Path,
+    projection_root: &Path,
+    rollback_manifest_path: &Path,
+    read_cut_report_path: &Path,
+    expected_db_hash: Option<&str>,
+    expected_fallback_hash: Option<&str>,
+    allowed_read_models: &BTreeSet<String>,
+    denied_path_markers: &[String],
+    failure_point: Option<SqliteLimitedReadCutFailurePoint>,
+    validate_paths: impl Fn(&Path, &Path, &Path, &Path, &Path, &[String]) -> Result<(), String>,
+    read_db_model: impl Fn(
+        &Path,
+        &str,
+        &Path,
+        Option<SqliteLimitedReadCutFailurePoint>,
+    ) -> Result<LimitedDbProjection, String>,
+) -> Result<SqliteLimitedReadCutReport, String> {
     validate_limited_read_model(read_model_name, allowed_read_models)?;
     let denied_markers = effective_limited_denied_markers(denied_path_markers);
-    validate_limited_read_cut_paths(
+    validate_paths(
         db_path,
         json_fallback_root,
         projection_root,
@@ -204,6 +307,7 @@ pub(crate) fn rehearse_limited_read_cut_level_a(
     remove_file_if_exists(read_cut_report_path)?;
 
     let fallback = verified_limited_json_fallback(
+        level,
         json_fallback_root,
         read_model_name,
         expected_fallback_hash,
@@ -213,6 +317,7 @@ pub(crate) fn rehearse_limited_read_cut_level_a(
 
     if !feature_flag_enabled {
         let report = limited_read_cut_report(
+            level,
             "feature_flag_disabled_fallback",
             read_model_name,
             false,
@@ -282,7 +387,7 @@ pub(crate) fn rehearse_limited_read_cut_level_a(
         })?;
     }
 
-    match read_limited_db_model(db_path, read_model_name, projection_root, failure_point) {
+    match read_db_model(db_path, read_model_name, projection_root, failure_point) {
         Ok(db_projection) => {
             if failure_point
                 == Some(SqliteLimitedReadCutFailurePoint::AfterDbReadBeforeReportCommit)
@@ -291,7 +396,7 @@ pub(crate) fn rehearse_limited_read_cut_level_a(
                 return Err("injected_failure_after_db_read_before_report_commit".to_string());
             }
             let manifest_hash =
-                write_limited_rollback_manifest(rollback_manifest_path, &db_projection)?;
+                write_limited_rollback_manifest(level, rollback_manifest_path, &db_projection)?;
             let verified_manifest_hash = verify_limited_rollback_manifest(
                 rollback_manifest_path,
                 failure_point,
@@ -301,6 +406,7 @@ pub(crate) fn rehearse_limited_read_cut_level_a(
                 return Err("limited_read_cut_blocked:rollback_manifest_hash_mismatch".to_string());
             }
             let report = limited_read_cut_report(
+                level,
                 "completed",
                 read_model_name,
                 true,
@@ -316,7 +422,11 @@ pub(crate) fn rehearse_limited_read_cut_level_a(
                 expected_fallback_hash,
                 &fallback.projection_hash,
                 db_projection.counts,
-                SqliteLimitedReadCutSafetyFlags::for_db_success(),
+                if level == LEVEL_B_WORKBENCH_OWNED_STATE {
+                    SqliteLimitedReadCutSafetyFlags::for_fallback()
+                } else {
+                    SqliteLimitedReadCutSafetyFlags::for_db_success()
+                },
                 failure_point,
             );
             write_limited_read_cut_report(read_cut_report_path, &report)?;
@@ -332,6 +442,7 @@ pub(crate) fn rehearse_limited_read_cut_level_a(
                 );
             }
             let report = limited_read_cut_report(
+                level,
                 "fallback_degraded",
                 read_model_name,
                 true,
@@ -570,7 +681,231 @@ fn validate_limited_read_cut_paths(
     Ok(())
 }
 
+fn validate_level_b_limited_read_cut_paths(
+    db_path: &Path,
+    json_fallback_root: &Path,
+    projection_root: &Path,
+    rollback_manifest_path: &Path,
+    read_cut_report_path: &Path,
+    config: &SqliteLimitedReadCutLevelBConfig,
+    denied_markers: &[String],
+) -> Result<(), String> {
+    validate_level_b_existing_path(
+        "db_path",
+        db_path,
+        &config.confirmed_db_path,
+        true,
+        denied_markers,
+    )?;
+    validate_level_b_existing_path(
+        "fallback_root",
+        json_fallback_root,
+        &config.confirmed_fallback_root,
+        false,
+        denied_markers,
+    )?;
+    validate_level_b_work_dir(
+        &config.confirmed_work_dir,
+        json_fallback_root,
+        denied_markers,
+    )?;
+    for (label, actual, confirmed) in [
+        (
+            "projection_root",
+            projection_root,
+            &config.confirmed_projection_root,
+        ),
+        (
+            "rollback_manifest_path",
+            rollback_manifest_path,
+            &config.confirmed_rollback_manifest_path,
+        ),
+        (
+            "read_cut_report_path",
+            read_cut_report_path,
+            &config.confirmed_read_cut_report_path,
+        ),
+    ] {
+        validate_level_b_output_path(
+            label,
+            actual,
+            confirmed,
+            &config.confirmed_work_dir,
+            json_fallback_root,
+            db_path,
+            denied_markers,
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_level_b_existing_path(
+    label: &str,
+    actual: &Path,
+    confirmed: &Path,
+    file_required: bool,
+    denied_markers: &[String],
+) -> Result<(), String> {
+    if actual != confirmed {
+        return Err(format!(
+            "limited_read_cut_level_b_confirmed_path_mismatch:{label}:expected={}:actual={}",
+            confirmed.display(),
+            actual.display()
+        ));
+    }
+    if !actual.is_absolute() {
+        return Err(format!(
+            "limited_read_cut_blocked:absolute_path_required:{}",
+            actual.display()
+        ));
+    }
+    require_clean_level_b_path(label, actual)?;
+    reject_denied_path_markers(actual, denied_markers)?;
+    let canonical_actual = fs::canonicalize(actual).map_err(|error| {
+        format!(
+            "limited_read_cut_level_b_canonicalize_failed:{label}:{}:{error}",
+            actual.display()
+        )
+    })?;
+    let canonical_confirmed = fs::canonicalize(confirmed).map_err(|error| {
+        format!(
+            "limited_read_cut_level_b_canonicalize_failed:confirmed_{label}:{}:{error}",
+            confirmed.display()
+        )
+    })?;
+    if canonical_actual != canonical_confirmed || actual != canonical_actual.as_path() {
+        return Err(format!(
+            "limited_read_cut_level_b_confirmed_path_must_be_canonical:{label}:expected={}:actual={}",
+            canonical_confirmed.display(),
+            actual.display()
+        ));
+    }
+    if file_required && !canonical_actual.is_file() {
+        return Err(format!(
+            "limited_read_cut_level_b_file_required:{label}:{}",
+            actual.display()
+        ));
+    }
+    if !file_required && !canonical_actual.is_dir() {
+        return Err(format!(
+            "limited_read_cut_level_b_dir_required:{label}:{}",
+            actual.display()
+        ));
+    }
+    Ok(())
+}
+
+fn validate_level_b_work_dir(
+    work_dir: &Path,
+    fallback_root: &Path,
+    denied_markers: &[String],
+) -> Result<(), String> {
+    if !work_dir.is_absolute() {
+        return Err(format!(
+            "limited_read_cut_blocked:absolute_path_required:{}",
+            work_dir.display()
+        ));
+    }
+    require_clean_level_b_path("work_dir", work_dir)?;
+    reject_denied_path_markers(work_dir, denied_markers)?;
+    let canonical_work_dir = canonical_existing_dir_limited(work_dir, "work_dir")?;
+    let canonical_fallback = canonical_existing_dir_limited(fallback_root, "fallback_root")?;
+    if work_dir != canonical_work_dir.as_path() {
+        return Err(format!(
+            "limited_read_cut_level_b_confirmed_path_must_be_canonical:work_dir:expected={}:actual={}",
+            canonical_work_dir.display(),
+            work_dir.display()
+        ));
+    }
+    if canonical_work_dir.starts_with(&canonical_fallback) {
+        return Err(format!(
+            "limited_read_cut_blocked:path_inside_fallback_root_denied:{}",
+            work_dir.display()
+        ));
+    }
+    Ok(())
+}
+
+fn validate_level_b_output_path(
+    label: &str,
+    actual: &Path,
+    confirmed: &Path,
+    work_dir: &Path,
+    fallback_root: &Path,
+    db_path: &Path,
+    denied_markers: &[String],
+) -> Result<(), String> {
+    if actual != confirmed {
+        return Err(format!(
+            "limited_read_cut_level_b_confirmed_path_mismatch:{label}:expected={}:actual={}",
+            confirmed.display(),
+            actual.display()
+        ));
+    }
+    if !actual.is_absolute() {
+        return Err(format!(
+            "limited_read_cut_blocked:absolute_path_required:{}",
+            actual.display()
+        ));
+    }
+    require_clean_level_b_path(label, actual)?;
+    reject_denied_path_markers(actual, denied_markers)?;
+    let canonical_actual = canonicalize_existing_or_parent_limited(actual, label)?;
+    let canonical_confirmed = canonicalize_existing_or_parent_limited(confirmed, label)?;
+    let canonical_work_dir = canonical_existing_dir_limited(work_dir, "work_dir")?;
+    let canonical_fallback = canonical_existing_dir_limited(fallback_root, "fallback_root")?;
+    let canonical_db_dir = db_path
+        .parent()
+        .ok_or_else(|| {
+            format!(
+                "limited_read_cut_level_b_db_parent_required:{}",
+                db_path.display()
+            )
+        })
+        .and_then(|parent| canonical_existing_dir_limited(parent, "db_parent"))?;
+    if canonical_actual != canonical_confirmed || actual != canonical_actual.as_path() {
+        return Err(format!(
+            "limited_read_cut_level_b_confirmed_path_must_be_canonical:{label}:expected={}:actual={}",
+            canonical_confirmed.display(),
+            actual.display()
+        ));
+    }
+    if canonical_actual.starts_with(&canonical_fallback) {
+        return Err(format!(
+            "limited_read_cut_blocked:path_inside_fallback_root_denied:{}",
+            actual.display()
+        ));
+    }
+    if canonical_actual.starts_with(&canonical_db_dir) {
+        return Err(format!(
+            "limited_read_cut_blocked:path_inside_db_dir_denied:{}",
+            actual.display()
+        ));
+    }
+    if !canonical_actual.starts_with(&canonical_work_dir) {
+        return Err(format!(
+            "limited_read_cut_blocked:path_outside_confirmed_work_dir:{label}:{}",
+            actual.display()
+        ));
+    }
+    Ok(())
+}
+
+fn require_clean_level_b_path(label: &str, path: &Path) -> Result<(), String> {
+    if path
+        .components()
+        .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+    {
+        return Err(format!(
+            "limited_read_cut_level_b_confirmed_path_must_be_clean:{label}:{}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
 fn verified_limited_json_fallback(
+    level: &str,
     fallback_root: &Path,
     read_model_name: &str,
     expected_fallback_hash: Option<&str>,
@@ -596,7 +931,7 @@ fn verified_limited_json_fallback(
     let manifest = json!({
         "schema_version": LIMITED_READ_CUT_SCHEMA_VERSION,
         "mode": LIMITED_READ_CUT_MODE,
-        "level": LEVEL_A,
+        "level": level,
         "status": "completed",
         "read_model_name": read_model_name,
         "fallback_root_hash": fallback_root_hash,
@@ -623,6 +958,31 @@ fn read_limited_db_model(
     let export_manifest =
         export_temp_db_to_json_dry_run(db_path, &projection_root.display().to_string())
             .map_err(|error| format!("limited_read_cut_fallback:db_export_failed:{error}"))?;
+    limited_db_projection_from_export(&export_manifest, failure_point)
+}
+
+fn read_limited_confirmed_db_model(
+    db_path: &Path,
+    confirmed_db_path: &Path,
+    _read_model_name: &str,
+    projection_root: &Path,
+    failure_point: Option<SqliteLimitedReadCutFailurePoint>,
+) -> Result<LimitedDbProjection, String> {
+    verify_limited_db_integrity(db_path)
+        .map_err(|reason| format!("limited_read_cut_fallback:{reason}"))?;
+    let export_manifest = export_confirmed_db_to_json_dry_run(
+        db_path,
+        confirmed_db_path,
+        &projection_root.display().to_string(),
+    )
+    .map_err(|error| format!("limited_read_cut_fallback:db_export_failed:{error}"))?;
+    limited_db_projection_from_export(&export_manifest, failure_point)
+}
+
+fn limited_db_projection_from_export(
+    export_manifest: &SqliteExportDryRunManifest,
+    failure_point: Option<SqliteLimitedReadCutFailurePoint>,
+) -> Result<LimitedDbProjection, String> {
     let workflow_projection = export_manifest
         .projected_files
         .iter()
@@ -690,6 +1050,7 @@ fn validate_limited_projection_paths(
 }
 
 fn limited_read_cut_report(
+    level: &str,
     status: &str,
     read_model_name: &str,
     feature_flag_enabled: bool,
@@ -711,7 +1072,7 @@ fn limited_read_cut_report(
     SqliteLimitedReadCutReport {
         schema_version: LIMITED_READ_CUT_SCHEMA_VERSION.to_string(),
         mode: LIMITED_READ_CUT_MODE.to_string(),
-        level: LEVEL_A.to_string(),
+        level: level.to_string(),
         status: status.to_string(),
         read_model_name: read_model_name.to_string(),
         feature_flag_enabled,
@@ -766,13 +1127,14 @@ fn write_limited_read_cut_report(
 }
 
 fn write_limited_rollback_manifest(
+    level: &str,
     path: &Path,
     projection: &LimitedDbProjection,
 ) -> Result<String, String> {
     let manifest = json!({
         "schema_version": LIMITED_READ_CUT_SCHEMA_VERSION,
         "mode": LIMITED_READ_CUT_MODE,
-        "level": LEVEL_A,
+        "level": level,
         "status": "completed",
         "projection_hash": projection.projection_hash,
         "counts": projection.counts,
@@ -959,6 +1321,60 @@ fn dir_hash(root: &Path) -> Result<String, String> {
 
 fn path_hash(path: &Path) -> String {
     canonical_json_hash(&json!({ "path_ref": path.display().to_string() }))
+}
+
+fn canonical_existing_dir_limited(path: &Path, label: &str) -> Result<PathBuf, String> {
+    let canonical = fs::canonicalize(path).map_err(|error| {
+        format!(
+            "limited_read_cut_level_b_canonicalize_failed:{label}:{}:{error}",
+            path.display()
+        )
+    })?;
+    if !canonical.is_dir() {
+        return Err(format!(
+            "limited_read_cut_level_b_dir_required:{label}:{}",
+            path.display()
+        ));
+    }
+    Ok(canonical)
+}
+
+fn canonicalize_existing_or_parent_limited(path: &Path, label: &str) -> Result<PathBuf, String> {
+    if path.exists() {
+        return fs::canonicalize(path).map_err(|error| {
+            format!(
+                "limited_read_cut_level_b_canonicalize_failed:{label}:{}:{error}",
+                path.display()
+            )
+        });
+    }
+    let mut ancestor = path.parent().ok_or_else(|| {
+        format!(
+            "limited_read_cut_level_b_parent_required:{label}:{}",
+            path.display()
+        )
+    })?;
+    while !ancestor.exists() {
+        ancestor = ancestor.parent().ok_or_else(|| {
+            format!(
+                "limited_read_cut_level_b_existing_parent_required:{label}:{}",
+                path.display()
+            )
+        })?;
+    }
+    let canonical_ancestor = fs::canonicalize(ancestor).map_err(|error| {
+        format!(
+            "limited_read_cut_level_b_parent_canonicalize_failed:{label}:{}:{error}",
+            ancestor.display()
+        )
+    })?;
+    let suffix = path.strip_prefix(ancestor).map_err(|error| {
+        format!(
+            "limited_read_cut_level_b_suffix_failed:{label}:{}:{error}",
+            path.display()
+        )
+    })?;
+    Ok(canonical_ancestor.join(suffix))
 }
 
 fn manifest_r3_a10_fixture_root() -> PathBuf {
@@ -2098,6 +2514,285 @@ mod tests {
         assert!(second.contains("prompt_body:omitted"));
     }
 
+    #[test]
+    fn sqlite_limited_read_cut_level_b_accepts_confirmed_non_temp_db_and_matches_fallback() {
+        let paths = prepare_level_b_limited_paths("level-b-db-success");
+        prepare_level_b_fallback_and_db(&paths);
+        let expected_db_hash = file_hash(&paths.db_path).expect("db hash");
+        let expected_fallback_hash = limited_expected_fallback_hash(&paths.fallback_root);
+
+        let fallback_report = run_level_b_limited(
+            &paths,
+            false,
+            Some(&expected_db_hash),
+            Some(&expected_fallback_hash),
+            None,
+        )
+        .expect("level b flag off fallback");
+        let source_hash_before = file_hash(&paths.fallback_root.join("workflow-state.v0.json"))
+            .expect("source hash before");
+
+        let db_report = run_level_b_limited(
+            &paths,
+            true,
+            Some(&expected_db_hash),
+            Some(&expected_fallback_hash),
+            None,
+        )
+        .expect("level b db limited success");
+        let source_hash_after = file_hash(&paths.fallback_root.join("workflow-state.v0.json"))
+            .expect("source hash after");
+
+        assert!(!paths.db_path.starts_with(std::env::temp_dir()));
+        assert_eq!(fallback_report.level, LEVEL_B_WORKBENCH_OWNED_STATE);
+        assert_eq!(fallback_report.status, "feature_flag_disabled_fallback");
+        assert_eq!(fallback_report.read_source, "json_fallback");
+        assert_eq!(db_report.level, LEVEL_B_WORKBENCH_OWNED_STATE);
+        assert_eq!(db_report.status, "completed");
+        assert_eq!(db_report.read_source, "db_limited");
+        assert_eq!(db_report.projection_hash, fallback_report.projection_hash);
+        assert_eq!(db_report.counts, fallback_report.counts);
+        assert_eq!(source_hash_before, source_hash_after);
+        assert_limited_safety_flags_all_false(&fallback_report);
+        assert_limited_safety_flags_all_false(&db_report);
+    }
+
+    #[test]
+    fn sqlite_limited_read_cut_level_b_rejects_invalid_confirmed_inputs() {
+        let paths = prepare_level_b_limited_paths("level-b-invalid-inputs");
+        prepare_level_b_fallback_and_db(&paths);
+        let fallback_hash = limited_expected_fallback_hash(&paths.fallback_root);
+
+        let err = rehearse_limited_read_cut_level_b_workbench_owned_state(
+            WORKFLOW_STATE_SUMMARY_READ_MODEL,
+            false,
+            &paths.work_dir.join("other.sqlite"),
+            &paths.fallback_root,
+            &paths.projection_root,
+            &paths.rollback_manifest_path,
+            &paths.read_cut_report_path,
+            None,
+            Some(&fallback_hash),
+            &limited_allowed_models(),
+            &[],
+            &level_b_limited_config(&paths),
+            None,
+        )
+        .expect_err("unconfirmed db path must reject");
+        assert!(err.contains("limited_read_cut_level_b_confirmed_path_mismatch:db_path"));
+
+        let mut inside_paths = paths.clone();
+        inside_paths.projection_root = inside_paths.fallback_root.join("projection");
+        inside_paths.rollback_manifest_path = inside_paths
+            .fallback_root
+            .join("rollback")
+            .join("limited-rollback-manifest.json");
+        inside_paths.read_cut_report_path = inside_paths
+            .fallback_root
+            .join("reports")
+            .join("limited-read-cut-report.json");
+        let err = rehearse_limited_read_cut_level_b_workbench_owned_state(
+            WORKFLOW_STATE_SUMMARY_READ_MODEL,
+            false,
+            &inside_paths.db_path,
+            &inside_paths.fallback_root,
+            &inside_paths.projection_root,
+            &inside_paths.rollback_manifest_path,
+            &inside_paths.read_cut_report_path,
+            Some(&file_hash(&inside_paths.db_path).expect("db hash")),
+            Some(&fallback_hash),
+            &limited_allowed_models(),
+            &[],
+            &level_b_limited_config(&inside_paths),
+            None,
+        )
+        .expect_err("output inside fallback root must reject");
+        assert!(err.contains("limited_read_cut_blocked:path_inside_fallback_root_denied"));
+
+        let mut outside_report_paths = paths.clone();
+        outside_report_paths.read_cut_report_path = paths
+            .work_dir
+            .parent()
+            .expect("work dir parent")
+            .join("outside-work")
+            .join("limited-read-cut-report.json");
+        let err = rehearse_limited_read_cut_level_b_workbench_owned_state(
+            WORKFLOW_STATE_SUMMARY_READ_MODEL,
+            false,
+            &outside_report_paths.db_path,
+            &outside_report_paths.fallback_root,
+            &outside_report_paths.projection_root,
+            &outside_report_paths.rollback_manifest_path,
+            &outside_report_paths.read_cut_report_path,
+            Some(&file_hash(&outside_report_paths.db_path).expect("db hash")),
+            Some(&fallback_hash),
+            &limited_allowed_models(),
+            &[],
+            &level_b_limited_config(&outside_report_paths),
+            None,
+        )
+        .expect_err("report path outside confirmed work dir must reject");
+        assert!(err.contains("limited_read_cut_blocked:path_outside_confirmed_work_dir"));
+
+        let err = run_level_b_limited(
+            &paths,
+            true,
+            Some("sha256:not-the-confirmed-db"),
+            Some(&fallback_hash),
+            None,
+        )
+        .expect_err("db hash mismatch blocks");
+        assert!(err.contains("limited_read_cut_blocked:db_hash_mismatch"));
+        assert!(!paths.read_cut_report_path.exists());
+
+        let expected_db_hash = file_hash(&paths.db_path).expect("db hash");
+        let report = run_level_b_limited(
+            &paths,
+            true,
+            Some(&expected_db_hash),
+            Some(&fallback_hash),
+            Some(SqliteLimitedReadCutFailurePoint::DbUnavailable),
+        )
+        .expect("db unavailable after validation should degrade");
+
+        assert_eq!(report.level, LEVEL_B_WORKBENCH_OWNED_STATE);
+        assert_eq!(report.status, "fallback_degraded");
+        assert_eq!(report.read_source, "json_fallback");
+        assert!(report.fallback_decision.contains("db_unavailable"));
+        assert_limited_safety_flags_all_false(&report);
+    }
+
+    #[test]
+    fn sqlite_limited_read_cut_level_a_still_rejects_non_temp_db_path() {
+        let paths = prepare_level_b_limited_paths("level-a-non-temp-db-rejected");
+        prepare_limited_fallback(&LimitedPaths {
+            db_path: paths.db_path.clone(),
+            fallback_root: paths.fallback_root.clone(),
+            projection_root: paths.projection_root.clone(),
+            rollback_manifest_path: paths.rollback_manifest_path.clone(),
+            read_cut_report_path: paths.read_cut_report_path.clone(),
+        });
+
+        let err = rehearse_limited_read_cut_level_a(
+            WORKFLOW_STATE_SUMMARY_READ_MODEL,
+            false,
+            &paths.db_path,
+            &paths.fallback_root,
+            &paths.projection_root,
+            &paths.rollback_manifest_path,
+            &paths.read_cut_report_path,
+            None,
+            Some(&limited_expected_fallback_hash(&paths.fallback_root)),
+            &limited_allowed_models(),
+            &[],
+            None,
+        )
+        .expect_err("Level-A must still reject non-temp DB paths");
+
+        assert!(err.contains("temp_db_path_required"));
+        assert!(!paths.read_cut_report_path.exists());
+    }
+
+    #[test]
+    #[ignore = "requires explicit R3 B2 limited read-cut authorization and confirmed paths"]
+    fn r3_b2_limited_read_cut_confirmed_paths_requires_env_authorization() {
+        let confirmation = std::env::var("R3_B2_READ_CUT_CONFIRM")
+            .expect("R3_B2_READ_CUT_CONFIRM is required for real B2 read-cut");
+        assert_eq!(confirmation, "CONFIRMED_USER_PRESENT_2026_06_15");
+        let canonical_env = |name: &str| {
+            let value = std::env::var(name).unwrap_or_else(|_| panic!("{name} is required"));
+            fs::canonicalize(&value)
+                .unwrap_or_else(|error| panic!("canonicalize {name} failed for {value}: {error}"))
+        };
+        let db_path = canonical_env("R3_B2_DB_PATH");
+        let fallback_root = canonical_env("R3_B2_FALLBACK_ROOT");
+        let work_dir = canonical_env("R3_B2_WORK_DIR");
+        let expected_db_hash = std::env::var("R3_B2_EXPECTED_DB_HASH")
+            .expect("R3_B2_EXPECTED_DB_HASH is required for real B2 read-cut");
+        let expected_fallback_hash = std::env::var("R3_B2_EXPECTED_FALLBACK_HASH")
+            .expect("R3_B2_EXPECTED_FALLBACK_HASH is required for real B2 read-cut");
+        let projection_root = work_dir.join("projection");
+        let flag_off_report_path = work_dir
+            .join("reports")
+            .join("limited-read-cut-report-flag-off.json");
+        let flag_on_report_path = work_dir
+            .join("reports")
+            .join("limited-read-cut-report-flag-on.json");
+        let rollback_manifest_path = work_dir
+            .join("rollback")
+            .join("limited-read-cut-rollback-manifest.json");
+
+        let flag_off_paths = LevelBLimitedPaths {
+            db_path: db_path.clone(),
+            fallback_root: fallback_root.clone(),
+            work_dir: work_dir.clone(),
+            projection_root: projection_root.clone(),
+            rollback_manifest_path: rollback_manifest_path.clone(),
+            read_cut_report_path: flag_off_report_path,
+        };
+        let flag_on_paths = LevelBLimitedPaths {
+            read_cut_report_path: flag_on_report_path,
+            ..flag_off_paths.clone()
+        };
+        let source_hash_before = dir_hash(&fallback_root).expect("fallback hash before");
+
+        let flag_off = rehearse_limited_read_cut_level_b_workbench_owned_state(
+            WORKFLOW_STATE_SUMMARY_READ_MODEL,
+            false,
+            &db_path,
+            &fallback_root,
+            &projection_root,
+            &rollback_manifest_path,
+            &flag_off_paths.read_cut_report_path,
+            Some(&expected_db_hash),
+            Some(&expected_fallback_hash),
+            &limited_allowed_models(),
+            &[],
+            &level_b_limited_config(&flag_off_paths),
+            None,
+        )
+        .expect("R3 B2 flag-off fallback must complete");
+        let flag_on = rehearse_limited_read_cut_level_b_workbench_owned_state(
+            WORKFLOW_STATE_SUMMARY_READ_MODEL,
+            true,
+            &db_path,
+            &fallback_root,
+            &projection_root,
+            &rollback_manifest_path,
+            &flag_on_paths.read_cut_report_path,
+            Some(&expected_db_hash),
+            Some(&expected_fallback_hash),
+            &limited_allowed_models(),
+            &[],
+            &level_b_limited_config(&flag_on_paths),
+            None,
+        )
+        .expect("R3 B2 flag-on db limited read must complete");
+        let source_hash_after = dir_hash(&fallback_root).expect("fallback hash after");
+
+        assert_eq!(
+            file_hash(&db_path).expect("db hash after"),
+            expected_db_hash
+        );
+        assert_eq!(source_hash_before, source_hash_after);
+        assert_eq!(flag_off.status, "feature_flag_disabled_fallback");
+        assert_eq!(flag_off.read_source, "json_fallback");
+        assert_eq!(flag_on.status, "completed");
+        assert_eq!(flag_on.read_source, "db_limited");
+        assert_eq!(flag_on.projection_hash, flag_off.projection_hash);
+        assert_eq!(flag_on.counts, flag_off.counts);
+        assert_limited_safety_flags_all_false(&flag_off);
+        assert_limited_safety_flags_all_false(&flag_on);
+        println!(
+            "R3_B2_DB_PATH={}\nR3_B2_DB_HASH={expected_db_hash}\nR3_B2_FALLBACK_ROOT={}\nR3_B2_FALLBACK_HASH_BEFORE={source_hash_before}\nR3_B2_FALLBACK_HASH_AFTER={source_hash_after}\nR3_B2_FLAG_OFF_REPORT_PATH={}\nR3_B2_FLAG_ON_REPORT_PATH={}\nR3_B2_ROLLBACK_MANIFEST_PATH={}",
+            db_path.display(),
+            fallback_root.display(),
+            flag_off_paths.read_cut_report_path.display(),
+            flag_on_paths.read_cut_report_path.display(),
+            rollback_manifest_path.display()
+        );
+    }
+
     struct RehearsalPaths {
         db_path: PathBuf,
         projection_root: PathBuf,
@@ -2164,6 +2859,16 @@ mod tests {
         read_cut_report_path: PathBuf,
     }
 
+    #[derive(Clone)]
+    struct LevelBLimitedPaths {
+        db_path: PathBuf,
+        fallback_root: PathBuf,
+        work_dir: PathBuf,
+        projection_root: PathBuf,
+        rollback_manifest_path: PathBuf,
+        read_cut_report_path: PathBuf,
+    }
+
     fn prepare_limited_paths(name: &str) -> LimitedPaths {
         let nanos = unique_nanos();
         let root = std::env::temp_dir().join(format!("r3-a10-{name}-{nanos}"));
@@ -2186,6 +2891,97 @@ mod tests {
             paths.fallback_root.join("workflow-state.v0.json"),
         )
         .expect("copy fallback workflow state");
+    }
+
+    fn prepare_level_b_limited_paths(name: &str) -> LevelBLimitedPaths {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("r3-b2a-{name}-{}", unique_nanos()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create level b root");
+        let canonical_root = fs::canonicalize(root).expect("canonical level b root");
+        let fallback_root = canonical_root.join("source");
+        let work_dir = canonical_root.join("work");
+        let db_dir = canonical_root.join("db");
+        fs::create_dir_all(&work_dir).expect("create work dir");
+        fs::create_dir_all(&db_dir).expect("create db dir");
+        LevelBLimitedPaths {
+            db_path: db_dir.join("workbench-state.v1.sqlite"),
+            projection_root: work_dir.join("projection"),
+            rollback_manifest_path: work_dir
+                .join("rollback")
+                .join("limited-rollback-manifest.json"),
+            read_cut_report_path: work_dir
+                .join("reports")
+                .join("limited-read-cut-report.json"),
+            fallback_root,
+            work_dir,
+        }
+    }
+
+    fn prepare_level_b_fallback_and_db(paths: &LevelBLimitedPaths) {
+        prepare_limited_fallback(&LimitedPaths {
+            db_path: paths.db_path.clone(),
+            fallback_root: paths.fallback_root.clone(),
+            projection_root: paths.projection_root.clone(),
+            rollback_manifest_path: paths.rollback_manifest_path.clone(),
+            read_cut_report_path: paths.read_cut_report_path.clone(),
+        });
+        crate::workbench_sqlite_apply::apply_confirmed_workbench_state_root_to_confirmed_db(
+            &paths.fallback_root,
+            &paths.fallback_root,
+            &paths.db_path,
+            &paths.db_path,
+            None,
+        )
+        .expect("prepare level b confirmed db");
+    }
+
+    fn level_b_limited_config(paths: &LevelBLimitedPaths) -> SqliteLimitedReadCutLevelBConfig {
+        SqliteLimitedReadCutLevelBConfig {
+            confirmed_db_path: paths.db_path.clone(),
+            confirmed_fallback_root: paths.fallback_root.clone(),
+            confirmed_work_dir: paths.work_dir.clone(),
+            confirmed_projection_root: paths.projection_root.clone(),
+            confirmed_rollback_manifest_path: paths.rollback_manifest_path.clone(),
+            confirmed_read_cut_report_path: paths.read_cut_report_path.clone(),
+        }
+    }
+
+    fn run_level_b_limited(
+        paths: &LevelBLimitedPaths,
+        feature_flag_enabled: bool,
+        expected_db_hash: Option<&str>,
+        expected_fallback_hash: Option<&str>,
+        failure_point: Option<SqliteLimitedReadCutFailurePoint>,
+    ) -> Result<SqliteLimitedReadCutReport, String> {
+        rehearse_limited_read_cut_level_b_workbench_owned_state(
+            WORKFLOW_STATE_SUMMARY_READ_MODEL,
+            feature_flag_enabled,
+            &paths.db_path,
+            &paths.fallback_root,
+            &paths.projection_root,
+            &paths.rollback_manifest_path,
+            &paths.read_cut_report_path,
+            expected_db_hash,
+            expected_fallback_hash,
+            &limited_allowed_models(),
+            &[],
+            &level_b_limited_config(paths),
+            failure_point,
+        )
+    }
+
+    fn assert_limited_safety_flags_all_false(report: &SqliteLimitedReadCutReport) {
+        assert!(!report.safety_flags.limited_read_cut_enabled);
+        assert!(!report.safety_flags.product_global_read_path_changed);
+        assert!(!report.safety_flags.app_startup_reads_db);
+        assert!(!report.safety_flags.tauri_command_reads_db);
+        assert!(!report.safety_flags.ui_reads_db);
+        assert!(!report.safety_flags.stop_write_json);
+        assert!(!report.safety_flags.source_json_written);
+        assert!(!report.safety_flags.production_restore_performed);
+        assert!(!report.safety_flags.codex_home_touched);
     }
 
     fn limited_expected_fallback_hash(fallback_root: &Path) -> String {
