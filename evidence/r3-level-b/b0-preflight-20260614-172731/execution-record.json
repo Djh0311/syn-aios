@@ -1,0 +1,243 @@
+{
+  "schema_version": "root_treatment_r3_level_b_execution_record.v1",
+  "window_id": "r3-level-b-b0-preflight-20260614-172731",
+  "phase": "B0_preflight",
+  "status": "completed",
+  "supervisor": "codex-global-supervisor",
+  "user_present_required": false,
+  "user_confirmation_ref": "user-thread-2026-06-14-r3-level-b-b0-readonly-authorization",
+  "authorization_summary": {
+    "allowed": [
+      "read workbench-owned state files for inventory and hash calculation",
+      "proceed without per-step path confirmation inside B0 scope"
+    ],
+    "forbidden": [
+      "/Users/yoyi/.codex",
+      "secret",
+      "token",
+      ".env",
+      "keychain",
+      "OAuth",
+      "provider credential",
+      "full transcript",
+      "rollout body",
+      "prompt body"
+    ]
+  },
+  "git_head_before": "70f5557a70128ffa3d9cfced96b0690d62eb1628",
+  "git_head_after": "70f5557a70128ffa3d9cfced96b0690d62eb1628",
+  "worktree_preexisting_untracked": [
+    "docs/harness-script-audit-2026-06-14.md",
+    "docs/harness-source-package-audit-2026-06-14.md",
+    "docs/plans/2026-06-14-work-schedule-v1.md"
+  ],
+  "allowed_roots": [
+    "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state"
+  ],
+  "candidate_roots": [
+    {
+      "path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state",
+      "classification": "WORKBENCH_STATE_ROOT",
+      "exists": true,
+      "path_sha256": "e5eda291644a3fac663598e2490020a03d5257da5549f5b278fc8db95d62f487"
+    },
+    {
+      "path": "/Users/yoyi/Library/Application Support/local.codex.governance.workbench",
+      "classification": "tauri_identifier_app_support_candidate",
+      "exists": false
+    },
+    {
+      "path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/canvas-v1",
+      "classification": "adjacent_workbench_app_data_not_workflow_state_root",
+      "exists": true
+    }
+  ],
+  "denied_paths": [
+    "/Users/yoyi/.codex",
+    "secret",
+    "token",
+    ".env",
+    "keychain",
+    "OAuth",
+    "provider credential",
+    "full transcript",
+    "rollout body",
+    "prompt body",
+    "unlisted user project source directories",
+    "any path not listed in allowed_roots"
+  ],
+  "path_classification": {
+    "allowed_denied_conflict": false,
+    "state_root_under_codex_home": false,
+    "state_root_contains_denied_marker": false,
+    "scope": "read allowed JSON and sidecar files directly under WORKBENCH_STATE_ROOT only"
+  },
+  "source_root_hash_before": "2fbdb7bfdc71b30d5b4d2bec2dfdde50de98ab24942c8ba550d29b6b539d3b53",
+  "source_root_hash_after": "2fbdb7bfdc71b30d5b4d2bec2dfdde50de98ab24942c8ba550d29b6b539d3b53",
+  "source_root_hash_algorithm": "sha256 over sorted existing entries: <path_sha256> <file_sha256> <relative_path> joined by LF",
+  "source_inventory": [
+    {
+      "relative_path": "workflow-state.v0.json",
+      "exists": true,
+      "size_bytes": 2060497,
+      "sha256": "4bd5434fdca9e82c8fafc42989e1a267ed7d677bfe2972273fb3afaa26829972",
+      "path_sha256": "1cbe584bb56c360b8d9ccf51ea72a328551c1b268cb877f078d05094c34a165d",
+      "schema_version": "workflow_state_v0",
+      "revision": 1,
+      "top_level_counts": {
+        "agent_adapters": 1,
+        "artifacts": 1,
+        "audit_events": 356,
+        "capabilities": 0,
+        "edges": 32,
+        "execution_attempts": 62,
+        "harness_resources": 0,
+        "nodes": 35,
+        "permission_requests": 1,
+        "projects": 5,
+        "reviews": 11,
+        "work_items": 12,
+        "workflow_execution_controls": 62,
+        "workflow_machine_runs": 10,
+        "workflow_node_dispatches": 118,
+        "workflow_node_session_bindings": 36,
+        "workflows": 5
+      }
+    },
+    {
+      "relative_path": "blackboard-candidates.v1.json",
+      "exists": false,
+      "path_sha256": "a7ba45020eefb8f902dc3e058900bedb60d30f971e46c8e6e5feda32e069bbe7"
+    },
+    {
+      "relative_path": "formal-memories.v1.json",
+      "exists": false,
+      "path_sha256": "d2faa5294a2f6c5d8b726cfcab643bf8004dd9fd850fe582a29363d408ad0599"
+    },
+    {
+      "relative_path": "memory-candidates.v1.json",
+      "exists": false,
+      "path_sha256": "e6017d9e56f99477dc1c88d1d9903ac57fd9d920f11e1b1991bfa6f04deb5d6d"
+    },
+    {
+      "relative_path": "memory-capture-events.v1.json",
+      "exists": false,
+      "path_sha256": "3023c6dcf115c93700d881b26d80d55117a11cc8c546a37e63fd9c2d6b649aa3"
+    },
+    {
+      "relative_path": "memory-entity-relations.v1.json",
+      "exists": false,
+      "path_sha256": "26626309494e50630eb229834f4237de555d0e35fb089d6e6c9955f8eb6ff0ec"
+    },
+    {
+      "relative_path": "memory-lint.v1.json",
+      "exists": false,
+      "path_sha256": "9802272455dd0f3d7f2b95f08f4e8f640669947e78307dda5ac84deb0f8e45bb"
+    },
+    {
+      "relative_path": "memory-patterns.v1.json",
+      "exists": false,
+      "path_sha256": "fcc8c61fc5fee4a91db3592e5e1f10bb1a39c3bc0ff25e0e12ceabcf897a5bd1"
+    },
+    {
+      "relative_path": "observations.v1.json",
+      "exists": false,
+      "path_sha256": "d0fdae8ce5ed47ffd70610703ddd46b35e204386bb8c427f4570f20bcdce0834"
+    },
+    {
+      "relative_path": "plan-authorizations.v1.json",
+      "exists": true,
+      "size_bytes": 15211,
+      "sha256": "6962e4781f49246525d4cde37d3133924a66faa12b8aab90db106c3c9f401b0e",
+      "path_sha256": "2d022552d8b69fabf3dc5f41d8dd1ef50a82d593d8d9c5a5504ab627168cb083",
+      "schema_version": "plan_authorization_store.v1",
+      "revision": 14,
+      "top_level_counts": {
+        "authorizations": 0,
+        "audit_events": 14,
+        "warnings": 1
+      }
+    },
+    {
+      "relative_path": "project-proposals.v1.json",
+      "exists": false,
+      "path_sha256": "a2adea10db3359be093fd9d8e9d15bb259d344aeefcb9731194c8b2d83b371b4"
+    },
+    {
+      "relative_path": "real-execution-product-commands.v1.json",
+      "exists": false,
+      "path_sha256": "bbb5b427f72bfb3b28016cb5ef9636dd1b2c812b3a6a296c89a48013b72d51bf"
+    },
+    {
+      "relative_path": "runtime-log.v1.json",
+      "exists": false,
+      "path_sha256": "deeb45000e51f33ba16628aefb5f9c841f22241e80296701b9260f9ce870a964"
+    },
+    {
+      "relative_path": "runtime-logs.v1.json",
+      "exists": false,
+      "path_sha256": "a62bb2b91b83da1e4acaf2ae88f50e34965cd8b52875309ae95c72ad6515a7a4"
+    },
+    {
+      "relative_path": "session-continuations.v1.json",
+      "exists": false,
+      "path_sha256": "4a4c15d036bb5f3f7e2f8bd5445b1a635cfd0cb5aaa53bb69718179b087b78fc"
+    }
+  ],
+  "production_db_path": null,
+  "production_db_path_hash": null,
+  "production_db_hash_before": "missing_before=true",
+  "production_db_hash_after": "not_applicable_b0",
+  "workbench_storage_root": null,
+  "workbench_storage_root_status": "not_configured_or_not_found_in_b0",
+  "backup_manifest_hash": "pending_before=true",
+  "rollback_manifest_hash": "pending_before=true",
+  "report_hash": "not_recorded_before_report_commit",
+  "read_cut_scope": "none",
+  "stop_write_json": false,
+  "source_json_written": false,
+  "sidecar_written": false,
+  "codex_home_touched": false,
+  "product_global_read_path_changed": false,
+  "product_global_write_path_changed": false,
+  "rollback_or_recovery_performed": false,
+  "fresh_verify": [
+    {
+      "name": "Path classification check",
+      "status": "pass",
+      "evidence": "allowed root is WORKBENCH_STATE_ROOT and does not overlap denied paths"
+    },
+    {
+      "name": "Source inventory hash report",
+      "status": "pass",
+      "evidence": "source_root_hash_before=2fbdb7bfdc71b30d5b4d2bec2dfdde50de98ab24942c8ba550d29b6b539d3b53"
+    },
+    {
+      "name": "workbench-shape-gate",
+      "status": "pass",
+      "evidence": "Status: pass; Errors: 0; Warnings: 0; Git HEAD: 70f5557a70128ffa3d9cfced96b0690d62eb1628"
+    },
+    {
+      "name": "git diff --check",
+      "status": "pass",
+      "evidence": "empty output"
+    }
+  ],
+  "real_state_assessment": {
+    "classification": "real_primary_workflow_state_with_sparse_sidecars",
+    "summary": "workflow-state.v0.json exists and is about 2.06 MB with projects, workflows, nodes, audit events, execution attempts, workflow machine runs, dispatches, and bindings. Only plan-authorizations sidecar exists; the other 13 allowed sidecars are missing.",
+    "b1_judgment": "B1 is worthwhile if the objective is to validate production apply for the real primary workflow-state file. It is still early if the objective is a complete full-domain sidecar migration; B1 should not be claimed as complete storage cutover."
+  },
+  "do_not_claim": [
+    "B1 production apply executed",
+    "production DB created",
+    "production read-cut executed",
+    "production observation executed",
+    "JSON or sidecar stop-write executed",
+    "rollback or recovery verified on real data",
+    "R3 Level B complete",
+    "multi-agent parallel real execution unlocked",
+    "real Codex execution performed",
+    "/Users/yoyi/.codex touched"
+  ]
+}
