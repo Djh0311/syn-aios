@@ -1,14 +1,17 @@
 use crate::utils::fs_ops::remove_file_if_exists;
 use crate::utils::hash::sha256_hex_bytes as sha256_hex;
-use crate::workbench_sqlite_exporter::{export_temp_db_to_json_dry_run, SqliteProjectedFile};
+use crate::workbench_sqlite_exporter::{
+    export_confirmed_db_to_json_dry_run, export_temp_db_to_json_dry_run, SqliteProjectedFile,
+};
 use crate::workbench_sqlite_importer::canonical_json_hash;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 const LEVEL_A: &str = "level_a_fixture";
+const LEVEL_B_WORKBENCH_OWNED_STATE: &str = "level_b_workbench_owned_state";
 const MODE: &str = "stop_write_json_decision";
 const DECISION_MODE: &str = "level_a_fixture_stop_write_decision";
 const SCHEMA_VERSION: &str = "workbench_sqlite_stop_write_decision.v1";
@@ -49,6 +52,17 @@ impl SqliteStopWriteLevelBEvidence {
             && self.limited_read_cut_level_b_completed
             && self.production_observation_level_b_completed
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SqliteStopWriteLevelBConfig {
+    pub(crate) confirmed_db_path: PathBuf,
+    pub(crate) confirmed_fallback_root: PathBuf,
+    pub(crate) confirmed_last_verified_projection_root: PathBuf,
+    pub(crate) confirmed_observation_report_path: PathBuf,
+    pub(crate) confirmed_work_dir: PathBuf,
+    pub(crate) confirmed_stop_write_report_path: PathBuf,
+    pub(crate) confirmed_rollback_manifest_path: PathBuf,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -267,6 +281,133 @@ pub(crate) fn rehearse_stop_write_decision_level_a(
     Ok(report)
 }
 
+pub(crate) fn rehearse_stop_write_decision_level_b_workbench_owned_state(
+    decision_mode: &str,
+    decision_actor: &str,
+    supervisor_decision: Option<&str>,
+    read_model_name: &str,
+    db_path: &Path,
+    json_fallback_root: &Path,
+    last_verified_projection_root: &Path,
+    stop_write_report_path: &Path,
+    rollback_manifest_path: &Path,
+    observation_report_path: &Path,
+    expected_db_hash: Option<&str>,
+    expected_fallback_hash: Option<&str>,
+    expected_projection_hash: Option<&str>,
+    expected_observation_report_hash: Option<&str>,
+    allowed_read_models: &BTreeSet<String>,
+    denied_path_markers: &[String],
+    level_b_evidence: &SqliteStopWriteLevelBEvidence,
+    config: &SqliteStopWriteLevelBConfig,
+    failure_point: Option<SqliteStopWriteFailurePoint>,
+) -> Result<SqliteStopWriteDecisionReport, String> {
+    validate_decision_mode(decision_mode)?;
+    validate_decision_actor(decision_actor)?;
+    validate_read_model(read_model_name, allowed_read_models)?;
+    let supervisor_decision = supervisor_decision
+        .ok_or_else(|| "stop_write_blocked:missing_supervisor_decision".to_string())?;
+    validate_supervisor_decision(supervisor_decision)?;
+    let denied_markers = effective_denied_markers(denied_path_markers);
+    validate_level_b_paths(
+        db_path,
+        json_fallback_root,
+        last_verified_projection_root,
+        stop_write_report_path,
+        rollback_manifest_path,
+        observation_report_path,
+        config,
+        &denied_markers,
+    )?;
+    remove_file_if_exists(stop_write_report_path)?;
+    remove_file_if_exists(rollback_manifest_path)?;
+
+    let observed = observed_inputs_with_export(
+        db_path,
+        json_fallback_root,
+        last_verified_projection_root,
+        rollback_manifest_path,
+        observation_report_path,
+        failure_point,
+        |db, target_root_ref| {
+            export_confirmed_db_to_json_dry_run(db, &config.confirmed_db_path, target_root_ref)
+        },
+    )?;
+    let preconditions = preconditions_level_b(
+        &observed,
+        expected_db_hash,
+        expected_fallback_hash,
+        expected_projection_hash,
+        expected_observation_report_hash,
+        level_b_evidence,
+    );
+
+    let status = match supervisor_decision {
+        "prepare_only" => "not_ready",
+        "reject_stop_write" => "rejected_by_supervisor",
+        "approve_stop_write" => {
+            let failed = preconditions
+                .iter()
+                .filter(|condition| !condition.satisfied)
+                .map(|condition| condition.name.clone())
+                .collect::<Vec<_>>();
+            if !failed.is_empty() {
+                remove_file_if_exists(stop_write_report_path)?;
+                remove_file_if_exists(rollback_manifest_path)?;
+                return Err(format!(
+                    "stop_write_blocked:preconditions_not_met:{}",
+                    failed.join(",")
+                ));
+            }
+            if failure_point
+                == Some(SqliteStopWriteFailurePoint::AfterPreconditionsBeforeReportCommit)
+            {
+                remove_file_if_exists(stop_write_report_path)?;
+                remove_file_if_exists(rollback_manifest_path)?;
+                return Err("injected_failure_after_preconditions_before_report_commit".to_string());
+            }
+            "ready_but_not_executed"
+        }
+        _ => unreachable!("supervisor decision already validated"),
+    };
+
+    let mut report = SqliteStopWriteDecisionReport {
+        schema_version: SCHEMA_VERSION.to_string(),
+        mode: MODE.to_string(),
+        level: LEVEL_B_WORKBENCH_OWNED_STATE.to_string(),
+        status: status.to_string(),
+        decision_mode: decision_mode.to_string(),
+        supervisor_decision: supervisor_decision.to_string(),
+        read_model_name: read_model_name.to_string(),
+        preconditions,
+        db_path_hash: observed.db_path_hash,
+        expected_db_hash: expected_db_hash.map(ToString::to_string),
+        actual_db_hash: observed.actual_db_hash,
+        expected_fallback_hash: expected_fallback_hash.map(ToString::to_string),
+        actual_fallback_hash: observed.actual_fallback_hash,
+        expected_projection_hash: expected_projection_hash.map(ToString::to_string),
+        actual_projection_hash: observed.actual_projection_hash,
+        expected_observation_report_hash: expected_observation_report_hash.map(ToString::to_string),
+        actual_observation_report_hash: observed.actual_observation_report_hash,
+        rollback_manifest_hash: None,
+        db_export_hash: observed.db_export_hash,
+        projected_file_counts: observed.projected_file_counts,
+        rollback_drill: rollback_drill(),
+        safety_flags: SqliteStopWriteSafetyFlags::recorded(),
+        before_source_hashes: observed.before_source_hashes,
+        after_source_hashes: observed.after_source_hashes,
+        failure_point: failure_point.map(|point| format!("{point:?}")),
+        do_not_claim: do_not_claim(),
+    };
+    if report.status == "ready_but_not_executed" {
+        let rollback_manifest_hash =
+            write_level_b_rollback_manifest(rollback_manifest_path, &report)?;
+        report.rollback_manifest_hash = Some(rollback_manifest_hash);
+    }
+    write_report(stop_write_report_path, &report)?;
+    Ok(report)
+}
+
 fn validate_decision_mode(decision_mode: &str) -> Result<(), String> {
     if decision_mode == DECISION_MODE {
         Ok(())
@@ -355,6 +496,171 @@ fn validate_paths(
     Ok(())
 }
 
+fn validate_level_b_paths(
+    db_path: &Path,
+    json_fallback_root: &Path,
+    last_verified_projection_root: &Path,
+    stop_write_report_path: &Path,
+    rollback_manifest_path: &Path,
+    observation_report_path: &Path,
+    config: &SqliteStopWriteLevelBConfig,
+    denied_path_markers: &[String],
+) -> Result<(), String> {
+    let confirm_existing = |label: &str, actual: &Path, confirmed: &Path, expected_dir: bool| {
+        if actual != confirmed {
+            return Err(format!(
+                "stop_write_level_b_confirmed_path_mismatch:{label}:expected={}:actual={}",
+                confirmed.display(),
+                actual.display()
+            ));
+        }
+        if !actual.is_absolute() {
+            return Err(format!(
+                "stop_write_blocked:absolute_path_required:{}",
+                actual.display()
+            ));
+        }
+        if actual
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+        {
+            return Err(format!(
+                "stop_write_level_b_confirmed_path_must_be_clean:{label}:{}",
+                actual.display()
+            ));
+        }
+        reject_denied_path_markers(actual, denied_path_markers)?;
+        let canonical = fs::canonicalize(actual).map_err(|error| {
+            format!(
+                "stop_write_level_b_canonicalize_failed:{label}:{}:{error}",
+                actual.display()
+            )
+        })?;
+        let confirmed_canonical = fs::canonicalize(confirmed).map_err(|error| {
+            format!(
+                "stop_write_level_b_canonicalize_failed:confirmed_{label}:{}:{error}",
+                confirmed.display()
+            )
+        })?;
+        if canonical != confirmed_canonical {
+            return Err(format!(
+                "stop_write_level_b_confirmed_path_must_be_canonical:{label}:expected={}:actual={}",
+                confirmed_canonical.display(),
+                actual.display()
+            ));
+        }
+        if expected_dir && !canonical.is_dir() {
+            return Err(format!(
+                "stop_write_level_b_dir_required:{label}:{}",
+                actual.display()
+            ));
+        }
+        if !expected_dir && !canonical.is_file() {
+            return Err(format!(
+                "stop_write_level_b_file_required:{label}:{}",
+                actual.display()
+            ));
+        }
+        Ok(canonical)
+    };
+    let db_canonical = confirm_existing("db_path", db_path, &config.confirmed_db_path, false)?;
+    let db_dir_canonical = db_canonical
+        .parent()
+        .ok_or_else(|| {
+            format!(
+                "stop_write_level_b_db_parent_required:{}",
+                db_path.display()
+            )
+        })?
+        .to_path_buf();
+    let fallback_canonical = confirm_existing(
+        "fallback_root",
+        json_fallback_root,
+        &config.confirmed_fallback_root,
+        true,
+    )?;
+    let projection_canonical = confirm_existing(
+        "last_verified_projection_root",
+        last_verified_projection_root,
+        &config.confirmed_last_verified_projection_root,
+        true,
+    )?;
+    let _observation_report_canonical = confirm_existing(
+        "observation_report_path",
+        observation_report_path,
+        &config.confirmed_observation_report_path,
+        false,
+    )?;
+    let work_dir_canonical = confirm_existing(
+        "work_dir",
+        &config.confirmed_work_dir,
+        &config.confirmed_work_dir,
+        true,
+    )?;
+    let output = |label: &str, actual: &Path, confirmed: &Path| -> Result<(), String> {
+        if actual != confirmed {
+            return Err(format!(
+                "stop_write_level_b_confirmed_path_mismatch:{label}:expected={}:actual={}",
+                confirmed.display(),
+                actual.display()
+            ));
+        }
+        if !actual.is_absolute() {
+            return Err(format!(
+                "stop_write_blocked:absolute_path_required:{}",
+                actual.display()
+            ));
+        }
+        if actual
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+        {
+            return Err(format!(
+                "stop_write_level_b_confirmed_path_must_be_clean:{label}:{}",
+                actual.display()
+            ));
+        }
+        reject_denied_path_markers(actual, denied_path_markers)?;
+        let canonical = canonicalize_existing_or_parent_stop_write(actual, label)?;
+        let confirmed_canonical =
+            canonicalize_existing_or_parent_stop_write(confirmed, &format!("confirmed_{label}"))?;
+        if canonical != confirmed_canonical {
+            return Err(format!(
+                "stop_write_level_b_confirmed_path_must_be_canonical:{label}:expected={}:actual={}",
+                confirmed_canonical.display(),
+                actual.display()
+            ));
+        }
+        if canonical.starts_with(&fallback_canonical)
+            || canonical.starts_with(&projection_canonical)
+            || canonical.starts_with(&db_dir_canonical)
+        {
+            return Err(format!(
+                "stop_write_level_b_output_inside_source_or_db_or_projection_denied:{label}:{}",
+                actual.display()
+            ));
+        }
+        if !canonical.starts_with(&work_dir_canonical) {
+            return Err(format!(
+                "stop_write_level_b_output_must_be_inside_work_dir:{label}:{}",
+                actual.display()
+            ));
+        }
+        Ok(())
+    };
+    output(
+        "stop_write_report_path",
+        stop_write_report_path,
+        &config.confirmed_stop_write_report_path,
+    )?;
+    output(
+        "rollback_manifest_path",
+        rollback_manifest_path,
+        &config.confirmed_rollback_manifest_path,
+    )?;
+    Ok(())
+}
+
 fn observed_inputs(
     db_path: &Path,
     json_fallback_root: &Path,
@@ -362,6 +668,30 @@ fn observed_inputs(
     rollback_manifest_path: &Path,
     observation_report_path: &Path,
     failure_point: Option<SqliteStopWriteFailurePoint>,
+) -> Result<StopWriteObservedInputs, String> {
+    observed_inputs_with_export(
+        db_path,
+        json_fallback_root,
+        last_verified_projection_root,
+        rollback_manifest_path,
+        observation_report_path,
+        failure_point,
+        |db_path, target_root_ref| export_temp_db_to_json_dry_run(db_path, target_root_ref),
+    )
+}
+
+fn observed_inputs_with_export(
+    db_path: &Path,
+    json_fallback_root: &Path,
+    last_verified_projection_root: &Path,
+    rollback_manifest_path: &Path,
+    observation_report_path: &Path,
+    failure_point: Option<SqliteStopWriteFailurePoint>,
+    export_db: impl Fn(
+        &Path,
+        &str,
+    )
+        -> Result<crate::workbench_sqlite_exporter::SqliteExportDryRunManifest, String>,
 ) -> Result<StopWriteObservedInputs, String> {
     let before_source_hashes = source_file_hashes(json_fallback_root)?;
     let mut after_source_hashes = before_source_hashes.clone();
@@ -378,7 +708,7 @@ fn observed_inputs(
         None
     };
     let export_manifest = if db_path.exists() {
-        Some(export_temp_db_to_json_dry_run(
+        Some(export_db(
             db_path,
             &last_verified_projection_root.display().to_string(),
         )?)
@@ -404,6 +734,70 @@ fn observed_inputs(
         before_source_hashes,
         after_source_hashes,
     })
+}
+
+fn preconditions_level_b(
+    observed: &StopWriteObservedInputs,
+    expected_db_hash: Option<&str>,
+    expected_fallback_hash: Option<&str>,
+    expected_projection_hash: Option<&str>,
+    expected_observation_report_hash: Option<&str>,
+    level_b_evidence: &SqliteStopWriteLevelBEvidence,
+) -> Vec<SqliteStopWritePrecondition> {
+    vec![
+        condition(
+            "level_b_evidence_complete",
+            level_b_evidence.complete(),
+            "B1 / B2b / B3b Level B evidence must be complete",
+        ),
+        condition(
+            "db_exists",
+            observed.actual_db_hash.is_some(),
+            "production DB path must exist",
+        ),
+        condition(
+            "db_hash_matches",
+            expected_db_hash
+                .zip(observed.actual_db_hash.as_deref())
+                .map_or(false, |(expected, actual)| expected == actual),
+            "expected DB hash must match actual DB hash",
+        ),
+        condition(
+            "fallback_hash_matches",
+            expected_fallback_hash
+                .map_or(false, |expected| expected == observed.actual_fallback_hash),
+            "verified JSON fallback hash must match",
+        ),
+        condition(
+            "projection_hash_matches",
+            expected_projection_hash.map_or(false, |expected| {
+                expected == observed.actual_projection_hash
+            }),
+            "last verified projection hash must match",
+        ),
+        condition(
+            "observation_report_hash_matches",
+            expected_observation_report_hash
+                .zip(observed.actual_observation_report_hash.as_deref())
+                .map_or(false, |(expected, actual)| expected == actual),
+            "observation report hash must match",
+        ),
+        condition(
+            "source_hashes_unchanged",
+            observed.before_source_hashes == observed.after_source_hashes,
+            "source JSON / sidecar hashes must not change",
+        ),
+        condition(
+            "no_product_runtime_path_changed",
+            true,
+            "no startup, Tauri command, UI, product global read/write path is changed",
+        ),
+        condition(
+            "production_restore_not_performed",
+            true,
+            "production restore is not performed by Level B",
+        ),
+    ]
 }
 
 fn preconditions(
@@ -501,6 +895,92 @@ fn rollback_drill() -> SqliteStopWriteRollbackDrill {
             "production restore is not performed by this rehearsal".to_string(),
         ],
     }
+}
+
+fn write_level_b_rollback_manifest(
+    path: &Path,
+    report: &SqliteStopWriteDecisionReport,
+) -> Result<String, String> {
+    let payload = json!({
+        "schema_version": SCHEMA_VERSION,
+        "mode": MODE,
+        "level": report.level,
+        "status": "completed",
+        "decision_status": report.status,
+        "decision_mode": report.decision_mode,
+        "supervisor_decision": report.supervisor_decision,
+        "read_model_name": report.read_model_name,
+        "preconditions": report.preconditions,
+        "db_path_hash": report.db_path_hash,
+        "expected_db_hash": report.expected_db_hash,
+        "actual_db_hash": report.actual_db_hash,
+        "expected_fallback_hash": report.expected_fallback_hash,
+        "actual_fallback_hash": report.actual_fallback_hash,
+        "expected_projection_hash": report.expected_projection_hash,
+        "actual_projection_hash": report.actual_projection_hash,
+        "expected_observation_report_hash": report.expected_observation_report_hash,
+        "actual_observation_report_hash": report.actual_observation_report_hash,
+        "db_export_hash": report.db_export_hash,
+        "projected_file_counts": report.projected_file_counts,
+        "rollback_drill": report.rollback_drill,
+        "safety_flags": report.safety_flags,
+        "before_source_hashes": report.before_source_hashes,
+        "after_source_hashes": report.after_source_hashes,
+        "do_not_claim": report.do_not_claim,
+    });
+    let rollback_manifest_hash = canonical_json_hash(&payload);
+    let mut manifest = payload;
+    manifest["rollback_manifest_hash"] = Value::String(rollback_manifest_hash.clone());
+    write_json_file(path, &manifest)?;
+    Ok(rollback_manifest_hash)
+}
+
+fn canonicalize_existing_or_parent_stop_write(path: &Path, label: &str) -> Result<PathBuf, String> {
+    if path.exists() {
+        return fs::canonicalize(path).map_err(|error| {
+            format!(
+                "stop_write_level_b_canonicalize_failed:{label}:{}:{error}",
+                path.display()
+            )
+        });
+    }
+    let mut ancestor = path.parent().ok_or_else(|| {
+        format!(
+            "stop_write_level_b_parent_required:{label}:{}",
+            path.display()
+        )
+    })?;
+    while !ancestor.exists() {
+        ancestor = ancestor.parent().ok_or_else(|| {
+            format!(
+                "stop_write_level_b_existing_parent_required:{label}:{}",
+                path.display()
+            )
+        })?;
+    }
+    let canonical_ancestor = fs::canonicalize(ancestor).map_err(|error| {
+        format!(
+            "stop_write_level_b_parent_canonicalize_failed:{label}:{}:{error}",
+            ancestor.display()
+        )
+    })?;
+    let suffix = path.strip_prefix(ancestor).map_err(|error| {
+        format!(
+            "stop_write_level_b_suffix_failed:{label}:{}:{error}",
+            path.display()
+        )
+    })?;
+    Ok(canonical_ancestor.join(suffix))
+}
+
+fn reject_denied_path_markers(path: &Path, denied_markers: &[String]) -> Result<(), String> {
+    if denied_path_hit(path, denied_markers) {
+        return Err(format!(
+            "stop_write_blocked:denied_path_marker:{}",
+            path.display()
+        ));
+    }
+    Ok(())
 }
 
 fn write_report(path: &Path, report: &SqliteStopWriteDecisionReport) -> Result<(), String> {
@@ -1021,8 +1501,303 @@ mod tests {
         assert!(err.contains("invalid_decision_actor"));
     }
 
+    #[test]
+    fn sqlite_stop_write_level_b_confirmed_paths_ready_but_not_executed() {
+        let paths = prepare_ready_paths("level-b-ready");
+        let config = level_b_config(&paths);
+        let report = rehearse_stop_write_decision_level_b_workbench_owned_state(
+            DECISION_MODE,
+            "supervisor_user",
+            Some("approve_stop_write"),
+            WORKFLOW_STATE_SUMMARY_READ_MODEL,
+            &paths.db_path,
+            &paths.fallback_root,
+            &paths.projection_root,
+            &paths.report_path,
+            &paths.rollback_manifest_path,
+            &paths.observation_report_path,
+            paths.expected_db_hash.as_deref(),
+            paths.expected_fallback_hash.as_deref(),
+            paths.expected_projection_hash.as_deref(),
+            paths.expected_observation_report_hash.as_deref(),
+            &allowed_read_models(),
+            &[],
+            &complete_level_b_evidence(),
+            &config,
+            None,
+        )
+        .expect("level b ready decision");
+
+        assert_eq!(report.level, LEVEL_B_WORKBENCH_OWNED_STATE);
+        assert_eq!(report.status, "ready_but_not_executed");
+        assert!(report.safety_flags.stop_write_decision_recorded);
+        assert!(!report.safety_flags.stop_write_json);
+        assert!(!report.safety_flags.source_json_written);
+        assert!(!report.safety_flags.sidecar_written);
+        assert!(!report.safety_flags.product_global_write_path_changed);
+        assert!(!report.rollback_drill.production_restore_performed);
+    }
+
+    #[test]
+    fn sqlite_stop_write_level_b_rejects_non_confirmed_db_path() {
+        let paths = prepare_ready_paths("level-b-db-mismatch");
+        let config = level_b_config(&paths);
+        let other_db = paths
+            .report_path
+            .parent()
+            .expect("report parent")
+            .join("other.sqlite");
+        fs::copy(&paths.db_path, &other_db).expect("copy other db");
+
+        let err = rehearse_stop_write_decision_level_b_workbench_owned_state(
+            DECISION_MODE,
+            "supervisor_user",
+            Some("prepare_only"),
+            WORKFLOW_STATE_SUMMARY_READ_MODEL,
+            &other_db,
+            &paths.fallback_root,
+            &paths.projection_root,
+            &paths.report_path,
+            &paths.rollback_manifest_path,
+            &paths.observation_report_path,
+            paths.expected_db_hash.as_deref(),
+            paths.expected_fallback_hash.as_deref(),
+            paths.expected_projection_hash.as_deref(),
+            paths.expected_observation_report_hash.as_deref(),
+            &allowed_read_models(),
+            &[],
+            &complete_level_b_evidence(),
+            &config,
+            None,
+        )
+        .expect_err("non-confirmed db path blocks");
+
+        assert!(err.contains("level_b_confirmed_path_mismatch:db_path"));
+    }
+
+    #[test]
+    fn sqlite_stop_write_level_b_rejects_output_inside_source_or_db_or_projection() {
+        let mut source_paths = prepare_ready_paths("level-b-source-output");
+        source_paths.report_path = source_paths.fallback_root.join("stop-write-report.json");
+        let source_config = level_b_config(&source_paths);
+        let err = level_b_ready_call(
+            &source_paths,
+            "prepare_only",
+            &complete_level_b_evidence(),
+            &source_config,
+        )
+        .expect_err("source output blocks");
+        assert!(err.contains("output_inside_source_or_db_or_projection_denied"));
+
+        let mut projection_paths = prepare_ready_paths("level-b-projection-output");
+        projection_paths.report_path = projection_paths
+            .projection_root
+            .join("stop-write-report.json");
+        let projection_config = level_b_config(&projection_paths);
+        let err = level_b_ready_call(
+            &projection_paths,
+            "prepare_only",
+            &complete_level_b_evidence(),
+            &projection_config,
+        )
+        .expect_err("projection output blocks");
+        assert!(err.contains("output_inside_source_or_db_or_projection_denied"));
+
+        let mut db_dir_paths = prepare_ready_paths("level-b-db-dir-output");
+        db_dir_paths.report_path = db_dir_paths
+            .db_path
+            .parent()
+            .expect("db parent")
+            .join("stop-write-report.json");
+        let db_dir_config = level_b_config(&db_dir_paths);
+        let err = level_b_ready_call(
+            &db_dir_paths,
+            "prepare_only",
+            &complete_level_b_evidence(),
+            &db_dir_config,
+        )
+        .expect_err("db dir output blocks");
+        assert!(err.contains("output_inside_source_or_db_or_projection_denied"));
+    }
+
+    #[test]
+    fn sqlite_stop_write_level_b_prepare_only_and_precondition_blocks() {
+        let paths = prepare_ready_paths("level-b-prepare-and-block");
+        let config = level_b_config(&paths);
+        let prepare = level_b_ready_call(
+            &paths,
+            "prepare_only",
+            &incomplete_level_b_evidence(),
+            &config,
+        )
+        .expect("prepare only report");
+        assert_eq!(prepare.status, "not_ready");
+        assert!(!prepare.safety_flags.stop_write_json);
+
+        let err = level_b_ready_call(
+            &paths,
+            "approve_stop_write",
+            &incomplete_level_b_evidence(),
+            &config,
+        )
+        .expect_err("missing evidence blocks approve");
+        assert!(err.contains("level_b_evidence_complete"));
+        assert!(!paths.report_path.exists());
+    }
+
+    #[test]
+    fn sqlite_stop_write_level_b_hash_mismatch_blocks_without_report() {
+        let mut paths = prepare_ready_paths("level-b-hash-mismatch");
+        let config = level_b_config(&paths);
+        paths.expected_projection_hash = Some("wrong".to_string());
+
+        let err = level_b_ready_call(
+            &paths,
+            "approve_stop_write",
+            &complete_level_b_evidence(),
+            &config,
+        )
+        .expect_err("projection hash mismatch blocks");
+
+        assert!(err.contains("projection_hash_matches"));
+        assert!(!paths.report_path.exists());
+        assert!(!paths.rollback_manifest_path.exists());
+    }
+
+    #[test]
+    fn sqlite_stop_write_level_a_still_rejects_non_temp_db_path() {
+        let paths = prepare_ready_paths("level-a-non-temp-guard");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("r3-b4a-non-temp-db-guard");
+        fs::create_dir_all(&root).expect("create non-temp root");
+        let db_path = root.join("workbench.sqlite");
+        fs::copy(&paths.db_path, &db_path).expect("copy db outside temp");
+
+        let err = rehearse_stop_write_decision_level_a(
+            DECISION_MODE,
+            "global_supervisor",
+            Some("prepare_only"),
+            WORKFLOW_STATE_SUMMARY_READ_MODEL,
+            &db_path,
+            &paths.fallback_root,
+            &paths.projection_root,
+            &paths.report_path,
+            &paths.rollback_manifest_path,
+            &paths.observation_report_path,
+            paths.expected_db_hash.as_deref(),
+            paths.expected_fallback_hash.as_deref(),
+            paths.expected_projection_hash.as_deref(),
+            paths.expected_observation_report_hash.as_deref(),
+            &allowed_read_models(),
+            &[],
+            &complete_level_b_evidence(),
+            None,
+        )
+        .expect_err("Level-A keeps temp / r3-a12 fixture path guard");
+
+        assert!(err.contains("level_a_temp_or_fixture_path_required"));
+    }
+
+    #[test]
+    #[ignore = "requires explicit R3 B4 stop-write decision authorization and confirmed paths"]
+    fn r3_b4_stop_write_decision_confirmed_paths_requires_env_authorization() {
+        let confirmation = std::env::var("R3_B4_STOP_WRITE_CONFIRM")
+            .expect("R3_B4_STOP_WRITE_CONFIRM is required for real B4 decision");
+        assert_eq!(confirmation, "CONFIRMED_USER_PRESENT_2026_06_16");
+        let decision_actor = std::env::var("R3_B4_DECISION_ACTOR")
+            .expect("R3_B4_DECISION_ACTOR is required for real B4 decision");
+        let supervisor_decision = std::env::var("R3_B4_SUPERVISOR_DECISION")
+            .expect("R3_B4_SUPERVISOR_DECISION is required for real B4 decision");
+        let db_path = canonical_env_path("R3_B4_DB_PATH");
+        let fallback_root = canonical_env_path("R3_B4_FALLBACK_ROOT");
+        let projection_root = canonical_env_path("R3_B4_PROJECTION_ROOT");
+        let observation_report_path = canonical_env_path("R3_B4_OBSERVATION_REPORT_PATH");
+        let work_dir = canonical_env_path("R3_B4_WORK_DIR");
+        let expected_db_hash = std::env::var("R3_B4_EXPECTED_DB_HASH")
+            .expect("R3_B4_EXPECTED_DB_HASH is required for real B4 decision");
+        let expected_fallback_hash = std::env::var("R3_B4_EXPECTED_FALLBACK_HASH")
+            .expect("R3_B4_EXPECTED_FALLBACK_HASH is required for real B4 decision");
+        let expected_projection_hash = std::env::var("R3_B4_EXPECTED_PROJECTION_HASH")
+            .expect("R3_B4_EXPECTED_PROJECTION_HASH is required for real B4 decision");
+        let expected_observation_report_hash =
+            std::env::var("R3_B4_EXPECTED_OBSERVATION_REPORT_HASH")
+                .expect("R3_B4_EXPECTED_OBSERVATION_REPORT_HASH is required for real B4 decision");
+        let evidence = std::env::var("R3_B4_LEVEL_B_EVIDENCE")
+            .expect("R3_B4_LEVEL_B_EVIDENCE is required for real B4 decision");
+        assert_eq!(evidence, "all_complete");
+        let report_path = work_dir
+            .join("reports")
+            .join("stop-write-decision-report.json");
+        let rollback_manifest_path = work_dir
+            .join("rollback")
+            .join("stop-write-decision-rollback-manifest.json");
+        let paths = StopWritePaths {
+            db_path: db_path.clone(),
+            work_dir: work_dir.clone(),
+            fallback_root: fallback_root.clone(),
+            projection_root: projection_root.clone(),
+            report_path: report_path.clone(),
+            rollback_manifest_path: rollback_manifest_path.clone(),
+            observation_report_path: observation_report_path.clone(),
+            expected_db_hash: Some(expected_db_hash.clone()),
+            expected_fallback_hash: Some(expected_fallback_hash.clone()),
+            expected_projection_hash: Some(expected_projection_hash.clone()),
+            expected_observation_report_hash: Some(expected_observation_report_hash.clone()),
+        };
+        let source_hash_before = root_manifest_hash(&fallback_root).expect("source hash before");
+        let db_hash_before = file_hash(&db_path).expect("db hash before");
+        let config = SqliteStopWriteLevelBConfig {
+            confirmed_db_path: db_path.clone(),
+            confirmed_fallback_root: fallback_root.clone(),
+            confirmed_last_verified_projection_root: projection_root.clone(),
+            confirmed_observation_report_path: observation_report_path.clone(),
+            confirmed_work_dir: work_dir.clone(),
+            confirmed_stop_write_report_path: report_path.clone(),
+            confirmed_rollback_manifest_path: rollback_manifest_path.clone(),
+        };
+
+        let report = level_b_ready_call(
+            &paths,
+            &supervisor_decision,
+            &complete_level_b_evidence(),
+            &config,
+        )
+        .expect("R3 B4 stop-write decision must complete");
+        let source_hash_after = root_manifest_hash(&fallback_root).expect("source hash after");
+        let db_hash_after = file_hash(&db_path).expect("db hash after");
+
+        assert_eq!(decision_actor, "supervisor_user");
+        assert_eq!(report.level, LEVEL_B_WORKBENCH_OWNED_STATE);
+        assert_eq!(report.status, "ready_but_not_executed");
+        assert!(report
+            .preconditions
+            .iter()
+            .all(|condition| condition.satisfied));
+        assert_eq!(source_hash_before, source_hash_after);
+        assert_eq!(db_hash_before, db_hash_after);
+        assert_eq!(db_hash_after, expected_db_hash);
+        assert!(report.safety_flags.stop_write_decision_recorded);
+        assert!(!report.safety_flags.stop_write_json);
+        assert!(!report.safety_flags.source_json_written);
+        assert!(!report.safety_flags.sidecar_written);
+        assert!(!report.safety_flags.product_global_write_path_changed);
+        assert!(!report.rollback_drill.production_restore_performed);
+        assert_eq!(report.rollback_drill.status, "rollback_drill_only");
+        println!(
+            "R3_B4_DB_PATH={}\nR3_B4_DB_HASH={expected_db_hash}\nR3_B4_FALLBACK_ROOT={}\nR3_B4_FALLBACK_HASH_BEFORE={source_hash_before}\nR3_B4_FALLBACK_HASH_AFTER={source_hash_after}\nR3_B4_PROJECTION_ROOT={}\nR3_B4_PROJECTION_HASH={expected_projection_hash}\nR3_B4_OBSERVATION_REPORT_PATH={}\nR3_B4_OBSERVATION_REPORT_HASH={expected_observation_report_hash}\nR3_B4_STOP_WRITE_REPORT_PATH={}\nR3_B4_ROLLBACK_MANIFEST_PATH={}",
+            db_path.display(),
+            fallback_root.display(),
+            projection_root.display(),
+            observation_report_path.display(),
+            report_path.display(),
+            rollback_manifest_path.display()
+        );
+    }
+
     struct StopWritePaths {
         db_path: PathBuf,
+        work_dir: PathBuf,
         fallback_root: PathBuf,
         projection_root: PathBuf,
         report_path: PathBuf,
@@ -1070,16 +1845,46 @@ mod tests {
         )
     }
 
+    fn level_b_ready_call(
+        paths: &StopWritePaths,
+        decision: &str,
+        evidence: &SqliteStopWriteLevelBEvidence,
+        config: &SqliteStopWriteLevelBConfig,
+    ) -> Result<SqliteStopWriteDecisionReport, String> {
+        rehearse_stop_write_decision_level_b_workbench_owned_state(
+            DECISION_MODE,
+            "supervisor_user",
+            Some(decision),
+            WORKFLOW_STATE_SUMMARY_READ_MODEL,
+            &paths.db_path,
+            &paths.fallback_root,
+            &paths.projection_root,
+            &paths.report_path,
+            &paths.rollback_manifest_path,
+            &paths.observation_report_path,
+            paths.expected_db_hash.as_deref(),
+            paths.expected_fallback_hash.as_deref(),
+            paths.expected_projection_hash.as_deref(),
+            paths.expected_observation_report_hash.as_deref(),
+            &allowed_read_models(),
+            &[],
+            evidence,
+            config,
+            None,
+        )
+    }
+
     fn prepare_paths(label: &str) -> StopWritePaths {
         let root = temp_root(label);
         let fallback_root = fixture_dir("stop-write-workflow-summary");
         StopWritePaths {
-            db_path: root.join("workbench.sqlite"),
+            db_path: root.join("db").join("workbench.sqlite"),
+            work_dir: root.clone(),
             fallback_root,
             projection_root: root.join("projection"),
-            report_path: root.join("stop-write-report.json"),
-            rollback_manifest_path: root.join("rollback-manifest.json"),
-            observation_report_path: root.join("observation-report.json"),
+            report_path: root.join("reports").join("stop-write-report.json"),
+            rollback_manifest_path: root.join("rollback").join("rollback-manifest.json"),
+            observation_report_path: root.join("observation").join("observation-report.json"),
             expected_db_hash: None,
             expected_fallback_hash: None,
             expected_projection_hash: None,
@@ -1089,6 +1894,23 @@ mod tests {
 
     fn prepare_ready_paths(label: &str) -> StopWritePaths {
         let paths = prepare_paths(label);
+        fs::create_dir_all(paths.db_path.parent().expect("db parent")).expect("create db dir");
+        fs::create_dir_all(paths.report_path.parent().expect("report parent"))
+            .expect("create report dir");
+        fs::create_dir_all(
+            paths
+                .rollback_manifest_path
+                .parent()
+                .expect("rollback parent"),
+        )
+        .expect("create rollback dir");
+        fs::create_dir_all(
+            paths
+                .observation_report_path
+                .parent()
+                .expect("observation parent"),
+        )
+        .expect("create observation dir");
         apply_fixture_dir_to_temp_db(&paths.fallback_root, &paths.db_path, None).expect("apply db");
         write_projection_root(&paths.db_path, &paths.projection_root).expect("write projection");
         write_json_file(
@@ -1161,6 +1983,24 @@ mod tests {
             limited_read_cut_level_b_completed: true,
             production_observation_level_b_completed: true,
         }
+    }
+
+    fn level_b_config(paths: &StopWritePaths) -> SqliteStopWriteLevelBConfig {
+        SqliteStopWriteLevelBConfig {
+            confirmed_db_path: paths.db_path.clone(),
+            confirmed_fallback_root: paths.fallback_root.clone(),
+            confirmed_last_verified_projection_root: paths.projection_root.clone(),
+            confirmed_observation_report_path: paths.observation_report_path.clone(),
+            confirmed_work_dir: paths.work_dir.clone(),
+            confirmed_stop_write_report_path: paths.report_path.clone(),
+            confirmed_rollback_manifest_path: paths.rollback_manifest_path.clone(),
+        }
+    }
+
+    fn canonical_env_path(name: &str) -> PathBuf {
+        let value = std::env::var(name).unwrap_or_else(|_| panic!("{name} is required"));
+        fs::canonicalize(&value)
+            .unwrap_or_else(|error| panic!("canonicalize {name} failed for {value}: {error}"))
     }
 
     fn fixture_dir(name: &str) -> PathBuf {
