@@ -8,6 +8,7 @@ import {
   bindWorkflowNodeCodexSession,
   correctTaskPackageDispatchFields,
   copyTaskPackagePreview,
+  captureMemoryEvent,
   createMemoryCandidateFromObservation,
   createProjectConsultationProposal,
   createTaskDraft,
@@ -338,6 +339,18 @@ export function App() {
         const result = await adoptMemoryCandidateToFormalMemory(pendingAction.memoryCandidateAdoption);
         await reloadCandidateStores();
         setNotice(`记忆候选已受控采纳为正式记忆：${result.record.memory_id}；版本 ${result.version.version_id}；审计 ${result.audit_event.audit_event_id}。`);
+      } else if (pendingAction.kind === "adopt-memory-candidates-to-formal-memory-batch") {
+        if (!pendingAction.memoryCandidateBatchAdoptions?.length) {
+          throw new Error("批量记忆候选采纳缺少待写入对象");
+        }
+        const results = [];
+        for (const adoption of pendingAction.memoryCandidateBatchAdoptions) {
+          results.push(await adoptMemoryCandidateToFormalMemory(adoption));
+        }
+        await reloadCandidateStores();
+        setNotice(
+          `批量采纳已逐条走 M2 门：${results.length} 条候选受控写入正式记忆；未自动采纳其他候选。`,
+        );
       } else if (pendingAction.kind === "record-formal-memory-lifecycle-operation") {
         if (!pendingAction.formalMemoryLifecycle) {
           throw new Error("正式记忆生命周期操作缺少待写入对象");
@@ -486,11 +499,19 @@ export function App() {
           throw new Error("L3 操作控制缺少待记录对象");
         }
         const result = await recordOperationControlDecision(operation);
+        let memoryCaptureNotice = "";
+        if (pendingAction.memoryCaptureEvent) {
+          const captureOutput = await captureMemoryEvent(pendingAction.memoryCaptureEvent);
+          await reloadCandidateStores();
+          memoryCaptureNotice = captureOutput.candidate
+            ? ` 已生成待确认记忆候选：${captureOutput.candidate.candidate_key}；候选不是正式记忆。`
+            : " 已记录记忆捕获来源；未写正式记忆。";
+        }
         const { snapshot: nextSnapshot } = await loadWorkbenchSnapshotFromPageQueries(queryWorkbenchPageReadModel);
         setSnapshot(nextSnapshot);
         setWorkflowState(result.snapshot);
         setNotice(
-          `${result.message} 审计 ${result.audit_event_id}；L3 不调用 runner、不停止/重启真实进程、不解锁 K3-B2。`,
+          `${result.message} 审计 ${result.audit_event_id}；L3 不调用 runner、不停止/重启真实进程、不解锁 K3-B2。${memoryCaptureNotice}`,
         );
       } else if (pendingAction.kind === "offline-role-dispatch") {
         if (!pendingAction.offlineRoleDispatch) {
@@ -901,6 +922,7 @@ function renderActiveView(
         workflowStateError={workflowStateError}
         memoryCaptureStore={memoryCaptureStore}
         memoryCandidateStore={memoryCandidateStore}
+        formalMemoryStore={formalMemoryStore}
         onReloadWorkflowState={onReloadWorkflowState}
         onNavigate={onNavigate}
         onRequestAction={onRequestAction}

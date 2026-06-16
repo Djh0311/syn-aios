@@ -20,6 +20,7 @@ pub mod mcp;
 mod memory_candidate_store;
 mod memory_capture_bus;
 mod memory_consistency;
+mod memory_daily_loop;
 mod memory_entity_relation_governance;
 mod memory_entity_relation_store;
 mod memory_lint_engine;
@@ -76,7 +77,6 @@ struct AllowedPaths {
     projects: BTreeSet<String>,
     rollouts: BTreeSet<String>,
 }
-
 impl AppState {
     fn new() -> Self {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

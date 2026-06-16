@@ -158,6 +158,7 @@ function memoryCaptureSourceLabel(sourceType: MemoryCaptureEventRecord["source_t
     runtime_log: "运行日志",
     readback: "执行读回",
     worker_report: "工作线汇报",
+    operation_control_decision: "操作控制决策",
     process_fact_decision: "过程事实确认",
     final_review: "最终复核",
   };

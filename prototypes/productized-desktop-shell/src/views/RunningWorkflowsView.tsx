@@ -1,11 +1,14 @@
 import { Badge } from "../components/Badge";
+import { DailyMemoryCandidateInbox } from "../components/DailyMemoryCandidateInbox";
 import { SummaryTile } from "../components/WorkbenchPrimitives";
 import { pathTail } from "../lib/format";
+import { buildOperationControlMemoryCaptureInput, deriveDailyMemoryCandidateInbox } from "../lib/memoryDailyLoop";
 import { deriveRunningWorkflowsPageReadModelFromParts } from "../lib/pageSelectors";
 import { deriveRunQueueReadModel, type OperationControlSummary } from "../lib/runQueue";
 import type {
   MemoryCandidateStoreV1,
   MemoryCaptureStoreV1,
+  FormalMemoryStoreV1,
   OperationControlItem,
   PendingAction,
   ProjectWorkflowSummary,
@@ -22,6 +25,7 @@ type RunningWorkflowsViewProps = {
   workflowStateError: string | null;
   memoryCaptureStore?: MemoryCaptureStoreV1 | null;
   memoryCandidateStore?: MemoryCandidateStoreV1 | null;
+  formalMemoryStore?: FormalMemoryStoreV1 | null;
   onReloadWorkflowState: () => void;
   onNavigate: (view: ViewKey) => void;
   onRequestAction?: (action: PendingAction) => void;
@@ -46,6 +50,7 @@ export function RunningWorkflowsView({
   workflowStateError,
   memoryCaptureStore = null,
   memoryCandidateStore = null,
+  formalMemoryStore = null,
   onReloadWorkflowState,
   onNavigate,
   onRequestAction,
@@ -77,6 +82,23 @@ export function RunningWorkflowsView({
   const operationControl = runQueue.operation_control_summary;
   const l3OperationControl = snapshot.operation_control ?? null;
   const operationItems = l3OperationControl?.operations ?? fallbackOperationItemsFromSummary(operationControl);
+  const dailyMemoryInbox = deriveDailyMemoryCandidateInbox({ memoryCandidateStore });
+  const primaryProject = snapshot.projects.find((item) => item.active_hint) ?? snapshot.projects[0] ?? null;
+  const primaryWorkflow = workflowState?.project_workflows[0] ?? null;
+  const dailyProjectRoot = primaryProject?.project_root ?? primaryWorkflow?.project_root ?? "workbench://memory-daily-loop";
+  const dailyProjectId = primaryWorkflow?.project_id ?? `project:${sanitizeId(dailyProjectRoot)}`;
+  const dailyWorkflowId = primaryWorkflow?.workflow_id ?? `workflow:${sanitizeId(dailyProjectRoot)}:default`;
+  const dailyWorkflowNodeId = primaryWorkflow?.derived_workflow?.nodes[0]?.workflow_node_id ?? null;
+  const dailyRunUnitId = automation?.latest_plan?.run_units[0]?.run_unit_id ?? null;
+  const operationCaptureContext: OperationCaptureContext = {
+    projectRoot: dailyProjectRoot,
+    projectId: dailyProjectId,
+    workflowId: dailyWorkflowId,
+    workflowNodeId: dailyWorkflowNodeId,
+    runUnitId: dailyRunUnitId,
+    captureStoreRevision: memoryCaptureStore?.revision ?? null,
+    candidateStoreRevision: memoryCandidateStore?.revision ?? null,
+  };
   const leadQueueItems = runQueue.run_queue_items.slice(0, 6);
   const leadConfirmations = runQueue.user_confirmation_queue.slice(0, 12);
   const leadFailures = runQueue.failure_control_summaries.slice(0, 6);
@@ -169,6 +191,14 @@ export function RunningWorkflowsView({
           <p className="muted small-note">运行队列是派生读模型；重试、停止、恢复和重启都必须先进入确认，不会自动调用 runner。</p>
         </section>
 
+        <DailyMemoryCandidateInbox
+          inbox={dailyMemoryInbox}
+          projectRoot={dailyProjectRoot}
+          candidateStoreRevision={memoryCandidateStore?.revision ?? null}
+          formalStoreRevision={formalMemoryStore?.revision ?? null}
+          onRequestAction={onRequestAction}
+        />
+
         <section className="panel running-section">
           <div className="panel-h">
             待确认
@@ -239,7 +269,12 @@ export function RunningWorkflowsView({
           </div>
           <div className="running-workflow-list">
             {operationItems.map((item) => (
-              <OperationBoundaryCard item={item} onRequestAction={onRequestAction} key={item.operation_id} />
+              <OperationBoundaryCard
+                item={item}
+                onRequestAction={onRequestAction}
+                captureContext={operationCaptureContext}
+                key={item.operation_id}
+              />
             ))}
             <OperationBoundaryCard title="读回" status="结果数未知" summary={operationControl.readback_boundary} />
             <OperationBoundaryCard title="过期状态清理" status="工作台侧" summary={operationControl.stale_cleanup_boundary} />
@@ -428,18 +463,19 @@ function RuntimeSummaryCard({ summary, onNavigate }: { summary: SessionRunStatus
 function OperationBoundaryCard({
   item,
   onRequestAction,
+  captureContext,
   title,
   status,
   summary,
 }: {
   item?: OperationControlItem;
   onRequestAction?: (action: PendingAction) => void;
+  captureContext?: OperationCaptureContext;
   title?: string;
   status?: string;
   summary?: string;
 }) {
   if (item) {
-    const action = buildOperationControlAction(item);
     const isBlocked = item.status === "blocked" || item.status === "confirmed_recorded" || !onRequestAction;
     return (
       <article className="running-attention-card operation-boundary-card">
@@ -456,7 +492,7 @@ function OperationBoundaryCard({
           className="secondary-button"
           type="button"
           disabled={isBlocked}
-          onClick={() => onRequestAction?.(action)}
+          onClick={() => onRequestAction?.(buildOperationControlAction(item, captureContext))}
         >
           {item.confirmation_label}
         </button>
@@ -472,29 +508,53 @@ function OperationBoundaryCard({
   );
 }
 
-function buildOperationControlAction(item: OperationControlItem): PendingAction {
+type OperationCaptureContext = {
+  projectRoot: string;
+  projectId: string;
+  workflowId: string;
+  workflowNodeId?: string | null;
+  runUnitId?: string | null;
+  captureStoreRevision?: number | null;
+  candidateStoreRevision?: number | null;
+};
+
+function buildOperationControlAction(item: OperationControlItem, captureContext?: OperationCaptureContext): PendingAction {
+  const operationControlAction = {
+    operation_id: item.operation_id,
+    label: item.label,
+    current_status: item.status,
+    status_after_confirmation: item.status_after_confirmation,
+    current_gate: item.current_gate,
+    would_write_if_real: item.would_write_if_real,
+    risk_disclosure: item.risk_disclosure,
+    readback_status: item.readback_status,
+    readback_result_count: item.readback_result_count ?? null,
+    audit_event_type: item.audit_event_type,
+    runtime_status_after_confirmation: item.runtime_status_after_confirmation,
+    does_execute_in_l3: false,
+    requires_separate_authorized_window: item.requires_separate_authorized_window,
+    blocks_k3_b2: item.blocks_k3_b2,
+  } as const;
   return {
     kind: "record-operation-control-decision",
     label: item.confirmation_label,
     path: `workbench://operation-control/${item.operation_id}`,
     source: "Tauri 应用数据目录",
     boundary: "L3 只登记运行控制决策和待处理状态；不调用 runner、不执行 Codex、不停止或重启真实进程。",
-    operationControlAction: {
-      operation_id: item.operation_id,
-      label: item.label,
-      current_status: item.status,
-      status_after_confirmation: item.status_after_confirmation,
-      current_gate: item.current_gate,
-      would_write_if_real: item.would_write_if_real,
-      risk_disclosure: item.risk_disclosure,
-      readback_status: item.readback_status,
-      readback_result_count: item.readback_result_count ?? null,
-      audit_event_type: item.audit_event_type,
-      runtime_status_after_confirmation: item.runtime_status_after_confirmation,
-      does_execute_in_l3: false,
-      requires_separate_authorized_window: item.requires_separate_authorized_window,
-      blocks_k3_b2: item.blocks_k3_b2,
-    },
+    operationControlAction,
+    memoryCaptureEvent: captureContext
+      ? buildOperationControlMemoryCaptureInput({
+          operation: operationControlAction,
+          projectRoot: captureContext.projectRoot,
+          projectId: captureContext.projectId,
+          workflowId: captureContext.workflowId,
+          workflowNodeId: captureContext.workflowNodeId,
+          runUnitId: captureContext.runUnitId,
+          createdAt: new Date().toISOString(),
+          expectedCaptureStoreRevision: captureContext.captureStoreRevision,
+          expectedCandidateStoreRevision: captureContext.candidateStoreRevision,
+        })
+      : undefined,
   };
 }
 
@@ -624,6 +684,10 @@ function productCommandStatusLabel(readModel: WorkbenchSnapshot["real_execution_
   if (readModel.blocked_attempt_count > 0) return "已阻断";
   if (readModel.running_attempt_count > 0) return "受控记录可见";
   return productAttemptStatusLabel(readModel.last_attempt_status) || "准备执行";
+}
+
+function sanitizeId(value: string): string {
+  return value.replace(/^\/+/, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "unknown";
 }
 
 function productAttemptStatusLabel(status?: string | null) {

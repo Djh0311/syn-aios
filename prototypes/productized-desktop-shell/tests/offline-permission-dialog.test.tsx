@@ -73,6 +73,7 @@ import {
 import { realExecutionProductCommandFixtures } from "./helpers/offlineRealExecutionProductCommandFixtures";
 import { runK3B1BlockedRecoveryProductPathScenario } from "./helpers/offlineK3B1RecoveryScenario";
 import { runL3OperationControlScenario } from "./helpers/offlineL3OperationControlScenario";
+import { runL5MemoryDailyLoopScenario } from "./helpers/offlineL5MemoryDailyLoopScenario";
 import { controlledSessionContinuationLevelAStoreFixture, h2DuplicateSessionContinuationStoreFixture } from "./helpers/offlineSessionContinuationStoreFixtures";
 import {
   rightDetailPanelCommonPropsFixture,
@@ -222,6 +223,7 @@ function main() {
   runAdapterSdkCliDiagnosticsBoundaryScenario();
   runRealExecutionProductCommandBoundaryScenario();
   runK3B1BlockedRecoveryProductPathScenario({ snapshot, project, session, workflowStateWithProjectWorkflow, onRequestAction: captureAction });
+  runL5MemoryDailyLoopScenario({ snapshot, workflowStateWithProjectWorkflow, project });
   runStageJRunQueueScenario();
   runSessionContinuationPreviewScenario();
   runControlledSessionContinuationLevelAScenario();

@@ -918,6 +918,7 @@ export type MemoryCaptureSourceType =
   | "runtime_log"
   | "readback"
   | "worker_report"
+  | "operation_control_decision"
   | "process_fact_decision"
   | "final_review";
 

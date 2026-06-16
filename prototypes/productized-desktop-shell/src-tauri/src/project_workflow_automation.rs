@@ -2821,11 +2821,12 @@ fn capture_process_fact_event(
             "来源包含 Product Command Phase A no-op、worker report 和项目主管过程事实确认。"
                 .to_string(),
         sensitivity: "internal".to_string(),
-        candidate_policy: "audit_only".to_string(),
+        candidate_policy: "observation_only".to_string(),
         generated_by_role: "project_director".to_string(),
         actor_id: "project-director-k3-level-a".to_string(),
         risk_level: "low".to_string(),
-        reason: "K3 Level A 只记录 capture source，不生成候选或 FormalMemory。".to_string(),
+        reason: "K3 Level A 记录 capture source 并形成 observation；不生成候选或 FormalMemory。"
+            .to_string(),
         candidate: None,
         expected_capture_store_revision: None,
         expected_observation_store_revision: None,
@@ -3725,7 +3726,8 @@ mod tests {
         let capture_store = memory_capture_bus::load_store(&path, "2026-06-09T00:00:00Z")
             .expect("capture store should load");
         assert_eq!(capture_store.events.len(), 1);
-        assert_eq!(capture_store.events[0].candidate_policy, "audit_only");
+        assert_eq!(capture_store.events[0].candidate_policy, "observation_only");
+        assert!(capture_store.events[0].observation_id.is_some());
         assert_eq!(capture_store.events[0].candidate_key, None);
         assert!(
             !formal_memory_store::sidecar_path(&path)

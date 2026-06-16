@@ -2,6 +2,7 @@ import type { ProjectWorkflowAutomationInput } from "./execution";
 import type { CodexLocalAuditRef, CodexLocalExecutionGuard, CodexLocalExecutionRequest, CodexLocalRuntimeLogRef } from "./agentSession";
 import type {
   AdoptMemoryCandidateInput,
+  CaptureMemoryEventInput,
   CreateMemoryCandidateFromObservationInput,
   CreateMemoryCandidateInput,
   FormalMemoryLifecycleInput,
@@ -1507,6 +1508,7 @@ export type PathActionKind =
   | "create-memory-candidate-from-observation"
   | "record-memory-candidate-decision"
   | "adopt-memory-candidate-to-formal-memory"
+  | "adopt-memory-candidates-to-formal-memory-batch"
   | "record-formal-memory-lifecycle-operation"
   | "record-memory-entity-alias-decision"
   | "record-memory-entity-merge-decision"
@@ -1562,6 +1564,7 @@ export type PendingAction = {
   observationCandidateCreation?: CreateMemoryCandidateFromObservationInput;
   memoryCandidateDecision?: RecordMemoryCandidateDecisionInput;
   memoryCandidateAdoption?: AdoptMemoryCandidateInput;
+  memoryCandidateBatchAdoptions?: AdoptMemoryCandidateInput[];
   formalMemoryLifecycle?: FormalMemoryLifecycleInput;
   formalMemoryLifecyclePreview?: FormalMemoryLifecyclePreview;
   memoryEntityAliasDecision?: RecordMemoryEntityAliasDecisionInput;
@@ -1611,6 +1614,7 @@ export type PendingAction = {
     readback_result_count?: number | null;
   };
   operationControlAction?: OperationControlDecisionRequest;
+  memoryCaptureEvent?: CaptureMemoryEventInput;
   offlineRoleDispatch?: OfflineRoleDispatchRequest;
   offlineRoleResultHandoff?: OfflineRoleResultHandoffRequest;
   offlineDirectorReview?: OfflineDirectorReviewRequest;

@@ -373,12 +373,32 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
         {action.kind === "adopt-memory-candidate-to-formal-memory" && action.memoryCandidateAdoption ? (
           <>
             <div className="permission-detail">
+              <span>采纳类型</span>
+              <strong>采纳候选为正式记忆</strong>
+            </div>
+            <div className="permission-detail">
               <span>记忆候选</span>
               <strong>{action.memoryCandidateAdoption.candidate_key}</strong>
             </div>
             <div className="permission-detail">
               <span>采纳理由</span>
               <strong>{action.memoryCandidateAdoption.adoption_reason}</strong>
+            </div>
+          </>
+        ) : null}
+        {action.kind === "adopt-memory-candidates-to-formal-memory-batch" && action.memoryCandidateBatchAdoptions?.length ? (
+          <>
+            <div className="permission-detail">
+              <span>批量采纳</span>
+              <strong>{action.memoryCandidateBatchAdoptions.length} 条候选；逐条复用 M2 采纳门</strong>
+            </div>
+            <div className="permission-detail">
+              <span>候选清单</span>
+              <strong>{action.memoryCandidateBatchAdoptions.map((item) => item.candidate_key).join("；")}</strong>
+            </div>
+            <div className="permission-detail">
+              <span>边界</span>
+              <strong>本动作只处理弹窗中列出的候选；不会自动采纳其他候选，不绕过用户确认门。</strong>
             </div>
           </>
         ) : null}
@@ -989,6 +1009,10 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
             ? "该动作只会在你确认后生成项目自动编排 Level A run units，并记录 Product Command Phase A no-op、runtime/audit/readback unavailable、worker report、捕获来源和 observation；不发送 prompt、不执行真实 Codex、不写 /Users/yoyi/.codex、不写项目文件。"
             : action.kind === "record-operation-control-decision"
             ? "该动作只会记录 L3 操作控制决策和待处理状态；不调用 runner、不执行 Codex、不发送 prompt、不停止或重启真实进程、不解锁 K3-B2。"
+            : action.kind === "adopt-memory-candidate-to-formal-memory"
+            ? "该动作只会在你确认后通过 M2 采纳门写入 formal-memories.v1.json，并保留候选、来源、版本和审计；不会自动采纳其他候选。"
+            : action.kind === "adopt-memory-candidates-to-formal-memory-batch"
+            ? "该动作只会在你确认后逐条调用 M2 采纳门；不会绕过确认门，不会自动正式化未列出的候选。"
             : action.kind === "offline-role-dispatch"
             ? "该动作只会在你确认后把离线角色派发写入工作台自己的工作流状态；不启动 Codex、不执行 codex exec resume、不发送消息、不写 /Users/yoyi/.codex、不运行运行器。"
             : action.kind === "offline-role-result-handoff"
@@ -1010,6 +1034,9 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
               ? `⚠ 高风险：会执行真实 Codex。批准后会写 /Users/yoyi/.codex。失败、超时或读回不可用必须记录边界，不会自动重试。`
               : action.kind === "record-operation-control-decision"
               ? "低风险：本轮只登记运行控制决策和待处理状态。不启动 Codex 命令行，不发送真实执行指令，不停止或重启进程。"
+              : action.kind === "adopt-memory-candidate-to-formal-memory" ||
+                action.kind === "adopt-memory-candidates-to-formal-memory-batch"
+              ? "中风险：会在确认后写正式记忆、版本和审计；候选不会自动正式化，批量也逐条走 M2 门。"
               : "低风险：只写工作台自己的状态文件。不启动 Codex 命令行，不发送真实执行指令，不写 /Users/yoyi/.codex。"}
           </p>
         <div className="dialog-actions">
@@ -1032,6 +1059,8 @@ function confirmActionLabel(kind: PendingAction["kind"]) {
   if (kind === "copy-task-preview") return "确认复制";
   if (kind === "run-project-workflow-automation-phase-a") return "确认生成编排记录";
   if (kind === "record-operation-control-decision") return "确认记录决策";
+  if (kind === "adopt-memory-candidate-to-formal-memory") return "确认采纳";
+  if (kind === "adopt-memory-candidates-to-formal-memory-batch") return "确认批量采纳";
   if (
     kind === "initialize-workflow-state" ||
     kind === "bootstrap-project-workflow" ||
@@ -1072,8 +1101,7 @@ function confirmActionLabel(kind: PendingAction["kind"]) {
   if (kind === "create-task-draft") return "确认创建草稿";
   if (
     kind === "create-memory-candidate" ||
-    kind === "create-memory-candidate-from-observation" ||
-    kind === "adopt-memory-candidate-to-formal-memory"
+    kind === "create-memory-candidate-from-observation"
   ) {
     return "确认创建候选";
   }
