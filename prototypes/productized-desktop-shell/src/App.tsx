@@ -475,6 +475,10 @@ export function App() {
         setNotice(
           `项目自动编排 Level A 已记录：${result.plan.run_units.length} 个 run unit；状态 ${result.status}；未发送 prompt、未执行真实 Codex。`,
         );
+      } else if (pendingAction.kind === "record-k3-b1-manual-recovery-submission") {
+        setNotice("K3-B1 手动回交路径已进入待主管线复核提示；L1 不执行真实 Codex、不发送 prompt、不自动接受成功。");
+      } else if (pendingAction.kind === "request-k3-b1-renewed-risk-approval") {
+        setNotice("K3-B1 重新授权申请只进入待安全审查提示；L1 不继承旧授权、不启动 retry、不解锁 K3-B2。");
       } else if (pendingAction.kind === "offline-role-dispatch") {
         if (!pendingAction.offlineRoleDispatch) {
           throw new Error("离线角色派发缺少派发块");
@@ -844,6 +848,7 @@ function renderActiveView(
         runtimeSessionAttention={snapshot.runtime_session_attention}
         realExecutionProductCommands={snapshot.real_execution_product_commands}
         projectWorkflowAutomation={snapshot.project_workflow_automation}
+        k3B1Recovery={snapshot.k3_b1_recovery}
         workflowStateLoading={workflowStateLoading}
         workflowStateError={workflowStateError}
         onReloadWorkflowState={onReloadWorkflowState}

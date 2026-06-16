@@ -25,6 +25,19 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
           failure: "失败、超时、读回不可用或读回失败必须记录边界；不能显示成 0 条结果，也不会自动重试。",
         }
       : null;
+  const k3B1RecoveryBoundary =
+    action.kind === "record-k3-b1-manual-recovery-submission" ||
+    action.kind === "request-k3-b1-renewed-risk-approval"
+      ? {
+          status: action.k3B1RecoveryAction?.status_after_selection ?? "blocked_by_safety_review_again",
+          risk: action.k3B1RecoveryAction?.risk_acknowledgement ?? "L1 只记录恢复路径，不执行真实 Codex。",
+          readback:
+            action.k3B1RecoveryAction?.readback_result_count === null ||
+            action.k3B1RecoveryAction?.readback_result_count === undefined
+              ? "结果数：未知/不可用"
+              : `结果数：${action.k3B1RecoveryAction.readback_result_count} 条`,
+        }
+      : null;
 
   return (
     <div
@@ -76,6 +89,26 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
             <div className="permission-detail">
               <span>失败处理</span>
               <strong>{realCodexBoundary.failure}</strong>
+            </div>
+          </>
+        ) : null}
+        {k3B1RecoveryBoundary ? (
+          <>
+            <div className="permission-detail">
+              <span>K3-B1 恢复状态</span>
+              <strong>{k3B1RecoveryBoundary.status}</strong>
+            </div>
+            <div className="permission-detail">
+              <span>读回边界</span>
+              <strong>{k3B1RecoveryBoundary.readback}</strong>
+            </div>
+            <div className="permission-detail">
+              <span>执行边界</span>
+              <strong>本动作不执行 codex exec/resume、不发送 prompt、不写 .codex、不解锁 K3-B2。</strong>
+            </div>
+            <div className="permission-detail">
+              <span>风险说明</span>
+              <strong>{k3B1RecoveryBoundary.risk}</strong>
             </div>
           </>
         ) : null}

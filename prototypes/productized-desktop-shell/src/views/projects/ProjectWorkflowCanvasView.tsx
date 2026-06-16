@@ -37,6 +37,7 @@ import type {
   AutoDispatchGuardResult,
   BlackboardCandidateStoreV1,
   FormalMemoryStoreV1,
+  K3B1RecoveryReadModel,
   MemoryCandidateStoreV1,
   MemoryLintStoreV1,
   ObservationStoreV1,
@@ -95,6 +96,7 @@ export type ProjectWorkflowCanvasSidePanelProps = {
   runtimeSessionAttention: RuntimeSessionAttention[];
   realExecutionProductCommands: RealExecutionProductCommandReadModel | null;
   projectWorkflowAutomation: ProjectWorkflowAutomationReadModel | null;
+  k3B1Recovery: K3B1RecoveryReadModel | null;
   taskMemoryPacketPreview: TaskMemoryPacketBuildOutput | null;
   taskMemoryPacketLoading: boolean;
   taskMemoryPacketError: string | null;
@@ -117,6 +119,7 @@ type ProjectWorkflowCanvasViewProps = {
   runtimeSessionAttention: RuntimeSessionAttention[];
   realExecutionProductCommands?: RealExecutionProductCommandReadModel | null;
   projectWorkflowAutomation?: ProjectWorkflowAutomationReadModel | null;
+  k3B1Recovery?: K3B1RecoveryReadModel | null;
   onRequestAction: (action: PendingAction) => void;
   onOpenAgentSession: (threadId: string) => void;
   onInspectWorkflowRunCheck?: (projectRoot: string, workflowId?: string | null) => Promise<WorkflowRunCheck>;
@@ -141,6 +144,7 @@ export function ProjectWorkflowCanvasView({
   runtimeSessionAttention,
   realExecutionProductCommands,
   projectWorkflowAutomation,
+  k3B1Recovery,
   onRequestAction,
   onOpenAgentSession,
   onInspectWorkflowRunCheck,
@@ -427,6 +431,7 @@ export function ProjectWorkflowCanvasView({
           runtimeSessionAttention,
           realExecutionProductCommands: realExecutionProductCommands ?? null,
           projectWorkflowAutomation: projectWorkflowAutomation ?? null,
+          k3B1Recovery: k3B1Recovery ?? null,
           taskMemoryPacketPreview,
           taskMemoryPacketLoading,
           taskMemoryPacketError,

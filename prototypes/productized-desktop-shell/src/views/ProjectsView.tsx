@@ -81,6 +81,7 @@ type ProjectsViewProps = {
   runtimeSessionAttention?: RuntimeSessionAttention[];
   realExecutionProductCommands?: RealExecutionProductCommandReadModel | null;
   projectWorkflowAutomation?: ProjectWorkflowAutomationReadModel | null;
+  k3B1Recovery?: ProjectDetailProps["k3B1Recovery"];
   workflowStateLoading?: boolean;
   workflowStateError?: string | null;
   onReloadWorkflowState?: () => void;
@@ -96,31 +97,8 @@ type ProjectsViewProps = {
   onOpenAgentSession?: (threadId: string) => void;
 };
 
-export function ProjectsView({
-  projects,
-  sessions,
-  workflowState = null,
-  blackboardCandidateStore = null,
-  planAuthorizationStore = null,
-  projectConsultationProposalStore = null,
-  observationStore = null,
-  memoryCandidateStore = null,
-  formalMemoryStore = null,
-  memoryLintStore = null,
-  runtimeSessionAttention = [],
-  realExecutionProductCommands = null,
-  projectWorkflowAutomation = null,
-  onRequestAction,
-  onLoadTranscript,
-  onRenderTaskPreview,
-  onInspectDispatchReadiness,
-  onInspectWorkflowRunCheck,
-  onInspectAutoDispatchAuthorization,
-  onPreviewTaskMemoryPacket,
-  onPreviewProjectDirectorTaskPlan,
-  taskMemoryPacketPreview,
-  onOpenAgentSession,
-}: ProjectsViewProps) {
+export function ProjectsView(props: ProjectsViewProps) {
+  const { projects, sessions, workflowState = null } = props;
   const [selectedRoot, setSelectedRoot] = useState<string | null>(null);
   const [selectedTool, setSelectedTool] = useState<ProjectToolKey>("workflow");
   const selectedProject = selectedRoot ? projects.find((project) => project.project_root === selectedRoot) ?? null : null;
@@ -197,32 +175,12 @@ export function ProjectsView({
     <section className="project-workbench">
       <article className="project-detail-shell">
         <ProjectDetail
+          {...props}
           project={selectedProject}
           sessions={projectSessions}
-          workflowState={workflowState}
-          blackboardCandidateStore={blackboardCandidateStore}
-          planAuthorizationStore={planAuthorizationStore}
-          projectConsultationProposalStore={projectConsultationProposalStore}
-          observationStore={observationStore}
-          memoryCandidateStore={memoryCandidateStore}
-          formalMemoryStore={formalMemoryStore}
-          memoryLintStore={memoryLintStore}
-          runtimeSessionAttention={runtimeSessionAttention}
-          realExecutionProductCommands={realExecutionProductCommands}
-          projectWorkflowAutomation={projectWorkflowAutomation}
           selectedTool={selectedTool}
           onSelectTool={setSelectedTool}
           onBackToGallery={() => setSelectedRoot(null)}
-          onOpenAgentSession={onOpenAgentSession}
-          onRequestAction={onRequestAction}
-          onLoadTranscript={onLoadTranscript}
-          onRenderTaskPreview={onRenderTaskPreview}
-          onInspectDispatchReadiness={onInspectDispatchReadiness}
-          onInspectWorkflowRunCheck={onInspectWorkflowRunCheck}
-          onInspectAutoDispatchAuthorization={onInspectAutoDispatchAuthorization}
-          onPreviewTaskMemoryPacket={onPreviewTaskMemoryPacket}
-          onPreviewProjectDirectorTaskPlan={onPreviewProjectDirectorTaskPlan}
-          taskMemoryPacketPreview={taskMemoryPacketPreview}
         />
       </article>
     </section>
@@ -275,6 +233,7 @@ export function ProjectDetail(props: ProjectDetailProps) {
           runtimeSessionAttention={runtimeSessionAttention}
           realExecutionProductCommands={realExecutionProductCommands}
           projectWorkflowAutomation={projectWorkflowAutomation}
+          k3B1Recovery={props.k3B1Recovery ?? null}
           onRequestAction={onRequestAction}
           onOpenAgentSession={onOpenAgentSession}
           onInspectWorkflowRunCheck={onInspectWorkflowRunCheck}

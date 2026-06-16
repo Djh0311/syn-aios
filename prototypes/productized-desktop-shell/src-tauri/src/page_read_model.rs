@@ -157,6 +157,7 @@ pub(crate) fn derive_page_read_model_schema_catalog(
                 "sessions",
                 "tasks",
                 "project_workflow_automation",
+                "k3_b1_recovery",
             ],
             &["project_workflows"],
             &["workflow-state.v0.json"],
@@ -185,6 +186,7 @@ pub(crate) fn derive_page_read_model_schema_catalog(
                 "session_run_status_summaries",
                 "worker_protocol",
                 "real_execution_product_commands",
+                "k3_b1_recovery",
             ],
             &["project_workflows", "session_bindings"],
             &["session-continuations.v1.json", "real-execution-product-commands.v1.json"],
@@ -212,6 +214,7 @@ pub(crate) fn derive_page_read_model_schema_catalog(
                 "worker_protocol",
                 "real_execution_product_commands",
                 "project_workflow_automation",
+                "k3_b1_recovery",
                 "diagnostic_summary",
             ],
             &["project_workflows", "task_drafts", "recent_execution_attempts"],
@@ -616,6 +619,7 @@ fn running_workflows_payload(snapshot: &Value, workflow_state: Option<&Value>) -
     let automation = snapshot
         .get("project_workflow_automation")
         .unwrap_or(&Value::Null);
+    let recovery = snapshot.get("k3_b1_recovery").unwrap_or(&Value::Null);
 
     json!({
         "schema_version": "running_workflows_page_read_model.v1",
@@ -641,6 +645,21 @@ fn running_workflows_payload(snapshot: &Value, workflow_state: Option<&Value>) -
             "waiting_user_count": usize_field(automation, "waiting_user_count"),
             "blocked_count": usize_field(automation, "blocked_count"),
             "readback_unknown_count": usize_field(automation, "readback_unknown_count"),
+        },
+        "k3_b1_recovery": {
+            "current_state": string_field(recovery, "current_state"),
+            "k3_b2_blocked": recovery
+                .get("k3_b2_gate")
+                .map(|gate| bool_field(gate, "blocked"))
+                .unwrap_or(false),
+            "readback_status": recovery
+                .get("readback_boundary")
+                .map(|boundary| string_field(boundary, "status"))
+                .unwrap_or_default(),
+            "result_count": recovery
+                .get("readback_boundary")
+                .and_then(|boundary| boundary.get("result_count").cloned())
+                .unwrap_or(Value::Null),
         },
         "diagnostic": {
             "degraded_count": array_field_len(snapshot.get("diagnostic_summary").unwrap_or(&Value::Null), "degraded_states"),
@@ -920,6 +939,11 @@ fn derive_snapshot_field_coverage() -> Vec<PageSnapshotFieldCoverage> {
             "Automation plans feed project workflow summaries and running queue state.",
         ),
         coverage(
+            "k3_b1_recovery",
+            &["projects", "agents", "running_workflows"],
+            "K3-B1 blocked recovery feeds the project recovery card, agent boundary, and running workflow blocked state without enabling execution.",
+        ),
+        coverage(
             "page_read_model_inventory",
             &["settings"],
             "Page contract inventory belongs in settings developer details.",
@@ -956,6 +980,7 @@ fn workbench_snapshot_field_names() -> Vec<&'static str> {
         "worker_protocol",
         "real_execution_product_commands",
         "project_workflow_automation",
+        "k3_b1_recovery",
         "page_read_model_inventory",
         "diagnostic_summary",
         "diagnostics",
@@ -1201,8 +1226,8 @@ mod tests {
             .map(|coverage| coverage.field_name.as_str())
             .collect();
 
-        assert_eq!(workbench_snapshot_field_names().len(), 20);
-        assert_eq!(catalog.snapshot_field_coverage.len(), 20);
+        assert_eq!(workbench_snapshot_field_names().len(), 21);
+        assert_eq!(catalog.snapshot_field_coverage.len(), 21);
         assert!(catalog.uncovered_snapshot_fields.is_empty());
         for field_name in workbench_snapshot_field_names() {
             assert!(
@@ -1352,6 +1377,22 @@ mod tests {
                 "waiting_user_count": 1,
                 "blocked_count": 0,
                 "readback_unknown_count": 1
+            },
+            "k3_b1_recovery": {
+                "schema_version": "k3_b1_recovery_read_model.v1",
+                "execution_point_id": "stage-k-k3-b1-mario-test-workflow-read-only",
+                "current_state": "blocked_by_safety_review_again",
+                "k3_b2_gate": {
+                    "blocked": true,
+                    "status": "blocked_waiting_k3_b1_recovery_acceptance",
+                    "reason": "K3-B1 still blocked"
+                },
+                "readback_boundary": {
+                    "status": "not_attempted_l1_recovery_path_only",
+                    "result_count": null,
+                    "unavailable_reason": "L1 does not execute Codex",
+                    "user_submitted_evidence_only": true
+                }
             },
             "page_read_model_inventory": {
                 "status": "contract_only",

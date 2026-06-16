@@ -8,6 +8,7 @@ import type {
   BlackboardCandidateStoreV1,
   CodexTranscript,
   FormalMemoryStoreV1,
+  K3B1RecoveryReadModel,
   MemoryCandidateStoreV1,
   MemoryLintStoreV1,
   ObservationStoreV1,
@@ -68,6 +69,7 @@ export type ProjectDetailProps = {
   runtimeSessionAttention?: RuntimeSessionAttention[];
   realExecutionProductCommands?: RealExecutionProductCommandReadModel | null;
   projectWorkflowAutomation?: ProjectWorkflowAutomationReadModel | null;
+  k3B1Recovery?: K3B1RecoveryReadModel | null;
   selectedTool?: ProjectToolKey;
   onSelectTool?: (tool: ProjectToolKey) => void;
   onOpenAgentSession?: (threadId: string) => void;

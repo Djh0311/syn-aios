@@ -152,6 +152,7 @@ struct WorkbenchSnapshot {
     worker_protocol: WorkerProtocolReadModel,
     real_execution_product_commands: RealExecutionProductCommandReadModel,
     project_workflow_automation: ProjectWorkflowAutomationReadModel,
+    k3_b1_recovery: k3_b1_recovery::K3B1RecoveryReadModel,
     page_read_model_inventory: page_read_model::WorkbenchPageReadModelInventory,
     diagnostic_summary: DiagnosticSummary,
     diagnostics: Diagnostics,

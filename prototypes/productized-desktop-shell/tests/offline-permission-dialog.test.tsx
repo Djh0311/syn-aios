@@ -71,10 +71,8 @@ import {
   transcriptCleaningFixtures,
 } from "./helpers/offlineTranscriptSessionFixtures";
 import { realExecutionProductCommandFixtures } from "./helpers/offlineRealExecutionProductCommandFixtures";
-import {
-  controlledSessionContinuationLevelAStoreFixture,
-  h2DuplicateSessionContinuationStoreFixture,
-} from "./helpers/offlineSessionContinuationStoreFixtures";
+import { runK3B1BlockedRecoveryProductPathScenario } from "./helpers/offlineK3B1RecoveryScenario";
+import { controlledSessionContinuationLevelAStoreFixture, h2DuplicateSessionContinuationStoreFixture } from "./helpers/offlineSessionContinuationStoreFixtures";
 import {
   rightDetailPanelCommonPropsFixture,
   rightRailPanelSummaryTitles,
@@ -222,6 +220,7 @@ function main() {
   runProviderAvailabilityBoundaryScenario();
   runAdapterSdkCliDiagnosticsBoundaryScenario();
   runRealExecutionProductCommandBoundaryScenario();
+  runK3B1BlockedRecoveryProductPathScenario({ snapshot, project, session, workflowStateWithProjectWorkflow, onRequestAction: captureAction });
   runStageJRunQueueScenario();
   runSessionContinuationPreviewScenario();
   runControlledSessionContinuationLevelAScenario();
@@ -239,7 +238,7 @@ function main() {
   for (const scenario of scenarios) {
     runPermissionScenario(scenario, capturedActionState);
   }
-  console.log(`offline interaction tests passed: ${scenarios.length + 14}`);
+  console.log(`offline interaction tests passed: ${scenarios.length + 15}`);
 }
 
 function runRealExecutionProductCommandBoundaryScenario() {

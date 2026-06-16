@@ -308,6 +308,121 @@ export type ProjectWorkflowAutomationResult = {
   warnings: string[];
 };
 
+export type K3B2GateStatus = {
+  blocked: boolean;
+  status: string;
+  reason: string;
+};
+
+export type K3B1RecoveryOption = {
+  option_id: string;
+  label: string;
+  status_after_selection: string;
+  user_visible_description: string;
+  does_execute_codex: boolean;
+  requires_separate_task_package: boolean;
+};
+
+export type ManualExactCommandContract = {
+  source_task_ref: string;
+  source_evidence_ref: string;
+  working_directory: string;
+  command_lines: string[];
+  prompt_ref: string;
+  prompt_hash: string;
+  prompt_path_ref: string;
+  prompt_body_included: boolean;
+  user_execution_required: boolean;
+  workbench_executes_in_l1: boolean;
+  runs_real_codex_if_user_executes: boolean;
+  writes_codex_home_if_user_executes: boolean;
+  boundary: string;
+};
+
+export type ManualRecoverySubmissionContract = {
+  status_after_submit: string;
+  auto_accepts_success: boolean;
+  required_fields: string[];
+  sensitive_material_policy: string;
+};
+
+export type RenewedRiskApprovalContract = {
+  status_after_request: string;
+  inherited_authorization_allowed: boolean;
+  warning: string;
+};
+
+export type NarrowBridgeDesignContract = {
+  status_after_selection: string;
+  implementation_allowed_in_l1: boolean;
+  minimum_future_fields: string[];
+};
+
+export type RecoveryRuntimeBoundary = {
+  records_blocked_state: boolean;
+  records_recovery_choice: boolean;
+  stores_prompt_body: boolean;
+  stores_codex_home_content: boolean;
+  allowed_summary: string;
+};
+
+export type RecoveryAuditBoundary = {
+  event_type: string;
+  records_actor: boolean;
+  records_choice: boolean;
+  records_supervisor_review: boolean;
+  stores_sensitive_material: boolean;
+};
+
+export type RecoveryReadbackBoundary = {
+  status: string;
+  result_count?: number | null;
+  unavailable_reason: string;
+  user_submitted_evidence_only: boolean;
+};
+
+export type RecoveryMemoryCaptureBoundary = {
+  capture_event_allowed: boolean;
+  observation_allowed: boolean;
+  candidate_allowed: boolean;
+  formal_memory_auto_write: boolean;
+  suggested_candidate_text: string;
+};
+
+export type RecoveryDeveloperDetail = {
+  label: string;
+  value: string;
+};
+
+export type K3B1RecoveryReadModel = {
+  schema_version: "k3_b1_recovery_read_model.v1" | string;
+  execution_point_id: string;
+  current_state:
+    | "blocked_by_safety_review_again"
+    | "manual_recovery_available"
+    | "manual_recovery_submitted"
+    | "manual_recovery_needs_review"
+    | "manual_recovery_rejected"
+    | "manual_recovery_accepted"
+    | "pending_renewed_risk_approval"
+    | "renewed_execution_request_rejected"
+    | "narrow_bridge_design_required"
+    | string;
+  k3_b2_gate: K3B2GateStatus;
+  recovery_options: K3B1RecoveryOption[];
+  manual_exact_command: ManualExactCommandContract;
+  manual_submission_contract: ManualRecoverySubmissionContract;
+  renewed_risk_approval: RenewedRiskApprovalContract;
+  narrow_bridge_design: NarrowBridgeDesignContract;
+  runtime_boundary: RecoveryRuntimeBoundary;
+  audit_boundary: RecoveryAuditBoundary;
+  readback_boundary: RecoveryReadbackBoundary;
+  memory_capture_boundary: RecoveryMemoryCaptureBoundary;
+  user_summary: string[];
+  developer_details: RecoveryDeveloperDetail[];
+  warnings: string[];
+};
+
 export type CodexControlCommandInput = {
   project_id?: string | null;
   project_root: string;

@@ -6,7 +6,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
-
 mod blackboard_candidate_store;
 pub mod codex_db;
 mod codex_local_runner;
@@ -64,7 +63,6 @@ struct AppState {
 
 // Type definitions live in src/types.rs for the conservative no-behavior split.
 include!("types.rs");
-
 trait CodexResumeRunner {
     fn resume_with_options(
         &self,
@@ -1646,7 +1644,8 @@ fn build_snapshot_with_session_source(
                         .map(|unit| unit.warnings.len())
                         .sum::<usize>()
             })
-            .unwrap_or(0);
+            .unwrap_or(0)
+        + k3_b1_recovery::WARNING_COUNT;
     let diagnostic_summary = derive_diagnostic_summary(
         state,
         index,
@@ -1689,6 +1688,7 @@ fn build_snapshot_with_session_source(
         worker_protocol,
         real_execution_product_commands,
         project_workflow_automation,
+        k3_b1_recovery: k3_b1_recovery::derive_k3_b1_recovery_read_model(),
         page_read_model_inventory,
         diagnostic_summary,
         diagnostics: Diagnostics {

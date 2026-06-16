@@ -1899,6 +1899,7 @@ struct RealExecutionProductCommandPhaseBOutput {
     warnings: Vec<String>,
 }
 
+mod k3_b1_recovery;
 include!("workbench_snapshot_types.rs");
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SessionSourceMode {

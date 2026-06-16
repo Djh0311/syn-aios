@@ -1523,6 +1523,8 @@ export type PathActionKind =
   | "record-user-result-decision"
   | "generate-stage-c-acceptance-summary"
   | "run-project-workflow-automation-phase-a"
+  | "record-k3-b1-manual-recovery-submission"
+  | "request-k3-b1-renewed-risk-approval"
   | "offline-role-dispatch"
   | "offline-role-result-handoff"
   | "offline-director-review"
@@ -1599,6 +1601,14 @@ export type PendingAction = {
   userResultDecision?: UserResultDecisionInput;
   stageCAcceptanceSummary?: GenerateStageCAcceptanceSummaryInput;
   projectWorkflowAutomation?: ProjectWorkflowAutomationInput;
+  k3B1RecoveryAction?: {
+    execution_point_id: string;
+    recovery_choice: "manual_exact_command_submission" | "renewed_risk_approval_request" | "narrow_local_bridge_design" | string;
+    status_after_selection: string;
+    risk_acknowledgement: string;
+    required_fields?: string[];
+    readback_result_count?: number | null;
+  };
   offlineRoleDispatch?: OfflineRoleDispatchRequest;
   offlineRoleResultHandoff?: OfflineRoleResultHandoffRequest;
   offlineDirectorReview?: OfflineDirectorReviewRequest;

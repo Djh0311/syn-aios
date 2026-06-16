@@ -20,6 +20,7 @@ import type {
   SessionRunStatusSummary,
 } from "./agentSession";
 import type {
+  K3B1RecoveryReadModel,
   ProjectWorkflowAutomationReadModel,
   RealExecutionProductCommandReadModel,
   WorkerProtocolReadModel,
@@ -43,6 +44,7 @@ export type WorkbenchSnapshot = {
   worker_protocol: WorkerProtocolReadModel;
   real_execution_product_commands?: RealExecutionProductCommandReadModel | null;
   project_workflow_automation?: ProjectWorkflowAutomationReadModel | null;
+  k3_b1_recovery?: K3B1RecoveryReadModel | null;
   page_read_model_inventory: WorkbenchPageReadModelInventory;
   diagnostic_summary: DiagnosticSummary;
   diagnostics: Diagnostics;
