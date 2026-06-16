@@ -261,6 +261,7 @@ Root Treatment / R5 已确认本锚定方式满足“蓝图正本路径锚定”
 - `decisions/2026-06-01-project-workflow-canvas-authority-v1.md`
 - `decisions/2026-06-01-architecture-module-split-guardrail-v1.md`
 - `decisions/2026-06-10-stage-l-root-treatment-freeze-relationship-v1.md`
+- `decisions/2026-06-16-memory-layer-form-acknowledgement-and-use-driven-trim-v1.md`：记忆层执行形态认定 + 真用驱动裁剪（用户 2026-06-16 拍板）。17 表 / 七层为终局设计、但对当前单人 / 0 数据阶段过度；不返工，路线改为真用观察 → 期末主动过度审计 → 趁数据少裁；多 agent 专属挂起；4 条不可逆维度保留；真 Codex（K3-B1 / K3-B2）为独立封禁轨。经 GPT + Claude 跨模型红队推翻此前"保持全形态"结论。
 
 ## 当前设计草案
 

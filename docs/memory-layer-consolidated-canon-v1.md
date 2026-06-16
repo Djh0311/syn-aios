@@ -75,9 +75,10 @@
 
 - 2026-06-14 round-2 研究（`docs/research/2026-06-14-memory-agent-research-v2.md`）提议把记忆落成"单 `memories` 表 + status 列"的 SQLite schema（抄 mem0/OpenMemory/evolver）。
 - 冲突报告（`docs/research/2026-06-14-three-projects-vs-canon-conflict-report-v1.md`）评估判定：该单表方案是把已冻结的 17 表记忆 schema **降级**（塌成两张、丢 15 张），属"拿浅换深"。
-- **决定**：记忆 schema 正本仍是 **R3 契约 §3.3 的 17 张表**；外部记忆库**借证据和零件可以，借范式不行**。
+- **决定（2026-06-16 修正，用户拍板）**：17 表 / 七层是**终局形态设计、成立**；但**对当前单人、0 真实记忆阶段偏重、被架空**。故 **(a)** 不采纳外部"单表拍平"（丢掉 `model_export`/`scope`/`status`/`source_ref` 等不可逆维度）；**(b)** 也**不把"现在建满 17 表全形态"当要求**——它是终局目标、非当前任务；**(c)** 路线改为**真用观察 → 期末主动过度审计 → 趁数据少时据实裁**，不预砍、也不"继续建满"。完整决策见 `decisions/2026-06-16-memory-layer-form-acknowledgement-and-use-driven-trim-v1.md`。
+- **保留（不可逆，任何裁剪不得砍）**：子 agent 不写正式 / append-only + status history / `model_export` 外发维度 / 权威-缓存分缝；用户确认门（不自动晋升）。
 - **已认可可借的零件**（来自冲突报告"其实吻合/可借"）：候选→正式门方向（外部独立收敛到同一结论=佐证我们方向对）、候选延迟 embedding、content-hash 幂等（我们已有）、SQLite + 向量可行性证据。这些是**信号/参考**，不改 17 表正本。
-- **2026-06-16 再次印证**：研究/咨询交付 `docs/research/2026-06-16-memory-layer-research-and-blueprint-adversarial-handoff-v1.md` 跨 5 轮研究 + 9 轴"蓝图 vs 外部"平等对抗，独立再次确认本条（外部全部借零件拒范式、canon 方向对）。该交付另带一套**待采纳前瞻路径**（第一天锁死 4 条不可逆地基 / 第一版 ~7–8 表轻门库 / 语义召回前移 / `governance_level` 开关），属**排期输入、未并 canon**，详见研究汇编 `docs/research/memory-layer-research-and-conflict-digest-v1.md` §2.7，由咨询线**另起一轮排期**处理；本节不改既定 schema 正本。
+- **2026-06-16 修正来由**：此前"保持 17 表全形态"的结论，经跨模型红队（GPT[记忆层原设计者，被要求攻己] + Claude[独立]）判定为**自评 + 承认过度却不改动作**，已推翻——见上"决定（修正）"。研究三件的前瞻路径（轻门 / 触发器 / 语义召回前移）作为**未来"过度审计"的输入**，不是现在的建库任务；研究处置见 `docs/research/memory-layer-research-and-conflict-digest-v1.md` §2.7。
 
 ### 6.2 `agent-memory-governance.md` 是 harness 参考，不是产品记忆层权威
 
