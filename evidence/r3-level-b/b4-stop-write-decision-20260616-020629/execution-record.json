@@ -1,0 +1,112 @@
+{
+  "schema_version": "root_treatment_r3_level_b_execution_record.v1",
+  "phase": "B4_stop_write_decision",
+  "status": "completed",
+  "outcome_status": "ready_but_not_executed",
+  "level": "level_b_workbench_owned_state",
+  "created_at_local": "2026-06-16T02:06:29+08:00",
+  "git_head_before": "26744ad",
+  "git_head_after": "26744ad",
+  "user_present_required": true,
+  "user_confirmation_ref": "user-thread-2026-06-16-r3-b4b-stop-write-decision-user-present",
+  "confirmed_paths": {
+    "db_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b1-production-apply-20260615/workbench-state.v1.sqlite",
+    "fallback_root": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state",
+    "projection_root": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b3-observation-20260615/projection",
+    "observation_report_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b3-observation-20260615/reports/production-observation-report.json",
+    "work_dir": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b4-stop-write-decision-20260616",
+    "stop_write_report_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b4-stop-write-decision-20260616/reports/stop-write-decision-report.json",
+    "rollback_manifest_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b4-stop-write-decision-20260616/rollback/stop-write-decision-rollback-manifest.json"
+  },
+  "pass_a_probe": {
+    "decision": "prepare_only",
+    "command_exit_code": 101,
+    "classification": "expected_probe_status_assertion_after_not_ready_report",
+    "runner_report_status_before_overwrite": "not_ready",
+    "actual_db_hash": "12d65f21ae383b72afd1b23347548974502ba60ca6a4143ca6b6fc94270f03ba",
+    "actual_fallback_hash": "ae0797f8c5fc4c156cc0f5f15ed686af9f7871642e42afffb45530a621edd061",
+    "actual_projection_hash": "87f62158ceef5dbe303d7c704dd47a2c3ae3775181e7ed1efbe59ff182e82175",
+    "actual_observation_report_hash": "9cd28f032c8bcd1b7ef9725cd1d8c92db05321a6656aa63834d0247304e1a8d8",
+    "rollback_manifest_written": false,
+    "source_json_written": false,
+    "stop_write_json": false
+  },
+  "pass_b_decision": {
+    "decision": "approve_stop_write",
+    "command_exit_code": 0,
+    "test_result": "1 passed",
+    "report_status": "ready_but_not_executed",
+    "level": "level_b_workbench_owned_state",
+    "actual_db_hash": "12d65f21ae383b72afd1b23347548974502ba60ca6a4143ca6b6fc94270f03ba",
+    "actual_fallback_hash": "ae0797f8c5fc4c156cc0f5f15ed686af9f7871642e42afffb45530a621edd061",
+    "actual_projection_hash": "87f62158ceef5dbe303d7c704dd47a2c3ae3775181e7ed1efbe59ff182e82175",
+    "actual_observation_report_hash": "9cd28f032c8bcd1b7ef9725cd1d8c92db05321a6656aa63834d0247304e1a8d8",
+    "rollback_manifest_hash": "107565964f016fca049218d5a8f33bf2838bff37269de75f43c4679cbc26b7f8",
+    "db_export_hash": "1aef44c8ae3a046497be70a878720ea45c26e390bbb1edda2b5649b18f908326",
+    "projected_file_counts": {
+      "workflow-state.v0.json": 612
+    },
+    "preconditions_all_satisfied": true,
+    "rollback_drill_status": "rollback_drill_only"
+  },
+  "source_inventory_before_after": [
+    {
+      "path_ref": "plan-authorizations.v1.json",
+      "before_sha256": "6962e4781f49246525d4cde37d3133924a66faa12b8aab90db106c3c9f401b0e",
+      "after_sha256": "6962e4781f49246525d4cde37d3133924a66faa12b8aab90db106c3c9f401b0e",
+      "size_bytes": 15211
+    },
+    {
+      "path_ref": "workflow-state.v0.json",
+      "before_sha256": "4bd5434fdca9e82c8fafc42989e1a267ed7d677bfe2972273fb3afaa26829972",
+      "after_sha256": "4bd5434fdca9e82c8fafc42989e1a267ed7d677bfe2972273fb3afaa26829972",
+      "size_bytes": 2060497
+    }
+  ],
+  "hashes_before_after": {
+    "db_sha256_before": "12d65f21ae383b72afd1b23347548974502ba60ca6a4143ca6b6fc94270f03ba",
+    "db_sha256_after": "12d65f21ae383b72afd1b23347548974502ba60ca6a4143ca6b6fc94270f03ba",
+    "fallback_root_hash_before": "ae0797f8c5fc4c156cc0f5f15ed686af9f7871642e42afffb45530a621edd061",
+    "fallback_root_hash_after": "ae0797f8c5fc4c156cc0f5f15ed686af9f7871642e42afffb45530a621edd061",
+    "projection_root_hash": "87f62158ceef5dbe303d7c704dd47a2c3ae3775181e7ed1efbe59ff182e82175",
+    "observation_report_sha256": "9cd28f032c8bcd1b7ef9725cd1d8c92db05321a6656aa63834d0247304e1a8d8"
+  },
+  "artifacts": {
+    "app_report_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b4-stop-write-decision-20260616/reports/stop-write-decision-report.json",
+    "app_rollback_manifest_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/r3-migration-work/b4-stop-write-decision-20260616/rollback/stop-write-decision-rollback-manifest.json",
+    "repo_report_copy": "evidence/r3-level-b/b4-stop-write-decision-20260616-020629/artifacts/stop-write-decision-report.json",
+    "repo_rollback_manifest_copy": "evidence/r3-level-b/b4-stop-write-decision-20260616-020629/artifacts/stop-write-decision-rollback-manifest.json",
+    "report_file_sha256": "843f748b6344b83d3df6f165fa1c4422b84337e78c80ea06e4569a84bbda8f7a",
+    "rollback_manifest_file_sha256": "26e3858799b6329f689ba461d1a322d9d02b501bfe5e88eb2842984613d790ee"
+  },
+  "safety_flags": {
+    "stop_write_decision_recorded": true,
+    "stop_write_json": false,
+    "source_json_written": false,
+    "sidecar_written": false,
+    "product_global_write_path_changed": false,
+    "product_global_read_path_changed": false,
+    "app_startup_writes_db": false,
+    "tauri_command_writes_db": false,
+    "ui_writes_db": false,
+    "production_restore_performed": false,
+    "codex_home_touched": false
+  },
+  "fresh_verify": {
+    "pass_a": "prepare_only probe returned expected nonzero because runner asserts ready_but_not_executed; transient not_ready report provided actual hashes",
+    "pass_b": "cargo test --lib r3_b4_stop_write_decision_confirmed_paths_requires_env_authorization -- --ignored --nocapture: 1 passed",
+    "post_run_shasum": "DB and two source JSON files match expected hashes; report and rollback manifest copies match app artifacts",
+    "git_status_after_runner": "clean before evidence files were created"
+  },
+  "do_not_claim": [
+    "stop-write executed",
+    "JSON / sidecar stop-write completed",
+    "product global read path changed",
+    "product global write path changed",
+    "full storage migration completed",
+    "R3 Level B completed",
+    "multi-agent parallel real execution unlocked",
+    "real Codex execution completed",
+    "/Users/yoyi/.codex touched"
+  ]
+}
