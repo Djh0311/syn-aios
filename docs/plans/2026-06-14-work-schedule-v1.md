@@ -1,5 +1,7 @@
 # 当前工作排期 v1（咨询线维护）
 
+> **2026-06-16 已过期 / superseded**：本文是 2026-06-14 的调度快照。其后 Stage R 已收口（2026-06-16，见 `CURRENT.md`）——A 线（harness）、C 线（研究落盘 / 冲突报告 / agentmemory 退役 / checkpoint-audit）、B 线（R3 Level B → R5 → Stage R 收口）均已完成；记忆层研究归档见 `docs/research/memory-layer-research-and-conflict-digest-v1.md`。**当前事实以 `CURRENT.md` 为正本**，本文仅留作历史调度记录，不再维护。
+
 日期：2026-06-14（更新于 harness 合并 + agentmemory 退役后）
 出自：咨询线（Claude）。性质：跨两条线的当前工作排期；不替代 `CURRENT.md` / stage-r 执行正本，只做调度视图。
 **一句话判据**：想知道"接下来干啥"，看 A / B / C 三线各自的"下一步"。

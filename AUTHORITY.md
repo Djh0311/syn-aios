@@ -266,6 +266,7 @@ Root Treatment / R5 已确认本锚定方式满足“蓝图正本路径锚定”
 
 - `docs/workbench-system-architecture-v1.md`：最终蓝图下的软件开发架构设计草案，定义项目单元、控制核心、秘书核心协作层、核心记忆治理、项目黑板、适配器、事件账本和读模型。
 - `docs/memory-layer-design-v1.md`：最终蓝图下的记忆层设计草案。
+- `docs/memory-layer-consolidated-canon-v1.md`：记忆层**已确定汇编（正本索引）**（咨询线 2026-06-16）——把记忆层已确定事实 / 决策梳理到一处的导航入口（七层、schema 正本 = R3 §3.3 的 17 表、治理硬规、存储架构、M1–M13 状态）。其 §6 钉入正本的两条决策：(a) 记忆 schema 正本 = R3 契约、外部"单表 schema"不采纳（借零件不借范式）；(b) `agent-memory-governance.md` 是 harness 参考、非产品记忆层权威。研究 / 冲突报告与待采纳前瞻路径见 `docs/research/memory-layer-research-and-conflict-digest-v1.md`。
 - `docs/workflow-task-package-design-v1.md`：最终蓝图下的工作流和任务包设计草案。
 - `docs/workbench-frontend-display-boundary-v1.md`：当前前端显示边界权威文档，定义一级入口、右侧入口、秘书、项目页、智能体、画布、记忆、知识库、管理、设置、权限、错误、证据和开发者模式的显示边界；其中部分内容属于最终形态，不能全部解释为中间版本当前任务。
 - `docs/middleware-version-development-plan-v1.md`：当前中间版本方案，定义方案授权制、角色分工、自动化工作流完成标准和记忆层完成标准。
@@ -285,6 +286,10 @@ Root Treatment / R5 已确认本锚定方式满足“蓝图正本路径锚定”
 - `docs/research/2026-06-05-gepa-workbench-optimization-layer-recommendation-v1.md`：GEPA 工作台优化层研究建议，已审核为后置优化层候选。它不进入当前 E1 / E2 主线，不进入当前执行 backlog，不拆任务包，不授权实现；真正运行 GEPA 必须等阶段 G 运行日志、诊断、eval、成本、脱敏和回滚底座完成。未来 GEPA 输出只能是候选和报告，不能绕过控制核心、记忆状态机、权限、审计或用户确认。
 - `docs/research/2026-06-05-gepa-workbench-deep-reference-research-v2.md`：GEPA 深度外部研究参考，已作为 `docs/workbench-system-architecture-v1.md` 的后置优化层拆解依据登记。它只影响蓝图层面的 GEPA-0 到 GEPA-4 数据契约、离线导出、隔离 dry run、候选治理和受控发布路线；不进入当前 E1 / E2 主线、不进入当前执行 backlog、不拆任务包、不授权安装 / 运行 GEPA 或修改生产 prompt。
 - `docs/research/2026-06-05-paseo-workbench-deep-reference-research-v1.md`：Paseo 深度外部研究参考，已作为 `docs/workbench-system-architecture-v1.md` 的外部 agent runtime 参考约束登记。它只作为多 agent 运行层、daemon-like control plane、provider adapter、agent timeline、worktree isolation、schedule / loop、CLI parity、relay security 和 daemon operations 的后续专题研究依据；不进入当前 E1 / E2 主线、不进入当前执行 backlog、不拆任务包、不授权实现。Paseo 的 agent 自治编排、MCP 直接管理其他 agent、skill autopilot、timeline 直接写正式记忆等做法不能绕过我们的控制核心、方案授权、项目主管 / 全局主管分工、正式记忆治理和审计边界。
+
+- `docs/research/memory-layer-research-and-conflict-digest-v1.md`：记忆层**研究 / 冲突报告汇编**（咨询线 2026-06-16）——所有记忆层研究 / 冲突报告的导航 + 处置入口。结论：外部约 14 个项目全部"借零件、拒范式"、反复印证 canon；记忆 schema 正本 = R3 契约的 17 表（冻结）。它索引下列三份原件。
+- `docs/research/2026-06-16-memory-layer-research-and-blueprint-adversarial-handoff-v1.md`：记忆层 5 轮研究 + 蓝图 9 轴平等对抗的结构化交付（含**未采纳**前瞻路径：第一天锁死 4 条不可逆地基 / 第一版 ~7–8 表轻门库 / 语义召回前移 / `governance_level` 开关 + 触发条件）。它是**排期输入、非 canon**；并入 canon 前必须走 task package + 复核，且不得砍 `model_export` 外发占位或权威 / 缓存分缝。咨询线已定排期映射另起一轮。
+- `docs/research/2026-06-14-memory-agent-research-v2.md` 与 `docs/research/2026-06-14-three-projects-vs-canon-conflict-report-v1.md`：上述交付的前两轮原件（round-2 SQLite 深挖 + 三项目 vs 正本冲突报告）；单表 schema 评估为降级、不采纳，记忆 schema 仍以 R3 契约为正本。
 
 使用限制：
 
