@@ -6,6 +6,8 @@
 
 本文不是执行任务包，不授权新的真实 `codex exec` / `codex exec resume`，不授权直接读写 `/Users/yoyi/.codex`，不授权启动 K3-B1 retry、K3-B2、真实 retry / stop / restart / resume 或 planned adapters 真实接入。所有真实执行仍必须进入独立任务包、权限 envelope、用户确认、runtime log、audit、readback 和 evidence / handoff。
 
+R5 并入口径（2026-06-16）：Root Treatment / R5 只把本文的纯文档 / 口径项并入 Stage R 收口记录和权威入口，包括“Stage L 暂挂不等于完成或取消”“K3-B1 / K3-B2 不得在治理期顺手启动”“L1-L6 产品代码和真实执行项仍需治理后另行恢复”。R5 不执行本文任何产品代码项，不启动真实执行点，不改变 Stage L 的后续计划身份。
+
 ## 0. 全局主管理解
 
 已知事实：

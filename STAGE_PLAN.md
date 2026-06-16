@@ -4,6 +4,8 @@
 
 ## 当前阶段
 
+**2026-06-16 更新：Root Treatment / Stage R 治理阶段已收口**——R4-H、R-U、R3 受控迁移验证（B0-B4）、R5 文档与蓝图对齐四块全完成且独立复核 CLEAR、用户拍板。下一步候选回到 Stage L（日常硬化，L1-L6 解冻）/ Stage K 剩项；R3 产品切换（真停写 / 切读 DB / 完整迁移 / 多 agent / 真 Codex）与 K3-B1 retry / K3-B2 仍 deferred，各需另窗另批。以下段落为治理期历史描述，当前事实以 `CURRENT.md` 为正本。
+
 当前阶段已经从“最终工作台骨架执行”切到“中间版本开发”，并在 G5、H-I、PCR10、Stage J、Stage K 和 Stage L/L0 后进入 Root Treatment / Stage R 治理阶段。Codex 主管线已回归并完成代班期间 R2-T12 / R2-T13 / R2-T14 的换脑抽查复检，记录见 `handoffs/2026-06-13-supervisor-brain-switch-post-t12-t13-t14-cross-check-v1.md`，结论为 `CLEAR_WITH_P2_REVIEW_NOTE`，P0/P1 无，P2 仅为 T12 复核结论文案过满。R2 后段已按 `decisions/2026-06-13-root-treatment-r2-late-stage-closure-track-v1.md` 的“明确下降轨道 + 冻结 deferred”口径收口；`lib.rs` 仍为 5,567 行，T 系列剩余 35 个 inline tests = 禁迁 34 + deferred 1，R2 不冒充完成。R4-H1 已完成：`src/lib/types.ts` 从 4,998 行降到 93 行，新增 4 个领域类型文件，记录见 `tasks/2026-06-13-root-treatment-r4-h1-frontend-types-domain-split-hard-target-v1.md`、`evidence/2026-06-13-root-treatment-r4-h1-frontend-types-domain-split-hard-target-v1.md` 与 `handoffs/2026-06-13-root-treatment-r4-h1-frontend-types-domain-split-hard-target-v1-result.md`。R4-H2 任务包已准备但未执行；P2-1 / R3 Level B 窗口计划已完成但不执行 Level B。R-Preflight、R0、R1、R2-B1 到 R2-B10、R2 closing / R3 preflight review、R2-T0 到 R2-T14、R3-P0、R3-A1 到 R3-A13 Level A、R4-A1 到 R4-A50 和 R4-H1 均已完成。R3 Level B 未执行，真实 workbench state root 未读取，真实 workbench-owned production DB 未创建，不切 app startup / Tauri command / UI / 产品全局读写路径，不停写 JSON / sidecar。Stage L / L1-L6 在治理冻结期内暂挂为 `deferred_during_root_treatment`，不等于 Stage L 完成或取消，也不等于取消 K3-B1 / K3-B2。治理期不授权真实 Codex 执行、`.codex` 读写、K3-B1 retry、K3-B2、planned adapters 真实接入或 backlog 功能解冻。
 
 中间版本核心目标已经以 `accepted_with_deferred_items` 收口：

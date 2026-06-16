@@ -43,6 +43,21 @@
 - 让子智能体直接写正式项目记忆。
 - 自动把普通聊天内容塞进长期记忆。
 
+### 1.1 R5 蓝图经验沉淀口径
+
+Root Treatment / R5 将外部蓝图 §17（记忆层）、§22（策略系统里的成熟模式沉淀）和 §26.4（Successful Run Pattern / 成功运行模式）统一解释为同一条 product-line 落地路径：
+
+```text
+工作流 / 阶段 / 成功运行证据
+-> observation / candidate / cross-project report
+-> MaturePatternCandidate
+-> 用户确认
+-> mature pattern formal memory / 项目记忆 / 全局成熟模式
+-> 后续任务包按权限召回，并保留来源、版本、审计和反例
+```
+
+当前已落地的对应项是 M12 / M12.1 / M13：成熟模式候选、跨项目主题报告、用户确认后的 mature pattern 正式记忆写入、任务包召回边界、acceptance summary freshness 和最终权威验收。R5 不把蓝图中的 Successful Run Pattern 解释成自动技能化、自动 harness 规则改写、自动全局策略升级或绕过用户确认的经验写入；这些仍必须另有任务包、证据和用户确认。
+
 ## 2. 蓝图约束
 
 最终蓝图已确认：
