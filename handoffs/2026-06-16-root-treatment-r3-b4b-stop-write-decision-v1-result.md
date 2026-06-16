@@ -27,7 +27,7 @@ B4b 受控停写决策已完成，状态为 `ready_but_not_executed`。这表示
 
 - Pass A：`prepare_only` 探测，runner 因固定 `ready_but_not_executed` 断言返回 `101`，该中止被分类为预期探测行为，transient report 用于取得 B4 expected hash。
 - Pass B：`approve_stop_write` 正式 decision-only runner，`1 passed`。
-- 独立复核：Maxwell / McClintock（`019ecc80-8908-75b0-b724-f8fe68833c09`），`STATUS: CLEAR`，无 P0 / P1 / P2 / P3。
+- 独立复核：Maxwell（`019ecc80-8908-75b0-b724-f8fe68833c09`），`STATUS: CLEAR`，无 P0 / P1 / P2 / P3。
 - `checkpoint-audit --record`：PASS，`evidence_hash_format` PASS。
 - Shape gate：0 errors / 0 warnings。
 - `git diff --check`：空。
