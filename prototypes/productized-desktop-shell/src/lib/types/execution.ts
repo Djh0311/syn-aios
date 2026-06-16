@@ -423,6 +423,79 @@ export type K3B1RecoveryReadModel = {
   warnings: string[];
 };
 
+export type OperationControlStatus =
+  | "not_applicable"
+  | "available"
+  | "pending_confirmation"
+  | "confirmed_recorded"
+  | "rejected"
+  | "blocked"
+  | string;
+
+export type OperationControlItem = {
+  operation_id: "retry" | "stop" | "restart" | "resume" | string;
+  label: string;
+  status: OperationControlStatus;
+  applies_to: string;
+  would_write_if_real: string;
+  current_gate: string;
+  does_execute_in_l3: false;
+  status_after_confirmation: "confirmed_recorded" | string;
+  requires_separate_authorized_window: boolean;
+  risk_disclosure: string;
+  confirmation_label: string;
+  audit_event_type: string;
+  runtime_status_after_confirmation: string;
+  readback_status: string;
+  readback_result_count?: number | null;
+  blocks_k3_b2: boolean;
+  user_visible_summary: string;
+  developer_details: RecoveryDeveloperDetail[];
+  warnings: string[];
+};
+
+export type OperationControlReadModel = {
+  schema_version: "operation_control_read_model.v1" | string;
+  generated_at: string;
+  status_contract: OperationControlStatus[];
+  operations: OperationControlItem[];
+  audit_boundary: {
+    event_type: string;
+    records_actor: boolean;
+    records_operation: boolean;
+    records_risk_acknowledgement: boolean;
+    records_supervisor_review: boolean;
+    stores_sensitive_material: boolean;
+  };
+  runtime_boundary: {
+    records_operation_kind: boolean;
+    records_operation_status: boolean;
+    records_pending_state: boolean;
+    real_process_control: boolean;
+    stores_prompt_body: boolean;
+    stores_codex_home_content: boolean;
+    allowed_summary: string;
+  };
+  readback_boundary: {
+    status: string;
+    result_count?: number | null;
+    unavailable_reason: string;
+    real_readback_performed: boolean;
+    user_submitted_evidence_only: boolean;
+  };
+  memory_capture_boundary: {
+    capture_event_allowed: boolean;
+    observation_allowed: boolean;
+    candidate_allowed: boolean;
+    formal_memory_auto_write: boolean;
+    suggested_candidate_text: string;
+  };
+  true_operation_available: false;
+  k3_b2_unlocked: false;
+  user_summary: string[];
+  warnings: string[];
+};
+
 export type CodexControlCommandInput = {
   project_id?: string | null;
   project_root: string;

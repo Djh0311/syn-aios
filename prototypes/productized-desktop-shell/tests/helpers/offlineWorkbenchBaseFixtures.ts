@@ -3,6 +3,7 @@ import { deriveProviderAvailabilitySummaries } from "../../src/lib/providerAvail
 import { deriveSessionOperationDescriptors } from "../../src/lib/sessionOperations";
 import type {
   AgentAdapterDescriptor,
+  OperationControlItem,
   PluginRecord,
   ProjectRecord,
   SessionRecord,
@@ -181,6 +182,68 @@ export function workbenchBaseFixtures(): {
     active_thread_count: 0,
     archived_thread_count: 0,
   };
+  const operationControlOperation = (
+    operationId: "retry" | "stop" | "restart" | "resume",
+    label: string,
+    gate: string,
+    wouldWriteIfReal: string,
+    riskDisclosure: string,
+  ): OperationControlItem => ({
+    operation_id: operationId,
+    label,
+    status: "available",
+    applies_to: operationId === "retry" ? "failed_run_unit" : operationId === "stop" ? "running_session_only" : "bound_or_existing_session",
+    would_write_if_real: wouldWriteIfReal,
+    current_gate: gate,
+    does_execute_in_l3: false,
+    status_after_confirmation: "confirmed_recorded",
+    requires_separate_authorized_window: true,
+    risk_disclosure: riskDisclosure,
+    confirmation_label: `确认记录 ${label} 决策`,
+    audit_event_type: "operation_decision_recorded",
+    runtime_status_after_confirmation: "operation_decision_recorded_pending_real_authorization",
+    readback_status: "not_attempted_l3_decision_only",
+    readback_result_count: null,
+    blocks_k3_b2: true,
+    user_visible_summary: `${label} 在 L3 只会记录决策，不会触发真实操作。`,
+    developer_details: [
+      { label: "operation_id", value: operationId },
+      { label: "current_gate", value: gate },
+      { label: "status_after_confirmation", value: "confirmed_recorded" },
+      { label: "does_execute_in_l3", value: "false" },
+    ],
+    warnings: ["decision_only_control_surface", "confirmed_recorded_is_not_executed"],
+  });
+  const operationControlOperations = [
+    operationControlOperation(
+      "retry",
+      "重试",
+      "requires_user_confirmation_and_new_authorized_window",
+      "workbench_state_only",
+      "确认后只记录重试请求和风险确认；不会自动重试，不调用 runner。",
+    ),
+    operationControlOperation(
+      "stop",
+      "停止",
+      "blocked_no_runtime_handle",
+      "workbench_state_only",
+      "确认后只记录停止请求；当前没有真实 runtime handle，不会 kill 进程或会话。",
+    ),
+    operationControlOperation(
+      "restart",
+      "重启",
+      "blocked_restart_semantics_not_defined",
+      "codex_home_and_workbench_state",
+      "确认后只记录重启意图；不会新建会话、resume 旧会话或重跑任务。",
+    ),
+    operationControlOperation(
+      "resume",
+      "恢复",
+      "gated_real_resume_mario_test_only",
+      "codex_home_and_workbench_state",
+      "确认后只记录恢复决策；不会进入 real-resume phase B，也不扩大既有门。",
+    ),
+  ];
 
   const snapshot: WorkbenchSnapshot = {
     summary: {
@@ -423,6 +486,56 @@ export function workbenchBaseFixtures(): {
         { label: "prompt_hash", value: "ab0442e86e75900ab47b293328e4a2b46512ae68868799b94e8608ffedd57039" },
       ],
       warnings: ["k3_b1_still_blocked", "k3_b2_gate_remains_blocked", "manual_submission_requires_supervisor_review"],
+    },
+    operation_control: {
+      schema_version: "operation_control_read_model.v1",
+      generated_at: "2026-06-16T00:00:00Z",
+      status_contract: ["not_applicable", "available", "pending_confirmation", "confirmed_recorded", "rejected", "blocked"],
+      operations: operationControlOperations,
+      audit_boundary: {
+        event_type: "operation_decision_recorded",
+        records_actor: true,
+        records_operation: true,
+        records_risk_acknowledgement: true,
+        records_supervisor_review: true,
+        stores_sensitive_material: false,
+      },
+      runtime_boundary: {
+        records_operation_kind: true,
+        records_operation_status: true,
+        records_pending_state: true,
+        real_process_control: false,
+        stores_prompt_body: false,
+        stores_codex_home_content: false,
+        allowed_summary: "只记录操作决策、待处理状态和引用；不记录 prompt body、secret、完整 transcript 或 .codex 原文。",
+      },
+      readback_boundary: {
+        status: "not_attempted_l3_decision_only",
+        result_count: null,
+        unavailable_reason: "L3 不执行真实操作；readback 未发生，结果数未知/不可用。",
+        real_readback_performed: false,
+        user_submitted_evidence_only: true,
+      },
+      memory_capture_boundary: {
+        capture_event_allowed: true,
+        observation_allowed: true,
+        candidate_allowed: true,
+        formal_memory_auto_write: false,
+        suggested_candidate_text: "用户对运行控制发起了产品确认；该决策已记录待处理，未触发真实执行。",
+      },
+      true_operation_available: false,
+      k3_b2_unlocked: false,
+      user_summary: [
+        "retry / stop / restart / resume 现在是可确认、可审计、可回收的产品控制面。",
+        "确认只记录决策和待处理状态，不执行真实操作，不显示成功。",
+        "真实 retry / stop / restart / resume 必须另开独立授权窗口。",
+      ],
+      warnings: [
+        "operation_control_l3_decision_only",
+        "confirmed_recorded_is_not_executed",
+        "no_real_retry_stop_restart_resume",
+        "k3_b2_remains_blocked",
+      ],
     },
     page_read_model_inventory: {
       schema_version: "workbench_page_read_model_inventory.v1",

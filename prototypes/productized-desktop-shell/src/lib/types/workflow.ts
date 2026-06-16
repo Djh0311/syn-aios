@@ -1525,6 +1525,7 @@ export type PathActionKind =
   | "run-project-workflow-automation-phase-a"
   | "record-k3-b1-manual-recovery-submission"
   | "request-k3-b1-renewed-risk-approval"
+  | "record-operation-control-decision"
   | "offline-role-dispatch"
   | "offline-role-result-handoff"
   | "offline-director-review"
@@ -1609,10 +1610,28 @@ export type PendingAction = {
     required_fields?: string[];
     readback_result_count?: number | null;
   };
+  operationControlAction?: OperationControlDecisionRequest;
   offlineRoleDispatch?: OfflineRoleDispatchRequest;
   offlineRoleResultHandoff?: OfflineRoleResultHandoffRequest;
   offlineDirectorReview?: OfflineDirectorReviewRequest;
   workflowMachineRun?: WorkflowMachineRunRequest;
+};
+
+export type OperationControlDecisionRequest = {
+    operation_id: "retry" | "stop" | "restart" | "resume" | string;
+    label: string;
+    current_status: string;
+    status_after_confirmation: string;
+    current_gate: string;
+    would_write_if_real: string;
+    risk_disclosure: string;
+    readback_status: string;
+    readback_result_count?: number | null;
+    audit_event_type: string;
+    runtime_status_after_confirmation: string;
+    does_execute_in_l3: false;
+    requires_separate_authorized_window: boolean;
+    blocks_k3_b2: boolean;
 };
 
 export type TaskDraftRequest = {

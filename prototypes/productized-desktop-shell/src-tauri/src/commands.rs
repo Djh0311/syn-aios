@@ -35,6 +35,18 @@ fn query_workbench_page_read_model(
 }
 
 #[tauri::command]
+fn record_operation_control_decision(
+    request: operation_control::OperationControlDecisionRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<WorkflowStateMutationResult, String> {
+    operation_control::record_operation_control_decision_at(
+        &state.workflow_state_path,
+        &request,
+        &unix_timestamp_string(),
+    )
+}
+
+#[tauri::command]
 fn load_codex_session_transcript(
     thread_id: String,
     state: tauri::State<'_, AppState>,

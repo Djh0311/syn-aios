@@ -84,6 +84,43 @@ pub(crate) fn k3_b1_recovery_decision_recorded(
     })
 }
 
+pub(crate) struct OperationDecisionRecordedAudit<'a> {
+    pub(crate) event_id: String,
+    pub(crate) operation_id: &'a str,
+    pub(crate) before_state: &'a str,
+    pub(crate) after_state: &'a str,
+    pub(crate) created_at: &'a str,
+    pub(crate) actor_ref: &'a str,
+    pub(crate) current_gate: &'a str,
+    pub(crate) risk_acknowledged: bool,
+    pub(crate) supervisor_review_required: bool,
+}
+
+pub(crate) fn operation_decision_recorded(event: OperationDecisionRecordedAudit<'_>) -> Value {
+    json!({
+      "event_id": event.event_id,
+      "event_type": "operation_decision_recorded",
+      "target_ref": event.operation_id,
+      "actor_ref": event.actor_ref,
+      "source_kind": "l3_operation_control_product_path",
+      "permission_level": "operation_decision_no_real_execution",
+      "operation_id": event.operation_id,
+      "before_state": event.before_state,
+      "after_state": event.after_state,
+      "current_gate": event.current_gate,
+      "created_at": event.created_at,
+      "risk_acknowledged": event.risk_acknowledged,
+      "supervisor_review_required": event.supervisor_review_required,
+      "real_operation_executed": false,
+      "real_codex_executed": false,
+      "k3_b2_unlocked": false,
+      "stores_prompt_body": false,
+      "stores_sensitive_material": false,
+      "stores_codex_home_content": false,
+      "reason": "记录 L3 operation control 决策；不调用 runner、不执行 Codex、不发送 prompt、不停止或重启真实进程。"
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +154,42 @@ mod tests {
         assert!(!serialized.contains("prompt body"));
         assert!(!serialized.contains("secret="));
         assert!(!serialized.contains("/Users/yoyi/.codex/state"));
+    }
+
+    #[test]
+    fn operation_decision_audit_event_records_decision_without_execution_or_sensitive_payloads() {
+        let event = operation_decision_recorded(OperationDecisionRecordedAudit {
+            event_id: "audit:l3-operation:resume:v1".to_string(),
+            operation_id: "resume",
+            before_state: "pending_confirmation",
+            after_state: "confirmed_recorded",
+            created_at: "2026-06-16T00:00:00Z",
+            actor_ref: "user_confirmed_desktop_shell",
+            current_gate: "gated_real_resume_mario_test_only",
+            risk_acknowledged: true,
+            supervisor_review_required: true,
+        });
+
+        assert_eq!(event["event_type"], "operation_decision_recorded");
+        assert_eq!(event["operation_id"], "resume");
+        assert_eq!(event["after_state"], "confirmed_recorded");
+        assert_eq!(event["real_operation_executed"], false);
+        assert_eq!(event["real_codex_executed"], false);
+        assert_eq!(event["k3_b2_unlocked"], false);
+        assert_eq!(event["stores_prompt_body"], false);
+        assert_eq!(event["stores_sensitive_material"], false);
+        assert_eq!(event["stores_codex_home_content"], false);
+        let serialized = serde_json::to_string(&event).expect("audit event should serialize");
+        for forbidden in [
+            "prompt body",
+            "secret=",
+            "full transcript",
+            "/Users/yoyi/.codex/state",
+        ] {
+            assert!(
+                !serialized.contains(forbidden),
+                "operation audit leaked forbidden fragment {forbidden}"
+            );
+        }
     }
 }

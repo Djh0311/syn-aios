@@ -49,6 +49,7 @@ import type {
   MaturePatternPreviewOutput,
   ObservationStoreV1,
   OfflineDirectorReviewRequest,
+  OperationControlDecisionRequest,
   OfflineRoleDispatchRequest,
   OfflineRoleResultHandoffRequest,
   PendingAction,
@@ -655,6 +656,13 @@ export function recordWorkflowPermissionDecision(
 ): Promise<WorkflowStateMutationResult> {
   ensureTauriRuntime();
   return invoke<WorkflowStateMutationResult>("record_workflow_permission_decision", { request });
+}
+
+export function recordOperationControlDecision(
+  request: OperationControlDecisionRequest,
+): Promise<WorkflowStateMutationResult> {
+  ensureTauriRuntime();
+  return invoke<WorkflowStateMutationResult>("record_operation_control_decision", { request });
 }
 
 // =============================================================

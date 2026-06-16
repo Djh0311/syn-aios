@@ -277,6 +277,69 @@ pub(crate) fn derive_store_from_runtime_state(
     }
 }
 
+pub(crate) struct OperationDecisionRuntimeLogInput<'a> {
+    pub(crate) operation_id: &'a str,
+    pub(crate) operation_status: &'a str,
+    pub(crate) current_gate: &'a str,
+    pub(crate) audit_ref: &'a str,
+    pub(crate) actor_ref: &'a str,
+    pub(crate) duplicate_scope: &'a str,
+    pub(crate) created_at: &'a str,
+}
+
+pub(crate) fn operation_decision_runtime_entry(
+    input: OperationDecisionRuntimeLogInput<'_>,
+) -> RuntimeLogEntry {
+    redact_entry(RuntimeLogEntry {
+        entry_version: 1,
+        entry_id: format!(
+            "runtime-log:operation-decision:{}:{}",
+            input.operation_id, input.created_at
+        ),
+        category: "operation_control_decision".to_string(),
+        status: input.operation_status.to_string(),
+        severity: if input.operation_status == "blocked" {
+            "warning".to_string()
+        } else {
+            "info".to_string()
+        },
+        started_at: Some(input.created_at.to_string()),
+        finished_at: Some(input.created_at.to_string()),
+        duration_ms: None,
+        project_id: None,
+        workflow_id: None,
+        node_id: None,
+        session_id: None,
+        adapter_id: None,
+        summary: format!(
+            "Operation {} decision recorded as {}; real process control remains disabled.",
+            input.operation_id, input.operation_status
+        ),
+        detail: format!(
+            "L3 records operation kind/status, gate {}, actor ref {}, and duplicate scope {}; it does not call runners or process-control APIs.",
+            input.current_gate, input.actor_ref, input.duplicate_scope
+        ),
+        source_refs: vec![RuntimeLogSourceRef {
+            source_kind: "l3_operation_control_decision".to_string(),
+            source_id: input.operation_id.to_string(),
+            label: "operation control decision".to_string(),
+        }],
+        audit_refs: sanitize_refs(&[input.audit_ref.to_string()]),
+        redaction_status: "redacted_safe_summary".to_string(),
+        sensitive_omissions: vec![
+            "prompt_body".to_string(),
+            "conversation_body".to_string(),
+            "codex_home_content".to_string(),
+            "process_handle".to_string(),
+        ],
+        user_visible: true,
+        warnings: vec![
+            "operation_decision_is_not_real_execution".to_string(),
+            "result_count_unknown_not_zero".to_string(),
+        ],
+    })
+}
+
 fn workflow_run_entry(continuation: &ControlledSessionContinuation) -> RuntimeLogEntry {
     RuntimeLogEntry {
         entry_version: 1,
@@ -991,6 +1054,45 @@ mod tests {
             assert!(
                 !serialized.to_lowercase().contains(forbidden),
                 "runtime log leaked forbidden fragment {forbidden}"
+            );
+        }
+    }
+
+    #[test]
+    fn operation_decision_runtime_entry_records_status_without_process_control_or_sensitive_payloads(
+    ) {
+        let entry = operation_decision_runtime_entry(OperationDecisionRuntimeLogInput {
+            operation_id: "restart",
+            operation_status: "confirmed_recorded",
+            current_gate: "blocked_restart_semantics_not_defined",
+            audit_ref: "audit:l3-operation:restart:v1",
+            actor_ref: "user_confirmed_desktop_shell",
+            duplicate_scope: "run-unit:l3-fixture:restart",
+            created_at: "2026-06-16T00:00:00Z",
+        });
+
+        assert_eq!(entry.category, "operation_control_decision");
+        assert_eq!(entry.status, "confirmed_recorded");
+        assert_eq!(entry.severity, "info");
+        assert!(entry.user_visible);
+        assert_eq!(entry.audit_refs, vec!["audit:l3-operation:restart:v1"]);
+        assert!(entry
+            .warnings
+            .contains(&"operation_decision_is_not_real_execution".to_string()));
+        assert!(entry
+            .sensitive_omissions
+            .contains(&"process_handle".to_string()));
+        let serialized = serde_json::to_string(&entry).expect("runtime entry should serialize");
+        for forbidden in [
+            "prompt body",
+            "full transcript",
+            "secret=",
+            "/Users/yoyi/.codex/state",
+            "process handle value",
+        ] {
+            assert!(
+                !serialized.contains(forbidden),
+                "operation runtime entry leaked forbidden fragment {forbidden}"
             );
         }
     }

@@ -38,6 +38,24 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
               : `结果数：${action.k3B1RecoveryAction.readback_result_count} 条`,
         }
       : null;
+  const operationControlBoundary =
+    action.kind === "record-operation-control-decision" && action.operationControlAction
+      ? {
+          operationId: action.operationControlAction.operation_id,
+          currentStatus: action.operationControlAction.current_status,
+          afterStatus: action.operationControlAction.status_after_confirmation,
+          gate: action.operationControlAction.current_gate,
+          wouldWrite: action.operationControlAction.would_write_if_real,
+          risk: action.operationControlAction.risk_disclosure,
+          readback:
+            action.operationControlAction.readback_result_count === null ||
+            action.operationControlAction.readback_result_count === undefined
+              ? `读回：${action.operationControlAction.readback_status}；结果数：未知/不可用`
+              : `读回：${action.operationControlAction.readback_status}；结果数：${action.operationControlAction.readback_result_count} 条`,
+          audit: action.operationControlAction.audit_event_type,
+          runtime: action.operationControlAction.runtime_status_after_confirmation,
+        }
+      : null;
 
   return (
     <div
@@ -109,6 +127,42 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
             <div className="permission-detail">
               <span>风险说明</span>
               <strong>{k3B1RecoveryBoundary.risk}</strong>
+            </div>
+          </>
+        ) : null}
+        {operationControlBoundary ? (
+          <>
+            <div className="permission-detail">
+              <span>L3 操作</span>
+              <strong>{operationControlBoundary.operationId}</strong>
+            </div>
+            <div className="permission-detail">
+              <span>当前状态</span>
+              <strong>{operationControlBoundary.currentStatus}</strong>
+            </div>
+            <div className="permission-detail">
+              <span>确认后状态</span>
+              <strong>{operationControlBoundary.afterStatus}；只登记决策，不代表已运行。</strong>
+            </div>
+            <div className="permission-detail">
+              <span>当前门</span>
+              <strong>{operationControlBoundary.gate}</strong>
+            </div>
+            <div className="permission-detail">
+              <span>真执行写入面</span>
+              <strong>{operationControlBoundary.wouldWrite}</strong>
+            </div>
+            <div className="permission-detail">
+              <span>读回边界</span>
+              <strong>{operationControlBoundary.readback}</strong>
+            </div>
+            <div className="permission-detail">
+              <span>审计 / 运行日志</span>
+              <strong>{operationControlBoundary.audit} / {operationControlBoundary.runtime}</strong>
+            </div>
+            <div className="permission-detail">
+              <span>风险说明</span>
+              <strong>{operationControlBoundary.risk}</strong>
             </div>
           </>
         ) : null}
@@ -933,6 +987,8 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
             ? "该动作只会在你确认后写入 M12 成熟模式辅助状态文件；只有用户确认正式化时才会联动 formal-memories.v1.json，候选和报告不会直接进入任务包。"
             : action.kind === "run-project-workflow-automation-phase-a"
             ? "该动作只会在你确认后生成项目自动编排 Level A run units，并记录 Product Command Phase A no-op、runtime/audit/readback unavailable、worker report、捕获来源和 observation；不发送 prompt、不执行真实 Codex、不写 /Users/yoyi/.codex、不写项目文件。"
+            : action.kind === "record-operation-control-decision"
+            ? "该动作只会记录 L3 操作控制决策和待处理状态；不调用 runner、不执行 Codex、不发送 prompt、不停止或重启真实进程、不解锁 K3-B2。"
             : action.kind === "offline-role-dispatch"
             ? "该动作只会在你确认后把离线角色派发写入工作台自己的工作流状态；不启动 Codex、不执行 codex exec resume、不发送消息、不写 /Users/yoyi/.codex、不运行运行器。"
             : action.kind === "offline-role-result-handoff"
@@ -952,6 +1008,8 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
           <p className={`dialog-risk-summary ${realCodexBoundary ? "" : "safe"}`}>
             {realCodexBoundary
               ? `⚠ 高风险：会执行真实 Codex。批准后会写 /Users/yoyi/.codex。失败、超时或读回不可用必须记录边界，不会自动重试。`
+              : action.kind === "record-operation-control-decision"
+              ? "低风险：本轮只登记运行控制决策和待处理状态。不启动 Codex 命令行，不发送真实执行指令，不停止或重启进程。"
               : "低风险：只写工作台自己的状态文件。不启动 Codex 命令行，不发送真实执行指令，不写 /Users/yoyi/.codex。"}
           </p>
         <div className="dialog-actions">
@@ -973,6 +1031,7 @@ function confirmActionLabel(kind: PendingAction["kind"]) {
   if (kind === "execute-node-dispatch") return "确认真实派发";
   if (kind === "copy-task-preview") return "确认复制";
   if (kind === "run-project-workflow-automation-phase-a") return "确认生成编排记录";
+  if (kind === "record-operation-control-decision") return "确认记录决策";
   if (
     kind === "initialize-workflow-state" ||
     kind === "bootstrap-project-workflow" ||

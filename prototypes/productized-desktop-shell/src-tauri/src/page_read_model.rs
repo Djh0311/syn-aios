@@ -187,6 +187,7 @@ pub(crate) fn derive_page_read_model_schema_catalog(
                 "worker_protocol",
                 "real_execution_product_commands",
                 "k3_b1_recovery",
+                "operation_control",
             ],
             &["project_workflows", "session_bindings"],
             &["session-continuations.v1.json", "real-execution-product-commands.v1.json"],
@@ -215,6 +216,7 @@ pub(crate) fn derive_page_read_model_schema_catalog(
                 "real_execution_product_commands",
                 "project_workflow_automation",
                 "k3_b1_recovery",
+                "operation_control",
                 "diagnostic_summary",
             ],
             &["project_workflows", "task_drafts", "recent_execution_attempts"],
@@ -620,6 +622,7 @@ fn running_workflows_payload(snapshot: &Value, workflow_state: Option<&Value>) -
         .get("project_workflow_automation")
         .unwrap_or(&Value::Null);
     let recovery = snapshot.get("k3_b1_recovery").unwrap_or(&Value::Null);
+    let operation_control = snapshot.get("operation_control").unwrap_or(&Value::Null);
 
     json!({
         "schema_version": "running_workflows_page_read_model.v1",
@@ -657,6 +660,19 @@ fn running_workflows_payload(snapshot: &Value, workflow_state: Option<&Value>) -
                 .map(|boundary| string_field(boundary, "status"))
                 .unwrap_or_default(),
             "result_count": recovery
+                .get("readback_boundary")
+                .and_then(|boundary| boundary.get("result_count").cloned())
+                .unwrap_or(Value::Null),
+        },
+        "operation_control": {
+            "operation_count": array_field_len(operation_control, "operations"),
+            "true_operation_available": bool_field(operation_control, "true_operation_available"),
+            "k3_b2_unlocked": bool_field(operation_control, "k3_b2_unlocked"),
+            "readback_status": operation_control
+                .get("readback_boundary")
+                .map(|boundary| string_field(boundary, "status"))
+                .unwrap_or_default(),
+            "result_count": operation_control
                 .get("readback_boundary")
                 .and_then(|boundary| boundary.get("result_count").cloned())
                 .unwrap_or(Value::Null),
@@ -944,6 +960,11 @@ fn derive_snapshot_field_coverage() -> Vec<PageSnapshotFieldCoverage> {
             "K3-B1 blocked recovery feeds the project recovery card, agent boundary, and running workflow blocked state without enabling execution.",
         ),
         coverage(
+            "operation_control",
+            &["agents", "running_workflows"],
+            "L3 operation control feeds confirmable retry/stop/restart/resume product controls without enabling execution.",
+        ),
+        coverage(
             "page_read_model_inventory",
             &["settings"],
             "Page contract inventory belongs in settings developer details.",
@@ -981,6 +1002,7 @@ fn workbench_snapshot_field_names() -> Vec<&'static str> {
         "real_execution_product_commands",
         "project_workflow_automation",
         "k3_b1_recovery",
+        "operation_control",
         "page_read_model_inventory",
         "diagnostic_summary",
         "diagnostics",
@@ -1226,8 +1248,8 @@ mod tests {
             .map(|coverage| coverage.field_name.as_str())
             .collect();
 
-        assert_eq!(workbench_snapshot_field_names().len(), 21);
-        assert_eq!(catalog.snapshot_field_coverage.len(), 21);
+        assert_eq!(workbench_snapshot_field_names().len(), 22);
+        assert_eq!(catalog.snapshot_field_coverage.len(), 22);
         assert!(catalog.uncovered_snapshot_fields.is_empty());
         for field_name in workbench_snapshot_field_names() {
             assert!(

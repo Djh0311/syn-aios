@@ -50,6 +50,7 @@ import {
   recordFormalMemoryLifecycleOperation,
   recordOfflineDirectorReview,
   recordOfflineRoleResultHandoff,
+  recordOperationControlDecision,
   recordProjectConsultationProposalDecision,
   recordUserResultDecision,
   queryWorkbenchPageReadModel,
@@ -479,6 +480,18 @@ export function App() {
         setNotice("K3-B1 手动回交路径已进入待主管线复核提示；L1 不执行真实 Codex、不发送 prompt、不自动接受成功。");
       } else if (pendingAction.kind === "request-k3-b1-renewed-risk-approval") {
         setNotice("K3-B1 重新授权申请只进入待安全审查提示；L1 不继承旧授权、不启动 retry、不解锁 K3-B2。");
+      } else if (pendingAction.kind === "record-operation-control-decision") {
+        const operation = pendingAction.operationControlAction;
+        if (!operation) {
+          throw new Error("L3 操作控制缺少待记录对象");
+        }
+        const result = await recordOperationControlDecision(operation);
+        const { snapshot: nextSnapshot } = await loadWorkbenchSnapshotFromPageQueries(queryWorkbenchPageReadModel);
+        setSnapshot(nextSnapshot);
+        setWorkflowState(result.snapshot);
+        setNotice(
+          `${result.message} 审计 ${result.audit_event_id}；L3 不调用 runner、不停止/重启真实进程、不解锁 K3-B2。`,
+        );
       } else if (pendingAction.kind === "offline-role-dispatch") {
         if (!pendingAction.offlineRoleDispatch) {
           throw new Error("离线角色派发缺少派发块");
@@ -890,6 +903,7 @@ function renderActiveView(
         memoryCandidateStore={memoryCandidateStore}
         onReloadWorkflowState={onReloadWorkflowState}
         onNavigate={onNavigate}
+        onRequestAction={onRequestAction}
       />
     );
   }

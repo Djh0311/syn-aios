@@ -372,6 +372,7 @@ fn validate_source_type(value: &str) -> Result<(), String> {
             | "runtime_log"
             | "readback"
             | "worker_report"
+            | "operation_control_decision"
             | "process_fact_decision"
             | "final_review"
     ) {
@@ -450,7 +451,7 @@ fn observation_type_from_source_type(source_type: &str) -> &'static str {
         "process_fact_decision" => "process_fact",
         "final_review" => "global_director_review",
         "user_action" => "plan_adopted",
-        "product_command" | "runtime_log" => "process_fact",
+        "product_command" | "runtime_log" | "operation_control_decision" => "process_fact",
         _ => "process_fact",
     }
 }
@@ -460,7 +461,7 @@ fn observation_source_kind_from_capture_source(source_type: &str) -> &'static st
         "worker_report" | "readback" => "worker_report",
         "final_review" | "process_fact_decision" => "director_review",
         "user_action" => "user_confirmation",
-        "product_command" | "runtime_log" => "workflow_event",
+        "product_command" | "runtime_log" | "operation_control_decision" => "workflow_event",
         _ => "workflow_event",
     }
 }
@@ -712,6 +713,76 @@ mod tests {
             .expect("workflow parent")
             .join("memory-capture-events.v1.json")
             .exists());
+        assert!(!path
+            .parent()
+            .expect("workflow parent")
+            .join("formal-memories.v1.json")
+            .exists());
+        assert!(output
+            .warnings
+            .contains(&"formal_memory_not_written_by_memory_capture".to_string()));
+
+        let _ = fs::remove_dir_all(path.parent().expect("workflow parent"));
+    }
+
+    #[test]
+    fn operation_control_decision_can_be_captured_as_candidate_without_formal_memory() {
+        let path = temp_workflow_path("memory-capture-operation-control");
+        let project_root = "/tmp/memory-capture-operation-control-project";
+        let mut input = capture_input(project_root);
+        input.source_type = "operation_control_decision".to_string();
+        input.runtime_log_ref = Some("runtime-log:operation-decision:resume".to_string());
+        input.audit_refs = vec!["audit:l3-operation:resume:v1".to_string()];
+        input.readback_ref = Some("readback:l3-operation:resume:not-attempted".to_string());
+        input.summary =
+            "用户确认记录 resume 操作控制决策；该决策待处理且没有触发真实运行。".to_string();
+        input.evidence_summary =
+            "L3 只登记 operation decision；readback result_count 为未知/不可用。".to_string();
+        input.reason =
+            "L3 operation control decision 可作为候选记忆来源，但不能自动正式化。".to_string();
+        input.source_refs = input
+            .source_refs
+            .into_iter()
+            .map(|mut source| {
+                source.source_ref_id = "source:l3-operation-control:resume".to_string();
+                source.source_type = "operation_control_decision".to_string();
+                source.source_id = "operation-control:resume:confirmed-recorded".to_string();
+                source.runtime_log_ref =
+                    Some("runtime-log:operation-decision:resume".to_string());
+                source.audit_ref_id = Some("audit:l3-operation:resume:v1".to_string());
+                source.readback_ref = Some("readback:l3-operation:resume:not-attempted".to_string());
+                source.summary =
+                    "resume control decision recorded; real operation remains separately authorized."
+                        .to_string();
+                source
+            })
+            .collect();
+        input.candidate = Some(MemoryCaptureCandidateDraft {
+            memory_type: "workflow_summary".to_string(),
+            claim: "L3 operation control confirmations record decisions without real operation."
+                .to_string(),
+            body:
+                "A user can confirm retry, stop, restart, or resume in the product control plane; the result remains pending separate authorization."
+                    .to_string(),
+            review_reason:
+                "从 L3 operation control decision 生成待审候选；候选不是正式记忆。"
+                    .to_string(),
+            requires_user_confirmation: true,
+            actor_role: "project_director".to_string(),
+        });
+
+        let output = capture_event(
+            &path,
+            &input,
+            "2026-06-16T12:00:00Z",
+            "write-capture-operation-control",
+            "write-observation-operation-control",
+            "write-candidate-operation-control",
+        )
+        .expect("operation control decision capture should create observation and candidate");
+
+        assert!(output.observation.is_some());
+        assert!(output.candidate.is_some());
         assert!(!path
             .parent()
             .expect("workflow parent")

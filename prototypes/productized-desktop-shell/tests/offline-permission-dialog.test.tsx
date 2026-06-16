@@ -72,6 +72,7 @@ import {
 } from "./helpers/offlineTranscriptSessionFixtures";
 import { realExecutionProductCommandFixtures } from "./helpers/offlineRealExecutionProductCommandFixtures";
 import { runK3B1BlockedRecoveryProductPathScenario } from "./helpers/offlineK3B1RecoveryScenario";
+import { runL3OperationControlScenario } from "./helpers/offlineL3OperationControlScenario";
 import { controlledSessionContinuationLevelAStoreFixture, h2DuplicateSessionContinuationStoreFixture } from "./helpers/offlineSessionContinuationStoreFixtures";
 import {
   rightDetailPanelCommonPropsFixture,
@@ -480,21 +481,12 @@ function runStageJRunQueueScenario() {
     "J4 默认确认队列不应声明写 .codex",
   );
 
-  const runningText = visibleText(
-    <RunningWorkflowsView
-      snapshot={j4Snapshot}
-      workflowState={workflowStateWithProjectWorkflow}
-      workflowStateLoading={false}
-      workflowStateError={null}
-      memoryCaptureStore={memoryCaptureStore}
-      memoryCandidateStore={memoryCandidateStore}
-      onReloadWorkflowState={() => {}}
-      onNavigate={() => {}}
-    />,
-  );
-  for (const expectedText of executionRunQueueTextFixtures.stageJRunningExpectedTexts) {
-    assert(runningText.includes(expectedText), `K5 Running UI 缺少 ${expectedText}`);
-  }
+  runL3OperationControlScenario({
+    snapshot: j4Snapshot,
+    workflowStateWithProjectWorkflow,
+    memoryCaptureStore,
+    memoryCandidateStore,
+  });
 
   const secretaryContext = deriveSecretaryContext({
     snapshot: j4Snapshot,

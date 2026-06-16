@@ -96,6 +96,7 @@ export const emptySnapshot: WorkbenchSnapshot = {
     warnings: ["empty_worker_protocol_read_model"],
   },
   k3_b1_recovery: null,
+  operation_control: null,
   page_read_model_inventory: {
     schema_version: "workbench_page_read_model_inventory.v1",
     generated_at: "未读取",

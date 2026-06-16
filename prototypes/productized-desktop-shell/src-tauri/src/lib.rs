@@ -1,11 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{fs, io::Write};
 mod blackboard_candidate_store;
 pub mod codex_db;
 mod codex_local_runner;
@@ -26,6 +25,7 @@ mod memory_entity_relation_store;
 mod memory_lint_engine;
 mod memory_lint_store;
 mod observation_store;
+mod operation_control;
 mod page_read_model;
 mod plan_authorization_store;
 mod project_consultation_proposal_store;
@@ -60,8 +60,6 @@ struct AppState {
     tasks_path: PathBuf,
     workflow_state_path: PathBuf,
 }
-
-// Type definitions live in src/types.rs for the conservative no-behavior split.
 include!("types.rs");
 trait CodexResumeRunner {
     fn resume_with_options(
@@ -1661,7 +1659,8 @@ fn build_snapshot_with_session_source(
         context_warning_count,
         &runtime_generated_at,
     );
-
+    let operation_control =
+        operation_control::read(&runtime_generated_at, &state.workflow_state_path);
     WorkbenchSnapshot {
         summary: IndexSummary {
             generated_at: optional_string(index, "generated_at"),
@@ -1689,6 +1688,7 @@ fn build_snapshot_with_session_source(
         real_execution_product_commands,
         project_workflow_automation,
         k3_b1_recovery: k3_b1_recovery::derive_k3_b1_recovery_read_model(),
+        operation_control,
         page_read_model_inventory,
         diagnostic_summary,
         diagnostics: Diagnostics {

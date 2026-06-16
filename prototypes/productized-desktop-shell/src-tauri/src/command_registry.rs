@@ -6,6 +6,7 @@ macro_rules! workbench_command_handler {
         tauri::generate_handler![
             load_workbench_snapshot,
             query_workbench_page_read_model,
+            record_operation_control_decision,
             load_codex_session_transcript,
             load_workflow_state_snapshot,
             load_plan_authorization_store,

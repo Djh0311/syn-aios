@@ -21,6 +21,7 @@ import type {
 } from "./agentSession";
 import type {
   K3B1RecoveryReadModel,
+  OperationControlReadModel,
   ProjectWorkflowAutomationReadModel,
   RealExecutionProductCommandReadModel,
   WorkerProtocolReadModel,
@@ -45,6 +46,7 @@ export type WorkbenchSnapshot = {
   real_execution_product_commands?: RealExecutionProductCommandReadModel | null;
   project_workflow_automation?: ProjectWorkflowAutomationReadModel | null;
   k3_b1_recovery?: K3B1RecoveryReadModel | null;
+  operation_control?: OperationControlReadModel | null;
   page_read_model_inventory: WorkbenchPageReadModelInventory;
   diagnostic_summary: DiagnosticSummary;
   diagnostics: Diagnostics;

@@ -2,8 +2,17 @@ import { Badge } from "../components/Badge";
 import { SummaryTile } from "../components/WorkbenchPrimitives";
 import { pathTail } from "../lib/format";
 import { deriveRunningWorkflowsPageReadModelFromParts } from "../lib/pageSelectors";
-import { deriveRunQueueReadModel } from "../lib/runQueue";
-import type { MemoryCandidateStoreV1, MemoryCaptureStoreV1, ProjectWorkflowSummary, SessionRunStatusSummary, WorkbenchSnapshot, WorkflowStateSnapshot } from "../lib/types";
+import { deriveRunQueueReadModel, type OperationControlSummary } from "../lib/runQueue";
+import type {
+  MemoryCandidateStoreV1,
+  MemoryCaptureStoreV1,
+  OperationControlItem,
+  PendingAction,
+  ProjectWorkflowSummary,
+  SessionRunStatusSummary,
+  WorkbenchSnapshot,
+  WorkflowStateSnapshot,
+} from "../lib/types";
 import type { ViewKey } from "../lib/workbenchNavigation";
 
 type RunningWorkflowsViewProps = {
@@ -15,6 +24,7 @@ type RunningWorkflowsViewProps = {
   memoryCandidateStore?: MemoryCandidateStoreV1 | null;
   onReloadWorkflowState: () => void;
   onNavigate: (view: ViewKey) => void;
+  onRequestAction?: (action: PendingAction) => void;
 };
 
 const focusStates = new Set([
@@ -38,6 +48,7 @@ export function RunningWorkflowsView({
   memoryCandidateStore = null,
   onReloadWorkflowState,
   onNavigate,
+  onRequestAction,
 }: RunningWorkflowsViewProps) {
   const workflows = workflowState?.project_workflows ?? [];
   const runningWorkflows = workflows.filter((workflow) => isWorkflowInFocus(workflow));
@@ -64,6 +75,8 @@ export function RunningWorkflowsView({
     memoryCandidateStore,
   });
   const operationControl = runQueue.operation_control_summary;
+  const l3OperationControl = snapshot.operation_control ?? null;
+  const operationItems = l3OperationControl?.operations ?? fallbackOperationItemsFromSummary(operationControl);
   const leadQueueItems = runQueue.run_queue_items.slice(0, 6);
   const leadConfirmations = runQueue.user_confirmation_queue.slice(0, 12);
   const leadFailures = runQueue.failure_control_summaries.slice(0, 6);
@@ -211,7 +224,7 @@ export function RunningWorkflowsView({
           <div className="panel-h">
             操作控制 / 恢复建议
             <Badge tone={operationControl.confirmation_required_count || operationControl.readback_issue_count ? "warning" : "neutral"}>
-              只读建议
+              L3 决策面
             </Badge>
           </div>
           <div className="running-summary-grid compact">
@@ -225,15 +238,14 @@ export function RunningWorkflowsView({
             <SummaryTile label="过期清理" value={`${operationControl.stale_cleanup_count}`} hint="仅工作台自有状态" />
           </div>
           <div className="running-workflow-list">
-            <OperationBoundaryCard title="重试" status="需要确认" summary={operationControl.retry_boundary} />
-            <OperationBoundaryCard title="停止 / 取消" status="只读状态" summary={operationControl.stop_boundary} />
-            <OperationBoundaryCard title="重启" status="后续任务" summary={operationControl.restart_boundary} />
-            <OperationBoundaryCard title="恢复" status="单独授权" summary={operationControl.resume_boundary} />
+            {operationItems.map((item) => (
+              <OperationBoundaryCard item={item} onRequestAction={onRequestAction} key={item.operation_id} />
+            ))}
             <OperationBoundaryCard title="读回" status="结果数未知" summary={operationControl.readback_boundary} />
             <OperationBoundaryCard title="过期状态清理" status="工作台侧" summary={operationControl.stale_cleanup_boundary} />
           </div>
           <p className="muted small-note">
-            {operationControl.user_message} {operationControl.recommended_next_step}
+            {l3OperationControl?.user_summary.join(" ") ?? operationControl.user_message} {operationControl.recommended_next_step}
           </p>
         </section>
 
@@ -413,7 +425,44 @@ function RuntimeSummaryCard({ summary, onNavigate }: { summary: SessionRunStatus
   );
 }
 
-function OperationBoundaryCard({ title, status, summary }: { title: string; status: string; summary: string }) {
+function OperationBoundaryCard({
+  item,
+  onRequestAction,
+  title,
+  status,
+  summary,
+}: {
+  item?: OperationControlItem;
+  onRequestAction?: (action: PendingAction) => void;
+  title?: string;
+  status?: string;
+  summary?: string;
+}) {
+  if (item) {
+    const action = buildOperationControlAction(item);
+    const isBlocked = item.status === "blocked" || item.status === "confirmed_recorded" || !onRequestAction;
+    return (
+      <article className="running-attention-card operation-boundary-card">
+        <strong>{item.label}</strong>
+        <span>{operationControlStatusLabel(item.status)} · {operationGateLabel(item.current_gate)}</span>
+        <em>{item.user_visible_summary} {item.risk_disclosure}</em>
+        <small>
+          确认后：{item.status_after_confirmation} · 读回 {readbackStatusLabel(item.readback_status)} · 结果数：{productCommandResultCountLabel(item.readback_result_count)}
+        </small>
+        <small>
+          审计 {item.audit_event_type} · 运行日志 {item.runtime_status_after_confirmation} · K3-B2 仍阻断
+        </small>
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={isBlocked}
+          onClick={() => onRequestAction?.(action)}
+        >
+          {item.confirmation_label}
+        </button>
+      </article>
+    );
+  }
   return (
     <article className="running-attention-card operation-boundary-card">
       <strong>{title}</strong>
@@ -421,6 +470,92 @@ function OperationBoundaryCard({ title, status, summary }: { title: string; stat
       <em>{summary}</em>
     </article>
   );
+}
+
+function buildOperationControlAction(item: OperationControlItem): PendingAction {
+  return {
+    kind: "record-operation-control-decision",
+    label: item.confirmation_label,
+    path: `workbench://operation-control/${item.operation_id}`,
+    source: "Tauri 应用数据目录",
+    boundary: "L3 只登记运行控制决策和待处理状态；不调用 runner、不执行 Codex、不停止或重启真实进程。",
+    operationControlAction: {
+      operation_id: item.operation_id,
+      label: item.label,
+      current_status: item.status,
+      status_after_confirmation: item.status_after_confirmation,
+      current_gate: item.current_gate,
+      would_write_if_real: item.would_write_if_real,
+      risk_disclosure: item.risk_disclosure,
+      readback_status: item.readback_status,
+      readback_result_count: item.readback_result_count ?? null,
+      audit_event_type: item.audit_event_type,
+      runtime_status_after_confirmation: item.runtime_status_after_confirmation,
+      does_execute_in_l3: false,
+      requires_separate_authorized_window: item.requires_separate_authorized_window,
+      blocks_k3_b2: item.blocks_k3_b2,
+    },
+  };
+}
+
+function fallbackOperationItemsFromSummary(summary: OperationControlSummary): OperationControlItem[] {
+  return [
+    fallbackOperationItem("retry", "重试", "requires_user_confirmation_and_new_authorized_window", summary.retry_boundary),
+    fallbackOperationItem("stop", "停止", "blocked_no_runtime_handle", summary.stop_boundary),
+    fallbackOperationItem("restart", "重启", "blocked_restart_semantics_not_defined", summary.restart_boundary),
+    fallbackOperationItem("resume", "恢复", "gated_real_resume_mario_test_only", summary.resume_boundary),
+  ];
+}
+
+function fallbackOperationItem(
+  operationId: "retry" | "stop" | "restart" | "resume",
+  label: string,
+  gate: string,
+  summary: string,
+): OperationControlItem {
+  return {
+    operation_id: operationId,
+    label,
+    status: "available",
+    applies_to: "derived_run_queue_summary",
+    would_write_if_real: operationId === "retry" || operationId === "stop" ? "workbench_state_only" : "codex_home_and_workbench_state",
+    current_gate: gate,
+    does_execute_in_l3: false,
+    status_after_confirmation: "confirmed_recorded",
+    requires_separate_authorized_window: true,
+    risk_disclosure: summary,
+    confirmation_label: `确认记录 ${label} 决策`,
+    audit_event_type: "operation_decision_recorded",
+    runtime_status_after_confirmation: "operation_decision_recorded_pending_real_authorization",
+    readback_status: "not_attempted_l3_decision_only",
+    readback_result_count: null,
+    blocks_k3_b2: true,
+    user_visible_summary: `${label} 在 L3 只会记录决策，不会触发真实操作。`,
+    developer_details: [],
+    warnings: ["fallback_from_run_queue_summary", "decision_only_control_surface"],
+  };
+}
+
+function operationControlStatusLabel(value: string) {
+  const labels: Record<string, string> = {
+    not_applicable: "不适用",
+    available: "可发起确认",
+    pending_confirmation: "等待风险确认",
+    confirmed_recorded: "决策已登记",
+    rejected: "已拒绝",
+    blocked: "被门挡",
+  };
+  return labels[value] ?? value;
+}
+
+function operationGateLabel(value: string) {
+  const labels: Record<string, string> = {
+    blocked_no_runtime_handle: "无 runtime handle",
+    requires_user_confirmation_and_new_authorized_window: "需另窗授权",
+    blocked_restart_semantics_not_defined: "重启语义未冻结",
+    gated_real_resume_mario_test_only: "real-resume 门未放宽",
+  };
+  return labels[value] ?? value;
 }
 
 function runQueueStatusLabel(value: string) {
