@@ -21,6 +21,7 @@ export type {
 
 export * from "./types/agentSession";
 export * from "./types/execution";
+export * from "./types/manualRelay";
 export * from "./types/memory";
 export * from "./types/workbenchSnapshot";
 export * from "./types/workflow";

@@ -53,6 +53,13 @@ import type {
   ObservationStoreV1,
   OfflineDirectorReviewRequest,
   OperationControlDecisionRequest,
+  ManualRelayConfirmInput,
+  ManualRelayConfirmation,
+  ManualRelayPreview,
+  ManualRelayPreviewInput,
+  ManualRelayReceipt,
+  ManualRelayRunInput,
+  ManualRelayStopInput,
   OfflineRoleDispatchRequest,
   OfflineRoleResultHandoffRequest,
   PendingAction,
@@ -676,6 +683,34 @@ export function recordOperationControlDecision(
 ): Promise<WorkflowStateMutationResult> {
   ensureTauriRuntime();
   return invoke<WorkflowStateMutationResult>("record_operation_control_decision", { request });
+}
+
+export function previewManualCodexRelay(
+  request: ManualRelayPreviewInput,
+): Promise<ManualRelayPreview> {
+  ensureTauriRuntime();
+  return invoke<ManualRelayPreview>("preview_manual_codex_relay", { request });
+}
+
+export function confirmManualCodexRelayOnce(
+  request: ManualRelayConfirmInput,
+): Promise<ManualRelayConfirmation> {
+  ensureTauriRuntime();
+  return invoke<ManualRelayConfirmation>("confirm_manual_codex_relay_once", { request });
+}
+
+export function runManualCodexRelayOnce(
+  request: ManualRelayRunInput,
+): Promise<ManualRelayReceipt> {
+  ensureTauriRuntime();
+  return invoke<ManualRelayReceipt>("run_manual_codex_relay_once", { request });
+}
+
+export function stopManualCodexRelayAttempt(
+  request: ManualRelayStopInput,
+): Promise<ManualRelayReceipt> {
+  ensureTauriRuntime();
+  return invoke<ManualRelayReceipt>("stop_manual_codex_relay_attempt", { request });
 }
 
 // =============================================================

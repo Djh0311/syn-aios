@@ -1,12 +1,24 @@
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { deriveAgentsPageReadModelFromParts } from "../../lib/pageSelectors";
-import { appendPendingUserMessage, buildPendingUserMessage } from "../../lib/conversationEngine";
+import {
+  appendPendingUserMessage,
+  buildManualRelayPendingUserMessage,
+  buildPendingUserMessage,
+} from "../../lib/conversationEngine";
 import { pathTail, relativeTime } from "../../lib/format";
+import {
+  confirmManualCodexRelayOnce,
+  previewManualCodexRelay,
+  runManualCodexRelayOnce,
+  stopManualCodexRelayAttempt,
+} from "../../lib/tauri";
 import type {
   AgentAdapterDescriptor,
   CodexTranscript,
   CodexTranscriptEvent,
+  ManualRelayPreview,
+  ManualRelayReceipt,
   PendingAction,
   ProjectRecord,
   ProjectWorkflowAutomationReadModel,
@@ -153,6 +165,10 @@ export function AgentSessionCenter({
   const [pendingUserMessages, setPendingUserMessages] = useState<CodexTranscriptEvent[]>([]);
   const [k2PreviewError, setK2PreviewError] = useState<string | null>(null);
   const [k2Operation, setK2Operation] = useState<"resume" | "new_session">("resume");
+  const [manualRelayPreview, setManualRelayPreview] = useState<ManualRelayPreview | null>(null);
+  const [manualRelayReceipt, setManualRelayReceipt] = useState<ManualRelayReceipt | null>(null);
+  const [manualRelayError, setManualRelayError] = useState<string | null>(null);
+  const [manualRelayBusy, setManualRelayBusy] = useState(false);
   const [developerOpen, setDeveloperOpen] = useState(false);
   const conversationMode = !showSoftware;
   const pageReadModel = useMemo(
@@ -205,6 +221,9 @@ export function AgentSessionCenter({
   );
   useEffect(() => {
     setK2PreviewError(null);
+    setManualRelayPreview(null);
+    setManualRelayReceipt(null);
+    setManualRelayError(null);
   }, [k2Operation, selectedProjectRoot, selectedSession?.thread_id]);
 
   useEffect(() => {
@@ -214,6 +233,9 @@ export function AgentSessionCenter({
   function handleChangeK2Draft(value: string) {
     setDraftPrompt(value);
     setK2PreviewError(null);
+    setManualRelayPreview(null);
+    setManualRelayReceipt(null);
+    setManualRelayError(null);
   }
 
   function handleSubmitConversationDraft() {
@@ -227,6 +249,95 @@ export function AgentSessionCenter({
     setPendingUserMessages((messages) => [...messages, pendingMessage]);
     setDraftPrompt("");
     setK2PreviewError(null);
+  }
+
+  async function handlePreviewManualRelay() {
+    const prompt = draftPrompt.trim();
+    if (!prompt || !selectedProjectRoot.trim()) return;
+    if (k2Operation === "resume" && !selectedSession) return;
+    setManualRelayBusy(true);
+    setManualRelayError(null);
+    setManualRelayReceipt(null);
+    try {
+      const preview = await previewManualCodexRelay({
+        original_user_text: prompt,
+        target_project_root: selectedProjectRoot,
+        target_cwd: selectedProjectRoot,
+        target_session_id: k2Operation === "resume" ? selectedSession?.thread_id ?? null : null,
+        new_session: k2Operation === "new_session",
+        sandbox: "workspace-write",
+        allowed_write_roots: [selectedProjectRoot],
+        requested_by: "user",
+      });
+      setManualRelayPreview(preview);
+    } catch (error) {
+      setManualRelayError(messageOf(error));
+    } finally {
+      setManualRelayBusy(false);
+    }
+  }
+
+  async function handleSubmitManualRelayOnce() {
+    const preview = manualRelayPreview;
+    if (!preview || preview.guard.blocks_execution) return;
+    setManualRelayBusy(true);
+    setManualRelayError(null);
+    try {
+      const confirmation = await confirmManualCodexRelayOnce({
+        envelope: preview.envelope,
+        actor_ref: "user",
+        target_hash: preview.envelope.target_binding.target_hash,
+        prompt_sha256: preview.envelope.payload.prompt_sha256,
+        sandbox: preview.envelope.target_binding.sandbox,
+        allowed_write_roots: preview.envelope.target_binding.allowed_write_roots,
+        risk_acknowledged: true,
+      });
+      const receipt = await runManualCodexRelayOnce({
+        envelope: preview.envelope,
+        confirmation,
+        confirmation_id: confirmation.confirmation_id,
+        expected_prompt_sha256: preview.envelope.payload.prompt_sha256,
+        expected_target_hash: preview.envelope.target_binding.target_hash,
+        expected_sandbox: preview.envelope.target_binding.sandbox,
+        expected_allowed_write_roots: preview.envelope.target_binding.allowed_write_roots,
+        mock_behavior: "stay_running",
+      });
+      setManualRelayReceipt(receipt);
+      if (selectedSession) {
+        const pendingMessage = buildManualRelayPendingUserMessage({
+          prompt: preview.envelope.payload.original_user_text,
+          threadId: selectedSession.thread_id,
+          relayAttemptId: receipt.relay_attempt_id,
+          confirmationId: receipt.confirmation_id,
+          targetProjectRoot: preview.envelope.target_binding.project_root_canonical,
+          targetSessionId: preview.envelope.target_binding.target_session_id,
+          promptSha256: preview.envelope.payload.prompt_sha256,
+        });
+        setPendingUserMessages((messages) => [...messages, pendingMessage]);
+        setDraftPrompt("");
+      }
+    } catch (error) {
+      setManualRelayError(messageOf(error));
+    } finally {
+      setManualRelayBusy(false);
+    }
+  }
+
+  async function handleStopManualRelayAttempt() {
+    if (!manualRelayReceipt?.relay_attempt_id) return;
+    setManualRelayBusy(true);
+    setManualRelayError(null);
+    try {
+      const receipt = await stopManualCodexRelayAttempt({
+        relay_attempt_id: manualRelayReceipt.relay_attempt_id,
+        requested_by: "user",
+      });
+      setManualRelayReceipt(receipt);
+    } catch (error) {
+      setManualRelayError(messageOf(error));
+    } finally {
+      setManualRelayBusy(false);
+    }
   }
 
   const groups = useMemo(() => {
@@ -498,10 +609,17 @@ export function AgentSessionCenter({
                 draftPrompt={draftPrompt}
                 k2PreviewError={k2PreviewError}
                 k2Operation={k2Operation}
+                manualRelayBusy={manualRelayBusy}
+                manualRelayError={manualRelayError}
+                manualRelayPreview={manualRelayPreview}
+                manualRelayReceipt={manualRelayReceipt}
                 selectedProjectRoot={selectedProjectRoot}
                 selectedSession={selectedSession}
                 onChangeDraft={handleChangeK2Draft}
+                onPreviewManualRelay={handlePreviewManualRelay}
+                onRunManualRelayOnce={handleSubmitManualRelayOnce}
                 onSubmitDraft={handleSubmitConversationDraft}
+                onStopManualRelayAttempt={handleStopManualRelayAttempt}
                 onOpenDeveloperDetails={() => setDeveloperOpen(true)}
               />
             ) : null}

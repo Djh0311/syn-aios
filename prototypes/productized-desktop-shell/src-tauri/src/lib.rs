@@ -14,6 +14,7 @@ mod formal_memory_lifecycle;
 mod formal_memory_store;
 mod h4_execution_boundary;
 mod h5_project_dispatch_bridge;
+mod manual_relay;
 mod mature_pattern_governance;
 mod mature_pattern_store;
 pub mod mcp;
@@ -71,7 +72,6 @@ trait CodexResumeRunner {
         options: &CodexResumeRequestOptions,
     ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String>;
 }
-
 #[derive(Default)]
 struct AllowedPaths {
     projects: BTreeSet<String>,

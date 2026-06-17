@@ -3,9 +3,11 @@ import { renderToStaticMarkup } from "react-dom/server.browser";
 import { assert, visibleText } from "./offlineInteractionTestUtils";
 import {
   appendPendingUserMessage,
+  buildManualRelayPendingUserMessage,
   buildPendingUserMessage,
   mergeOlderTranscriptPage,
 } from "../../src/lib/conversationEngine";
+import { AgentChatComposer } from "../../src/views/agent/AgentChatComposer";
 import type { CodexTranscript, PendingAction, SessionRecord } from "../../src/lib/types";
 import { AgentSessionCenter, ChatTranscript } from "../../src/views/AgentView";
 
@@ -160,9 +162,39 @@ export function runConversationEngineScenario({
     />,
   );
   assert(composerMarkup.includes("data-send-mode=\"decision-only\""), "M3 撰写区应声明发送只记录决策、不真执行");
+  assert(composerMarkup.includes("data-send-mode=\"manual_relay\""), "manual relay 应是并列显式模式，不覆盖 decision-only");
+  assert(composerMarkup.includes("Manual relay"), "manual relay 面板应可见");
+  assert(composerMarkup.includes("手动一次一发"), "manual relay UI 必须披露 one-shot 边界");
   assert(composerMarkup.includes("发送"), "M3 撰写区主按钮应是发送");
   assert(!composerMarkup.includes("生成发送预览"), "M3 普通撰写区不应保留 6 步预览入口");
   assert(!composerMarkup.includes("确认执行 Codex"), "M3 普通撰写区不应出现真实执行按钮");
+
+  const relayPreviewMarkup = renderToStaticMarkup(
+    <AgentChatComposer
+      draftPrompt="Manual relay exact payload fixture"
+      k2Operation="resume"
+      k2PreviewError={null}
+      manualRelayBusy={false}
+      manualRelayError={null}
+      manualRelayPreview={manualRelayPreviewFixture(session)}
+      manualRelayReceipt={manualRelayRunningReceiptFixture()}
+      selectedProjectRoot={session.project_root ?? ""}
+      selectedSession={session}
+      onChangeDraft={() => {}}
+      onOpenDeveloperDetails={() => {}}
+      onPreviewManualRelay={() => {}}
+      onRunManualRelayOnce={() => {}}
+      onStopManualRelayAttempt={() => {}}
+      onSubmitDraft={() => {}}
+    />,
+  );
+  assert(relayPreviewMarkup.includes("Manual relay exact payload fixture"), "manual relay 预演必须显示 exact payload");
+  assert(relayPreviewMarkup.includes(session.project_root ?? ""), "manual relay 预演必须显示 target project/cwd");
+  assert(relayPreviewMarkup.includes(session.thread_id), "manual relay 预演必须显示指定 target session");
+  assert(relayPreviewMarkup.includes("Write roots"), "manual relay 预演必须显示 allowed write roots");
+  assert(relayPreviewMarkup.includes("manual_once / auto_chain=false"), "manual relay 必须显示一次一发且不自动连环");
+  assert(relayPreviewMarkup.includes("Stop 本 attempt"), "manual relay 必须有可点击 stop 控件");
+  assert(relayPreviewMarkup.includes("real_codex_executed=false"), "manual relay fixture 回执不得声明真实 Codex 执行");
 
   const pendingMessage = buildPendingUserMessage({
     prompt: "M3 optimistic send fixture",
@@ -187,6 +219,134 @@ export function runConversationEngineScenario({
     repeatedPendingMessage.event_id !== nextRepeatedPendingMessage.event_id,
     "M3 相同 prompt 连续发送也不应生成重复 pending event_id",
   );
+
+  const relayPendingMessage = buildManualRelayPendingUserMessage({
+    confirmationId: "manual-relay-confirmation:fixture",
+    prompt: "Manual relay exact payload fixture",
+    promptSha256: "a".repeat(64),
+    relayAttemptId: "manual-relay-attempt:fixture",
+    targetProjectRoot: session.project_root ?? "",
+    targetSessionId: session.thread_id,
+    threadId: session.thread_id,
+  });
+  assert(
+    relayPendingMessage.metadata?.conversation_engine_send_mode === "manual_relay_confirmed_once",
+    "manual relay pending 消息必须使用 relay 专属模式",
+  );
+  assert(relayPendingMessage.metadata?.auto_chain === false, "manual relay pending 消息必须钉死 auto_chain=false");
+  assert(relayPendingMessage.metadata?.real_codex_executed === false, "manual relay fixture pending 不得声明真实执行");
+}
+
+function manualRelayPreviewFixture(session: SessionRecord) {
+  const projectRoot = session.project_root ?? "/tmp/offline";
+  return {
+    envelope: {
+      relay_id: "manual-relay:fixture",
+      target_binding: {
+        project_root_canonical: projectRoot,
+        target_cwd_canonical: projectRoot,
+        target_session_id: session.thread_id,
+        new_session: false,
+        sandbox: "workspace-write",
+        allowed_write_roots: [projectRoot],
+        target_hash: "b".repeat(64),
+      },
+      payload: {
+        original_user_text: "Manual relay exact payload fixture",
+        effective_prompt: "Manual relay exact payload fixture",
+        payload_layers: [],
+        prompt_sha256: "a".repeat(64),
+        prompt_length_bytes: 34,
+        exact_original: true,
+      },
+      policy: {
+        manual_once: true,
+        auto_chain: false,
+        duplicate_scope: "manual-relay:fixture",
+        denied_material_policy: "deny_secret_token_env_keychain_oauth_credential_full_transcript_rollout_codex_home",
+      },
+      future_hooks: {
+        role_id: null,
+        task_package_ref: null,
+        memory_packet_ref: null,
+        supervisor_review_ref: null,
+        post_run_memory_capture_policy: null,
+      },
+      audit_refs: ["audit:manual-relay-fixture"],
+      receipt_refs: [],
+    },
+    guard: {
+      status: "ready_fixture_only",
+      blocks_execution: false,
+      reasons: [],
+      warnings: ["manual_relay_fixture_only_no_real_codex"],
+      command_plan: {
+        program: "codex",
+        argv: ["exec", "resume", session.thread_id, "--output-last-message", "<workbench-managed-last-message>"],
+        stdin_prompt_ref: "manual-relay-prompt",
+        stdin_prompt_sha256: "a".repeat(64),
+        prompt_in_command: false,
+        shell_invocation: false,
+        redacted_preview: "codex exec resume <session> <stdin prompt>",
+        last_message_path: "/tmp/codex-governance-workbench/manual-relay-runs/fixture/last-message.txt",
+      },
+    },
+  };
+}
+
+function manualRelayRunningReceiptFixture() {
+  return {
+    relay_attempt_id: "manual-relay-attempt:fixture",
+    confirmation_id: "manual-relay-confirmation:fixture",
+    target: {
+      project_root_canonical: "/tmp/offline",
+      target_cwd_canonical: "/tmp/offline",
+      target_session_id: "offline-thread",
+      new_session: false,
+      sandbox: "workspace-write",
+      allowed_write_roots: ["/tmp/offline"],
+      target_hash: "b".repeat(64),
+    },
+    effective_prompt_sha256: "a".repeat(64),
+    prompt_length_bytes: 34,
+    prompt_exact_original: true,
+    command_plan: {
+      program: "codex",
+      argv: ["exec", "resume", "offline-thread"],
+      stdin_prompt_ref: "manual-relay-prompt",
+      stdin_prompt_sha256: "a".repeat(64),
+      prompt_in_command: false,
+      shell_invocation: false,
+      redacted_preview: "codex exec resume <session> <stdin prompt>",
+      last_message_path: "/tmp/codex-governance-workbench/manual-relay-runs/fixture/last-message.txt",
+    },
+    started_at: "2026-06-17T01:00:00Z",
+    ended_at: null,
+    exit_code: null,
+    status: "running",
+    prompt_sent: false,
+    real_codex_executed: false,
+    syn_read_codex_home: false,
+    syn_wrote_codex_home: false,
+    killed_by_user: false,
+    timed_out: false,
+    readback_status: "not_attempted_running_fixture",
+    last_message_hash: null,
+    last_message_size_bytes: null,
+    changed_files: [],
+    git_head_before: "fixture-head-before",
+    git_head_after: null,
+    git_status_before: "clean_fixture",
+    git_status_after: "clean_fixture",
+    rollback: {
+      git_available: true,
+      dirty_before: false,
+      auto_rollback_performed: false,
+      rollback_suggestion_available: true,
+      summary: "fixture only",
+    },
+    warnings: ["manual_relay_fixture_runner_only"],
+  };
 }
 
 function buildLargeTranscript(threadId: string, rolloutPath: string, count: number): CodexTranscript {

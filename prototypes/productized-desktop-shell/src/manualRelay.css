@@ -1,0 +1,60 @@
+.manual-relay-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(62, 85, 103, 0.2);
+  border-radius: 16px;
+  background: rgba(243, 247, 245, 0.82);
+}
+
+.manual-relay-panel strong {
+  color: var(--ink-deep);
+  font-family: "Noto Serif SC", serif;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
+.manual-relay-actions,
+.manual-relay-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.manual-relay-preview {
+  display: grid;
+  gap: 10px;
+}
+
+.manual-relay-preview pre {
+  max-height: 120px;
+  margin: 4px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.68);
+  white-space: pre-wrap;
+}
+
+.manual-relay-preview dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.manual-relay-preview dl div {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.manual-relay-preview dt,
+.manual-relay-preview dd,
+.manual-relay-receipt span {
+  margin: 0;
+  color: var(--ink-mid);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

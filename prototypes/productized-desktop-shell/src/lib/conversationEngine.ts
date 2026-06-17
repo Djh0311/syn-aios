@@ -6,6 +6,17 @@ export type PendingUserMessageInput = {
   createdAt?: string;
 };
 
+export type ManualRelayPendingUserMessageInput = {
+  prompt: string;
+  threadId: string;
+  relayAttemptId: string;
+  confirmationId: string;
+  targetProjectRoot: string;
+  targetSessionId: string | null;
+  promptSha256: string;
+  createdAt?: string;
+};
+
 export function buildPendingUserMessage({
   prompt,
   threadId,
@@ -23,6 +34,43 @@ export function buildPendingUserMessage({
       real_codex_executed: false,
     },
     warnings: ["pending_decision_only_no_codex_execution"],
+  };
+}
+
+export function buildManualRelayPendingUserMessage({
+  prompt,
+  threadId,
+  relayAttemptId,
+  confirmationId,
+  targetProjectRoot,
+  targetSessionId,
+  promptSha256,
+  createdAt = new Date().toISOString(),
+}: ManualRelayPendingUserMessageInput): CodexTranscriptEvent {
+  return {
+    event_id: `manual-relay-pending-user:${threadId}:${hashDraft(`${createdAt}:${relayAttemptId}:${promptSha256}`)}`,
+    timestamp: createdAt,
+    event_type: "user_message",
+    actor: "user",
+    text: prompt.trim(),
+    metadata: {
+      conversation_engine_pending: true,
+      conversation_engine_send_mode: "manual_relay_confirmed_once",
+      relay_attempt_id: relayAttemptId,
+      relay_confirmation_id: confirmationId,
+      target_project_root: targetProjectRoot,
+      target_session_id: targetSessionId,
+      prompt_sha256: promptSha256,
+      prompt_exact_original: true,
+      payload_layers_empty: true,
+      manual_once: true,
+      auto_chain: false,
+      real_codex_executed: false,
+    },
+    warnings: [
+      "manual_relay_fixture_only_no_real_codex_execution",
+      "manual_relay_prompt_body_visible_only_in_conversation_surface",
+    ],
   };
 }
 

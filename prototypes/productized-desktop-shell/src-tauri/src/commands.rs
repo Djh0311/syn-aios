@@ -47,6 +47,37 @@ fn record_operation_control_decision(
 }
 
 #[tauri::command]
+fn preview_manual_codex_relay(
+    request: manual_relay::ManualRelayPreviewInput,
+) -> Result<manual_relay::ManualRelayPreview, String> {
+    Ok(manual_relay::preview_manual_relay(
+        request,
+        &unix_timestamp_string(),
+    ))
+}
+
+#[tauri::command]
+fn confirm_manual_codex_relay_once(
+    request: manual_relay::ManualRelayConfirmInput,
+) -> Result<manual_relay::ManualRelayConfirmation, String> {
+    manual_relay::confirm_manual_relay_once(request, &unix_timestamp_string())
+}
+
+#[tauri::command]
+fn run_manual_codex_relay_once(
+    request: manual_relay::ManualRelayRunInput,
+) -> Result<manual_relay::ManualRelayReceipt, String> {
+    manual_relay::run_manual_relay_once(request, &unix_timestamp_string())
+}
+
+#[tauri::command]
+fn stop_manual_codex_relay_attempt(
+    request: manual_relay::ManualRelayStopInput,
+) -> Result<manual_relay::ManualRelayReceipt, String> {
+    manual_relay::stop_manual_relay_attempt(request, &unix_timestamp_string())
+}
+
+#[tauri::command]
 fn load_codex_session_transcript(
     thread_id: String,
     state: tauri::State<'_, AppState>,
