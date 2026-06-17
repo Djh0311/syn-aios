@@ -1,7 +1,11 @@
 export type {
   CodexTranscript,
   CodexTranscriptEvent,
+  CodexTranscriptPageRequest,
+  CodexTranscriptPagination,
   CodexTranscriptViewerBoundary,
+  CodexSessionPage,
+  CodexSessionPageRequest,
   Diagnostics,
   FileCandidate,
   HarnessCandidate,

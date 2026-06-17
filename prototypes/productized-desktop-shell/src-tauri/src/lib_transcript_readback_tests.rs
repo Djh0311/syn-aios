@@ -96,6 +96,49 @@
     }
 
     #[test]
+    fn transcript_catalog_page_reads_tail_and_older_from_sqlite_thread() {
+        let fixture =
+            transcript_catalog_numbered_fixture("transcript-catalog-page", "sqlite-thread", 9);
+        let index = transcript_index(&fixture.codex_home, Vec::new());
+
+        let tail = load_codex_session_transcript_page_with_catalog(
+            &index,
+            &CodexTranscriptPageRequest {
+                thread_id: "sqlite-thread".to_string(),
+                limit: Some(4),
+                before_line: None,
+            },
+            &fixture.db_path,
+        )
+        .expect("tail page");
+
+        assert_eq!(tail.events.len(), 4);
+        assert_eq!(tail.events[0].text.as_deref(), Some("sqlite message 6"));
+        assert_eq!(tail.events[3].text.as_deref(), Some("sqlite message 9"));
+        assert_eq!(tail.pagination.mode, "tail");
+        assert_eq!(tail.pagination.older_before_line, Some(6));
+        assert_eq!(tail.source_stats["catalog_source"], json!("sqlite"));
+        assert_eq!(tail.source_stats["jsonl"]["parsed_line_count"], json!(4));
+
+        let older = load_codex_session_transcript_page_with_catalog(
+            &index,
+            &CodexTranscriptPageRequest {
+                thread_id: "sqlite-thread".to_string(),
+                limit: Some(4),
+                before_line: tail.pagination.older_before_line,
+            },
+            &fixture.db_path,
+        )
+        .expect("older page");
+
+        assert_eq!(older.events.len(), 4);
+        assert_eq!(older.events[0].text.as_deref(), Some("sqlite message 2"));
+        assert_eq!(older.events[3].text.as_deref(), Some("sqlite message 5"));
+        assert_eq!(older.pagination.mode, "older");
+        assert_eq!(older.pagination.older_before_line, Some(2));
+    }
+
+    #[test]
     fn transcript_catalog_sqlite_overrides_stale_index_rollout_status() {
         let fixture =
             transcript_catalog_fixture("transcript-catalog-sqlite-overrides", "same-thread");
@@ -409,6 +452,32 @@
         fs::create_dir_all(codex_home.join("archived_sessions")).expect("create archived");
         let rollout = sessions_dir.join(format!("{thread_id}.jsonl"));
         write_test_rollout_events(&rollout, events);
+        let db_path = codex_home.join("state_5.sqlite");
+        create_test_threads_db(&db_path, thread_id, &rollout);
+        TranscriptCatalogFixture {
+            codex_home,
+            db_path,
+        }
+    }
+
+    fn transcript_catalog_numbered_fixture(
+        prefix: &str,
+        thread_id: &str,
+        count: usize,
+    ) -> TranscriptCatalogFixture {
+        let dir = test_temp_dir(prefix);
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let codex_home = dir.join("fake-codex-home");
+        let sessions_dir = codex_home.join("sessions");
+        fs::create_dir_all(&sessions_dir).expect("create sessions");
+        fs::create_dir_all(codex_home.join("archived_sessions")).expect("create archived");
+        let rollout = sessions_dir.join(format!("{thread_id}.jsonl"));
+        write_test_rollout_events(
+            &rollout,
+            (1..=count)
+                .map(|index| dispatch_text_event(&format!("sqlite message {index}")))
+                .collect(),
+        );
         let db_path = codex_home.join("state_5.sqlite");
         create_test_threads_db(&db_path, thread_id, &rollout);
         TranscriptCatalogFixture {

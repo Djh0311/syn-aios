@@ -74,6 +74,24 @@ export type SessionRecord = {
   warnings: string[];
 };
 
+export type CodexSessionPageRequest = {
+  page_size?: number | null;
+  offset?: number | null;
+  include_archived?: boolean | null;
+  archived_only?: boolean | null;
+};
+
+export type CodexSessionPage = {
+  sessions: SessionRecord[];
+  page_size: number;
+  offset: number;
+  has_more: boolean;
+  include_archived: boolean;
+  archived_only: boolean;
+  warnings: string[];
+  source: string;
+};
+
 export type CodexTranscriptEvent = {
   event_id: string;
   timestamp?: string | null;
@@ -93,6 +111,22 @@ export type CodexTranscriptEvent = {
   warnings: string[];
 };
 
+export type CodexTranscriptPagination = {
+  mode: string;
+  page_size: number;
+  returned_events: number;
+  total_line_count: number;
+  selected_line_count: number;
+  has_older: boolean;
+  older_before_line?: number | null;
+};
+
+export type CodexTranscriptPageRequest = {
+  thread_id: string;
+  limit?: number | null;
+  before_line?: number | null;
+};
+
 export type CodexTranscript = {
   thread_id: string;
   rollout_path: string;
@@ -110,6 +144,7 @@ export type CodexTranscript = {
     encrypted_content_event_count: number;
     sensitive_like_event_count: number;
   };
+  pagination?: CodexTranscriptPagination | null;
   warnings: string[];
   source_stats: {
     index_thread_count?: number | null;
@@ -117,6 +152,7 @@ export type CodexTranscript = {
       line_count?: number;
       parsed_line_count?: number;
       bad_json_line_count?: number;
+      selected_line_count?: number;
     };
     raw_type_counts?: Record<string, number>;
     payload_type_counts?: Record<string, number>;

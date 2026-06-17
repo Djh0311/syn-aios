@@ -21,6 +21,7 @@ import {
   inspectWorkflowRunCheck,
   loadBlackboardCandidateStore,
   loadCodexSessionTranscript,
+  loadCodexSessionTranscriptPage,
   loadFormalMemoryStore,
   loadMemoryCaptureStore,
   loadMemoryCandidateStore,
@@ -861,6 +862,7 @@ function renderActiveView(
         workflowState={workflowState}
         focusedThreadId={focusedAgentThreadId}
         onLoadTranscript={loadCodexSessionTranscript}
+        onLoadTranscriptPage={loadCodexSessionTranscriptPage}
         onRequestAction={onRequestAction}
       />
     );

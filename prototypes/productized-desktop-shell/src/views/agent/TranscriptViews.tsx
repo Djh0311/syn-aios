@@ -1,53 +1,208 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/Badge";
 import { conversationTurns } from "../../lib/conversationTurns";
 import type { CodexTranscript, CodexTranscriptEvent } from "../../lib/types";
 
-export function TranscriptTimeline({ transcript }: { transcript: CodexTranscript }) {
-  return <ChatTranscript transcript={transcript} />;
+const VIRTUAL_MESSAGE_WINDOW_SIZE = 12;
+const VIRTUAL_MESSAGE_OVERSCAN = 3;
+const ESTIMATED_MESSAGE_HEIGHT = 132;
+
+export function TranscriptTimeline({
+  olderLoading = false,
+  onLoadOlder,
+  transcript,
+}: {
+  olderLoading?: boolean;
+  onLoadOlder?: () => void;
+  transcript: CodexTranscript;
+}) {
+  return <ChatTranscript olderLoading={olderLoading} transcript={transcript} onLoadOlder={onLoadOlder} />;
 }
 
-export function ChatTranscript({ transcript }: { transcript: CodexTranscript }) {
+export function ChatTranscript({
+  olderLoading = false,
+  onLoadOlder,
+  transcript,
+}: {
+  olderLoading?: boolean;
+  onLoadOlder?: () => void;
+  transcript: CodexTranscript;
+}) {
   const [showInternal, setShowInternal] = useState(false);
-  const [showAllMessages, setShowAllMessages] = useState(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const previousScrollHeightRef = useRef<number | null>(null);
+  const autoRequestedOlderCursorRef = useRef<number | null>(null);
+  const [scrollTop, setScrollTop] = useState(Number.MAX_SAFE_INTEGER);
+  const [viewportHeight, setViewportHeight] = useState(720);
+  const [isNearBottom, setIsNearBottom] = useState(true);
 
   const conversation = useMemo(() => conversationTurns(transcript.events), [transcript.events]);
-  const visibleConversation = useMemo(
-    () => (showAllMessages ? conversation : conversation.slice(-12)),
-    [conversation, showAllMessages],
-  );
-  const hiddenConversationCount = conversation.length - visibleConversation.length;
+  const { stableConversation, streamingEvent } = useStreamingSeparatedConversation(conversation);
+  const virtualWindow = useVirtualMessageWindow(stableConversation, scrollTop, viewportHeight);
+  const hiddenConversationCount = stableConversation.length - virtualWindow.visible.length;
   const conversationIds = useMemo(() => new Set(conversation.map((event) => event.event_id)), [conversation]);
   const internalEvents = useMemo(
     () => transcript.events.filter((event) => !conversationIds.has(event.event_id)),
     [transcript.events, conversationIds],
   );
   const internalCount = internalEvents.length;
+  const olderCursor = transcript.pagination?.has_older ? transcript.pagination.older_before_line ?? null : null;
+  const hasOlderTranscript = !!olderCursor && !!onLoadOlder;
+  const boundedLoadMode = transcript.pagination && transcript.pagination.mode !== "full" ? "bounded" : "full";
 
   useEffect(() => {
-    setShowAllMessages(false);
+    if (autoRequestedOlderCursorRef.current !== olderCursor) {
+      autoRequestedOlderCursorRef.current = null;
+    }
+  }, [olderCursor]);
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    node.scrollTop = Math.max(0, stableConversation.length * ESTIMATED_MESSAGE_HEIGHT - node.clientHeight);
+    setScrollTop(node.scrollTop);
+    setViewportHeight(node.clientHeight || 720);
+    setIsNearBottom(true);
   }, [transcript.thread_id]);
+
+  useEffect(() => {
+    if (!isNearBottom) return;
+    const frame = window.requestAnimationFrame(() => scrollToLatest());
+    return () => window.cancelAnimationFrame(frame);
+  }, [isNearBottom, stableConversation.length, streamingEvent?.text]);
+
+  useEffect(() => {
+    const previousHeight = previousScrollHeightRef.current;
+    const node = scrollRef.current;
+    if (previousHeight === null || !node) return;
+    const delta = node.scrollHeight - previousHeight;
+    if (delta > 0) {
+      node.scrollTop += delta;
+      setScrollTop(node.scrollTop);
+    }
+    previousScrollHeightRef.current = null;
+  }, [transcript.events.length]);
+
+  function handleScroll(event: React.UIEvent<HTMLDivElement>) {
+    const target = event.currentTarget;
+    setScrollTop(target.scrollTop);
+    setViewportHeight(target.clientHeight || 720);
+    setIsNearBottom(target.scrollHeight - target.scrollTop - target.clientHeight < 100);
+    if (target.scrollTop < 24) requestOlderTranscript(false);
+  }
+
+  function scrollToLatest() {
+    const node = scrollRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+    setScrollTop(node.scrollTop);
+    setIsNearBottom(true);
+  }
+
+  function scrollOneWindow(direction: "earlier" | "newer") {
+    const node = scrollRef.current;
+    if (!node) return;
+    const delta = VIRTUAL_MESSAGE_WINDOW_SIZE * ESTIMATED_MESSAGE_HEIGHT;
+    node.scrollTop = Math.max(0, node.scrollTop + (direction === "earlier" ? -delta : delta));
+    setScrollTop(node.scrollTop);
+  }
+
+  function requestOlderTranscript(manual: boolean) {
+    if (!hasOlderTranscript || olderLoading || !olderCursor) return;
+    if (!manual && autoRequestedOlderCursorRef.current === olderCursor) return;
+    const node = scrollRef.current;
+    previousScrollHeightRef.current = node ? node.scrollHeight : null;
+    autoRequestedOlderCursorRef.current = olderCursor;
+    onLoadOlder?.();
+  }
+
+  const transcriptPageBoundary = hasOlderTranscript ? (
+    <button
+      className="secondary-button chat-load-older"
+      disabled={olderLoading}
+      type="button"
+      onClick={() => requestOlderTranscript(true)}
+    >
+      {olderLoading ? "正在加载更早对话" : "加载更早对话"}
+    </button>
+  ) : transcript.pagination?.mode && transcript.pagination.mode !== "full" ? (
+    <p className="session-reader-boundary">已到达这条对话的最早可读片段。</p>
+  ) : null;
 
   return (
     <section className="transcript-shell">
       {conversation.length === 0 ? (
-        <section className="empty-state">
-          <strong>这条会话没有可显示的对话</strong>
-          <span>如果需要排查工具调用、上下文或系统事件，请打开开发者详情。</span>
-        </section>
+        <>
+          <section className="empty-state">
+            <strong>这条会话没有可显示的对话</strong>
+            <span>如果需要排查工具调用、上下文或系统事件，请打开开发者详情。</span>
+          </section>
+          {transcriptPageBoundary}
+        </>
       ) : (
-        <div className="chat-stream">
+        <div
+          className="chat-stream"
+          data-conversation-engine="virtualized"
+          data-transcript-load={boundedLoadMode}
+          onScroll={handleScroll}
+          ref={scrollRef}
+        >
+          {transcriptPageBoundary}
           {hiddenConversationCount > 0 ? (
             <div className="chat-fold-notice">
-              <span>已收纳较早 {hiddenConversationCount} 条消息</span>
-              <button className="secondary-button" type="button" onClick={() => setShowAllMessages(true)}>
-                展开全部
+              <span>
+                虚拟消息窗口：已渲染 {virtualWindow.visible.length} / {conversation.length}，已收纳较早 {hiddenConversationCount} 条消息
+              </span>
+              {virtualWindow.start > 0 ? (
+                <button className="secondary-button" type="button" onClick={() => scrollOneWindow("earlier")}>
+                  展开全部
+                </button>
+              ) : null}
+              {virtualWindow.end < conversation.length ? (
+                <button className="secondary-button" type="button" onClick={() => scrollOneWindow("newer")}>
+                  查看更新
+                </button>
+              ) : null}
+              <button className="secondary-button" type="button" onClick={scrollToLatest}>
+                回到最新消息
               </button>
             </div>
           ) : null}
-          {visibleConversation.map((event) => (
-            <ChatBubble event={event} key={event.event_id} />
-          ))}
+          <div
+            className="chat-virtual-spacer"
+            data-stick-to-bottom={isNearBottom ? "true" : "false"}
+            data-streaming-separated={streamingEvent ? "true" : "false"}
+            style={{ height: virtualWindow.totalHeight, position: "relative" }}
+          >
+            <div
+              className="chat-virtual-window"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 18,
+                transform: `translateY(${virtualWindow.offsetTop}px)`,
+              }}
+            >
+              {virtualWindow.visible.map((event) => (
+                <ChatBubble event={event} key={event.event_id} />
+              ))}
+            </div>
+          </div>
+          {streamingEvent ? (
+            <div className="chat-streaming-tail" data-streaming-separated="true" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <ChatBubble event={streamingEvent} />
+            </div>
+          ) : null}
+          {!isNearBottom || streamingEvent ? (
+            <button
+              className="chat-return-bottom"
+              style={{ alignSelf: "center", bottom: 12, position: "sticky", zIndex: 2 }}
+              type="button"
+              onClick={scrollToLatest}
+            >
+              回到底部
+            </button>
+          ) : null}
         </div>
       )}
 
@@ -78,6 +233,45 @@ export function ChatTranscript({ transcript }: { transcript: CodexTranscript }) 
       ) : null}
     </section>
   );
+}
+
+function useStreamingSeparatedConversation(events: CodexTranscriptEvent[]) {
+  return useMemo(() => {
+    const last = events[events.length - 1];
+    if (last && metadataFlag(last, "conversation_engine_streaming")) {
+      return {
+        stableConversation: events.slice(0, -1),
+        streamingEvent: last,
+      };
+    }
+    return {
+      stableConversation: events,
+      streamingEvent: null,
+    };
+  }, [events]);
+}
+
+function metadataFlag(event: CodexTranscriptEvent, key: string): boolean {
+  const metadata = event.metadata;
+  return !!metadata && typeof metadata === "object" && !Array.isArray(metadata) && metadata[key] === true;
+}
+
+function useVirtualMessageWindow(events: CodexTranscriptEvent[], scrollTop: number, viewportHeight: number) {
+  return useMemo(() => {
+    const visibleByHeight = Math.ceil(viewportHeight / ESTIMATED_MESSAGE_HEIGHT) + VIRTUAL_MESSAGE_OVERSCAN * 2;
+    const windowSize = Math.max(VIRTUAL_MESSAGE_WINDOW_SIZE, visibleByHeight);
+    const firstVisible = Math.max(0, Math.floor(scrollTop / ESTIMATED_MESSAGE_HEIGHT) - VIRTUAL_MESSAGE_OVERSCAN);
+    const latestStart = Math.max(0, events.length - windowSize);
+    const start = Math.min(firstVisible, latestStart);
+    const end = Math.min(events.length, start + windowSize);
+    return {
+      start,
+      end,
+      offsetTop: start * ESTIMATED_MESSAGE_HEIGHT,
+      totalHeight: events.length * ESTIMATED_MESSAGE_HEIGHT,
+      visible: events.slice(start, end),
+    };
+  }, [events, scrollTop, viewportHeight]);
 }
 
 function ChatBubble({ event }: { event: CodexTranscriptEvent }) {

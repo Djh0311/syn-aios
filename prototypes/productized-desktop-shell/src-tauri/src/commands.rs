@@ -55,6 +55,212 @@ fn load_codex_session_transcript(
 }
 
 #[tauri::command]
+fn load_codex_session_transcript_page(
+    request: CodexTranscriptPageRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<CodexTranscript, String> {
+    load_codex_session_transcript_page_for_index(&state, &request)
+}
+
+fn load_codex_session_transcript_page_for_index(
+    state: &AppState,
+    request: &CodexTranscriptPageRequest,
+) -> Result<CodexTranscript, String> {
+    let db_path = codex_db::default_state_db_path();
+    match read_index(state) {
+        Ok(index) => load_codex_session_transcript_page_with_catalog(&index, request, &db_path),
+        Err(index_error) => load_codex_session_transcript_page_with_optional_catalog(
+            None,
+            request,
+            &db_path,
+            Some(index_error),
+        ),
+    }
+}
+
+fn load_codex_session_transcript_page_with_catalog(
+    index: &Value,
+    request: &CodexTranscriptPageRequest,
+    db_path: &Path,
+) -> Result<CodexTranscript, String> {
+    load_codex_session_transcript_page_with_optional_catalog(Some(index), request, db_path, None)
+}
+
+fn load_codex_session_transcript_page_with_optional_catalog(
+    index: Option<&Value>,
+    request: &CodexTranscriptPageRequest,
+    db_path: &Path,
+    index_error: Option<String>,
+) -> Result<CodexTranscript, String> {
+    match codex_db::read_threads(db_path) {
+        Ok(rows) => {
+            if let Some(row) = rows
+                .into_iter()
+                .find(|row| row.thread_id == request.thread_id)
+            {
+                return load_codex_session_transcript_page_from_sqlite_row(&row, db_path, request);
+            }
+        }
+        Err(err) => {
+            if let Some(index) = index {
+                if let Some(thread) = find_index_thread(index, &request.thread_id) {
+                    return load_codex_session_transcript_page_from_index_thread(
+                        index,
+                        &thread,
+                        "index_fallback_sqlite_unavailable",
+                        request,
+                    );
+                }
+            }
+            if let Some(index_error) = index_error {
+                return Err(format!(
+                    "sqlite_unavailable:{err};index_unavailable:{index_error}"
+                ));
+            }
+            return Err(format!("sqlite_unavailable:{err}"));
+        }
+    }
+
+    if let Some(index) = index {
+        if let Some(thread) = find_index_thread(index, &request.thread_id) {
+            return load_codex_session_transcript_page_from_index_thread(
+                index,
+                &thread,
+                "index_fallback_thread_missing_in_sqlite",
+                request,
+            );
+        }
+    }
+
+    Err(format!("session_not_found:{}", request.thread_id))
+}
+
+fn load_codex_session_transcript_page_from_sqlite_row(
+    row: &codex_db::CodexThreadRow,
+    db_path: &Path,
+    request: &CodexTranscriptPageRequest,
+) -> Result<CodexTranscript, String> {
+    let codex_home = db_path
+        .parent()
+        .ok_or_else(|| "unexpected_internal_error:sqlite_db_path_without_parent".to_string())?;
+    let metadata = codex_transcript::TranscriptThreadMetadata {
+        thread_id: row.thread_id.clone(),
+        rollout_path: row.rollout_path.clone(),
+        project_root: row.project_root.clone(),
+        title: Some(row.title.clone()),
+        created_at_ms: None,
+        updated_at_ms: row.updated_at_ms,
+        catalog_source: "sqlite".to_string(),
+        index_thread_count: None,
+    };
+    codex_transcript::read_transcript_page_from_rollout(
+        metadata,
+        codex_home,
+        transcript_page_request(request),
+    )
+}
+
+fn load_codex_session_transcript_page_from_index_thread(
+    index: &Value,
+    thread: &SessionRecord,
+    catalog_source: &str,
+    request: &CodexTranscriptPageRequest,
+) -> Result<CodexTranscript, String> {
+    let codex_home = codex_home_from_index(index)?;
+    let metadata = codex_transcript::TranscriptThreadMetadata {
+        thread_id: thread.thread_id.clone(),
+        rollout_path: thread.rollout_path.clone(),
+        project_root: thread.project_root.clone(),
+        title: Some(thread.title.clone()),
+        created_at_ms: None,
+        updated_at_ms: thread.updated_at_ms,
+        catalog_source: catalog_source.to_string(),
+        index_thread_count: index.get("threads").and_then(Value::as_array).map(Vec::len),
+    };
+    codex_transcript::read_transcript_page_from_rollout(
+        metadata,
+        &codex_home,
+        transcript_page_request(request),
+    )
+}
+
+fn transcript_page_request(
+    request: &CodexTranscriptPageRequest,
+) -> codex_transcript::TranscriptReadPageRequest {
+    codex_transcript::TranscriptReadPageRequest {
+        limit: request.limit.unwrap_or(80),
+        before_line: request.before_line,
+    }
+}
+
+#[tauri::command]
+fn load_codex_session_page(
+    request: CodexSessionPageRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<CodexSessionPage, String> {
+    let db_path = codex_db::default_state_db_path();
+    let page = codex_db::read_threads_page(
+        &db_path,
+        codex_db::CodexThreadPageOptions {
+            page_size: request.page_size.unwrap_or(100),
+            offset: request.offset.unwrap_or(0),
+            include_archived: request.include_archived.unwrap_or(false),
+            archived_only: request.archived_only.unwrap_or(false),
+        },
+    );
+    match page {
+        Ok(page) => Ok(CodexSessionPage {
+            sessions: page
+                .rows
+                .into_iter()
+                .map(session_record_from_codex_thread)
+                .collect(),
+            page_size: page.page_size,
+            offset: page.offset,
+            has_more: page.has_more,
+            include_archived: page.include_archived,
+            archived_only: page.archived_only,
+            warnings: Vec::new(),
+            source: "sqlite_page".to_string(),
+        }),
+        Err(error) => {
+            let index = read_index(&state)?;
+            let include_archived = request.include_archived.unwrap_or(false);
+            let archived_only = request.archived_only.unwrap_or(false);
+            let page_size = request.page_size.unwrap_or(100).clamp(1, 250);
+            let offset = request.offset.unwrap_or(0);
+            let mut sessions: Vec<SessionRecord> = parse_sessions(&index)
+                .into_iter()
+                .filter(|session| {
+                    if archived_only {
+                        session.archived
+                    } else {
+                        include_archived || !session.archived
+                    }
+                })
+                .collect();
+            sessions.sort_by(|a, b| {
+                let at = a.updated_at_ms.unwrap_or(0);
+                let bt = b.updated_at_ms.unwrap_or(0);
+                bt.cmp(&at).then_with(|| b.thread_id.cmp(&a.thread_id))
+            });
+            let has_more = sessions.len() > offset.saturating_add(page_size);
+            let page_sessions = sessions.into_iter().skip(offset).take(page_size).collect();
+            Ok(CodexSessionPage {
+                sessions: page_sessions,
+                page_size,
+                offset,
+                has_more,
+                include_archived,
+                archived_only,
+                warnings: vec![format!("codex sqlite 分页读取失败，回落到旧索引分页：{error}")],
+                source: "index_fallback_page".to_string(),
+            })
+        }
+    }
+}
+
+#[tauri::command]
 fn load_workflow_state_snapshot(
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowStateSnapshot, String> {

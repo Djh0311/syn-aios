@@ -118,7 +118,7 @@ export const agentBoundaryTextFixtures = {
     "worker 执行中",
     "readback 已完成",
   ],
-  sessionContinuationForbiddenButtonTexts: ["新建会话", "发消息", "发送", "resume", "申请确认", "执行", "重试"],
+  sessionContinuationForbiddenButtonTexts: ["发消息", "resume", "申请确认", "执行", "重试"],
   sessionContinuationForbiddenProposalTexts: ["新建会话", "发送", "发消息", "resume", "批准", "确认预览", "重试"],
   controlledContinuationLevelAExpectedTexts: [
     "受控会话继续 / E5 Level A",
@@ -141,7 +141,7 @@ export const agentBoundaryTextFixtures = {
     "0 条读回",
     "0 条结果",
   ],
-  controlledContinuationLevelAForbiddenButtonTexts: ["发消息", "发送", "resume", "执行", "重试", "stub 验收"],
+  controlledContinuationLevelAForbiddenButtonTexts: ["发消息", "resume", "执行", "重试", "stub 验收"],
   controlledContinuationLevelAForbiddenProposalTexts: ["发送", "发消息", "resume", "批准", "确认", "重试", "stub"],
   h2ReadinessExpectedTexts: [
     "H2 真实恢复授权准备",
@@ -174,7 +174,7 @@ export const agentBoundaryTextFixtures = {
     "0 条读回",
     "final approval 已批准",
   ],
-  h2ReadinessForbiddenButtonTexts: ["执行", "resume", "发送", "确认", "授权", "重试"],
+  h2ReadinessForbiddenButtonTexts: ["执行", "resume", "确认", "授权", "重试"],
   h2ReadinessForbiddenProposalTexts: ["发送", "发消息", "resume", "批准", "确认", "重试"],
   runtimeAttentionExpectedTexts: [
     "运行关注 / E6",
@@ -199,6 +199,6 @@ export const agentBoundaryTextFixtures = {
     "OpenClaw 已运行",
     "OpenCode 已 resume",
   ],
-  runtimeAttentionForbiddenButtonTexts: ["发送", "resume", "重试", "停止", "重启"],
+  runtimeAttentionForbiddenButtonTexts: ["resume", "重试", "停止", "重启"],
   runtimeAttentionForbiddenProposalTexts: ["发送", "resume", "批准", "确认", "重试", "停止", "重启"],
 } as const;

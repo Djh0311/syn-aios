@@ -22,28 +22,29 @@ fn load_sessions_from_sqlite_or_index(index: &Value) -> (Vec<SessionRecord>, Vec
     let db_path = codex_db::default_state_db_path();
     match codex_db::read_threads(&db_path) {
         Ok(rows) => {
-            let sessions = rows
-                .into_iter()
-                .map(|r| SessionRecord {
-                    thread_id: r.thread_id,
-                    title: r.title,
-                    project_root: r.project_root,
-                    updated_at_ms: r.updated_at_ms,
-                    archived: r.archived,
-                    rollout_exists: r.rollout_exists,
-                    rollout_path: r.rollout_path,
-                    model: r.model,
-                    reasoning_effort: r.reasoning_effort,
-                    thread_source: r.thread_source,
-                    warnings: r.warnings,
-                })
-                .collect();
+            let sessions = rows.into_iter().map(session_record_from_codex_thread).collect();
             (sessions, Vec::new())
         }
         Err(err) => (
             parse_sessions(index),
             vec![format!("codex sqlite 读取失败，回落到旧索引：{err}")],
         ),
+    }
+}
+
+fn session_record_from_codex_thread(r: codex_db::CodexThreadRow) -> SessionRecord {
+    SessionRecord {
+        thread_id: r.thread_id,
+        title: r.title,
+        project_root: r.project_root,
+        updated_at_ms: r.updated_at_ms,
+        archived: r.archived,
+        rollout_exists: r.rollout_exists,
+        rollout_path: r.rollout_path,
+        model: r.model,
+        reasoning_effort: r.reasoning_effort,
+        thread_source: r.thread_source,
+        warnings: r.warnings,
     }
 }
 
@@ -155,6 +156,7 @@ fn parse_codex_transcript(value: &Value) -> Result<CodexTranscript, String> {
         .iter()
         .map(parse_codex_transcript_event)
         .collect::<Vec<_>>();
+    let event_count = events.len();
 
     Ok(CodexTranscript {
         thread_id: optional_string_from(value, "thread_id")
@@ -174,6 +176,15 @@ fn parse_codex_transcript(value: &Value) -> Result<CodexTranscript, String> {
             warning_count: usize_value(summary, "warning_count"),
             encrypted_content_event_count: usize_value(summary, "encrypted_content_event_count"),
             sensitive_like_event_count: usize_value(summary, "sensitive_like_event_count"),
+        },
+        pagination: CodexTranscriptPagination {
+            mode: "full".to_string(),
+            page_size: event_count,
+            returned_events: event_count,
+            total_line_count: event_count,
+            selected_line_count: event_count,
+            has_older: false,
+            older_before_line: None,
         },
         warnings: string_array(value, "warnings"),
         source_stats: value.get("source_stats").cloned().unwrap_or(Value::Null),

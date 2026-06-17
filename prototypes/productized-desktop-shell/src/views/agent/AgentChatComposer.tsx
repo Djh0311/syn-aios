@@ -1,65 +1,33 @@
-import { pathTail } from "../../lib/format";
-import type {
-  RealExecutionProductCommandDecisionOutput,
-  RealExecutionProductCommandPhaseAOutput,
-  RealExecutionProductCommandPhaseBOutput,
-  RealExecutionProductCommandPrepareOutput,
-  RealExecutionProductCommandPreview,
-  SessionRecord,
-} from "../../lib/types";
-import { readbackCountLabel } from "./TranscriptViews";
+import type { SessionRecord } from "../../lib/types";
 
 export function AgentChatComposer({
   selectedProjectRoot,
   selectedSession,
   draftPrompt,
-  k2Preview,
-  k2PreviewBusy,
-  k2ActionBusy,
-  k2PrepareOutput,
-  k2DecisionOutput,
-  k2PhaseAOutput,
-  k2PhaseBOutput,
   k2PreviewError,
   k2Operation,
   onChangeDraft,
-  onGeneratePreview,
-  onPrepareCommand,
-  onConfirmCommand,
-  onRecordPhaseA,
-  onRunPhaseB,
+  onSubmitDraft,
   onOpenDeveloperDetails,
 }: {
   selectedProjectRoot: string;
   selectedSession: SessionRecord | null;
   draftPrompt: string;
-  k2Preview: RealExecutionProductCommandPreview | null;
-  k2PreviewBusy: boolean;
-  k2ActionBusy: string | null;
-  k2PrepareOutput: RealExecutionProductCommandPrepareOutput | null;
-  k2DecisionOutput: RealExecutionProductCommandDecisionOutput | null;
-  k2PhaseAOutput: RealExecutionProductCommandPhaseAOutput | null;
-  k2PhaseBOutput: RealExecutionProductCommandPhaseBOutput | null;
   k2PreviewError: string | null;
   k2Operation: "resume" | "new_session";
   onChangeDraft: (value: string) => void;
-  onGeneratePreview: () => Promise<void>;
-  onPrepareCommand: () => Promise<void>;
-  onConfirmCommand: () => Promise<void>;
-  onRecordPhaseA: () => Promise<void>;
-  onRunPhaseB: () => Promise<void>;
+  onSubmitDraft: () => void;
   onOpenDeveloperDetails: () => void;
 }) {
   const canPreview = Boolean(selectedProjectRoot && draftPrompt.trim() && (k2Operation === "new_session" || selectedSession));
-  const canRunPhaseB = Boolean(k2PhaseAOutput && !k2PhaseAOutput.blocked_reasons.length && !k2PhaseBOutput);
-  const operationLabel = k2Operation === "new_session" ? "新建对话" : "继续已有对话";
   return (
     <form
       className="agent-chat-composer"
+      data-send-mode="decision-only"
       aria-label="智能体任务输入"
       onSubmit={(event) => void (async () => {
         event.preventDefault();
-        await onGeneratePreview();
+        onSubmitDraft();
       })()}
     >
       <label>
@@ -67,93 +35,34 @@ export function AgentChatComposer({
         <textarea
           aria-label="输入给 Codex 的任务"
           value={draftPrompt}
-          placeholder="写下要让 Codex 做的事。发送前会先让你确认项目、对话、权限和记忆影响。"
+          placeholder="写下要让 Codex 做的事。Enter 发送；Shift+Enter 换行。"
           rows={3}
           onChange={(event) => onChangeDraft(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.shiftKey) return;
+            event.preventDefault();
+            onSubmitDraft();
+          }}
         />
       </label>
       <div className="agent-chat-composer-foot">
         <span>
           {k2Operation === "new_session"
-            ? "将创建新对话：先生成预览，再确认执行"
+            ? "将记录新对话发送意图；真实创建仍需另行授权"
             : selectedSession
             ? `当前对话：${selectedSession.title || selectedSession.thread_id}`
             : "请选择一个可读取对话"}
         </span>
-        <button className="primary-button" disabled={!canPreview || k2PreviewBusy} type="submit">
-          {k2PreviewBusy ? "生成中" : "生成发送预览"}
+        <button className="primary-button" disabled={!canPreview} type="submit">
+          发送
         </button>
       </div>
-      {k2PreviewError ? <p className="error-text">预览失败：{k2PreviewError}</p> : null}
-      {k2Preview ? (
-        <section className="agent-send-preview" aria-label="发送预览">
-          <div>
-            <strong>{k2Preview.blocked_reasons.length ? "需要处理后再发送" : "发送前确认材料已生成"}</strong>
-            <span>{operationLabel} · 只读沙箱 · 需要用户确认</span>
-          </div>
-          <div className="agent-send-preview-grid">
-            <span>项目：{selectedProjectRoot ? pathTail(selectedProjectRoot) : "未选择"}</span>
-            <span>对话：{k2Operation === "new_session" ? "新建对话" : selectedSession?.title || selectedSession?.thread_id || "未选择"}</span>
-            <span>读回：{readbackStatusLabel(k2Preview.readback_boundary.status)} · 结果数 {readbackCountLabel(k2Preview.readback_boundary.result_count)}</span>
-            <span>记忆：只生成观察 / 候选来源，不自动写正式记忆</span>
-            <span>准备：{k2PrepareOutput?.status ?? "未写入"}</span>
-            <span>确认：{k2DecisionOutput?.status ?? "未确认"}</span>
-            <span>预检：{k2PhaseAOutput?.status ?? "未记录"}</span>
-            <span>执行：{k2PhaseBOutput?.status ?? "未执行"}</span>
-          </div>
-          {k2Preview.blocked_reasons.length ? (
-            <div className="agent-send-preview-warnings">
-              {k2Preview.blocked_reasons.map((reason) => (
-                <span key={reason}>{codexControlReasonLabel(reason)}</span>
-              ))}
-            </div>
-          ) : null}
-          <div className="action-row compact">
-            <button
-              className="secondary-button"
-              disabled={!!k2Preview.blocked_reasons.length || !!k2ActionBusy}
-              type="button"
-              onClick={() => void onPrepareCommand()}
-            >
-              {k2ActionBusy === "prepare" ? "准备中" : "写入准备"}
-            </button>
-            <button
-              className="secondary-button"
-              disabled={k2PrepareOutput?.status !== "prepared" || !!k2ActionBusy}
-              type="button"
-              onClick={() => void onConfirmCommand()}
-            >
-              {k2ActionBusy === "confirm" ? "确认中" : "用户确认"}
-            </button>
-            <button
-              className="secondary-button"
-              disabled={!k2DecisionOutput || !!k2ActionBusy}
-              type="button"
-              onClick={() => void onRecordPhaseA()}
-            >
-              {k2ActionBusy === "phase-a" ? "记录中" : "记录预检"}
-            </button>
-            <button
-              className="primary-button"
-              disabled={!canRunPhaseB || !!k2ActionBusy}
-              type="button"
-              onClick={() => void onRunPhaseB()}
-            >
-              {k2ActionBusy === "phase-b" ? "执行中" : "确认执行 Codex"}
-            </button>
-            <button className="secondary-button" type="button" onClick={onOpenDeveloperDetails}>
-              查看开发者详情
-            </button>
-          </div>
-          {k2PhaseBOutput ? (
-            <p>
-              执行结果：{k2PhaseBOutput.status} · 读回 {readbackStatusLabel(k2PhaseBOutput.readback_summary.status)} · 结果数 {readbackCountLabel(k2PhaseBOutput.readback_summary.result_count)}
-            </p>
-          ) : null}
-        </section>
-      ) : null}
+      {k2PreviewError ? <p className="error-text">发送意图记录失败：{k2PreviewError}</p> : null}
+      <button className="secondary-button" type="button" onClick={onOpenDeveloperDetails}>
+        查看发送边界
+      </button>
       <p>
-        预览不会直接发送。下一步仍要确认要做什么、影响哪里、是否写入项目，以及是否产生记忆候选。
+        已记录发送意图，等待授权执行；本按钮不真跑 Codex、不解锁 K3-B1 / K3-B2。
       </p>
     </form>
   );

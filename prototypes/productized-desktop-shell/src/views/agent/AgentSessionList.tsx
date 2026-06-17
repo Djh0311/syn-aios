@@ -1,4 +1,5 @@
 import type React from "react";
+import { useEffect, useMemo, useState } from "react";
 import { pathTail, relativeTime } from "../../lib/format";
 import type { SessionRecord } from "../../lib/types";
 
@@ -38,8 +39,8 @@ export function statusOf(session: SessionRecord): { tone: "ok" | "warn" | "err" 
 }
 
 export function sessionMatchesReadFilter(session: SessionRecord, filter: SessionReadFilter): boolean {
-  if (filter === "all") return true;
-  if (filter === "missing") return !session.rollout_exists || !session.rollout_path;
+  if (filter === "all") return !session.archived;
+  if (filter === "missing") return !session.archived && (!session.rollout_exists || !session.rollout_path);
   if (filter === "archived") return session.archived;
   return !session.archived && !!session.rollout_exists && !!session.rollout_path;
 }
@@ -107,6 +108,8 @@ export type AgentSessionGroup = {
   sessions: SessionRecord[];
 };
 
+const SESSION_RENDER_WINDOW_SIZE = 40;
+
 export function AgentSessionList({
   sessions,
   visibleSessions,
@@ -127,8 +130,13 @@ export function AgentSessionList({
   collapsedKeys,
   onToggleGroup,
   onOpenSession,
+  sessionPageStatus = "idle",
+  sessionPageSource = null,
+  sessionPageWarnings = [],
+  sessionHasMore = false,
+  loadingMoreSessions = false,
+  onLoadMoreSessions,
 }: {
-  // 当前仍由适配层传入数组；后续可替换成分页、虚拟滚动或直读数据库数据源。
   sessions: SessionRecord[];
   visibleSessions: SessionRecord[];
   groups: AgentSessionGroup[];
@@ -148,7 +156,50 @@ export function AgentSessionList({
   onReadFilterChange: (filter: SessionReadFilter) => void;
   onToggleGroup: (key: string) => void;
   onOpenSession: (session: SessionRecord) => void;
+  sessionPageStatus?: "idle" | "loading" | "error";
+  sessionPageSource?: string | null;
+  sessionPageWarnings?: string[];
+  sessionHasMore?: boolean;
+  loadingMoreSessions?: boolean;
+  onLoadMoreSessions?: () => void;
 }) {
+  const [renderLimit, setRenderLimit] = useState(SESSION_RENDER_WINDOW_SIZE);
+  useEffect(() => {
+    setRenderLimit(SESSION_RENDER_WINDOW_SIZE);
+  }, [effectiveGroupBy, readFilter, searchQuery]);
+
+  const windowedGroups = useMemo(() => {
+    let remaining = renderLimit;
+    const next: AgentSessionGroup[] = [];
+    for (const group of groups) {
+      if (collapsedKeys.has(group.key)) {
+        next.push(group);
+        continue;
+      }
+      if (remaining <= 0) break;
+      const shownSessions = group.sessions.slice(0, remaining);
+      remaining -= shownSessions.length;
+      if (shownSessions.length) {
+        next.push({ ...group, sessions: shownSessions });
+      }
+    }
+    return next;
+  }, [collapsedKeys, groups, renderLimit]);
+  const renderedSessionCount = windowedGroups.reduce(
+    (count, group) => count + (collapsedKeys.has(group.key) ? 0 : group.sessions.length),
+    0,
+  );
+  const hasLocalMore = renderedSessionCount < visibleSessions.length;
+  const canLoadMore = hasLocalMore || sessionHasMore;
+
+  function handleLoadMore() {
+    if (hasLocalMore) {
+      setRenderLimit((current) => current + SESSION_RENDER_WINDOW_SIZE);
+      return;
+    }
+    onLoadMoreSessions?.();
+  }
+
   return (
     <aside className="agent-session-list" aria-label="会话列表">
       {!showSoftware ? (
@@ -191,6 +242,17 @@ export function AgentSessionList({
             </button>
           ))}
         </div>
+        <p className="muted small-note">
+          已渲染 {renderedSessionCount} / {visibleSessions.length}；后端分页默认隔离归档。
+          {readFilter === "archived" ? " 显式归档视图：归档会话不会混入默认列表。" : ""}
+        </p>
+        {sessionPageStatus === "loading" || sessionPageSource || sessionPageWarnings.length ? (
+          <p className="muted small-note">
+            {sessionPageStatus === "loading" ? "正在读取会话分页。" : null}
+            {sessionPageSource ? ` 会话页来源：${sessionPageSource}。` : null}
+            {sessionPageWarnings.length ? ` ${sessionPageWarnings.join("；")}` : null}
+          </p>
+        ) : null}
         {selectedCollapsedGroup ? (
           <p className="session-collapsed-selection">
             当前选中会话在已收纳分组内：{effectiveGroupBy === "project" && selectedCollapsedGroup.key !== NO_PROJECT_KEY ? pathTail(selectedCollapsedGroup.label) : selectedCollapsedGroup.label}
@@ -200,7 +262,7 @@ export function AgentSessionList({
       {groups.length === 0 ? (
         <p className="muted small-note">没有符合搜索或过滤条件的会话。已过滤 {filteredOutCount} 条。</p>
       ) : (
-        groups.map((group) => {
+        windowedGroups.map((group) => {
           const collapsed = collapsedKeys.has(group.key);
           return (
           <div className={`session-group ${collapsed ? "collapsed" : ""}`} key={group.key}>
@@ -248,6 +310,21 @@ export function AgentSessionList({
           );
         })
       )}
+      {canLoadMore ? (
+        <div className="session-list-controls">
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={loadingMoreSessions}
+            onClick={handleLoadMore}
+          >
+            显示更多会话
+          </button>
+          <span className="muted small-note">
+            {hasLocalMore ? "继续展开当前页的虚拟窗口。" : "继续读取下一页会话元数据。"}
+          </span>
+        </div>
+      ) : null}
     </aside>
   );
 }

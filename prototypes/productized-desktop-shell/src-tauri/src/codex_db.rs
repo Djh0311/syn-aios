@@ -23,6 +23,35 @@ pub struct CodexThreadRow {
     pub warnings: Vec<String>,
 }
 
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub struct CodexThreadPage {
+    pub rows: Vec<CodexThreadRow>,
+    pub page_size: usize,
+    pub offset: usize,
+    pub has_more: bool,
+    pub include_archived: bool,
+    pub archived_only: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CodexThreadPageOptions {
+    pub page_size: usize,
+    pub offset: usize,
+    pub include_archived: bool,
+    pub archived_only: bool,
+}
+
+impl Default for CodexThreadPageOptions {
+    fn default() -> Self {
+        Self {
+            page_size: 100,
+            offset: 0,
+            include_archived: false,
+            archived_only: false,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct SessionIndexRow {
     id: String,
@@ -58,9 +87,37 @@ fn latest_state_db_path(codex_dir: &Path) -> Option<PathBuf> {
 /// Read all threads from codex's sqlite.
 /// Skips threads where has_user_event=0 (codex desktop hides those too — they're empty placeholders).
 pub fn read_threads(db_path: &Path) -> Result<Vec<CodexThreadRow>, String> {
+    let mut rows = Vec::new();
+    let mut offset = 0;
+    loop {
+        let page = read_threads_page(
+            db_path,
+            CodexThreadPageOptions {
+                page_size: 250,
+                offset,
+                include_archived: true,
+                archived_only: false,
+            },
+        )?;
+        offset += page.rows.len();
+        rows.extend(page.rows);
+        if !page.has_more {
+            return Ok(rows);
+        }
+    }
+}
+
+/// Read one page of non-archived threads by default.
+/// This keeps session shell loading bounded while preserving the older read_threads() helper.
+pub fn read_threads_page(
+    db_path: &Path,
+    options: CodexThreadPageOptions,
+) -> Result<CodexThreadPage, String> {
     if !db_path.exists() {
         return Err(format!("找不到 codex 状态库：{}", db_path.display()));
     }
+    let page_size = options.page_size.clamp(1, 250);
+    let offset = options.offset;
 
     let conn = Connection::open_with_flags(
         db_path,
@@ -68,7 +125,15 @@ pub fn read_threads(db_path: &Path) -> Result<Vec<CodexThreadRow>, String> {
     )
     .map_err(|e| format!("打开 sqlite 失败 {}：{e}", db_path.display()))?;
 
-    let sql = r#"
+    let archived_clause = if options.archived_only {
+        "AND archived = 1"
+    } else if options.include_archived {
+        ""
+    } else {
+        "AND archived = 0"
+    };
+    let sql = format!(
+        r#"
         SELECT
             id,
             COALESCE(NULLIF(title, ''), '未命名会话') AS title,
@@ -81,15 +146,18 @@ pub fn read_threads(db_path: &Path) -> Result<Vec<CodexThreadRow>, String> {
             thread_source
         FROM threads
         WHERE has_user_event = 1
+        {archived_clause}
         ORDER BY updated_at_ms DESC, id DESC
-    "#;
+        LIMIT ?1 OFFSET ?2
+    "#
+    );
 
     let mut stmt = conn
-        .prepare(sql)
+        .prepare(&sql)
         .map_err(|e| format!("准备查询失败：{e}"))?;
 
     let rows = stmt
-        .query_map([], |row| {
+        .query_map([page_size as i64 + 1, offset as i64], |row| {
             let thread_id: String = row.get(0)?;
             let title: String = row.get(1)?;
             let cwd: String = row.get(2)?;
@@ -143,7 +211,37 @@ pub fn read_threads(db_path: &Path) -> Result<Vec<CodexThreadRow>, String> {
         }
         out.push(thread);
     }
-    Ok(out)
+    let has_more = out.len() > page_size;
+    out.truncate(page_size);
+    Ok(CodexThreadPage {
+        rows: out,
+        page_size,
+        offset,
+        has_more,
+        include_archived: options.include_archived,
+        archived_only: options.archived_only,
+    })
+}
+
+pub fn has_parent_session_id_column(db_path: &Path) -> Result<bool, String> {
+    if !db_path.exists() {
+        return Err(format!("找不到 codex 状态库：{}", db_path.display()));
+    }
+    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| format!("打开 sqlite 失败 {}：{e}", db_path.display()))?;
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(threads)")
+        .map_err(|e| format!("准备 threads schema 查询失败：{e}"))?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| format!("读取 threads schema 失败：{e}"))?;
+    for row in rows {
+        if row.map_err(|e| format!("读取 threads schema row 失败：{e}"))? == "parent_session_id"
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn read_session_index_titles(db_path: &Path) -> HashMap<String, String> {
@@ -248,6 +346,167 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    #[test]
+    fn read_threads_page_filters_archived_and_limits_rows() {
+        let dir = temp_dir("codex-session-page");
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let db_path = dir.join("state_5.sqlite");
+        create_threads_db(&db_path);
+        insert_thread(&db_path, "thread-2", "第二条", 2_000, 0, 1);
+        insert_thread(&db_path, "thread-3", "第三条归档", 3_000, 1, 1);
+        insert_thread(&db_path, "thread-4", "第四条占位", 4_000, 0, 0);
+
+        let page = read_threads_page(
+            &db_path,
+            CodexThreadPageOptions {
+                page_size: 1,
+                offset: 0,
+                include_archived: false,
+                archived_only: false,
+            },
+        )
+        .expect("read page");
+
+        assert_eq!(page.rows.len(), 1);
+        assert_eq!(page.rows[0].thread_id, "thread-2");
+        assert!(!page.rows[0].archived);
+        assert!(page.has_more);
+        assert!(!page.include_archived);
+
+        let next_page = read_threads_page(
+            &db_path,
+            CodexThreadPageOptions {
+                page_size: 10,
+                offset: 1,
+                include_archived: false,
+                archived_only: false,
+            },
+        )
+        .expect("read next page");
+        assert_eq!(
+            next_page
+                .rows
+                .iter()
+                .map(|row| row.thread_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["thread-1"]
+        );
+        assert!(!next_page.has_more);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn read_threads_page_can_include_archived_for_explicit_archive_view() {
+        let dir = temp_dir("codex-session-page-archived");
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let db_path = dir.join("state_5.sqlite");
+        create_threads_db(&db_path);
+        insert_thread(&db_path, "thread-archived", "归档条目", 2_000, 1, 1);
+
+        let page = read_threads_page(
+            &db_path,
+            CodexThreadPageOptions {
+                page_size: 10,
+                offset: 0,
+                include_archived: true,
+                archived_only: false,
+            },
+        )
+        .expect("read archived page");
+
+        assert_eq!(
+            page.rows
+                .iter()
+                .map(|row| (row.thread_id.as_str(), row.archived))
+                .collect::<Vec<_>>(),
+            vec![("thread-archived", true), ("thread-1", false)]
+        );
+        assert!(page.include_archived);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn read_threads_page_can_target_archived_only() {
+        let dir = temp_dir("codex-session-page-archived-only");
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let db_path = dir.join("state_5.sqlite");
+        create_threads_db(&db_path);
+        insert_thread(&db_path, "thread-archived", "归档条目", 2_000, 1, 1);
+
+        let page = read_threads_page(
+            &db_path,
+            CodexThreadPageOptions {
+                page_size: 10,
+                offset: 0,
+                include_archived: false,
+                archived_only: true,
+            },
+        )
+        .expect("read archived-only page");
+
+        assert_eq!(
+            page.rows
+                .iter()
+                .map(|row| (row.thread_id.as_str(), row.archived))
+                .collect::<Vec<_>>(),
+            vec![("thread-archived", true)]
+        );
+        assert!(page.archived_only);
+        assert!(!page.include_archived);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn detects_parent_session_id_column_from_fixture_schema_only() {
+        let dir = temp_dir("codex-parent-session-column");
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let db_path = dir.join("state_5.sqlite");
+        create_threads_db(&db_path);
+        assert!(
+            !has_parent_session_id_column(&db_path).expect("detect missing parent column"),
+            "baseline fixture should not pretend subagent folding is available"
+        );
+
+        let conn = Connection::open(&db_path).expect("open sqlite");
+        conn.execute("ALTER TABLE threads ADD COLUMN parent_session_id TEXT", [])
+            .expect("add parent_session_id");
+        assert!(
+            has_parent_session_id_column(&db_path).expect("detect parent column"),
+            "schema discovery should notice parent_session_id when present"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn read_threads_legacy_helper_still_reads_all_pages() {
+        let dir = temp_dir("codex-read-threads-all-pages");
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let db_path = dir.join("state_5.sqlite");
+        create_threads_db(&db_path);
+        for index in 0..260 {
+            insert_thread(
+                &db_path,
+                &format!("bulk-thread-{index}"),
+                &format!("Bulk thread {index}"),
+                10_000 + index,
+                0,
+                1,
+            );
+        }
+
+        let rows = read_threads(&db_path).expect("read all rows");
+        assert_eq!(rows.len(), 261);
+        assert!(
+            rows.iter().any(|row| row.thread_id == "bulk-thread-259"),
+            "legacy helper must not be capped at the first page"
+        );
+        assert!(
+            rows.iter().any(|row| row.thread_id == "thread-1"),
+            "legacy helper should retain older rows beyond the first page"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
     fn temp_dir(prefix: &str) -> PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -298,5 +557,34 @@ mod tests {
             "#,
         )
         .expect("create threads table");
+    }
+
+    fn insert_thread(
+        db_path: &Path,
+        thread_id: &str,
+        title: &str,
+        updated_at_ms: i64,
+        archived: i64,
+        has_user_event: i64,
+    ) {
+        let conn = Connection::open(db_path).expect("open sqlite");
+        conn.execute(
+            r#"
+            INSERT INTO threads (
+                id,
+                title,
+                cwd,
+                updated_at_ms,
+                archived,
+                rollout_path,
+                model,
+                reasoning_effort,
+                thread_source,
+                has_user_event
+            ) VALUES (?1, ?2, '/tmp/project', ?3, ?4, '', 'gpt-test', 'medium', 'codex', ?5)
+            "#,
+            (thread_id, title, updated_at_ms, archived, has_user_event),
+        )
+        .expect("insert thread");
     }
 }

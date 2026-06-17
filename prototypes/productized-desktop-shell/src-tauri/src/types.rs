@@ -12,6 +12,7 @@ struct CodexTranscript {
     viewer_boundary: CodexTranscriptViewerBoundary,
     events: Vec<CodexTranscriptEvent>,
     summary: CodexTranscriptSummary,
+    pagination: CodexTranscriptPagination,
     warnings: Vec<String>,
     source_stats: Value,
 }
@@ -54,6 +55,44 @@ struct CodexTranscriptSummary {
     warning_count: usize,
     encrypted_content_event_count: usize,
     sensitive_like_event_count: usize,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+struct CodexTranscriptPagination {
+    mode: String,
+    page_size: usize,
+    returned_events: usize,
+    total_line_count: usize,
+    selected_line_count: usize,
+    has_older: bool,
+    older_before_line: Option<usize>,
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
+struct CodexTranscriptPageRequest {
+    thread_id: String,
+    limit: Option<usize>,
+    before_line: Option<usize>,
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq, Eq)]
+struct CodexSessionPageRequest {
+    page_size: Option<usize>,
+    offset: Option<usize>,
+    include_archived: Option<bool>,
+    archived_only: Option<bool>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+struct CodexSessionPage {
+    sessions: Vec<SessionRecord>,
+    page_size: usize,
+    offset: usize,
+    has_more: bool,
+    include_archived: bool,
+    archived_only: bool,
+    warnings: Vec<String>,
+    source: String,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]

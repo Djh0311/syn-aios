@@ -9,7 +9,10 @@ import type {
   BlackboardCandidateStoreV1,
   CanvasDefinition,
   CanvasRunState,
+  CodexSessionPage,
+  CodexSessionPageRequest,
   CodexTranscript,
+  CodexTranscriptPageRequest,
   CreateFormalMemoryRecordInput,
   CreateFormalMemoryRecordOutput,
   CreateMemoryCandidateInput,
@@ -198,6 +201,16 @@ export function runControlledSessionContinuationRealResumePhaseB(
 export function loadCodexSessionTranscript(threadId: string): Promise<CodexTranscript> {
   ensureTauriRuntime();
   return invoke<CodexTranscript>("load_codex_session_transcript", { threadId });
+}
+
+export function loadCodexSessionTranscriptPage(request: CodexTranscriptPageRequest): Promise<CodexTranscript> {
+  ensureTauriRuntime();
+  return invoke<CodexTranscript>("load_codex_session_transcript_page", { request });
+}
+
+export function loadCodexSessionPage(request: CodexSessionPageRequest): Promise<CodexSessionPage> {
+  ensureTauriRuntime();
+  return invoke<CodexSessionPage>("load_codex_session_page", { request });
 }
 
 export function runPathAction(action: PendingAction): Promise<string> {

@@ -74,6 +74,7 @@ import { realExecutionProductCommandFixtures } from "./helpers/offlineRealExecut
 import { runK3B1BlockedRecoveryProductPathScenario } from "./helpers/offlineK3B1RecoveryScenario";
 import { runL3OperationControlScenario } from "./helpers/offlineL3OperationControlScenario";
 import { runL5MemoryDailyLoopScenario } from "./helpers/offlineL5MemoryDailyLoopScenario";
+import { runAgentSessionShellPaginationScenario } from "./helpers/offlineAgentSessionShellPaginationScenario";
 import { controlledSessionContinuationLevelAStoreFixture, h2DuplicateSessionContinuationStoreFixture } from "./helpers/offlineSessionContinuationStoreFixtures";
 import {
   rightDetailPanelCommonPropsFixture,
@@ -2119,9 +2120,14 @@ function runSessionCenterHardeningScenario() {
     "搜索标题应缩小到匹配会话",
   );
   assertDeepEqual(
+    filterAgentSessions(sessions, "all", "").map((item) => item.thread_id),
+    [session.thread_id, otherProjectSession.thread_id, missingSession.thread_id],
+    "全部过滤也不应混入归档会话",
+  );
+  assertDeepEqual(
     filterAgentSessions(sessions, "all", "other-project").map((item) => item.thread_id),
     [otherProjectSession.thread_id],
-    "搜索项目路径末段应缩小到匹配项目",
+    "搜索项目路径末段应缩小到匹配非归档项目",
   );
   assertDeepEqual(
     filterAgentSessions(sessions, "missing", "").map((item) => item.thread_id),
@@ -2181,6 +2187,7 @@ function runSessionCenterHardeningScenario() {
   );
 
   assert(centerMarkup.includes("session-search") && centerMarkup.includes("session-card"), "会话中心应渲染搜索框和 button 会话卡");
+  runAgentSessionShellPaginationScenario({ archivedSession, captureAction, projectSession: session });
 }
 
 function runOfflineRoleOrchestrationScenario() {

@@ -1,5 +1,6 @@
 use crate::{
-    CodexTranscript, CodexTranscriptEvent, CodexTranscriptSummary, CodexTranscriptViewerBoundary,
+    CodexTranscript, CodexTranscriptEvent, CodexTranscriptPagination, CodexTranscriptSummary,
+    CodexTranscriptViewerBoundary,
 };
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
@@ -24,6 +25,12 @@ struct JsonlStats {
     line_count: usize,
     parsed_line_count: usize,
     bad_json_line_count: usize,
+    selected_line_count: usize,
+}
+
+pub(crate) struct TranscriptReadPageRequest {
+    pub limit: usize,
+    pub before_line: Option<usize>,
 }
 
 pub(crate) fn read_transcript_from_rollout(
@@ -32,6 +39,51 @@ pub(crate) fn read_transcript_from_rollout(
 ) -> Result<CodexTranscript, String> {
     let rollout_path = validated_rollout_path(&metadata, codex_home)?;
     let (events, mut warnings, jsonl_stats) = read_jsonl_events(&rollout_path)?;
+    let pagination = CodexTranscriptPagination {
+        mode: "full".to_string(),
+        page_size: events.len(),
+        returned_events: events.len(),
+        total_line_count: jsonl_stats.line_count,
+        selected_line_count: jsonl_stats.selected_line_count,
+        has_older: false,
+        older_before_line: None,
+    };
+    build_transcript(
+        metadata,
+        rollout_path,
+        events,
+        &mut warnings,
+        jsonl_stats,
+        pagination,
+    )
+}
+
+pub(crate) fn read_transcript_page_from_rollout(
+    metadata: TranscriptThreadMetadata,
+    codex_home: &Path,
+    request: TranscriptReadPageRequest,
+) -> Result<CodexTranscript, String> {
+    let rollout_path = validated_rollout_path(&metadata, codex_home)?;
+    let (events, mut warnings, jsonl_stats, pagination) =
+        read_jsonl_event_page(&rollout_path, request)?;
+    build_transcript(
+        metadata,
+        rollout_path,
+        events,
+        &mut warnings,
+        jsonl_stats,
+        pagination,
+    )
+}
+
+fn build_transcript(
+    metadata: TranscriptThreadMetadata,
+    rollout_path: PathBuf,
+    events: Vec<CodexTranscriptEvent>,
+    warnings: &mut Vec<String>,
+    jsonl_stats: JsonlStats,
+    pagination: CodexTranscriptPagination,
+) -> Result<CodexTranscript, String> {
     let event_type_counts = count_events_by_type(&events);
     let raw_type_counts = count_metadata_value(&events, "raw_type");
     let payload_type_counts = count_metadata_value(&events, "payload_type");
@@ -86,7 +138,8 @@ pub(crate) fn read_transcript_from_rollout(
             encrypted_content_event_count: encrypted_count,
             sensitive_like_event_count: sensitive_count,
         },
-        warnings,
+        pagination,
+        warnings: warnings.clone(),
         source_stats: json!({
             "catalog_source": metadata.catalog_source,
             "index_thread_count": metadata.index_thread_count,
@@ -94,6 +147,7 @@ pub(crate) fn read_transcript_from_rollout(
                 "line_count": jsonl_stats.line_count,
                 "parsed_line_count": jsonl_stats.parsed_line_count,
                 "bad_json_line_count": jsonl_stats.bad_json_line_count,
+                "selected_line_count": jsonl_stats.selected_line_count,
             },
             "raw_type_counts": raw_type_counts,
             "payload_type_counts": payload_type_counts,
@@ -186,7 +240,85 @@ fn read_jsonl_events(
         }
     }
 
+    stats.selected_line_count = stats.parsed_line_count;
     Ok((events, warnings, stats))
+}
+
+fn read_jsonl_event_page(
+    path: &Path,
+    request: TranscriptReadPageRequest,
+) -> Result<
+    (
+        Vec<CodexTranscriptEvent>,
+        Vec<String>,
+        JsonlStats,
+        CodexTranscriptPagination,
+    ),
+    String,
+> {
+    let file = fs::File::open(path)
+        .map_err(|error| format!("filesystem_read_failed:{}:{error}", path.display()))?;
+    let reader = BufReader::new(file);
+    let mut stats = JsonlStats::default();
+    let mut non_empty_lines = Vec::new();
+
+    for (index, line) in reader.lines().enumerate() {
+        let line_number = index + 1;
+        stats.line_count += 1;
+        let line =
+            line.map_err(|error| format!("filesystem_read_failed:{}:{error}", path.display()))?;
+        let text = line.trim();
+        if !text.is_empty() {
+            non_empty_lines.push((line_number, text.to_string()));
+        }
+    }
+
+    let limit = request.limit.clamp(1, 500);
+    let before_line = request.before_line.unwrap_or(usize::MAX);
+    let eligible = non_empty_lines
+        .iter()
+        .filter(|(line_number, _)| *line_number < before_line)
+        .collect::<Vec<_>>();
+    let start = eligible.len().saturating_sub(limit);
+    let selected = &eligible[start..];
+    stats.selected_line_count = selected.len();
+
+    let mut events = Vec::new();
+    let mut warnings = Vec::new();
+    for (line_number, text) in selected.iter().copied() {
+        match serde_json::from_str::<Value>(text) {
+            Ok(item) => {
+                stats.parsed_line_count += 1;
+                events.push(parse_event(&item, *line_number));
+            }
+            Err(_) => {
+                stats.bad_json_line_count += 1;
+                warnings.push(format!("invalid_json_line:{line_number}"));
+            }
+        }
+    }
+
+    let first_selected_line = selected.first().map(|(line_number, _)| *line_number);
+    let has_older = first_selected_line.is_some_and(|line| {
+        non_empty_lines
+            .iter()
+            .any(|(line_number, _)| *line_number < line)
+    });
+    let pagination = CodexTranscriptPagination {
+        mode: if request.before_line.is_some() {
+            "older".to_string()
+        } else {
+            "tail".to_string()
+        },
+        page_size: limit,
+        returned_events: events.len(),
+        total_line_count: stats.line_count,
+        selected_line_count: stats.selected_line_count,
+        has_older,
+        older_before_line: if has_older { first_selected_line } else { None },
+    };
+
+    Ok((events, warnings, stats, pagination))
 }
 
 fn parse_event(item: &Value, line_number: usize) -> CodexTranscriptEvent {
@@ -755,6 +887,51 @@ mod tests {
     }
 
     #[test]
+    fn paged_transcript_tail_returns_recent_events_and_older_cursor_without_full_parse() {
+        let fixture = fixture("codex-transcript-tail-page");
+        let rollout_path = fixture.sessions_dir.join("thread-ok.jsonl");
+        write_numbered_messages(&rollout_path, 12);
+
+        let tail = read_transcript_page_from_rollout(
+            metadata(&rollout_path),
+            &fixture.codex_home,
+            TranscriptReadPageRequest {
+                limit: 5,
+                before_line: None,
+            },
+        )
+        .expect("tail page");
+
+        assert_eq!(tail.events.len(), 5);
+        assert_eq!(tail.events[0].text.as_deref(), Some("message 8"));
+        assert_eq!(tail.events[4].text.as_deref(), Some("message 12"));
+        assert_eq!(tail.summary.total_events, 5);
+        assert_eq!(tail.source_stats["jsonl"]["line_count"], json!(12));
+        assert_eq!(tail.source_stats["jsonl"]["parsed_line_count"], json!(5));
+        assert_eq!(tail.source_stats["jsonl"]["selected_line_count"], json!(5));
+        assert_eq!(tail.pagination.mode, "tail");
+        assert!(tail.pagination.has_older);
+        assert_eq!(tail.pagination.older_before_line, Some(8));
+
+        let older = read_transcript_page_from_rollout(
+            metadata(&rollout_path),
+            &fixture.codex_home,
+            TranscriptReadPageRequest {
+                limit: 5,
+                before_line: tail.pagination.older_before_line,
+            },
+        )
+        .expect("older page");
+
+        assert_eq!(older.events.len(), 5);
+        assert_eq!(older.events[0].text.as_deref(), Some("message 3"));
+        assert_eq!(older.events[4].text.as_deref(), Some("message 7"));
+        assert_eq!(older.pagination.mode, "older");
+        assert!(older.pagination.has_older);
+        assert_eq!(older.pagination.older_before_line, Some(3));
+    }
+
+    #[test]
     fn bad_jsonl_line_records_warning_and_keeps_other_events() {
         let fixture = fixture("codex-transcript-bad-line");
         let rollout_path = fixture.sessions_dir.join("thread-ok.jsonl");
@@ -914,6 +1091,22 @@ mod tests {
             .join("\n");
         text.push('\n');
         fs::write(path, text).expect("write jsonl");
+    }
+
+    fn write_numbered_messages(path: &Path, count: usize) {
+        let rows = (1..=count)
+            .map(|index| {
+                json!({
+                    "timestamp": format!("2026-06-17T00:00:{index:02}Z"),
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "user_message",
+                        "message": format!("message {index}")
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        write_jsonl(path, &rows);
     }
 
     fn temp_dir(prefix: &str) -> PathBuf {

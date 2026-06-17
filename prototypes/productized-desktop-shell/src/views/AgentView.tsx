@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { deriveAgentAdapterDescriptors } from "../lib/adapterCapabilities";
 import {
   deriveH2RealResumeAuthorizationReadiness,
@@ -10,6 +10,7 @@ import { deriveSessionOperationDescriptors } from "../lib/sessionOperations";
 import type {
   AgentAdapterDescriptor,
   CodexTranscript,
+  CodexTranscriptPageRequest,
   PendingAction,
   ProviderAvailabilitySummary,
   ProjectRecord,
@@ -26,7 +27,9 @@ import type {
 } from "../lib/types";
 import { AgentDeveloperPanels } from "./agent/AgentDeveloperPanels";
 import { AgentSessionCenter, softwareKeyOf, softwareLabelOf } from "./agent/AgentConversationShell";
-import { messageOf } from "./agent/agentLabels";
+import { AgentSoftwareFilterBar } from "./agent/AgentSoftwareFilterBar";
+import { useAgentSessionPage } from "./agent/useAgentSessionPage";
+import { useAgentTranscriptLoader } from "./agent/useAgentTranscriptLoader";
 export { ChatTranscript, TranscriptTimeline } from "./agent/TranscriptViews";
 export { AgentSessionCenter, filterAgentSessions, softwareGroupsForSessions } from "./agent/AgentConversationShell";
 
@@ -46,6 +49,7 @@ type AgentViewProps = {
   workflowState?: WorkflowStateSnapshot | null;
   focusedThreadId?: string | null;
   onLoadTranscript?: (threadId: string) => Promise<CodexTranscript>;
+  onLoadTranscriptPage?: (request: CodexTranscriptPageRequest) => Promise<CodexTranscript>;
   onRequestAction?: (action: PendingAction) => void;
 };
 
@@ -65,39 +69,38 @@ export function AgentView({
   workflowState = null,
   focusedThreadId = null,
   onLoadTranscript,
+  onLoadTranscriptPage,
   onRequestAction = () => {},
 }: AgentViewProps) {
+  const sessionPage = useAgentSessionPage(sessions);
+  const { shellSessions } = sessionPage;
   const softwareCounts = useMemo(() => {
     const map = new Map<string, number>();
-    for (const s of sessions) {
+    for (const s of shellSessions) {
       const key = softwareKeyOf(s);
       map.set(key, (map.get(key) ?? 0) + 1);
     }
     return Array.from(map.entries()).map(([key, count]) => ({ key, label: softwareLabelOf(key), count }));
-  }, [sessions]);
-  const multiSoftware = softwareCounts.length > 1;
+  }, [shellSessions]);
   const [softwareFilter, setSoftwareFilter] = useState<string | null>(null);
 
   const filteredSessions = useMemo(
-    () => (softwareFilter ? sessions.filter((session) => softwareKeyOf(session) === softwareFilter) : sessions),
-    [sessions, softwareFilter],
+    () => (softwareFilter ? shellSessions.filter((session) => softwareKeyOf(session) === softwareFilter) : shellSessions),
+    [shellSessions, softwareFilter],
   );
   const readableSessions = useMemo(
     () => filteredSessions.filter((session) => session.rollout_exists && session.rollout_path),
     [filteredSessions],
   );
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(readableSessions[0]?.thread_id ?? null);
-  const [transcript, setTranscript] = useState<CodexTranscript | null>(null);
-  const [loadingThreadId, setLoadingThreadId] = useState<string | null>(null);
-  const [transcriptError, setTranscriptError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!focusedThreadId) return;
-    const focusedSession = sessions.find((session) => session.thread_id === focusedThreadId);
+    const focusedSession = shellSessions.find((session) => session.thread_id === focusedThreadId);
     if (!focusedSession) return;
     setSoftwareFilter(null);
     setSelectedThreadId(focusedThreadId);
-  }, [focusedThreadId, sessions]);
+  }, [focusedThreadId, shellSessions]);
 
   useEffect(() => {
     if (selectedThreadId && filteredSessions.some((session) => session.thread_id === selectedThreadId)) return;
@@ -105,12 +108,17 @@ export function AgentView({
   }, [filteredSessions, readableSessions, selectedThreadId]);
 
   const selectedSession = filteredSessions.find((session) => session.thread_id === selectedThreadId) ?? null;
+  const { loadingOlderThreadId, loadingThreadId, loadOlderTranscript, loadTranscript, selectedTranscript, transcriptError } = useAgentTranscriptLoader({
+    onLoadTranscript,
+    onLoadTranscriptPage,
+    selectedSession,
+  });
   const adapterDescriptors = useMemo(
     () =>
       backendAdapterDescriptors.length
         ? backendAdapterDescriptors
-        : deriveAgentAdapterDescriptors({ sessions, projects, workflowState }),
-    [backendAdapterDescriptors, sessions, projects, workflowState],
+        : deriveAgentAdapterDescriptors({ sessions: shellSessions, projects, workflowState }),
+    [backendAdapterDescriptors, shellSessions, projects, workflowState],
   );
   const sessionOperationDescriptors = useMemo(
     () =>
@@ -165,33 +173,6 @@ export function AgentView({
   const projectAttemptCount =
     workflowState?.project_workflows.reduce((count, workflow) => count + workflow.execution_attempts.length, 0) ?? 0;
 
-  const loadTranscript = useCallback(
-    async (threadId: string) => {
-      setTranscript(null);
-      setTranscriptError(null);
-      if (!onLoadTranscript) {
-        setTranscriptError("当前运行环境没有接入会话记录读取入口。");
-        return;
-      }
-      setLoadingThreadId(threadId);
-      try {
-        const nextTranscript = await onLoadTranscript(threadId);
-        setTranscript((current) => (threadId === selectedThreadIdRef.current ? nextTranscript : current));
-      } catch (error) {
-        setTranscriptError((current) => (threadId === selectedThreadIdRef.current ? messageOf(error) : current));
-      } finally {
-        setLoadingThreadId((current) => (current === threadId ? null : current));
-      }
-    },
-    [onLoadTranscript],
-  );
-
-  // Keep a ref so an in-flight load can tell if its thread is still the selected one.
-  const selectedThreadIdRef = useRef<string | null>(selectedThreadId);
-  useEffect(() => {
-    selectedThreadIdRef.current = selectedThreadId;
-  }, [selectedThreadId]);
-
   function openSession(session: SessionRecord) {
     if (session.thread_id === selectedThreadId) {
       // Already selected — re-read on demand (used by the reader's reload button).
@@ -201,36 +182,15 @@ export function AgentView({
     setSelectedThreadId(session.thread_id);
   }
 
-  const filterBar = multiSoftware ? (
-    <div className="session-filter-bar" role="group" aria-label="按软件筛选会话">
-      <button
-        className={`filter-chip ${softwareFilter === null ? "active" : ""}`}
-        type="button"
-        onClick={() => setSoftwareFilter(null)}
-      >
-        全部 <em>{sessions.length}</em>
-      </button>
-      {softwareCounts.map((row) => (
-        <button
-          className={`filter-chip ${softwareFilter === row.key ? "active" : ""}`}
-          key={row.key}
-          type="button"
-          onClick={() => setSoftwareFilter(row.key)}
-        >
-          {row.label} <em>{row.count}</em>
-        </button>
-      ))}
-    </div>
-  ) : null;
-
   return (
     <section className="view-stack agent-view-root">
       <AgentSessionCenter
         sessions={filteredSessions}
         selectedThreadId={selectedThreadId}
         selectedSession={selectedSession}
-        transcript={transcript}
+        transcript={selectedTranscript}
         loadingThreadId={loadingThreadId}
+        loadingOlderThreadId={loadingOlderThreadId}
         transcriptError={transcriptError}
         projectSessionCount={0}
         projects={projects}
@@ -238,7 +198,14 @@ export function AgentView({
         groupBy="project"
         embedded
         showSoftwareLayer={false}
-        filterBar={filterBar}
+        filterBar={
+          <AgentSoftwareFilterBar
+            activeKey={softwareFilter}
+            counts={softwareCounts}
+            total={shellSessions.length}
+            onChange={setSoftwareFilter}
+          />
+        }
         adapterDescriptors={adapterDescriptors}
         sessionOperationDescriptors={sessionOperationDescriptors}
         providerAvailabilitySummaries={providerAvailabilitySummaries}
@@ -250,9 +217,14 @@ export function AgentView({
         projectWorkflowAutomation={projectWorkflowAutomation}
         workerProtocol={workerProtocol}
         workflowState={workflowState}
+        sessionPageStatus={sessionPage.sessionPageStatus}
+        sessionPageSource={sessionPage.sessionPageSource}
+        sessionPageWarnings={sessionPage.sessionPageWarnings}
+        sessionHasMore={sessionPage.sessionPageHasMore}
+        loadingMoreSessions={sessionPage.loadingMoreSessions}
         developerDetails={
           <AgentDeveloperPanels
-            sessions={sessions}
+            sessions={shellSessions}
             projects={projects}
             selectedSession={selectedSession}
             realExecutionProductCommands={realExecutionProductCommands}
@@ -278,6 +250,9 @@ export function AgentView({
         emptyTitle="选择左侧会话开始阅读"
         emptyMessage="点任意会话即可查看你与 Agent 的对话。"
         onOpenSession={(session) => void openSession(session)}
+        onLoadOlderTranscript={loadOlderTranscript}
+        onLoadMoreSessions={() => void sessionPage.loadSessionPage(sessionPage.sessionPageOffset, "append")}
+        onReadFilterChange={sessionPage.setSessionPageReadFilter}
         onRequestAction={onRequestAction}
       />
     </section>

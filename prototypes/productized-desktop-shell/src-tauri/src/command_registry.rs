@@ -8,6 +8,8 @@ macro_rules! workbench_command_handler {
             query_workbench_page_read_model,
             record_operation_control_decision,
             load_codex_session_transcript,
+            load_codex_session_transcript_page,
+            load_codex_session_page,
             load_workflow_state_snapshot,
             load_plan_authorization_store,
             create_plan_authorization,

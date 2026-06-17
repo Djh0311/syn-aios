@@ -1,31 +1,16 @@
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { deriveAgentsPageReadModelFromParts } from "../../lib/pageSelectors";
-import {
-  confirmRealExecutionProductCommand,
-  prepareRealExecutionProductCommand,
-  previewRealExecutionProductCommand,
-  runRealExecutionProductCommandNewSessionPhaseB,
-  runRealExecutionProductCommandPhaseA,
-  runRealExecutionProductCommandPhaseB,
-} from "../../lib/tauri";
+import { appendPendingUserMessage, buildPendingUserMessage } from "../../lib/conversationEngine";
 import { pathTail, relativeTime } from "../../lib/format";
 import type {
   AgentAdapterDescriptor,
-  AutoDispatchGuardInput,
-  CodexControlCommandInput,
   CodexTranscript,
-  H2RealResumeAuthorizationMatrix,
-  H3RealNewSessionAuthorizationMatrix,
+  CodexTranscriptEvent,
   PendingAction,
   ProjectRecord,
   ProjectWorkflowAutomationReadModel,
   ProviderAvailabilitySummary,
-  RealExecutionProductCommandDecisionOutput,
-  RealExecutionProductCommandPhaseAOutput,
-  RealExecutionProductCommandPhaseBOutput,
-  RealExecutionProductCommandPrepareOutput,
-  RealExecutionProductCommandPreview,
   RealExecutionProductCommandReadModel,
   RuntimeSessionAttention,
   SessionContinuationPreview,
@@ -48,7 +33,7 @@ import {
   type AgentSessionGroup,
   type SessionReadFilter,
 } from "./AgentSessionList";
-import { readbackCountLabel, TranscriptTimeline as AgentTranscriptTimeline, WarningStrip } from "./TranscriptViews";
+import { TranscriptTimeline as AgentTranscriptTimeline, WarningStrip } from "./TranscriptViews";
 
 export {
   filterAgentSessions,
@@ -75,6 +60,7 @@ export type AgentSessionCenterProps = {
   selectedSession: SessionRecord | null;
   transcript: CodexTranscript | null;
   loadingThreadId: string | null;
+  loadingOlderThreadId?: string | null;
   transcriptError: string | null;
   projectSessionCount: number;
   projects?: ProjectRecord[];
@@ -95,13 +81,22 @@ export type AgentSessionCenterProps = {
   sessionContinuationStore?: SessionContinuationStoreV1 | null;
   runtimeSessionAttention?: RuntimeSessionAttention[];
   sessionRunStatusSummaries?: SessionRunStatusSummary[];
+  sessionPageStatus?: "idle" | "loading" | "error";
+  sessionPageSource?: string | null;
+  sessionPageWarnings?: string[];
+  sessionHasMore?: boolean;
+  loadingMoreSessions?: boolean;
   realExecutionProductCommands?: RealExecutionProductCommandReadModel | null;
   projectWorkflowAutomation?: ProjectWorkflowAutomationReadModel | null;
   workerProtocol?: WorkerProtocolReadModel | null;
   workflowState?: WorkflowStateSnapshot | null;
   onOpenSession: (session: SessionRecord) => void;
+  onLoadOlderTranscript?: (threadId: string) => void;
+  onLoadMoreSessions?: () => void;
+  onReadFilterChange?: (filter: SessionReadFilter) => void;
   onRequestAction: (action: PendingAction) => void;
   developerDetails?: React.ReactNode;
+  initialReadFilter?: SessionReadFilter;
 };
 
 export function AgentSessionCenter({
@@ -110,6 +105,7 @@ export function AgentSessionCenter({
   selectedSession,
   transcript,
   loadingThreadId,
+  loadingOlderThreadId = null,
   transcriptError,
   projectSessionCount: _projectSessionCount,
   projects = [],
@@ -129,29 +125,32 @@ export function AgentSessionCenter({
   sessionContinuationStore = null,
   runtimeSessionAttention = [],
   sessionRunStatusSummaries = [],
+  sessionPageStatus = "idle",
+  sessionPageSource = null,
+  sessionPageWarnings = [],
+  sessionHasMore = false,
+  loadingMoreSessions = false,
   realExecutionProductCommands = null,
   projectWorkflowAutomation = null,
   workerProtocol = null,
   workflowState = null,
   embedded = false,
   onOpenSession,
+  onLoadOlderTranscript,
+  onLoadMoreSessions,
+  onReadFilterChange,
   onRequestAction,
   developerDetails,
+  initialReadFilter = "readable",
 }: AgentSessionCenterProps) {
   const effectiveGroupBy: "project" | "software" =
     groupBy ?? (scope === "project" ? "software" : "project");
   const showSoftware = showSoftwareLayer ?? scope === "global";
   const [searchQuery, setSearchQuery] = useState("");
-  const [readFilter, setReadFilter] = useState<SessionReadFilter>("readable");
+  const [readFilter, setReadFilter] = useState<SessionReadFilter>(initialReadFilter);
   const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(() => new Set());
   const [draftPrompt, setDraftPrompt] = useState("");
-  const [k2Preview, setK2Preview] = useState<RealExecutionProductCommandPreview | null>(null);
-  const [k2PrepareOutput, setK2PrepareOutput] = useState<RealExecutionProductCommandPrepareOutput | null>(null);
-  const [k2DecisionOutput, setK2DecisionOutput] = useState<RealExecutionProductCommandDecisionOutput | null>(null);
-  const [k2PhaseAOutput, setK2PhaseAOutput] = useState<RealExecutionProductCommandPhaseAOutput | null>(null);
-  const [k2PhaseBOutput, setK2PhaseBOutput] = useState<RealExecutionProductCommandPhaseBOutput | null>(null);
-  const [k2PreviewBusy, setK2PreviewBusy] = useState(false);
-  const [k2ActionBusy, setK2ActionBusy] = useState<string | null>(null);
+  const [pendingUserMessages, setPendingUserMessages] = useState<CodexTranscriptEvent[]>([]);
   const [k2PreviewError, setK2PreviewError] = useState<string | null>(null);
   const [k2Operation, setK2Operation] = useState<"resume" | "new_session">("resume");
   const [developerOpen, setDeveloperOpen] = useState(false);
@@ -181,6 +180,11 @@ export function AgentSessionCenter({
     });
   }
 
+  function handleReadFilterChange(filter: SessionReadFilter) {
+    setReadFilter(filter);
+    onReadFilterChange?.(filter);
+  }
+
   const visibleSessions = useMemo(
     () => filterAgentSessions(conversationMode && selectedProjectRoot ? sessions.filter((session) => session.project_root === selectedProjectRoot) : sessions, readFilter, searchQuery),
     [conversationMode, readFilter, searchQuery, selectedProjectRoot, sessions],
@@ -199,262 +203,30 @@ export function AgentSessionCenter({
     () => (selectedProjectRoot ? sessions.filter((session) => session.project_root === selectedProjectRoot) : sessions),
     [selectedProjectRoot, sessions],
   );
-  const selectedProjectWorkflow = useMemo(
-    () => workflowState?.project_workflows.find((workflow) => workflow.project_root === selectedProjectRoot) ?? null,
-    [selectedProjectRoot, workflowState],
-  );
-
   useEffect(() => {
-    setK2Preview(null);
-    setK2PrepareOutput(null);
-    setK2DecisionOutput(null);
-    setK2PhaseAOutput(null);
-    setK2PhaseBOutput(null);
     setK2PreviewError(null);
   }, [k2Operation, selectedProjectRoot, selectedSession?.thread_id]);
 
-  function resetK2PreparedState() {
-    setK2PrepareOutput(null);
-    setK2DecisionOutput(null);
-    setK2PhaseAOutput(null);
-    setK2PhaseBOutput(null);
-  }
+  useEffect(() => {
+    setPendingUserMessages([]);
+  }, [selectedSession?.thread_id]);
 
   function handleChangeK2Draft(value: string) {
     setDraftPrompt(value);
-    setK2Preview(null);
-    resetK2PreparedState();
     setK2PreviewError(null);
   }
 
-  async function handleGenerateK2Preview() {
-    if (!selectedProjectRoot.trim() || !draftPrompt.trim()) return;
-    if (k2Operation === "resume" && !selectedSession) return;
-    setK2PreviewBusy(true);
-    setK2PreviewError(null);
-    try {
-      const promptBody = draftPrompt.trim();
-      const promptHash = await sha256HexText(promptBody);
-      const projectSlug = j1ControlSlug(selectedProjectRoot);
-      const runRef = `stage-k-k2-${k2Operation}:${projectSlug}:${promptHash.slice(0, 12)}`;
-      const promptSummary = promptBody.split(/\s+/).join(" ").slice(0, 180) || "继续当前 Codex 对话";
-      const preview = await previewRealExecutionProductCommand({
-        source_kind: "codex_control",
-        h5_dispatch_preview: null,
-        codex_control: {
-          project_id: selectedProjectWorkflow?.project_id ?? `project:${projectSlug}`,
-          project_root: selectedProjectRoot,
-          workflow_id: selectedProjectWorkflow?.workflow_id ?? `workflow:stage-k:k2:${projectSlug}`,
-          node_id: `node:${runRef}`,
-          work_item_id: `work-item:${runRef}`,
-          task_package_ref: "tasks/2026-06-10-stage-k-k2-general-codex-resume-new-session-product-entry-v1.md",
-          memory_packet_ref: `memory-packet:${runRef}`,
-          adapter_id: "codex-local",
-          operation_id: k2Operation,
-          session_mode: k2Operation === "new_session" ? "new_session_execution_point" : "resume_existing_session",
-          target_session_id: k2Operation === "resume" ? selectedSession?.thread_id ?? null : null,
-          sandbox: "read-only",
-          prompt_summary: promptSummary,
-          prompt_ref: `workbench-runtime-prompt:${runRef}`,
-          prompt_hash: promptHash,
-          allowed_write_roots: [],
-          denied_paths: J1_DEFAULT_DENIED_PATHS,
-          readback_plan: "readback_unavailable_is_not_zero_results",
-          timeout_ms: 120_000,
-          requested_by: "user",
-        },
-        requested_by: "user",
-        created_at: new Date().toISOString(),
-      });
-      setK2Preview(preview);
-      resetK2PreparedState();
-    } catch (error) {
-      setK2PreviewError(messageOf(error));
-      setK2Preview(null);
-      resetK2PreparedState();
-    } finally {
-      setK2PreviewBusy(false);
-    }
-  }
-
-  function k2CodexControlFromPreview(preview: RealExecutionProductCommandPreview): CodexControlCommandInput {
-    const request = preview.request;
-    return {
-      project_id: request.project_id,
-      project_root: request.project_root ?? "",
-      workflow_id: request.workflow_id,
-      node_id: request.node_id,
-      work_item_id: request.work_item_id,
-      task_package_ref: request.task_package_ref,
-      memory_packet_ref: request.memory_packet_ref,
-      adapter_id: request.adapter_id,
-      operation_id: request.operation_id,
-      session_mode: request.session_mode,
-      target_session_id: request.target_session_id,
-      sandbox: request.sandbox,
-      prompt_summary: request.prompt_summary,
-      prompt_ref: request.prompt_ref,
-      prompt_hash: request.prompt_hash,
-      allowed_write_roots: request.allowed_write_roots,
-      denied_paths: request.denied_paths,
-      readback_plan: request.readback_plan,
-      timeout_ms: request.timeout_ms,
-      requested_by: request.requested_by,
-    };
-  }
-
-  async function runK2Action<T>(label: string, task: () => Promise<T>): Promise<T | null> {
-    setK2ActionBusy(label);
-    setK2PreviewError(null);
-    try {
-      return await task();
-    } catch (error) {
-      setK2PreviewError(messageOf(error));
-      return null;
-    } finally {
-      setK2ActionBusy(null);
-    }
-  }
-
-  async function handlePrepareK2Command() {
-    if (!k2Preview) return;
-    const result = await runK2Action("prepare", () =>
-      prepareRealExecutionProductCommand({
-        source_kind: "codex_control",
-        h5_dispatch_preview: null,
-        codex_control: k2CodexControlFromPreview(k2Preview),
-        expected_store_revision: realExecutionProductCommands?.store_revision ?? 0,
-        requested_by: "user",
-        created_at: k2Preview.request.created_at,
-      }),
-    );
-    if (!result) return;
-    setK2PrepareOutput(result);
-    setK2DecisionOutput(null);
-    setK2PhaseAOutput(null);
-    setK2PhaseBOutput(null);
-  }
-
-  async function handleConfirmK2Command() {
-    if (!k2PrepareOutput?.product_command_id) return;
-    const result = await runK2Action("confirm", () =>
-      confirmRealExecutionProductCommand({
-        product_command_id: k2PrepareOutput.product_command_id ?? "",
-        expected_store_revision: k2PrepareOutput.store_revision,
-        confirmed_by: "user",
-        risk_acknowledgement: "用户确认 K2 发送预览和 Phase A 预检；真实 Codex 执行仍需执行点验收。",
-        allowed_once: true,
-        reason: "Stage K K2 user confirmed controlled product command preview.",
-        requested_by: "user",
-        confirmed_at: new Date().toISOString(),
-      }),
-    );
-    if (!result) return;
-    setK2DecisionOutput(result);
-    setK2PhaseAOutput(null);
-    setK2PhaseBOutput(null);
-  }
-
-  async function handleRecordK2PhaseA() {
-    if (!k2PrepareOutput?.product_command_id || !k2DecisionOutput) return;
-    const result = await runK2Action("phase-a", () =>
-      runRealExecutionProductCommandPhaseA({
-        product_command_id: k2PrepareOutput.product_command_id ?? "",
-        expected_product_command_store_revision: k2DecisionOutput.store_revision,
-        expected_session_continuation_store_revision: null,
-        actor_role: "user",
-        execution_decision: "phase_a_noop",
-        timeout_ms: 120_000,
-        requested_at: new Date().toISOString(),
-      }),
-    );
-    if (!result) return;
-    setK2PhaseAOutput(result);
-    setK2PhaseBOutput(null);
-  }
-
-  function k2ResumeAuthorizationFromPreview(preview: RealExecutionProductCommandPreview): H2RealResumeAuthorizationMatrix {
-    const request = preview.request;
-    const projectRoot = request.project_root ?? "";
-    return {
-      operation_type: "resume",
-      test_project: "stage-k-k2-product-entry",
-      project_root: projectRoot,
-      target_cwd: projectRoot,
-      target_session: request.target_session_id ?? "",
-      prompt_summary: request.prompt_summary,
-      prompt_sha256: request.prompt_hash,
-      prompt_ref: request.prompt_ref,
-      allowed_write_roots: request.allowed_write_roots,
-      codex_home_scope: "Codex CLI minimum session state for one user-confirmed K2 resume; no credential material requested.",
-      sandbox: request.sandbox,
-      timeout_ms: request.timeout_ms,
-      readback_plan: request.readback_plan,
-      evidence_path: "evidence/2026-06-10-stage-k-k2-general-codex-resume-new-session-product-entry-level-b-v1.md",
-      rollback_plan: request.allowed_write_roots.length
-        ? "Only listed allowed write roots may change; unexpected project writes block acceptance."
-        : "Read-only run; unexpected project file changes block acceptance.",
-      user_confirmed_real_resume: true,
-      global_supervisor_confirmed: true,
-    };
-  }
-
-  function k2NewSessionAuthorizationFromPreview(preview: RealExecutionProductCommandPreview): H3RealNewSessionAuthorizationMatrix {
-    const request = preview.request;
-    const projectRoot = request.project_root ?? "";
-    return {
-      operation_type: "new_session",
-      test_project: "stage-k-k2-product-entry",
-      project_root: projectRoot,
-      target_cwd: projectRoot,
-      work_item_id: request.work_item_id ?? request.product_command_id,
-      prompt_summary: request.prompt_summary,
-      prompt_sha256: request.prompt_hash,
-      prompt_ref: request.prompt_ref,
-      allowed_write_roots: request.allowed_write_roots,
-      codex_home_scope: "Codex CLI minimum session state for one user-confirmed K2 new session; no credential material requested.",
-      sandbox: request.sandbox,
-      timeout_ms: request.timeout_ms,
-      readback_plan: request.readback_plan,
-      evidence_path: "evidence/2026-06-10-stage-k-k2-general-codex-resume-new-session-product-entry-level-b-v1.md",
-      rollback_plan: request.allowed_write_roots.length
-        ? "Only listed allowed write roots may change; unexpected project writes block acceptance."
-        : "Read-only run; unexpected project file changes block acceptance.",
-      user_confirmed_real_new_session: true,
-      global_supervisor_confirmed: true,
-    };
-  }
-
-  async function handleRunK2PhaseB() {
-    if (!k2Preview || !k2PrepareOutput?.product_command_id || !k2DecisionOutput || !k2PhaseAOutput) return;
-    const promptBody = draftPrompt.trim();
-    if (!promptBody) return;
-    const result = await runK2Action("phase-b", () => {
-      if (k2Operation === "new_session") {
-        return runRealExecutionProductCommandNewSessionPhaseB({
-          product_command_id: k2PrepareOutput.product_command_id ?? "",
-          expected_product_command_store_revision: k2PhaseAOutput.product_command_store_revision,
-          expected_session_continuation_store_revision: k2PhaseAOutput.session_continuation_store_revision ?? null,
-          actor_role: "user",
-          execution_decision: "approved_for_h3_b",
-          authorization: k2NewSessionAuthorizationFromPreview(k2Preview),
-          prompt_body: promptBody,
-          requested_at: new Date().toISOString(),
-        });
-      }
-      return runRealExecutionProductCommandPhaseB({
-        product_command_id: k2PrepareOutput.product_command_id ?? "",
-        expected_product_command_store_revision: k2PhaseAOutput.product_command_store_revision,
-        expected_session_continuation_store_revision: k2PhaseAOutput.session_continuation_store_revision ?? null,
-        actor_role: "user",
-        execution_decision: "approved_for_phase_b",
-        authorization: k2ResumeAuthorizationFromPreview(k2Preview),
-        prompt_body: promptBody,
-        requested_at: new Date().toISOString(),
-      });
+  function handleSubmitConversationDraft() {
+    const prompt = draftPrompt.trim();
+    if (!prompt || !selectedSession || !selectedProjectRoot.trim()) return;
+    if (k2Operation === "resume" && (!selectedSession.rollout_exists || !selectedSession.rollout_path)) return;
+    const pendingMessage = buildPendingUserMessage({
+      prompt,
+      threadId: selectedSession.thread_id,
     });
-    if (!result) return;
-    setK2PhaseBOutput(result);
+    setPendingUserMessages((messages) => [...messages, pendingMessage]);
+    setDraftPrompt("");
+    setK2PreviewError(null);
   }
 
   const groups = useMemo(() => {
@@ -499,6 +271,15 @@ export function AgentSessionCenter({
         group.sessions.some((session) => session.thread_id === selectedThreadId),
     ) ?? null;
   }, [collapsedKeys, groups, selectedThreadId]);
+
+  const transcriptWithPendingMessages = useMemo(() => {
+    const selectedTranscript = transcript?.thread_id === selectedSession?.thread_id ? transcript : null;
+    if (!selectedTranscript) return null;
+    return pendingUserMessages.reduce(
+      (currentTranscript, message) => appendPendingUserMessage(currentTranscript, message),
+      selectedTranscript,
+    );
+  }, [pendingUserMessages, selectedSession?.thread_id, transcript]);
 
   const softwareSummary = useMemo(() => {
     if (!showSoftware) return [];
@@ -646,7 +427,7 @@ export function AgentSessionCenter({
           </label>
           <div className="agent-conversation-status">
             <strong>{k2Operation === "new_session" ? "准备新建对话" : selectedSession ? "可以开始对话" : "先选择对话"}</strong>
-            <span>输入任务后先生成确认材料，确认项目、权限和记忆影响，再进入执行。</span>
+            <span>输入任务后只记录发送意图；真实执行仍需另窗授权。</span>
           </div>
           <div className="agent-conversation-actions">
             <button
@@ -654,13 +435,12 @@ export function AgentSessionCenter({
               type="button"
               onClick={() => {
                 setK2Operation("new_session");
-                setK2Preview(null);
                 setK2PreviewError(null);
               }}
             >
               新建对话
             </button>
-            <span>只生成预览，不直接创建。</span>
+            <span>只记录意图，不直接创建。</span>
           </div>
         </section>
       ) : null}
@@ -683,9 +463,15 @@ export function AgentSessionCenter({
           title={title}
           description={description}
           onSearchQueryChange={setSearchQuery}
-          onReadFilterChange={setReadFilter}
+          onReadFilterChange={handleReadFilterChange}
           onToggleGroup={toggleGroup}
           onOpenSession={onOpenSession}
+          sessionPageStatus={sessionPageStatus}
+          sessionPageSource={sessionPageSource}
+          sessionPageWarnings={sessionPageWarnings}
+          sessionHasMore={sessionHasMore}
+          loadingMoreSessions={loadingMoreSessions}
+          onLoadMoreSessions={onLoadMoreSessions}
         />
 
         <div className="agent-transcript-panel">
@@ -693,10 +479,12 @@ export function AgentSessionCenter({
             {selectedSession ? (
               <SessionReader
                 loading={loadingThreadId === selectedSession.thread_id}
+                loadingOlder={loadingOlderThreadId === selectedSession.thread_id}
+                onLoadOlder={() => onLoadOlderTranscript?.(selectedSession.thread_id)}
                 onRequestAction={onRequestAction}
                 onRetry={() => onOpenSession(selectedSession)}
                 session={selectedSession}
-                transcript={transcript?.thread_id === selectedSession.thread_id ? transcript : null}
+                transcript={transcriptWithPendingMessages}
                 transcriptError={transcriptError}
               />
             ) : (
@@ -708,23 +496,12 @@ export function AgentSessionCenter({
             {conversationMode ? (
               <AgentChatComposer
                 draftPrompt={draftPrompt}
-                k2Preview={k2Preview}
-                k2PreviewBusy={k2PreviewBusy}
-                k2ActionBusy={k2ActionBusy}
-                k2PrepareOutput={k2PrepareOutput}
-                k2DecisionOutput={k2DecisionOutput}
-                k2PhaseAOutput={k2PhaseAOutput}
-                k2PhaseBOutput={k2PhaseBOutput}
                 k2PreviewError={k2PreviewError}
                 k2Operation={k2Operation}
                 selectedProjectRoot={selectedProjectRoot}
                 selectedSession={selectedSession}
                 onChangeDraft={handleChangeK2Draft}
-                onGeneratePreview={handleGenerateK2Preview}
-                onPrepareCommand={handlePrepareK2Command}
-                onConfirmCommand={handleConfirmK2Command}
-                onRecordPhaseA={handleRecordK2PhaseA}
-                onRunPhaseB={handleRunK2PhaseB}
+                onSubmitDraft={handleSubmitConversationDraft}
                 onOpenDeveloperDetails={() => setDeveloperOpen(true)}
               />
             ) : null}
@@ -750,7 +527,9 @@ type SessionReaderProps = {
   session: SessionRecord;
   transcript: CodexTranscript | null;
   loading: boolean;
+  loadingOlder?: boolean;
   transcriptError: string | null;
+  onLoadOlder?: () => void;
   onRetry: () => void;
   onRequestAction: (action: PendingAction) => void;
 };
@@ -830,7 +609,7 @@ function normalizeTranscriptError(rawError: string): TranscriptErrorInfo {
   };
 }
 
-function SessionReader({ session, transcript, loading, transcriptError, onRetry, onRequestAction }: SessionReaderProps) {
+function SessionReader({ session, transcript, loading, loadingOlder = false, transcriptError, onLoadOlder, onRetry, onRequestAction }: SessionReaderProps) {
   const normalizedError = transcriptError ? normalizeTranscriptError(transcriptError) : null;
   return (
     <section className="session-reader">
@@ -881,9 +660,13 @@ function SessionReader({ session, transcript, loading, transcriptError, onRetry,
         </details>
       ) : null}
       {session.warnings.length > 0 && <WarningStrip warnings={session.warnings} />}
+      {loading && transcript ? (
+        <p className="session-reader-refreshing">正在刷新这条对话，已读历史保持可见。</p>
+      ) : null}
       {loading && !transcript && (
-        <section className="empty-state">
-          <strong>正在读取对话</strong>
+        <section className="session-reader-loading">
+          <strong>正在读取这条对话</strong>
+          <span>读取完成后会自动显示历史；这不是 0 条结果。</span>
         </section>
       )}
       {transcriptError && (
@@ -893,7 +676,13 @@ function SessionReader({ session, transcript, loading, transcriptError, onRetry,
           {normalizedError?.code ? <small>{normalizedError.code}</small> : null}
         </section>
       )}
-      {transcript ? <AgentTranscriptTimeline transcript={transcript} /> : null}
+      {transcript ? (
+        <AgentTranscriptTimeline
+          olderLoading={loadingOlder}
+          transcript={transcript}
+          onLoadOlder={onLoadOlder}
+        />
+      ) : null}
     </section>
   );
 }
@@ -911,15 +700,4 @@ export function j1ControlSlug(value: string) {
 export function messageOf(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
-}
-
-async function sha256HexText(value: string): Promise<string> {
-  if (!globalThis.crypto?.subtle) {
-    throw new Error("当前环境缺少 Web Crypto，无法生成任务正文摘要。");
-  }
-  const bytes = new TextEncoder().encode(value);
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
 }
