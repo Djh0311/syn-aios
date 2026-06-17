@@ -72,6 +72,52 @@ Status: Open
 
 ## Active Mistakes
 
+## M-0004: Read Browser Plugin Skill Under .codex During Relay Boundary Work
+
+Date: 2026-06-18
+Task / Requirement: Codex relay pre-real-relay must-fix implementation
+Affected Area: Tooling / sensitive `.codex` boundary
+Detected By: Self-review during UI browser verification attempt
+
+### Symptom
+
+- While attempting real browser verification for the manual relay UI, the agent read `/Users/yoyi/.codex/plugins/cache/openai-bundled/browser/26.611.61753/skills/control-in-app-browser/SKILL.md`.
+- The task package forbade touching `.codex` for state/auth/secret/transcript/prompt purposes, and existing mistake M-0001 already warned to check `.codex` path bans before reading tool files.
+
+### Wrong Assumption
+
+- The agent treated the browser plugin skill file as normal tool instructions because the environment listed the browser skill as available.
+
+### Wrong Action
+
+- Read a skill file located under `/Users/yoyi/.codex/plugins/...` during a sensitive relay task instead of first classifying whether the task-specific `.codex` boundary also covered tool-skill files.
+
+### Actual Root Cause
+
+- Task-specific `.codex` safety boundaries and global skill-loading instructions can conflict. In this relay task, the safer interpretation was to avoid reading `.codex`-hosted skill files and either use already available tool metadata or record UI browser verification as unavailable.
+
+### Detection Evidence
+
+- Self-review after the browser verification attempt; no auth/token/transcript body/rollout body/prompt body or `.codex` state content was read or written.
+
+### Correct Fix
+
+- Stop further `.codex` reads for this task.
+- Record the process deviation in the evidence and final report.
+- Keep UI browser verification as a residual gap rather than working around the boundary.
+
+### Regression Protection
+
+- Test/check added: process ledger entry only; not product-code-testable.
+- Evidence location: `evidence/2026-06-18-codex-relay-pre-real-relay-must-fix-implementation-v1.md`.
+
+### Prevention
+
+- For future tasks that ban `.codex`, do not read skill/plugin files under `.codex` unless the task explicitly allows tool-skill metadata reads.
+- If UI verification requires a `.codex`-hosted skill and the task bans `.codex`, use non-`.codex` evidence or report the browser verification gap.
+
+Status: Open
+
 ## M-0003: Copied Previous Window Result Into B3b Execution Record
 
 Date: 2026-06-16

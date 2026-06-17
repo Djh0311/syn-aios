@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{btree_map::Entry, BTreeMap};
 use std::path::{Component, Path, PathBuf};
+use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 
 use crate::utils::hash::{sha256_hex, short_hash};
@@ -37,6 +38,7 @@ pub(crate) struct ManualRelayTargetBinding {
     pub(crate) sandbox: String,
     pub(crate) allowed_write_roots: Vec<String>,
     pub(crate) target_hash: String,
+    pub(crate) path_verified: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -141,6 +143,9 @@ pub(crate) struct ManualRelayReceipt {
     pub(crate) started_at: String,
     pub(crate) ended_at: Option<String>,
     pub(crate) exit_code: Option<i32>,
+    pub(crate) process_id: Option<u32>,
+    pub(crate) process_kind: String,
+    pub(crate) real_process_killed: bool,
     pub(crate) status: String,
     pub(crate) prompt_sent: bool,
     pub(crate) real_codex_executed: bool,
@@ -179,22 +184,30 @@ pub(crate) fn preview_manual_relay(
     input: ManualRelayPreviewInput,
     timestamp: &str,
 ) -> ManualRelayPreview {
-    let project_root = normalize_path_text(&input.target_project_root);
-    let target_cwd = normalize_path_text(&input.target_cwd);
-    let allowed_write_roots = input
+    let project_root = normalize_path_for_preview(&input.target_project_root);
+    let target_cwd = normalize_path_for_preview(&input.target_cwd);
+    let allowed_write_roots_with_verification = input
         .allowed_write_roots
         .iter()
-        .map(|root| normalize_path_text(root))
+        .map(|root| normalize_path_for_preview(root))
         .collect::<Vec<_>>();
+    let allowed_write_roots = allowed_write_roots_with_verification
+        .iter()
+        .map(|path| path.normalized.clone())
+        .collect::<Vec<_>>();
+    let path_verified = project_root.verified
+        && target_cwd.verified
+        && allowed_write_roots_with_verification
+            .iter()
+            .all(|path| path.verified);
     let prompt_sha256 = sha256_hex(&input.original_user_text);
-    let target_hash = sha256_hex(&format!(
-        "{}\n{}\n{}\n{}\n{}",
-        project_root,
-        target_cwd,
-        input.target_session_id.as_deref().unwrap_or("new-session"),
+    let target_hash = target_hash_for_binding(
+        &project_root.normalized,
+        &target_cwd.normalized,
+        input.target_session_id.as_deref(),
         input.new_session,
-        input.sandbox
-    ));
+        &input.sandbox,
+    );
     let relay_id = format!(
         "manual-relay:{}:{}",
         timestamp.replace([':', '.', 'Z'], ""),
@@ -217,13 +230,14 @@ pub(crate) fn preview_manual_relay(
     let envelope = ManualRelayEnvelope {
         relay_id: relay_id.clone(),
         target_binding: ManualRelayTargetBinding {
-            project_root_canonical: project_root.clone(),
-            target_cwd_canonical: target_cwd.clone(),
+            project_root_canonical: project_root.normalized.clone(),
+            target_cwd_canonical: target_cwd.normalized.clone(),
             target_session_id: input.target_session_id.clone(),
             new_session: input.new_session,
             sandbox: input.sandbox.clone(),
             allowed_write_roots: allowed_write_roots.clone(),
             target_hash,
+            path_verified,
         },
         payload: ManualRelayPayload {
             original_user_text: input.original_user_text.clone(),
@@ -312,24 +326,11 @@ pub(crate) fn run_manual_relay_once(
 ) -> Result<ManualRelayReceipt, String> {
     validate_run_binding(&input)?;
     let scope = input.envelope.policy.duplicate_scope.clone();
-    {
-        let registry = active_attempts()
-            .lock()
-            .map_err(|_| "manual_relay_registry_poisoned".to_string())?;
-        if registry
-            .values()
-            .any(|attempt| attempt.duplicate_scope == scope && attempt.status == "running")
-        {
-            return Err("manual_relay_duplicate_running_attempt".to_string());
-        }
+    if is_process_mode(&input.mock_behavior) {
+        verify_strict_run_paths(&input.envelope)?;
     }
-    {
-        let consumed = consumed_confirmations()
-            .lock()
-            .map_err(|_| "manual_relay_confirmation_registry_poisoned".to_string())?;
-        if consumed.contains_key(&input.confirmation_id) {
-            return Err("manual_relay_confirmation_already_consumed".to_string());
-        }
+    if input.mock_behavior == "real_codex_env_gated" {
+        return Err("manual_relay_real_codex_env_gated_not_enabled_in_this_package".to_string());
     }
     let last_message_path = std::env::temp_dir()
         .join("codex-governance-workbench")
@@ -360,6 +361,53 @@ pub(crate) fn run_manual_relay_once(
         ))
     );
     let dirty_before = input.mock_behavior.contains("dirty_tree");
+    if input.mock_behavior == "placeholder_process_sleep" {
+        let placeholder_plan = placeholder_command_plan(&last_message_path, &input.envelope);
+        let mut registry = active_attempts()
+            .lock()
+            .map_err(|_| "manual_relay_registry_poisoned".to_string())?;
+        if registry
+            .values()
+            .any(|attempt| attempt.duplicate_scope == scope && attempt.status == "running")
+        {
+            return Err("manual_relay_duplicate_running_attempt".to_string());
+        }
+        let mut consumed = consumed_confirmations()
+            .lock()
+            .map_err(|_| "manual_relay_confirmation_registry_poisoned".to_string())?;
+        reserve_confirmation_in_map(&mut consumed, &input.confirmation_id)?;
+        let child = spawn_placeholder_process(&placeholder_plan, &input.envelope)?;
+        let process_id = Some(child.id());
+        let mut receipt = fixture_receipt(
+            &attempt_id,
+            &input.confirmation_id,
+            "running",
+            &input.envelope,
+            placeholder_plan,
+            timestamp,
+            false,
+            dirty_before,
+            None,
+        );
+        receipt.process_id = process_id;
+        receipt.process_kind = "placeholder".to_string();
+        receipt
+            .warnings
+            .push("placeholder_process_spawned_no_codex".to_string());
+        receipt.warnings.sort();
+        receipt.warnings.dedup();
+        registry.insert(
+            attempt_id.clone(),
+            ActiveManualRelayAttempt {
+                duplicate_scope: scope,
+                status: "running".to_string(),
+                receipt: receipt.clone(),
+                child: Some(child),
+            },
+        );
+        consumed.insert(input.confirmation_id.clone(), attempt_id);
+        return Ok(receipt);
+    }
     let mut receipt = fixture_receipt(
         &attempt_id,
         &input.confirmation_id,
@@ -385,29 +433,28 @@ pub(crate) fn run_manual_relay_once(
     receipt.warnings.dedup();
 
     if receipt.status == "running" {
-        let mut registry = active_attempts()
-            .lock()
-            .map_err(|_| "manual_relay_registry_poisoned".to_string())?;
-        registry.insert(
+        register_running_attempt_once(
+            &scope,
+            &input.confirmation_id,
             attempt_id.clone(),
             ActiveManualRelayAttempt {
-                duplicate_scope: scope,
+                duplicate_scope: scope.clone(),
                 status: "running".to_string(),
                 receipt: receipt.clone(),
+                child: None,
             },
-        );
+        )?;
+    } else {
+        reserve_non_running_attempt_once(&scope, &input.confirmation_id)?;
     }
-    let mut consumed = consumed_confirmations()
-        .lock()
-        .map_err(|_| "manual_relay_confirmation_registry_poisoned".to_string())?;
-    consumed.insert(input.confirmation_id.clone(), attempt_id);
+    set_consumed_confirmation_attempt(&input.confirmation_id, &attempt_id)?;
 
     Ok(receipt)
 }
 
 pub(crate) fn stop_manual_relay_attempt(
     input: ManualRelayStopInput,
-    _timestamp: &str,
+    timestamp: &str,
 ) -> Result<ManualRelayReceipt, String> {
     if input.requested_by.trim().is_empty() {
         return Err("manual_relay_stop_requested_by_missing".to_string());
@@ -419,9 +466,16 @@ pub(crate) fn stop_manual_relay_attempt(
         return Err("manual_relay_attempt_not_running".to_string());
     };
     let mut receipt = active.receipt;
+    if let Some(mut child) = active.child {
+        let kill_result = child.kill();
+        let wait_result = child.wait();
+        receipt.real_process_killed = kill_result.is_ok() && wait_result.is_ok();
+        if let Ok(status) = wait_result {
+            receipt.exit_code = status.code();
+        }
+    }
     receipt.status = "stopped_by_user".to_string();
-    receipt.ended_at = Some("manual_relay_stop_requested".to_string());
-    receipt.exit_code = None;
+    receipt.ended_at = Some(timestamp.to_string());
     receipt.killed_by_user = true;
     receipt.prompt_sent = false;
     receipt.real_codex_executed = false;
@@ -435,11 +489,11 @@ pub(crate) fn stop_manual_relay_attempt(
     Ok(receipt)
 }
 
-#[derive(Clone, Debug)]
 struct ActiveManualRelayAttempt {
     duplicate_scope: String,
     status: String,
     receipt: ManualRelayReceipt,
+    child: Option<Child>,
 }
 
 fn active_attempts() -> &'static Mutex<BTreeMap<String, ActiveManualRelayAttempt>> {
@@ -450,6 +504,77 @@ fn active_attempts() -> &'static Mutex<BTreeMap<String, ActiveManualRelayAttempt
 fn consumed_confirmations() -> &'static Mutex<BTreeMap<String, String>> {
     static REGISTRY: OnceLock<Mutex<BTreeMap<String, String>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+fn reserve_confirmation_once(confirmation_id: &str) -> Result<String, String> {
+    let mut consumed = consumed_confirmations()
+        .lock()
+        .map_err(|_| "manual_relay_confirmation_registry_poisoned".to_string())?;
+    reserve_confirmation_in_map(&mut consumed, confirmation_id)
+}
+
+fn reserve_confirmation_in_map(
+    consumed: &mut BTreeMap<String, String>,
+    confirmation_id: &str,
+) -> Result<String, String> {
+    match consumed.entry(confirmation_id.to_string()) {
+        Entry::Vacant(entry) => {
+            entry.insert("reserved".to_string());
+            Ok("reserved".to_string())
+        }
+        Entry::Occupied(_) => Err("manual_relay_confirmation_already_consumed".to_string()),
+    }
+}
+
+fn register_running_attempt_once(
+    scope: &str,
+    confirmation_id: &str,
+    attempt_id: String,
+    attempt: ActiveManualRelayAttempt,
+) -> Result<(), String> {
+    let mut registry = active_attempts()
+        .lock()
+        .map_err(|_| "manual_relay_registry_poisoned".to_string())?;
+    if registry
+        .values()
+        .any(|attempt| attempt.duplicate_scope == scope && attempt.status == "running")
+    {
+        return Err("manual_relay_duplicate_running_attempt".to_string());
+    }
+    let mut consumed = consumed_confirmations()
+        .lock()
+        .map_err(|_| "manual_relay_confirmation_registry_poisoned".to_string())?;
+    reserve_confirmation_in_map(&mut consumed, confirmation_id)?;
+    registry.insert(attempt_id, attempt);
+    Ok(())
+}
+
+fn reserve_non_running_attempt_once(scope: &str, confirmation_id: &str) -> Result<(), String> {
+    let registry = active_attempts()
+        .lock()
+        .map_err(|_| "manual_relay_registry_poisoned".to_string())?;
+    if registry
+        .values()
+        .any(|attempt| attempt.duplicate_scope == scope && attempt.status == "running")
+    {
+        return Err("manual_relay_duplicate_running_attempt".to_string());
+    }
+    let mut consumed = consumed_confirmations()
+        .lock()
+        .map_err(|_| "manual_relay_confirmation_registry_poisoned".to_string())?;
+    reserve_confirmation_in_map(&mut consumed, confirmation_id)?;
+    Ok(())
+}
+
+fn set_consumed_confirmation_attempt(
+    confirmation_id: &str,
+    attempt_id: &str,
+) -> Result<(), String> {
+    let mut consumed = consumed_confirmations()
+        .lock()
+        .map_err(|_| "manual_relay_confirmation_registry_poisoned".to_string())?;
+    consumed.insert(confirmation_id.to_string(), attempt_id.to_string());
+    Ok(())
 }
 
 fn inspect_manual_relay_guard(
@@ -661,6 +786,72 @@ fn validate_run_binding(input: &ManualRelayRunInput) -> Result<(), String> {
     Ok(())
 }
 
+fn is_process_mode(mock_behavior: &str) -> bool {
+    mock_behavior.starts_with("placeholder_process_") || mock_behavior == "real_codex_env_gated"
+}
+
+fn verify_strict_run_paths(envelope: &ManualRelayEnvelope) -> Result<(), String> {
+    let project_root = canonical_path_text(&envelope.target_binding.project_root_canonical)
+        .map_err(|_| "manual_relay_paths_not_verified".to_string())?;
+    let target_cwd = canonical_path_text(&envelope.target_binding.target_cwd_canonical)
+        .map_err(|_| "manual_relay_paths_not_verified".to_string())?;
+    let allowed_write_roots = envelope
+        .target_binding
+        .allowed_write_roots
+        .iter()
+        .map(|root| canonical_path_text(root))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| "manual_relay_paths_not_verified".to_string())?;
+    let target_hash = target_hash_for_binding(
+        &project_root,
+        &target_cwd,
+        envelope.target_binding.target_session_id.as_deref(),
+        envelope.target_binding.new_session,
+        &envelope.target_binding.sandbox,
+    );
+    if !envelope.target_binding.path_verified
+        || project_root != envelope.target_binding.project_root_canonical
+        || target_cwd != envelope.target_binding.target_cwd_canonical
+        || allowed_write_roots != envelope.target_binding.allowed_write_roots
+        || target_hash != envelope.target_binding.target_hash
+    {
+        return Err("manual_relay_paths_not_verified".to_string());
+    }
+    Ok(())
+}
+
+fn placeholder_command_plan(
+    last_message_path: &Path,
+    envelope: &ManualRelayEnvelope,
+) -> ManualRelayCommandPlan {
+    ManualRelayCommandPlan {
+        program: "/bin/sleep".to_string(),
+        argv: vec!["30".to_string()],
+        stdin_prompt_ref: format!("manual-relay-prompt:{}", envelope.payload.prompt_sha256),
+        stdin_prompt_sha256: envelope.payload.prompt_sha256.clone(),
+        prompt_in_command: false,
+        shell_invocation: false,
+        redacted_preview: "placeholder process: /bin/sleep 30 <stdin prompt ignored>".to_string(),
+        last_message_path: last_message_path.display().to_string(),
+    }
+}
+
+fn spawn_placeholder_process(
+    command_plan: &ManualRelayCommandPlan,
+    envelope: &ManualRelayEnvelope,
+) -> Result<Child, String> {
+    let mut command = Command::new(&command_plan.program);
+    command.args(&command_plan.argv);
+    command.current_dir(&envelope.target_binding.target_cwd_canonical);
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    command
+        .spawn()
+        .map_err(|error| format!("manual_relay_placeholder_spawn_failed:{error}"))
+}
+
 fn fixture_receipt(
     attempt_id: &str,
     confirmation_id: &str,
@@ -688,6 +879,9 @@ fn fixture_receipt(
             Some(timestamp.to_string())
         },
         exit_code: if status == "running" { None } else { Some(0) },
+        process_id: None,
+        process_kind: "fixture".to_string(),
+        real_process_killed: false,
         status: status.to_string(),
         prompt_sent: false,
         real_codex_executed: false,
@@ -755,7 +949,13 @@ fn denied_material_requested(text: &str) -> bool {
     .any(|needle| lowered.contains(needle))
 }
 
-fn normalize_path_text(value: &str) -> String {
+#[derive(Clone, Debug)]
+struct PreviewPath {
+    normalized: String,
+    verified: bool,
+}
+
+fn normalize_path_for_preview(value: &str) -> PreviewPath {
     let path = PathBuf::from(value.trim());
     let absolute = if path.is_absolute() {
         path
@@ -764,10 +964,40 @@ fn normalize_path_text(value: &str) -> String {
             .unwrap_or_else(|_| PathBuf::from("/"))
             .join(path)
     };
-    std::fs::canonicalize(&absolute)
-        .unwrap_or_else(|_| clean_path(&absolute))
-        .display()
-        .to_string()
+    match std::fs::canonicalize(&absolute) {
+        Ok(path) => PreviewPath {
+            normalized: path.display().to_string(),
+            verified: true,
+        },
+        Err(_) => PreviewPath {
+            normalized: clean_path(&absolute).display().to_string(),
+            verified: false,
+        },
+    }
+}
+
+fn canonical_path_text(value: &str) -> Result<String, String> {
+    let path = PathBuf::from(value.trim());
+    std::fs::canonicalize(&path)
+        .map(|path| path.display().to_string())
+        .map_err(|error| format!("manual_relay_path_canonicalize_failed:{error}"))
+}
+
+fn target_hash_for_binding(
+    project_root: &str,
+    target_cwd: &str,
+    target_session_id: Option<&str>,
+    new_session: bool,
+    sandbox: &str,
+) -> String {
+    sha256_hex(&format!(
+        "{}\n{}\n{}\n{}\n{}",
+        project_root,
+        target_cwd,
+        target_session_id.unwrap_or("new-session"),
+        new_session,
+        sandbox
+    ))
 }
 
 fn clean_path(path: &Path) -> PathBuf {
@@ -855,7 +1085,10 @@ mod tests {
             "2026-06-17T12:00:04Z",
         )
         .expect_err("duplicate running attempt must block");
-        assert!(duplicate.contains("manual_relay_duplicate_running_attempt"));
+        assert!(
+            duplicate.contains("duplicate_running_attempt"),
+            "unexpected duplicate error: {duplicate}"
+        );
     }
 
     #[test]
@@ -978,9 +1211,246 @@ mod tests {
         assert!(still_running.killed_by_user);
     }
 
+    #[test]
+    fn manual_relay_strict_run_requires_verified_paths() {
+        let _guard = test_guard();
+        let mut preview_input = fixture_preview_input("strict paths");
+        let missing_root = std::env::temp_dir().join(format!(
+            "manual-relay-missing-{}",
+            short_hash("strict paths")
+        ));
+        preview_input.target_project_root = missing_root.display().to_string();
+        preview_input.target_cwd = missing_root.display().to_string();
+        preview_input.allowed_write_roots = vec![missing_root.display().to_string()];
+        let preview = preview_manual_relay(preview_input, "2026-06-18T00:00:00Z");
+        assert!(!preview.envelope.target_binding.path_verified);
+
+        let confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:01Z",
+        )
+        .expect("confirmation should still be preview-level only");
+        let mut run_input = fixture_run_input(&preview.envelope, &confirmation);
+        run_input.mock_behavior = "placeholder_process_complete".to_string();
+        let error = run_manual_relay_once(run_input, "2026-06-18T00:00:02Z")
+            .expect_err("strict run must reject unverified paths");
+        assert!(error.contains("manual_relay_paths_not_verified"));
+    }
+
+    #[test]
+    fn manual_relay_confirmation_reservation_is_atomic_for_reentrant_submit() {
+        let _guard = test_guard();
+        let preview = preview_manual_relay(
+            fixture_preview_input("atomic confirmation"),
+            "2026-06-18T00:00:00Z",
+        );
+        let confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:01Z",
+        )
+        .expect("confirmation should pass");
+
+        let first = reserve_confirmation_once(&confirmation.confirmation_id)
+            .expect("first reservation should win");
+        let second = reserve_confirmation_once(&confirmation.confirmation_id)
+            .expect_err("second reservation must be rejected atomically");
+        assert_eq!(first, "reserved");
+        assert!(second.contains("manual_relay_confirmation_already_consumed"));
+    }
+
+    #[test]
+    fn manual_relay_run_consumes_confirmation_once_for_concurrent_submit() {
+        let _guard = test_guard();
+        let preview = preview_manual_relay(
+            fixture_preview_input("atomic run confirmation"),
+            "2026-06-18T00:00:00Z",
+        );
+        let confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:01Z",
+        )
+        .expect("confirmation should pass");
+        let run_input = fixture_run_input(&preview.envelope, &confirmation);
+
+        let first_input = run_input.clone();
+        let second_input = run_input.clone();
+        let first =
+            std::thread::spawn(move || run_manual_relay_once(first_input, "2026-06-18T00:00:02Z"));
+        let second =
+            std::thread::spawn(move || run_manual_relay_once(second_input, "2026-06-18T00:00:03Z"));
+        let results = vec![
+            first.join().expect("first runner should not panic"),
+            second.join().expect("second runner should not panic"),
+        ];
+
+        assert_eq!(
+            results.iter().filter(|result| result.is_ok()).count(),
+            1,
+            "exactly one concurrent run may consume a confirmation"
+        );
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| {
+                    result.as_ref().err().is_some_and(|error| {
+                        error.contains("manual_relay_confirmation_already_consumed")
+                    })
+                })
+                .count(),
+            1,
+            "the losing concurrent run must be rejected by the one-shot guard"
+        );
+    }
+
+    #[test]
+    fn manual_relay_duplicate_scope_reservation_is_atomic_for_distinct_confirmations() {
+        let _guard = test_guard();
+        let preview = preview_manual_relay(
+            fixture_preview_input("atomic duplicate scope"),
+            "2026-06-18T00:00:00Z",
+        );
+        let first_confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:01Z",
+        )
+        .expect("first confirmation should pass");
+        let second_confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:02Z",
+        )
+        .expect("second confirmation should pass");
+        assert_ne!(
+            first_confirmation.confirmation_id,
+            second_confirmation.confirmation_id
+        );
+
+        let mut first_input = fixture_run_input(&preview.envelope, &first_confirmation);
+        first_input.mock_behavior = "stay_running".to_string();
+        let mut second_input = fixture_run_input(&preview.envelope, &second_confirmation);
+        second_input.mock_behavior = "stay_running".to_string();
+        let first =
+            std::thread::spawn(move || run_manual_relay_once(first_input, "2026-06-18T00:00:03Z"));
+        let second =
+            std::thread::spawn(move || run_manual_relay_once(second_input, "2026-06-18T00:00:04Z"));
+        let results = vec![
+            first.join().expect("first runner should not panic"),
+            second.join().expect("second runner should not panic"),
+        ];
+
+        assert_eq!(
+            results.iter().filter(|result| result.is_ok()).count(),
+            1,
+            "only one running attempt may occupy a duplicate scope"
+        );
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| {
+                    result
+                        .as_ref()
+                        .err()
+                        .is_some_and(|error| error.contains("duplicate_running_attempt"))
+                })
+                .count(),
+            1,
+            "the losing concurrent run must be rejected by the duplicate-scope guard"
+        );
+    }
+
+    #[test]
+    fn manual_relay_placeholder_process_can_be_stopped_and_reaped() {
+        let _guard = test_guard();
+        let preview = preview_manual_relay(
+            existing_fixture_preview_input("placeholder process"),
+            "2026-06-18T00:00:00Z",
+        );
+        assert!(preview.envelope.target_binding.path_verified);
+        let confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:01Z",
+        )
+        .expect("confirmation should pass");
+        let mut run_input = fixture_run_input(&preview.envelope, &confirmation);
+        run_input.mock_behavior = "placeholder_process_sleep".to_string();
+        let running = run_manual_relay_once(run_input, "2026-06-18T00:00:02Z")
+            .expect("placeholder process should start");
+        assert_eq!(running.status, "running");
+        assert_eq!(running.process_kind, "placeholder");
+        assert!(running.process_id.is_some());
+        assert!(!running.real_codex_executed);
+
+        let stopped = stop_manual_relay_attempt(
+            ManualRelayStopInput {
+                relay_attempt_id: running.relay_attempt_id.clone(),
+                requested_by: "user".to_string(),
+            },
+            "2026-06-18T00:00:03Z",
+        )
+        .expect("stop must kill placeholder process");
+        assert_eq!(stopped.status, "stopped_by_user");
+        assert!(stopped.killed_by_user);
+        assert!(stopped.real_process_killed);
+        assert_eq!(stopped.process_kind, "placeholder");
+        assert!(!stopped.real_codex_executed);
+    }
+
+    #[test]
+    #[ignore = "real Codex relay is a separate user-present window; this gate proves env authorization is required"]
+    fn manual_relay_real_codex_requires_env_authorization() {
+        let _guard = test_guard();
+        let confirmation = std::env::var("MANUAL_RELAY_REAL_CODEX_CONFIRM")
+            .expect("MANUAL_RELAY_REAL_CODEX_CONFIRM is required");
+        assert_eq!(confirmation, "CONFIRMED_USER_PRESENT_REAL_RELAY");
+
+        let preview = preview_manual_relay(
+            existing_fixture_preview_input("real codex env-gated placeholder"),
+            "2026-06-18T00:00:00Z",
+        );
+        assert!(preview.envelope.target_binding.path_verified);
+        let plan = preview
+            .guard
+            .command_plan
+            .as_ref()
+            .expect("env-gated runner should expose a codex command plan");
+        assert_eq!(plan.program, "codex");
+        assert!(!plan.prompt_in_command);
+        assert!(!plan.shell_invocation);
+        assert_eq!(
+            plan.stdin_prompt_sha256,
+            preview.envelope.payload.prompt_sha256
+        );
+        let confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:01Z",
+        )
+        .expect("confirmation should pass only after env authorization");
+        let mut run_input = fixture_run_input(&preview.envelope, &confirmation);
+        run_input.mock_behavior = "real_codex_env_gated".to_string();
+        let error = run_manual_relay_once(run_input, "2026-06-18T00:00:02Z")
+            .expect_err("this package must not execute real Codex");
+        assert!(error.contains("manual_relay_real_codex_env_gated_not_enabled_in_this_package"));
+    }
+
     fn fixture_preview_input(prompt: &str) -> ManualRelayPreviewInput {
         let suffix = short_hash(prompt);
         let project_root = std::env::temp_dir().join(format!("manual-relay-project-{suffix}"));
+        let session_id = format!("session:manual-relay-fixture:{suffix}");
+        ManualRelayPreviewInput {
+            original_user_text: prompt.to_string(),
+            target_project_root: project_root.display().to_string(),
+            target_cwd: project_root.display().to_string(),
+            target_session_id: Some(session_id),
+            new_session: false,
+            sandbox: "workspace-write".to_string(),
+            allowed_write_roots: vec![project_root.display().to_string()],
+            requested_by: "user".to_string(),
+        }
+    }
+
+    fn existing_fixture_preview_input(prompt: &str) -> ManualRelayPreviewInput {
+        let suffix = short_hash(prompt);
+        let project_root = std::env::temp_dir().join(format!("manual-relay-existing-{suffix}"));
+        std::fs::create_dir_all(&project_root).expect("fixture project root should be created");
         let session_id = format!("session:manual-relay-fixture:{suffix}");
         ManualRelayPreviewInput {
             original_user_text: prompt.to_string(),

@@ -239,6 +239,7 @@ export function AgentSessionCenter({
   }
 
   function handleSubmitConversationDraft() {
+    if (manualRelayBusy || manualRelayReceipt?.status === "running") return;
     const prompt = draftPrompt.trim();
     if (!prompt || !selectedSession || !selectedProjectRoot.trim()) return;
     if (k2Operation === "resume" && (!selectedSession.rollout_exists || !selectedSession.rollout_path)) return;
@@ -282,6 +283,7 @@ export function AgentSessionCenter({
     if (!preview || preview.guard.blocks_execution) return;
     setManualRelayBusy(true);
     setManualRelayError(null);
+    setDraftPrompt("");
     try {
       const confirmation = await confirmManualCodexRelayOnce({
         envelope: preview.envelope,

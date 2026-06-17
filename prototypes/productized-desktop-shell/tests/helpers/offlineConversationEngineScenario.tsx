@@ -1,6 +1,6 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server.browser";
-import { assert, visibleText } from "./offlineInteractionTestUtils";
+import { assert, findButtonByText, findElement, visibleText } from "./offlineInteractionTestUtils";
 import {
   appendPendingUserMessage,
   buildManualRelayPendingUserMessage,
@@ -193,8 +193,91 @@ export function runConversationEngineScenario({
   assert(relayPreviewMarkup.includes(session.thread_id), "manual relay 预演必须显示指定 target session");
   assert(relayPreviewMarkup.includes("Write roots"), "manual relay 预演必须显示 allowed write roots");
   assert(relayPreviewMarkup.includes("manual_once / auto_chain=false"), "manual relay 必须显示一次一发且不自动连环");
+  assert(relayPreviewMarkup.includes("Path verified"), "manual relay 预演必须显示路径校验结果");
   assert(relayPreviewMarkup.includes("Stop 本 attempt"), "manual relay 必须有可点击 stop 控件");
   assert(relayPreviewMarkup.includes("real_codex_executed=false"), "manual relay fixture 回执不得声明真实 Codex 执行");
+  assert(relayPreviewMarkup.includes("process_kind=fixture"), "manual relay 回执必须显示进程类型");
+  assert(relayPreviewMarkup.includes("real_process_killed=false"), "manual relay running fixture 不得伪称已 kill 真进程");
+
+  const relayRunningComposer = (
+    <AgentChatComposer
+      draftPrompt=""
+      k2Operation="resume"
+      k2PreviewError={null}
+      manualRelayBusy={false}
+      manualRelayError={null}
+      manualRelayPreview={manualRelayPreviewFixture(session)}
+      manualRelayReceipt={manualRelayRunningReceiptFixture()}
+      selectedProjectRoot={session.project_root ?? ""}
+      selectedSession={session}
+      onChangeDraft={() => {}}
+      onOpenDeveloperDetails={() => {}}
+      onPreviewManualRelay={() => {}}
+      onRunManualRelayOnce={() => {}}
+      onStopManualRelayAttempt={() => {}}
+      onSubmitDraft={() => {}}
+    />
+  );
+  const relayRunningTextarea = findElement(
+    relayRunningComposer,
+    (element) => element.type === "textarea" && element.props?.["aria-label"] === "输入给 Codex 的任务",
+  );
+  assert(relayRunningTextarea?.props?.value === "", "manual relay 触发 run 后输入框应立即清空");
+  assert(relayRunningTextarea?.props?.readOnly === true, "manual relay running 时 textarea 应锁定键盘输入");
+  assert(findButtonByText(relayRunningComposer, "发送")?.props?.disabled === true, "manual relay running 时普通发送应禁用");
+  assert(
+    findButtonByText(relayRunningComposer, "预演中转 payload")?.props?.disabled === true,
+    "manual relay running 时预演按钮应禁用",
+  );
+  assert(
+    findButtonByText(relayRunningComposer, "确认 mock 中转一次")?.props?.disabled === true,
+    "manual relay running 时确认按钮应禁用以避免双提交",
+  );
+  assert(
+    findButtonByText(relayRunningComposer, "Stop 本 attempt")?.props?.disabled !== true,
+    "manual relay running 时 Stop 本 attempt 必须保持可点击",
+  );
+
+  const relayTerminalComposer = (
+    <AgentChatComposer
+      draftPrompt="Manual relay next prompt"
+      k2Operation="resume"
+      k2PreviewError={null}
+      manualRelayBusy={false}
+      manualRelayError={null}
+      manualRelayPreview={manualRelayPreviewFixture(session)}
+      manualRelayReceipt={manualRelayCompletedReceiptFixture()}
+      selectedProjectRoot={session.project_root ?? ""}
+      selectedSession={session}
+      onChangeDraft={() => {}}
+      onOpenDeveloperDetails={() => {}}
+      onPreviewManualRelay={() => {}}
+      onRunManualRelayOnce={() => {}}
+      onStopManualRelayAttempt={() => {}}
+      onSubmitDraft={() => {}}
+    />
+  );
+  assert(
+    findButtonByText(relayTerminalComposer, "发送")?.props?.disabled !== true,
+    "manual relay terminal 后普通发送应恢复",
+  );
+  const relayTerminalTextarea = findElement(
+    relayTerminalComposer,
+    (element) => element.type === "textarea" && element.props?.["aria-label"] === "输入给 Codex 的任务",
+  );
+  assert(relayTerminalTextarea?.props?.readOnly !== true, "manual relay terminal 后 textarea 应恢复输入");
+  assert(
+    findButtonByText(relayTerminalComposer, "预演中转 payload")?.props?.disabled !== true,
+    "manual relay terminal 后预演按钮应恢复",
+  );
+  assert(
+    findButtonByText(relayTerminalComposer, "确认 mock 中转一次")?.props?.disabled !== true,
+    "manual relay terminal 后确认按钮应恢复",
+  );
+  assert(
+    findButtonByText(relayTerminalComposer, "Stop 本 attempt")?.props?.disabled === true,
+    "manual relay terminal 后 Stop 应禁用",
+  );
 
   const pendingMessage = buildPendingUserMessage({
     prompt: "M3 optimistic send fixture",
@@ -250,6 +333,7 @@ function manualRelayPreviewFixture(session: SessionRecord) {
         sandbox: "workspace-write",
         allowed_write_roots: [projectRoot],
         target_hash: "b".repeat(64),
+        path_verified: true,
       },
       payload: {
         original_user_text: "Manual relay exact payload fixture",
@@ -306,6 +390,7 @@ function manualRelayRunningReceiptFixture() {
       sandbox: "workspace-write",
       allowed_write_roots: ["/tmp/offline"],
       target_hash: "b".repeat(64),
+      path_verified: true,
     },
     effective_prompt_sha256: "a".repeat(64),
     prompt_length_bytes: 34,
@@ -323,6 +408,9 @@ function manualRelayRunningReceiptFixture() {
     started_at: "2026-06-17T01:00:00Z",
     ended_at: null,
     exit_code: null,
+    process_id: null,
+    process_kind: "fixture",
+    real_process_killed: false,
     status: "running",
     prompt_sent: false,
     real_codex_executed: false,
@@ -346,6 +434,19 @@ function manualRelayRunningReceiptFixture() {
       summary: "fixture only",
     },
     warnings: ["manual_relay_fixture_runner_only"],
+  };
+}
+
+function manualRelayCompletedReceiptFixture() {
+  return {
+    ...manualRelayRunningReceiptFixture(),
+    ended_at: "2026-06-17T01:00:03Z",
+    exit_code: 0,
+    status: "completed_fixture",
+    readback_status: "fixture_last_message_available",
+    last_message_hash: "c".repeat(64),
+    last_message_size_bytes: 33,
+    git_head_after: "fixture-head-after",
   };
 }
 

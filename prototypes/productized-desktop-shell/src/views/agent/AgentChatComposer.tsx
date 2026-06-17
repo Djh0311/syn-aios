@@ -36,8 +36,9 @@ export function AgentChatComposer({
   const canPreview = Boolean(selectedProjectRoot && draftPrompt.trim() && (k2Operation === "new_session" || selectedSession));
   const relayGuard = manualRelayPreview?.guard ?? null;
   const relayEnvelope = manualRelayPreview?.envelope ?? null;
-  const relayCanRun = Boolean(relayEnvelope && relayGuard && !relayGuard.blocks_execution && !manualRelayBusy);
   const relayIsRunning = manualRelayReceipt?.status === "running";
+  const relayInputLocked = manualRelayBusy || relayIsRunning;
+  const relayCanRun = Boolean(relayEnvelope && relayGuard && !relayGuard.blocks_execution && !relayInputLocked);
   return (
     <form
       className="agent-chat-composer"
@@ -45,7 +46,7 @@ export function AgentChatComposer({
       aria-label="智能体任务输入"
       onSubmit={(event) => void (async () => {
         event.preventDefault();
-        onSubmitDraft();
+        if (!relayInputLocked) onSubmitDraft();
       })()}
     >
       <label>
@@ -55,8 +56,16 @@ export function AgentChatComposer({
           value={draftPrompt}
           placeholder="写下要让 Codex 做的事。Enter 发送；Shift+Enter 换行。"
           rows={3}
-          onChange={(event) => onChangeDraft(event.currentTarget.value)}
+          readOnly={relayInputLocked}
+          aria-busy={relayInputLocked}
+          onChange={(event) => {
+            if (!relayInputLocked) onChangeDraft(event.currentTarget.value);
+          }}
           onKeyDown={(event) => {
+            if (relayInputLocked) {
+              event.preventDefault();
+              return;
+            }
             if (event.key !== "Enter" || event.shiftKey) return;
             event.preventDefault();
             onSubmitDraft();
@@ -71,7 +80,7 @@ export function AgentChatComposer({
             ? `当前对话：${selectedSession.title || selectedSession.thread_id}`
             : "请选择一个可读取对话"}
         </span>
-        <button className="primary-button" disabled={!canPreview} type="submit">
+        <button className="primary-button" disabled={!canPreview || relayInputLocked} type="submit">
           发送
         </button>
       </div>
@@ -92,7 +101,7 @@ export function AgentChatComposer({
         <div className="manual-relay-actions">
           <button
             className="secondary-button"
-            disabled={!canPreview || manualRelayBusy}
+            disabled={!canPreview || relayInputLocked}
             type="button"
             onClick={onPreviewManualRelay}
           >
@@ -139,6 +148,10 @@ export function AgentChatComposer({
                 <dd>{relayEnvelope.target_binding.allowed_write_roots.join(" / ") || "none"}</dd>
               </div>
               <div>
+                <dt>Path verified</dt>
+                <dd>{relayEnvelope.target_binding.path_verified ? "true" : "false"}</dd>
+              </div>
+              <div>
                 <dt>Payload layers</dt>
                 <dd>{relayEnvelope.payload.payload_layers.length}（v1 必须为空）</dd>
               </div>
@@ -154,11 +167,15 @@ export function AgentChatComposer({
             )}
           </div>
         ) : null}
+        {relayIsRunning ? <p>中转运行中：输入已锁定；停止或 terminal 回执后恢复。</p> : null}
         {manualRelayReceipt ? (
           <div className="manual-relay-receipt">
             <strong>回执：{manualRelayReceipt.status}</strong>
             <span>attempt: {manualRelayReceipt.relay_attempt_id}</span>
+            <span>process_kind={manualRelayReceipt.process_kind}</span>
+            <span>process_id={manualRelayReceipt.process_id ?? "none"}</span>
             <span>real_codex_executed={String(manualRelayReceipt.real_codex_executed)}</span>
+            <span>real_process_killed={String(manualRelayReceipt.real_process_killed)}</span>
             <span>syn_read_codex_home={String(manualRelayReceipt.syn_read_codex_home)}</span>
             <span>killed_by_user={String(manualRelayReceipt.killed_by_user)}</span>
           </div>

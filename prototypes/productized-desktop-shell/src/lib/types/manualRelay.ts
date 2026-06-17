@@ -17,6 +17,7 @@ export type ManualRelayTargetBinding = {
   sandbox: string;
   allowed_write_roots: string[];
   target_hash: string;
+  path_verified: boolean;
 };
 
 export type ManualRelayPayload = {
@@ -129,6 +130,9 @@ export type ManualRelayReceipt = {
   started_at: string;
   ended_at: string | null;
   exit_code: number | null;
+  process_id: number | null;
+  process_kind: string;
+  real_process_killed: boolean;
   status: string;
   prompt_sent: boolean;
   real_codex_executed: boolean;
