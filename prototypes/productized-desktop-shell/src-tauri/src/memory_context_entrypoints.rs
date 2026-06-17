@@ -1,5 +1,8 @@
 // Memory command bridge, observation bridge, task memory preview, and context guard helpers split out during Root Treatment R2-B7.
 // This file is included at crate root so helper visibility and behavior stay unchanged.
+#[cfg(test)]
+#[path = "ru_dogfood.rs"]
+mod ru_dogfood;
 
 fn create_formal_memory_record_at(
     path: &Path,
@@ -11,7 +14,7 @@ fn create_formal_memory_record_at(
     formal_memory_store::create_record(path, request, timestamp, write_id)
 }
 
-fn adopt_memory_candidate_to_formal_memory_at(
+pub(crate) fn adopt_memory_candidate_to_formal_memory_at(
     path: &Path,
     request: &AdoptMemoryCandidateInput,
     timestamp: &str,
@@ -472,4 +475,3 @@ fn validate_formal_memory_project_registered(
     }
     Ok(())
 }
-

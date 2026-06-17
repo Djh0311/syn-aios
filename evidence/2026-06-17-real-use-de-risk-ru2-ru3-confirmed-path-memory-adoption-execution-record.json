@@ -1,0 +1,53 @@
+{
+  "schema": "real_use_de_risk_ru2_ru3_execution_record.v1",
+  "phase": "RU2_RU3_confirmed_path_memory_adoption",
+  "status": "completed_pending_consultation_review",
+  "git_head": "512c04713f4a7403fb6b5fa7236ed59cfe0769b6",
+  "user_confirmation_ref": "user-thread-2026-06-17-ru2-ru3-option-1-confirmed-path",
+  "state_root": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state",
+  "project_root": "/Users/yoyi/Documents/mario test",
+  "project_id": "project:users-yoyi-documents-mario-test",
+  "workflow_id": "workflow:users-yoyi-documents-mario-test:default",
+  "runner": {
+    "name": "r3_ru2_dogfood_confirmed_paths_requires_env_authorization",
+    "status": "passed",
+    "timestamp": "1781630651485"
+  },
+  "source_files": {
+    "workflow_state_v0_json_sha256_before": "4bd5434fdca9e82c8fafc42989e1a267ed7d677bfe2972273fb3afaa26829972",
+    "workflow_state_v0_json_sha256_after": "4bd5434fdca9e82c8fafc42989e1a267ed7d677bfe2972273fb3afaa26829972",
+    "plan_authorizations_v1_json_sha256_before": "6962e4781f49246525d4cde37d3133924a66faa12b8aab90db106c3c9f401b0e",
+    "plan_authorizations_v1_json_sha256_after": "6962e4781f49246525d4cde37d3133924a66faa12b8aab90db106c3c9f401b0e"
+  },
+  "sidecars": {
+    "memory_capture_events_v1_json_sha256": "b771a51ec95e25fd830b33df23131d5ee45e7ffbd2fe9e6176caccf2a5d62191",
+    "observations_v1_json_sha256": "8c6258bc51829ab1ba6d233997402eee8dfba41628bb6831bee42d53f77718dc",
+    "memory_candidates_v1_json_sha256": "3f0e850cd084a4ee019d9cc810fbf36be71eb5d29e6658bcd9f1c8c39c8dcdd9",
+    "formal_memories_v1_json_sha256": "3b2c13af745daf710fc3810a005d7af17ccc8e092ad416c6fc72aeae898becfe",
+    "memory_lint_v1_json_sha256": "a68f6270c2d4836ee52c0037abe0317df22232448b780a3c41ca4f2d9ce83a58"
+  },
+  "memory_result": {
+    "capture_event_id": "memory-capture:1781630651485:a16cb8f0eef8",
+    "observation_id": "obs:v1:1781630651485:3313fafbc3954aa5",
+    "candidate_key": "memcand:v1:d52ec5fb5378ffb013219d0d6bd1e6f4b9682c195c436fe6ac0640dd88dae55d",
+    "memory_id": "mem:v1:1781630651485:8a3140d6102a2c7d",
+    "formal_memory_revision": 1,
+    "candidate_store_revision": 3,
+    "lint_status": "succeeded",
+    "lint_blocking_count": 0
+  },
+  "boundaries": {
+    "codex_home_touched": false,
+    "real_codex_executed": false,
+    "gui_started": false,
+    "tauri_command_added": false,
+    "product_global_read_write_cutover": false,
+    "manual_formal_memory_json_write": false
+  },
+  "review": {
+    "line": "Aquinas",
+    "agent_id": "019ece6b-4b39-7830-9553-86b979ec322c",
+    "status": "CLEAR",
+    "file": "evidence/2026-06-17-real-use-de-risk-ru2-ru3-confirmed-path-memory-adoption-review-aquinas-v1.md"
+  }
+}
