@@ -1,10 +1,15 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{btree_map::Entry, BTreeMap};
+use std::fs;
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 
 use crate::utils::hash::{sha256_hex, short_hash};
+
+const MANUAL_RELAY_REAL_CODEX_CONFIRM_ENV: &str = "MANUAL_RELAY_REAL_CODEX_CONFIRM";
+const MANUAL_RELAY_REAL_CODEX_CONFIRM_VALUE: &str = "CONFIRMED_USER_PRESENT_REAL_RELAY";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ManualRelayPreviewInput {
@@ -326,11 +331,12 @@ pub(crate) fn run_manual_relay_once(
 ) -> Result<ManualRelayReceipt, String> {
     validate_run_binding(&input)?;
     let scope = input.envelope.policy.duplicate_scope.clone();
+    if is_mock_codex_process_mode(&input.mock_behavior) && !mock_codex_process_mode_allowed() {
+        return Err("manual_relay_mock_codex_process_mode_test_only".to_string());
+    }
+    let process_mode = manual_relay_process_mode(&input.mock_behavior);
     if is_process_mode(&input.mock_behavior) {
         verify_strict_run_paths(&input.envelope)?;
-    }
-    if input.mock_behavior == "real_codex_env_gated" {
-        return Err("manual_relay_real_codex_env_gated_not_enabled_in_this_package".to_string());
     }
     let last_message_path = std::env::temp_dir()
         .join("codex-governance-workbench")
@@ -361,51 +367,78 @@ pub(crate) fn run_manual_relay_once(
         ))
     );
     let dirty_before = input.mock_behavior.contains("dirty_tree");
-    if input.mock_behavior == "placeholder_process_sleep" {
-        let placeholder_plan = placeholder_command_plan(&last_message_path, &input.envelope);
-        let mut registry = active_attempts()
-            .lock()
-            .map_err(|_| "manual_relay_registry_poisoned".to_string())?;
-        if registry
-            .values()
-            .any(|attempt| attempt.duplicate_scope == scope && attempt.status == "running")
-        {
-            return Err("manual_relay_duplicate_running_attempt".to_string());
+    if let Some(process_mode) = process_mode {
+        if process_mode == ManualRelayProcessMode::PlaceholderSleep {
+            let placeholder_plan = placeholder_command_plan(&last_message_path, &input.envelope);
+            let mut registry = active_attempts()
+                .lock()
+                .map_err(|_| "manual_relay_registry_poisoned".to_string())?;
+            if registry
+                .values()
+                .any(|attempt| attempt.duplicate_scope == scope && attempt.status == "running")
+            {
+                return Err("manual_relay_duplicate_running_attempt".to_string());
+            }
+            let mut consumed = consumed_confirmations()
+                .lock()
+                .map_err(|_| "manual_relay_confirmation_registry_poisoned".to_string())?;
+            reserve_confirmation_in_map(&mut consumed, &input.confirmation_id)?;
+            let child = spawn_placeholder_process(&placeholder_plan, &input.envelope)?;
+            let process_id = Some(child.id());
+            let mut receipt = fixture_receipt(
+                &attempt_id,
+                &input.confirmation_id,
+                "running",
+                &input.envelope,
+                placeholder_plan,
+                timestamp,
+                false,
+                dirty_before,
+                None,
+            );
+            receipt.process_id = process_id;
+            receipt.process_kind = "placeholder".to_string();
+            receipt
+                .warnings
+                .push("placeholder_process_spawned_no_codex".to_string());
+            receipt.warnings.sort();
+            receipt.warnings.dedup();
+            registry.insert(
+                attempt_id.clone(),
+                ActiveManualRelayAttempt {
+                    duplicate_scope: scope,
+                    status: "running".to_string(),
+                    receipt: receipt.clone(),
+                    child: Some(child),
+                },
+            );
+            consumed.insert(input.confirmation_id.clone(), attempt_id);
+            return Ok(receipt);
         }
-        let mut consumed = consumed_confirmations()
-            .lock()
-            .map_err(|_| "manual_relay_confirmation_registry_poisoned".to_string())?;
-        reserve_confirmation_in_map(&mut consumed, &input.confirmation_id)?;
-        let child = spawn_placeholder_process(&placeholder_plan, &input.envelope)?;
-        let process_id = Some(child.id());
-        let mut receipt = fixture_receipt(
+
+        let process_config = process_config_for_mode(process_mode, command_plan)?;
+        if process_config.return_running {
+            return spawn_running_codex_like_process(
+                &scope,
+                &input.confirmation_id,
+                attempt_id,
+                &input.envelope,
+                process_config,
+                timestamp,
+                dirty_before,
+            );
+        }
+
+        reserve_non_running_attempt_once(&scope, &input.confirmation_id)?;
+        let receipt = run_codex_like_process_to_completion(
             &attempt_id,
             &input.confirmation_id,
-            "running",
             &input.envelope,
-            placeholder_plan,
+            process_config,
             timestamp,
-            false,
             dirty_before,
-            None,
-        );
-        receipt.process_id = process_id;
-        receipt.process_kind = "placeholder".to_string();
-        receipt
-            .warnings
-            .push("placeholder_process_spawned_no_codex".to_string());
-        receipt.warnings.sort();
-        receipt.warnings.dedup();
-        registry.insert(
-            attempt_id.clone(),
-            ActiveManualRelayAttempt {
-                duplicate_scope: scope,
-                status: "running".to_string(),
-                receipt: receipt.clone(),
-                child: Some(child),
-            },
-        );
-        consumed.insert(input.confirmation_id.clone(), attempt_id);
+        )?;
+        set_consumed_confirmation_attempt(&input.confirmation_id, &attempt_id)?;
         return Ok(receipt);
     }
     let mut receipt = fixture_receipt(
@@ -477,8 +510,6 @@ pub(crate) fn stop_manual_relay_attempt(
     receipt.status = "stopped_by_user".to_string();
     receipt.ended_at = Some(timestamp.to_string());
     receipt.killed_by_user = true;
-    receipt.prompt_sent = false;
-    receipt.real_codex_executed = false;
     receipt.syn_read_codex_home = false;
     receipt.syn_wrote_codex_home = false;
     receipt
@@ -487,6 +518,292 @@ pub(crate) fn stop_manual_relay_attempt(
     receipt.warnings.sort();
     receipt.warnings.dedup();
     Ok(receipt)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ManualRelayProcessMode {
+    PlaceholderSleep,
+    MockCodexComplete(PathBuf),
+    MockCodexSleep(PathBuf),
+    RealCodexEnvGated,
+}
+
+struct ManualRelayProcessConfig {
+    command_plan: ManualRelayCommandPlan,
+    process_kind: String,
+    real_codex_executed: bool,
+    return_running: bool,
+    completed_status: String,
+}
+
+fn manual_relay_process_mode(mock_behavior: &str) -> Option<ManualRelayProcessMode> {
+    if mock_behavior == "placeholder_process_sleep" {
+        return Some(ManualRelayProcessMode::PlaceholderSleep);
+    }
+    if mock_behavior == "real_codex_env_gated" {
+        return Some(ManualRelayProcessMode::RealCodexEnvGated);
+    }
+    if let Some(path) = mock_behavior.strip_prefix("mock_codex_process_sleep:") {
+        return Some(ManualRelayProcessMode::MockCodexSleep(PathBuf::from(path)));
+    }
+    mock_behavior
+        .strip_prefix("mock_codex_process:")
+        .map(|path| ManualRelayProcessMode::MockCodexComplete(PathBuf::from(path)))
+}
+
+fn is_mock_codex_process_mode(mock_behavior: &str) -> bool {
+    mock_behavior.starts_with("mock_codex_process:")
+        || mock_behavior.starts_with("mock_codex_process_sleep:")
+}
+
+#[cfg(test)]
+fn mock_codex_process_mode_allowed() -> bool {
+    true
+}
+
+#[cfg(not(test))]
+fn mock_codex_process_mode_allowed() -> bool {
+    false
+}
+
+fn process_config_for_mode(
+    process_mode: ManualRelayProcessMode,
+    mut command_plan: ManualRelayCommandPlan,
+) -> Result<ManualRelayProcessConfig, String> {
+    match process_mode {
+        ManualRelayProcessMode::PlaceholderSleep => {
+            Err("manual_relay_placeholder_process_mode_unexpected".to_string())
+        }
+        ManualRelayProcessMode::MockCodexComplete(program) => {
+            command_plan.program = program.display().to_string();
+            command_plan.redacted_preview =
+                "mock codex fixture <stdin prompt> # workbench-managed last-message".to_string();
+            Ok(ManualRelayProcessConfig {
+                command_plan,
+                process_kind: "mock_codex".to_string(),
+                real_codex_executed: false,
+                return_running: false,
+                completed_status: "completed_mock_codex".to_string(),
+            })
+        }
+        ManualRelayProcessMode::MockCodexSleep(program) => {
+            command_plan.program = program.display().to_string();
+            command_plan.redacted_preview =
+                "mock codex sleep fixture <stdin prompt> # workbench-managed last-message"
+                    .to_string();
+            Ok(ManualRelayProcessConfig {
+                command_plan,
+                process_kind: "mock_codex".to_string(),
+                real_codex_executed: false,
+                return_running: true,
+                completed_status: "completed_mock_codex".to_string(),
+            })
+        }
+        ManualRelayProcessMode::RealCodexEnvGated => {
+            ensure_real_codex_env_authorized()?;
+            Ok(ManualRelayProcessConfig {
+                command_plan,
+                process_kind: "real_codex".to_string(),
+                real_codex_executed: true,
+                return_running: true,
+                completed_status: "completed_real_codex".to_string(),
+            })
+        }
+    }
+}
+
+fn ensure_real_codex_env_authorized() -> Result<(), String> {
+    match std::env::var(MANUAL_RELAY_REAL_CODEX_CONFIRM_ENV) {
+        Ok(value) if value == MANUAL_RELAY_REAL_CODEX_CONFIRM_VALUE => Ok(()),
+        _ => Err("manual_relay_real_codex_env_authorization_required".to_string()),
+    }
+}
+
+fn spawn_running_codex_like_process(
+    scope: &str,
+    confirmation_id: &str,
+    attempt_id: String,
+    envelope: &ManualRelayEnvelope,
+    process_config: ManualRelayProcessConfig,
+    timestamp: &str,
+    dirty_before: bool,
+) -> Result<ManualRelayReceipt, String> {
+    let mut registry = active_attempts()
+        .lock()
+        .map_err(|_| "manual_relay_registry_poisoned".to_string())?;
+    if registry
+        .values()
+        .any(|attempt| attempt.duplicate_scope == scope && attempt.status == "running")
+    {
+        return Err("manual_relay_duplicate_running_attempt".to_string());
+    }
+    let mut consumed = consumed_confirmations()
+        .lock()
+        .map_err(|_| "manual_relay_confirmation_registry_poisoned".to_string())?;
+    reserve_confirmation_in_map(&mut consumed, confirmation_id)?;
+    let child = spawn_codex_like_process(
+        &process_config.command_plan,
+        envelope,
+        Some(&envelope.payload.effective_prompt),
+    )?;
+    let process_id = Some(child.id());
+    let mut receipt = fixture_receipt(
+        &attempt_id,
+        confirmation_id,
+        "running",
+        envelope,
+        process_config.command_plan,
+        timestamp,
+        false,
+        dirty_before,
+        None,
+    );
+    receipt.process_id = process_id;
+    receipt.process_kind = process_config.process_kind;
+    receipt.prompt_sent = true;
+    receipt.real_codex_executed = process_config.real_codex_executed;
+    receipt.readback_status = "not_attempted_running_process".to_string();
+    receipt
+        .warnings
+        .push("process_spawned_with_workbench_managed_last_message_only".to_string());
+    if !receipt.real_codex_executed {
+        receipt
+            .warnings
+            .push("mock_codex_fixture_no_real_codex".to_string());
+    }
+    receipt.warnings.sort();
+    receipt.warnings.dedup();
+    registry.insert(
+        attempt_id.clone(),
+        ActiveManualRelayAttempt {
+            duplicate_scope: scope.to_string(),
+            status: "running".to_string(),
+            receipt: receipt.clone(),
+            child: Some(child),
+        },
+    );
+    consumed.insert(confirmation_id.to_string(), attempt_id);
+    Ok(receipt)
+}
+
+fn run_codex_like_process_to_completion(
+    attempt_id: &str,
+    confirmation_id: &str,
+    envelope: &ManualRelayEnvelope,
+    process_config: ManualRelayProcessConfig,
+    timestamp: &str,
+    dirty_before: bool,
+) -> Result<ManualRelayReceipt, String> {
+    let mut child = spawn_codex_like_process(
+        &process_config.command_plan,
+        envelope,
+        Some(&envelope.payload.effective_prompt),
+    )?;
+    let process_id = Some(child.id());
+    let exit_status = child
+        .wait()
+        .map_err(|error| format!("manual_relay_process_wait_failed:{error}"))?;
+    let (readback_status, last_message_hash, last_message_size_bytes) =
+        read_last_message_summary(&process_config.command_plan.last_message_path);
+    let status = if exit_status.success() {
+        process_config.completed_status.as_str()
+    } else {
+        "failed_process"
+    };
+    let mut receipt = fixture_receipt(
+        attempt_id,
+        confirmation_id,
+        status,
+        envelope,
+        process_config.command_plan,
+        timestamp,
+        false,
+        dirty_before,
+        last_message_hash,
+    );
+    receipt.process_id = process_id;
+    receipt.process_kind = process_config.process_kind;
+    receipt.prompt_sent = true;
+    receipt.real_codex_executed = process_config.real_codex_executed;
+    receipt.exit_code = exit_status.code();
+    receipt.readback_status = readback_status;
+    receipt.last_message_size_bytes = last_message_size_bytes;
+    receipt
+        .warnings
+        .push("readback_last_message_only_no_full_transcript".to_string());
+    if !receipt.real_codex_executed {
+        receipt
+            .warnings
+            .push("mock_codex_fixture_no_real_codex".to_string());
+    }
+    receipt.warnings.sort();
+    receipt.warnings.dedup();
+    Ok(receipt)
+}
+
+fn spawn_codex_like_process(
+    command_plan: &ManualRelayCommandPlan,
+    envelope: &ManualRelayEnvelope,
+    stdin_prompt: Option<&str>,
+) -> Result<Child, String> {
+    let last_message_path = PathBuf::from(&command_plan.last_message_path);
+    let Some(output_dir) = last_message_path.parent() else {
+        return Err("manual_relay_last_message_parent_missing".to_string());
+    };
+    fs::create_dir_all(output_dir)
+        .map_err(|error| format!("manual_relay_last_message_dir_create_failed:{error}"))?;
+    let mut command = Command::new(&command_plan.program);
+    for arg in &command_plan.argv {
+        if arg == "<workbench-managed-last-message>" {
+            command.arg(&last_message_path);
+        } else {
+            command.arg(arg);
+        }
+    }
+    command.current_dir(&envelope.target_binding.target_cwd_canonical);
+    command
+        .stdin(if stdin_prompt.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("manual_relay_process_spawn_failed:{error}"))?;
+    if let Some(prompt) = stdin_prompt {
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| "manual_relay_process_stdin_unavailable".to_string())?;
+        if let Err(error) = stdin.write_all(prompt.as_bytes()) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("manual_relay_process_stdin_write_failed:{error}"));
+        }
+    }
+    Ok(child)
+}
+
+fn read_last_message_summary(path: &str) -> (String, Option<String>, Option<i64>) {
+    match fs::read_to_string(path) {
+        Ok(message) if !message.is_empty() => (
+            "workbench_managed_last_message_available".to_string(),
+            Some(sha256_hex(&message)),
+            Some(message.as_bytes().len() as i64),
+        ),
+        Ok(_) => (
+            "workbench_managed_last_message_empty".to_string(),
+            None,
+            Some(0),
+        ),
+        Err(error) => (
+            format!("workbench_managed_last_message_unavailable:{error}"),
+            None,
+            None,
+        ),
+    }
 }
 
 struct ActiveManualRelayAttempt {
@@ -787,7 +1104,8 @@ fn validate_run_binding(input: &ManualRelayRunInput) -> Result<(), String> {
 }
 
 fn is_process_mode(mock_behavior: &str) -> bool {
-    mock_behavior.starts_with("placeholder_process_") || mock_behavior == "real_codex_env_gated"
+    mock_behavior.starts_with("placeholder_process_")
+        || manual_relay_process_mode(mock_behavior).is_some()
 }
 
 fn verify_strict_run_paths(envelope: &ManualRelayEnvelope) -> Result<(), String> {
@@ -1017,6 +1335,7 @@ fn clean_path(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
     use std::sync::{Mutex, OnceLock};
 
     #[test]
@@ -1395,6 +1714,146 @@ mod tests {
     }
 
     #[test]
+    fn manual_relay_real_codex_env_gated_without_env_does_not_spawn() {
+        let _guard = test_guard();
+        std::env::remove_var("MANUAL_RELAY_REAL_CODEX_CONFIRM");
+        let preview = preview_manual_relay(
+            existing_fixture_preview_input("real codex no env"),
+            "2026-06-18T00:00:00Z",
+        );
+        let confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:01Z",
+        )
+        .expect("confirmation should pass");
+        let mut run_input = fixture_run_input(&preview.envelope, &confirmation);
+        run_input.mock_behavior = "real_codex_env_gated".to_string();
+        let error = run_manual_relay_once(run_input, "2026-06-18T00:00:02Z")
+            .expect_err("real codex path must require explicit env authorization");
+        assert!(error.contains("manual_relay_real_codex_env_authorization_required"));
+        assert!(active_attempts()
+            .lock()
+            .expect("registry should not poison")
+            .is_empty());
+    }
+
+    #[test]
+    fn manual_relay_mock_codex_process_writes_last_message_readback() {
+        let _guard = test_guard();
+        let script = mock_codex_script(
+            "complete",
+            r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+if [ -z "$last" ]; then
+  exit 42
+fi
+mkdir -p "$(dirname "$last")"
+prompt="$(cat)"
+printf 'mock codex last message: %s\n' "$prompt" > "$last"
+exit 0
+"#,
+        );
+        let preview = preview_manual_relay(
+            existing_fixture_preview_input("mock codex readback"),
+            "2026-06-18T00:00:00Z",
+        );
+        let confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:01Z",
+        )
+        .expect("confirmation should pass");
+        let mut run_input = fixture_run_input(&preview.envelope, &confirmation);
+        run_input.mock_behavior = format!("mock_codex_process:{}", script.display());
+        let receipt = run_manual_relay_once(run_input, "2026-06-18T00:00:02Z")
+            .expect("mock codex process should complete");
+        let expected_last_message = "mock codex last message: mock codex readback\n".to_string();
+        assert_eq!(receipt.status, "completed_mock_codex");
+        assert_eq!(receipt.process_kind, "mock_codex");
+        assert_eq!(receipt.exit_code, Some(0));
+        assert!(receipt.prompt_sent);
+        assert!(!receipt.real_codex_executed);
+        assert_eq!(
+            receipt.readback_status,
+            "workbench_managed_last_message_available"
+        );
+        assert_eq!(
+            receipt.last_message_hash.as_deref(),
+            Some(sha256_hex(&expected_last_message).as_str())
+        );
+        assert_eq!(
+            receipt.last_message_size_bytes,
+            Some(expected_last_message.as_bytes().len() as i64)
+        );
+        assert!(!receipt.syn_read_codex_home);
+        assert!(!receipt.syn_wrote_codex_home);
+        assert!(receipt
+            .warnings
+            .contains(&"readback_last_message_only_no_full_transcript".to_string()));
+    }
+
+    #[test]
+    fn manual_relay_mock_codex_process_can_be_stopped_and_reaped() {
+        let _guard = test_guard();
+        let script = mock_codex_script(
+            "sleep",
+            r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+if [ -n "$last" ]; then
+  mkdir -p "$(dirname "$last")"
+  printf 'mock codex started\n' > "$last"
+fi
+sleep 30
+"#,
+        );
+        let preview = preview_manual_relay(
+            existing_fixture_preview_input("mock codex stop"),
+            "2026-06-18T00:00:00Z",
+        );
+        let confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:01Z",
+        )
+        .expect("confirmation should pass");
+        let mut run_input = fixture_run_input(&preview.envelope, &confirmation);
+        run_input.mock_behavior = format!("mock_codex_process_sleep:{}", script.display());
+        let running = run_manual_relay_once(run_input, "2026-06-18T00:00:02Z")
+            .expect("mock codex process should start");
+        assert_eq!(running.status, "running");
+        assert_eq!(running.process_kind, "mock_codex");
+        assert!(running.process_id.is_some());
+        assert!(running.prompt_sent);
+        assert!(!running.real_codex_executed);
+
+        let stopped = stop_manual_relay_attempt(
+            ManualRelayStopInput {
+                relay_attempt_id: running.relay_attempt_id,
+                requested_by: "user".to_string(),
+            },
+            "2026-06-18T00:00:03Z",
+        )
+        .expect("stop must kill mock codex process");
+        assert_eq!(stopped.status, "stopped_by_user");
+        assert!(stopped.killed_by_user);
+        assert!(stopped.real_process_killed);
+        assert_eq!(stopped.process_kind, "mock_codex");
+        assert!(!stopped.real_codex_executed);
+    }
+
+    #[test]
     #[ignore = "real Codex relay is a separate user-present window; this gate proves env authorization is required"]
     fn manual_relay_real_codex_requires_env_authorization() {
         let _guard = test_guard();
@@ -1419,16 +1878,13 @@ mod tests {
             plan.stdin_prompt_sha256,
             preview.envelope.payload.prompt_sha256
         );
-        let confirmation = confirm_manual_relay_once(
-            fixture_confirm_input(&preview.envelope),
-            "2026-06-18T00:00:01Z",
-        )
-        .expect("confirmation should pass only after env authorization");
-        let mut run_input = fixture_run_input(&preview.envelope, &confirmation);
-        run_input.mock_behavior = "real_codex_env_gated".to_string();
-        let error = run_manual_relay_once(run_input, "2026-06-18T00:00:02Z")
-            .expect_err("this package must not execute real Codex");
-        assert!(error.contains("manual_relay_real_codex_env_gated_not_enabled_in_this_package"));
+        let process_config =
+            process_config_for_mode(ManualRelayProcessMode::RealCodexEnvGated, plan.clone())
+                .expect("env authorization should unlock the real Codex process config");
+        assert_eq!(process_config.command_plan.program, "codex");
+        assert_eq!(process_config.process_kind, "real_codex");
+        assert!(process_config.real_codex_executed);
+        assert!(process_config.return_running);
     }
 
     fn fixture_preview_input(prompt: &str) -> ManualRelayPreviewInput {
@@ -1462,6 +1918,23 @@ mod tests {
             allowed_write_roots: vec![project_root.display().to_string()],
             requested_by: "user".to_string(),
         }
+    }
+
+    fn mock_codex_script(name: &str, body: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "manual-relay-mock-codex-{}",
+            short_hash(&format!("{name}:{body}"))
+        ));
+        std::fs::create_dir_all(&dir).expect("mock codex dir should be created");
+        let script = dir.join("mock-codex.sh");
+        std::fs::write(&script, body).expect("mock codex script should be written");
+        let mut permissions = std::fs::metadata(&script)
+            .expect("mock codex script metadata should exist")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&script, permissions)
+            .expect("mock codex script should be executable");
+        script
     }
 
     fn fixture_confirm_input(envelope: &ManualRelayEnvelope) -> ManualRelayConfirmInput {

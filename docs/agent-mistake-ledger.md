@@ -72,6 +72,53 @@ Status: Open
 
 ## Active Mistakes
 
+## M-0005: Left Mock Process Mode Reachable From Production Manual Relay Input
+
+Date: 2026-06-18
+Task / Requirement: Codex relay real Codex execution wiring ③a
+Affected Area: Manual relay process execution boundary
+Detected By: Independent review line Dirac (`019ed78e-f036-78f0-b576-e602fc87a79f`)
+
+### Symptom
+
+- The first implementation of ③a added `mock_codex_process:<path>` and `mock_codex_process_sleep:<path>` modes as ordinary runtime `mock_behavior` values.
+- Because `ManualRelayRunInput.mock_behavior` is part of the product command input shape, a caller could theoretically point the mock mode at an arbitrary local executable and spawn it without `MANUAL_RELAY_REAL_CODEX_CONFIRM`.
+
+### Wrong Assumption
+
+- The agent treated "mock codex" behavior as test-only because only tests were expected to use it.
+
+### Wrong Action
+
+- Added mock process modes in production-compiled code without a separate test-only gate.
+
+### Actual Root Cause
+
+- Test fixtures that spawn processes share the same entrypoint shape as product runtime input unless explicitly cfg-gated or otherwise denied.
+- In a real-execution-sensitive path, "only tests will call this string" is not a sufficient safety boundary.
+
+### Detection Evidence
+
+- Dirac review returned `STATUS: FINDINGS` with P1: mock process modes were production-code process modes and could weaken the env-gated real-process boundary.
+
+### Correct Fix
+
+- Added `is_mock_codex_process_mode` plus `mock_codex_process_mode_allowed`.
+- `mock_codex_process_mode_allowed()` returns `true` only under `#[cfg(test)]`; production builds return `false`.
+- `run_manual_relay_once` now rejects mock codex process modes outside test builds with `manual_relay_mock_codex_process_mode_test_only`.
+
+### Regression Protection
+
+- Test/check added: `cargo check --lib` compiles the non-test production cfg path; `cargo test --lib manual_relay` keeps the test-only mock path working.
+- Evidence location: `evidence/2026-06-18-codex-relay-real-codex-execution-wiring-v1.md`.
+
+### Prevention
+
+- For any future process-spawning test fixture, do not route a caller-controlled executable path through the production command input unless it is guarded by `#[cfg(test)]` or an equivalent production-deny gate.
+- During review, classify every new `Command::new` by whether the executable path is user-controlled, fixture-controlled, env-gated, or hard-coded.
+
+Status: Open
+
 ## M-0004: Read Browser Plugin Skill Under .codex During Relay Boundary Work
 
 Date: 2026-06-18
