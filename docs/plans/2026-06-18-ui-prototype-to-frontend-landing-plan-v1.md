@@ -1,5 +1,7 @@
 # 原型 → 真前端 落地方案 v1（转交咨询线）
 
+> ⚠️ **排布已统一进 [总计划 `2026-06-18-master-roadmap-phased-v1.md`](2026-06-18-master-roadmap-phased-v1.md)**（前端进度落在阶段 0–1）；本文保留批次 / 落点(文件:行) / 形态分歧 / §10 拍板细节，排布与状态以总计划为准。
+
 日期：2026-06-18
 出处：咨询线（Claude）只读探查真前端代码（3 个子 agent 分头摸 外壳 / 首页+项目页 / 各页差距）后汇总。
 关联：水墨原型正本 `…/docs/architecture/ui-prototype/inkwash-full.html`（预览副本 `~/.preview-inkwash/index.html`，已含本轮全部改动）；去留清单 `…/ui-prototype/ui-inventory-keep-cut-review-2026-06-18.md`；功能候选批次 `docs/plans/2026-06-18-ui-feature-batching-and-frontend-backend-split-plan-v1.md`。

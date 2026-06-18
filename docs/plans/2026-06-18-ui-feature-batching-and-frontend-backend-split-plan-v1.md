@@ -1,5 +1,7 @@
 # UI 功能候选 · 三批排期 + 前后端分工 v1
 
+> ⚠️ 本表是「功能批次 + 前后端分工」细节附件，已纳入 [总计划 `2026-06-18-master-roadmap-phased-v1.md`](2026-06-18-master-roadmap-phased-v1.md)（第一批→阶段 1 / 第二批→阶段 2 / 第三批→阶段 3）；总排布与状态以总计划为准。
+
 日期：2026-06-18
 出处：咨询线（Claude）+ 用户 2026-06-18 拍板。
 关联：功能明细正本 = `backlog.md`「Xuanji 功能点候选全量清单（簇一~簇十）」；**本表是其「批次 + 前后端分工」正本**。设计阶梯见 `CURRENT.md`；relay 见 `docs/plans/2026-06-17-codex-relay-stepping-stone-plan-v1.md`。
