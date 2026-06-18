@@ -8,6 +8,7 @@ import {
   mergeOlderTranscriptPage,
 } from "../../src/lib/conversationEngine";
 import { AgentChatComposer } from "../../src/views/agent/AgentChatComposer";
+import { deriveRelayBindingState } from "../../src/views/agent/AgentConversationShell";
 import type { CodexTranscript, PendingAction, SessionRecord } from "../../src/lib/types";
 import { AgentSessionCenter, ChatTranscript } from "../../src/views/AgentView";
 
@@ -171,6 +172,55 @@ export function runConversationEngineScenario({
   assert(!composerMarkup.includes("生成发送预览"), "M3 普通撰写区不应保留 6 步预览入口");
   assert(!composerMarkup.includes("确认执行 Codex"), "M3 普通撰写区不应出现真实执行按钮");
   assert(!composerMarkup.includes("确认 mock 中转一次"), "B2 主路径不应保留二次 mock 中转确认按钮");
+
+  const otherProjectSession: SessionRecord = {
+    ...session,
+    thread_id: "codex-other-project-thread",
+    title: "Other project Codex",
+    project_root: "/offline-fixture/projects/other-codex-project",
+    thread_source: "codex",
+  };
+  const crossProjectMarkup = renderToStaticMarkup(
+    <AgentSessionCenter
+      sessions={[session, otherProjectSession]}
+      selectedThreadId={session.thread_id}
+      selectedSession={session}
+      transcript={transcript}
+      loadingThreadId={null}
+      transcriptError={null}
+      projectSessionCount={2}
+      showSoftwareLayer={false}
+      onOpenSession={() => {}}
+      onRequestAction={captureAction}
+    />,
+  );
+  assert(
+    crossProjectMarkup.includes("Other project Codex"),
+    "B2 bind-fix 对话下拉不得被当前项目过滤到看不见其它项目的 Codex 会话",
+  );
+
+  const staleProjectRoot = "/offline-fixture/projects/stale-project";
+  const relayBinding = deriveRelayBindingState({
+    ...session,
+    project_root: "/offline-fixture/projects/selected-codex-project",
+    thread_source: "codex",
+  });
+  assert(relayBinding.enabled === true, "B2 bind-fix 点开 Codex 会话后应立即启用 direct relay 绑定");
+  assert(
+    relayBinding.targetProjectRoot !== staleProjectRoot &&
+      relayBinding.targetProjectRoot === "/offline-fixture/projects/selected-codex-project",
+    "B2 bind-fix relay target 必须跟随选中会话自己的 project_root，不得沿用旧项目选择",
+  );
+  const missingProjectBinding = deriveRelayBindingState({
+    ...session,
+    project_root: null,
+    thread_source: "codex",
+  });
+  assert(missingProjectBinding.enabled === false, "B2 bind-fix 缺 project_root 的 Codex 会话不得猜测目标项目");
+  assert(
+    missingProjectBinding.blockedReason === "当前会话未记录项目路径",
+    "B2 bind-fix 缺 project_root 时 UI/读模型必须写清绑定失败原因",
+  );
 
   let directSubmitCount = 0;
   const directComposer = (

@@ -63,6 +63,48 @@ export const J1_DEFAULT_DENIED_PATHS = [
   "rollout",
 ];
 
+export type RelayBindingState = {
+  enabled: boolean;
+  targetProjectRoot: string;
+  blockedReason: string | null;
+  selectedSessionSoftware: string | null;
+};
+
+export function deriveRelayBindingState(selectedSession: SessionRecord | null): RelayBindingState {
+  if (!selectedSession) {
+    return {
+      enabled: false,
+      targetProjectRoot: "",
+      blockedReason: "未绑定会话",
+      selectedSessionSoftware: null,
+    };
+  }
+  const selectedSessionSoftware = softwareKeyOf(selectedSession);
+  if (selectedSessionSoftware !== "codex") {
+    return {
+      enabled: false,
+      targetProjectRoot: "",
+      blockedReason: "仅 Codex 会话可用",
+      selectedSessionSoftware,
+    };
+  }
+  const targetProjectRoot = (selectedSession.project_root ?? "").trim();
+  if (!targetProjectRoot) {
+    return {
+      enabled: false,
+      targetProjectRoot: "",
+      blockedReason: "当前会话未记录项目路径",
+      selectedSessionSoftware,
+    };
+  }
+  return {
+    enabled: true,
+    targetProjectRoot,
+    blockedReason: null,
+    selectedSessionSoftware,
+  };
+}
+
 export type AgentSessionCenterProps = {
   sessions: SessionRecord[];
   selectedThreadId: string | null;
@@ -198,33 +240,24 @@ export function AgentSessionCenter({
   }
 
   const visibleSessions = useMemo(
-    () => filterAgentSessions(conversationMode && selectedProjectRoot ? sessions.filter((session) => session.project_root === selectedProjectRoot) : sessions, readFilter, searchQuery),
-    [conversationMode, readFilter, searchQuery, selectedProjectRoot, sessions],
+    () => filterAgentSessions(sessions, readFilter, searchQuery),
+    [readFilter, searchQuery, sessions],
   );
-  const selectedSessionSoftware = selectedSession ? softwareKeyOf(selectedSession) : null;
-  const relayDirectSendEnabled = Boolean(
-    selectedSession && selectedProjectRoot && selectedSessionSoftware === "codex",
-  );
-  const relayDirectSendBlockedReason = !selectedSession
-    ? "未绑定会话"
-    : !selectedProjectRoot
-    ? "未绑定项目"
-    : selectedSessionSoftware !== "codex"
-    ? "仅 Codex 会话可用"
-    : null;
+  const relayBindingState = useMemo(() => deriveRelayBindingState(selectedSession), [selectedSession]);
+  const relayTargetProjectRoot = relayBindingState.targetProjectRoot;
+  const relayDirectSendEnabled = relayBindingState.enabled;
+  const relayDirectSendBlockedReason = relayBindingState.blockedReason;
 
   useEffect(() => {
-    if (!conversationMode || !selectedSession?.project_root) return;
-    setSelectedProjectRoot(selectedSession.project_root);
-  }, [conversationMode, selectedSession?.project_root]);
+    if (!conversationMode || !selectedSession) return;
+    setSelectedProjectRoot((selectedSession.project_root ?? "").trim());
+  }, [conversationMode, selectedSession?.thread_id, selectedSession?.project_root]);
 
-  const scopedSessionCount = conversationMode && selectedProjectRoot
-    ? sessions.filter((session) => session.project_root === selectedProjectRoot).length
-    : sessions.length;
+  const scopedSessionCount = sessions.length;
   const filteredOutCount = scopedSessionCount - visibleSessions.length;
   const conversationSessionOptions = useMemo(
-    () => (selectedProjectRoot ? sessions.filter((session) => session.project_root === selectedProjectRoot) : sessions),
-    [selectedProjectRoot, sessions],
+    () => sessions,
+    [sessions],
   );
   useEffect(() => {
     setK2PreviewError(null);
@@ -248,7 +281,7 @@ export function AgentSessionCenter({
   async function handleSubmitConversationDraft() {
     if (manualRelayBusy || manualRelayReceipt?.status === "running") return;
     const prompt = draftPrompt;
-    if (!prompt || !selectedSession || !selectedProjectRoot.trim()) return;
+    if (!prompt || !selectedSession || !relayTargetProjectRoot) return;
     if (!prompt.trim()) return;
     setManualRelayBusy(true);
     setK2PreviewError(null);
@@ -257,11 +290,11 @@ export function AgentSessionCenter({
     try {
       const receipt = await runManualCodexRelayGuiDirect({
         original_user_text: prompt,
-        target_project_root: selectedProjectRoot,
-        target_cwd: selectedProjectRoot,
+        target_project_root: relayTargetProjectRoot,
+        target_cwd: relayTargetProjectRoot,
         target_session_id: selectedSession.thread_id,
         sandbox: "workspace-write",
-        allowed_write_roots: [selectedProjectRoot],
+        allowed_write_roots: [relayTargetProjectRoot],
         requested_by: "user",
       });
       setManualRelayReceipt(receipt);
@@ -490,13 +523,13 @@ export function AgentSessionCenter({
               <option value="">选择对话</option>
               {conversationSessionOptions.map((session) => (
                 <option key={session.thread_id} disabled={!sessionMatchesReadFilter(session, "readable")} value={session.thread_id}>
-                  {session.title || session.thread_id}
+                  {session.title || session.thread_id} · {session.project_root ? pathTail(session.project_root) : NO_PROJECT_LABEL}
                 </option>
               ))}
             </select>
           </label>
           <div className="agent-conversation-status">
-            <strong>{selectedSession ? "GUI direct relay 已绑定" : "先选择对话"}</strong>
+            <strong>{relayDirectSendEnabled ? "GUI direct relay 已绑定" : selectedSession ? "GUI direct relay 未绑定" : "先选择对话"}</strong>
             <span>输入任务后会手动一次一发给当前 Codex 会话；新增 target 另窗授权。</span>
           </div>
         </section>
@@ -560,7 +593,7 @@ export function AgentSessionCenter({
                 manualRelayReceipt={manualRelayReceipt}
                 relayDirectSendBlockedReason={relayDirectSendBlockedReason}
                 relayDirectSendEnabled={relayDirectSendEnabled}
-                selectedProjectRoot={selectedProjectRoot}
+                selectedProjectRoot={relayTargetProjectRoot}
                 selectedSession={selectedSession}
                 onChangeDraft={handleChangeK2Draft}
                 onSubmitDraft={handleSubmitConversationDraft}
