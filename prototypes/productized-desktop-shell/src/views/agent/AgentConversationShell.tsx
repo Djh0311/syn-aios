@@ -2,15 +2,12 @@ import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { deriveAgentsPageReadModelFromParts } from "../../lib/pageSelectors";
 import {
-  appendPendingUserMessage,
   buildManualRelayPendingUserMessage,
-  buildPendingUserMessage,
+  appendPendingUserMessage,
 } from "../../lib/conversationEngine";
 import { pathTail, relativeTime } from "../../lib/format";
 import {
-  confirmManualCodexRelayOnce,
-  previewManualCodexRelay,
-  runManualCodexRelayOnce,
+  runManualCodexRelayGuiDirect,
   stopManualCodexRelayAttempt,
 } from "../../lib/tauri";
 import type {
@@ -164,7 +161,6 @@ export function AgentSessionCenter({
   const [draftPrompt, setDraftPrompt] = useState("");
   const [pendingUserMessages, setPendingUserMessages] = useState<CodexTranscriptEvent[]>([]);
   const [k2PreviewError, setK2PreviewError] = useState<string | null>(null);
-  const [k2Operation, setK2Operation] = useState<"resume" | "new_session">("resume");
   const [manualRelayPreview, setManualRelayPreview] = useState<ManualRelayPreview | null>(null);
   const [manualRelayReceipt, setManualRelayReceipt] = useState<ManualRelayReceipt | null>(null);
   const [manualRelayError, setManualRelayError] = useState<string | null>(null);
@@ -205,6 +201,17 @@ export function AgentSessionCenter({
     () => filterAgentSessions(conversationMode && selectedProjectRoot ? sessions.filter((session) => session.project_root === selectedProjectRoot) : sessions, readFilter, searchQuery),
     [conversationMode, readFilter, searchQuery, selectedProjectRoot, sessions],
   );
+  const selectedSessionSoftware = selectedSession ? softwareKeyOf(selectedSession) : null;
+  const relayDirectSendEnabled = Boolean(
+    selectedSession && selectedProjectRoot && selectedSessionSoftware === "codex",
+  );
+  const relayDirectSendBlockedReason = !selectedSession
+    ? "未绑定会话"
+    : !selectedProjectRoot
+    ? "未绑定项目"
+    : selectedSessionSoftware !== "codex"
+    ? "仅 Codex 会话可用"
+    : null;
 
   useEffect(() => {
     if (!conversationMode || !selectedSession?.project_root) return;
@@ -224,7 +231,7 @@ export function AgentSessionCenter({
     setManualRelayPreview(null);
     setManualRelayReceipt(null);
     setManualRelayError(null);
-  }, [k2Operation, selectedProjectRoot, selectedSession?.thread_id]);
+  }, [selectedProjectRoot, selectedSession?.thread_id]);
 
   useEffect(() => {
     setPendingUserMessages([]);
@@ -238,86 +245,37 @@ export function AgentSessionCenter({
     setManualRelayError(null);
   }
 
-  function handleSubmitConversationDraft() {
+  async function handleSubmitConversationDraft() {
     if (manualRelayBusy || manualRelayReceipt?.status === "running") return;
-    const prompt = draftPrompt.trim();
+    const prompt = draftPrompt;
     if (!prompt || !selectedSession || !selectedProjectRoot.trim()) return;
-    if (k2Operation === "resume" && (!selectedSession.rollout_exists || !selectedSession.rollout_path)) return;
-    const pendingMessage = buildPendingUserMessage({
-      prompt,
-      threadId: selectedSession.thread_id,
-    });
-    setPendingUserMessages((messages) => [...messages, pendingMessage]);
-    setDraftPrompt("");
-    setK2PreviewError(null);
-  }
-
-  async function handlePreviewManualRelay() {
-    const prompt = draftPrompt.trim();
-    if (!prompt || !selectedProjectRoot.trim()) return;
-    if (k2Operation === "resume" && !selectedSession) return;
+    if (!prompt.trim()) return;
     setManualRelayBusy(true);
+    setK2PreviewError(null);
     setManualRelayError(null);
     setManualRelayReceipt(null);
     try {
-      const preview = await previewManualCodexRelay({
+      const receipt = await runManualCodexRelayGuiDirect({
         original_user_text: prompt,
         target_project_root: selectedProjectRoot,
         target_cwd: selectedProjectRoot,
-        target_session_id: k2Operation === "resume" ? selectedSession?.thread_id ?? null : null,
-        new_session: k2Operation === "new_session",
+        target_session_id: selectedSession.thread_id,
         sandbox: "workspace-write",
         allowed_write_roots: [selectedProjectRoot],
         requested_by: "user",
       });
-      setManualRelayPreview(preview);
-    } catch (error) {
-      setManualRelayError(messageOf(error));
-    } finally {
-      setManualRelayBusy(false);
-    }
-  }
-
-  async function handleSubmitManualRelayOnce() {
-    const preview = manualRelayPreview;
-    if (!preview || preview.guard.blocks_execution) return;
-    setManualRelayBusy(true);
-    setManualRelayError(null);
-    setDraftPrompt("");
-    try {
-      const confirmation = await confirmManualCodexRelayOnce({
-        envelope: preview.envelope,
-        actor_ref: "user",
-        target_hash: preview.envelope.target_binding.target_hash,
-        prompt_sha256: preview.envelope.payload.prompt_sha256,
-        sandbox: preview.envelope.target_binding.sandbox,
-        allowed_write_roots: preview.envelope.target_binding.allowed_write_roots,
-        risk_acknowledged: true,
-      });
-      const receipt = await runManualCodexRelayOnce({
-        envelope: preview.envelope,
-        confirmation,
-        confirmation_id: confirmation.confirmation_id,
-        expected_prompt_sha256: preview.envelope.payload.prompt_sha256,
-        expected_target_hash: preview.envelope.target_binding.target_hash,
-        expected_sandbox: preview.envelope.target_binding.sandbox,
-        expected_allowed_write_roots: preview.envelope.target_binding.allowed_write_roots,
-        mock_behavior: "stay_running",
-      });
       setManualRelayReceipt(receipt);
-      if (selectedSession) {
-        const pendingMessage = buildManualRelayPendingUserMessage({
-          prompt: preview.envelope.payload.original_user_text,
-          threadId: selectedSession.thread_id,
-          relayAttemptId: receipt.relay_attempt_id,
-          confirmationId: receipt.confirmation_id,
-          targetProjectRoot: preview.envelope.target_binding.project_root_canonical,
-          targetSessionId: preview.envelope.target_binding.target_session_id,
-          promptSha256: preview.envelope.payload.prompt_sha256,
-        });
-        setPendingUserMessages((messages) => [...messages, pendingMessage]);
-        setDraftPrompt("");
-      }
+      const pendingMessage = buildManualRelayPendingUserMessage({
+        prompt,
+        threadId: selectedSession.thread_id,
+        relayAttemptId: receipt.relay_attempt_id,
+        confirmationId: receipt.confirmation_id,
+        targetProjectRoot: receipt.target.project_root_canonical,
+        targetSessionId: receipt.target.target_session_id,
+        promptSha256: receipt.effective_prompt_sha256,
+      });
+      setPendingUserMessages((messages) => [...messages, pendingMessage]);
+      setDraftPrompt("");
     } catch (error) {
       setManualRelayError(messageOf(error));
     } finally {
@@ -525,7 +483,6 @@ export function AgentSessionCenter({
               onChange={(event) => {
                 const nextSession = sessions.find((session) => session.thread_id === event.currentTarget.value);
                 if (nextSession) {
-                  setK2Operation("resume");
                   onOpenSession(nextSession);
                 }
               }}
@@ -539,21 +496,8 @@ export function AgentSessionCenter({
             </select>
           </label>
           <div className="agent-conversation-status">
-            <strong>{k2Operation === "new_session" ? "准备新建对话" : selectedSession ? "可以开始对话" : "先选择对话"}</strong>
-            <span>输入任务后只记录发送意图；真实执行仍需另窗授权。</span>
-          </div>
-          <div className="agent-conversation-actions">
-            <button
-              className={`secondary-button ${k2Operation === "new_session" ? "active" : ""}`}
-              type="button"
-              onClick={() => {
-                setK2Operation("new_session");
-                setK2PreviewError(null);
-              }}
-            >
-              新建对话
-            </button>
-            <span>只记录意图，不直接创建。</span>
+            <strong>{selectedSession ? "GUI direct relay 已绑定" : "先选择对话"}</strong>
+            <span>输入任务后会手动一次一发给当前 Codex 会话；新增 target 另窗授权。</span>
           </div>
         </section>
       ) : null}
@@ -610,16 +554,15 @@ export function AgentSessionCenter({
               <AgentChatComposer
                 draftPrompt={draftPrompt}
                 k2PreviewError={k2PreviewError}
-                k2Operation={k2Operation}
                 manualRelayBusy={manualRelayBusy}
                 manualRelayError={manualRelayError}
                 manualRelayPreview={manualRelayPreview}
                 manualRelayReceipt={manualRelayReceipt}
+                relayDirectSendBlockedReason={relayDirectSendBlockedReason}
+                relayDirectSendEnabled={relayDirectSendEnabled}
                 selectedProjectRoot={selectedProjectRoot}
                 selectedSession={selectedSession}
                 onChangeDraft={handleChangeK2Draft}
-                onPreviewManualRelay={handlePreviewManualRelay}
-                onRunManualRelayOnce={handleSubmitManualRelayOnce}
                 onSubmitDraft={handleSubmitConversationDraft}
                 onStopManualRelayAttempt={handleStopManualRelayAttempt}
                 onOpenDeveloperDetails={() => setDeveloperOpen(true)}

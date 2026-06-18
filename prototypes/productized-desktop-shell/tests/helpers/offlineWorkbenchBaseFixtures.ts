@@ -129,7 +129,7 @@ export function workbenchBaseFixtures(): {
     rollout_path: "/offline-fixture/rollouts/offline-thread-001.jsonl",
     model: "offline-model",
     reasoning_effort: "offline",
-    thread_source: "offline-fixture",
+    thread_source: "codex",
     warnings: [],
   };
 

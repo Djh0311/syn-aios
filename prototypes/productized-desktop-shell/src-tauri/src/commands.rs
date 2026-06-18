@@ -71,6 +71,13 @@ fn run_manual_codex_relay_once(
 }
 
 #[tauri::command]
+fn run_manual_codex_relay_gui_direct(
+    request: manual_relay::ManualRelayGuiDirectRunInput,
+) -> Result<manual_relay::ManualRelayReceipt, String> {
+    manual_relay::run_manual_relay_gui_direct_once(request, &unix_timestamp_string())
+}
+
+#[tauri::command]
 fn stop_manual_codex_relay_attempt(
     request: manual_relay::ManualRelayStopInput,
 ) -> Result<manual_relay::ManualRelayReceipt, String> {

@@ -137,6 +137,17 @@ pub(crate) struct ManualRelayRunInput {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ManualRelayGuiDirectRunInput {
+    pub(crate) original_user_text: String,
+    pub(crate) target_project_root: String,
+    pub(crate) target_cwd: String,
+    pub(crate) target_session_id: String,
+    pub(crate) sandbox: String,
+    pub(crate) allowed_write_roots: Vec<String>,
+    pub(crate) requested_by: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ManualRelayReceipt {
     pub(crate) relay_attempt_id: String,
     pub(crate) confirmation_id: String,
@@ -329,17 +340,112 @@ pub(crate) fn run_manual_relay_once(
     input: ManualRelayRunInput,
     timestamp: &str,
 ) -> Result<ManualRelayReceipt, String> {
+    run_manual_relay_once_with_process_mode(input, timestamp, None)
+}
+
+pub(crate) fn run_manual_relay_gui_direct_once(
+    input: ManualRelayGuiDirectRunInput,
+    timestamp: &str,
+) -> Result<ManualRelayReceipt, String> {
+    run_manual_relay_gui_direct_once_with_process_mode(
+        input,
+        timestamp,
+        ManualRelayProcessMode::RealCodexProductGui,
+    )
+}
+
+#[cfg(test)]
+fn run_manual_relay_gui_direct_once_for_test(
+    input: ManualRelayGuiDirectRunInput,
+    timestamp: &str,
+    mock_behavior: &str,
+) -> Result<ManualRelayReceipt, String> {
+    let Some(process_mode) = manual_relay_process_mode(mock_behavior) else {
+        return Err("manual_relay_gui_direct_test_process_mode_required".to_string());
+    };
+    if matches!(process_mode, ManualRelayProcessMode::RealCodexEnvGated) {
+        return Err("manual_relay_gui_direct_test_must_not_use_real_codex".to_string());
+    }
+    run_manual_relay_gui_direct_once_with_process_mode(input, timestamp, process_mode)
+}
+
+fn run_manual_relay_gui_direct_once_with_process_mode(
+    input: ManualRelayGuiDirectRunInput,
+    timestamp: &str,
+    process_mode: ManualRelayProcessMode,
+) -> Result<ManualRelayReceipt, String> {
+    validate_gui_direct_input(&input)?;
+    let preview = preview_manual_relay(
+        ManualRelayPreviewInput {
+            original_user_text: input.original_user_text,
+            target_project_root: input.target_project_root,
+            target_cwd: input.target_cwd,
+            target_session_id: Some(input.target_session_id),
+            new_session: false,
+            sandbox: input.sandbox,
+            allowed_write_roots: input.allowed_write_roots,
+            requested_by: input.requested_by.clone(),
+        },
+        timestamp,
+    );
+    if preview.guard.blocks_execution {
+        return Err(format!(
+            "manual_relay_guard_blocked:{}",
+            preview.guard.reasons.join(",")
+        ));
+    }
+    let Some(command_plan) = preview.guard.command_plan.as_ref() else {
+        return Err("manual_relay_command_plan_missing".to_string());
+    };
+    validate_gui_direct_target_and_command_plan(&preview.envelope, command_plan)?;
+    let confirmation = confirm_manual_relay_once(
+        ManualRelayConfirmInput {
+            envelope: preview.envelope.clone(),
+            actor_ref: input.requested_by,
+            target_hash: preview.envelope.target_binding.target_hash.clone(),
+            prompt_sha256: preview.envelope.payload.prompt_sha256.clone(),
+            sandbox: preview.envelope.target_binding.sandbox.clone(),
+            allowed_write_roots: preview.envelope.target_binding.allowed_write_roots.clone(),
+            risk_acknowledged: true,
+        },
+        timestamp,
+    )?;
+    let run_input = ManualRelayRunInput {
+        envelope: preview.envelope.clone(),
+        confirmation: confirmation.clone(),
+        confirmation_id: confirmation.confirmation_id.clone(),
+        expected_prompt_sha256: preview.envelope.payload.prompt_sha256.clone(),
+        expected_target_hash: preview.envelope.target_binding.target_hash.clone(),
+        expected_sandbox: preview.envelope.target_binding.sandbox.clone(),
+        expected_allowed_write_roots: preview.envelope.target_binding.allowed_write_roots.clone(),
+        mock_behavior: "gui_direct_internal_process_mode".to_string(),
+    };
+    run_manual_relay_once_with_process_mode(run_input, timestamp, Some(process_mode))
+}
+
+fn run_manual_relay_once_with_process_mode(
+    input: ManualRelayRunInput,
+    timestamp: &str,
+    process_mode_override: Option<ManualRelayProcessMode>,
+) -> Result<ManualRelayReceipt, String> {
     validate_run_binding(&input)?;
     let scope = input.envelope.policy.duplicate_scope.clone();
-    if is_placeholder_process_behavior(&input.mock_behavior) && !placeholder_process_mode_allowed()
+    let process_mode =
+        process_mode_override.or_else(|| manual_relay_process_mode(&input.mock_behavior));
+    if matches!(process_mode, Some(ManualRelayProcessMode::PlaceholderSleep))
+        && !placeholder_process_mode_allowed()
     {
         return Err("manual_relay_placeholder_process_mode_test_only".to_string());
     }
-    if is_mock_codex_process_mode(&input.mock_behavior) && !mock_codex_process_mode_allowed() {
+    if matches!(
+        process_mode,
+        Some(ManualRelayProcessMode::MockCodexComplete(_))
+            | Some(ManualRelayProcessMode::MockCodexSleep(_))
+    ) && !mock_codex_process_mode_allowed()
+    {
         return Err("manual_relay_mock_codex_process_mode_test_only".to_string());
     }
-    let process_mode = manual_relay_process_mode(&input.mock_behavior);
-    if is_process_mode(&input.mock_behavior) {
+    if process_mode.is_some() || is_process_mode(&input.mock_behavior) {
         verify_strict_run_paths(&input.envelope)?;
     }
     let last_message_path = std::env::temp_dir()
@@ -530,6 +636,7 @@ enum ManualRelayProcessMode {
     MockCodexComplete(PathBuf),
     MockCodexSleep(PathBuf),
     RealCodexEnvGated,
+    RealCodexProductGui,
 }
 
 struct ManualRelayProcessConfig {
@@ -559,10 +666,6 @@ fn is_placeholder_process_mode(mock_behavior: &str) -> bool {
     mock_behavior == "placeholder_process_sleep"
 }
 
-fn is_placeholder_process_behavior(mock_behavior: &str) -> bool {
-    mock_behavior.starts_with("placeholder_process_")
-}
-
 #[cfg(test)]
 fn placeholder_process_mode_allowed() -> bool {
     true
@@ -571,11 +674,6 @@ fn placeholder_process_mode_allowed() -> bool {
 #[cfg(not(test))]
 fn placeholder_process_mode_allowed() -> bool {
     false
-}
-
-fn is_mock_codex_process_mode(mock_behavior: &str) -> bool {
-    mock_behavior.starts_with("mock_codex_process:")
-        || mock_behavior.starts_with("mock_codex_process_sleep:")
 }
 
 #[cfg(test)]
@@ -631,6 +729,13 @@ fn process_config_for_mode(
                 completed_status: "completed_real_codex".to_string(),
             })
         }
+        ManualRelayProcessMode::RealCodexProductGui => Ok(ManualRelayProcessConfig {
+            command_plan,
+            process_kind: "real_codex".to_string(),
+            real_codex_executed: true,
+            return_running: true,
+            completed_status: "completed_real_codex".to_string(),
+        }),
     }
 }
 
@@ -1123,6 +1228,86 @@ fn validate_run_binding(input: &ManualRelayRunInput) -> Result<(), String> {
         return Err("manual_relay_confirmation_must_be_one_shot".to_string());
     }
     Ok(())
+}
+
+fn validate_gui_direct_input(input: &ManualRelayGuiDirectRunInput) -> Result<(), String> {
+    if input.original_user_text.trim().is_empty() {
+        return Err("manual_relay_gui_direct_prompt_required".to_string());
+    }
+    if input.target_session_id.trim().is_empty() {
+        return Err("manual_relay_gui_direct_requires_bound_session".to_string());
+    }
+    if input.target_project_root.trim().is_empty() || input.target_cwd.trim().is_empty() {
+        return Err("manual_relay_gui_direct_target_required".to_string());
+    }
+    if input.requested_by.trim().is_empty() {
+        return Err("manual_relay_gui_direct_requested_by_required".to_string());
+    }
+    Ok(())
+}
+
+fn validate_gui_direct_target_and_command_plan(
+    envelope: &ManualRelayEnvelope,
+    command_plan: &ManualRelayCommandPlan,
+) -> Result<(), String> {
+    verify_strict_run_paths(envelope)?;
+    if envelope.target_binding.new_session || envelope.target_binding.target_session_id.is_none() {
+        return Err("manual_relay_gui_direct_requires_bound_session".to_string());
+    }
+    if envelope.target_binding.sandbox != "workspace-write" {
+        return Err("manual_relay_gui_direct_sandbox_must_be_workspace_write".to_string());
+    }
+    if envelope.target_binding.target_cwd_canonical
+        != envelope.target_binding.project_root_canonical
+    {
+        return Err("manual_relay_gui_direct_cwd_must_equal_project_root".to_string());
+    }
+    if envelope.target_binding.allowed_write_roots
+        != vec![envelope.target_binding.project_root_canonical.clone()]
+    {
+        return Err("manual_relay_gui_direct_write_roots_must_equal_project_root".to_string());
+    }
+    if command_plan.program != "codex" {
+        return Err("manual_relay_gui_direct_program_must_be_codex".to_string());
+    }
+    if command_plan.prompt_in_command || command_plan.shell_invocation {
+        return Err("manual_relay_gui_direct_prompt_must_use_stdin_no_shell".to_string());
+    }
+    if !argv_contains_pair(
+        &command_plan.argv,
+        "--sandbox",
+        &envelope.target_binding.sandbox,
+    ) {
+        return Err("manual_relay_gui_direct_sandbox_arg_missing".to_string());
+    }
+    if !argv_contains_pair(
+        &command_plan.argv,
+        "--add-dir",
+        &envelope.target_binding.project_root_canonical,
+    ) {
+        return Err("manual_relay_gui_direct_add_dir_arg_missing".to_string());
+    }
+    if command_plan
+        .argv
+        .iter()
+        .any(|arg| codex_approval_bypass_arg(arg))
+    {
+        return Err("manual_relay_gui_direct_approval_bypass_arg_forbidden".to_string());
+    }
+    Ok(())
+}
+
+fn argv_contains_pair(argv: &[String], flag: &str, value: &str) -> bool {
+    argv.windows(2).any(|pair| {
+        pair.first().is_some_and(|arg| arg == flag) && pair.get(1).is_some_and(|arg| arg == value)
+    })
+}
+
+fn codex_approval_bypass_arg(arg: &str) -> bool {
+    arg == "--full-auto"
+        || arg.contains("dangerously-bypass")
+        || arg.starts_with("--approval")
+        || arg == "full-auto"
 }
 
 fn is_process_mode(mock_behavior: &str) -> bool {
@@ -1759,6 +1944,87 @@ mod tests {
             .lock()
             .expect("registry should not poison")
             .is_empty());
+    }
+
+    #[test]
+    fn manual_relay_gui_direct_send_uses_bound_target_without_approval_bypass() {
+        let _guard = test_guard();
+        std::env::remove_var("MANUAL_RELAY_REAL_CODEX_CONFIRM");
+        let script = mock_codex_script(
+            "gui-direct-complete",
+            r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+if [ -z "$last" ]; then
+  exit 42
+fi
+mkdir -p "$(dirname "$last")"
+prompt="$(cat)"
+printf 'gui direct mock last message: %s\n' "$prompt" > "$last"
+exit 0
+"#,
+        );
+        let fixture = existing_fixture_preview_input("GUI direct exact prompt");
+        let input = ManualRelayGuiDirectRunInput {
+            original_user_text: fixture.original_user_text.clone(),
+            target_project_root: fixture.target_project_root.clone(),
+            target_cwd: fixture.target_cwd.clone(),
+            target_session_id: fixture
+                .target_session_id
+                .clone()
+                .expect("GUI direct send must bind an existing session"),
+            sandbox: fixture.sandbox.clone(),
+            allowed_write_roots: fixture.allowed_write_roots.clone(),
+            requested_by: "user".to_string(),
+        };
+
+        let receipt = run_manual_relay_gui_direct_once_for_test(
+            input,
+            "2026-06-18T08:00:00Z",
+            &format!("mock_codex_process:{}", script.display()),
+        )
+        .expect("GUI direct send should run through the mock codex process");
+
+        assert_eq!(receipt.status, "completed_mock_codex");
+        assert_eq!(receipt.process_kind, "mock_codex");
+        assert!(receipt.prompt_sent);
+        assert!(!receipt.real_codex_executed);
+        assert!(!receipt.command_plan.prompt_in_command);
+        assert!(!receipt.command_plan.shell_invocation);
+        assert!(receipt
+            .command_plan
+            .argv
+            .iter()
+            .any(|arg| arg == "--sandbox"));
+        assert!(receipt
+            .command_plan
+            .argv
+            .iter()
+            .any(|arg| arg == "workspace-write"));
+        assert!(receipt
+            .command_plan
+            .argv
+            .iter()
+            .any(|arg| arg == "--add-dir"));
+        assert!(receipt
+            .command_plan
+            .argv
+            .iter()
+            .any(|arg| arg == &receipt.target.project_root_canonical));
+        assert!(!receipt
+            .command_plan
+            .argv
+            .iter()
+            .any(|arg| arg == "--full-auto" || arg.contains("dangerously-bypass")));
+        assert!(receipt.target.path_verified);
+        assert_eq!(receipt.target.target_session_id, fixture.target_session_id);
+        assert!(!receipt.target.new_session);
     }
 
     #[test]

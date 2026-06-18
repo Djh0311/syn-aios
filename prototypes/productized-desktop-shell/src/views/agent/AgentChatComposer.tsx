@@ -5,15 +5,14 @@ export function AgentChatComposer({
   selectedSession,
   draftPrompt,
   k2PreviewError,
-  k2Operation,
   manualRelayPreview,
   manualRelayReceipt,
   manualRelayError,
   manualRelayBusy,
+  relayDirectSendEnabled,
+  relayDirectSendBlockedReason,
   onChangeDraft,
   onSubmitDraft,
-  onPreviewManualRelay,
-  onRunManualRelayOnce,
   onStopManualRelayAttempt,
   onOpenDeveloperDetails,
 }: {
@@ -21,34 +20,46 @@ export function AgentChatComposer({
   selectedSession: SessionRecord | null;
   draftPrompt: string;
   k2PreviewError: string | null;
-  k2Operation: "resume" | "new_session";
   manualRelayPreview: ManualRelayPreview | null;
   manualRelayReceipt: ManualRelayReceipt | null;
   manualRelayError: string | null;
   manualRelayBusy: boolean;
+  relayDirectSendEnabled: boolean;
+  relayDirectSendBlockedReason?: string | null;
   onChangeDraft: (value: string) => void;
   onSubmitDraft: () => void;
-  onPreviewManualRelay: () => void;
-  onRunManualRelayOnce: () => void;
   onStopManualRelayAttempt: () => void;
   onOpenDeveloperDetails: () => void;
 }) {
-  const canPreview = Boolean(selectedProjectRoot && draftPrompt.trim() && (k2Operation === "new_session" || selectedSession));
   const relayGuard = manualRelayPreview?.guard ?? null;
   const relayEnvelope = manualRelayPreview?.envelope ?? null;
   const relayIsRunning = manualRelayReceipt?.status === "running";
   const relayInputLocked = manualRelayBusy || relayIsRunning;
-  const relayCanRun = Boolean(relayEnvelope && relayGuard && !relayGuard.blocks_execution && !relayInputLocked);
+  const canDirectSend = Boolean(relayDirectSendEnabled && selectedProjectRoot && selectedSession && draftPrompt.trim() && !relayInputLocked);
+  const targetSessionTitle = selectedSession?.title || "未命名会话";
+  const targetSessionId = selectedSession?.thread_id || "未绑定会话";
+  const targetSessionLabel = selectedSession ? `${targetSessionTitle} (${targetSessionId})` : "未绑定会话";
   return (
     <form
       className="agent-chat-composer"
-      data-send-mode="decision-only"
+      data-send-mode={relayDirectSendEnabled ? "manual_relay_direct" : "decision-only"}
       aria-label="智能体任务输入"
       onSubmit={(event) => void (async () => {
         event.preventDefault();
-        if (!relayInputLocked) onSubmitDraft();
+        if (canDirectSend) onSubmitDraft();
       })()}
     >
+      <div
+        className={`manual-relay-target-strip ${relayDirectSendEnabled ? "armed" : "blocked"}`}
+        data-relay-target-bound={relayDirectSendEnabled ? "true" : "false"}
+      >
+        <strong>↔ GUI direct relay target</strong>
+        <span>项目：{selectedProjectRoot || "未绑定项目"}</span>
+        <span>会话：{targetSessionTitle}</span>
+        <span>会话ID：{targetSessionId}</span>
+        <span>策略：手动一次一发 · auto_chain=false · sandbox=workspace-write</span>
+        {!relayDirectSendEnabled && relayDirectSendBlockedReason ? <span>未启用：{relayDirectSendBlockedReason}</span> : null}
+      </div>
       <label>
         <span>任务输入</span>
         <textarea
@@ -68,19 +79,17 @@ export function AgentChatComposer({
             }
             if (event.key !== "Enter" || event.shiftKey) return;
             event.preventDefault();
-            onSubmitDraft();
+            if (canDirectSend) onSubmitDraft();
           }}
         />
       </label>
       <div className="agent-chat-composer-foot">
         <span>
-          {k2Operation === "new_session"
-            ? "将记录新对话发送意图；真实创建仍需另行授权"
-            : selectedSession
-            ? `当前对话：${selectedSession.title || selectedSession.thread_id}`
-            : "请选择一个可读取对话"}
+          {relayDirectSendEnabled
+            ? `Enter 将直接发送给：${targetSessionLabel}`
+            : "请选择一个绑定项目的 Codex 会话；未绑定时不会真发"}
         </span>
-        <button className="primary-button" disabled={!canPreview || relayInputLocked} type="submit">
+        <button className="primary-button" disabled={!canDirectSend} type="submit">
           发送
         </button>
       </div>
@@ -89,32 +98,16 @@ export function AgentChatComposer({
         查看发送边界
       </button>
       <p>
-        已记录发送意图，等待授权执行；本按钮不真跑 Codex、不解锁 K3-B1 / K3-B2。
+        绑定会话时，发送会走 GUI direct relay；不自动连环、不解锁 K3-B1 / K3-B2，Codex 审批与 sandbox 不放松。
       </p>
       <section className="manual-relay-panel" data-send-mode="manual_relay" aria-label="Manual relay 中转">
         <div>
           <strong>甲 · Manual relay</strong>
           <p>
-            手动一次一发；本包只走 mock / fixture contract，不真跑 Codex、不写 .codex、不自动连环。
+            手动一次一发；主发送直接绑定上方 target，回执和 Stop 在这里显示；第一次 GUI 真发仍需用户在场。
           </p>
         </div>
         <div className="manual-relay-actions">
-          <button
-            className="secondary-button"
-            disabled={!canPreview || relayInputLocked}
-            type="button"
-            onClick={onPreviewManualRelay}
-          >
-            预演中转 payload
-          </button>
-          <button
-            className="primary-button"
-            disabled={!relayCanRun}
-            type="button"
-            onClick={onRunManualRelayOnce}
-          >
-            确认 mock 中转一次
-          </button>
           <button
             className="secondary-button"
             disabled={!relayIsRunning || manualRelayBusy}

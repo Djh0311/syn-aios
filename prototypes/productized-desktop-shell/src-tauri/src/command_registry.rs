@@ -10,6 +10,7 @@ macro_rules! workbench_command_handler {
             preview_manual_codex_relay,
             confirm_manual_codex_relay_once,
             run_manual_codex_relay_once,
+            run_manual_codex_relay_gui_direct,
             stop_manual_codex_relay_attempt,
             load_codex_session_transcript,
             load_codex_session_transcript_page,

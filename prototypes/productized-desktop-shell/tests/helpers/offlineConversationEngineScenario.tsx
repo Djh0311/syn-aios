@@ -161,29 +161,139 @@ export function runConversationEngineScenario({
       onRequestAction={captureAction}
     />,
   );
-  assert(composerMarkup.includes("data-send-mode=\"decision-only\""), "M3 撰写区应声明发送只记录决策、不真执行");
-  assert(composerMarkup.includes("data-send-mode=\"manual_relay\""), "manual relay 应是并列显式模式，不覆盖 decision-only");
-  assert(composerMarkup.includes("Manual relay"), "manual relay 面板应可见");
+  assert(composerMarkup.includes("data-send-mode=\"manual_relay_direct\""), "B2 绑定会话撰写区应声明 GUI direct relay 模式");
+  assert(composerMarkup.includes("↔"), "B2 撰写区必须常驻显示 target 绑定标记");
+  assert(composerMarkup.includes(session.project_root ?? ""), "B2 target 常驻区必须显示 canonical project path");
+  assert(composerMarkup.includes(session.thread_id), "B2 target 常驻区必须显示指定会话");
+  assert(composerMarkup.includes("会话ID"), "B2 target 常驻区必须显式标出 session id 字段");
   assert(composerMarkup.includes("手动一次一发"), "manual relay UI 必须披露 one-shot 边界");
   assert(composerMarkup.includes("发送"), "M3 撰写区主按钮应是发送");
   assert(!composerMarkup.includes("生成发送预览"), "M3 普通撰写区不应保留 6 步预览入口");
   assert(!composerMarkup.includes("确认执行 Codex"), "M3 普通撰写区不应出现真实执行按钮");
+  assert(!composerMarkup.includes("确认 mock 中转一次"), "B2 主路径不应保留二次 mock 中转确认按钮");
+
+  let directSubmitCount = 0;
+  const directComposer = (
+    <AgentChatComposer
+      draftPrompt="Send this exact GUI prompt"
+      k2PreviewError={null}
+      manualRelayBusy={false}
+      manualRelayError={null}
+      manualRelayPreview={null}
+      manualRelayReceipt={null}
+      relayDirectSendEnabled={true}
+      relayDirectSendBlockedReason={null}
+      selectedProjectRoot={session.project_root ?? ""}
+      selectedSession={session}
+      onChangeDraft={() => {}}
+      onOpenDeveloperDetails={() => {}}
+      onStopManualRelayAttempt={() => {}}
+      onSubmitDraft={() => {
+        directSubmitCount += 1;
+      }}
+    />
+  );
+  const directTextarea = findElement(
+    directComposer,
+    (element) => element.type === "textarea" && element.props?.["aria-label"] === "输入给 Codex 的任务",
+  );
+  assert(directTextarea, "B2 直发撰写区应有 textarea");
+  const directKeyDown = directTextarea.props?.onKeyDown;
+  assert(typeof directKeyDown === "function", "B2 直发撰写区应接管 Enter 键");
+  (directKeyDown as (event: { key: string; shiftKey: boolean; preventDefault: () => void }) => void)({
+    key: "Enter",
+    shiftKey: false,
+    preventDefault() {},
+  });
+  assert(directSubmitCount === 1, "B2 绑定会话 Enter 应调用 GUI direct relay 发送 handler");
+
+  let unboundSubmitCount = 0;
+  const unboundComposer = (
+    <AgentChatComposer
+      draftPrompt="Should stay local"
+      k2PreviewError={null}
+      manualRelayBusy={false}
+      manualRelayError={null}
+      manualRelayPreview={null}
+      manualRelayReceipt={null}
+      relayDirectSendEnabled={false}
+      relayDirectSendBlockedReason="未绑定会话"
+      selectedProjectRoot={session.project_root ?? ""}
+      selectedSession={null}
+      onChangeDraft={() => {}}
+      onOpenDeveloperDetails={() => {}}
+      onStopManualRelayAttempt={() => {}}
+      onSubmitDraft={() => {
+        unboundSubmitCount += 1;
+      }}
+    />
+  );
+  const unboundTextarea = findElement(
+    unboundComposer,
+    (element) => element.type === "textarea" && element.props?.["aria-label"] === "输入给 Codex 的任务",
+  );
+  assert(unboundTextarea, "B2 非绑定撰写区仍应显示 textarea");
+  const unboundKeyDown = unboundTextarea.props?.onKeyDown;
+  assert(typeof unboundKeyDown === "function", "B2 非绑定撰写区应接管 Enter 键");
+  (unboundKeyDown as (event: { key: string; shiftKey: boolean; preventDefault: () => void }) => void)({
+    key: "Enter",
+    shiftKey: false,
+    preventDefault() {},
+  });
+  assert(unboundSubmitCount === 0, "B2 非绑定会话 Enter 不得触发 direct relay");
+
+  let nonCodexSubmitCount = 0;
+  const nonCodexSession: SessionRecord = { ...session, thread_source: "claude-code" };
+  const nonCodexComposer = (
+    <AgentChatComposer
+      draftPrompt="Should stay blocked"
+      k2PreviewError={null}
+      manualRelayBusy={false}
+      manualRelayError={null}
+      manualRelayPreview={null}
+      manualRelayReceipt={null}
+      relayDirectSendEnabled={false}
+      relayDirectSendBlockedReason="仅 Codex 会话可用"
+      selectedProjectRoot={session.project_root ?? ""}
+      selectedSession={nonCodexSession}
+      onChangeDraft={() => {}}
+      onOpenDeveloperDetails={() => {}}
+      onStopManualRelayAttempt={() => {}}
+      onSubmitDraft={() => {
+        nonCodexSubmitCount += 1;
+      }}
+    />
+  );
+  const nonCodexMarkup = renderToStaticMarkup(nonCodexComposer);
+  assert(nonCodexMarkup.includes("仅 Codex 会话可用"), "B2 非 Codex 会话必须显示 direct relay 阻断原因");
+  const nonCodexTextarea = findElement(
+    nonCodexComposer,
+    (element) => element.type === "textarea" && element.props?.["aria-label"] === "输入给 Codex 的任务",
+  );
+  assert(nonCodexTextarea, "B2 非 Codex 会话仍应显示 textarea");
+  const nonCodexKeyDown = nonCodexTextarea.props?.onKeyDown;
+  assert(typeof nonCodexKeyDown === "function", "B2 非 Codex 会话应接管 Enter 键");
+  (nonCodexKeyDown as (event: { key: string; shiftKey: boolean; preventDefault: () => void }) => void)({
+    key: "Enter",
+    shiftKey: false,
+    preventDefault() {},
+  });
+  assert(nonCodexSubmitCount === 0, "B2 非 Codex 会话 Enter 不得触发 direct relay");
 
   const relayPreviewMarkup = renderToStaticMarkup(
     <AgentChatComposer
       draftPrompt="Manual relay exact payload fixture"
-      k2Operation="resume"
       k2PreviewError={null}
       manualRelayBusy={false}
       manualRelayError={null}
       manualRelayPreview={manualRelayPreviewFixture(session)}
       manualRelayReceipt={manualRelayRunningReceiptFixture()}
+      relayDirectSendEnabled={true}
+      relayDirectSendBlockedReason={null}
       selectedProjectRoot={session.project_root ?? ""}
       selectedSession={session}
       onChangeDraft={() => {}}
       onOpenDeveloperDetails={() => {}}
-      onPreviewManualRelay={() => {}}
-      onRunManualRelayOnce={() => {}}
       onStopManualRelayAttempt={() => {}}
       onSubmitDraft={() => {}}
     />,
@@ -195,6 +305,7 @@ export function runConversationEngineScenario({
   assert(relayPreviewMarkup.includes("manual_once / auto_chain=false"), "manual relay 必须显示一次一发且不自动连环");
   assert(relayPreviewMarkup.includes("Path verified"), "manual relay 预演必须显示路径校验结果");
   assert(relayPreviewMarkup.includes("Stop 本 attempt"), "manual relay 必须有可点击 stop 控件");
+  assert(!relayPreviewMarkup.includes("确认 mock 中转一次"), "B2 直发 UI 不应出现 mock 二次确认按钮");
   assert(relayPreviewMarkup.includes("real_codex_executed=false"), "manual relay fixture 回执不得声明真实 Codex 执行");
   assert(relayPreviewMarkup.includes("process_kind=fixture"), "manual relay 回执必须显示进程类型");
   assert(relayPreviewMarkup.includes("real_process_killed=false"), "manual relay running fixture 不得伪称已 kill 真进程");
@@ -202,18 +313,17 @@ export function runConversationEngineScenario({
   const relayRunningComposer = (
     <AgentChatComposer
       draftPrompt=""
-      k2Operation="resume"
       k2PreviewError={null}
       manualRelayBusy={false}
       manualRelayError={null}
       manualRelayPreview={manualRelayPreviewFixture(session)}
       manualRelayReceipt={manualRelayRunningReceiptFixture()}
+      relayDirectSendEnabled={true}
+      relayDirectSendBlockedReason={null}
       selectedProjectRoot={session.project_root ?? ""}
       selectedSession={session}
       onChangeDraft={() => {}}
       onOpenDeveloperDetails={() => {}}
-      onPreviewManualRelay={() => {}}
-      onRunManualRelayOnce={() => {}}
       onStopManualRelayAttempt={() => {}}
       onSubmitDraft={() => {}}
     />
@@ -226,12 +336,8 @@ export function runConversationEngineScenario({
   assert(relayRunningTextarea?.props?.readOnly === true, "manual relay running 时 textarea 应锁定键盘输入");
   assert(findButtonByText(relayRunningComposer, "发送")?.props?.disabled === true, "manual relay running 时普通发送应禁用");
   assert(
-    findButtonByText(relayRunningComposer, "预演中转 payload")?.props?.disabled === true,
-    "manual relay running 时预演按钮应禁用",
-  );
-  assert(
-    findButtonByText(relayRunningComposer, "确认 mock 中转一次")?.props?.disabled === true,
-    "manual relay running 时确认按钮应禁用以避免双提交",
+    findButtonByText(relayRunningComposer, "Stop 本 attempt")?.props?.disabled !== true,
+    "manual relay running 时 stop 按钮应可点击",
   );
   assert(
     findButtonByText(relayRunningComposer, "Stop 本 attempt")?.props?.disabled !== true,
@@ -241,18 +347,17 @@ export function runConversationEngineScenario({
   const relayTerminalComposer = (
     <AgentChatComposer
       draftPrompt="Manual relay next prompt"
-      k2Operation="resume"
       k2PreviewError={null}
       manualRelayBusy={false}
       manualRelayError={null}
       manualRelayPreview={manualRelayPreviewFixture(session)}
       manualRelayReceipt={manualRelayCompletedReceiptFixture()}
+      relayDirectSendEnabled={true}
+      relayDirectSendBlockedReason={null}
       selectedProjectRoot={session.project_root ?? ""}
       selectedSession={session}
       onChangeDraft={() => {}}
       onOpenDeveloperDetails={() => {}}
-      onPreviewManualRelay={() => {}}
-      onRunManualRelayOnce={() => {}}
       onStopManualRelayAttempt={() => {}}
       onSubmitDraft={() => {}}
     />
@@ -266,14 +371,6 @@ export function runConversationEngineScenario({
     (element) => element.type === "textarea" && element.props?.["aria-label"] === "输入给 Codex 的任务",
   );
   assert(relayTerminalTextarea?.props?.readOnly !== true, "manual relay terminal 后 textarea 应恢复输入");
-  assert(
-    findButtonByText(relayTerminalComposer, "预演中转 payload")?.props?.disabled !== true,
-    "manual relay terminal 后预演按钮应恢复",
-  );
-  assert(
-    findButtonByText(relayTerminalComposer, "确认 mock 中转一次")?.props?.disabled !== true,
-    "manual relay terminal 后确认按钮应恢复",
-  );
   assert(
     findButtonByText(relayTerminalComposer, "Stop 本 attempt")?.props?.disabled === true,
     "manual relay terminal 后 Stop 应禁用",

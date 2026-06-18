@@ -58,6 +58,7 @@ import type {
   ManualRelayPreview,
   ManualRelayPreviewInput,
   ManualRelayReceipt,
+  ManualRelayGuiDirectRunInput,
   ManualRelayRunInput,
   ManualRelayStopInput,
   OfflineRoleDispatchRequest,
@@ -704,6 +705,13 @@ export function runManualCodexRelayOnce(
 ): Promise<ManualRelayReceipt> {
   ensureTauriRuntime();
   return invoke<ManualRelayReceipt>("run_manual_codex_relay_once", { request });
+}
+
+export function runManualCodexRelayGuiDirect(
+  request: ManualRelayGuiDirectRunInput,
+): Promise<ManualRelayReceipt> {
+  ensureTauriRuntime();
+  return invoke<ManualRelayReceipt>("run_manual_codex_relay_gui_direct", { request });
 }
 
 export function stopManualCodexRelayAttempt(

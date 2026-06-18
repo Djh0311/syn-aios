@@ -111,6 +111,16 @@ export type ManualRelayRunInput = {
   mock_behavior: string;
 };
 
+export type ManualRelayGuiDirectRunInput = {
+  original_user_text: string;
+  target_project_root: string;
+  target_cwd: string;
+  target_session_id: string;
+  sandbox: string;
+  allowed_write_roots: string[];
+  requested_by: string;
+};
+
 export type ManualRelayRollbackSummary = {
   git_available: boolean;
   dirty_before: boolean;
