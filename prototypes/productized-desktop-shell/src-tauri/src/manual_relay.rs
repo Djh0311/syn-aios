@@ -331,6 +331,10 @@ pub(crate) fn run_manual_relay_once(
 ) -> Result<ManualRelayReceipt, String> {
     validate_run_binding(&input)?;
     let scope = input.envelope.policy.duplicate_scope.clone();
+    if is_placeholder_process_behavior(&input.mock_behavior) && !placeholder_process_mode_allowed()
+    {
+        return Err("manual_relay_placeholder_process_mode_test_only".to_string());
+    }
     if is_mock_codex_process_mode(&input.mock_behavior) && !mock_codex_process_mode_allowed() {
         return Err("manual_relay_mock_codex_process_mode_test_only".to_string());
     }
@@ -537,7 +541,7 @@ struct ManualRelayProcessConfig {
 }
 
 fn manual_relay_process_mode(mock_behavior: &str) -> Option<ManualRelayProcessMode> {
-    if mock_behavior == "placeholder_process_sleep" {
+    if is_placeholder_process_mode(mock_behavior) {
         return Some(ManualRelayProcessMode::PlaceholderSleep);
     }
     if mock_behavior == "real_codex_env_gated" {
@@ -549,6 +553,24 @@ fn manual_relay_process_mode(mock_behavior: &str) -> Option<ManualRelayProcessMo
     mock_behavior
         .strip_prefix("mock_codex_process:")
         .map(|path| ManualRelayProcessMode::MockCodexComplete(PathBuf::from(path)))
+}
+
+fn is_placeholder_process_mode(mock_behavior: &str) -> bool {
+    mock_behavior == "placeholder_process_sleep"
+}
+
+fn is_placeholder_process_behavior(mock_behavior: &str) -> bool {
+    mock_behavior.starts_with("placeholder_process_")
+}
+
+#[cfg(test)]
+fn placeholder_process_mode_allowed() -> bool {
+    true
+}
+
+#[cfg(not(test))]
+fn placeholder_process_mode_allowed() -> bool {
+    false
 }
 
 fn is_mock_codex_process_mode(mock_behavior: &str) -> bool {
@@ -1337,6 +1359,8 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
     use std::sync::{Mutex, OnceLock};
+    use std::thread;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn manual_relay_preview_keeps_payload_exact_and_structured_command_safe() {
@@ -1854,6 +1878,127 @@ sleep 30
     }
 
     #[test]
+    fn manual_relay_b1_runner_entry_uses_temp_fixture_defaults_with_mock_process() {
+        let _guard = test_guard();
+        let script = mock_codex_script(
+            "b1-complete",
+            r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+if [ -z "$last" ]; then
+  exit 42
+fi
+mkdir -p "$(dirname "$last")"
+prompt="$(cat)"
+printf 'manual relay b1 mock last message: %s\n' "$prompt" > "$last"
+exit 0
+"#,
+        );
+        let preview_input = b1_real_relay_fixture_preview_input("mock-defaults")
+            .expect("B1 fixture input should be built");
+        assert!(preview_input.original_user_text.contains("hello.txt"));
+        assert!(preview_input.original_user_text.contains("hi"));
+        assert!(preview_input.new_session);
+        assert!(preview_input.target_session_id.is_none());
+        assert_eq!(preview_input.sandbox, "workspace-write");
+        assert_eq!(
+            preview_input.allowed_write_roots,
+            vec![preview_input.target_project_root.clone()]
+        );
+        assert!(PathBuf::from(&preview_input.target_project_root).exists());
+
+        let preview = preview_manual_relay(preview_input, "2026-06-18T00:00:00Z");
+        assert!(preview.envelope.target_binding.path_verified);
+        let plan = preview
+            .guard
+            .command_plan
+            .as_ref()
+            .expect("B1 fixture should expose a codex command plan");
+        assert_eq!(plan.program, "codex");
+        assert!(plan.argv.iter().any(|arg| arg == "--output-last-message"));
+        assert!(plan.argv.iter().any(|arg| arg == "--skip-git-repo-check"));
+        assert!(!plan.prompt_in_command);
+        assert!(!plan.shell_invocation);
+
+        let confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:01Z",
+        )
+        .expect("confirmation should pass");
+        let mut run_input = fixture_run_input(&preview.envelope, &confirmation);
+        run_input.mock_behavior = format!("mock_codex_process:{}", script.display());
+        let receipt = run_manual_relay_once(run_input, "2026-06-18T00:00:02Z")
+            .expect("B1 mock runner should complete");
+        assert_eq!(receipt.status, "completed_mock_codex");
+        assert_eq!(receipt.process_kind, "mock_codex");
+        assert!(receipt.prompt_sent);
+        assert!(!receipt.real_codex_executed);
+        assert_eq!(
+            receipt.readback_status,
+            "workbench_managed_last_message_available"
+        );
+        assert!(receipt.last_message_hash.is_some());
+        assert!(receipt.last_message_size_bytes.unwrap_or_default() > 0);
+    }
+
+    #[test]
+    fn manual_relay_b1_runner_entry_stop_kills_mock_process() {
+        let _guard = test_guard();
+        let script = mock_codex_script(
+            "b1-sleep",
+            r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+if [ -n "$last" ]; then
+  mkdir -p "$(dirname "$last")"
+  printf 'manual relay b1 mock started\n' > "$last"
+fi
+sleep 30
+"#,
+        );
+        let preview_input =
+            b1_real_relay_fixture_preview_input("mock-stop").expect("B1 fixture input");
+        let preview = preview_manual_relay(preview_input, "2026-06-18T00:00:00Z");
+        let confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:01Z",
+        )
+        .expect("confirmation should pass");
+        let mut run_input = fixture_run_input(&preview.envelope, &confirmation);
+        run_input.mock_behavior = format!("mock_codex_process_sleep:{}", script.display());
+        let running = run_manual_relay_once(run_input, "2026-06-18T00:00:02Z")
+            .expect("B1 mock process should start");
+        assert_eq!(running.status, "running");
+        assert!(running.prompt_sent);
+        assert!(!running.real_codex_executed);
+
+        let stopped = stop_manual_relay_attempt(
+            ManualRelayStopInput {
+                relay_attempt_id: running.relay_attempt_id,
+                requested_by: "user".to_string(),
+            },
+            "2026-06-18T00:00:03Z",
+        )
+        .expect("stop should kill only the B1 mock attempt");
+        assert_eq!(stopped.status, "stopped_by_user");
+        assert!(stopped.real_process_killed);
+        assert_eq!(stopped.process_kind, "mock_codex");
+        assert!(!stopped.real_codex_executed);
+    }
+
+    #[test]
     #[ignore = "real Codex relay is a separate user-present window; this gate proves env authorization is required"]
     fn manual_relay_real_codex_requires_env_authorization() {
         let _guard = test_guard();
@@ -1885,6 +2030,58 @@ sleep 30
         assert_eq!(process_config.process_kind, "real_codex");
         assert!(process_config.real_codex_executed);
         assert!(process_config.return_running);
+    }
+
+    #[test]
+    #[ignore = "B1 first true Codex relay requires user-present env authorization; do not run in implementation package"]
+    fn manual_relay_b1_real_codex_runner_entry_requires_user_present_env() {
+        let _guard = test_guard();
+        let confirmation = std::env::var("MANUAL_RELAY_REAL_CODEX_CONFIRM")
+            .expect("MANUAL_RELAY_REAL_CODEX_CONFIRM is required");
+        assert_eq!(confirmation, "CONFIRMED_USER_PRESENT_REAL_RELAY");
+
+        let preview_input = b1_real_relay_fixture_preview_input("real-codex")
+            .expect("B1 real relay fixture input should be built");
+        let project_root = PathBuf::from(&preview_input.target_project_root);
+        let hello_path = project_root.join("hello.txt");
+        if hello_path.exists() {
+            std::fs::remove_file(&hello_path).expect("stale hello.txt should be removable");
+        }
+        let preview = preview_manual_relay(preview_input, "2026-06-18T00:00:00Z");
+        assert!(preview.envelope.target_binding.path_verified);
+        let confirmation = confirm_manual_relay_once(
+            fixture_confirm_input(&preview.envelope),
+            "2026-06-18T00:00:01Z",
+        )
+        .expect("confirmation should pass");
+        let mut run_input = fixture_run_input(&preview.envelope, &confirmation);
+        run_input.mock_behavior = "real_codex_env_gated".to_string();
+        let running = run_manual_relay_once(run_input, "2026-06-18T00:00:02Z")
+            .expect("B1 user-present env should spawn real Codex");
+        assert_eq!(running.status, "running");
+        assert_eq!(running.process_kind, "real_codex");
+        assert!(running.process_id.is_some());
+        assert!(running.prompt_sent);
+        assert!(running.real_codex_executed);
+
+        let completed = wait_manual_relay_attempt_for_test(
+            &running.relay_attempt_id,
+            "2026-06-18T00:01:02Z",
+            60_000,
+        )
+        .expect("B1 real Codex attempt should finish or classify cleanly");
+        assert_eq!(completed.status, "completed_real_codex");
+        assert!(completed.real_codex_executed);
+        assert_eq!(
+            completed.readback_status,
+            "workbench_managed_last_message_available"
+        );
+        assert!(completed.last_message_hash.is_some());
+        assert!(hello_path.exists());
+        assert_eq!(
+            std::fs::read_to_string(&hello_path).expect("hello.txt should be readable"),
+            "hi\n"
+        );
     }
 
     fn fixture_preview_input(prompt: &str) -> ManualRelayPreviewInput {
@@ -1935,6 +2132,144 @@ sleep 30
         std::fs::set_permissions(&script, permissions)
             .expect("mock codex script should be executable");
         script
+    }
+
+    fn b1_real_relay_fixture_preview_input(label: &str) -> Result<ManualRelayPreviewInput, String> {
+        let project_root = std::env::temp_dir().join(format!(
+            "manual-relay-b1-real-fixture-{}",
+            short_hash(label)
+        ));
+        std::fs::create_dir_all(&project_root)
+            .map_err(|error| format!("b1_fixture_dir_create_failed:{error}"))?;
+        let init_status = std::process::Command::new("git")
+            .arg("init")
+            .arg("--quiet")
+            .current_dir(&project_root)
+            .status()
+            .map_err(|error| format!("b1_fixture_git_init_spawn_failed:{error}"))?;
+        if !init_status.success() {
+            return Err(format!(
+                "b1_fixture_git_init_failed:{}",
+                init_status.code().unwrap_or(-1)
+            ));
+        }
+        let hello_path = project_root.join("hello.txt");
+        if hello_path.exists() {
+            std::fs::remove_file(&hello_path)
+                .map_err(|error| format!("b1_fixture_hello_cleanup_failed:{error}"))?;
+        }
+        Ok(ManualRelayPreviewInput {
+            original_user_text: "Create a file named hello.txt in the current directory containing exactly one line: hi\nThen reply with MANUAL_RELAY_B1_REAL_CODEX_OK.".to_string(),
+            target_project_root: project_root.display().to_string(),
+            target_cwd: project_root.display().to_string(),
+            target_session_id: None,
+            new_session: true,
+            sandbox: "workspace-write".to_string(),
+            allowed_write_roots: vec![project_root.display().to_string()],
+            requested_by: "user".to_string(),
+        })
+    }
+
+    fn wait_manual_relay_attempt_for_test(
+        relay_attempt_id: &str,
+        timestamp: &str,
+        timeout_ms: u64,
+    ) -> Result<ManualRelayReceipt, String> {
+        let started = Instant::now();
+        let timeout = Duration::from_millis(timeout_ms.max(1));
+        loop {
+            let status = {
+                let mut registry = active_attempts()
+                    .lock()
+                    .map_err(|_| "manual_relay_registry_poisoned".to_string())?;
+                let active = registry
+                    .get_mut(relay_attempt_id)
+                    .ok_or_else(|| "manual_relay_attempt_not_running".to_string())?;
+                let child = active
+                    .child
+                    .as_mut()
+                    .ok_or_else(|| "manual_relay_attempt_has_no_process".to_string())?;
+                child
+                    .try_wait()
+                    .map_err(|error| format!("manual_relay_process_wait_failed:{error}"))?
+            };
+            if let Some(status) = status {
+                let active = active_attempts()
+                    .lock()
+                    .map_err(|_| "manual_relay_registry_poisoned".to_string())?
+                    .remove(relay_attempt_id)
+                    .ok_or_else(|| "manual_relay_attempt_not_running".to_string())?;
+                return Ok(finalize_manual_relay_attempt_for_test(
+                    active.receipt,
+                    timestamp,
+                    status.code(),
+                    false,
+                    false,
+                ));
+            }
+            if started.elapsed() >= timeout {
+                let mut active = active_attempts()
+                    .lock()
+                    .map_err(|_| "manual_relay_registry_poisoned".to_string())?
+                    .remove(relay_attempt_id)
+                    .ok_or_else(|| "manual_relay_attempt_not_running".to_string())?;
+                let mut exit_code = None;
+                let mut killed = false;
+                if let Some(mut child) = active.child.take() {
+                    killed = child.kill().is_ok();
+                    exit_code = child.wait().ok().and_then(|status| status.code());
+                }
+                return Ok(finalize_manual_relay_attempt_for_test(
+                    active.receipt,
+                    timestamp,
+                    exit_code,
+                    true,
+                    killed,
+                ));
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    fn finalize_manual_relay_attempt_for_test(
+        mut receipt: ManualRelayReceipt,
+        timestamp: &str,
+        exit_code: Option<i32>,
+        timed_out: bool,
+        killed: bool,
+    ) -> ManualRelayReceipt {
+        let (readback_status, last_message_hash, last_message_size_bytes) =
+            read_last_message_summary(&receipt.command_plan.last_message_path);
+        receipt.ended_at = Some(timestamp.to_string());
+        receipt.exit_code = exit_code;
+        receipt.timed_out = timed_out;
+        receipt.real_process_killed = killed;
+        receipt.readback_status = if timed_out {
+            "readback_timed_out".to_string()
+        } else {
+            readback_status
+        };
+        receipt.last_message_hash = last_message_hash;
+        receipt.last_message_size_bytes = last_message_size_bytes;
+        receipt.status = if timed_out {
+            "timed_out".to_string()
+        } else if exit_code == Some(0) && receipt.last_message_hash.is_some() {
+            match receipt.process_kind.as_str() {
+                "real_codex" => "completed_real_codex".to_string(),
+                "mock_codex" => "completed_mock_codex".to_string(),
+                _ => "completed_process".to_string(),
+            }
+        } else if exit_code == Some(0) {
+            "readback_unavailable".to_string()
+        } else {
+            "failed_process".to_string()
+        };
+        receipt
+            .warnings
+            .push("readback_last_message_only_no_full_transcript".to_string());
+        receipt.warnings.sort();
+        receipt.warnings.dedup();
+        receipt
     }
 
     fn fixture_confirm_input(envelope: &ManualRelayEnvelope) -> ManualRelayConfirmInput {
