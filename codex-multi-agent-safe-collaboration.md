@@ -1,5 +1,7 @@
 # Codex Multi-Agent Safe Collaboration Protocol
 
+> ⚠️ **已废弃（2026-06-19）**：本协议（科学家代号复核线 / 咨询审实物 / Strict Path 重型流程）是旧重型治理的源头，已被 `AGENTS.md` 精简版 v2 取代。轻档不用、**勿据此重启重流程**；保留仅作历史参考。乙·自动连环阶段若要重型协作护栏，再另议。
+
 Use this protocol for any multi-agent work. Also use it for Strict Path work that is large, risky, cross-module, parallelizable, or long-running.
 
 Default to a single main agent plus tools. Multi-agent work is optional and should be used only when the parallel benefit is clearly larger than the coordination cost. Most tasks are safer as one agent with focused tool calls; the usual multi-agent exception is bounded read-only reconnaissance, independent evaluator review, or truly disjoint write scopes that the main agent can integrate and verify.
