@@ -63,7 +63,6 @@ export function ProjectDirectorTaskPlanCard({
         <Badge tone={projectDirectorTaskPlanTone(plan, loading, error)}>{summary.status_label}</Badge>
       </div>
       <div className="workflow-draft-grid">
-        <DetailLine label="active 授权" value={summary.active_authorization_id ?? request?.authorization_id ?? "暂无"} />
         <DetailLine label="planned" value={String(summary.planned_task_count)} />
         <DetailLine label="prepared" value={String(summary.prepared_dispatch_count)} />
         <DetailLine label="needs_binding" value={String(summary.needs_binding_count)} />
@@ -71,6 +70,12 @@ export function ProjectDirectorTaskPlanCard({
         <DetailLine label="记忆快照" value={summary.memory_text} />
       </div>
       {error ? <p className="state-warning">拆任务草案读取失败：{error}</p> : null}
+      <details className="agent-boundary-details">
+        <summary className="agent-boundary-summary">开发者详情</summary>
+        <div className="workflow-draft-grid">
+          <DetailLine label="active 授权" value={summary.active_authorization_id ?? request?.authorization_id ?? "暂无"} />
+        </div>
+      </details>
       {summary.blocked_reasons.map((reason) => (
         <p className="state-warning" key={reason}>{reason}</p>
       ))}
@@ -402,12 +407,17 @@ export function GlobalBoundaryReviewCard({
       <div className="workflow-draft-grid">
         <DetailLine label="用户确认" value={summary.proposal?.status === "user_confirmed" ? "已确认" : "未就绪"} />
         <DetailLine label="复核状态" value={summary.review?.status ? globalBoundaryReviewStatusLabels[summary.review.status as GlobalBoundaryReviewStatus] ?? summary.review.status : "待全局复核"} />
-        <DetailLine label="授权对象" value={summary.authorization?.authorization_id ?? "未建立"} />
-        <DetailLine label="有效授权" value={summary.active_authorization_id ?? "暂无"} />
         <DetailLine label="守卫验证" value={summary.guard_display_text} />
         <DetailLine label="发现" value={String(summary.findings.length)} />
       </div>
       {guardError ? <p className="state-warning">授权检查读取失败：{guardError}</p> : null}
+      <details className="agent-boundary-details">
+        <summary className="agent-boundary-summary">开发者详情</summary>
+        <div className="workflow-draft-grid">
+          <DetailLine label="授权对象" value={summary.authorization?.authorization_id ?? "未建立"} />
+          <DetailLine label="有效授权" value={summary.active_authorization_id ?? "暂无"} />
+        </div>
+      </details>
       {summary.blocked_reasons.map((reason) => (
         <p className="state-warning" key={reason}>{reason}</p>
       ))}
@@ -718,18 +728,23 @@ export function PlanAuthorizationSummaryCard({
         </Badge>
       </div>
       <div className="workflow-draft-grid">
-        <DetailLine label="sidecar" value={`${summary.sidecar_name} / rev ${summary.revision}`} />
-        <DetailLine label="授权对象" value={summary.latest_authorization_id ?? "未建立"} />
-        <DetailLine label="active 授权" value={summary.active_authorization_id ?? "暂无"} />
         <DetailLine label="允许角色" value={String(summary.actor_scope?.allowed_role_ids.length ?? 0)} />
         <DetailLine label="允许 agent" value={String(summary.actor_scope?.allowed_agent_ids.length ?? 0)} />
         <DetailLine label="读写范围" value={`读 ${summary.resource_scope?.allowed_read_roots.length ?? 0} / 写 ${summary.resource_scope?.allowed_write_roots.length ?? 0}`} />
         <DetailLine label="工具 / 检查" value={`工具 ${summary.resource_scope?.allowed_tools.length ?? 0} / 检查 ${summary.resource_scope?.allowed_checks.length ?? 0}`} />
         <DetailLine label="停止条件" value={String(summary.stop_condition_count)} />
         <DetailLine label="当前检查" value={guardSummary.display_text} />
-        <DetailLine label="最近审计" value={summary.recent_audit_event_id ?? "暂无"} />
       </div>
       {guardError ? <p className="state-warning">授权检查读取失败：{guardError}</p> : null}
+      <details className="agent-boundary-details">
+        <summary className="agent-boundary-summary">开发者详情</summary>
+        <div className="workflow-draft-grid">
+          <DetailLine label="sidecar" value={`${summary.sidecar_name} / rev ${summary.revision}`} />
+          <DetailLine label="授权对象" value={summary.latest_authorization_id ?? "未建立"} />
+          <DetailLine label="active 授权" value={summary.active_authorization_id ?? "暂无"} />
+          <DetailLine label="最近审计" value={summary.recent_audit_event_id ?? "暂无"} />
+        </div>
+      </details>
       {blockedReasons.map((reason) => (
         <p className="state-warning" key={reason}>{reason}</p>
       ))}

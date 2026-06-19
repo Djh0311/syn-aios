@@ -120,7 +120,10 @@ export function WorkItemOrchestrationCard({
         <div>
           <p className="eyebrow">当前工作项</p>
           <h3>{workItem.title}</h3>
-          <p className="path-text">{workItem.work_item_id}</p>
+          <details className="agent-boundary-details">
+            <summary className="agent-boundary-summary">开发者详情</summary>
+            <p className="path-text">工作项 ID：{workItem.work_item_id}</p>
+          </details>
         </div>
         <Badge tone={workItem.state === "accepted" ? "candidate" : "unknown"}>{stateLabel(workItem.state)}</Badge>
       </div>
@@ -258,12 +261,15 @@ export function WorkItemOrchestrationCard({
         {recentDispatch ? (
           <div className="dispatch-result-card">
             <strong>{recentDispatch.state}</strong>
-            <span>{recentDispatch.dispatch_id}</span>
-            <span>会话：{recentDispatch.native_thread_id}</span>
             <span>退出码：{recentDispatch.exit_code ?? "未完成"}</span>
             <span>事件：{recentDispatch.transcript_event_count ?? "未回读"} / 命中：{recentDispatch.transcript_target_hits ?? "未回读"}</span>
             {recentDispatch.last_message_summary ? <em>{recentDispatch.last_message_summary}</em> : null}
             {recentDispatch.warnings.length ? <em>警告：{recentDispatch.warnings.join("，")}</em> : null}
+            <details className="agent-boundary-details">
+              <summary className="agent-boundary-summary">开发者详情</summary>
+              <span>派发 ID：{recentDispatch.dispatch_id}</span>
+              <span>会话：{recentDispatch.native_thread_id}</span>
+            </details>
           </div>
         ) : (
           <p className="muted small-note">当前工作项还没有节点派发记录。</p>
@@ -348,8 +354,11 @@ export function WorkItemOrchestrationCard({
         {recentDirectorReview ? (
           <div className="dispatch-result-card">
             <strong>{directorDecisionLabel(recentDirectorReview.decision)}</strong>
-            <span>{recentDirectorReview.review_id}</span>
             <em>{recentDirectorReview.summary}</em>
+            <details className="agent-boundary-details">
+              <summary className="agent-boundary-summary">开发者详情</summary>
+              <span>复核 ID：{recentDirectorReview.review_id}</span>
+            </details>
           </div>
         ) : null}
         <div className="workflow-state-actions" aria-label="总指导回收动作">
@@ -688,7 +697,10 @@ function WorkflowResultSummaryPanel({
         <div className="dispatch-result-card">
           <strong>全局主管已完成最终复核</strong>
           <span>{globalFinalReviewStatusLabel(resultSummary.final_review_status)}</span>
-          <em>{resultSummary.final_review_id}</em>
+          <details className="agent-boundary-details">
+            <summary className="agent-boundary-summary">开发者详情</summary>
+            <span>复核 ID：{resultSummary.final_review_id}</span>
+          </details>
         </div>
       ) : (
         <p className="muted small-note">全局主管尚未记录最终复核；C5 观察只能作为过程事实证据，仍不是正式记忆。</p>
@@ -697,7 +709,10 @@ function WorkflowResultSummaryPanel({
         <div className="dispatch-result-card">
           <strong>用户已查看结果并作出决定</strong>
           <span>{userResultDecisionStatusLabel(resultSummary.user_decision_status)}</span>
-          <em>{resultSummary.user_decision_id}</em>
+          <details className="agent-boundary-details">
+            <summary className="agent-boundary-summary">开发者详情</summary>
+            <span>决定 ID：{resultSummary.user_decision_id}</span>
+          </details>
         </div>
       ) : (
         <p className="muted small-note">用户结果决定尚未记录；全局最终复核不能自动代表用户接受。</p>

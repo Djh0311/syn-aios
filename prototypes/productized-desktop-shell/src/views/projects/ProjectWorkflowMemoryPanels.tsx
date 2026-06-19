@@ -45,13 +45,18 @@ export function ProjectBlackboardPanel({ blackboard }: { blackboard: ProjectBlac
       <div className="workflow-compact-list">
         {entries.slice(0, 8).map((entry) => (
           <div className="workflow-compact-item" key={entry.entry_id}>
-            <strong>{blackboardKindLabel(entry.kind)} / {entry.status}</strong>
+            <strong>{blackboardKindLabel(entry.kind)}</strong>
             <span>{entry.title}：{entry.summary}</span>
-            <em>
-              来源：{entry.source_refs.map((ref) => `${ref.label}:${ref.source_id}`).join("；") || "无"}
-              {" / "}
-              升级：{entry.promotion_decision.status}
-            </em>
+            <details className="agent-boundary-details">
+              <summary className="agent-boundary-summary">开发者详情</summary>
+              <em>
+                状态：{entry.status}
+                {" / "}
+                来源：{entry.source_refs.map((ref) => `${ref.label}:${ref.source_id}`).join("；") || "无"}
+                {" / "}
+                升级：{entry.promotion_decision.status}
+              </em>
+            </details>
           </div>
         ))}
       </div>
@@ -130,31 +135,36 @@ export function CandidateGovernanceStrip({
         </Badge>
       </div>
       <div className="workflow-draft-grid">
-        <DetailLine label="黑板 sidecar" value={blackboardOverlay.sidecar_name} />
         <DetailLine label="黑板状态" value={`待处理 ${entries.length} / 已确认后续 ${blackboardOverlay.confirmed_count} / 已拒绝 ${blackboardOverlay.rejected_count}`} />
-        <DetailLine label="观察辅助状态文件" value={observationSummary.sidecar_name} />
         <DetailLine label="工作流观察" value={observationSummary.display_text} />
-        <DetailLine label="最近观察审计" value={observationSummary.recent_audit_event?.event_type ?? "暂无"} />
-        <DetailLine label="最近观察候选" value={observationSummary.recent_candidate_key ?? "暂无"} />
-        <DetailLine label="记忆 sidecar" value={memorySummary.sidecar_name} />
         <DetailLine label="记忆候选" value={memorySummary.display_text} />
-        <DetailLine label="adopted_memory_id" value={memorySummary.first_adoption?.adopted_memory_id ?? "暂无"} />
-        <DetailLine label="adopted_version_id" value={memorySummary.first_adoption?.adopted_version_id ?? "暂无"} />
-        <DetailLine label="adopted_audit_event_id" value={memorySummary.first_adoption?.adopted_audit_event_id ?? "暂无"} />
-        <DetailLine label="正式记忆 sidecar" value={formalSummary.sidecar_name} />
         <DetailLine label="正式记忆骨架" value={formalSummary.display_text} />
-        <DetailLine label="最近正式记忆审计" value={formalSummary.recent_audit_event?.event_type ?? "暂无"} />
-        <DetailLine label="记忆 lint sidecar" value={memoryLintSummary.sidecar_name} />
         <DetailLine label="记忆 lint 阻断摘要" value={memoryLintSummary.display_text} />
-        <DetailLine label="最近检查运行" value={memoryLintSummary.recent_run ? `${memoryLintSummary.recent_run.status} / ${memoryLintSummary.recent_run.reason}` : "暂无"} />
         <DetailLine label="任务包记忆注入摘要" value={taskPackageMemorySummary.display_text} />
-        <DetailLine label="任务包记忆快照" value={taskPackageMemorySummary.snapshot_id ? `${taskPackageMemorySummary.snapshot_id} / ${taskPackageMemorySummary.stale ? "过期" : "新鲜"}` : "未生成"} />
         <DetailLine label="任务记忆包预览" value={taskMemoryPacketSummary.display_text} />
         <DetailLine label="预览排除理由" value={taskMemoryPacketSummary.reason_text} />
       </div>
+      <details className="agent-boundary-details">
+        <summary className="agent-boundary-summary">开发者详情</summary>
+        <div className="workflow-draft-grid">
+          <DetailLine label="黑板 sidecar" value={blackboardOverlay.sidecar_name} />
+          <DetailLine label="观察辅助状态文件" value={observationSummary.sidecar_name} />
+          <DetailLine label="最近观察审计" value={observationSummary.recent_audit_event?.event_type ?? "暂无"} />
+          <DetailLine label="最近观察候选" value={observationSummary.recent_candidate_key ?? "暂无"} />
+          <DetailLine label="记忆 sidecar" value={memorySummary.sidecar_name} />
+          <DetailLine label="adopted_memory_id" value={memorySummary.first_adoption?.adopted_memory_id ?? "暂无"} />
+          <DetailLine label="adopted_version_id" value={memorySummary.first_adoption?.adopted_version_id ?? "暂无"} />
+          <DetailLine label="adopted_audit_event_id" value={memorySummary.first_adoption?.adopted_audit_event_id ?? "暂无"} />
+          <DetailLine label="正式记忆 sidecar" value={formalSummary.sidecar_name} />
+          <DetailLine label="最近正式记忆审计" value={formalSummary.recent_audit_event?.event_type ?? "暂无"} />
+          <DetailLine label="记忆 lint sidecar" value={memoryLintSummary.sidecar_name} />
+          <DetailLine label="最近检查运行" value={memoryLintSummary.recent_run ? `${memoryLintSummary.recent_run.status} / ${memoryLintSummary.recent_run.reason}` : "暂无"} />
+          <DetailLine label="任务包记忆快照" value={taskPackageMemorySummary.snapshot_id ? `${taskPackageMemorySummary.snapshot_id} / ${taskPackageMemorySummary.stale ? "过期" : "新鲜"}` : "未生成"} />
+        </div>
+      </details>
       <div className="workflow-compact-list" aria-label="任务包记忆注入摘要">
         <div className="workflow-compact-item">
-          <strong>任务包记忆注入摘要 / {taskPackageMemorySummary.snapshot_id ?? "未生成"}</strong>
+          <strong>任务包记忆注入摘要</strong>
           <span>{taskPackageMemorySummary.display_text}</span>
           <em>仅启用态正式记忆可进入任务包；候选 / 观察仅作为待审查材料；任务包内容不会回灌成正式记忆。</em>
         </div>
@@ -314,9 +324,13 @@ function TaskMemoryPacketPreviewPanel({
   return (
     <div className="workflow-compact-list task-memory-packet-preview" aria-label="任务记忆包预览">
       <div className="workflow-compact-item">
-        <strong>任务记忆包预览 / {summary.packet_id ?? "未生成"}</strong>
+        <strong>任务记忆包预览</strong>
         <span>{summary.display_text}</span>
         <em>预览未注入任务包；仅启用态正式记忆可入选；候选 / 观察仅作为待审查材料。</em>
+        <details className="agent-boundary-details">
+          <summary className="agent-boundary-summary">开发者详情</summary>
+          <em>packet_id：{summary.packet_id ?? "未生成"}</em>
+        </details>
       </div>
       {loading ? (
         <p className="muted small-note">正在生成任务记忆包预览。</p>
@@ -334,16 +348,24 @@ function TaskMemoryPacketPreviewPanel({
           </div>
           {excludedItems.map((item) => (
             <div className="workflow-compact-item" key={`${item.source_kind}:${item.source_id}:${item.reason}`}>
-              <strong>{item.source_kind} / {item.reason}</strong>
+              <strong>{taskMemoryPacketReasonLabels[item.reason]}</strong>
               <span>{item.claim ?? item.source_id}</span>
-              <em>{taskMemoryPacketReasonLabels[item.reason]}；{item.detail}</em>
+              <em>{item.detail}</em>
+              <details className="agent-boundary-details">
+                <summary className="agent-boundary-summary">开发者详情</summary>
+                <em>source_kind：{item.source_kind} / reason：{item.reason} / source_id：{item.source_id}</em>
+              </details>
             </div>
           ))}
           {reviewMaterials.map((item) => (
             <div className="workflow-compact-item" key={`${item.source_kind}:${item.source_id}:${item.reason}`}>
-              <strong>待审查材料 / {item.source_kind}</strong>
+              <strong>待审查材料</strong>
               <span>{item.title}</span>
-              <em>{item.reason}；不进入正式记忆列表。</em>
+              <em>{taskMemoryPacketReasonLabels[item.reason]}；不进入正式记忆列表。</em>
+              <details className="agent-boundary-details">
+                <summary className="agent-boundary-summary">开发者详情</summary>
+                <em>source_kind：{item.source_kind} / reason：{item.reason} / source_id：{item.source_id}</em>
+              </details>
             </div>
           ))}
           {summary.warnings.slice(0, 4).map((warning) => (

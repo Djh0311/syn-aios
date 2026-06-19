@@ -120,7 +120,12 @@ export function ProjectWorkflowDraftPanel({
                   <strong>{taskDraft.title}</strong>
                   <span>{taskDraft.state}</span>
                   <em>{taskDraft.artifact_type || "artifact 类型缺失"}</em>
-                  {taskDraft.artifact_path ? <em>{taskDraft.artifact_path}</em> : null}
+                  {taskDraft.artifact_path ? (
+                    <details className="agent-boundary-details">
+                      <summary className="agent-boundary-summary">开发者详情</summary>
+                      <em>{taskDraft.artifact_path}</em>
+                    </details>
+                  ) : null}
                   {taskDraft.work_item_id === fallbackSelectedTaskDraft?.work_item_id ? <b>当前选中</b> : <b>选择</b>}
                 </div>
               ))
@@ -467,7 +472,12 @@ export function TaskDispatchReadinessDetails({ readiness }: { readiness: TaskPac
   const memorySummary = summarizeTaskPackageMemoryInjection(readiness.memory_injection_summary);
   return (
     <>
-      {readiness.artifact_path ? <p className="path-text">{readiness.artifact_path}</p> : null}
+      {readiness.artifact_path ? (
+        <details className="agent-boundary-details">
+          <summary className="agent-boundary-summary">开发者详情</summary>
+          <p className="path-text">{readiness.artifact_path}</p>
+        </details>
+      ) : null}
       <div className="workflow-compact-list" aria-label="任务包记忆注入摘要">
         <div className="workflow-compact-item">
           <strong>任务包记忆注入摘要 / {memorySummary.snapshot_id ?? "未生成"}</strong>

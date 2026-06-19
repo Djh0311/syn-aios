@@ -72,11 +72,14 @@ export function KnowledgeBaseView({
               <div className="knowledge-document-item" key={document.document_key}>
                 <span>{document.title}</span>
                 <strong>{document.project_name}</strong>
-                <em>{document.source_anchor.source_kind} / {document.source_anchor.path_summary}</em>
                 <small>
                   关联正式记忆 {document.formal_memory_links.length} / 关联候选 {document.candidate_links.length} /{" "}
                   {document.task_reference_summary.display_text}
                 </small>
+                <details className="agent-boundary-details">
+                  <summary className="agent-boundary-summary">开发者详情</summary>
+                  <em>{document.source_anchor.source_kind} / {document.source_anchor.path_summary}</em>
+                </details>
               </div>
             ))}
             {!summary.documents.length ? (
@@ -169,14 +172,20 @@ function KnowledgeDocumentDetail({
     <div className="knowledge-document-detail">
       <div className="workflow-draft-grid knowledge-detail-grid">
         <DetailLine label="项目归属" value={document.project_name} />
-        <DetailLine label="来源类型" value={document.source_anchor.source_kind} />
         <DetailLine label="来源锚点" value={document.source_anchor.anchor_label} />
-        <DetailLine label="路径摘要" value={document.source_anchor.path_summary} />
         <DetailLine label="关联正式记忆" value={`${document.formal_memory_links.length}`} />
         <DetailLine label="关联候选" value={`${document.candidate_links.length}`} />
         <DetailLine label="任务包知识引用" value={`${document.task_reference_summary.reference_count}`} />
         <DetailLine label="边界" value={document.boundary} />
       </div>
+
+      <details className="agent-boundary-details">
+        <summary className="agent-boundary-summary">开发者详情</summary>
+        <div className="workflow-draft-grid knowledge-detail-grid">
+          <DetailLine label="来源类型" value={document.source_anchor.source_kind} />
+          <DetailLine label="路径摘要" value={document.source_anchor.path_summary} />
+        </div>
+      </details>
 
       <div className="knowledge-action-row">
         <button type="button" className="primary-button" onClick={() => onRequestAction(buildKnowledgeCandidateAction(document))}>
@@ -215,8 +224,11 @@ function KnowledgeLinkItem({ link }: { link: KnowledgeMemoryLink }) {
     <div className={`workflow-compact-item knowledge-link-item ${link.kind}`}>
       <strong>{link.label}</strong>
       <span>{link.claim}</span>
-      <em>{link.status}</em>
       <em>{link.boundary}</em>
+      <details className="agent-boundary-details">
+        <summary className="agent-boundary-summary">开发者详情</summary>
+        <em>{link.status}</em>
+      </details>
     </div>
   );
 }

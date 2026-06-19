@@ -3066,6 +3066,13 @@ function runShellScenario() {
   for (const expectedText of shellTexts.workflowReviewProjectExpectedTexts) {
     assert(workflowReviewProjectText.includes(expectedText), `总指导回收区缺少 ${expectedText}`);
   }
+  // 渐进披露（内部字段收口）：内部 ID 等水管字段收进「开发者详情」<details> 折叠——
+  // 剥掉折叠块后正常态不含该字段，但完整 markup 里仍可达。藏≠删≠静默。
+  const workflowReviewProjectMarkup = renderToStaticMarkup(workflowReviewProject);
+  const workflowReviewProjectMarkupNoFold = workflowReviewProjectMarkup.replace(/<details[\s\S]*?<\/details>/g, "");
+  assert(workflowReviewProjectMarkup.includes("开发者详情"), "渐进披露：项目工作流面板应保留「开发者详情」折叠");
+  assert(workflowReviewProjectMarkup.includes("工作项 ID"), "渐进披露：内部工作项 ID 应在「开发者详情」折叠内仍可达");
+  assert(!workflowReviewProjectMarkupNoFold.includes("工作项 ID"), "渐进披露：内部工作项 ID 不应出现在折叠外的正常态");
   const workflowReviewControlCard = (
     <WorkItemOrchestrationCard
       project={project}

@@ -211,7 +211,11 @@ export function OfflineRoleOrchestrationPanel({
         <div className="dispatch-preview-block">
           <span>账本锚点</span>
           <strong>{selectedWorkItem.title}</strong>
-          <em>{selectedWorkItem.work_item_id} / {selectedWorkItem.state}</em>
+          <em>{selectedWorkItem.state}</em>
+          <details className="agent-boundary-details">
+            <summary className="agent-boundary-summary">开发者详情</summary>
+            <em>{selectedWorkItem.work_item_id}</em>
+          </details>
         </div>
       ) : (
         <p className="state-warning">当前没有可编排工作项；离线编排只能预览，不能写入工作台事实层。</p>

@@ -39,7 +39,7 @@ export function AgentAdapterCapabilityPanel({ descriptors }: { descriptors: Agen
             <div className="adapter-card-head">
               <div>
                 <strong>{descriptor.display_name}</strong>
-                <span>{descriptor.adapter_id} · {descriptor.provider} · {descriptor.source_kind}</span>
+                <span>{descriptor.provider}</span>
               </div>
               <Badge tone={adapterStatusTone(descriptor.status)}>{adapterStatusLabel(descriptor.status)}</Badge>
             </div>
@@ -77,6 +77,13 @@ export function AgentAdapterCapabilityPanel({ descriptors }: { descriptors: Agen
                 <span key={warning}>{warning}</span>
               ))}
             </div>
+            <details className="agent-boundary-details nested-boundary-details">
+              <summary className="agent-boundary-summary">开发者详情</summary>
+              <div className="adapter-boundary-list">
+                <span>adapter_id={descriptor.adapter_id}</span>
+                <span>source_kind={descriptor.source_kind}</span>
+              </div>
+            </details>
           </article>
         ))}
       </div>
@@ -104,7 +111,6 @@ export function ProviderAvailabilityPanel({ summaries }: { summaries: ProviderAv
             <div className="provider-availability-card-head">
               <div>
                 <strong>{summary.provider_label}</strong>
-                <span>{summary.adapter_id} · {summary.provider_id} · {summary.provider_kind}</span>
               </div>
               <Badge tone={providerAvailabilityTone(summary.availability_status)}>
                 {providerAvailabilityStatusLabel(summary.availability_status)}
@@ -124,6 +130,14 @@ export function ProviderAvailabilityPanel({ summaries }: { summaries: ProviderAv
                 <span key={warning}>{warning}</span>
               ))}
             </div>
+            <details className="agent-boundary-details nested-boundary-details">
+              <summary className="agent-boundary-summary">开发者详情</summary>
+              <div className="provider-boundary-list">
+                <span>adapter_id={summary.adapter_id}</span>
+                <span>provider_id={summary.provider_id}</span>
+                <span>provider_kind={summary.provider_kind}</span>
+              </div>
+            </details>
           </article>
         ))}
       </div>
@@ -151,7 +165,7 @@ export function SessionOperationBoundaryPanel({ operations }: { operations: Sess
             <div className="session-operation-card-head">
               <div>
                 <strong>{adapterDisplayName(group.adapterId)}</strong>
-                <span>{group.adapterId} · {group.operations.length} 个操作边界</span>
+                <span>{group.operations.length} 个操作边界</span>
               </div>
               <Badge tone={group.adapterId === "codex-local" ? "unknown" : "warning"}>
                 {group.adapterId === "codex-local" ? "只读边界" : "计划中不可执行"}
@@ -177,6 +191,12 @@ export function SessionOperationBoundaryPanel({ operations }: { operations: Sess
                 </div>
               ))}
             </div>
+            <details className="agent-boundary-details nested-boundary-details">
+              <summary className="agent-boundary-summary">开发者详情</summary>
+              <div className="session-operation-flags">
+                <span>adapter_id={group.adapterId}</span>
+              </div>
+            </details>
           </article>
         ))}
       </div>

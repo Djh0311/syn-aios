@@ -25,6 +25,7 @@ import type {
 } from "../../lib/types";
 import { readbackCountLabel } from "./TranscriptViews";
 import {
+  adapterDisplayName,
   attemptStatusLabel,
   automationRunUnitLabel,
   automationStatusLabel,
@@ -32,6 +33,7 @@ import {
   codexControlPreviewLabel,
   codexControlReasonLabel,
   h2DecisionStatusLabel,
+  sessionContinuationOperationLabel,
   J1_DEFAULT_DENIED_PATHS,
   j1ControlSlug,
   messageOf,
@@ -360,8 +362,17 @@ export function CodexControlEntryPanel({
         <span>确认：{decisionOutput?.status ?? "未确认"}</span>
         <span>Phase A：{phaseAOutput?.status ?? "未记录"}</span>
         <span>命令：{commandId ? "已生成受控命令" : "未生成"}</span>
-        <span>store revision：{localReadModel?.store_revision ?? 0}</span>
       </div>
+      {localReadModel ? (
+        <details className="agent-boundary-details nested-boundary-details">
+          <summary className="agent-boundary-summary">开发者详情：受控命令读模型</summary>
+          <div className="codex-control-status-grid">
+            <span>store revision：{localReadModel.store_revision ?? 0}</span>
+            <span>store：{localReadModel.store_available ? "可用" : "不可用 / 未生成"}</span>
+            <span>sidecar：{localReadModel.sidecar_name ?? "未生成"}</span>
+          </div>
+        </details>
+      ) : null}
       {preview?.blocked_reasons.length ? (
         <div className="codex-control-warnings">
           {preview.blocked_reasons.map((reason) => (
@@ -371,12 +382,23 @@ export function CodexControlEntryPanel({
       ) : null}
       {phaseAOutput ? (
         <div className="codex-control-warnings">
-          <span>prompt_sent={String(phaseAOutput.prompt_sent)}</span>
-          <span>real_codex_executed={String(phaseAOutput.real_codex_executed)}</span>
-          <span>writes_codex_home={String(phaseAOutput.writes_codex_home)}</span>
-          <span>writes_project_files={String(phaseAOutput.writes_project_files)}</span>
+          <span>
+            Phase A 记录：{phaseAOutput.real_codex_executed ? "已真实执行 Codex" : "未真实执行 Codex"}
+            {phaseAOutput.prompt_sent ? " · 已发送任务正文" : " · 未发送任务正文"}
+          </span>
           <span>读回：{readbackStatusLabel(phaseAOutput.readback_summary.status)} · 结果数 {readbackCountLabel(phaseAOutput.readback_summary.result_count)}</span>
         </div>
+      ) : null}
+      {phaseAOutput ? (
+        <details className="agent-boundary-details nested-boundary-details">
+          <summary className="agent-boundary-summary">开发者详情：真实执行审计标志</summary>
+          <div className="codex-control-warnings">
+            <span>prompt_sent={String(phaseAOutput.prompt_sent)}</span>
+            <span>real_codex_executed={String(phaseAOutput.real_codex_executed)}</span>
+            <span>writes_codex_home={String(phaseAOutput.writes_codex_home)}</span>
+            <span>writes_project_files={String(phaseAOutput.writes_project_files)}</span>
+          </div>
+        </details>
       ) : null}
     </section>
   );
@@ -435,8 +457,8 @@ export function UnifiedExecutionStatusPanel({
         <span>重新确认：{failureStopRetry?.retry_requires_new_user_confirmation ? "需要重新确认" : "当前未要求"}</span>
         <span>停止请求：{failureStopRetry?.manual_stop_requested_count ?? 0}</span>
         <span>读回边界：未知 / 不可用（不可用不等于 0）</span>
-        <span>适配器：{surface.adapter_id}</span>
-        <span>操作：{surface.operation_id}</span>
+        <span>适配器：{adapterDisplayName(surface.adapter_id)}</span>
+        <span>操作：{sessionContinuationOperationLabel(surface.operation_id)}</span>
         <span>目标会话：{surface.target_session_id ?? latestRealAttempt?.continuation_id ?? "待确认"}</span>
         <span>准备状态：{h2DecisionStatusLabel(surface.status)}</span>
         <span>尝试：{attemptStatusLabel(latestRealAttempt?.status ?? latestAttempt?.status)}</span>
@@ -508,6 +530,8 @@ export function UnifiedExecutionStatusPanel({
           <span>sidecar：{realExecutionProductCommands?.sidecar_name ?? "未生成"}</span>
           <span>store：{realExecutionProductCommands?.store_available ? "可用" : "不可用 / 未生成"}</span>
           <span>runner：{productEntryStatusLabel(realExecutionProductCommands?.runner_entry_status)}</span>
+          <span>adapter_id={surface.adapter_id}</span>
+          <span>operation_id={surface.operation_id}</span>
         </div>
         {failureStopRetryItems.length ? (
           <div className="h2-execution-decision-summary">

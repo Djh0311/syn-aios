@@ -249,20 +249,25 @@ function ResourceCard({ resource }: { resource: ProjectHarnessResource }) {
         <Badge tone="warning">候选资源</Badge>
       </div>
       <div className="resource-fields">
-        <Field label="根路径" value={resource.root_path} />
         <Field label="运行器类型" value={resource.harness_kind || "缺失"} />
-        <Field label="智能体类型" value={resource.agent_type || "缺失"} />
-        <Field label="适配器编号" value={resource.adapter_id || "缺失"} />
-        <Field label="来源类型" value={resource.source_kind || "缺失"} />
         <Field label="能力" value={resource.capabilities.length ? resource.capabilities.join(", ") : "缺失"} />
-        <Field label="清单路径" value={resource.manifest_path || "缺失"} warning={!resource.manifest_path} />
-        <Field label="说明路径" value={resource.readme_path || "缺失"} warning={!resource.readme_path} />
         <Field label="版本" value={resource.version || "缺失"} warning={!resource.version} />
         <Field label="入口" value={entrypointText(resource)} warning={!resource.entrypoints.length} />
         <Field label="权限级别" value={resource.permission_level || "缺失"} />
         <Field label="更新时间" value={formatDate(resource.updated_at_ms)} />
       </div>
       <WarningRow warnings={resource.warnings} />
+      <details className="agent-boundary-details">
+        <summary className="agent-boundary-summary">开发者详情</summary>
+        <div className="resource-fields">
+          <Field label="根路径" value={resource.root_path} />
+          <Field label="智能体类型" value={resource.agent_type || "缺失"} />
+          <Field label="适配器编号" value={resource.adapter_id || "缺失"} />
+          <Field label="来源类型" value={resource.source_kind || "缺失"} />
+          <Field label="清单路径" value={resource.manifest_path || "缺失"} warning={!resource.manifest_path} />
+          <Field label="说明路径" value={resource.readme_path || "缺失"} warning={!resource.readme_path} />
+        </div>
+      </details>
     </article>
   );
 }
@@ -278,12 +283,17 @@ function CandidateCard({ candidate }: { candidate: ProjectHarnessCandidate }) {
         <Badge tone="candidate">文件候选</Badge>
       </div>
       <div className="resource-fields">
-        <Field label="路径" value={candidate.path} />
-        <Field label="入口类型" value={candidate.entry_type || "缺失"} />
-        <Field label="来源" value={candidate.source || "缺失"} />
         <Field label="更新时间" value={formatDate(candidate.updated_at_ms)} />
       </div>
       <WarningRow warnings={candidate.warnings} />
+      <details className="agent-boundary-details">
+        <summary className="agent-boundary-summary">开发者详情</summary>
+        <div className="resource-fields">
+          <Field label="路径" value={candidate.path} />
+          <Field label="入口类型" value={candidate.entry_type || "缺失"} />
+          <Field label="来源" value={candidate.source || "缺失"} />
+        </div>
+      </details>
     </article>
   );
 }

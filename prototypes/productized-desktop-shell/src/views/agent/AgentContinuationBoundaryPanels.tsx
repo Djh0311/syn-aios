@@ -66,7 +66,7 @@ export function SessionContinuationPreviewPanel({ previews }: { previews: Sessio
             <div className="session-continuation-card-head">
               <div>
                 <strong>{adapterDisplayName(group.adapterId)}</strong>
-                <span>{group.adapterId} · {group.previews.length} 个继续预览</span>
+                <span>{group.previews.length} 个继续预览</span>
               </div>
               <Badge tone={group.adapterId === "codex-local" ? "unknown" : "warning"}>
                 {group.adapterId === "codex-local" ? "预览协议" : "计划中阻断"}
@@ -84,10 +84,6 @@ export function SessionContinuationPreviewPanel({ previews }: { previews: Sessio
                   </div>
                   <div className="session-continuation-target">
                     <span>会话：{preview.target_session_title || preview.target_session_id || "未绑定"}</span>
-                    <span>项目：{preview.project_id || "未绑定"}</span>
-                    <span>工作流：{preview.workflow_id || "未绑定"}</span>
-                    <span>节点：{preview.node_id || "未绑定"}</span>
-                    <span>工作项：{preview.work_item_id || "未绑定"}</span>
                   </div>
                   <p>{preview.prompt_summary}</p>
                   <div className="session-continuation-scope">
@@ -110,14 +106,23 @@ export function SessionContinuationPreviewPanel({ previews }: { previews: Sessio
                       <span>写入 Codex 主目录：否</span>
                     </div>
                   ) : null}
-                  <div className="session-continuation-reasons">
-                    {preview.guard_result.reasons.slice(0, 5).map((reason) => (
-                      <span key={reason}>{reason}</span>
-                    ))}
-                  </div>
                   {preview.guard_result.required_fixes.length ? (
                     <small>{preview.guard_result.required_fixes[0]}</small>
                   ) : null}
+                  <details className="agent-boundary-details nested-boundary-details">
+                    <summary className="agent-boundary-summary">开发者详情</summary>
+                    <div className="session-continuation-target">
+                      <span>项目：{preview.project_id || "未绑定"}</span>
+                      <span>工作流：{preview.workflow_id || "未绑定"}</span>
+                      <span>节点：{preview.node_id || "未绑定"}</span>
+                      <span>工作项：{preview.work_item_id || "未绑定"}</span>
+                    </div>
+                    <div className="session-continuation-reasons">
+                      {preview.guard_result.reasons.slice(0, 5).map((reason) => (
+                        <span key={reason}>{reason}</span>
+                      ))}
+                    </div>
+                  </details>
                   <div className="session-continuation-warnings">
                     {preview.user_visible_warnings.slice(0, 6).map((warning) => (
                       <span key={warning}>{warning}</span>
@@ -166,8 +171,13 @@ export function ControlledSessionContinuationPanel({
         <span>codex-local 预览：{codexPreviewCount}</span>
         <span>等待用户确认：{runnablePreviewCount}</span>
         <span>读回不可用：{readbackUnavailableCount}</span>
-        <span>辅助状态文件：{store?.scope.sidecar_path ? pathTail(store.scope.sidecar_path) : "session-continuations.v1.json"}</span>
       </div>
+      <details className="agent-boundary-details nested-boundary-details">
+        <summary className="agent-boundary-summary">开发者详情</summary>
+        <div className="controlled-continuation-summary">
+          <span>辅助状态文件：{store?.scope.sidecar_path ? pathTail(store.scope.sidecar_path) : "session-continuations.v1.json"}</span>
+        </div>
+      </details>
       {continuations.length ? (
         <div className="controlled-continuation-list">
           {continuations.map((continuation) => {
@@ -177,7 +187,6 @@ export function ControlledSessionContinuationPanel({
                 <div className="controlled-continuation-card-head">
                   <div>
                     <strong>{sessionContinuationOperationLabel(continuation.operation_id)}</strong>
-                    <span>{continuation.adapter_id} · {continuation.execution_level} · {continuation.runner_kind}</span>
                   </div>
                   <Badge tone={controlledContinuationTone(continuation.status)}>
                     {controlledContinuationLabel(continuation.status)}
@@ -185,10 +194,6 @@ export function ControlledSessionContinuationPanel({
                 </div>
                 <p>{continuation.prompt_summary}</p>
                 <div className="controlled-continuation-facts">
-                  <span>会话：{continuation.session_id}</span>
-                  <span>项目：{continuation.project_id}</span>
-                  <span>工作流：{continuation.workflow_id}</span>
-                  <span>节点：{continuation.node_id}</span>
                   <span>工作目录：{continuation.target_cwd}</span>
                   <span>沙箱：{continuation.sandbox}</span>
                 </div>
@@ -203,6 +208,18 @@ export function ControlledSessionContinuationPanel({
                 ) : (
                   <small>等待桩验收；Level B 真实执行仍需另行授权。</small>
                 )}
+                <details className="agent-boundary-details nested-boundary-details">
+                  <summary className="agent-boundary-summary">开发者详情</summary>
+                  <div className="controlled-continuation-facts">
+                    <span>adapter_id={continuation.adapter_id}</span>
+                    <span>execution_level={continuation.execution_level}</span>
+                    <span>runner_kind={continuation.runner_kind}</span>
+                    <span>session_id={continuation.session_id}</span>
+                    <span>project_id={continuation.project_id}</span>
+                    <span>workflow_id={continuation.workflow_id}</span>
+                    <span>node_id={continuation.node_id}</span>
+                  </div>
+                </details>
                 <div className="controlled-continuation-warnings">
                   {(attempt?.warnings ?? continuation.warnings).slice(0, 6).map((warning) => (
                     <span key={warning}>{warning}</span>
@@ -246,8 +263,13 @@ export function H2RealResumeAuthorizationPanel({ readiness }: { readiness: H2Rea
         <span>状态：{h2ReadinessStatusLabel(readiness.status)}</span>
         <span>目标会话：{readiness.target_session_id ?? "待确认"}</span>
         <span>项目目录：{readiness.target_project_root ?? "待确认"}</span>
-        <span>测试样例：{readiness.recommended_fixture_path}</span>
       </div>
+      <details className="agent-boundary-details nested-boundary-details">
+        <summary className="agent-boundary-summary">开发者详情</summary>
+        <div className="h2-resume-authorization-summary">
+          <span>测试样例：{readiness.recommended_fixture_path}</span>
+        </div>
+      </details>
       <div className="h2-resume-authorization-grid">
         {readiness.readiness_items.map((item) => (
           <article className={`h2-resume-authorization-item ${item.status}`} key={item.item_id}>
@@ -282,7 +304,7 @@ export function H2RealResumeExecutionDecisionPanel({ surface }: { surface: H2Rea
         {surface.summary} 这里是权限弹层、审计摘要、运行日志预览和读回边界的只读材料；不批准、不执行、不发送提示词、不读写 /Users/yoyi/.codex。
       </p>
       <div className="h2-execution-decision-summary">
-        <span>适配器：{surface.adapter_id}</span>
+        <span>适配器：{adapterDisplayName(surface.adapter_id)}</span>
         <span>操作：{sessionContinuationOperationLabel(surface.operation_id)}</span>
         <span>授权：{h2ReadinessStatusLabel(surface.authorization_status)}</span>
         <span>最终批准：{surface.final_approval_allowed ? "材料齐备但仍需明确确认" : "当前不可批准"}</span>
@@ -342,6 +364,12 @@ export function H2RealResumeExecutionDecisionPanel({ surface }: { surface: H2Rea
           <span key={warning}>{warning}</span>
         ))}
       </div>
+      <details className="agent-boundary-details nested-boundary-details">
+        <summary className="agent-boundary-summary">开发者详情</summary>
+        <div className="h2-execution-decision-summary">
+          <span>adapter_id={surface.adapter_id}</span>
+        </div>
+      </details>
     </section>
   );
 }
@@ -381,7 +409,7 @@ export function RuntimeSessionAttentionPanel({
             <article className="runtime-session-summary-card" key={`${summary.adapter_id}:${summary.session_id}`}>
               <div>
                 <strong>{summary.session_id}</strong>
-                <span>{summary.adapter_id} · {runtimeAttentionLabel(summary.current_status) || summary.current_status_label}</span>
+                <span>{adapterDisplayName(summary.adapter_id)} · {runtimeAttentionLabel(summary.current_status) || summary.current_status_label}</span>
               </div>
               <Badge tone={runtimeAttentionTone(summary.current_status)}>
                 {runtimeAttentionLabel(summary.current_status)}
@@ -399,7 +427,7 @@ export function RuntimeSessionAttentionPanel({
             <div className="runtime-attention-card-head">
               <div>
                 <strong>{item.title}</strong>
-                <span>{item.adapter_id} · {item.session_id ?? "未绑定会话"} · {runtimeAttentionLabel(item.status)}</span>
+                <span>{adapterDisplayName(item.adapter_id)} · {item.session_id ?? "未绑定会话"} · {runtimeAttentionLabel(item.status)}</span>
               </div>
               <Badge tone={runtimeAttentionTone(item.status)}>
                 {runtimeAttentionLabel(item.status)}
@@ -469,7 +497,7 @@ export function AdapterSdkCliDiagnosticsPanel({ workerProtocol }: { workerProtoc
               <div className="adapter-sdk-diagnostics-card-head">
                 <div>
                   <strong>{adapterDisplayName(checklist.adapter_id)}</strong>
-                  <span>{checklist.adapter_id} · {adapterContractStatusLabel(checklist.status)}</span>
+                  <span>{adapterContractStatusLabel(checklist.status)}</span>
                 </div>
                 <Badge tone={checklist.status === "ready_for_controlled_adapter_contract" ? "candidate" : "warning"}>
                   {adapterContractStatusLabel(checklist.status)}
