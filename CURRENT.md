@@ -16,7 +16,7 @@
 ## 三、下一步
 
 - relay GUI 在新对话重做 / 修真机体验——见上面交接文档 + 总图 `docs/plans/2026-06-18-master-roadmap-phased-v1.md`。
-- **UI 信息架构问题**（现有前端全平铺、没层级、没渐进披露）——独立一摊，待排。
+- **UI 信息架构问题**（现有前端全平铺、没层级、没渐进披露）——方案已出、待落地：`docs/plans/2026-06-20-ui-internal-field-disclosure-sweep-plan-v1.md`（全 views 内部字段渐进披露收口）。智能体聊天框已作样板落地（证据 `docs/evidence/2026-06-20-agent-view-info-surfacing-cleanup-v1.md`）。
 
 ## 四、锁着的 / 没接（要碰先按 `AGENTS.md` 高危档走）
 
