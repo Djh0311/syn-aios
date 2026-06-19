@@ -1,9 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { App } from "./App";
+import { setTauriWindowTitle } from "./lib/tauriWindow";
 import "./styles.css";
 import "./manualRelay.css";
+import "./components/sourceStylePlaceholder.css";
+import "./views/memory/memoryCenter.css";
+import "./views/projects/projectWorkflowSidePanel.css";
+import "./views/projects/projectReferencePanels.css";
 
 type BootErrorBoundaryProps = {
   children: React.ReactNode;
@@ -26,11 +30,11 @@ class BootErrorBoundary extends React.Component<BootErrorBoundaryProps, BootErro
   componentDidCatch(error: Error) {
     if (!bootProbeEnabled) return;
 
-    void getCurrentWindow()
-      .setTitle(`Codex 治理工作台 · 首屏错误：${error.message || "未知错误"}`.slice(0, 80))
-      .catch(() => {
+    void setTauriWindowTitle(`Codex 治理工作台 · 首屏错误：${error.message || "未知错误"}`.slice(0, 80)).then((available) => {
+      if (!available) {
         document.documentElement.dataset.bootErrorTitleProbe = "unavailable";
-      });
+      }
+    });
   }
 
   render() {
@@ -67,9 +71,8 @@ async function markFrontendLoaded() {
 
   document.documentElement.dataset.frontendBoot = "loaded";
 
-  try {
-    await getCurrentWindow().setTitle("Codex 治理工作台 · 前端已加载");
-  } catch {
+  const titleUpdated = await setTauriWindowTitle("Codex 治理工作台 · 前端已加载");
+  if (!titleUpdated) {
     document.documentElement.dataset.frontendTitleProbe = "unavailable";
   }
 }

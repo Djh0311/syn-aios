@@ -11,6 +11,8 @@ import type {
   AgentAdapterDescriptor,
   CodexTranscript,
   CodexTranscriptPageRequest,
+  CodexSessionPage,
+  CodexSessionPageRequest,
   PendingAction,
   ProviderAvailabilitySummary,
   ProjectRecord,
@@ -48,6 +50,7 @@ type AgentViewProps = {
   workerProtocol?: WorkerProtocolReadModel | null;
   workflowState?: WorkflowStateSnapshot | null;
   focusedThreadId?: string | null;
+  onLoadSessionPage?: (request: CodexSessionPageRequest) => Promise<CodexSessionPage>;
   onLoadTranscript?: (threadId: string) => Promise<CodexTranscript>;
   onLoadTranscriptPage?: (request: CodexTranscriptPageRequest) => Promise<CodexTranscript>;
   onRequestAction?: (action: PendingAction) => void;
@@ -68,11 +71,13 @@ export function AgentView({
   workerProtocol = null,
   workflowState = null,
   focusedThreadId = null,
+  onLoadSessionPage,
   onLoadTranscript,
   onLoadTranscriptPage,
   onRequestAction = () => {},
 }: AgentViewProps) {
-  const sessionPage = useAgentSessionPage(sessions);
+  const [sessionSearchQuery, setSessionSearchQuery] = useState("");
+  const sessionPage = useAgentSessionPage(sessions, sessionSearchQuery, onLoadSessionPage);
   const { shellSessions } = sessionPage;
   const softwareCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -182,6 +187,15 @@ export function AgentView({
     setSelectedThreadId(session.thread_id);
   }
 
+  async function handleNewSessionThreadStarted(threadId: string) {
+    setSoftwareFilter(null);
+    setSessionSearchQuery(threadId);
+    const page = await sessionPage.loadSessionPage(0, "replace", threadId);
+    if (page?.sessions.some((session) => session.thread_id === threadId)) {
+      setSelectedThreadId(threadId);
+    }
+  }
+
   return (
     <section className="view-stack agent-view-root">
       <AgentSessionCenter
@@ -246,13 +260,15 @@ export function AgentView({
         }
         eyebrow=""
         title="智能体"
-        description="选择项目和对话，继续处理任务。"
+        description="新对话、搜索和会话分组在左栏；当前对话在中间继续。"
         emptyTitle="选择左侧会话开始阅读"
         emptyMessage="点任意会话即可查看你与 Agent 的对话。"
         onOpenSession={(session) => void openSession(session)}
         onLoadOlderTranscript={loadOlderTranscript}
         onLoadMoreSessions={() => void sessionPage.loadSessionPage(sessionPage.sessionPageOffset, "append")}
+        onNewSessionThreadStarted={(threadId) => void handleNewSessionThreadStarted(threadId)}
         onReadFilterChange={sessionPage.setSessionPageReadFilter}
+        onSearchQueryChange={setSessionSearchQuery}
         onRequestAction={onRequestAction}
       />
     </section>

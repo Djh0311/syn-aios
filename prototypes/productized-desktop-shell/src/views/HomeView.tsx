@@ -1,4 +1,4 @@
-import { formatDate } from "../lib/format";
+import type { ReactNode } from "react";
 import type { WorkbenchSnapshot, WorkflowStateSnapshot } from "../lib/types";
 import type { ViewKey } from "../lib/workbenchNavigation";
 
@@ -29,209 +29,182 @@ function compactDisplayName(value: string, maxLength = 28) {
   return compactText(parts.length > 1 ? parts[parts.length - 1] : normalized, maxLength);
 }
 
-function HomeNode({
-  className,
-  ko,
-  name,
-  count,
-  rows,
-  moreLabel,
-  view,
-  onNavigate,
-}: {
-  className: string;
-  ko: string;
-  name: string;
-  count: number;
-  rows: HomeFeedItem[];
-  moreLabel: string;
-  view: ViewKey;
-  onNavigate: (view: ViewKey) => void;
-}) {
-  return (
-    <section className={`node ${className}`} aria-label={name}>
-      <div className="node-mark">
-        <span className="ko">{ko}</span>
-        <button className="name home-node-action" type="button" onClick={() => onNavigate(view)}>
-          {name}
-        </button>
-        <span className="count">· {count}</span>
-      </div>
-      <div className="node-feed">
-        {rows.slice(0, 3).map((row) => (
-          <button className="row" key={row.key} type="button" onClick={() => onNavigate(row.view)} title={`${row.label} · ${row.meta}`}>
-            <span className={`d ${row.tone ?? ""}`} aria-hidden="true" />
-            <span className="t">{compactDisplayName(row.label)}</span>
-            <span className="x">{compactText(row.meta, 18)}</span>
-          </button>
-        ))}
-        <button className="more home-node-more" type="button" onClick={() => onNavigate(view)}>
-          {moreLabel}
-        </button>
-      </div>
-    </section>
-  );
-}
-
 export function HomeView({ snapshot, workflowState = null, onNavigate }: HomeViewProps) {
   const recentProjects = [...snapshot.projects]
     .sort((a, b) => (b.latest_updated_at_ms ?? 0) - (a.latest_updated_at_ms ?? 0))
-    .slice(0, 4);
+    .slice(0, 3);
+  const needsUser = snapshot.runtime_session_attention.filter((item) => item.requires_user_action);
+  const blockingAttention = snapshot.runtime_session_attention.filter((item) => item.blocks_continuation);
+  const reviewTaskCount =
+    workflowState?.project_workflows.reduce(
+      (count, workflow) => count + workflow.task_drafts.filter((task) => task.state === "ready_for_review").length,
+      0,
+    ) ?? 0;
+  const pendingPermissionCount =
+    workflowState?.project_workflows.reduce(
+      (count, workflow) => count + workflow.permission_requests.filter((request) => request.status !== "approved").length,
+      0,
+    ) ?? 0;
+  const actionCount = needsUser.length + reviewTaskCount + pendingPermissionCount;
 
-  const needsUser = snapshot.runtime_session_attention.filter((a) => a.requires_user_action);
-  const running = snapshot.session_run_status_summaries.filter(
-    (s) => s.current_status === "running" || s.attention_count > 0,
-  );
-
-  const workflowCount = workflowState?.counts.workflows ?? 0;
-  const workItemCount = workflowState?.counts.work_items ?? 0;
   const runningWorkflows = (workflowState?.project_workflows ?? []).filter((workflow) =>
     workflow.task_drafts.some((task) =>
       ["running", "waiting_for_permission", "retry_pending", "ready_to_dispatch", "ready_for_review"].includes(task.state),
     ),
   );
-  const recentWorkflows = (runningWorkflows.length ? runningWorkflows : workflowState?.project_workflows ?? []).slice(0, 3);
-  const recentSkills = snapshot.skills.slice(0, 3);
-  const harnessResources = snapshot.projects.flatMap((project) =>
-    project.harness_resources.map((resource) => ({
-      label: resource.display_name ?? resource.root_path,
-      projectName: project.name,
-    })),
+  const runningSessions = snapshot.session_run_status_summaries.filter(
+    (summary) => summary.current_status === "running" || summary.attention_count > 0,
   );
-  const projectRows: HomeFeedItem[] = recentProjects.length
-    ? recentProjects.slice(0, 3).map((project) => ({
-        key: project.project_root,
-        label: project.name,
-        meta: `${project.thread_count} 会话`,
-        tone: project.context_warnings.length ? "warn" : "ok",
-        view: "projects",
-      }))
-    : [{ key: "empty-projects", label: "暂无项目", meta: "—", view: "projects" }];
-  const agentRows: HomeFeedItem[] = needsUser.length
-    ? needsUser.slice(0, 3).map((attention) => ({
-        key: attention.attention_id,
-        label: attention.title,
-        meta: "待确认",
-        tone: "warn",
-        view: "agents",
-      }))
-    : running.length
-      ? running.slice(0, 3).map((summary) => ({
-          key: summary.session_id,
-          label: summary.current_status_label,
-          meta: "运行中",
-          tone: "run",
-          view: "agents",
-        }))
-      : [{ key: "empty-agents", label: "暂无需要处理的智能体状态", meta: "—", view: "agents" }];
-  const skillRows: HomeFeedItem[] = recentSkills.length
-    ? recentSkills.map((skill) => ({
-        key: skill.skill_id,
-        label: skill.title,
-        meta: skill.source_type,
-        tone: "ok",
-        view: "skills",
-      }))
-    : [{ key: "empty-skills", label: "暂无 Skill", meta: "—", view: "skills" }];
-  const harnessRows: HomeFeedItem[] = harnessResources.length
-    ? harnessResources.slice(0, 3).map((resource) => ({
-        key: `${resource.projectName}-${resource.label}`,
-        label: resource.label,
-        meta: resource.projectName,
-        tone: "run",
-        view: "harness",
-      }))
-    : [{ key: "empty-harness", label: "暂无 Harness 资源", meta: "—", view: "harness" }];
-  const workflowRows: HomeFeedItem[] = recentWorkflows.length
-    ? recentWorkflows.map((workflow) => ({
-        key: workflow.workflow_id,
-        label: workflow.title,
-        meta: `${workflow.task_draft_count} 任务`,
-        tone: runningWorkflows.includes(workflow) ? "run" : workflow.state === "draft" ? "warn" : "ok",
-        view: "runningWorkflows",
-      }))
-    : [{ key: "empty-workflows", label: "暂无工作流", meta: "—", view: "runningWorkflows" }];
+  const runningRows: HomeFeedItem[] = [
+    ...runningWorkflows.slice(0, 3).map((workflow) => ({
+      key: workflow.workflow_id,
+      label: workflow.title,
+      meta: `${workflow.task_draft_count} 工作项`,
+      tone: "run" as const,
+      view: "runningWorkflows" as const,
+    })),
+    ...runningSessions.slice(0, 3).map((summary) => ({
+      key: summary.session_id,
+      label: summary.session_id,
+      meta: summary.current_status_label,
+      tone: summary.blocking_count ? "err" as const : summary.needs_user_count ? "warn" as const : "run" as const,
+      view: "agents" as const,
+    })),
+  ];
+  const recentWorkRows: HomeFeedItem[] = [
+    ...recentProjects.map((project) => ({
+      key: project.project_root,
+      label: project.name,
+      meta: `${project.thread_count} 会话`,
+      tone: project.context_warnings.length || project.warnings.length ? "warn" as const : "ok" as const,
+      view: "projects" as const,
+    })),
+    ...snapshot.skills.slice(0, 1).map((skill) => ({
+      key: skill.skill_id,
+      label: skill.title,
+      meta: `Skill · ${skill.source_type}`,
+      tone: "ok" as const,
+      view: "skills" as const,
+    })),
+  ].slice(0, 3);
+  const harnessCount = snapshot.projects.reduce((count, project) => count + project.harness_resources.length, 0);
 
   return (
-    <div className="ink-home-stage home-ink-stage">
+    <div className="ink-home-stage home-ink-stage home-workbench-stage">
       {/* sr-only anchors required by offline interaction tests */}
       <p className="sr-only">最近项来自索引近似口径，不是真实使用事件。</p>
-      <p className="sr-only">技能管理</p>
-      <p className="sr-only">运行器管理</p>
+      <p className="sr-only">Skill</p>
+      <p className="sr-only">Harness</p>
+      <p className="sr-only">运行中工作流</p>
       <button className="sr-only" type="button" onClick={() => onNavigate("agents")}>
         打开智能体
       </button>
-      <header className="stage-head home-page-head">
-        <h1 className="title">首页</h1>
-        <div className="meta home-index-meta">
-          <div className="big">
-            {snapshot.summary.project_count} 项目 · {snapshot.summary.session_count} 会话 · {workflowCount} 工作流
-          </div>
-          <div>更新 {formatDate(snapshot.summary.generated_at)}</div>
-        </div>
-      </header>
 
-      <div className="constellation">
-        <HomeNode
-          className="n-project"
-          ko="项目"
-          name="项目"
-          count={snapshot.summary.project_count}
-          rows={projectRows}
-          moreLabel="查看全部"
-          view="projects"
-          onNavigate={onNavigate}
-        />
-        <HomeNode
-          className="n-agents"
-          ko="智能体"
-          name="智能体"
-          count={snapshot.summary.session_count}
-          rows={agentRows}
-          moreLabel={`${snapshot.summary.session_count} 个会话`}
-          view="agents"
-          onNavigate={onNavigate}
-        />
-        <HomeNode
-          className="n-flow center"
-          ko="运行中"
-          name="运行中工作流"
-          count={runningWorkflows.length}
-          rows={[
-            {
-              key: "workflow-summary",
-              label: `${workflowCount} 工作流 · ${workItemCount} 工作项`,
-              meta: `${runningWorkflows.length} 关注`,
-              tone: runningWorkflows.length ? "run" : "ok",
-              view: "runningWorkflows",
-            },
-            ...workflowRows,
-          ]}
-          moreLabel="查看运行中"
-          view="runningWorkflows"
-          onNavigate={onNavigate}
-        />
-        <HomeNode
-          className="n-skills"
-          ko="Skill"
-          name="Skill"
-          count={snapshot.summary.skill_count}
-          rows={skillRows}
-          moreLabel="Skill 库"
-          view="skills"
-          onNavigate={onNavigate}
-        />
-        <HomeNode
-          className="n-harness"
-          ko="Harness"
-          name="Harness"
-          count={harnessResources.length}
-          rows={harnessRows}
-          moreLabel="Harness 库"
-          view="harness"
-          onNavigate={onNavigate}
-        />
+      <section className="home-action-hero" aria-label="待处理">
+        <div>
+          <p className="eyebrow">工作台 · 此刻</p>
+          <h1>{actionCount ? `${actionCount} 件需要你看一眼` : "当前没有必须处理的阻断"}</h1>
+          <p className="muted">
+            项目 {snapshot.summary.project_count} · 智能体 {snapshot.summary.session_count} · Skill {snapshot.summary.skill_count} · Harness {harnessCount}
+          </p>
+        </div>
+        <div className="home-action-buttons" aria-label="待处理入口">
+          <button className="primary-button" type="button" onClick={() => onNavigate("agents")}>
+            去确认
+          </button>
+          <button className="secondary-button" type="button" onClick={() => onNavigate("projects")}>
+            去处理
+          </button>
+          <button className="secondary-button" type="button" onClick={() => onNavigate("runningWorkflows")}>
+            去审批
+          </button>
+        </div>
+      </section>
+
+      <section className="home-now-grid" aria-label="运行中与变更">
+        <HomePanel title="运行中" count={runningRows.length} emptyText="暂无运行、等待、复核或重试关注项。">
+          <HomeFeed rows={runningRows} onNavigate={onNavigate} />
+        </HomePanel>
+        <HomePanel title="变更" count={0} emptyText="change-feed 数据源未接入；先保留入口，不伪造变化。">
+          <div className="home-change-placeholder">
+            <strong>暂无可证明变化</strong>
+            <span>后续需要上次访问基线和变化读模型后再填充。</span>
+          </div>
+        </HomePanel>
+      </section>
+
+      <section className="home-recent-work" aria-label="最近工作">
+        <div className="home-section-head">
+          <div>
+            <p className="eyebrow">最近工作</p>
+            <h2>项目、智能体和素材入口</h2>
+          </div>
+          <button className="secondary-button" type="button" onClick={() => onNavigate("projects")}>
+            查看项目
+          </button>
+        </div>
+        <div className="home-recent-grid">
+          <HomeFeed rows={recentWorkRows} onNavigate={onNavigate} />
+          <button className="home-entry-tile" type="button" onClick={() => onNavigate("skills")}>
+            <span>Skill</span>
+            <strong>{snapshot.summary.skill_count}</strong>
+            <em>可复用能力</em>
+          </button>
+          <button className="home-entry-tile" type="button" onClick={() => onNavigate("harness")}>
+            <span>Harness</span>
+            <strong>{harnessCount}</strong>
+            <em>运行器资源</em>
+          </button>
+        </div>
+      </section>
+
+      {blockingAttention.length ? (
+        <section className="home-warning-strip" aria-label="阻断提醒">
+          {blockingAttention.slice(0, 2).map((item) => (
+            <button key={item.attention_id} type="button" onClick={() => onNavigate("agents")}>
+              <strong>{compactDisplayName(item.title)}</strong>
+              <span>{compactText(item.recommended_next_step, 48)}</span>
+            </button>
+          ))}
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function HomePanel({
+  title,
+  count,
+  emptyText,
+  children,
+}: {
+  title: string;
+  count: number;
+  emptyText: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="home-panel">
+      <div className="home-panel-head">
+        <h2>{title}</h2>
+        <span>{count}</span>
       </div>
+      {count ? children : <p className="muted small-note">{emptyText}</p>}
+    </section>
+  );
+}
+
+function HomeFeed({ rows, onNavigate }: { rows: HomeFeedItem[]; onNavigate: (view: ViewKey) => void }) {
+  if (!rows.length) return null;
+  return (
+    <div className="home-feed">
+      {rows.slice(0, 4).map((row) => (
+        <button className="home-feed-row" key={row.key} type="button" onClick={() => onNavigate(row.view)}>
+          <i className={row.tone ?? ""} aria-hidden="true" />
+          <span>{compactDisplayName(row.label)}</span>
+          <em>{compactText(row.meta, 22)}</em>
+        </button>
+      ))}
     </div>
   );
 }

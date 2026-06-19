@@ -47,15 +47,10 @@ export function SettingsView({
 
   return (
     <section className="stage-pad settings-view">
-      <div className="pg-head">
-        <div>
-          <p className="pg-sub">设置</p>
-          <h1 className="pg-title">工作台设置</h1>
-        </div>
-        <div className="pg-meta">
-          <div className="big">{pageReadModel.snapshot_status_label}</div>
-          <div>{pageReadModel.boundary_text}</div>
-        </div>
+      <div className="sr-only">
+        <p>设置</p>
+        <h1>工作台设置</h1>
+        <p>{pageReadModel.snapshot_status_label}；{pageReadModel.boundary_text}</p>
       </div>
 
       <div className="settings-grid">

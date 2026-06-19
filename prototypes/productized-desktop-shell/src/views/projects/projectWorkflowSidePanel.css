@@ -1,0 +1,303 @@
+.project-canvas-side-panel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  max-height: 660px;
+  overflow: auto;
+  padding-left: 16px;
+  border-left: 1px dashed var(--hair-2);
+}
+
+.project-side-primary {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.project-side-panel-section {
+  min-width: 0;
+  border: 1px solid var(--hair-2);
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.project-side-panel-section > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  min-height: 44px;
+  padding: 9px 10px;
+  color: var(--ink-deep);
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.project-side-panel-section > summary:focus-visible {
+  outline: 2px solid rgba(35, 108, 104, 0.28);
+  outline-offset: 2px;
+}
+
+.project-side-panel-section > summary span {
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.project-side-panel-section > summary em {
+  color: var(--ink-mid);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.project-side-panel-section[open] > summary {
+  border-bottom: 1px dashed var(--hair);
+}
+
+.project-side-panel-section-body {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.project-canvas-detail-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 0 0 14px;
+  border-bottom: 1px dashed var(--hair);
+}
+
+.project-canvas-detail-sections {
+  display: grid;
+  gap: 10px;
+}
+
+.project-canvas-detail-layers {
+  display: grid;
+  gap: 10px;
+}
+
+.project-canvas-detail-layer {
+  min-width: 0;
+  border: 1px solid var(--hair-2);
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.project-canvas-detail-layer summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  min-height: 44px;
+  padding: 9px 10px;
+  cursor: pointer;
+  color: var(--ink-deep);
+  list-style-position: inside;
+}
+
+.project-canvas-detail-layer summary:focus-visible {
+  outline: 2px solid rgba(35, 108, 104, 0.28);
+  outline-offset: 2px;
+}
+
+.project-canvas-detail-layer summary span {
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.project-canvas-detail-layer summary em {
+  color: var(--ink-mid);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.project-canvas-detail-layer[open] summary {
+  border-bottom: 1px dashed var(--hair);
+}
+
+.project-canvas-detail-layer.user_summary {
+  border-color: rgba(35, 108, 104, 0.24);
+}
+
+.project-canvas-detail-layer.technical_details {
+  background: rgba(28, 31, 36, 0.018);
+}
+
+.project-canvas-detail-layer > .project-canvas-detail-sections {
+  padding: 10px;
+}
+
+.project-canvas-detail-section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border-left: 1px solid var(--hair-2);
+  background: rgba(28, 31, 36, 0.025);
+}
+
+.project-canvas-detail-section > strong {
+  color: var(--ink-deep);
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.project-canvas-detail-line {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.36fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.project-canvas-detail-line span,
+.project-canvas-detail-line strong {
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.project-canvas-detail-line span {
+  color: var(--ink-mid);
+}
+
+.project-canvas-detail-line strong {
+  color: var(--ink-deep);
+  font-weight: 500;
+}
+
+.project-canvas-detail-line.warning strong,
+.project-canvas-detail-line.blocked strong {
+  color: var(--warning);
+}
+
+.proposal-scope-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0 0 0 18px;
+  color: var(--ink-mid);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.proposal-scope-list li {
+  overflow-wrap: anywhere;
+}
+
+.proposal-decision-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.proposal-decision-field span {
+  color: var(--ink-mid);
+  font-size: 12px;
+}
+
+.proposal-decision-field textarea {
+  width: 100%;
+  min-height: 78px;
+  resize: vertical;
+  border: 1px solid var(--hair-2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink-deep);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.proposal-decision-field textarea:focus {
+  outline: 2px solid rgba(35, 108, 104, 0.22);
+  border-color: rgba(35, 108, 104, 0.56);
+}
+
+.project-canvas-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.project-canvas-actions span {
+  display: block;
+  min-width: 0;
+  padding: 7px 8px;
+  border-left: 1px solid var(--hair-2);
+  color: var(--ink-mid);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.project-canvas-actions span.enabled {
+  border-left-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.project-canvas-edit-capabilities {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.project-canvas-edit-capabilities span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--hair-2);
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.project-canvas-edit-capabilities strong,
+.project-canvas-edit-capabilities em {
+  font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.project-canvas-edit-capabilities strong {
+  color: var(--ink-deep);
+  font-weight: 500;
+}
+
+.project-canvas-edit-capabilities em {
+  color: var(--ink-mid);
+  font-style: normal;
+}
+
+.project-canvas-edit-capabilities span.preview_only,
+.project-canvas-edit-capabilities span.blocked {
+  border-color: rgba(155, 74, 24, 0.32);
+}
+
+.project-canvas-edit-capabilities span.preview_only em,
+.project-canvas-edit-capabilities span.blocked em {
+  color: var(--warning);
+}
+
+.project-canvas-boundary-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.project-canvas-boundary-badges span {
+  min-width: 0;
+  min-height: 22px;
+  padding: 3px 7px;
+  border: 1px solid var(--hair-2);
+  background: rgba(255, 255, 255, 0.3);
+  color: var(--ink-mid);
+  font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}

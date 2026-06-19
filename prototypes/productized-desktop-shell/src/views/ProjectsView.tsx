@@ -120,14 +120,9 @@ export function ProjectsView(props: ProjectsViewProps) {
   if (!projects.length) {
     return (
       <section className="stage-pad source-placeholder">
-        <div className="pg-head">
-          <div>
-            <h1 className="pg-title">项 目 入 口</h1>
-          </div>
-          <div className="pg-meta">
-            <div className="big">0 项目 · 0 会话</div>
-            <div>普通浏览器没有 Tauri 数据桥；这里不能假装有项目</div>
-          </div>
+        <div className="sr-only">
+          <h1>项 目 入 口</h1>
+          <p>0 项目 · 0 会话；普通浏览器没有 Tauri 数据桥；这里不能假装有项目</p>
         </div>
         <div className="stat-strip">
           <div className="stat-cell">

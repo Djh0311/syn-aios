@@ -87,10 +87,10 @@ export const projectRuntimeTranscriptRoleTextFixtures = {
     "session-state-filter",
   ],
   transcriptExpectedTexts: [
-    "已收纳较早 3 条消息",
-    "展开全部",
+    "已收纳较早 4 条对话",
+    "看更早",
     "展开",
-    "开发者详情：过程事件",
+    "准备调用工具",
     "复制",
     "const ok = true;",
   ],

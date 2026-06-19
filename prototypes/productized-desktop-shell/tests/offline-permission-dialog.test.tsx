@@ -93,6 +93,7 @@ import { readModelContractFixtures } from "./helpers/offlineReadModelContractFix
 import { stageJRunQueueFixtures } from "./helpers/offlineRunQueueFixtures";
 import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtocolFixtures";
 import { AgentSessionCenter, AgentView, ChatTranscript, filterAgentSessions } from "../src/views/AgentView";
+import { renderActiveWorkbenchView } from "../src/components/ActiveWorkbenchView";
 import { HomeView } from "../src/views/HomeView";
 import { RunningWorkflowsView } from "../src/views/RunningWorkflowsView";
 import { SettingsView } from "../src/views/SettingsView";
@@ -134,6 +135,7 @@ import {
   nextSelectedWorkItemId,
   selectedTaskDraftFor,
 } from "../src/views/ProjectsView";
+import { ProjectHandoffEvidencePanel, ProjectResourcesPanel } from "../src/views/projects/ProjectReferencePanels";
 import { SkillsBoardView } from "../src/views/SkillsBoardView";
 import { HarnessBoardView } from "../src/views/HarnessBoardView";
 import { RightDetailPanel, workspaceRailItems } from "../src/App";
@@ -291,10 +293,12 @@ function runRealExecutionProductCommandBoundaryScenario() {
   for (const expectedText of executionRunQueueTextFixtures.agentConversationExpectedTexts) {
     assert(agentText.includes(expectedText), `J5 Agent 对话工作区缺少 ${expectedText}`);
   }
-  assert(agentMarkup.includes("agent-conversation-bar"), "J5 Agent 普通区应有项目 / 对话选择条");
+  assert(agentMarkup.includes("agent-session-shell"), "J5 Agent 普通区应有 Codex 式会话布局");
+  assert(agentMarkup.includes("agent-new-chat-button"), "J5 Agent 普通区左栏应有新对话入口");
   assert(agentMarkup.includes("agent-chat-composer"), "J5 Agent 普通区应有任务输入框");
+  assert(!agentMarkup.includes("agent-conversation-bar"), "J5 Agent 普通区不应保留旧项目 / 对话选择条");
   assert(
-    agentMarkup.indexOf("agent-conversation-bar") < agentMarkup.indexOf("agent-boundary-details"),
+    agentMarkup.indexOf("agent-session-shell") < agentMarkup.indexOf("agent-boundary-details"),
     "J5 Agent 普通对话区必须排在开发者详情前面",
   );
   for (const expectedText of executionRunQueueTextFixtures.agentUnifiedExecutionExpectedTexts) {
@@ -2052,6 +2056,17 @@ function runRightRailSecretarySurfaceScenario() {
     assert(!panelText.includes("候选，不是正式记忆"), `${activePanel} 详情不应渲染秘书记忆边界`);
   }
 
+  const todoPanelText = visibleText(<RightDetailPanel activePanel="todos" {...commonProps} />);
+  assert(todoPanelText.includes("按项目"), "待办右栏应提供按项目分组入口");
+  assert(todoPanelText.includes("codex-workbench 默认工作流草稿"), "待办右栏项目分组应显示项目工作流标题");
+  assert(todoPanelText.includes("第二个任务草稿"), "待办右栏项目分组应显示待复核任务");
+  assert(todoPanelText.includes("待处理事项"), "待办右栏项目分组不应替换原全局摘要");
+
+  const runningPanelText = visibleText(<RightDetailPanel activePanel="running" {...commonProps} />);
+  assert(runningPanelText.includes("按项目"), "运行中右栏应提供按项目分组入口");
+  assert(runningPanelText.includes("已有任务草稿"), "运行中右栏项目分组应显示可归属项目的运行项");
+  assert(runningPanelText.includes("运行中摘要"), "运行中右栏项目分组不应替换原全局摘要");
+
   const secretaryPanel = <RightDetailPanel activePanel="secretary" {...commonProps} />;
   const secretaryText = visibleText(secretaryPanel);
   for (const expectedText of memoryKnowledgeTextFixtures.secretaryPanelExpectedTexts) {
@@ -2166,7 +2181,7 @@ function runSessionCenterHardeningScenario() {
   for (const expectedText of projectRuntimeTranscriptRoleTextFixtures.transcriptExpectedTexts) {
     assert(transcriptText.includes(expectedText), `Transcript 展示硬化缺少 ${expectedText}`);
   }
-  assert(!transcriptText.includes("should be internal"), "工具事件不应默认进入主对话流");
+  assert(transcriptText.includes("should be internal"), "P3 工具事件应作为 Codex 状态行进入主对话流详情");
 
   const transcriptCenterText = visibleText(
     <AgentSessionCenter
@@ -2182,7 +2197,7 @@ function runSessionCenterHardeningScenario() {
     />,
   );
   assert(
-    transcriptCenterText.includes("会话来源：只读历史查看，不是执行结果回收。"),
+    transcriptCenterText.includes("只读历史查看；不是执行结果回收。"),
     "transcript viewer 的执行边界说明应收进开发者会话来源详情",
   );
 
@@ -2372,6 +2387,67 @@ function runShellScenario() {
     assert(!settingsText.includes(forbiddenText), `设置开发者区不应出现执行或凭据读取文案：${forbiddenText}`);
   }
 
+  const sourceEntryText = visibleText([
+    renderActiveWorkbenchView({
+      view: "ideas",
+      snapshot,
+      workflowState: workflowStateWithProjectWorkflow,
+      workflowStateLoading: false,
+      workflowStateError: null,
+      hasRealSnapshot: true,
+      onRequestAction: captureAction,
+      onNavigate: (view) => visited.push(view),
+      onReloadWorkflowState: () => {},
+      onNotice: () => {},
+      onOpenAgentSession: () => {},
+    }),
+    renderActiveWorkbenchView({
+      view: "proposal",
+      snapshot,
+      workflowState: workflowStateWithProjectWorkflow,
+      workflowStateLoading: false,
+      workflowStateError: null,
+      hasRealSnapshot: true,
+      onRequestAction: captureAction,
+      onNavigate: (view) => visited.push(view),
+      onReloadWorkflowState: () => {},
+      onNotice: () => {},
+      onOpenAgentSession: () => {},
+    }),
+    renderActiveWorkbenchView({
+      view: "tools",
+      snapshot,
+      workflowState: workflowStateWithProjectWorkflow,
+      workflowStateLoading: false,
+      workflowStateError: null,
+      hasRealSnapshot: true,
+      onRequestAction: captureAction,
+      onNavigate: (view) => visited.push(view),
+      onReloadWorkflowState: () => {},
+      onNotice: () => {},
+      onOpenAgentSession: () => {},
+    }),
+    renderActiveWorkbenchView({
+      view: "models",
+      snapshot,
+      workflowState: workflowStateWithProjectWorkflow,
+      workflowStateLoading: false,
+      workflowStateError: null,
+      hasRealSnapshot: true,
+      onRequestAction: captureAction,
+      onNavigate: (view) => visited.push(view),
+      onReloadWorkflowState: () => {},
+      onNotice: () => {},
+      onOpenAgentSession: () => {},
+    }),
+  ]);
+  for (const expectedText of shellTexts.sourceEntryExpectedTexts) {
+    assert(sourceEntryText.includes(expectedText), `四个占位入口页缺少 ${expectedText}`);
+  }
+  for (const forbiddenText of shellTexts.sourceEntryForbiddenTexts) {
+    assert(!sourceEntryText.includes(forbiddenText), `四个占位入口页不应出现 ${forbiddenText}`);
+  }
+
   const runningWorkflowsText = visibleText(
     <RunningWorkflowsView
       snapshot={snapshot}
@@ -2425,8 +2501,10 @@ function runShellScenario() {
   for (const expectedText of shellTexts.agentViewExpectedTexts) {
     assert(agentViewText.includes(expectedText), `AgentView 新方向缺少 ${expectedText}`);
   }
-  assert(agentViewMarkup.includes("agent-conversation-bar"), "AgentView 新方向应有项目 / 对话选择条");
+  assert(agentViewMarkup.includes("agent-session-shell"), "AgentView 新方向应有 Codex 式会话布局");
+  assert(agentViewMarkup.includes("agent-new-chat-button"), "AgentView 新方向左栏应有新对话入口");
   assert(agentViewMarkup.includes("agent-chat-composer"), "AgentView 新方向应有任务输入框");
+  assert(!agentViewMarkup.includes("agent-conversation-bar"), "AgentView 新方向不应保留旧项目 / 对话选择条");
   assert(
     agentViewMarkup.indexOf("agent-session-shell") < agentViewMarkup.indexOf("agent-boundary-details"),
     "AgentView 新方向应先展示对话界面，再展示开发者详情",
@@ -2451,6 +2529,10 @@ function runShellScenario() {
   for (const forbiddenText of shellTexts.projectOverviewForbiddenTexts) {
     assert(!projectText.includes(forbiddenText), `项目工作台主导航不应出现 ${forbiddenText}`);
   }
+  const projectEvidenceText = visibleText(<ProjectHandoffEvidencePanel project={project} />);
+  assert(projectEvidenceText.includes("展开完整资料索引"), "项目交接证据页应把完整资料索引收进 disclosure");
+  const projectResourcesText = visibleText(<ProjectResourcesPanel project={project} />);
+  assert(projectResourcesText.includes("展开资源详情"), "项目资源页应把资源详情收进 disclosure");
 
   const projectAgentButton = findButtonByText(
     <ProjectDetail project={project} sessions={[session]} onRequestAction={captureAction} />,

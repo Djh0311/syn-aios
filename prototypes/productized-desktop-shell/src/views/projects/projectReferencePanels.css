@@ -1,0 +1,96 @@
+.project-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  gap: 18px;
+}
+
+.project-overview-card,
+.project-evidence-panel,
+.project-resources-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px 0;
+  border-top: 1px dashed var(--hair);
+  background: transparent;
+}
+
+.project-overview-card.primary,
+.project-evidence-panel {
+  grid-column: span 1;
+}
+
+.project-disclosure {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.project-disclosure > summary {
+  width: fit-content;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--hair-2);
+  color: var(--ink-mid);
+  cursor: pointer;
+  font-family: -apple-system, "PingFang SC", sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  list-style: none;
+}
+
+.project-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.project-disclosure > summary:hover,
+.project-disclosure > summary:focus-visible {
+  border-color: rgba(161, 66, 66, 0.28);
+  color: var(--vermil);
+  outline: none;
+}
+
+.project-disclosure[open] > summary {
+  margin-bottom: 10px;
+}
+
+.project-file-columns,
+.project-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.project-file-list,
+.project-resource-grid article {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 130px;
+  padding: 12px;
+  border-left: 1px solid var(--hair-2);
+  background: rgba(28, 31, 36, 0.025);
+}
+
+.project-file-list strong,
+.project-resource-grid strong {
+  color: var(--ink-deep);
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
+
+.project-file-list span,
+.project-resource-grid span {
+  color: var(--ink-mid);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.project-file-list em {
+  display: block;
+  color: var(--terra);
+  font-style: normal;
+}

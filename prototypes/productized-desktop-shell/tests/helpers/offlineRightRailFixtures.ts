@@ -53,6 +53,7 @@ export function rightDetailPanelCommonPropsFixture({
 export const rightRailPanelSummaryTitles = {
   notifications: "通知摘要",
   todos: "待处理事项",
+  ideas: "想法线索",
   audit: "管理摘要",
   running: "运行中摘要",
 } as const;

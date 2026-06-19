@@ -81,6 +81,7 @@ struct CodexSessionPageRequest {
     offset: Option<usize>,
     include_archived: Option<bool>,
     archived_only: Option<bool>,
+    query: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]

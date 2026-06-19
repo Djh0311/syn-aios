@@ -57,7 +57,9 @@ import type {
   ManualRelayConfirmation,
   ManualRelayPreview,
   ManualRelayPreviewInput,
+  ManualRelayPollInput,
   ManualRelayReceipt,
+  ManualRelayGuiDirectNewSessionInput,
   ManualRelayGuiDirectRunInput,
   ManualRelayRunInput,
   ManualRelayStopInput,
@@ -714,11 +716,25 @@ export function runManualCodexRelayGuiDirect(
   return invoke<ManualRelayReceipt>("run_manual_codex_relay_gui_direct", { request });
 }
 
+export function runManualCodexRelayGuiDirectNewSession(
+  request: ManualRelayGuiDirectNewSessionInput,
+): Promise<ManualRelayReceipt> {
+  ensureTauriRuntime();
+  return invoke<ManualRelayReceipt>("run_manual_codex_relay_gui_direct_new_session", { request });
+}
+
 export function stopManualCodexRelayAttempt(
   request: ManualRelayStopInput,
 ): Promise<ManualRelayReceipt> {
   ensureTauriRuntime();
   return invoke<ManualRelayReceipt>("stop_manual_codex_relay_attempt", { request });
+}
+
+export function pollManualCodexRelayAttempt(
+  request: ManualRelayPollInput,
+): Promise<ManualRelayReceipt> {
+  ensureTauriRuntime();
+  return invoke<ManualRelayReceipt>("poll_manual_codex_relay_attempt", { request });
 }
 
 // =============================================================

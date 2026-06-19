@@ -197,6 +197,14 @@ fn load_codex_session_transcript_with_optional_catalog(
         }
     }
 
+    if let Some(codex_home) = db_path.parent() {
+        if let Some(transcript) =
+            load_codex_session_transcript_from_rollout_fallback(codex_home, thread_id)?
+        {
+            return Ok(transcript);
+        }
+    }
+
     Err(format!("session_not_found:{thread_id}"))
 }
 

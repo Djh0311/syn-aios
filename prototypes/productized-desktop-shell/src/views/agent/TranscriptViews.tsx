@@ -36,14 +36,23 @@ export function ChatTranscript({
   const [viewportHeight, setViewportHeight] = useState(720);
   const [isNearBottom, setIsNearBottom] = useState(true);
 
-  const conversation = useMemo(() => conversationTurns(transcript.events), [transcript.events]);
-  const { stableConversation, streamingEvent } = useStreamingSeparatedConversation(conversation);
+  const conversationEvents = useMemo(() => conversationTurns(transcript.events), [transcript.events]);
+  const conversationIds = useMemo(() => new Set(conversationEvents.map((event) => event.event_id)), [conversationEvents]);
+  const displayEvents = useMemo(
+    () =>
+      transcript.events.filter((event) => {
+        if (conversationIds.has(event.event_id)) return true;
+        return isCodexNativeStatusEvent(event);
+      }),
+    [transcript.events, conversationIds],
+  );
+  const { stableConversation, streamingEvent } = useStreamingSeparatedConversation(displayEvents);
   const virtualWindow = useVirtualMessageWindow(stableConversation, scrollTop, viewportHeight);
   const hiddenConversationCount = stableConversation.length - virtualWindow.visible.length;
-  const conversationIds = useMemo(() => new Set(conversation.map((event) => event.event_id)), [conversation]);
+  const displayIds = useMemo(() => new Set(displayEvents.map((event) => event.event_id)), [displayEvents]);
   const internalEvents = useMemo(
-    () => transcript.events.filter((event) => !conversationIds.has(event.event_id)),
-    [transcript.events, conversationIds],
+    () => transcript.events.filter((event) => !displayIds.has(event.event_id)),
+    [transcript.events, displayIds],
   );
   const internalCount = internalEvents.length;
   const olderCursor = transcript.pagination?.has_older ? transcript.pagination.older_before_line ?? null : null;
@@ -131,7 +140,7 @@ export function ChatTranscript({
 
   return (
     <section className="transcript-shell">
-      {conversation.length === 0 ? (
+      {displayEvents.length === 0 ? (
         <>
           <section className="empty-state">
             <strong>这条会话没有可显示的对话</strong>
@@ -149,22 +158,22 @@ export function ChatTranscript({
         >
           {transcriptPageBoundary}
           {hiddenConversationCount > 0 ? (
-            <div className="chat-fold-notice">
+            <div className="chat-fold-notice" data-virtualized-window={`${virtualWindow.visible.length}/${displayEvents.length}`}>
               <span>
-                虚拟消息窗口：已渲染 {virtualWindow.visible.length} / {conversation.length}，已收纳较早 {hiddenConversationCount} 条消息
+                已收纳较早 {hiddenConversationCount} 条对话
               </span>
               {virtualWindow.start > 0 ? (
                 <button className="secondary-button" type="button" onClick={() => scrollOneWindow("earlier")}>
-                  展开全部
+                  看更早
                 </button>
               ) : null}
-              {virtualWindow.end < conversation.length ? (
+              {virtualWindow.end < displayEvents.length ? (
                 <button className="secondary-button" type="button" onClick={() => scrollOneWindow("newer")}>
                   查看更新
                 </button>
               ) : null}
               <button className="secondary-button" type="button" onClick={scrollToLatest}>
-                回到最新消息
+                回到最新
               </button>
             </div>
           ) : null}
@@ -184,13 +193,13 @@ export function ChatTranscript({
               }}
             >
               {virtualWindow.visible.map((event) => (
-                <ChatBubble event={event} key={event.event_id} />
+                <CodexTranscriptItem event={event} key={event.event_id} />
               ))}
             </div>
           </div>
           {streamingEvent ? (
             <div className="chat-streaming-tail" data-streaming-separated="true" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <ChatBubble event={streamingEvent} />
+              <CodexTranscriptItem event={streamingEvent} />
             </div>
           ) : null}
           {!isNearBottom || streamingEvent ? (
@@ -207,7 +216,7 @@ export function ChatTranscript({
       )}
 
       <div className="chat-toolbar">
-        <span className="counts"><em>{conversation.length}</em> 条对话</span>
+        <span className="counts"><em>{displayEvents.length}</em> 条对话项</span>
       </div>
 
       {internalCount > 0 ? (
@@ -216,7 +225,7 @@ export function ChatTranscript({
           open={showInternal}
           onToggle={(event) => setShowInternal(event.currentTarget.open)}
         >
-          <summary>开发者详情：过程事件（{internalCount}）</summary>
+          <summary>过程事件（{internalCount}）</summary>
           {showInternal ? (
             <section className="internal-events">
               <header className="ie-head">过程事件 · {internalCount}</header>
@@ -256,6 +265,31 @@ function metadataFlag(event: CodexTranscriptEvent, key: string): boolean {
   return !!metadata && typeof metadata === "object" && !Array.isArray(metadata) && metadata[key] === true;
 }
 
+function metadataValue(event: CodexTranscriptEvent, key: string): unknown {
+  const metadata = event.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  return metadata[key];
+}
+
+function payloadTypeOf(event: CodexTranscriptEvent): string | null {
+  const payloadType = metadataValue(event, "payload_type");
+  return typeof payloadType === "string" ? payloadType : null;
+}
+
+function metadataString(event: CodexTranscriptEvent, key: string): string | null {
+  const value = metadataValue(event, key);
+  return typeof value === "string" ? value : null;
+}
+
+function isCodexNativeStatusEvent(event: CodexTranscriptEvent): boolean {
+  if (metadataFlag(event, "conversation_engine_live_status")) return true;
+  if (event.event_type === "tool_call") return true;
+  if (event.event_type === "tool_result") return true;
+  if (event.event_type === "command_output") return true;
+  if (event.event_type === "compacted") return true;
+  return event.event_type === "system_context" && payloadTypeOf(event) === "reasoning";
+}
+
 function useVirtualMessageWindow(events: CodexTranscriptEvent[], scrollTop: number, viewportHeight: number) {
   return useMemo(() => {
     const visibleByHeight = Math.ceil(viewportHeight / ESTIMATED_MESSAGE_HEIGHT) + VIRTUAL_MESSAGE_OVERSCAN * 2;
@@ -274,19 +308,26 @@ function useVirtualMessageWindow(events: CodexTranscriptEvent[], scrollTop: numb
   }, [events, scrollTop, viewportHeight]);
 }
 
-function ChatBubble({ event }: { event: CodexTranscriptEvent }) {
+function CodexTranscriptItem({ event }: { event: CodexTranscriptEvent }) {
   const [expanded, setExpanded] = useState(false);
-  const isUser = event.event_type === "user_message";
-  const role = isUser ? "user" : "assistant";
-  const speaker = isUser ? "你" : "Codex";
+  if (isCodexNativeStatusEvent(event) && event.event_type !== "user_message" && event.event_type !== "assistant_message") {
+    return <CodexStatusItem event={event} />;
+  }
+  const role = event.event_type === "user_message" ? "user" : "assistant";
+  const speaker = role === "user" ? "你" : "";
   const text = event.text || valuePreview(event.output) || "（无正文）";
   const longMessage = text.length > 680 || text.split(/\r?\n/).length > 10;
+  const liveClass = metadataFlag(event, "conversation_engine_streaming") ? " streaming" : "";
+  const timestamp = event.timestamp ?? undefined;
+  const displayTime = role === "user" && timestamp ? compactTimestamp(timestamp) : null;
   return (
-    <article className={`chat-bubble ${role}`}>
-      <header className="who">
-        <strong>{speaker}</strong>
-        {event.timestamp ? <time>{event.timestamp}</time> : null}
-      </header>
+    <article className={`codex-transcript-item ${role}${liveClass}`}>
+      {speaker || displayTime ? (
+        <header className="who">
+          {speaker ? <strong>{speaker}</strong> : null}
+          {displayTime ? <time dateTime={timestamp}>{displayTime}</time> : null}
+        </header>
+      ) : null}
       <div className={`body ${longMessage && !expanded ? "is-collapsed" : ""}`}>
         <MessageBody text={text} />
       </div>
@@ -297,6 +338,150 @@ function ChatBubble({ event }: { event: CodexTranscriptEvent }) {
       ) : null}
     </article>
   );
+}
+
+function CodexStatusItem({ event }: { event: CodexTranscriptEvent }) {
+  const liveClass = metadataFlag(event, "conversation_engine_live_status") ? " live" : "";
+  const timestamp = event.timestamp ?? undefined;
+  const displayTime = timestamp ? compactTimestamp(timestamp) : null;
+  if (event.event_type === "compacted") {
+    return (
+      <article className={`codex-status-item compacted${liveClass}`}>
+        <div className="codex-status-line">
+          <span>上下文已自动压缩</span>
+          {displayTime ? <time dateTime={timestamp}>{displayTime}</time> : null}
+        </div>
+        {event.text ? <p>{event.text}</p> : null}
+      </article>
+    );
+  }
+  if (payloadTypeOf(event) === "reasoning") {
+    const label = metadataString(event, "live_title") ?? "思考";
+    return (
+      <details className={`codex-status-item reasoning${liveClass}`}>
+        <summary>
+          <span>{label}</span>
+          {displayTime ? <time dateTime={timestamp}>{displayTime}</time> : null}
+        </summary>
+        <p>{event.text || (event.warnings.includes("encrypted_content_omitted") ? "思考内容已由 Codex 加密存储，当前仅显示占位。" : "无可展示正文")}</p>
+        {event.warnings.length > 0 ? <WarningStrip warnings={event.warnings} compact /> : null}
+      </details>
+    );
+  }
+  const label = statusLabelForEvent(event);
+  const detail = statusDetailForEvent(event);
+  return (
+    <details className={`codex-status-item ${event.event_type ?? "event"}${liveClass}`}>
+      <summary>
+        <span>{label}</span>
+        {detail ? <em>{detail}</em> : null}
+        {displayTime ? <time dateTime={timestamp}>{displayTime}</time> : null}
+      </summary>
+      <StatusEventDetails event={event} />
+    </details>
+  );
+}
+
+function StatusEventDetails({ event }: { event: CodexTranscriptEvent }) {
+  const body = event.text || valuePreview(event.output) || event.stdout || event.stderr || valuePreview(event.arguments) || "";
+  return (
+    <div className="codex-status-details">
+      {body ? <p>{body}</p> : null}
+      {!isEmptyValue(event.arguments) ? <pre>arguments: {valuePreview(event.arguments)}</pre> : null}
+      {!isEmptyValue(event.output) ? <pre>output: {valuePreview(event.output)}</pre> : null}
+      {event.stdout ? <pre>stdout: {event.stdout}</pre> : null}
+      {event.stderr ? <pre>stderr: {event.stderr}</pre> : null}
+      {event.exit_code !== null && event.exit_code !== undefined ? <pre>exit_code: {String(event.exit_code)}</pre> : null}
+      {event.warnings.length > 0 ? <WarningStrip warnings={event.warnings} compact /> : null}
+    </div>
+  );
+}
+
+function statusLabelForEvent(event: CodexTranscriptEvent): string {
+  const liveTitle = metadataString(event, "live_title");
+  if (liveTitle) return friendlyLiveTitle(liveTitle);
+  if (event.event_type === "tool_call") {
+    if (event.tool_name?.includes("exec_command")) return "准备运行命令";
+    if (event.tool_name?.includes("apply_patch")) return "准备编辑文件";
+    return "准备调用工具";
+  }
+  if (event.event_type === "command_output") {
+    if (event.tool_name === "apply_patch") return "已应用补丁";
+    return exitCodeIsSuccess(event.exit_code) ? "已运行命令" : "命令已返回";
+  }
+  if (event.event_type === "tool_result") return "工具结果";
+  return labelForEvent(event.event_type);
+}
+
+function statusDetailForEvent(event: CodexTranscriptEvent): string {
+  const liveStatus = metadataString(event, "live_status");
+  const liveEventType = metadataString(event, "live_event_type");
+  if (liveStatus || liveEventType) return friendlyLiveDetail(event, liveStatus, liveEventType);
+  if (event.event_type === "tool_call") {
+    const command = commandFromArguments(event.arguments);
+    if (command) return command;
+    return event.tool_name || "";
+  }
+  if (event.event_type === "command_output") {
+    const exit = event.exit_code !== null && event.exit_code !== undefined ? `exit ${String(event.exit_code)}` : "";
+    const stdout = event.stdout?.trim();
+    if (stdout) return exit ? `${exit} · ${firstLine(stdout)}` : firstLine(stdout);
+    return exit;
+  }
+  if (event.event_type === "tool_result") return event.tool_name || event.call_id || "";
+  return event.text ? firstLine(event.text) : "";
+}
+
+function friendlyLiveTitle(title: string): string {
+  const labels: Record<string, string> = {
+    "Codex 开始处理": "开始处理",
+    "Codex 正在回复": "正在回复",
+    "Codex 回复完成": "回复完成",
+    "Codex 完成": "完成",
+    "Codex 失败": "失败",
+    "对话已创建": "已创建对话",
+    "思考中": "正在思考",
+    "思考完成": "思考完成",
+    "正在运行命令": "正在运行命令",
+    "命令完成": "命令完成",
+    "正在调用工具": "正在调用工具",
+    "工具完成": "工具完成",
+    "工具输出": "工具输出",
+  };
+  return labels[title] ?? title;
+}
+
+function friendlyLiveDetail(event: CodexTranscriptEvent, liveStatus: string | null, liveEventType: string | null): string {
+  const command = commandFromArguments(event.arguments);
+  if (command) return command;
+  const stdout = event.stdout?.trim();
+  if (stdout) return firstLine(stdout);
+  const liveStatusLabel = liveStatus === "running" ? "运行中" : liveStatus === "completed" ? "已完成" : liveStatus === "failed" ? "失败" : "";
+  const eventTypeLabel = liveEventType ? liveEventType.replace("item.", "").replace("turn.", "") : "";
+  return [liveStatusLabel, eventTypeLabel].filter(Boolean).join(" · ");
+}
+
+function commandFromArguments(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const record = value as Record<string, unknown>;
+  const cmd = record.cmd;
+  if (typeof cmd === "string") return cmd;
+  if (Array.isArray(cmd)) return cmd.map(String).join(" ");
+  return "";
+}
+
+function exitCodeIsSuccess(value: unknown): boolean {
+  return value === 0 || value === "0";
+}
+
+function firstLine(text: string): string {
+  return text.split(/\r?\n/)[0]?.trim() ?? "";
+}
+
+function compactTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 type MessagePart =

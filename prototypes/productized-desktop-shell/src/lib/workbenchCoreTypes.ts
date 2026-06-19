@@ -79,6 +79,7 @@ export type CodexSessionPageRequest = {
   offset?: number | null;
   include_archived?: boolean | null;
   archived_only?: boolean | null;
+  query?: string | null;
 };
 
 export type CodexSessionPage = {

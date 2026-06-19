@@ -24,7 +24,8 @@ export const SESSION_READ_FILTERS: Array<{ key: SessionReadFilter; label: string
 
 export function softwareKeyOf(session: SessionRecord): string {
   const raw = (session.thread_source ?? "codex").trim().toLowerCase();
-  return raw || "codex";
+  if (!raw || raw === "user" || raw === "subagent") return "codex";
+  return raw;
 }
 
 export function softwareLabelOf(key: string): string {
@@ -116,15 +117,16 @@ export function AgentSessionList({
   groups,
   effectiveGroupBy,
   selectedThreadId,
+  newSessionActive,
   filteredOutCount,
   filterBar,
   searchQuery,
   readFilter,
   selectedCollapsedGroup,
-  showSoftware,
   eyebrow,
   title,
   description,
+  onNewConversation,
   onSearchQueryChange,
   onReadFilterChange,
   collapsedKeys,
@@ -142,16 +144,17 @@ export function AgentSessionList({
   groups: AgentSessionGroup[];
   effectiveGroupBy: "project" | "software";
   selectedThreadId: string | null;
+  newSessionActive?: boolean;
   filteredOutCount: number;
   filterBar?: React.ReactNode;
   searchQuery: string;
   readFilter: SessionReadFilter;
   selectedCollapsedGroup: AgentSessionGroup | null;
   collapsedKeys: Set<string>;
-  showSoftware: boolean;
   eyebrow?: string;
   title: string;
   description?: string;
+  onNewConversation?: () => void;
   onSearchQueryChange: (value: string) => void;
   onReadFilterChange: (filter: SessionReadFilter) => void;
   onToggleGroup: (key: string) => void;
@@ -202,16 +205,25 @@ export function AgentSessionList({
 
   return (
     <aside className="agent-session-list" aria-label="会话列表">
-      {!showSoftware ? (
-        <header className="agent-list-head">
+      <header className="agent-list-head">
+        <div>
           {eyebrow ? <p className="pg-sub">{eyebrow}</p> : null}
           <h1 className="agent-list-title">{title}</h1>
           <span className="agent-list-count">
             {visibleSessions.length} / {sessions.length} 会话 · {groups.length} {effectiveGroupBy === "software" ? "软件" : "项目"}
           </span>
           {description ? <p className="agent-list-desc">{description}</p> : null}
-        </header>
-      ) : null}
+        </div>
+        <button
+          className={`agent-new-chat-button ${newSessionActive ? "active" : ""}`}
+          type="button"
+          aria-pressed={newSessionActive}
+          onClick={onNewConversation}
+        >
+          <span aria-hidden="true">+</span>
+          新对话
+        </button>
+      </header>
       {filterBar}
       <div className="session-list-controls">
         <label className="session-search">
@@ -220,7 +232,7 @@ export function AgentSessionList({
             aria-label="搜索会话"
             type="search"
             value={searchQuery}
-            placeholder="标题 / 项目 / 智能体 / 状态"
+            placeholder="标题 / ID / 项目 / 智能体 / 状态"
             onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
@@ -242,14 +254,14 @@ export function AgentSessionList({
             </button>
           ))}
         </div>
-        <p className="muted small-note">
-          已渲染 {renderedSessionCount} / {visibleSessions.length}；后端分页默认隔离归档。
-          {readFilter === "archived" ? " 显式归档视图：归档会话不会混入默认列表。" : ""}
+        <p className="muted small-note session-list-progress">
+          显示 {renderedSessionCount} / {visibleSessions.length} 个匹配会话。
+          {readFilter === "archived" ? " 当前只看归档。" : ""}
         </p>
         {sessionPageStatus === "loading" || sessionPageSource || sessionPageWarnings.length ? (
-          <p className="muted small-note">
-            {sessionPageStatus === "loading" ? "正在读取会话分页。" : null}
-            {sessionPageSource ? ` 会话页来源：${sessionPageSource}。` : null}
+          <p className="muted small-note session-list-read-state">
+            {sessionPageStatus === "loading" ? "正在更新会话列表。" : null}
+            {sessionPageSource ? ` 来源：${sessionPageSource}。` : null}
             {sessionPageWarnings.length ? ` ${sessionPageWarnings.join("；")}` : null}
           </p>
         ) : null}
@@ -321,7 +333,7 @@ export function AgentSessionList({
             显示更多会话
           </button>
           <span className="muted small-note">
-            {hasLocalMore ? "继续展开当前页的虚拟窗口。" : "继续读取下一页会话元数据。"}
+            {hasLocalMore ? "继续显示当前匹配结果。" : "继续读取更多会话。"}
           </span>
         </div>
       ) : null}

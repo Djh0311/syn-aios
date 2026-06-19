@@ -40,6 +40,7 @@ import {
   readbackStatusLabel,
   runtimeAttentionLabel,
   sha256HexText,
+  userFacingAgentError,
 } from "./agentLabels";
 
 export function CodexControlEntryPanel({
@@ -76,6 +77,7 @@ export function CodexControlEntryPanel({
   const [draftCreatedAt, setDraftCreatedAt] = useState(() => new Date().toISOString());
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const userError = error ? userFacingAgentError(error) : null;
   const [preview, setPreview] = useState<RealExecutionProductCommandPreview | null>(null);
   const [prepareOutput, setPrepareOutput] = useState<RealExecutionProductCommandPrepareOutput | null>(null);
   const [decisionOutput, setDecisionOutput] = useState<RealExecutionProductCommandDecisionOutput | null>(null);
@@ -342,7 +344,16 @@ export function CodexControlEntryPanel({
           重置本轮草稿
         </button>
       </div>
-      {error ? <p className="error-text">操作失败：{error}</p> : null}
+      {userError ? (
+        <div className="agent-composer-error" role="alert">
+          <strong>{userError.title}</strong>
+          <span>{userError.nextStep}</span>
+          <details className="nested-boundary-details">
+            <summary>原始错误</summary>
+            <pre>{userError.raw}</pre>
+          </details>
+        </div>
+      ) : null}
       <div className="codex-control-status-grid">
         <span>预览：{preview ? codexControlPreviewLabel(preview) : "未生成"}</span>
         <span>准备：{prepareOutput?.status ?? "未写入"}</span>

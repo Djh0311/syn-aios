@@ -78,10 +78,24 @@ fn run_manual_codex_relay_gui_direct(
 }
 
 #[tauri::command]
+fn run_manual_codex_relay_gui_direct_new_session(
+    request: manual_relay::ManualRelayGuiDirectNewSessionInput,
+) -> Result<manual_relay::ManualRelayReceipt, String> {
+    manual_relay::run_manual_relay_gui_direct_new_session_once(request, &unix_timestamp_string())
+}
+
+#[tauri::command]
 fn stop_manual_codex_relay_attempt(
     request: manual_relay::ManualRelayStopInput,
 ) -> Result<manual_relay::ManualRelayReceipt, String> {
     manual_relay::stop_manual_relay_attempt(request, &unix_timestamp_string())
+}
+
+#[tauri::command]
+fn poll_manual_codex_relay_attempt(
+    request: manual_relay::ManualRelayPollInput,
+) -> Result<manual_relay::ManualRelayReceipt, String> {
+    manual_relay::poll_manual_relay_attempt(request, &unix_timestamp_string())
 }
 
 #[tauri::command]
@@ -170,6 +184,14 @@ fn load_codex_session_transcript_page_with_optional_catalog(
         }
     }
 
+    if let Some(codex_home) = db_path.parent() {
+        if let Some(transcript) =
+            load_codex_session_transcript_page_from_rollout_fallback(codex_home, request)?
+        {
+            return Ok(transcript);
+        }
+    }
+
     Err(format!("session_not_found:{}", request.thread_id))
 }
 
@@ -244,29 +266,49 @@ fn load_codex_session_page(
             offset: request.offset.unwrap_or(0),
             include_archived: request.include_archived.unwrap_or(false),
             archived_only: request.archived_only.unwrap_or(false),
+            query: request.query.clone(),
         },
     );
     match page {
-        Ok(page) => Ok(CodexSessionPage {
-            sessions: page
+        Ok(page) => {
+            let mut sessions: Vec<SessionRecord> = page
                 .rows
                 .into_iter()
                 .map(session_record_from_codex_thread)
-                .collect(),
-            page_size: page.page_size,
-            offset: page.offset,
-            has_more: page.has_more,
-            include_archived: page.include_archived,
-            archived_only: page.archived_only,
-            warnings: Vec::new(),
-            source: "sqlite_page".to_string(),
-        }),
+                .collect();
+            let mut warnings = Vec::new();
+            let mut source = "sqlite_page".to_string();
+            if sessions.is_empty() {
+                if let Some(query) = request.query.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+                    if let Some(codex_home) = db_path.parent() {
+                        if let Some(fallback_session) =
+                            find_rollout_session_by_thread_query(codex_home, query)
+                        {
+                            sessions.push(fallback_session);
+                            warnings.push("sqlite_session_missing_rollout_filename_fallback".to_string());
+                            source = "sqlite_page_rollout_filename_fallback".to_string();
+                        }
+                    }
+                }
+            }
+            Ok(CodexSessionPage {
+                sessions,
+                page_size: page.page_size,
+                offset: page.offset,
+                has_more: page.has_more,
+                include_archived: page.include_archived,
+                archived_only: page.archived_only,
+                warnings,
+                source,
+            })
+        }
         Err(error) => {
             let index = read_index(&state)?;
             let include_archived = request.include_archived.unwrap_or(false);
             let archived_only = request.archived_only.unwrap_or(false);
             let page_size = request.page_size.unwrap_or(100).clamp(1, 250);
             let offset = request.offset.unwrap_or(0);
+            let query = request.query.as_deref().map(str::trim).filter(|value| !value.is_empty());
             let mut sessions: Vec<SessionRecord> = parse_sessions(&index)
                 .into_iter()
                 .filter(|session| {
@@ -276,12 +318,24 @@ fn load_codex_session_page(
                         include_archived || !session.archived
                     }
                 })
+                .filter(|session| query.is_none_or(|query| session_matches_query(session, query)))
                 .collect();
             sessions.sort_by(|a, b| {
                 let at = a.updated_at_ms.unwrap_or(0);
                 let bt = b.updated_at_ms.unwrap_or(0);
                 bt.cmp(&at).then_with(|| b.thread_id.cmp(&a.thread_id))
             });
+            if sessions.is_empty() {
+                if let Some(query) = query {
+                    if let Ok(codex_home) = codex_home_from_index(&index) {
+                        if let Some(fallback_session) =
+                            find_rollout_session_by_thread_query(&codex_home, query)
+                        {
+                            sessions.push(fallback_session);
+                        }
+                    }
+                }
+            }
             let has_more = sessions.len() > offset.saturating_add(page_size);
             let page_sessions = sessions.into_iter().skip(offset).take(page_size).collect();
             Ok(CodexSessionPage {
@@ -295,6 +349,267 @@ fn load_codex_session_page(
                 source: "index_fallback_page".to_string(),
             })
         }
+    }
+}
+
+fn session_matches_query(session: &SessionRecord, query: &str) -> bool {
+    let normalized = query.to_lowercase();
+    [
+        Some(session.thread_id.as_str()),
+        Some(session.title.as_str()),
+        session.project_root.as_deref(),
+        session.rollout_path.as_deref(),
+        session.model.as_deref(),
+        session.reasoning_effort.as_deref(),
+        session.thread_source.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|value| value.to_lowercase().contains(&normalized))
+}
+
+fn load_codex_session_transcript_page_from_rollout_fallback(
+    codex_home: &Path,
+    request: &CodexTranscriptPageRequest,
+) -> Result<Option<CodexTranscript>, String> {
+    let Some(session) = find_rollout_session_by_thread_query(codex_home, &request.thread_id) else {
+        return Ok(None);
+    };
+    let metadata = codex_transcript::TranscriptThreadMetadata {
+        thread_id: session.thread_id,
+        rollout_path: session.rollout_path,
+        project_root: session.project_root,
+        title: Some(session.title),
+        created_at_ms: None,
+        updated_at_ms: session.updated_at_ms,
+        catalog_source: "rollout_filename_fallback".to_string(),
+        index_thread_count: None,
+    };
+    codex_transcript::read_transcript_page_from_rollout(
+        metadata,
+        codex_home,
+        transcript_page_request(request),
+    )
+    .map(Some)
+}
+
+fn load_codex_session_transcript_from_rollout_fallback(
+    codex_home: &Path,
+    thread_id: &str,
+) -> Result<Option<CodexTranscript>, String> {
+    let Some(session) = find_rollout_session_by_thread_query(codex_home, thread_id) else {
+        return Ok(None);
+    };
+    let metadata = codex_transcript::TranscriptThreadMetadata {
+        thread_id: session.thread_id,
+        rollout_path: session.rollout_path,
+        project_root: session.project_root,
+        title: Some(session.title),
+        created_at_ms: None,
+        updated_at_ms: session.updated_at_ms,
+        catalog_source: "rollout_filename_fallback".to_string(),
+        index_thread_count: None,
+    };
+    codex_transcript::read_transcript_from_rollout(metadata, codex_home).map(Some)
+}
+
+fn find_rollout_session_by_thread_query(codex_home: &Path, query: &str) -> Option<SessionRecord> {
+    let query = query.trim().to_lowercase();
+    if query.len() < 8 {
+        return None;
+    }
+    let mut candidates = Vec::new();
+    for root_name in ["sessions", "archived_sessions"] {
+        collect_rollout_matches(
+            &codex_home.join(root_name),
+            &query,
+            root_name == "archived_sessions",
+            &mut candidates,
+        );
+    }
+    candidates
+        .into_iter()
+        .max_by_key(|session| session.updated_at_ms.unwrap_or(0))
+}
+
+fn collect_rollout_matches(
+    root: &Path,
+    query: &str,
+    archived: bool,
+    out: &mut Vec<SessionRecord>,
+) {
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_rollout_matches(&path, query, archived, out);
+            continue;
+        }
+        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        let Some(thread_id) = thread_id_from_rollout_file_name(file_name) else {
+            continue;
+        };
+        if !thread_id.to_lowercase().contains(query) && !file_name.to_lowercase().contains(query) {
+            continue;
+        }
+        out.push(session_record_from_rollout_path(path, thread_id, archived));
+    }
+}
+
+fn thread_id_from_rollout_file_name(file_name: &str) -> Option<String> {
+    let stem = file_name.strip_suffix(".jsonl")?;
+    let body = stem.strip_prefix("rollout-")?;
+    if body.len() < 36 {
+        return None;
+    }
+    let thread_id = &body[body.len() - 36..];
+    let bytes = thread_id.as_bytes();
+    let uuid_shape = bytes.len() == 36
+        && bytes[8] == b'-'
+        && bytes[13] == b'-'
+        && bytes[18] == b'-'
+        && bytes[23] == b'-'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| [8, 13, 18, 23].contains(&index) || byte.is_ascii_hexdigit());
+    if uuid_shape {
+        Some(thread_id.to_string())
+    } else {
+        None
+    }
+}
+
+fn session_record_from_rollout_path(path: PathBuf, thread_id: String, archived: bool) -> SessionRecord {
+    let (project_root, model, reasoning_effort) = rollout_session_meta(&path);
+    let updated_at_ms = fs::metadata(&path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64);
+    SessionRecord {
+        thread_id: thread_id.clone(),
+        title: format!("新建 Codex 对话 {}", thread_id.chars().take(8).collect::<String>()),
+        project_root,
+        updated_at_ms,
+        archived,
+        rollout_exists: true,
+        rollout_path: Some(path.display().to_string()),
+        model,
+        reasoning_effort,
+        thread_source: Some("codex".to_string()),
+        warnings: vec!["session_index_pending_rollout_filename_fallback".to_string()],
+    }
+}
+
+fn rollout_session_meta(path: &Path) -> (Option<String>, Option<String>, Option<String>) {
+    let Ok(file) = fs::File::open(path) else {
+        return (None, None, None);
+    };
+    let reader = std::io::BufReader::new(file);
+    for line in std::io::BufRead::lines(reader).take(32).flatten() {
+        let Ok(value) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        if value.get("type").and_then(Value::as_str) != Some("session_meta") {
+            continue;
+        }
+        let payload = value.get("payload").and_then(Value::as_object);
+        let project_root = payload
+            .and_then(|payload| payload.get("cwd"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string);
+        let model = payload
+            .and_then(|payload| payload.get("model"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string);
+        let reasoning_effort = payload
+            .and_then(|payload| payload.get("reasoning_effort"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string);
+        return (project_root, model, reasoning_effort);
+    }
+    (None, None, None)
+}
+
+#[cfg(test)]
+mod command_rollout_fallback_tests {
+    use super::*;
+
+    #[test]
+    fn rollout_filename_fallback_finds_new_thread_before_sqlite_index_catches_up() {
+        let codex_home = temp_codex_home("rollout-filename-fallback");
+        let thread_id = "019ede51-6ca4-78a2-b658-6c3ef465ea14";
+        let project_root = "/tmp/stage-k-isolated-project";
+        let rollout_dir = codex_home.join("sessions/2026/06/19");
+        fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+        let rollout_path = rollout_dir.join(format!("rollout-2026-06-19T13-18-58-{thread_id}.jsonl"));
+        fs::write(
+            &rollout_path,
+            format!(
+                "{}\n{}\n",
+                json!({
+                    "timestamp": "2026-06-19T13:18:58Z",
+                    "type": "session_meta",
+                    "payload": {
+                        "id": thread_id,
+                        "cwd": project_root,
+                        "model": "gpt-test"
+                    }
+                }),
+                json!({
+                    "timestamp": "2026-06-19T13:19:00Z",
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "user_message",
+                        "message": "fallback fixture"
+                    }
+                })
+            ),
+        )
+        .expect("write rollout");
+
+        let session = find_rollout_session_by_thread_query(&codex_home, "019ede51")
+            .expect("fallback session");
+        assert_eq!(session.thread_id, thread_id);
+        assert_eq!(session.project_root.as_deref(), Some(project_root));
+        assert_eq!(session.rollout_path.as_deref(), Some(rollout_path.to_str().expect("path")));
+        assert!(session.rollout_exists);
+        assert!(session
+            .warnings
+            .contains(&"session_index_pending_rollout_filename_fallback".to_string()));
+
+        let transcript = load_codex_session_transcript_page_from_rollout_fallback(
+            &codex_home,
+            &CodexTranscriptPageRequest {
+                thread_id: thread_id.to_string(),
+                limit: Some(80),
+                before_line: None,
+            },
+        )
+        .expect("fallback transcript")
+        .expect("fallback transcript present");
+        assert_eq!(transcript.thread_id, thread_id);
+        assert_eq!(transcript.project_path.as_deref(), Some(project_root));
+        assert_eq!(
+            transcript.source_stats["catalog_source"].as_str(),
+            Some("rollout_filename_fallback")
+        );
+    }
+
+    fn temp_codex_home(label: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        std::env::temp_dir().join(format!("codex-workbench-{label}-{stamp}"))
     }
 }
 

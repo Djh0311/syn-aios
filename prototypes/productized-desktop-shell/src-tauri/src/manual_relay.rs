@@ -1,10 +1,16 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::{btree_map::Entry, BTreeMap};
 use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, OnceLock};
+use std::thread;
+use std::time::{Duration, Instant};
+
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 
 use crate::utils::hash::{sha256_hex, short_hash};
 
@@ -148,6 +154,16 @@ pub(crate) struct ManualRelayGuiDirectRunInput {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ManualRelayGuiDirectNewSessionInput {
+    pub(crate) original_user_text: String,
+    pub(crate) target_project_root: String,
+    pub(crate) target_cwd: String,
+    pub(crate) sandbox: String,
+    pub(crate) allowed_write_roots: Vec<String>,
+    pub(crate) requested_by: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ManualRelayReceipt {
     pub(crate) relay_attempt_id: String,
     pub(crate) confirmation_id: String,
@@ -170,6 +186,9 @@ pub(crate) struct ManualRelayReceipt {
     pub(crate) killed_by_user: bool,
     pub(crate) timed_out: bool,
     pub(crate) readback_status: String,
+    pub(crate) assistant_message_text: Option<String>,
+    pub(crate) thread_event_summary: ManualRelayThreadEventSummary,
+    pub(crate) live_events: Vec<ManualRelayLiveEvent>,
     pub(crate) last_message_hash: Option<String>,
     pub(crate) last_message_size_bytes: Option<i64>,
     pub(crate) changed_files: Vec<String>,
@@ -179,6 +198,45 @@ pub(crate) struct ManualRelayReceipt {
     pub(crate) git_status_after: String,
     pub(crate) rollback: ManualRelayRollbackSummary,
     pub(crate) warnings: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ManualRelayThreadEventSummary {
+    pub(crate) thread_id: Option<String>,
+    pub(crate) assistant_item_id: Option<String>,
+    pub(crate) assistant_message_text: Option<String>,
+    pub(crate) turn_completed: bool,
+    pub(crate) turn_failed: bool,
+    pub(crate) usage: BTreeMap<String, i64>,
+    pub(crate) event_types: Vec<String>,
+    pub(crate) json_line_count: i64,
+    pub(crate) malformed_json_line_count: i64,
+    pub(crate) stderr_summary: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ManualRelayLiveEvent {
+    pub(crate) sequence: i64,
+    pub(crate) event_type: String,
+    pub(crate) thread_id: Option<String>,
+    pub(crate) item_id: Option<String>,
+    pub(crate) item_type: Option<String>,
+    pub(crate) title: String,
+    pub(crate) text: Option<String>,
+    pub(crate) delta: Option<String>,
+    pub(crate) tool_name: Option<String>,
+    pub(crate) arguments_preview: Option<String>,
+    pub(crate) output_preview: Option<String>,
+    pub(crate) stdout: Option<String>,
+    pub(crate) stderr: Option<String>,
+    pub(crate) exit_code: Option<i32>,
+    pub(crate) status: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ManualRelayThreadEventReport {
+    summary: ManualRelayThreadEventSummary,
+    live_events: Vec<ManualRelayLiveEvent>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -192,6 +250,12 @@ pub(crate) struct ManualRelayRollbackSummary {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ManualRelayStopInput {
+    pub(crate) relay_attempt_id: String,
+    pub(crate) requested_by: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ManualRelayPollInput {
     pub(crate) relay_attempt_id: String,
     pub(crate) requested_by: String,
 }
@@ -354,6 +418,17 @@ pub(crate) fn run_manual_relay_gui_direct_once(
     )
 }
 
+pub(crate) fn run_manual_relay_gui_direct_new_session_once(
+    input: ManualRelayGuiDirectNewSessionInput,
+    timestamp: &str,
+) -> Result<ManualRelayReceipt, String> {
+    run_manual_relay_gui_direct_new_session_once_with_process_mode(
+        input,
+        timestamp,
+        ManualRelayProcessMode::RealCodexProductGui,
+    )
+}
+
 #[cfg(test)]
 fn run_manual_relay_gui_direct_once_for_test(
     input: ManualRelayGuiDirectRunInput,
@@ -367,6 +442,21 @@ fn run_manual_relay_gui_direct_once_for_test(
         return Err("manual_relay_gui_direct_test_must_not_use_real_codex".to_string());
     }
     run_manual_relay_gui_direct_once_with_process_mode(input, timestamp, process_mode)
+}
+
+#[cfg(test)]
+fn run_manual_relay_gui_direct_new_session_once_for_test(
+    input: ManualRelayGuiDirectNewSessionInput,
+    timestamp: &str,
+    mock_behavior: &str,
+) -> Result<ManualRelayReceipt, String> {
+    let Some(process_mode) = manual_relay_process_mode(mock_behavior) else {
+        return Err("manual_relay_gui_direct_test_process_mode_required".to_string());
+    };
+    if matches!(process_mode, ManualRelayProcessMode::RealCodexEnvGated) {
+        return Err("manual_relay_gui_direct_test_must_not_use_real_codex".to_string());
+    }
+    run_manual_relay_gui_direct_new_session_once_with_process_mode(input, timestamp, process_mode)
 }
 
 fn run_manual_relay_gui_direct_once_with_process_mode(
@@ -398,6 +488,60 @@ fn run_manual_relay_gui_direct_once_with_process_mode(
         return Err("manual_relay_command_plan_missing".to_string());
     };
     validate_gui_direct_target_and_command_plan(&preview.envelope, command_plan)?;
+    let confirmation = confirm_manual_relay_once(
+        ManualRelayConfirmInput {
+            envelope: preview.envelope.clone(),
+            actor_ref: input.requested_by,
+            target_hash: preview.envelope.target_binding.target_hash.clone(),
+            prompt_sha256: preview.envelope.payload.prompt_sha256.clone(),
+            sandbox: preview.envelope.target_binding.sandbox.clone(),
+            allowed_write_roots: preview.envelope.target_binding.allowed_write_roots.clone(),
+            risk_acknowledged: true,
+        },
+        timestamp,
+    )?;
+    let run_input = ManualRelayRunInput {
+        envelope: preview.envelope.clone(),
+        confirmation: confirmation.clone(),
+        confirmation_id: confirmation.confirmation_id.clone(),
+        expected_prompt_sha256: preview.envelope.payload.prompt_sha256.clone(),
+        expected_target_hash: preview.envelope.target_binding.target_hash.clone(),
+        expected_sandbox: preview.envelope.target_binding.sandbox.clone(),
+        expected_allowed_write_roots: preview.envelope.target_binding.allowed_write_roots.clone(),
+        mock_behavior: "gui_direct_internal_process_mode".to_string(),
+    };
+    run_manual_relay_once_with_process_mode(run_input, timestamp, Some(process_mode))
+}
+
+fn run_manual_relay_gui_direct_new_session_once_with_process_mode(
+    input: ManualRelayGuiDirectNewSessionInput,
+    timestamp: &str,
+    process_mode: ManualRelayProcessMode,
+) -> Result<ManualRelayReceipt, String> {
+    validate_gui_direct_new_session_input(&input)?;
+    let preview = preview_manual_relay(
+        ManualRelayPreviewInput {
+            original_user_text: input.original_user_text,
+            target_project_root: input.target_project_root,
+            target_cwd: input.target_cwd,
+            target_session_id: None,
+            new_session: true,
+            sandbox: input.sandbox,
+            allowed_write_roots: input.allowed_write_roots,
+            requested_by: input.requested_by.clone(),
+        },
+        timestamp,
+    );
+    if preview.guard.blocks_execution {
+        return Err(format!(
+            "manual_relay_guard_blocked:{}",
+            preview.guard.reasons.join(",")
+        ));
+    }
+    let Some(command_plan) = preview.guard.command_plan.as_ref() else {
+        return Err("manual_relay_command_plan_missing".to_string());
+    };
+    validate_gui_direct_new_session_target_and_command_plan(&preview.envelope, command_plan)?;
     let confirmation = confirm_manual_relay_once(
         ManualRelayConfirmInput {
             envelope: preview.envelope.clone(),
@@ -520,6 +664,8 @@ fn run_manual_relay_once_with_process_mode(
                     status: "running".to_string(),
                     receipt: receipt.clone(),
                     child: Some(child),
+                    completed_status: "completed_process".to_string(),
+                    output_paths: None,
                 },
             );
             consumed.insert(input.confirmation_id.clone(), attempt_id);
@@ -585,6 +731,8 @@ fn run_manual_relay_once_with_process_mode(
                 status: "running".to_string(),
                 receipt: receipt.clone(),
                 child: None,
+                completed_status: "completed_fixture".to_string(),
+                output_paths: None,
             },
         )?;
     } else {
@@ -610,13 +758,27 @@ pub(crate) fn stop_manual_relay_attempt(
     };
     let mut receipt = active.receipt;
     if let Some(mut child) = active.child {
-        let kill_result = child.kill();
-        let wait_result = child.wait();
-        receipt.real_process_killed = kill_result.is_ok() && wait_result.is_ok();
-        if let Ok(status) = wait_result {
-            receipt.exit_code = status.code();
+        if let Some(exit_status) = child
+            .try_wait()
+            .map_err(|error| format!("manual_relay_process_wait_failed:{error}"))?
+        {
+            return Ok(finalize_running_codex_like_attempt(
+                receipt,
+                timestamp,
+                Some(exit_status),
+                false,
+                false,
+                &active.completed_status,
+                active.output_paths.as_ref(),
+            ));
         }
+        let (exit_code, process_killed, mut stop_warnings) =
+            stop_manual_relay_child_process(child)?;
+        receipt.real_process_killed = process_killed;
+        receipt.exit_code = exit_code;
+        receipt.warnings.append(&mut stop_warnings);
     }
+    refresh_running_receipt_from_output(&mut receipt, active.output_paths.as_ref());
     receipt.status = "stopped_by_user".to_string();
     receipt.ended_at = Some(timestamp.to_string());
     receipt.killed_by_user = true;
@@ -628,6 +790,141 @@ pub(crate) fn stop_manual_relay_attempt(
     receipt.warnings.sort();
     receipt.warnings.dedup();
     Ok(receipt)
+}
+
+pub(crate) fn poll_manual_relay_attempt(
+    input: ManualRelayPollInput,
+    timestamp: &str,
+) -> Result<ManualRelayReceipt, String> {
+    if input.requested_by.trim().is_empty() {
+        return Err("manual_relay_poll_requested_by_missing".to_string());
+    }
+    let mut registry = active_attempts()
+        .lock()
+        .map_err(|_| "manual_relay_registry_poisoned".to_string())?;
+    let Some(active) = registry.get_mut(&input.relay_attempt_id) else {
+        return Err("manual_relay_attempt_not_running".to_string());
+    };
+    let Some(child) = active.child.as_mut() else {
+        return Ok(active.receipt.clone());
+    };
+    let Some(exit_status) = child
+        .try_wait()
+        .map_err(|error| format!("manual_relay_process_wait_failed:{error}"))?
+    else {
+        refresh_running_receipt_from_output(&mut active.receipt, active.output_paths.as_ref());
+        return Ok(active.receipt.clone());
+    };
+    let active = registry
+        .remove(&input.relay_attempt_id)
+        .ok_or_else(|| "manual_relay_attempt_not_running".to_string())?;
+    Ok(finalize_running_codex_like_attempt(
+        active.receipt,
+        timestamp,
+        Some(exit_status),
+        false,
+        false,
+        &active.completed_status,
+        active.output_paths.as_ref(),
+    ))
+}
+
+fn configure_manual_relay_process_group(command: &mut Command) {
+    #[cfg(unix)]
+    {
+        command.process_group(0);
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = command;
+    }
+}
+
+fn stop_manual_relay_child_process(
+    mut child: Child,
+) -> Result<(Option<i32>, bool, Vec<String>), String> {
+    let mut warnings = Vec::new();
+    if let Some(status) = child
+        .try_wait()
+        .map_err(|error| format!("manual_relay_process_wait_failed:{error}"))?
+    {
+        return Ok((status.code(), false, warnings));
+    }
+
+    #[cfg(unix)]
+    {
+        let process_id = child.id();
+        let term_signaled = signal_manual_relay_process_group(process_id, "TERM", &mut warnings);
+        if let Some(status) = wait_manual_relay_child_for(&mut child, Duration::from_millis(800))? {
+            return Ok((status.code(), term_signaled, warnings));
+        }
+
+        let kill_signaled = signal_manual_relay_process_group(process_id, "KILL", &mut warnings);
+        let child_killed = child.kill().is_ok();
+        let status = child
+            .wait()
+            .map_err(|error| format!("manual_relay_process_wait_failed:{error}"))?;
+        return Ok((
+            status.code(),
+            term_signaled || kill_signaled || child_killed,
+            warnings,
+        ));
+    }
+
+    #[cfg(not(unix))]
+    {
+        let child_killed = child.kill().is_ok();
+        let status = child
+            .wait()
+            .map_err(|error| format!("manual_relay_process_wait_failed:{error}"))?;
+        Ok((status.code(), child_killed, warnings))
+    }
+}
+
+fn wait_manual_relay_child_for(
+    child: &mut Child,
+    timeout: Duration,
+) -> Result<Option<std::process::ExitStatus>, String> {
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| format!("manual_relay_process_wait_failed:{error}"))?
+        {
+            return Ok(Some(status));
+        }
+        if started.elapsed() >= timeout {
+            return Ok(None);
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+}
+
+#[cfg(unix)]
+fn signal_manual_relay_process_group(
+    process_id: u32,
+    signal: &str,
+    warnings: &mut Vec<String>,
+) -> bool {
+    let status = Command::new("/bin/kill")
+        .arg(format!("-{signal}"))
+        .arg(format!("-{process_id}"))
+        .status();
+    match status {
+        Ok(status) if status.success() => true,
+        Ok(status) => {
+            warnings.push(format!(
+                "manual_relay_process_group_signal_{signal}_failed:{status}"
+            ));
+            false
+        }
+        Err(error) => {
+            warnings.push(format!(
+                "manual_relay_process_group_signal_{signal}_failed:{error}"
+            ));
+            false
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -768,7 +1065,7 @@ fn spawn_running_codex_like_process(
         .lock()
         .map_err(|_| "manual_relay_confirmation_registry_poisoned".to_string())?;
     reserve_confirmation_in_map(&mut consumed, confirmation_id)?;
-    let child = spawn_codex_like_process(
+    let (child, output_paths) = spawn_codex_like_process_capture_to_files(
         &process_config.command_plan,
         envelope,
         Some(&envelope.payload.effective_prompt),
@@ -792,7 +1089,7 @@ fn spawn_running_codex_like_process(
     receipt.readback_status = "not_attempted_running_process".to_string();
     receipt
         .warnings
-        .push("process_spawned_with_workbench_managed_last_message_only".to_string());
+        .push("process_spawned_with_thread_event_output_capture".to_string());
     if !receipt.real_codex_executed {
         receipt
             .warnings
@@ -807,6 +1104,8 @@ fn spawn_running_codex_like_process(
             status: "running".to_string(),
             receipt: receipt.clone(),
             child: Some(child),
+            completed_status: process_config.completed_status,
+            output_paths: Some(output_paths),
         },
     );
     consumed.insert(confirmation_id.to_string(), attempt_id);
@@ -821,17 +1120,17 @@ fn run_codex_like_process_to_completion(
     timestamp: &str,
     dirty_before: bool,
 ) -> Result<ManualRelayReceipt, String> {
-    let mut child = spawn_codex_like_process(
+    let process_output = run_codex_like_process_capture(
         &process_config.command_plan,
         envelope,
         Some(&envelope.payload.effective_prompt),
     )?;
-    let process_id = Some(child.id());
-    let exit_status = child
-        .wait()
-        .map_err(|error| format!("manual_relay_process_wait_failed:{error}"))?;
+    let process_id = Some(process_output.process_id);
+    let exit_status = process_output.exit_status;
     let (readback_status, last_message_hash, last_message_size_bytes) =
         read_last_message_summary(&process_config.command_plan.last_message_path);
+    let thread_event_report =
+        parse_thread_event_report(&process_output.stdout, &process_output.stderr);
     let status = if exit_status.success() {
         process_config.completed_status.as_str()
     } else {
@@ -854,6 +1153,7 @@ fn run_codex_like_process_to_completion(
     receipt.real_codex_executed = process_config.real_codex_executed;
     receipt.exit_code = exit_status.code();
     receipt.readback_status = readback_status;
+    apply_thread_event_report_to_receipt(&mut receipt, thread_event_report);
     receipt.last_message_size_bytes = last_message_size_bytes;
     receipt
         .warnings
@@ -868,11 +1168,136 @@ fn run_codex_like_process_to_completion(
     Ok(receipt)
 }
 
-fn spawn_codex_like_process(
+fn finalize_running_codex_like_attempt(
+    mut receipt: ManualRelayReceipt,
+    timestamp: &str,
+    exit_status: Option<std::process::ExitStatus>,
+    timed_out: bool,
+    killed: bool,
+    completed_status: &str,
+    output_paths: Option<&ManualRelayProcessOutputPaths>,
+) -> ManualRelayReceipt {
+    let process_success = exit_status.as_ref().is_some_and(|status| status.success());
+    let (stdout, stderr, mut output_warnings) = read_process_output_paths(output_paths);
+    let thread_event_report = parse_thread_event_report(&stdout, &stderr);
+    let (readback_status, last_message_hash, last_message_size_bytes) =
+        read_last_message_summary(&receipt.command_plan.last_message_path);
+    receipt.ended_at = Some(timestamp.to_string());
+    receipt.exit_code = exit_status.as_ref().and_then(|status| status.code());
+    receipt.timed_out = timed_out;
+    receipt.real_process_killed = killed;
+    receipt.readback_status = if timed_out {
+        "readback_timed_out".to_string()
+    } else {
+        readback_status
+    };
+    receipt.last_message_hash = last_message_hash;
+    receipt.last_message_size_bytes = last_message_size_bytes;
+    apply_thread_event_report_to_receipt(&mut receipt, thread_event_report);
+    receipt.status = if timed_out {
+        "timed_out".to_string()
+    } else if process_success {
+        completed_status.to_string()
+    } else {
+        "failed_process".to_string()
+    };
+    receipt
+        .warnings
+        .push("readback_last_message_only_no_full_transcript".to_string());
+    receipt.warnings.append(&mut output_warnings);
+    receipt.warnings.sort();
+    receipt.warnings.dedup();
+    receipt
+}
+
+fn refresh_running_receipt_from_output(
+    receipt: &mut ManualRelayReceipt,
+    output_paths: Option<&ManualRelayProcessOutputPaths>,
+) {
+    let (stdout, stderr, mut output_warnings) = read_process_output_paths(output_paths);
+    if stdout.is_empty() && stderr.is_empty() {
+        return;
+    }
+    let thread_event_report = parse_thread_event_report(&stdout, &stderr);
+    apply_thread_event_report_to_receipt(receipt, thread_event_report);
+    receipt.warnings.append(&mut output_warnings);
+    receipt.warnings.sort();
+    receipt.warnings.dedup();
+}
+
+fn apply_thread_event_report_to_receipt(
+    receipt: &mut ManualRelayReceipt,
+    report: ManualRelayThreadEventReport,
+) {
+    receipt.live_events = report.live_events;
+    apply_thread_event_summary_to_receipt(receipt, report.summary);
+}
+
+fn apply_thread_event_summary_to_receipt(
+    receipt: &mut ManualRelayReceipt,
+    thread_event_summary: ManualRelayThreadEventSummary,
+) {
+    receipt.assistant_message_text = thread_event_summary.assistant_message_text.clone();
+    receipt.thread_event_summary = thread_event_summary;
+    if receipt.thread_event_summary.turn_completed && receipt.assistant_message_text.is_some() {
+        receipt.readback_status = "thread_event_agent_message_available".to_string();
+    } else if receipt.thread_event_summary.malformed_json_line_count > 0 {
+        receipt
+            .warnings
+            .push("thread_event_jsonl_malformed_lines_present".to_string());
+    } else if receipt
+        .thread_event_summary
+        .event_types
+        .iter()
+        .any(|event_type| event_type == "turn.completed")
+    {
+        receipt
+            .warnings
+            .push("thread_event_agent_message_unavailable".to_string());
+    }
+    if receipt.thread_event_summary.stderr_summary.is_some() {
+        receipt
+            .warnings
+            .push("thread_event_stderr_summary_available".to_string());
+    }
+}
+
+fn read_process_output_paths(
+    output_paths: Option<&ManualRelayProcessOutputPaths>,
+) -> (Vec<u8>, Vec<u8>, Vec<String>) {
+    let Some(paths) = output_paths else {
+        return (Vec::new(), Vec::new(), Vec::new());
+    };
+    let mut warnings = Vec::new();
+    let stdout = match fs::read(&paths.stdout_path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            warnings.push(format!("thread_event_stdout_read_failed:{error}"));
+            Vec::new()
+        }
+    };
+    let stderr = match fs::read(&paths.stderr_path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            warnings.push(format!("thread_event_stderr_read_failed:{error}"));
+            Vec::new()
+        }
+    };
+    (stdout, stderr, warnings)
+}
+
+struct ManualRelayProcessOutput {
+    process_id: u32,
+    exit_status: std::process::ExitStatus,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+}
+
+fn run_codex_like_process_capture(
     command_plan: &ManualRelayCommandPlan,
     envelope: &ManualRelayEnvelope,
     stdin_prompt: Option<&str>,
-) -> Result<Child, String> {
+) -> Result<ManualRelayProcessOutput, String> {
     let last_message_path = PathBuf::from(&command_plan.last_message_path);
     let Some(output_dir) = last_message_path.parent() else {
         return Err("manual_relay_last_message_parent_missing".to_string());
@@ -894,8 +1319,420 @@ fn spawn_codex_like_process(
         } else {
             Stdio::null()
         })
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    configure_manual_relay_process_group(&mut command);
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("manual_relay_process_spawn_failed:{error}"))?;
+    let process_id = child.id();
+    if let Some(prompt) = stdin_prompt {
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| "manual_relay_process_stdin_unavailable".to_string())?;
+        if let Err(error) = stdin.write_all(prompt.as_bytes()) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("manual_relay_process_stdin_write_failed:{error}"));
+        }
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("manual_relay_process_wait_failed:{error}"))?;
+    Ok(ManualRelayProcessOutput {
+        process_id,
+        exit_status: output.status,
+        stdout: output.stdout,
+        stderr: output.stderr,
+    })
+}
+
+fn parse_thread_event_report(stdout: &[u8], stderr: &[u8]) -> ManualRelayThreadEventReport {
+    let mut summary = empty_thread_event_summary();
+    let mut live_events = Vec::new();
+    let stdout_text = String::from_utf8_lossy(stdout);
+    for line in stdout_text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        match serde_json::from_str::<Value>(trimmed) {
+            Ok(value) => {
+                summary.json_line_count += 1;
+                apply_thread_event_value(&mut summary, &value);
+                if let Some(event) =
+                    live_event_from_thread_event_value(summary.json_line_count, &value)
+                {
+                    live_events.push(event);
+                }
+            }
+            Err(_) => {
+                summary.malformed_json_line_count += 1;
+            }
+        }
+    }
+    summary.stderr_summary = bounded_stderr_summary(stderr);
+    ManualRelayThreadEventReport {
+        summary,
+        live_events,
+    }
+}
+
+fn apply_thread_event_value(summary: &mut ManualRelayThreadEventSummary, value: &Value) {
+    let Some(event_type) = value.get("type").and_then(Value::as_str) else {
+        summary.malformed_json_line_count += 1;
+        return;
+    };
+    summary.event_types.push(event_type.to_string());
+    match event_type {
+        "thread.started" => {
+            summary.thread_id = value
+                .get("thread_id")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+        }
+        "item.completed" => {
+            if let Some(item) = value.get("item").and_then(Value::as_object) {
+                if item.get("type").and_then(Value::as_str) == Some("agent_message") {
+                    summary.assistant_item_id =
+                        item.get("id").and_then(Value::as_str).map(str::to_string);
+                    summary.assistant_message_text =
+                        item.get("text").and_then(Value::as_str).map(str::to_string);
+                }
+            }
+        }
+        "turn.completed" => {
+            summary.turn_completed = true;
+            if let Some(usage) = value.get("usage").and_then(Value::as_object) {
+                for (key, item) in usage {
+                    if let Some(count) = item.as_i64() {
+                        summary.usage.insert(key.clone(), count);
+                    }
+                }
+            }
+        }
+        "turn.failed" | "error" => {
+            summary.turn_failed = true;
+        }
+        _ => {}
+    }
+}
+
+fn empty_thread_event_summary() -> ManualRelayThreadEventSummary {
+    ManualRelayThreadEventSummary {
+        thread_id: None,
+        assistant_item_id: None,
+        assistant_message_text: None,
+        turn_completed: false,
+        turn_failed: false,
+        usage: BTreeMap::new(),
+        event_types: Vec::new(),
+        json_line_count: 0,
+        malformed_json_line_count: 0,
+        stderr_summary: None,
+    }
+}
+
+fn live_event_from_thread_event_value(
+    sequence: i64,
+    value: &Value,
+) -> Option<ManualRelayLiveEvent> {
+    let event_type = value.get("type").and_then(Value::as_str)?;
+    let thread_id = value
+        .get("thread_id")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    match event_type {
+        "thread.started" => Some(ManualRelayLiveEvent {
+            sequence,
+            event_type: event_type.to_string(),
+            thread_id,
+            item_id: None,
+            item_type: None,
+            title: "对话已创建".to_string(),
+            text: value
+                .get("thread_id")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            delta: None,
+            tool_name: None,
+            arguments_preview: None,
+            output_preview: None,
+            stdout: None,
+            stderr: None,
+            exit_code: None,
+            status: "started".to_string(),
+        }),
+        "turn.started" => Some(ManualRelayLiveEvent {
+            sequence,
+            event_type: event_type.to_string(),
+            thread_id,
+            item_id: None,
+            item_type: None,
+            title: "Codex 开始处理".to_string(),
+            text: None,
+            delta: None,
+            tool_name: None,
+            arguments_preview: None,
+            output_preview: None,
+            stdout: None,
+            stderr: None,
+            exit_code: None,
+            status: "running".to_string(),
+        }),
+        "turn.completed" => Some(ManualRelayLiveEvent {
+            sequence,
+            event_type: event_type.to_string(),
+            thread_id,
+            item_id: None,
+            item_type: None,
+            title: "Codex 完成".to_string(),
+            text: value.get("usage").map(bounded_value_preview),
+            delta: None,
+            tool_name: None,
+            arguments_preview: None,
+            output_preview: value.get("usage").map(bounded_value_preview),
+            stdout: None,
+            stderr: None,
+            exit_code: None,
+            status: "completed".to_string(),
+        }),
+        "turn.failed" | "error" => Some(ManualRelayLiveEvent {
+            sequence,
+            event_type: event_type.to_string(),
+            thread_id,
+            item_id: None,
+            item_type: None,
+            title: "Codex 失败".to_string(),
+            text: thread_event_error_text(value),
+            delta: None,
+            tool_name: None,
+            arguments_preview: None,
+            output_preview: Some(bounded_value_preview(value)),
+            stdout: None,
+            stderr: None,
+            exit_code: None,
+            status: "failed".to_string(),
+        }),
+        "item.started" | "item.updated" | "item.completed" => {
+            live_item_event_from_thread_event_value(sequence, event_type, thread_id, value)
+        }
+        _ => Some(ManualRelayLiveEvent {
+            sequence,
+            event_type: event_type.to_string(),
+            thread_id,
+            item_id: None,
+            item_type: None,
+            title: event_type.to_string(),
+            text: None,
+            delta: None,
+            tool_name: None,
+            arguments_preview: Some(bounded_value_preview(value)),
+            output_preview: None,
+            stdout: None,
+            stderr: None,
+            exit_code: None,
+            status: "running".to_string(),
+        }),
+    }
+}
+
+fn live_item_event_from_thread_event_value(
+    sequence: i64,
+    event_type: &str,
+    thread_id: Option<String>,
+    value: &Value,
+) -> Option<ManualRelayLiveEvent> {
+    let item = value.get("item").and_then(Value::as_object)?;
+    let item_id = item.get("id").and_then(Value::as_str).map(str::to_string);
+    let item_type = item.get("type").and_then(Value::as_str).map(str::to_string);
+    let item_type_str = item_type.as_deref().unwrap_or("item");
+    let status = if event_type == "item.completed" {
+        "completed"
+    } else {
+        "running"
+    };
+    let text = first_string_field(item, &["text", "message", "summary", "content"])
+        .or_else(|| first_string_field(value.as_object()?, &["text", "message"]));
+    let delta = thread_event_delta_text(value);
+    let tool_name = first_string_field(item, &["name", "tool_name"]).or_else(|| {
+        if item_type_str == "local_shell_call" || item_type_str == "function_call" {
+            Some(item_type_str.to_string())
+        } else {
+            None
+        }
+    });
+    let arguments_preview = item
+        .get("arguments")
+        .or_else(|| item.get("args"))
+        .or_else(|| item.get("input"))
+        .map(bounded_value_preview);
+    let output_preview = item.get("output").map(bounded_value_preview);
+    let stdout = item
+        .get("stdout")
+        .and_then(Value::as_str)
+        .map(bounded_text_preview);
+    let stderr = item
+        .get("stderr")
+        .and_then(Value::as_str)
+        .map(bounded_text_preview);
+    let exit_code = item
+        .get("exit_code")
+        .and_then(Value::as_i64)
+        .and_then(|value| i32::try_from(value).ok());
+    let title = live_item_title(event_type, item_type_str);
+    Some(ManualRelayLiveEvent {
+        sequence,
+        event_type: event_type.to_string(),
+        thread_id,
+        item_id,
+        item_type,
+        title,
+        text: text.as_deref().map(bounded_text_preview),
+        delta: delta.as_deref().map(bounded_text_preview),
+        tool_name,
+        arguments_preview,
+        output_preview,
+        stdout,
+        stderr,
+        exit_code,
+        status: status.to_string(),
+    })
+}
+
+fn live_item_title(event_type: &str, item_type: &str) -> String {
+    match item_type {
+        "agent_message" => {
+            if event_type == "item.completed" {
+                "Codex 回复完成"
+            } else {
+                "Codex 正在回复"
+            }
+        }
+        "reasoning" => {
+            if event_type == "item.completed" {
+                "思考完成"
+            } else {
+                "思考中"
+            }
+        }
+        "local_shell_call" => {
+            if event_type == "item.completed" {
+                "命令完成"
+            } else {
+                "正在运行命令"
+            }
+        }
+        "function_call" => {
+            if event_type == "item.completed" {
+                "工具完成"
+            } else {
+                "正在调用工具"
+            }
+        }
+        "function_call_output" => "工具输出",
+        _ => item_type,
+    }
+    .to_string()
+}
+
+fn first_string_field(
+    object: &serde_json::Map<String, Value>,
+    field_names: &[&str],
+) -> Option<String> {
+    for field_name in field_names {
+        if let Some(value) = object.get(*field_name).and_then(Value::as_str) {
+            if !value.trim().is_empty() {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn thread_event_delta_text(value: &Value) -> Option<String> {
+    let delta = value.get("delta")?;
+    if let Some(text) = delta.as_str() {
+        return Some(text.to_string());
+    }
+    if let Some(object) = delta.as_object() {
+        return first_string_field(object, &["text", "message", "content"]);
+    }
+    None
+}
+
+fn thread_event_error_text(value: &Value) -> Option<String> {
+    first_string_field(
+        value.as_object()?,
+        &["message", "error", "details", "reason"],
+    )
+}
+
+fn bounded_value_preview(value: &Value) -> String {
+    let text = match value {
+        Value::String(text) => text.clone(),
+        _ => serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string()),
+    };
+    bounded_text_preview(&text)
+}
+
+fn bounded_text_preview(text: &str) -> String {
+    const LIMIT: usize = 4096;
+    if text.chars().count() <= LIMIT {
+        return text.to_string();
+    }
+    let mut bounded = text.chars().take(LIMIT).collect::<String>();
+    bounded.push_str("\n...[truncated]");
+    bounded
+}
+
+fn bounded_stderr_summary(stderr: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(stderr).trim().to_string();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text.chars().take(2048).collect())
+    }
+}
+
+fn spawn_codex_like_process_capture_to_files(
+    command_plan: &ManualRelayCommandPlan,
+    envelope: &ManualRelayEnvelope,
+    stdin_prompt: Option<&str>,
+) -> Result<(Child, ManualRelayProcessOutputPaths), String> {
+    let last_message_path = PathBuf::from(&command_plan.last_message_path);
+    let Some(output_dir) = last_message_path.parent() else {
+        return Err("manual_relay_last_message_parent_missing".to_string());
+    };
+    fs::create_dir_all(output_dir)
+        .map_err(|error| format!("manual_relay_last_message_dir_create_failed:{error}"))?;
+    let output_paths = ManualRelayProcessOutputPaths {
+        stdout_path: output_dir.join("thread-events.stdout.jsonl"),
+        stderr_path: output_dir.join("thread-events.stderr.txt"),
+    };
+    let stdout_file = fs::File::create(&output_paths.stdout_path)
+        .map_err(|error| format!("manual_relay_stdout_capture_create_failed:{error}"))?;
+    let stderr_file = fs::File::create(&output_paths.stderr_path)
+        .map_err(|error| format!("manual_relay_stderr_capture_create_failed:{error}"))?;
+    let mut command = Command::new(&command_plan.program);
+    for arg in &command_plan.argv {
+        if arg == "<workbench-managed-last-message>" {
+            command.arg(&last_message_path);
+        } else {
+            command.arg(arg);
+        }
+    }
+    command.current_dir(&envelope.target_binding.target_cwd_canonical);
+    command
+        .stdin(if stdin_prompt.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::from(stdout_file))
+        .stderr(Stdio::from(stderr_file));
+    configure_manual_relay_process_group(&mut command);
     let mut child = command
         .spawn()
         .map_err(|error| format!("manual_relay_process_spawn_failed:{error}"))?;
@@ -910,7 +1747,7 @@ fn spawn_codex_like_process(
             return Err(format!("manual_relay_process_stdin_write_failed:{error}"));
         }
     }
-    Ok(child)
+    Ok((child, output_paths))
 }
 
 fn read_last_message_summary(path: &str) -> (String, Option<String>, Option<i64>) {
@@ -938,6 +1775,14 @@ struct ActiveManualRelayAttempt {
     status: String,
     receipt: ManualRelayReceipt,
     child: Option<Child>,
+    completed_status: String,
+    output_paths: Option<ManualRelayProcessOutputPaths>,
+}
+
+#[derive(Clone, Debug)]
+struct ManualRelayProcessOutputPaths {
+    stdout_path: PathBuf,
+    stderr_path: PathBuf,
 }
 
 fn active_attempts() -> &'static Mutex<BTreeMap<String, ActiveManualRelayAttempt>> {
@@ -1031,9 +1876,6 @@ fn inspect_manual_relay_guard(
         "manual_relay_fixture_only_no_real_codex".to_string(),
         "payload_layers_empty_in_v1".to_string(),
     ];
-    if denied_material_requested(&envelope.payload.original_user_text) {
-        reasons.push("manual_relay_denied_material_requested".to_string());
-    }
     if envelope.payload.effective_prompt != envelope.payload.original_user_text
         || !envelope.payload.payload_layers.is_empty()
         || !envelope.payload.exact_original
@@ -1246,6 +2088,21 @@ fn validate_gui_direct_input(input: &ManualRelayGuiDirectRunInput) -> Result<(),
     Ok(())
 }
 
+fn validate_gui_direct_new_session_input(
+    input: &ManualRelayGuiDirectNewSessionInput,
+) -> Result<(), String> {
+    if input.original_user_text.trim().is_empty() {
+        return Err("manual_relay_gui_direct_prompt_required".to_string());
+    }
+    if input.target_project_root.trim().is_empty() || input.target_cwd.trim().is_empty() {
+        return Err("manual_relay_gui_direct_target_required".to_string());
+    }
+    if input.requested_by.trim().is_empty() {
+        return Err("manual_relay_gui_direct_requested_by_required".to_string());
+    }
+    Ok(())
+}
+
 fn validate_gui_direct_target_and_command_plan(
     envelope: &ManualRelayEnvelope,
     command_plan: &ManualRelayCommandPlan,
@@ -1293,6 +2150,54 @@ fn validate_gui_direct_target_and_command_plan(
         .any(|arg| codex_approval_bypass_arg(arg))
     {
         return Err("manual_relay_gui_direct_approval_bypass_arg_forbidden".to_string());
+    }
+    Ok(())
+}
+
+fn validate_gui_direct_new_session_target_and_command_plan(
+    envelope: &ManualRelayEnvelope,
+    command_plan: &ManualRelayCommandPlan,
+) -> Result<(), String> {
+    verify_strict_run_paths(envelope)?;
+    if !envelope.target_binding.new_session || envelope.target_binding.target_session_id.is_some() {
+        return Err("manual_relay_gui_direct_new_session_must_not_bind_session".to_string());
+    }
+    if envelope.target_binding.sandbox != "workspace-write" {
+        return Err("manual_relay_gui_direct_sandbox_must_be_workspace_write".to_string());
+    }
+    if envelope.target_binding.target_cwd_canonical
+        != envelope.target_binding.project_root_canonical
+    {
+        return Err("manual_relay_gui_direct_cwd_must_equal_project_root".to_string());
+    }
+    if envelope.target_binding.allowed_write_roots
+        != vec![envelope.target_binding.project_root_canonical.clone()]
+    {
+        return Err("manual_relay_gui_direct_write_roots_must_equal_project_root".to_string());
+    }
+    if !command_plan.argv.windows(2).any(|pair| {
+        pair.first().is_some_and(|arg| arg == "-C")
+            && pair
+                .get(1)
+                .is_some_and(|arg| arg == &envelope.target_binding.target_cwd_canonical)
+    }) {
+        return Err("manual_relay_gui_direct_command_missing_target_cwd".to_string());
+    }
+    if command_plan.argv.iter().any(|arg| arg == "resume") {
+        return Err("manual_relay_gui_direct_new_session_must_not_resume".to_string());
+    }
+    if command_plan
+        .argv
+        .iter()
+        .any(|arg| codex_approval_bypass_arg(arg))
+    {
+        return Err("manual_relay_gui_direct_command_contains_approval_bypass".to_string());
+    }
+    if !command_plan.argv.iter().any(|arg| arg == "--json") {
+        return Err("manual_relay_gui_direct_command_missing_json".to_string());
+    }
+    if command_plan.prompt_in_command || command_plan.shell_invocation {
+        return Err("manual_relay_gui_direct_command_must_use_stdin_no_shell".to_string());
     }
     Ok(())
 }
@@ -1372,6 +2277,7 @@ fn spawn_placeholder_process(
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    configure_manual_relay_process_group(&mut command);
     command
         .spawn()
         .map_err(|error| format!("manual_relay_placeholder_spawn_failed:{error}"))
@@ -1419,6 +2325,9 @@ fn fixture_receipt(
         } else {
             "fixture_last_message_available".to_string()
         },
+        assistant_message_text: None,
+        thread_event_summary: empty_thread_event_summary(),
+        live_events: Vec::new(),
         last_message_hash,
         last_message_size_bytes: if status == "running" { None } else { Some(33) },
         changed_files: Vec::new(),
@@ -1451,27 +2360,6 @@ fn fixture_receipt(
             "no_codex_home_read_or_write_by_syn".to_string(),
         ],
     }
-}
-
-fn denied_material_requested(text: &str) -> bool {
-    let lowered = text.to_ascii_lowercase();
-    [
-        "/users/yoyi/.codex",
-        ".codex",
-        "auth.json",
-        "secret",
-        "token",
-        ".env",
-        "keychain",
-        "oauth",
-        "credential",
-        "full transcript",
-        "完整 transcript",
-        "rollout",
-        "prompt body",
-    ]
-    .iter()
-    .any(|needle| lowered.contains(needle))
 }
 
 #[derive(Clone, Debug)]
@@ -1667,27 +2555,6 @@ mod tests {
         )
         .expect_err("same confirmation must not be reusable after terminal receipt");
         assert!(replay.contains("manual_relay_confirmation_already_consumed"));
-    }
-
-    #[test]
-    fn manual_relay_blocks_sensitive_or_codex_home_requests() {
-        let _guard = test_guard();
-        for prompt in [
-            "read /Users/yoyi/.codex/auth.json",
-            "show me the full transcript and rollout body",
-            "cat .env token secret keychain OAuth credential",
-        ] {
-            let preview =
-                preview_manual_relay(fixture_preview_input(prompt), "2026-06-17T12:00:00Z");
-            assert!(
-                preview.guard.blocks_execution,
-                "prompt should be blocked: {prompt}"
-            );
-            assert!(preview
-                .guard
-                .reasons
-                .contains(&"manual_relay_denied_material_requested".to_string()));
-        }
     }
 
     #[test]
@@ -2025,6 +2892,512 @@ exit 0
         assert!(receipt.target.path_verified);
         assert_eq!(receipt.target.target_session_id, fixture.target_session_id);
         assert!(!receipt.target.new_session);
+    }
+
+    #[test]
+    fn manual_relay_gui_direct_new_session_uses_unbound_exec_json_command() {
+        let _guard = test_guard();
+        std::env::remove_var("MANUAL_RELAY_REAL_CODEX_CONFIRM");
+        let script = mock_codex_script(
+            "gui-direct-new-session-json-events",
+            r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+if [ -z "$last" ]; then
+  exit 42
+fi
+mkdir -p "$(dirname "$last")"
+prompt="$(cat)"
+printf 'new session json event mock last message: %s\n' "$prompt" > "$last"
+printf '%s\n' '{"type":"thread.started","thread_id":"thread-new-session-json-fixture"}'
+printf '%s\n' '{"type":"turn.started"}'
+printf '%s\n' '{"type":"item.completed","item":{"id":"item-new-session-json-fixture","type":"agent_message","text":"NEW_SESSION_JSON_EVENT_REPLY_OK"}}'
+printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":7,"output_tokens":3}}'
+exit 0
+"#,
+        );
+        let fixture = new_session_fixture_preview_input("GUI direct new session exact prompt");
+        let input = ManualRelayGuiDirectNewSessionInput {
+            original_user_text: fixture.original_user_text.clone(),
+            target_project_root: fixture.target_project_root.clone(),
+            target_cwd: fixture.target_cwd.clone(),
+            sandbox: fixture.sandbox.clone(),
+            allowed_write_roots: fixture.allowed_write_roots.clone(),
+            requested_by: "user".to_string(),
+        };
+
+        let receipt = run_manual_relay_gui_direct_new_session_once_for_test(
+            input,
+            "2026-06-18T08:30:00Z",
+            &format!("mock_codex_process:{}", script.display()),
+        )
+        .expect("GUI direct new session should run through mock codex process");
+
+        assert_eq!(receipt.status, "completed_mock_codex");
+        assert_eq!(receipt.process_kind, "mock_codex");
+        assert!(receipt.prompt_sent);
+        assert_eq!(receipt.target.target_session_id, None);
+        assert!(receipt.target.new_session);
+        assert!(!receipt.command_plan.argv.iter().any(|arg| arg == "resume"));
+        assert!(receipt.command_plan.argv.iter().any(|arg| arg == "--json"));
+        assert!(receipt
+            .command_plan
+            .argv
+            .iter()
+            .any(|arg| arg == "--output-last-message"));
+        assert!(receipt
+            .command_plan
+            .argv
+            .iter()
+            .any(|arg| arg == "--sandbox"));
+        assert!(receipt
+            .command_plan
+            .argv
+            .iter()
+            .any(|arg| arg == "workspace-write"));
+        assert!(receipt
+            .command_plan
+            .argv
+            .iter()
+            .any(|arg| arg == "--add-dir"));
+        assert!(!receipt
+            .command_plan
+            .argv
+            .iter()
+            .any(|arg| arg == "--full-auto" || arg.contains("dangerously-bypass")));
+        assert_eq!(
+            receipt.thread_event_summary.thread_id.as_deref(),
+            Some("thread-new-session-json-fixture")
+        );
+        assert_eq!(
+            receipt.assistant_message_text.as_deref(),
+            Some("NEW_SESSION_JSON_EVENT_REPLY_OK")
+        );
+    }
+
+    #[test]
+    fn manual_relay_gui_direct_parses_json_thread_events_for_reply_and_completion() {
+        let _guard = test_guard();
+        std::env::remove_var("MANUAL_RELAY_REAL_CODEX_CONFIRM");
+        let script = mock_codex_script(
+            "gui-direct-json-events",
+            r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+if [ -z "$last" ]; then
+  exit 42
+fi
+mkdir -p "$(dirname "$last")"
+prompt="$(cat)"
+printf 'json event mock last message: %s\n' "$prompt" > "$last"
+printf '%s\n' '{"type":"thread.started","thread_id":"thread-json-fixture"}'
+printf '%s\n' '{"type":"turn.started"}'
+printf '%s\n' '{"type":"item.completed","item":{"id":"item-json-fixture","type":"agent_message","text":"JSON_EVENT_REPLY_OK"}}'
+printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":4,"reasoning_output_tokens":1}}'
+exit 0
+"#,
+        );
+        let fixture = existing_fixture_preview_input("GUI direct exact prompt");
+        let input = ManualRelayGuiDirectRunInput {
+            original_user_text: fixture.original_user_text.clone(),
+            target_project_root: fixture.target_project_root.clone(),
+            target_cwd: fixture.target_cwd.clone(),
+            target_session_id: fixture
+                .target_session_id
+                .clone()
+                .expect("GUI direct send must bind an existing session"),
+            sandbox: fixture.sandbox.clone(),
+            allowed_write_roots: fixture.allowed_write_roots.clone(),
+            requested_by: "user".to_string(),
+        };
+
+        let receipt = run_manual_relay_gui_direct_once_for_test(
+            input,
+            "2026-06-18T09:00:00Z",
+            &format!("mock_codex_process:{}", script.display()),
+        )
+        .expect("GUI direct send should parse mock codex JSON events");
+
+        assert_eq!(receipt.status, "completed_mock_codex");
+        assert_eq!(
+            receipt.assistant_message_text.as_deref(),
+            Some("JSON_EVENT_REPLY_OK")
+        );
+        assert!(receipt
+            .live_events
+            .iter()
+            .any(|event| event.event_type == "item.completed"
+                && event.item_type.as_deref() == Some("agent_message")
+                && event.text.as_deref() == Some("JSON_EVENT_REPLY_OK")));
+        assert_eq!(
+            receipt.thread_event_summary.thread_id.as_deref(),
+            Some("thread-json-fixture")
+        );
+        assert_eq!(
+            receipt.thread_event_summary.assistant_item_id.as_deref(),
+            Some("item-json-fixture")
+        );
+        assert!(receipt.thread_event_summary.turn_completed);
+        assert_eq!(
+            receipt
+                .thread_event_summary
+                .usage
+                .get("reasoning_output_tokens"),
+            Some(&1)
+        );
+        assert_eq!(
+            receipt.readback_status,
+            "thread_event_agent_message_available"
+        );
+    }
+
+    #[test]
+    fn manual_relay_gui_direct_running_poll_parses_json_thread_events_for_reply_and_completion() {
+        let _guard = test_guard();
+        std::env::remove_var("MANUAL_RELAY_REAL_CODEX_CONFIRM");
+        let script = mock_codex_script(
+            "gui-direct-running-json-events",
+            r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+if [ -z "$last" ]; then
+  exit 42
+fi
+mkdir -p "$(dirname "$last")"
+prompt="$(cat)"
+printf 'running json event mock last message: %s\n' "$prompt" > "$last"
+sleep 0.2
+printf '%s\n' '{"type":"thread.started","thread_id":"thread-running-json-fixture"}'
+printf '%s\n' '{"type":"turn.started"}'
+printf '%s\n' '{"type":"item.completed","item":{"id":"item-running-json-fixture","type":"agent_message","text":"RUNNING_JSON_EVENT_REPLY_OK"}}'
+printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":12,"cached_input_tokens":3,"output_tokens":5,"reasoning_output_tokens":2}}'
+exit 0
+"#,
+        );
+        let fixture = existing_fixture_preview_input("GUI direct running exact prompt");
+        let input = ManualRelayGuiDirectRunInput {
+            original_user_text: fixture.original_user_text.clone(),
+            target_project_root: fixture.target_project_root.clone(),
+            target_cwd: fixture.target_cwd.clone(),
+            target_session_id: fixture
+                .target_session_id
+                .clone()
+                .expect("GUI direct send must bind an existing session"),
+            sandbox: fixture.sandbox.clone(),
+            allowed_write_roots: fixture.allowed_write_roots.clone(),
+            requested_by: "user".to_string(),
+        };
+
+        let running = run_manual_relay_gui_direct_once_for_test(
+            input,
+            "2026-06-18T09:10:00Z",
+            &format!("mock_codex_process_sleep:{}", script.display()),
+        )
+        .expect("GUI direct running send should spawn mock codex and return running");
+        assert_eq!(running.status, "running");
+        assert_eq!(running.process_kind, "mock_codex");
+        assert!(running.process_id.is_some());
+        assert!(running.prompt_sent);
+        assert_eq!(running.assistant_message_text, None);
+
+        let completed = poll_manual_relay_attempt_until_terminal_for_test(
+            &running.relay_attempt_id,
+            "2026-06-18T09:10:01Z",
+            5_000,
+        )
+        .expect("poll should finalize mock codex JSON events");
+
+        assert_eq!(completed.status, "completed_mock_codex");
+        assert_eq!(
+            completed.assistant_message_text.as_deref(),
+            Some("RUNNING_JSON_EVENT_REPLY_OK")
+        );
+        assert_eq!(
+            completed.thread_event_summary.thread_id.as_deref(),
+            Some("thread-running-json-fixture")
+        );
+        assert_eq!(
+            completed.thread_event_summary.assistant_item_id.as_deref(),
+            Some("item-running-json-fixture")
+        );
+        assert!(completed.thread_event_summary.turn_completed);
+        assert_eq!(
+            completed
+                .thread_event_summary
+                .usage
+                .get("reasoning_output_tokens"),
+            Some(&2)
+        );
+        assert_eq!(
+            completed.readback_status,
+            "thread_event_agent_message_available"
+        );
+        assert!(active_attempts()
+            .lock()
+            .expect("registry should not poison")
+            .is_empty());
+    }
+
+    #[test]
+    fn manual_relay_gui_direct_running_poll_returns_live_thread_events_before_completion() {
+        let _guard = test_guard();
+        std::env::remove_var("MANUAL_RELAY_REAL_CODEX_CONFIRM");
+        let script = mock_codex_script(
+            "gui-direct-live-thread-events",
+            r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+if [ -z "$last" ]; then
+  exit 42
+fi
+mkdir -p "$(dirname "$last")"
+prompt="$(cat)"
+printf 'running live event mock last message: %s\n' "$prompt" > "$last"
+printf '%s\n' '{"type":"thread.started","thread_id":"thread-live-json-fixture"}'
+printf '%s\n' '{"type":"turn.started"}'
+printf '%s\n' '{"type":"item.started","item":{"id":"item-live-reply","type":"agent_message","text":"LIVE_PARTIAL"}}'
+sleep 1
+printf '%s\n' '{"type":"item.completed","item":{"id":"item-live-reply","type":"agent_message","text":"LIVE_FINAL_OK"}}'
+printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":14,"output_tokens":6}}'
+exit 0
+"#,
+        );
+        let fixture = existing_fixture_preview_input("GUI direct live exact prompt");
+        let input = ManualRelayGuiDirectRunInput {
+            original_user_text: fixture.original_user_text.clone(),
+            target_project_root: fixture.target_project_root.clone(),
+            target_cwd: fixture.target_cwd.clone(),
+            target_session_id: fixture
+                .target_session_id
+                .clone()
+                .expect("GUI direct send must bind an existing session"),
+            sandbox: fixture.sandbox.clone(),
+            allowed_write_roots: fixture.allowed_write_roots.clone(),
+            requested_by: "user".to_string(),
+        };
+
+        let running = run_manual_relay_gui_direct_once_for_test(
+            input,
+            "2026-06-18T09:20:00Z",
+            &format!("mock_codex_process_sleep:{}", script.display()),
+        )
+        .expect("GUI direct running send should spawn mock codex and return running");
+        assert_eq!(running.status, "running");
+
+        let mut live = None;
+        for _ in 0..20 {
+            let receipt = poll_manual_relay_attempt(
+                ManualRelayPollInput {
+                    relay_attempt_id: running.relay_attempt_id.clone(),
+                    requested_by: "user".to_string(),
+                },
+                "2026-06-18T09:20:00Z",
+            )
+            .expect("running poll should return a receipt");
+            if receipt.live_events.iter().any(|event| {
+                event.event_type == "item.started"
+                    && event.item_type.as_deref() == Some("agent_message")
+                    && event.text.as_deref() == Some("LIVE_PARTIAL")
+            }) {
+                live = Some(receipt);
+                break;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+
+        let live = live.expect("poll should expose live item.started before process completion");
+        assert_eq!(live.status, "running");
+        assert_eq!(
+            live.thread_event_summary.thread_id.as_deref(),
+            Some("thread-live-json-fixture")
+        );
+        assert_eq!(live.assistant_message_text, None);
+
+        let completed = poll_manual_relay_attempt_until_terminal_for_test(
+            &running.relay_attempt_id,
+            "2026-06-18T09:20:01Z",
+            5_000,
+        )
+        .expect("poll should eventually finalize live mock codex JSON events");
+        assert_eq!(
+            completed.assistant_message_text.as_deref(),
+            Some("LIVE_FINAL_OK")
+        );
+        assert!(completed.thread_event_summary.turn_completed);
+        assert!(completed
+            .live_events
+            .iter()
+            .any(|event| event.event_type == "turn.completed"));
+    }
+
+    #[test]
+    fn manual_relay_gui_direct_running_stop_kills_mock_process() {
+        let _guard = test_guard();
+        std::env::remove_var("MANUAL_RELAY_REAL_CODEX_CONFIRM");
+        let script = mock_codex_script(
+            "gui-direct-running-stop",
+            r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+if [ -n "$last" ]; then
+  mkdir -p "$(dirname "$last")"
+  printf 'gui direct running stop started\n' > "$last"
+fi
+sleep 30
+"#,
+        );
+        let fixture = existing_fixture_preview_input("GUI direct running stop");
+        let input = ManualRelayGuiDirectRunInput {
+            original_user_text: fixture.original_user_text.clone(),
+            target_project_root: fixture.target_project_root.clone(),
+            target_cwd: fixture.target_cwd.clone(),
+            target_session_id: fixture
+                .target_session_id
+                .clone()
+                .expect("GUI direct send must bind an existing session"),
+            sandbox: fixture.sandbox.clone(),
+            allowed_write_roots: fixture.allowed_write_roots.clone(),
+            requested_by: "user".to_string(),
+        };
+
+        let running = run_manual_relay_gui_direct_once_for_test(
+            input,
+            "2026-06-18T09:20:00Z",
+            &format!("mock_codex_process_sleep:{}", script.display()),
+        )
+        .expect("GUI direct running send should spawn mock codex");
+        assert_eq!(running.status, "running");
+        assert_eq!(running.process_kind, "mock_codex");
+        assert!(running.process_id.is_some());
+
+        let stopped = stop_manual_relay_attempt(
+            ManualRelayStopInput {
+                relay_attempt_id: running.relay_attempt_id,
+                requested_by: "user".to_string(),
+            },
+            "2026-06-18T09:20:01Z",
+        )
+        .expect("stop must kill GUI direct mock codex process");
+        assert_eq!(stopped.status, "stopped_by_user");
+        assert!(stopped.killed_by_user);
+        assert!(stopped.real_process_killed);
+        assert_eq!(stopped.process_kind, "mock_codex");
+        assert!(!stopped.real_codex_executed);
+    }
+
+    #[test]
+    fn manual_relay_gui_direct_stop_kills_mock_process_group_children() {
+        let _guard = test_guard();
+        std::env::remove_var("MANUAL_RELAY_REAL_CODEX_CONFIRM");
+        let marker_dir = std::env::temp_dir().join(format!(
+            "manual-relay-process-group-stop-{}",
+            short_hash("gui-direct-process-group-children")
+        ));
+        std::fs::create_dir_all(&marker_dir).expect("marker dir should be created");
+        let ready_path = marker_dir.join("ready.txt");
+        let leaked_path = marker_dir.join("leaked.txt");
+        let _ = std::fs::remove_file(&ready_path);
+        let _ = std::fs::remove_file(&leaked_path);
+        let script = mock_codex_script(
+            "gui-direct-process-group-stop",
+            &format!(
+                r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+( sleep 1; printf 'leaked child survived stop\n' > "{leaked}" ) &
+printf 'child spawned\n' > "{ready}"
+if [ -n "$last" ]; then
+  mkdir -p "$(dirname "$last")"
+  printf 'mock codex process group child started\n' > "$last"
+fi
+wait
+"#,
+                leaked = leaked_path.display(),
+                ready = ready_path.display(),
+            ),
+        );
+        let fixture = existing_fixture_preview_input("GUI direct process group stop");
+        let input = ManualRelayGuiDirectRunInput {
+            original_user_text: fixture.original_user_text.clone(),
+            target_project_root: fixture.target_project_root.clone(),
+            target_cwd: fixture.target_cwd.clone(),
+            target_session_id: fixture
+                .target_session_id
+                .clone()
+                .expect("GUI direct send must bind an existing session"),
+            sandbox: fixture.sandbox.clone(),
+            allowed_write_roots: fixture.allowed_write_roots.clone(),
+            requested_by: "user".to_string(),
+        };
+
+        let running = run_manual_relay_gui_direct_once_for_test(
+            input,
+            "2026-06-18T09:21:00Z",
+            &format!("mock_codex_process_sleep:{}", script.display()),
+        )
+        .expect("GUI direct running send should spawn mock codex");
+        let started = Instant::now();
+        while !ready_path.exists() && started.elapsed() < Duration::from_millis(1000) {
+            thread::sleep(Duration::from_millis(25));
+        }
+        assert!(
+            ready_path.exists(),
+            "mock child must be spawned before Stop"
+        );
+
+        let stopped = stop_manual_relay_attempt(
+            ManualRelayStopInput {
+                relay_attempt_id: running.relay_attempt_id,
+                requested_by: "user".to_string(),
+            },
+            "2026-06-18T09:21:01Z",
+        )
+        .expect("stop must kill GUI direct mock codex process group");
+        assert_eq!(stopped.status, "stopped_by_user");
+        assert!(stopped.killed_by_user);
+        assert!(stopped.real_process_killed);
+
+        thread::sleep(Duration::from_millis(1300));
+        assert!(
+            !leaked_path.exists(),
+            "Stop must kill child processes in the relay process group"
+        );
     }
 
     #[test]
@@ -2383,6 +3756,22 @@ sleep 30
         }
     }
 
+    fn new_session_fixture_preview_input(prompt: &str) -> ManualRelayPreviewInput {
+        let suffix = short_hash(prompt);
+        let project_root = std::env::temp_dir().join(format!("manual-relay-new-session-{suffix}"));
+        std::fs::create_dir_all(&project_root).expect("fixture project root should be created");
+        ManualRelayPreviewInput {
+            original_user_text: prompt.to_string(),
+            target_project_root: project_root.display().to_string(),
+            target_cwd: project_root.display().to_string(),
+            target_session_id: None,
+            new_session: true,
+            sandbox: "workspace-write".to_string(),
+            allowed_write_roots: vec![project_root.display().to_string()],
+            requested_by: "user".to_string(),
+        }
+    }
+
     fn mock_codex_script(name: &str, body: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
             "manual-relay-mock-codex-{}",
@@ -2494,6 +3883,38 @@ sleep 30
                 ));
             }
             thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    fn poll_manual_relay_attempt_until_terminal_for_test(
+        relay_attempt_id: &str,
+        timestamp: &str,
+        timeout_ms: u64,
+    ) -> Result<ManualRelayReceipt, String> {
+        let started = Instant::now();
+        let timeout = Duration::from_millis(timeout_ms.max(1));
+        loop {
+            let receipt = poll_manual_relay_attempt(
+                ManualRelayPollInput {
+                    relay_attempt_id: relay_attempt_id.to_string(),
+                    requested_by: "user".to_string(),
+                },
+                timestamp,
+            )?;
+            if receipt.status != "running" {
+                return Ok(receipt);
+            }
+            if started.elapsed() >= timeout {
+                let _ = stop_manual_relay_attempt(
+                    ManualRelayStopInput {
+                        relay_attempt_id: relay_attempt_id.to_string(),
+                        requested_by: "user".to_string(),
+                    },
+                    timestamp,
+                );
+                return Err("manual_relay_poll_test_timed_out".to_string());
+            }
+            thread::sleep(Duration::from_millis(50));
         }
     }
 

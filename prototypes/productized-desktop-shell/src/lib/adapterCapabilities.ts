@@ -198,5 +198,7 @@ function capability(input: Omit<AdapterCapability, "capability_id">): AdapterCap
 }
 
 function softwareKeyOf(session: SessionRecord): string {
-  return (session.thread_source ?? "codex").trim().toLowerCase() || "codex";
+  const raw = (session.thread_source ?? "codex").trim().toLowerCase();
+  if (!raw || raw === "user" || raw === "subagent") return "codex";
+  return raw;
 }

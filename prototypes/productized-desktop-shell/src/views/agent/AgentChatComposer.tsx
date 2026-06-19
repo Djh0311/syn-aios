@@ -1,72 +1,145 @@
-import type { ManualRelayPreview, ManualRelayReceipt, SessionRecord } from "../../lib/types";
+import type { AgentProjectOptionReadModel } from "../../lib/pageSelectors";
+import { pathTail } from "../../lib/format";
+import type { ManualRelayReceipt, SessionRecord } from "../../lib/types";
+import { userFacingAgentError } from "./agentLabels";
+
+export type AgentConversationSendMode = "existing_session" | "new_session";
 
 export function AgentChatComposer({
+  sendMode = "existing_session",
+  projectOptions = [],
   selectedProjectRoot,
   selectedSession,
   draftPrompt,
   k2PreviewError,
-  manualRelayPreview,
   manualRelayReceipt,
   manualRelayError,
   manualRelayBusy,
+  manualRelayPollingPaused = false,
+  manualRelayTimedOutLocally = false,
   relayDirectSendEnabled,
   relayDirectSendBlockedReason,
   onChangeDraft,
+  onChangeSelectedProjectRoot,
   onSubmitDraft,
+  onResumeManualRelayPolling,
   onStopManualRelayAttempt,
   onOpenDeveloperDetails,
 }: {
+  sendMode?: AgentConversationSendMode;
+  projectOptions?: AgentProjectOptionReadModel[];
   selectedProjectRoot: string;
   selectedSession: SessionRecord | null;
   draftPrompt: string;
   k2PreviewError: string | null;
-  manualRelayPreview: ManualRelayPreview | null;
   manualRelayReceipt: ManualRelayReceipt | null;
   manualRelayError: string | null;
   manualRelayBusy: boolean;
+  manualRelayPollingPaused?: boolean;
+  manualRelayTimedOutLocally?: boolean;
   relayDirectSendEnabled: boolean;
   relayDirectSendBlockedReason?: string | null;
   onChangeDraft: (value: string) => void;
+  onChangeSelectedProjectRoot?: (value: string) => void;
   onSubmitDraft: () => void;
+  onResumeManualRelayPolling?: () => void;
   onStopManualRelayAttempt: () => void;
   onOpenDeveloperDetails: () => void;
 }) {
-  const relayGuard = manualRelayPreview?.guard ?? null;
-  const relayEnvelope = manualRelayPreview?.envelope ?? null;
   const relayIsRunning = manualRelayReceipt?.status === "running";
+  const relayLiveEvents = manualRelayReceipt?.live_events ?? [];
+  const relayLiveEventCount = relayLiveEvents.length;
+  const relayLastLiveTitle = relayLiveEvents.at(-1)?.title ?? null;
   const relayInputLocked = manualRelayBusy || relayIsRunning;
-  const canDirectSend = Boolean(relayDirectSendEnabled && selectedProjectRoot && selectedSession && draftPrompt.trim() && !relayInputLocked);
-  const targetSessionTitle = selectedSession?.title || "未命名会话";
-  const targetSessionId = selectedSession?.thread_id || "未绑定会话";
-  const targetSessionLabel = selectedSession ? `${targetSessionTitle} (${targetSessionId})` : "未绑定会话";
+  const isNewSessionMode = sendMode === "new_session";
+  const selectedProjectLabel =
+    projectOptions.find((project) => project.project_root === selectedProjectRoot)?.label ??
+    pathTail(selectedProjectRoot) ??
+    selectedProjectRoot;
+  const projectPickerOptions =
+    selectedProjectRoot && !projectOptions.some((project) => project.project_root === selectedProjectRoot)
+      ? [
+          {
+            project_root: selectedProjectRoot,
+            label: selectedProjectLabel,
+            active_session_count: 0,
+            session_count: 0,
+          },
+          ...projectOptions,
+        ]
+      : projectOptions;
+  const canDirectSend = Boolean(
+    relayDirectSendEnabled &&
+      selectedProjectRoot &&
+      draftPrompt.trim() &&
+      !relayInputLocked &&
+      (isNewSessionMode || selectedSession),
+  );
+  const targetSessionTitle = isNewSessionMode ? "新建对话" : selectedSession?.title || "未命名会话";
+  const formSendMode = relayDirectSendEnabled
+    ? isNewSessionMode
+      ? "manual_relay_new_session"
+      : "manual_relay_direct"
+    : "decision-only";
+  const targetSummary = isNewSessionMode
+    ? `新建对话 · ${selectedProjectLabel || "未绑定项目"}`
+    : `${targetSessionTitle} · ${selectedProjectLabel || "未绑定项目"}`;
+  const runSummary = relayIsRunning
+    ? manualRelayPollingPaused
+      ? "状态刷新已暂停"
+      : `${relayLastLiveTitle ?? "Codex 正在运行"}${relayLiveEventCount > 0 ? ` · ${relayLiveEventCount} 步` : ""}`
+    : manualRelayTimedOutLocally
+      ? "已超时"
+    : manualRelayReceipt?.status && manualRelayReceipt.status !== "running"
+      ? `上次运行：${manualRelayReceipt.status}`
+      : null;
+  const relayErrorInfo = manualRelayError ? userFacingAgentError(manualRelayError) : null;
   return (
     <form
       className="agent-chat-composer"
-      data-send-mode={relayDirectSendEnabled ? "manual_relay_direct" : "decision-only"}
+      data-send-mode={formSendMode}
       aria-label="智能体任务输入"
       onSubmit={(event) => void (async () => {
         event.preventDefault();
         if (canDirectSend) onSubmitDraft();
       })()}
     >
-      <div
-        className={`manual-relay-target-strip ${relayDirectSendEnabled ? "armed" : "blocked"}`}
-        data-relay-target-bound={relayDirectSendEnabled ? "true" : "false"}
-      >
-        <strong>↔ GUI direct relay target</strong>
-        <span>项目：{selectedProjectRoot || "未绑定项目"}</span>
-        <span>会话：{targetSessionTitle}</span>
-        <span>会话ID：{targetSessionId}</span>
-        <span>策略：手动一次一发 · auto_chain=false · sandbox=workspace-write</span>
-        {!relayDirectSendEnabled && relayDirectSendBlockedReason ? <span>未启用：{relayDirectSendBlockedReason}</span> : null}
+      <div className={`agent-composer-statusline ${relayDirectSendEnabled ? "armed" : "blocked"} ${relayIsRunning ? "running" : ""}`}>
+        <div className="agent-composer-target">
+          <strong>{isNewSessionMode ? "新建对话" : "继续对话"}</strong>
+          {isNewSessionMode ? (
+            <label className="agent-composer-project-picker">
+              <span>项目</span>
+              <select
+                aria-label="选择新对话项目"
+                value={selectedProjectRoot}
+                disabled={relayInputLocked}
+                onChange={(event) => onChangeSelectedProjectRoot?.(event.currentTarget.value)}
+              >
+                <option value="">选择项目</option>
+                {projectPickerOptions.map((project) => (
+                  <option key={project.project_root} value={project.project_root}>
+                    {project.label} ({project.active_session_count}/{project.session_count})
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <span>{targetSummary}</span>
+          )}
+        </div>
+        <div className="agent-composer-runstate" aria-live="polite">
+          {runSummary ? <em>{runSummary}</em> : null}
+          {!relayDirectSendEnabled && relayDirectSendBlockedReason ? <em>{relayDirectSendBlockedReason}</em> : null}
+        </div>
       </div>
       <label>
-        <span>任务输入</span>
+        <span className="agent-composer-label">给 Codex</span>
         <textarea
           aria-label="输入给 Codex 的任务"
           value={draftPrompt}
-          placeholder="写下要让 Codex 做的事。Enter 发送；Shift+Enter 换行。"
-          rows={3}
+          placeholder="写下要让 Codex 做的事。"
+          rows={1}
           readOnly={relayInputLocked}
           aria-busy={relayInputLocked}
           onChange={(event) => {
@@ -84,97 +157,42 @@ export function AgentChatComposer({
         />
       </label>
       <div className="agent-chat-composer-foot">
-        <span>
-          {relayDirectSendEnabled
-            ? `Enter 将直接发送给：${targetSessionLabel}`
-            : "请选择一个绑定项目的 Codex 会话；未绑定时不会真发"}
-        </span>
-        <button className="primary-button" disabled={!canDirectSend} type="submit">
-          发送
-        </button>
-      </div>
-      {k2PreviewError ? <p className="error-text">发送意图记录失败：{k2PreviewError}</p> : null}
-      <button className="secondary-button" type="button" onClick={onOpenDeveloperDetails}>
-        查看发送边界
-      </button>
-      <p>
-        绑定会话时，发送会走 GUI direct relay；不自动连环、不解锁 K3-B1 / K3-B2，Codex 审批与 sandbox 不放松。
-      </p>
-      <section className="manual-relay-panel" data-send-mode="manual_relay" aria-label="Manual relay 中转">
-        <div>
-          <strong>甲 · Manual relay</strong>
-          <p>
-            手动一次一发；主发送直接绑定上方 target，回执和 Stop 在这里显示；第一次 GUI 真发仍需用户在场。
-          </p>
-        </div>
-        <div className="manual-relay-actions">
-          <button
-            className="secondary-button"
-            disabled={!relayIsRunning || manualRelayBusy}
-            type="button"
-            onClick={onStopManualRelayAttempt}
-          >
-            Stop 本 attempt
+        <div className="agent-chat-composer-actions">
+          {manualRelayPollingPaused && relayIsRunning ? (
+            <button
+              className="secondary-button"
+              disabled={manualRelayBusy || !onResumeManualRelayPolling}
+              type="button"
+              onClick={onResumeManualRelayPolling}
+            >
+              恢复轮询
+            </button>
+          ) : null}
+          {relayIsRunning ? (
+            <button
+              className="secondary-button"
+              disabled={manualRelayBusy}
+              type="button"
+              onClick={onStopManualRelayAttempt}
+            >
+              Stop
+            </button>
+          ) : null}
+          <button className="primary-button" disabled={!canDirectSend} type="submit">
+            发送
           </button>
         </div>
-        {relayEnvelope ? (
-          <div className="manual-relay-preview">
-            <div>
-              <span>Exact payload</span>
-              <pre>{relayEnvelope.payload.effective_prompt}</pre>
-            </div>
-            <dl>
-              <div>
-                <dt>Target</dt>
-                <dd>{relayEnvelope.target_binding.target_cwd_canonical}</dd>
-              </div>
-              <div>
-                <dt>Session</dt>
-                <dd>{relayEnvelope.target_binding.target_session_id ?? "new session"}</dd>
-              </div>
-              <div>
-                <dt>Sandbox</dt>
-                <dd>{relayEnvelope.target_binding.sandbox}</dd>
-              </div>
-              <div>
-                <dt>Write roots</dt>
-                <dd>{relayEnvelope.target_binding.allowed_write_roots.join(" / ") || "none"}</dd>
-              </div>
-              <div>
-                <dt>Path verified</dt>
-                <dd>{relayEnvelope.target_binding.path_verified ? "true" : "false"}</dd>
-              </div>
-              <div>
-                <dt>Payload layers</dt>
-                <dd>{relayEnvelope.payload.payload_layers.length}（v1 必须为空）</dd>
-              </div>
-              <div>
-                <dt>One-shot</dt>
-                <dd>{relayEnvelope.policy.manual_once && !relayEnvelope.policy.auto_chain ? "manual_once / auto_chain=false" : "blocked"}</dd>
-              </div>
-            </dl>
-            {relayGuard?.blocks_execution ? (
-              <p className="error-text">中转被阻断：{relayGuard.reasons.join(" / ")}</p>
-            ) : (
-              <p>Guard ready: command plan 使用 stdin prompt，无 shell 拼接；当前仍是 fixture-only。</p>
-            )}
-          </div>
-        ) : null}
-        {relayIsRunning ? <p>中转运行中：输入已锁定；停止或 terminal 回执后恢复。</p> : null}
-        {manualRelayReceipt ? (
-          <div className="manual-relay-receipt">
-            <strong>回执：{manualRelayReceipt.status}</strong>
-            <span>attempt: {manualRelayReceipt.relay_attempt_id}</span>
-            <span>process_kind={manualRelayReceipt.process_kind}</span>
-            <span>process_id={manualRelayReceipt.process_id ?? "none"}</span>
-            <span>real_codex_executed={String(manualRelayReceipt.real_codex_executed)}</span>
-            <span>real_process_killed={String(manualRelayReceipt.real_process_killed)}</span>
-            <span>syn_read_codex_home={String(manualRelayReceipt.syn_read_codex_home)}</span>
-            <span>killed_by_user={String(manualRelayReceipt.killed_by_user)}</span>
-          </div>
-        ) : null}
-        {manualRelayError ? <p className="error-text">Manual relay 失败：{manualRelayError}</p> : null}
-      </section>
+      </div>
+      {k2PreviewError ? <p className="error-text">发送意图记录失败：{k2PreviewError}</p> : null}
+      {relayErrorInfo ? (
+        <div className="agent-composer-error" role="alert">
+          <strong>{relayErrorInfo.title}</strong>
+          <span>{relayErrorInfo.nextStep}</span>
+          <button className="secondary-button" type="button" onClick={onOpenDeveloperDetails}>
+            查看开发者详情
+          </button>
+        </div>
+      ) : null}
     </form>
   );
 }

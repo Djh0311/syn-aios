@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadCodexSessionPage } from "../../lib/tauri";
-import type { SessionRecord } from "../../lib/types";
+import type { CodexSessionPage, CodexSessionPageRequest, SessionRecord } from "../../lib/types";
 import { messageOf } from "./agentLabels";
 import type { SessionReadFilter } from "./AgentSessionList";
 
 const AGENT_SESSION_PAGE_SIZE = 100;
 
-export function useAgentSessionPage(initialSessions: SessionRecord[]) {
+export function useAgentSessionPage(
+  initialSessions: SessionRecord[],
+  searchQuery = "",
+  loadSessionPageFromSource: (request: CodexSessionPageRequest) => Promise<CodexSessionPage> = loadCodexSessionPage,
+) {
   const [shellSessions, setShellSessions] = useState<SessionRecord[]>(initialSessions);
   const [sessionPageOffset, setSessionPageOffset] = useState(0);
   const [sessionPageHasMore, setSessionPageHasMore] = useState(false);
@@ -34,13 +38,14 @@ export function useAgentSessionPage(initialSessions: SessionRecord[]) {
   );
 
   const loadSessionPage = useCallback(
-    async (offset: number, mode: "replace" | "append") => {
+    async (offset: number, mode: "replace" | "append", queryOverride?: string) => {
       setSessionPageStatus("loading");
       setLoadingMoreSessions(mode === "append");
       try {
-        const page = await loadCodexSessionPage({
+        const page = await loadSessionPageFromSource({
           page_size: AGENT_SESSION_PAGE_SIZE,
           offset,
+          query: (queryOverride ?? searchQuery).trim() || null,
           ...sessionPageArchiveOptions,
         });
         setShellSessions((current) => (mode === "append" ? [...current, ...page.sessions] : page.sessions));
@@ -49,6 +54,7 @@ export function useAgentSessionPage(initialSessions: SessionRecord[]) {
         setSessionPageSource(page.source);
         setSessionPageWarnings(page.warnings);
         setSessionPageStatus("idle");
+        return page;
       } catch (error) {
         if (mode === "replace") {
           setShellSessions(initialSessions);
@@ -58,11 +64,12 @@ export function useAgentSessionPage(initialSessions: SessionRecord[]) {
         setSessionPageSource("snapshot_fallback");
         setSessionPageWarnings([messageOf(error)]);
         setSessionPageStatus("error");
+        return null;
       } finally {
         setLoadingMoreSessions(false);
       }
     },
-    [initialSessions, sessionPageArchiveOptions],
+    [initialSessions, searchQuery, sessionPageArchiveOptions, loadSessionPageFromSource],
   );
 
   useEffect(() => {

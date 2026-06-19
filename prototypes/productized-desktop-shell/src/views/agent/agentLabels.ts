@@ -38,6 +38,85 @@ export function codexControlReasonLabel(reason: string) {
   return labels[reason] ?? reason;
 }
 
+export type AgentUserFacingError = {
+  title: string;
+  nextStep: string;
+  raw: string;
+};
+
+export function manualRelayReasonLabel(reason: string) {
+  const labels: Record<string, string> = {
+    manual_relay_denied_material_requested: "这条消息像是在索取凭据、密钥、完整记录或内部提示材料",
+    manual_relay_payload_must_be_exact_original: "发送正文被改写过，Manual relay 只允许原文一次发送",
+    manual_relay_policy_must_be_manual_once_without_auto_chain: "发送策略不是一次一发",
+    manual_relay_new_session_must_not_bind_target_session: "新建对话不能同时绑定旧会话",
+    manual_relay_existing_session_requires_target_session: "继续对话需要绑定目标会话",
+    manual_relay_command_plan_missing: "没有生成可执行的发送计划",
+    manual_relay_duplicate_running_attempt: "同一个目标已有运行中的发送",
+    manual_relay_gui_direct_test_process_mode_required: "测试模式缺少进程模式",
+    manual_relay_gui_direct_test_must_not_use_real_codex: "测试入口不能启动真实 Codex",
+    manual_relay_confirmation_already_consumed: "这次确认已经被使用过",
+  };
+  if (reason.startsWith("codex_local_guard:")) {
+    return `Codex 本地执行边界阻断：${codexControlReasonLabel(reason.slice("codex_local_guard:".length))}`;
+  }
+  return labels[reason] ?? reason;
+}
+
+export function userFacingAgentError(rawError: string): AgentUserFacingError {
+  const raw = rawError.trim();
+  if (!raw) {
+    return {
+      title: "没发出去：没有拿到错误详情",
+      nextStep: "重新发送一次；如果仍失败，展开“开发者详情”查看原始诊断。",
+      raw,
+    };
+  }
+  if (raw.startsWith("manual_relay_guard_blocked:")) {
+    const reasons = raw
+      .slice("manual_relay_guard_blocked:".length)
+      .split(",")
+      .map((reason) => reason.trim())
+      .filter(Boolean);
+    const humanReasons = reasons.map(manualRelayReasonLabel);
+    const title =
+      reasons.includes("manual_relay_denied_material_requested")
+        ? "没发出去：这条消息像是在索取敏感材料。"
+        : `没发出去：${humanReasons[0] ?? "安全边界阻断了这次发送"}。`;
+    const nextStep =
+      reasons.includes("manual_relay_denied_material_requested")
+        ? "删掉凭据、token、.codex、完整 transcript 或内部 prompt 相关请求后再发送；原始 reason 在“开发者详情”里。"
+        : "按提示修正目标或正文后再发送；原始 reason 在“开发者详情”里。";
+    return { title, nextStep, raw };
+  }
+  if (raw.includes("状态刷新连续失败")) {
+    return {
+      title: "状态刷新暂停了，发送进程可能还在跑。",
+      nextStep: "点“恢复轮询”继续刷新，或点 Stop 停止这次运行；原始错误在“开发者详情”里。",
+      raw,
+    };
+  }
+  if (raw.includes("状态刷新失败")) {
+    return {
+      title: "状态刷新暂时失败，正在重试。",
+      nextStep: "可以先等自动重试；如果多次失败，展开“开发者详情”查看原始错误。",
+      raw,
+    };
+  }
+  if (raw.includes("Codex 运行超过 10 分钟")) {
+    return {
+      title: "Codex 运行超过 10 分钟。",
+      nextStep: "可以重新发送，或展开“开发者详情”确认停止/回执状态。",
+      raw,
+    };
+  }
+  return {
+    title: "没发出去：发送流程返回了错误。",
+    nextStep: "展开“开发者详情”查看原始原因；确认目标和正文后再试一次。",
+    raw,
+  };
+}
+
 export function productCommandStatusLabel(readModel: RealExecutionProductCommandReadModel | null | undefined) {
   if (!readModel || !readModel.store_available || readModel.command_count === 0) return "无统一执行命令";
   if (readModel.pending_decision_count > 0) return "等待确认";

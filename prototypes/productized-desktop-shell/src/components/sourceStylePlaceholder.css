@@ -1,0 +1,134 @@
+.source-placeholder {
+  min-height: 100%;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.source-entry-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+  gap: 18px;
+  align-items: stretch;
+  padding: 18px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.source-entry-hero h2 {
+  margin: 2px 0 8px;
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.source-entry-hero p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.source-entry-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.source-entry-stat {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: rgba(248, 246, 239, 0.82);
+}
+
+.source-entry-stat span,
+.source-entry-row em {
+  color: var(--ink-light);
+  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.source-entry-stat strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.source-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.source-entry-section {
+  min-width: 0;
+}
+
+.source-entry-list {
+  display: grid;
+  gap: 8px;
+}
+
+.source-entry-row,
+.source-entry-boundary-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.source-entry-row strong,
+.source-entry-boundary-card strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.source-entry-row span,
+.source-entry-boundary-card span {
+  min-width: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.source-entry-boundary {
+  border-left: 3px solid var(--verm);
+}
+
+.source-entry-boundary-card {
+  background: rgba(122, 31, 31, 0.06);
+}
+
+.source-entry-boundary-card em {
+  color: var(--ink-light);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 1120px) {
+  .source-entry-hero,
+  .source-entry-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .source-entry-stats {
+    grid-template-columns: 1fr;
+  }
+}

@@ -104,7 +104,7 @@ export function ProjectOverview({
       <article className="project-overview-card">
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">当前工作流</p>
+            <p className="eyebrow">工作流</p>
             <h3>{activeTask?.title ?? "还没有当前工作项"}</h3>
           </div>
           <Badge tone={projectWorkflow ? "candidate" : "warning"}>{projectWorkflow?.state ?? "缺 workflow"}</Badge>

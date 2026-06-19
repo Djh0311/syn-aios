@@ -27,15 +27,10 @@ export function ProjectGallery({
 
   return (
     <section className="project-gallery stage-pad">
-      <div className="pg-head">
-        <div>
-          <p className="pg-sub">项目 · 方块入口</p>
-          <h1 className="pg-title">项 目 入 口</h1>
-        </div>
-        <div className="pg-meta">
-          <div className="big">{pageReadModel.project_count} 项目 · {pageReadModel.total_session_count} 会话</div>
-          <div>{workflowProjectCount} 个项目有工作流草稿 · {totalWarnings} 个警告</div>
-        </div>
+      <div className="sr-only">
+        <p>项目 · 方块入口</p>
+        <h1>项 目 入 口</h1>
+        <p>{pageReadModel.project_count} 项目 · {pageReadModel.total_session_count} 会话；{workflowProjectCount} 个项目有工作流草稿 · {totalWarnings} 个警告</p>
       </div>
 
       <div className="project-card-grid" aria-label="项目方块列表">

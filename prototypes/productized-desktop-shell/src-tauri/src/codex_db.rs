@@ -39,6 +39,7 @@ pub struct CodexThreadPageOptions {
     pub offset: usize,
     pub include_archived: bool,
     pub archived_only: bool,
+    pub query: Option<String>,
 }
 
 impl Default for CodexThreadPageOptions {
@@ -48,6 +49,7 @@ impl Default for CodexThreadPageOptions {
             offset: 0,
             include_archived: false,
             archived_only: false,
+            query: None,
         }
     }
 }
@@ -97,6 +99,7 @@ pub fn read_threads(db_path: &Path) -> Result<Vec<CodexThreadRow>, String> {
                 offset,
                 include_archived: true,
                 archived_only: false,
+                query: None,
             },
         )?;
         offset += page.rows.len();
@@ -132,6 +135,32 @@ pub fn read_threads_page(
     } else {
         "AND archived = 0"
     };
+    let query = options
+        .query
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| format!("%{}%", value.to_lowercase()));
+    let query_clause = if query.is_some() {
+        r#"
+        AND (
+            lower(id) LIKE ?1
+            OR lower(COALESCE(title, '')) LIKE ?1
+            OR lower(COALESCE(cwd, '')) LIKE ?1
+            OR lower(COALESCE(rollout_path, '')) LIKE ?1
+            OR lower(COALESCE(model, '')) LIKE ?1
+            OR lower(COALESCE(reasoning_effort, '')) LIKE ?1
+            OR lower(COALESCE(thread_source, '')) LIKE ?1
+        )
+        "#
+    } else {
+        ""
+    };
+    let (limit_param, offset_param) = if query.is_some() {
+        ("?2", "?3")
+    } else {
+        ("?1", "?2")
+    };
     let sql = format!(
         r#"
         SELECT
@@ -147,8 +176,9 @@ pub fn read_threads_page(
         FROM threads
         WHERE has_user_event = 1
         {archived_clause}
+        {query_clause}
         ORDER BY updated_at_ms DESC, id DESC
-        LIMIT ?1 OFFSET ?2
+        LIMIT {limit_param} OFFSET {offset_param}
     "#
     );
 
@@ -156,60 +186,36 @@ pub fn read_threads_page(
         .prepare(&sql)
         .map_err(|e| format!("准备查询失败：{e}"))?;
 
-    let rows = stmt
-        .query_map([page_size as i64 + 1, offset as i64], |row| {
-            let thread_id: String = row.get(0)?;
-            let title: String = row.get(1)?;
-            let cwd: String = row.get(2)?;
-            let updated_at_ms: Option<i64> = row.get(3)?;
-            let archived_int: i64 = row.get(4)?;
-            let rollout_path: String = row.get(5)?;
-            let model: Option<String> = row.get(6)?;
-            let reasoning_effort: Option<String> = row.get(7)?;
-            let thread_source: Option<String> = row.get(8)?;
-
-            let project_root = if cwd.trim().is_empty() {
-                None
-            } else {
-                Some(cwd)
-            };
-            let rollout_exists = !rollout_path.is_empty() && Path::new(&rollout_path).exists();
-
-            let mut warnings = Vec::new();
-            if rollout_path.is_empty() {
-                warnings.push("rollout_path_empty".to_string());
-            } else if !rollout_exists {
-                warnings.push("rollout_missing_on_disk".to_string());
-            }
-
-            Ok(CodexThreadRow {
-                thread_id,
-                title,
-                project_root,
-                updated_at_ms,
-                archived: archived_int != 0,
-                rollout_exists,
-                rollout_path: if rollout_path.is_empty() {
-                    None
-                } else {
-                    Some(rollout_path)
-                },
-                model,
-                reasoning_effort,
-                thread_source,
-                warnings,
-            })
-        })
-        .map_err(|e| format!("执行查询失败：{e}"))?;
-
     let display_titles = read_session_index_titles(db_path);
     let mut out = Vec::new();
-    for row in rows {
-        let mut thread = row.map_err(|e| format!("行解码失败：{e}"))?;
-        if let Some(title) = display_titles.get(&thread.thread_id) {
-            thread.title = title.clone();
+    if let Some(query) = query {
+        let rows = stmt
+            .query_map(
+                rusqlite::params![query, page_size as i64 + 1, offset as i64],
+                decode_thread_row,
+            )
+            .map_err(|e| format!("执行查询失败：{e}"))?;
+        for row in rows {
+            let mut thread = row.map_err(|e| format!("行解码失败：{e}"))?;
+            if let Some(title) = display_titles.get(&thread.thread_id) {
+                thread.title = title.clone();
+            }
+            out.push(thread);
         }
-        out.push(thread);
+    } else {
+        let rows = stmt
+            .query_map(
+                rusqlite::params![page_size as i64 + 1, offset as i64],
+                decode_thread_row,
+            )
+            .map_err(|e| format!("执行查询失败：{e}"))?;
+        for row in rows {
+            let mut thread = row.map_err(|e| format!("行解码失败：{e}"))?;
+            if let Some(title) = display_titles.get(&thread.thread_id) {
+                thread.title = title.clone();
+            }
+            out.push(thread);
+        }
     }
     let has_more = out.len() > page_size;
     out.truncate(page_size);
@@ -220,6 +226,50 @@ pub fn read_threads_page(
         has_more,
         include_archived: options.include_archived,
         archived_only: options.archived_only,
+    })
+}
+
+fn decode_thread_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexThreadRow> {
+    let thread_id: String = row.get(0)?;
+    let title: String = row.get(1)?;
+    let cwd: String = row.get(2)?;
+    let updated_at_ms: Option<i64> = row.get(3)?;
+    let archived_int: i64 = row.get(4)?;
+    let rollout_path: String = row.get(5)?;
+    let model: Option<String> = row.get(6)?;
+    let reasoning_effort: Option<String> = row.get(7)?;
+    let thread_source: Option<String> = row.get(8)?;
+
+    let project_root = if cwd.trim().is_empty() {
+        None
+    } else {
+        Some(cwd)
+    };
+    let rollout_exists = !rollout_path.is_empty() && Path::new(&rollout_path).exists();
+
+    let mut warnings = Vec::new();
+    if rollout_path.is_empty() {
+        warnings.push("rollout_path_empty".to_string());
+    } else if !rollout_exists {
+        warnings.push("rollout_missing_on_disk".to_string());
+    }
+
+    Ok(CodexThreadRow {
+        thread_id,
+        title,
+        project_root,
+        updated_at_ms,
+        archived: archived_int != 0,
+        rollout_exists,
+        rollout_path: if rollout_path.is_empty() {
+            None
+        } else {
+            Some(rollout_path)
+        },
+        model,
+        reasoning_effort,
+        thread_source,
+        warnings,
     })
 }
 
@@ -363,6 +413,7 @@ mod tests {
                 offset: 0,
                 include_archived: false,
                 archived_only: false,
+                query: None,
             },
         )
         .expect("read page");
@@ -380,6 +431,7 @@ mod tests {
                 offset: 1,
                 include_archived: false,
                 archived_only: false,
+                query: None,
             },
         )
         .expect("read next page");
@@ -410,6 +462,7 @@ mod tests {
                 offset: 0,
                 include_archived: true,
                 archived_only: false,
+                query: None,
             },
         )
         .expect("read archived page");
@@ -440,6 +493,7 @@ mod tests {
                 offset: 0,
                 include_archived: false,
                 archived_only: true,
+                query: None,
             },
         )
         .expect("read archived-only page");
@@ -453,6 +507,78 @@ mod tests {
         );
         assert!(page.archived_only);
         assert!(!page.include_archived);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn read_threads_page_searches_visible_threads_by_id_title_and_project() {
+        let dir = temp_dir("codex-session-page-query");
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let db_path = dir.join("state_5.sqlite");
+        create_threads_db(&db_path);
+        insert_thread_with_cwd(
+            &db_path,
+            "older-visible-thread",
+            "Stage K visible",
+            "/tmp/stage-k",
+            2_000,
+            0,
+            1,
+        );
+        insert_thread_with_cwd(
+            &db_path,
+            "hidden-exec-thread",
+            "Stage K hidden",
+            "/tmp/stage-k",
+            3_000,
+            0,
+            0,
+        );
+
+        let page = read_threads_page(
+            &db_path,
+            CodexThreadPageOptions {
+                page_size: 10,
+                offset: 0,
+                include_archived: false,
+                archived_only: false,
+                query: Some("older-visible".to_string()),
+            },
+        )
+        .expect("read queried page");
+        assert_eq!(
+            page.rows
+                .iter()
+                .map(|row| row.thread_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["older-visible-thread"]
+        );
+
+        let project_page = read_threads_page(
+            &db_path,
+            CodexThreadPageOptions {
+                page_size: 10,
+                offset: 0,
+                include_archived: false,
+                archived_only: false,
+                query: Some("stage-k".to_string()),
+            },
+        )
+        .expect("read project query page");
+        assert!(
+            project_page
+                .rows
+                .iter()
+                .all(|row| row.thread_id != "hidden-exec-thread"),
+            "query must not surface has_user_event=0 placeholder threads"
+        );
+        assert!(
+            project_page
+                .rows
+                .iter()
+                .any(|row| row.thread_id == "older-visible-thread"),
+            "project query should find visible older sessions without loading prior pages"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -567,6 +693,26 @@ mod tests {
         archived: i64,
         has_user_event: i64,
     ) {
+        insert_thread_with_cwd(
+            db_path,
+            thread_id,
+            title,
+            "/tmp/project",
+            updated_at_ms,
+            archived,
+            has_user_event,
+        );
+    }
+
+    fn insert_thread_with_cwd(
+        db_path: &Path,
+        thread_id: &str,
+        title: &str,
+        cwd: &str,
+        updated_at_ms: i64,
+        archived: i64,
+        has_user_event: i64,
+    ) {
         let conn = Connection::open(db_path).expect("open sqlite");
         conn.execute(
             r#"
@@ -581,9 +727,16 @@ mod tests {
                 reasoning_effort,
                 thread_source,
                 has_user_event
-            ) VALUES (?1, ?2, '/tmp/project', ?3, ?4, '', 'gpt-test', 'medium', 'codex', ?5)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, '', 'gpt-test', 'medium', 'codex', ?6)
             "#,
-            (thread_id, title, updated_at_ms, archived, has_user_event),
+            (
+                thread_id,
+                title,
+                cwd,
+                updated_at_ms,
+                archived,
+                has_user_event,
+            ),
         )
         .expect("insert thread");
     }

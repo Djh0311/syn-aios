@@ -105,15 +105,10 @@ export function RunningWorkflowsView({
 
   return (
     <section className="stage-pad running-workflows-view">
-      <div className="pg-head">
-        <div>
-          <p className="pg-sub">运行中工作流</p>
-          <h1 className="pg-title">运行中工作流</h1>
-        </div>
-        <div className="pg-meta">
-          <div className="big">{pageReadModel.workflow_focus_count} 关注 · {pageReadModel.waiting_permission_count} 等权限</div>
-          <div>只显示运行、等待、复核、重试和读回异常摘要。</div>
-        </div>
+      <div className="sr-only">
+        <p>运行中工作流</p>
+        <h1>运行中工作流</h1>
+        <p>{pageReadModel.workflow_focus_count} 关注 · {pageReadModel.waiting_permission_count} 等权限；只显示运行、等待、复核、重试和读回异常摘要。</p>
       </div>
 
       <div className="running-summary-grid">

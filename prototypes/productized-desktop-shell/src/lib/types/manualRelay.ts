@@ -121,12 +121,52 @@ export type ManualRelayGuiDirectRunInput = {
   requested_by: string;
 };
 
+export type ManualRelayGuiDirectNewSessionInput = {
+  original_user_text: string;
+  target_project_root: string;
+  target_cwd: string;
+  sandbox: string;
+  allowed_write_roots: string[];
+  requested_by: string;
+};
+
 export type ManualRelayRollbackSummary = {
   git_available: boolean;
   dirty_before: boolean;
   auto_rollback_performed: boolean;
   rollback_suggestion_available: boolean;
   summary: string;
+};
+
+export type ManualRelayThreadEventSummary = {
+  thread_id: string | null;
+  assistant_item_id: string | null;
+  assistant_message_text: string | null;
+  turn_completed: boolean;
+  turn_failed: boolean;
+  usage: Record<string, number>;
+  event_types: string[];
+  json_line_count: number;
+  malformed_json_line_count: number;
+  stderr_summary: string | null;
+};
+
+export type ManualRelayLiveEvent = {
+  sequence: number;
+  event_type: string;
+  thread_id: string | null;
+  item_id: string | null;
+  item_type: string | null;
+  title: string;
+  text: string | null;
+  delta: string | null;
+  tool_name: string | null;
+  arguments_preview: string | null;
+  output_preview: string | null;
+  stdout: string | null;
+  stderr: string | null;
+  exit_code: number | null;
+  status: string;
 };
 
 export type ManualRelayReceipt = {
@@ -151,6 +191,9 @@ export type ManualRelayReceipt = {
   killed_by_user: boolean;
   timed_out: boolean;
   readback_status: string;
+  assistant_message_text: string | null;
+  thread_event_summary: ManualRelayThreadEventSummary;
+  live_events: ManualRelayLiveEvent[];
   last_message_hash: string | null;
   last_message_size_bytes: number | null;
   changed_files: string[];
@@ -163,6 +206,11 @@ export type ManualRelayReceipt = {
 };
 
 export type ManualRelayStopInput = {
+  relay_attempt_id: string;
+  requested_by: string;
+};
+
+export type ManualRelayPollInput = {
   relay_attempt_id: string;
   requested_by: string;
 };

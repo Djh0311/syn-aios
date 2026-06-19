@@ -3,12 +3,19 @@ import { renderToStaticMarkup } from "react-dom/server.browser";
 import { assert, findButtonByText, findElement, visibleText } from "./offlineInteractionTestUtils";
 import {
   appendPendingUserMessage,
+  buildManualRelayAssistantMessage,
+  buildManualRelayLiveTranscriptEvents,
   buildManualRelayPendingUserMessage,
   buildPendingUserMessage,
   mergeOlderTranscriptPage,
 } from "../../src/lib/conversationEngine";
 import { AgentChatComposer } from "../../src/views/agent/AgentChatComposer";
-import { deriveRelayBindingState } from "../../src/views/agent/AgentConversationShell";
+import {
+  AgentManualRelayDeveloperDetails,
+  deriveRelayBindingState,
+  manualRelayAttemptTimedOut,
+  nextManualRelayPollFailureDecision,
+} from "../../src/views/agent/AgentConversationShell";
 import type { CodexTranscript, PendingAction, SessionRecord } from "../../src/lib/types";
 import { AgentSessionCenter, ChatTranscript } from "../../src/views/AgentView";
 
@@ -22,12 +29,92 @@ export function runConversationEngineScenario({
   const transcript = buildLargeTranscript(session.thread_id, session.rollout_path ?? "fixture-rollout.jsonl", 180);
   const transcriptMarkup = renderToStaticMarkup(<ChatTranscript transcript={transcript} />);
   const transcriptText = visibleText(<ChatTranscript transcript={transcript} />);
+  const firstPollFailure = nextManualRelayPollFailureDecision(0);
+  const terminalPollFailure = nextManualRelayPollFailureDecision(4);
+  assert(firstPollFailure.shouldRetry && firstPollFailure.nextDelayMs === 1000, "P4 轮询首次失败应退避重试，不应冻结");
+  assert(!terminalPollFailure.shouldRetry, "P4 轮询连续失败到上限应进入可恢复状态");
+  assert(
+    manualRelayAttemptTimedOut({ started_at: "2026-06-17T00:00:00Z" }, Date.parse("2026-06-17T00:10:00Z")),
+    "P4 relay 前端墙钟超时应能独立判定",
+  );
 
   assert(transcriptMarkup.includes("data-conversation-engine=\"virtualized\""), "M1 对话流应声明使用虚拟化引擎");
-  assert(transcriptText.includes("虚拟消息窗口"), "M1 对话流应暴露虚拟窗口计数");
-  assert(transcriptText.includes("已渲染"), "M1 对话流应显示当前渲染数量");
+  assert(transcriptMarkup.includes("codex-transcript-item"), "P3 对话流应使用 Codex 平铺消息项");
+  assert(!transcriptMarkup.includes("chat-bubble"), "P3 对话流不应再使用聊天气泡类名");
+  assert(transcriptMarkup.includes("data-virtualized-window="), "M1 对话流应保留虚拟窗口计数元数据");
+  assert(transcriptText.includes("已收纳较早"), "M1 对话流应以用户文案提示较早对话已收纳");
   assert(transcriptText.includes("Message fixture 179"), "M1 初始窗口应显示最新消息");
   assert(!transcriptMarkup.includes("Message fixture 20"), "M1 大对话不应默认把早期消息全量放进 DOM");
+
+  const nativeTranscript: CodexTranscript = {
+    ...transcript,
+    events: [
+      {
+        event_id: "native-user",
+        timestamp: "2026-06-17T00:00:00Z",
+        event_type: "user_message",
+        actor: "user",
+        text: "P3 native render user fixture",
+        warnings: [],
+      },
+      {
+        event_id: "native-assistant",
+        timestamp: "2026-06-17T00:00:01Z",
+        event_type: "assistant_message",
+        actor: "assistant",
+        text: "P3 native render assistant fixture",
+        warnings: [],
+      },
+      {
+        event_id: "native-tool-call",
+        timestamp: "2026-06-17T00:00:02Z",
+        event_type: "tool_call",
+        actor: "assistant",
+        tool_name: "functions.exec_command",
+        arguments: { cmd: "pwd" },
+        warnings: [],
+      },
+      {
+        event_id: "native-command-output",
+        timestamp: "2026-06-17T00:00:03Z",
+        event_type: "command_output",
+        actor: "tool",
+        stdout: "/tmp/offline\n",
+        stderr: "",
+        exit_code: 0,
+        output: { stdout: "/tmp/offline\n", stderr: "", exit_code: 0 },
+        warnings: [],
+      },
+      {
+        event_id: "native-reasoning",
+        timestamp: "2026-06-17T00:00:04Z",
+        event_type: "system_context",
+        actor: "assistant",
+        text: "Reasoning fixture summary",
+        metadata: { payload_type: "reasoning" },
+        warnings: [],
+      },
+      {
+        event_id: "native-compacted",
+        timestamp: "2026-06-17T00:00:05Z",
+        event_type: "compacted",
+        actor: "system",
+        text: "Compacted fixture summary.",
+        warnings: [],
+      },
+    ],
+  };
+  const nativeMarkup = renderToStaticMarkup(<ChatTranscript transcript={nativeTranscript} />);
+  const nativeText = visibleText(<ChatTranscript transcript={nativeTranscript} />);
+  assert(nativeMarkup.includes("codex-status-item"), "P3 工具/系统事件应作为 Codex 状态行渲染");
+  assert(
+    nativeMarkup.includes("codex-transcript-item assistant") && nativeText.includes("P3 native render assistant fixture"),
+    "P3 助手回复应一眼可辨",
+  );
+  assert(nativeText.includes("准备运行命令"), "P3 工具调用应显示为命令状态行");
+  assert(nativeText.includes("已运行命令"), "P3 命令输出应显示为完成状态行");
+  assert(nativeText.includes("思考"), "P3 reasoning 应显示为思考块");
+  assert(nativeText.includes("上下文已自动压缩"), "P3 compacted 应显示为压缩分隔");
 
   const centerText = visibleText(
     <AgentSessionCenter
@@ -58,7 +145,7 @@ export function runConversationEngineScenario({
     />,
   );
   assert(firstLoadText.includes("正在读取这条对话"), "M1 首次加载新会话应显示读取态，不应静默空窗");
-  assert(firstLoadText.includes("这不是 0 条结果"), "M1 首次加载态不得暗示读回 0 条");
+  assert(!firstLoadText.includes("0 条结果"), "M1 首次加载态不得暗示读回 0 条");
 
   const streamingTranscript = {
     ...transcript,
@@ -127,8 +214,10 @@ export function runConversationEngineScenario({
       }}
     />,
   );
-  assert(internalOnlyMarkup.includes("这条会话没有可显示的对话"), "M2 内部事件 tail 应显示空态说明");
-  assert(internalOnlyMarkup.includes("加载更早对话"), "M2 内部事件 tail 仍应保留加载更早入口");
+  assert(internalOnlyMarkup.includes("codex-status-item"), "P3 工具事件 tail 应进入主渲染状态行");
+  assert(internalOnlyMarkup.includes("准备调用工具"), "P3 无具体工具名的工具事件应显示通用工具状态");
+  assert(!internalOnlyMarkup.includes("这条会话没有可显示的对话"), "P3 工具事件 tail 不应再显示对话空态");
+  assert(internalOnlyMarkup.includes("加载更早对话"), "M2 工具事件 tail 仍应保留加载更早入口");
 
   const olderPage = {
     ...transcript,
@@ -163,11 +252,9 @@ export function runConversationEngineScenario({
     />,
   );
   assert(composerMarkup.includes("data-send-mode=\"manual_relay_direct\""), "B2 绑定会话撰写区应声明 GUI direct relay 模式");
-  assert(composerMarkup.includes("↔"), "B2 撰写区必须常驻显示 target 绑定标记");
-  assert(composerMarkup.includes(session.project_root ?? ""), "B2 target 常驻区必须显示 canonical project path");
-  assert(composerMarkup.includes(session.thread_id), "B2 target 常驻区必须显示指定会话");
-  assert(composerMarkup.includes("会话ID"), "B2 target 常驻区必须显式标出 session id 字段");
-  assert(composerMarkup.includes("手动一次一发"), "manual relay UI 必须披露 one-shot 边界");
+  assert(composerMarkup.includes("继续对话"), "P3.5 撰写区主路径应显示普通对话目标");
+  const selectedProjectTail = (session.project_root ?? "").split("/").filter(Boolean).at(-1) ?? "";
+  assert(composerMarkup.includes(selectedProjectTail), "P3.5 撰写区应显示项目名而不是完整路径");
   assert(composerMarkup.includes("发送"), "M3 撰写区主按钮应是发送");
   assert(!composerMarkup.includes("生成发送预览"), "M3 普通撰写区不应保留 6 步预览入口");
   assert(!composerMarkup.includes("确认执行 Codex"), "M3 普通撰写区不应出现真实执行按钮");
@@ -229,7 +316,6 @@ export function runConversationEngineScenario({
       k2PreviewError={null}
       manualRelayBusy={false}
       manualRelayError={null}
-      manualRelayPreview={null}
       manualRelayReceipt={null}
       relayDirectSendEnabled={true}
       relayDirectSendBlockedReason={null}
@@ -243,6 +329,15 @@ export function runConversationEngineScenario({
       }}
     />
   );
+  const directComposerMarkup = renderToStaticMarkup(directComposer);
+  assert(directComposerMarkup.includes("继续对话"), "P3.5 独立 composer 应显示普通对话目标");
+  assert(directComposerMarkup.includes(selectedProjectTail), "P3.5 独立 composer 应显示项目名");
+  assert(!directComposerMarkup.includes(session.project_root ?? ""), "信息收口后 composer 不应常驻显示完整项目路径");
+  assert(!directComposerMarkup.includes(session.thread_id), "信息收口后 composer 不应常驻显示 session id");
+  assert(!directComposerMarkup.includes("会话ID"), "信息收口后 composer 不应常驻显示 session id 字段");
+  assert(!directComposerMarkup.includes("manual-relay-boundary-details"), "composer 不应再自带 manual relay 边界折叠");
+  assert(!directComposerMarkup.includes("target_cwd_canonical"), "composer 不应显示 relay envelope 原始字段");
+  assert(!directComposerMarkup.includes("real_codex_executed"), "composer 不应显示 relay receipt 原始字段");
   const directTextarea = findElement(
     directComposer,
     (element) => element.type === "textarea" && element.props?.["aria-label"] === "输入给 Codex 的任务",
@@ -257,6 +352,49 @@ export function runConversationEngineScenario({
   });
   assert(directSubmitCount === 1, "B2 绑定会话 Enter 应调用 GUI direct relay 发送 handler");
 
+  let newSessionSubmitCount = 0;
+  const newSessionComposer = (
+    <AgentChatComposer
+      draftPrompt="Start a new Codex conversation"
+      k2PreviewError={null}
+      manualRelayBusy={false}
+      manualRelayError={null}
+      manualRelayReceipt={null}
+      relayDirectSendEnabled={true}
+      relayDirectSendBlockedReason={null}
+      selectedProjectRoot="/offline-fixture/projects/new-codex-project"
+      selectedSession={null}
+      sendMode="new_session"
+      onChangeDraft={() => {}}
+      onOpenDeveloperDetails={() => {}}
+      onStopManualRelayAttempt={() => {}}
+      onSubmitDraft={() => {
+        newSessionSubmitCount += 1;
+      }}
+    />
+  );
+  const newSessionMarkup = renderToStaticMarkup(newSessionComposer);
+  assert(
+    newSessionMarkup.includes('data-send-mode="manual_relay_new_session"'),
+    "P2 新建对话撰写区应声明 manual relay new-session 模式",
+  );
+  assert(newSessionMarkup.includes("新建对话"), "P2 新建对话撰写区应显示新建 target");
+  assert(newSessionMarkup.includes("new-codex-project"), "P2 新建对话撰写区应显示项目名");
+  assert(!newSessionMarkup.includes("new session"), "信息收口后新建对话 composer 不应显示 raw session 占位");
+  const newSessionTextarea = findElement(
+    newSessionComposer,
+    (element) => element.type === "textarea" && element.props?.["aria-label"] === "输入给 Codex 的任务",
+  );
+  assert(newSessionTextarea, "P2 新建对话撰写区应有 textarea");
+  const newSessionKeyDown = newSessionTextarea.props?.onKeyDown;
+  assert(typeof newSessionKeyDown === "function", "P2 新建对话撰写区应接管 Enter 键");
+  (newSessionKeyDown as (event: { key: string; shiftKey: boolean; preventDefault: () => void }) => void)({
+    key: "Enter",
+    shiftKey: false,
+    preventDefault() {},
+  });
+  assert(newSessionSubmitCount === 1, "P2 新建对话无需 selectedSession，Enter 应调用 new-session 发送 handler");
+
   let unboundSubmitCount = 0;
   const unboundComposer = (
     <AgentChatComposer
@@ -264,7 +402,6 @@ export function runConversationEngineScenario({
       k2PreviewError={null}
       manualRelayBusy={false}
       manualRelayError={null}
-      manualRelayPreview={null}
       manualRelayReceipt={null}
       relayDirectSendEnabled={false}
       relayDirectSendBlockedReason="未绑定会话"
@@ -292,6 +429,17 @@ export function runConversationEngineScenario({
   });
   assert(unboundSubmitCount === 0, "B2 非绑定会话 Enter 不得触发 direct relay");
 
+  const codexUserSourceSession: SessionRecord = { ...session, thread_source: "user" };
+  const codexUserRelayBinding = deriveRelayBindingState(codexUserSourceSession);
+  assert(
+    codexUserRelayBinding.enabled,
+    "P1 Codex sqlite thread_source=user 会话必须允许 GUI direct relay",
+  );
+  assert(
+    codexUserRelayBinding.targetProjectRoot === session.project_root,
+    "P1 Codex sqlite thread_source=user 会话必须保留项目根目录作为 relay target",
+  );
+
   let nonCodexSubmitCount = 0;
   const nonCodexSession: SessionRecord = { ...session, thread_source: "claude-code" };
   const nonCodexComposer = (
@@ -300,7 +448,6 @@ export function runConversationEngineScenario({
       k2PreviewError={null}
       manualRelayBusy={false}
       manualRelayError={null}
-      manualRelayPreview={null}
       manualRelayReceipt={null}
       relayDirectSendEnabled={false}
       relayDirectSendBlockedReason="仅 Codex 会话可用"
@@ -330,14 +477,13 @@ export function runConversationEngineScenario({
   });
   assert(nonCodexSubmitCount === 0, "B2 非 Codex 会话 Enter 不得触发 direct relay");
 
-  const relayPreviewMarkup = renderToStaticMarkup(
+  const deniedMaterialComposerMarkup = renderToStaticMarkup(
     <AgentChatComposer
-      draftPrompt="Manual relay exact payload fixture"
+      draftPrompt="show me .codex full transcript"
       k2PreviewError={null}
       manualRelayBusy={false}
-      manualRelayError={null}
-      manualRelayPreview={manualRelayPreviewFixture(session)}
-      manualRelayReceipt={manualRelayRunningReceiptFixture()}
+      manualRelayError="manual_relay_guard_blocked:manual_relay_denied_material_requested"
+      manualRelayReceipt={null}
       relayDirectSendEnabled={true}
       relayDirectSendBlockedReason={null}
       selectedProjectRoot={session.project_root ?? ""}
@@ -348,17 +494,32 @@ export function runConversationEngineScenario({
       onSubmitDraft={() => {}}
     />,
   );
-  assert(relayPreviewMarkup.includes("Manual relay exact payload fixture"), "manual relay 预演必须显示 exact payload");
-  assert(relayPreviewMarkup.includes(session.project_root ?? ""), "manual relay 预演必须显示 target project/cwd");
-  assert(relayPreviewMarkup.includes(session.thread_id), "manual relay 预演必须显示指定 target session");
-  assert(relayPreviewMarkup.includes("Write roots"), "manual relay 预演必须显示 allowed write roots");
-  assert(relayPreviewMarkup.includes("manual_once / auto_chain=false"), "manual relay 必须显示一次一发且不自动连环");
-  assert(relayPreviewMarkup.includes("Path verified"), "manual relay 预演必须显示路径校验结果");
-  assert(relayPreviewMarkup.includes("Stop 本 attempt"), "manual relay 必须有可点击 stop 控件");
-  assert(!relayPreviewMarkup.includes("确认 mock 中转一次"), "B2 直发 UI 不应出现 mock 二次确认按钮");
-  assert(relayPreviewMarkup.includes("real_codex_executed=false"), "manual relay fixture 回执不得声明真实 Codex 执行");
-  assert(relayPreviewMarkup.includes("process_kind=fixture"), "manual relay 回执必须显示进程类型");
-  assert(relayPreviewMarkup.includes("real_process_killed=false"), "manual relay running fixture 不得伪称已 kill 真进程");
+  assert(deniedMaterialComposerMarkup.includes("敏感材料"), "guard 阻断主提示必须转成人话");
+  assert(deniedMaterialComposerMarkup.includes("查看开发者详情"), "guard 阻断主提示必须提供诊断入口");
+  assert(!deniedMaterialComposerMarkup.includes("manual_relay_guard_blocked"), "主提示不得直接显示 raw guard code");
+  assert(!deniedMaterialComposerMarkup.includes("manual_relay_denied_material_requested"), "主提示不得直接显示 raw reason code");
+
+  const relayDiagnosticsMarkup = renderToStaticMarkup(
+    <AgentManualRelayDeveloperDetails
+      manualRelayError="manual_relay_guard_blocked:manual_relay_denied_material_requested"
+      manualRelayPreview={manualRelayPreviewFixture(session)}
+      manualRelayReceipt={manualRelayRunningReceiptFixture()}
+    />,
+  );
+  assert(relayDiagnosticsMarkup.includes("Manual relay exact payload fixture"), "开发者详情必须保留 relay exact payload");
+  assert(relayDiagnosticsMarkup.includes(session.project_root ?? ""), "开发者详情必须保留 target project/cwd");
+  assert(relayDiagnosticsMarkup.includes(session.thread_id), "开发者详情必须保留 target session");
+  assert(relayDiagnosticsMarkup.includes("allowed_write_roots"), "开发者详情必须保留 allowed write roots");
+  assert(relayDiagnosticsMarkup.includes("manual_once / auto_chain=false"), "开发者详情必须保留一次一发策略");
+  assert(relayDiagnosticsMarkup.includes("path_verified"), "开发者详情必须保留路径校验结果");
+  assert(relayDiagnosticsMarkup.includes("real_codex_executed=false"), "开发者详情必须保留真实 Codex 执行状态");
+  assert(relayDiagnosticsMarkup.includes("process_kind=fixture"), "开发者详情必须保留进程类型");
+  assert(relayDiagnosticsMarkup.includes("real_process_killed=false"), "开发者详情必须保留 kill 状态");
+  assert(
+    relayDiagnosticsMarkup.includes("manual_relay_denied_material_requested"),
+    "开发者详情必须保留原始 guard reason",
+  );
+  assert(relayDiagnosticsMarkup.includes("索取凭据"), "开发者详情必须同时显示 guard reason 人话");
 
   const relayRunningComposer = (
     <AgentChatComposer
@@ -366,7 +527,6 @@ export function runConversationEngineScenario({
       k2PreviewError={null}
       manualRelayBusy={false}
       manualRelayError={null}
-      manualRelayPreview={manualRelayPreviewFixture(session)}
       manualRelayReceipt={manualRelayRunningReceiptFixture()}
       relayDirectSendEnabled={true}
       relayDirectSendBlockedReason={null}
@@ -386,13 +546,33 @@ export function runConversationEngineScenario({
   assert(relayRunningTextarea?.props?.readOnly === true, "manual relay running 时 textarea 应锁定键盘输入");
   assert(findButtonByText(relayRunningComposer, "发送")?.props?.disabled === true, "manual relay running 时普通发送应禁用");
   assert(
-    findButtonByText(relayRunningComposer, "Stop 本 attempt")?.props?.disabled !== true,
+    findButtonByText(relayRunningComposer, "Stop")?.props?.disabled !== true,
     "manual relay running 时 stop 按钮应可点击",
   );
   assert(
-    findButtonByText(relayRunningComposer, "Stop 本 attempt")?.props?.disabled !== true,
-    "manual relay running 时 Stop 本 attempt 必须保持可点击",
+    findButtonByText(relayRunningComposer, "Stop")?.props?.disabled !== true,
+    "manual relay running 时 Stop 必须保持可点击",
   );
+  const relayPausedComposer = (
+    <AgentChatComposer
+      draftPrompt=""
+      k2PreviewError={null}
+      manualRelayBusy={false}
+      manualRelayError="状态刷新连续失败，已暂停轮询。"
+      manualRelayPollingPaused
+      manualRelayReceipt={manualRelayRunningReceiptFixture()}
+      relayDirectSendEnabled={true}
+      relayDirectSendBlockedReason={null}
+      selectedProjectRoot={session.project_root ?? ""}
+      selectedSession={session}
+      onChangeDraft={() => {}}
+      onOpenDeveloperDetails={() => {}}
+      onResumeManualRelayPolling={() => {}}
+      onStopManualRelayAttempt={() => {}}
+      onSubmitDraft={() => {}}
+    />
+  );
+  assert(findButtonByText(relayPausedComposer, "恢复轮询"), "P4 轮询失败暂停后必须提供 Stop 以外恢复路");
 
   const relayTerminalComposer = (
     <AgentChatComposer
@@ -400,7 +580,6 @@ export function runConversationEngineScenario({
       k2PreviewError={null}
       manualRelayBusy={false}
       manualRelayError={null}
-      manualRelayPreview={manualRelayPreviewFixture(session)}
       manualRelayReceipt={manualRelayCompletedReceiptFixture()}
       relayDirectSendEnabled={true}
       relayDirectSendBlockedReason={null}
@@ -422,8 +601,8 @@ export function runConversationEngineScenario({
   );
   assert(relayTerminalTextarea?.props?.readOnly !== true, "manual relay terminal 后 textarea 应恢复输入");
   assert(
-    findButtonByText(relayTerminalComposer, "Stop 本 attempt")?.props?.disabled === true,
-    "manual relay terminal 后 Stop 应禁用",
+    !findButtonByText(relayTerminalComposer, "Stop"),
+    "manual relay terminal 后 Stop 不应占用主路径",
   );
 
   const pendingMessage = buildPendingUserMessage({
@@ -465,6 +644,98 @@ export function runConversationEngineScenario({
   );
   assert(relayPendingMessage.metadata?.auto_chain === false, "manual relay pending 消息必须钉死 auto_chain=false");
   assert(relayPendingMessage.metadata?.real_codex_executed === false, "manual relay fixture pending 不得声明真实执行");
+  const relayAssistantMessage = buildManualRelayAssistantMessage({
+    assistantItemId: "item-json-fixture",
+    promptSha256: "a".repeat(64),
+    relayAttemptId: "manual-relay-attempt:fixture",
+    text: "JSON_EVENT_REPLY_OK",
+    threadId: session.thread_id,
+    usage: { input_tokens: 10, cached_input_tokens: 2, output_tokens: 4, reasoning_output_tokens: 1 },
+  });
+  assert(relayAssistantMessage.event_type === "assistant_message", "manual relay assistant reply 必须成为助手消息");
+  assert(relayAssistantMessage.text === "JSON_EVENT_REPLY_OK", "manual relay assistant reply 必须保留事件流文本");
+  assert(
+    relayAssistantMessage.metadata?.conversation_engine_send_mode === "manual_relay_thread_event_reply",
+    "manual relay assistant reply 必须标明来自 ThreadEvent",
+  );
+  assert(relayAssistantMessage.metadata?.real_codex_executed === true, "manual relay assistant reply 必须标明真实 codex 已执行");
+
+  const relayLiveEvents = buildManualRelayLiveTranscriptEvents({
+    liveEvents: [
+      {
+        sequence: 1,
+        event_type: "turn.started",
+        thread_id: session.thread_id,
+        item_id: null,
+        item_type: null,
+        title: "Codex 开始处理",
+        text: null,
+        delta: null,
+        tool_name: null,
+        arguments_preview: null,
+        output_preview: null,
+        stdout: null,
+        stderr: null,
+        exit_code: null,
+        status: "running",
+      },
+      {
+        sequence: 2,
+        event_type: "item.updated",
+        thread_id: session.thread_id,
+        item_id: "item-live-fixture",
+        item_type: "agent_message",
+        title: "Codex 正在回复",
+        text: "P4 live partial",
+        delta: null,
+        tool_name: null,
+        arguments_preview: null,
+        output_preview: null,
+        stdout: null,
+        stderr: null,
+        exit_code: null,
+        status: "running",
+      },
+    ],
+    relayAttemptId: "manual-relay-attempt:live",
+    threadId: session.thread_id,
+  });
+  const relayLiveTranscript = {
+    ...transcript,
+    events: [...transcript.events, ...relayLiveEvents],
+  };
+  const relayLiveMarkup = renderToStaticMarkup(<ChatTranscript transcript={relayLiveTranscript} />);
+  const relayLiveText = visibleText(<ChatTranscript transcript={relayLiveTranscript} />);
+  assert(relayLiveMarkup.includes("codex-status-item"), "P4 live turn 状态应作为 Codex 状态行渲染");
+  assert(relayLiveMarkup.includes("data-streaming-separated=\"true\""), "P4 live assistant 应进入 streaming tail");
+  assert(relayLiveText.includes("开始处理"), "P4 live turn 状态应显示友好的运行标题");
+  assert(relayLiveText.includes("P4 live partial"), "P4 live assistant partial 应显示在对话尾部");
+  const canonicalHistoryWithLive = {
+    ...transcript,
+    events: [
+      {
+        event_id: "canonical-user",
+        timestamp: "2026-06-17T01:01:00Z",
+        event_type: "user_message",
+        actor: "user",
+        text: "Canonical user",
+        metadata: { raw_type: "event_msg" },
+        warnings: [],
+      },
+      {
+        event_id: "canonical-assistant",
+        timestamp: "2026-06-17T01:01:01Z",
+        event_type: "assistant_message",
+        actor: "assistant",
+        text: "Canonical assistant",
+        metadata: { raw_type: "event_msg" },
+        warnings: [],
+      },
+      ...relayLiveEvents,
+    ],
+  };
+  const canonicalLiveText = visibleText(<ChatTranscript transcript={canonicalHistoryWithLive} />);
+  assert(canonicalLiveText.includes("P4 live partial"), "P4 live assistant 不应被 event_msg 规范历史过滤掉");
 }
 
 function manualRelayPreviewFixture(session: SessionRecord) {
@@ -566,6 +837,20 @@ function manualRelayRunningReceiptFixture() {
     killed_by_user: false,
     timed_out: false,
     readback_status: "not_attempted_running_fixture",
+    assistant_message_text: null,
+    thread_event_summary: {
+      thread_id: null,
+      assistant_item_id: null,
+      assistant_message_text: null,
+      turn_completed: false,
+      turn_failed: false,
+      usage: {},
+      event_types: [],
+      json_line_count: 0,
+      malformed_json_line_count: 0,
+      stderr_summary: null,
+    },
+    live_events: [],
     last_message_hash: null,
     last_message_size_bytes: null,
     changed_files: [],
@@ -591,6 +876,7 @@ function manualRelayCompletedReceiptFixture() {
     exit_code: 0,
     status: "completed_fixture",
     readback_status: "fixture_last_message_available",
+    assistant_message_text: null,
     last_message_hash: "c".repeat(64),
     last_message_size_bytes: 33,
     git_head_after: "fixture-head-after",

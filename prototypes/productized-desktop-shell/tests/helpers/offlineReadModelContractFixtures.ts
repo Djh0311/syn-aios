@@ -103,7 +103,7 @@ const h2MissingReadinessItemIds: readonly string[] = [
   "global_supervisor_confirmation",
 ];
 
-const rightRailNonSecretaryPanelIds = ["notifications", "todos", "audit", "running"] as const;
+const rightRailNonSecretaryPanelIds = ["notifications", "todos", "ideas", "audit", "running"] as const;
 
 const transcriptCleaningExpectedIds = {
   eventMessages: ["e2", "e3"] as readonly string[],

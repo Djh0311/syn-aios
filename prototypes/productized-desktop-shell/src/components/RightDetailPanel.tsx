@@ -12,6 +12,18 @@ type RightFeedItem = {
   tone: RightFeedTone;
 };
 
+type RightProjectGroupItem = RightFeedItem & {
+  id: string;
+};
+
+type RightProjectGroup = {
+  id: string;
+  title: string;
+  projectRoot: string;
+  todoItems: RightProjectGroupItem[];
+  runningItems: RightProjectGroupItem[];
+};
+
 export function RightDetailPanel({
   activePanel,
   snapshot,
@@ -100,6 +112,9 @@ export function RightDetailPanel({
   const failureStopRetry = productCommandReadModel?.failure_stop_retry_summary ?? null;
   const failureStopRetryItems = failureStopRetry?.items ?? [];
   const runQueue = deriveRunQueueReadModel({ snapshot, workflowState, memoryCaptureStore, memoryCandidateStore });
+  const projectGroups = buildRightProjectGroups(workflowState);
+  const projectTodoGroups = projectGroups.filter((group) => group.todoItems.length);
+  const projectRunningGroups = projectGroups.filter((group) => group.runningItems.length);
   const queueRunningItems: RightFeedItem[] = runQueue.run_queue_items.slice(0, 6).map((item) => ({
     title: item.user_visible_summary,
     meta: `${displayStatus(item.status)} · 下一步：${item.next_step_label} · 结果数 ${productCommandResultCountLabel(item.readback_result_count)}`,
@@ -156,14 +171,35 @@ export function RightDetailPanel({
     ...runtimeTodoItems.slice(0, 6),
     ...runningTasks.filter((item) => item.meta.includes("ready_for_review")).slice(0, 4),
   ];
+  const ideaItems: RightFeedItem[] = [
+    ...snapshot.tasks.slice(0, 8).map((task) => ({
+      title: task.title,
+      meta: `来自待办索引 · ${displayStatus(task.status)}`,
+      tone: task.status.includes("done") ? "ok" as const : "warn" as const,
+    })),
+    ...secretaryContext.suggestions.slice(0, 6).map((suggestion) => ({
+      title: suggestion.title,
+      meta: `秘书建议 · ${suggestion.summary}`,
+      tone: suggestion.priority === "high" ? "warn" as const : "ok" as const,
+    })),
+    ...snapshot.projects.flatMap((project) =>
+      [...project.context_warnings, ...project.warnings].slice(0, 2).map((warning) => ({
+        title: project.name,
+        meta: `项目线索 · ${warning}`,
+        tone: "warn" as const,
+      })),
+    ),
+  ];
   const list =
     activePanel === "notifications"
       ? notificationItems
       : activePanel === "todos"
         ? todoItems
-        : activePanel === "audit"
-          ? [...diagnosticItems, ...runtimeLogItems, ...auditItems]
-          : [...queueFailureItems, ...queueRunningItems, ...runtimeRunningItems, ...runningTasks];
+        : activePanel === "ideas"
+          ? ideaItems
+          : activePanel === "audit"
+            ? [...diagnosticItems, ...runtimeLogItems, ...auditItems]
+            : [...queueFailureItems, ...queueRunningItems, ...runtimeRunningItems, ...runningTasks];
 
   return (
     <div className="right-detail">
@@ -178,11 +214,40 @@ export function RightDetailPanel({
           <RightStat label="项目" value={snapshot.projects.length} />
           <RightStat label="会话" value={snapshot.sessions.length} />
           <RightStat label="项目工作流" value={workflowState?.counts.workflows ?? 0} />
-          <RightStat label={activePanel === "audit" ? "诊断状态" : "运行关注"} value={activePanel === "audit" ? snapshot.diagnostic_summary.degraded_states.length : snapshot.runtime_session_attention.length} />
+          <RightStat
+            label={activePanel === "audit" ? "诊断状态" : activePanel === "ideas" ? "想法线索" : "运行关注"}
+            value={
+              activePanel === "audit"
+                ? snapshot.diagnostic_summary.degraded_states.length
+                : activePanel === "ideas"
+                  ? ideaItems.length
+                  : snapshot.runtime_session_attention.length
+            }
+          />
         </div>
         <p className="muted small-note">{rightPanelBoundaryNote(activePanel)}</p>
         {workflowStateError ? <p className="rail-error">事实层读取失败：{workflowStateError}</p> : null}
       </section>
+      {activePanel === "ideas" ? (
+        <section className="status-pane">
+          <h2>
+            想法箱入口
+            <span>{ideaItems.length}</span>
+          </h2>
+          <p className="muted small-note">
+            这里先把待办、项目 warning 和秘书建议收成线索列表；不新建事实、不写正式记忆、不派发任务。
+          </p>
+          <div className="right-stat-grid">
+            <RightStat label="待办线索" value={snapshot.tasks.length} />
+            <RightStat label="秘书建议" value={secretaryContext.suggestions.length} />
+            <RightStat label="项目 warning" value={snapshot.projects.reduce((count, project) => count + project.context_warnings.length + project.warnings.length, 0)} />
+            <RightStat label="占位入口" value={1} />
+          </div>
+          <button className="secondary-button pane-action" type="button" onClick={() => onNavigate("ideas")}>
+            打开想法箱
+          </button>
+        </section>
+      ) : null}
       {activePanel === "running" ? (
         <section className="status-pane">
           <h2>
@@ -327,6 +392,13 @@ export function RightDetailPanel({
           </div>
         </section>
       ) : null}
+      {activePanel === "todos" || activePanel === "running" ? (
+        <ProjectGroupedSummary
+          groups={activePanel === "todos" ? projectTodoGroups : projectRunningGroups}
+          mode={activePanel}
+          onNavigate={onNavigate}
+        />
+      ) : null}
       <section className="status-pane">
         <h2>
           {rightPanelFeedTitle(activePanel)}
@@ -390,6 +462,123 @@ export function RightDetailPanel({
   );
 }
 
+function ProjectGroupedSummary({
+  groups,
+  mode,
+  onNavigate,
+}: {
+  groups: RightProjectGroup[];
+  mode: "todos" | "running";
+  onNavigate: (view: ViewKey) => void;
+}) {
+  const itemCount = groups.reduce((count, group) => count + projectGroupItemsForMode(group, mode).length, 0);
+
+  return (
+    <section className="status-pane right-project-groups">
+      <h2>
+        按项目
+        <span>
+          {groups.length} 项目 / {itemCount} 项
+        </span>
+      </h2>
+      <p className="muted small-note">
+        只按 workflow-state 的项目工作流归组；全局会话、运行队列和诊断摘要继续留在下方。
+      </p>
+      {groups.length ? (
+        <div className="right-project-group-list">
+          {groups.slice(0, 6).map((group) => {
+            const items = projectGroupItemsForMode(group, mode);
+            return (
+              <button className="right-project-group" type="button" key={`${mode}-${group.id}`} onClick={() => onNavigate("projects")}>
+                <span className="right-project-group-head">
+                  <b>{group.title}</b>
+                  <small>{shortProjectRoot(group.projectRoot)}</small>
+                </span>
+                <span className="right-project-group-counts">
+                  <span>
+                    {projectGroupModeLabel(mode)} {items.length}
+                  </span>
+                  <span>{items.filter((item) => item.tone === "warn").length} 需看</span>
+                  <span>{items.filter((item) => item.tone === "run").length} 运行</span>
+                </span>
+                <span className="right-project-group-preview">
+                  {items.slice(0, 3).map((item) => (
+                    <span key={item.id}>
+                      {item.title} · {item.meta}
+                    </span>
+                  ))}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="muted small-note">当前没有能归属到项目工作流的{projectGroupModeLabel(mode)}项。</p>
+      )}
+    </section>
+  );
+}
+
+function buildRightProjectGroups(workflowState: WorkflowStateSnapshot | null): RightProjectGroup[] {
+  return (workflowState?.project_workflows ?? []).map((workflow) => {
+    const todoTaskItems: RightProjectGroupItem[] = workflow.task_drafts
+      .filter((task) => RIGHT_PROJECT_TODO_TASK_STATES.has(task.state))
+      .map((task) => ({
+        id: `task:${task.work_item_id}`,
+        title: task.title,
+        meta: displayStatus(task.state),
+        tone: task.state === "waiting_for_permission" || task.state === "retry_pending" ? "warn" : "ok",
+      }));
+    const permissionItems: RightProjectGroupItem[] = workflow.permission_requests
+      .filter((request) => isPendingProjectPermission(request.status))
+      .map((request) => {
+        const relatedTask = workflow.task_drafts.find((task) => task.work_item_id === request.work_item_id);
+        return {
+          id: `permission:${request.request_id}`,
+          title: request.reason || relatedTask?.title || request.request_id,
+          meta: `${displayStatus(request.status)} · ${displayStatus(request.permission_kind)}`,
+          tone: "warn" as const,
+        };
+      });
+    const runningItems: RightProjectGroupItem[] = workflow.task_drafts
+      .filter((task) => RIGHT_PROJECT_RUNNING_TASK_STATES.has(task.state))
+      .map((task) => ({
+        id: `running:${task.work_item_id}`,
+        title: task.title,
+        meta: `${displayStatus(task.state)} · ${workflow.title}`,
+        tone: task.state === "waiting_for_permission" ? "warn" : task.state === "running" ? "run" : "ok",
+      }));
+
+    return {
+      id: workflow.workflow_id,
+      title: workflow.title,
+      projectRoot: workflow.project_root,
+      todoItems: [...todoTaskItems, ...permissionItems],
+      runningItems,
+    };
+  });
+}
+
+function projectGroupItemsForMode(group: RightProjectGroup, mode: "todos" | "running") {
+  return mode === "todos" ? group.todoItems : group.runningItems;
+}
+
+function projectGroupModeLabel(mode: "todos" | "running") {
+  return mode === "todos" ? "待办" : "运行";
+}
+
+function shortProjectRoot(projectRoot: string) {
+  const parts = projectRoot.split("/").filter(Boolean);
+  return parts.slice(-2).join("/") || projectRoot || "未登记路径";
+}
+
+const RIGHT_PROJECT_TODO_TASK_STATES = new Set(["waiting_for_permission", "ready_for_review", "retry_pending"]);
+const RIGHT_PROJECT_RUNNING_TASK_STATES = new Set(["running", "waiting_for_permission", "retry_pending", "ready_to_dispatch", "ready_for_review"]);
+
+function isPendingProjectPermission(status: string) {
+  return !["approved", "accepted", "done", "completed", "closed", "cancelled", "canceled"].includes(status);
+}
+
 function confirmationKindLabel(value: string) {
   const labels: Record<string, string> = {
     execute_confirmation: "执行确认",
@@ -430,6 +619,7 @@ function RightStat({ label, value }: { label: string; value: number }) {
 function rightPanelTitle(panel: RightPanelKey) {
   if (panel === "notifications") return "通知";
   if (panel === "todos") return "待办";
+  if (panel === "ideas") return "想法箱";
   if (panel === "audit") return "管理";
   if (panel === "secretary") return "秘书只读摘要";
   return "运行中";
@@ -438,6 +628,7 @@ function rightPanelTitle(panel: RightPanelKey) {
 function rightPanelFeedTitle(panel: RightPanelKey) {
   if (panel === "notifications") return "通知摘要";
   if (panel === "todos") return "待处理事项";
+  if (panel === "ideas") return "想法线索";
   if (panel === "audit") return "管理摘要";
   if (panel === "running") return "运行中摘要";
   return "摘要";
@@ -446,6 +637,7 @@ function rightPanelFeedTitle(panel: RightPanelKey) {
 function rightPanelBoundaryNote(panel: RightPanelKey) {
   if (panel === "notifications") return "通知只解释当前读取、风险和降级状态；不触发修复或执行。";
   if (panel === "todos") return "待办只整理需要用户查看的事项；不替用户批准、派发或写入状态。";
+  if (panel === "ideas") return "想法箱只收纳可见线索；不创建任务、不写事实、不替代用户确认。";
   if (panel === "audit") return "管理收纳健康、诊断、日志和审计摘要；原始材料仍在开发者区或详情中查看。";
   return "运行中只汇总工作流和会话关注项；不停止、恢复、重试或启动真实执行。";
 }
@@ -454,6 +646,7 @@ function rightPanelTargetView(panel: RightPanelKey): ViewKey {
   if (panel === "running") return "runningWorkflows";
   if (panel === "audit") return "settings";
   if (panel === "todos") return "projects";
+  if (panel === "ideas") return "ideas";
   return "home";
 }
 

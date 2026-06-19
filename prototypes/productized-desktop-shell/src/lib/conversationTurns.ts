@@ -57,13 +57,21 @@ function isCleanConversationEvent(event: CodexTranscriptEvent, allowResponseItem
   return !isSystemInjectedText(event.text ?? "");
 }
 
+function isPendingConversationEvent(event: CodexTranscriptEvent): boolean {
+  return metadataOf(event)?.conversation_engine_pending === true && isCleanConversationEvent(event, true);
+}
+
 export function conversationTurns(events: CodexTranscriptEvent[]): CodexTranscriptEvent[] {
+  const pending = events.filter(isPendingConversationEvent);
   const fromEventMsg = events.filter((event) => rawTypeOf(event) === "event_msg" && isCleanConversationEvent(event, false));
   if (fromEventMsg.length === 0) return events.filter((event) => isCleanConversationEvent(event, true));
 
   const hasUser = fromEventMsg.some((event) => event.event_type === "user_message");
   const hasAssistant = fromEventMsg.some((event) => event.event_type === "assistant_message");
-  if (hasUser && hasAssistant) return fromEventMsg;
+  if (hasUser && hasAssistant) {
+    const selectedIds = new Set([...fromEventMsg, ...pending].map((event) => event.event_id));
+    return events.filter((event) => selectedIds.has(event.event_id));
+  }
 
   const fallback = events.filter((event) => {
     if (rawTypeOf(event) !== "response_item") return false;
@@ -72,6 +80,6 @@ export function conversationTurns(events: CodexTranscriptEvent[]): CodexTranscri
     if (!hasAssistant && event.event_type === "assistant_message") return true;
     return false;
   });
-  const selectedIds = new Set([...fromEventMsg, ...fallback].map((event) => event.event_id));
+  const selectedIds = new Set([...fromEventMsg, ...fallback, ...pending].map((event) => event.event_id));
   return events.filter((event) => selectedIds.has(event.event_id));
 }

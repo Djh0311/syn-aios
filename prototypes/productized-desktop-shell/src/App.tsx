@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { PermissionDialog } from "./components/PermissionDialog";
+import { renderActiveWorkbenchView } from "./components/ActiveWorkbenchView";
 import { RightDetailPanel } from "./components/RightDetailPanel";
+import { WorkbenchShell } from "./components/WorkbenchShell";
 import {
   adoptMemoryCandidateToFormalMemory,
   bootstrapProjectWorkflow,
@@ -16,12 +16,7 @@ import {
   generateStageCAcceptanceSummary,
   generateTaskPackageFile,
   initializeWorkflowState,
-  inspectAutoDispatchAuthorization,
-  inspectTaskPackageDispatchReadiness,
-  inspectWorkflowRunCheck,
   loadBlackboardCandidateStore,
-  loadCodexSessionTranscript,
-  loadCodexSessionTranscriptPage,
   loadFormalMemoryStore,
   loadMemoryCaptureStore,
   loadMemoryCandidateStore,
@@ -36,7 +31,6 @@ import {
   prepareOfflineRoleDispatch,
   previewProjectDirectorTaskPlan,
   previewMemoryEntityRelationCandidates,
-  previewMaturePatterns,
   recordProjectDirectorProcessFactDecision,
   recordWorkerStructuredReport,
   recordBlackboardCandidateDecision,
@@ -56,7 +50,6 @@ import {
   recordProjectConsultationProposalDecision,
   recordUserResultDecision,
   queryWorkbenchPageReadModel,
-  renderTaskPackagePreview,
   previewFormalMemoryLifecycleOperation,
   previewTaskMemoryPacket,
   runProjectWorkflowAutomationPhaseA,
@@ -66,24 +59,23 @@ import {
   updateWorkItemState,
   unbindWorkflowNodeCodexSession,
 } from "./lib/tauri";
+import {
+  browserPreviewSessionPage,
+  browserPreviewSnapshot,
+  browserPreviewTranscript,
+} from "./lib/browserPreviewSnapshot";
 import { emptySnapshot } from "./lib/emptySnapshot";
 import { loadWorkbenchSnapshotFromPageQueries } from "./lib/pageReadModelRuntime";
 import { deriveSecretaryContext } from "./lib/secretaryReadModel";
-import type { BlackboardCandidateStoreV1, FormalMemoryStoreV1, MemoryCaptureStoreV1, MemoryCandidateStoreV1, MemoryEntityRelationStoreV1, MemoryLintStoreV1, MemoryPatternStoreV1, ObservationStoreV1, PendingAction, PlanAuthorizationStoreV1, PreviewProjectDirectorTaskPlanInput, ProjectConsultationProposalStoreV1, ProjectDirectorTaskPlan, WorkbenchSnapshot, TaskMemoryPacketBuildInput, TaskMemoryPacketBuildOutput, WorkflowStateSnapshot } from "./lib/types";
+import { setTauriWindowTitle } from "./lib/tauriWindow";
+import type { BlackboardCandidateStoreV1, FormalMemoryStoreV1, MemoryCaptureStoreV1, MemoryCandidateStoreV1, MemoryEntityRelationStoreV1, MemoryLintStoreV1, MemoryPatternStoreV1, ObservationStoreV1, PendingAction, PlanAuthorizationStoreV1, ProjectConsultationProposalStoreV1, WorkbenchSnapshot, WorkflowStateSnapshot } from "./lib/types";
 import { devNavItems, homeNavItem, primaryNavItems, settingsNavItem, workspaceRailItems } from "./lib/workbenchNavigation";
 import type { RightPanelKey, ViewKey } from "./lib/workbenchNavigation";
-import { AgentView } from "./views/AgentView";
-import { CanvasViewWithProvider } from "./views/CanvasView";
-import { HarnessBoardView } from "./views/HarnessBoardView";
-import { HomeView } from "./views/HomeView";
-import { KnowledgeBaseView } from "./views/KnowledgeBaseView";
-import { MemoryCenterView } from "./views/MemoryCenterView";
-import { ProjectsView } from "./views/ProjectsView";
-import { RunningWorkflowsView } from "./views/RunningWorkflowsView";
-import { SettingsView } from "./views/SettingsView";
-import { SkillsBoardView } from "./views/SkillsBoardView";
 
 export { RightDetailPanel, workspaceRailItems };
+
+const viteEnv = import.meta.env ?? {};
+const browserPreviewEnabled = viteEnv.DEV === true && !("__TAURI_INTERNALS__" in window);
 
 const stageKInitialViewKeys = new Set<ViewKey>([
   homeNavItem.key,
@@ -93,7 +85,7 @@ const stageKInitialViewKeys = new Set<ViewKey>([
 ]);
 
 function stageKInitialView(): ViewKey {
-  const requested = import.meta.env.VITE_STAGE_K_INITIAL_VIEW;
+  const requested = viteEnv.VITE_STAGE_K_INITIAL_VIEW;
   if (!requested) return "home";
   return stageKInitialViewKeys.has(requested as ViewKey) ? (requested as ViewKey) : "home";
 }
@@ -126,14 +118,14 @@ export function App() {
   useEffect(() => {
     document.getElementById("tauri-boot-visible-probe")?.remove();
 
-    if (!import.meta.env.DEV) return;
+    if (viteEnv.DEV !== true) return;
 
     document.documentElement.dataset.appBoot = "mounted";
-    void getCurrentWindow()
-      .setTitle("Codex 治理工作台 · 首屏已挂载")
-      .catch(() => {
+    void setTauriWindowTitle("Codex 治理工作台 · 首屏已挂载").then((available) => {
+      if (!available) {
         document.documentElement.dataset.appTitleProbe = "unavailable";
-      });
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -143,6 +135,12 @@ export function App() {
   async function reload() {
     setNotice("正在读取索引。");
     setError(false);
+    if (browserPreviewEnabled) {
+      setSnapshot(browserPreviewSnapshot);
+      setWorkflowState(null);
+      setNotice("浏览器预览模式：使用示例会话数据；真实读取和发送请用 Tauri 桌面壳。");
+      return;
+    }
     try {
       const { snapshot: nextSnapshot } = await loadWorkbenchSnapshotFromPageQueries(queryWorkbenchPageReadModel);
       setSnapshot(nextSnapshot);
@@ -156,6 +154,12 @@ export function App() {
   }
 
   async function reloadWorkflowState() {
+    if (browserPreviewEnabled) {
+      setWorkflowState(null);
+      setWorkflowStateError(null);
+      setWorkflowStateLoading(false);
+      return;
+    }
     setWorkflowStateLoading(true);
     setWorkflowStateError(null);
     try {
@@ -171,6 +175,7 @@ export function App() {
   }
 
   async function reloadCandidateStores() {
+    if (browserPreviewEnabled) return;
     try {
       const [
         nextBlackboardStore,
@@ -612,94 +617,54 @@ export function App() {
   const isDeveloperView = devNavItems.some((item) => item.key === activeView);
 
   return (
-    <div className={`app-shell ${activeRightPanel ? "right-pane-open" : ""}`}>
-      <header className="shell-topbar ink-shell">
-        <label className="search-box">
-          <span aria-hidden="true">⌕</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="跨项目 · 跨智能体 · 跨工作流" aria-label="跨项目、跨智能体、跨工作流检索" />
-          <kbd>⌘K</kbd>
-        </label>
-        <div className="topbar-actions">
-          {topbarReviewCount > 0 ? (
-            <button className="pending-review-button" type="button" onClick={() => setActiveRightPanel("todos")}>
-              {topbarReviewCount} 待审
-            </button>
-          ) : null}
-          <span className="meta-text">{displaySnapshot.summary.project_count} 项目</span>
-          <button className="secondary-button icon-button" type="button" onClick={() => void reload()} aria-label="重新读取">↺</button>
-          <span className={`top-health-dot ${error ? "error" : ""}`} title={error ? "需处理" : "可用"} aria-label={error ? "需处理" : "可用"} />
-        </div>
-      </header>
-
-      <aside className="sidebar ink-shell">
-        <div className="sidebar-inner">
-          <button
-            className={`brand brand-home-button ${activeView === "home" ? "active" : ""}`}
-            type="button"
-            onClick={() => setActiveView("home")}
-            title="首页"
-          >
-            <span className="brand-mark">案</span>
-            <span className="brand-name">本地智能工作台</span>
-          </button>
-          <nav className="sidebar-nav" aria-label="主导航">
-            <p className="nav-section-label">工作台</p>
-            <div className="nav-list">
-              {primaryNavItems.map((item) => (
-                <button
-                  className={`nav-item ${activeView === item.key ? "active" : ""}`}
-                  key={item.key}
-                  type="button"
-                  onClick={() => setActiveView(item.key)}
-                  title={item.label}
-                >
-                  <span className="nav-glyph" aria-hidden="true">{item.glyph}</span>
-                  <span className="nav-label">{item.label}</span>
-                </button>
-              ))}
-            </div>
-            <div className="nav-list settings-nav-list" aria-label="设置入口">
-              <button
-                className={`nav-item ${activeView === settingsNavItem.key || isDeveloperView ? "active" : ""}`}
-                type="button"
-                onClick={() => setActiveView(settingsNavItem.key)}
-                title={settingsNavItem.label}
-              >
-                <span className="nav-glyph" aria-hidden="true">{settingsNavItem.glyph}</span>
-                <span className="nav-label">{settingsNavItem.label}</span>
-              </button>
-            </div>
-          </nav>
-        </div>
-      </aside>
-
-      <main
-        className={`main-panel stage ${activeView === "projects" ? "project-stage" : ""} ${
-          activeView === "agents" ? "agent-stage" : ""
-        }`}
-      >
-        {notice || error ? (
-          <section className={`notice-panel ${error ? "error" : ""}`} aria-live="polite">
-            <strong>{error ? "需要处理" : "状态"}</strong>
-            <span>{notice}</span>
-          </section>
-        ) : null}
-
-        {renderActiveView(
-          activeView,
-          displaySnapshot,
-          setPendingAction,
-          setActiveView,
+    <WorkbenchShell
+      activeRightPanel={activeRightPanel}
+      activeView={activeView}
+      actionBusy={actionBusy}
+      displaySnapshot={displaySnapshot}
+      error={error}
+      isDeveloperView={isDeveloperView}
+      memoryCandidateStore={memoryCandidateStore}
+      memoryCaptureStore={memoryCaptureStore}
+      notice={notice}
+      pendingAction={pendingAction}
+      query={query}
+      rightStats={rightStats}
+      secretaryContext={secretaryContext}
+      topbarReviewCount={topbarReviewCount}
+      workflowState={workflowState}
+      workflowStateError={workflowStateError}
+      workflowStateLoading={workflowStateLoading}
+      onActiveRightPanelChange={setActiveRightPanel}
+      onActiveViewChange={setActiveView}
+      onCancelAction={() => setPendingAction(null)}
+      onConfirmAction={confirmAction}
+      onQueryChange={setQuery}
+      onReload={reload}
+      onReloadWorkflowState={reloadWorkflowState}
+    >
+        {renderActiveWorkbenchView({
+          view: activeView,
+          snapshot: displaySnapshot,
+          onRequestAction: setPendingAction,
+          onNavigate: setActiveView,
           workflowState,
           workflowStateLoading,
           workflowStateError,
-          reloadWorkflowState,
-          setNotice,
-          Boolean(filteredSnapshot),
-          (threadId) => {
+          onReloadWorkflowState: reloadWorkflowState,
+          onNotice: setNotice,
+          hasRealSnapshot: Boolean(filteredSnapshot),
+          onOpenAgentSession: (threadId) => {
             setFocusedAgentThreadId(threadId);
             setActiveView("agents");
           },
+          browserPreviewData: browserPreviewEnabled
+            ? {
+                loadSessionPage: (request) => Promise.resolve(browserPreviewSessionPage(request)),
+                loadTranscript: (threadId) => Promise.resolve(browserPreviewTranscript(threadId)),
+                loadTranscriptPage: (request) => Promise.resolve(browserPreviewTranscript(request.thread_id)),
+              }
+            : undefined,
           focusedAgentThreadId,
           blackboardCandidateStore,
           planAuthorizationStore,
@@ -711,362 +676,12 @@ export function App() {
           memoryLintStore,
           memoryEntityRelationStore,
           memoryPatternStore,
-          previewTaskMemoryPacket,
-          previewProjectDirectorTaskPlan,
-          previewFormalMemoryLifecycleOperation,
-          previewMemoryEntityRelationCandidates,
-          previewMaturePatterns,
-        )}
-      </main>
-
-      <aside className="status-rail ink-shell" aria-label="工作台入口">
-        <div className="right-icon-strip">
-          {workspaceRailItems.map((item) => (
-            <button
-              className={`rail-icon-button ${activeRightPanel === item.key ? "active" : ""}`}
-              key={item.key}
-              type="button"
-              title={item.label}
-              aria-label={item.label}
-              aria-expanded={activeRightPanel === item.key}
-              onClick={() => setActiveRightPanel((current) => (current === item.key ? null : item.key))}
-            >
-              <span aria-hidden="true">{item.glyph}</span>
-            </button>
-          ))}
-          <div className="rail-mini-stats" aria-label="工作台状态摘要">
-            {rightStats.map((stat) => (
-              <span key={stat.label} title={`${stat.label} ${stat.value}`}>
-                {stat.value}
-              </span>
-            ))}
-          </div>
-          <span
-            className={`rail-health-dot ${error || workflowStateError ? "error" : workflowStateLoading ? "loading" : ""}`}
-            title={workflowStateError ?? (workflowStateLoading ? "读取中" : "状态可用")}
-            aria-label={workflowStateError ?? (workflowStateLoading ? "读取中" : "状态可用")}
-          />
-        </div>
-        {activeRightPanel ? (
-          <RightDetailPanel
-            activePanel={activeRightPanel}
-            snapshot={displaySnapshot}
-            workflowState={workflowState}
-            notice={notice}
-            error={error || Boolean(workflowStateError)}
-            workflowStateError={workflowStateError}
-            memoryCaptureStore={memoryCaptureStore}
-            memoryCandidateStore={memoryCandidateStore}
-            secretaryContext={secretaryContext}
-            onClose={() => setActiveRightPanel(null)}
-            onNavigate={setActiveView}
-            onReloadWorkflowState={reloadWorkflowState}
-          />
-        ) : null}
-      </aside>
-
-      <footer className="dock ink-shell" aria-label="秘书对话框">
-        <button
-          className="secretary secretary-dock-trigger"
-          type="button"
-          onClick={() => setActiveRightPanel("secretary")}
-          aria-label="打开秘书对话"
-        >
-          <span className="secretary-orb" aria-hidden="true" />
-          <span>秘 书 · 辅 助</span>
-        </button>
-        <div className="dock-input-wrap">
-          <span className="prompt" aria-hidden="true">›</span>
-          <input
-            className="dock-input"
-            readOnly
-            onFocus={() => setActiveRightPanel("secretary")}
-            onClick={() => setActiveRightPanel("secretary")}
-            placeholder="让秘书解释、整理、提醒或说明影响面（预览）"
-            aria-label="秘书对话输入预览，点击打开秘书"
-          />
-          <div className="dock-chips" aria-label="秘书快捷入口">
-            <button className="chip" type="button" onClick={() => setActiveRightPanel("secretary")}>解释</button>
-            <button className="chip" type="button" onClick={() => setActiveRightPanel("secretary")}>整理</button>
-            <button className="chip" type="button" onClick={() => setActiveRightPanel("secretary")}>提醒</button>
-            <button className="chip" type="button" onClick={() => setActiveRightPanel("secretary")}>影响面</button>
-            <button className="chip send" type="button" onClick={() => setActiveRightPanel("secretary")}>打开秘书</button>
-          </div>
-        </div>
-      </footer>
-
-      <PermissionDialog
-        action={pendingAction}
-        busy={actionBusy}
-        onCancel={() => setPendingAction(null)}
-        onConfirm={() => void confirmAction()}
-      />
-
-      <button
-        className={`secretary-float ${activeRightPanel === "secretary" ? "active" : ""}`}
-        type="button"
-        aria-label="打开秘书"
-        onClick={() => setActiveRightPanel((current) => (current === "secretary" ? null : "secretary"))}
-      >
-        <span aria-hidden="true">秘</span>
-        {topbarReviewCount > 0 ? <i>{topbarReviewCount}</i> : null}
-      </button>
-    </div>
-  );
-}
-
-function renderActiveView(
-  view: ViewKey,
-  snapshot: WorkbenchSnapshot,
-  onRequestAction: (action: PendingAction) => void,
-  onNavigate: (view: ViewKey) => void,
-  workflowState: WorkflowStateSnapshot | null,
-  workflowStateLoading: boolean,
-  workflowStateError: string | null,
-  onReloadWorkflowState: () => void,
-  onNotice: (msg: string) => void,
-  hasRealSnapshot: boolean,
-  onOpenAgentSession: (threadId: string) => void,
-  focusedAgentThreadId?: string | null,
-  blackboardCandidateStore?: BlackboardCandidateStoreV1 | null,
-  planAuthorizationStore?: PlanAuthorizationStoreV1 | null,
-  projectConsultationProposalStore?: ProjectConsultationProposalStoreV1 | null,
-  observationStore?: ObservationStoreV1 | null,
-  memoryCaptureStore?: MemoryCaptureStoreV1 | null,
-  memoryCandidateStore?: MemoryCandidateStoreV1 | null,
-  formalMemoryStore?: FormalMemoryStoreV1 | null,
-  memoryLintStore?: MemoryLintStoreV1 | null,
-  memoryEntityRelationStore?: MemoryEntityRelationStoreV1 | null,
-  memoryPatternStore?: MemoryPatternStoreV1 | null,
-  onPreviewTaskMemoryPacket?: (request: TaskMemoryPacketBuildInput) => Promise<TaskMemoryPacketBuildOutput>,
-  onPreviewProjectDirectorTaskPlan?: (request: PreviewProjectDirectorTaskPlanInput) => Promise<ProjectDirectorTaskPlan>,
-  onPreviewFormalMemoryLifecycle?: Parameters<typeof MemoryCenterView>[0]["onPreviewFormalMemoryLifecycle"],
-  onPreviewMemoryEntityRelationCandidates?: Parameters<typeof MemoryCenterView>[0]["onPreviewMemoryEntityRelationCandidates"],
-  onPreviewMaturePatterns?: Parameters<typeof MemoryCenterView>[0]["onPreviewMaturePatterns"],
-) {
-  if (view === "agents") {
-    return (
-      <AgentView
-        sessions={snapshot.sessions}
-        projects={snapshot.projects}
-        adapterDescriptors={snapshot.agent_adapters}
-        sessionOperationDescriptors={snapshot.session_operations}
-        providerAvailabilitySummaries={snapshot.provider_availability}
-        sessionContinuationPreviews={snapshot.session_continuation_previews}
-        sessionContinuationStore={snapshot.session_continuation_store}
-        runtimeSessionAttention={snapshot.runtime_session_attention}
-        sessionRunStatusSummaries={snapshot.session_run_status_summaries}
-        realExecutionProductCommands={snapshot.real_execution_product_commands}
-        projectWorkflowAutomation={snapshot.project_workflow_automation}
-        workerProtocol={snapshot.worker_protocol}
-        workflowState={workflowState}
-        focusedThreadId={focusedAgentThreadId}
-        onLoadTranscript={loadCodexSessionTranscript}
-        onLoadTranscriptPage={loadCodexSessionTranscriptPage}
-        onRequestAction={onRequestAction}
-      />
-    );
-  }
-
-  if (view === "projects") {
-    return (
-      <ProjectsView
-        projects={snapshot.projects}
-        sessions={snapshot.sessions}
-        workflowState={workflowState}
-        blackboardCandidateStore={blackboardCandidateStore}
-        planAuthorizationStore={planAuthorizationStore}
-        projectConsultationProposalStore={projectConsultationProposalStore}
-        observationStore={observationStore}
-        memoryCandidateStore={memoryCandidateStore}
-        formalMemoryStore={formalMemoryStore}
-        memoryLintStore={memoryLintStore}
-        runtimeSessionAttention={snapshot.runtime_session_attention}
-        realExecutionProductCommands={snapshot.real_execution_product_commands}
-        projectWorkflowAutomation={snapshot.project_workflow_automation}
-        k3B1Recovery={snapshot.k3_b1_recovery}
-        workflowStateLoading={workflowStateLoading}
-        workflowStateError={workflowStateError}
-        onReloadWorkflowState={onReloadWorkflowState}
-        onRequestAction={onRequestAction}
-        onLoadTranscript={loadCodexSessionTranscript}
-        onRenderTaskPreview={(projectRoot, workItemId) =>
-          renderTaskPackagePreview({ project_root: projectRoot, work_item_id: workItemId })
-        }
-        onInspectDispatchReadiness={(projectRoot, workItemId) =>
-          inspectTaskPackageDispatchReadiness({ project_root: projectRoot, work_item_id: workItemId })
-        }
-        onInspectWorkflowRunCheck={(projectRoot, workflowId) =>
-          inspectWorkflowRunCheck({ project_root: projectRoot, workflow_id: workflowId })
-        }
-        onInspectAutoDispatchAuthorization={inspectAutoDispatchAuthorization}
-        onPreviewTaskMemoryPacket={onPreviewTaskMemoryPacket}
-        onPreviewProjectDirectorTaskPlan={onPreviewProjectDirectorTaskPlan}
-        onOpenAgentSession={onOpenAgentSession}
-      />
-    );
-  }
-
-  if (view === "skills") {
-    return <SkillsBoardView skills={snapshot.skills} plugins={snapshot.plugins} projects={snapshot.projects} />;
-  }
-
-  if (view === "harness") {
-    return <HarnessBoardView projects={snapshot.projects} />;
-  }
-
-  if (view === "runningWorkflows") {
-    return (
-      <RunningWorkflowsView
-        snapshot={snapshot}
-        workflowState={workflowState}
-        workflowStateLoading={workflowStateLoading}
-        workflowStateError={workflowStateError}
-        memoryCaptureStore={memoryCaptureStore}
-        memoryCandidateStore={memoryCandidateStore}
-        formalMemoryStore={formalMemoryStore}
-        onReloadWorkflowState={onReloadWorkflowState}
-        onNavigate={onNavigate}
-        onRequestAction={onRequestAction}
-      />
-    );
-  }
-
-  if (view === "workflow") {
-    return (
-      <CanvasViewWithProvider
-        canvasId="default"
-        sessions={snapshot.sessions}
-        onNotice={onNotice}
-      />
-    );
-  }
-
-  if (view === "ideas") {
-    return <SourceStylePlaceholder title="想法箱" kicker="想法" hasRealSnapshot={hasRealSnapshot} items={snapshot.tasks.map((task) => `${task.status} · ${task.title}`)} />;
-  }
-
-  if (view === "proposal") {
-    return <SourceStylePlaceholder title="建议方案" kicker="方案" hasRealSnapshot={hasRealSnapshot} items={snapshot.projects.slice(0, 4).map((project) => `${project.name} · ${project.context_warnings.length + project.warnings.length} 条警告`)} />;
-  }
-
-  if (view === "knowledge") {
-    return (
-      <KnowledgeBaseView
-        projects={snapshot.projects}
-        workflowState={workflowState}
-        formalMemoryStore={formalMemoryStore}
-        memoryCaptureStore={memoryCaptureStore}
-        memoryCandidateStore={memoryCandidateStore}
-        hasRealSnapshot={hasRealSnapshot}
-        onRequestAction={onRequestAction}
-      />
-    );
-  }
-
-  if (view === "memory") {
-    return (
-      <MemoryCenterView
-        projects={snapshot.projects}
-        workflowState={workflowState}
-        formalMemoryStore={formalMemoryStore}
-        memoryCaptureStore={memoryCaptureStore}
-        memoryCandidateStore={memoryCandidateStore}
-        observationStore={observationStore}
-        memoryLintStore={memoryLintStore}
-        memoryEntityRelationStore={memoryEntityRelationStore}
-        memoryPatternStore={memoryPatternStore}
-        hasRealSnapshot={hasRealSnapshot}
-        onRequestAction={onRequestAction}
-        onPreviewFormalMemoryLifecycle={onPreviewFormalMemoryLifecycle}
-        onPreviewMemoryEntityRelationCandidates={onPreviewMemoryEntityRelationCandidates}
-        onPreviewMaturePatterns={onPreviewMaturePatterns}
-      />
-    );
-  }
-
-  if (view === "tools") {
-    return <SourceStylePlaceholder title="工具" kicker="工具" hasRealSnapshot={hasRealSnapshot} items={snapshot.projects.flatMap((project) => project.harness_resources.map((resource) => `${project.name} · ${resource.display_name ?? resource.root_path}`)).slice(0, 6)} />;
-  }
-
-  if (view === "models") {
-    return <SourceStylePlaceholder title="模型 / 凭据" kicker="模型" hasRealSnapshot={hasRealSnapshot} items={["未接真实模型池和凭据状态；入口已按源稿保留。"]} />;
-  }
-
-  if (view === "settings") {
-    return (
-      <SettingsView
-        snapshot={snapshot}
-        workflowState={workflowState}
-        workflowStateError={workflowStateError}
-        hasRealSnapshot={hasRealSnapshot}
-        developerItems={devNavItems}
-        onNavigate={onNavigate}
-      />
-    );
-  }
-
-  return <HomeView snapshot={snapshot} workflowState={workflowState} onNavigate={onNavigate} />;
-}
-
-function SourceStylePlaceholder({
-  title,
-  kicker,
-  hasRealSnapshot,
-  items,
-}: {
-  title: string;
-  kicker: string;
-  hasRealSnapshot: boolean;
-  items: string[];
-}) {
-  return (
-    <section className="stage-pad source-placeholder">
-      <div className="pg-head">
-        <div>
-          <p className="pg-sub">{kicker}</p>
-          <h1 className="pg-title">{title}</h1>
-        </div>
-        <div className="pg-meta">
-          <div className="big">{hasRealSnapshot ? "索引已读取" : "未接真实数据"}</div>
-          <div>只读入口；不足部分不冒充真实完成</div>
-        </div>
-      </div>
-      <div className="cols cols-2-eq">
-        <section className="panel">
-          <div className="panel-h">
-            当前内容
-            <span className="count">{items.length}</span>
-          </div>
-          {items.length ? (
-            items.map((item) => (
-              <div className="card" key={item}>
-                <div className="c-head">
-                  <span className="c-title">{item.split(" · ")[0]}</span>
-                  <span className="c-meta">只读</span>
-                </div>
-                <div className="c-body">{item}</div>
-              </div>
-            ))
-          ) : (
-            <p className="muted small-note">当前索引没有提供可展示的真实条目。</p>
-          )}
-        </section>
-        <section className="panel">
-          <div className="panel-h">
-            接入状态
-            <span className="count">占位</span>
-          </div>
-          <div className="card lit">
-            <div className="c-head">
-              <span className="c-title">未接真实能力时仅展示入口</span>
-              <span className="c-meta">边界</span>
-            </div>
-            <div className="c-body">这里按源稿结构保留页面，不用假数据冒充已经接入。</div>
-          </div>
-        </section>
-      </div>
-    </section>
+          onPreviewTaskMemoryPacket: previewTaskMemoryPacket,
+          onPreviewProjectDirectorTaskPlan: previewProjectDirectorTaskPlan,
+          onPreviewFormalMemoryLifecycle: previewFormalMemoryLifecycleOperation,
+          onPreviewMemoryEntityRelationCandidates: previewMemoryEntityRelationCandidates,
+        })}
+    </WorkbenchShell>
   );
 }
 

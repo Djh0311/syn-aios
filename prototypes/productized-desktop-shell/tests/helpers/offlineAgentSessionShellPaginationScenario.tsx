@@ -35,7 +35,7 @@ export function runAgentSessionShellPaginationScenario({
   );
   const largeCenterText = visibleText(largeCenter);
   const largeCenterMarkup = renderToStaticMarkup(largeCenter);
-  assert(largeCenterText.includes("已渲染 40 / 90"), "大列表应默认只渲染首个虚拟窗口");
+  assert(largeCenterText.includes("显示 40 / 90"), "大列表应默认只显示首个窗口");
   assert(largeCenterText.includes("显示更多会话"), "大列表应提供继续渲染入口");
   assert(largeCenterText.includes("Large list fixture 39"), "虚拟窗口应包含第 40 条");
   assert(!largeCenterMarkup.includes("Large list fixture 40"), "第 41 条应在加载更多前不进入 DOM");
@@ -56,6 +56,6 @@ export function runAgentSessionShellPaginationScenario({
       onRequestAction={captureAction}
     />,
   );
-  assert(archivedCenterText.includes("显式归档视图"), "归档会话只能出现在显式归档视图说明中");
+  assert(archivedCenterText.includes("当前只看归档"), "归档会话只能出现在归档视图说明中");
   runConversationEngineScenario({ captureAction, session: projectSession });
 }
