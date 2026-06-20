@@ -66,6 +66,24 @@
 
 ---
 
+## 第 4 步 · 岔路已解（2026-06-21 · 主导线亲核 H5 路径）
+
+**问题**：让测试项目真跑,是给旧工作流引擎**新造** runner,还是**走已有真 runner 的 H5 路径**?
+
+**亲核结论**:
+- **真 codex 引线确实已存在且经验证** = `run_real_codex_process`，由 `RealCodexLocalPhaseBProcessRunner.run_phase_b`（`codex_local_runner.rs:131-148`）调用，命令计划走 `command_plan_for`（无条件 `--sandbox`+`--add-dir`、不注入 bypass）。H5 Phase B（`session_continuation_store.rs:587`）与甲·relay 都用它。
+- **但 H5 那条是「会话续跑 / 单条 controlled resume」，不是多节点四角色编排。** 它跑真 codex,但**不会让工作流画布那套编排活起来**。Phase A 还是 noop runner（`session_continuation_store.rs:577`）。
+- **工作流机器（多节点编排）用的是另一个 trait `CodexResumeRunner`，只有 stub。**
+
+**所以三条路**:
+- (A) 给工作流机器**从零造**真 runner（自己写 spawn）——浪费,重复已验证的 spawn。
+- (B) **直接用 H5**——拿不到多节点编排,不满足「画布活起来」。
+- (C) ✅ **建一个薄适配器**:`CodexResumeRunner` 的真实现，把工作流的 resume 选项翻成 `CodexLocalExecutionRequest` → 复用**已验证的 `run_real_codex_process`** 真 spawn。**最小、复用经验证的沙箱化真引线、且让多节点编排真跑。**
+
+**修正落地步骤（替换上面 C 的「调现成真 runner」）**:① 建薄适配器 `CodexResumeRunner → run_real_codex_process`；② 测试项目 + env 双闸（改 block 闸 = 重档,需授权+审 diff）；③ 测试文件夹 `/Users/yoyi/codex-workflow-mario-test` 需补成 git repo（现非 repo）+ 入项目索引；④ 单节点端到端真跑通。
+
+---
+
 ## ⚠️ 第 1 步深核修正（2026-06-21 · 推翻上面 C「翻闸即可」的假设）
 
 深核发现:**工作流引擎从没真跑过 Codex,只有 stub runner(全在 test)**——所以「解封 = 翻闸 + 调现成真 runner」是错的,那个真 runner **不存在**。

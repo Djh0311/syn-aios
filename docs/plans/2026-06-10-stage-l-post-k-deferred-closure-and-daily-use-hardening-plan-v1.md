@@ -1,5 +1,7 @@
 # Stage L Post-K Deferred Closure And Daily-Use Hardening Plan v1
 
+> ⚠️ **状态过期·与 git 矛盾（2026-06-21 核实）。** 本文称「L1-L6 暂挂 `deferred_during_root_treatment`」，但 **L1/L3/L5 实已 commit 落地并线上在用**（`69f89e8` L1 blocked-recovery、`224c9cb` L3 操作控制、`512c047` L5 记忆日 inbox）。当前状态一律以 `CURRENT.md` 为准；核实依据见 `handoffs/2026-06-21-full-project-fact-reconciliation-result-v1.md`。
+
 日期：2026-06-10
 
 状态：计划已创建，L0 已完成，L1 任务包已创建但治理期暂停执行。根据 `decisions/2026-06-10-stage-l-root-treatment-freeze-relationship-v1.md`，Root Treatment / Stage R 治理阶段插队执行；Stage L / L1-L6 暂挂为 `deferred_during_root_treatment`。本文承接 Stage K / K6 final freeze，仍是治理收口后恢复 Stage L / Stage K 的后续计划，不是当前治理期执行入口。Stage K 已冻结为 `accepted_with_deferred_items`，不是严格无缺口完成；Stage L 的目标仍是把 Stage K 留下的关键 deferred 项收敛成可执行、可验收、可回收的产品化硬化阶段。
