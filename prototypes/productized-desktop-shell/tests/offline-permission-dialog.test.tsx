@@ -75,6 +75,7 @@ import { runK3B1BlockedRecoveryProductPathScenario } from "./helpers/offlineK3B1
 import { runL3OperationControlScenario } from "./helpers/offlineL3OperationControlScenario";
 import { runL5MemoryDailyLoopScenario } from "./helpers/offlineL5MemoryDailyLoopScenario";
 import { runAgentSessionShellPaginationScenario } from "./helpers/offlineAgentSessionShellPaginationScenario";
+import { runCanvasNodeAuthoringScenario } from "./helpers/offlineCanvasNodeAuthoringScenario";
 import { controlledSessionContinuationLevelAStoreFixture, h2DuplicateSessionContinuationStoreFixture } from "./helpers/offlineSessionContinuationStoreFixtures";
 import {
   rightDetailPanelCommonPropsFixture,
@@ -241,6 +242,7 @@ function main() {
   runOfflineRoleOrchestrationScenario();
   runTranscriptCleaningScenario();
   runSessionCenterHardeningScenario();
+  runCanvasNodeAuthoringScenario();
   for (const scenario of scenarios) {
     runPermissionScenario(scenario, capturedActionState);
   }

@@ -5,14 +5,19 @@ import {
   Background,
   Controls,
   MiniMap,
+  Handle,
+  Position,
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
+  useReactFlow,
   type Connection,
   type Edge,
   type EdgeChange,
   type Node,
   type NodeChange,
+  type NodeProps,
+  type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -24,10 +29,21 @@ import {
   type CanvasRunStatus,
 } from "../lib/tauri";
 import { experimentCanvasBoundary, type CanvasSurfaceBoundary } from "../lib/canvasSurfaceBoundaries";
+import {
+  NODE_KIND_PRESETS,
+  SANDBOX_PRESETS,
+  STATUS_PRESETS,
+  canvasNodeToData,
+  createNodeData,
+  dataToCanvasNode,
+  kindAccent,
+  kindLabel,
+  statusTone,
+  type CanvasCustomField,
+  type CanvasNodeData,
+} from "../lib/canvasNodeData";
 import type {
   CanvasDefinition,
-  CanvasNode,
-  CanvasNodeRole,
   SessionRecord,
 } from "../lib/types";
 
@@ -37,25 +53,14 @@ type CanvasViewProps = {
   onNotice: (msg: string) => void;
 };
 
-type FlowNode = Node<{
-  label: string;
-  role: CanvasNodeRole;
-  skill?: string | null;
-  session_id?: string | null;
-}>;
-
-const ROLE_STYLES: Record<CanvasNodeRole, { bg: string; border: string; tone: string }> = {
-  director: { bg: "#fff3e6", border: "#c8602b", tone: "实验主管" },
-  subagent: { bg: "#f4f1e8", border: "#5a6f4a", tone: "子 agent" },
-};
+type FlowNode = Node<CanvasNodeData>;
 
 function toFlowNodes(canvas: CanvasDefinition): FlowNode[] {
   return canvas.nodes.map((n) => ({
     id: n.id,
     position: n.position,
-    data: { label: n.label, role: n.role, skill: n.skill, session_id: n.session_id },
-    style: nodeStyle(n.role),
-    type: "default",
+    data: canvasNodeToData(n),
+    type: "canvasNode",
   }));
 }
 
@@ -68,31 +73,10 @@ function toFlowEdges(canvas: CanvasDefinition): Edge[] {
   }));
 }
 
-function nodeStyle(role: CanvasNodeRole): React.CSSProperties {
-  const s = ROLE_STYLES[role];
-  return {
-    background: s.bg,
-    border: `2px solid ${s.border}`,
-    padding: 8,
-    borderRadius: 6,
-    fontSize: 13,
-    minWidth: 140,
-    textAlign: "left",
-  };
-}
-
 function fromFlow(canvas: CanvasDefinition, nodes: FlowNode[], edges: Edge[]): CanvasDefinition {
-  const merged: CanvasNode[] = nodes.map((fn) => {
+  const merged = nodes.map((fn) => {
     const prior = canvas.nodes.find((n) => n.id === fn.id);
-    return {
-      id: fn.id,
-      role: fn.data.role,
-      label: fn.data.label,
-      skill: fn.data.skill ?? null,
-      session_id: fn.data.session_id ?? null,
-      position: { x: fn.position.x, y: fn.position.y },
-      warnings: prior?.warnings ?? [],
-    };
+    return dataToCanvasNode(fn.id, fn.data, fn.position, prior?.warnings ?? []);
   });
   return {
     ...canvas,
@@ -159,20 +143,35 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
     setDirty(true);
   }, []);
 
-  const addNode = useCallback((role: CanvasNodeRole) => {
-    const id = `${role}-${Date.now().toString(36).slice(-5)}`;
-    const label = role === "director" ? "实验主管" : "新子 agent";
-    const offset = nodes.length * 30;
-    const fn: FlowNode = {
-      id,
-      position: { x: 80 + offset, y: 80 + offset },
-      data: { label, role, skill: role === "subagent" ? "" : null, session_id: null },
-      style: nodeStyle(role),
-    };
-    setNodes((curr) => [...curr, fn]);
+  const { screenToFlowPosition } = useReactFlow();
+
+  const addNode = useCallback((kind: string, position?: { x: number; y: number }) => {
+    const id = `${kind}-${Date.now().toString(36).slice(-5)}-${Math.random().toString(36).slice(2, 5)}`;
+    setNodes((curr) => {
+      const offset = curr.length * 28;
+      const fn: FlowNode = {
+        id,
+        position: position ?? { x: 80 + offset, y: 80 + offset },
+        data: createNodeData(kind),
+        type: "canvasNode",
+      };
+      return [...curr, fn];
+    });
     setSelected(id);
     setDirty(true);
-  }, [nodes.length]);
+  }, []);
+
+  const onPaneDoubleClick = useCallback(
+    (event: React.MouseEvent) => {
+      // Double-click empty canvas → drop a fresh node where the cursor is. Only
+      // when the pane itself was hit, so double-clicking a node still selects it.
+      const target = event.target as HTMLElement | null;
+      if (!target || !target.classList.contains("react-flow__pane")) return;
+      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      addNode("subagent", position);
+    },
+    [addNode, screenToFlowPosition],
+  );
 
   const updateSelected = useCallback(
     (patch: Partial<FlowNode["data"]>) => {
@@ -252,6 +251,8 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
     [nodes, selected],
   );
 
+  const nodeTypes = useMemo<NodeTypes>(() => ({ canvasNode: CanvasFlowNode }), []);
+
   if (error) {
     return (
       <section className="canvas-view canvas-load-fallback">
@@ -307,9 +308,24 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
         <aside className="canvas-side">
           <ExperimentCanvasBoundaryPanel boundary={experimentCanvasBoundary} />
           <fieldset>
-            <legend>新增节点</legend>
-            <button onClick={() => addNode("director")} disabled={busy}>+ 实验主管</button>
-            <button onClick={() => addNode("subagent")} disabled={busy}>+ 子智能体</button>
+            <legend>节点调色板</legend>
+            <div className="canvas-palette">
+              {NODE_KIND_PRESETS.map((preset) => (
+                <button
+                  key={preset.kind}
+                  type="button"
+                  className="canvas-palette-chip"
+                  style={{ borderColor: preset.accent }}
+                  onClick={() => addNode(preset.kind)}
+                  disabled={busy}
+                  title={preset.hint}
+                >
+                  <span className="canvas-palette-dot" style={{ background: preset.accent }} aria-hidden="true" />
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            <p className="canvas-hint">点种类建节点；或在空白处双击建节点。种类、字段都可在下方自由改。</p>
           </fieldset>
           <fieldset>
             <legend>节点编辑</legend>
@@ -356,10 +372,11 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
             )}
           </fieldset>
         </aside>
-        <div className="canvas-flow">
+        <div className="canvas-flow" onDoubleClick={onPaneDoubleClick}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
+            nodeTypes={nodeTypes}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
@@ -384,6 +401,41 @@ export function CanvasViewWithProvider(props: CanvasViewProps) {
   );
 }
 
+// A1 · custom React Flow node. Beyond a colour block: title + kind badge +
+// status light + a few key fields, with explicit handles so any node can be
+// freely wired to any other.
+function CanvasFlowNode({ data, selected }: NodeProps<FlowNode>) {
+  const accent = kindAccent(data.kind);
+  const preview = data.prompt.trim().split(/\r?\n/)[0] ?? "";
+  return (
+    <div className={`canvas-node-card${selected ? " selected" : ""}`} style={{ borderColor: accent }}>
+      <Handle type="target" position={Position.Left} />
+      <header className="cnc-head">
+        <span className="cnc-kind" style={{ background: accent }}>{kindLabel(data.kind)}</span>
+        <span className="cnc-status" title={`状态：${data.status}`}>
+          <span className="cnc-status-dot" style={{ background: statusTone(data.status) }} aria-hidden="true" />
+          {data.status}
+        </span>
+      </header>
+      <strong className="cnc-name">{data.name || "未命名节点"}</strong>
+      <dl className="cnc-fields">
+        {data.skill ? (
+          <div><dt>技能</dt><dd>{data.skill}</dd></div>
+        ) : null}
+        <div><dt>沙箱</dt><dd>{data.sandbox}</dd></div>
+        <div><dt>会话</dt><dd>{data.session_id ? data.session_id.slice(0, 8) : "未挂"}</dd></div>
+        {preview ? (
+          <div className="cnc-prompt"><dt>提示</dt><dd>{preview}</dd></div>
+        ) : null}
+        {data.fields.length > 0 ? (
+          <div><dt>自定义</dt><dd>{data.fields.length} 项</dd></div>
+        ) : null}
+      </dl>
+      <Handle type="source" position={Position.Right} />
+    </div>
+  );
+}
+
 function NodeEditor({
   node,
   sessions,
@@ -392,49 +444,98 @@ function NodeEditor({
 }: {
   node: FlowNode;
   sessions: SessionRecord[];
-  onChange: (patch: Partial<FlowNode["data"]>) => void;
+  onChange: (patch: Partial<CanvasNodeData>) => void;
   disabled: boolean;
 }) {
+  const data = node.data;
+  const updateField = (id: string, patch: Partial<CanvasCustomField>) => {
+    onChange({ fields: data.fields.map((f) => (f.id === id ? { ...f, ...patch } : f)) });
+  };
+  const addField = () => {
+    const id = `field-${Date.now().toString(36).slice(-5)}-${Math.random().toString(36).slice(2, 5)}`;
+    onChange({ fields: [...data.fields, { id, key: "", value: "" }] });
+  };
+  const removeField = (id: string) => {
+    onChange({ fields: data.fields.filter((f) => f.id !== id) });
+  };
   return (
     <div className="canvas-node-editor">
       <p>
         <strong>编号：</strong> <code>{node.id}</code>
       </p>
       <label>
-        角色
-        <select
-          value={node.data.role}
-          onChange={(e) => onChange({ role: e.target.value as CanvasNodeRole })}
-          disabled={disabled}
-        >
-          <option value="director">实验主管</option>
-          <option value="subagent">子智能体</option>
-        </select>
-      </label>
-      <label>
-        显示名
+        名称
         <input
           type="text"
-          value={node.data.label}
-          onChange={(e) => onChange({ label: e.target.value })}
+          value={data.name}
+          onChange={(e) => onChange({ name: e.target.value })}
           disabled={disabled}
         />
       </label>
-      {node.data.role === "subagent" && (
-        <label>
-          技能 / 岗位
-          <input
-            type="text"
-            value={node.data.skill ?? ""}
-            onChange={(e) => onChange({ skill: e.target.value })}
-            disabled={disabled}
-          />
-        </label>
-      )}
+      <label>
+        种类（自由）
+        <input
+          type="text"
+          list="canvas-node-kinds"
+          value={data.kind}
+          onChange={(e) => onChange({ kind: e.target.value })}
+          disabled={disabled}
+        />
+        <datalist id="canvas-node-kinds">
+          {NODE_KIND_PRESETS.map((preset) => (
+            <option key={preset.kind} value={preset.kind} />
+          ))}
+        </datalist>
+      </label>
+      <label>
+        状态灯
+        <input
+          type="text"
+          list="canvas-node-status"
+          value={data.status}
+          onChange={(e) => onChange({ status: e.target.value })}
+          disabled={disabled}
+        />
+        <datalist id="canvas-node-status">
+          {STATUS_PRESETS.map((status) => (
+            <option key={status} value={status} />
+          ))}
+        </datalist>
+      </label>
+      <label>
+        提示词 prompt
+        <textarea
+          value={data.prompt}
+          onChange={(e) => onChange({ prompt: e.target.value })}
+          rows={3}
+          disabled={disabled}
+        />
+      </label>
+      <label>
+        沙箱
+        <select
+          value={data.sandbox}
+          onChange={(e) => onChange({ sandbox: e.target.value })}
+          disabled={disabled}
+        >
+          {SANDBOX_PRESETS.map((sandbox) => (
+            <option key={sandbox} value={sandbox}>{sandbox}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        技能 / 岗位
+        <input
+          type="text"
+          value={data.skill ?? ""}
+          onChange={(e) => onChange({ skill: e.target.value })}
+          disabled={disabled}
+        />
+      </label>
       <label>
         Codex 会话
         <select
-          value={node.data.session_id ?? ""}
+          value={data.session_id ?? ""}
           onChange={(e) => onChange({ session_id: e.target.value || null })}
           disabled={disabled}
         >
@@ -446,8 +547,39 @@ function NodeEditor({
           ))}
         </select>
       </label>
+      <fieldset className="canvas-custom-fields">
+        <legend>自定义字段</legend>
+        {data.fields.length === 0 ? (
+          <p className="canvas-hint">没有自定义字段。</p>
+        ) : (
+          data.fields.map((field) => (
+            <div className="canvas-custom-field-row" key={field.id}>
+              <input
+                type="text"
+                aria-label="字段名"
+                placeholder="字段名"
+                value={field.key}
+                onChange={(e) => updateField(field.id, { key: e.target.value })}
+                disabled={disabled}
+              />
+              <input
+                type="text"
+                aria-label="字段值"
+                placeholder="字段值"
+                value={field.value}
+                onChange={(e) => updateField(field.id, { value: e.target.value })}
+                disabled={disabled}
+              />
+              <button type="button" onClick={() => removeField(field.id)} disabled={disabled} aria-label="删除字段">
+                ×
+              </button>
+            </div>
+          ))
+        )}
+        <button type="button" onClick={addField} disabled={disabled}>+ 字段</button>
+      </fieldset>
       <p className="canvas-hint">
-        v1 暂不支持画布内新建会话；先在 Codex 命令行或智能体页起好会话，再回来这里挂上。
+        v1 暂不支持画布内新建会话；先在 Codex 命令行或智能体页起好会话，再回来这里挂上。节点数据「保存」后随画布持久化。
       </p>
     </div>
   );
