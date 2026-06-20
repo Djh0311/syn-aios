@@ -45,7 +45,28 @@ export const shellScenarioTextFixtures = {
     "凭据不可见",
   ],
   sourceEntryForbiddenTexts: ["读取密钥值", "启动 runner", "调用真实 Codex", "自动转成项目任务"],
-  runningWorkflowsExpectedTexts: ["运行中工作流", "只显示运行、等待、复核、重试和读回异常摘要", "读回异常", "未知 / 不可用不显示成 0 条结果"],
+  runningWorkflowsExpectedTexts: [
+    "运行中工作流",
+    "只显示运行、等待、复核、重试和读回异常摘要",
+    "读回异常",
+    "未知 / 不可用不显示成 0 条结果",
+    // 画布优先重画后的新结构（标题区 / 状态带 / 右栏详情 / 底部模式与操作）
+    "CANVAS · 工作流画布",
+    "当前节点",
+    "运行状态",
+    "建议方案",
+    "手动编排",
+    "展开任务包",
+    "点节点只切换详情，不触发真实执行",
+    // P4：顶部阶段进度段带 + 右栏运行上下文（读回 / 失败 / 状态原因）
+    "阶段进度",
+    "读回",
+    "失败 / 阻断",
+    "状态原因",
+  ],
+  // 空数据（无 workflowState）必须走空画布文案，绝不显示成 0 条成功结果。
+  runningWorkflowsEmptyExpectedTexts: ["CANVAS · 工作流画布", "当前没有运行中的工作流。", "打开项目工作流"],
+  runningWorkflowsEmptyForbiddenTexts: ["自动执行已启用", "已成功", "0 条成功结果", "结果数：0"],
   agentSessionExpectedTexts: ["新对话", "搜索会话", "Offline interaction fixture", "重新读取", "打开记录文件"],
   agentViewExpectedTexts: [
     "新对话",

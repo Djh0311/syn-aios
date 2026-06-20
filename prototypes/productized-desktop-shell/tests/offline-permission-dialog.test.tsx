@@ -2462,6 +2462,24 @@ function runShellScenario() {
     assert(runningWorkflowsText.includes(expectedText), `运行中工作流页缺少 ${expectedText}`);
   }
 
+  // 空数据 → 空画布 + 空状态文案，不得显示成 0 条成功结果或伪造自动执行。
+  const runningWorkflowsEmptyText = visibleText(
+    <RunningWorkflowsView
+      snapshot={snapshot}
+      workflowState={null}
+      workflowStateLoading={false}
+      workflowStateError={null}
+      onReloadWorkflowState={() => {}}
+      onNavigate={() => {}}
+    />,
+  );
+  for (const expectedText of shellTexts.runningWorkflowsEmptyExpectedTexts) {
+    assert(runningWorkflowsEmptyText.includes(expectedText), `运行中工作流空画布缺少 ${expectedText}`);
+  }
+  for (const forbiddenText of shellTexts.runningWorkflowsEmptyForbiddenTexts) {
+    assert(!runningWorkflowsEmptyText.includes(forbiddenText), `运行中工作流空画布不得出现 ${forbiddenText}`);
+  }
+
   const agentButton = findButtonByText(home, "打开智能体");
   assert(agentButton, "首页找不到智能体入口按钮");
   const openAgent = agentButton.props?.onClick;

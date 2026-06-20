@@ -1,9 +1,15 @@
+import { useState } from "react";
 import { Badge } from "../components/Badge";
 import { DailyMemoryCandidateInbox } from "../components/DailyMemoryCandidateInbox";
-import { SummaryTile } from "../components/WorkbenchPrimitives";
+import { DetailLine, SummaryTile } from "../components/WorkbenchPrimitives";
 import { pathTail } from "../lib/format";
 import { buildOperationControlMemoryCaptureInput, deriveDailyMemoryCandidateInbox } from "../lib/memoryDailyLoop";
 import { deriveRunningWorkflowsPageReadModelFromParts } from "../lib/pageSelectors";
+import {
+  deriveProjectWorkflowCanvasReadModel,
+  type ProjectCanvasNodeDetail,
+  type ProjectWorkflowCanvasReadModel,
+} from "../lib/projectCanvas";
 import { deriveRunQueueReadModel, type OperationControlSummary } from "../lib/runQueue";
 import type {
   MemoryCandidateStoreV1,
@@ -11,12 +17,14 @@ import type {
   FormalMemoryStoreV1,
   OperationControlItem,
   PendingAction,
+  ProjectRecord,
   ProjectWorkflowSummary,
   SessionRunStatusSummary,
   WorkbenchSnapshot,
   WorkflowStateSnapshot,
 } from "../lib/types";
 import type { ViewKey } from "../lib/workbenchNavigation";
+import { ProjectWorkflowReactFlowCanvas } from "./projects/ProjectWorkflowCanvasView";
 
 type RunningWorkflowsViewProps = {
   snapshot: WorkbenchSnapshot;
@@ -43,6 +51,57 @@ const focusStates = new Set([
   "timed_out",
 ]);
 
+type CanvasMode = "run_status" | "suggested_plan" | "manual_orchestration";
+
+const canvasModeLabels: Record<CanvasMode, string> = {
+  run_status: "运行状态",
+  suggested_plan: "建议方案",
+  manual_orchestration: "手动编排",
+};
+
+// 阶段段带：只取主流程的角色泳道节点（项目目标 / 总指导 / 开发线 / 验证线 / 回收线），按横向位置排序，
+// 每节点压成一段，按状态着色。纯展示，不改读模型、不触发任何执行。与连线互补：连线表关系，段带表进度。
+const stageLaneNodeTypes = new Set(["project_goal", "director", "dev_line", "validation_line", "review_line"]);
+
+type StageBandSegmentState = "completed" | "active" | "blocked" | "pending";
+
+type StageBandSegment = {
+  node_id: string;
+  label: string;
+  state: StageBandSegmentState;
+  status_label: string;
+};
+
+function stageBandSegmentState(status: string): StageBandSegmentState {
+  if (status === "accepted" || status === "ready_for_review") return "completed";
+  if (status === "running") return "active";
+  if (status === "blocked" || status === "waiting_for_permission" || status === "failed" || status === "timed_out" || status === "readback_unavailable") {
+    return "blocked";
+  }
+  if (status === "needs_review" || status === "needs_changes") return "active";
+  return "pending";
+}
+
+function buildStageBandSegments(canvasModel: ProjectWorkflowCanvasReadModel): StageBandSegment[] {
+  return canvasModel.nodes
+    .filter((node) => stageLaneNodeTypes.has(node.node_type))
+    .slice()
+    .sort((a, b) => (a.position_hint?.x ?? 0) - (b.position_hint?.x ?? 0))
+    .map((node) => ({
+      node_id: node.node_id,
+      label: node.title,
+      state: stageBandSegmentState(String(node.status ?? "")),
+      status_label: runtimeStatusLabel(String(node.status ?? "")),
+    }));
+}
+
+const stageBandStateLabels: Record<StageBandSegmentState, string> = {
+  completed: "已通过",
+  active: "执行中",
+  blocked: "待处理",
+  pending: "未开始",
+};
+
 export function RunningWorkflowsView({
   snapshot,
   workflowState,
@@ -58,6 +117,7 @@ export function RunningWorkflowsView({
   const workflows = workflowState?.project_workflows ?? [];
   const runningWorkflows = workflows.filter((workflow) => isWorkflowInFocus(workflow));
   const visibleWorkflows = (runningWorkflows.length ? runningWorkflows : workflows).slice(0, 8);
+  const focusWorkflow = runningWorkflows[0] ?? workflows[0] ?? null;
   const runtimeSummaries = snapshot.session_run_status_summaries.filter(
     (summary) => summary.current_status === "running" || summary.attention_count > 0,
   );
@@ -103,50 +163,19 @@ export function RunningWorkflowsView({
   const leadConfirmations = runQueue.user_confirmation_queue.slice(0, 12);
   const leadFailures = runQueue.failure_control_summaries.slice(0, 6);
 
+  // 画布读模型：用真实 workflow / project 派生，空数据走空画布，不补编。
+  const canvasProject = matchProjectForWorkflow(snapshot.projects, focusWorkflow);
+  const canvasModel = buildRunningCanvasModel({ canvasProject, focusWorkflow, snapshot, workflowState });
+
   return (
-    <section className="stage-pad running-workflows-view">
+    <section className="stage-pad running-workflows-view canvas-first-running">
       <div className="sr-only">
         <p>运行中工作流</p>
         <h1>运行中工作流</h1>
         <p>{pageReadModel.workflow_focus_count} 关注 · {pageReadModel.waiting_permission_count} 等权限；只显示运行、等待、复核、重试和读回异常摘要。</p>
       </div>
 
-      <div className="running-summary-grid">
-        <SummaryTile label="工作流" value={`${pageReadModel.workflow_count}`} hint="事实层当前可见数量" />
-        <SummaryTile label="运行关注" value={`${pageReadModel.running_attention_count}`} hint="项目工作流和会话运行关注" />
-        <SummaryTile label="等权限" value={`${pageReadModel.waiting_permission_count}`} hint="需要用户处理时进入待办" />
-        <SummaryTile label="读回异常" value={`${pageReadModel.readback_issue_count}`} hint="未知 / 不可用不显示成 0 条结果" />
-        <SummaryTile
-          label="运行队列"
-          value={`${pageReadModel.run_queue.item_count}`}
-          hint={`${pageReadModel.run_queue.waiting_user_count} 待确认 · ${pageReadModel.run_queue.blocked_count} 阻断`}
-        />
-        <SummaryTile
-          label="失败控制"
-          value={`${pageReadModel.run_queue.failure_control_count}`}
-          hint={`${pageReadModel.run_queue.duplicate_blocked_count} 重复阻断 · ${pageReadModel.run_queue.capture_compensation_count} 捕获补偿`}
-        />
-        <SummaryTile
-          label="操作控制"
-          value={`${pageReadModel.operation_control.confirmation_required_count}`}
-          hint={`${pageReadModel.operation_control.readback_issue_count} 读回异常 · ${pageReadModel.operation_control.manual_review_count} 需人工`}
-        />
-        <SummaryTile
-          label="记忆待处理"
-          value={`${pageReadModel.memory_pending.confirmation_count}`}
-          hint={`${pageReadModel.memory_pending.capture_count} 捕获 · ${pageReadModel.memory_pending.pending_candidate_count} 候选/正式化`}
-        />
-        <SummaryTile
-          label="统一执行"
-          value={`${pageReadModel.product_command.command_count}`}
-          hint={`${pageReadModel.product_command.pending_decision_count} 等确认 · ${pageReadModel.product_command.readback_issue_count} 读回异常`}
-        />
-        <SummaryTile
-          label="自动编排"
-          value={`${pageReadModel.automation.run_unit_count}`}
-          hint={`${pageReadModel.automation.waiting_user_count} 等确认 · ${pageReadModel.automation.readback_unknown_count} 读回未知`}
-        />
-      </div>
+      <RunningCanvasHeader workflow={focusWorkflow} project={canvasProject} canvasModel={canvasModel} />
 
       {workflowStateError ? (
         <section className="notice-panel error">
@@ -155,263 +184,660 @@ export function RunningWorkflowsView({
         </section>
       ) : null}
 
-      <div className="content-grid two">
-        <section className="panel running-section">
-          <div className="panel-h">
-            运行队列
-            <Badge tone={runQueue.blocked_count || runQueue.failed_count ? "warning" : runQueue.running_count ? "candidate" : "neutral"}>
-              {runQueue.running_count} 运行 · {runQueue.waiting_user_count} 待确认
-            </Badge>
-          </div>
-          <div className="running-workflow-list">
-            {leadQueueItems.length ? (
-              leadQueueItems.map((item) => (
-                <article className="running-attention-card" key={item.queue_item_id}>
-                  <strong>{item.user_visible_summary}</strong>
-                  <span>{runQueueStatusLabel(item.status)} · 读回 {readbackStatusLabel(item.readback_status)}</span>
-                  <em>
-                    下一步：{item.next_step_label}；结果数：{productCommandResultCountLabel(item.readback_result_count)}
-                  </em>
-                  {item.capture_event_refs.length || item.memory_candidate_refs.length ? (
-                    <small>
-                      记忆捕获 {item.capture_event_refs.length} · 候选 {item.memory_candidate_refs.length}；候选不是正式记忆
-                    </small>
-                  ) : null}
-                </article>
-              ))
-            ) : (
-              <p className="empty-line">当前没有需要排队关注的运行项。</p>
-            )}
-          </div>
-          <p className="muted small-note">运行队列是派生读模型；重试、停止、恢复和重启都必须先进入确认，不会自动调用 runner。</p>
-        </section>
+      <RunningCanvasWorkspace canvasModel={canvasModel} focusWorkflow={focusWorkflow} onNavigate={onNavigate} />
 
-        <DailyMemoryCandidateInbox
-          inbox={dailyMemoryInbox}
-          projectRoot={dailyProjectRoot}
-          candidateStoreRevision={memoryCandidateStore?.revision ?? null}
-          formalStoreRevision={formalMemoryStore?.revision ?? null}
-          onRequestAction={onRequestAction}
-        />
+      <details className="running-status-detail">
+        <summary>运行状态面板：队列 / 失败 / 操作 / 编排 / 记忆（降级到首屏画布下方，仍读真实数据）</summary>
 
-        <section className="panel running-section">
-          <div className="panel-h">
-            待确认
-            <Badge tone={leadConfirmations.length ? "warning" : "neutral"}>{runQueue.user_confirmation_queue.length} 项</Badge>
-          </div>
-          <p className="muted small-note">
-            其中记忆事项 {pageReadModel.memory_pending.confirmation_count} 项：候选确认、正式化或捕获补证都不会自动写正式记忆。
-          </p>
-          <div className="running-workflow-list">
-            {leadConfirmations.length ? (
-              leadConfirmations.map((item) => (
-                <article className="running-attention-card" key={item.confirmation_item_id}>
-                  <strong>{confirmationKindLabel(item.kind)}</strong>
-                  <span>{item.title} · {riskLabel(item.risk_level)}</span>
-                  <em>{item.summary}</em>
-                  <small>
-                    写项目 {yesNoLabel(item.writes_project_files)} · 写 .codex {yesNoLabel(item.writes_codex_home)} · 写工作台记录 {yesNoLabel(item.writes_workbench_sidecars)}
-                  </small>
-                </article>
-              ))
-            ) : (
-              <p className="empty-line">当前没有等待用户确认的运行事项。</p>
-            )}
-          </div>
-        </section>
+        <div className="running-summary-grid">
+          <SummaryTile label="工作流" value={`${pageReadModel.workflow_count}`} hint="事实层当前可见数量" />
+          <SummaryTile label="运行关注" value={`${pageReadModel.running_attention_count}`} hint="项目工作流和会话运行关注" />
+          <SummaryTile label="等权限" value={`${pageReadModel.waiting_permission_count}`} hint="需要用户处理时进入待办" />
+          <SummaryTile label="读回异常" value={`${pageReadModel.readback_issue_count}`} hint="未知 / 不可用不显示成 0 条结果" />
+          <SummaryTile
+            label="运行队列"
+            value={`${pageReadModel.run_queue.item_count}`}
+            hint={`${pageReadModel.run_queue.waiting_user_count} 待确认 · ${pageReadModel.run_queue.blocked_count} 阻断`}
+          />
+          <SummaryTile
+            label="失败控制"
+            value={`${pageReadModel.run_queue.failure_control_count}`}
+            hint={`${pageReadModel.run_queue.duplicate_blocked_count} 重复阻断 · ${pageReadModel.run_queue.capture_compensation_count} 捕获补偿`}
+          />
+          <SummaryTile
+            label="操作控制"
+            value={`${pageReadModel.operation_control.confirmation_required_count}`}
+            hint={`${pageReadModel.operation_control.readback_issue_count} 读回异常 · ${pageReadModel.operation_control.manual_review_count} 需人工`}
+          />
+          <SummaryTile
+            label="记忆待处理"
+            value={`${pageReadModel.memory_pending.confirmation_count}`}
+            hint={`${pageReadModel.memory_pending.capture_count} 捕获 · ${pageReadModel.memory_pending.pending_candidate_count} 候选/正式化`}
+          />
+          <SummaryTile
+            label="统一执行"
+            value={`${pageReadModel.product_command.command_count}`}
+            hint={`${pageReadModel.product_command.pending_decision_count} 等确认 · ${pageReadModel.product_command.readback_issue_count} 读回异常`}
+          />
+          <SummaryTile
+            label="自动编排"
+            value={`${pageReadModel.automation.run_unit_count}`}
+            hint={`${pageReadModel.automation.waiting_user_count} 等确认 · ${pageReadModel.automation.readback_unknown_count} 读回未知`}
+          />
+        </div>
 
-        <section className="panel running-section">
-          <div className="panel-h">
-            失败控制
-            <Badge tone={leadFailures.length ? "warning" : "neutral"}>{runQueue.failure_control_summaries.length} 条</Badge>
-          </div>
-          <div className="running-workflow-list">
-            {leadFailures.length ? (
-              leadFailures.map((item) => (
-                <article className="running-attention-card" key={item.failure_id}>
-                  <strong>{failureClassificationLabel(item.classification)}</strong>
-                  <span>
-                    {runQueueStatusLabel(item.status)} · {item.retry_requires_user_confirmation ? "重试需确认" : "不自动重试"}
-                  </span>
-                  <em>{item.user_message} 下一步：{item.recommended_next_step}</em>
-                  <small>
-                    结果数：{productCommandResultCountLabel(item.readback_result_count)} · 捕获补偿 {yesNoLabel(item.memory_capture_compensation_needed)}
-                  </small>
-                </article>
-              ))
-            ) : (
-              <p className="empty-line">当前没有失败、读回异常、重复阻断或捕获补偿事项。</p>
-            )}
-          </div>
-        </section>
-
-        <section className="panel running-section">
-          <div className="panel-h">
-            操作控制 / 恢复建议
-            <Badge tone={operationControl.confirmation_required_count || operationControl.readback_issue_count ? "warning" : "neutral"}>
-              L3 决策面
-            </Badge>
-          </div>
-          <div className="running-summary-grid compact">
-            <SummaryTile label="重试提案" value={`${operationControl.retry_proposal_count}`} hint="需重新确认，不自动重试" />
-            <SummaryTile label="停止请求" value={`${operationControl.stop_request_count}`} hint="只处理工作台状态，不 kill Codex" />
-            <SummaryTile label="重启准备" value={`${operationControl.restart_readiness_count}`} hint="后续任务，不触发真实重启" />
-            <SummaryTile label="恢复准备" value={`${operationControl.resume_readiness_count}`} hint="需单独授权，不执行 resume" />
-            <SummaryTile label="读回异常" value={`${operationControl.readback_issue_count}`} hint="未知 / 不可用不等于 0" />
-            <SummaryTile label="重复阻断" value={`${operationControl.duplicate_blocked_count}`} hint="防止并行重复执行" />
-            <SummaryTile label="边界阻断" value={`${operationControl.blocked_by_guard_count}`} hint="guard 阻断，需要人工查看" />
-            <SummaryTile label="过期清理" value={`${operationControl.stale_cleanup_count}`} hint="仅工作台自有状态" />
-          </div>
-          <div className="running-workflow-list">
-            {operationItems.map((item) => (
-              <OperationBoundaryCard
-                item={item}
-                onRequestAction={onRequestAction}
-                captureContext={operationCaptureContext}
-                key={item.operation_id}
-              />
-            ))}
-            <OperationBoundaryCard title="读回" status="结果数未知" summary={operationControl.readback_boundary} />
-            <OperationBoundaryCard title="过期状态清理" status="工作台侧" summary={operationControl.stale_cleanup_boundary} />
-          </div>
-          <p className="muted small-note">
-            {l3OperationControl?.user_summary.join(" ") ?? operationControl.user_message} {operationControl.recommended_next_step}
-          </p>
-        </section>
-
-        <section className="panel running-section">
-          <div className="panel-h">
-            自动编排
-            <Badge tone={automation?.blocked_count ? "warning" : automation?.available ? "candidate" : "neutral"}>
-              {automationStatusLabel(automation?.latest_status)}
-            </Badge>
-          </div>
-          {automation?.latest_plan ? (
-            <>
-              <div className="running-summary-grid compact">
-                <SummaryTile label="阶段" value={automationPhaseLabel(automation.latest_plan.current_phase)} hint="计划 / 开发 / 验证 / 回收 / 复核" />
-                <SummaryTile label="等待确认" value={`${automation.waiting_user_count}`} hint="需要用户处理才会推进" />
-                <SummaryTile label="阻断" value={`${automation.blocked_count}`} hint="guard 或准备态阻断" />
-                <SummaryTile label="读回未知" value={`${automation.readback_unknown_count}`} hint="未知 / 不可用不显示成 0" />
-                <SummaryTile label="工作者汇报" value={`${automation.worker_report_count}`} hint="结构化汇报，不是正式事实" />
-                <SummaryTile label="捕获来源" value={`${automation.capture_event_count}`} hint="捕获只是来源索引" />
-                <SummaryTile label="过程观察" value={`${automation.observation_count}`} hint="observation 仍不是正式记忆" />
-              </div>
-              <div className="running-workflow-list">
-                {automationUnits.slice(0, 5).map((unit) => (
-                  <article className="running-attention-card" key={unit.run_unit_id}>
-                    <strong>{automationRunUnitLabel(unit.run_unit_kind)}</strong>
-                    <span>{automationUnitStatusLabel(unit.status)} · 读回 {readbackStatusLabel(unit.readback_status)}</span>
+        <div className="content-grid two">
+          <section className="panel running-section">
+            <div className="panel-h">
+              运行队列
+              <Badge tone={runQueue.blocked_count || runQueue.failed_count ? "warning" : runQueue.running_count ? "candidate" : "neutral"}>
+                {runQueue.running_count} 运行 · {runQueue.waiting_user_count} 待确认
+              </Badge>
+            </div>
+            <div className="running-workflow-list">
+              {leadQueueItems.length ? (
+                leadQueueItems.map((item) => (
+                  <article className="running-attention-card" key={item.queue_item_id}>
+                    <strong>{item.user_visible_summary}</strong>
+                    <span>{runQueueStatusLabel(item.status)} · 读回 {readbackStatusLabel(item.readback_status)}</span>
                     <em>
-                      {unit.worker_report_ref ? "已有 worker report" : unit.summary}
-                      {unit.capture_event_refs.length ? `；捕获来源 ${unit.capture_event_refs.length}` : ""}；下一步：{unit.next_step}
+                      下一步：{item.next_step_label}；结果数：{productCommandResultCountLabel(item.readback_result_count)}
                     </em>
+                    {item.capture_event_refs.length || item.memory_candidate_refs.length ? (
+                      <small>
+                        记忆捕获 {item.capture_event_refs.length} · 候选 {item.memory_candidate_refs.length}；候选不是正式记忆
+                      </small>
+                    ) : null}
+                  </article>
+                ))
+              ) : (
+                <p className="empty-line">当前没有需要排队关注的运行项。</p>
+              )}
+            </div>
+            <p className="muted small-note">运行队列是派生读模型；重试、停止、恢复和重启都必须先进入确认，不会自动调用 runner。</p>
+          </section>
+
+          <DailyMemoryCandidateInbox
+            inbox={dailyMemoryInbox}
+            projectRoot={dailyProjectRoot}
+            candidateStoreRevision={memoryCandidateStore?.revision ?? null}
+            formalStoreRevision={formalMemoryStore?.revision ?? null}
+            onRequestAction={onRequestAction}
+          />
+
+          <section className="panel running-section">
+            <div className="panel-h">
+              待确认
+              <Badge tone={leadConfirmations.length ? "warning" : "neutral"}>{runQueue.user_confirmation_queue.length} 项</Badge>
+            </div>
+            <p className="muted small-note">
+              其中记忆事项 {pageReadModel.memory_pending.confirmation_count} 项：候选确认、正式化或捕获补证都不会自动写正式记忆。
+            </p>
+            <div className="running-workflow-list">
+              {leadConfirmations.length ? (
+                leadConfirmations.map((item) => (
+                  <article className="running-attention-card" key={item.confirmation_item_id}>
+                    <strong>{confirmationKindLabel(item.kind)}</strong>
+                    <span>{item.title} · {riskLabel(item.risk_level)}</span>
+                    <em>{item.summary}</em>
+                    <small>
+                      写项目 {yesNoLabel(item.writes_project_files)} · 写 .codex {yesNoLabel(item.writes_codex_home)} · 写工作台记录 {yesNoLabel(item.writes_workbench_sidecars)}
+                    </small>
+                  </article>
+                ))
+              ) : (
+                <p className="empty-line">当前没有等待用户确认的运行事项。</p>
+              )}
+            </div>
+          </section>
+
+          <section className="panel running-section">
+            <div className="panel-h">
+              失败控制
+              <Badge tone={leadFailures.length ? "warning" : "neutral"}>{runQueue.failure_control_summaries.length} 条</Badge>
+            </div>
+            <div className="running-workflow-list">
+              {leadFailures.length ? (
+                leadFailures.map((item) => (
+                  <article className="running-attention-card" key={item.failure_id}>
+                    <strong>{failureClassificationLabel(item.classification)}</strong>
+                    <span>
+                      {runQueueStatusLabel(item.status)} · {item.retry_requires_user_confirmation ? "重试需确认" : "不自动重试"}
+                    </span>
+                    <em>{item.user_message} 下一步：{item.recommended_next_step}</em>
+                    <small>
+                      结果数：{productCommandResultCountLabel(item.readback_result_count)} · 捕获补偿 {yesNoLabel(item.memory_capture_compensation_needed)}
+                    </small>
+                  </article>
+                ))
+              ) : (
+                <p className="empty-line">当前没有失败、读回异常、重复阻断或捕获补偿事项。</p>
+              )}
+            </div>
+          </section>
+
+          <section className="panel running-section">
+            <div className="panel-h">
+              操作控制 / 恢复建议
+              <Badge tone={operationControl.confirmation_required_count || operationControl.readback_issue_count ? "warning" : "neutral"}>
+                L3 决策面
+              </Badge>
+            </div>
+            <div className="running-summary-grid compact">
+              <SummaryTile label="重试提案" value={`${operationControl.retry_proposal_count}`} hint="需重新确认，不自动重试" />
+              <SummaryTile label="停止请求" value={`${operationControl.stop_request_count}`} hint="只处理工作台状态，不 kill Codex" />
+              <SummaryTile label="重启准备" value={`${operationControl.restart_readiness_count}`} hint="后续任务，不触发真实重启" />
+              <SummaryTile label="恢复准备" value={`${operationControl.resume_readiness_count}`} hint="需单独授权，不执行 resume" />
+              <SummaryTile label="读回异常" value={`${operationControl.readback_issue_count}`} hint="未知 / 不可用不等于 0" />
+              <SummaryTile label="重复阻断" value={`${operationControl.duplicate_blocked_count}`} hint="防止并行重复执行" />
+              <SummaryTile label="边界阻断" value={`${operationControl.blocked_by_guard_count}`} hint="guard 阻断，需要人工查看" />
+              <SummaryTile label="过期清理" value={`${operationControl.stale_cleanup_count}`} hint="仅工作台自有状态" />
+            </div>
+            <div className="running-workflow-list">
+              {operationItems.map((item) => (
+                <OperationBoundaryCard
+                  item={item}
+                  onRequestAction={onRequestAction}
+                  captureContext={operationCaptureContext}
+                  key={item.operation_id}
+                />
+              ))}
+              <OperationBoundaryCard title="读回" status="结果数未知" summary={operationControl.readback_boundary} />
+              <OperationBoundaryCard title="过期状态清理" status="工作台侧" summary={operationControl.stale_cleanup_boundary} />
+            </div>
+            <p className="muted small-note">
+              {l3OperationControl?.user_summary.join(" ") ?? operationControl.user_message} {operationControl.recommended_next_step}
+            </p>
+          </section>
+
+          <section className="panel running-section">
+            <div className="panel-h">
+              自动编排
+              <Badge tone={automation?.blocked_count ? "warning" : automation?.available ? "candidate" : "neutral"}>
+                {automationStatusLabel(automation?.latest_status)}
+              </Badge>
+            </div>
+            {automation?.latest_plan ? (
+              <>
+                <div className="running-summary-grid compact">
+                  <SummaryTile label="阶段" value={automationPhaseLabel(automation.latest_plan.current_phase)} hint="计划 / 开发 / 验证 / 回收 / 复核" />
+                  <SummaryTile label="等待确认" value={`${automation.waiting_user_count}`} hint="需要用户处理才会推进" />
+                  <SummaryTile label="阻断" value={`${automation.blocked_count}`} hint="guard 或准备态阻断" />
+                  <SummaryTile label="读回未知" value={`${automation.readback_unknown_count}`} hint="未知 / 不可用不显示成 0" />
+                  <SummaryTile label="工作者汇报" value={`${automation.worker_report_count}`} hint="结构化汇报，不是正式事实" />
+                  <SummaryTile label="捕获来源" value={`${automation.capture_event_count}`} hint="捕获只是来源索引" />
+                  <SummaryTile label="过程观察" value={`${automation.observation_count}`} hint="observation 仍不是正式记忆" />
+                </div>
+                <div className="running-workflow-list">
+                  {automationUnits.slice(0, 5).map((unit) => (
+                    <article className="running-attention-card" key={unit.run_unit_id}>
+                      <strong>{automationRunUnitLabel(unit.run_unit_kind)}</strong>
+                      <span>{automationUnitStatusLabel(unit.status)} · 读回 {readbackStatusLabel(unit.readback_status)}</span>
+                      <em>
+                        {unit.worker_report_ref ? "已有 worker report" : unit.summary}
+                        {unit.capture_event_refs.length ? `；捕获来源 ${unit.capture_event_refs.length}` : ""}；下一步：{unit.next_step}
+                      </em>
+                    </article>
+                  ))}
+                </div>
+                <p className="muted small-note">{automation.next_step ?? automation.latest_plan.next_step}</p>
+              </>
+            ) : (
+              <p className="empty-line">当前还没有项目自动编排摘要；项目工作流仍按现有事实层展示。</p>
+            )}
+          </section>
+
+          <section className="panel running-section">
+            <div className="panel-h">
+              统一执行命令
+              <Badge tone={productCommandReadModel?.blocked_attempt_count ? "warning" : "neutral"}>
+                {productCommandStatusLabel(productCommandReadModel)}
+              </Badge>
+            </div>
+            <div className="running-summary-grid compact">
+              <SummaryTile label="命令" value={`${productCommandReadModel?.command_count ?? 0}`} hint="统一产品命令读模型" />
+              <SummaryTile label="等待确认" value={`${productCommandReadModel?.pending_decision_count ?? 0}`} hint="需要用户处理时进入待办" />
+              <SummaryTile label="受控记录" value={`${productCommandReadModel?.running_attempt_count ?? 0}`} hint="不等于真实 Codex 自由运行" />
+              <SummaryTile label="阻断" value={`${productCommandReadModel?.blocked_attempt_count ?? 0}`} hint="guard / diagnostics / duplicate 等边界" />
+              <SummaryTile label="最近状态" value={productAttemptStatusLabel(productCommandReadModel?.last_attempt_status)} hint="只读 read model 字段" />
+              <SummaryTile label="失败" value={`${failureStopRetry?.failure_count ?? 0}`} hint="不会自动恢复或自动重试" />
+              <SummaryTile label="读回异常" value={`${failureStopRetry?.readback_issue_count ?? 0}`} hint="未知 / 不可用不显示成 0" />
+              <SummaryTile label="重新确认" value={failureStopRetry?.retry_requires_new_user_confirmation ? "需要" : "未要求"} hint="再次执行前需要用户确认" />
+              <SummaryTile label="停止请求" value={`${failureStopRetry?.manual_stop_requested_count ?? 0}`} hint="仅状态展示，不停止真实进程" />
+            </div>
+            {failureStopRetryItems.length ? (
+              <div className="running-workflow-list">
+                {failureStopRetryItems.map((item) => (
+                  <article className="running-attention-card" key={item.kind}>
+                    <strong>{item.title}</strong>
+                    <span>{item.count} 条 · {item.requires_new_user_confirmation ? "需要重新确认" : "只读查看"}</span>
+                    <em>{item.summary} 读回结果：{productCommandResultCountLabel(item.result_count)}</em>
                   </article>
                 ))}
               </div>
-              <p className="muted small-note">{automation.next_step ?? automation.latest_plan.next_step}</p>
-            </>
-          ) : (
-            <p className="empty-line">当前还没有项目自动编排摘要；项目工作流仍按现有事实层展示。</p>
-          )}
-        </section>
+            ) : (
+              <p className="muted small-note">当前统一执行命令没有失败、停止或重试相关产品状态。</p>
+            )}
+            <p className="muted small-note">
+              统一执行命令、项目工作流和智能体运行关注是三个不同事实源；读回不可用 / 失败 / 超时不能显示成 0 条结果。
+            </p>
+            <details className="project-dev-details">
+              <summary>开发者详情：统一命令读模型</summary>
+              <div className="running-summary-grid compact">
+                <SummaryTile label="store revision" value={`${productCommandReadModel?.store_revision ?? 0}`} hint="sidecar 修订" />
+                <SummaryTile label="sidecar path" value={productCommandReadModel?.sidecar_path ? pathTail(productCommandReadModel.sidecar_path) : "未生成"} hint="完整路径不铺普通首屏" />
+                <SummaryTile label="legacy entry" value={productEntryStatusLabel(productCommandReadModel?.legacy_entry_status)} hint="旧入口封口状态" />
+                <SummaryTile label="runner entry" value={productEntryStatusLabel(productCommandReadModel?.runner_entry_status)} hint="runner 边界状态" />
+                {failureStopRetryItems.map((item) => (
+                  <SummaryTile
+                    label={item.kind}
+                    value={`${item.source_refs.length} refs`}
+                    hint={item.warnings.join(" / ") || "无 warnings"}
+                    key={item.kind}
+                  />
+                ))}
+              </div>
+            </details>
+          </section>
 
-        <section className="panel running-section">
-          <div className="panel-h">
-            统一执行命令
-            <Badge tone={productCommandReadModel?.blocked_attempt_count ? "warning" : "neutral"}>
-              {productCommandStatusLabel(productCommandReadModel)}
-            </Badge>
-          </div>
-          <div className="running-summary-grid compact">
-            <SummaryTile label="命令" value={`${productCommandReadModel?.command_count ?? 0}`} hint="统一产品命令读模型" />
-            <SummaryTile label="等待确认" value={`${productCommandReadModel?.pending_decision_count ?? 0}`} hint="需要用户处理时进入待办" />
-            <SummaryTile label="受控记录" value={`${productCommandReadModel?.running_attempt_count ?? 0}`} hint="不等于真实 Codex 自由运行" />
-            <SummaryTile label="阻断" value={`${productCommandReadModel?.blocked_attempt_count ?? 0}`} hint="guard / diagnostics / duplicate 等边界" />
-            <SummaryTile label="最近状态" value={productAttemptStatusLabel(productCommandReadModel?.last_attempt_status)} hint="只读 read model 字段" />
-            <SummaryTile label="失败" value={`${failureStopRetry?.failure_count ?? 0}`} hint="不会自动恢复或自动重试" />
-            <SummaryTile label="读回异常" value={`${failureStopRetry?.readback_issue_count ?? 0}`} hint="未知 / 不可用不显示成 0" />
-            <SummaryTile label="重新确认" value={failureStopRetry?.retry_requires_new_user_confirmation ? "需要" : "未要求"} hint="再次执行前需要用户确认" />
-            <SummaryTile label="停止请求" value={`${failureStopRetry?.manual_stop_requested_count ?? 0}`} hint="仅状态展示，不停止真实进程" />
-          </div>
-          {failureStopRetryItems.length ? (
+          <section className="panel running-section">
+            <div className="panel-h">
+              项目工作流
+              <button className="secondary-button" type="button" onClick={onReloadWorkflowState} disabled={workflowStateLoading}>
+                {workflowStateLoading ? "读取中" : "重新读取"}
+              </button>
+            </div>
             <div className="running-workflow-list">
-              {failureStopRetryItems.map((item) => (
-                <article className="running-attention-card" key={item.kind}>
-                  <strong>{item.title}</strong>
-                  <span>{item.count} 条 · {item.requires_new_user_confirmation ? "需要重新确认" : "只读查看"}</span>
-                  <em>{item.summary} 读回结果：{productCommandResultCountLabel(item.result_count)}</em>
-                </article>
-              ))}
+              {visibleWorkflows.length ? (
+                visibleWorkflows.map((workflow) => (
+                  <WorkflowCard workflow={workflow} key={workflow.workflow_id} onNavigate={onNavigate} />
+                ))
+              ) : (
+                <p className="empty-line">当前没有可展示的工作流事实层记录。</p>
+              )}
             </div>
-          ) : (
-            <p className="muted small-note">当前统一执行命令没有失败、停止或重试相关产品状态。</p>
-          )}
-          <p className="muted small-note">
-            统一执行命令、项目工作流和智能体运行关注是三个不同事实源；读回不可用 / 失败 / 超时不能显示成 0 条结果。
-          </p>
-          <details className="project-dev-details">
-            <summary>开发者详情：统一命令读模型</summary>
-            <div className="running-summary-grid compact">
-              <SummaryTile label="store revision" value={`${productCommandReadModel?.store_revision ?? 0}`} hint="sidecar 修订" />
-              <SummaryTile label="sidecar path" value={productCommandReadModel?.sidecar_path ? pathTail(productCommandReadModel.sidecar_path) : "未生成"} hint="完整路径不铺普通首屏" />
-              <SummaryTile label="legacy entry" value={productEntryStatusLabel(productCommandReadModel?.legacy_entry_status)} hint="旧入口封口状态" />
-              <SummaryTile label="runner entry" value={productEntryStatusLabel(productCommandReadModel?.runner_entry_status)} hint="runner 边界状态" />
-              {failureStopRetryItems.map((item) => (
-                <SummaryTile
-                  label={item.kind}
-                  value={`${item.source_refs.length} refs`}
-                  hint={item.warnings.join(" / ") || "无 warnings"}
-                  key={item.kind}
-                />
-              ))}
+          </section>
+
+          <section className="panel running-section">
+            <div className="panel-h">
+              智能体运行关注
+              <Badge tone={runtimeAttention.length ? "warning" : "neutral"}>{runtimeAttention.length} 条</Badge>
             </div>
-          </details>
-        </section>
-
-        <section className="panel running-section">
-          <div className="panel-h">
-            项目工作流
-            <button className="secondary-button" type="button" onClick={onReloadWorkflowState} disabled={workflowStateLoading}>
-              {workflowStateLoading ? "读取中" : "重新读取"}
-            </button>
-          </div>
-          <div className="running-workflow-list">
-            {visibleWorkflows.length ? (
-              visibleWorkflows.map((workflow) => (
-                <WorkflowCard workflow={workflow} key={workflow.workflow_id} onNavigate={onNavigate} />
-              ))
-            ) : (
-              <p className="empty-line">当前没有可展示的工作流事实层记录。</p>
-            )}
-          </div>
-        </section>
-
-        <section className="panel running-section">
-          <div className="panel-h">
-            智能体运行关注
-            <Badge tone={runtimeAttention.length ? "warning" : "neutral"}>{runtimeAttention.length} 条</Badge>
-          </div>
-          <div className="running-workflow-list">
-            {runtimeAttention.length ? (
-              runtimeAttention.slice(0, 8).map((item) => (
-                <button className="running-attention-card" type="button" key={item.attention_id} onClick={() => onNavigate("agents")}>
-                  <strong>{item.title}</strong>
-                  <span>{runtimeStatusLabel(item.status)} · 读回 {readbackStatusLabel(item.readback_boundary.status)}</span>
-                  <em>{item.recommended_next_step}</em>
-                </button>
-              ))
-            ) : runtimeSummaries.length ? (
-              runtimeSummaries.slice(0, 8).map((summary) => (
-                <RuntimeSummaryCard summary={summary} key={`${summary.adapter_id}:${summary.session_id}`} onNavigate={onNavigate} />
-              ))
-            ) : (
-              <p className="empty-line">当前没有运行中的智能体会话摘要。</p>
-            )}
-          </div>
-        </section>
-      </div>
+            <div className="running-workflow-list">
+              {runtimeAttention.length ? (
+                runtimeAttention.slice(0, 8).map((item) => (
+                  <button className="running-attention-card" type="button" key={item.attention_id} onClick={() => onNavigate("agents")}>
+                    <strong>{item.title}</strong>
+                    <span>{runtimeStatusLabel(item.status)} · 读回 {readbackStatusLabel(item.readback_boundary.status)}</span>
+                    <em>{item.recommended_next_step}</em>
+                  </button>
+                ))
+              ) : runtimeSummaries.length ? (
+                runtimeSummaries.slice(0, 8).map((summary) => (
+                  <RuntimeSummaryCard summary={summary} key={`${summary.adapter_id}:${summary.session_id}`} onNavigate={onNavigate} />
+                ))
+              ) : (
+                <p className="empty-line">当前没有运行中的智能体会话摘要。</p>
+              )}
+            </div>
+          </section>
+        </div>
+      </details>
     </section>
+  );
+}
+
+function buildRunningCanvasModel({
+  canvasProject,
+  focusWorkflow,
+  snapshot,
+  workflowState,
+}: {
+  canvasProject: ProjectRecord | null;
+  focusWorkflow: ProjectWorkflowSummary | null;
+  snapshot: WorkbenchSnapshot;
+  workflowState: WorkflowStateSnapshot | null;
+}): ProjectWorkflowCanvasReadModel | null {
+  if (!canvasProject) return null;
+  const projectBlackboard =
+    workflowState?.project_blackboards?.find(
+      (blackboard) =>
+        blackboard.project_root === canvasProject.project_root &&
+        (!focusWorkflow || blackboard.workflow_id === focusWorkflow.workflow_id),
+    ) ?? null;
+  const selectedTask =
+    focusWorkflow?.task_drafts.find((task) => focusStates.has(task.state)) ?? focusWorkflow?.task_drafts[0] ?? null;
+  return deriveProjectWorkflowCanvasReadModel({
+    project: canvasProject,
+    projectWorkflow: focusWorkflow,
+    projectBlackboard,
+    selectedTask,
+    workflowStatePath: workflowState?.path ?? null,
+    workflowStateUpdatedAt: workflowState?.updated_at ?? null,
+    runtimeSessionAttention: snapshot.runtime_session_attention,
+  });
+}
+
+// 画布 + 右栏详情 + 底部模式/操作。
+// window 守卫放最前：离线测试（普通函数调用）走静态分支，不触发任何 hook；浏览器才进入有状态版本。
+function RunningCanvasWorkspace(props: {
+  canvasModel: ProjectWorkflowCanvasReadModel | null;
+  focusWorkflow: ProjectWorkflowSummary | null;
+  onNavigate: (view: ViewKey) => void;
+}) {
+  if (typeof window === "undefined") {
+    return <RunningCanvasWorkspaceStatic {...props} />;
+  }
+  return <RunningCanvasWorkspaceBrowser {...props} />;
+}
+
+function RunningCanvasWorkspaceStatic({
+  canvasModel,
+  focusWorkflow,
+  onNavigate,
+}: {
+  canvasModel: ProjectWorkflowCanvasReadModel | null;
+  focusWorkflow: ProjectWorkflowSummary | null;
+  onNavigate: (view: ViewKey) => void;
+}) {
+  const activeNodeId = canvasModel?.viewport_hint.selected_node_id ?? null;
+  const activeDetail = canvasModel && activeNodeId ? canvasModel.detail_panels[activeNodeId] ?? null : null;
+  return (
+    <RunningCanvasWorkspaceLayout
+      canvasModel={canvasModel}
+      focusWorkflow={focusWorkflow}
+      onNavigate={onNavigate}
+      activeNodeId={activeNodeId}
+      activeDetail={activeDetail}
+      canvasMode="run_status"
+      onSelectNode={() => {}}
+      onSelectMode={() => {}}
+    />
+  );
+}
+
+function RunningCanvasWorkspaceBrowser({
+  canvasModel,
+  focusWorkflow,
+  onNavigate,
+}: {
+  canvasModel: ProjectWorkflowCanvasReadModel | null;
+  focusWorkflow: ProjectWorkflowSummary | null;
+  onNavigate: (view: ViewKey) => void;
+}) {
+  const [selectedCanvasNodeId, setSelectedCanvasNodeId] = useState<string | null>(null);
+  const [canvasMode, setCanvasMode] = useState<CanvasMode>("run_status");
+  const activeNodeId = canvasModel
+    ? selectedCanvasNodeId && canvasModel.nodes.some((node) => node.node_id === selectedCanvasNodeId)
+      ? selectedCanvasNodeId
+      : canvasModel.viewport_hint.selected_node_id
+    : null;
+  const activeDetail = canvasModel && activeNodeId ? canvasModel.detail_panels[activeNodeId] ?? null : null;
+  return (
+    <RunningCanvasWorkspaceLayout
+      canvasModel={canvasModel}
+      focusWorkflow={focusWorkflow}
+      onNavigate={onNavigate}
+      activeNodeId={activeNodeId}
+      activeDetail={activeDetail}
+      canvasMode={canvasMode}
+      onSelectNode={setSelectedCanvasNodeId}
+      onSelectMode={setCanvasMode}
+    />
+  );
+}
+
+function RunningCanvasWorkspaceLayout({
+  canvasModel,
+  focusWorkflow,
+  onNavigate,
+  activeNodeId,
+  activeDetail,
+  canvasMode,
+  onSelectNode,
+  onSelectMode,
+}: {
+  canvasModel: ProjectWorkflowCanvasReadModel | null;
+  focusWorkflow: ProjectWorkflowSummary | null;
+  onNavigate: (view: ViewKey) => void;
+  activeNodeId: string | null;
+  activeDetail: ProjectCanvasNodeDetail | null;
+  canvasMode: CanvasMode;
+  onSelectNode: (nodeId: string) => void;
+  onSelectMode: (mode: CanvasMode) => void;
+}) {
+  return (
+    <>
+      {canvasModel ? (
+        <div className="running-canvas-status-band" aria-label="运行状态带">
+          {canvasModel.global_badges.map((badgeItem) => (
+            <span className={`running-status-pill ${badgeItem.tone}`} key={badgeItem.badge_id}>
+              {badgeItem.label}
+            </span>
+          ))}
+          <span className="running-status-pill neutral">当前视图：{canvasModeLabels[canvasMode]}</span>
+        </div>
+      ) : null}
+
+      {canvasModel ? <RunningStageBand canvasModel={canvasModel} /> : null}
+
+      <div className="running-canvas-main">
+        <div className="running-canvas-stage-wrap">
+          {canvasModel ? (
+            <ProjectWorkflowReactFlowCanvas
+              canvasModel={canvasModel}
+              selectedNodeId={activeNodeId ?? canvasModel.viewport_hint.selected_node_id}
+              onSelectNode={onSelectNode}
+            />
+          ) : (
+            <div className="running-canvas-empty" aria-label="空画布">
+              <strong>当前没有运行中的工作流。</strong>
+              <span>可在项目工作流中创建 / 打开工作流，运行态会在这里画成执行画布。</span>
+              <button className="secondary-button" type="button" onClick={() => onNavigate("projects")}>
+                打开项目工作流
+              </button>
+            </div>
+          )}
+        </div>
+        <RunningNodeDetailPanel detail={activeDetail} canvasModel={canvasModel} />
+      </div>
+
+      <div className="running-canvas-footer" aria-label="画布模式与操作">
+        <div className="running-canvas-modes" role="group" aria-label="画布视图模式">
+          {(Object.keys(canvasModeLabels) as CanvasMode[]).map((mode) => (
+            <button
+              className={`running-mode-button ${canvasMode === mode ? "active" : ""}`}
+              type="button"
+              key={mode}
+              aria-pressed={canvasMode === mode}
+              onClick={() => onSelectMode(mode)}
+            >
+              {canvasModeLabels[mode]}
+            </button>
+          ))}
+        </div>
+        <div className="running-canvas-actions">
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={!focusWorkflow}
+            onClick={() => onNavigate("projects")}
+          >
+            展开任务包
+          </button>
+          <button className="secondary-button" type="button" disabled title="无真实执行能力，仅状态展示">
+            暂停（只读）
+          </button>
+          <span className="running-action-note">点节点只切换详情，不触发真实执行。</span>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function RunningStageBand({ canvasModel }: { canvasModel: ProjectWorkflowCanvasReadModel }) {
+  const segments = buildStageBandSegments(canvasModel);
+  if (!segments.length) return null;
+  const completed = segments.filter((segment) => segment.state === "completed").length;
+  return (
+    <div className="running-stage-band" aria-label="阶段进度段带">
+      <div className="running-stage-band-track">
+        {segments.map((segment) => (
+          <div className={`running-stage-segment ${segment.state}`} key={segment.node_id} title={`${segment.label}：${segment.status_label}`}>
+            <span className="running-stage-segment-bar" aria-hidden="true" />
+            <span className="running-stage-segment-label">{segment.label}</span>
+            <em className="running-stage-segment-state">{stageBandStateLabels[segment.state]}</em>
+          </div>
+        ))}
+      </div>
+      <span className="running-stage-band-progress">阶段进度 {completed} / {segments.length}</span>
+    </div>
+  );
+}
+
+function RunningCanvasHeader({
+  workflow,
+  project,
+  canvasModel,
+}: {
+  workflow: ProjectWorkflowSummary | null;
+  project: ProjectRecord | null;
+  canvasModel: ProjectWorkflowCanvasReadModel | null;
+}) {
+  const nodeProgress = workflow ? nodeProgressLabel(workflow) : null;
+  return (
+    <div className="running-canvas-head" aria-label="工作流标题区">
+      <div className="running-canvas-head-left">
+        <p className="running-canvas-eyebrow">CANVAS · 工作流画布</p>
+        <h1 className="running-canvas-title">{workflow?.title ?? "当前没有运行中的工作流"}</h1>
+      </div>
+      <div className="running-canvas-head-meta" aria-label="工作流元信息">
+        {workflow ? <span>{pathTail(workflow.project_root)}</span> : null}
+        {!workflow && project ? <span>{project.name}</span> : null}
+        {nodeProgress ? <span>{nodeProgress}</span> : null}
+        {workflow ? <span>{workflowStatusLabel(workflow.state)}</span> : null}
+        {canvasModel ? <span>{canvasModel.nodes.length} 节点 · {canvasModel.attention_items.length} 关注</span> : null}
+      </div>
+    </div>
+  );
+}
+
+// §6 轻量上下文映射：把读回异常 / 失败 / 阻断挂到右栏当前节点旁，纯读 canvasModel.attention_items，
+// 没有就显示"未知 / 不可用"，绝不补编成"0 条成功结果"或伪造执行结果。
+const readbackAttentionKinds = new Set(["readback_unavailable", "timed_out"]);
+const failureAttentionKinds = new Set(["failed", "blocked", "waiting_for_permission"]);
+
+function RunningNodeRunContext({ canvasModel }: { canvasModel: ProjectWorkflowCanvasReadModel }) {
+  const attention = canvasModel.attention_items;
+  const readbackItem = attention.find((item) => readbackAttentionKinds.has(item.kind)) ?? null;
+  const failureItem = attention.find((item) => failureAttentionKinds.has(item.kind)) ?? null;
+  const readbackValue = readbackItem
+    ? readbackItem.kind === "timed_out"
+      ? "读回超时"
+      : "读回不可用"
+    : "未知 / 不可用";
+  const failureValue = failureItem ? `${stateLabelForDetail(failureItem.status)} · ${failureItem.title}` : "无失败 / 阻断";
+  return (
+    <section className="running-canvas-run-context" aria-label="当前运行上下文">
+      <DetailLine label="读回" value={readbackValue} />
+      <DetailLine label="失败 / 阻断" value={failureValue} />
+      <DetailLine label="状态原因" value={canvasModel.status_reason.label} />
+    </section>
+  );
+}
+
+function stateLabelForDetail(status: string) {
+  return runtimeStatusLabel(status);
+}
+
+function RunningNodeDetailPanel({
+  detail,
+  canvasModel,
+}: {
+  detail: ProjectCanvasNodeDetail | null;
+  canvasModel: ProjectWorkflowCanvasReadModel | null;
+}) {
+  if (!canvasModel) {
+    return (
+      <aside className="running-canvas-detail" aria-label="当前节点详情">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">当前节点</p>
+            <h3>暂无可解释节点</h3>
+            <p className="path-text">没有运行中的工作流；不会补编节点详情。</p>
+          </div>
+        </div>
+        <p className="muted small-note">点节点只切换详情，不触发任何真实执行。</p>
+      </aside>
+    );
+  }
+  if (!detail) {
+    return (
+      <aside className="running-canvas-detail" aria-label="当前节点详情">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">当前节点</p>
+            <h3>未选中节点</h3>
+            <p className="path-text">点击画布节点查看状态 / 会话 / 模型 / 验收 / 审查要求。</p>
+          </div>
+        </div>
+        <RunningNodeRunContext canvasModel={canvasModel} />
+      </aside>
+    );
+  }
+  return (
+    <aside className="running-canvas-detail" aria-label="当前节点详情">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">当前节点</p>
+          <h3>{detail.title}</h3>
+          {detail.summary ? <p className="path-text">{detail.summary}</p> : null}
+        </div>
+        <Badge tone="candidate">{detail.sections.length} 节</Badge>
+      </div>
+      <RunningNodeRunContext canvasModel={canvasModel} />
+      <div className="running-canvas-detail-sections">
+        {detail.sections.map((sectionItem) => (
+          <section className="running-canvas-detail-section" key={sectionItem.section_id}>
+            <h4>{sectionItem.title}</h4>
+            <div className="workflow-draft-grid">
+              {sectionItem.items.map((item) => (
+                <DetailLine key={item.item_id} label={item.label} value={item.value} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+      <p className="muted small-note">点节点只切换详情，不触发真实执行；右栏只解释当前节点为什么安全 / 能跑 / 卡住。</p>
+    </aside>
+  );
+}
+
+function nodeProgressLabel(workflow: ProjectWorkflowSummary): string {
+  const nodes = workflow.derived_workflow?.nodes ?? [];
+  if (!nodes.length) return `节点 ${workflow.node_count}`;
+  const done = nodes.filter((node) => ["accepted", "completed", "ready_for_review"].includes(String(node.status ?? ""))).length;
+  return `节点 ${done} / ${nodes.length}`;
+}
+
+function matchProjectForWorkflow(projects: ProjectRecord[], workflow: ProjectWorkflowSummary | null): ProjectRecord | null {
+  if (!workflow) return null;
+  return (
+    projects.find((project) => project.project_root === workflow.project_root) ?? {
+      project_root: workflow.project_root,
+      name: pathTail(workflow.project_root),
+      active_hint: false,
+      thread_count: 0,
+      active_thread_count: 0,
+      archived_thread_count: 0,
+      authority_files: [],
+      handoff_files: [],
+      evidence_files: [],
+      harness_candidates: [],
+      harness_resources: [],
+      context_warnings: [],
+      warnings: [],
+    }
   );
 }
 

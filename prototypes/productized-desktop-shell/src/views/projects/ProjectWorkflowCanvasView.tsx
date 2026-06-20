@@ -456,7 +456,24 @@ const projectCanvasNodeTypes = {
   projectCanvasNode: ProjectCanvasFlowNodeView,
 };
 
-function ProjectWorkflowReactFlowCanvas({
+export function ProjectWorkflowReactFlowCanvas({
+  canvasModel,
+  selectedNodeId,
+  onSelectNode,
+}: {
+  canvasModel: ProjectWorkflowCanvasReadModel;
+  selectedNodeId: string;
+  onSelectNode: (nodeId: string) => void;
+}) {
+  // window 守卫放在 hooks 之前：服务端 / 离线测试（直接以普通函数调用本组件）走静态舞台，
+  // 不调用任何 hook；浏览器侧才进入下面的 React Flow 内层组件。
+  if (typeof window === "undefined") {
+    return <ProjectCanvasStaticStage canvasModel={canvasModel} selectedNodeId={selectedNodeId} onSelectNode={onSelectNode} />;
+  }
+  return <ProjectWorkflowReactFlowCanvasBrowser canvasModel={canvasModel} selectedNodeId={selectedNodeId} onSelectNode={onSelectNode} />;
+}
+
+function ProjectWorkflowReactFlowCanvasBrowser({
   canvasModel,
   selectedNodeId,
   onSelectNode,
@@ -498,10 +515,6 @@ function ProjectWorkflowReactFlowCanvas({
       })),
     [canvasModel.edges],
   );
-
-  if (typeof window === "undefined") {
-    return <ProjectCanvasStaticStage canvasModel={canvasModel} selectedNodeId={selectedNodeId} onSelectNode={onSelectNode} />;
-  }
 
   return (
     <div className="project-flow-stage" aria-label="项目工作流画布">
