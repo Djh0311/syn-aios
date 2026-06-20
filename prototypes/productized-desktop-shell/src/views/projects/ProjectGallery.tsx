@@ -47,7 +47,6 @@ export function ProjectGallery({
               <span className="project-tile-seal" aria-hidden="true">{projectInitials(project.name)}</span>
               <span className="project-tile-main">
                 <strong>{project.name}</strong>
-                <span className="project-tile-path">{project.project_root}</span>
               </span>
               <span className="project-tile-meta">
                 <span>最近更新</span>

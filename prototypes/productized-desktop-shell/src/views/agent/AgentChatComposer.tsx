@@ -75,15 +75,11 @@ export function AgentChatComposer({
       !relayInputLocked &&
       (isNewSessionMode || selectedSession),
   );
-  const targetSessionTitle = isNewSessionMode ? "新建对话" : selectedSession?.title || "未命名会话";
   const formSendMode = relayDirectSendEnabled
     ? isNewSessionMode
       ? "manual_relay_new_session"
       : "manual_relay_direct"
     : "decision-only";
-  const targetSummary = isNewSessionMode
-    ? `新建对话 · ${selectedProjectLabel || "未绑定项目"}`
-    : `${targetSessionTitle} · ${selectedProjectLabel || "未绑定项目"}`;
   const runSummary = relayIsRunning
     ? manualRelayPollingPaused
       ? "状态刷新已暂停"
@@ -94,6 +90,8 @@ export function AgentChatComposer({
       ? `上次运行：${manualRelayReceipt.status}`
       : null;
   const relayErrorInfo = manualRelayError ? userFacingAgentError(manualRelayError) : null;
+  const blockedRunSummary = !relayDirectSendEnabled && relayDirectSendBlockedReason ? relayDirectSendBlockedReason : null;
+  const showStatusline = isNewSessionMode || !!runSummary || !!blockedRunSummary;
   return (
     <form
       className="agent-chat-composer"
@@ -104,35 +102,34 @@ export function AgentChatComposer({
         if (canDirectSend) onSubmitDraft();
       })()}
     >
+      {showStatusline ? (
       <div className={`agent-composer-statusline ${relayDirectSendEnabled ? "armed" : "blocked"} ${relayIsRunning ? "running" : ""}`}>
+        {isNewSessionMode ? (
         <div className="agent-composer-target">
-          <strong>{isNewSessionMode ? "新建对话" : "继续对话"}</strong>
-          {isNewSessionMode ? (
-            <label className="agent-composer-project-picker">
-              <span>项目</span>
-              <select
-                aria-label="选择新对话项目"
-                value={selectedProjectRoot}
-                disabled={relayInputLocked}
-                onChange={(event) => onChangeSelectedProjectRoot?.(event.currentTarget.value)}
-              >
-                <option value="">选择项目</option>
-                {projectPickerOptions.map((project) => (
-                  <option key={project.project_root} value={project.project_root}>
-                    {project.label} ({project.active_session_count}/{project.session_count})
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <span>{targetSummary}</span>
-          )}
+          <label className="agent-composer-project-picker">
+            <span>项目</span>
+            <select
+              aria-label="选择新对话项目"
+              value={selectedProjectRoot}
+              disabled={relayInputLocked}
+              onChange={(event) => onChangeSelectedProjectRoot?.(event.currentTarget.value)}
+            >
+              <option value="">选择项目</option>
+              {projectPickerOptions.map((project) => (
+                <option key={project.project_root} value={project.project_root}>
+                  {project.label} ({project.active_session_count}/{project.session_count})
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
+        ) : null}
         <div className="agent-composer-runstate" aria-live="polite">
           {runSummary ? <em>{runSummary}</em> : null}
-          {!relayDirectSendEnabled && relayDirectSendBlockedReason ? <em>{relayDirectSendBlockedReason}</em> : null}
+          {blockedRunSummary ? <em>{blockedRunSummary}</em> : null}
         </div>
       </div>
+      ) : null}
       <label>
         <span className="agent-composer-label">给 Codex</span>
         <textarea

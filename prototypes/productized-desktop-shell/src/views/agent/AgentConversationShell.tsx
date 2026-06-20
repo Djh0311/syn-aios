@@ -7,7 +7,7 @@ import {
   buildManualRelayOptimisticUserMessage,
   appendPendingUserMessage,
 } from "../../lib/conversationEngine";
-import { pathTail, relativeTime } from "../../lib/format";
+import { pathTail } from "../../lib/format";
 import {
   pollManualCodexRelayAttempt,
   runManualCodexRelayGuiDirect,
@@ -1146,13 +1146,7 @@ function SessionReader({ session, transcript, loading, loadingOlder = false, tra
     <section className="session-reader">
       <header className="session-reader-head">
         <div>
-          <p className="eyebrow">当前会话</p>
           <h3>{session.title || "未命名会话"}</h3>
-          <p className="session-reader-sub">
-            <span>{session.project_root ? pathTail(session.project_root) : "未关联项目"}</span>
-            <span className="sc-sep" aria-hidden="true">·</span>
-            <span>{relativeTime(session.updated_at_ms)}</span>
-          </p>
         </div>
         <div className="action-row compact">
           <button className="secondary-button" disabled={loading} type="button" onClick={onRetry}>
