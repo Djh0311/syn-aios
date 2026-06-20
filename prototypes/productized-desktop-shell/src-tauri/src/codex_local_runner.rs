@@ -147,6 +147,118 @@ impl CodexLocalPhaseBProcessRunner for RealCodexLocalPhaseBProcessRunner {
     }
 }
 
+/// 工作流单节点·真实 codex 执行适配器（中间版本闭环 worker 节点 / 收敛第一刀）。
+///
+/// 作用：把工作流侧的 `CodexResumeRunner` 接口，翻成 codex_local 侧请求，
+/// **复用已验证的沙箱化 `command_plan_for` + `run_real_codex_process`**——
+/// 不另造 spawn、不另拼沙箱参数、不注入任何审批绕过标。
+///
+/// 仅由 `execute_workflow_node_dispatch` 在「固定测试项目 + env 钥匙」双闸通过后构造；
+/// 真实项目 / 没钥匙 时根本到不了这里（命令层直接 blocked）。
+pub(crate) struct RealWorkflowNodeCodexRunner;
+
+impl crate::CodexResumeRunner for RealWorkflowNodeCodexRunner {
+    fn resume_with_options(
+        &self,
+        thread_id: &str,
+        prompt: &str,
+        last_message_path: &Path,
+        options: &crate::CodexResumeRequestOptions,
+    ) -> Result<(crate::CodexResumeRunResult, crate::WorkflowNodeDispatchExecutionOptions), String>
+    {
+        // safe_probe 是只读探针，不真跑 codex。
+        if options.prompt_kind == "safe_probe" {
+            return Err("safe_probe 不走真实 codex 执行".to_string());
+        }
+        // 沙箱与执行目录必须由上游指令给全，缺一律拒——不裸跑。
+        let sandbox = options
+            .sandbox_mode
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| "缺少 sandbox_mode，已拒绝真实 codex 执行".to_string())?;
+        let target_cwd = options
+            .execution_cwd
+            .as_ref()
+            .map(|path| path.to_string_lossy().to_string())
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| "缺少 execution_cwd，已拒绝真实 codex 执行".to_string())?;
+        let allowed_write_roots: Vec<String> = options
+            .allowed_write_roots
+            .iter()
+            .map(|root| root.to_string_lossy().to_string())
+            .collect();
+        // 节点已绑 codex 会话则 resume，否则新建会话（首跑场景）。
+        let trimmed_thread = thread_id.trim();
+        let (operation_id, session_id) = if trimmed_thread.is_empty() {
+            ("new_session".to_string(), None)
+        } else {
+            ("resume".to_string(), Some(trimmed_thread.to_string()))
+        };
+        let request = CodexLocalExecutionRequest {
+            request_version: 1,
+            adapter_id: "codex-local".to_string(),
+            operation_id,
+            project_id: String::new(),
+            project_root: target_cwd.clone(),
+            workflow_id: String::new(),
+            node_id: String::new(),
+            session_id,
+            work_item_id: None,
+            continuation_id: None,
+            target_cwd,
+            allowed_write_roots,
+            sandbox,
+            prompt_source_kind: "workflow_node_prompt".to_string(),
+            prompt_summary: String::new(),
+            prompt_sha256: String::new(),
+            prompt_ref: String::new(),
+            readback_plan: crate::CodexLocalReadbackPlan {
+                strategy: "required".to_string(),
+                required: true,
+                expected_sources: vec!["worker_report_candidate".to_string()],
+                unavailable_behavior:
+                    "readback_unavailable_or_failed_keeps_result_count_null".to_string(),
+                trust_policy: "workbench_managed_refs_only_no_full_transcript_by_default"
+                    .to_string(),
+                warnings: vec![],
+            },
+            requested_by: "workflow_node_test_project_runner".to_string(),
+            user_confirmation_state: "test_project_env_gated".to_string(),
+            authorization_scope_id: None,
+            runtime_log_refs: vec![],
+            audit_refs: vec![],
+            active_attempts: vec![],
+            warnings: vec!["workflow_node_real_codex_test_project_only".to_string()],
+        };
+        let command_plan = command_plan_for(&request);
+        let timeout_ms = options.timeout_seconds.map(|seconds| seconds * 1000);
+        let result = run_real_codex_process(
+            &request,
+            &command_plan,
+            prompt,
+            last_message_path,
+            timeout_ms,
+        );
+        if !result.real_codex_executed {
+            return Err(result
+                .failure_message
+                .unwrap_or_else(|| "真实 codex 未执行".to_string()));
+        }
+        Ok((
+            crate::CodexResumeRunResult {
+                exit_code: result.exit_code.unwrap_or(-1),
+                timed_out: result.timed_out,
+                stderr_summary: result.failure_message,
+            },
+            // readback_stats 交回 None，由 execute_workflow_node_dispatch_at 走真实
+            // dispatch_readback_stats 计算，不在这里伪造结果数。
+            crate::WorkflowNodeDispatchExecutionOptions {
+                readback_stats: None,
+            },
+        ))
+    }
+}
+
 pub(crate) fn inspect_codex_local_execution_guard(
     request: &CodexLocalExecutionRequest,
 ) -> CodexLocalExecutionGuard {

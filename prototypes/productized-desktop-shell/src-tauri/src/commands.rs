@@ -1647,15 +1647,43 @@ fn prepare_workflow_node_dispatch_for_index_at(
     prepare_workflow_node_dispatch_at(path, index, request)
 }
 
+/// 工作流引擎解封·固定测试项目双闸（高危 #3：改 block 闸；决策见
+/// `decisions/2026-06-21-next-step-unseal-workflow-engine-for-test-project-v1.md`）。
+/// 只有「目标 == 固定测试项目」且「env 钥匙已设」同时满足才放行真实执行；
+/// 其余任何项目 / 没钥匙 → 维持原 legacy blocked，真实项目行为零变化。
+const WORKFLOW_ENGINE_TEST_PROJECT_ROOT: &str = "/Users/yoyi/codex-workflow-mario-test";
+const WORKFLOW_ENGINE_TEST_CONFIRM_ENV: &str = "WORKFLOW_ENGINE_TEST_CONFIRM";
+const WORKFLOW_ENGINE_TEST_CONFIRM_VALUE: &str = "CONFIRMED_TEST_PROJECT_REAL_RUN";
+
+fn workflow_engine_test_project_unsealed(project_root: &str) -> bool {
+    project_root == WORKFLOW_ENGINE_TEST_PROJECT_ROOT
+        && std::env::var(WORKFLOW_ENGINE_TEST_CONFIRM_ENV).ok().as_deref()
+            == Some(WORKFLOW_ENGINE_TEST_CONFIRM_VALUE)
+}
+
 #[tauri::command]
 fn execute_workflow_node_dispatch(
-    _request: WorkflowNodeDispatchExecuteRequest,
+    request: WorkflowNodeDispatchExecuteRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowNodeDispatchResult, String> {
-    let _ = state;
-    Err(legacy_product_command_blocked_message(
-        "execute_workflow_node_dispatch",
-    ))
+    // 双闸:固定测试项目 + env 钥匙。任一不满足 → 维持原 blocked(真实项目零变化)。
+    if !workflow_engine_test_project_unsealed(&request.project_root) {
+        return Err(legacy_product_command_blocked_message(
+            "execute_workflow_node_dispatch",
+        ));
+    }
+    // 已通过双闸:读索引、取 readback 库路径、用复用真 spawn 的适配器执行单节点。
+    // 真实现自带 find_index_project 二次校验;沙箱由 command_plan_for 强制(见适配器)。
+    let index = read_index(&state)?;
+    let readback_db_path = codex_db::default_state_db_path();
+    let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+    execute_workflow_node_dispatch_for_index_at(
+        &state.workflow_state_path,
+        &index,
+        &readback_db_path,
+        &runner,
+        &request,
+    )
 }
 
 fn execute_workflow_node_dispatch_for_index_at(

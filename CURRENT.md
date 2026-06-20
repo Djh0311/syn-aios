@@ -13,12 +13,12 @@
 
 ## 二、在做什么
 
-- **工作流引擎解封·scoping**（主导线）：方案 `decisions/2026-06-21-next-step-unseal-workflow-engine-for-test-project-v1.md`——解封到固定测试项目真跑。**深核发现引擎只 stub 测过、无真 runner**；岔路待定：给旧引擎新造 runner vs 走已有真 runner 的 H5 路径。
+- **工作流引擎解封·第一刀已写入（代码层，真跑待验）**：岔路已定=建薄适配器复用已验证真 spawn（非新造、非走 H5）。`codex_local_runner.rs` 加 `RealWorkflowNodeCodexRunner`（复用 `command_plan_for`+`run_real_codex_process`）；`commands.rs` 给 `execute_workflow_node_dispatch` 加「固定测试项目 + env 钥匙」双闸（真实项目零变化）。**已验**：`cargo check` 0 + `cargo test --lib` 555 passed。**未验**：真跑 codex 一次（高危#1，待授权+测试项目 git init/入索引+设 env）。方案 `decisions/2026-06-21-next-step-unseal-workflow-engine-for-test-project-v1.md`。
 - 运行工作流画布·真机对图打磨：代码 P1–P4 完成，剩起 Tauri 微调视觉（未做）。
 
 ## 三、下一步
 
-1. **定引擎解封岔路**（头号）：先核「测试项目真跑能否走已有真 runner 的 H5 路径」，再决定造哪条；改 block 闸 = 高危 #3，需用户授权 + 审 diff。
+1. **真跑验证引擎解封第一刀**（头号）：测试项目 `git init` + 入索引 → 设 env 钥匙 → 单节点真跑一次 codex → 核实物（真跑了没、改了哪些文件、resume/new_session 哪条对）。高危#1，用户授权那一下不可省。
 2. 据核实矩阵（`handoffs/2026-06-21-full-project-fact-reconciliation-result-v1.md`）做文档归档 + 死码清理——注：`workbench_sqlite_*` 孤岛虽 ~480 dead warning，但是 R3 已拍板的**未来迁移机制，保留勿删**，只压噪声。
 3. 画布真机对图打磨（纯视觉）。
 4. 再往后 relay GUI 尾巴 / 中间·半自动。

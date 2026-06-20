@@ -84,6 +84,19 @@
 
 ---
 
+## 第 5 步 · 断点图 + 第一刀代码已写入（2026-06-21 · 主导线亲核+亲写）
+
+**断点图结论（§0.6 闭环逐节点核代码）**:闭环的「状态机壳」(方案/授权/记录/记忆 命令)基本端到端注册+前端接通,但**闭环内没有一个节点真调 codex**——咨询出方案只存(`project_consultation_proposal_store`)、主管拆任务只预览(`c4_c6_workflow_governance_entrypoints`)、候选提取闭包注入(`observation_store`)、worker 执行被 block。全后端**只有 `manual_relay.rs` + `codex_local_runner.rs` 两处真调 codex**,对应甲·中转 + H5 续跑,**都在闭环外**。→ 第一刀=把真引线接进 worker 节点。
+
+**已写入（代码层,真跑未验）**:
+- `codex_local_runner.rs`:新增 `pub(crate) struct RealWorkflowNodeCodexRunner` impl `crate::CodexResumeRunner`,把 resume options 翻成 `CodexLocalExecutionRequest` → 复用 `command_plan_for` + `run_real_codex_process`(不另造 spawn、不另拼沙箱、缺 sandbox_mode 拒跑、safe_probe 拒跑)。
+- `commands.rs`:`execute_workflow_node_dispatch` 加双闸 `workflow_engine_test_project_unsealed`(== `/Users/yoyi/codex-workflow-mario-test` 且 env `WORKFLOW_ENGINE_TEST_CONFIRM=CONFIRMED_TEST_PROJECT_REAL_RUN`),否则原样 `legacy_product_command_blocked`。过闸后 `read_index` + `codex_db::default_state_db_path()` 做 readback + 适配器执行。
+- 验证:`cargo check` exit 0；`cargo test --lib` 555 passed / 0 failed（无回归,真实项目 blocked 断言仍过）。
+- 安全自证:真实项目零变化(双闸任一不满足→blocked)；沙箱沿用 `command_plan_for`(无条件 `--sandbox`+`--add-dir`、无 bypass)；只读 codex 状态库做 readback,不读凭据。
+- **待真跑验**:首跑 resume vs new_session(适配器按「绑了→resume,否则 new_session」处理,真跑才知对不对);测试项目需 git init + 入索引;需设 env;需用户授权那一下(高危#1)。
+
+---
+
 ## ⚠️ 第 1 步深核修正（2026-06-21 · 推翻上面 C「翻闸即可」的假设）
 
 深核发现:**工作流引擎从没真跑过 Codex,只有 stub runner(全在 test)**——所以「解封 = 翻闸 + 调现成真 runner」是错的,那个真 runner **不存在**。
