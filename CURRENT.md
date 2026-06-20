@@ -1,30 +1,42 @@
-# Current Authority（精简版 · 2026-06-20）
+# Current Authority（精简版 · 2026-06-21）
 
 > **本文是唯一「每次工作完必更」的活正本**（四块：能用 / 在做 / 下一步 / 锁着）。per-task 状态以本文为准；`docs/plans/2026-06-18-master-roadmap-phased-v1.md` 只在阶段切换时动。规则见 `AGENTS.md`。完整历史进 `archive/` + git。
 
 ## 一、现在真能用什么（验过的）
 
-- **甲·中转 relay（A 线 ③b 已收口）**：GUI 在 Syn 里**真发 codex 成功**（里程碑 `9b7360a`「第一次真启动 Codex 干活」）；绑会话 Enter 直发、`codex exec` 沙箱限项目 `--sandbox workspace-write` + `--add-dir` + 拒审批绕过、在场 env 闸、stop 真杀、回执。后端 `manual_relay.rs`。命令行中转亦验成。
-- **⭐ 智能体页 UI = 整体完成**（本会话收口、真机验过、已入库）：codex 布局；信息呈现收口（envelope/receipt 进开发者详情、失败转人话）；会话流拆固定虚拟化 + 消抖 + 按轮分组 + 过程折叠；会话列表过滤 subagent（604→136）+ 无项目统一（`Documents/Codex`→「直接聊天」）+ 标题截断 + 拖拽改宽 + 侧栏收窄 + 头部按 scope 条件化。
-- **运行工作流画布 = 画布优先重画 P1–P4 完成**（本次收口、typecheck 0 + offline 15+r4 亲验）：任务包页从「指标仪表盘」改成「工作流执行画布」——标题区 + 状态带 + 左只读 React Flow 节点画布（状态卡牌 + 连线状态着色 + 顶部阶段进度段带 + minimap）+ 右栏当前节点详情 + 底部模式/操作；统计大盘降级收起。复用 `projectCanvas.ts`（`ProjectWorkflowReactFlowCanvas` + `deriveProjectWorkflowCanvasReadModel`），纯前端零后端、空数据不撒谎、点节点不执行。落点 `RunningWorkflowsView.tsx` + `styles.css`。**唯一没验**：真机对图（需起 Tauri）。
-- **前端其余（B 线已收口）**：拆瘦 App 1104→695 / 记忆页 1340→676 / 工作流侧栏 953→340；全 views 内部字段渐进披露（11 面板）。
+- **甲·中转 relay（A 线 ③b 已收口）**：GUI 在 Syn 里**真发 codex 成功**（里程碑 `9b7360a`）；绑会话 Enter 直发、`codex exec` 沙箱限项目 `--sandbox workspace-write` + `--add-dir` + 拒审批绕过、在场 env 闸、stop 真杀、回执。后端 `manual_relay.rs`。**唯一真能指挥 codex 的路径。**
+- **⭐ 智能体页 UI = 整体完成**（真机验过、已入库）：codex 布局；信息呈现收口；会话流拆固定虚拟化 + 消抖 + 按轮分组 + 过程折叠；会话列表过滤 subagent（604→136）+ 无项目统一 + 标题截断 + 拖拽改宽 + 侧栏收窄。
+- **运行工作流画布 = 画布优先重画 P1–P4 完成**（typecheck 0 + offline 15+r4 亲验）：任务包页改成执行画布（状态带 + 只读 React Flow 节点 + 连线着色 + 阶段段带 + 右栏详情）；纯前端零后端、点节点不执行。**唯一没验**：真机对图。
+- **统一记忆层 + 真攒记忆**：存储 = JSON sidecar（App Support）、命令全接通、线上实存 **3 条真实正式记忆**（已建已用，非「没做」；被冻结的部分见 ④b）。
+- **前端其余（B 线已收口）**：拆瘦 App 1104→695 / 记忆页 1340→676 / 工作流侧栏 953→340；全 views 渐进披露。
+- 后端基线：`cargo test --lib` = **555 passed / 0 failed**（2026-06-21 本机）。
 
 ## 二、在做什么
 
-- **运行工作流画布·真机对图打磨**（B 线最后尾巴）：代码层 P1–P4 已完成并亲验（typecheck+offline）；剩**起 Tauri 对着 image 1 微调视觉**（密度/间距/连线着色/段带）。这就是「打磨 UI」那一步，纯视觉、不碰数据/后端。
+- **工作流引擎解封·scoping**（主导线）：方案 `decisions/2026-06-21-next-step-unseal-workflow-engine-for-test-project-v1.md`——解封到固定测试项目真跑。**深核发现引擎只 stub 测过、无真 runner**；岔路待定：给旧引擎新造 runner vs 走已有真 runner 的 H5 路径。
+- 运行工作流画布·真机对图打磨：代码 P1–P4 完成，剩起 Tauri 微调视觉（未做）。
 
 ## 三、下一步
 
-1. **运行工作流画布·真机对图打磨**：起 Tauri 看画布 vs image 1，差距在哪调哪（纯视觉微调）。← UI 打磨在这一步。
-2. relay GUI 体验最后打磨（A 线，已基本随对话模块重做一起收）。
-3. 再往后才是 **中间·半自动**（A 线阶段 1，依赖甲成熟 + 底座）。
+1. **定引擎解封岔路**（头号）：先核「测试项目真跑能否走已有真 runner 的 H5 路径」，再决定造哪条；改 block 闸 = 高危 #3，需用户授权 + 审 diff。
+2. 据核实矩阵（`handoffs/2026-06-21-full-project-fact-reconciliation-result-v1.md`）做文档归档 + 死码清理——注：`workbench_sqlite_*` 孤岛虽 ~480 dead warning，但是 R3 已拍板的**未来迁移机制，保留勿删**，只压噪声。
+3. 画布真机对图打磨（纯视觉）。
+4. 再往后 relay GUI 尾巴 / 中间·半自动。
 
-## 四、锁着的 / 没接（要碰先按 `AGENTS.md` 高危档走）
+## 四、锁着的 / 没接（区分三种「不在线上默认」，别压成「deferred」一个词——那是上一版误报之源）
 
-- **真跑 codex 进真实项目**（非 temp）：用户在场明确授权那一下，不可省。
-- **乙·自动连环 / 多项目接力**：终局，没开（风险到这才真大）。
-- **底座**：R3 真库切换、统一记忆层、真攒记忆 —— deferred，各需另窗另批。
+**a) 故意锁（impl 完整、可解条件明确）**
+- 工作流多节点编排引擎：前后端双锁（`App.tsx:547` / `commands.rs:1789`→legacy blocked）；四角色真环实现完整（`workflow_execution_entrypoints.rs:1489`），但**只 stub 测过、无真 runner**。⚠️ 主导线正解封到固定测试项目（见 ②）。
+- product-command Phase B / 受控 real resume：对真实项目封，探针跑过。
+- 真跑 codex 进真实项目（非 temp）：用户在场授权那一下，不可省。
+
+**b) 已建 + 已演 + 用户拍板「先不翻闸」（不是没做）**
+- R3 真库切换（JSON→sqlite）：迁移机制全建、fixture+Level-B 演完、`ac7813b` 拍板，结论 `ready_but_not_executed`。**线上仍走 JSON**（`workflow-state.v0.json`）；翻闸被拍板暂缓，机制 0 命令、0 生产调用方。
+- 统一记忆层 + 真攒记忆：见 ①。冻结的只有「切 DB」+「多 agent 专属门」，不是整块 deferred。
+
+**c) 没建（终局）**
+- 乙·自动连环 / 多项目接力：风险到这才真大，没开。
 
 ---
 
-*阶梯：甲·手动中转（已收口）→ 中间·半自动（下下步）→ 乙·自动连环（终局）。**本文每次 commit 必回写**（AGENTS.md §五）。*
+*阶梯：甲·手动中转（已收口）→ 中间·半自动（下下步）→ 乙·自动连环（终局）。**本文每次 commit 必回写**（AGENTS.md §五）。证据正本：`handoffs/2026-06-21-full-project-fact-reconciliation-result-v1.md`。*
