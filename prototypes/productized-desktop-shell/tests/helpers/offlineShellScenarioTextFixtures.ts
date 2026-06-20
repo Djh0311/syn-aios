@@ -46,9 +46,8 @@ export const shellScenarioTextFixtures = {
   ],
   sourceEntryForbiddenTexts: ["读取密钥值", "启动 runner", "调用真实 Codex", "自动转成项目任务"],
   runningWorkflowsExpectedTexts: ["运行中工作流", "只显示运行、等待、复核、重试和读回异常摘要", "读回异常", "未知 / 不可用不显示成 0 条结果"],
-  agentSessionExpectedTexts: ["Codex 会话中心", "新对话", "搜索会话", "Offline interaction fixture", "重新读取", "打开记录文件"],
+  agentSessionExpectedTexts: ["新对话", "搜索会话", "Offline interaction fixture", "重新读取", "打开记录文件"],
   agentViewExpectedTexts: [
-    "智能体",
     "新对话",
     "搜索会话",
     "给 Codex",

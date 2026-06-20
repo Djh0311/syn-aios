@@ -123,6 +123,7 @@ export function AgentSessionList({
   searchQuery,
   readFilter,
   selectedCollapsedGroup,
+  showHeader = false,
   eyebrow,
   title,
   onNewConversation,
@@ -148,6 +149,7 @@ export function AgentSessionList({
   readFilter: SessionReadFilter;
   selectedCollapsedGroup: AgentSessionGroup | null;
   collapsedKeys: Set<string>;
+  showHeader?: boolean;
   eyebrow?: string;
   title: string;
   description?: string;
@@ -203,13 +205,15 @@ export function AgentSessionList({
   return (
     <aside className="agent-session-list" aria-label="会话列表">
       <header className="agent-list-head">
-        <div>
-          {eyebrow ? <p className="pg-sub">{eyebrow}</p> : null}
-          <h1 className="agent-list-title">{title}</h1>
-          <span className="agent-list-count">
-            {visibleSessions.length} / {sessions.length} 会话 · {groups.length} {effectiveGroupBy === "software" ? "软件" : "项目"}
-          </span>
-        </div>
+        {showHeader ? (
+          <div>
+            {eyebrow ? <p className="pg-sub">{eyebrow}</p> : null}
+            <h1 className="agent-list-title">{title}</h1>
+            <span className="agent-list-count">
+              {visibleSessions.length} / {sessions.length} 会话 · {groups.length} {effectiveGroupBy === "software" ? "软件" : "项目"}
+            </span>
+          </div>
+        ) : null}
         <button
           className={`agent-new-chat-button ${newSessionActive ? "active" : ""}`}
           type="button"
@@ -238,22 +242,20 @@ export function AgentSessionList({
             }}
           />
         </label>
-        <div className="session-state-filter" role="group" aria-label="按读取状态筛选会话">
-          {SESSION_READ_FILTERS.map((filter) => (
-            <button
-              className={`filter-chip ${readFilter === filter.key ? "active" : ""}`}
-              key={filter.key}
-              type="button"
-              onClick={() => onReadFilterChange(filter.key)}
-            >
-              {filter.label} <em>{sessions.filter((session) => sessionMatchesReadFilter(session, filter.key)).length}</em>
-            </button>
-          ))}
-        </div>
-        <p className="muted small-note session-list-progress">
-          显示 {renderedSessionCount} / {visibleSessions.length} 个匹配会话。
-          {readFilter === "archived" ? " 当前只看归档。" : ""}
-        </p>
+        {sessions.some((session) => session.archived || !session.rollout_exists) ? (
+          <div className="session-state-filter" role="group" aria-label="按读取状态筛选会话">
+            {SESSION_READ_FILTERS.map((filter) => (
+              <button
+                className={`filter-chip ${readFilter === filter.key ? "active" : ""}`}
+                key={filter.key}
+                type="button"
+                onClick={() => onReadFilterChange(filter.key)}
+              >
+                {filter.label} <em>{sessions.filter((session) => sessionMatchesReadFilter(session, filter.key)).length}</em>
+              </button>
+            ))}
+          </div>
+        ) : null}
         {sessionPageStatus === "loading" ? (
           <p className="muted small-note session-list-read-state">
             正在更新会话列表。
@@ -305,7 +307,9 @@ export function AgentSessionList({
                     </span>
                     <span className="sc-line-2">
                       <span className="sc-time">{relativeTime(session.updated_at_ms)}</span>
-                      <span className={`sc-status ${status.tone}`}>{status.label}</span>
+                      {status.tone !== "ok" ? (
+                        <span className={`sc-status ${status.tone}`}>{status.label}</span>
+                      ) : null}
                     </span>
                   </button>
                 );

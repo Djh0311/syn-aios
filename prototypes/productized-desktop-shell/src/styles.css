@@ -79,7 +79,7 @@
   --shadow-lg: 0 12px 40px rgba(26, 28, 26, 0.10);
 
   /* ── Shell dimensions ── */
-  --sidebar-w: 176px;
+  --sidebar-w: 144px;
   --topbar-h: 52px;
   --dock-h: 0px;
   --right-rail-w: 44px;
@@ -1026,10 +1026,35 @@ button:disabled {
 
 .agent-session-shell {
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: 180px minmax(0, 1fr);
   gap: 0;
   align-items: stretch;
   min-height: 0;
+}
+
+.session-resize-handle {
+  cursor: col-resize;
+  align-self: stretch;
+  position: relative;
+  touch-action: none;
+  user-select: none;
+}
+.session-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  background: var(--ui-line);
+  opacity: 0.5;
+  transition: opacity 0.12s ease, width 0.12s ease;
+}
+.session-resize-handle:hover::before,
+.session-resize-handle:active::before {
+  width: 3px;
+  opacity: 1;
 }
 
 .agent-view-root {
@@ -3398,7 +3423,7 @@ td {
   --candidate-bg: rgba(110, 127, 91, 0.1);
   --danger: var(--vermil);
   --shadow: none;
-  --rail-left: 56px;
+  --rail-left: 48px;
   --rail-right: 58px;
   --topbar-h: 46px;
   --dock-h: 64px;
@@ -8087,7 +8112,7 @@ textarea {
    later review steps. */
 @media (min-width: 1181px) {
   :root {
-    --rail-left: 72px;
+    --rail-left: 48px;
     --rail-right: 58px;
     --rail-right-expanded: 384px;
     --topbar-h: 56px;
@@ -8662,7 +8687,7 @@ textarea {
   }
 
   .agent-view-root .agent-session-shell {
-    grid-template-columns: 304px minmax(0, 1fr);
+    grid-template-columns: 180px minmax(0, 1fr);
     height: 100%;
     min-height: 0;
     border-top: 1px solid var(--ui-line);

@@ -204,7 +204,7 @@ export function AgentSessionCenter({
   transcriptError,
   projectSessionCount: _projectSessionCount,
   projects = [],
-  scope: _scope = "global",
+  scope = "global",
   groupBy: _groupBy,
   title = "Codex 会话中心",
   eyebrow = "智能体",
@@ -258,6 +258,34 @@ export function AgentSessionCenter({
   const manualRelayPollFailureCountRef = useRef(0);
   const [developerOpen, setDeveloperOpen] = useState(false);
   const [sendMode, setSendMode] = useState<AgentConversationSendMode>("existing_session");
+  const [sessionListWidth, setSessionListWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 180;
+    const saved = Number(window.localStorage?.getItem("agent-session-list-width"));
+    return Number.isFinite(saved) && saved >= 120 && saved <= 520 ? saved : 180;
+  });
+  const startSessionListResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sessionListWidth;
+    let latest = startWidth;
+    const onMove = (moveEvent: PointerEvent) => {
+      latest = Math.min(520, Math.max(120, startWidth + (moveEvent.clientX - startX)));
+      setSessionListWidth(latest);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.userSelect = "";
+      try {
+        window.localStorage?.setItem("agent-session-list-width", String(latest));
+      } catch {
+        // ignore persistence failures
+      }
+    };
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
   const pageReadModel = useMemo(
     () =>
       deriveAgentsPageReadModelFromParts({
@@ -703,7 +731,10 @@ export function AgentSessionCenter({
 
   return (
     <section className={`view-stack agent-session-center ${embedded ? "embedded" : ""}`}>
-      <div className="agent-session-shell">
+      <div
+        className="agent-session-shell"
+        style={{ gridTemplateColumns: `${sessionListWidth}px 6px minmax(0, 1fr)` }}
+      >
         <AgentSessionList
           sessions={sessions}
           visibleSessions={visibleSessions}
@@ -717,6 +748,7 @@ export function AgentSessionCenter({
           readFilter={readFilter}
           selectedCollapsedGroup={selectedCollapsedGroup}
           collapsedKeys={collapsedKeys}
+          showHeader={scope === "project"}
           eyebrow={eyebrow}
           title={title}
           description={description}
@@ -731,6 +763,14 @@ export function AgentSessionCenter({
           sessionHasMore={sessionHasMore}
           loadingMoreSessions={loadingMoreSessions}
           onLoadMoreSessions={onLoadMoreSessions}
+        />
+
+        <div
+          className="session-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="拖拽调整会话列表宽度"
+          onPointerDown={startSessionListResize}
         />
 
         <div className="agent-transcript-panel">
