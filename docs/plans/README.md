@@ -1,5 +1,7 @@
 # Plans Directory
 
+> ⚠️ **本目录文档只是设计 / 落点 / 排布，不是状态真相。** 任何 plan 的「✅ / ⏳ / 已完成 / 待做」默认**可能过期**；当前状态一律以 `CURRENT.md` 为准（AGENTS.md §三：报状态必核实物、禁照搬 plan）。
+
 Purpose: store PRDs, design documents, implementation plans, migration plans, rollout plans, and review plans.
 
 This template describes an installed project's `docs/plans/**` directory. It does not define where the standard rule source package stores its own development plans; source-package plans belong under repo-root `plans/**`.

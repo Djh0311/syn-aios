@@ -10,7 +10,7 @@
 
 ## 二、在做什么
 
-- **运行工作流画布**（B 线唯一没动的大 UI 块）：方案 `docs/plans/2026-06-20-running-workflow-canvas-first-redesign-plan-v1.md`（含连线）；**一行没落地**，旧仪表盘还在。
+- **运行工作流画布**（B 线唯一没动的大 UI 块）：方案 `docs/plans/2026-06-20-running-workflow-canvas-first-redesign-plan-v1.md` 已按 **React Flow** 修正（复用 `CanvasView`、re-present 现有 `workflowState`、纯呈现层）；**交执行线建 image 1，从 P1 起**。旧仪表盘还在。
 
 ## 三、下一步
 
