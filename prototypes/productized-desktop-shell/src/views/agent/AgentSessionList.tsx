@@ -4,7 +4,7 @@ import { pathTail, relativeTime } from "../../lib/format";
 import type { SessionRecord } from "../../lib/types";
 
 export const NO_PROJECT_KEY = "__no_project__";
-export const NO_PROJECT_LABEL = "未关联项目";
+export const NO_PROJECT_LABEL = "直接聊天";
 
 const SOFTWARE_LABELS: Record<string, string> = {
   codex: "Codex",
@@ -125,7 +125,6 @@ export function AgentSessionList({
   selectedCollapsedGroup,
   eyebrow,
   title,
-  description,
   onNewConversation,
   onSearchQueryChange,
   onReadFilterChange,
@@ -133,8 +132,6 @@ export function AgentSessionList({
   onToggleGroup,
   onOpenSession,
   sessionPageStatus = "idle",
-  sessionPageSource = null,
-  sessionPageWarnings = [],
   sessionHasMore = false,
   loadingMoreSessions = false,
   onLoadMoreSessions,
@@ -212,7 +209,6 @@ export function AgentSessionList({
           <span className="agent-list-count">
             {visibleSessions.length} / {sessions.length} 会话 · {groups.length} {effectiveGroupBy === "software" ? "软件" : "项目"}
           </span>
-          {description ? <p className="agent-list-desc">{description}</p> : null}
         </div>
         <button
           className={`agent-new-chat-button ${newSessionActive ? "active" : ""}`}
@@ -258,11 +254,9 @@ export function AgentSessionList({
           显示 {renderedSessionCount} / {visibleSessions.length} 个匹配会话。
           {readFilter === "archived" ? " 当前只看归档。" : ""}
         </p>
-        {sessionPageStatus === "loading" || sessionPageSource || sessionPageWarnings.length ? (
+        {sessionPageStatus === "loading" ? (
           <p className="muted small-note session-list-read-state">
-            {sessionPageStatus === "loading" ? "正在更新会话列表。" : null}
-            {sessionPageSource ? ` 来源：${sessionPageSource}。` : null}
-            {sessionPageWarnings.length ? ` ${sessionPageWarnings.join("；")}` : null}
+            正在更新会话列表。
           </p>
         ) : null}
         {selectedCollapsedGroup ? (

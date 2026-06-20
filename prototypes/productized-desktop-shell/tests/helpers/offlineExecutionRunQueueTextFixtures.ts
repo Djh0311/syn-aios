@@ -1,5 +1,5 @@
 export const executionRunQueueTextFixtures = {
-  agentConversationExpectedTexts: ["新对话", "搜索会话", "继续对话", "给 Codex", "发送"],
+  agentConversationExpectedTexts: ["新对话", "搜索会话", "给 Codex", "发送"],
   agentUnifiedExecutionExpectedTexts: [
     "统一执行链路",
     "2 条统一命令",

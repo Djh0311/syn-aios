@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/Badge";
 import { conversationTurns } from "../../lib/conversationTurns";
 import type { CodexTranscript, CodexTranscriptEvent } from "../../lib/types";
 
-const VIRTUAL_MESSAGE_WINDOW_SIZE = 12;
-const VIRTUAL_MESSAGE_OVERSCAN = 3;
-const ESTIMATED_MESSAGE_HEIGHT = 132;
+// Predictive older-page preload: begin loading the next older page while the
+// user is still this many viewport heights away from the very top, instead of
+// waiting until they hit scrollTop 0. Keeps upward scrolling smooth.
+const OLDER_PRELOAD_VIEWPORT_FACTOR = 1.5;
+const OLDER_PRELOAD_MIN_THRESHOLD = 160;
 
 export function TranscriptTimeline({
   olderLoading = false,
@@ -30,15 +32,25 @@ export function ChatTranscript({
 }) {
   const [showInternal, setShowInternal] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const previousScrollHeightRef = useRef<number | null>(null);
+  // Element-based prepend anchor: we hold the real DOM node of the first turn
+  // and its on-screen top, then after an older page is prepended we shift
+  // scrollTop by however far that exact node actually moved. This is immune to
+  // estimated heights / content-visibility intrinsic sizing, and works on
+  // WKWebView (Tauri/macOS) where the native `overflow-anchor` does not.
+  const prependAnchorRef = useRef<{ element: Element; top: number } | null>(null);
   const autoRequestedOlderCursorRef = useRef<number | null>(null);
-  const [scrollTop, setScrollTop] = useState(Number.MAX_SAFE_INTEGER);
-  const [viewportHeight, setViewportHeight] = useState(720);
-  const [isNearBottom, setIsNearBottom] = useState(true);
+  // Near-bottom tracking lives in a ref so per-tick live updates do not force a
+  // re-render of the whole stream; a separate state drives only the "回到底部"
+  // affordance which genuinely needs to repaint.
+  const isNearBottomRef = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
 
   const conversationEvents = useMemo(() => conversationTurns(transcript.events), [transcript.events]);
   const conversationIds = useMemo(() => new Set(conversationEvents.map((event) => event.event_id)), [conversationEvents]);
-  const displayEvents = useMemo(
+  // Main stream = the clean conversation events plus the per-turn process
+  // status events (tool / reasoning / command / compacted). Everything else is
+  // raw internal noise that stays in the bottom developer fold.
+  const streamEvents = useMemo(
     () =>
       transcript.events.filter((event) => {
         if (conversationIds.has(event.event_id)) return true;
@@ -46,18 +58,24 @@ export function ChatTranscript({
       }),
     [transcript.events, conversationIds],
   );
-  const { stableConversation, streamingEvent } = useStreamingSeparatedConversation(displayEvents);
-  const virtualWindow = useVirtualMessageWindow(stableConversation, scrollTop, viewportHeight);
-  const hiddenConversationCount = stableConversation.length - virtualWindow.visible.length;
-  const displayIds = useMemo(() => new Set(displayEvents.map((event) => event.event_id)), [displayEvents]);
+  const turns = useMemo(() => buildConversationTurns(streamEvents, conversationIds), [streamEvents, conversationIds]);
+  const conversationItemCount = useMemo(
+    () => turns.reduce((count, turn) => count + (turn.kind === "user" || turn.final ? 1 : 0), 0),
+    [turns],
+  );
+  const streamIds = useMemo(() => new Set(streamEvents.map((event) => event.event_id)), [streamEvents]);
   const internalEvents = useMemo(
-    () => transcript.events.filter((event) => !displayIds.has(event.event_id)),
-    [transcript.events, displayIds],
+    () => transcript.events.filter((event) => !streamIds.has(event.event_id)),
+    [transcript.events, streamIds],
   );
   const internalCount = internalEvents.length;
   const olderCursor = transcript.pagination?.has_older ? transcript.pagination.older_before_line ?? null : null;
   const hasOlderTranscript = !!olderCursor && !!onLoadOlder;
   const boundedLoadMode = transcript.pagination && transcript.pagination.mode !== "full" ? "bounded" : "full";
+
+  const lastTurn = turns[turns.length - 1];
+  const streamingTurn = lastTurn?.kind === "agent" && lastTurn.final && metadataFlag(lastTurn.final, "conversation_engine_streaming");
+  const streamingText = lastTurn?.kind === "agent" ? lastTurn.final?.text ?? null : null;
 
   useEffect(() => {
     if (autoRequestedOlderCursorRef.current !== olderCursor) {
@@ -65,144 +83,115 @@ export function ChatTranscript({
     }
   }, [olderCursor]);
 
-  useEffect(() => {
+  // On thread switch, jump to the bottom using the real rendered height. Runs
+  // in a layout effect (before paint) so the first frame already sits at the
+  // bottom — no flash of wrong position then a correcting jump.
+  useLayoutEffect(() => {
     const node = scrollRef.current;
     if (!node) return;
-    node.scrollTop = Math.max(0, stableConversation.length * ESTIMATED_MESSAGE_HEIGHT - node.clientHeight);
-    setScrollTop(node.scrollTop);
-    setViewportHeight(node.clientHeight || 720);
-    setIsNearBottom(true);
+    node.scrollTop = node.scrollHeight;
+    isNearBottomRef.current = true;
+    setAtBottom(true);
   }, [transcript.thread_id]);
 
-  useEffect(() => {
-    if (!isNearBottom) return;
-    const frame = window.requestAnimationFrame(() => scrollToLatest());
-    return () => window.cancelAnimationFrame(frame);
-  }, [isNearBottom, stableConversation.length, streamingEvent?.text]);
-
-  useEffect(() => {
-    const previousHeight = previousScrollHeightRef.current;
+  // Bottom-follow only while genuinely pinned to the bottom. Synchronous,
+  // pre-paint, so a streamed tick lands at the bottom in the same frame instead
+  // of painting short then snapping down.
+  useLayoutEffect(() => {
+    if (!isNearBottomRef.current) return;
     const node = scrollRef.current;
-    if (previousHeight === null || !node) return;
-    const delta = node.scrollHeight - previousHeight;
-    if (delta > 0) {
-      node.scrollTop += delta;
-      setScrollTop(node.scrollTop);
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [turns.length, streamingText, streamingTurn]);
+
+  // Prepend older page: shift scrollTop by exactly how far the anchored turn
+  // actually moved (measured pre-paint), so the reading position is preserved
+  // with zero visible jump.
+  useLayoutEffect(() => {
+    const pending = prependAnchorRef.current;
+    const node = scrollRef.current;
+    if (!pending || !node) {
+      prependAnchorRef.current = null;
+      return;
     }
-    previousScrollHeightRef.current = null;
+    if (pending.element.isConnected) {
+      const delta = pending.element.getBoundingClientRect().top - pending.top;
+      if (delta !== 0) node.scrollTop += delta;
+    }
+    prependAnchorRef.current = null;
   }, [transcript.events.length]);
 
   function handleScroll(event: React.UIEvent<HTMLDivElement>) {
     const target = event.currentTarget;
-    setScrollTop(target.scrollTop);
-    setViewportHeight(target.clientHeight || 720);
-    setIsNearBottom(target.scrollHeight - target.scrollTop - target.clientHeight < 100);
-    if (target.scrollTop < 24) requestOlderTranscript(false);
+    const nearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 100;
+    if (nearBottom !== isNearBottomRef.current) {
+      isNearBottomRef.current = nearBottom;
+      setAtBottom(nearBottom);
+    }
+    const preloadThreshold = Math.max(OLDER_PRELOAD_MIN_THRESHOLD, (target.clientHeight || 720) * OLDER_PRELOAD_VIEWPORT_FACTOR);
+    if (target.scrollTop < preloadThreshold) requestOlderTranscript();
   }
 
   function scrollToLatest() {
     const node = scrollRef.current;
     if (!node) return;
     node.scrollTop = node.scrollHeight;
-    setScrollTop(node.scrollTop);
-    setIsNearBottom(true);
+    isNearBottomRef.current = true;
+    setAtBottom(true);
   }
 
-  function scrollOneWindow(direction: "earlier" | "newer") {
-    const node = scrollRef.current;
-    if (!node) return;
-    const delta = VIRTUAL_MESSAGE_WINDOW_SIZE * ESTIMATED_MESSAGE_HEIGHT;
-    node.scrollTop = Math.max(0, node.scrollTop + (direction === "earlier" ? -delta : delta));
-    setScrollTop(node.scrollTop);
-  }
-
-  function requestOlderTranscript(manual: boolean) {
+  function requestOlderTranscript() {
     if (!hasOlderTranscript || olderLoading || !olderCursor) return;
-    if (!manual && autoRequestedOlderCursorRef.current === olderCursor) return;
+    // Same-cursor dedup keeps predictive scrolling from chain-firing the loader.
+    if (autoRequestedOlderCursorRef.current === olderCursor) return;
     const node = scrollRef.current;
-    previousScrollHeightRef.current = node ? node.scrollHeight : null;
+    // Anchor to the first real turn node so we can put the reading position back
+    // exactly after the older page lands above it.
+    const anchor = node?.querySelector(":scope > .codex-transcript-item, :scope > .chat-turn") ?? null;
+    prependAnchorRef.current = anchor ? { element: anchor, top: anchor.getBoundingClientRect().top } : null;
     autoRequestedOlderCursorRef.current = olderCursor;
     onLoadOlder?.();
   }
 
-  const transcriptPageBoundary = hasOlderTranscript ? (
-    <button
-      className="secondary-button chat-load-older"
-      disabled={olderLoading}
-      type="button"
-      onClick={() => requestOlderTranscript(true)}
-    >
-      {olderLoading ? "正在加载更早对话" : "加载更早对话"}
-    </button>
+  const olderBoundary = hasOlderTranscript ? (
+    <p className="session-reader-boundary chat-older-preload" data-older-preload="pending">
+      {olderLoading ? "正在载入更早对话…" : "上滑可继续载入更早对话。"}
+    </p>
   ) : transcript.pagination?.mode && transcript.pagination.mode !== "full" ? (
-    <p className="session-reader-boundary">已到达这条对话的最早可读片段。</p>
+    <p className="session-reader-boundary" data-older-preload="earliest">
+      已到达这条对话的最早可读片段。
+    </p>
   ) : null;
 
   return (
     <section className="transcript-shell">
-      {displayEvents.length === 0 ? (
+      {streamEvents.length === 0 ? (
         <>
           <section className="empty-state">
             <strong>这条会话没有可显示的对话</strong>
             <span>如果需要排查工具调用、上下文或系统事件，请打开开发者详情。</span>
           </section>
-          {transcriptPageBoundary}
+          {olderBoundary}
         </>
       ) : (
         <div
           className="chat-stream"
-          data-conversation-engine="virtualized"
+          data-conversation-engine="turns"
           data-transcript-load={boundedLoadMode}
+          data-stick-to-bottom={atBottom ? "true" : "false"}
+          data-streaming={streamingTurn ? "true" : "false"}
           onScroll={handleScroll}
           ref={scrollRef}
         >
-          {transcriptPageBoundary}
-          {hiddenConversationCount > 0 ? (
-            <div className="chat-fold-notice" data-virtualized-window={`${virtualWindow.visible.length}/${displayEvents.length}`}>
-              <span>
-                已收纳较早 {hiddenConversationCount} 条对话
-              </span>
-              {virtualWindow.start > 0 ? (
-                <button className="secondary-button" type="button" onClick={() => scrollOneWindow("earlier")}>
-                  看更早
-                </button>
-              ) : null}
-              {virtualWindow.end < displayEvents.length ? (
-                <button className="secondary-button" type="button" onClick={() => scrollOneWindow("newer")}>
-                  查看更新
-                </button>
-              ) : null}
-              <button className="secondary-button" type="button" onClick={scrollToLatest}>
-                回到最新
-              </button>
-            </div>
-          ) : null}
-          <div
-            className="chat-virtual-spacer"
-            data-stick-to-bottom={isNearBottom ? "true" : "false"}
-            data-streaming-separated={streamingEvent ? "true" : "false"}
-            style={{ height: virtualWindow.totalHeight, position: "relative" }}
-          >
-            <div
-              className="chat-virtual-window"
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 18,
-                transform: `translateY(${virtualWindow.offsetTop}px)`,
-              }}
-            >
-              {virtualWindow.visible.map((event) => (
-                <CodexTranscriptItem event={event} key={event.event_id} />
-              ))}
-            </div>
-          </div>
-          {streamingEvent ? (
-            <div className="chat-streaming-tail" data-streaming-separated="true" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <CodexTranscriptItem event={streamingEvent} />
-            </div>
-          ) : null}
-          {!isNearBottom || streamingEvent ? (
+          {olderBoundary}
+          {turns.map((turn) =>
+            turn.kind === "user" ? (
+              <CodexTranscriptItem event={turn.event} key={turn.key} />
+            ) : (
+              <AgentTurn key={turn.key} turn={turn} />
+            ),
+          )}
+          {!atBottom || streamingTurn ? (
             <button
               className="chat-return-bottom"
               style={{ alignSelf: "center", bottom: 12, position: "sticky", zIndex: 2 }}
@@ -216,7 +205,7 @@ export function ChatTranscript({
       )}
 
       <div className="chat-toolbar">
-        <span className="counts"><em>{displayEvents.length}</em> 条对话项</span>
+        <span className="counts"><em>{conversationItemCount}</em> 条对话项</span>
       </div>
 
       {internalCount > 0 ? (
@@ -244,20 +233,84 @@ export function ChatTranscript({
   );
 }
 
-function useStreamingSeparatedConversation(events: CodexTranscriptEvent[]) {
-  return useMemo(() => {
-    const last = events[events.length - 1];
-    if (last && metadataFlag(last, "conversation_engine_streaming")) {
-      return {
-        stableConversation: events.slice(0, -1),
-        streamingEvent: last,
-      };
+type ConversationTurn =
+  | { kind: "user"; key: string; event: CodexTranscriptEvent }
+  | { kind: "agent"; key: string; process: CodexTranscriptEvent[]; final: CodexTranscriptEvent | null };
+
+// Group the ordered stream into turns. The turn boundary is the user message:
+// everything from one user message up to (but not including) the next is one
+// agent turn. Within that turn the LAST clean assistant_message is the final
+// output; any earlier assistant messages (codex preambles like "我看下这个
+// 文件") fold into the process alongside reasoning / tool / command events, in
+// chronological order. This is adapter-agnostic — it keys off "clean
+// conversation event" vs "process noise" and "last assistant in the turn",
+// never off codex-specific completion markers — so any future agent normalised
+// into the same event shape gets turn = [process folded] + [final output] for
+// free.
+function buildConversationTurns(events: CodexTranscriptEvent[], conversationIds: Set<string>): ConversationTurn[] {
+  const turns: ConversationTurn[] = [];
+  let pendingItems: CodexTranscriptEvent[] | null = null;
+  let pendingSeedId: string | null = null;
+
+  function flushAgent() {
+    if (!pendingItems || pendingItems.length === 0) {
+      pendingItems = null;
+      pendingSeedId = null;
+      return;
     }
-    return {
-      stableConversation: events,
-      streamingEvent: null,
-    };
-  }, [events]);
+    // Last clean assistant_message in the turn is the final output; everything
+    // else (earlier assistant preambles + process events) stays in order.
+    let finalIndex = -1;
+    for (let index = pendingItems.length - 1; index >= 0; index -= 1) {
+      const candidate = pendingItems[index];
+      if (conversationIds.has(candidate.event_id) && candidate.event_type === "assistant_message") {
+        finalIndex = index;
+        break;
+      }
+    }
+    const final = finalIndex >= 0 ? pendingItems[finalIndex] : null;
+    const process = pendingItems.filter((_, index) => index !== finalIndex);
+    turns.push({ kind: "agent", key: `agent-${pendingSeedId ?? pendingItems[0].event_id}`, process, final });
+    pendingItems = null;
+    pendingSeedId = null;
+  }
+
+  for (const event of events) {
+    if (conversationIds.has(event.event_id) && event.event_type === "user_message") {
+      flushAgent();
+      turns.push({ kind: "user", key: event.event_id, event });
+      continue;
+    }
+    if (!pendingItems) {
+      pendingItems = [];
+      pendingSeedId = event.event_id;
+    }
+    pendingItems.push(event);
+  }
+  flushAgent();
+  return turns;
+}
+
+function AgentTurn({ turn }: { turn: { kind: "agent"; key: string; process: CodexTranscriptEvent[]; final: CodexTranscriptEvent | null } }) {
+  const stepCount = turn.process.length;
+  return (
+    <div className="chat-turn agent" data-turn="agent">
+      {stepCount > 0 ? (
+        <details className="chat-turn-process" data-turn-process={stepCount}>
+          <summary>
+            <span>过程 · {stepCount} 步</span>
+            <em>思考与工具调用</em>
+          </summary>
+          <div className="chat-turn-process-list">
+            {turn.process.map((event) => (
+              <CodexTranscriptItem event={event} key={event.event_id} />
+            ))}
+          </div>
+        </details>
+      ) : null}
+      {turn.final ? <CodexTranscriptItem event={turn.final} key={turn.final.event_id} /> : null}
+    </div>
+  );
 }
 
 function metadataFlag(event: CodexTranscriptEvent, key: string): boolean {
@@ -288,24 +341,6 @@ function isCodexNativeStatusEvent(event: CodexTranscriptEvent): boolean {
   if (event.event_type === "command_output") return true;
   if (event.event_type === "compacted") return true;
   return event.event_type === "system_context" && payloadTypeOf(event) === "reasoning";
-}
-
-function useVirtualMessageWindow(events: CodexTranscriptEvent[], scrollTop: number, viewportHeight: number) {
-  return useMemo(() => {
-    const visibleByHeight = Math.ceil(viewportHeight / ESTIMATED_MESSAGE_HEIGHT) + VIRTUAL_MESSAGE_OVERSCAN * 2;
-    const windowSize = Math.max(VIRTUAL_MESSAGE_WINDOW_SIZE, visibleByHeight);
-    const firstVisible = Math.max(0, Math.floor(scrollTop / ESTIMATED_MESSAGE_HEIGHT) - VIRTUAL_MESSAGE_OVERSCAN);
-    const latestStart = Math.max(0, events.length - windowSize);
-    const start = Math.min(firstVisible, latestStart);
-    const end = Math.min(events.length, start + windowSize);
-    return {
-      start,
-      end,
-      offsetTop: start * ESTIMATED_MESSAGE_HEIGHT,
-      totalHeight: events.length * ESTIMATED_MESSAGE_HEIGHT,
-      visible: events.slice(start, end),
-    };
-  }, [events, scrollTop, viewportHeight]);
 }
 
 function CodexTranscriptItem({ event }: { event: CodexTranscriptEvent }) {

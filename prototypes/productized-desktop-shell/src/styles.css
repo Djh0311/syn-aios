@@ -79,7 +79,7 @@
   --shadow-lg: 0 12px 40px rgba(26, 28, 26, 0.10);
 
   /* ── Shell dimensions ── */
-  --sidebar-w: 220px;
+  --sidebar-w: 176px;
   --topbar-h: 52px;
   --dock-h: 0px;
   --right-rail-w: 44px;
@@ -1026,7 +1026,7 @@ button:disabled {
 
 .agent-session-shell {
   display: grid;
-  grid-template-columns: 304px minmax(0, 1fr);
+  grid-template-columns: 224px minmax(0, 1fr);
   gap: 0;
   align-items: stretch;
   min-height: 0;
@@ -1119,14 +1119,6 @@ button:disabled {
   font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
   font-size: 11px;
 }
-.agent-list-head .agent-list-desc {
-  margin: 8px 0 0;
-  color: var(--ink-light);
-  font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
-  line-height: 1.6;
-}
-
 .agent-new-chat-button {
   display: flex;
   align-items: center;
@@ -1602,6 +1594,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 .session-card .sc-dot {
   flex: none;
@@ -1624,6 +1617,11 @@ button:disabled {
   background: var(--ink-mist);
 }
 .session-card .sc-title {
+  flex: 1 1 auto;
+  /* Without min-width:0 a flex child refuses to shrink below its content width,
+     so the ellipsis above never engages and a multi-kilobyte title blows the
+     card open. This is the missing piece that makes the truncation real. */
+  min-width: 0;
   color: var(--ink-deep);
   font-family: -apple-system, "PingFang SC", sans-serif;
   font-size: 12.5px;
@@ -1731,20 +1729,36 @@ button:disabled {
 
 .session-reader-head {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 11px 18px 9px;
+  min-height: 38px;
+  padding: 6px 16px;
   border-bottom: 1px solid var(--hair-2);
   background: rgba(252, 251, 248, 0.7);
 }
 
+.session-reader-head > div:first-child {
+  min-width: 0;
+}
 .session-reader-head h3 {
-  margin: 2px 0 0;
+  margin: 0;
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 650;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
+  line-height: 1.2;
+  /* Conversation-page top-bar title: codex stores the whole first message here,
+     so clamp to one ellipsised line instead of wrapping a wall of text. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-reader-head .action-row.compact .secondary-button {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 .session-detail-grid,
@@ -6358,7 +6372,20 @@ textarea {
   gap: 8px;
   max-height: calc(100vh - var(--topbar-h) - var(--dock-h) - 150px);
   overflow: auto;
+  /* Let engines that support it preserve scroll position on content change for
+     free; WKWebView ignores this, where our element-based JS anchor takes over. */
+  overflow-anchor: auto;
   padding: 20px 32px 26px;
+}
+/* Skip layout/paint for off-screen turns so a full-segment render of a long
+   conversation does not block the main thread. `auto` intrinsic size remembers
+   the real height once rendered; the 120px fallback keeps the scrollbar stable
+   before first paint. Supported on Chromium and Safari 18+, harmlessly ignored
+   elsewhere. */
+.chat-stream > .codex-transcript-item,
+.chat-stream > .chat-turn {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }
 .agent-session-center.embedded .chat-stream {
   flex: 1 1 auto;
@@ -6376,6 +6403,56 @@ textarea {
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
   font-size: 11px;
+}
+
+.chat-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(100%, 860px);
+  max-width: 100%;
+}
+.chat-turn-process {
+  align-self: flex-start;
+  width: 100%;
+  border: 1px solid rgba(54, 51, 44, 0.1);
+  border-radius: 8px;
+  background: rgba(245, 241, 232, 0.42);
+}
+.chat-turn-process > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink-light);
+  font-family: -apple-system, "PingFang SC", sans-serif;
+  font-size: 12px;
+}
+.chat-turn-process > summary::-webkit-details-marker {
+  display: none;
+}
+.chat-turn-process > summary span {
+  font-weight: 600;
+}
+.chat-turn-process > summary em {
+  font-style: normal;
+  color: rgba(54, 51, 44, 0.45);
+  font-size: 11px;
+}
+.chat-turn-process[open] > summary {
+  border-bottom: 1px solid rgba(54, 51, 44, 0.08);
+}
+.chat-turn-process-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+.chat-older-preload {
+  align-self: center;
+  opacity: 0.72;
 }
 
 .codex-transcript-item {
@@ -6403,8 +6480,13 @@ textarea {
 }
 
 .codex-transcript-item.user {
-  padding-left: 12px;
-  border-left: 2px solid rgba(161, 66, 66, 0.28);
+  align-self: flex-end;
+  width: fit-content;
+  max-width: min(76%, 720px);
+  padding: 8px 11px 9px;
+  border: 1px solid rgba(161, 66, 66, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 248, 239, 0.72);
 }
 
 .codex-transcript-item.assistant {
@@ -6422,6 +6504,10 @@ textarea {
   font-size: 10px;
   letter-spacing: 0;
   text-transform: none;
+}
+
+.codex-transcript-item.user .who {
+  justify-content: flex-end;
 }
 .codex-transcript-item .who strong {
   color: var(--ink-deep);
@@ -7081,16 +7167,22 @@ textarea {
 
 .project-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(188px, 236px));
+  gap: 12px;
+  justify-content: start;
 }
 
 .project-tile {
   display: grid;
-  grid-template-rows: auto minmax(74px, auto) auto auto;
-  gap: 12px;
-  min-height: 248px;
-  padding: 18px;
+  grid-template-areas:
+    "seal main"
+    "meta meta"
+    "stats stats";
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px 10px;
+  min-height: 0;
+  padding: 12px 13px;
   border: 1px solid var(--hair-2);
   border-left: 2px solid rgba(28, 31, 36, 0.16);
   background:
@@ -7114,48 +7206,39 @@ textarea {
 }
 
 .project-tile-seal {
+  grid-area: seal;
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
+  width: 34px;
+  height: 34px;
   border: 1px solid rgba(161, 66, 66, 0.42);
   color: var(--vermil);
   font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 15px;
+  font-size: 12px;
   letter-spacing: 0;
 }
 
 .project-tile-main {
+  grid-area: main;
   display: grid;
-  gap: 8px;
+  gap: 0;
   min-width: 0;
 }
 
 .project-tile-main strong {
   color: var(--ink-deep);
   font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 400;
-  line-height: 1.25;
+  line-height: 1.28;
   overflow-wrap: anywhere;
-}
-
-.project-tile-path {
-  display: -webkit-box;
-  color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 11px;
-  line-height: 1.45;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 .project-tile-meta {
+  grid-area: meta;
   display: grid;
   gap: 2px;
-  padding-top: 10px;
+  padding-top: 8px;
   border-top: 1px dashed var(--hair);
 }
 
@@ -7174,9 +7257,10 @@ textarea {
 }
 
 .project-tile-stats {
+  grid-area: stats;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 12px;
+  gap: 4px 10px;
 }
 
 .project-tile-stats b {

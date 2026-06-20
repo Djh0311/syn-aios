@@ -175,6 +175,7 @@ pub fn read_threads_page(
             thread_source
         FROM threads
         WHERE has_user_event = 1
+        AND source NOT LIKE '%subagent%'
         {archived_clause}
         {query_clause}
         ORDER BY updated_at_ms DESC, id DESC
@@ -198,7 +199,7 @@ pub fn read_threads_page(
         for row in rows {
             let mut thread = row.map_err(|e| format!("行解码失败：{e}"))?;
             if let Some(title) = display_titles.get(&thread.thread_id) {
-                thread.title = title.clone();
+                thread.title = truncate_display_title(title);
             }
             out.push(thread);
         }
@@ -212,7 +213,7 @@ pub fn read_threads_page(
         for row in rows {
             let mut thread = row.map_err(|e| format!("行解码失败：{e}"))?;
             if let Some(title) = display_titles.get(&thread.thread_id) {
-                thread.title = title.clone();
+                thread.title = truncate_display_title(title);
             }
             out.push(thread);
         }
@@ -229,6 +230,42 @@ pub fn read_threads_page(
     })
 }
 
+/// cwd prefixes codex uses as scratch / "open a chat without a project" roots.
+/// Threads rooted here are direct chats, not project work, so they collapse into
+/// the None project bucket (codex's own unified "direct chat" list). Kept as a
+/// named list — user-specified for 2026-06-20 (codex's default new-chat area
+/// under Documents/Codex); add prefixes here or swap for a more general signal
+/// later without touching the derivation logic.
+const NO_PROJECT_PATH_PREFIXES: &[&str] = &["/Users/yoyi/Documents/Codex"];
+
+/// A cwd is "no project" when it equals one of the scratch roots or sits anywhere
+/// beneath it. Everything else (named project dirs, including ~/workspace) keeps
+/// its own project_root.
+fn is_no_project_cwd(cwd: &str) -> bool {
+    let trimmed = cwd.trim();
+    NO_PROJECT_PATH_PREFIXES.iter().any(|prefix| {
+        trimmed == *prefix || trimmed.starts_with(&format!("{prefix}/"))
+    })
+}
+
+/// codex stores the entire first user message in `threads.title` (observed mean
+/// ~11k chars, max ~76k). Collapse it to a single display line capped at 120
+/// chars so the read model payload stays small and the UI never has to render a
+/// multi-kilobyte title. Search still runs against the full title column in SQL,
+/// so this only trims what is shown, not what is matched.
+fn truncate_display_title(raw: &str) -> String {
+    const MAX_CHARS: usize = 120;
+    let trimmed = raw.trim();
+    let first_line = trimmed.lines().next().unwrap_or(trimmed).trim();
+    let base = if first_line.is_empty() { trimmed } else { first_line };
+    let is_single_line = base.chars().count() == trimmed.chars().count();
+    if is_single_line && base.chars().count() <= MAX_CHARS {
+        return base.to_string();
+    }
+    let truncated: String = base.chars().take(MAX_CHARS).collect();
+    format!("{truncated}…")
+}
+
 fn decode_thread_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexThreadRow> {
     let thread_id: String = row.get(0)?;
     let title: String = row.get(1)?;
@@ -240,7 +277,7 @@ fn decode_thread_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexThreadRow
     let reasoning_effort: Option<String> = row.get(7)?;
     let thread_source: Option<String> = row.get(8)?;
 
-    let project_root = if cwd.trim().is_empty() {
+    let project_root = if cwd.trim().is_empty() || is_no_project_cwd(&cwd) {
         None
     } else {
         Some(cwd)
@@ -256,7 +293,7 @@ fn decode_thread_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexThreadRow
 
     Ok(CodexThreadRow {
         thread_id,
-        title,
+        title: truncate_display_title(&title),
         project_root,
         updated_at_ms,
         archived: archived_int != 0,
@@ -655,6 +692,7 @@ mod tests {
                 model TEXT,
                 reasoning_effort TEXT,
                 thread_source TEXT,
+                source TEXT NOT NULL DEFAULT 'cli',
                 has_user_event INTEGER NOT NULL
             );
             INSERT INTO threads (
@@ -739,5 +777,171 @@ mod tests {
             ),
         )
         .expect("insert thread");
+    }
+
+    fn insert_thread_with_source(
+        db_path: &Path,
+        thread_id: &str,
+        title: &str,
+        source: &str,
+        updated_at_ms: i64,
+        has_user_event: i64,
+    ) {
+        let conn = Connection::open(db_path).expect("open sqlite");
+        conn.execute(
+            r#"
+            INSERT INTO threads (
+                id,
+                title,
+                cwd,
+                updated_at_ms,
+                archived,
+                rollout_path,
+                model,
+                reasoning_effort,
+                thread_source,
+                source,
+                has_user_event
+            ) VALUES (?1, ?2, '/tmp/project', ?3, 0, '', 'gpt-test', 'medium', 'codex', ?4, ?5)
+            "#,
+            (thread_id, title, updated_at_ms, source, has_user_event),
+        )
+        .expect("insert thread with source");
+    }
+
+    #[test]
+    fn read_threads_hides_subagent_source() {
+        let dir = temp_dir("codex-session-subagent-filter");
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let db_path = dir.join("state_5.sqlite");
+        create_threads_db(&db_path);
+        // thread-1 (from fixture) has source 'cli'. Add a real top-level session
+        // and several subagent child threads — the subagents must be hidden.
+        insert_thread_with_source(&db_path, "real-vscode", "真实顶层会话", "vscode", 5_000, 1);
+        insert_thread_with_source(
+            &db_path,
+            "subagent-guardian",
+            "guardian subagent noise",
+            r#"{"subagent":{"other":"guardian"}}"#,
+            6_000,
+            1,
+        );
+        insert_thread_with_source(
+            &db_path,
+            "subagent-worker",
+            "worker subagent noise",
+            r#"{"subagent":{"thread_spawn":{"role":"worker"}}}"#,
+            7_000,
+            1,
+        );
+
+        let page = read_threads_page(
+            &db_path,
+            CodexThreadPageOptions {
+                page_size: 100,
+                offset: 0,
+                include_archived: false,
+                archived_only: false,
+                query: None,
+            },
+        )
+        .expect("read page");
+
+        let ids: Vec<&str> = page.rows.iter().map(|row| row.thread_id.as_str()).collect();
+        assert!(ids.contains(&"real-vscode"), "top-level vscode session must stay");
+        assert!(ids.contains(&"thread-1"), "fixture cli session must stay");
+        assert!(
+            !ids.iter().any(|id| id.starts_with("subagent-")),
+            "subagent child threads must be hidden from the session list: {ids:?}",
+        );
+        assert_eq!(page.rows.len(), 2, "only the two non-subagent sessions remain");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn truncate_display_title_collapses_long_first_message() {
+        let short = "第一句话标题";
+        assert_eq!(truncate_display_title(short), short, "short titles pass through unchanged");
+        let renamed = "用户重命名标题";
+        assert_eq!(truncate_display_title(renamed), renamed, "deliberate short renames untouched");
+
+        let multiline = "首行摘要\n第二行不应进入标题";
+        assert_eq!(truncate_display_title(multiline), "首行摘要…", "multi-line collapses to first line");
+
+        let huge: String = "话".repeat(76_000);
+        let truncated = truncate_display_title(&huge);
+        assert!(truncated.ends_with('…'), "huge title is ellipsised");
+        assert!(truncated.chars().count() <= 121, "huge title capped at 120 chars + ellipsis");
+    }
+
+    #[test]
+    fn is_no_project_cwd_matches_only_scratch_root_and_descendants() {
+        assert!(is_no_project_cwd("/Users/yoyi/Documents/Codex"));
+        assert!(is_no_project_cwd("/Users/yoyi/Documents/Codex/2026-05-09/ai"));
+        assert!(is_no_project_cwd("  /Users/yoyi/Documents/Codex/new-chat  "));
+        // A sibling dir that merely shares the prefix string is NOT under it.
+        assert!(!is_no_project_cwd("/Users/yoyi/Documents/CodexProjects"));
+        assert!(!is_no_project_cwd("/Users/yoyi/workspace/product-line"));
+        assert!(!is_no_project_cwd(""));
+    }
+
+    #[test]
+    fn read_threads_collapses_documents_codex_into_no_project_bucket() {
+        let dir = temp_dir("codex-session-no-project");
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let db_path = dir.join("state_5.sqlite");
+        create_threads_db(&db_path); // thread-1 cwd '/tmp/project' → real project
+        insert_thread_with_cwd(&db_path, "scratch-root", "直接聊天根", "/Users/yoyi/Documents/Codex", 5_000, 0, 1);
+        insert_thread_with_cwd(
+            &db_path,
+            "scratch-dated",
+            "日期戳暂存",
+            "/Users/yoyi/Documents/Codex/2026-05-09/ai",
+            6_000,
+            0,
+            1,
+        );
+        insert_thread_with_cwd(
+            &db_path,
+            "real-workspace",
+            "真实项目",
+            "/Users/yoyi/workspace/product-line",
+            7_000,
+            0,
+            1,
+        );
+
+        let page = read_threads_page(
+            &db_path,
+            CodexThreadPageOptions {
+                page_size: 100,
+                offset: 0,
+                include_archived: false,
+                archived_only: false,
+                query: None,
+            },
+        )
+        .expect("read page");
+        let row = |id: &str| {
+            page.rows
+                .iter()
+                .find(|r| r.thread_id == id)
+                .unwrap_or_else(|| panic!("row {id} missing"))
+        };
+
+        assert_eq!(row("scratch-root").project_root, None, "Documents/Codex root is no-project");
+        assert_eq!(row("scratch-dated").project_root, None, "below Documents/Codex is no-project");
+        assert_eq!(
+            row("real-workspace").project_root,
+            Some("/Users/yoyi/workspace/product-line".to_string()),
+            "workspace must stay a real project, not collapse into no-project",
+        );
+        assert_eq!(
+            row("thread-1").project_root,
+            Some("/tmp/project".to_string()),
+            "ordinary project dir keeps its root",
+        );
+
+        let _ = fs::remove_dir_all(dir);
     }
 }

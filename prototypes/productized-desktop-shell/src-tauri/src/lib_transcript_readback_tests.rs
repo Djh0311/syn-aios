@@ -560,6 +560,7 @@
                 model TEXT,
                 reasoning_effort TEXT,
                 thread_source TEXT,
+                source TEXT NOT NULL DEFAULT 'cli',
                 has_user_event INTEGER NOT NULL
             );
             "#,

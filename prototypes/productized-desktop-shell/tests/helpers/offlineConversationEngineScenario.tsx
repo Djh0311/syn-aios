@@ -1,6 +1,6 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server.browser";
-import { assert, findButtonByText, findElement, visibleText } from "./offlineInteractionTestUtils";
+import { assert, buttonTextsInMarkup, findButtonByText, findElement, visibleText } from "./offlineInteractionTestUtils";
 import {
   appendPendingUserMessage,
   buildManualRelayAssistantMessage,
@@ -18,6 +18,47 @@ import {
 } from "../../src/views/agent/AgentConversationShell";
 import type { CodexTranscript, PendingAction, SessionRecord } from "../../src/lib/types";
 import { AgentSessionCenter, ChatTranscript } from "../../src/views/AgentView";
+
+// Remove the per-turn process folds (depth-aware, so nested status <details>
+// inside them are handled) to get "what the main stream shows when folds are
+// collapsed" — the faithful basis for asserting 剥折叠后正常态不含过程事件.
+function stripProcessFolds(markup: string): string {
+  const OPEN = '<details class="chat-turn-process"';
+  const CLOSE = "</details>";
+  let result = "";
+  let cursor = 0;
+  while (cursor < markup.length) {
+    const open = markup.indexOf(OPEN, cursor);
+    if (open === -1) {
+      result += markup.slice(cursor);
+      break;
+    }
+    result += markup.slice(cursor, open);
+    let depth = 0;
+    let scan = open + OPEN.length;
+    while (scan < markup.length) {
+      const nextOpen = markup.indexOf("<details", scan);
+      const nextClose = markup.indexOf(CLOSE, scan);
+      if (nextClose === -1) {
+        scan = markup.length;
+        break;
+      }
+      if (nextOpen !== -1 && nextOpen < nextClose) {
+        depth += 1;
+        scan = nextOpen + "<details".length;
+        continue;
+      }
+      if (depth === 0) {
+        scan = nextClose + CLOSE.length;
+        break;
+      }
+      depth -= 1;
+      scan = nextClose + CLOSE.length;
+    }
+    cursor = scan;
+  }
+  return result;
+}
 
 export function runConversationEngineScenario({
   captureAction,
@@ -38,13 +79,18 @@ export function runConversationEngineScenario({
     "P4 relay 前端墙钟超时应能独立判定",
   );
 
-  assert(transcriptMarkup.includes("data-conversation-engine=\"virtualized\""), "M1 对话流应声明使用虚拟化引擎");
+  assert(transcriptMarkup.includes("data-conversation-engine=\"turns\""), "M1 对话流应声明使用按轮渲染引擎");
   assert(transcriptMarkup.includes("codex-transcript-item"), "P3 对话流应使用 Codex 平铺消息项");
   assert(!transcriptMarkup.includes("chat-bubble"), "P3 对话流不应再使用聊天气泡类名");
-  assert(transcriptMarkup.includes("data-virtualized-window="), "M1 对话流应保留虚拟窗口计数元数据");
-  assert(transcriptText.includes("已收纳较早"), "M1 对话流应以用户文案提示较早对话已收纳");
-  assert(transcriptText.includes("Message fixture 179"), "M1 初始窗口应显示最新消息");
-  assert(!transcriptMarkup.includes("Message fixture 20"), "M1 大对话不应默认把早期消息全量放进 DOM");
+  assert(
+    !transcriptMarkup.includes("data-virtualized-window=") && !transcriptMarkup.includes("translateY("),
+    "M1 抖动修复：不应再使用固定估算高度的虚拟窗口/绝对偏移",
+  );
+  assert(transcriptText.includes("Message fixture 179"), "M1 应显示最新消息");
+  assert(
+    transcriptText.includes("Message fixture 0") && transcriptText.includes("Message fixture 20"),
+    "M1 整段渲染：更早消息也应进入 DOM 可达，不再被写死的 132 估算裁掉",
+  );
 
   const nativeTranscript: CodexTranscript = {
     ...transcript,
@@ -116,6 +162,155 @@ export function runConversationEngineScenario({
   assert(nativeText.includes("思考"), "P3 reasoning 应显示为思考块");
   assert(nativeText.includes("上下文已自动压缩"), "P3 compacted 应显示为压缩分隔");
 
+  // Part 3 · 过程事件按轮收纳：每一轮 = 过程[默认折叠] + 最终输出（主流只显最终 agent_message）。
+  // 死线（接 ui-internal-field-disclosure-sweep）：过程事件是收纳进折叠、不是删——折叠内必须可达。
+  const turnDisclosureTranscript: CodexTranscript = {
+    ...transcript,
+    events: [
+      {
+        event_id: "turn-user",
+        timestamp: "2026-06-17T00:10:00Z",
+        event_type: "user_message",
+        actor: "user",
+        text: "P3 turn user fixture",
+        warnings: [],
+      },
+      {
+        event_id: "turn-tool",
+        timestamp: "2026-06-17T00:10:01Z",
+        event_type: "tool_call",
+        actor: "assistant",
+        tool_name: "functions.exec_command",
+        arguments: { cmd: "pwd" },
+        warnings: [],
+      },
+      {
+        event_id: "turn-reasoning",
+        timestamp: "2026-06-17T00:10:02Z",
+        event_type: "system_context",
+        actor: "assistant",
+        text: "P3 turn reasoning fixture",
+        metadata: { payload_type: "reasoning" },
+        warnings: [],
+      },
+      {
+        event_id: "turn-final",
+        timestamp: "2026-06-17T00:10:03Z",
+        event_type: "assistant_message",
+        actor: "assistant",
+        text: "P3 turn final fixture",
+        warnings: [],
+      },
+    ],
+  };
+  const turnMarkup = renderToStaticMarkup(<ChatTranscript transcript={turnDisclosureTranscript} />);
+  const turnText = visibleText(<ChatTranscript transcript={turnDisclosureTranscript} />);
+  assert(turnMarkup.includes("chat-turn-process") && turnMarkup.includes("chat-turn-process-list"), "Part3 每轮过程事件应收纳进按轮折叠");
+  assert(
+    /<details class="chat-turn-process"[^>]*>/.test(turnMarkup) && !/<details class="chat-turn-process"[^>]*\sopen/.test(turnMarkup),
+    "Part3 过程折叠应默认收起，主流默认只显最终输出",
+  );
+  assert(
+    turnMarkup.includes("</details><article class=\"codex-transcript-item assistant"),
+    "Part3 最终 agent 输出应作为主流条目位于过程折叠之外",
+  );
+  assert(turnText.includes("P3 turn final fixture"), "Part3 最终 agent 输出必须显示在主流");
+  assert(
+    turnMarkup.includes("准备运行命令") && turnMarkup.includes("思考"),
+    "Part3 死线：过程事件（工具调用 / 思考）必须在折叠内可达，不能被删而非收纳",
+  );
+  assert(turnMarkup.includes("data-turn-process=\"2\""), "Part3 折叠应标注该轮过程步数");
+  assert(
+    stripProcessFolds(turnMarkup).includes("P3 turn final fixture") && !stripProcessFolds(turnMarkup).includes("准备运行命令"),
+    "Part3 剥折叠后主流应只剩最终输出，不含过程事件",
+  );
+
+  // R2（真机回归）· 一轮多条 assistant_message：轮按 user_message 划，末条 assistant = 最终输出，
+  // 之前的前导消息（codex 常见“我看下这个文件”）连同工具一起折进 process，不漏进主流、也不被删。
+  const multiAssistantTurnTranscript: CodexTranscript = {
+    ...transcript,
+    events: [
+      {
+        event_id: "ma-user",
+        timestamp: "2026-06-17T00:20:00Z",
+        event_type: "user_message",
+        actor: "user",
+        text: "R2 multi-assistant user fixture",
+        warnings: [],
+      },
+      {
+        event_id: "ma-preamble",
+        timestamp: "2026-06-17T00:20:01Z",
+        event_type: "assistant_message",
+        actor: "assistant",
+        text: "R2 preamble 我看下这个文件",
+        warnings: [],
+      },
+      {
+        event_id: "ma-tool",
+        timestamp: "2026-06-17T00:20:02Z",
+        event_type: "tool_call",
+        actor: "assistant",
+        tool_name: "functions.exec_command",
+        arguments: { cmd: "cat file" },
+        warnings: [],
+      },
+      {
+        event_id: "ma-final",
+        timestamp: "2026-06-17T00:20:03Z",
+        event_type: "assistant_message",
+        actor: "assistant",
+        text: "R2 final answer fixture",
+        warnings: [],
+      },
+    ],
+  };
+  const multiAssistantMarkup = renderToStaticMarkup(<ChatTranscript transcript={multiAssistantTurnTranscript} />);
+  const multiAssistantMainStream = stripProcessFolds(multiAssistantMarkup);
+  assert(
+    multiAssistantMainStream.includes("R2 final answer fixture"),
+    "R2 一轮多条 assistant 时主流必须显示末条最终输出",
+  );
+  assert(
+    !multiAssistantMainStream.includes("R2 preamble 我看下这个文件"),
+    "R2 前导 assistant 消息不应漏进主流最终输出",
+  );
+  assert(
+    multiAssistantMarkup.includes("R2 preamble 我看下这个文件"),
+    "R2 死线：前导消息应折进 per-turn 过程折叠内可达，不能被删",
+  );
+  assert(
+    multiAssistantMarkup.includes("data-turn-process=\"2\""),
+    "R2 前导消息 + 工具应合计为该轮 2 步过程",
+  );
+  assert(
+    multiAssistantMainStream.split("codex-transcript-item assistant").length - 1 === 1,
+    "R2 该轮主流应只剩唯一一条 agent 最终输出，不再每条 assistant 各成一条",
+  );
+
+  // §2 标题溢出：会话卡标题挂 sc-title 截断类（CSS ellipsis 钩子），超长标题完整原文进 title tooltip，
+  // 不靠撑破容器来显示。真实 DOM 文本截短由后端 truncate_display_title 负责（codex_db Rust 测试覆盖）。
+  const overflowTitle = "超长标题".repeat(2000);
+  const longTitleSession: SessionRecord = { ...session, thread_id: "long-title-thread", title: overflowTitle };
+  const longTitleCenterMarkup = renderToStaticMarkup(
+    <AgentSessionCenter
+      sessions={[longTitleSession]}
+      selectedThreadId={longTitleSession.thread_id}
+      selectedSession={longTitleSession}
+      transcript={null}
+      loadingThreadId={null}
+      transcriptError={null}
+      projectSessionCount={1}
+      onOpenSession={() => {}}
+      onRequestAction={captureAction}
+    />,
+  );
+  assert(longTitleCenterMarkup.includes("sc-title"), "§2 会话卡标题应使用 sc-title 截断类");
+  assert(
+    longTitleCenterMarkup.includes(`title="${overflowTitle}"`),
+    "§2 会话卡应把完整标题留在 tooltip，截断只发生在显示层",
+  );
+
   const centerText = visibleText(
     <AgentSessionCenter
       sessions={[session]}
@@ -165,10 +360,10 @@ export function runConversationEngineScenario({
   const streamingMarkup = renderToStaticMarkup(<ChatTranscript transcript={streamingTranscript} />);
   const streamingText = visibleText(<ChatTranscript transcript={streamingTranscript} />);
   assert(streamingMarkup.includes("data-stick-to-bottom=\"true\""), "M2 对话流应声明默认黏底");
-  assert(streamingMarkup.includes("data-streaming-separated=\"true\""), "M2 流式追加应从稳定虚拟窗口分离");
-  assert(streamingText.includes("回到底部"), "M2 滚离底部时应有回到底部入口");
-  assert(streamingText.includes("Streaming fixture draft"), "M2 流式草稿应作为单条自然流显示");
-  assert(!streamingMarkup.includes("streaming-assistant-draft\" style"), "M2 流式草稿不应进入稳定虚拟窗口绝对定位层");
+  assert(streamingMarkup.includes("data-streaming=\"true\""), "M2 末轮流式输出应被标记为流式");
+  assert(streamingText.includes("回到底部"), "M2 流式时应有回到底部入口");
+  assert(streamingText.includes("Streaming fixture draft"), "M2 流式草稿应作为末轮最终输出自然显示");
+  assert(!streamingMarkup.includes("translateY("), "M2 不应再使用固定偏移的绝对定位虚拟层");
 
   const boundedTailTranscript = {
     ...transcript,
@@ -193,7 +388,13 @@ export function runConversationEngineScenario({
     />,
   );
   assert(boundedMarkup.includes("data-transcript-load=\"bounded\""), "M2 点开对话应声明 transcript 加载已界定");
-  assert(boundedMarkup.includes("加载更早对话"), "M2 有 older cursor 时应显示上滚加载更早入口");
+  assert(
+    !boundedMarkup.includes("加载更早对话") &&
+      !boundedMarkup.includes("chat-load-older") &&
+      !buttonTextsInMarkup(boundedMarkup).some((text) => text.includes("加载更早")),
+    "M2 去栏：顶部不应再有「加载更早」按钮",
+  );
+  assert(boundedMarkup.includes("data-older-preload=\"pending\""), "M2 有 older cursor 时应改为距顶预加载的静默提示");
 
   const internalOnlyTailTranscript: CodexTranscript = {
     ...boundedTailTranscript,
@@ -214,10 +415,11 @@ export function runConversationEngineScenario({
       }}
     />,
   );
-  assert(internalOnlyMarkup.includes("codex-status-item"), "P3 工具事件 tail 应进入主渲染状态行");
+  assert(internalOnlyMarkup.includes("codex-status-item"), "P3 工具事件应作为 Codex 状态行渲染");
+  assert(internalOnlyMarkup.includes("chat-turn-process"), "Part3 纯工具事件 tail 应收纳进按轮过程折叠（可达）");
   assert(internalOnlyMarkup.includes("准备调用工具"), "P3 无具体工具名的工具事件应显示通用工具状态");
   assert(!internalOnlyMarkup.includes("这条会话没有可显示的对话"), "P3 工具事件 tail 不应再显示对话空态");
-  assert(internalOnlyMarkup.includes("加载更早对话"), "M2 工具事件 tail 仍应保留加载更早入口");
+  assert(!internalOnlyMarkup.includes("加载更早对话"), "M2 去栏后工具事件 tail 不应再有加载更早按钮");
 
   const olderPage = {
     ...transcript,
@@ -252,9 +454,8 @@ export function runConversationEngineScenario({
     />,
   );
   assert(composerMarkup.includes("data-send-mode=\"manual_relay_direct\""), "B2 绑定会话撰写区应声明 GUI direct relay 模式");
-  assert(composerMarkup.includes("继续对话"), "P3.5 撰写区主路径应显示普通对话目标");
   const selectedProjectTail = (session.project_root ?? "").split("/").filter(Boolean).at(-1) ?? "";
-  assert(composerMarkup.includes(selectedProjectTail), "P3.5 撰写区应显示项目名而不是完整路径");
+  assert(!composerMarkup.includes("继续对话"), "信息收口后撰写区不应常驻显示普通对话目标");
   assert(composerMarkup.includes("发送"), "M3 撰写区主按钮应是发送");
   assert(!composerMarkup.includes("生成发送预览"), "M3 普通撰写区不应保留 6 步预览入口");
   assert(!composerMarkup.includes("确认执行 Codex"), "M3 普通撰写区不应出现真实执行按钮");
@@ -330,8 +531,8 @@ export function runConversationEngineScenario({
     />
   );
   const directComposerMarkup = renderToStaticMarkup(directComposer);
-  assert(directComposerMarkup.includes("继续对话"), "P3.5 独立 composer 应显示普通对话目标");
-  assert(directComposerMarkup.includes(selectedProjectTail), "P3.5 独立 composer 应显示项目名");
+  assert(!directComposerMarkup.includes("继续对话"), "信息收口后独立 composer 不应常驻显示普通对话目标");
+  assert(!directComposerMarkup.includes(selectedProjectTail), "信息收口后 composer 不应常驻显示项目名");
   assert(!directComposerMarkup.includes(session.project_root ?? ""), "信息收口后 composer 不应常驻显示完整项目路径");
   assert(!directComposerMarkup.includes(session.thread_id), "信息收口后 composer 不应常驻显示 session id");
   assert(!directComposerMarkup.includes("会话ID"), "信息收口后 composer 不应常驻显示 session id 字段");
@@ -378,8 +579,9 @@ export function runConversationEngineScenario({
     newSessionMarkup.includes('data-send-mode="manual_relay_new_session"'),
     "P2 新建对话撰写区应声明 manual relay new-session 模式",
   );
-  assert(newSessionMarkup.includes("新建对话"), "P2 新建对话撰写区应显示新建 target");
+  assert(newSessionMarkup.includes("选择新对话项目"), "P2 新建对话撰写区应提供项目选择器");
   assert(newSessionMarkup.includes("new-codex-project"), "P2 新建对话撰写区应显示项目名");
+  assert(!newSessionMarkup.includes("新建对话"), "信息收口后新建对话 composer 不应显示目标说明条");
   assert(!newSessionMarkup.includes("new session"), "信息收口后新建对话 composer 不应显示 raw session 占位");
   const newSessionTextarea = findElement(
     newSessionComposer,
@@ -707,7 +909,7 @@ export function runConversationEngineScenario({
   const relayLiveMarkup = renderToStaticMarkup(<ChatTranscript transcript={relayLiveTranscript} />);
   const relayLiveText = visibleText(<ChatTranscript transcript={relayLiveTranscript} />);
   assert(relayLiveMarkup.includes("codex-status-item"), "P4 live turn 状态应作为 Codex 状态行渲染");
-  assert(relayLiveMarkup.includes("data-streaming-separated=\"true\""), "P4 live assistant 应进入 streaming tail");
+  assert(relayLiveMarkup.includes("data-streaming=\"true\""), "P4 live assistant 应标记为末轮流式输出");
   assert(relayLiveText.includes("开始处理"), "P4 live turn 状态应显示友好的运行标题");
   assert(relayLiveText.includes("P4 live partial"), "P4 live assistant partial 应显示在对话尾部");
   const canonicalHistoryWithLive = {
