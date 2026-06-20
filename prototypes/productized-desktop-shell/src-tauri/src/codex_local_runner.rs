@@ -1560,6 +1560,37 @@ fn contains_sensitive_fragment(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // 引擎解封·第一刀的真跑验证(高危#1)。默认 #[ignore],只在显式
+    // `cargo test --lib real_run_workflow_node_adapter -- --ignored --nocapture` 时起真 codex。
+    // 直接验适配器:在固定测试项目里真起一次 codex、新建会话、让它写一个证明文件。
+    #[test]
+    #[ignore = "spawns real codex in the fixed test project"]
+    fn real_run_workflow_node_adapter() {
+        let runner = RealWorkflowNodeCodexRunner;
+        let last_message_path =
+            std::env::temp_dir().join("workflow-node-real-run-last-message.txt");
+        let test_root = "/Users/yoyi/codex-workflow-mario-test";
+        let options = crate::CodexResumeRequestOptions {
+            prompt_kind: "workflow_node_business".to_string(),
+            execution_cwd: Some(std::path::PathBuf::from(test_root)),
+            sandbox_mode: Some("workspace-write".to_string()),
+            allowed_write_roots: vec![std::path::PathBuf::from(test_root)],
+            timeout_seconds: Some(180),
+        };
+        let result = crate::CodexResumeRunner::resume_with_options(
+            &runner,
+            "",
+            "在当前目录创建文件 workflow-real-run-proof.txt，写入一行：workflow engine real run ok。完成后用一句话说明你做了什么。",
+            &last_message_path,
+            &options,
+        );
+        println!("[REAL_RUN] last_message_path = {}", last_message_path.display());
+        println!("[REAL_RUN] result = {result:?}");
+        let (run, _opts) = result.expect("adapter real run should succeed");
+        println!("[REAL_RUN] exit_code={} timed_out={}", run.exit_code, run.timed_out);
+        assert_eq!(run.exit_code, 0, "codex exit code should be 0");
+    }
     use crate::CodexLocalReadbackPlan;
 
     #[test]
