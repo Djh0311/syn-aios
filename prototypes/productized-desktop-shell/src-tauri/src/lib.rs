@@ -3598,6 +3598,92 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    // 引擎解封·走通整条派发路径(高危#1)。默认 #[ignore];显式
+    // `cargo test --lib real_run_full_dispatch_resume -- --ignored --nocapture` 才起真 codex。
+    // 端到端:bootstrap 工作流 → 备节点 → 绑真实 codex 会话 → execute_workflow_node_dispatch_for_index_at
+    // (= 双闸命令过闸后调的真实现) → RealWorkflowNodeCodexRunner resume 真会话 → 真 codex。
+    #[test]
+    #[ignore = "spawns real codex through the full resume-based dispatch path"]
+    fn real_run_full_dispatch_resume() {
+        let test_root = "/Users/yoyi/codex-workflow-mario-test";
+        let real_session = "019ed9f7-c0c2-7213-b871-6d18959b7c24";
+        let dir = std::env::temp_dir()
+            .join(format!("full-dispatch-real-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let project = fixture_project(test_root);
+        let index = fixture_dispatch_index(test_root, real_session);
+        let draft = fixture_task_draft_request(test_root, "走通真派发节点");
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
+        create_task_draft_at(&path, &draft).expect("work item should exist");
+        let value = read_json_file(&path);
+        let work_item_id = optional_string_from(&value["work_items"][0], "work_item_id")
+            .expect("work item id should exist");
+        update_work_item_state_at(
+            &path,
+            &fixture_work_item_state_update_request(test_root, &work_item_id, "ready_to_dispatch"),
+        )
+        .expect("work item should be ready");
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let session = fixture_session(real_session, test_root, true);
+        bind_workflow_node_codex_session_at(
+            &path,
+            &fixture_node_session_bind_request(
+                test_root,
+                &node_id,
+                Some(&work_item_id),
+                real_session,
+            ),
+            &session,
+        )
+        .expect("binding real session should write");
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let request = WorkflowNodeDispatchExecuteRequest {
+            project_root: test_root.to_string(),
+            node_id: node_id.clone(),
+            work_item_id: work_item_id.clone(),
+            prompt_kind: "user_reviewed_instruction".to_string(),
+            user_reviewed_instruction: Some(UserReviewedInstructionInput {
+                instruction_id: "instruction:realrun:full-dispatch".to_string(),
+                summary: "走通真派发：建证明文件".to_string(),
+                objective: "在测试项目创建 full dispatch 证明文件".to_string(),
+                execution_cwd: test_root.to_string(),
+                sandbox_mode: "workspace-write".to_string(),
+                allowed_write_roots: vec![test_root.to_string()],
+                allowed_reads: vec![test_root.to_string()],
+                allowed_writes: vec![format!("{test_root}/workflow-fulldispatch-proof.txt")],
+                forbidden_actions: vec![
+                    "不读取 auth.json、.env、密钥、token 或授权文件。".to_string(),
+                    "不读取完整 transcript。".to_string(),
+                    "不运行 harness。".to_string(),
+                ],
+                timeout_seconds: 180,
+                max_retries: 0,
+                required_return: vec!["本步做了什么".to_string(), "改了哪些文件".to_string()],
+                prompt_preview: Some(
+                    "在当前目录创建文件 workflow-fulldispatch-proof.txt，写入一行：full dispatch path ok。完成后用一句话说明你做了什么。"
+                        .to_string(),
+                ),
+            }),
+        };
+        let readback_db_path = codex_db::default_state_db_path();
+        let result = execute_workflow_node_dispatch_for_index_at(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &request,
+        )
+        .expect("full dispatch path should complete");
+        println!(
+            "[FULL_DISPATCH] state={} exit={:?} summary={:?}",
+            result.dispatch.state, result.dispatch.exit_code, result.dispatch.last_message_summary
+        );
+        assert_eq!(result.dispatch.exit_code, Some(0), "codex exit should be 0");
+        assert_eq!(result.dispatch.state, "completed");
+    }
+
     #[test]
     fn workflow_node_dispatch_execute_uses_stub_and_advances_to_review() {
         let dir =

@@ -14,12 +14,12 @@
 ## 二、在做什么
 
 - **工作流引擎解封·第一刀 = 适配器真跑已验**（高危#1 用户授权下，2026-06-21）：`codex_local_runner.rs` 的 `RealWorkflowNodeCodexRunner`（复用 `command_plan_for`+`run_real_codex_process`）+ `commands.rs` 双闸（真实项目零变化）。**实物核过**：直接调适配器在测试项目 `/Users/yoyi/codex-workflow-mario-test` 真起一次 codex，codex 建了 `workflow-real-run-proof.txt`（内容对）、沙箱只动测试目录没外溢、exit 0；new_session 路径通。`cargo test --lib` 555 + #[ignore] 真跑测试。决策 `decisions/2026-06-21-next-step-unseal-workflow-engine-for-test-project-v1.md`。
-- **走通整条双闸命令路径中**：上面只直验了适配器；端到端（`execute_workflow_node_dispatch` 双闸 → 索引 → 派发 → 适配器）还差「测试项目入索引 + 铺一个工作流节点」。
+- **工作流引擎解封·走通已验（全派发路径真跑）**：bootstrap 工作流 → 绑真会话 `019ed9f7` → `execute_workflow_node_dispatch_for_index_at`（= 双闸命令过闸后的真实现）→ 适配器 resume → 真 codex 建 `workflow-fulldispatch-proof.txt`（内容对）、沙箱只动测试目录、dispatch `state=completed` exit0。`#[ignore]` 集成测试 `real_run_full_dispatch_resume`。**即:工作流 worker 节点已能经生产派发路径真跑 codex。**（注:派发是 resume 已绑真会话那套——节点需先绑一个真 codex 会话。）
 - 运行工作流画布·真机对图打磨：代码 P1–P4 完成，剩起 Tauri 微调视觉（未做）。
 
 ## 三、下一步
 
-1. **走通引擎解封整条链**（头号）：测试项目入索引 + 铺一个工作流节点 → 过双闸命令 → 真派发真跑 → 核实物。（适配器本身已真跑验过；这步验「双闸→索引→派发」串通。）高危#1，用户授权那一下不可省。
+1. **引擎解封已走通**，往下可选:① 起 Tauri 过真双闸命令端到端（GUI 层，含 AppState）；② 把闭环其余生成节点（咨询出方案 / 主管拆任务 / 候选提取——现都只存/预览、无真 AI）也接 codex，让 §0.6 闭环更多节点活；③ 回到积压（文档归档 / 画布真机对图）。高危#1 真跑仍逐次授权。
 2. 据核实矩阵（`handoffs/2026-06-21-full-project-fact-reconciliation-result-v1.md`）做文档归档 + 死码清理——注：`workbench_sqlite_*` 孤岛虽 ~480 dead warning，但是 R3 已拍板的**未来迁移机制，保留勿删**，只压噪声。
 3. 画布真机对图打磨（纯视觉）。
 4. 再往后 relay GUI 尾巴 / 中间·半自动。
