@@ -110,7 +110,11 @@ macro_rules! workbench_command_handler {
             mcp::commands::canvas_start_run,
             mcp::commands::canvas_abort_run,
             mcp::commands::canvas_run_status,
-            mcp::commands::canvas_tick_run
+            mcp::commands::canvas_tick_run,
+            mcp::commands::save_workflow_template,
+            mcp::commands::list_workflow_templates,
+            mcp::commands::load_workflow_template,
+            mcp::commands::delete_workflow_template
         ]
     };
 }

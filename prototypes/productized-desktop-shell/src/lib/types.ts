@@ -45,4 +45,6 @@ export type {
   DirectorRecycleVerdict,
   SubagentReportBlockedRequest,
   SubagentSubmitOutboxRequest,
+  WorkflowTemplate,
+  WorkflowTemplateSummary,
 } from "./types/canvas";

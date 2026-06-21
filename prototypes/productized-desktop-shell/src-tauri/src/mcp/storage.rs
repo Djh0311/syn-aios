@@ -16,18 +16,27 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const SCHEMA_CANVAS: &str = "canvas-v1";
 const SCHEMA_RUN: &str = "canvas-run-v1";
+const SCHEMA_WORKFLOW_TEMPLATE: &str = "workflow-template-v1";
 
 // ---------- types ----------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CanvasNode {
     pub id: String,
-    pub role: String, // "director" | "subagent"
+    pub role: String, // "director" | "subagent" (kept for back-compat / sealed run logic)
     pub label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skill: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+    // Free-canvas authoring (plan A4): `kind` is an open node type and `data` is
+    // a free payload (status/prompt/sandbox/custom fields). Opaque passthrough —
+    // no interpretation, no execution. Optional + skip-if-none so pre-feature
+    // canvases keep round-tripping unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<serde_json::Value>,
     pub position: Position,
     #[serde(default)]
     pub warnings: Vec<String>,
@@ -59,6 +68,47 @@ pub struct CanvasDefinition {
     pub updated_at: String,
     #[serde(default)]
     pub warnings: Vec<String>,
+}
+
+// ---------- workflow templates (plan B: 成熟模式保留) ----------
+//
+// Stores the workflow GRAPH itself (nodes/edges/node-data) + metadata, so a
+// canvas that runs well can be saved as a reusable "mature pattern" and a new
+// workflow can be instantiated from it. Deliberately separate from the memory
+// `mature_pattern_store` (that holds memory patterns, not workflow graphs).
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowTemplate {
+    pub schema_version: String, // "workflow-template-v1"
+    pub template_id: String,
+    pub title: String,
+    #[serde(default)]
+    pub scope: String, // "project" | "global"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_canvas_id: Option<String>,
+    #[serde(default)]
+    pub version: u32,
+    pub nodes: Vec<CanvasNode>,
+    pub edges: Vec<CanvasEdge>,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowTemplateSummary {
+    pub template_id: String,
+    pub title: String,
+    pub scope: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_root: Option<String>,
+    pub node_count: usize,
+    pub edge_count: usize,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,6 +211,82 @@ pub fn save_canvas(canvas: &CanvasDefinition) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| format!("建目录失败 {}：{e}", parent.display()))?;
     }
     write_atomic(&p, &serde_json::to_string_pretty(canvas).unwrap())
+}
+
+// ---------- workflow templates ----------
+
+pub fn workflow_template_dir() -> PathBuf {
+    canvas_v1_root().join("workflow-templates")
+}
+
+pub fn workflow_template_path(template_id: &str) -> PathBuf {
+    workflow_template_dir().join(format!("{template_id}.json"))
+}
+
+pub fn save_workflow_template(template: &WorkflowTemplate) -> Result<(), String> {
+    if template.template_id.trim().is_empty() {
+        return Err("workflow template 缺 template_id".to_string());
+    }
+    let p = workflow_template_path(&template.template_id);
+    if let Some(parent) = p.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("建目录失败 {}：{e}", parent.display()))?;
+    }
+    write_atomic(&p, &serde_json::to_string_pretty(template).unwrap())
+}
+
+pub fn load_workflow_template(template_id: &str) -> Result<WorkflowTemplate, String> {
+    let p = workflow_template_path(template_id);
+    let text = fs::read_to_string(&p).map_err(|e| format!("读模板失败 {}：{e}", p.display()))?;
+    let template: WorkflowTemplate = serde_json::from_str(&text)
+        .map_err(|e| format!("模板 JSON 解析失败 {}：{e}", p.display()))?;
+    if template.schema_version != SCHEMA_WORKFLOW_TEMPLATE {
+        return Err(format!(
+            "模板 schema_version={} 期望 {}",
+            template.schema_version, SCHEMA_WORKFLOW_TEMPLATE
+        ));
+    }
+    Ok(template)
+}
+
+pub fn list_workflow_templates() -> Result<Vec<WorkflowTemplateSummary>, String> {
+    let dir = workflow_template_dir();
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    let entries = fs::read_dir(&dir).map_err(|e| format!("读模板目录失败 {}：{e}", dir.display()))?;
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(template) = serde_json::from_str::<WorkflowTemplate>(&text) else {
+            continue;
+        };
+        out.push(WorkflowTemplateSummary {
+            template_id: template.template_id,
+            title: template.title,
+            scope: template.scope,
+            project_root: template.project_root,
+            node_count: template.nodes.len(),
+            edge_count: template.edges.len(),
+            created_at: template.created_at,
+            updated_at: template.updated_at,
+        });
+    }
+    out.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then(a.title.cmp(&b.title)));
+    Ok(out)
+}
+
+pub fn delete_workflow_template(template_id: &str) -> Result<(), String> {
+    let p = workflow_template_path(template_id);
+    if !p.exists() {
+        return Ok(());
+    }
+    fs::remove_file(&p).map_err(|e| format!("删模板失败 {}：{e}", p.display()))
 }
 
 // ---------- run state ----------

@@ -6,7 +6,7 @@ use tauri::State;
 use super::orchestrator::{
     LoopDecision, OrchestratorState, RunStatus, StartRunRequest, StartRunResult,
 };
-use super::storage::{self, CanvasDefinition};
+use super::storage::{self, CanvasDefinition, WorkflowTemplate, WorkflowTemplateSummary};
 
 pub(crate) fn mcp_canvas_real_execution_blocked_message(command_name: &str) -> String {
     crate::real_execution_command::mcp_canvas_real_execution_blocked_message(command_name)
@@ -39,6 +39,28 @@ pub fn canvas_load(canvas_id: String) -> Result<CanvasDefinition, String> {
 #[tauri::command]
 pub fn canvas_save(canvas: CanvasDefinition) -> Result<(), String> {
     storage::save_canvas(&canvas)
+}
+
+// ---------- workflow templates (plan B) — data store only, no execution ----------
+
+#[tauri::command]
+pub fn save_workflow_template(template: WorkflowTemplate) -> Result<(), String> {
+    storage::save_workflow_template(&template)
+}
+
+#[tauri::command]
+pub fn list_workflow_templates() -> Result<Vec<WorkflowTemplateSummary>, String> {
+    storage::list_workflow_templates()
+}
+
+#[tauri::command]
+pub fn load_workflow_template(template_id: String) -> Result<WorkflowTemplate, String> {
+    storage::load_workflow_template(&template_id)
+}
+
+#[tauri::command]
+pub fn delete_workflow_template(template_id: String) -> Result<(), String> {
+    storage::delete_workflow_template(&template_id)
 }
 
 #[tauri::command]

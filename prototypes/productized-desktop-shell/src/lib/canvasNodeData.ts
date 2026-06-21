@@ -3,7 +3,7 @@
 // the React Flow custom node / right-panel editor work with. Kept free of React
 // Flow / DOM so it is unit-testable offline (no SSR of @xyflow needed).
 
-import type { CanvasNode, CanvasNodeRole } from "./types";
+import type { CanvasEdge, CanvasNode, CanvasNodeRole } from "./types";
 
 export type CanvasCustomField = { id: string; key: string; value: string };
 
@@ -85,31 +85,49 @@ export function createNodeData(kind: string): CanvasNodeData {
   };
 }
 
-// Persisted node → rich editor payload. The persisted CanvasNode only carries
-// the A1-era fields (role/label/skill/session_id); the free authoring payload
-// (kind/status/prompt/sandbox/custom fields) is NOT persisted in A1–A3, so it
-// is seeded fresh here — kind falls back to role, the rest to defaults. (Real
-// persistence of the free payload is A4; keeping it session-only here is the
-// intended A1–A3 behaviour, so a reload drops in-session free edits.)
+function readString(raw: Record<string, unknown>, key: string, fallback: string): string {
+  const value = raw[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function readCustomFields(raw: Record<string, unknown>): CanvasCustomField[] {
+  if (!Array.isArray(raw.fields)) return [];
+  return (raw.fields as unknown[]).flatMap((entry, index) => {
+    if (!entry || typeof entry !== "object") return [];
+    const rec = entry as Record<string, unknown>;
+    const key = typeof rec.key === "string" ? rec.key : "";
+    const value = typeof rec.value === "string" ? rec.value : "";
+    if (key === "" && value === "") return [];
+    const id = typeof rec.id === "string" && rec.id ? rec.id : `field-${index}`;
+    return [{ id, key, value }];
+  });
+}
+
+// Persisted node → rich editor payload. A4: the free payload (kind/status/
+// prompt/sandbox/custom fields) now round-trips through the persisted CanvasNode
+// (`kind` + `data`). Backward compatible: a node saved before A4 has no kind /
+// data, so kind falls back to its role and the free fields default empty.
 export function canvasNodeToData(node: CanvasNode): CanvasNodeData {
+  const raw = node.data && typeof node.data === "object" && !Array.isArray(node.data)
+    ? (node.data as Record<string, unknown>)
+    : {};
   return {
     name: node.label,
-    kind: node.role,
+    kind: node.kind && node.kind.trim() ? node.kind : node.role,
     role: node.role,
-    status: "draft",
-    prompt: "",
-    sandbox: "read-only",
+    status: readString(raw, "status", "draft"),
+    prompt: readString(raw, "prompt", ""),
+    sandbox: readString(raw, "sandbox", "read-only"),
     skill: node.skill ?? null,
     session_id: node.session_id ?? null,
-    fields: [],
+    fields: readCustomFields(raw),
   };
 }
 
-// Rich editor payload → persisted node. Only the backend-supported subset is
-// emitted (id/role/label/skill/session_id/position/warnings) — the free payload
-// (kind/status/prompt/sandbox/custom fields) is deliberately dropped so save
-// sends NOTHING the store schema lacks (no half-contract). A4 will extend the
-// store to persist it properly.
+// Rich editor payload → persisted node. A4: the full free payload persists —
+// name/kind/skill/session_id are first-class, and status/prompt/sandbox/custom
+// fields ride in `data`. Front/back types match (CanvasNode has kind + data),
+// so this is a complete contract, not a half one.
 export function dataToCanvasNode(
   id: string,
   data: CanvasNodeData,
@@ -122,7 +140,51 @@ export function dataToCanvasNode(
     label: data.name,
     skill: data.skill ?? null,
     session_id: data.session_id ?? null,
+    kind: data.kind,
+    data: {
+      status: data.status,
+      prompt: data.prompt,
+      sandbox: data.sandbox,
+      fields: data.fields.map((field) => ({ id: field.id, key: field.key, value: field.value })),
+    },
     position: { x: position.x, y: position.y },
     warnings: priorWarnings,
   };
+}
+
+export type InstantiatedNode = {
+  id: string;
+  data: CanvasNodeData;
+  position: { x: number; y: number };
+};
+
+export type InstantiatedGraph = {
+  nodes: InstantiatedNode[];
+  edges: { id: string; from: string; to: string }[];
+};
+
+// Plan B3 · instantiate a fresh editable graph from a saved template: every node
+// gets a brand-new id (so the instance is independent of the template), edges
+// are remapped onto the new ids, and node payloads are carried over verbatim.
+// `newNodeId` is injected so callers control id generation (the app uses
+// time/random; tests pass a deterministic factory).
+export function instantiateTemplateGraph(
+  templateNodes: CanvasNode[],
+  templateEdges: CanvasEdge[],
+  newNodeId: (node: CanvasNode, index: number) => string,
+): InstantiatedGraph {
+  const idMap = new Map<string, string>();
+  const nodes = templateNodes.map((node, index) => {
+    const id = newNodeId(node, index);
+    idMap.set(node.id, id);
+    return { id, data: canvasNodeToData(node), position: { x: node.position.x, y: node.position.y } };
+  });
+  const edges = templateEdges
+    .filter((edge) => idMap.has(edge.from) && idMap.has(edge.to))
+    .map((edge, index) => ({
+      id: `tmpl-edge-${index}-${idMap.get(edge.from)}`,
+      from: idMap.get(edge.from) as string,
+      to: idMap.get(edge.to) as string,
+    }));
+  return { nodes, edges };
 }

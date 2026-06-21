@@ -5337,6 +5337,52 @@ textarea {
   background: #fbeceb;
 }
 
+/* B · 成熟模式 list */
+.canvas-template-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.canvas-template-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #d8d3c5;
+  border-radius: 5px;
+  background: #faf8f3;
+}
+.canvas-template-item .ct-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.canvas-template-item .ct-meta strong {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-template-item .ct-meta span {
+  font-size: 10.5px;
+  color: var(--ink-light, #8a8275);
+}
+.canvas-template-item .ct-actions {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+.canvas-view .canvas-side .canvas-template-item .ct-delete {
+  padding: 2px 8px;
+  border-color: #b1493f;
+  background: #fbeceb;
+}
+
 /* A1 · custom node card on the canvas */
 .canvas-node-card {
   display: flex;

@@ -26,6 +26,10 @@ import {
   canvasLoad,
   canvasRunStatus,
   canvasSave,
+  deleteWorkflowTemplate,
+  listWorkflowTemplates,
+  loadWorkflowTemplate,
+  saveWorkflowTemplate,
   type CanvasRunStatus,
 } from "../lib/tauri";
 import { experimentCanvasBoundary, type CanvasSurfaceBoundary } from "../lib/canvasSurfaceBoundaries";
@@ -36,6 +40,7 @@ import {
   canvasNodeToData,
   createNodeData,
   dataToCanvasNode,
+  instantiateTemplateGraph,
   kindAccent,
   kindLabel,
   statusTone,
@@ -45,6 +50,8 @@ import {
 import type {
   CanvasDefinition,
   SessionRecord,
+  WorkflowTemplate,
+  WorkflowTemplateSummary,
 } from "../lib/types";
 
 type CanvasViewProps = {
@@ -97,6 +104,7 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
   const [goal, setGoal] = useState("");
   const [runId, setRunId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<CanvasRunStatus | null>(null);
+  const [templates, setTemplates] = useState<WorkflowTemplateSummary[]>([]);
   const pollRef = useRef<number | null>(null);
 
   const reload = useCallback(async () => {
@@ -115,9 +123,19 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
     }
   }, [canvasId]);
 
+  const refreshTemplates = useCallback(async () => {
+    try {
+      setTemplates(await listWorkflowTemplates());
+    } catch (e) {
+      // Non-fatal: templates panel just stays empty if the store can't be read.
+      onNotice(`读取成熟模式失败：${messageOf(e)}`);
+    }
+  }, [onNotice]);
+
   useEffect(() => {
     void reload();
-  }, [reload]);
+    void refreshTemplates();
+  }, [reload, refreshTemplates]);
 
   const onNodesChange = useCallback((changes: NodeChange<FlowNode>[]) => {
     setNodes((curr) => applyNodeChanges(changes, curr));
@@ -201,6 +219,81 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
       setBusy(false);
     }
   }, [canvas, nodes, edges, onNotice]);
+
+  // B2 · 把当前画布图存成可复用的「成熟模式」（workflow template）。纯数据，不执行。
+  const saveAsTemplate = useCallback(async () => {
+    if (!canvas) return;
+    const title = window.prompt("成熟模式标题", canvas.display_name || "未命名工作流");
+    if (title === null) return;
+    setBusy(true);
+    try {
+      const now = new Date().toISOString();
+      const graph = fromFlow(canvas, nodes, edges);
+      const template: WorkflowTemplate = {
+        schema_version: "workflow-template-v1",
+        template_id: `wft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+        title: title.trim() || "未命名工作流",
+        scope: canvas.project_root ? "project" : "global",
+        project_root: canvas.project_root ?? null,
+        source_canvas_id: canvas.canvas_id,
+        version: 1,
+        nodes: graph.nodes,
+        edges: graph.edges,
+        created_at: now,
+        updated_at: now,
+        warnings: [],
+      };
+      await saveWorkflowTemplate(template);
+      await refreshTemplates();
+      onNotice(`已存为成熟模式：${template.title}`);
+    } catch (e) {
+      setError(messageOf(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [canvas, nodes, edges, onNotice, refreshTemplates]);
+
+  // B3 · 从成熟模式起一张新工作流：节点 id 全部重置，连线随新 id 重映射，载入当前画布供编辑。
+  const instantiateFromTemplate = useCallback(
+    async (templateId: string) => {
+      setBusy(true);
+      try {
+        const template = await loadWorkflowTemplate(templateId);
+        const graph = instantiateTemplateGraph(
+          template.nodes,
+          template.edges,
+          (node) => `${node.kind ?? node.role}-${Date.now().toString(36).slice(-5)}-${Math.random().toString(36).slice(2, 5)}`,
+        );
+        setNodes(graph.nodes.map((n) => ({ id: n.id, position: n.position, data: n.data, type: "canvasNode" })));
+        setEdges(graph.edges.map((e) => ({ id: e.id, source: e.from, target: e.to, animated: false })));
+        setSelected(null);
+        setDirty(true);
+        onNotice(`已从成熟模式「${template.title}」起新工作流（${graph.nodes.length} 节点）；记得保存。`);
+      } catch (e) {
+        setError(messageOf(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onNotice],
+  );
+
+  const removeTemplate = useCallback(
+    async (templateId: string, title: string) => {
+      if (!window.confirm(`删除成熟模式「${title}」？`)) return;
+      setBusy(true);
+      try {
+        await deleteWorkflowTemplate(templateId);
+        await refreshTemplates();
+        onNotice(`已删除成熟模式：${title}`);
+      } catch (e) {
+        setError(messageOf(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onNotice, refreshTemplates],
+  );
 
   const startRun = useCallback(async () => {
     onNotice("旧实验画布真实运行入口已封存；H 阶段统一产品命令完成前，不能从这里启动 Codex。");
@@ -346,6 +439,40 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
               {dirty ? "保存（未保存）" : "保存"}
             </button>
             <button onClick={() => void reload()} disabled={busy}>重载</button>
+          </fieldset>
+          <fieldset>
+            <legend>成熟模式</legend>
+            <button onClick={() => void saveAsTemplate()} disabled={busy || nodes.length === 0}>
+              ＋ 把这张存成成熟模式
+            </button>
+            {templates.length === 0 ? (
+              <p className="canvas-hint">还没有成熟模式。把跑顺的工作流存下来，可一键起新工作流。</p>
+            ) : (
+              <ul className="canvas-template-list">
+                {templates.map((tpl) => (
+                  <li key={tpl.template_id} className="canvas-template-item">
+                    <div className="ct-meta">
+                      <strong>{tpl.title}</strong>
+                      <span>{tpl.scope === "project" ? "项目私有" : "全局"} · {tpl.node_count} 节点 / {tpl.edge_count} 连线</span>
+                    </div>
+                    <div className="ct-actions">
+                      <button onClick={() => void instantiateFromTemplate(tpl.template_id)} disabled={busy}>
+                        起新工作流
+                      </button>
+                      <button
+                        className="ct-delete"
+                        onClick={() => void removeTemplate(tpl.template_id, tpl.title)}
+                        disabled={busy}
+                        aria-label="删除成熟模式"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="canvas-hint">从成熟模式起的新工作流节点 id 会重置；保存后成为独立画布。</p>
           </fieldset>
           <fieldset>
             <legend>实验运行边界</legend>

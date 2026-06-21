@@ -9,6 +9,8 @@ import type {
   BlackboardCandidateStoreV1,
   CanvasDefinition,
   CanvasRunState,
+  WorkflowTemplate,
+  WorkflowTemplateSummary,
   CodexSessionPage,
   CodexSessionPageRequest,
   CodexTranscript,
@@ -787,6 +789,28 @@ export function canvasRunStatus(runId: string): Promise<CanvasRunStatus> {
 export function canvasTickRun(runId: string): Promise<unknown> {
   ensureTauriRuntime();
   return invoke<unknown>("canvas_tick_run", { runId });
+}
+
+// ---- Workflow templates (plan B · 成熟模式保留) — data store only ----
+
+export function saveWorkflowTemplate(template: WorkflowTemplate): Promise<void> {
+  ensureTauriRuntime();
+  return invoke<void>("save_workflow_template", { template });
+}
+
+export function listWorkflowTemplates(): Promise<WorkflowTemplateSummary[]> {
+  ensureTauriRuntime();
+  return invoke<WorkflowTemplateSummary[]>("list_workflow_templates", {});
+}
+
+export function loadWorkflowTemplate(templateId: string): Promise<WorkflowTemplate> {
+  ensureTauriRuntime();
+  return invoke<WorkflowTemplate>("load_workflow_template", { templateId });
+}
+
+export function deleteWorkflowTemplate(templateId: string): Promise<void> {
+  ensureTauriRuntime();
+  return invoke<void>("delete_workflow_template", { templateId });
 }
 
 function ensureTauriRuntime() {

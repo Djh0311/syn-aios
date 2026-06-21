@@ -9,6 +9,11 @@ export type CanvasNode = {
   label: string;
   skill?: string | null;
   session_id?: string | null;
+  // Free-canvas authoring (plan A4): `kind` is an open node type beyond
+  // director/subagent; `data` carries the free payload (status/prompt/sandbox/
+  // custom fields). Both optional + backward compatible with pre-feature nodes.
+  kind?: string | null;
+  data?: Record<string, unknown> | null;
   position: { x: number; y: number };
   warnings: string[];
 };
@@ -29,6 +34,34 @@ export type CanvasDefinition = {
   created_at: string;
   updated_at: string;
   warnings: string[];
+};
+
+// Plan B · 成熟工作流模式（workflow template）。存图本体 + 元数据，与记忆
+// mature_pattern_store 无关。字段与后端 storage::WorkflowTemplate 对齐。
+export type WorkflowTemplate = {
+  schema_version: "workflow-template-v1";
+  template_id: string;
+  title: string;
+  scope: string; // "project" | "global"
+  project_root?: string | null;
+  source_canvas_id?: string | null;
+  version: number;
+  nodes: CanvasNode[];
+  edges: CanvasEdge[];
+  created_at: string;
+  updated_at: string;
+  warnings: string[];
+};
+
+export type WorkflowTemplateSummary = {
+  template_id: string;
+  title: string;
+  scope: string;
+  project_root?: string | null;
+  node_count: number;
+  edge_count: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export type CanvasRunStatus = "running" | "finished" | "aborted";
