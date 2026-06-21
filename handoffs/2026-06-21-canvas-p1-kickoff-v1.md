@@ -15,7 +15,7 @@
 ### A. 导航重构（小、先做）
 - 删 nav key `runningWorkflows`（`src/lib/workbenchNavigation.ts` 第 41/58 行）+ `ActiveWorkbenchView.tsx` 的 `view === "runningWorkflows"` 分支（约 179 行）。
 - 把「实验画布」（key `workflow`，现埋二级菜单第 83 行）**提到主栏显眼位**（原运行中工作流的位置）。
-- 删 `src/views/RunningWorkflowsView.tsx`（旧只读组件、已无入口进）。
+- **保留** `src/views/RunningWorkflowsView.tsx`——核实物确认它是 **3 个离线测试的 fixture**（offline-permission-dialog / L5MemoryDailyLoop / L3OperationControl），删了断测试；只需确保**无 nav 入口**（已做到，`ActiveWorkbenchView` 不再引用）。〔2026-06-22 订正：原写"删"是我误判死码。〕
 - "看运行中工作流" 不再单列入口——归项目面的运行状态视图（子项 C/D）。
 
 ### B. scope 显式字段（数据模型）
