@@ -26,7 +26,7 @@
 ## 三、下一步
 
 1. **画布架构 P1+P2（轻档）= v2（真机反馈修订）已落·机器验全绿·真机待复验**：v1（A 导航重构 / B scope 显式字段 + 2 加性 `.rs` / C 共享引擎挂项目面 / D 规则条 / E 同屏打架文案+空画布引导）+ **真机反馈 v2**：项目面**去视图切换**（编辑改成动作不是视图）、「编辑工作流 / 新建工作流」→ 草案 → 提交（运行性 + 控制核心/权限/审计，P3 重档）统一流程（不再空闲直改）；实验画布加「清空画布 / 新建画布」。**主导线亲跑四闸**（cargo 556/0、typecheck 净、offline 15+r4、build 279）+ **0 碰高危清单**（双闸/sandbox/manual_relay 未动；项目面「▶运行此节点」发真实 root → 固定测试项目双闸挡下、默认安全态成立；submitDraft 只 notice、不写 workflow-state）。`RunningWorkflowsView` 留作离线治理测试载体（不删，记忆 `running-workflows-view-test-load-bearing`）。kickoff `handoffs/2026-06-21-canvas-p1-kickoff-v1.md`。**待用户真机复验 → 过即挪入①。**
-2. **P3（轻档·2026-06-22 下放，P1/P2 真机复验过即做）**：节点真起 codex + 节点↔work_item 映射（项目=C / 实验=A）+ 去 env-CONFIRM 闸（保 path-lock + 沙箱）；真跑就在固定测试项目（随便读写、不再逐次授权）。含「编辑提交」接运行性「通过」判据 + 控制核心写回 workflow-state（重档部分）。
+2. **P3（轻档·2026-06-22 下放）= kickoff 已写、可派实现线**：节点真起 codex + 节点↔work_item 映射（项目=C / 实验=A）+ 去 env-CONFIRM 闸（保 path-lock + 沙箱）+ 运行层 policy→session 解析 + 「编辑提交」经运行性「通过」+ 控制核心写回 workflow-state。**真跑/写回都在固定测试项目（轻档·随便读写）**；非测试真实项目仍高危·锁。主导线逐字核 gate + 用户真机第一次真跑。kickoff `handoffs/2026-06-22-canvas-p3-kickoff-v1.md`。
 3. **后置 / 锁着**：节点对话编辑（补充层）；乙·自动连环（北极星，④c）；**真跑进非测试真实项目（仍高危·仍锁）**。
 4. 旧积压（引擎解封 GUI 端到端 / 文档归档 + 死码清理〔`workbench_sqlite_*` 保留勿删〕/ 旧运行画布对图〔大概率被项目面取代〕）优先级低于画布。
 
