@@ -10,6 +10,8 @@ import {
   type CanvasNodeData,
 } from "../../src/lib/canvasNodeData";
 import type { CanvasEdge, CanvasNode } from "../../src/lib/types";
+import { experimentCanvasSurfaceConfig } from "../../src/lib/canvasSurfaceConfig";
+import { experimentCanvasBoundary } from "../../src/lib/canvasSurfaceBoundaries";
 
 // Free-canvas node authoring (plan A1–A4) data-layer coverage. React Flow does
 // not render under renderToStaticMarkup, so this exercises the pure mapping that
@@ -188,5 +190,35 @@ export function runCanvasNodeAuthoringScenario() {
     readOnlyReq.user_reviewed_instruction.allowed_write_roots,
     [],
     "C1 read-only 节点不给任何写入根",
+  );
+
+  // 引擎抽出 P0 · 行为不变锚点：CanvasView 现在是 WorkflowCanvasEngine + experiment
+  // config 的薄壳。experiment 面 config 必须复现旧 CanvasView 的实验语境——它注入
+  // 的 boundary 必须就是旧代码硬编码的同一个 experimentCanvasBoundary（引用相同），
+  // 能力为自由编排全开、真跑目标=固定测试项目、事实源=自由画布定义、无项目规则条。
+  assert(experimentCanvasSurfaceConfig.kind === "experiment", "P0 实验面 config kind=experiment");
+  assert(
+    experimentCanvasSurfaceConfig.boundary === experimentCanvasBoundary,
+    "P0 实验面 config 注入的 boundary 必须是旧 CanvasView 同一个 experimentCanvasBoundary（行为不变）",
+  );
+  assert(
+    experimentCanvasSurfaceConfig.realRunTarget === "fixed_test_project",
+    "P0 实验面真跑目标仍为固定测试项目（双闸靶子不变）",
+  );
+  assert(
+    experimentCanvasSurfaceConfig.authority === "free_canvas_def",
+    "P0 实验面事实源 = 自由画布定义，非项目事实源",
+  );
+  assert(
+    experimentCanvasSurfaceConfig.capabilities.edit &&
+      experimentCanvasSurfaceConfig.capabilities.connect &&
+      experimentCanvasSurfaceConfig.capabilities.createNode &&
+      experimentCanvasSurfaceConfig.capabilities.saveTemplate &&
+      experimentCanvasSurfaceConfig.capabilities.manualOrchestrate,
+    "P0 实验面自由编排全功能全开（与旧 CanvasView 一致）",
+  );
+  assert(
+    experimentCanvasSurfaceConfig.showProjectRuleBar === false,
+    "P0 实验面无项目规则状态条（§11.2 是项目面的）",
   );
 }
