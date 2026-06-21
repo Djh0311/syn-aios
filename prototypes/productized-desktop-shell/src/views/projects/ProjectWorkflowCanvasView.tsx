@@ -32,6 +32,8 @@ import {
   type ProjectWorkflowCanvasReadModel,
 } from "../../lib/projectCanvas";
 import type { CanvasSurfaceBoundary } from "../../lib/canvasSurfaceBoundaries";
+import { projectCanvasSurfaceConfig } from "../../lib/canvasSurfaceConfig";
+import { WorkflowCanvasEngine } from "../WorkflowCanvasEngine";
 import type {
   AutoDispatchGuardInput,
   AutoDispatchGuardResult,
@@ -121,6 +123,7 @@ type ProjectWorkflowCanvasViewProps = {
   projectWorkflowAutomation?: ProjectWorkflowAutomationReadModel | null;
   k3B1Recovery?: K3B1RecoveryReadModel | null;
   onRequestAction: (action: PendingAction) => void;
+  onNotice?: (msg: string) => void;
   onOpenAgentSession: (threadId: string) => void;
   onInspectWorkflowRunCheck?: (projectRoot: string, workflowId?: string | null) => Promise<WorkflowRunCheck>;
   onInspectAutoDispatchAuthorization?: (request: AutoDispatchGuardInput) => Promise<AutoDispatchGuardResult>;
@@ -146,6 +149,7 @@ export function ProjectWorkflowCanvasView({
   projectWorkflowAutomation,
   k3B1Recovery,
   onRequestAction,
+  onNotice = () => {},
   onOpenAgentSession,
   onInspectWorkflowRunCheck,
   onInspectAutoDispatchAuthorization,
@@ -178,6 +182,31 @@ export function ProjectWorkflowCanvasView({
     [project, projectWorkflow, projectBlackboard, selectedTask, workflowState?.path, workflowState?.updated_at, runtimeSessionAttention],
   );
   const [selectedCanvasNodeId, setSelectedCanvasNodeId] = useState<string | null>(canvasModel.viewport_hint.selected_node_id);
+  // P1/P2 项目面（两面一引擎，2026-06-21 真机反馈版）：默认是只读运行状态视图（保留既有治理
+  // 落地页）。编辑是「动作」不是「视图」——点「编辑工作流 / 新建工作流」才进编辑态、挂引擎改
+  // 草案（原工作流继续跑），离线/SSR 不渲染引擎（React Flow 无法 SSR）。统一草案流：不分空闲/
+  // 在跑，一律改草案 → 提交 → 通过（运行性 / 控制核心·权限·审计，P3 重档）才生效。
+  const [editing, setEditing] = useState(false);
+  const [editingMode, setEditingMode] = useState<"edit" | "new">("edit");
+  const projectConfig = useMemo(() => projectCanvasSurfaceConfig(project.project_root), [project.project_root]);
+  const projectCanvasId = useMemo(
+    () =>
+      `project-${
+        project.project_root.replace(/^\/+/, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() ||
+        "unknown"
+      }`,
+    [project.project_root],
+  );
+  // 新建工作流改独立草案画布（不动现有草案）；编辑工作流改项目草案画布。
+  const draftCanvasId = editingMode === "new" ? `${projectCanvasId}-draft-new` : projectCanvasId;
+  // 提交（轻档）：草案由引擎自存；落为正式项目工作流需先过运行性检查 + 控制核心 / 权限 / 审计
+  // （P3 重档），当前不写 workflow-state、不动运行中的工作流。
+  const submitDraft = () => {
+    onNotice(
+      "草案已存。提交为正式项目工作流需先过运行性检查 + 控制核心 / 权限 / 审计（P3 重档）；当前不改运行中的工作流。",
+    );
+    setEditing(false);
+  };
   const blackboardOverlay = useMemo(
     () =>
       buildBlackboardCandidateOverlay({
@@ -381,13 +410,57 @@ export function ProjectWorkflowCanvasView({
 
   return (
     <section className="workflow-canvas" aria-label="项目级工作流画布">
+      {projectConfig.showProjectRuleBar ? (
+        <ProjectRuleStatusBar canvasModel={canvasModel} runCheckStatus={derivedWorkflow?.run_check_status ?? null} />
+      ) : null}
+
+      {editing ? (
+        <>
+          <div className="workflow-orchestration-head project-canvas-edit-head">
+            <div>
+              <p className="eyebrow">{editingMode === "new" ? "新建项目工作流 · 草案" : "编辑项目工作流 · 草案"}</p>
+              <h3>
+                {editingMode === "new"
+                  ? "新建工作流（草案）"
+                  : projectWorkflow
+                    ? `编辑：${projectWorkflow.title}（草案）`
+                    : "编辑工作流（草案）"}
+              </h3>
+              <p className="path-text">改的是草案，运行中的工作流不动；提交并通过后才生效（经控制核心 / 权限 / 审计）。</p>
+            </div>
+            <div className="workflow-state-actions">
+              <button className="primary-button" type="button" onClick={submitDraft}>提交为项目工作流</button>
+              <button className="secondary-button" type="button" onClick={() => setEditing(false)}>返回运行状态</button>
+            </div>
+          </div>
+          <div className="project-canvas-plan" aria-label="项目工作流草案（可编辑）">
+            <ReactFlowProvider>
+              <WorkflowCanvasEngine
+                config={projectConfig}
+                canvasId={draftCanvasId}
+                sessions={sessions}
+                onNotice={onNotice}
+              />
+            </ReactFlowProvider>
+          </div>
+        </>
+      ) : (
+      <>
       <div className="workflow-orchestration-head">
         <div>
           <p className="eyebrow">项目工作流主入口</p>
           <h3>{projectWorkflow ? projectWorkflow.title : "当前项目还没有默认工作流"}</h3>
           <p className="path-text">{project.project_root}</p>
         </div>
-        <Badge tone={projectWorkflow ? "candidate" : "warning"}>{projectWorkflow ? projectWorkflow.state : "缺 workflow"}</Badge>
+        <div className="workflow-state-actions">
+          <button className="secondary-button" type="button" onClick={() => { setEditingMode("new"); setEditing(true); }}>
+            新建工作流
+          </button>
+          <button className="secondary-button" type="button" onClick={() => { setEditingMode("edit"); setEditing(true); }}>
+            编辑工作流
+          </button>
+          <Badge tone={projectWorkflow ? "candidate" : "warning"}>{projectWorkflow ? projectWorkflow.state : "缺 workflow"}</Badge>
+        </div>
       </div>
 
       <div className="project-canvas-shell">
@@ -440,8 +513,41 @@ export function ProjectWorkflowCanvasView({
           onInspectWorkflowRunCheck,
         })}
       </div>
+      </>
+      )}
     </section>
   );
+}
+
+// D · 项目规则状态条（蓝图 §11.2）：把已派生的运行性 / 状态原因 / 全局徽标
+// （关注 / 权限 / 黑板）condense 成顶部一条；纯读派生数据，不补编、不触发执行。
+function ProjectRuleStatusBar({
+  canvasModel,
+  runCheckStatus,
+}: {
+  canvasModel: ProjectWorkflowCanvasReadModel;
+  runCheckStatus: WorkflowRunCheck["status"] | null;
+}) {
+  return (
+    <div className="project-rule-status-bar" aria-label="项目规则状态条">
+      <span className="prsb-headline">{canvasModel.status_reason.label}</span>
+      <span className={`prsb-pill runcheck ${runCheckStatus ?? "unknown"}`}>
+        运行性：{runCheckStatusLabel(runCheckStatus)}
+      </span>
+      {canvasModel.global_badges.map((badgeItem) => (
+        <span className={`prsb-pill ${badgeItem.tone}`} key={badgeItem.badge_id}>
+          {badgeItem.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function runCheckStatusLabel(status: WorkflowRunCheck["status"] | null) {
+  if (status === "runnable") return "可运行";
+  if (status === "warning") return "有警告";
+  if (status === "blocked") return "不可运行";
+  return "未知 / 不可用";
 }
 
 type ProjectCanvasFlowNodeData = {

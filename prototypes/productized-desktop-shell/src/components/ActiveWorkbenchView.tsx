@@ -35,7 +35,6 @@ import { HomeView } from "../views/HomeView";
 import { KnowledgeBaseView } from "../views/KnowledgeBaseView";
 import { MemoryCenterView } from "../views/MemoryCenterView";
 import { ProjectsView } from "../views/ProjectsView";
-import { RunningWorkflowsView } from "../views/RunningWorkflowsView";
 import { SettingsView } from "../views/SettingsView";
 import { SkillsBoardView } from "../views/SkillsBoardView";
 
@@ -164,6 +163,7 @@ export function renderActiveWorkbenchView({
         onPreviewTaskMemoryPacket={onPreviewTaskMemoryPacket}
         onPreviewProjectDirectorTaskPlan={onPreviewProjectDirectorTaskPlan}
         onOpenAgentSession={onOpenAgentSession}
+        onNotice={onNotice}
       />
     );
   }
@@ -176,27 +176,9 @@ export function renderActiveWorkbenchView({
     return <HarnessBoardView projects={snapshot.projects} />;
   }
 
-  if (view === "runningWorkflows") {
-    // 用户要求:「运行中工作流」入口直接显示实验画布(自由定义任意节点),
-    // 不再是只读状态画布(RunningWorkflowsView 暂留代码、不从此入口进)。
-    void workflowState;
-    void workflowStateLoading;
-    void workflowStateError;
-    void memoryCaptureStore;
-    void memoryCandidateStore;
-    void formalMemoryStore;
-    void onReloadWorkflowState;
-    void onRequestAction;
-    return (
-      <CanvasViewWithProvider
-        canvasId="default"
-        sessions={snapshot.sessions}
-        onNotice={onNotice}
-      />
-    );
-  }
-
   if (view === "workflow") {
+    // 实验画布（沙盒）：已扶正到主栏入口。项目工作流的「运行状态」归项目面
+    // （画布架构方案 P1/P2 项目面运行状态视图），不再单列「运行中工作流」入口。
     return (
       <CanvasViewWithProvider
         canvasId="default"

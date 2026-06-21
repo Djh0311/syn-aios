@@ -5731,20 +5731,6 @@ textarea {
   border-color: rgba(161, 66, 66, 0.45);
   color: var(--vermil);
 }
-.canvas-view .canvas-run-panel {
-  font-size: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px;
-  background: #f4f1e8;
-  border-radius: 4px;
-}
-.canvas-view .canvas-run-panel code {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px;
-}
-
 /* ============================================================
    Inkwash 会话视图: 软件层卡 / 软件分组小表 / 纯净对话气泡
    对齐 docs/architecture/ui-prototype/inkwash-full.html V2 + V6
@@ -8114,6 +8100,70 @@ textarea {
   border-bottom: 1px dashed var(--hair-2);
 }
 
+/* D · 项目规则状态条（§11.2）：运行性 / 状态原因 / 全局徽标 condense 成一条。 */
+.project-rule-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--hair-2);
+  border-radius: 4px;
+  background: rgba(245, 241, 232, 0.7);
+}
+.project-rule-status-bar .prsb-headline {
+  font-weight: 600;
+  font-size: 13px;
+  margin-right: 4px;
+}
+.project-rule-status-bar .prsb-pill {
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--hair-2);
+  background: var(--rice);
+  color: rgba(28, 31, 36, 0.72);
+}
+.project-rule-status-bar .prsb-pill.warning {
+  border-color: #c8993f;
+  color: #8a5a12;
+  background: #faf3e2;
+}
+.project-rule-status-bar .prsb-pill.runcheck.runnable {
+  border-color: #5a6f4a;
+  color: #3f5235;
+  background: #eef2e8;
+}
+.project-rule-status-bar .prsb-pill.runcheck.warning {
+  border-color: #c8993f;
+  color: #8a5a12;
+  background: #faf3e2;
+}
+.project-rule-status-bar .prsb-pill.runcheck.blocked {
+  border-color: #a14242;
+  color: #7a2e2e;
+  background: #f7e8e8;
+}
+
+/* 实验画布「清空 / 新建画布」两步确认（行内换行排布）。 */
+.canvas-reset-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* C · 草案编辑：内嵌可编辑引擎（embedded，无自身 header chrome）。编辑是动作（真机后
+   删了方案/运行视图切换），点「编辑/新建工作流」才进编辑态。 */
+.project-canvas-plan {
+  display: flex;
+  min-height: 680px;
+}
+.project-canvas-plan > .canvas-view {
+  flex: 1;
+  min-width: 0;
+}
+
 .project-canvas-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(330px, 390px);
@@ -8458,6 +8508,7 @@ textarea {
 }
 
 .canvas-view .canvas-flow {
+  position: relative;
   height: 100%;
   min-height: 560px;
   border: 0;
@@ -8465,6 +8516,34 @@ textarea {
   background:
     radial-gradient(70% 60% at 50% 45%, rgba(245, 241, 232, 0.96), rgba(245, 241, 232, 0.68)),
     var(--rice);
+}
+
+/* 空画布引导：居中浮层，pointer-events:none 让空白处双击仍能穿透到 React Flow 画布建节点。 */
+.canvas-view .canvas-flow .canvas-empty-guide {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 360px;
+  padding: 18px 22px;
+  text-align: center;
+  pointer-events: none;
+  color: rgba(28, 31, 36, 0.62);
+  background: rgba(250, 247, 240, 0.82);
+  border: 1px dashed #cfc8b6;
+  border-radius: 6px;
+}
+.canvas-view .canvas-flow .canvas-empty-guide strong {
+  font-size: 15px;
+  color: rgba(28, 31, 36, 0.78);
+}
+.canvas-view .canvas-flow .canvas-empty-guide span {
+  font-size: 12.5px;
+  line-height: 1.55;
 }
 
 .react-flow__node {

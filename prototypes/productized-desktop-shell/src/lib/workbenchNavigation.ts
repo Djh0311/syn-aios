@@ -4,7 +4,6 @@ export type ViewKey =
   | "ideas"
   | "proposal"
   | "workflow"
-  | "runningWorkflows"
   | "agents"
   | "knowledge"
   | "memory"
@@ -38,7 +37,7 @@ export const primaryNavItems: WorkbenchNavItem[] = [
   { key: "memory", label: "记忆层", glyph: "◐" },
   { key: "skills", label: "Skill", glyph: "✦" },
   { key: "harness", label: "Harness", glyph: "⬡" },
-  { key: "runningWorkflows", label: "运行中工作流", glyph: "≋" },
+  { key: "workflow", label: "实验画布", glyph: "⊹" },
 ];
 
 export const primaryNavGroups: WorkbenchNavGroup[] = [
@@ -55,7 +54,7 @@ export const primaryNavGroups: WorkbenchNavGroup[] = [
     label: "流转",
     items: [
       { key: "ideas", label: "想法箱", glyph: "✎" },
-      { key: "runningWorkflows", label: "运行中工作流", glyph: "≋" },
+      { key: "workflow", label: "实验画布", glyph: "⊹" },
     ],
   },
   {
@@ -80,7 +79,6 @@ export const settingsNavItem: WorkbenchNavItem = { key: "settings", label: "设�
 
 export const devNavItems: WorkbenchNavItem[] = [
   { key: "proposal", label: "建议方案", glyph: "≣" },
-  { key: "workflow", label: "实验画布", glyph: "⊹" },
   { key: "tools", label: "工具", glyph: "⚙" },
   { key: "models", label: "模型/凭据", glyph: "◇" },
 ];

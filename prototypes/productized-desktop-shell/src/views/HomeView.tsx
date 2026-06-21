@@ -61,7 +61,8 @@ export function HomeView({ snapshot, workflowState = null, onNavigate }: HomeVie
       label: workflow.title,
       meta: `${workflow.task_draft_count} 工作项`,
       tone: "run" as const,
-      view: "runningWorkflows" as const,
+      // 「运行中工作流」入口已撤；项目工作流运行状态归项目面（画布架构 P1/P2）。
+      view: "projects" as const,
     })),
     ...runningSessions.slice(0, 3).map((summary) => ({
       key: summary.session_id,
@@ -115,7 +116,7 @@ export function HomeView({ snapshot, workflowState = null, onNavigate }: HomeVie
           <button className="secondary-button" type="button" onClick={() => onNavigate("projects")}>
             去处理
           </button>
-          <button className="secondary-button" type="button" onClick={() => onNavigate("runningWorkflows")}>
+          <button className="secondary-button" type="button" onClick={() => onNavigate("projects")}>
             去审批
           </button>
         </div>

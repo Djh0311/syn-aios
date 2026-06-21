@@ -3,6 +3,7 @@ import {
   NODE_KIND_PRESETS,
   buildNodeDispatchRequest,
   canvasNodeToData,
+  canvasScope,
   createNodeData,
   dataToCanvasNode,
   instantiateTemplateGraph,
@@ -10,8 +11,8 @@ import {
   type CanvasNodeData,
 } from "../../src/lib/canvasNodeData";
 import type { CanvasEdge, CanvasNode } from "../../src/lib/types";
-import { experimentCanvasSurfaceConfig } from "../../src/lib/canvasSurfaceConfig";
-import { experimentCanvasBoundary } from "../../src/lib/canvasSurfaceBoundaries";
+import { experimentCanvasSurfaceConfig, projectCanvasSurfaceConfig } from "../../src/lib/canvasSurfaceConfig";
+import { experimentCanvasBoundary, projectWorkflowCanvasBoundary } from "../../src/lib/canvasSurfaceBoundaries";
 
 // Free-canvas node authoring (plan A1–A4) data-layer coverage. React Flow does
 // not render under renderToStaticMarkup, so this exercises the pure mapping that
@@ -221,4 +222,41 @@ export function runCanvasNodeAuthoringScenario() {
     experimentCanvasSurfaceConfig.showProjectRuleBar === false,
     "P0 实验面无项目规则状态条（§11.2 是项目面的）",
   );
+
+  // B · scope 是显式持久化字段，不再靠 project_root 派生：显式值优先；旧画布（无
+  // scope）按 project_root 有无回落迁移；并留出「草案设计好、未绑项目」中间态
+  // （scope=project 但 project_root 空）。
+  assert(
+    canvasScope({ scope: "experiment", project_root: "/some/project" }) === "experiment",
+    "B 显式 scope 优先于 project_root 派生",
+  );
+  assert(
+    canvasScope({ scope: "project", project_root: null }) === "project",
+    "B 显式 scope=project 即使未绑 project_root 也保留（草案未绑中间态）",
+  );
+  assert(
+    canvasScope({ project_root: "/some/project" }) === "project",
+    "B 向后兼容：旧画布无 scope、有 project_root → 派生 project",
+  );
+  assert(
+    canvasScope({}) === "experiment",
+    "B 向后兼容：旧画布无 scope、无 project_root → 派生 experiment",
+  );
+
+  // C/D · 项目面 config（两面一引擎，2026-06-21 真机反馈版）：与实验面同引擎、不同调用。
+  // project kind、事实源 = workflow-state 读模型、默认只读运行状态视图（编辑是动作不是视图，
+  // 已删方案/运行切换）、真跑目标 = 绑定项目、有项目规则状态条、embedded（host 提供 chrome）、
+  // boundary = 项目工作流边界。
+  const projectCfg = projectCanvasSurfaceConfig("/Users/yoyi/some-project");
+  assert(projectCfg.kind === "project", "C 项目面 config kind=project");
+  assert(projectCfg.boundary === projectWorkflowCanvasBoundary, "C 项目面 config 注入项目工作流边界");
+  assert(projectCfg.projectRoot === "/Users/yoyi/some-project", "C 项目面 config 带 projectRoot");
+  assert(projectCfg.authority === "workflow_state_read_model", "C 项目面事实源 = workflow-state 派生读模型");
+  assert(projectCfg.realRunTarget === "bound_project", "C 项目面真跑目标 = 绑定项目（非固定测试项目）");
+  assertDeepEqual(projectCfg.views, ["run_state"], "D 项目面默认只读运行状态视图（编辑是动作不是视图，真机后删切换）");
+  assert(projectCfg.showProjectRuleBar === true, "D 项目面有规则状态条（§11.2）");
+  assert(projectCfg.embedded === true, "C 项目面 embedded：host 提供 head / 规则条 / 编辑动作");
+  // 两面差异（同引擎双调用）：experiment 真跑打固定测试项目 / 自由画布事实源 / 无规则条；
+  // project 真跑打绑定项目 / workflow-state 读模型事实源 / 有规则条。（上面逐项已锚定；
+  // 两者字面量类型本就不同，TS 编译期即保证有别，无需再运行期比较。）
 }

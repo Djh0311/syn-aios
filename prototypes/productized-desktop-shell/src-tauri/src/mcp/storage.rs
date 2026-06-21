@@ -62,6 +62,13 @@ pub struct CanvasDefinition {
     pub display_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_root: Option<String>,
+    // Canvas surface scope (two-surfaces-one-engine plan P1/B): explicit
+    // "experiment" | "project", persisted instead of derived from project_root,
+    // so a "designed but not yet bound" project draft can exist. Opaque
+    // passthrough — no interpretation. Optional + serde default = old canvases
+    // round-trip unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
     pub nodes: Vec<CanvasNode>,
     pub edges: Vec<CanvasEdge>,
     pub created_at: String,

@@ -1,7 +1,7 @@
 export const shellScenarioTextFixtures = {
   homeExpectedTexts: ["项目", "智能体", "Skill", "Harness", "运行中工作流", "不是真实使用事件"],
   homeForbiddenTexts: ["系统", "Skills 1", "Plugins 1"],
-  primaryNavLabels: ["项目", "智能体", "想法箱", "知识库", "记忆层", "Skill", "Harness", "运行中工作流"],
+  primaryNavLabels: ["项目", "智能体", "想法箱", "知识库", "记忆层", "Skill", "Harness", "实验画布"],
   primaryNavGlyphs: [
     ["projects", "▤"],
     ["agents", "◍"],
@@ -10,12 +10,11 @@ export const shellScenarioTextFixtures = {
     ["memory", "◐"],
     ["skills", "✦"],
     ["harness", "⬡"],
-    ["runningWorkflows", "≋"],
+    ["workflow", "⊹"],
   ],
   settingsExpectedTexts: [
     "开发者",
     "建议方案",
-    "实验画布",
     "模型/凭据",
     "适配器",
     "供应方",
@@ -128,6 +127,11 @@ export const shellScenarioTextFixtures = {
     "编辑字段表单会绑定当前选中的任务草稿",
   ],
   workflowCanvasWithDraftExpectedTexts: [
+    // P1/P2 项目面（两面一引擎，2026-06-21 真机反馈版）：规则状态条（运行性）+「新建/编辑工作流」
+    // 动作（编辑是动作不是视图，已删方案/运行视图切换）。默认渲染只读运行状态治理面。
+    "运行性：",
+    "新建工作流",
+    "编辑工作流",
     "项目工作流主入口",
     "运行检查",
     "方案与授权",

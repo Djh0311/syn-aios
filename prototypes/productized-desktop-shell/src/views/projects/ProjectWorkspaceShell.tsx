@@ -88,6 +88,9 @@ export type ProjectDetailProps = {
   onOpenAgentSession?: (threadId: string) => void;
   onBackToGallery?: () => void;
   onRequestAction: (action: PendingAction) => void;
+  // Notice sink for the editable project-plan canvas (engine save / template /
+  // run feedback). Optional so offline / gallery callsites needn't supply it.
+  onNotice?: (msg: string) => void;
   onLoadTranscript?: (threadId: string) => Promise<CodexTranscript>;
   onRenderTaskPreview?: (projectRoot: string, workItemId: string) => Promise<TaskPackagePreview>;
   onInspectDispatchReadiness?: (projectRoot: string, workItemId: string) => Promise<TaskPackageDispatchReadiness>;

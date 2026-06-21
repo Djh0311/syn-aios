@@ -3,9 +3,25 @@
 // the React Flow custom node / right-panel editor work with. Kept free of React
 // Flow / DOM so it is unit-testable offline (no SSR of @xyflow needed).
 
-import type { CanvasEdge, CanvasNode, CanvasNodeDispatchRequest, CanvasNodeRole } from "./types";
+import type {
+  CanvasDefinition,
+  CanvasEdge,
+  CanvasNode,
+  CanvasNodeDispatchRequest,
+  CanvasNodeRole,
+  CanvasScope,
+} from "./types";
 
 export type CanvasCustomField = { id: string; key: string; value: string };
+
+// Canvas surface scope (two-surfaces-one-engine plan, P1/B). The explicit,
+// persisted `scope` wins; old canvases that predate the field fall back to
+// deriving it from `project_root` (bound → project, unbound → experiment), so
+// nothing breaks on read. Takes a Pick so it is trivially offline-testable.
+export function canvasScope(canvas: Pick<CanvasDefinition, "scope" | "project_root">): CanvasScope {
+  if (canvas.scope === "experiment" || canvas.scope === "project") return canvas.scope;
+  return canvas.project_root ? "project" : "experiment";
+}
 
 // Session model (plan 2026-06-21 workflow-session-and-scope). The node stores a
 // session POLICY, not a resolved session id — definition/template stay free of a

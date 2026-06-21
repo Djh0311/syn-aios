@@ -24,11 +24,18 @@ export type CanvasEdge = {
   to: string;
 };
 
+// Canvas surface scope (two-surfaces-one-engine plan, P1/B). EXPLICIT + persisted
+// rather than derived from `project_root`, so a "designed but not yet bound"
+// project draft (scope=project, project_root=null) is representable. Old canvases
+// have no scope and fall back to project-root derivation (see `canvasScope`).
+export type CanvasScope = "experiment" | "project";
+
 export type CanvasDefinition = {
   schema_version: "canvas-v1";
   canvas_id: string;
   display_name: string;
   project_root?: string | null;
+  scope?: CanvasScope | null;
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   created_at: string;

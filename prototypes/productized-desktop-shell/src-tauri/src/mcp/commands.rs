@@ -24,6 +24,10 @@ pub fn canvas_load(canvas_id: String) -> Result<CanvasDefinition, String> {
                 canvas_id: canvas_id.clone(),
                 display_name: format!("画布 {canvas_id}"),
                 project_root: None,
+                // No explicit scope on the bootstrap canvas → frontend `canvasScope`
+                // derives "experiment" (no project_root), and the first save stamps
+                // it explicitly. Old canvases without this field still round-trip.
+                scope: None,
                 nodes: Vec::new(),
                 edges: Vec::new(),
                 created_at: now.clone(),

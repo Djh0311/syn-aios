@@ -643,7 +643,7 @@ function rightPanelBoundaryNote(panel: RightPanelKey) {
 }
 
 function rightPanelTargetView(panel: RightPanelKey): ViewKey {
-  if (panel === "running") return "runningWorkflows";
+  if (panel === "running") return "projects";
   if (panel === "audit") return "settings";
   if (panel === "todos") return "projects";
   if (panel === "ideas") return "ideas";

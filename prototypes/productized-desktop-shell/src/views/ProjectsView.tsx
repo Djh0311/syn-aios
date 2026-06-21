@@ -86,6 +86,7 @@ type ProjectsViewProps = {
   workflowStateError?: string | null;
   onReloadWorkflowState?: () => void;
   onRequestAction: (action: PendingAction) => void;
+  onNotice?: (msg: string) => void;
   onLoadTranscript: (threadId: string) => Promise<CodexTranscript>;
   onRenderTaskPreview?: (projectRoot: string, workItemId: string) => Promise<TaskPackagePreview>;
   onInspectDispatchReadiness?: (projectRoot: string, workItemId: string) => Promise<TaskPackageDispatchReadiness>;
@@ -202,6 +203,7 @@ export function ProjectDetail(props: ProjectDetailProps) {
     realExecutionProductCommands = null,
     projectWorkflowAutomation = null,
     onRequestAction,
+    onNotice = () => {},
     onOpenAgentSession = () => {},
     onInspectWorkflowRunCheck,
     onInspectAutoDispatchAuthorization,
@@ -230,6 +232,7 @@ export function ProjectDetail(props: ProjectDetailProps) {
           projectWorkflowAutomation={projectWorkflowAutomation}
           k3B1Recovery={props.k3B1Recovery ?? null}
           onRequestAction={onRequestAction}
+          onNotice={onNotice}
           onOpenAgentSession={onOpenAgentSession}
           onInspectWorkflowRunCheck={onInspectWorkflowRunCheck}
           onInspectAutoDispatchAuthorization={onInspectAutoDispatchAuthorization}

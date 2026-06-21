@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -21,16 +21,13 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import {
-  canvasAbortRun,
   canvasLoad,
-  canvasRunStatus,
   canvasSave,
   deleteWorkflowTemplate,
   executeWorkflowNodeDispatch,
   listWorkflowTemplates,
   loadWorkflowTemplate,
   saveWorkflowTemplate,
-  type CanvasRunStatus,
 } from "../lib/tauri";
 import type { CanvasSurfaceBoundary } from "../lib/canvasSurfaceBoundaries";
 import type { CanvasSurfaceConfig } from "../lib/canvasSurfaceConfig";
@@ -41,6 +38,7 @@ import {
   STATUS_PRESETS,
   buildNodeDispatchRequest,
   canvasNodeToData,
+  canvasScope,
   createNodeData,
   dataToCanvasNode,
   instantiateTemplateGraph,
@@ -93,6 +91,9 @@ function fromFlow(canvas: CanvasDefinition, nodes: FlowNode[], edges: Edge[]): C
   });
   return {
     ...canvas,
+    // Stamp scope explicitly on save: legacy canvases (no scope) get migrated to a
+    // concrete value via the project_root fallback; an explicit scope is preserved.
+    scope: canvasScope(canvas),
     nodes: merged,
     edges: edges.map((e) => ({ id: e.id, from: String(e.source), to: String(e.target) })),
     updated_at: new Date().toISOString(),
@@ -107,19 +108,26 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: W
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [goal, setGoal] = useState("");
-  const [runId, setRunId] = useState<string | null>(null);
-  const [runStatus, setRunStatus] = useState<CanvasRunStatus | null>(null);
   const [templates, setTemplates] = useState<WorkflowTemplateSummary[]>([]);
   const [templateTitle, setTemplateTitle] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const pollRef = useRef<number | null>(null);
+  const [bindOpen, setBindOpen] = useState(false);
+  const [bindInput, setBindInput] = useState("");
+  // 实验画布「清空 / 新建画布」两步确认（Tauri webview 不弹 window.confirm）。
+  const [confirmReset, setConfirmReset] = useState<null | "clear" | "new">(null);
 
   const reload = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
-      const c = await canvasLoad(canvasId);
+      const loaded = await canvasLoad(canvasId);
+      // Project surface: bind the canvas to its project + stamp scope on load so
+      // a fresh project canvas isn't mis-derived as experiment (default-by-surface
+      // per plan B). Persists on the next save (fromFlow stamps scope).
+      const c =
+        config.kind === "project" && config.projectRoot && !loaded.project_root
+          ? { ...loaded, project_root: config.projectRoot, scope: "project" as const }
+          : loaded;
       setCanvas(c);
       setNodes(toFlowNodes(c));
       setEdges(toFlowEdges(c));
@@ -129,7 +137,7 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: W
     } finally {
       setBusy(false);
     }
-  }, [canvasId]);
+  }, [canvasId, config.kind, config.projectRoot]);
 
   const refreshTemplates = useCallback(async () => {
     try {
@@ -335,59 +343,43 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: W
 
   // P2 · 作用域升级：实验画布「绑定到项目」→ 设 project_root，画布变项目画布。
   // 只改定义里的 project_root（保存后持久化）；不碰双闸——真跑权限仍由后端定。
-  const bindToProject = useCallback(() => {
+  // 页面内输入（Tauri webview 不弹 window.prompt、旧版会静默失败）：点按钮开内联输入框。
+  const openBind = useCallback(() => {
     if (!canvas) return;
-    const next = window.prompt("绑定到项目（项目根目录绝对路径，留空=保持实验画布）", canvas.project_root ?? "");
-    if (next === null) return;
-    const trimmed = next.trim();
-    setCanvas({ ...canvas, project_root: trimmed || null });
+    setBindInput(canvas.project_root ?? "");
+    setBindOpen(true);
+  }, [canvas]);
+  // scope is explicit + persisted now: binding graduates the canvas to a project
+  // surface, unbinding returns it to experiment. (P3 真跑权限仍由后端双闸定。)
+  const applyBind = useCallback(() => {
+    if (!canvas) return;
+    const trimmed = bindInput.trim();
+    setCanvas({ ...canvas, project_root: trimmed || null, scope: trimmed ? "project" : "experiment" });
     setDirty(true);
+    setBindOpen(false);
     onNotice(trimmed ? `画布已绑定项目：${trimmed}（记得保存）` : "已取消项目绑定，回到实验画布（记得保存）");
-  }, [canvas, onNotice]);
+  }, [canvas, bindInput, onNotice]);
 
-  const startRun = useCallback(async () => {
-    onNotice("旧实验画布真实运行入口已封存；H 阶段统一产品命令完成前，不能从这里启动 Codex。");
+  // 真机反馈：实验画布需要「清空画布 / 新建画布」。清空 = 倒空当前图（留 id/名）；
+  // 新建 = 重置成一张空白新工作流（清图 + 名归位 + 退回实验作用域）。都置 dirty，存盘生效；
+  // 纯前端、零执行。（实验面单画布模型；多画布库后置。）
+  const clearCanvas = useCallback(() => {
+    setNodes([]);
+    setEdges([]);
+    setSelected(null);
+    setDirty(true);
+    setConfirmReset(null);
+    onNotice("画布已清空（记得保存）。");
   }, [onNotice]);
-
-  const abort = useCallback(async () => {
-    if (!runId) return;
-    setBusy(true);
-    try {
-      const status = await canvasAbortRun(runId, "用户拍停");
-      setRunStatus(status);
-      onNotice("已停止实验画布运行；未写项目 workflow。");
-    } catch (e) {
-      setError(messageOf(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [runId, onNotice]);
-
-  useEffect(() => {
-    if (!runId) return;
-    const tick = async () => {
-      try {
-        const s = await canvasRunStatus(runId);
-        setRunStatus(s);
-        if (s.run.status !== "running") {
-          if (pollRef.current !== null) {
-            window.clearInterval(pollRef.current);
-            pollRef.current = null;
-          }
-        }
-      } catch {
-        // tolerate transient
-      }
-    };
-    void tick();
-    pollRef.current = window.setInterval(tick, 2000);
-    return () => {
-      if (pollRef.current !== null) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [runId]);
+  const newCanvas = useCallback(() => {
+    setCanvas((curr) => (curr ? { ...curr, display_name: "新工作流", project_root: null, scope: "experiment" } : curr));
+    setNodes([]);
+    setEdges([]);
+    setSelected(null);
+    setDirty(true);
+    setConfirmReset(null);
+    onNotice("已重置为新的空白实验画布（记得保存）。");
+  }, [onNotice]);
 
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selected) ?? null,
@@ -396,12 +388,17 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: W
 
   const nodeTypes = useMemo<NodeTypes>(() => ({ canvasNode: CanvasFlowNode }), []);
 
+  // Surface-driven chrome (one engine, two调用): the project surface relabels and
+  // (when embedded) lets the host render the head / rule bar / view toggle.
+  const isProject = config.kind === "project";
+  const surfaceEyebrow = isProject ? "项目工作流画布" : "实验 / 模板画布";
+
   if (error) {
     return (
       <section className="canvas-view canvas-load-fallback">
         <header className="canvas-head">
           <div>
-            <p className="eyebrow">实验 / 模板画布</p>
+            <p className="eyebrow">{surfaceEyebrow}</p>
             <h2>画 布 暂 未 接 入</h2>
           </div>
           <span className="canvas-id">canvas_id={canvasId}</span>
@@ -435,30 +432,49 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: W
   }
 
   if (!canvas) {
-    return <section className="canvas-view">载入实验 / 模板画布……</section>;
+    return <section className="canvas-view">载入{isProject ? "项目工作流" : "实验 / 模板"}画布……</section>;
   }
 
+  const scope = canvasScope(canvas);
+
   return (
-    <section className="canvas-view" aria-label="实验 / 模板画布">
-      <header className="canvas-head">
-        <div>
-          <p className="eyebrow">实验 / 模板画布</p>
-          <h2>{canvas.display_name}</h2>
-          <div className="canvas-scope" data-scope={canvas.project_root ? "project" : "experiment"}>
-            {canvas.project_root ? (
-              <span className="canvas-scope-chip project" title={canvas.project_root}>
-                项目画布 · {pathTail(canvas.project_root)}
-              </span>
-            ) : (
-              <span className="canvas-scope-chip experiment">实验画布 · 未绑项目（真跑只打固定测试项目）</span>
-            )}
-            <button type="button" className="canvas-scope-bind" onClick={() => void bindToProject()} disabled={busy}>
-              {canvas.project_root ? "改绑项目" : "绑定到项目"}
-            </button>
+    <section className="canvas-view" aria-label={surfaceEyebrow}>
+      {config.embedded ? null : (
+        <header className="canvas-head">
+          <div>
+            <p className="eyebrow">{surfaceEyebrow}</p>
+            <h2>{canvas.display_name}</h2>
+            <div className="canvas-scope" data-scope={scope}>
+              {scope === "project" ? (
+                <span className="canvas-scope-chip project" title={canvas.project_root ?? undefined}>
+                  项目画布{canvas.project_root ? ` · ${pathTail(canvas.project_root)}` : " · 草案（未绑项目）"}
+                </span>
+              ) : (
+                <span className="canvas-scope-chip experiment">实验画布 · 未绑项目（真跑只打固定测试项目）</span>
+              )}
+              {/* 绑定/改绑是实验面把草案「毕业」到项目的入口；项目面已由 surface 绑定，不重复提供。 */}
+              {isProject ? null : bindOpen ? (
+                <span className="canvas-scope-bind-edit">
+                  <input
+                    type="text"
+                    value={bindInput}
+                    onChange={(e) => setBindInput(e.target.value)}
+                    placeholder="项目根目录绝对路径（留空=保持实验画布）"
+                    disabled={busy}
+                  />
+                  <button type="button" className="canvas-scope-bind" onClick={() => void applyBind()} disabled={busy}>确认</button>
+                  <button type="button" onClick={() => setBindOpen(false)} disabled={busy}>取消</button>
+                </span>
+              ) : (
+                <button type="button" className="canvas-scope-bind" onClick={() => void openBind()} disabled={busy}>
+                  {canvas.project_root ? "改绑项目" : "绑定到项目"}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-        <span className="canvas-id">canvas_id={canvas.canvas_id}</span>
-      </header>
+          <span className="canvas-id">canvas_id={canvas.canvas_id}</span>
+        </header>
+      )}
       <div className="canvas-body">
         <aside className="canvas-side">
           <ExperimentCanvasBoundaryPanel boundary={config.boundary} />
@@ -502,6 +518,25 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: W
               {dirty ? "保存（未保存）" : "保存"}
             </button>
             <button onClick={() => void reload()} disabled={busy}>重载</button>
+            {/* 真机反馈：实验画布加「清空 / 新建画布」（项目面用项目页的「新建工作流」，这里不重复）。*/}
+            {!isProject ? (
+              confirmReset ? (
+                <span className="canvas-reset-confirm">
+                  <span className="canvas-hint">
+                    确认{confirmReset === "clear" ? "清空当前画布" : "重置为新画布"}？未保存的改动会丢失。
+                  </span>
+                  <button onClick={() => (confirmReset === "clear" ? clearCanvas() : newCanvas())} disabled={busy}>
+                    确认
+                  </button>
+                  <button onClick={() => setConfirmReset(null)} disabled={busy}>取消</button>
+                </span>
+              ) : (
+                <>
+                  <button onClick={() => setConfirmReset("clear")} disabled={busy || nodes.length === 0}>清空画布</button>
+                  <button onClick={() => setConfirmReset("new")} disabled={busy}>新建画布</button>
+                </>
+              )
+            ) : null}
           </fieldset>
           <fieldset>
             <legend>成熟模式</legend>
@@ -563,31 +598,22 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: W
             <p className="canvas-hint">从成熟模式起的新工作流节点 id 会重置；保存后成为独立画布。</p>
           </fieldset>
           <fieldset>
-            <legend>实验运行边界</legend>
+            <legend>运行说明</legend>
             <p className="canvas-hint">
-              旧实验画布真实运行入口已封存，不会启动 Codex、不发送 prompt、不推进项目 workflow。后续真实执行必须走 H 阶段统一产品命令。
+              {isProject
+                ? "在「节点编辑 → 接执行」里点「▶ 运行此节点」会经控制核心 + 双闸派发到本项目；默认安全态会被后端挡下、零执行（项目真跑 P3 逐次授权）。方案视图是草案，提交为正式工作流也经控制核心 / 权限 / 审计。"
+                : "在「节点编辑 → 接执行」里点「▶ 运行此节点」经双闸命令派发；默认安全态（非固定测试项目 / 未设 env 钥匙）会被后端挡下、零执行。实验画布不是项目工作流事实源，真跑只打固定测试项目。"}
             </p>
-            <label>
-              目标草稿
-              <textarea
-                value={goal}
-                onChange={(e) => setGoal(e.target.value)}
-                rows={3}
-                disabled={busy || !!runId}
-              />
-            </label>
-            <button onClick={() => void startRun()} disabled={busy || !!runId}>
-              查看封存边界
-            </button>
-            <button onClick={() => void abort()} disabled={busy || !runId}>
-              停止实验画布运行
-            </button>
-            {runId && (
-              <RunPanel runId={runId} status={runStatus} />
-            )}
           </fieldset>
         </aside>
         <div className="canvas-flow" onDoubleClick={onPaneDoubleClick}>
+          {nodes.length === 0 ? (
+            <div className="canvas-empty-guide" role="note">
+              <strong>空白画布</strong>
+              <span>从左侧「节点调色板」点一个种类，或在画布空白处双击，建第一个节点。</span>
+              <span>建好后点选节点，在右侧「节点编辑」里改名称 / 种类 / 提示词 / 自定义字段。</span>
+            </div>
+          ) : null}
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -875,36 +901,6 @@ function sessionLabel(s: SessionRecord): string {
   const title = s.title || s.thread_id;
   const tail = s.thread_id.slice(0, 8);
   return `${title} (${tail})`;
-}
-
-function RunPanel({
-  runId,
-  status,
-}: {
-  runId: string;
-  status: CanvasRunStatus | null;
-}) {
-  return (
-    <div className="canvas-run-panel">
-      <p className="canvas-hint">运行范围：实验画布；不是项目工作流事实源。</p>
-      <p>
-        <strong>运行编号：</strong> <code>{runId}</code>
-      </p>
-      <p>状态：{status?.run.status ?? "..."}</p>
-      <p>忙碌节点：{status?.run.busy_node_id ?? "—"}</p>
-      {status?.run.outbox && (
-        <p>
-          上次交回：{status.run.outbox.node_id}（{status.run.outbox.summary}）
-        </p>
-      )}
-      {status?.run.finish_summary && (
-        <p>收工：{status.run.finish_summary}</p>
-      )}
-      {status?.run.abort_reason && (
-        <p>停止原因：{status.run.abort_reason}</p>
-      )}
-    </div>
-  );
 }
 
 function ExperimentCanvasBoundaryPanel({ boundary }: { boundary: CanvasSurfaceBoundary }) {
