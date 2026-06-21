@@ -381,6 +381,13 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onSelectionChange={({ nodes: sel }) => setSelected(sel[0]?.id ?? null)}
+            panOnScroll
+            zoomOnScroll={false}
+            zoomOnPinch
+            zoomOnDoubleClick={false}
+            nodesDraggable
+            nodesConnectable
+            elementsSelectable
             fitView
           >
             <Background />

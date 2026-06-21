@@ -177,18 +177,21 @@ export function renderActiveWorkbenchView({
   }
 
   if (view === "runningWorkflows") {
+    // 用户要求:「运行中工作流」入口直接显示实验画布(自由定义任意节点),
+    // 不再是只读状态画布(RunningWorkflowsView 暂留代码、不从此入口进)。
+    void workflowState;
+    void workflowStateLoading;
+    void workflowStateError;
+    void memoryCaptureStore;
+    void memoryCandidateStore;
+    void formalMemoryStore;
+    void onReloadWorkflowState;
+    void onRequestAction;
     return (
-      <RunningWorkflowsView
-        snapshot={snapshot}
-        workflowState={workflowState}
-        workflowStateLoading={workflowStateLoading}
-        workflowStateError={workflowStateError}
-        memoryCaptureStore={memoryCaptureStore}
-        memoryCandidateStore={memoryCandidateStore}
-        formalMemoryStore={formalMemoryStore}
-        onReloadWorkflowState={onReloadWorkflowState}
-        onNavigate={onNavigate}
-        onRequestAction={onRequestAction}
+      <CanvasViewWithProvider
+        canvasId="default"
+        sessions={snapshot.sessions}
+        onNotice={onNotice}
       />
     );
   }

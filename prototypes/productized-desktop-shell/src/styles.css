@@ -415,6 +415,9 @@
 
 .running-canvas-stage-wrap .project-flow-stage {
   min-height: 560px;
+  /* stage-wrap 是 running-canvas-main 的 grid 项(被 stretch、有确定高度);
+     这里必须 height:100% 把它填满,否则 react-flow 的 height:100% 撑不进 min-height、塌成 0(#004)。 */
+  height: 100%;
 }
 
 .running-canvas-empty {
@@ -5212,7 +5215,9 @@ textarea {
 .canvas-view {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* 不依赖父链 height:100%(app-shell 是 min-height、main-panel 无定高,会塌成 0 → React Flow #004)。
+     直接按视口定高:减掉 topbar 高 + main-panel 上下 padding。 */
+  height: calc(100vh - var(--topbar-h) - var(--space-6) * 2);
   min-height: 0;
   gap: 8px;
 }
@@ -8282,6 +8287,7 @@ textarea {
 
 .canvas-view .canvas-body {
   grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 0;
 }
 
@@ -8293,6 +8299,7 @@ textarea {
 }
 
 .canvas-view .canvas-flow {
+  height: 100%;
   min-height: 560px;
   border: 0;
   border-radius: 0;
