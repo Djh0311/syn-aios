@@ -612,23 +612,21 @@ mod command_rollout_fallback_tests {
         std::env::temp_dir().join(format!("codex-workbench-{label}-{stamp}"))
     }
 
-    // C1 default-safe proof: the canvas "运行此节点" button calls
-    // execute_workflow_node_dispatch, whose first line is the test-project + env
-    // double gate. Any project that is not the fixed test project is sealed
-    // regardless of env, so a normal run is blocked before any codex is spawned.
+    // P3-A default-safe proof: the canvas "运行此节点" button calls
+    // execute_workflow_node_dispatch, whose first line is the test-project
+    // path-lock gate. 2026-06-22 下放: the fixed test project unseals on path
+    // ALONE (env belt removed); every NON-test real project stays sealed by the
+    // path-lock, so a run into a real project is blocked before any codex spawns.
     #[test]
     fn workflow_engine_gate_seals_non_test_project_regardless_of_env() {
-        // A real / arbitrary project short-circuits to false on the project_root
-        // check alone — independent of whether the env key happens to be set, so
-        // this assertion holds in any test environment.
+        // 非测试真实项目:只凭 project_root 即 false(path-lock)，与 env 无关、任何环境都成立。
         assert!(!workflow_engine_test_project_unsealed("/Users/yoyi/workspace/product-line"));
         assert!(!workflow_engine_test_project_unsealed("/tmp/some-other-project"));
         assert!(!workflow_engine_test_project_unsealed(""));
-        // The gate constants are the only unseal keys; the test path is fixed and
-        // the env value is an exact match, leaving no implicit-open path.
+        // P3-A:固定测试项目现在只凭 path 解封(不再需要 env 钥匙)——这是本次授权的松闸。
+        assert!(workflow_engine_test_project_unsealed("/Users/yoyi/codex-workflow-mario-test"));
+        // path-lock 那把锁是唯一解封键,常量固定、无隐式放开路径。
         assert_eq!(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "/Users/yoyi/codex-workflow-mario-test");
-        assert_eq!(WORKFLOW_ENGINE_TEST_CONFIRM_ENV, "WORKFLOW_ENGINE_TEST_CONFIRM");
-        assert_eq!(WORKFLOW_ENGINE_TEST_CONFIRM_VALUE, "CONFIRMED_TEST_PROJECT_REAL_RUN");
     }
 }
 
@@ -1666,18 +1664,17 @@ fn prepare_workflow_node_dispatch_for_index_at(
     prepare_workflow_node_dispatch_at(path, index, request)
 }
 
-/// 工作流引擎解封·固定测试项目双闸（高危 #3：改 block 闸；决策见
-/// `decisions/2026-06-21-next-step-unseal-workflow-engine-for-test-project-v1.md`）。
-/// 只有「目标 == 固定测试项目」且「env 钥匙已设」同时满足才放行真实执行；
-/// 其余任何项目 / 没钥匙 → 维持原 legacy blocked，真实项目行为零变化。
+/// 工作流引擎解封·固定测试项目 path-lock 闸。决策见
+/// `decisions/2026-06-22-p3-test-project-real-run-light-tier-v1.md`（在
+/// `...2026-06-21-next-step-unseal...` 之上，把测试项目真跑下放为轻档）。
+/// 2026-06-22 P3-A：去掉原 env-CONFIRM「你确定」belt（重档遗留、现多余），
+/// **只保留 path-lock**——只有「目标 == 固定测试项目」才放行真实执行；其余任何
+/// 真实项目 → 维持 legacy blocked，**非测试真实项目行为零变化、仍 sealed**。
+/// 沙箱仍由 `command_plan_for` 强制（codex 关在测试目录），本次一个字节不动。
 const WORKFLOW_ENGINE_TEST_PROJECT_ROOT: &str = "/Users/yoyi/codex-workflow-mario-test";
-const WORKFLOW_ENGINE_TEST_CONFIRM_ENV: &str = "WORKFLOW_ENGINE_TEST_CONFIRM";
-const WORKFLOW_ENGINE_TEST_CONFIRM_VALUE: &str = "CONFIRMED_TEST_PROJECT_REAL_RUN";
 
 fn workflow_engine_test_project_unsealed(project_root: &str) -> bool {
     project_root == WORKFLOW_ENGINE_TEST_PROJECT_ROOT
-        && std::env::var(WORKFLOW_ENGINE_TEST_CONFIRM_ENV).ok().as_deref()
-            == Some(WORKFLOW_ENGINE_TEST_CONFIRM_VALUE)
 }
 
 #[tauri::command]
@@ -1685,7 +1682,8 @@ fn execute_workflow_node_dispatch(
     request: WorkflowNodeDispatchExecuteRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowNodeDispatchResult, String> {
-    // 双闸:固定测试项目 + env 钥匙。任一不满足 → 维持原 blocked(真实项目零变化)。
+    // path-lock 闸:仅固定测试项目放行(2026-06-22 P3-A 去 env belt)。非测试真实项目
+    // → 维持原 blocked、零变化。沙箱仍由 command_plan_for 强制(测试目录,字节未动)。
     if !workflow_engine_test_project_unsealed(&request.project_root) {
         return Err(legacy_product_command_blocked_message(
             "execute_workflow_node_dispatch",

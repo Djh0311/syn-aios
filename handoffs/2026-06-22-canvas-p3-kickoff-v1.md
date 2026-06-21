@@ -2,6 +2,8 @@
 
 > 交实现线。**轻档**（2026-06-22 下放：真跑只打固定测试项目、随便读写）——但碰**真 codex 执行 + 闸代码（去 env）+ workflow-state 写回**，所以**主导线会逐字核 gate + 用户真机第一次真跑**。执行子线不 commit；做完主导线核实物 + 用户真机 → 主导线提交。
 > 先读：架构方案 `docs/plans/2026-06-21-workflow-canvas-two-surfaces-one-engine-v1.md`（§6 P3 / §9 映射）、会话方案 `...-session-and-scope-model-v1.md`（§4 解析 / §7）、`decisions/2026-06-22-p3-test-project-real-run-light-tier-v1.md`、`AGENTS.md` 高危#1（细化）。
+>
+> **⚠️ 2026-06-22 进度：A（去 env 闸）已完成**——主导线逐字核（5 条全 YES：去 env / 留 path-lock / 沙箱 `codex_local_runner` 字节未动 / 非测试 sealed / cargo556）、用户明确授权、已提交。**本派单剩 B–E**（节点↔work_item 映射 / session 解析 / 真跑接线 / 提交写回），交**新对话**做（原实现会话过长）。接力点：gate 已是 path-only，真跑只需「画布绑测试项目 + 运行」。
 
 ## 0. 现状（已落、e3636a2）
 - P0/P1/P2 都在：两面一引擎、项目面接引擎可编辑（草案→提交，**submitDraft 现只 notice、不写 workflow-state**）、scope 显式字段、规则状态条+运行性、画布管理钮。
@@ -10,7 +12,7 @@
 
 ## 1. 这批要做
 
-### A. 去 env-CONFIRM 闸（保 path-lock + 沙箱）—— 安全关键、主导线逐字核
+### A. 去 env-CONFIRM 闸（保 path-lock + 沙箱）—— ✅ **已完成**（主导线逐字核 + 用户授权 + 已提交；下为存档说明）
 - `workflow_engine_test_project_unsealed`（`src-tauri/src/commands.rs`）：**去掉 env-CONFIRM 检查、保留 path-lock**（`project_root == /Users/yoyi/codex-workflow-mario-test`）。改完闸 = 只查 path。
 - **`command_plan_for` / `run_real_codex_process` 的沙箱限定一个字节不动**（codex 仍关在测试目录）。
 - 改 gate 测试 `workflow_engine_gate_seals_non_test_project_regardless_of_env`：断言**非测试项目仍 sealed**（靠 path-lock，与 env 无关）；测试项目不再需要 env。
