@@ -7,11 +7,20 @@ import type { CanvasEdge, CanvasNode, CanvasNodeDispatchRequest, CanvasNodeRole 
 
 export type CanvasCustomField = { id: string; key: string; value: string };
 
+// Session model (plan 2026-06-21 workflow-session-and-scope). The node stores a
+// session POLICY, not a resolved session id — definition/template stay free of a
+// concrete session; the real session is resolved at run time (P3):
+//   { mode: "new" }                  → mint a fresh codex session when run
+//   { mode: "resume"; thread_id }    → resume the given existing session
+// The two modes are peers (no default bias). thread_id may be "" for a
+// "resume-but-not-yet-chosen" node (e.g. fresh from a template — see §8.1).
+export type SessionPolicy = { mode: "new" } | { mode: "resume"; thread_id: string };
+
 // Rich, freely-editable node payload. `kind` is an open string (not limited to
 // director/subagent); `role` is kept only so the existing persistence /
 // (sealed) run logic that still speaks director|subagent keeps working.
-// `session_id` (C2) binds a real codex session — resume-based dispatch needs it.
-// `work_item_id` (C1) binds the node to a workflow-state work item to dispatch.
+// `session` (session model) is the execution-context policy; `work_item_id`
+// (C1) binds the node to a workflow-state work item to dispatch.
 export type CanvasNodeData = {
   name: string;
   kind: string;
@@ -20,7 +29,7 @@ export type CanvasNodeData = {
   prompt: string;
   sandbox: string;
   skill: string | null;
-  session_id: string | null;
+  session: SessionPolicy;
   work_item_id: string;
   fields: CanvasCustomField[];
 };
@@ -85,10 +94,29 @@ export function createNodeData(kind: string): CanvasNodeData {
     prompt: "",
     sandbox: "read-only",
     skill: (preset?.role ?? "subagent") === "subagent" ? "" : null,
-    session_id: null,
+    session: { mode: "new" },
     work_item_id: "",
     fields: [],
   };
+}
+
+// Read the session policy from a persisted node. Priority: the rich `data.session`
+// policy if present; otherwise migrate the legacy top-level `session_id` (a value
+// → resume that thread, none → new). Keeps pre-feature canvases working.
+function readSessionPolicy(raw: Record<string, unknown>, node: CanvasNode): SessionPolicy {
+  const stored = raw.session;
+  if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+    const mode = (stored as Record<string, unknown>).mode;
+    if (mode === "new") return { mode: "new" };
+    if (mode === "resume") {
+      const threadId = (stored as Record<string, unknown>).thread_id;
+      return { mode: "resume", thread_id: typeof threadId === "string" ? threadId : "" };
+    }
+  }
+  if (node.session_id && node.session_id.trim()) {
+    return { mode: "resume", thread_id: node.session_id };
+  }
+  return { mode: "new" };
 }
 
 function readString(raw: Record<string, unknown>, key: string, fallback: string): string {
@@ -125,7 +153,7 @@ export function canvasNodeToData(node: CanvasNode): CanvasNodeData {
     prompt: readString(raw, "prompt", ""),
     sandbox: readString(raw, "sandbox", "read-only"),
     skill: node.skill ?? null,
-    session_id: node.session_id ?? null,
+    session: readSessionPolicy(raw, node),
     work_item_id: readString(raw, "work_item_id", ""),
     fields: readCustomFields(raw),
   };
@@ -141,17 +169,23 @@ export function dataToCanvasNode(
   position: { x: number; y: number },
   priorWarnings: string[],
 ): CanvasNode {
+  // Top-level session_id stays populated for legacy / sealed logic that still
+  // reads it: only the resume policy has a concrete id; a "new" node has none.
+  const legacySessionId = data.session.mode === "resume" && data.session.thread_id
+    ? data.session.thread_id
+    : null;
   return {
     id,
     role: data.role,
     label: data.name,
     skill: data.skill ?? null,
-    session_id: data.session_id ?? null,
+    session_id: legacySessionId,
     kind: data.kind,
     data: {
       status: data.status,
       prompt: data.prompt,
       sandbox: data.sandbox,
+      session: data.session,
       work_item_id: data.work_item_id,
       fields: data.fields.map((field) => ({ id: field.id, key: field.key, value: field.value })),
     },
@@ -160,12 +194,14 @@ export function dataToCanvasNode(
   };
 }
 
-// Plan C2 · a node can only be dispatched once it is bound to a real codex
-// session (resume-based) and a workflow-state work item. The UI uses this to
-// gate the "运行此节点" button — NOT a security gate (the backend double gate is
-// authoritative), just a "you haven't finished wiring this node" guard.
+// A node is run-ready (UI guard, NOT a security gate — the backend double gate is
+// authoritative) once its session policy is resolvable and a workflow-state work
+// item is bound. "new" mints a session at run time so it needs nothing extra;
+// "resume" needs a concrete thread_id chosen.
 export function nodeRunReadiness(data: CanvasNodeData): { ready: boolean; reason: string | null } {
-  if (!data.session_id) return { ready: false, reason: "未绑定真 codex 会话（resume 前提）" };
+  if (data.session.mode === "resume" && !data.session.thread_id.trim()) {
+    return { ready: false, reason: "续已有会话但未选具体会话" };
+  }
   if (!data.work_item_id.trim()) return { ready: false, reason: "未填工作项 ID（workflow-state 绑定）" };
   return { ready: true, reason: null };
 }
@@ -230,7 +266,13 @@ export function instantiateTemplateGraph(
   const nodes = templateNodes.map((node, index) => {
     const id = newNodeId(node, index);
     idMap.set(node.id, id);
-    return { id, data: canvasNodeToData(node), position: { x: node.position.x, y: node.position.y } };
+    const data = canvasNodeToData(node);
+    // §8.1 · a template only stores the "resume" INTENT, not a concrete session:
+    // clear the thread_id on instantiation so a new workflow never inherits the
+    // template author's old conversation (the reuse bug this model fixes).
+    const session: SessionPolicy =
+      data.session.mode === "resume" ? { mode: "resume", thread_id: "" } : data.session;
+    return { id, data: { ...data, session }, position: { x: node.position.x, y: node.position.y } };
   });
   const edges = templateEdges
     .filter((edge) => idMap.has(edge.from) && idMap.has(edge.to))

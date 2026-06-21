@@ -5429,6 +5429,73 @@ textarea {
   opacity: 0.5;
 }
 
+/* session model · 平级分段会话控件 */
+.canvas-session-policy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.canvas-session-policy .csp-label {
+  color: var(--ink-light, #6b6457);
+}
+.canvas-segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border: 1px solid #c8c2b4;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.canvas-view .canvas-side .canvas-segmented .csp-seg {
+  border: 0;
+  border-radius: 0;
+  background: #faf8f3;
+  padding: 5px 8px;
+}
+.canvas-view .canvas-side .canvas-segmented .csp-seg.active {
+  background: #eef2e8;
+  border-color: #5a6f4a;
+  font-weight: 600;
+}
+.canvas-view .canvas-side .canvas-segmented .csp-seg + .csp-seg {
+  border-left: 1px solid #c8c2b4;
+}
+
+/* scope 指示 + 绑定到项目 */
+.canvas-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.canvas-scope-chip {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid #c8c2b4;
+}
+.canvas-scope-chip.project {
+  background: #eef2e8;
+  border-color: #5a6f4a;
+}
+.canvas-scope-chip.experiment {
+  background: #f7f1e6;
+  border-color: #c8a05a;
+}
+.canvas-scope-bind {
+  padding: 2px 9px;
+  border: 1px solid #8a8275;
+  background: #faf8f3;
+  border-radius: 5px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.canvas-scope-bind:disabled {
+  opacity: 0.5;
+}
+
 /* A1 · custom node card on the canvas */
 .canvas-node-card {
   display: flex;

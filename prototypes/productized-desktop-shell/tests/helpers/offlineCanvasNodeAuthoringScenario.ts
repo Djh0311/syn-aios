@@ -39,7 +39,7 @@ export function runCanvasNodeAuthoringScenario() {
     prompt: "检查 README 是否更新\n第二行也保留",
     sandbox: "workspace-write",
     skill: "doc-review",
-    session_id: "thread-xyz",
+    session: { mode: "resume", thread_id: "thread-xyz" },
     work_item_id: "wi-001",
     fields: [
       { id: "f1", key: "模型", value: "claude-opus-4-8" },
@@ -101,22 +101,59 @@ export function runCanvasNodeAuthoringScenario() {
   );
   assert(instance.nodes[0].data.name === "模板节点 A", "B3 实例化应带过节点 payload（name）");
   assert(instance.nodes[0].data.kind === "my-custom-kind", "B3 实例化应带过自由 kind");
+  // §8.1 reuse-bug fix: a template node with a resume policy must NOT carry the
+  // template author's thread_id into the instance — it lands as resume-but-unchosen.
+  assert(
+    instance.nodes[0].data.session.mode === "resume" && instance.nodes[0].data.session.thread_id === "",
+    "B3 实例化应清空模板里 resume 的 thread_id，不继承旧会话",
+  );
   assertDeepEqual(
     instance.edges.map((e) => ({ from: e.from, to: e.to })),
     [{ from: "new-0", to: "new-1" }],
     "B3 连线应重映射到新 id，且丢弃指向缺失节点的悬空边",
   );
 
-  // C2 · run readiness gate (UI-level, NOT a security gate): a node must bind a
-  // real codex session (resume prereq) and a workflow-state work item to run.
-  assert(nodeRunReadiness(rich).ready, "C2 绑了会话 + work_item 的节点应可运行");
+  // C2 / 会话模型 · run readiness (UI-level, NOT a security gate): "new" mints a
+  // session at run time so it is ready; "resume" needs a concrete thread_id; a
+  // work_item_id is always required.
+  assert(nodeRunReadiness(rich).ready, "续已有 + 选了会话 + work_item 的节点应可运行");
   assert(
-    !nodeRunReadiness({ ...rich, session_id: null }).ready,
-    "C2 未绑真 codex 会话的节点不能运行（resume 前提）",
+    nodeRunReadiness({ ...rich, session: { mode: "new" } }).ready,
+    "会话模型：new 策略无需预绑会话即可运行（运行时 mint）",
+  );
+  assert(
+    !nodeRunReadiness({ ...rich, session: { mode: "resume", thread_id: "" } }).ready,
+    "会话模型：续已有但未选具体会话 → 不能运行",
   );
   assert(
     !nodeRunReadiness({ ...rich, work_item_id: "" }).ready,
     "C2 未绑工作项 ID 的节点不能运行",
+  );
+
+  // 会话模型 P1 · default policy is "new"; resume policy round-trips through
+  // persistence; legacy top-level session_id migrates to a resume policy.
+  assert(createNodeData("subagent").session.mode === "new", "P1 新建节点默认会话策略 = new（无默认偏向偏 resume）");
+  assert(
+    restored.session.mode === "resume" &&
+      restored.session.thread_id === "thread-xyz",
+    "P1 resume 会话策略应经持久化往返无损",
+  );
+  assert(
+    persisted.session_id === "thread-xyz",
+    "P1 顶层 session_id 仍随 resume 策略写入，供既有 sealed 逻辑读",
+  );
+  const legacyResume = canvasNodeToData({
+    id: "legacy-resume",
+    role: "subagent",
+    label: "老节点带会话",
+    skill: null,
+    session_id: "old-thread-001",
+    position: { x: 0, y: 0 },
+    warnings: [],
+  });
+  assert(
+    legacyResume.session.mode === "resume" && legacyResume.session.thread_id === "old-thread-001",
+    "P1 向后兼容：旧节点顶层 session_id 迁移成 resume 策略",
   );
 
   // C1 · the dispatch request built from node data maps prompt/sandbox/work_item

@@ -34,6 +34,7 @@ import {
   type CanvasRunStatus,
 } from "../lib/tauri";
 import { experimentCanvasBoundary, type CanvasSurfaceBoundary } from "../lib/canvasSurfaceBoundaries";
+import { pathTail } from "../lib/format";
 import {
   NODE_KIND_PRESETS,
   SANDBOX_PRESETS,
@@ -49,6 +50,7 @@ import {
   statusTone,
   type CanvasCustomField,
   type CanvasNodeData,
+  type SessionPolicy,
 } from "../lib/canvasNodeData";
 import type {
   CanvasDefinition,
@@ -330,6 +332,18 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
     }
   }, [nodes, selected, canvas, onNotice]);
 
+  // P2 · 作用域升级：实验画布「绑定到项目」→ 设 project_root，画布变项目画布。
+  // 只改定义里的 project_root（保存后持久化）；不碰双闸——真跑权限仍由后端定。
+  const bindToProject = useCallback(() => {
+    if (!canvas) return;
+    const next = window.prompt("绑定到项目（项目根目录绝对路径，留空=保持实验画布）", canvas.project_root ?? "");
+    if (next === null) return;
+    const trimmed = next.trim();
+    setCanvas({ ...canvas, project_root: trimmed || null });
+    setDirty(true);
+    onNotice(trimmed ? `画布已绑定项目：${trimmed}（记得保存）` : "已取消项目绑定，回到实验画布（记得保存）");
+  }, [canvas, onNotice]);
+
   const startRun = useCallback(async () => {
     onNotice("旧实验画布真实运行入口已封存；H 阶段统一产品命令完成前，不能从这里启动 Codex。");
   }, [onNotice]);
@@ -429,6 +443,18 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
         <div>
           <p className="eyebrow">实验 / 模板画布</p>
           <h2>{canvas.display_name}</h2>
+          <div className="canvas-scope" data-scope={canvas.project_root ? "project" : "experiment"}>
+            {canvas.project_root ? (
+              <span className="canvas-scope-chip project" title={canvas.project_root}>
+                项目画布 · {pathTail(canvas.project_root)}
+              </span>
+            ) : (
+              <span className="canvas-scope-chip experiment">实验画布 · 未绑项目（真跑只打固定测试项目）</span>
+            )}
+            <button type="button" className="canvas-scope-bind" onClick={() => void bindToProject()} disabled={busy}>
+              {canvas.project_root ? "改绑项目" : "绑定到项目"}
+            </button>
+          </div>
         </div>
         <span className="canvas-id">canvas_id={canvas.canvas_id}</span>
       </header>
@@ -618,7 +644,7 @@ function CanvasFlowNode({ data, selected }: NodeProps<FlowNode>) {
           <div><dt>技能</dt><dd>{data.skill}</dd></div>
         ) : null}
         <div><dt>沙箱</dt><dd>{data.sandbox}</dd></div>
-        <div><dt>会话</dt><dd>{data.session_id ? data.session_id.slice(0, 8) : "未挂"}</dd></div>
+        <div><dt>会话</dt><dd>{sessionPolicyLabel(data.session)}</dd></div>
         {preview ? (
           <div className="cnc-prompt"><dt>提示</dt><dd>{preview}</dd></div>
         ) : null}
@@ -763,22 +789,56 @@ function NodeEditor({
             ))}
           </select>
         </label>
-        <label>
-          绑定 codex 会话
-          <input
-            type="text"
-            list="canvas-sessions"
-            value={data.session_id ?? ""}
-            onChange={(e) => onChange({ session_id: e.target.value || null })}
-            placeholder="粘贴 / 搜 thread id"
-            disabled={disabled}
-          />
-          <datalist id="canvas-sessions">
-            {sessions.map((s) => (
-              <option key={s.thread_id} value={s.thread_id}>{sessionLabel(s)}</option>
-            ))}
-          </datalist>
-        </label>
+        <div className="canvas-session-policy">
+          <span className="csp-label">会话（执行上下文）</span>
+          <div className="canvas-segmented" role="group" aria-label="会话策略">
+            <button
+              type="button"
+              className={`csp-seg${data.session.mode === "new" ? " active" : ""}`}
+              onClick={() => onChange({ session: { mode: "new" } })}
+              disabled={disabled}
+              aria-pressed={data.session.mode === "new"}
+            >
+              新建会话
+            </button>
+            <button
+              type="button"
+              className={`csp-seg${data.session.mode === "resume" ? " active" : ""}`}
+              onClick={() =>
+                onChange({
+                  session: {
+                    mode: "resume",
+                    thread_id: data.session.mode === "resume" ? data.session.thread_id : "",
+                  },
+                })
+              }
+              disabled={disabled}
+              aria-pressed={data.session.mode === "resume"}
+            >
+              续已有会话
+            </button>
+          </div>
+          {data.session.mode === "resume" ? (
+            <label className="csp-resume">
+              续哪条会话
+              <input
+                type="text"
+                list="canvas-sessions"
+                value={data.session.thread_id}
+                onChange={(e) => onChange({ session: { mode: "resume", thread_id: e.target.value } })}
+                placeholder="粘贴 / 搜 thread id"
+                disabled={disabled}
+              />
+              <datalist id="canvas-sessions">
+                {sessions.map((s) => (
+                  <option key={s.thread_id} value={s.thread_id}>{sessionLabel(s)}</option>
+                ))}
+              </datalist>
+            </label>
+          ) : (
+            <p className="canvas-hint">运行时在作用域内新建一条 codex 会话（定义层不产生真会话）。</p>
+          )}
+        </div>
         <label>
           工作项 ID
           <input
@@ -811,6 +871,11 @@ function NodeEditor({
       </details>
     </div>
   );
+}
+
+function sessionPolicyLabel(session: SessionPolicy): string {
+  if (session.mode === "new") return "新建";
+  return session.thread_id ? `续 ${session.thread_id.slice(0, 8)}` : "续(未选)";
 }
 
 function sessionLabel(s: SessionRecord): string {
