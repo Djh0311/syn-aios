@@ -39,13 +39,13 @@ export const NODE_KIND_PRESETS: CanvasNodeKindPreset[] = [
   { kind: "director", label: "主管", role: "director", accent: "#c8602b", hint: "统筹 / 派发" },
   { kind: "subagent", label: "子 agent", role: "subagent", accent: "#5a6f4a", hint: "执行节点" },
   { kind: "reviewer", label: "审查", role: "subagent", accent: "#3a6a77", hint: "复核 / 验收" },
-  { kind: "tool", label: "工具", role: "subagent", accent: "#7a5ea6", hint: "工具 / 脚本" },
-  { kind: "note", label: "便签", role: "subagent", accent: "#9a8c5a", hint: "说明 / 备注" },
-  { kind: "custom", label: "自定义", role: "subagent", accent: "#8a7f6a", hint: "自定义种类" },
+  { kind: "custom", label: "自定义", role: "subagent", accent: "#8a7f6a", hint: "自定义（也可在节点里直接输入任意 kind）" },
 ];
 
 export const SANDBOX_PRESETS = ["read-only", "workspace-write", "danger-full-access"] as const;
 
+// Full tone map — still colors every state the system may set (running/blocked
+// included), even though the editor only suggests the 3 common ones below.
 const STATUS_TONES: Record<string, string> = {
   draft: "#b9b3a6",
   ready: "#5a6f4a",
@@ -54,7 +54,9 @@ const STATUS_TONES: Record<string, string> = {
   done: "#3a6a77",
 };
 
-export const STATUS_PRESETS = Object.keys(STATUS_TONES);
+// Editor suggestions trimmed to the common few; `status` stays a free input, so
+// typing "running"/"blocked" still works and still gets its tone.
+export const STATUS_PRESETS = ["draft", "ready", "done"];
 
 export function statusTone(status: string): string {
   return STATUS_TONES[status.trim().toLowerCase()] ?? "#b9b3a6";

@@ -5291,6 +5291,34 @@ textarea {
   border-radius: 3px;
   font: inherit;
   font-size: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.canvas-view .canvas-side fieldset,
+.canvas-view .canvas-side label,
+.canvas-view .canvas-side details {
+  min-width: 0;
+}
+.canvas-view .canvas-side select {
+  text-overflow: ellipsis;
+}
+/* 接执行（真跑用）折叠区：默认收起，减少日常编排时的字段密度 */
+.canvas-view .canvas-side .canvas-exec-details {
+  border: 1px dashed #c9bfa6;
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.canvas-view .canvas-side .canvas-exec-details > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.8;
+  list-style: revert;
 }
 .canvas-view .canvas-hint {
   font-size: 12px;

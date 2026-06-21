@@ -108,6 +108,8 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
   const [runId, setRunId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<CanvasRunStatus | null>(null);
   const [templates, setTemplates] = useState<WorkflowTemplateSummary[]>([]);
+  const [templateTitle, setTemplateTitle] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
 
   const reload = useCallback(async () => {
@@ -226,8 +228,7 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
   // B2 · 把当前画布图存成可复用的「成熟模式」（workflow template）。纯数据，不执行。
   const saveAsTemplate = useCallback(async () => {
     if (!canvas) return;
-    const title = window.prompt("成熟模式标题", canvas.display_name || "未命名工作流");
-    if (title === null) return;
+    const title = templateTitle.trim() || canvas.display_name || "未命名工作流";
     setBusy(true);
     try {
       const now = new Date().toISOString();
@@ -248,13 +249,14 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
       };
       await saveWorkflowTemplate(template);
       await refreshTemplates();
+      setTemplateTitle("");
       onNotice(`已存为成熟模式：${template.title}`);
     } catch (e) {
       setError(messageOf(e));
     } finally {
       setBusy(false);
     }
-  }, [canvas, nodes, edges, onNotice, refreshTemplates]);
+  }, [canvas, nodes, edges, onNotice, refreshTemplates, templateTitle]);
 
   // B3 · 从成熟模式起一张新工作流：节点 id 全部重置，连线随新 id 重映射，载入当前画布供编辑。
   const instantiateFromTemplate = useCallback(
@@ -283,7 +285,7 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
 
   const removeTemplate = useCallback(
     async (templateId: string, title: string) => {
-      if (!window.confirm(`删除成熟模式「${title}」？`)) return;
+      setConfirmDeleteId(null);
       setBusy(true);
       try {
         await deleteWorkflowTemplate(templateId);
@@ -476,6 +478,16 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
           </fieldset>
           <fieldset>
             <legend>成熟模式</legend>
+            <label>
+              模式标题
+              <input
+                type="text"
+                value={templateTitle}
+                onChange={(e) => setTemplateTitle(e.target.value)}
+                placeholder={canvas?.display_name || "未命名工作流"}
+                disabled={busy}
+              />
+            </label>
             <button onClick={() => void saveAsTemplate()} disabled={busy || nodes.length === 0}>
               ＋ 把这张存成成熟模式
             </button>
@@ -493,14 +505,29 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
                       <button onClick={() => void instantiateFromTemplate(tpl.template_id)} disabled={busy}>
                         起新工作流
                       </button>
-                      <button
-                        className="ct-delete"
-                        onClick={() => void removeTemplate(tpl.template_id, tpl.title)}
-                        disabled={busy}
-                        aria-label="删除成熟模式"
-                      >
-                        ×
-                      </button>
+                      {confirmDeleteId === tpl.template_id ? (
+                        <>
+                          <button
+                            className="ct-delete"
+                            onClick={() => void removeTemplate(tpl.template_id, tpl.title)}
+                            disabled={busy}
+                          >
+                            确认删除
+                          </button>
+                          <button onClick={() => setConfirmDeleteId(null)} disabled={busy}>
+                            取消
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="ct-delete"
+                          onClick={() => setConfirmDeleteId(tpl.template_id)}
+                          disabled={busy}
+                          aria-label="删除成熟模式"
+                        >
+                          ×
+                        </button>
+                      )}
                     </div>
                   </li>
                 ))}
@@ -683,48 +710,11 @@ function NodeEditor({
         />
       </label>
       <label>
-        沙箱
-        <select
-          value={data.sandbox}
-          onChange={(e) => onChange({ sandbox: e.target.value })}
-          disabled={disabled}
-        >
-          {SANDBOX_PRESETS.map((sandbox) => (
-            <option key={sandbox} value={sandbox}>{sandbox}</option>
-          ))}
-        </select>
-      </label>
-      <label>
         技能 / 岗位
         <input
           type="text"
           value={data.skill ?? ""}
           onChange={(e) => onChange({ skill: e.target.value })}
-          disabled={disabled}
-        />
-      </label>
-      <label>
-        绑定真 codex 会话（resume 前提）
-        <select
-          value={data.session_id ?? ""}
-          onChange={(e) => onChange({ session_id: e.target.value || null })}
-          disabled={disabled}
-        >
-          <option value="">— 未绑定会话 —</option>
-          {sessions.map((s) => (
-            <option key={s.thread_id} value={s.thread_id}>
-              {sessionLabel(s)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        工作项 ID（workflow-state 绑定）
-        <input
-          type="text"
-          value={data.work_item_id}
-          onChange={(e) => onChange({ work_item_id: e.target.value })}
-          placeholder="测试项目 workflow-state 的 work_item_id"
           disabled={disabled}
         />
       </label>
@@ -759,25 +749,66 @@ function NodeEditor({
         )}
         <button type="button" onClick={addField} disabled={disabled}>+ 字段</button>
       </fieldset>
-      <div className="canvas-node-run">
-        <button
-          type="button"
-          className="canvas-node-run-btn"
-          onClick={onRun}
-          disabled={disabled || !readiness.ready}
-          title={readiness.reason ?? "经双闸命令运行此节点"}
-        >
-          ▶ 运行此节点
-        </button>
+      <details className="canvas-exec-details">
+        <summary>接执行（真跑用）</summary>
+        <label>
+          沙箱
+          <select
+            value={data.sandbox}
+            onChange={(e) => onChange({ sandbox: e.target.value })}
+            disabled={disabled}
+          >
+            {SANDBOX_PRESETS.map((sandbox) => (
+              <option key={sandbox} value={sandbox}>{sandbox}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          绑定 codex 会话
+          <input
+            type="text"
+            list="canvas-sessions"
+            value={data.session_id ?? ""}
+            onChange={(e) => onChange({ session_id: e.target.value || null })}
+            placeholder="粘贴 / 搜 thread id"
+            disabled={disabled}
+          />
+          <datalist id="canvas-sessions">
+            {sessions.map((s) => (
+              <option key={s.thread_id} value={s.thread_id}>{sessionLabel(s)}</option>
+            ))}
+          </datalist>
+        </label>
+        <label>
+          工作项 ID
+          <input
+            type="text"
+            value={data.work_item_id}
+            onChange={(e) => onChange({ work_item_id: e.target.value })}
+            placeholder="workflow-state work_item_id"
+            disabled={disabled}
+          />
+        </label>
+        <div className="canvas-node-run">
+          <button
+            type="button"
+            className="canvas-node-run-btn"
+            onClick={onRun}
+            disabled={disabled || !readiness.ready}
+            title={readiness.reason ?? "经双闸命令运行此节点"}
+          >
+            ▶ 运行此节点
+          </button>
+          <p className="canvas-hint">
+            {readiness.ready
+              ? "经双闸命令派发；默认安全态（非固定测试项目 / 未设 env 钥匙）会被后端挡下、零执行。"
+              : `运行前提未满足：${readiness.reason}`}
+          </p>
+        </div>
         <p className="canvas-hint">
-          {readiness.ready
-            ? "经已有双闸命令派发；默认安全态（非固定测试项目 / 未设 env 钥匙）会被后端挡下、零执行。"
-            : `运行前提未满足：${readiness.reason}`}
+          v1 暂不支持画布内新建会话；先在 Codex 命令行或智能体页起好会话，再回来这里绑上。
         </p>
-      </div>
-      <p className="canvas-hint">
-        v1 暂不支持画布内新建会话；先在 Codex 命令行或智能体页起好会话，再回来这里绑上。节点数据「保存」后随画布持久化。
-      </p>
+      </details>
     </div>
   );
 }
