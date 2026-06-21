@@ -1,10 +1,12 @@
 import { assert, assertDeepEqual } from "./offlineInteractionTestUtils";
 import {
   NODE_KIND_PRESETS,
+  buildNodeDispatchRequest,
   canvasNodeToData,
   createNodeData,
   dataToCanvasNode,
   instantiateTemplateGraph,
+  nodeRunReadiness,
   type CanvasNodeData,
 } from "../../src/lib/canvasNodeData";
 import type { CanvasEdge, CanvasNode } from "../../src/lib/types";
@@ -38,6 +40,7 @@ export function runCanvasNodeAuthoringScenario() {
     sandbox: "workspace-write",
     skill: "doc-review",
     session_id: "thread-xyz",
+    work_item_id: "wi-001",
     fields: [
       { id: "f1", key: "模型", value: "claude-opus-4-8" },
       { id: "f2", key: "验收", value: "typecheck 绿" },
@@ -102,5 +105,51 @@ export function runCanvasNodeAuthoringScenario() {
     instance.edges.map((e) => ({ from: e.from, to: e.to })),
     [{ from: "new-0", to: "new-1" }],
     "B3 连线应重映射到新 id，且丢弃指向缺失节点的悬空边",
+  );
+
+  // C2 · run readiness gate (UI-level, NOT a security gate): a node must bind a
+  // real codex session (resume prereq) and a workflow-state work item to run.
+  assert(nodeRunReadiness(rich).ready, "C2 绑了会话 + work_item 的节点应可运行");
+  assert(
+    !nodeRunReadiness({ ...rich, session_id: null }).ready,
+    "C2 未绑真 codex 会话的节点不能运行（resume 前提）",
+  );
+  assert(
+    !nodeRunReadiness({ ...rich, work_item_id: "" }).ready,
+    "C2 未绑工作项 ID 的节点不能运行",
+  );
+
+  // C1 · the dispatch request built from node data maps prompt/sandbox/work_item
+  // correctly. (It only SHAPES the request — the backend double gate decides
+  // blocked vs run; default-safe is proved by the Rust gate test, not here.)
+  const request = buildNodeDispatchRequest({
+    nodeId: "canvas-node-9",
+    projectRoot: "/Users/yoyi/codex-workflow-mario-test",
+    data: rich,
+    instructionId: "instr-fixed",
+  });
+  assert(request.node_id === "canvas-node-9", "C1 请求带画布节点 id 作为 node_id");
+  assert(request.work_item_id === "wi-001", "C1 请求带节点绑定的 work_item_id");
+  assert(request.prompt_kind === "user_reviewed_instruction", "C1 真业务派发用 user_reviewed_instruction");
+  assert(
+    request.user_reviewed_instruction.objective === "检查 README 是否更新\n第二行也保留",
+    "C1 prompt 应映射到 objective",
+  );
+  assert(request.user_reviewed_instruction.sandbox_mode === "workspace-write", "C1 sandbox 取自节点 data");
+  assertDeepEqual(
+    request.user_reviewed_instruction.allowed_write_roots,
+    ["/Users/yoyi/codex-workflow-mario-test"],
+    "C1 workspace-write 才给写入根，限死在 project_root",
+  );
+  const readOnlyReq = buildNodeDispatchRequest({
+    nodeId: "n",
+    projectRoot: "/Users/yoyi/codex-workflow-mario-test",
+    data: { ...rich, sandbox: "read-only" },
+    instructionId: "instr-ro",
+  });
+  assertDeepEqual(
+    readOnlyReq.user_reviewed_instruction.allowed_write_roots,
+    [],
+    "C1 read-only 节点不给任何写入根",
   );
 }

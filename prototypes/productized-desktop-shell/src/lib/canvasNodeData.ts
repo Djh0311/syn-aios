@@ -3,13 +3,15 @@
 // the React Flow custom node / right-panel editor work with. Kept free of React
 // Flow / DOM so it is unit-testable offline (no SSR of @xyflow needed).
 
-import type { CanvasEdge, CanvasNode, CanvasNodeRole } from "./types";
+import type { CanvasEdge, CanvasNode, CanvasNodeDispatchRequest, CanvasNodeRole } from "./types";
 
 export type CanvasCustomField = { id: string; key: string; value: string };
 
 // Rich, freely-editable node payload. `kind` is an open string (not limited to
 // director/subagent); `role` is kept only so the existing persistence /
 // (sealed) run logic that still speaks director|subagent keeps working.
+// `session_id` (C2) binds a real codex session — resume-based dispatch needs it.
+// `work_item_id` (C1) binds the node to a workflow-state work item to dispatch.
 export type CanvasNodeData = {
   name: string;
   kind: string;
@@ -19,6 +21,7 @@ export type CanvasNodeData = {
   sandbox: string;
   skill: string | null;
   session_id: string | null;
+  work_item_id: string;
   fields: CanvasCustomField[];
 };
 
@@ -81,6 +84,7 @@ export function createNodeData(kind: string): CanvasNodeData {
     sandbox: "read-only",
     skill: (preset?.role ?? "subagent") === "subagent" ? "" : null,
     session_id: null,
+    work_item_id: "",
     fields: [],
   };
 }
@@ -120,6 +124,7 @@ export function canvasNodeToData(node: CanvasNode): CanvasNodeData {
     sandbox: readString(raw, "sandbox", "read-only"),
     skill: node.skill ?? null,
     session_id: node.session_id ?? null,
+    work_item_id: readString(raw, "work_item_id", ""),
     fields: readCustomFields(raw),
   };
 }
@@ -145,10 +150,56 @@ export function dataToCanvasNode(
       status: data.status,
       prompt: data.prompt,
       sandbox: data.sandbox,
+      work_item_id: data.work_item_id,
       fields: data.fields.map((field) => ({ id: field.id, key: field.key, value: field.value })),
     },
     position: { x: position.x, y: position.y },
     warnings: priorWarnings,
+  };
+}
+
+// Plan C2 · a node can only be dispatched once it is bound to a real codex
+// session (resume-based) and a workflow-state work item. The UI uses this to
+// gate the "运行此节点" button — NOT a security gate (the backend double gate is
+// authoritative), just a "you haven't finished wiring this node" guard.
+export function nodeRunReadiness(data: CanvasNodeData): { ready: boolean; reason: string | null } {
+  if (!data.session_id) return { ready: false, reason: "未绑定真 codex 会话（resume 前提）" };
+  if (!data.work_item_id.trim()) return { ready: false, reason: "未填工作项 ID（workflow-state 绑定）" };
+  return { ready: true, reason: null };
+}
+
+// Plan C1 · build the dispatch request from node data. Pure (instructionId
+// injected) so it is offline-testable. prompt/sandbox come from the A4 payload;
+// project_root / node_id / work_item_id locate the workflow-state work item.
+// This only SHAPES the request — the backend double gate decides blocked vs run.
+export function buildNodeDispatchRequest(input: {
+  nodeId: string;
+  projectRoot: string;
+  data: CanvasNodeData;
+  instructionId: string;
+}): CanvasNodeDispatchRequest {
+  const { nodeId, projectRoot, data, instructionId } = input;
+  const writeRoots = data.sandbox === "workspace-write" && projectRoot ? [projectRoot] : [];
+  return {
+    project_root: projectRoot,
+    node_id: nodeId,
+    work_item_id: data.work_item_id.trim(),
+    prompt_kind: "user_reviewed_instruction",
+    user_reviewed_instruction: {
+      instruction_id: instructionId,
+      summary: data.name,
+      objective: data.prompt,
+      execution_cwd: projectRoot,
+      sandbox_mode: data.sandbox,
+      allowed_write_roots: writeRoots,
+      allowed_reads: [],
+      allowed_writes: writeRoots,
+      forbidden_actions: [],
+      timeout_seconds: 600,
+      max_retries: 0,
+      required_return: [],
+      prompt_preview: data.prompt || null,
+    },
   };
 }
 

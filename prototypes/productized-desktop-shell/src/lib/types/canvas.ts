@@ -64,6 +64,34 @@ export type WorkflowTemplateSummary = {
   updated_at: string;
 };
 
+// Plan C1 · request shape for the existing double-gated dispatch command
+// `execute_workflow_node_dispatch`. Mirrors the backend
+// WorkflowNodeDispatchExecuteRequest / UserReviewedInstructionInput. The
+// frontend only builds + sends this; the backend gate decides blocked vs run.
+export type CanvasNodeDispatchInstruction = {
+  instruction_id: string;
+  summary: string;
+  objective: string;
+  execution_cwd: string;
+  sandbox_mode: string;
+  allowed_write_roots: string[];
+  allowed_reads: string[];
+  allowed_writes: string[];
+  forbidden_actions: string[];
+  timeout_seconds: number;
+  max_retries: number;
+  required_return: string[];
+  prompt_preview: string | null;
+};
+
+export type CanvasNodeDispatchRequest = {
+  project_root: string;
+  node_id: string;
+  work_item_id: string;
+  prompt_kind: string;
+  user_reviewed_instruction: CanvasNodeDispatchInstruction;
+};
+
 export type CanvasRunStatus = "running" | "finished" | "aborted";
 
 export type CanvasRunInbox = {

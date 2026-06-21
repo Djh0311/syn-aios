@@ -33,6 +33,8 @@ export type {
   CanvasDefinition,
   CanvasEdge,
   CanvasNode,
+  CanvasNodeDispatchInstruction,
+  CanvasNodeDispatchRequest,
   CanvasNodeRole,
   CanvasRunInbox,
   CanvasRunOutboxPointer,

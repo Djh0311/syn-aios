@@ -27,6 +27,7 @@ import {
   canvasRunStatus,
   canvasSave,
   deleteWorkflowTemplate,
+  executeWorkflowNodeDispatch,
   listWorkflowTemplates,
   loadWorkflowTemplate,
   saveWorkflowTemplate,
@@ -37,12 +38,14 @@ import {
   NODE_KIND_PRESETS,
   SANDBOX_PRESETS,
   STATUS_PRESETS,
+  buildNodeDispatchRequest,
   canvasNodeToData,
   createNodeData,
   dataToCanvasNode,
   instantiateTemplateGraph,
   kindAccent,
   kindLabel,
+  nodeRunReadiness,
   statusTone,
   type CanvasCustomField,
   type CanvasNodeData,
@@ -295,6 +298,36 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
     [onNotice, refreshTemplates],
   );
 
+  // C1 · 运行此节点：调已存在的双闸命令 execute_workflow_node_dispatch。
+  // 前端不判闸——默认安全态由后端守：非固定测试项目 / 未设 env 钥匙 → 返回 blocked
+  // message，零执行。绑会话（C2）是 resume 前提，未绑则前端直接拦下不发。
+  const runSelectedNode = useCallback(async () => {
+    const node = nodes.find((n) => n.id === selected);
+    if (!node || !canvas) return;
+    const readiness = nodeRunReadiness(node.data);
+    if (!readiness.ready) {
+      onNotice(`无法运行：${readiness.reason}`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const request = buildNodeDispatchRequest({
+        nodeId: node.id,
+        projectRoot: canvas.project_root ?? "",
+        data: node.data,
+        instructionId: `canvas-run-${node.id}-${Date.now().toString(36)}`,
+      });
+      const result = await executeWorkflowNodeDispatch(request);
+      onNotice(`已派发节点「${node.data.name}」。返回：${summarizeRunResult(result)}`);
+    } catch (e) {
+      // The backend double gate returns an Err (blocked message) when the fixed
+      // test project + env key are not both set — surfaced here, no codex ran.
+      onNotice(`运行被拦截或失败：${messageOf(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [nodes, selected, canvas, onNotice]);
+
   const startRun = useCallback(async () => {
     onNotice("旧实验画布真实运行入口已封存；H 阶段统一产品命令完成前，不能从这里启动 Codex。");
   }, [onNotice]);
@@ -427,6 +460,7 @@ export function CanvasView({ canvasId, sessions, onNotice }: CanvasViewProps) {
                 node={selectedNode}
                 sessions={sessions}
                 onChange={updateSelected}
+                onRun={() => void runSelectedNode()}
                 disabled={busy}
               />
             ) : (
@@ -574,14 +608,17 @@ function NodeEditor({
   node,
   sessions,
   onChange,
+  onRun,
   disabled,
 }: {
   node: FlowNode;
   sessions: SessionRecord[];
   onChange: (patch: Partial<CanvasNodeData>) => void;
+  onRun: () => void;
   disabled: boolean;
 }) {
   const data = node.data;
+  const readiness = nodeRunReadiness(data);
   const updateField = (id: string, patch: Partial<CanvasCustomField>) => {
     onChange({ fields: data.fields.map((f) => (f.id === id ? { ...f, ...patch } : f)) });
   };
@@ -667,19 +704,29 @@ function NodeEditor({
         />
       </label>
       <label>
-        Codex 会话
+        绑定真 codex 会话（resume 前提）
         <select
           value={data.session_id ?? ""}
           onChange={(e) => onChange({ session_id: e.target.value || null })}
           disabled={disabled}
         >
-          <option value="">— 未挂会话 —</option>
+          <option value="">— 未绑定会话 —</option>
           {sessions.map((s) => (
             <option key={s.thread_id} value={s.thread_id}>
               {sessionLabel(s)}
             </option>
           ))}
         </select>
+      </label>
+      <label>
+        工作项 ID（workflow-state 绑定）
+        <input
+          type="text"
+          value={data.work_item_id}
+          onChange={(e) => onChange({ work_item_id: e.target.value })}
+          placeholder="测试项目 workflow-state 的 work_item_id"
+          disabled={disabled}
+        />
       </label>
       <fieldset className="canvas-custom-fields">
         <legend>自定义字段</legend>
@@ -712,8 +759,24 @@ function NodeEditor({
         )}
         <button type="button" onClick={addField} disabled={disabled}>+ 字段</button>
       </fieldset>
+      <div className="canvas-node-run">
+        <button
+          type="button"
+          className="canvas-node-run-btn"
+          onClick={onRun}
+          disabled={disabled || !readiness.ready}
+          title={readiness.reason ?? "经双闸命令运行此节点"}
+        >
+          ▶ 运行此节点
+        </button>
+        <p className="canvas-hint">
+          {readiness.ready
+            ? "经已有双闸命令派发；默认安全态（非固定测试项目 / 未设 env 钥匙）会被后端挡下、零执行。"
+            : `运行前提未满足：${readiness.reason}`}
+        </p>
+      </div>
       <p className="canvas-hint">
-        v1 暂不支持画布内新建会话；先在 Codex 命令行或智能体页起好会话，再回来这里挂上。节点数据「保存」后随画布持久化。
+        v1 暂不支持画布内新建会话；先在 Codex 命令行或智能体页起好会话，再回来这里绑上。节点数据「保存」后随画布持久化。
       </p>
     </div>
   );
@@ -781,6 +844,24 @@ function ExperimentCanvasBoundaryPanel({ boundary }: { boundary: CanvasSurfaceBo
       </dl>
     </section>
   );
+}
+
+function summarizeRunResult(result: unknown): string {
+  if (result && typeof result === "object") {
+    const rec = result as Record<string, unknown>;
+    const dispatch = rec.dispatch;
+    if (dispatch && typeof dispatch === "object") {
+      const d = dispatch as Record<string, unknown>;
+      const id = typeof d.dispatch_id === "string" ? d.dispatch_id : "?";
+      const state = typeof d.state === "string" ? d.state : "?";
+      return `dispatch_id=${id} state=${state}`;
+    }
+  }
+  try {
+    return JSON.stringify(result);
+  } catch {
+    return String(result);
+  }
 }
 
 function messageOf(e: unknown): string {

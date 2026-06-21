@@ -8,6 +8,7 @@ import type {
   AuthorizedPreparedDispatchResult,
   BlackboardCandidateStoreV1,
   CanvasDefinition,
+  CanvasNodeDispatchRequest,
   CanvasRunState,
   WorkflowTemplate,
   WorkflowTemplateSummary,
@@ -811,6 +812,15 @@ export function loadWorkflowTemplate(templateId: string): Promise<WorkflowTempla
 export function deleteWorkflowTemplate(templateId: string): Promise<void> {
   ensureTauriRuntime();
   return invoke<void>("delete_workflow_template", { templateId });
+}
+
+// ---- Canvas node real run (plan C1) — wires to the EXISTING double-gated
+// command. Zero new/relaxed gate: the backend returns a blocked message unless
+// the fixed test project + WORKFLOW_ENGINE_TEST_CONFIRM env key are both set.
+// The frontend only sends the request; it never decides execution.
+export function executeWorkflowNodeDispatch(request: CanvasNodeDispatchRequest): Promise<unknown> {
+  ensureTauriRuntime();
+  return invoke<unknown>("execute_workflow_node_dispatch", { request });
 }
 
 function ensureTauriRuntime() {

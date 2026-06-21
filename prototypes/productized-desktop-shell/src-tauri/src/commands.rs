@@ -611,6 +611,25 @@ mod command_rollout_fallback_tests {
             .as_nanos();
         std::env::temp_dir().join(format!("codex-workbench-{label}-{stamp}"))
     }
+
+    // C1 default-safe proof: the canvas "运行此节点" button calls
+    // execute_workflow_node_dispatch, whose first line is the test-project + env
+    // double gate. Any project that is not the fixed test project is sealed
+    // regardless of env, so a normal run is blocked before any codex is spawned.
+    #[test]
+    fn workflow_engine_gate_seals_non_test_project_regardless_of_env() {
+        // A real / arbitrary project short-circuits to false on the project_root
+        // check alone — independent of whether the env key happens to be set, so
+        // this assertion holds in any test environment.
+        assert!(!workflow_engine_test_project_unsealed("/Users/yoyi/workspace/product-line"));
+        assert!(!workflow_engine_test_project_unsealed("/tmp/some-other-project"));
+        assert!(!workflow_engine_test_project_unsealed(""));
+        // The gate constants are the only unseal keys; the test path is fixed and
+        // the env value is an exact match, leaving no implicit-open path.
+        assert_eq!(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "/Users/yoyi/codex-workflow-mario-test");
+        assert_eq!(WORKFLOW_ENGINE_TEST_CONFIRM_ENV, "WORKFLOW_ENGINE_TEST_CONFIRM");
+        assert_eq!(WORKFLOW_ENGINE_TEST_CONFIRM_VALUE, "CONFIRMED_TEST_PROJECT_REAL_RUN");
+    }
 }
 
 #[tauri::command]

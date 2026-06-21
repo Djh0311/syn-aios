@@ -5383,6 +5383,24 @@ textarea {
   background: #fbeceb;
 }
 
+/* C1 · run-this-node */
+.canvas-node-run {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(54, 51, 44, 0.1);
+}
+.canvas-view .canvas-side .canvas-node-run-btn {
+  border-color: #5a6f4a;
+  background: #eef2e8;
+  font-weight: 600;
+}
+.canvas-view .canvas-side .canvas-node-run-btn:disabled {
+  opacity: 0.5;
+}
+
 /* A1 · custom node card on the canvas */
 .canvas-node-card {
   display: flex;
