@@ -2,6 +2,7 @@
 
 > 交执行线。**轻档**（纯前端 + 数据 store，零真跑、不碰安全闸）。执行子线不 commit；做完主导线核实物 + 用户统一真机验，再由主导线提交。
 > 先读：架构方案 `docs/plans/2026-06-21-workflow-canvas-two-surfaces-one-engine-v1.md`（§3 config / §4 两面功能 / §8 决策 / §9 P3映射）、会话方案 `docs/plans/2026-06-21-workflow-session-and-scope-model-v1.md`、蓝图 §11/§11.0。
+> **⚠️ 本版含 2026-06-21 用户真机反馈改动**：项目面**去掉视图切换** + 改成**「编辑工作流」→草案→提交→通过**流程 + 加**「新建工作流」**；实验画布加**「清空画布」「新建画布」**按钮；§8 编辑判据改**统一草案**（不再"空闲直改"）。详见 §C/§D/§E。（首轮 P1 已建一版含视图切换的，**按本版改过来**。）
 
 ## 0. 现状（P0 已落，59415bc）
 - `WorkflowCanvasEngine`（可编辑 React Flow 核心）已从 `CanvasView` 逐字抽出；`CanvasView` = 薄壳注 `experimentCanvasSurfaceConfig`。
@@ -22,22 +23,24 @@
 - 默认值：按所在面置（实验面建的 = experiment / 项目面 = project）；但独立存储，留出"草案设计好、未绑项目"中间态。
 - 向后兼容：旧画布无 `scope` → 读时按 `project_root` 有无回落（绑=project / 没绑=experiment），不报错。
 
-### C. 项目面落地（P1 核心）
-- 新增 `projectCanvasSurfaceConfig`（`canvasSurfaceConfig.ts`）：`kind:"project"`、`boundary: projectWorkflowCanvasBoundary`、`authority:"workflow_state_read_model"`、`views:["plan","run_state"]`、`realRunTarget:"bound_project"`、`showProjectRuleBar:true`、capabilities 全开。
-- `ProjectWorkflowCanvasView` 改用 `WorkflowCanvasEngine` + project config（**收编/替换**现 `ProjectWorkflowReactFlowCanvas` 只读渲染），**开可编辑**。
-- 事实源 = workflow-state 派生读模型（项目面 authority）；编辑落到工作流定义。
-- **编辑判据（§8 决策 1，分情况）**：该项目 workflow-state **没有 in-flight 派发 + 空闲态 → 直接编辑**；**有节点在跑 → 编辑落草案、经控制核心/权限/审计提交**（合蓝图 §11「运行中可暂停后修改」）。
-- 保留**只读「运行状态视图」**作为引擎的一个 view（看项目在跑）。
+### C. 项目面落地（P1 核心，**已按真机反馈改**）
+- 新增 `projectCanvasSurfaceConfig`（`canvasSurfaceConfig.ts`）：`kind:"project"`、`boundary: projectWorkflowCanvasBoundary`、`authority:"workflow_state_read_model"`、`realRunTarget:"bound_project"`、`showProjectRuleBar:true`、capabilities 全开。**`views` 不再做 plan/run 切换**（见下）。
+- 项目页**默认显示当前（在跑的）工作流 + 运行状态**（保留现有只读 workflow-state 治理视图）。**删掉「方案/运行视图」切换钮**（用户真机后不要）。
+- 两个动作：**「新建工作流」**（建一张新的）+ **「编辑工作流」**。
+- **编辑流程（统一草案，§8 决策 1）**：点「编辑工作流」→ 切到编辑界面（`WorkflowCanvasEngine` + project config）**改的是草案、原工作流不动/继续跑** → 「提交」→ 通过（运行性检查 / 控制核心·权限·审计；空闲轻、在跑重）→ 才落到工作流生效。**不分空闲/在跑、一律走草案。**
+- 事实源 = workflow-state 派生读模型；提交通过后才改工作流定义。
 
 ### D. P2（项目面配齐）
 - 顶部**项目规则状态条**（蓝图 §11.2：harness / 运行性 / 违规 / 证据）。
-- **方案视图 ↔ 运行状态视图**切换（同一引擎两 view）。
-- **运行性检查**（可运行 / 有警告 / 不可运行，蓝图 §11）。
+- **运行性检查**（可运行 / 有警告 / 不可运行，蓝图 §11）= 编辑「提交」时的"通过"判据。
+- （**视图切换钮删掉**——见 §C，编辑是动作不是视图。）
 
-### E. UI 收口
-- **矛盾运行文案**：节点「▶ 运行此节点」（C1）vs 侧栏「实验运行边界·真实运行入口已封存」——旧封存文案没随 C1 收口，对齐（实验真跑过双闸打测试项目；删/改"封存"旧字）。
+### E. 画布管理 + UI 收口
+- **实验画布加「清空画布」「新建画布」按钮**（真机反馈：现在没有）。
+- **矛盾运行文案**：节点「▶ 运行此节点」（C1）vs 侧栏「实验运行边界·真实运行入口已封存」——对齐（实验真跑过双闸打测试项目；删/改"封存"旧字）。
 - **空画布引导**（建第一个节点的提示）。
-- **节点编辑器手感**：结构化编辑（点/选）是底座、做扎实（分组已在 d06e399）；不要改成全靠打字。
+- **节点编辑器手感**：结构化编辑（点/选）是底座、做扎实；不改成全靠打字。
+- （注：`bindToProject` 的 `window.prompt` 主导线已修成内联输入，无需再动。）
 
 ## 2. 边界 / 护栏
 - 全程**轻档**：纯前端 + 数据 store，**零真跑、不碰** `execute_workflow_node_dispatch` / 双闸 / `manual_relay` / 安全逻辑。
