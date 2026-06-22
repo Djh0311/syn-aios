@@ -2,6 +2,7 @@ import { assert, assertDeepEqual } from "./offlineInteractionTestUtils";
 import {
   NODE_KIND_PRESETS,
   buildNodeDispatchRequest,
+  buildExperimentNodeDispatchRequest,
   canvasNodeToData,
   canvasScope,
   createNodeData,
@@ -133,6 +134,24 @@ export function runCanvasNodeAuthoringScenario() {
     "C2 未绑工作项 ID 的节点不能运行",
   );
 
+  // P3 A 映射 · 实验面 readiness：无需手填 work_item_id（后端自动建临时 work_item），但要 prompt。
+  assert(
+    nodeRunReadiness({ ...rich, work_item_id: "" }, "experiment").ready,
+    "A 映射：实验面无需手填 work_item_id（后端自动建临时票）",
+  );
+  assert(
+    !nodeRunReadiness({ ...rich, prompt: "" }, "experiment").ready,
+    "A 映射：实验面节点缺 prompt 不能跑",
+  );
+  assert(
+    !nodeRunReadiness({ ...rich, session: { mode: "resume", thread_id: "" } }, "experiment").ready,
+    "A 映射：实验面续已有但未选会话 → 不能跑（拦路石①下仍要先选名册里的会话）",
+  );
+  assert(
+    !nodeRunReadiness({ ...rich, session: { mode: "new" } }, "experiment").ready,
+    "resume-only（2026-06-22 决策）：实验面选『开新会话』不可跑（本期未启用）",
+  );
+
   // 会话模型 P1 · default policy is "new"; resume policy round-trips through
   // persistence; legacy top-level session_id migrates to a resume policy.
   assert(createNodeData("subagent").session.mode === "new", "P1 新建节点默认会话策略 = new（无默认偏向偏 resume）");
@@ -192,6 +211,24 @@ export function runCanvasNodeAuthoringScenario() {
     [],
     "C1 read-only 节点不给任何写入根",
   );
+
+  // P3 A 映射 · 实验派发请求只带会话策略 + 节点名 + prompt + 沙箱；不带 project_root /
+  // work_item_id（后端硬锁固定测试项目 + 自动建临时票）。resume 带 trim 后的 thread_id；new → null。
+  const expResume = buildExperimentNodeDispatchRequest({
+    ...rich,
+    name: "实验节点A",
+    prompt: "建实验证明文件",
+    sandbox: "workspace-write",
+    session: { mode: "resume", thread_id: "  019e7738-thread  " },
+  });
+  assert(expResume.session_mode === "resume", "A 映射：resume 策略透传");
+  assert(expResume.thread_id === "019e7738-thread", "A 映射：resume thread_id 应 trim 后透传");
+  assert(expResume.summary === "实验节点A", "A 映射：summary 取节点名");
+  assert(expResume.objective === "建实验证明文件", "A 映射：objective 取 prompt");
+  assert(expResume.sandbox_mode === "workspace-write", "A 映射：sandbox 取节点 data");
+  assert(!("project_root" in expResume) && !("work_item_id" in expResume), "A 映射：请求不带 project_root / work_item_id");
+  const expNew = buildExperimentNodeDispatchRequest({ ...rich, session: { mode: "new" } });
+  assert(expNew.session_mode === "new" && expNew.thread_id === null, "A 映射：new 策略 thread_id=null（resume-only 决策下 readiness 已拦，builder 仍纯映射）");
 
   // 引擎抽出 P0 · 行为不变锚点：CanvasView 现在是 WorkflowCanvasEngine + experiment
   // config 的薄壳。experiment 面 config 必须复现旧 CanvasView 的实验语境——它注入

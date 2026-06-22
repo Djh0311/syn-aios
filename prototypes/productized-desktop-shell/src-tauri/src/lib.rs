@@ -1035,6 +1035,21 @@ fn find_index_thread(index: &Value, thread_id: &str) -> Option<SessionRecord> {
         .find(|session| session.thread_id == thread_id)
 }
 
+// 路A（拦路石①）· 会话查找：先查静态快照 codex-index.json，找不到就回退实时 sqlite。
+// 沿用 transcript reader 2026-06-02 的同款回退（记忆 codex-workbench-session-data-sources）：
+// 静态索引是快照、会过期；bind/派发若只认它，5/31 后新建/新 mint 的会话全被判「不在索引」而拒。
+// 实时 sqlite 是 codex 自己的库（会话列表也走它），新会话会立刻出现在这。读不到库 → 当作没有。
+// 给 bind / 派发上下文 / 实验真跑用；普通会话列表/快照消费方不动（最小爆炸半径）。
+fn find_index_thread_or_sqlite(index: &Value, thread_id: &str) -> Option<SessionRecord> {
+    if let Some(session) = find_index_thread(index, thread_id) {
+        return Some(session);
+    }
+    let rows = codex_db::read_threads(&codex_db::default_state_db_path()).ok()?;
+    rows.into_iter()
+        .find(|row| row.thread_id == thread_id)
+        .map(session_record_from_codex_thread)
+}
+
 fn project_id(project_root: &str) -> String {
     format!("project:{}", stable_id(project_root))
 }
@@ -3682,6 +3697,382 @@ mod tests {
         );
         assert_eq!(result.dispatch.exit_code, Some(0), "codex exit should be 0");
         assert_eq!(result.dispatch.state, "completed");
+    }
+
+    // 宽松 stub：不像 StubCodexResumeRunner 那样硬编码 execution_cwd=/Users/yoyi（那是某旧
+    // fixture 绑死的）；本 runner 只验证「走到了真跑这步」，回 exit 0 + readback。实验命令的
+    // execution_cwd 应是固定测试项目（codex_resume_options_for_context 取 instruction 的值）。
+    struct PermissiveExperimentRunner {
+        stats: CodexDispatchReadbackStats,
+    }
+    impl CodexResumeRunner for PermissiveExperimentRunner {
+        fn resume_with_options(
+            &self,
+            _thread_id: &str,
+            _prompt: &str,
+            last_message_path: &Path,
+            _options: &CodexResumeRequestOptions,
+        ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String> {
+            if let Some(parent) = last_message_path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|error| format!("fixture output dir create failed: {error}"))?;
+            }
+            fs::write(last_message_path, "EXPERIMENT_STUB_OK")
+                .map_err(|error| format!("fixture last message write failed: {error}"))?;
+            Ok((
+                CodexResumeRunResult {
+                    exit_code: 0,
+                    timed_out: false,
+                    stderr_summary: None,
+                },
+                WorkflowNodeDispatchExecutionOptions {
+                    readback_stats: Some(self.stats.clone()),
+                },
+            ))
+        }
+    }
+
+    // P3 实验面真跑（A 映射）·机器闸：用 stub runner（不起真 codex）验证
+    // execute_experiment_node_dispatch_at 在固定测试项目里自动建临时 work_item + 绑会话 +
+    // 走通派发到 completed。真 codex 真跑由用户真机做（#[ignore] 见 real_run_full_dispatch_resume 同款）。
+    #[test]
+    fn experiment_node_dispatch_creates_temp_work_item_and_dispatches() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir =
+            std::env::temp_dir().join(format!("experiment-dispatch-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let project = fixture_project(test_root);
+        let index = fixture_dispatch_index(test_root, "thread-exp-1");
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
+        let before = read_json_file(&path)["work_items"]
+            .as_array()
+            .map(|items| items.len())
+            .unwrap_or(0);
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 5,
+                transcript_target_hits: 1,
+            },
+        };
+        DISPATCH_READBACK_NATIVE_READ_COUNT.with(|count| count.set(0));
+        let request = ExperimentNodeDispatchExecuteRequest {
+            session_mode: "resume".to_string(),
+            thread_id: Some("thread-exp-1".to_string()),
+            summary: "实验节点".to_string(),
+            objective: "建实验证明文件".to_string(),
+            sandbox_mode: "workspace-write".to_string(),
+            timeout_seconds: Some(120),
+        };
+        let result =
+            execute_experiment_node_dispatch_at(&path, &index, &index_path, &runner, &request)
+                .expect("experiment dispatch should complete");
+        assert_eq!(result.dispatch.state, "completed");
+        assert_eq!(result.dispatch.exit_code, Some(0));
+        // A · 自动建了一个临时 work_item（数量增长 + 标题前缀），无需手填 work_item_id。
+        let after_value = read_json_file(&path);
+        let items = after_value["work_items"].as_array().expect("work_items array");
+        assert!(items.len() > before, "应自动建一个临时 work_item");
+        let temp = items
+            .iter()
+            .find(|item| {
+                optional_string_from(item, "title")
+                    .map(|title| title.starts_with("experiment-temp-"))
+                    .unwrap_or(false)
+            })
+            .expect("临时 work_item 标题应为 experiment-temp-*");
+        // 目标锁死固定测试项目：临时票挂在测试项目的 default workflow 上。
+        assert_eq!(
+            optional_string_from(temp, "workflow_id").as_deref(),
+            Some(default_workflow_id(test_root).as_str())
+        );
+    }
+
+    // C · new 不启用（resume-only，用户拍板 C）：报清楚的错、不假跑。
+    #[test]
+    fn experiment_node_dispatch_new_session_returns_clear_error() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir()
+            .join(format!("experiment-dispatch-new-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, "thread-exp-1");
+        let runner = StubCodexResumeRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 0,
+                transcript_target_hits: 0,
+            },
+        };
+        let request = ExperimentNodeDispatchExecuteRequest {
+            session_mode: "new".to_string(),
+            thread_id: None,
+            summary: "实验节点".to_string(),
+            objective: "建实验证明文件".to_string(),
+            sandbox_mode: "workspace-write".to_string(),
+            timeout_seconds: Some(120),
+        };
+        let error =
+            execute_experiment_node_dispatch_at(&path, &index, &index_path, &runner, &request)
+                .expect_err("resume-only：new 应报错不假跑");
+        assert!(error.contains("resume-only"), "错误应点明 resume-only / 开新会话未启用：{error}");
+    }
+
+    // 会话不在 5/31 静态名册 → 拒绝（resume 近期/新会话的现实障碍，拦路石①）。
+    #[test]
+    fn experiment_node_dispatch_session_not_in_index_refused() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir()
+            .join(format!("experiment-dispatch-noidx-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, "thread-in-index");
+        let runner = StubCodexResumeRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 0,
+                transcript_target_hits: 0,
+            },
+        };
+        let request = ExperimentNodeDispatchExecuteRequest {
+            session_mode: "resume".to_string(),
+            thread_id: Some("thread-NOT-in-index".to_string()),
+            summary: "实验节点".to_string(),
+            objective: "建实验证明文件".to_string(),
+            sandbox_mode: "workspace-write".to_string(),
+            timeout_seconds: Some(120),
+        };
+        let error =
+            execute_experiment_node_dispatch_at(&path, &index, &index_path, &runner, &request)
+                .expect_err("会话不在名册应拒绝");
+        assert!(error.contains("不在当前索引内"), "错误应点明会话不在名册：{error}");
+    }
+
+    // P3 项目面真跑（C 映射）·机器闸：用已存在的 work_item（带任务包）+ 绑定，stub runner 验证
+    // execute_project_workflow_node_at 从任务包构造指令 + 走通派发到 completed。
+    #[test]
+    fn project_workflow_node_dispatch_uses_task_package_and_dispatches() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir =
+            std::env::temp_dir().join(format!("project-node-dispatch-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let project = fixture_project(test_root);
+        let index = fixture_dispatch_index(test_root, "thread-proj-1");
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
+        create_task_draft_at(&path, &fixture_task_draft_request(test_root, "项目节点真跑任务"))
+            .expect("work item should exist");
+        let work_item_id = optional_string_from(&read_json_file(&path)["work_items"][0], "work_item_id")
+            .expect("work item id should exist");
+        update_work_item_state_at(
+            &path,
+            &fixture_work_item_state_update_request(test_root, &work_item_id, "ready_to_dispatch"),
+        )
+        .expect("work item should be ready");
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let session = fixture_session("thread-proj-1", test_root, true);
+        bind_workflow_node_codex_session_at(
+            &path,
+            &fixture_node_session_bind_request(test_root, &node_id, Some(&work_item_id), "thread-proj-1"),
+            &session,
+        )
+        .expect("binding should write");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        DISPATCH_READBACK_NATIVE_READ_COUNT.with(|count| count.set(0));
+        let request = ProjectWorkflowNodeRunRequest {
+            project_root: test_root.to_string(),
+            node_id,
+            work_item_id,
+        };
+        let result =
+            execute_project_workflow_node_at(&path, &index, &index_path, &runner, &request)
+                .expect("project node dispatch should complete");
+        assert_eq!(result.dispatch.state, "completed");
+        assert_eq!(result.dispatch.exit_code, Some(0));
+    }
+
+    // C 映射语义：work_item 不是 ready_to_dispatch 时，派发自身清楚拒绝（不自动推进状态）。
+    #[test]
+    fn project_workflow_node_dispatch_refuses_when_work_item_not_ready() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir()
+            .join(format!("project-node-notready-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let project = fixture_project(test_root);
+        let index = fixture_dispatch_index(test_root, "thread-proj-2");
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
+        create_task_draft_at(&path, &fixture_task_draft_request(test_root, "未就绪项目任务"))
+            .expect("work item should exist");
+        let work_item_id = optional_string_from(&read_json_file(&path)["work_items"][0], "work_item_id")
+            .expect("work item id should exist");
+        // 故意不推进到 ready_to_dispatch（停在 draft）。
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let session = fixture_session("thread-proj-2", test_root, true);
+        bind_workflow_node_codex_session_at(
+            &path,
+            &fixture_node_session_bind_request(test_root, &node_id, Some(&work_item_id), "thread-proj-2"),
+            &session,
+        )
+        .expect("binding should write");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 0,
+                transcript_target_hits: 0,
+            },
+        };
+        let request = ProjectWorkflowNodeRunRequest {
+            project_root: test_root.to_string(),
+            node_id,
+            work_item_id,
+        };
+        let error = execute_project_workflow_node_at(&path, &index, &index_path, &runner, &request)
+            .expect_err("draft work item 不可派发，应拒绝");
+        assert!(error.contains("待派发"), "错误应点明工作项未就绪：{error}");
+    }
+
+    // P3 E · 多工作流底座（架构 §12）·机器闸。
+    #[test]
+    fn submit_project_workflow_draft_creates_new_workflow() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("submit-new-wf-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow should exist");
+        let before = read_json_file(&path)["workflows"]
+            .as_array()
+            .map(|a| a.len())
+            .unwrap_or(0);
+        let request = SubmitProjectWorkflowDraftRequest {
+            project_root: test_root.to_string(),
+            workflow_id: None,
+            title: "我的新工作流".to_string(),
+            nodes: vec![
+                json!({"id":"d1","kind":"director","label":"主管","prompt":"统筹","position":{"x":1,"y":2}}),
+                json!({"id":"a1","kind":"subagent","label":"开发","prompt":"写代码","position":{"x":3,"y":4}}),
+            ],
+            edges: vec![json!({"id":"e1","from":"d1","to":"a1"})],
+        };
+        let result = submit_project_workflow_draft_at(&path, &request).expect("submit new should write");
+        assert!(result.message.contains("已新建"), "应报已新建：{}", result.message);
+        let after = read_json_file(&path);
+        assert_eq!(
+            after["workflows"].as_array().unwrap().len(),
+            before + 1,
+            "应新增一个工作流（不覆盖默认）"
+        );
+        // 新工作流带 2 节点 1 边 + canvas_payload 往返。
+        let new_wf = after["workflows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|w| optional_string_from(w, "title").as_deref() == Some("我的新工作流"))
+            .expect("new workflow present");
+        let wid = optional_string_from(new_wf, "workflow_id").unwrap();
+        assert_ne!(wid, default_workflow_id(test_root), "新工作流 id 不是 default");
+        let node_count = after["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|n| optional_string_from(n, "workflow_id").as_deref() == Some(wid.as_str()))
+            .count();
+        assert_eq!(node_count, 2, "新工作流应有 2 个节点");
+        let director = after["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| {
+                optional_string_from(n, "workflow_id").as_deref() == Some(wid.as_str())
+                    && optional_string_from(n, "node_type").as_deref() == Some("director")
+            })
+            .expect("director node present");
+        assert_eq!(
+            optional_string_from(&director["canvas_payload"], "prompt").as_deref(),
+            Some("统筹"),
+            "canvas_payload 应原样存（往返）"
+        );
+    }
+
+    #[test]
+    fn submit_project_workflow_draft_rejects_without_director() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("submit-nodir-wf-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow should exist");
+        let request = SubmitProjectWorkflowDraftRequest {
+            project_root: test_root.to_string(),
+            workflow_id: None,
+            title: "缺主管的工作流".to_string(),
+            nodes: vec![json!({"id":"a1","kind":"subagent","label":"开发","position":{"x":1,"y":1}})],
+            edges: vec![],
+        };
+        let error = submit_project_workflow_draft_at(&path, &request)
+            .expect_err("无 director 应被运行性检查挡");
+        assert!(error.contains("运行性"), "错误应点明运行性未通过：{error}");
+    }
+
+    #[test]
+    fn submit_project_workflow_draft_updates_existing_workflow() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("submit-upd-wf-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow should exist");
+        // 先新建一个有 2 节点的工作流。
+        submit_project_workflow_draft_at(
+            &path,
+            &SubmitProjectWorkflowDraftRequest {
+                project_root: test_root.to_string(),
+                workflow_id: None,
+                title: "待更新工作流".to_string(),
+                nodes: vec![
+                    json!({"id":"d1","kind":"director","label":"主管","position":{"x":1,"y":1}}),
+                    json!({"id":"a1","kind":"subagent","label":"开发","position":{"x":2,"y":2}}),
+                ],
+                edges: vec![],
+            },
+        )
+        .expect("create should write");
+        let wid = optional_string_from(
+            read_json_file(&path)["workflows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|w| optional_string_from(w, "title").as_deref() == Some("待更新工作流"))
+                .unwrap(),
+            "workflow_id",
+        )
+        .unwrap();
+        // 用同 workflow_id 提交，只留 1 个 director 节点 → 应替换成 1 节点。
+        let result = submit_project_workflow_draft_at(
+            &path,
+            &SubmitProjectWorkflowDraftRequest {
+                project_root: test_root.to_string(),
+                workflow_id: Some(wid.clone()),
+                title: "待更新工作流（改）".to_string(),
+                nodes: vec![json!({"id":"d1","kind":"director","label":"只剩主管","position":{"x":1,"y":1}})],
+                edges: vec![],
+            },
+        )
+        .expect("update should write");
+        assert!(result.message.contains("已更新"), "应报已更新：{}", result.message);
+        let after = read_json_file(&path);
+        let node_count = after["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|n| optional_string_from(n, "workflow_id").as_deref() == Some(wid.as_str()))
+            .count();
+        assert_eq!(node_count, 1, "更新应替换该工作流的节点为 1 个");
     }
 
     #[test]

@@ -9,7 +9,8 @@
 - **运行工作流画布 = 画布优先重画 P1–P4 完成**（typecheck 0 + offline 15+r4 亲验）：任务包页改成执行画布（状态带 + 只读 React Flow 节点 + 连线着色 + 阶段段带 + 右栏详情）；纯前端零后端、点节点不执行。**唯一没验**：真机对图。
 - **统一记忆层 + 真攒记忆**：存储 = JSON sidecar（App Support）、命令全接通、线上实存 **3 条真实正式记忆**（已建已用，非「没做」；被冻结的部分见 ④b）。
 - **前端其余（B 线已收口）**：拆瘦 App 1104→695 / 记忆页 1340→676 / 工作流侧栏 953→340；全 views 渐进披露。
-- 后端基线：`cargo test --lib` = **555 passed / 0 failed**（2026-06-21 本机）。
+- **工作流画布 P3 · 多工作流编排（B–E + 点二「只读跟随选择器」，本次 commit）**：项目面一项目存 N 个工作流——**新建 / 编辑（加载现有进草案）/ 列表选择 / 切换查看 / 提交写回**（经运行性检查 + 备份 + 原子写 + 审计），全锁固定测试项目；两条真跑命令（实验面=自动建临时 work_item / 项目面=默认工作流）经 path-lock 闸、沙箱 `codex_local_runner` 字节未动。**真机过**：建/切/提交通、codex 真执行只动测试目录（gate① 满足、git status 仅 in-dir proof）。机器：cargo **564/0** / typecheck0 / offline 15+r4 / build 279。**已知限制见 ④d。**
+- 后端基线：`cargo test --lib` = **564 passed / 0 failed**（2026-06-22 本机）。
 
 ## 二、在做什么
 
@@ -26,10 +27,7 @@
 ## 三、下一步
 
 1. **画布架构 P1+P2（轻档）= v2（真机反馈修订）已落·机器验全绿·真机待复验**：v1（A 导航重构 / B scope 显式字段 + 2 加性 `.rs` / C 共享引擎挂项目面 / D 规则条 / E 同屏打架文案+空画布引导）+ **真机反馈 v2**：项目面**去视图切换**（编辑改成动作不是视图）、「编辑工作流 / 新建工作流」→ 草案 → 提交（运行性 + 控制核心/权限/审计，P3 重档）统一流程（不再空闲直改）；实验画布加「清空画布 / 新建画布」。**主导线亲跑四闸**（cargo 556/0、typecheck 净、offline 15+r4、build 279）+ **0 碰高危清单**（双闸/sandbox/manual_relay 未动；项目面「▶运行此节点」发真实 root → 固定测试项目双闸挡下、默认安全态成立；submitDraft 只 notice、不写 workflow-state）。`RunningWorkflowsView` 留作离线治理测试载体（不删，记忆 `running-workflows-view-test-load-bearing`）。kickoff `handoffs/2026-06-21-canvas-p1-kickoff-v1.md`。**待用户真机复验 → 过即挪入①。**
-2. **P3（轻档·2026-06-22 下放）= A（闸）已落·主导线逐字核·本次 commit；B–E 待新对话**：
-   - **A 去 env-CONFIRM 闸已落**（高危#3·用户明确授权）：gate fn 改 path-only（去 env belt、保 path-lock）、**沙箱 `codex_local_runner` 字节未动**、`execute_workflow_node_dispatch` 控制流未变；非测试项目仍 sealed（gate 测试 + 主导线读 diff 核）、cargo 556/0。真跑流程改为「画布绑测试项目 + 运行」即真跑（不再 export env）。
-   - **B/C/D（节点↔work_item 映射 / session 解析 / 两条真跑命令）执行线已做·主导线核过安全·未提交**：`execute_project_workflow_node`（gate 1919 在 runner 之前）+ `execute_experiment_node_dispatch`（project_root 硬编码测试项目）都过 path-lock 闸、沙箱 `codex_local_runner` 字节未动、`lib.rs +255` 纯测试、`workflow_run_dispatch +5` 只读会话解析、cargo 561/0。待**第一次真跑真机**（codex 真执行·沙箱不外溢）+ E。
-   - **E 扩成「多工作流」底座（2026-06-22 拍板 a）**：一个项目存 N 个工作流（现一个 default）·新建=造新的（空白对）·编辑=选一个加载进草案改·提交经运行性「通过」+控制核心写回；**解了「提交即覆盖治理结构」坑**（架构 §12）。+ **F 收 C 的 stale 注释**（1727/1762「暂未接」→「不启用」）。交新对话做。kickoff `handoffs/2026-06-22-canvas-p3-kickoff-v1.md`。
+2. **P3（轻档）= A + B/C/D + E + F + 点二 全落、本次 commit 收口**（多工作流编排见①；gate① 真机真跑已验）。剩 **3 个已知限制（④d）= 后置修**：画的工作流真跑未闭合 / 编辑挂错会话 / 编辑≠只读显示。**真正解 = 补完 P1**（只读运行视图也走引擎、退掉老渲染器 `ProjectWorkflowReactFlowCanvas`，一套 builder 一个数据源），排 follow-up。
 3. **后置 / 锁着**：节点对话编辑（补充层）；乙·自动连环（北极星，④c）；**真跑进非测试真实项目（仍高危·仍锁）**。
 4. 旧积压（引擎解封 GUI 端到端 / 文档归档 + 死码清理〔`workbench_sqlite_*` 保留勿删〕/ 旧运行画布对图〔大概率被项目面取代〕）优先级低于画布。
 
@@ -47,6 +45,11 @@
 **c) 没建（终局）**
 - 乙·自动连环 / 多项目接力：风险到这才真大，没开。**北极星**：主管对话说"按计划开干"→ 总指导自动执行画布编排好的工作流 → 直到完成。开时重护栏加回来（可中断/边界/审计/可回滚）+ 明确授权 + 守 principles §4（经状态机+权限，不靠聊天绕过改状态）。
 - **真跑进任意真实项目（非测试项目）= 另一道锁**：现两面真跑都只打固定测试项目；放开任意真实项目需明确授权，不在当前计划。
+
+**d) P3 B–E 已知限制（功能可用，这 3 条后置修，均非安全/数据问题、有备份可回滚）**
+- **画布新建的工作流不能真跑**：项目派发 `execute_project_workflow_node` 写死 `default_workflow_id` + 提交不建 work_item → 只有默认工作流能真跑、画的工作流真跑未闭合（§9 项目侧 C 未落地）。
+- **编辑已绑会话的工作流→会话可能挂错节点**：node_id 位置式 `{wf}:node:{i}-{kind}`、`workflow_node_session_bindings` 按 node_id 键且编辑不重映射 → 删/重排节点后旧绑定悬空，或同种类节点移位后旧会话静默重挂。
+- **编辑视图 ≠ 只读视图**：编辑走 `get_project_workflow_nodes`（角色写死 `subagent`、用存的坐标）、只读走读模型 `derive_workflow_nodes`（真角色、自动排版、多派生节点）→ 同一工作流两副长相。纯显示、re-submit 由 `kind` 保真不损数据。**真正解 = 补完 P1（只读=引擎只读模式，退老渲染器）。**
 
 ---
 

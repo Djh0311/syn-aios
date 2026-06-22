@@ -25,6 +25,7 @@ import {
   canvasSave,
   deleteWorkflowTemplate,
   executeWorkflowNodeDispatch,
+  executeExperimentNodeDispatch,
   listWorkflowTemplates,
   loadWorkflowTemplate,
   saveWorkflowTemplate,
@@ -37,6 +38,7 @@ import {
   SANDBOX_PRESETS,
   STATUS_PRESETS,
   buildNodeDispatchRequest,
+  buildExperimentNodeDispatchRequest,
   canvasNodeToData,
   canvasScope,
   createNodeData,
@@ -311,35 +313,43 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: W
     [onNotice, refreshTemplates],
   );
 
-  // C1 · 运行此节点：调已存在的双闸命令 execute_workflow_node_dispatch。
-  // 前端不判闸——默认安全态由后端守：非固定测试项目 / 未设 env 钥匙 → 返回 blocked
-  // message，零执行。绑会话（C2）是 resume 前提，未绑则前端直接拦下不发。
+  // P3 · 运行此节点。前端不判闸——默认安全态由后端 path-lock 守（非固定测试项目 → blocked、零执行）。
+  //   实验面（A 映射）：调 execute_experiment_node_dispatch——目标后端硬锁固定测试项目、自动建临时
+  //     work_item，无需手填票号/绑项目；实验节点自由 id 对不上 workflow-state，不能走下面那条。
+  //   项目面（C 映射）：节点=workflow-state work_item，走 execute_workflow_node_dispatch（带 project_root
+  //     + work_item_id + 已绑会话）。
   const runSelectedNode = useCallback(async () => {
     const node = nodes.find((n) => n.id === selected);
     if (!node || !canvas) return;
-    const readiness = nodeRunReadiness(node.data);
+    const surface = config.kind === "experiment" ? "experiment" : "project";
+    const readiness = nodeRunReadiness(node.data, surface);
     if (!readiness.ready) {
       onNotice(`无法运行：${readiness.reason}`);
       return;
     }
     setBusy(true);
     try {
-      const request = buildNodeDispatchRequest({
-        nodeId: node.id,
-        projectRoot: canvas.project_root ?? "",
-        data: node.data,
-        instructionId: `canvas-run-${node.id}-${Date.now().toString(36)}`,
-      });
-      const result = await executeWorkflowNodeDispatch(request);
-      onNotice(`已派发节点「${node.data.name}」。返回：${summarizeRunResult(result)}`);
+      if (surface === "experiment") {
+        const result = await executeExperimentNodeDispatch(buildExperimentNodeDispatchRequest(node.data));
+        onNotice(`已在固定测试项目派发实验节点「${node.data.name}」。返回：${summarizeRunResult(result)}`);
+      } else {
+        const request = buildNodeDispatchRequest({
+          nodeId: node.id,
+          projectRoot: canvas.project_root ?? "",
+          data: node.data,
+          instructionId: `canvas-run-${node.id}-${Date.now().toString(36)}`,
+        });
+        const result = await executeWorkflowNodeDispatch(request);
+        onNotice(`已派发节点「${node.data.name}」。返回：${summarizeRunResult(result)}`);
+      }
     } catch (e) {
-      // The backend double gate returns an Err (blocked message) when the fixed
-      // test project + env key are not both set — surfaced here, no codex ran.
+      // 后端 path-lock 闸对非固定测试项目返回 Err（blocked message）；实验「新建会话」不启用（resume-only）也会
+      // 在此报清楚（拦路石②）。任一情况都没有 codex 真跑。
       onNotice(`运行被拦截或失败：${messageOf(e)}`);
     } finally {
       setBusy(false);
     }
-  }, [nodes, selected, canvas, onNotice]);
+  }, [nodes, selected, canvas, config.kind, onNotice]);
 
   // P2 · 作用域升级：实验画布「绑定到项目」→ 设 project_root，画布变项目画布。
   // 只改定义里的 project_root（保存后持久化）；不碰双闸——真跑权限仍由后端定。
@@ -504,6 +514,7 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: W
               <NodeEditor
                 node={selectedNode}
                 sessions={sessions}
+                surface={config.kind === "experiment" ? "experiment" : "project"}
                 onChange={updateSelected}
                 onRun={() => void runSelectedNode()}
                 disabled={busy}
@@ -679,18 +690,20 @@ function CanvasFlowNode({ data, selected }: NodeProps<FlowNode>) {
 function NodeEditor({
   node,
   sessions,
+  surface,
   onChange,
   onRun,
   disabled,
 }: {
   node: FlowNode;
   sessions: SessionRecord[];
+  surface: "experiment" | "project";
   onChange: (patch: Partial<CanvasNodeData>) => void;
   onRun: () => void;
   disabled: boolean;
 }) {
   const data = node.data;
-  const readiness = nodeRunReadiness(data);
+  const readiness = nodeRunReadiness(data, surface);
   const updateField = (id: string, patch: Partial<CanvasCustomField>) => {
     onChange({ fields: data.fields.map((f) => (f.id === id ? { ...f, ...patch } : f)) });
   };

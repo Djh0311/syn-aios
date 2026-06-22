@@ -8,6 +8,7 @@ import type {
   CanvasEdge,
   CanvasNode,
   CanvasNodeDispatchRequest,
+  ExperimentNodeDispatchRequest,
   CanvasNodeRole,
   CanvasScope,
 } from "./types";
@@ -211,15 +212,45 @@ export function dataToCanvasNode(
 }
 
 // A node is run-ready (UI guard, NOT a security gate — the backend double gate is
-// authoritative) once its session policy is resolvable and a workflow-state work
-// item is bound. "new" mints a session at run time so it needs nothing extra;
-// "resume" needs a concrete thread_id chosen.
-export function nodeRunReadiness(data: CanvasNodeData): { ready: boolean; reason: string | null } {
+// authoritative) once its session policy is resolvable. `surface` decides the
+// work-item rule:
+//   - experiment (A 映射): the backend auto-creates a temp work_item in the fixed
+//     test project on run, so NO manual work_item_id is needed (B 过渡态删除).
+//   - project (C 映射): the node IS a workflow-state work item, so it must carry
+//     its work_item_id.
+// "new" session is resolved at run time (currently only wired for the project /
+// resume path; experiment "new" is reported clearly by the backend, not blocked here).
+export function nodeRunReadiness(
+  data: CanvasNodeData,
+  surface: "experiment" | "project" = "project",
+): { ready: boolean; reason: string | null } {
   if (data.session.mode === "resume" && !data.session.thread_id.trim()) {
     return { ready: false, reason: "续已有会话但未选具体会话" };
   }
+  if (surface === "experiment") {
+    // 决策（2026-06-22）：实验面 resume-only，「开新会话」未启用（详见后端注释）。
+    if (data.session.mode === "new") {
+      return { ready: false, reason: "实验面本期只支持续已有会话（开新会话未启用）" };
+    }
+    if (!data.prompt.trim()) return { ready: false, reason: "未填 prompt（节点要做什么）" };
+    return { ready: true, reason: null };
+  }
   if (!data.work_item_id.trim()) return { ready: false, reason: "未填工作项 ID（workflow-state 绑定）" };
   return { ready: true, reason: null };
+}
+
+// P3 实验面真跑（A 映射）· 从节点数据造实验派发请求。纯函数、离线可测。后端会把目标硬锁成
+// 固定测试项目、自动建临时 work_item，所以这里不带 project_root / work_item_id，只传会话策略
+// + 节点名 + prompt + 沙箱。new 策略后端不启用（resume-only 决策），会回明确错。
+export function buildExperimentNodeDispatchRequest(data: CanvasNodeData): ExperimentNodeDispatchRequest {
+  return {
+    session_mode: data.session.mode,
+    thread_id: data.session.mode === "resume" ? data.session.thread_id.trim() : null,
+    summary: data.name,
+    objective: data.prompt,
+    sandbox_mode: data.sandbox,
+    timeout_seconds: 600,
+  };
 }
 
 // Plan C1 · build the dispatch request from node data. Pure (instructionId

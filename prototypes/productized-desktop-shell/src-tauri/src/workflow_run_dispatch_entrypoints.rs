@@ -996,8 +996,9 @@ fn workflow_node_dispatch_context(
         .ok_or_else(|| "当前工作流节点绑定记录缺失；无法派发".to_string())?;
     let native_thread_id = optional_string_from(binding, "native_thread_id")
         .ok_or_else(|| "节点绑定缺少 Codex thread id；无法派发".to_string())?;
-    let session = find_index_thread(index, &native_thread_id)
-        .ok_or_else(|| "绑定会话不在当前索引内，已拒绝派发".to_string())?;
+    // 路A：静态快照找不到绑定会话 → 回退实时 sqlite（新 mint/近期会话能被认）。
+    let session = find_index_thread_or_sqlite(index, &native_thread_id)
+        .ok_or_else(|| "绑定会话不在当前索引内（含实时 sqlite），已拒绝派发".to_string())?;
     if !session.rollout_exists {
         return Err("绑定会话在索引中缺少 rollout，已拒绝派发".to_string());
     }

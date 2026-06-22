@@ -99,6 +99,42 @@ export type CanvasNodeDispatchRequest = {
   user_reviewed_instruction: CanvasNodeDispatchInstruction;
 };
 
+// P3 实验面真跑（架构方案 §9 的 A 映射）。前端不传 project_root / work_item_id：目标恒为
+// 固定测试项目（后端硬锁），临时 work_item 后端自动建。只带会话策略 + 节点名 + prompt + 沙箱。
+export type ExperimentNodeDispatchRequest = {
+  session_mode: "new" | "resume";
+  thread_id?: string | null;
+  summary: string;
+  objective: string;
+  sandbox_mode: string;
+  timeout_seconds?: number | null;
+};
+
+// P3 项目面真跑（架构方案 §9 的 C 映射）。节点=workflow-state work_item 本体，只带定位三元组；
+// 派发指令由后端从该 work_item 的任务包构造，会话用节点既有绑定（resume）。
+export type ProjectWorkflowNodeRunRequest = {
+  project_root: string;
+  node_id: string;
+  work_item_id: string;
+};
+
+// P3 E · 多工作流底座（架构 §12）。命名避开 types/workflow.ts 既有的 ProjectWorkflowSummary。
+export type ProjectWorkflowListItem = {
+  workflow_id: string;
+  title: string;
+  state: string;
+  node_count: number;
+  is_default: boolean;
+};
+// 提交草案写回：workflow_id 空=新建一个工作流（不覆盖谁）、非空=更新那一个。nodes/edges 传画布原节点/边。
+export type SubmitProjectWorkflowDraftRequest = {
+  project_root: string;
+  workflow_id?: string | null;
+  title: string;
+  nodes: unknown[];
+  edges: unknown[];
+};
+
 export type CanvasRunStatus = "running" | "finished" | "aborted";
 
 export type CanvasRunInbox = {

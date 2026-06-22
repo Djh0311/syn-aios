@@ -1619,8 +1619,9 @@ fn bind_workflow_node_codex_session_for_index_at(
     if find_index_project(index, &request.project_root).is_none() {
         return Err("项目不在当前索引内，已拒绝绑定节点会话".to_string());
     }
-    let session = find_index_thread(index, &request.thread_id)
-        .ok_or_else(|| "会话不在当前索引内，已拒绝绑定节点会话".to_string())?;
+    // 路A：静态快照找不到 → 回退实时 sqlite（用户能绑近期/新会话，不被 5/31 快照卡）。
+    let session = find_index_thread_or_sqlite(index, &request.thread_id)
+        .ok_or_else(|| "会话不在当前索引内（含实时 sqlite），已拒绝绑定节点会话".to_string())?;
     bind_workflow_node_codex_session_at(path, request, &session)
 }
 
@@ -1714,6 +1715,609 @@ fn execute_workflow_node_dispatch_for_index_at(
         return Err("项目不在当前索引内，已拒绝执行节点派发".to_string());
     }
     execute_workflow_node_dispatch_at(path, index, readback_db_path, runner, request)
+}
+
+// P3 实验面真跑（架构方案 §9 的 A 映射）。实验节点 id 是自由生成的、对不上 workflow-state，
+// 所以不能直接走 execute_workflow_node_dispatch；这条命令在固定测试项目里**自动建一个临时
+// work_item + 绑会话**，再走与项目面同一条已验派发路径真跑（= 复刻 real_run_full_dispatch_resume
+// 配方，由实验节点的会话/prompt 驱动）。
+//
+// 安全：目标**恒为固定测试项目**（前端传不进 project_root），path-lock 与
+// execute_workflow_node_dispatch 同一道闸；沙箱由 command_plan_for 强制（字节未动）。
+// 会话策略：resume 用给定 thread_id；new 不启用（resume-only，2026-06-22 用户拍板 C）——唯一
+// mint+拿 id 的路径 manual_relay new_session 后面卡在场 env 闸，启用要么加摩擦要么动安全闸，
+// 故本期只做 resume；选 new 明确报错不假跑。
+#[tauri::command]
+fn execute_experiment_node_dispatch(
+    request: ExperimentNodeDispatchExecuteRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<WorkflowNodeDispatchResult, String> {
+    let index = read_index(&state)?;
+    let readback_db_path = codex_db::default_state_db_path();
+    let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+    execute_experiment_node_dispatch_at(
+        &state.workflow_state_path,
+        &index,
+        &readback_db_path,
+        &runner,
+        &request,
+    )
+}
+
+fn execute_experiment_node_dispatch_at(
+    path: &Path,
+    index: &Value,
+    readback_db_path: &Path,
+    runner: &dyn CodexResumeRunner,
+    request: &ExperimentNodeDispatchExecuteRequest,
+) -> Result<WorkflowNodeDispatchResult, String> {
+    // 目标恒为固定测试项目（path-lock：与 execute_workflow_node_dispatch 同一道闸）。
+    // 前端无法传入 project_root，所以不会被重定向到真实项目。
+    let project_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+    if !workflow_engine_test_project_unsealed(project_root) {
+        return Err(legacy_product_command_blocked_message(
+            "execute_experiment_node_dispatch",
+        ));
+    }
+
+    // C · 会话解析：resume 用给定 thread_id；new 不启用（resume-only，用户拍板 C）。
+    let thread_id = match request.session_mode.trim() {
+        "resume" => request
+            .thread_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| "实验节点续已有会话需要 thread_id".to_string())?
+            .to_string(),
+        "new" => {
+            // 决策（2026-06-22）：本期只做 resume-only，不启用「开新会话」。开新会话的唯一
+            // mint+拿 id 路径（manual_relay new_session）后面卡着在场 env 闸，启用它要么加摩擦
+            // 要么动安全闸；用户拍板暂不做。请选「续已有会话」并给一条已存在的 codex 会话。
+            return Err(
+                "实验面本期只支持「续已有会话」（resume-only，用户拍板）；「开新会话」未启用。请选续已有会话并给一条已存在的 thread。"
+                    .to_string(),
+            )
+        }
+        other => return Err(format!("未知会话策略：{other}")),
+    };
+
+    // 会话必须能找到且有 rollout（bind/dispatch 前置）。路A 后：静态快照找不到则回退实时 sqlite，
+    // 所以近期/新 mint 的会话也能认。
+    let session = find_index_thread_or_sqlite(index, &thread_id)
+        .ok_or_else(|| "会话不在当前索引内（含实时 sqlite），已拒绝实验真跑".to_string())?;
+    if !session.rollout_exists {
+        return Err("会话在索引中缺少 rollout，已拒绝实验真跑".to_string());
+    }
+    let project = find_index_project(index, project_root)
+        .ok_or_else(|| "固定测试项目不在当前索引内，已拒绝实验真跑".to_string())?;
+
+    // prompt / sandbox 校验（validate_user_reviewed_instruction 的子集，提前给清楚错）。
+    let objective = request.objective.trim();
+    if objective.is_empty() {
+        return Err("实验节点缺少 prompt（objective），无法真跑".to_string());
+    }
+    let sandbox_mode = request.sandbox_mode.trim();
+    if !matches!(sandbox_mode, "read-only" | "workspace-write") {
+        return Err("sandbox 只允许 read-only 或 workspace-write".to_string());
+    }
+    let summary = {
+        let trimmed = request.summary.trim();
+        if trimmed.is_empty() {
+            "实验节点真跑".to_string()
+        } else {
+            trimmed.to_string()
+        }
+    };
+
+    let workflow_id = default_workflow_id(project_root);
+    // 工作流骨架缺时才 bootstrap（已存在则不重建，避免每次真跑都写一遍）。
+    let needs_bootstrap = match read_workflow_state_value(path) {
+        Ok(value) => !workflow_exists(&value, &workflow_id),
+        Err(_) => true,
+    };
+    if needs_bootstrap {
+        bootstrap_project_workflow_at(path, &project)?;
+    }
+
+    // A · 自动建临时 work_item（唯一标题避免去重 no-op），推进到 ready_to_dispatch。
+    let stamp = unix_timestamp_string();
+    let title = format!("experiment-temp-{stamp}");
+    create_task_draft_at(
+        path,
+        &TaskDraftRequest {
+            project_root: project_root.to_string(),
+            title: title.clone(),
+            objective: objective.to_string(),
+            assigned_role: Some("codex-dev".to_string()),
+        },
+    )?;
+    let work_item_id = {
+        let value = read_workflow_state_value(path)?;
+        value
+            .get("work_items")
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items.iter().rev().find(|item| {
+                    optional_string_from(item, "workflow_id").as_deref() == Some(workflow_id.as_str())
+                        && optional_string_from(item, "title").as_deref() == Some(title.as_str())
+                })
+            })
+            .and_then(|item| optional_string_from(item, "work_item_id"))
+            .ok_or_else(|| "刚建的临时 work_item 找不回，已中止实验真跑".to_string())?
+    };
+    update_work_item_state_at(
+        path,
+        &WorkItemStateUpdateRequest {
+            project_root: project_root.to_string(),
+            work_item_id: work_item_id.clone(),
+            next_state: "ready_to_dispatch".to_string(),
+        },
+    )?;
+
+    // C · 把会话绑到 codex-dev 节点 + 这个临时 work_item（resume 路径）。
+    let node_id = format!("{workflow_id}:node:codex-dev");
+    bind_workflow_node_codex_session_at(
+        path,
+        &WorkflowNodeSessionBindRequest {
+            project_root: project_root.to_string(),
+            node_id: node_id.clone(),
+            work_item_id: Some(work_item_id.clone()),
+            thread_id: thread_id.clone(),
+        },
+        &session,
+    )?;
+
+    // D · 走与项目面同一条已验派发真跑路径。后端构造完整 instruction（前端那条 builder 发空
+    // allowed_reads/forbidden_actions/required_return，过不了 validate_user_reviewed_instruction）。
+    let exec_request = WorkflowNodeDispatchExecuteRequest {
+        project_root: project_root.to_string(),
+        node_id,
+        work_item_id,
+        prompt_kind: "user_reviewed_instruction".to_string(),
+        user_reviewed_instruction: Some(UserReviewedInstructionInput {
+            instruction_id: format!("instruction:experiment:{stamp}"),
+            summary,
+            objective: objective.to_string(),
+            execution_cwd: project_root.to_string(),
+            sandbox_mode: sandbox_mode.to_string(),
+            allowed_write_roots: if sandbox_mode == "workspace-write" {
+                vec![project_root.to_string()]
+            } else {
+                vec![]
+            },
+            allowed_reads: vec![project_root.to_string()],
+            allowed_writes: if sandbox_mode == "workspace-write" {
+                vec![project_root.to_string()]
+            } else {
+                vec![]
+            },
+            forbidden_actions: vec![
+                "不读取 auth.json、.env、密钥、token 或授权文件。".to_string(),
+                "不读取完整 transcript。".to_string(),
+                "不运行 harness。".to_string(),
+            ],
+            timeout_seconds: request.timeout_seconds.unwrap_or(600).max(1),
+            max_retries: 0,
+            required_return: vec!["本步做了什么".to_string(), "改了哪些文件".to_string()],
+            prompt_preview: Some(objective.to_string()),
+        }),
+    };
+    execute_workflow_node_dispatch_for_index_at(path, index, readback_db_path, runner, &exec_request)
+}
+
+// P3 项目面真跑（架构方案 §9 的 C 映射）。项目画布只读运行态的节点 = workflow-state 的 work_item
+// 本体（无手绑）。「▶ 运行此节点」= 派发那个已存在的 work_item：从它的任务包构造派发指令，走与
+// 实验面同一条已验派发路径。忠实于 kickoff「跑节点=派发那个 work_item」——work_item 必须已是
+// ready_to_dispatch 且节点已绑会话（resume-only），否则派发自身会清楚报错（不自动推进状态）。
+//
+// 安全：path-lock 同 execute_workflow_node_dispatch（前端可传 project_root，但非固定测试项目→blocked）。
+// 沙箱由 command_plan_for 强制（字节未动）。
+#[tauri::command]
+fn execute_project_workflow_node(
+    request: ProjectWorkflowNodeRunRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<WorkflowNodeDispatchResult, String> {
+    if !workflow_engine_test_project_unsealed(&request.project_root) {
+        return Err(legacy_product_command_blocked_message(
+            "execute_project_workflow_node",
+        ));
+    }
+    let index = read_index(&state)?;
+    let readback_db_path = codex_db::default_state_db_path();
+    let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+    execute_project_workflow_node_at(
+        &state.workflow_state_path,
+        &index,
+        &readback_db_path,
+        &runner,
+        &request,
+    )
+}
+
+fn execute_project_workflow_node_at(
+    path: &Path,
+    index: &Value,
+    readback_db_path: &Path,
+    runner: &dyn CodexResumeRunner,
+    request: &ProjectWorkflowNodeRunRequest,
+) -> Result<WorkflowNodeDispatchResult, String> {
+    let project = find_index_project(index, &request.project_root)
+        .ok_or_else(|| "项目不在当前索引内，已拒绝运行项目节点".to_string())?;
+    let workflow_id = default_workflow_id(&request.project_root);
+    let value = read_workflow_state_value(path)?;
+    let work_item = find_work_item(&value, &workflow_id, &request.work_item_id)
+        .ok_or_else(|| "当前 workflow 下找不到该 work item；无法运行项目节点".to_string())?
+        .clone();
+    // 从 work_item 的任务包构造派发指令（C 映射：画布即 workflow-state，指令源=任务包）。
+    let empty_artifact = json!({});
+    let artifact =
+        find_task_package_artifact(&value, &request.work_item_id, &work_item).unwrap_or(&empty_artifact);
+    let fields = task_package_fields_from(
+        &work_item,
+        artifact,
+        &project,
+        &workflow_id,
+        &request.work_item_id,
+    );
+
+    let objective = {
+        let joined = fields.goals.join("\n");
+        if joined.trim().is_empty() {
+            fields.task_name.clone()
+        } else {
+            joined
+        }
+    };
+    if objective.trim().is_empty() {
+        return Err("该 work item 任务包缺少目标（goals/标题），无法运行项目节点".to_string());
+    }
+    let summary = if fields.task_name.trim().is_empty() {
+        "项目节点真跑".to_string()
+    } else {
+        fields.task_name.clone()
+    };
+    let forbidden_actions = if fields.forbidden_actions.is_empty() {
+        vec![
+            "不读取 auth.json、.env、密钥、token 或授权文件。".to_string(),
+            "不读取完整 transcript。".to_string(),
+            "不运行 harness。".to_string(),
+        ]
+    } else {
+        fields.forbidden_actions.clone()
+    };
+    let required_return = if fields.required_return.is_empty() {
+        vec!["本步做了什么".to_string(), "改了哪些文件".to_string()]
+    } else {
+        fields.required_return.clone()
+    };
+
+    // 沙箱：workspace-write 限定该项目根（codex 仍被 command_plan_for 关在项目目录；path-lock 已限测试项目）。
+    let exec_request = WorkflowNodeDispatchExecuteRequest {
+        project_root: request.project_root.clone(),
+        node_id: request.node_id.clone(),
+        work_item_id: request.work_item_id.clone(),
+        prompt_kind: "user_reviewed_instruction".to_string(),
+        user_reviewed_instruction: Some(UserReviewedInstructionInput {
+            instruction_id: format!("instruction:project:{}", unix_timestamp_string()),
+            summary,
+            objective: objective.clone(),
+            execution_cwd: request.project_root.clone(),
+            sandbox_mode: "workspace-write".to_string(),
+            allowed_write_roots: vec![request.project_root.clone()],
+            allowed_reads: vec![request.project_root.clone()],
+            allowed_writes: vec![request.project_root.clone()],
+            forbidden_actions,
+            timeout_seconds: 600,
+            max_retries: 0,
+            required_return,
+            prompt_preview: Some(objective),
+        }),
+    };
+    execute_workflow_node_dispatch_for_index_at(path, index, readback_db_path, runner, &exec_request)
+}
+
+// P3 E · 多工作流底座（架构 §12）：列出某项目的所有工作流（看有哪些、选一个查看/编辑/新建）。
+#[tauri::command]
+fn list_project_workflows(
+    project_root: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<Value>, String> {
+    if !state.workflow_state_path.exists() {
+        return Ok(vec![]);
+    }
+    let value = read_workflow_state_value(&state.workflow_state_path)?;
+    let pid = project_id(&project_root);
+    let slug = stable_id(&project_root);
+    let default_id = default_workflow_id(&project_root);
+    let nodes = value.get("nodes").and_then(Value::as_array).cloned().unwrap_or_default();
+    let mut out = Vec::new();
+    for wf in value.get("workflows").and_then(Value::as_array).cloned().unwrap_or_default() {
+        let Some(wid) = optional_string_from(&wf, "workflow_id") else {
+            continue;
+        };
+        // 归属该项目：workflow 带 project_id 命中，或 workflow_id 含项目 slug（兼容老记录）。
+        let belongs = optional_string_from(&wf, "project_id").as_deref() == Some(pid.as_str())
+            || wid.contains(&slug);
+        if !belongs {
+            continue;
+        }
+        let node_count = nodes
+            .iter()
+            .filter(|n| optional_string_from(n, "workflow_id").as_deref() == Some(wid.as_str()))
+            .count();
+        out.push(json!({
+          "workflow_id": wid,
+          "title": optional_string_from(&wf, "title").unwrap_or_default(),
+          "state": optional_string_from(&wf, "state").unwrap_or_default(),
+          "node_count": node_count,
+          "is_default": wid == default_id,
+        }));
+    }
+    Ok(out)
+}
+
+// P3 E · 把项目画布草案写回 workflow-state（架构 §12）。workflow_id 空=新建一个工作流（不覆盖谁）、
+// 非空=更新那一个（替换它的 nodes/edges）。提交闸：①仅固定测试项目（轻档）②运行性检查不 blocked
+// （§12「通过」；新草案需含 director 节点）③记审计 + 备份 + 原子写。会话方案/运行中工作项不在此动。
+#[tauri::command]
+fn submit_project_workflow_draft(
+    request: SubmitProjectWorkflowDraftRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<WorkflowStateMutationResult, String> {
+    submit_project_workflow_draft_at(&state.workflow_state_path, &request)
+}
+
+fn submit_project_workflow_draft_at(
+    path: &Path,
+    request: &SubmitProjectWorkflowDraftRequest,
+) -> Result<WorkflowStateMutationResult, String> {
+    // E 测试项目·轻档：写回当前仅限固定测试项目；非测试项目的工作流定义仍不碰。
+    if !workflow_engine_test_project_unsealed(&request.project_root) {
+        return Err("提交工作流草案当前仅限固定测试项目（轻档）；非测试项目仍锁".to_string());
+    }
+    let title = request.title.trim();
+    if title.is_empty() {
+        return Err("工作流标题不能为空".to_string());
+    }
+    if request.nodes.is_empty() {
+        return Err("草案没有节点；不写回空工作流".to_string());
+    }
+    if !path.exists() {
+        return Err("工作流状态文件不存在；无法写回草案".to_string());
+    }
+    let timestamp = unix_timestamp_string();
+    let mut value = read_workflow_state_value(path)?;
+    let validation_warnings = validate_workflow_state(&value);
+    if !validation_warnings.is_empty() {
+        return Err(format!(
+            "当前状态文件未通过 schema 校验：{}",
+            validation_warnings.join(", ")
+        ));
+    }
+
+    let is_new = request
+        .workflow_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_none();
+    let workflow_id = if is_new {
+        format!("workflow:{}:{timestamp}", stable_id(&request.project_root))
+    } else {
+        request.workflow_id.clone().unwrap_or_default()
+    };
+    if !is_new && !workflow_exists(&value, &workflow_id) {
+        return Err("要更新的工作流不存在；无法写回".to_string());
+    }
+
+    // 草案节点 → workflow-state 节点（结构字段供读模型/显示 + canvas_payload 原样存供往返）。
+    let mut id_map: Vec<(String, String)> = Vec::new();
+    let mut built_nodes: Vec<Value> = Vec::new();
+    for (i, dn) in request.nodes.iter().enumerate() {
+        let canvas_id = optional_string_from(dn, "id").unwrap_or_else(|| format!("n{i}"));
+        let kind = optional_string_from(dn, "kind")
+            .or_else(|| optional_string_from(dn, "role"))
+            .filter(|k| !k.trim().is_empty())
+            .unwrap_or_else(|| "custom".to_string());
+        let node_title = optional_string_from(dn, "label")
+            .filter(|l| !l.trim().is_empty())
+            .unwrap_or_else(|| kind.clone());
+        let node_id = format!("{workflow_id}:node:{i}-{}", stable_id(&kind));
+        id_map.push((canvas_id, node_id.clone()));
+        built_nodes.push(json!({
+          "node_id": node_id,
+          "workflow_id": workflow_id,
+          "node_type": kind,
+          "title": node_title,
+          "state": "draft",
+          "source_kind": "canvas_submitted",
+          "source_ref": Value::Null,
+          "agent_type": Value::Null,
+          "adapter_id": Value::Null,
+          "artifact_type": Value::Null,
+          "permission_level": "user_confirmed_write",
+          "position": dn.get("position").cloned().unwrap_or_else(|| json!({"x":120,"y":120})),
+          "canvas_payload": dn.clone(),
+          "created_at": timestamp,
+          "updated_at": timestamp,
+          "warnings": []
+        }));
+    }
+    let mut built_edges: Vec<Value> = Vec::new();
+    for (i, de) in request.edges.iter().enumerate() {
+        let from_node = optional_string_from(de, "from")
+            .and_then(|c| id_map.iter().find(|(cid, _)| *cid == c).map(|(_, n)| n.clone()));
+        let to_node = optional_string_from(de, "to")
+            .and_then(|c| id_map.iter().find(|(cid, _)| *cid == c).map(|(_, n)| n.clone()));
+        if let (Some(f), Some(t)) = (from_node, to_node) {
+            built_edges.push(json!({
+              "edge_id": format!("{workflow_id}:edge:{i}"),
+              "workflow_id": workflow_id,
+              "from_node_id": f,
+              "to_node_id": t,
+              "edge_type": "canvas_link",
+              "state": "draft",
+              "source_kind": "canvas_submitted",
+              "permission_level": "user_confirmed_write",
+              "created_at": timestamp,
+              "updated_at": timestamp,
+              "warnings": []
+            }));
+        }
+    }
+
+    // 候选状态：更新=先删该 workflow 旧 nodes/edges 再加；新建=加 workflow 记录。
+    {
+        let nodes = ensure_array_mut(&mut value, "nodes")?;
+        nodes.retain(|n| optional_string_from(n, "workflow_id").as_deref() != Some(workflow_id.as_str()));
+        nodes.extend(built_nodes);
+    }
+    {
+        let edges = ensure_array_mut(&mut value, "edges")?;
+        edges.retain(|e| optional_string_from(e, "workflow_id").as_deref() != Some(workflow_id.as_str()));
+        edges.extend(built_edges);
+    }
+    if is_new {
+        ensure_array_mut(&mut value, "workflows")?.push(json!({
+          "workflow_id": workflow_id,
+          "project_id": project_id(&request.project_root),
+          "title": title,
+          "state": "draft",
+          "source_kind": "canvas_submitted",
+          "permission_level": "user_confirmed_write",
+          "created_at": timestamp,
+          "updated_at": timestamp,
+          "warnings": []
+        }));
+    } else if let Some(wf) = array_mut(&mut value, "workflows")?
+        .iter_mut()
+        .find(|w| optional_string_from(w, "workflow_id").as_deref() == Some(workflow_id.as_str()))
+    {
+        wf["title"] = Value::String(title.to_string());
+        wf["updated_at"] = Value::String(timestamp.clone());
+    }
+
+    // 运行性检查（§12「通过」= 不 blocked）。在候选状态上跑。
+    let workflow_record = value
+        .get("workflows")
+        .and_then(Value::as_array)
+        .and_then(|ws| {
+            ws.iter()
+                .find(|w| optional_string_from(w, "workflow_id").as_deref() == Some(workflow_id.as_str()))
+        })
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let nodes_all = value.get("nodes").and_then(Value::as_array).cloned().unwrap_or_default();
+    let work_items_all = value.get("work_items").and_then(Value::as_array).cloned().unwrap_or_default();
+    let artifacts_all = value.get("artifacts").and_then(Value::as_array).cloned().unwrap_or_default();
+    let bindings_all = value
+        .get("workflow_node_session_bindings")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let run_check = inspect_workflow_run_check_from_value(
+        &request.project_root,
+        Some(&workflow_id),
+        &workflow_record,
+        &nodes_all,
+        &work_items_all,
+        &artifacts_all,
+        &bindings_all,
+    );
+    if run_check.status == "blocked" {
+        return Err(format!(
+            "运行性检查未通过（blocked）：{}",
+            run_check.blocked_reasons.join("；")
+        ));
+    }
+
+    // 控制核心 / 审计：记审计事件；备份 + schema 校验后原子写。
+    let audit_event_id = format!("audit:workflow-submit:{}:{timestamp}", stable_id(&workflow_id));
+    ensure_array_mut(&mut value, "audit_events")?.push(json!({
+      "event_id": audit_event_id,
+      "event_type": if is_new { "project_workflow_created_from_canvas" } else { "project_workflow_updated_from_canvas" },
+      "target_ref": workflow_id,
+      "actor_ref": "user_confirmed_desktop_shell",
+      "source_kind": "workspace_state",
+      "permission_level": "user_confirmed_write",
+      "created_at": timestamp,
+      "reason": "用户在项目画布提交草案为项目工作流（经运行性检查通过 + 审计；测试项目·轻档）。"
+    }));
+
+    let backup = backup_workflow_state_file(path, &timestamp)?;
+    write_validated_workflow_state(path, &value)?;
+    let snapshot = read_workflow_state_snapshot(path)?;
+    Ok(WorkflowStateMutationResult {
+        message: format!(
+            "{}项目工作流「{}」（运行性 {}）",
+            if is_new { "已新建" } else { "已更新" },
+            title,
+            run_check.status
+        ),
+        path: path.display().to_string(),
+        backup_path: Some(backup.display().to_string()),
+        audit_event_id,
+        first_initialize: false,
+        snapshot,
+    })
+}
+
+// P3 E · 取某工作流的画布节点/边，供「编辑工作流」把现有 nodes 加载进草案（避免空白覆盖，§12）。
+// 返回 { nodes: [画布节点], edges: [{id,from,to} 画布 id] }：canvas-submitted 节点用其 canvas_payload；
+// 老 bootstrap 节点无 payload → 用结构字段合成一个，使默认治理工作流也能被编辑回填。
+#[tauri::command]
+fn get_project_workflow_nodes(
+    project_root: String,
+    workflow_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Value, String> {
+    let _ = project_root;
+    if !state.workflow_state_path.exists() {
+        return Ok(json!({ "nodes": [], "edges": [] }));
+    }
+    let value = read_workflow_state_value(&state.workflow_state_path)?;
+    let mut node_to_canvas: Vec<(String, String)> = Vec::new();
+    let mut nodes_out: Vec<Value> = Vec::new();
+    for n in value.get("nodes").and_then(Value::as_array).cloned().unwrap_or_default() {
+        if optional_string_from(&n, "workflow_id").as_deref() != Some(workflow_id.as_str()) {
+            continue;
+        }
+        let node_id = optional_string_from(&n, "node_id").unwrap_or_default();
+        let payload = n.get("canvas_payload").cloned().unwrap_or_else(|| {
+            json!({
+              "id": node_id,
+              "role": "subagent",
+              "kind": optional_string_from(&n, "node_type").unwrap_or_else(|| "custom".to_string()),
+              "label": optional_string_from(&n, "title").unwrap_or_default(),
+              "position": n.get("position").cloned().unwrap_or_else(|| json!({"x":120,"y":120})),
+              "warnings": []
+            })
+        });
+        let canvas_id = optional_string_from(&payload, "id").unwrap_or_else(|| node_id.clone());
+        node_to_canvas.push((node_id, canvas_id));
+        nodes_out.push(payload);
+    }
+    let mut edges_out: Vec<Value> = Vec::new();
+    for (i, e) in value
+        .get("edges")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .enumerate()
+    {
+        if optional_string_from(e, "workflow_id").as_deref() != Some(workflow_id.as_str()) {
+            continue;
+        }
+        let from_c = optional_string_from(e, "from_node_id")
+            .and_then(|nid| node_to_canvas.iter().find(|(n, _)| *n == nid).map(|(_, c)| c.clone()));
+        let to_c = optional_string_from(e, "to_node_id")
+            .and_then(|nid| node_to_canvas.iter().find(|(n, _)| *n == nid).map(|(_, c)| c.clone()));
+        if let (Some(f), Some(t)) = (from_c, to_c) {
+            edges_out.push(json!({ "id": format!("seed-edge-{i}"), "from": f, "to": t }));
+        }
+    }
+    Ok(json!({ "nodes": nodes_out, "edges": edges_out }))
 }
 
 #[tauri::command]

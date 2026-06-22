@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Background,
   Controls,
@@ -33,6 +33,15 @@ import {
 } from "../../lib/projectCanvas";
 import type { CanvasSurfaceBoundary } from "../../lib/canvasSurfaceBoundaries";
 import { projectCanvasSurfaceConfig } from "../../lib/canvasSurfaceConfig";
+import {
+  canvasLoad,
+  canvasSave,
+  executeProjectWorkflowNode,
+  getProjectWorkflowNodes,
+  listProjectWorkflows,
+  submitProjectWorkflowDraft,
+} from "../../lib/tauri";
+import type { CanvasDefinition, CanvasEdge, CanvasNode, ProjectWorkflowListItem } from "../../lib/types";
 import { WorkflowCanvasEngine } from "../WorkflowCanvasEngine";
 import type {
   AutoDispatchGuardInput,
@@ -158,7 +167,18 @@ export function ProjectWorkflowCanvasView({
   initialTaskMemoryPacketPreview,
   renderSidePanel,
 }: ProjectWorkflowCanvasViewProps) {
-  const projectWorkflow = workflowState?.project_workflows.find((workflow) => workflow.project_root === project.project_root) ?? null;
+  // P3 E · 多工作流底座（架构 §12）：项目存 N 个工作流，列表/选择器 + 新建/编辑。
+  const [workflows, setWorkflows] = useState<ProjectWorkflowListItem[]>([]);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
+  // 渲染跟随选择器（§12）：选中哪个工作流就渲染哪个；未选/找不到 → 回退该项目首个（= 旧行为）。
+  const projectWorkflowsForProject =
+    workflowState?.project_workflows.filter((workflow) => workflow.project_root === project.project_root) ?? [];
+  const projectWorkflow =
+    (selectedWorkflowId
+      ? projectWorkflowsForProject.find((workflow) => workflow.workflow_id === selectedWorkflowId)
+      : undefined) ??
+    projectWorkflowsForProject[0] ??
+    null;
   const selectedTask = selectedTaskDraftFor(projectWorkflow?.task_drafts ?? [], null);
   const derivedWorkflow = projectWorkflow?.derived_workflow ?? null;
   const selectedTaskPackage = selectedTaskPackageFor(derivedWorkflow?.task_packages ?? [], selectedTask);
@@ -199,14 +219,131 @@ export function ProjectWorkflowCanvasView({
   );
   // 新建工作流改独立草案画布（不动现有草案）；编辑工作流改项目草案画布。
   const draftCanvasId = editingMode === "new" ? `${projectCanvasId}-draft-new` : projectCanvasId;
-  // 提交（轻档）：草案由引擎自存；落为正式项目工作流需先过运行性检查 + 控制核心 / 权限 / 审计
-  // （P3 重档），当前不写 workflow-state、不动运行中的工作流。
-  const submitDraft = () => {
-    onNotice(
-      "草案已存。提交为正式项目工作流需先过运行性检查 + 控制核心 / 权限 / 审计（P3 重档）；当前不改运行中的工作流。",
-    );
-    setEditing(false);
-  };
+  const refreshWorkflows = useCallback(async () => {
+    try {
+      const list = await listProjectWorkflows(project.project_root);
+      setWorkflows(list);
+      setSelectedWorkflowId((cur) =>
+        cur && list.some((w) => w.workflow_id === cur)
+          ? cur
+          : (list.find((w) => w.is_default) ?? list[0])?.workflow_id ?? null,
+      );
+    } catch {
+      // 列不出（无 workflow-state 等）→ 静默留空，项目页其余仍可用。
+    }
+  }, [project.project_root]);
+  useEffect(() => {
+    void refreshWorkflows();
+  }, [refreshWorkflows]);
+
+  // 提交草案 → 真写回 workflow-state（§12）：新建=create（workflow_id 空、不覆盖谁）、编辑=update
+  // （带 selectedWorkflowId）。经后端运行性检查「通过」+ 控制核心 + 审计；非测试项目仍被后端挡。
+  // 读引擎已保存的草案（引擎是手动「保存」，故提交前需先保存）。
+  const submitDraft = useCallback(async () => {
+    try {
+      const draft = await canvasLoad(draftCanvasId);
+      if (!draft || draft.nodes.length === 0) {
+        onNotice("草案为空或未保存；请先在画布上编辑并点「保存」，再提交。");
+        return;
+      }
+      const result = await submitProjectWorkflowDraft({
+        project_root: project.project_root,
+        workflow_id: editingMode === "new" ? null : selectedWorkflowId,
+        title: draft.display_name?.trim() || (editingMode === "new" ? "新工作流" : "工作流"),
+        nodes: draft.nodes,
+        edges: draft.edges,
+      });
+      onNotice(result?.message ?? "已提交为项目工作流。");
+      setEditing(false);
+      await refreshWorkflows();
+    } catch (e) {
+      onNotice(`提交失败：${messageOf(e)}`);
+    }
+  }, [draftCanvasId, editingMode, selectedWorkflowId, project.project_root, onNotice, refreshWorkflows]);
+
+  // 新建工作流：先把 draft-new 画布清空（不覆盖谁）→ 编辑 → 提交走 create。
+  const openNewWorkflow = useCallback(async () => {
+    const now = new Date().toISOString();
+    try {
+      await canvasSave({
+        schema_version: "canvas-v1",
+        canvas_id: `${projectCanvasId}-draft-new`,
+        display_name: `新工作流-${Date.now().toString(36).slice(-4)}`,
+        project_root: project.project_root,
+        scope: "project",
+        nodes: [],
+        edges: [],
+        created_at: now,
+        updated_at: now,
+        warnings: [],
+      });
+    } catch {
+      // 清空失败不致命；引擎仍会加载该 id。
+    }
+    setEditingMode("new");
+    setEditing(true);
+  }, [projectCanvasId, project.project_root]);
+
+  // 编辑工作流：把选中工作流的现有 nodes 加载进草案（§12「要补」——否则提交=空白覆盖）→ 编辑 → update。
+  const openEditWorkflow = useCallback(async () => {
+    const wid = selectedWorkflowId;
+    if (!wid) {
+      onNotice("先选一个工作流再编辑。");
+      return;
+    }
+    try {
+      const seed = await getProjectWorkflowNodes(project.project_root, wid);
+      const now = new Date().toISOString();
+      const seeded: CanvasDefinition = {
+        schema_version: "canvas-v1",
+        canvas_id: projectCanvasId,
+        display_name: workflows.find((w) => w.workflow_id === wid)?.title ?? "工作流",
+        project_root: project.project_root,
+        scope: "project",
+        nodes: seed.nodes as CanvasNode[],
+        edges: seed.edges as CanvasEdge[],
+        created_at: now,
+        updated_at: now,
+        warnings: [],
+      };
+      await canvasSave(seeded);
+      setEditingMode("edit");
+      setEditing(true);
+    } catch (e) {
+      onNotice(`加载工作流到草案失败：${messageOf(e)}`);
+    }
+  }, [selectedWorkflowId, project.project_root, projectCanvasId, workflows, onNotice]);
+  const [runningProjectNode, setRunningProjectNode] = useState(false);
+  const selectedProjectNode = useMemo(
+    () =>
+      canvasModel.nodes.find(
+        (node) => node.node_id === (selectedCanvasNodeId ?? canvasModel.viewport_hint.selected_node_id),
+      ) ?? null,
+    [canvasModel, selectedCanvasNodeId],
+  );
+  // P3 项目面真跑（架构方案 §9 的 C 映射）：选中只读运行态里一个节点 → 派发它的 work_item。
+  // 节点 = workflow-state work_item 本体（无手绑）；后端从任务包构造指令、用节点既有会话绑定
+  // resume。前端不判闸——非固定测试项目仍被后端 path-lock 挡下、零执行。
+  const runSelectedProjectNode = useCallback(async () => {
+    const node = selectedProjectNode;
+    if (!node?.workflow_node_id || !node?.work_item_id) {
+      onNotice("请先选中一个绑定了工作项的节点再运行");
+      return;
+    }
+    setRunningProjectNode(true);
+    try {
+      const result = await executeProjectWorkflowNode({
+        project_root: project.project_root,
+        node_id: node.workflow_node_id,
+        work_item_id: node.work_item_id,
+      });
+      onNotice(`已派发项目节点「${node.title}」。返回：${compactRunResult(result)}`);
+    } catch (e) {
+      onNotice(`运行被拦截或失败：${messageOf(e)}`);
+    } finally {
+      setRunningProjectNode(false);
+    }
+  }, [selectedProjectNode, project.project_root, onNotice]);
   const blackboardOverlay = useMemo(
     () =>
       buildBlackboardCandidateOverlay({
@@ -429,7 +566,9 @@ export function ProjectWorkflowCanvasView({
               <p className="path-text">改的是草案，运行中的工作流不动；提交并通过后才生效（经控制核心 / 权限 / 审计）。</p>
             </div>
             <div className="workflow-state-actions">
-              <button className="primary-button" type="button" onClick={submitDraft}>提交为项目工作流</button>
+              <button className="primary-button" type="button" onClick={() => void submitDraft()}>
+                {editingMode === "new" ? "提交为新工作流" : "提交更新"}
+              </button>
               <button className="secondary-button" type="button" onClick={() => setEditing(false)}>返回运行状态</button>
             </div>
           </div>
@@ -453,11 +592,43 @@ export function ProjectWorkflowCanvasView({
           <p className="path-text">{project.project_root}</p>
         </div>
         <div className="workflow-state-actions">
-          <button className="secondary-button" type="button" onClick={() => { setEditingMode("new"); setEditing(true); }}>
+          {workflows.length > 0 ? (
+            <select
+              aria-label="选择工作流"
+              value={selectedWorkflowId ?? ""}
+              onChange={(e) => setSelectedWorkflowId(e.target.value || null)}
+            >
+              {workflows.map((w) => (
+                <option key={w.workflow_id} value={w.workflow_id}>
+                  {`${w.title || "(未命名)"}${w.is_default ? "（默认）" : ""} · ${w.node_count} 节点`}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <button className="secondary-button" type="button" onClick={() => void openNewWorkflow()}>
             新建工作流
           </button>
-          <button className="secondary-button" type="button" onClick={() => { setEditingMode("edit"); setEditing(true); }}>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void openEditWorkflow()}
+            disabled={!selectedWorkflowId}
+            title={selectedWorkflowId ? "把选中工作流加载进草案编辑" : "先选一个工作流"}
+          >
             编辑工作流
+          </button>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => void runSelectedProjectNode()}
+            disabled={runningProjectNode || !selectedProjectNode?.work_item_id || !selectedProjectNode?.workflow_node_id}
+            title={
+              selectedProjectNode?.work_item_id
+                ? "派发选中节点的工作项（经 path-lock 闸真跑；work_item 需 ready_to_dispatch 且节点已绑会话）"
+                : "先选中一个绑定了工作项的节点"
+            }
+          >
+            {runningProjectNode ? "运行中…" : "▶ 运行选中节点"}
           </button>
           <Badge tone={projectWorkflow ? "candidate" : "warning"}>{projectWorkflow ? projectWorkflow.state : "缺 workflow"}</Badge>
         </div>
@@ -983,4 +1154,12 @@ function canvasNodeTypeLabel(type: ProjectCanvasNode["node_type"]) {
 function messageOf(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
+}
+
+// 项目节点派发回执的一句话摘要（后端返回 WorkflowNodeDispatchResult；这里只取状态/退出码给提示用）。
+function compactRunResult(result: unknown): string {
+  const dispatch = (result as { dispatch?: { state?: string; exit_code?: number | null } } | null)?.dispatch;
+  if (!dispatch) return "已提交";
+  const exit = dispatch.exit_code ?? "—";
+  return `${dispatch.state ?? "未知"}（exit ${exit}）`;
 }

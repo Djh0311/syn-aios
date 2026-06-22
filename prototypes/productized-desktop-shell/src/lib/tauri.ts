@@ -9,6 +9,10 @@ import type {
   BlackboardCandidateStoreV1,
   CanvasDefinition,
   CanvasNodeDispatchRequest,
+  ExperimentNodeDispatchRequest,
+  ProjectWorkflowNodeRunRequest,
+  ProjectWorkflowListItem,
+  SubmitProjectWorkflowDraftRequest,
   CanvasRunState,
   WorkflowTemplate,
   WorkflowTemplateSummary,
@@ -821,6 +825,38 @@ export function deleteWorkflowTemplate(templateId: string): Promise<void> {
 export function executeWorkflowNodeDispatch(request: CanvasNodeDispatchRequest): Promise<unknown> {
   ensureTauriRuntime();
   return invoke<unknown>("execute_workflow_node_dispatch", { request });
+}
+
+// P3 实验面真跑（架构方案 §9 的 A 映射）。目标恒为固定测试项目（后端硬锁 project_root，前端传
+// 不进），临时 work_item 后端自动建。同样零新闸：非测试项目仍被 path-lock 挡（这条本就只打测试项目）。
+export function executeExperimentNodeDispatch(request: ExperimentNodeDispatchRequest): Promise<unknown> {
+  ensureTauriRuntime();
+  return invoke<unknown>("execute_experiment_node_dispatch", { request });
+}
+
+// P3 项目面真跑（C 映射）。目标项目由前端传入（项目面绑定的项目），非固定测试项目仍被后端
+// path-lock 挡下。派发指令后端从 work_item 任务包构造，会话用节点既有绑定。
+export function executeProjectWorkflowNode(request: ProjectWorkflowNodeRunRequest): Promise<unknown> {
+  ensureTauriRuntime();
+  return invoke<unknown>("execute_project_workflow_node", { request });
+}
+
+// P3 E · 多工作流底座（架构 §12）。
+export function listProjectWorkflows(projectRoot: string): Promise<ProjectWorkflowListItem[]> {
+  ensureTauriRuntime();
+  return invoke<ProjectWorkflowListItem[]>("list_project_workflows", { projectRoot });
+}
+export function submitProjectWorkflowDraft(request: SubmitProjectWorkflowDraftRequest): Promise<{ message?: string }> {
+  ensureTauriRuntime();
+  return invoke<{ message?: string }>("submit_project_workflow_draft", { request });
+}
+// 取某工作流的画布节点/边，供「编辑工作流」把现有 nodes 加载进草案（避免空白覆盖）。
+export function getProjectWorkflowNodes(
+  projectRoot: string,
+  workflowId: string,
+): Promise<{ nodes: unknown[]; edges: unknown[] }> {
+  ensureTauriRuntime();
+  return invoke<{ nodes: unknown[]; edges: unknown[] }>("get_project_workflow_nodes", { projectRoot, workflowId });
 }
 
 function ensureTauriRuntime() {

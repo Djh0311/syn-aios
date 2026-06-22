@@ -5051,6 +5051,40 @@ struct WorkflowNodeDispatchExecuteRequest {
     user_reviewed_instruction: Option<UserReviewedInstructionInput>,
 }
 
+// P3 实验面真跑（架构方案 §9 的 A 映射）。前端**不传 project_root**——目标恒为固定测试
+// 项目，由后端硬锁（path-lock 防越界）。不传 work_item_id——后端自动建临时 work_item
+// （替代手填的 B 过渡态）。只带：会话策略（resume thread_id / new）、节点名、prompt、沙箱。
+#[derive(Deserialize)]
+struct ExperimentNodeDispatchExecuteRequest {
+    session_mode: String,
+    thread_id: Option<String>,
+    summary: String,
+    objective: String,
+    sandbox_mode: String,
+    timeout_seconds: Option<i64>,
+}
+
+// P3 项目面真跑（架构方案 §9 的 C 映射）。节点=workflow-state 的 work_item 本体，所以只带定位
+// 三元组；派发指令由后端从该 work_item 的任务包构造（前端不传 prompt/会话——会话用节点既有绑定）。
+#[derive(Deserialize)]
+struct ProjectWorkflowNodeRunRequest {
+    project_root: String,
+    node_id: String,
+    work_item_id: String,
+}
+
+// P3 E · 多工作流底座（架构 §12）。把项目画布草案写回该项目 workflow-state：workflow_id 为空 =
+// 新建一个工作流（不覆盖谁）；非空 = 更新那一个（替换它的 nodes/edges）。nodes/edges 收 opaque
+// 的画布节点/边对象（后端提取结构字段 + 原样存 canvas_payload 供往返）。
+#[derive(Deserialize)]
+struct SubmitProjectWorkflowDraftRequest {
+    project_root: String,
+    workflow_id: Option<String>,
+    title: String,
+    nodes: Vec<Value>,
+    edges: Vec<Value>,
+}
+
 #[derive(Deserialize)]
 struct WorkflowNodeDispatchReadbackRequest {
     project_root: String,
