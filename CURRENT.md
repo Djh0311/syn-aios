@@ -26,10 +26,13 @@
 
 ## 三、下一步
 
-1. **画布架构 P1+P2（轻档）= v2（真机反馈修订）已落·机器验全绿·真机待复验**：v1（A 导航重构 / B scope 显式字段 + 2 加性 `.rs` / C 共享引擎挂项目面 / D 规则条 / E 同屏打架文案+空画布引导）+ **真机反馈 v2**：项目面**去视图切换**（编辑改成动作不是视图）、「编辑工作流 / 新建工作流」→ 草案 → 提交（运行性 + 控制核心/权限/审计，P3 重档）统一流程（不再空闲直改）；实验画布加「清空画布 / 新建画布」。**主导线亲跑四闸**（cargo 556/0、typecheck 净、offline 15+r4、build 279）+ **0 碰高危清单**（双闸/sandbox/manual_relay 未动；项目面「▶运行此节点」发真实 root → 固定测试项目双闸挡下、默认安全态成立；submitDraft 只 notice、不写 workflow-state）。`RunningWorkflowsView` 留作离线治理测试载体（不删，记忆 `running-workflows-view-test-load-bearing`）。kickoff `handoffs/2026-06-21-canvas-p1-kickoff-v1.md`。**待用户真机复验 → 过即挪入①。**
-2. **P3（轻档）= A + B/C/D + E + F + 点二 全落、本次 commit 收口**（多工作流编排见①；gate① 真机真跑已验）。剩 **3 个已知限制（④d）= 后置修**：画的工作流真跑未闭合 / 编辑挂错会话 / 编辑≠只读显示。**真正解 = 补完 P1**（只读运行视图也走引擎、退掉老渲染器 `ProjectWorkflowReactFlowCanvas`，一套 builder 一个数据源），排 follow-up。
-3. **后置 / 锁着**：节点对话编辑（补充层）；乙·自动连环（北极星，④c）；**真跑进非测试真实项目（仍高危·仍锁）**。
-4. 旧积压（引擎解封 GUI 端到端 / 文档归档 + 死码清理〔`workbench_sqlite_*` 保留勿删〕/ 旧运行画布对图〔大概率被项目面取代〕）优先级低于画布。
+> 画布主线 **P0–P3 + 后置批全收口入库**（`acd4ce8`/`1638b69`/`aa33f114`/`e0fa4e1`：多工作流编排 / C#2 画布工作流真跑 / B+稳定 uuid 绑定根治 / A止血+A真正解 只读忠实 / 快照刷新）；架构债结清（稳定 uuid 根治、引擎统一**评估后不做**·④d）。**下一步 = 方向选择（待用户拍）**：
+
+1. **乙·自动连环（北极星，④c）**：主管对话"按计划开干"→ 总指导照画布自动跑完。**高危#4·锁着**——开它要重护栏（可中断/边界/审计/可回滚）+ **用户明确授权那一下**；多半先走"中间·半自动"（逐节点带审批连跑）过渡。
+2. **画布手感打磨（轻档·真机）**：用户曾反馈"还有点不舒服"，待指明具体位置再改。
+3. **节点对话编辑 NL（轻档·补充层，架构 §10）**：大白话说意图 → AI 翻成节点字段改。
+4. **旧积压（低优先）**：文档归档 + 死码清理〔`workbench_sqlite_*` 保留勿删〕/ 旧运行画布对图〔大概率被项目面取代〕。
+5. **仍锁**：真跑进非测试真实项目（高危#1·用户明确授权不可省）。
 
 ## 四、锁着的 / 没接（区分三种「不在线上默认」，别压成「deferred」一个词——那是上一版误报之源）
 
@@ -50,7 +53,7 @@
 - ✅ **画布建的工作流不能真跑 → C#2 已修**：派发接 `workflow_id`（从 node_id 解析、回退 default）+ 提交/运行自动建临时 work_item + resume 会话；画布建的工作流可真跑（仍只打固定测试项目、闸在上游、沙箱未动）。
 - ✅ **编辑已绑会话→会话挂错 → 已根治**：B 提交时剪失效绑定 + **node_id 改用节点稳定 id（非位置式 `{i}-{kind}`）** → 删/重排节点后 node_id 不变、绑定不悬空/不静默重挂（回归测试 `submit_project_workflow_draft_node_id_stable_across_reorder`；前缀 `{wf}:node:` 保留、解析不断）。
 - ✅ **编辑视图 ≠ 只读视图 → A 真正解（次选）已修**：`deriveProjectWorkflowCanvasReadModel` 改为按真实节点 1:1 渲染、去 goal 框、清 `buildGoalNode` 死码；offline 契约测试改为「只出现真实节点 + 显式断言无 project_goal/director/validation_line/review_line 幻影」。机器绿（typecheck/offline 15+r4/build）+ 真机过。
-- ⏳ **可选架构债（非用户可见、不阻断）·剩 1 条**：只读视图仍走读模型渲染器（`ProjectWorkflowReactFlowCanvas` + `deriveProjectWorkflowCanvasReadModel`）、非引擎。完整 P1 = 只读也走引擎只读模式、退老渲染器、一套渲染器一个数据源。**渲染改、需真机**（主导线在做）。
+- ✋ **「只读走引擎」= 评估后不做（架构债结清）**：摸到底发现负 ROI——① `canvasModel` 退不掉（状态条 `ProjectRuleStatusBar` + 侧栏 `renderSidePanel` + 选择逻辑都锚在它上）；② 引擎 `WorkflowCanvasEngine` 是手动保存的 store 编辑器、非实时只读查看器，repurpose = 重构；③ A真正解 已让只读渲染**忠实**、本要防的漂移已消 → 改了只会更复杂、零收益。留 `ProjectWorkflowReactFlowCanvas` + 读模型渲染只读，是对的。
 
 ---
 
