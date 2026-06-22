@@ -523,43 +523,51 @@ export function deriveProjectWorkflowCanvasReadModel({
   const statusReason = buildStatusReason(status, projectWorkflow, selectedTask, attentionItems, sourceRefs);
   const nodes: ProjectCanvasNode[] = [];
   const detailPanels: Record<string, ProjectCanvasNodeDetail> = {};
-  const goalNode = buildGoalNode(project, workflowId, projectWorkflow, selectedTask, status);
-  nodes.push(goalNode);
-  detailPanels[goalNode.detail_panel_id] = buildDetail(goalNode, {
-    projectWorkflow,
-    derivedWorkflow,
-    selectedTask,
-    selectedTaskPackage,
-    binding: null,
-    dispatch: null,
-    permissionRequests: [],
-    executionAttempts: [],
-    blackboardEntries: [],
-    directorReviews: [],
-  });
+  // 后置A 次选：去掉合成的「项目目标」goalNode——编辑画布里没有这个框，只读要忠实于用户画的节点
+  // 才算「只读=编辑」。（goal 的项目目标信息仍在右侧治理面板/徽章，与画布节点解耦。）
 
-  const roleNodes = roleLanes.map((role) => {
-    const workflowNode = findWorkflowNode(derivedWorkflow?.nodes ?? [], workflowId, role.role_id);
-    const workflowNodeId = workflowNode?.workflow_node_id ?? `${workflowId}:node:${role.role_id}`;
+  // 后置A 次选：只读视图按工作流的**真实节点 1:1 渲染**（不再固定 goal+4 泳道、与编辑视图忠实对齐）。
+  // 能映射到已知 4 角色的（findWorkflowNode：node_id 或 assigned_role 命中）复用 buildRoleNode（固定泳道
+  // 坐标）；其余（画布自由建的）走通用 buildWorkflowNodeCanvas（自动排第二行，真机看了再调）。
+  const workflowNodes = derivedWorkflow?.nodes ?? [];
+  const roleByNodeId = new Map<string, RoleLane>();
+  for (const role of roleLanes) {
+    const matched = findWorkflowNode(workflowNodes, workflowId, role.role_id);
+    if (matched) roleByNodeId.set(matched.workflow_node_id, role);
+  }
+  const realNodes = workflowNodes.map((wfNode, index) => {
+    const workflowNodeId = wfNode.workflow_node_id;
     const binding = findRoleBinding(projectWorkflow?.node_session_bindings ?? [], workflowNodeId, selectedTask);
     const dispatch = findRoleDispatch(projectWorkflow?.node_dispatches ?? [], workflowNodeId, selectedTask);
     const permissions = relatedPermissions(projectWorkflow?.permission_requests ?? [], workflowNodeId, selectedTask);
     const attempts = relatedAttempts(projectWorkflow?.execution_attempts ?? [], dispatch, selectedTask);
     const blackboardEntries = relatedBlackboardEntries(projectBlackboard?.entries ?? [], workflowNodeId, selectedTask);
     const directorReviews = relatedDirectorReviews(projectWorkflow?.director_reviews ?? [], dispatch, selectedTask);
-    const node = buildRoleNode({
-      role,
-      workflowId,
-      workflowNode,
-      workflowNodeId,
-      selectedTask,
-      selectedTaskPackage,
-      binding,
-      dispatch,
-      permissionRequests: permissions,
-      executionAttempts: attempts,
-      blackboardEntries,
-    });
+    const role = roleByNodeId.get(workflowNodeId);
+    const node = role
+      ? buildRoleNode({
+          role,
+          workflowId,
+          workflowNode: wfNode,
+          workflowNodeId,
+          selectedTask,
+          selectedTaskPackage,
+          binding,
+          dispatch,
+          permissionRequests: permissions,
+          executionAttempts: attempts,
+          blackboardEntries,
+        })
+      : buildWorkflowNodeCanvas({
+          wfNode,
+          workflowId,
+          index,
+          selectedTask,
+          binding,
+          dispatch,
+          permissionRequests: permissions,
+          executionAttempts: attempts,
+        });
     detailPanels[node.detail_panel_id] = buildDetail(node, {
       projectWorkflow,
       derivedWorkflow,
@@ -574,7 +582,7 @@ export function deriveProjectWorkflowCanvasReadModel({
     });
     return node;
   });
-  nodes.push(...roleNodes);
+  nodes.push(...realNodes);
 
   const sidecarNodes = buildSidecarNodes({
     workflowId,
@@ -858,42 +866,6 @@ function buildProjectWorkflowEditBoundary({
   };
 }
 
-function buildGoalNode(
-  project: ProjectRecord,
-  workflowId: string,
-  projectWorkflow: ProjectWorkflowSummary | null,
-  selectedTask: TaskDraftSummary | null,
-  status: ProjectCanvasStatus,
-): ProjectCanvasNode {
-  const nodeId = `${workflowId}:canvas:goal`;
-  const refs = compactRefs([
-    projectWorkflow ? ref("workflow", projectWorkflow.workflow_id, projectWorkflow.title) : null,
-    selectedTask ? ref("work_item", selectedTask.work_item_id, selectedTask.title) : null,
-  ]);
-  return {
-    node_id: nodeId,
-    node_type: "project_goal",
-    title: projectWorkflow?.title ?? project.name,
-    subtitle: selectedTask?.title ?? "未登记当前工作项",
-    status,
-    role_id: "project",
-    work_item_id: selectedTask?.work_item_id ?? null,
-    workflow_node_id: null,
-    position_hint: { lane: "goal", order: 0, x: 20, y: 150 },
-    badges: [
-      badge("source", projectWorkflow ? "项目事实" : "缺 workflow", projectWorkflow ? "ready" : "warning", refs),
-      badge("task", selectedTask ? selectedTask.state : "无工作项", selectedTask ? toneForStatus(status) : "neutral", refs),
-    ],
-    metrics: [
-      { metric_id: "sessions", label: "会话", value: project.thread_count },
-      { metric_id: "files", label: "资料", value: project.authority_files.length + project.handoff_files.length + project.evidence_files.length },
-    ],
-    source_refs: refs,
-    detail_panel_id: `${nodeId}:detail`,
-    warnings: projectWorkflow ? [] : ["当前项目缺少默认 workflow，只显示占位读模型。"],
-  };
-}
-
 function buildRoleNode({
   role,
   workflowId,
@@ -955,6 +927,69 @@ function buildRoleNode({
       { metric_id: "task", label: "任务", value: selectedTask?.state ?? "无" },
       { metric_id: "dispatch", label: "派发", value: dispatch?.state ?? "无" },
       { metric_id: "blackboard", label: "黑板", value: blackboardEntries.length, tone: blackboardEntries.length ? "warning" : "neutral" },
+    ],
+    source_refs: refs,
+    detail_panel_id: `${nodeId}:detail`,
+    warnings,
+  };
+}
+
+// 后置A 次选：画布自由建的（非已知 4 角色）真实节点 → 通用 ProjectCanvasNode，忠实 1:1 显示。
+// node_type 暂复用 "dev_line"（已有渲染样式，不连带改前端渲染器）；位置先自动排成第二行（y=340），
+// 真机看了再调布局。状态走 roleStatus 的通用判据（dispatch/权限/尝试驱动，与角色无关）。
+function buildWorkflowNodeCanvas({
+  wfNode,
+  workflowId,
+  index,
+  selectedTask,
+  binding,
+  dispatch,
+  permissionRequests,
+  executionAttempts,
+}: {
+  wfNode: WorkflowNode;
+  workflowId: string;
+  index: number;
+  selectedTask: TaskDraftSummary | null;
+  binding: WorkflowNodeSessionBinding | null;
+  dispatch: WorkflowNodeDispatchRecord | null;
+  permissionRequests: WorkflowPermissionRequestRecord[];
+  executionAttempts: WorkflowExecutionAttemptRecord[];
+}): ProjectCanvasNode {
+  const workflowNodeId = wfNode.workflow_node_id;
+  const slug = workflowNodeId.split(":node:").pop() ?? `node-${index}`;
+  const nodeId = `${workflowId}:canvas:${slug}`;
+  const status = roleStatus("codex-dev", workflowNodeId, selectedTask, dispatch, permissionRequests, executionAttempts);
+  const refs = compactRefs([
+    ref("workflow_node", workflowNodeId, wfNode.title),
+    selectedTask ? ref("work_item", selectedTask.work_item_id, selectedTask.title) : null,
+    binding ? ref("node_binding", binding.binding_id, binding.session_title) : null,
+    dispatch ? ref("dispatch", dispatch.dispatch_id, dispatch.state) : null,
+  ]);
+  const warnings = [
+    ...(wfNode.warnings ?? []),
+    ...(wfNode.missing_fields ?? []).map((field) => `missing:${field}`),
+    ...(binding && !binding.rollout_exists ? ["rollout_missing"] : []),
+  ];
+  return {
+    node_id: nodeId,
+    node_type: "dev_line",
+    title: wfNode.title || slug,
+    subtitle: binding?.session_title ?? wfNode.node_type ?? "画布节点",
+    status,
+    role_id: wfNode.assigned_role ?? null,
+    work_item_id: selectedTask?.work_item_id ?? null,
+    workflow_node_id: workflowNodeId,
+    position_hint: { lane: "execution", order: index + 1, x: 260 + index * 240, y: 340 },
+    badges: [
+      badge("type", wfNode.node_type || "节点", "neutral", refs),
+      badge("status", status, toneForStatus(status), refs),
+      ...(binding ? [badge("binding", binding.rollout_exists ? "已绑定" : "缺回放记录", binding.rollout_exists ? "ready" : "warning", refs)] : []),
+      ...(warnings.length ? [badge("warning", `${warnings.length} 条警告`, "warning", refs)] : []),
+    ],
+    metrics: [
+      { metric_id: "task", label: "任务", value: selectedTask?.state ?? "无" },
+      { metric_id: "dispatch", label: "派发", value: dispatch?.state ?? "无" },
     ],
     source_refs: refs,
     detail_panel_id: `${nodeId}:detail`,

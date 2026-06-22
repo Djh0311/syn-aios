@@ -611,11 +611,28 @@ function runProjectCanvasReadModelScenario() {
   assert(model.status_reason.label === "等待权限", "画布缺少状态原因标签");
   assert(model.attention_items.some((item) => item.kind === "waiting_for_permission"), "画布 attention 缺少权限待处理");
   assert(model.attention_items.some((item) => item.kind === "readback_unavailable"), "画布 attention 缺少 readback unavailable");
-  for (const nodeType of readModelContractFixtures.projectCanvasNodeTypes) {
-    assert(model.nodes.some((node) => node.node_type === nodeType), `项目画布缺少节点 ${nodeType}`);
+  // 后置A：只读视图忠实渲染工作流的真实节点（不再固定 goal+4 泳道骨架）。该 fixture 的
+  // derived_workflow.nodes 只有 codex-dev 一个真节点（director 只是被 depends_on/task_package
+  // 引用、不在 nodes 数组里）→ 只读应只画这一个（+ 权限 sidecar），4 种合成骨架类型都不该出现。
+  // 这正是 2→(1) 的根治断言。
+  for (const node of model.nodes) {
+    assert(
+      readModelContractFixtures.projectCanvasNodeTypes.includes(node.node_type),
+      `项目画布出现非法节点类型 ${node.node_type}`,
+    );
   }
-  for (const edgeType of readModelContractFixtures.projectCanvasEdgeTypes) {
-    assert(model.edges.some((edge) => edge.edge_type === edgeType), `项目画布缺少边 ${edgeType}`);
+  assert(model.nodes.some((node) => node.node_type === "dev_line"), "只读应有该工作流的真实节点（codex-dev / 开发线）");
+  for (const phantom of ["project_goal", "director", "validation_line", "review_line"]) {
+    assert(
+      !model.nodes.some((node) => node.node_type === phantom),
+      `后置A：该 fixture 无此真节点 → 只读不应凭空多画 ${phantom}（忠实 = 不铺骨架）`,
+    );
+  }
+  for (const edge of model.edges) {
+    assert(
+      readModelContractFixtures.projectCanvasEdgeTypes.includes(edge.edge_type),
+      `项目画布出现非法边类型 ${edge.edge_type}`,
+    );
   }
   assert(model.viewport_hint.selected_node_id.includes(":canvas:codex-dev"), "默认选中节点应落在当前派发角色");
   assert(model.edit_boundary.source_kind === "frontend_read_model", "F3 编辑边界应来自前端只读模型");
@@ -2678,7 +2695,10 @@ function runShellScenario() {
     <ProjectDetail
       project={project}
       sessions={[session]}
-      workflowState={workflowStateWithProjectWorkflow}
+      // 后置A：项目画布忠实渲染真实节点。本断言要看节点内容（总指导/开发线/节点详情/派发摘要…），
+      // 故用带 derived_workflow 节点图的 fixture（workflowStateWithProjectWorkflow 没有节点图，
+      // 忠实后会是空画布——那是正确行为，但测不到节点内容）。
+      workflowState={workflowStateWithDerivedWorkflow}
       planAuthorizationStore={planAuthorizationStore}
       projectConsultationProposalStore={projectConsultationProposalStore}
       selectedTool="workflow"
