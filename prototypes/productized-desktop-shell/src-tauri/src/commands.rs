@@ -2259,7 +2259,10 @@ fn submit_project_workflow_draft_at(
         let node_title = optional_string_from(dn, "label")
             .filter(|l| !l.trim().is_empty())
             .unwrap_or_else(|| kind.clone());
-        let node_id = format!("{workflow_id}:node:{i}-{}", stable_id(&kind));
+        // 架构债·根治 B：node_id 后缀用节点稳定 id（引擎建节点即定、随 canvas_payload 跨编辑往返），
+        // 不再用位置式 {i}-{kind} —— 删/重排节点后 node_id 不变 → 会话绑定不悬空/不静默重挂。
+        // 前缀 {wf}:node: 保留，所有 :node: 解析（派发/run-check/bind）照常不断。
+        let node_id = format!("{workflow_id}:node:{}", stable_id(&canvas_id));
         id_map.push((canvas_id, node_id.clone()));
         built_nodes.push(json!({
           "node_id": node_id,

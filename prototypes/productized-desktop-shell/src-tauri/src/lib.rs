@@ -4110,7 +4110,20 @@ mod tests {
             "workflow_id",
         )
         .unwrap();
-        let subagent_node_id = format!("{wid}:node:1-{}", stable_id("subagent"));
+        // 读回真实 node_id（架构债修后用节点稳定 id、非位置式；测试别假设格式）。
+        let subagent_node_id = optional_string_from(
+            read_json_file(&path)["nodes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|n| {
+                    optional_string_from(n, "workflow_id").as_deref() == Some(wid.as_str())
+                        && optional_string_from(n, "node_type").as_deref() == Some("subagent")
+                })
+                .expect("subagent 节点应在 workflow-state 里"),
+            "node_id",
+        )
+        .unwrap();
         // 直接注入一条该节点的 active 绑定（绕开 bind 命令的 default_workflow_id 写死——那是 C#2 的另一处）。
         {
             let mut value = read_json_file(&path);
@@ -4159,6 +4172,71 @@ mod tests {
         assert_eq!(bound_after, 0, "删掉 subagent 节点后，它的绑定应被 prune（不悬空/不重挂）");
     }
 
+    // 架构债·根治 B：node_id 用节点稳定 id（非位置式）→ 重排节点后，某节点 node_id 不变 → 会话绑定不漂。
+    // 位置式时代 subagent 在第 2 位 vs 第 1 位会得到不同 node_id（:node:1-.. ↔ :node:0-..），本测试正是该回归断言。
+    #[test]
+    fn submit_project_workflow_draft_node_id_stable_across_reorder() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("submit-stable-id-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow should exist");
+        let find_subagent = |wid: &str| {
+            optional_string_from(
+                read_json_file(&path)["nodes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|n| {
+                        optional_string_from(n, "workflow_id").as_deref() == Some(wid)
+                            && optional_string_from(n, "node_type").as_deref() == Some("subagent")
+                    })
+                    .expect("subagent 节点应在"),
+                "node_id",
+            )
+            .unwrap()
+        };
+        let dir_node = json!({"id":"dir","kind":"director","label":"主管","position":{"x":1,"y":1}});
+        let sub_node = json!({"id":"sa","kind":"subagent","label":"开发","position":{"x":2,"y":2}});
+        // v1：director 在前、subagent 在后。
+        submit_project_workflow_draft_at(
+            &path,
+            &SubmitProjectWorkflowDraftRequest {
+                project_root: test_root.to_string(),
+                workflow_id: None,
+                title: "稳定id 工作流".to_string(),
+                nodes: vec![dir_node.clone(), sub_node.clone()],
+                edges: vec![],
+            },
+        )
+        .expect("create");
+        let wid = optional_string_from(
+            read_json_file(&path)["workflows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|w| optional_string_from(w, "title").as_deref() == Some("稳定id 工作流"))
+                .unwrap(),
+            "workflow_id",
+        )
+        .unwrap();
+        let node_id_v1 = find_subagent(&wid);
+        // v2：编辑——把 subagent 挪到第 1 位（位置变），但 canvas id "sa" 不变。
+        submit_project_workflow_draft_at(
+            &path,
+            &SubmitProjectWorkflowDraftRequest {
+                project_root: test_root.to_string(),
+                workflow_id: Some(wid.clone()),
+                title: "稳定id 工作流".to_string(),
+                nodes: vec![sub_node, dir_node],
+                edges: vec![],
+            },
+        )
+        .expect("update");
+        let node_id_v2 = find_subagent(&wid);
+        assert_eq!(node_id_v1, node_id_v2, "subagent 的 node_id 应跨重排稳定（用稳定 id、非位置式）");
+    }
+
     // 后置C#2·机器闸：画布建的（非默认）工作流，节点载荷带 resume 会话 → 运行时自动建临时 work_item
     // + 现绑会话 + 走通派发到 completed（stub）。证明「画布建的工作流也能真跑」闭合。
     #[test]
@@ -4195,7 +4273,20 @@ mod tests {
             "workflow_id",
         )
         .unwrap();
-        let node_id = format!("{wid}:node:1-{}", stable_id("subagent"));
+        // 读回真实 node_id（架构债修后用节点稳定 id，不再是位置式；测试别假设格式）。
+        let node_id = optional_string_from(
+            read_json_file(&path)["nodes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|n| {
+                    optional_string_from(n, "workflow_id").as_deref() == Some(wid.as_str())
+                        && optional_string_from(n, "node_type").as_deref() == Some("subagent")
+                })
+                .expect("提交的 subagent 节点应在 workflow-state 里"),
+            "node_id",
+        )
+        .unwrap();
         let count_wi = |p: &Path, w: &str| {
             read_json_file(p)["work_items"]
                 .as_array()

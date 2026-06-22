@@ -48,9 +48,9 @@
 
 **d) P3 已知限制 — 已全部收口（剩可选架构债）**
 - ✅ **画布建的工作流不能真跑 → C#2 已修**：派发接 `workflow_id`（从 node_id 解析、回退 default）+ 提交/运行自动建临时 work_item + resume 会话；画布建的工作流可真跑（仍只打固定测试项目、闸在上游、沙箱未动）。
-- ✅ **编辑已绑会话→会话挂错 → B 缓解**：提交时剪掉 node_id 已不在新节点集的会话绑定。
+- ✅ **编辑已绑会话→会话挂错 → 已根治**：B 提交时剪失效绑定 + **node_id 改用节点稳定 id（非位置式 `{i}-{kind}`）** → 删/重排节点后 node_id 不变、绑定不悬空/不静默重挂（回归测试 `submit_project_workflow_draft_node_id_stable_across_reorder`；前缀 `{wf}:node:` 保留、解析不断）。
 - ✅ **编辑视图 ≠ 只读视图 → A 真正解（次选）已修**：`deriveProjectWorkflowCanvasReadModel` 改为按真实节点 1:1 渲染、去 goal 框、清 `buildGoalNode` 死码；offline 契约测试改为「只出现真实节点 + 显式断言无 project_goal/director/validation_line/review_line 幻影」。机器绿（typecheck/offline 15+r4/build）+ 真机过。
-- ⏳ **可选架构债（非用户可见、不阻断）**：只读仍走读模型渲染器(非引擎);完整 P1(只读=引擎只读模式、退 `ProjectWorkflowReactFlowCanvas`、节点改稳定 uuid 替位置式)是后续 cleanup。
+- ⏳ **可选架构债（非用户可见、不阻断）·剩 1 条**：只读视图仍走读模型渲染器（`ProjectWorkflowReactFlowCanvas` + `deriveProjectWorkflowCanvasReadModel`）、非引擎。完整 P1 = 只读也走引擎只读模式、退老渲染器、一套渲染器一个数据源。**渲染改、需真机**（主导线在做）。
 
 ---
 
