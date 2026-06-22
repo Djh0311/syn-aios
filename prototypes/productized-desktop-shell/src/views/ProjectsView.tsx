@@ -220,6 +220,7 @@ export function ProjectDetail(props: ProjectDetailProps) {
           project={project}
           sessions={sessions}
           workflowState={workflowState}
+          onReloadWorkflowState={props.onReloadWorkflowState}
           blackboardCandidateStore={blackboardCandidateStore}
           planAuthorizationStore={planAuthorizationStore}
           projectConsultationProposalStore={projectConsultationProposalStore}

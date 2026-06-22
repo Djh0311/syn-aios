@@ -120,6 +120,7 @@ type ProjectWorkflowCanvasViewProps = {
   project: ProjectRecord;
   sessions: SessionRecord[];
   workflowState: WorkflowStateSnapshot | null;
+  onReloadWorkflowState?: () => void;
   blackboardCandidateStore: BlackboardCandidateStoreV1 | null;
   planAuthorizationStore: PlanAuthorizationStoreV1 | null;
   projectConsultationProposalStore: ProjectConsultationProposalStoreV1 | null;
@@ -146,6 +147,7 @@ export function ProjectWorkflowCanvasView({
   project,
   sessions,
   workflowState,
+  onReloadWorkflowState,
   blackboardCandidateStore,
   planAuthorizationStore,
   projectConsultationProposalStore,
@@ -256,10 +258,11 @@ export function ProjectWorkflowCanvasView({
       onNotice(result?.message ?? "已提交为项目工作流。");
       setEditing(false);
       await refreshWorkflows();
+      onReloadWorkflowState?.(); // 后置：提交后刷新画布快照（否则新建/改的工作流只进下拉、画布快照仍旧 → 选它回退默认）
     } catch (e) {
       onNotice(`提交失败：${messageOf(e)}`);
     }
-  }, [draftCanvasId, editingMode, selectedWorkflowId, project.project_root, onNotice, refreshWorkflows]);
+  }, [draftCanvasId, editingMode, selectedWorkflowId, project.project_root, onNotice, refreshWorkflows, onReloadWorkflowState]);
 
   // 新建工作流：先把 draft-new 画布清空（不覆盖谁）→ 编辑 → 提交走 create。
   const openNewWorkflow = useCallback(async () => {
@@ -326,24 +329,28 @@ export function ProjectWorkflowCanvasView({
   // resume。前端不判闸——非固定测试项目仍被后端 path-lock 挡下、零执行。
   const runSelectedProjectNode = useCallback(async () => {
     const node = selectedProjectNode;
-    if (!node?.workflow_node_id || !node?.work_item_id) {
-      onNotice("请先选中一个绑定了工作项的节点再运行");
+    if (!node?.workflow_node_id) {
+      onNotice("请先选中一个节点再运行");
       return;
     }
     setRunningProjectNode(true);
     try {
+      // 后置C#2：work_item_id 可空——画布建的工作流节点没预存 work_item，后端会自动建临时 work_item
+      // 并用节点载荷里的 resume 会话现绑再派发。
       const result = await executeProjectWorkflowNode({
         project_root: project.project_root,
         node_id: node.workflow_node_id,
-        work_item_id: node.work_item_id,
+        work_item_id: node.work_item_id ?? "",
+        workflow_id: selectedWorkflowId,
       });
       onNotice(`已派发项目节点「${node.title}」。返回：${compactRunResult(result)}`);
+      onReloadWorkflowState?.(); // 后置：运行后刷新画布快照（派发/绑定记录变了）
     } catch (e) {
       onNotice(`运行被拦截或失败：${messageOf(e)}`);
     } finally {
       setRunningProjectNode(false);
     }
-  }, [selectedProjectNode, project.project_root, onNotice]);
+  }, [selectedProjectNode, project.project_root, onNotice, onReloadWorkflowState]);
   const blackboardOverlay = useMemo(
     () =>
       buildBlackboardCandidateOverlay({
@@ -621,11 +628,11 @@ export function ProjectWorkflowCanvasView({
             className="primary-button"
             type="button"
             onClick={() => void runSelectedProjectNode()}
-            disabled={runningProjectNode || !selectedProjectNode?.work_item_id || !selectedProjectNode?.workflow_node_id}
+            disabled={runningProjectNode || !selectedProjectNode?.workflow_node_id}
             title={
-              selectedProjectNode?.work_item_id
-                ? "派发选中节点的工作项（经 path-lock 闸真跑；work_item 需 ready_to_dispatch 且节点已绑会话）"
-                : "先选中一个绑定了工作项的节点"
+              selectedProjectNode?.workflow_node_id
+                ? "派发选中节点（经 path-lock 闸真跑；画布建的节点会自动建临时 work_item + 用节点 resume 会话）"
+                : "先选中一个节点"
             }
           >
             {runningProjectNode ? "运行中…" : "▶ 运行选中节点"}

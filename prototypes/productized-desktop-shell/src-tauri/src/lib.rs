@@ -3889,6 +3889,7 @@ mod tests {
             project_root: test_root.to_string(),
             node_id,
             work_item_id,
+            workflow_id: None,
         };
         let result =
             execute_project_workflow_node_at(&path, &index, &index_path, &runner, &request)
@@ -3933,6 +3934,7 @@ mod tests {
             project_root: test_root.to_string(),
             node_id,
             work_item_id,
+            workflow_id: None,
         };
         let error = execute_project_workflow_node_at(&path, &index, &index_path, &runner, &request)
             .expect_err("draft work item 不可派发，应拒绝");
@@ -4073,6 +4075,159 @@ mod tests {
             .filter(|n| optional_string_from(n, "workflow_id").as_deref() == Some(wid.as_str()))
             .count();
         assert_eq!(node_count, 1, "更新应替换该工作流的节点为 1 个");
+    }
+
+    // 后置B·机器闸：编辑删掉某节点后，它的会话绑定被 prune（不悬空、不静默重挂）。
+    #[test]
+    fn submit_project_workflow_draft_prunes_binding_of_removed_node() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("submit-prune-bind-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow should exist");
+        // 新建一个含 director + subagent 的工作流。
+        submit_project_workflow_draft_at(
+            &path,
+            &SubmitProjectWorkflowDraftRequest {
+                project_root: test_root.to_string(),
+                workflow_id: None,
+                title: "B-prune 工作流".to_string(),
+                nodes: vec![
+                    json!({"id":"d1","kind":"director","label":"主管","position":{"x":1,"y":1}}),
+                    json!({"id":"s1","kind":"subagent","label":"开发","position":{"x":2,"y":2}}),
+                ],
+                edges: vec![],
+            },
+        )
+        .expect("create should write");
+        let wid = optional_string_from(
+            read_json_file(&path)["workflows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|w| optional_string_from(w, "title").as_deref() == Some("B-prune 工作流"))
+                .unwrap(),
+            "workflow_id",
+        )
+        .unwrap();
+        let subagent_node_id = format!("{wid}:node:1-{}", stable_id("subagent"));
+        // 直接注入一条该节点的 active 绑定（绕开 bind 命令的 default_workflow_id 写死——那是 C#2 的另一处）。
+        {
+            let mut value = read_json_file(&path);
+            value["workflow_node_session_bindings"]
+                .as_array_mut()
+                .expect("bindings array")
+                .push(json!({
+                  "binding_id": "binding:b-prune-test",
+                  "project_id": project_id(test_root),
+                  "workflow_id": wid,
+                  "node_id": subagent_node_id,
+                  "work_item_id": Value::Null,
+                  "native_thread_id": "thread-prune-1",
+                  "lifecycle": "active",
+                  "created_at_ms": 1,
+                  "updated_at_ms": 1,
+                  "warnings": []
+                }));
+            write_validated_workflow_state(&path, &value).expect("inject binding should write");
+        }
+        let bound_before = read_json_file(&path)["workflow_node_session_bindings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|b| optional_string_from(b, "node_id").as_deref() == Some(subagent_node_id.as_str()))
+            .count();
+        assert_eq!(bound_before, 1, "前置：subagent 节点应有 1 条绑定");
+        // 编辑：只留 director（删掉 subagent）→ 提交更新。
+        submit_project_workflow_draft_at(
+            &path,
+            &SubmitProjectWorkflowDraftRequest {
+                project_root: test_root.to_string(),
+                workflow_id: Some(wid.clone()),
+                title: "B-prune 工作流".to_string(),
+                nodes: vec![json!({"id":"d1","kind":"director","label":"主管","position":{"x":1,"y":1}})],
+                edges: vec![],
+            },
+        )
+        .expect("update should write");
+        let bound_after = read_json_file(&path)["workflow_node_session_bindings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|b| optional_string_from(b, "node_id").as_deref() == Some(subagent_node_id.as_str()))
+            .count();
+        assert_eq!(bound_after, 0, "删掉 subagent 节点后，它的绑定应被 prune（不悬空/不重挂）");
+    }
+
+    // 后置C#2·机器闸：画布建的（非默认）工作流，节点载荷带 resume 会话 → 运行时自动建临时 work_item
+    // + 现绑会话 + 走通派发到 completed（stub）。证明「画布建的工作流也能真跑」闭合。
+    #[test]
+    fn project_canvas_workflow_node_auto_runs_with_payload_session() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("c2-canvas-run-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow should exist");
+        // 画布新建一个工作流：director + 一个带 resume 会话载荷的 subagent 节点。
+        submit_project_workflow_draft_at(
+            &path,
+            &SubmitProjectWorkflowDraftRequest {
+                project_root: test_root.to_string(),
+                workflow_id: None,
+                title: "C2画布工作流".to_string(),
+                nodes: vec![
+                    json!({"id":"d1","kind":"director","label":"主管","position":{"x":1,"y":1}}),
+                    json!({"id":"c1","kind":"subagent","label":"开发","position":{"x":2,"y":2},
+                           "data":{"session":{"mode":"resume","thread_id":"thread-c2"},"prompt":"建文件 c2-proof.txt","sandbox":"workspace-write"}}),
+                ],
+                edges: vec![],
+            },
+        )
+        .expect("create canvas workflow");
+        let wid = optional_string_from(
+            read_json_file(&path)["workflows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|w| optional_string_from(w, "title").as_deref() == Some("C2画布工作流"))
+                .unwrap(),
+            "workflow_id",
+        )
+        .unwrap();
+        let node_id = format!("{wid}:node:1-{}", stable_id("subagent"));
+        let count_wi = |p: &Path, w: &str| {
+            read_json_file(p)["work_items"]
+                .as_array()
+                .map(|a| a.iter().filter(|it| optional_string_from(it, "workflow_id").as_deref() == Some(w)).count())
+                .unwrap_or(0)
+        };
+        let wi_before = count_wi(&path, &wid);
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats { transcript_event_count: 2, transcript_target_hits: 1 },
+        };
+        DISPATCH_READBACK_NATIVE_READ_COUNT.with(|count| count.set(0));
+        let index = fixture_dispatch_index(test_root, "thread-c2");
+        let request = ProjectWorkflowNodeRunRequest {
+            project_root: test_root.to_string(),
+            node_id: node_id.clone(),
+            work_item_id: String::new(), // 空 → 自动建临时 work_item
+            workflow_id: Some(wid.clone()),
+        };
+        let result = execute_project_workflow_node_at(&path, &index, &index_path, &runner, &request)
+            .expect("画布工作流节点应能自动建票+绑+派发");
+        assert_eq!(result.dispatch.state, "completed");
+        assert_eq!(result.dispatch.exit_code, Some(0));
+        assert!(count_wi(&path, &wid) > wi_before, "应自动建临时 work_item");
+        let bound = read_json_file(&path)["workflow_node_session_bindings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|b| {
+                optional_string_from(b, "node_id").as_deref() == Some(node_id.as_str())
+                    && optional_string_from(b, "native_thread_id").as_deref() == Some("thread-c2")
+            });
+        assert!(bound, "应给画布节点现绑载荷里的 resume 会话");
     }
 
     #[test]

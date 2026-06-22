@@ -5071,6 +5071,10 @@ struct ProjectWorkflowNodeRunRequest {
     project_root: String,
     node_id: String,
     work_item_id: String,
+    // 后置C（§9 闭合）：派发哪个工作流的节点。空 = 从 node_id 解析（`{workflow_id}:node:…`）→ 退回 default。
+    // 不写死 default_workflow_id，画布新建的工作流也能真跑。
+    #[serde(default)]
+    workflow_id: Option<String>,
 }
 
 // P3 E · 多工作流底座（架构 §12）。把项目画布草案写回该项目 workflow-state：workflow_id 为空 =

@@ -116,6 +116,8 @@ export type ProjectWorkflowNodeRunRequest = {
   project_root: string;
   node_id: string;
   work_item_id: string;
+  // 后置C：派发哪个工作流的节点（非默认工作流也能跑）。空则后端从 node_id 解析。
+  workflow_id?: string | null;
 };
 
 // P3 E · 多工作流底座（架构 §12）。命名避开 types/workflow.ts 既有的 ProjectWorkflowSummary。

@@ -155,9 +155,12 @@
         assert!(missing_session.unwrap_err().contains("会话不在当前索引内"));
 
         let session = fixture_session("thread-001", &project.project_root, true);
+        // 后置C#2：bind 现在从 node_id 解析 workflow_id；要测「缺节点」就把缺的节点挂在**存在的**
+        // 默认工作流上（否则解析出不存在的 workflow，先报「还没有本地 workflow」而非「找不到该 node」）。
+        let missing_node_id = format!("{}:node:nope", default_workflow_id(&project.project_root));
         let missing_node_request = fixture_node_session_bind_request(
             &project.project_root,
-            "workflow:missing:node:nope",
+            &missing_node_id,
             None,
             &session.thread_id,
         );

@@ -580,7 +580,14 @@ fn bind_workflow_node_codex_session_at(
         ));
     }
 
-    let workflow_id = default_workflow_id(&request.project_root);
+    // 后置C#2：workflow_id 从 node_id（`{workflow_id}:node:…`）解析、退回 default——让非默认工作流
+    // 的节点也能绑（默认工作流 node_id 照样解析出 default，向后兼容）。
+    let workflow_id = request
+        .node_id
+        .split_once(":node:")
+        .map(|(prefix, _)| prefix.to_string())
+        .filter(|prefix| !prefix.is_empty())
+        .unwrap_or_else(|| default_workflow_id(&request.project_root));
     if !workflow_exists(&value, &workflow_id) {
         return Err("当前项目还没有本地 workflow；无法绑定节点会话".to_string());
     }
@@ -970,7 +977,14 @@ fn workflow_node_dispatch_context(
     }
     let value = read_workflow_state_value(path)?;
     ensure_valid_dispatch_state(&value)?;
-    let workflow_id = default_workflow_id(&request.project_root);
+    // 后置C#2：workflow_id 从 node_id（`{workflow_id}:node:…`）解析、退回 default——让非默认
+    // （画布建的）工作流节点也能派发（默认工作流 node_id 照样解析出 default，向后兼容）。
+    let workflow_id = request
+        .node_id
+        .split_once(":node:")
+        .map(|(prefix, _)| prefix.to_string())
+        .filter(|prefix| !prefix.is_empty())
+        .unwrap_or_else(|| default_workflow_id(&request.project_root));
     if !workflow_exists(&value, &workflow_id) {
         return Err("当前项目还没有本地 workflow；无法准备节点派发".to_string());
     }

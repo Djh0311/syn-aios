@@ -72,6 +72,7 @@ export type ProjectDetailProps = {
   project: ProjectRecord;
   sessions: SessionRecord[];
   workflowState?: WorkflowStateSnapshot | null;
+  onReloadWorkflowState?: () => void;
   blackboardCandidateStore?: BlackboardCandidateStoreV1 | null;
   planAuthorizationStore?: PlanAuthorizationStoreV1 | null;
   projectConsultationProposalStore?: ProjectConsultationProposalStoreV1 | null;

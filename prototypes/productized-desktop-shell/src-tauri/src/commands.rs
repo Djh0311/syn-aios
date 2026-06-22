@@ -1943,69 +1943,206 @@ fn execute_project_workflow_node_at(
 ) -> Result<WorkflowNodeDispatchResult, String> {
     let project = find_index_project(index, &request.project_root)
         .ok_or_else(|| "项目不在当前索引内，已拒绝运行项目节点".to_string())?;
-    let workflow_id = default_workflow_id(&request.project_root);
-    let value = read_workflow_state_value(path)?;
-    let work_item = find_work_item(&value, &workflow_id, &request.work_item_id)
-        .ok_or_else(|| "当前 workflow 下找不到该 work item；无法运行项目节点".to_string())?
-        .clone();
-    // 从 work_item 的任务包构造派发指令（C 映射：画布即 workflow-state，指令源=任务包）。
-    let empty_artifact = json!({});
-    let artifact =
-        find_task_package_artifact(&value, &request.work_item_id, &work_item).unwrap_or(&empty_artifact);
-    let fields = task_package_fields_from(
-        &work_item,
-        artifact,
-        &project,
-        &workflow_id,
-        &request.work_item_id,
-    );
-
-    let objective = {
-        let joined = fields.goals.join("\n");
-        if joined.trim().is_empty() {
-            fields.task_name.clone()
-        } else {
-            joined
-        }
-    };
-    if objective.trim().is_empty() {
-        return Err("该 work item 任务包缺少目标（goals/标题），无法运行项目节点".to_string());
+    // 后置C defect#1：workflow_id 不写死 default——优先用请求传入的，否则从 node_id
+    // （`{workflow_id}:node:…`）解析，再退回 default。让非默认工作流的节点也能定位/派发。
+    let workflow_id = request
+        .workflow_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            request
+                .node_id
+                .split_once(":node:")
+                .map(|(prefix, _)| prefix.to_string())
+                .filter(|prefix| !prefix.is_empty())
+        })
+        .unwrap_or_else(|| default_workflow_id(&request.project_root));
+    let mut value = read_workflow_state_value(path)?;
+    if !workflow_exists(&value, &workflow_id) {
+        return Err("当前项目下找不到该 workflow；无法运行项目节点".to_string());
     }
-    let summary = if fields.task_name.trim().is_empty() {
-        "项目节点真跑".to_string()
-    } else {
-        fields.task_name.clone()
-    };
-    let forbidden_actions = if fields.forbidden_actions.is_empty() {
+    if !node_exists(&value, &workflow_id, &request.node_id) {
+        return Err("当前 workflow 下找不到该 node；无法运行项目节点".to_string());
+    }
+    let std_forbidden = || {
         vec![
             "不读取 auth.json、.env、密钥、token 或授权文件。".to_string(),
             "不读取完整 transcript。".to_string(),
             "不运行 harness。".to_string(),
         ]
-    } else {
-        fields.forbidden_actions.clone()
     };
-    let required_return = if fields.required_return.is_empty() {
-        vec!["本步做了什么".to_string(), "改了哪些文件".to_string()]
-    } else {
-        fields.required_return.clone()
-    };
+    let std_required = || vec!["本步做了什么".to_string(), "改了哪些文件".to_string()];
 
-    // 沙箱：workspace-write 限定该项目根（codex 仍被 command_plan_for 关在项目目录；path-lock 已限测试项目）。
+    // 节点画布载荷（canvas_payload.data）：画布建的节点真跑的 prompt/sandbox/会话策略来源。
+    let node_payload = value
+        .get("nodes")
+        .and_then(Value::as_array)
+        .and_then(|nodes| {
+            nodes.iter().find(|n| {
+                optional_string_from(n, "workflow_id").as_deref() == Some(workflow_id.as_str())
+                    && optional_string_from(n, "node_id").as_deref() == Some(request.node_id.as_str())
+            })
+        })
+        .and_then(|n| n.get("canvas_payload"))
+        .cloned();
+    let payload_data = node_payload.as_ref().and_then(|p| p.get("data")).cloned();
+
+    // 后置C#2 · 会话 thread：① 节点已有 active 绑定复用；② 否则画布载荷里 resume 的 thread_id；
+    // 都没有 → resume-only 报清错（new 不启用，见 P3 C 决策）。
+    let existing_thread = value
+        .get("workflow_node_session_bindings")
+        .and_then(Value::as_array)
+        .and_then(|bindings| {
+            bindings.iter().find(|b| {
+                optional_string_from(b, "workflow_id").as_deref() == Some(workflow_id.as_str())
+                    && optional_string_from(b, "node_id").as_deref() == Some(request.node_id.as_str())
+                    && optional_string_from(b, "lifecycle").as_deref() == Some("active")
+            })
+        })
+        .and_then(|b| optional_string_from(b, "native_thread_id"));
+    let payload_thread = payload_data
+        .as_ref()
+        .and_then(|d| d.get("session"))
+        .filter(|s| optional_string_from(s, "mode").as_deref() == Some("resume"))
+        .and_then(|s| optional_string_from(s, "thread_id"))
+        .filter(|t| !t.trim().is_empty());
+    let thread_id = existing_thread.or(payload_thread).ok_or_else(|| {
+        "该节点没有可用会话（无既有绑定、画布也没设 resume 会话）；resume-only：请先给节点绑一条已有 codex 会话".to_string()
+    })?;
+
+    // 后置C#2 · work_item + 指令：① 请求给了且存在 → 用它（指令取任务包）；② 否则 → 自动建临时
+    // work_item（§9「节点即 work_item」；指令取画布载荷 prompt/sandbox），让画布建的工作流也能真跑。
+    let timestamp = unix_timestamp_string();
+    let existing_wi = if request.work_item_id.trim().is_empty() {
+        None
+    } else {
+        find_work_item(&value, &workflow_id, &request.work_item_id).cloned()
+    };
+    let (work_item_id, summary, objective, sandbox_mode, forbidden_actions, required_return) =
+        if let Some(work_item) = existing_wi.as_ref() {
+            let empty_artifact = json!({});
+            let artifact = find_task_package_artifact(&value, &request.work_item_id, work_item)
+                .unwrap_or(&empty_artifact);
+            let fields =
+                task_package_fields_from(work_item, artifact, &project, &workflow_id, &request.work_item_id);
+            let objective = {
+                let joined = fields.goals.join("\n");
+                if joined.trim().is_empty() {
+                    fields.task_name.clone()
+                } else {
+                    joined
+                }
+            };
+            (
+                request.work_item_id.clone(),
+                if fields.task_name.trim().is_empty() {
+                    "项目节点真跑".to_string()
+                } else {
+                    fields.task_name.clone()
+                },
+                objective,
+                "workspace-write".to_string(),
+                if fields.forbidden_actions.is_empty() {
+                    std_forbidden()
+                } else {
+                    fields.forbidden_actions.clone()
+                },
+                if fields.required_return.is_empty() {
+                    std_required()
+                } else {
+                    fields.required_return.clone()
+                },
+            )
+        } else {
+            let prompt = payload_data
+                .as_ref()
+                .and_then(|d| optional_string_from(d, "prompt"))
+                .unwrap_or_default();
+            let label = node_payload
+                .as_ref()
+                .and_then(|p| optional_string_from(p, "label"))
+                .filter(|l| !l.trim().is_empty())
+                .unwrap_or_else(|| "项目画布节点".to_string());
+            let sandbox = payload_data
+                .as_ref()
+                .and_then(|d| optional_string_from(d, "sandbox"))
+                .filter(|s| matches!(s.as_str(), "read-only" | "workspace-write"))
+                .unwrap_or_else(|| "workspace-write".to_string());
+            (
+                format!("work-item:{workflow_id}:canvas-run:{timestamp}"),
+                label,
+                prompt,
+                sandbox,
+                std_forbidden(),
+                std_required(),
+            )
+        };
+    if objective.trim().is_empty() {
+        return Err("该节点缺少 prompt/目标，无法运行项目节点".to_string());
+    }
+
+    // 自动建的临时 work_item 先落盘（bind/dispatch 都重读文件）。
+    if existing_wi.is_none() {
+        ensure_array_mut(&mut value, "work_items")?.push(json!({
+          "work_item_id": work_item_id,
+          "project_id": project_id(&request.project_root),
+          "workflow_id": workflow_id,
+          "title": summary,
+          "state": "ready_to_dispatch",
+          "source_kind": "canvas_run",
+          "assigned_role_id": "codex-dev",
+          "current_node_id": request.node_id,
+          "created_at": timestamp,
+          "updated_at": timestamp,
+          "warnings": []
+        }));
+        backup_workflow_state_file(path, &timestamp)?;
+        write_validated_workflow_state(path, &value)?;
+    }
+
+    // 绑定：若该 (node, work_item) 还没 active 绑定，用解析到的会话现绑（bind 已 workflow 感知）。
+    let need_bind = {
+        let current = read_workflow_state_value(path)?;
+        workflow_node_session_binding_index(&current, &workflow_id, &request.node_id, Some(&work_item_id))
+            .is_none()
+    };
+    if need_bind {
+        let session = find_index_thread_or_sqlite(index, &thread_id)
+            .ok_or_else(|| "节点会话不在当前索引内（含实时 sqlite），已拒绝运行".to_string())?;
+        bind_workflow_node_codex_session_at(
+            path,
+            &WorkflowNodeSessionBindRequest {
+                project_root: request.project_root.clone(),
+                node_id: request.node_id.clone(),
+                work_item_id: Some(work_item_id.clone()),
+                thread_id: thread_id.clone(),
+            },
+            &session,
+        )?;
+    }
+
+    // 沙箱：限定该项目根（codex 仍被 command_plan_for 关在项目目录；path-lock 已限测试项目）。
+    let write_roots = if sandbox_mode == "workspace-write" {
+        vec![request.project_root.clone()]
+    } else {
+        vec![]
+    };
     let exec_request = WorkflowNodeDispatchExecuteRequest {
         project_root: request.project_root.clone(),
         node_id: request.node_id.clone(),
-        work_item_id: request.work_item_id.clone(),
+        work_item_id,
         prompt_kind: "user_reviewed_instruction".to_string(),
         user_reviewed_instruction: Some(UserReviewedInstructionInput {
-            instruction_id: format!("instruction:project:{}", unix_timestamp_string()),
+            instruction_id: format!("instruction:project:{timestamp}"),
             summary,
             objective: objective.clone(),
             execution_cwd: request.project_root.clone(),
-            sandbox_mode: "workspace-write".to_string(),
-            allowed_write_roots: vec![request.project_root.clone()],
+            sandbox_mode,
+            allowed_write_roots: write_roots.clone(),
             allowed_reads: vec![request.project_root.clone()],
-            allowed_writes: vec![request.project_root.clone()],
+            allowed_writes: write_roots,
             forbidden_actions,
             timeout_seconds: 600,
             max_retries: 0,
@@ -2167,6 +2304,11 @@ fn submit_project_workflow_draft_at(
     }
 
     // 候选状态：更新=先删该 workflow 旧 nodes/edges 再加；新建=加 workflow 记录。
+    // 后置B：新节点集的 node_id（用于 prune 失效绑定）。在 built_nodes 被 move 前抓。
+    let new_node_ids: Vec<String> = built_nodes
+        .iter()
+        .filter_map(|n| optional_string_from(n, "node_id"))
+        .collect();
     {
         let nodes = ensure_array_mut(&mut value, "nodes")?;
         nodes.retain(|n| optional_string_from(n, "workflow_id").as_deref() != Some(workflow_id.as_str()));
@@ -2176,6 +2318,18 @@ fn submit_project_workflow_draft_at(
         let edges = ensure_array_mut(&mut value, "edges")?;
         edges.retain(|e| optional_string_from(e, "workflow_id").as_deref() != Some(workflow_id.as_str()));
         edges.extend(built_edges);
+    }
+    // 后置B：prune 本工作流里 node_id 已不在新节点集的会话绑定——防位置式 node_id 下「删/重排节点后
+    // 旧绑定悬空」或「旧会话静默重挂到占了同位置 id 的新节点」。残留边：同位置+同种类节点 id 不变 →
+    // 绑定仍跟随（彻底解需稳定 uuid，随 A 引擎统一一起做）。
+    {
+        let bindings = ensure_array_mut(&mut value, "workflow_node_session_bindings")?;
+        bindings.retain(|b| {
+            optional_string_from(b, "workflow_id").as_deref() != Some(workflow_id.as_str())
+                || optional_string_from(b, "node_id")
+                    .map(|nid| new_node_ids.contains(&nid))
+                    .unwrap_or(false)
+        });
     }
     if is_new {
         ensure_array_mut(&mut value, "workflows")?.push(json!({
@@ -2284,10 +2438,20 @@ fn get_project_workflow_nodes(
         }
         let node_id = optional_string_from(&n, "node_id").unwrap_or_default();
         let payload = n.get("canvas_payload").cloned().unwrap_or_else(|| {
+            // 后置A 止血：老 bootstrap 节点无 canvas_payload → 合成时角色/种类按 node_type 派生
+            // （别全写 subagent，对齐读模型真角色：director/审查/执行…）。CanvasNodeRole 只有
+            // director|subagent；kind 开放（用于显示色/标签）。
+            let node_type = optional_string_from(&n, "node_type").unwrap_or_else(|| "custom".to_string());
+            let (role, kind) = match node_type.as_str() {
+                "director" => ("director", "director"),
+                "actor" => ("subagent", "subagent"),
+                "validation" | "review" => ("subagent", "reviewer"),
+                other => ("subagent", other),
+            };
             json!({
               "id": node_id,
-              "role": "subagent",
-              "kind": optional_string_from(&n, "node_type").unwrap_or_else(|| "custom".to_string()),
+              "role": role,
+              "kind": kind,
               "label": optional_string_from(&n, "title").unwrap_or_default(),
               "position": n.get("position").cloned().unwrap_or_else(|| json!({"x":120,"y":120})),
               "warnings": []
