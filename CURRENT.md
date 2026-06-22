@@ -28,7 +28,8 @@
 1. **画布架构 P1+P2（轻档）= v2（真机反馈修订）已落·机器验全绿·真机待复验**：v1（A 导航重构 / B scope 显式字段 + 2 加性 `.rs` / C 共享引擎挂项目面 / D 规则条 / E 同屏打架文案+空画布引导）+ **真机反馈 v2**：项目面**去视图切换**（编辑改成动作不是视图）、「编辑工作流 / 新建工作流」→ 草案 → 提交（运行性 + 控制核心/权限/审计，P3 重档）统一流程（不再空闲直改）；实验画布加「清空画布 / 新建画布」。**主导线亲跑四闸**（cargo 556/0、typecheck 净、offline 15+r4、build 279）+ **0 碰高危清单**（双闸/sandbox/manual_relay 未动；项目面「▶运行此节点」发真实 root → 固定测试项目双闸挡下、默认安全态成立；submitDraft 只 notice、不写 workflow-state）。`RunningWorkflowsView` 留作离线治理测试载体（不删，记忆 `running-workflows-view-test-load-bearing`）。kickoff `handoffs/2026-06-21-canvas-p1-kickoff-v1.md`。**待用户真机复验 → 过即挪入①。**
 2. **P3（轻档·2026-06-22 下放）= A（闸）已落·主导线逐字核·本次 commit；B–E 待新对话**：
    - **A 去 env-CONFIRM 闸已落**（高危#3·用户明确授权）：gate fn 改 path-only（去 env belt、保 path-lock）、**沙箱 `codex_local_runner` 字节未动**、`execute_workflow_node_dispatch` 控制流未变；非测试项目仍 sealed（gate 测试 + 主导线读 diff 核）、cargo 556/0。真跑流程改为「画布绑测试项目 + 运行」即真跑（不再 export env）。
-   - **B–E 待做（新对话，实现线上一会话过长）**：节点↔work_item 映射（项目=C / 实验=A）+ 运行层 policy→session 解析 + 真跑接线 + 「编辑提交」经运行性「通过」+ 控制核心写回 workflow-state（都在测试项目·轻档）。**真机第一次真跑待用户**。kickoff `handoffs/2026-06-22-canvas-p3-kickoff-v1.md`（A 标完成）。
+   - **B/C/D（节点↔work_item 映射 / session 解析 / 两条真跑命令）执行线已做·主导线核过安全·未提交**：`execute_project_workflow_node`（gate 1919 在 runner 之前）+ `execute_experiment_node_dispatch`（project_root 硬编码测试项目）都过 path-lock 闸、沙箱 `codex_local_runner` 字节未动、`lib.rs +255` 纯测试、`workflow_run_dispatch +5` 只读会话解析、cargo 561/0。待**第一次真跑真机**（codex 真执行·沙箱不外溢）+ E。
+   - **E 扩成「多工作流」底座（2026-06-22 拍板 a）**：一个项目存 N 个工作流（现一个 default）·新建=造新的（空白对）·编辑=选一个加载进草案改·提交经运行性「通过」+控制核心写回；**解了「提交即覆盖治理结构」坑**（架构 §12）。+ **F 收 C 的 stale 注释**（1727/1762「暂未接」→「不启用」）。交新对话做。kickoff `handoffs/2026-06-22-canvas-p3-kickoff-v1.md`。
 3. **后置 / 锁着**：节点对话编辑（补充层）；乙·自动连环（北极星，④c）；**真跑进非测试真实项目（仍高危·仍锁）**。
 4. 旧积压（引擎解封 GUI 端到端 / 文档归档 + 死码清理〔`workbench_sqlite_*` 保留勿删〕/ 旧运行画布对图〔大概率被项目面取代〕）优先级低于画布。
 

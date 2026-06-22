@@ -3,7 +3,10 @@
 > 交实现线。**轻档**（2026-06-22 下放：真跑只打固定测试项目、随便读写）——但碰**真 codex 执行 + 闸代码（去 env）+ workflow-state 写回**，所以**主导线会逐字核 gate + 用户真机第一次真跑**。执行子线不 commit；做完主导线核实物 + 用户真机 → 主导线提交。
 > 先读：架构方案 `docs/plans/2026-06-21-workflow-canvas-two-surfaces-one-engine-v1.md`（§6 P3 / §9 映射）、会话方案 `...-session-and-scope-model-v1.md`（§4 解析 / §7）、`decisions/2026-06-22-p3-test-project-real-run-light-tier-v1.md`、`AGENTS.md` 高危#1（细化）。
 >
-> **⚠️ 2026-06-22 进度：A（去 env 闸）已完成**——主导线逐字核（5 条全 YES：去 env / 留 path-lock / 沙箱 `codex_local_runner` 字节未动 / 非测试 sealed / cargo556）、用户明确授权、已提交。**本派单剩 B–E**（节点↔work_item 映射 / session 解析 / 真跑接线 / 提交写回），交**新对话**做（原实现会话过长）。接力点：gate 已是 path-only，真跑只需「画布绑测试项目 + 运行」。
+> **⚠️ 2026-06-22 进度**：
+> - **A（去 env 闸）已提交**（`8a713a9`，高危#3·用户授权）。
+> - **B/C/D（节点↔work_item 映射 / session 解析 / 两条真跑命令）执行线已做、主导线核过安全**（`execute_project_workflow_node` + `execute_experiment_node_dispatch` 都过 path-lock 闸·沙箱字节未动·lib.rs 纯测试·cargo 561/0），**未提交**（待第一次真跑真机 + E 定）。
+> - **剩 E（提交写回，已扩成「多工作流」底座）+ F（收 C 的 stale 注释）**，交**新对话**做（原实现会话过长）。接力点：gate 已 path-only、两条真跑命令已在（gated），真跑只需「画布绑测试项目 + 运行」。
 
 ## 0. 现状（已落、e3636a2）
 - P0/P1/P2 都在：两面一引擎、项目面接引擎可编辑（草案→提交，**submitDraft 现只 notice、不写 workflow-state**）、scope 显式字段、规则状态条+运行性、画布管理钮。
@@ -29,9 +32,16 @@
 ### D. 真跑接线（节点「▶ 运行」真执行）
 - 实验面 + 项目面节点「运行」→ 经 `execute_workflow_node_dispatch`（去 env 后只 path-lock）→ 真起 codex 在测试项目跑、回执。轻档·零摩擦（不再逐次授权）。
 
-### E. 项目面「提交为项目工作流」真写回（草案 → workflow-state）
-- 现 `submitDraft` 只 notice。P3：提交 → **运行性检查「通过」**（P2 那个判据）→ 经**控制核心 / 权限 / 审计**把草案写回该项目 workflow-state（测试项目，轻档）。
-- **空闲 vs 在跑**：在跑的工作流改草案、提交时不打断运行中的，按控制核心规矩落（合蓝图 §11「运行中可暂停后修改」）。
+### E. 多工作流底座 + 项目面提交真写回（草案 → workflow-state）—— 架构方案 §12 是 canon
+- **数据模型**：项目 workflow-state 支持 **N 个工作流**（现状一个 `default_workflow_id` → 扩 list/map，每个有 workflow_id / 名 / 状态 / nodes / edges）。
+- **项目页**：工作流**列表 / 选择器**（看有哪些、选一个查看/编辑、新建）。
+- **新建工作流**：造新 workflow_id（空白画布**对**，不覆盖谁）→ 编辑 → 提交 → 经控制核心**新增**进 workflow-state。
+- **编辑工作流**：选一个现有 → **把它的 nodes 加载进草案**（现在草案是空白、**这块要补**，否则提交=空白覆盖）→ 改 → 提交 → 经**运行性「通过」+ 控制核心/权限/审计** **更新那一个**。
+- `submitDraft` 现只 notice → 换成真写回（新增/更新，过控制核心；测试项目·轻档）。
+- 在跑的工作流改草案、提交不打断运行中（合蓝图 §11「运行中可暂停后修改」）。
+
+### F. 收口 C 的 stale 注释（P2）
+- `commands.rs` 1727、1762 两处注释把 new 会话写成「**暂未接**（等以后）」——用户已拍「**明确不启用**」（不是"暂"）。行为 / 用户消息都对，只改**注释**：「暂未接」→「不启用（runner 不回传新会话 id，故 resume-only）」。
 
 ## 2. 边界 / 护栏
 - **全程轻档·真跑只打固定测试项目**：path-lock + 沙箱**守住**（A 只去 env）。
