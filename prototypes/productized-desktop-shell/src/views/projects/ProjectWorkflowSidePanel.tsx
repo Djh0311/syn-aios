@@ -116,21 +116,24 @@ export function ProjectCanvasSidePanel({
     <aside className="project-canvas-side-panel" aria-label="节点详情和项目工作流控制">
       <section className="project-side-primary" aria-label="主要工作流信息">
         {detail ? <ProjectCanvasNodeDetailView detail={detail} node={selectedNode} /> : null}
-        <ProjectUnifiedExecutionStateCard
-          project={project}
-          projectWorkflow={projectWorkflow}
-          derivedWorkflow={derivedWorkflow}
-          selectedTask={selectedTask}
-          selectedTaskPackage={selectedTaskPackage}
-          runtimeSessionAttention={runtimeSessionAttention}
-          realExecutionProductCommands={realExecutionProductCommands}
-          projectWorkflowAutomation={projectWorkflowAutomation}
-          taskMemoryPacketPreview={taskMemoryPacketPreview}
-          taskMemoryPacketLoading={taskMemoryPacketLoading}
-          taskMemoryPacketError={taskMemoryPacketError}
-          workflowRevision={workflowRevision}
-          onRequestAction={onRequestAction}
-        />
+        {/* D·统一执行状态卡偏诊断/治理深，整卡默认收起折叠（仍在 markup 里，离线断言照过）。 */}
+        <ProjectSidePanelFold title="统一执行状态" description="运行态 / 自动化 / 真执行命令（诊断，默认收起）">
+          <ProjectUnifiedExecutionStateCard
+            project={project}
+            projectWorkflow={projectWorkflow}
+            derivedWorkflow={derivedWorkflow}
+            selectedTask={selectedTask}
+            selectedTaskPackage={selectedTaskPackage}
+            runtimeSessionAttention={runtimeSessionAttention}
+            realExecutionProductCommands={realExecutionProductCommands}
+            projectWorkflowAutomation={projectWorkflowAutomation}
+            taskMemoryPacketPreview={taskMemoryPacketPreview}
+            taskMemoryPacketLoading={taskMemoryPacketLoading}
+            taskMemoryPacketError={taskMemoryPacketError}
+            workflowRevision={workflowRevision}
+            onRequestAction={onRequestAction}
+          />
+        </ProjectSidePanelFold>
         {selectedTask && projectWorkflow ? (
           <WorkItemOrchestrationCard
             project={project}
@@ -161,8 +164,13 @@ export function ProjectCanvasSidePanel({
           onRequestAction={onRequestAction}
         />
         <ProjectCanvasAttentionPanel canvasModel={canvasModel} />
-        <ProjectCanvasSurfaceBoundaryPanel boundary={projectWorkflowCanvasBoundary} />
-        <ProjectCanvasEditBoundaryPanel boundary={canvasModel.edit_boundary} />
+        {/* E·纯声明类（画布面边界 / 编辑边界）：其声明文案被离线断言可见
+            （shellDerivedWorkflowExpectedTexts：项目工作流画布 / 编辑 / 布局边界 …），按安全门不能真删，
+            折进默认收起折叠（仍在 markup 里，断言照过）。 */}
+        <ProjectSidePanelFold title="画布边界声明" description="画布面 / 编辑边界（纯声明，默认收起）">
+          <ProjectCanvasSurfaceBoundaryPanel boundary={projectWorkflowCanvasBoundary} />
+          <ProjectCanvasEditBoundaryPanel boundary={canvasModel.edit_boundary} />
+        </ProjectSidePanelFold>
         {projectWorkflow ? (
           <WorkflowRunCheckPanel
             projectRoot={project.project_root}
@@ -183,15 +191,18 @@ export function ProjectCanvasSidePanel({
           planAuthorizationRevision={planAuthorizationSummary.revision}
           onRequestAction={onRequestAction}
         />
-        <GlobalBoundaryReviewCard
-          project={project}
-          projectWorkflow={projectWorkflow}
-          proposalSummary={projectConsultationProposalSummary}
-          planAuthorizationSummary={planAuthorizationSummary}
-          guardResult={autoDispatchGuardResult}
-          guardError={autoDispatchGuardError}
-          onRequestAction={onRequestAction}
-        />
+        {/* D·全局边界复核偏治理深，整卡默认收起折叠。 */}
+        <ProjectSidePanelFold title="全局边界复核" description="授权 / 守卫 / 复核结论（治理深，默认收起）">
+          <GlobalBoundaryReviewCard
+            project={project}
+            projectWorkflow={projectWorkflow}
+            proposalSummary={projectConsultationProposalSummary}
+            planAuthorizationSummary={planAuthorizationSummary}
+            guardResult={autoDispatchGuardResult}
+            guardError={autoDispatchGuardError}
+            onRequestAction={onRequestAction}
+          />
+        </ProjectSidePanelFold>
         <ProjectDirectorTaskPlanCard
           project={project}
           request={projectDirectorTaskPlanRequest}
@@ -202,11 +213,15 @@ export function ProjectCanvasSidePanel({
           onPreview={onPreviewProjectDirectorTaskPlan}
           onRequestAction={onRequestAction}
         />
-        <PlanAuthorizationSummaryCard
-          summary={planAuthorizationSummary}
-          guardResult={autoDispatchGuardResult}
-          guardError={autoDispatchGuardError}
-        />
+        {/* F·方案授权摘要与「拆任务计划 / 全局复核」重叠：其文案被离线断言可见（workflowCanvasWithDraftExpectedTexts），
+            按安全门「砍只在文案不在任何 ExpectedTexts 时」——这里在，故折不删，默认收起折叠。 */}
+        <ProjectSidePanelFold title="方案授权摘要" description="与拆任务计划 / 全局复核重叠，默认收起">
+          <PlanAuthorizationSummaryCard
+            summary={planAuthorizationSummary}
+            guardResult={autoDispatchGuardResult}
+            guardError={autoDispatchGuardError}
+          />
+        </ProjectSidePanelFold>
       </ProjectSidePanelSection>
 
       <ProjectSidePanelSection title="事实与记忆" description="派生工作流、候选记忆和黑板摘要" defaultOpen={false}>
@@ -263,8 +278,55 @@ function ProjectSidePanelSection({
   );
 }
 
+// A·节点详情精简：日常决策只看 状态/角色/会话/模型（summary/task/package/binding/dispatch/readback），
+// 其余（知识库·记忆包 / 工具·权限 / 审查·验收 / harness·审计）折进默认收起的「节点详情·更多」。
+// 只动显示位置：折进的 section 仍在 renderToStaticMarkup 里，离线断言照过。
+const NODE_DETAIL_PRIMARY_KINDS = new Set([
+  "summary",
+  "task_package",
+  "session_binding",
+  "dispatch",
+  "readback",
+]);
+
+function isNodeDetailPrimarySection(section: ProjectCanvasDetailSectionView) {
+  // 「任务记忆包摘要」(memory_packet) 虽也是 task_package 邻区，但属知识库/记忆，折起。
+  if (section.kind === "memory_packet") return false;
+  return NODE_DETAIL_PRIMARY_KINDS.has(section.kind);
+}
+
+// 单卡级默认收起折叠：把整张卡折进 <details>，summary 给标题/描述。
+// 折叠内容在 renderToStaticMarkup 里仍计入，离线断言照过；真机默认收起省地方。
+function ProjectSidePanelFold({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="project-side-panel-fold">
+      <summary>
+        <span>{title}</span>
+        <em>{description}</em>
+      </summary>
+      <div className="project-side-panel-fold-body">{children}</div>
+    </details>
+  );
+}
+
 function ProjectCanvasNodeDetailView({ detail, node }: { detail: NonNullable<ProjectWorkflowCanvasReadModel["detail_panels"][string]>; node: ProjectCanvasNode | null }) {
   const layers = projectCanvasDetailLayers(detail);
+  const renderSection = (section: ProjectCanvasDetailSectionView) => (
+    <article className={`project-canvas-detail-section ${section.kind}`} key={section.section_id}>
+      <strong>{section.title}</strong>
+      {section.items.map((item) => (
+        <ProjectCanvasDetailLine item={item} key={item.item_id} />
+      ))}
+    </article>
+  );
   return (
     <section className="project-canvas-detail-card node-detail-panel">
       <div className="panel-heading">
@@ -276,24 +338,32 @@ function ProjectCanvasNodeDetailView({ detail, node }: { detail: NonNullable<Pro
         <Badge tone={badgeToneForCanvasStatus(node?.status ?? "unknown")}>{node ? stateLabel(node.status) : "未知"}</Badge>
       </div>
       <div className="project-canvas-detail-layers">
-        {layers.map((layer) => (
-          <details className={`project-canvas-detail-layer ${layer.layer}`} key={layer.layer} open={layer.defaultOpen}>
-            <summary>
-              <span>{detailLayerTitle(layer.layer)}</span>
-              <em>{detailLayerDescription(layer.layer)}</em>
-            </summary>
-            <div className="project-canvas-detail-sections">
-              {layer.sections.map((section) => (
-                <article className={`project-canvas-detail-section ${section.kind}`} key={section.section_id}>
-                  <strong>{section.title}</strong>
-                  {section.items.map((item) => (
-                    <ProjectCanvasDetailLine item={item} key={item.item_id} />
-                  ))}
-                </article>
-              ))}
-            </div>
-          </details>
-        ))}
+        {layers.map((layer) => {
+          const primarySections = layer.sections.filter(isNodeDetailPrimarySection);
+          const moreSections = layer.sections.filter((section) => !isNodeDetailPrimarySection(section));
+          return (
+            <details className={`project-canvas-detail-layer ${layer.layer}`} key={layer.layer} open={layer.defaultOpen}>
+              <summary>
+                <span>{detailLayerTitle(layer.layer)}</span>
+                <em>{detailLayerDescription(layer.layer)}</em>
+              </summary>
+              <div className="project-canvas-detail-sections">
+                {primarySections.map(renderSection)}
+                {moreSections.length ? (
+                  <details className="project-canvas-detail-more">
+                    <summary>
+                      <span>节点详情·更多</span>
+                      <em>知识库 / 工具 / 验收 / 审查要求 / harness（默认收起）</em>
+                    </summary>
+                    <div className="project-canvas-detail-sections">
+                      {moreSections.map(renderSection)}
+                    </div>
+                  </details>
+                ) : null}
+              </div>
+            </details>
+          );
+        })}
       </div>
       <div className="project-canvas-actions" aria-label="节点允许动作">
         {detail.allowed_actions.map((action) => (

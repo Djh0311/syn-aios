@@ -47,16 +47,6 @@ export function ProjectBlackboardPanel({ blackboard }: { blackboard: ProjectBlac
           <div className="workflow-compact-item" key={entry.entry_id}>
             <strong>{blackboardKindLabel(entry.kind)}</strong>
             <span>{entry.title}：{entry.summary}</span>
-            <details className="agent-boundary-details">
-              <summary className="agent-boundary-summary">开发者详情</summary>
-              <em>
-                状态：{entry.status}
-                {" / "}
-                来源：{entry.source_refs.map((ref) => `${ref.label}:${ref.source_id}`).join("；") || "无"}
-                {" / "}
-                升级：{entry.promotion_decision.status}
-              </em>
-            </details>
           </div>
         ))}
       </div>
@@ -162,6 +152,13 @@ export function CandidateGovernanceStrip({
           <DetailLine label="任务包记忆快照" value={taskPackageMemorySummary.snapshot_id ? `${taskPackageMemorySummary.snapshot_id} / ${taskPackageMemorySummary.stale ? "过期" : "新鲜"}` : "未生成"} />
         </div>
       </details>
+      {/* C·折：黑板摘要 / 观察 / memory lint / 注入摘要 / 任务包记忆预览 等次要块默认收起。
+          KEEP 的「记忆候选 + 正式记忆骨架」在上方 grid 常驻；这些块文案被离线断言可见，折不删。 */}
+      <details className="candidate-governance-secondary-fold">
+        <summary>
+          <span>记忆治理·更多</span>
+          <em>注入摘要 / memory lint / 任务记忆包预览（默认收起）</em>
+        </summary>
       <div className="workflow-compact-list" aria-label="任务包记忆注入摘要">
         <div className="workflow-compact-item">
           <strong>任务包记忆注入摘要</strong>
@@ -204,6 +201,7 @@ export function CandidateGovernanceStrip({
         loading={taskMemoryPacketLoading}
         error={taskMemoryPacketError}
       />
+      </details>
       <div className="workflow-state-actions">
         {firstPendingEntry ? (
           <>

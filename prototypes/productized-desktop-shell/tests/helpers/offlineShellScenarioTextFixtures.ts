@@ -129,10 +129,12 @@ export const shellScenarioTextFixtures = {
   workflowCanvasWithDraftExpectedTexts: [
     // P1/P2 项目面（两面一引擎，2026-06-21 真机反馈版）：规则状态条（运行性）+「新建/编辑工作流」
     // 动作（编辑是动作不是视图，已删方案/运行视图切换）。默认渲染只读运行状态治理面。
+    // 2026-06-23 P1 全屏壳：删了只读头部 eyebrow「项目工作流主入口」，动作条挪顶边悬浮 HUD；
+    // 改断「▶ 运行选中节点」（HUD 里稳定渲染的动作锚点）替代被删的头部文案，不弱化安全断言。
     "运行性：",
     "新建工作流",
     "编辑工作流",
-    "项目工作流主入口",
+    "▶ 运行选中节点",
     "运行检查",
     "方案与授权",
     "事实与记忆",
@@ -302,7 +304,8 @@ export function shellProposalDialogExpectedTexts(projectRoot: string): readonly 
 
 export function shellDerivedWorkflowExpectedTexts(projectRoot: string): readonly string[] {
   return [
-    "项目工作流主入口",
+    // 2026-06-23 P1 全屏壳：头部 eyebrow「项目工作流主入口」已删，改断顶边 HUD 稳定动作锚点。
+    "▶ 运行选中节点",
     "candidates",
     "黑板候选",
     "工作流详情摘要",

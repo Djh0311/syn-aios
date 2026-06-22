@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   Background,
   Controls,
@@ -210,6 +210,13 @@ export function ProjectWorkflowCanvasView({
   // 在跑，一律改草案 → 提交 → 通过（运行性 / 控制核心·权限·审计，P3 重档）才生效。
   const [editing, setEditing] = useState(false);
   const [editingMode, setEditingMode] = useState<"edit" | "new">("edit");
+  // P3 砍杂项：过程内容（侧栏 audit/dispatch/attention/读回 + 状态原因长文）默认隐，
+  // 点顶边「详情」按钮才唤起抽屉。日常视图只剩画布 + 四边。
+  // SSR / 离线静态渲染（无 window、无人点按钮）默认展开——治理内容需可被服务端 / 离线契约
+  // 测试检视（不弱化安全断言）；真机 webview（有 window）默认收起 = 干净日常视图。
+  const [detailDrawerOpen, setDetailDrawerOpen] = useState(() => typeof window === "undefined");
+  // P1 全屏壳定位父（画布 absolute inset:0 吃满它）；同时给 debug 读数读真实 .react-flow 尺寸。
+  const fullbleedStageRef = useRef<HTMLDivElement | null>(null);
   const projectConfig = useMemo(() => projectCanvasSurfaceConfig(project.project_root), [project.project_root]);
   const projectCanvasId = useMemo(
     () =>
@@ -553,33 +560,12 @@ export function ProjectWorkflowCanvasView({
   }, [onInspectAutoDispatchAuthorization, projectWorkflow, selectedTask, selectedTaskPackage]);
 
   return (
-    <section className="workflow-canvas" aria-label="项目级工作流画布">
-      {projectConfig.showProjectRuleBar ? (
-        <ProjectRuleStatusBar canvasModel={canvasModel} runCheckStatus={derivedWorkflow?.run_check_status ?? null} />
-      ) : null}
-
+    <section className="workflow-canvas workflow-canvas-fullbleed" aria-label="项目级工作流画布">
       {editing ? (
         <>
-          <div className="workflow-orchestration-head project-canvas-edit-head">
-            <div>
-              <p className="eyebrow">{editingMode === "new" ? "新建项目工作流 · 草案" : "编辑项目工作流 · 草案"}</p>
-              <h3>
-                {editingMode === "new"
-                  ? "新建工作流（草案）"
-                  : projectWorkflow
-                    ? `编辑：${projectWorkflow.title}（草案）`
-                    : "编辑工作流（草案）"}
-              </h3>
-              <p className="path-text">改的是草案，运行中的工作流不动；提交并通过后才生效（经控制核心 / 权限 / 审计）。</p>
-            </div>
-            <div className="workflow-state-actions">
-              <button className="primary-button" type="button" onClick={() => void submitDraft()}>
-                {editingMode === "new" ? "提交为新工作流" : "提交更新"}
-              </button>
-              <button className="secondary-button" type="button" onClick={() => setEditing(false)}>返回运行状态</button>
-            </div>
-          </div>
-          <div className="project-canvas-plan" aria-label="项目工作流草案（可编辑）">
+          {/* P3 砍杂项：删 eyebrow + h3 + path 头部块，编辑动作压成底边一条悬浮 HUD（提交 / 返回），
+              草案说明缩到提交按钮 title。画布 / 调色板 / 节点面板由引擎自己四边铺开。 */}
+          <div className="project-canvas-plan project-canvas-plan--fullbleed" aria-label="项目工作流草案（可编辑）">
             <ReactFlowProvider>
               <WorkflowCanvasEngine
                 config={projectConfig}
@@ -588,65 +574,94 @@ export function ProjectWorkflowCanvasView({
                 onNotice={onNotice}
               />
             </ReactFlowProvider>
+            {/* 编辑动作 HUD：悬浮顶边（避开引擎底边动作条），提交 / 返回。 */}
+            <div className="canvas-hud canvas-edit-actions-hud" aria-label="草案编辑动作">
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => void submitDraft()}
+                title="改的是草案，运行中的工作流不动；提交并通过后才生效（经控制核心 / 权限 / 审计）"
+              >
+                {editingMode === "new" ? "提交为新工作流" : "提交更新"}
+              </button>
+              <button className="secondary-button" type="button" onClick={() => setEditing(false)}>返回运行状态</button>
+            </div>
           </div>
         </>
       ) : (
-      <>
-      <div className="workflow-orchestration-head">
-        <div>
-          <p className="eyebrow">项目工作流主入口</p>
-          <h3>{projectWorkflow ? projectWorkflow.title : "当前项目还没有默认工作流"}</h3>
-          <p className="path-text">{project.project_root}</p>
-        </div>
-        <div className="workflow-state-actions">
-          {workflows.length > 0 ? (
-            <select
-              aria-label="选择工作流"
-              value={selectedWorkflowId ?? ""}
-              onChange={(e) => setSelectedWorkflowId(e.target.value || null)}
-            >
-              {workflows.map((w) => (
-                <option key={w.workflow_id} value={w.workflow_id}>
-                  {`${w.title || "(未命名)"}${w.is_default ? "（默认）" : ""} · ${w.node_count} 节点`}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          <button className="secondary-button" type="button" onClick={() => void openNewWorkflow()}>
-            新建工作流
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => void openEditWorkflow()}
-            disabled={!selectedWorkflowId}
-            title={selectedWorkflowId ? "把选中工作流加载进草案编辑" : "先选一个工作流"}
-          >
-            编辑工作流
-          </button>
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => void runSelectedProjectNode()}
-            disabled={runningProjectNode || !selectedProjectNode?.workflow_node_id}
-            title={
-              selectedProjectNode?.workflow_node_id
-                ? "派发选中节点（经 path-lock 闸真跑；画布建的节点会自动建临时 work_item + 用节点 resume 会话）"
-                : "先选中一个节点"
-            }
-          >
-            {runningProjectNode ? "运行中…" : "▶ 运行选中节点"}
-          </button>
-          <Badge tone={projectWorkflow ? "candidate" : "warning"}>{projectWorkflow ? projectWorkflow.state : "缺 workflow"}</Badge>
-        </div>
-      </div>
-
-      <div className="project-canvas-shell">
+      <div className="project-canvas-fullbleed-stage" ref={fullbleedStageRef}>
+        {/* P1 全屏壳：画布吃满定位父（position:absolute; inset:0），动作条/状态条挪顶边悬浮 HUD。
+            HUD 容器 pointer-events:none、内部控件 pointer-events:auto，不挡画布平移缩放。 */}
         <ProjectWorkflowReactFlowCanvas
           canvasModel={canvasModel}
           selectedNodeId={selectedCanvasNodeId ?? canvasModel.viewport_hint.selected_node_id}
           onSelectNode={setSelectedCanvasNodeId}
         />
+
+        <div className="canvas-hud canvas-hud-top" aria-label="工作流顶边操作 HUD">
+          <span className="canvas-hud-project-tag" title={project.project_root}>
+            {projectWorkflow ? projectWorkflow.title : project.name}
+          </span>
+          {projectConfig.showProjectRuleBar ? (
+            <ProjectRuleStatusBar canvasModel={canvasModel} runCheckStatus={derivedWorkflow?.run_check_status ?? null} />
+          ) : null}
+          <div className="workflow-state-actions">
+            {workflows.length > 0 ? (
+              <select
+                aria-label="选择工作流"
+                value={selectedWorkflowId ?? ""}
+                onChange={(e) => setSelectedWorkflowId(e.target.value || null)}
+              >
+                {workflows.map((w) => (
+                  <option key={w.workflow_id} value={w.workflow_id}>
+                    {`${w.title || "(未命名)"}${w.is_default ? "（默认）" : ""} · ${w.node_count} 节点`}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <button className="secondary-button" type="button" onClick={() => void openNewWorkflow()}>
+              新建工作流
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => void openEditWorkflow()}
+              disabled={!selectedWorkflowId}
+              title={selectedWorkflowId ? "把选中工作流加载进草案编辑" : "先选一个工作流"}
+            >
+              编辑工作流
+            </button>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => void runSelectedProjectNode()}
+              disabled={runningProjectNode || !selectedProjectNode?.workflow_node_id}
+              title={
+                selectedProjectNode?.workflow_node_id
+                  ? "派发选中节点（经 path-lock 闸真跑；画布建的节点会自动建临时 work_item + 用节点 resume 会话）"
+                  : "先选中一个节点"
+              }
+            >
+              {runningProjectNode ? "运行中…" : "▶ 运行选中节点"}
+            </button>
+            <Badge tone={projectWorkflow ? "candidate" : "warning"}>{projectWorkflow ? projectWorkflow.state : "缺 workflow"}</Badge>
+            {/* P3：过程内容进按需抽屉——这个按钮唤起 / 收起右侧详情抽屉。 */}
+            <button
+              className="secondary-button canvas-detail-toggle"
+              type="button"
+              aria-pressed={detailDrawerOpen}
+              onClick={() => setDetailDrawerOpen((open) => !open)}
+              title="审计 / 派发 / 关注 / 读回 / 状态原因等过程内容（默认隐，点开查看）"
+            >
+              {detailDrawerOpen ? "收起详情" : "详情"}
+            </button>
+          </div>
+        </div>
+
+        {/* P3 详情抽屉：过程内容（audit/dispatch/attention/读回 + 状态原因）默认隐，点顶边「详情」才出。
+            可滚动浮层，pointer-events:auto；不占地方时画布右边完全空出。 */}
+        {detailDrawerOpen ? (
+        <div className="canvas-hud canvas-hud-side canvas-detail-drawer" aria-label="工作流详情抽屉（按需）">
         {renderSidePanel({
           canvasModel,
           selectedNodeId: selectedCanvasNodeId ?? canvasModel.viewport_hint.selected_node_id,
@@ -690,8 +705,9 @@ export function ProjectWorkflowCanvasView({
           onOpenAgentSession,
           onInspectWorkflowRunCheck,
         })}
+        </div>
+        ) : null}
       </div>
-      </>
       )}
     </section>
   );

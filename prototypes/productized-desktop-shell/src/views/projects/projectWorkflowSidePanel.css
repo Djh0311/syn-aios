@@ -3,10 +3,10 @@
   align-content: start;
   gap: 14px;
   min-width: 0;
-  max-height: 660px;
-  overflow: auto;
-  padding-left: 16px;
-  border-left: 1px dashed var(--hair-2);
+  /* 不再当独立滚动容器（外层 .canvas-hud-side 已统一竖滑 + 横向 clip）——
+     原本 max-height:660 + overflow:auto 造成双层滚动、内层能横滑（真机报「还是能横滑」根因）。 */
+  max-height: none;
+  overflow: visible;
 }
 
 .project-side-primary {
@@ -61,6 +61,77 @@
   gap: 14px;
   min-width: 0;
   padding: 10px;
+}
+
+/* 单卡 / 子块级默认收起折叠（精简第一波）：复用 side-panel-section 的折叠观感。 */
+.project-side-panel-fold,
+.project-canvas-detail-more,
+.work-item-secondary-fold,
+.candidate-governance-secondary-fold {
+  min-width: 0;
+  border: 1px solid var(--hair-2);
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.project-side-panel-fold > summary,
+.project-canvas-detail-more > summary,
+.work-item-secondary-fold > summary,
+.candidate-governance-secondary-fold > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  min-height: 40px;
+  padding: 8px 10px;
+  color: var(--ink-deep);
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.project-side-panel-fold > summary:focus-visible,
+.project-canvas-detail-more > summary:focus-visible,
+.work-item-secondary-fold > summary:focus-visible,
+.candidate-governance-secondary-fold > summary:focus-visible {
+  outline: 2px solid rgba(35, 108, 104, 0.28);
+  outline-offset: 2px;
+}
+
+.project-side-panel-fold > summary span,
+.project-canvas-detail-more > summary span,
+.work-item-secondary-fold > summary span,
+.candidate-governance-secondary-fold > summary span {
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.project-side-panel-fold > summary em,
+.project-canvas-detail-more > summary em,
+.work-item-secondary-fold > summary em,
+.candidate-governance-secondary-fold > summary em {
+  color: var(--ink-mid);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.project-side-panel-fold[open] > summary,
+.project-canvas-detail-more[open] > summary,
+.work-item-secondary-fold[open] > summary,
+.candidate-governance-secondary-fold[open] > summary {
+  border-bottom: 1px dashed var(--hair);
+}
+
+.project-side-panel-fold-body {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.work-item-secondary-fold,
+.candidate-governance-secondary-fold {
+  margin: 4px 0;
 }
 
 .project-canvas-detail-card {

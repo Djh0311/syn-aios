@@ -7948,6 +7948,146 @@ textarea {
   border-bottom: 1px dashed var(--hair-2);
 }
 
+/* ============================================================
+   全窗项目壳重做（方案 2026-06-23 §2/§4）：项目 chrome（返回+项目名+状态条+4 入口）
+   全收成顶边悬浮 HUD（.project-hud-top），.project-layout 绝对定位 inset:0 吃满定高根
+   .project-detail-shell（它已有 height:calc(100vh-…)，确定基准，不靠 min-height 链——记忆
+   ux-render-bugs #004「高度塌 0」雷区）。当前 tab 内容填满整窗，HUD 浮在上面。
+   ============================================================ */
+.project-detail-shell:has(.project-detail-content--fullwindow) {
+  /* 定高根自己不滚也不留内边距；全窗内容铺满，画布/各 tab 自己管滚动 */
+  overflow: hidden;
+  padding: 0;
+}
+.project-detail-content--fullwindow {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: block; /* 覆盖默认 grid */
+  gap: 0;
+}
+
+/* 顶边项目 HUD：绝对定位浮在内容上方，容器不挡内容（pointer-events:none），
+   内部控件各自 pointer-events:auto。允许换行，宽屏一行排满。 */
+.project-detail-content--fullwindow .project-hud-top {
+  position: absolute;
+  z-index: 18;
+  top: 10px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  pointer-events: none;
+}
+.project-detail-content--fullwindow .project-hud-top > * {
+  pointer-events: auto;
+}
+
+/* 返回 + 项目名 压成紧凑 pill 组（路径/更新时间收进「设置」折叠）。 */
+.project-workspace-head--compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--hair-2);
+  border-radius: 999px;
+  background: rgba(245, 241, 232, 0.94);
+}
+.project-workspace-head--compact .project-back-button {
+  min-height: 28px;
+  padding: 4px 10px;
+}
+.project-workspace-head--compact .project-workspace-title {
+  display: flex;
+  min-width: 0;
+}
+.project-workspace-head--compact .project-workspace-title h1 {
+  margin: 0;
+  max-width: 220px;
+  overflow: hidden;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-workspace-head--compact .project-workspace-meta {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+/* 状态条压成紧凑 pill 组（不占整条横幅）。 */
+.project-status-strip--pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+  background: rgba(245, 241, 232, 0.94);
+}
+.project-status-strip--pills .project-status-cell {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 0;
+  max-width: 220px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: transparent;
+}
+.project-status-strip--pills .project-status-cell em {
+  display: none; /* note 收掉，靠 title 仍可读 */
+}
+.project-status-strip--pills .project-status-cell strong {
+  font-size: 12px;
+}
+
+/* 4 入口在 HUD 里做成 tab pills，保持 onSelectTool 切换。 */
+.project-detail-content--fullwindow .project-tool-tabs {
+  gap: 4px;
+  padding: 3px 4px;
+  border: 1px solid var(--hair-2);
+  border-bottom: 1px solid var(--hair-2);
+  border-radius: 10px;
+  background: rgba(245, 241, 232, 0.94);
+  overflow: visible;
+}
+.project-detail-content--fullwindow .project-tool-tabs button {
+  min-height: 28px;
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  letter-spacing: 0.12em;
+}
+.project-detail-content--fullwindow .project-tool-tabs button:hover,
+.project-detail-content--fullwindow .project-tool-tabs button:focus-visible,
+.project-detail-content--fullwindow .project-tool-tabs button.active {
+  border-color: var(--vermil);
+  background: rgba(161, 66, 66, 0.06);
+  color: var(--ink-deep);
+}
+
+/* 当前 tab 内容填满整窗（绝对定位 inset:0）。 */
+.project-detail-content--fullwindow .project-layout {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+}
+/* 工作流以外的 3 个 tab（总览/交接/资源）：全窗内可滚动，HUD 浮在上面，顶部留出 HUD 高度。 */
+.project-detail-content--fullwindow .project-layout:not(.project-layout--canvas) {
+  overflow: auto;
+  padding: 96px 24px 28px;
+}
+/* 工作流 tab：画布壳吃满整窗（自身已 position:relative + 内部 inset:0 stage）。 */
+.project-detail-content--fullwindow .project-layout--canvas {
+  overflow: hidden;
+  display: flex;
+}
+
 .project-workspace-title {
   display: grid;
   gap: 6px;
@@ -8169,6 +8309,456 @@ textarea {
   grid-template-columns: minmax(0, 1fr) minmax(330px, 390px);
   gap: 18px;
   min-height: 660px;
+}
+
+/* ============================================================
+   全屏壳·画布（fullbleed canvas + 四周悬浮 HUD）
+   方案 docs/plans/2026-06-23-workflow-canvas-fullbleed-hud-redesign-v1.md §2/§4
+   高度链命门（记忆 ux-render-bugs #004「高度塌 0」）：不靠 min-height 链给基准。
+   新模型（2026-06-23 重做）：定高根 .project-detail-shell 已 height:calc(100vh-…)；
+   .project-layout--canvas 已 position:absolute; inset:0; display:flex 吃满整窗（见上方
+   全窗壳块）。这里只让 .workflow-canvas-fullbleed flex:1 填满那个绝对定位的 tab 容器，
+   内部 .project-canvas-fullbleed-stage / .project-flow-stage 再 inset:0 铺满——确定基准、
+   不猜级联，也不再纵向堆头部。 */
+.workflow-canvas-fullbleed {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: block;
+  position: relative;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+/* 定位父：画布 + 四周 HUD 都相对它定位。inset:0 吃满 .workflow-canvas-fullbleed。 */
+.project-canvas-fullbleed-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* React Flow 画布壳铺满定位父（原 .project-flow-stage 用 min-height:660 撑高，这里改 inset:0）。 */
+.project-canvas-fullbleed-stage > .project-flow-stage {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 8px;
+}
+
+/* HUD 容器：默认不挡画布（pointer-events:none），内部交互控件再各自打开。 */
+.canvas-hud {
+  position: absolute;
+  z-index: 12;
+  pointer-events: none;
+}
+.canvas-hud > *,
+.canvas-hud button,
+.canvas-hud select,
+.canvas-hud .project-rule-status-bar,
+.canvas-hud .workflow-state-actions {
+  pointer-events: auto;
+}
+
+/* 画布自己的运行/选择器 HUD：错开到「底边」，避开顶边项目 4-tab HUD（方案要求别撞叠）。
+   仍叫 .canvas-hud-top（DOM/类名不动），但视觉锚到底边一条；项目角标 + 紧凑运行性 pill +
+   工作流选择器/新建/编辑/▶运行 动作条，悬浮底边、可换行。 */
+.canvas-hud-top {
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.canvas-hud-top .canvas-hud-project-tag {
+  max-width: 240px;
+  padding: 4px 10px;
+  border: 1px solid var(--hair-2);
+  border-radius: 999px;
+  background: rgba(245, 241, 232, 0.92);
+  color: var(--ink-deep);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 顶边里的状态条压成紧凑 pill 组（不占整条横幅）。 */
+.canvas-hud-top .project-rule-status-bar {
+  padding: 4px 8px;
+  background: rgba(245, 241, 232, 0.92);
+}
+.canvas-hud-top .workflow-state-actions {
+  margin-left: auto;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: rgba(245, 241, 232, 0.92);
+}
+
+/* 右边浮层侧栏（P1 先简单浮、可滚；P2 收进抽屉）。顶部下移到 ~104px 让开顶边项目 HUD
+   （返回/状态/4-tab，可换 2 行）；底部上移到 60px 让开底边画布动作 HUD。 */
+.canvas-hud-side {
+  top: 104px;
+  right: 12px;
+  bottom: 60px;
+  width: min(390px, 38vw);
+  /* 只许竖滑，禁横滑——长内容（路径/pre/会话标识）改为换行，不把面板撑超宽 / 不留半截可用宽度。 */
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* 浮在画布上的内容面板：必须有不透明纸面底，否则文字飘在画布上看不清（真机报「背景透明」）。 */
+  padding: 12px;
+  pointer-events: auto;
+  background: var(--rice, #f5f1e8);
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(28, 31, 36, 0.16);
+}
+/* 面板内长内容一律换行，杜绝横向溢出（这是「宽度变窄一半 + 能横滑」的根因）。 */
+.canvas-hud-side,
+.canvas-hud-side * {
+  min-width: 0;
+}
+.canvas-hud-side pre,
+.canvas-hud-side .path-text,
+.canvas-hud-side code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.canvas-hud-side > * {
+  pointer-events: auto;
+}
+
+/* ============================================================
+   P2/P3 · 共享引擎四边 HUD（WorkflowCanvasEngine 全屏 + 四周悬浮）
+   方案 docs/plans/2026-06-23-...-fullbleed-hud-redesign-v1.md §2/§3。
+   引擎（实验 + 项目编辑同一套）由纵向 aside+flow 改成：画布吃满 .canvas-engine-stage，
+   调色板/节点面板/动作条作为四边绝对定位 HUD 悬浮。HUD 容器 pointer-events:none、
+   内部控件 auto，不挡画布平移缩放/空白双击建节点。
+   高度链（记忆 ux-render-bugs #004）：.canvas-view-hud 用 flex 列、stage flex:1 min-height:0
+   吃满父定高（实验面 .canvas-view 已 height:calc(100vh-…)，项目编辑面 .project-canvas-plan
+   已 min-height）——不靠 min-height 链给基准。 */
+.canvas-view-hud {
+  position: relative;
+}
+.canvas-view-hud .canvas-engine-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #d8d3c5;
+  border-radius: 4px;
+  background:
+    radial-gradient(70% 60% at 50% 45%, rgba(245, 241, 232, 0.96), rgba(245, 241, 232, 0.68)),
+    var(--rice);
+}
+/* React Flow 自身铺满 stage（原 .canvas-flow 用 height:100%；这里 inset:0）。 */
+.canvas-view-hud .canvas-engine-stage > .react-flow {
+  position: absolute;
+  inset: 0;
+}
+/* 空画布引导浮中心，pointer-events:none 让双击穿透到画布建节点。 */
+.canvas-view-hud .canvas-engine-stage > .canvas-empty-guide {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 360px;
+  padding: 16px 20px;
+  text-align: center;
+  pointer-events: none;
+  color: rgba(28, 31, 36, 0.62);
+  background: rgba(250, 247, 240, 0.82);
+  border: 1px dashed #cfc8b6;
+  border-radius: 6px;
+}
+.canvas-view-hud .canvas-engine-stage > .canvas-empty-guide strong {
+  font-size: 15px;
+  color: rgba(28, 31, 36, 0.78);
+}
+
+/* 四边 HUD 容器：默认不挡画布，内部控件各自打开。 */
+.canvas-engine-hud {
+  position: absolute;
+  z-index: 12;
+  pointer-events: none;
+}
+.canvas-engine-hud > *,
+.canvas-engine-hud button,
+.canvas-engine-hud select,
+.canvas-engine-hud input,
+.canvas-engine-hud textarea,
+.canvas-engine-hud label,
+.canvas-engine-hud details,
+.canvas-engine-hud .canvas-palette,
+.canvas-engine-hud .canvas-node-editor {
+  pointer-events: auto;
+}
+
+/* 左边：节点调色板竖排。 */
+.canvas-engine-hud-left {
+  top: 12px;
+  left: 12px;
+  max-height: calc(100% - 24px);
+  overflow: auto;
+}
+.canvas-engine-hud-left .canvas-palette {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--hair-2, #d8d3c5);
+  border-radius: 8px;
+  background: rgba(245, 241, 232, 0.94);
+}
+
+/* 右边：选中节点才出现的节点面板，可滚动。 */
+.canvas-engine-hud-right {
+  top: 12px;
+  right: 12px;
+  bottom: 56px;
+  width: min(320px, 34vw);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--hair-2, #d8d3c5);
+  border-radius: 8px;
+  background: rgba(245, 241, 232, 0.96);
+}
+.canvas-engine-hud-right .canvas-node-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.canvas-engine-hud-right .cne-id {
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.7;
+  overflow-wrap: anywhere;
+}
+.canvas-engine-hud-right label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  min-width: 0;
+}
+.canvas-engine-hud-right input,
+.canvas-engine-hud-right select,
+.canvas-engine-hud-right textarea {
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.canvas-engine-hud-right button {
+  padding: 5px 9px;
+  border: 1px solid #c8602b;
+  background: #fff3e6;
+  color: #2e2a25;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.canvas-engine-hud-right button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.canvas-engine-hud-right .canvas-advanced-details,
+.canvas-engine-hud-right .canvas-exec-details {
+  border: 1px dashed #c9bfa6;
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.canvas-engine-hud-right .canvas-advanced-details > summary,
+.canvas-engine-hud-right .canvas-exec-details > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.8;
+  list-style: revert;
+}
+.canvas-engine-hud-right .canvas-custom-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 4px;
+  align-items: center;
+}
+.canvas-engine-hud-right .canvas-node-run-btn {
+  border-color: #5a6f4a;
+  background: #eef2e8;
+  font-weight: 600;
+}
+
+/* 底边：运行 / 保存 / 紧凑动作 + 「更多」折叠。可换行。 */
+.canvas-engine-hud-bottom {
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.canvas-engine-hud-bottom > button,
+.canvas-engine-hud-bottom .canvas-reset-confirm,
+.canvas-engine-hud-bottom .canvas-engine-more {
+  padding: 5px 10px;
+  border: 1px solid #c8c2b4;
+  background: rgba(245, 241, 232, 0.95);
+  color: #2e2a25;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.canvas-engine-hud-bottom > button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.canvas-engine-hud-bottom .canvas-engine-run {
+  border-color: #5a6f4a;
+  background: #eef2e8;
+  font-weight: 600;
+}
+.canvas-engine-hud-bottom .canvas-engine-save {
+  border-color: #c8602b;
+  background: #fff3e6;
+}
+.canvas-engine-hud-bottom .canvas-reset-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+.canvas-engine-hud-bottom .canvas-reset-confirm-text {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.canvas-engine-hud-bottom .canvas-reset-confirm button {
+  padding: 3px 8px;
+  border: 1px solid #c8c2b4;
+  background: #faf8f3;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+/* 「更多」折叠：成熟模式 + 边界面板向上展开成浮层，不挤底边。 */
+.canvas-engine-more {
+  position: relative;
+  padding: 0;
+}
+.canvas-engine-more > summary {
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  list-style: revert;
+}
+.canvas-engine-more[open] {
+  background: transparent;
+  border-color: transparent;
+}
+.canvas-engine-more[open] > summary {
+  border: 1px solid #c8c2b4;
+  border-radius: 6px;
+  background: rgba(245, 241, 232, 0.95);
+}
+.canvas-engine-more > :not(summary) {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: min(360px, 60vw);
+  max-height: 50vh;
+  overflow: auto;
+  margin: 0 0 6px;
+  padding: 10px;
+  border: 1px solid var(--hair-2, #d8d3c5);
+  border-radius: 8px;
+  background: rgba(245, 241, 232, 0.98);
+  box-shadow: 0 -6px 24px rgba(33, 31, 26, 0.12);
+}
+.canvas-engine-more fieldset {
+  border: 1px solid #d8d3c5;
+  border-radius: 4px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+.canvas-engine-more legend {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0 4px;
+}
+.canvas-engine-more input {
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 12px;
+  box-sizing: border-box;
+  width: 100%;
+}
+.canvas-engine-more button {
+  padding: 5px 9px;
+  border: 1px solid #c8602b;
+  background: #fff3e6;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* 项目编辑面：草案画布全屏化（删头部后，引擎吃满 .project-canvas-plan）。父
+   .workflow-canvas-fullbleed 是 display:block + position:relative，这里用 absolute inset:0
+   吃满它（与只读面 .project-canvas-fullbleed-stage 同手法），引擎 .canvas-view 再 height:100%
+   填满——确定基准，不靠 min-height 链（记忆 ux-render-bugs #004）。 */
+.project-canvas-plan--fullbleed {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+}
+.project-canvas-plan--fullbleed > .canvas-view {
+  flex: 1 1 auto;
+  height: 100%;
+  min-width: 0;
+}
+/* 编辑动作 HUD（提交 / 返回）悬浮顶边，避开引擎底边动作条。 */
+.canvas-edit-actions-hud {
+  position: absolute;
+  z-index: 13;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+}
+.canvas-edit-actions-hud > button {
+  pointer-events: auto;
+}
+
+/* P3 详情抽屉切换按钮（顶边 HUD 内，沿用 secondary-button 基样）。 */
+.canvas-detail-toggle[aria-pressed="true"] {
+  background: #eef2e8;
+  border-color: #5a6f4a;
 }
 
 .project-flow-stage {

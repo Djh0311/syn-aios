@@ -126,55 +126,60 @@ export function ProjectWorkspaceShell({
   const selectedTaskDraft = selectedTaskDraftFor(projectWorkflow?.task_drafts ?? [], null);
   const selectedTaskPackage = selectedTaskPackageFor(derivedWorkflow?.task_packages ?? [], selectedTaskDraft);
 
+  // P1 全屏壳·重做（方案 2026-06-23 §2/§4）：项目 chrome 全收成顶边悬浮 HUD（一条
+  // .project-hud-top 绝对定位浮在内容上方），.project-layout 改 position:absolute; inset:0
+  // 吃满定高根 .project-detail-shell。返回/项目名压紧、路径/设置收进角标折叠、状态条压成
+  // pill、4 入口做成 tab pills——切换/返回/各 tab 内容照常可用。HUD 容器 pointer-events:none、
+  // 内部控件 pointer-events:auto，不挡底下内容（画布平移缩放）。
   return (
-    <section className="project-detail-content">
-      <header className="project-workspace-head">
-        <button className="secondary-button project-back-button" type="button" onClick={onBackToGallery}>
-          返回项目
-        </button>
-        <div className="project-workspace-title">
-          <p className="pg-sub">项目 · 工作台</p>
-          <h1>{project.name}</h1>
-          <p className="path-text">{project.project_root}</p>
-        </div>
-        <div className="project-workspace-meta">
-          <Badge tone={project.active_hint ? "candidate" : "unknown"}>{project.active_hint ? "活跃" : "静默"}</Badge>
-          <span>{sessions.length || project.thread_count} 会话</span>
-          <span>{formatDate(project.latest_updated_at_ms)}</span>
-          <details className="project-settings-menu">
-            <summary>设置</summary>
-            <div>
-              <DetailLine label="项目路径" value={project.project_root} />
-              <DetailLine label="上下文 warning" value={String(project.context_warnings.length)} />
-              <DetailLine label="项目 warning" value={String(project.warnings.length)} />
-            </div>
-          </details>
-        </div>
-      </header>
-
-      <ProjectWorkspaceStatusStrip
-        hasWorkflow={Boolean(projectWorkflow)}
-        stage={derivedWorkflow?.current_stage || projectWorkflow?.state || "未登记"}
-        harnessRequirements={selectedTaskPackage?.harness_requirements ?? []}
-        skillNames={selectedTaskPackage?.available_skills ?? []}
-        hasTaskPackage={Boolean(selectedTaskPackage)}
-      />
-
-      <nav className="project-tool-tabs" aria-label="项目详情列表">
-        {projectTools.map((tool) => (
-          <button
-            className={tool.key === selectedTool ? "active" : ""}
-            key={tool.key}
-            type="button"
-            onClick={() => onSelectTool(tool.key)}
-            title={tool.label}
-          >
-            {tool.shortLabel}
+    <section className="project-detail-content project-detail-content--fullwindow">
+      <div className="project-hud-top" aria-label="项目顶边操作 HUD">
+        <header className="project-workspace-head project-workspace-head--compact">
+          <button className="secondary-button project-back-button" type="button" onClick={onBackToGallery}>
+            ← 返回项目
           </button>
-        ))}
-      </nav>
+          <div className="project-workspace-title">
+            <h1 title={project.project_root}>{project.name}</h1>
+          </div>
+          <div className="project-workspace-meta">
+            <Badge tone={project.active_hint ? "candidate" : "unknown"}>{project.active_hint ? "活跃" : "静默"}</Badge>
+            <span>{sessions.length || project.thread_count} 会话</span>
+            <details className="project-settings-menu">
+              <summary>设置</summary>
+              <div>
+                <DetailLine label="项目路径" value={project.project_root} />
+                <DetailLine label="最近更新" value={formatDate(project.latest_updated_at_ms)} />
+                <DetailLine label="上下文 warning" value={String(project.context_warnings.length)} />
+                <DetailLine label="项目 warning" value={String(project.warnings.length)} />
+              </div>
+            </details>
+          </div>
+        </header>
 
-      <div className="project-layout">
+        <ProjectWorkspaceStatusStrip
+          hasWorkflow={Boolean(projectWorkflow)}
+          stage={derivedWorkflow?.current_stage || projectWorkflow?.state || "未登记"}
+          harnessRequirements={selectedTaskPackage?.harness_requirements ?? []}
+          skillNames={selectedTaskPackage?.available_skills ?? []}
+          hasTaskPackage={Boolean(selectedTaskPackage)}
+        />
+
+        <nav className="project-tool-tabs" aria-label="项目详情列表">
+          {projectTools.map((tool) => (
+            <button
+              className={tool.key === selectedTool ? "active" : ""}
+              key={tool.key}
+              type="button"
+              onClick={() => onSelectTool(tool.key)}
+              title={tool.label}
+            >
+              {tool.shortLabel}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      <div className={`project-layout${selectedTool === "workflow" ? " project-layout--canvas" : ""}`}>
         {selectedTool === "overview" ? (
           <ProjectOverview
             project={project}
@@ -230,7 +235,7 @@ function ProjectWorkspaceStatusStrip({
   hasTaskPackage: boolean;
 }) {
   return (
-    <section className="project-status-strip" aria-label="项目状态条">
+    <section className="project-status-strip project-status-strip--pills" aria-label="项目状态条">
       <ProjectWorkspaceStatusCell
         label="阶段"
         value={stage || "未登记"}

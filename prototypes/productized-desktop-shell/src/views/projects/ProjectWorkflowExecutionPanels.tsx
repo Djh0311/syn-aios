@@ -137,6 +137,11 @@ export function WorkItemOrchestrationCard({
           value={currentBinding ? `${currentBinding.session_title} / ${currentBinding.project_binding_source}` : "未绑定；请选择已有 Codex 会话"}
         />
       </div>
+      <details className="work-item-secondary-fold">
+        <summary>
+          <span>会话绑定</span>
+          <em>选择 / 解除节点 Codex 会话（次要，默认收起）</em>
+        </summary>
       <div className="node-session-binding-box">
         <div className="panel-heading">
           <div>
@@ -214,6 +219,8 @@ export function WorkItemOrchestrationCard({
           {!candidateSessions.length ? <p className="muted small-note">当前索引没有可绑定的 Codex 会话。</p> : null}
         </div>
       </div>
+      </details>
+      {/* B·保留：派发指令框含「派发结果」(recentDispatch)——KEEP 常驻。 */}
       <div className="node-dispatch-box">
         <div className="panel-heading">
           <div>
@@ -275,6 +282,12 @@ export function WorkItemOrchestrationCard({
           <p className="muted small-note">当前工作项还没有节点派发记录。</p>
         )}
       </div>
+      {/* B·折：工作流机器旧入口（全封存声明，无结果）默认收起。 */}
+      <details className="work-item-secondary-fold">
+        <summary>
+          <span>工作流机器（旧入口已封存）</span>
+          <em>总指导循环闭环旧入口声明（默认收起）</em>
+        </summary>
       <div className="node-dispatch-box">
         <div className="panel-heading">
           <div>
@@ -299,6 +312,13 @@ export function WorkItemOrchestrationCard({
           </button>
         </div>
       </div>
+      </details>
+      {/* B·折：可控执行协议 / 权限请求队列 / 执行尝试记录（次要），默认收起。 */}
+      <details className="work-item-secondary-fold">
+        <summary>
+          <span>可控执行协议 / 权限 / 执行尝试</span>
+          <em>会话绑定外的执行控制次要块（默认收起）</em>
+        </summary>
       <ExecutionControlPanel
         control={executionControl}
         attempts={workItemExecutionAttempts}
@@ -307,6 +327,7 @@ export function WorkItemOrchestrationCard({
         workItem={workItem}
         onRequestAction={onRequestAction}
       />
+      </details>
       <ProcessFactConfirmationPanel
         project={project}
         projectId={projectId}
@@ -320,6 +341,12 @@ export function WorkItemOrchestrationCard({
         observationStoreRevision={observationStoreRevision}
         onRequestAction={onRequestAction}
       />
+      {/* B·折：C6 结果 / 阶段验收（全局复核 / 用户决定）次要，默认收起。汇报(C5)与回收(总指导)保持常驻。 */}
+      <details className="work-item-secondary-fold">
+        <summary>
+          <span>C6 结果 / 全局复核 / 用户决定</span>
+          <em>阶段验收门禁与最终复核次要块（默认收起）</em>
+        </summary>
       <WorkflowResultSummaryPanel
         project={project}
         projectId={projectId}
@@ -330,6 +357,7 @@ export function WorkItemOrchestrationCard({
         workflowRevision={workflowRevision}
         onRequestAction={onRequestAction}
       />
+      </details>
       <div className="director-review-box">
         <div className="panel-heading">
           <div>

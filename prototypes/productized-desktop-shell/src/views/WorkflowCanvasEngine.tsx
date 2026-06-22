@@ -448,7 +448,7 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: W
   const scope = canvasScope(canvas);
 
   return (
-    <section className="canvas-view" aria-label={surfaceEyebrow}>
+    <section className="canvas-view canvas-view-hud" aria-label={surfaceEyebrow}>
       {config.embedded ? null : (
         <header className="canvas-head">
           <div>
@@ -485,167 +485,169 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: W
           <span className="canvas-id">canvas_id={canvas.canvas_id}</span>
         </header>
       )}
-      <div className="canvas-body">
-        <aside className="canvas-side">
-          <ExperimentCanvasBoundaryPanel boundary={config.boundary} />
-          <fieldset>
-            <legend>节点调色板</legend>
-            <div className="canvas-palette">
-              {NODE_KIND_PRESETS.map((preset) => (
-                <button
-                  key={preset.kind}
-                  type="button"
-                  className="canvas-palette-chip"
-                  style={{ borderColor: preset.accent }}
-                  onClick={() => addNode(preset.kind)}
-                  disabled={busy}
-                  title={preset.hint}
-                >
-                  <span className="canvas-palette-dot" style={{ background: preset.accent }} aria-hidden="true" />
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-            <p className="canvas-hint">点种类建节点；或在空白处双击建节点。种类、字段都可在下方自由改。</p>
-          </fieldset>
-          <fieldset>
-            <legend>节点编辑</legend>
-            {selectedNode ? (
-              <NodeEditor
-                node={selectedNode}
-                sessions={sessions}
-                surface={config.kind === "experiment" ? "experiment" : "project"}
-                onChange={updateSelected}
-                onRun={() => void runSelectedNode()}
+      {/* P2 四周分布（fullbleed-hud 重设计 §2）：画布吃满 .canvas-engine-stage（position:relative;
+          flex:1），调色板 / 节点编辑 / 动作条作为四边绝对定位 HUD 悬浮。HUD 容器 pointer-events:none、
+          内部控件 pointer-events:auto，不挡画布平移缩放 / 空白双击建节点。共享引擎：实验 + 项目编辑
+          同一套，两面都拿到同一个四边布局。 */}
+      <div className="canvas-engine-stage" onDoubleClick={onPaneDoubleClick}>
+        {nodes.length === 0 ? (
+          <div className="canvas-empty-guide" role="note">
+            <strong>空白画布</strong>
+            <span>左边「节点调色板」点一个种类，或在空白处双击，建第一个节点。</span>
+          </div>
+        ) : null}
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onSelectionChange={({ nodes: sel }) => setSelected(sel[0]?.id ?? null)}
+          panOnScroll
+          zoomOnScroll={false}
+          zoomOnPinch
+          zoomOnDoubleClick={false}
+          nodesDraggable
+          nodesConnectable
+          elementsSelectable
+          fitView
+        >
+          <Background />
+          <Controls />
+          <MiniMap />
+        </ReactFlow>
+
+        {/* 左边 HUD：节点调色板（编辑态竖排）。点种类建节点；空白双击也可建。 */}
+        <div className="canvas-engine-hud canvas-engine-hud-left" aria-label="节点调色板">
+          <div className="canvas-palette">
+            {NODE_KIND_PRESETS.map((preset) => (
+              <button
+                key={preset.kind}
+                type="button"
+                className="canvas-palette-chip"
+                style={{ borderColor: preset.accent }}
+                onClick={() => addNode(preset.kind)}
                 disabled={busy}
-              />
-            ) : (
-              <p className="canvas-hint">点选画布上的节点编辑。</p>
-            )}
-          </fieldset>
-          <fieldset>
-            <legend>画布</legend>
-            <button onClick={() => void save()} disabled={busy || !dirty}>
-              {dirty ? "保存（未保存）" : "保存"}
-            </button>
-            <button onClick={() => void reload()} disabled={busy}>重载</button>
-            {/* 真机反馈：实验画布加「清空 / 新建画布」（项目面用项目页的「新建工作流」，这里不重复）。*/}
-            {!isProject ? (
-              confirmReset ? (
-                <span className="canvas-reset-confirm">
-                  <span className="canvas-hint">
-                    确认{confirmReset === "clear" ? "清空当前画布" : "重置为新画布"}？未保存的改动会丢失。
-                  </span>
-                  <button onClick={() => (confirmReset === "clear" ? clearCanvas() : newCanvas())} disabled={busy}>
-                    确认
-                  </button>
-                  <button onClick={() => setConfirmReset(null)} disabled={busy}>取消</button>
+                title={preset.hint}
+              >
+                <span className="canvas-palette-dot" style={{ background: preset.accent }} aria-hidden="true" />
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 右边 HUD：选中节点才出现的节点面板（名称/提示词等；开发者字段折进默认收起区）。 */}
+        {selectedNode ? (
+          <div className="canvas-engine-hud canvas-engine-hud-right" aria-label="节点编辑">
+            <NodeEditor
+              node={selectedNode}
+              sessions={sessions}
+              surface={config.kind === "experiment" ? "experiment" : "project"}
+              onChange={updateSelected}
+              onRun={() => void runSelectedNode()}
+              disabled={busy}
+            />
+          </div>
+        ) : null}
+
+        {/* 底边 HUD：▶运行选中节点 + 保存 + 紧凑动作（重载/清空/新建）+ 成熟模式折进默认收起区。 */}
+        <div className="canvas-engine-hud canvas-engine-hud-bottom" aria-label="画布动作">
+          <button
+            type="button"
+            className="canvas-engine-run"
+            onClick={() => void runSelectedNode()}
+            disabled={busy || !selectedNode || !nodeRunReadiness(selectedNode.data, config.kind === "experiment" ? "experiment" : "project").ready}
+            title={selectedNode ? "运行选中节点（经双闸；默认安全态被后端挡下、零执行）" : "先选中一个节点"}
+          >
+            ▶ 运行选中节点
+          </button>
+          <button type="button" className="canvas-engine-save" onClick={() => void save()} disabled={busy || !dirty}>
+            {dirty ? "保存（未保存）" : "保存"}
+          </button>
+          <button type="button" onClick={() => void reload()} disabled={busy}>重载</button>
+          {/* 实验画布「清空 / 新建画布」（项目面用项目页的「新建工作流」，这里不重复）。*/}
+          {!isProject ? (
+            confirmReset ? (
+              <span className="canvas-reset-confirm">
+                <span className="canvas-reset-confirm-text">
+                  确认{confirmReset === "clear" ? "清空" : "重置"}？未保存改动会丢失。
                 </span>
-              ) : (
-                <>
-                  <button onClick={() => setConfirmReset("clear")} disabled={busy || nodes.length === 0}>清空画布</button>
-                  <button onClick={() => setConfirmReset("new")} disabled={busy}>新建画布</button>
-                </>
-              )
-            ) : null}
-          </fieldset>
-          <fieldset>
-            <legend>成熟模式</legend>
-            <label>
-              模式标题
-              <input
-                type="text"
-                value={templateTitle}
-                onChange={(e) => setTemplateTitle(e.target.value)}
-                placeholder={canvas?.display_name || "未命名工作流"}
-                disabled={busy}
-              />
-            </label>
-            <button onClick={() => void saveAsTemplate()} disabled={busy || nodes.length === 0}>
-              ＋ 把这张存成成熟模式
-            </button>
-            {templates.length === 0 ? (
-              <p className="canvas-hint">还没有成熟模式。把跑顺的工作流存下来，可一键起新工作流。</p>
+                <button onClick={() => (confirmReset === "clear" ? clearCanvas() : newCanvas())} disabled={busy}>
+                  确认
+                </button>
+                <button onClick={() => setConfirmReset(null)} disabled={busy}>取消</button>
+              </span>
             ) : (
-              <ul className="canvas-template-list">
-                {templates.map((tpl) => (
-                  <li key={tpl.template_id} className="canvas-template-item">
-                    <div className="ct-meta">
-                      <strong>{tpl.title}</strong>
-                      <span>{tpl.scope === "project" ? "项目私有" : "全局"} · {tpl.node_count} 节点 / {tpl.edge_count} 连线</span>
-                    </div>
-                    <div className="ct-actions">
-                      <button onClick={() => void instantiateFromTemplate(tpl.template_id)} disabled={busy}>
-                        起新工作流
-                      </button>
-                      {confirmDeleteId === tpl.template_id ? (
-                        <>
+              <>
+                <button onClick={() => setConfirmReset("clear")} disabled={busy || nodes.length === 0}>清空画布</button>
+                <button onClick={() => setConfirmReset("new")} disabled={busy}>新建画布</button>
+              </>
+            )
+          ) : null}
+
+          {/* P3 砍杂项：成熟模式 + 边界说明折进默认收起的「更多」区，日常看不到。 */}
+          <details className="canvas-engine-more">
+            <summary>更多（成熟模式 / 边界）</summary>
+            <fieldset>
+              <legend>成熟模式</legend>
+              <label>
+                模式标题
+                <input
+                  type="text"
+                  value={templateTitle}
+                  onChange={(e) => setTemplateTitle(e.target.value)}
+                  placeholder={canvas?.display_name || "未命名工作流"}
+                  disabled={busy}
+                />
+              </label>
+              <button onClick={() => void saveAsTemplate()} disabled={busy || nodes.length === 0}>
+                ＋ 把这张存成成熟模式
+              </button>
+              {templates.length === 0 ? null : (
+                <ul className="canvas-template-list">
+                  {templates.map((tpl) => (
+                    <li key={tpl.template_id} className="canvas-template-item">
+                      <div className="ct-meta">
+                        <strong>{tpl.title}</strong>
+                        <span>{tpl.scope === "project" ? "项目私有" : "全局"} · {tpl.node_count} 节点 / {tpl.edge_count} 连线</span>
+                      </div>
+                      <div className="ct-actions">
+                        <button onClick={() => void instantiateFromTemplate(tpl.template_id)} disabled={busy}>
+                          起新工作流
+                        </button>
+                        {confirmDeleteId === tpl.template_id ? (
+                          <>
+                            <button
+                              className="ct-delete"
+                              onClick={() => void removeTemplate(tpl.template_id, tpl.title)}
+                              disabled={busy}
+                            >
+                              确认删除
+                            </button>
+                            <button onClick={() => setConfirmDeleteId(null)} disabled={busy}>
+                              取消
+                            </button>
+                          </>
+                        ) : (
                           <button
                             className="ct-delete"
-                            onClick={() => void removeTemplate(tpl.template_id, tpl.title)}
+                            onClick={() => setConfirmDeleteId(tpl.template_id)}
                             disabled={busy}
+                            aria-label="删除成熟模式"
                           >
-                            确认删除
+                            ×
                           </button>
-                          <button onClick={() => setConfirmDeleteId(null)} disabled={busy}>
-                            取消
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          className="ct-delete"
-                          onClick={() => setConfirmDeleteId(tpl.template_id)}
-                          disabled={busy}
-                          aria-label="删除成熟模式"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="canvas-hint">从成熟模式起的新工作流节点 id 会重置；保存后成为独立画布。</p>
-          </fieldset>
-          <fieldset>
-            <legend>运行说明</legend>
-            <p className="canvas-hint">
-              {isProject
-                ? "在「节点编辑 → 接执行」里点「▶ 运行此节点」会经控制核心 + 双闸派发到本项目；默认安全态会被后端挡下、零执行（项目真跑 P3 逐次授权）。方案视图是草案，提交为正式工作流也经控制核心 / 权限 / 审计。"
-                : "在「节点编辑 → 接执行」里点「▶ 运行此节点」经双闸命令派发；默认安全态（非固定测试项目 / 未设 env 钥匙）会被后端挡下、零执行。实验画布不是项目工作流事实源，真跑只打固定测试项目。"}
-            </p>
-          </fieldset>
-        </aside>
-        <div className="canvas-flow" onDoubleClick={onPaneDoubleClick}>
-          {nodes.length === 0 ? (
-            <div className="canvas-empty-guide" role="note">
-              <strong>空白画布</strong>
-              <span>从左侧「节点调色板」点一个种类，或在画布空白处双击，建第一个节点。</span>
-              <span>建好后点选节点，在右侧「节点编辑」里改名称 / 种类 / 提示词 / 自定义字段。</span>
-            </div>
-          ) : null}
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onSelectionChange={({ nodes: sel }) => setSelected(sel[0]?.id ?? null)}
-            panOnScroll
-            zoomOnScroll={false}
-            zoomOnPinch
-            zoomOnDoubleClick={false}
-            nodesDraggable
-            nodesConnectable
-            elementsSelectable
-            fitView
-          >
-            <Background />
-            <Controls />
-            <MiniMap />
-          </ReactFlow>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </fieldset>
+            <ExperimentCanvasBoundaryPanel boundary={config.boundary} />
+          </details>
         </div>
       </div>
     </section>
@@ -716,7 +718,7 @@ function NodeEditor({
   };
   return (
     <div className="canvas-node-editor">
-      <p>
+      <p className="cne-id">
         <strong>编号：</strong> <code>{node.id}</code>
       </p>
       <label>
@@ -729,36 +731,6 @@ function NodeEditor({
         />
       </label>
       <label>
-        种类（自由）
-        <input
-          type="text"
-          list="canvas-node-kinds"
-          value={data.kind}
-          onChange={(e) => onChange({ kind: e.target.value })}
-          disabled={disabled}
-        />
-        <datalist id="canvas-node-kinds">
-          {NODE_KIND_PRESETS.map((preset) => (
-            <option key={preset.kind} value={preset.kind} />
-          ))}
-        </datalist>
-      </label>
-      <label>
-        状态灯
-        <input
-          type="text"
-          list="canvas-node-status"
-          value={data.status}
-          onChange={(e) => onChange({ status: e.target.value })}
-          disabled={disabled}
-        />
-        <datalist id="canvas-node-status">
-          {STATUS_PRESETS.map((status) => (
-            <option key={status} value={status} />
-          ))}
-        </datalist>
-      </label>
-      <label>
         提示词 prompt
         <textarea
           value={data.prompt}
@@ -767,21 +739,51 @@ function NodeEditor({
           disabled={disabled}
         />
       </label>
-      <label>
-        技能 / 岗位
-        <input
-          type="text"
-          value={data.skill ?? ""}
-          onChange={(e) => onChange({ skill: e.target.value })}
-          disabled={disabled}
-        />
-      </label>
-      <fieldset className="canvas-custom-fields">
-        <legend>自定义字段</legend>
-        {data.fields.length === 0 ? (
-          <p className="canvas-hint">没有自定义字段。</p>
-        ) : (
-          data.fields.map((field) => (
+      {/* P3 砍杂项：种类 / 状态 / 技能 / 自定义字段折进默认收起的「字段 / 高级」区，日常看不到。 */}
+      <details className="canvas-advanced-details">
+        <summary>字段 / 高级（种类 · 状态 · 技能 · 自定义字段）</summary>
+        <label>
+          种类（自由）
+          <input
+            type="text"
+            list="canvas-node-kinds"
+            value={data.kind}
+            onChange={(e) => onChange({ kind: e.target.value })}
+            disabled={disabled}
+          />
+          <datalist id="canvas-node-kinds">
+            {NODE_KIND_PRESETS.map((preset) => (
+              <option key={preset.kind} value={preset.kind} />
+            ))}
+          </datalist>
+        </label>
+        <label>
+          状态灯
+          <input
+            type="text"
+            list="canvas-node-status"
+            value={data.status}
+            onChange={(e) => onChange({ status: e.target.value })}
+            disabled={disabled}
+          />
+          <datalist id="canvas-node-status">
+            {STATUS_PRESETS.map((status) => (
+              <option key={status} value={status} />
+            ))}
+          </datalist>
+        </label>
+        <label>
+          技能 / 岗位
+          <input
+            type="text"
+            value={data.skill ?? ""}
+            onChange={(e) => onChange({ skill: e.target.value })}
+            disabled={disabled}
+          />
+        </label>
+        <fieldset className="canvas-custom-fields">
+          <legend>自定义字段</legend>
+          {data.fields.map((field) => (
             <div className="canvas-custom-field-row" key={field.id}>
               <input
                 type="text"
@@ -803,10 +805,10 @@ function NodeEditor({
                 ×
               </button>
             </div>
-          ))
-        )}
-        <button type="button" onClick={addField} disabled={disabled}>+ 字段</button>
-      </fieldset>
+          ))}
+          <button type="button" onClick={addField} disabled={disabled}>+ 字段</button>
+        </fieldset>
+      </details>
       <details className="canvas-exec-details">
         <summary>接执行（真跑用）</summary>
         <label>
@@ -867,9 +869,7 @@ function NodeEditor({
                 ))}
               </datalist>
             </label>
-          ) : (
-            <p className="canvas-hint">运行时在作用域内新建一条 codex 会话（定义层不产生真会话）。</p>
-          )}
+          ) : null}
         </div>
         <label>
           工作项 ID
@@ -891,15 +891,10 @@ function NodeEditor({
           >
             ▶ 运行此节点
           </button>
-          <p className="canvas-hint">
-            {readiness.ready
-              ? "经双闸命令派发；默认安全态（非固定测试项目 / 未设 env 钥匙）会被后端挡下、零执行。"
-              : `运行前提未满足：${readiness.reason}`}
-          </p>
+          {readiness.ready ? null : (
+            <p className="canvas-hint">运行前提未满足：{readiness.reason}</p>
+          )}
         </div>
-        <p className="canvas-hint">
-          v1 暂不支持画布内新建会话；先在 Codex 命令行或智能体页起好会话，再回来这里绑上。
-        </p>
       </details>
     </div>
   );
