@@ -21,7 +21,6 @@ pub mod mcp;
 mod memory_candidate_store;
 mod memory_capture_bus;
 mod memory_consistency;
-mod memory_daily_loop;
 mod memory_entity_relation_governance;
 mod memory_entity_relation_store;
 mod memory_lint_engine;

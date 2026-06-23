@@ -99,8 +99,8 @@ B 线·前端    拆瘦 ──► 布局翻新 ──► 功能填充 ┘   蓝�
 | B·前端组件拆分设计 | `docs/plans/2026-06-13-root-treatment-r4-h3-...-layout-block-split-design-v1.md` |
 | 底座·R3 真库 | `docs/plans/2026-06-11-root-treatment-r3-production-cutover-...-v1.md` 等 |
 | 底座·记忆层 + 功能候选 | `backlog.md`（统一记忆层 / Xuanji 簇 / 接住 vibe / 项目状态摘要面板） |
-| 终局·乙 | `docs/architecture/local-ai-workbench-blueprint-v1.md` §11/§12/§26 |
-| 既有大阶段史 | `STAGE_PLAN.md`（Stage A-R 已收口 / Stage L 剩项 / R3 deferred） |
+| 终局·乙 | `/Users/yoyi/Documents/Codex/2026-05-26/gan-xing-codexbridge-https-github-com/docs/architecture/local-ai-workbench-blueprint-v1.md` §11/§12/§26（外部蓝图正源，见 `AUTHORITY.md`；product-line 内无此路径） |
+| 既有大阶段史 | `archive/STAGE_PLAN.md`（已归档·状态过期 / Stage A-R / Stage L 剩项 / R3 deferred） |
 
 ---
 

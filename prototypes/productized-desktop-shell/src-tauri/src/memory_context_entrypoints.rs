@@ -1,8 +1,5 @@
 // Memory command bridge, observation bridge, task memory preview, and context guard helpers split out during Root Treatment R2-B7.
 // This file is included at crate root so helper visibility and behavior stay unchanged.
-#[cfg(test)]
-#[path = "ru_dogfood.rs"]
-mod ru_dogfood;
 
 fn create_formal_memory_record_at(
     path: &Path,

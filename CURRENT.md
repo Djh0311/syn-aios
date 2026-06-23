@@ -32,7 +32,7 @@
 
 > **2026-06-23 全面审查 + 真计划已出（推翻了"#20 真编排是下一主线"的旧框）。** 审查发现：**A 线（角色循环 C1–C6 + 记忆闭环 M1–M13）早建成、后端活（cargo 580、104 A 线测试绿）、但前端 UX 差被弃用；B 线（relay/画布/链 = 用户当年开的"中间版本"，强化对话+工作流）是现在在用、前端已调好；两线在项目页缠绕、各有一套真执行闸**。方向 = **分层复用统一**（前端用 B 现有、后端复用 A、执行层合一）。**下一步执行真计划 `docs/plans/2026-06-23-next-stage-unify-and-requirements-plan-v1.md`**：
 
-1. **S0 瘦身+文档对齐**（零风险）：删孤儿死码（`ru_dogfood`/`memory_daily_loop`/4 死视图/tauri 死包装/`run_workflow_machine` 真实现留 stub）+ 修 README/CURRENT/roadmap。
+1. ✅ **S0 瘦身+文档对齐 = 已执行（四闸绿·cargo 575/0·本次 commit）**：删孤儿死码（`ru_dogfood`/`memory_daily_loop`/4 死视图/tauri 死包装，净 −1256 行）+ README 砍纯入口 + roadmap 修 2 断链。**纠偏（已核物）**：`run_workflow_machine` 真实现纠缠深（helper 被另一测试用）→ deferred 留后面 careful 做；`projectCanvasStateExamples` 实为测试夹具 → 保留（审查目录误判 2 处）。**+ S3 加「每日自动记忆采集」为完成标准（原 memory_daily_loop 点子接线通电）。**
 2. **S1 执行层合一**（高危#3·仅测试项目）：B 画布触发 + A 银行级执行闸 `decide_real_execution_command`，path-lock 作 authorization 必要项。
 3. **S2 救活+全盘统一**（核心）：A 角色循环原样接 B 现前端 + **记忆闭环全救** + 整理 A 旧面板残留 + 可用性（方案授权制 UI/收字段/编辑 UX）。
 4. **S3 做需求**（统一后）：agent 层/NL 拆解/一句话启动/角色补全/套模版（= 本会话对话扒清版需求，非 backlog）。

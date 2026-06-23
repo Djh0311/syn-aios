@@ -17,7 +17,6 @@ import type {
   ProjectWorkflowChainStatus,
   ProjectWorkflowListItem,
   SubmitProjectWorkflowDraftRequest,
-  CanvasRunState,
   WorkflowTemplate,
   WorkflowTemplateSummary,
   CodexSessionPage,
@@ -144,12 +143,9 @@ import type {
   WorkItemStateUpdateRequest,
   WorkflowRunCheck,
   WorkflowRunCheckRequest,
-  WorkflowMachineRunRequest,
-  WorkflowMachineRunResult,
   WorkflowNodeSessionBindRequest,
   WorkflowDispatchDirectorReviewRequest,
   WorkflowPermissionDecisionRequest,
-  WorkflowNodeDispatchExecuteRequest,
   WorkflowNodeDispatchPrepareRequest,
   WorkflowNodeDispatchResult,
   WorkflowNodeSessionUnbindRequest,
@@ -653,11 +649,6 @@ export function prepareWorkflowNodeDispatch(request: WorkflowNodeDispatchPrepare
   return invoke<WorkflowNodeDispatchResult>("prepare_workflow_node_dispatch", { request });
 }
 
-export function executeLegacyWorkflowNodeDispatch(request: WorkflowNodeDispatchExecuteRequest): Promise<WorkflowNodeDispatchResult> {
-  ensureTauriRuntime();
-  return invoke<WorkflowNodeDispatchResult>("execute_workflow_node_dispatch", { request });
-}
-
 export function prepareOfflineRoleDispatch(request: OfflineRoleDispatchRequest): Promise<WorkflowNodeDispatchResult> {
   ensureTauriRuntime();
   return invoke<WorkflowNodeDispatchResult>("prepare_offline_role_dispatch", { request });
@@ -671,11 +662,6 @@ export function recordOfflineRoleResultHandoff(request: OfflineRoleResultHandoff
 export function recordOfflineDirectorReview(request: OfflineDirectorReviewRequest): Promise<WorkflowStateMutationResult> {
   ensureTauriRuntime();
   return invoke<WorkflowStateMutationResult>("record_offline_director_review", { request });
-}
-
-export function runLegacyWorkflowMachine(request: WorkflowMachineRunRequest): Promise<WorkflowMachineRunResult> {
-  ensureTauriRuntime();
-  return invoke<WorkflowMachineRunResult>("run_workflow_machine", { request });
 }
 
 export function recordWorkflowDispatchDirectorReview(
@@ -760,44 +746,6 @@ export function canvasLoad(canvasId: string): Promise<CanvasDefinition> {
 export function canvasSave(canvas: CanvasDefinition): Promise<void> {
   ensureTauriRuntime();
   return invoke<void>("canvas_save", { canvas });
-}
-
-export type CanvasStartRunRequest = { canvas_id: string; goal: string };
-export type CanvasStartRunResult = {
-  run_id: string;
-  state_path: string;
-  run: CanvasRunState;
-};
-export type CanvasRunStatus = {
-  run: CanvasRunState;
-  last_decision: unknown | null;
-};
-
-/**
- * @deprecated Legacy experiment canvas real run is sealed by the backend.
- * Use the H-stage unified product command boundary before any real Codex execution.
- */
-export function canvasStartRun(request: CanvasStartRunRequest): Promise<CanvasStartRunResult> {
-  ensureTauriRuntime();
-  return invoke<CanvasStartRunResult>("canvas_start_run", { request });
-}
-
-export function canvasAbortRun(runId: string, reason: string): Promise<CanvasRunStatus> {
-  ensureTauriRuntime();
-  return invoke<CanvasRunStatus>("canvas_abort_run", { runId, reason });
-}
-
-export function canvasRunStatus(runId: string): Promise<CanvasRunStatus> {
-  ensureTauriRuntime();
-  return invoke<CanvasRunStatus>("canvas_run_status", { runId });
-}
-
-/**
- * @deprecated Legacy experiment canvas tick can spawn Codex and is sealed by the backend.
- */
-export function canvasTickRun(runId: string): Promise<unknown> {
-  ensureTauriRuntime();
-  return invoke<unknown>("canvas_tick_run", { runId });
 }
 
 // ---- Workflow templates (plan B · 成熟模式保留) — data store only ----
