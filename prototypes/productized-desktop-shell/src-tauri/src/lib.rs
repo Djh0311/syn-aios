@@ -3624,8 +3624,8 @@ mod tests {
     fn real_run_full_dispatch_resume() {
         let test_root = "/Users/yoyi/codex-workflow-mario-test";
         let real_session = "019ed9f7-c0c2-7213-b871-6d18959b7c24";
-        let dir = std::env::temp_dir()
-            .join(format!("full-dispatch-real-{}", unix_timestamp_string()));
+        let dir =
+            std::env::temp_dir().join(format!("full-dispatch-real-{}", unix_timestamp_string()));
         let path = dir.join("workflow-state.v0.json");
         let project = fixture_project(test_root);
         let index = fixture_dispatch_index(test_root, real_session);
@@ -3774,7 +3774,9 @@ mod tests {
         assert_eq!(result.dispatch.exit_code, Some(0));
         // A · 自动建了一个临时 work_item（数量增长 + 标题前缀），无需手填 work_item_id。
         let after_value = read_json_file(&path);
-        let items = after_value["work_items"].as_array().expect("work_items array");
+        let items = after_value["work_items"]
+            .as_array()
+            .expect("work_items array");
         assert!(items.len() > before, "应自动建一个临时 work_item");
         let temp = items
             .iter()
@@ -3795,8 +3797,10 @@ mod tests {
     #[test]
     fn experiment_node_dispatch_new_session_returns_clear_error() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
-        let dir = std::env::temp_dir()
-            .join(format!("experiment-dispatch-new-{}", unix_timestamp_string()));
+        let dir = std::env::temp_dir().join(format!(
+            "experiment-dispatch-new-{}",
+            unix_timestamp_string()
+        ));
         let path = dir.join("workflow-state.v0.json");
         let index_path = dir.join("codex-index.json");
         let index = fixture_dispatch_index(test_root, "thread-exp-1");
@@ -3817,15 +3821,20 @@ mod tests {
         let error =
             execute_experiment_node_dispatch_at(&path, &index, &index_path, &runner, &request)
                 .expect_err("resume-only：new 应报错不假跑");
-        assert!(error.contains("resume-only"), "错误应点明 resume-only / 开新会话未启用：{error}");
+        assert!(
+            error.contains("resume-only"),
+            "错误应点明 resume-only / 开新会话未启用：{error}"
+        );
     }
 
     // 会话不在 5/31 静态名册 → 拒绝（resume 近期/新会话的现实障碍，拦路石①）。
     #[test]
     fn experiment_node_dispatch_session_not_in_index_refused() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
-        let dir = std::env::temp_dir()
-            .join(format!("experiment-dispatch-noidx-{}", unix_timestamp_string()));
+        let dir = std::env::temp_dir().join(format!(
+            "experiment-dispatch-noidx-{}",
+            unix_timestamp_string()
+        ));
         let path = dir.join("workflow-state.v0.json");
         let index_path = dir.join("codex-index.json");
         let index = fixture_dispatch_index(test_root, "thread-in-index");
@@ -3846,7 +3855,10 @@ mod tests {
         let error =
             execute_experiment_node_dispatch_at(&path, &index, &index_path, &runner, &request)
                 .expect_err("会话不在名册应拒绝");
-        assert!(error.contains("不在当前索引内"), "错误应点明会话不在名册：{error}");
+        assert!(
+            error.contains("不在当前索引内"),
+            "错误应点明会话不在名册：{error}"
+        );
     }
 
     // P3 项目面真跑（C 映射）·机器闸：用已存在的 work_item（带任务包）+ 绑定，stub runner 验证
@@ -3862,10 +3874,14 @@ mod tests {
         let index = fixture_dispatch_index(test_root, "thread-proj-1");
         fs::create_dir_all(&dir).expect("fixture dir should exist");
         bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
-        create_task_draft_at(&path, &fixture_task_draft_request(test_root, "项目节点真跑任务"))
-            .expect("work item should exist");
-        let work_item_id = optional_string_from(&read_json_file(&path)["work_items"][0], "work_item_id")
-            .expect("work item id should exist");
+        create_task_draft_at(
+            &path,
+            &fixture_task_draft_request(test_root, "项目节点真跑任务"),
+        )
+        .expect("work item should exist");
+        let work_item_id =
+            optional_string_from(&read_json_file(&path)["work_items"][0], "work_item_id")
+                .expect("work item id should exist");
         update_work_item_state_at(
             &path,
             &fixture_work_item_state_update_request(test_root, &work_item_id, "ready_to_dispatch"),
@@ -3876,7 +3892,12 @@ mod tests {
         let session = fixture_session("thread-proj-1", test_root, true);
         bind_workflow_node_codex_session_at(
             &path,
-            &fixture_node_session_bind_request(test_root, &node_id, Some(&work_item_id), "thread-proj-1"),
+            &fixture_node_session_bind_request(
+                test_root,
+                &node_id,
+                Some(&work_item_id),
+                "thread-proj-1",
+            ),
             &session,
         )
         .expect("binding should write");
@@ -3904,25 +3925,34 @@ mod tests {
     #[test]
     fn project_workflow_node_dispatch_refuses_when_work_item_not_ready() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
-        let dir = std::env::temp_dir()
-            .join(format!("project-node-notready-{}", unix_timestamp_string()));
+        let dir =
+            std::env::temp_dir().join(format!("project-node-notready-{}", unix_timestamp_string()));
         let path = dir.join("workflow-state.v0.json");
         let index_path = dir.join("codex-index.json");
         let project = fixture_project(test_root);
         let index = fixture_dispatch_index(test_root, "thread-proj-2");
         fs::create_dir_all(&dir).expect("fixture dir should exist");
         bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
-        create_task_draft_at(&path, &fixture_task_draft_request(test_root, "未就绪项目任务"))
-            .expect("work item should exist");
-        let work_item_id = optional_string_from(&read_json_file(&path)["work_items"][0], "work_item_id")
-            .expect("work item id should exist");
+        create_task_draft_at(
+            &path,
+            &fixture_task_draft_request(test_root, "未就绪项目任务"),
+        )
+        .expect("work item should exist");
+        let work_item_id =
+            optional_string_from(&read_json_file(&path)["work_items"][0], "work_item_id")
+                .expect("work item id should exist");
         // 故意不推进到 ready_to_dispatch（停在 draft）。
         let workflow_id = default_workflow_id(test_root);
         let node_id = format!("{workflow_id}:node:codex-dev");
         let session = fixture_session("thread-proj-2", test_root, true);
         bind_workflow_node_codex_session_at(
             &path,
-            &fixture_node_session_bind_request(test_root, &node_id, Some(&work_item_id), "thread-proj-2"),
+            &fixture_node_session_bind_request(
+                test_root,
+                &node_id,
+                Some(&work_item_id),
+                "thread-proj-2",
+            ),
             &session,
         )
         .expect("binding should write");
@@ -3950,7 +3980,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("submit-new-wf-{}", unix_timestamp_string()));
         let path = dir.join("workflow-state.v0.json");
         fs::create_dir_all(&dir).expect("fixture dir should exist");
-        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root))
+            .expect("workflow should exist");
         let before = read_json_file(&path)["workflows"]
             .as_array()
             .map(|a| a.len())
@@ -3965,8 +3996,13 @@ mod tests {
             ],
             edges: vec![json!({"id":"e1","from":"d1","to":"a1"})],
         };
-        let result = submit_project_workflow_draft_at(&path, &request).expect("submit new should write");
-        assert!(result.message.contains("已新建"), "应报已新建：{}", result.message);
+        let result =
+            submit_project_workflow_draft_at(&path, &request).expect("submit new should write");
+        assert!(
+            result.message.contains("已新建"),
+            "应报已新建：{}",
+            result.message
+        );
         let after = read_json_file(&path);
         assert_eq!(
             after["workflows"].as_array().unwrap().len(),
@@ -3981,7 +4017,11 @@ mod tests {
             .find(|w| optional_string_from(w, "title").as_deref() == Some("我的新工作流"))
             .expect("new workflow present");
         let wid = optional_string_from(new_wf, "workflow_id").unwrap();
-        assert_ne!(wid, default_workflow_id(test_root), "新工作流 id 不是 default");
+        assert_ne!(
+            wid,
+            default_workflow_id(test_root),
+            "新工作流 id 不是 default"
+        );
         let node_count = after["nodes"]
             .as_array()
             .unwrap()
@@ -4011,12 +4051,15 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("submit-nodir-wf-{}", unix_timestamp_string()));
         let path = dir.join("workflow-state.v0.json");
         fs::create_dir_all(&dir).expect("fixture dir should exist");
-        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root))
+            .expect("workflow should exist");
         let request = SubmitProjectWorkflowDraftRequest {
             project_root: test_root.to_string(),
             workflow_id: None,
             title: "缺主管的工作流".to_string(),
-            nodes: vec![json!({"id":"a1","kind":"subagent","label":"开发","position":{"x":1,"y":1}})],
+            nodes: vec![
+                json!({"id":"a1","kind":"subagent","label":"开发","position":{"x":1,"y":1}}),
+            ],
             edges: vec![],
         };
         let error = submit_project_workflow_draft_at(&path, &request)
@@ -4030,7 +4073,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("submit-upd-wf-{}", unix_timestamp_string()));
         let path = dir.join("workflow-state.v0.json");
         fs::create_dir_all(&dir).expect("fixture dir should exist");
-        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root))
+            .expect("workflow should exist");
         // 先新建一个有 2 节点的工作流。
         submit_project_workflow_draft_at(
             &path,
@@ -4068,7 +4112,11 @@ mod tests {
             },
         )
         .expect("update should write");
-        assert!(result.message.contains("已更新"), "应报已更新：{}", result.message);
+        assert!(
+            result.message.contains("已更新"),
+            "应报已更新：{}",
+            result.message
+        );
         let after = read_json_file(&path);
         let node_count = after["nodes"]
             .as_array()
@@ -4083,10 +4131,12 @@ mod tests {
     #[test]
     fn submit_project_workflow_draft_prunes_binding_of_removed_node() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
-        let dir = std::env::temp_dir().join(format!("submit-prune-bind-{}", unix_timestamp_string()));
+        let dir =
+            std::env::temp_dir().join(format!("submit-prune-bind-{}", unix_timestamp_string()));
         let path = dir.join("workflow-state.v0.json");
         fs::create_dir_all(&dir).expect("fixture dir should exist");
-        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root))
+            .expect("workflow should exist");
         // 新建一个含 director + subagent 的工作流。
         submit_project_workflow_draft_at(
             &path,
@@ -4150,7 +4200,9 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .filter(|b| optional_string_from(b, "node_id").as_deref() == Some(subagent_node_id.as_str()))
+            .filter(|b| {
+                optional_string_from(b, "node_id").as_deref() == Some(subagent_node_id.as_str())
+            })
             .count();
         assert_eq!(bound_before, 1, "前置：subagent 节点应有 1 条绑定");
         // 编辑：只留 director（删掉 subagent）→ 提交更新。
@@ -4160,7 +4212,9 @@ mod tests {
                 project_root: test_root.to_string(),
                 workflow_id: Some(wid.clone()),
                 title: "B-prune 工作流".to_string(),
-                nodes: vec![json!({"id":"d1","kind":"director","label":"主管","position":{"x":1,"y":1}})],
+                nodes: vec![
+                    json!({"id":"d1","kind":"director","label":"主管","position":{"x":1,"y":1}}),
+                ],
                 edges: vec![],
             },
         )
@@ -4169,9 +4223,14 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .filter(|b| optional_string_from(b, "node_id").as_deref() == Some(subagent_node_id.as_str()))
+            .filter(|b| {
+                optional_string_from(b, "node_id").as_deref() == Some(subagent_node_id.as_str())
+            })
             .count();
-        assert_eq!(bound_after, 0, "删掉 subagent 节点后，它的绑定应被 prune（不悬空/不重挂）");
+        assert_eq!(
+            bound_after, 0,
+            "删掉 subagent 节点后，它的绑定应被 prune（不悬空/不重挂）"
+        );
     }
 
     // 架构债·根治 B：node_id 用节点稳定 id（非位置式）→ 重排节点后，某节点 node_id 不变 → 会话绑定不漂。
@@ -4179,10 +4238,12 @@ mod tests {
     #[test]
     fn submit_project_workflow_draft_node_id_stable_across_reorder() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
-        let dir = std::env::temp_dir().join(format!("submit-stable-id-{}", unix_timestamp_string()));
+        let dir =
+            std::env::temp_dir().join(format!("submit-stable-id-{}", unix_timestamp_string()));
         let path = dir.join("workflow-state.v0.json");
         fs::create_dir_all(&dir).expect("fixture dir should exist");
-        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root))
+            .expect("workflow should exist");
         let find_subagent = |wid: &str| {
             optional_string_from(
                 read_json_file(&path)["nodes"]
@@ -4198,7 +4259,8 @@ mod tests {
             )
             .unwrap()
         };
-        let dir_node = json!({"id":"dir","kind":"director","label":"主管","position":{"x":1,"y":1}});
+        let dir_node =
+            json!({"id":"dir","kind":"director","label":"主管","position":{"x":1,"y":1}});
         let sub_node = json!({"id":"sa","kind":"subagent","label":"开发","position":{"x":2,"y":2}});
         // v1：director 在前、subagent 在后。
         submit_project_workflow_draft_at(
@@ -4236,7 +4298,10 @@ mod tests {
         )
         .expect("update");
         let node_id_v2 = find_subagent(&wid);
-        assert_eq!(node_id_v1, node_id_v2, "subagent 的 node_id 应跨重排稳定（用稳定 id、非位置式）");
+        assert_eq!(
+            node_id_v1, node_id_v2,
+            "subagent 的 node_id 应跨重排稳定（用稳定 id、非位置式）"
+        );
     }
 
     // 后置C#2·机器闸：画布建的（非默认）工作流，节点载荷带 resume 会话 → 运行时自动建临时 work_item
@@ -4248,7 +4313,8 @@ mod tests {
         let path = dir.join("workflow-state.v0.json");
         let index_path = dir.join("codex-index.json");
         fs::create_dir_all(&dir).expect("fixture dir should exist");
-        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root))
+            .expect("workflow should exist");
         // 画布新建一个工作流：director + 一个带 resume 会话载荷的 subagent 节点。
         submit_project_workflow_draft_at(
             &path,
@@ -4292,12 +4358,19 @@ mod tests {
         let count_wi = |p: &Path, w: &str| {
             read_json_file(p)["work_items"]
                 .as_array()
-                .map(|a| a.iter().filter(|it| optional_string_from(it, "workflow_id").as_deref() == Some(w)).count())
+                .map(|a| {
+                    a.iter()
+                        .filter(|it| optional_string_from(it, "workflow_id").as_deref() == Some(w))
+                        .count()
+                })
                 .unwrap_or(0)
         };
         let wi_before = count_wi(&path, &wid);
         let runner = PermissiveExperimentRunner {
-            stats: CodexDispatchReadbackStats { transcript_event_count: 2, transcript_target_hits: 1 },
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 2,
+                transcript_target_hits: 1,
+            },
         };
         DISPATCH_READBACK_NATIVE_READ_COUNT.with(|count| count.set(0));
         let index = fixture_dispatch_index(test_root, "thread-c2");
@@ -4307,8 +4380,9 @@ mod tests {
             work_item_id: String::new(), // 空 → 自动建临时 work_item
             workflow_id: Some(wid.clone()),
         };
-        let result = execute_project_workflow_node_at(&path, &index, &index_path, &runner, &request)
-            .expect("画布工作流节点应能自动建票+绑+派发");
+        let result =
+            execute_project_workflow_node_at(&path, &index, &index_path, &runner, &request)
+                .expect("画布工作流节点应能自动建票+绑+派发");
         assert_eq!(result.dispatch.state, "completed");
         assert_eq!(result.dispatch.exit_code, Some(0));
         assert!(count_wi(&path, &wid) > wi_before, "应自动建临时 work_item");
@@ -4433,7 +4507,10 @@ mod tests {
             .cloned()
             .unwrap_or_default();
         assert_eq!(runs.len(), 1, "只一条链运行记录");
-        assert_eq!(optional_string_from(&runs[0], "state").as_deref(), Some("completed"));
+        assert_eq!(
+            optional_string_from(&runs[0], "state").as_deref(),
+            Some("completed")
+        );
     }
 
     #[test]
@@ -4472,8 +4549,16 @@ mod tests {
                 .and_then(|n| optional_string_from(n, "state"))
         };
         assert_eq!(state_of("a").as_deref(), Some("failed"));
-        assert_eq!(state_of("b").as_deref(), Some("pending"), "失败后不应继续派发 b");
-        assert_eq!(state_of("c").as_deref(), Some("pending"), "失败后不应继续派发 c");
+        assert_eq!(
+            state_of("b").as_deref(),
+            Some("pending"),
+            "失败后不应继续派发 b"
+        );
+        assert_eq!(
+            state_of("c").as_deref(),
+            Some("pending"),
+            "失败后不应继续派发 c"
+        );
         assert!(audit_has(&path, "workflow_chain_node_failed"));
         assert!(audit_has(&path, "workflow_chain_run_failed"));
     }
@@ -4572,7 +4657,10 @@ mod tests {
         .expect("run2");
         assert_eq!(run2.state, "completed");
         assert_eq!(run2.dispatched_count, 3, "三节点最终都完成");
-        assert_eq!(run1.chain_run_id, run2.chain_run_id, "断点续：复用同一条链运行记录");
+        assert_eq!(
+            run1.chain_run_id, run2.chain_run_id,
+            "断点续：复用同一条链运行记录"
+        );
         let runs = read_json_file(&path)["workflow_chain_runs"]
             .as_array()
             .cloned()
@@ -4584,7 +4672,10 @@ mod tests {
             .iter()
             .find(|n| optional_string_from(n, "node_id").as_deref() == Some(a_node_id.as_str()))
             .and_then(|n| optional_string_from(n, "dispatch_id"));
-        assert_eq!(a_dispatch_id_1, a_dispatch_id_2, "已完成的 a 应被跳过、不重跑");
+        assert_eq!(
+            a_dispatch_id_1, a_dispatch_id_2,
+            "已完成的 a 应被跳过、不重跑"
+        );
     }
 
     #[test]
@@ -4720,7 +4811,10 @@ mod tests {
             .iter()
             .find(|r| optional_string_from(r, "chain_run_id").as_deref() == Some("cr-stopcmd-1"))
             .unwrap();
-        assert_eq!(run.get("stop_requested").and_then(Value::as_bool), Some(true));
+        assert_eq!(
+            run.get("stop_requested").and_then(Value::as_bool),
+            Some(true)
+        );
         assert!(audit_has(&path, "workflow_chain_stop_requested"));
     }
 
@@ -4730,7 +4824,8 @@ mod tests {
     #[test]
     fn submit_project_workflow_draft_not_blocked_by_canvas_run_work_items() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
-        let dir = std::env::temp_dir().join(format!("submit-after-run-{}", unix_timestamp_string()));
+        let dir =
+            std::env::temp_dir().join(format!("submit-after-run-{}", unix_timestamp_string()));
         let path = dir.join("workflow-state.v0.json");
         fs::create_dir_all(&dir).expect("fixture dir");
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
@@ -4777,7 +4872,11 @@ mod tests {
             .and_then(|n| n.get("canvas_payload"))
             .and_then(|p| p.get("data"))
             .and_then(|d| optional_string_from(d, "prompt"));
-        assert_eq!(sub_prompt.as_deref(), Some("新填的子agent提示"), "编辑的 prompt 应存住");
+        assert_eq!(
+            sub_prompt.as_deref(),
+            Some("新填的子agent提示"),
+            "编辑的 prompt 应存住"
+        );
     }
 
     // 积压清理回归：每跑一次节点自动建一个 canvas_run 临时 work_item + 一条绑定，跑多了会累积。
@@ -4821,7 +4920,10 @@ mod tests {
         )
         .unwrap();
         let runner = PermissiveExperimentRunner {
-            stats: CodexDispatchReadbackStats { transcript_event_count: 2, transcript_target_hits: 1 },
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 2,
+                transcript_target_hits: 1,
+            },
         };
         DISPATCH_READBACK_NATIVE_READ_COUNT.with(|c| c.set(0));
         let index = fixture_dispatch_index(test_root, "thread-cap");
@@ -4841,19 +4943,202 @@ mod tests {
             .filter(|wi| {
                 optional_string_from(wi, "source_kind").as_deref() == Some("canvas_run")
                     && optional_string_from(wi, "workflow_id").as_deref() == Some(wid.as_str())
-                    && optional_string_from(wi, "origin_node_id").as_deref() == Some(node_id.as_str())
+                    && optional_string_from(wi, "origin_node_id").as_deref()
+                        == Some(node_id.as_str())
             })
             .count();
-        assert_eq!(wi_count, 1, "同节点 canvas_run 临时件应封顶 1，实际 {wi_count}");
+        assert_eq!(
+            wi_count, 1,
+            "同节点 canvas_run 临时件应封顶 1，实际 {wi_count}"
+        );
         let bind_count = v["workflow_node_session_bindings"]
             .as_array()
             .map(|b| {
                 b.iter()
-                    .filter(|x| optional_string_from(x, "node_id").as_deref() == Some(node_id.as_str()))
+                    .filter(|x| {
+                        optional_string_from(x, "node_id").as_deref() == Some(node_id.as_str())
+                    })
                     .count()
             })
             .unwrap_or(0);
         assert_eq!(bind_count, 1, "同节点会话绑定应封顶 1，实际 {bind_count}");
+    }
+
+    // ===== S1 执行层合一：B 画布派发过 A 强闸（option A：path-lock 作授权、guard 取执行安全子集） =====
+
+    // 铁律（§3）：authorized_for_real_runner ⟹ authorization_complete ⟹ path-lock 命中。
+    // B 把 authorization_complete 只赋 path-lock 命中 → 非测试项目必拦、测试项目+其余满足才放。
+    #[test]
+    fn s1_gate_iron_law_path_lock_required_for_authorized() {
+        let input = |authz: bool| crate::real_execution_command::RealExecutionCommandGateInput {
+            command_name: "execute_project_workflow_node",
+            command_family: "workflow_real_execution",
+            operation_id: "resume",
+            h5_unified_product_command: true,
+            authorization_complete: authz,
+            user_rejected: false,
+            duplicate_blocked: false,
+            guard_blocked: false,
+            diagnostics_blocked: false,
+            stale_memory_blocked: false,
+            readback_required: true,
+        };
+        // 非测试项目 → path-lock 不命中
+        assert!(!workflow_engine_test_project_unsealed(
+            "/tmp/not-test-project"
+        ));
+        assert!(!workflow_engine_test_project_unsealed(
+            "/Users/yoyi/workspace/product-line"
+        ));
+        assert!(
+            !crate::real_execution_command::decide_real_execution_command(input(false))
+                .runner_call_allowed,
+            "铁律：path-lock 不命中（authorization_complete=false）→ 不授权"
+        );
+        // 测试项目 → path-lock 命中；其余判据满足 → 授权
+        assert!(workflow_engine_test_project_unsealed(
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT
+        ));
+        assert!(
+            crate::real_execution_command::decide_real_execution_command(input(true))
+                .runner_call_allowed,
+            "测试项目 + 各判据满足 → 授权"
+        );
+    }
+
+    // duplicate_blocked：只数 "running"（真正执行中），不数 "prepared"（每次派发残留的 orphan）。
+    #[test]
+    fn s1_has_inflight_dispatch_counts_running_only() {
+        let with_state = |state: &str| json!({"workflow_node_dispatches":[{"workflow_id":"wf","node_id":"wf:node:x","state":state}]});
+        assert!(has_inflight_dispatch(
+            &with_state("running"),
+            "wf",
+            "wf:node:x"
+        ));
+        assert!(
+            !has_inflight_dispatch(&with_state("prepared"), "wf", "wf:node:x"),
+            "prepared 是 orphan 残留、不算在飞（否则误拦合法重跑）"
+        );
+        assert!(!has_inflight_dispatch(
+            &with_state("completed"),
+            "wf",
+            "wf:node:x"
+        ));
+        assert!(!has_inflight_dispatch(
+            &with_state("failed"),
+            "wf",
+            "wf:node:x"
+        ));
+        assert!(
+            !has_inflight_dispatch(&with_state("running"), "wf", "wf:node:other"),
+            "不同 node 不算"
+        );
+    }
+
+    // guard_blocked（option A）：A 的 3 道授权 reason 不计入 B；执行安全 reason 照计。
+    #[test]
+    fn s1_canvas_node_guard_blocked_excludes_authorization_reasons() {
+        let mk = |reasons: Vec<String>| CodexLocalExecutionGuard {
+            guard_version: 1,
+            status: "x".to_string(),
+            severity: "x".to_string(),
+            blocks_execution: true,
+            allows_dry_run: false,
+            requires_user_confirmation: false,
+            duplicate_running_attempt: false,
+            command_plan: None,
+            reasons,
+            required_fixes: vec![],
+            warnings: vec![],
+        };
+        // 纯授权 reason → 不计入 B
+        assert!(!canvas_node_guard_blocked(&mk(vec![
+            "user_confirmation_required".to_string(),
+            "authorization_scope_missing".to_string(),
+            "audit_ref_missing".to_string(),
+        ])));
+        // 夹一条执行安全 reason → 计入
+        assert!(canvas_node_guard_blocked(&mk(vec![
+            "user_confirmation_required".to_string(),
+            "check_paths_failed".to_string(),
+        ])));
+    }
+
+    // guard 安全子集真拦：prompt 含密钥词 → secret_deny_list 触发（执行安全 reason）→ guard_blocked。
+    #[test]
+    fn s1_guard_blocks_prompt_with_secret_but_allows_clean() {
+        let roots = vec![WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string()];
+        let secret_req = build_canvas_node_codex_local_request(
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            "project:test",
+            "wf",
+            "wf:node:x",
+            "thread-1",
+            "wi-1",
+            "请读取 .env 里的 token 再说",
+            "workspace-write",
+            &roots,
+        );
+        let g1 = crate::codex_local_runner::inspect_codex_local_execution_guard(&secret_req);
+        assert!(
+            canvas_node_guard_blocked(&g1),
+            "含密钥词的 prompt 应被执行安全子集拦：{:?}",
+            g1.reasons
+        );
+        let clean_req = build_canvas_node_codex_local_request(
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            "project:test",
+            "wf",
+            "wf:node:x",
+            "thread-1",
+            "wi-1",
+            "建一个文本文档",
+            "workspace-write",
+            &roots,
+        );
+        let g2 = crate::codex_local_runner::inspect_codex_local_execution_guard(&clean_req);
+        assert!(
+            !canvas_node_guard_blocked(&g2),
+            "干净 prompt 不应被执行安全子集拦（剩的只是被排除的授权 reason）：{:?}",
+            g2.reasons
+        );
+    }
+
+    // 端到端：节点已有在飞 running 派发 → execute_project_workflow_node_at 被 duplicate 闸拦、不起 runner。
+    #[test]
+    fn s1_gate_blocks_dispatch_when_node_has_inflight_running() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("s1-dup-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        fs::create_dir_all(&dir).expect("fixture dir");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        submit_chain_test_workflow(&path, test_root, "S1去重");
+        let wid = chain_test_workflow_id_by_title(&path, "S1去重");
+        let node_id = format!("{wid}:node:{}", stable_id("a"));
+        // 注入一条该节点的 "running" 派发（模拟在飞）。
+        let mut v = read_workflow_state_value(&path).unwrap();
+        ensure_array_mut(&mut v, "workflow_node_dispatches")
+            .unwrap()
+            .push(json!({
+              "dispatch_id":"d-inflight","workflow_id":wid,"node_id":node_id,"state":"running"
+            }));
+        write_validated_workflow_state(&path, &v).unwrap();
+        let runner = chain_test_runner();
+        DISPATCH_READBACK_NATIVE_READ_COUNT.with(|c| c.set(0));
+        let index = fixture_multi_thread_index(test_root, &["thread-1", "thread-2", "thread-3"]);
+        let req = ProjectWorkflowNodeRunRequest {
+            project_root: test_root.to_string(),
+            node_id: node_id.clone(),
+            work_item_id: String::new(),
+            workflow_id: Some(wid.clone()),
+        };
+        let err = execute_project_workflow_node_at(&path, &index, &index_path, &runner, &req)
+            .expect_err("在飞 running 应被 duplicate 闸拦");
+        assert!(
+            err.contains("duplicate_blocked"),
+            "应被 duplicate 闸拦、不起 runner：{err}"
+        );
     }
 
     #[test]

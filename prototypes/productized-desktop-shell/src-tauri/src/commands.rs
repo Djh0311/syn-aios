@@ -2171,6 +2171,57 @@ fn execute_project_workflow_node_at(
     } else {
         vec![]
     };
+
+    // S1 执行层合一（option A）：真起 runner 前，B 派发过 A 的统一强闸 decide_real_execution_command。
+    //   authorization_complete = path-lock 命中（铁律：authorized ⟹ 此 ⟹ path-lock；非测试项目即拦）；
+    //   duplicate_blocked = 查在飞派发（B 净新）；
+    //   guard_blocked = 过 A 的执行安全 guard，但只计「执行安全」reason、排除 A 的 3 道授权 reason（B 授权=path-lock）；
+    //   diagnostics/stale_memory/user_rejected 取 false（见 evidence：B 无诊断摘要输入·不走任务记忆包·无逐次审批=S2）；
+    //   readback_required = true（B 走 readback_db 回读）。
+    // 沙箱 command_plan_for / 判决体 decide_real_execution_command / A 线路径 均一字未改。
+    {
+        let path_lock_hit = workflow_engine_test_project_unsealed(&request.project_root);
+        let gate_state = read_workflow_state_value(path)?;
+        let duplicate_blocked = has_inflight_dispatch(&gate_state, &workflow_id, &request.node_id);
+        let guard = codex_local_runner::inspect_codex_local_execution_guard(
+            &build_canvas_node_codex_local_request(
+                &request.project_root,
+                &project_id(&request.project_root),
+                &workflow_id,
+                &request.node_id,
+                &thread_id,
+                &work_item_id,
+                &objective,
+                &sandbox_mode,
+                &write_roots,
+            ),
+        );
+        let guard_blocked = canvas_node_guard_blocked(&guard);
+        let gate = real_execution_command::decide_real_execution_command(
+            real_execution_command::RealExecutionCommandGateInput {
+                command_name: "execute_project_workflow_node",
+                command_family: "workflow_real_execution",
+                operation_id: "resume",
+                h5_unified_product_command: true,
+                authorization_complete: path_lock_hit,
+                user_rejected: false,
+                duplicate_blocked,
+                guard_blocked,
+                diagnostics_blocked: false,
+                stale_memory_blocked: false,
+                readback_required: true,
+            },
+        );
+        if !gate.runner_call_allowed {
+            return Err(format!(
+                "real_execution_gate_blocked:{}:{}（guard_reasons: {}）",
+                gate.status,
+                gate.reason,
+                guard.reasons.join(",")
+            ));
+        }
+    }
+
     let exec_request = WorkflowNodeDispatchExecuteRequest {
         project_root: request.project_root.clone(),
         node_id: request.node_id.clone(),
@@ -2193,6 +2244,99 @@ fn execute_project_workflow_node_at(
         }),
     };
     execute_workflow_node_dispatch_for_index_at(path, index, readback_db_path, runner, &exec_request)
+}
+
+// ===== S1 执行层合一：B 画布派发过 A 强闸的辅助件 =====
+
+// S1：查某 (workflow, node) 是否已有「在飞」（state=="running"）派发——给 duplicate_blocked。
+// 只数 "running"，不数 "prepared"：execute_workflow_node_dispatch_at 每次派发都先 write_prepared_dispatch
+// 留一条 orphan "prepared" 记录（永不推进，真正执行是另一条 started→completed），所以 "prepared" 每次残留、
+// 不是可靠在飞信号——数它会误拦同节点的合法重跑。"running" 是真正执行中的窗口（同一次调用里推进到
+// completed/failed，不残留），才是「当前正在跑」的准信号。
+fn has_inflight_dispatch(value: &Value, workflow_id: &str, node_id: &str) -> bool {
+    value
+        .get("workflow_node_dispatches")
+        .and_then(Value::as_array)
+        .map(|dispatches| {
+            dispatches.iter().any(|d| {
+                optional_string_from(d, "workflow_id").as_deref() == Some(workflow_id)
+                    && optional_string_from(d, "node_id").as_deref() == Some(node_id)
+                    && optional_string_from(d, "state").as_deref() == Some("running")
+            })
+        })
+        .unwrap_or(false)
+}
+
+// S1（option A）：B 的授权走 path-lock，不是 A 的「确认/范围/审计」那套。故 A 强 guard 的这 3 道**授权**
+// reason 不计入 B 的 guard_blocked；其余**执行安全** reason（adapter/operation/路径/密钥/prompt 边界/
+// readback/duplicate/command_plan…）照计。= 只加严（B 拿到执行安全检查）、不伪造授权产物。
+const CANVAS_NODE_GUARD_AUTHORIZATION_REASONS: [&str; 3] = [
+    "user_confirmation_required",
+    "authorization_scope_missing",
+    "audit_ref_missing",
+];
+
+fn canvas_node_guard_blocked(guard: &CodexLocalExecutionGuard) -> bool {
+    guard
+        .reasons
+        .iter()
+        .any(|reason| !CANVAS_NODE_GUARD_AUTHORIZATION_REASONS.contains(&reason.as_str()))
+}
+
+// S1：从画布节点派发上下文构造 CodexLocalExecutionRequest，仅供过 A 的**执行安全** guard。
+// 安全字段据实填（路径锁项目根、prompt 真算 sha256、readback 计划齐）；A 的授权产物（确认/范围/审计）
+// B 没有、**不伪造**，留空——它们触发的 3 道授权 reason 在 canvas_node_guard_blocked 里被排除（option A）。
+#[allow(clippy::too_many_arguments)]
+fn build_canvas_node_codex_local_request(
+    project_root: &str,
+    project_id_value: &str,
+    workflow_id: &str,
+    node_id: &str,
+    thread_id: &str,
+    work_item_id: &str,
+    objective: &str,
+    sandbox_mode: &str,
+    write_roots: &[String],
+) -> CodexLocalExecutionRequest {
+    CodexLocalExecutionRequest {
+        request_version: 1,
+        adapter_id: "codex-local".to_string(),
+        operation_id: "resume".to_string(),
+        project_id: project_id_value.to_string(),
+        project_root: project_root.to_string(),
+        workflow_id: workflow_id.to_string(),
+        node_id: node_id.to_string(),
+        session_id: Some(thread_id.to_string()),
+        work_item_id: Some(work_item_id.to_string()),
+        continuation_id: None,
+        target_cwd: project_root.to_string(),
+        allowed_write_roots: write_roots.to_vec(),
+        sandbox: sandbox_mode.to_string(),
+        prompt_source_kind: "user_reviewed_instruction".to_string(),
+        prompt_summary: objective.chars().take(160).collect(),
+        prompt_sha256: crate::utils::hash::sha256_hex(objective),
+        prompt_ref: format!("prompt-ref:canvas-node:{}", stable_id(node_id)),
+        readback_plan: CodexLocalReadbackPlan {
+            strategy: "required".to_string(),
+            required: true,
+            expected_sources: vec![
+                "workbench_managed_last_message".to_string(),
+                "workflow_node_dispatch".to_string(),
+            ],
+            unavailable_behavior: "readback_unavailable_or_failed_keeps_result_count_null"
+                .to_string(),
+            trust_policy: "must_be_explicit_readback_result_not_raw_transcript".to_string(),
+            warnings: vec!["readback_unavailable_is_not_zero_results".to_string()],
+        },
+        requested_by: "workflow_node_canvas_dispatch".to_string(),
+        // option A：授权走 path-lock（在 authorization_complete 算）；A 的授权产物 B 没有、不伪造，留空。
+        user_confirmation_state: "path_lock_only".to_string(),
+        authorization_scope_id: None,
+        runtime_log_refs: vec![],
+        audit_refs: vec![],
+        active_attempts: vec![],
+        warnings: vec!["canvas_node_guard_safety_subset_only".to_string()],
+    }
 }
 
 // P3 E · 多工作流底座（架构 §12）：列出某项目的所有工作流（看有哪些、选一个查看/编辑/新建）。
