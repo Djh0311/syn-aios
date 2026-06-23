@@ -25,15 +25,16 @@
 - **工作流引擎解封·走通已验（全派发路径真跑）**：bootstrap 工作流 → 绑真会话 `019ed9f7` → `execute_workflow_node_dispatch_for_index_at`（= 双闸命令过闸后的真实现）→ 适配器 resume → 真 codex 建 `workflow-fulldispatch-proof.txt`（内容对）、沙箱只动测试目录、dispatch `state=completed` exit0。`#[ignore]` 集成测试 `real_run_full_dispatch_resume`。**即:工作流 worker 节点已能经生产派发路径真跑 codex。**（注:派发是 resume 已绑真会话那套——节点需先绑一个真 codex 会话。）
 - 运行工作流画布·真机对图打磨：代码 P1–P4 完成，剩起 Tauri 微调视觉（未做）。
 - **工作流自动连环 P1（圈固定测试项目·跨高危#4 下放，决策 2026-06-23）= 已建·本次 commit·部分真机**：薄 controller `workflow_chain_controller.rs` 按拓扑序逐节点连跑，复用已 gated 的 `execute_project_workflow_node_at`（不旁路/不新开闸/`codex_local_runner`·`manual_relay`·闸 字节未碰）；四护栏 runaway上限(min(节点数,50))/可中断(节点边界 stop 标志)/审计/回滚 + 断点续；命令 `start/stop_project_workflow_chain`（start = async+`spawn_blocking` 防冻 UI）+ 画布起/停链按钮。cargo **578/0**（+11 测试）。**真机验过**：director 跑通、停链成、UI 不冻、**失败即停 6× 坐实**（subagent 空 prompt→报错→链停→reviewer 不跑）、断点续。**尚未真机**：完整链跑通（一直停在空-prompt subagent）、**沙箱写隔离在链场景**（无链节点写过文件——director 只读、subagent 没到 codex；机制字节未变、单节点早验过）。⚠️ **P1 = 顺序节点跑批，不是多智能体编排**：图边只定顺序、不传数据、主管不派活给子agent、审查不复核产出（那是乙/四角色引擎，未做）。决策 `decisions/2026-06-23-test-project-auto-chain-light-tier-v1.md`、交接 `handoffs/2026-06-23-workflow-chain-p1-inflight-handoff-v1.md`。
+- **画布编辑保存修复（真机确认·本次 commit）**：跑过链/节点后累积的 `canvas_run` 临时 work_item（无任务包 artifact）曾让 submit + 显示的运行性检查全 blocked → **编辑工作流存不下来**（真机踩到、绕了好几刀才定位）。修：submit + 读模型 run_check 都**剔除 canvas_run 临时件**（只看定义结构 + 真任务包件；真跑就绪 / path-lock / 沙箱 / fail-stop 一字未动·**安全没削**）+ 前端提交改用引擎实时编辑态（不依赖手动保存）。回归 `submit_project_workflow_draft_not_blocked_by_canvas_run_work_items`、`rejects_without_director` 仍过、cargo **579/0**。**真机确认**：subagent/审查 prompt 编辑存得住。
 
 ## 三、下一步
 
 > 画布主线全收口。**自动连环 P1（圈测试项目·跨高危#4）= 已建+本次 commit+部分真机**（见①；两道闸经"直接干"已过，决策 2026-06-23）。**下一步**：
 
 1. **P2 对话启动（用户已开工 2026-06-23）**：对话"按计划跑工作流 W" → 起链（仍逐节点真跑、圈测试项目、不绕状态机）。
-2. **补 P1 真机**：完整链跑通 + **沙箱写隔离**（给 subagent 真 prompt、跑写文件的节点、核 codex 只动测试目录）——P1 安全底线，未验。
+2. **补 P1 真机（保存已修、可做了）**：完整链跑通 + **沙箱写隔离**（subagent 给写文件 prompt、核 codex 只动测试目录）——P1 安全底线，未验。
 3. **多智能体编排（待方向）**：主管派子agent / 审查复核产出 = 乙核心，需解封/适配四角色引擎 `workflow_execution_entrypoints.rs`，比 P2 大；P1 只是顺序跑批、不做编排。
-4. **轻档积压**：画布手感打磨 / 节点对话编辑 NL（架构 §10）/ 文档归档·死码清理〔`workbench_sqlite_*` 勿删〕/ 旧运行画布对图。
+4. **轻档积压**：画布手感打磨 / 节点对话编辑 NL（架构 §10）/ **canvas_run 临时件累积清理 + run_check 对画布对齐**（老任务包模型查的字段画布不贴、临时件会越堆越多）/ 文档归档·死码清理〔`workbench_sqlite_*` 勿删〕/ 旧运行画布对图。
 5. **仍锁**：真跑进非测试真实项目（高危#1·明确授权不可省）。
 
 ## 四、锁着的 / 没接（区分三种「不在线上默认」，别压成「deferred」一个词——那是上一版误报之源）

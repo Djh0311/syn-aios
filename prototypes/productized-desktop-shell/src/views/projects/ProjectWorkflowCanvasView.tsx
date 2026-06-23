@@ -247,14 +247,20 @@ export function ProjectWorkflowCanvasView({
     void refreshWorkflows();
   }, [refreshWorkflows]);
 
+  // 引擎实时推上来的编辑态画布：提交直接用它（内存实时图），不读盘、不依赖手动保存。
+  const liveDraftRef = useRef<CanvasDefinition | null>(null);
+  const handleDraftChange = useCallback((canvas: CanvasDefinition) => {
+    liveDraftRef.current = canvas;
+  }, []);
+
   // 提交草案 → 真写回 workflow-state（§12）：新建=create（workflow_id 空、不覆盖谁）、编辑=update
   // （带 selectedWorkflowId）。经后端运行性检查「通过」+ 控制核心 + 审计；非测试项目仍被后端挡。
-  // 读引擎已保存的草案（引擎是手动「保存」，故提交前需先保存）。
+  // 根治两步陷阱：直接用引擎实时推上来的编辑态画布（内存），不依赖手动保存 / 读盘。回退读盘以防万一。
   const submitDraft = useCallback(async () => {
     try {
-      const draft = await canvasLoad(draftCanvasId);
+      const draft = liveDraftRef.current ?? (await canvasLoad(draftCanvasId));
       if (!draft || draft.nodes.length === 0) {
-        onNotice("草案为空或未保存；请先在画布上编辑并点「保存」，再提交。");
+        onNotice("草案为空；请先在画布上编辑，再提交。");
         return;
       }
       const result = await submitProjectWorkflowDraft({
@@ -612,6 +618,7 @@ export function ProjectWorkflowCanvasView({
                 canvasId={draftCanvasId}
                 sessions={sessions}
                 onNotice={onNotice}
+                onDraftChange={handleDraftChange}
               />
             </ReactFlowProvider>
             {/* 编辑动作 HUD：悬浮顶边（避开引擎底边动作条），提交 / 返回。 */}

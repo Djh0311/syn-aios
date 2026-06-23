@@ -2366,6 +2366,15 @@ fn submit_project_workflow_draft_at(
         .unwrap_or_else(|| json!({}));
     let nodes_all = value.get("nodes").and_then(Value::as_array).cloned().unwrap_or_default();
     let work_items_all = value.get("work_items").and_then(Value::as_array).cloned().unwrap_or_default();
+    // 提交是保存「定义」，不该被运行时自动建的临时 work_item 卡住：跑链/跑节点会给每次执行建一个
+    // canvas_run 临时 work_item（无任务包 artifact），它们会累积、在运行性检查里全 blocked（缺模型/
+    // 读写范围/验收/会话绑定）→ 跑过一次后就再也存不了草案。存草案只看定义结构（director 等），故剔除
+    // canvas_run 临时件再做运行性检查；真任务包 work_item 仍照查（旧模型不受影响）。
+    let work_items_for_check: Vec<Value> = work_items_all
+        .iter()
+        .filter(|wi| optional_string_from(wi, "source_kind").as_deref() != Some("canvas_run"))
+        .cloned()
+        .collect();
     let artifacts_all = value.get("artifacts").and_then(Value::as_array).cloned().unwrap_or_default();
     let bindings_all = value
         .get("workflow_node_session_bindings")
@@ -2377,7 +2386,7 @@ fn submit_project_workflow_draft_at(
         Some(&workflow_id),
         &workflow_record,
         &nodes_all,
-        &work_items_all,
+        &work_items_for_check,
         &artifacts_all,
         &bindings_all,
     );

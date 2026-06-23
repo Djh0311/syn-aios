@@ -584,12 +584,19 @@ fn derive_workflow_read_model(
         director_reviews,
         permission_requests,
     );
+    // 运行性检查剔除 canvas_run 临时 work_item（跑链/跑节点的产物、会累积、无任务包 artifact）——
+    // 与 submit 侧一致，否则跑过一次后状态条会一直显 blocked、跟「能存草案」对不上。真任务包件照查。
+    let work_items_for_check: Vec<Value> = work_items
+        .iter()
+        .filter(|wi| optional_string_from(wi, "source_kind").as_deref() != Some("canvas_run"))
+        .cloned()
+        .collect();
     let check = inspect_workflow_run_check_from_value(
         project_root,
         Some(&workflow_id),
         workflow,
         nodes,
-        work_items,
+        &work_items_for_check,
         artifacts,
         node_session_bindings,
     );

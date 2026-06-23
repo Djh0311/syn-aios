@@ -64,6 +64,9 @@ type WorkflowCanvasEngineProps = {
   canvasId: string;
   sessions: SessionRecord[];
   onNotice: (msg: string) => void;
+  // 宿主（项目面）订阅画布编辑态：每次改动把最新 canvas 推上来，提交时直接用内存里的实时图，
+  // 绕开"先手动保存再提交 + 读盘"整条链（真机实测刷盘方案修不动，改走实时推送）。
+  onDraftChange?: (canvas: CanvasDefinition) => void;
 };
 
 type FlowNode = Node<CanvasNodeData>;
@@ -102,7 +105,7 @@ function fromFlow(canvas: CanvasDefinition, nodes: FlowNode[], edges: Edge[]): C
   };
 }
 
-export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: WorkflowCanvasEngineProps) {
+export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice, onDraftChange }: WorkflowCanvasEngineProps) {
   const [canvas, setCanvas] = useState<CanvasDefinition | null>(null);
   const [nodes, setNodes] = useState<FlowNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -237,6 +240,12 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice }: W
       setBusy(false);
     }
   }, [canvas, nodes, edges, onNotice]);
+
+  // 把画布编辑态实时推给宿主：项目面「提交更新」直接用这份内存实时图（不读盘、不依赖手动保存）。
+  // 每次 nodes/edges 改动都重算 fromFlow 推上去——根治"不点保存就提交→读到旧 seed→编辑丢"。
+  useEffect(() => {
+    if (canvas) onDraftChange?.(fromFlow(canvas, nodes, edges));
+  }, [canvas, nodes, edges, onDraftChange]);
 
   // B2 · 把当前画布图存成可复用的「成熟模式」（workflow template）。纯数据，不执行。
   const saveAsTemplate = useCallback(async () => {

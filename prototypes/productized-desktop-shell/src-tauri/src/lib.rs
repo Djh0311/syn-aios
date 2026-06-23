@@ -4725,6 +4725,62 @@ mod tests {
         assert!(audit_has(&path, "workflow_chain_stop_requested"));
     }
 
+    // 回归：跑过链/节点后会累积 canvas_run 临时 work_item（无任务包 artifact）。submit 的运行性检查
+    // 曾遍历它们 → 全 blocked（缺模型/读写范围/验收/会话）→ 跑过一次后再也存不了草案（真机踩到）。
+    // 修后：剔除 canvas_run 临时件再查，存草案不受其影响、编辑的 prompt 能写进去。
+    #[test]
+    fn submit_project_workflow_draft_not_blocked_by_canvas_run_work_items() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("submit-after-run-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        fs::create_dir_all(&dir).expect("fixture dir");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let make_req = |wid: Option<String>, sub_prompt: &str| SubmitProjectWorkflowDraftRequest {
+            project_root: test_root.to_string(),
+            workflow_id: wid,
+            title: "存盘回归".to_string(),
+            nodes: vec![
+                json!({"id":"a","kind":"director","label":"主管","position":{"x":1,"y":1},
+                       "data":{"prompt":"P","session":{"mode":"resume","thread_id":"t1"}}}),
+                json!({"id":"b","kind":"subagent","label":"B","position":{"x":2,"y":2},
+                       "data":{"prompt":sub_prompt,"session":{"mode":"resume","thread_id":"t2"}}}),
+            ],
+            edges: vec![json!({"id":"e1","from":"a","to":"b"})],
+        };
+        submit_project_workflow_draft_at(&path, &make_req(None, "")).expect("初次创建应成功");
+        let wid = chain_test_workflow_id_by_title(&path, "存盘回归");
+        // 注入一个 canvas_run 临时 work_item（无 artifact）——模拟跑过链/节点后累积的临时件。
+        let mut v = read_workflow_state_value(&path).unwrap();
+        ensure_array_mut(&mut v, "work_items").unwrap().push(json!({
+          "work_item_id": "work-item:canvas-run-temp-1",
+          "project_id": project_id(test_root),
+          "workflow_id": wid,
+          "title": "临时跑件",
+          "state": "ready_for_review",
+          "source_kind": "canvas_run",
+          "assigned_role_id": "codex-dev",
+          "created_at": "t", "updated_at": "t", "warnings": []
+        }));
+        write_validated_workflow_state(&path, &v).unwrap();
+        // 编辑再提交（update）：有了 canvas_run 临时件也应成功（不被运行性检查挡）。
+        submit_project_workflow_draft_at(&path, &make_req(Some(wid.clone()), "新填的子agent提示"))
+            .expect("有 canvas_run 临时件也应能存草案");
+        // 编辑的 subagent prompt 真写进去了。
+        let after = read_json_file(&path);
+        let sub_prompt = after["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| {
+                optional_string_from(n, "workflow_id").as_deref() == Some(wid.as_str())
+                    && optional_string_from(n, "node_type").as_deref() == Some("subagent")
+            })
+            .and_then(|n| n.get("canvas_payload"))
+            .and_then(|p| p.get("data"))
+            .and_then(|d| optional_string_from(d, "prompt"));
+        assert_eq!(sub_prompt.as_deref(), Some("新填的子agent提示"), "编辑的 prompt 应存住");
+    }
+
     #[test]
     fn workflow_node_dispatch_execute_uses_stub_and_advances_to_review() {
         let dir =
