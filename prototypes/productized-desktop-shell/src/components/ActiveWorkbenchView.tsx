@@ -30,6 +30,7 @@ import type {
 import { devNavItems, type ViewKey } from "../lib/workbenchNavigation";
 import { AgentView } from "../views/AgentView";
 import { CanvasViewWithProvider } from "../views/CanvasView";
+import { WorkflowCommandConsoleView } from "../views/WorkflowCommandConsoleView";
 import { HarnessBoardView } from "../views/HarnessBoardView";
 import { HomeView } from "../views/HomeView";
 import { KnowledgeBaseView } from "../views/KnowledgeBaseView";
@@ -184,6 +185,17 @@ export function renderActiveWorkbenchView({
         canvasId="default"
         sessions={snapshot.sessions}
         onNotice={onNotice}
+      />
+    );
+  }
+
+  if (view === "command-console") {
+    // P2 发令台：对工作流发令起链（对话只启动/停，真跑仍走 gated 链控制器·圈测试项目）。
+    return (
+      <WorkflowCommandConsoleView
+        projects={snapshot.projects}
+        onNotice={onNotice}
+        onReloadWorkflowState={onReloadWorkflowState}
       />
     );
   }

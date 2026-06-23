@@ -4,6 +4,7 @@ export type ViewKey =
   | "ideas"
   | "proposal"
   | "workflow"
+  | "command-console"
   | "agents"
   | "knowledge"
   | "memory"
@@ -55,6 +56,7 @@ export const primaryNavGroups: WorkbenchNavGroup[] = [
     items: [
       { key: "ideas", label: "想法箱", glyph: "✎" },
       { key: "workflow", label: "实验画布", glyph: "⊹" },
+      { key: "command-console", label: "发令台", glyph: "►" },
     ],
   },
   {
