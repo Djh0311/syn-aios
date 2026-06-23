@@ -4781,6 +4781,82 @@ mod tests {
         assert_eq!(sub_prompt.as_deref(), Some("新填的子agent提示"), "编辑的 prompt 应存住");
     }
 
+    // 积压清理回归：每跑一次节点自动建一个 canvas_run 临时 work_item + 一条绑定，跑多了会累积。
+    // 修后：同 (workflow, node) 的旧 canvas_run 件连同绑定一起剔、封顶 1。dispatch 审计留痕不动。
+    #[test]
+    fn canvas_run_temp_work_items_and_bindings_capped_per_node() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("canvas-run-cap-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        fs::create_dir_all(&dir).expect("fixture dir");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        submit_project_workflow_draft_at(
+            &path,
+            &SubmitProjectWorkflowDraftRequest {
+                project_root: test_root.to_string(),
+                workflow_id: None,
+                title: "封顶测试".to_string(),
+                nodes: vec![
+                    json!({"id":"a","kind":"director","label":"主管","position":{"x":1,"y":1},
+                           "data":{"prompt":"P","session":{"mode":"resume","thread_id":"thread-cap"}}}),
+                    json!({"id":"b","kind":"subagent","label":"B","position":{"x":2,"y":2},
+                           "data":{"session":{"mode":"resume","thread_id":"thread-cap"},"prompt":"做事","sandbox":"workspace-write"}}),
+                ],
+                edges: vec![],
+            },
+        )
+        .expect("create");
+        let wid = chain_test_workflow_id_by_title(&path, "封顶测试");
+        let node_id = optional_string_from(
+            read_json_file(&path)["nodes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|n| {
+                    optional_string_from(n, "workflow_id").as_deref() == Some(wid.as_str())
+                        && optional_string_from(n, "node_type").as_deref() == Some("subagent")
+                })
+                .unwrap(),
+            "node_id",
+        )
+        .unwrap();
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats { transcript_event_count: 2, transcript_target_hits: 1 },
+        };
+        DISPATCH_READBACK_NATIVE_READ_COUNT.with(|c| c.set(0));
+        let index = fixture_dispatch_index(test_root, "thread-cap");
+        let req = ProjectWorkflowNodeRunRequest {
+            project_root: test_root.to_string(),
+            node_id: node_id.clone(),
+            work_item_id: String::new(),
+            workflow_id: Some(wid.clone()),
+        };
+        execute_project_workflow_node_at(&path, &index, &index_path, &runner, &req).expect("run1");
+        execute_project_workflow_node_at(&path, &index, &index_path, &runner, &req).expect("run2");
+        let v = read_json_file(&path);
+        let wi_count = v["work_items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|wi| {
+                optional_string_from(wi, "source_kind").as_deref() == Some("canvas_run")
+                    && optional_string_from(wi, "workflow_id").as_deref() == Some(wid.as_str())
+                    && optional_string_from(wi, "origin_node_id").as_deref() == Some(node_id.as_str())
+            })
+            .count();
+        assert_eq!(wi_count, 1, "同节点 canvas_run 临时件应封顶 1，实际 {wi_count}");
+        let bind_count = v["workflow_node_session_bindings"]
+            .as_array()
+            .map(|b| {
+                b.iter()
+                    .filter(|x| optional_string_from(x, "node_id").as_deref() == Some(node_id.as_str()))
+                    .count()
+            })
+            .unwrap_or(0);
+        assert_eq!(bind_count, 1, "同节点会话绑定应封顶 1，实际 {bind_count}");
+    }
+
     #[test]
     fn workflow_node_dispatch_execute_uses_stub_and_advances_to_review() {
         let dir =

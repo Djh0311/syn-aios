@@ -2085,6 +2085,46 @@ fn execute_project_workflow_node_at(
 
     // 自动建的临时 work_item 先落盘（bind/dispatch 都重读文件）。
     if existing_wi.is_none() {
+        // 积压清理：每跑一次链/节点都自动建一个 canvas_run 临时 work_item（外加一条会话绑定），跑多了在
+        // 状态文件里越堆越多（run_check 已剔除它们、不破坏功能，纯属臃肿）。同一 (workflow, node) 的旧
+        // canvas_run 件连同其会话绑定一起剔掉，只留这次新建的 → 封顶每节点 1 个临时件 + 1 条绑定。
+        // 历史 dispatch 是审计留痕（按 dispatch_id），保留不动。
+        let stale_ids: Vec<String> = value
+            .get("work_items")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter(|wi| {
+                        optional_string_from(wi, "source_kind").as_deref() == Some("canvas_run")
+                            && optional_string_from(wi, "workflow_id").as_deref()
+                                == Some(workflow_id.as_str())
+                            && optional_string_from(wi, "origin_node_id").as_deref()
+                                == Some(request.node_id.as_str())
+                    })
+                    .filter_map(|wi| optional_string_from(wi, "work_item_id"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !stale_ids.is_empty() {
+            if let Some(items) = value.get_mut("work_items").and_then(Value::as_array_mut) {
+                items.retain(|wi| {
+                    optional_string_from(wi, "work_item_id")
+                        .map(|id| !stale_ids.contains(&id))
+                        .unwrap_or(true)
+                });
+            }
+            if let Some(binds) = value
+                .get_mut("workflow_node_session_bindings")
+                .and_then(Value::as_array_mut)
+            {
+                binds.retain(|b| {
+                    optional_string_from(b, "work_item_id")
+                        .map(|id| !stale_ids.contains(&id))
+                        .unwrap_or(true)
+                });
+            }
+        }
         ensure_array_mut(&mut value, "work_items")?.push(json!({
           "work_item_id": work_item_id,
           "project_id": project_id(&request.project_root),
@@ -2094,6 +2134,8 @@ fn execute_project_workflow_node_at(
           "source_kind": "canvas_run",
           "assigned_role_id": "codex-dev",
           "current_node_id": request.node_id,
+          // 稳定的"出生节点"——current_node_id 会随 dispatch 漂移，积压清理按这个剔才准。
+          "origin_node_id": request.node_id,
           "created_at": timestamp,
           "updated_at": timestamp,
           "warnings": []
