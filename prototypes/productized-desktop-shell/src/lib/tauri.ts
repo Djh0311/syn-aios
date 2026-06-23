@@ -14,6 +14,7 @@ import type {
   ProjectWorkflowChainRunRequest,
   ProjectWorkflowChainStopRequest,
   ProjectWorkflowChainRunResult,
+  ProjectWorkflowChainStatus,
   ProjectWorkflowListItem,
   SubmitProjectWorkflowDraftRequest,
   CanvasRunState,
@@ -857,6 +858,17 @@ export function stopProjectWorkflowChain(
 ): Promise<ProjectWorkflowChainRunResult> {
   ensureTauriRuntime();
   return invoke<ProjectWorkflowChainRunResult>("stop_project_workflow_chain", { request });
+}
+// #19 实时进度：轮询该工作流最新一条链运行记录（state + 每节点状态）。只读、无副作用。
+export function getProjectWorkflowChainStatus(
+  projectRoot: string,
+  workflowId: string,
+): Promise<ProjectWorkflowChainStatus | null> {
+  ensureTauriRuntime();
+  return invoke<ProjectWorkflowChainStatus | null>("get_project_workflow_chain_status", {
+    projectRoot,
+    workflowId,
+  });
 }
 
 // P3 E · 多工作流底座（架构 §12）。

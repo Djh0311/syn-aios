@@ -141,6 +141,12 @@ export type ProjectWorkflowChainRunResult = {
   max_nodes: number;
   nodes: unknown[];
 };
+// #19 实时进度：链运行态轮询返回（最新一条链运行记录的关键字段）。
+export type ProjectWorkflowChainStatus = {
+  chain_run_id: string;
+  state: string;
+  nodes: { node_id: string; state: string }[];
+};
 
 // P3 E · 多工作流底座（架构 §12）。命名避开 types/workflow.ts 既有的 ProjectWorkflowSummary。
 export type ProjectWorkflowListItem = {

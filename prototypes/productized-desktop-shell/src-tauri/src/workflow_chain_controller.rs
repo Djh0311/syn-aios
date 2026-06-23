@@ -629,6 +629,41 @@ fn stop_project_workflow_chain(
     stop_project_workflow_chain_at(&state.workflow_state_path, &request)
 }
 
+// #19 实时进度：读该工作流最新一条链运行记录（state + 每节点状态），供画布轮询显示。只读、无副作用。
+fn latest_chain_run_for(value: &Value, project_root: &str, workflow_id: &str) -> Option<Value> {
+    let wid = workflow_id.trim();
+    let pid = project_id(project_root);
+    value
+        .get("workflow_chain_runs")
+        .and_then(Value::as_array)
+        .and_then(|runs| {
+            runs.iter()
+                .filter(|r| {
+                    optional_string_from(r, "workflow_id").as_deref() == Some(wid)
+                        && optional_string_from(r, "project_id").as_deref() == Some(pid.as_str())
+                })
+                .max_by_key(|r| {
+                    optional_string_from(r, "started_at")
+                        .and_then(|s| s.parse::<i64>().ok())
+                        .unwrap_or(0)
+                })
+                .cloned()
+        })
+}
+
+#[tauri::command]
+fn get_project_workflow_chain_status(
+    project_root: String,
+    workflow_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<Value>, String> {
+    if !state.workflow_state_path.exists() {
+        return Ok(None);
+    }
+    let value = read_workflow_state_value(&state.workflow_state_path)?;
+    Ok(latest_chain_run_for(&value, &project_root, &workflow_id))
+}
+
 #[cfg(test)]
 mod workflow_chain_controller_topo_tests {
     use super::*;

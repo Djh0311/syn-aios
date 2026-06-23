@@ -40,6 +40,7 @@ export type {
   ProjectWorkflowChainRunRequest,
   ProjectWorkflowChainStopRequest,
   ProjectWorkflowChainRunResult,
+  ProjectWorkflowChainStatus,
   ProjectWorkflowListItem,
   SubmitProjectWorkflowDraftRequest,
   CanvasNodeRole,

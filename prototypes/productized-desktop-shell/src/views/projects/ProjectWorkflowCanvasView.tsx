@@ -39,11 +39,18 @@ import {
   executeProjectWorkflowNode,
   startProjectWorkflowChain,
   stopProjectWorkflowChain,
+  getProjectWorkflowChainStatus,
   getProjectWorkflowNodes,
   listProjectWorkflows,
   submitProjectWorkflowDraft,
 } from "../../lib/tauri";
-import type { CanvasDefinition, CanvasEdge, CanvasNode, ProjectWorkflowListItem } from "../../lib/types";
+import type {
+  CanvasDefinition,
+  CanvasEdge,
+  CanvasNode,
+  ProjectWorkflowChainStatus,
+  ProjectWorkflowListItem,
+} from "../../lib/types";
 import { WorkflowCanvasEngine } from "../WorkflowCanvasEngine";
 import type {
   AutoDispatchGuardInput,
@@ -370,6 +377,8 @@ export function ProjectWorkflowCanvasView({
   // 无逐步审批。前端只造请求 + 发；闸在后端 path-lock，非测试项目造不了钥匙、按钮单独开不了闸。
   // start 调用同步阻塞到整条链跑完/停下；期间可点「停链」（另一条命令置 stop 标志，节点边界生效）。
   const [runningChain, setRunningChain] = useState(false);
+  // #19 实时进度：链跑期间轮询出来的最新链运行态（每节点 pending/running/completed/failed）。
+  const [chainStatus, setChainStatus] = useState<ProjectWorkflowChainStatus | null>(null);
   const startChain = useCallback(async () => {
     if (!selectedWorkflowId) {
       onNotice("请先选一个工作流再起链");
@@ -380,6 +389,11 @@ export function ProjectWorkflowCanvasView({
       const result = await startProjectWorkflowChain({
         project_root: project.project_root,
         workflow_id: selectedWorkflowId,
+      });
+      setChainStatus({
+        chain_run_id: result.chain_run_id,
+        state: result.state,
+        nodes: result.nodes as { node_id: string; state: string }[],
       });
       onNotice(`链「${result.state}」：${result.dispatched_count} 个节点已派发。${result.message}`);
       onReloadWorkflowState?.();
@@ -404,6 +418,25 @@ export function ProjectWorkflowCanvasView({
       onNotice(`停链失败：${messageOf(e)}`);
     }
   }, [selectedWorkflowId, project.project_root, onNotice, onReloadWorkflowState]);
+  // #19 实时进度：链跑期间每 2.5s 轮询链运行态，让画布显示 director✓ subagent⏳ reviewer… 而非一片空白。
+  useEffect(() => {
+    if (!runningChain || !selectedWorkflowId) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const s = await getProjectWorkflowChainStatus(project.project_root, selectedWorkflowId);
+        if (active && s) setChainStatus(s);
+      } catch {
+        // 轮询失败不致命，下一拍再来。
+      }
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 2500);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [runningChain, selectedWorkflowId, project.project_root]);
   const blackboardOverlay = useMemo(
     () =>
       buildBlackboardCandidateOverlay({
@@ -713,6 +746,25 @@ export function ProjectWorkflowCanvasView({
             >
               ■ 停链
             </button>
+            {chainStatus ? (
+              <span className="canvas-chain-status" title={`链运行：${chainStatus.state}`}>
+                {`链 ${chainStatus.nodes.filter((n) => n.state === "completed").length}/${chainStatus.nodes.length} `}
+                {chainStatus.nodes
+                  .map((n) => {
+                    const label = (n.node_id.split(":node:")[1] ?? n.node_id).split("-")[0];
+                    const icon =
+                      n.state === "completed"
+                        ? "✓"
+                        : n.state === "running"
+                          ? "⏳"
+                          : n.state === "failed"
+                            ? "✗"
+                            : "•";
+                    return `${icon}${label}`;
+                  })
+                  .join(" ")}
+              </span>
+            ) : null}
             <Badge tone={projectWorkflow ? "candidate" : "warning"}>{projectWorkflow ? projectWorkflow.state : "缺 workflow"}</Badge>
             {/* P3：过程内容进按需抽屉——这个按钮唤起 / 收起右侧详情抽屉。 */}
             <button

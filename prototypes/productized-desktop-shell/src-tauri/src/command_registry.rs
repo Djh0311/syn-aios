@@ -99,6 +99,7 @@ macro_rules! workbench_command_handler {
             execute_project_workflow_node,
             start_project_workflow_chain,
             stop_project_workflow_chain,
+            get_project_workflow_chain_status,
             list_project_workflows,
             submit_project_workflow_draft,
             get_project_workflow_nodes,
