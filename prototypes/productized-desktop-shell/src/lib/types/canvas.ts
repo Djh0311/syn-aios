@@ -120,6 +120,28 @@ export type ProjectWorkflowNodeRunRequest = {
   workflow_id?: string | null;
 };
 
+// P1 工作流自动连环（决策 2026-06-23 · 圈固定测试项目）：起链 = 按拓扑序逐节点自动真跑到底，
+// 无逐步审批；护栏 = runaway 上限 / 可中断 / 审计 / 可回滚。max_nodes 只能比 min(节点数,50) 更小。
+export type ProjectWorkflowChainRunRequest = {
+  project_root: string;
+  workflow_id: string;
+  max_nodes?: number | null;
+};
+export type ProjectWorkflowChainStopRequest = {
+  project_root: string;
+  workflow_id: string;
+};
+export type ProjectWorkflowChainRunResult = {
+  message: string;
+  path: string;
+  chain_run_id: string;
+  workflow_id: string;
+  state: string;
+  dispatched_count: number;
+  max_nodes: number;
+  nodes: unknown[];
+};
+
 // P3 E · 多工作流底座（架构 §12）。命名避开 types/workflow.ts 既有的 ProjectWorkflowSummary。
 export type ProjectWorkflowListItem = {
   workflow_id: string;

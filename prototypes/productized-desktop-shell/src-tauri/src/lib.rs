@@ -268,6 +268,9 @@ include!("c4_c6_workflow_governance_entrypoints.rs");
 // Workflow dispatch execution control, offline role dispatch, and workflow machine helpers live in a crate-root include for the conservative no-behavior split.
 include!("workflow_execution_entrypoints.rs");
 
+// P1 工作流自动连环 controller（链驱动逐节点真跑，圈固定测试项目；决策 2026-06-23）。
+include!("workflow_chain_controller.rs");
+
 fn find_work_item<'a>(
     value: &'a Value,
     workflow_id: &str,
@@ -4319,6 +4322,407 @@ mod tests {
                     && optional_string_from(b, "native_thread_id").as_deref() == Some("thread-c2")
             });
         assert!(bound, "应给画布节点现绑载荷里的 resume 会话");
+    }
+
+    // ===== P1 工作流自动连环 controller（决策 2026-06-23 · 圈固定测试项目） =====
+
+    fn chain_test_workflow_id_by_title(path: &Path, title: &str) -> String {
+        optional_string_from(
+            read_json_file(path)["workflows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|w| optional_string_from(w, "title").as_deref() == Some(title))
+                .expect("workflow by title should exist"),
+            "workflow_id",
+        )
+        .unwrap()
+    }
+
+    // 三节点链 a→b→c，每节点带 resume 会话载荷（thread-1/2/3）。
+    fn submit_chain_test_workflow(path: &Path, test_root: &str, title: &str) {
+        submit_project_workflow_draft_at(
+            path,
+            &SubmitProjectWorkflowDraftRequest {
+                project_root: test_root.to_string(),
+                workflow_id: None,
+                title: title.to_string(),
+                nodes: vec![
+                    // a = director（满足运行性检查「需 director 节点」）；带 session，链照样真跑它。
+                    json!({"id":"a","kind":"director","label":"主管A","position":{"x":1,"y":1},
+                           "data":{"session":{"mode":"resume","thread_id":"thread-1"},"prompt":"步骤A","sandbox":"workspace-write"}}),
+                    json!({"id":"b","kind":"subagent","label":"B","position":{"x":2,"y":2},
+                           "data":{"session":{"mode":"resume","thread_id":"thread-2"},"prompt":"步骤B","sandbox":"workspace-write"}}),
+                    json!({"id":"c","kind":"subagent","label":"C","position":{"x":3,"y":3},
+                           "data":{"session":{"mode":"resume","thread_id":"thread-3"},"prompt":"步骤C","sandbox":"workspace-write"}}),
+                ],
+                edges: vec![
+                    json!({"id":"e1","from":"a","to":"b"}),
+                    json!({"id":"e2","from":"b","to":"c"}),
+                ],
+            },
+        )
+        .expect("create chain workflow");
+    }
+
+    fn chain_test_runner() -> PermissiveExperimentRunner {
+        PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 2,
+                transcript_target_hits: 1,
+            },
+        }
+    }
+
+    fn audit_has(path: &Path, event_type: &str) -> bool {
+        read_json_file(path)["audit_events"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .any(|e| optional_string_from(e, "event_type").as_deref() == Some(event_type))
+            })
+            .unwrap_or(false)
+    }
+
+    #[test]
+    fn project_workflow_chain_runs_all_nodes_to_completion() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("chain-run-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        fs::create_dir_all(&dir).expect("fixture dir");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        submit_chain_test_workflow(&path, test_root, "链工作流");
+        let wid = chain_test_workflow_id_by_title(&path, "链工作流");
+        let runner = chain_test_runner();
+        DISPATCH_READBACK_NATIVE_READ_COUNT.with(|c| c.set(0));
+        let index = fixture_multi_thread_index(test_root, &["thread-1", "thread-2", "thread-3"]);
+        let request = ProjectWorkflowChainRunRequest {
+            project_root: test_root.to_string(),
+            workflow_id: wid.clone(),
+            max_nodes: None,
+        };
+        let result = run_project_workflow_chain_at(&path, &index, &index_path, &runner, &request)
+            .expect("chain should run to completion");
+        assert_eq!(result.state, "completed");
+        assert_eq!(result.dispatched_count, 3, "三节点都应真派发");
+        for n in &result.nodes {
+            assert_eq!(
+                optional_string_from(n, "state").as_deref(),
+                Some("completed"),
+                "每节点应 completed"
+            );
+        }
+        // 拓扑序：a 在 b 前、b 在 c 前（按 canvas id 还原顺序）
+        let order: Vec<String> = result
+            .nodes
+            .iter()
+            .filter_map(|n| optional_string_from(n, "node_id"))
+            .collect();
+        let pos = |canvas: &str| {
+            let nid = format!("{wid}:node:{}", stable_id(canvas));
+            order.iter().position(|n| *n == nid).unwrap()
+        };
+        assert!(pos("a") < pos("b") && pos("b") < pos("c"), "应按拓扑序");
+        // 审计：链起 + 链完成
+        assert!(audit_has(&path, "workflow_chain_run_started"));
+        assert!(audit_has(&path, "workflow_chain_run_completed"));
+        assert!(audit_has(&path, "workflow_chain_node_completed"));
+        // 链运行记录落盘 + completed
+        let runs = read_json_file(&path)["workflow_chain_runs"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(runs.len(), 1, "只一条链运行记录");
+        assert_eq!(optional_string_from(&runs[0], "state").as_deref(), Some("completed"));
+    }
+
+    #[test]
+    fn project_workflow_chain_stops_on_first_node_failure() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("chain-fail-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        fs::create_dir_all(&dir).expect("fixture dir");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        submit_chain_test_workflow(&path, test_root, "失败链");
+        let wid = chain_test_workflow_id_by_title(&path, "失败链");
+        // 失败 runner：第一个节点就 codex 失败 → 失败即停
+        let runner = FailingCodexResumeRunner {
+            exit_code: 1,
+            timed_out: false,
+        };
+        DISPATCH_READBACK_NATIVE_READ_COUNT.with(|c| c.set(0));
+        let index = fixture_multi_thread_index(test_root, &["thread-1", "thread-2", "thread-3"]);
+        let request = ProjectWorkflowChainRunRequest {
+            project_root: test_root.to_string(),
+            workflow_id: wid.clone(),
+            max_nodes: None,
+        };
+        let result = run_project_workflow_chain_at(&path, &index, &index_path, &runner, &request)
+            .expect("chain call itself returns Ok with failed state");
+        assert_eq!(result.state, "failed", "失败即停 → 链 failed");
+        assert_eq!(result.dispatched_count, 0, "没有节点 completed");
+        // 第一个节点 failed，后两个仍 pending（没被派发）
+        let state_of = |canvas: &str| {
+            let nid = format!("{wid}:node:{}", stable_id(canvas));
+            result
+                .nodes
+                .iter()
+                .find(|n| optional_string_from(n, "node_id").as_deref() == Some(nid.as_str()))
+                .and_then(|n| optional_string_from(n, "state"))
+        };
+        assert_eq!(state_of("a").as_deref(), Some("failed"));
+        assert_eq!(state_of("b").as_deref(), Some("pending"), "失败后不应继续派发 b");
+        assert_eq!(state_of("c").as_deref(), Some("pending"), "失败后不应继续派发 c");
+        assert!(audit_has(&path, "workflow_chain_node_failed"));
+        assert!(audit_has(&path, "workflow_chain_run_failed"));
+    }
+
+    #[test]
+    fn project_workflow_chain_gate_seals_non_test_project() {
+        let dir = std::env::temp_dir().join(format!("chain-gate-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        fs::create_dir_all(&dir).expect("fixture dir");
+        // 非测试真实项目 root → path-lock 闸必须拒（连环更不能碰真实仓）
+        let runner = chain_test_runner();
+        let index = fixture_dispatch_index("/tmp/some-real-project", "thread-x");
+        let request = ProjectWorkflowChainRunRequest {
+            project_root: "/tmp/some-real-project".to_string(),
+            workflow_id: "workflow:whatever:1".to_string(),
+            max_nodes: None,
+        };
+        let err = run_project_workflow_chain_at(&path, &index, &index_path, &runner, &request)
+            .expect_err("非测试项目必须被闸拒");
+        assert_eq!(
+            err,
+            legacy_product_command_blocked_message("start_project_workflow_chain"),
+            "应是 path-lock 闸的拒绝消息"
+        );
+    }
+
+    #[test]
+    fn project_workflow_chain_honors_runaway_cap() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("chain-cap-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        fs::create_dir_all(&dir).expect("fixture dir");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        submit_chain_test_workflow(&path, test_root, "上限链");
+        let wid = chain_test_workflow_id_by_title(&path, "上限链");
+        let runner = chain_test_runner();
+        DISPATCH_READBACK_NATIVE_READ_COUNT.with(|c| c.set(0));
+        let index = fixture_multi_thread_index(test_root, &["thread-1", "thread-2", "thread-3"]);
+        // runaway 上限 = 1 → 跑完第一个就到顶停
+        let request = ProjectWorkflowChainRunRequest {
+            project_root: test_root.to_string(),
+            workflow_id: wid.clone(),
+            max_nodes: Some(1),
+        };
+        let result = run_project_workflow_chain_at(&path, &index, &index_path, &runner, &request)
+            .expect("chain should run then cap");
+        assert_eq!(result.state, "stopped", "到 runaway 上限 → stopped");
+        assert_eq!(result.dispatched_count, 1, "只派发 1 个");
+        assert!(result.message.contains("runaway 上限"), "消息应点明上限");
+    }
+
+    #[test]
+    fn project_workflow_chain_resumes_skipping_completed_nodes() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("chain-resume-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        fs::create_dir_all(&dir).expect("fixture dir");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        submit_chain_test_workflow(&path, test_root, "续跑链");
+        let wid = chain_test_workflow_id_by_title(&path, "续跑链");
+        let runner = chain_test_runner();
+        DISPATCH_READBACK_NATIVE_READ_COUNT.with(|c| c.set(0));
+        let index = fixture_multi_thread_index(test_root, &["thread-1", "thread-2", "thread-3"]);
+        // 第一跑：上限 1 → a 完成、链 stopped
+        let run1 = run_project_workflow_chain_at(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &ProjectWorkflowChainRunRequest {
+                project_root: test_root.to_string(),
+                workflow_id: wid.clone(),
+                max_nodes: Some(1),
+            },
+        )
+        .expect("run1");
+        assert_eq!(run1.state, "stopped");
+        let a_node_id = optional_string_from(&run1.nodes[0], "node_id").unwrap();
+        let a_dispatch_id_1 = optional_string_from(&run1.nodes[0], "dispatch_id");
+        assert!(a_dispatch_id_1.is_some(), "a 应已派发并记 dispatch_id");
+        // 第二跑：无上限 → 复用同一条链运行记录（断点续），跳过 a，跑完 b、c
+        let run2 = run_project_workflow_chain_at(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &ProjectWorkflowChainRunRequest {
+                project_root: test_root.to_string(),
+                workflow_id: wid.clone(),
+                max_nodes: None,
+            },
+        )
+        .expect("run2");
+        assert_eq!(run2.state, "completed");
+        assert_eq!(run2.dispatched_count, 3, "三节点最终都完成");
+        assert_eq!(run1.chain_run_id, run2.chain_run_id, "断点续：复用同一条链运行记录");
+        let runs = read_json_file(&path)["workflow_chain_runs"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(runs.len(), 1, "续跑不该新建第二条记录");
+        // a 没被重跑：dispatch_id 不变
+        let a_dispatch_id_2 = run2
+            .nodes
+            .iter()
+            .find(|n| optional_string_from(n, "node_id").as_deref() == Some(a_node_id.as_str()))
+            .and_then(|n| optional_string_from(n, "dispatch_id"));
+        assert_eq!(a_dispatch_id_1, a_dispatch_id_2, "已完成的 a 应被跳过、不重跑");
+    }
+
+    #[test]
+    fn project_workflow_chain_interrupts_at_node_boundary_on_stop_flag() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("chain-stop-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        fs::create_dir_all(&dir).expect("fixture dir");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        submit_chain_test_workflow(&path, test_root, "停链测试");
+        let wid = chain_test_workflow_id_by_title(&path, "停链测试");
+
+        // 模拟「跑第一个节点时用户点了停」：runner 每次跑完顺手把 running 链的 stop_requested 置真，
+        // 写回状态文件。下个节点边界 controller 重读 → 看到 stop → 停。
+        struct StopDuringRunner {
+            state_path: PathBuf,
+            stats: CodexDispatchReadbackStats,
+        }
+        impl CodexResumeRunner for StopDuringRunner {
+            fn resume_with_options(
+                &self,
+                _thread_id: &str,
+                _prompt: &str,
+                last_message_path: &Path,
+                _options: &CodexResumeRequestOptions,
+            ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String>
+            {
+                if let Some(parent) = last_message_path.parent() {
+                    fs::create_dir_all(parent).ok();
+                }
+                fs::write(last_message_path, "STOP_DURING_OK").ok();
+                let mut v = read_workflow_state_value(&self.state_path)?;
+                if let Some(runs) = v
+                    .get_mut("workflow_chain_runs")
+                    .and_then(Value::as_array_mut)
+                {
+                    if let Some(run) = runs
+                        .iter_mut()
+                        .find(|r| optional_string_from(r, "state").as_deref() == Some("running"))
+                    {
+                        run["stop_requested"] = json!(true);
+                    }
+                }
+                write_validated_workflow_state(&self.state_path, &v)?;
+                Ok((
+                    CodexResumeRunResult {
+                        exit_code: 0,
+                        timed_out: false,
+                        stderr_summary: None,
+                    },
+                    WorkflowNodeDispatchExecutionOptions {
+                        readback_stats: Some(self.stats.clone()),
+                    },
+                ))
+            }
+        }
+        let runner = StopDuringRunner {
+            state_path: path.clone(),
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 2,
+                transcript_target_hits: 1,
+            },
+        };
+        DISPATCH_READBACK_NATIVE_READ_COUNT.with(|c| c.set(0));
+        let index = fixture_multi_thread_index(test_root, &["thread-1", "thread-2", "thread-3"]);
+        let result = run_project_workflow_chain_at(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &ProjectWorkflowChainRunRequest {
+                project_root: test_root.to_string(),
+                workflow_id: wid.clone(),
+                max_nodes: None,
+            },
+        )
+        .expect("chain should stop mid-way");
+        assert_eq!(result.state, "stopped", "收到停 → 节点边界停");
+        assert_eq!(result.dispatched_count, 1, "只完成第一个，停在边界");
+        assert!(result.message.contains("停链请求"));
+        assert!(audit_has(&path, "workflow_chain_run_stopped"));
+    }
+
+    #[test]
+    fn stop_project_workflow_chain_sets_flag_and_errors_when_none_running() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("chain-stopcmd-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        fs::create_dir_all(&dir).expect("fixture dir");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        submit_chain_test_workflow(&path, test_root, "停命令链");
+        let wid = chain_test_workflow_id_by_title(&path, "停命令链");
+        // 没有 running 链 → 停链报清错
+        let none = stop_project_workflow_chain_at(
+            &path,
+            &ProjectWorkflowChainStopRequest {
+                project_root: test_root.to_string(),
+                workflow_id: wid.clone(),
+            },
+        );
+        assert!(none.is_err(), "无 running 链时停链应报错");
+        // 注入一条 running 链记录 → 停链置 stop_requested + 记审计
+        let mut v = read_workflow_state_value(&path).unwrap();
+        ensure_array_mut(&mut v, "workflow_chain_runs")
+            .unwrap()
+            .push(json!({
+              "chain_run_id": "cr-stopcmd-1",
+              "project_id": project_id(test_root),
+              "workflow_id": wid,
+              "state": "running",
+              "stop_requested": false,
+              "max_nodes": 3,
+              "started_at": "t0",
+              "ended_at": Value::Null,
+              "nodes": []
+            }));
+        write_validated_workflow_state(&path, &v).unwrap();
+        let ok = stop_project_workflow_chain_at(
+            &path,
+            &ProjectWorkflowChainStopRequest {
+                project_root: test_root.to_string(),
+                workflow_id: wid.clone(),
+            },
+        )
+        .expect("有 running 链 → 停链成功");
+        assert_eq!(ok.chain_run_id, "cr-stopcmd-1");
+        let runs = read_json_file(&path)["workflow_chain_runs"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        let run = runs
+            .iter()
+            .find(|r| optional_string_from(r, "chain_run_id").as_deref() == Some("cr-stopcmd-1"))
+            .unwrap();
+        assert_eq!(run.get("stop_requested").and_then(Value::as_bool), Some(true));
+        assert!(audit_has(&path, "workflow_chain_stop_requested"));
     }
 
     #[test]

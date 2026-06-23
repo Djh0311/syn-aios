@@ -11,6 +11,9 @@ import type {
   CanvasNodeDispatchRequest,
   ExperimentNodeDispatchRequest,
   ProjectWorkflowNodeRunRequest,
+  ProjectWorkflowChainRunRequest,
+  ProjectWorkflowChainStopRequest,
+  ProjectWorkflowChainRunResult,
   ProjectWorkflowListItem,
   SubmitProjectWorkflowDraftRequest,
   CanvasRunState,
@@ -839,6 +842,21 @@ export function executeExperimentNodeDispatch(request: ExperimentNodeDispatchReq
 export function executeProjectWorkflowNode(request: ProjectWorkflowNodeRunRequest): Promise<unknown> {
   ensureTauriRuntime();
   return invoke<unknown>("execute_project_workflow_node", { request });
+}
+
+// P1 工作流自动连环（决策 2026-06-23 · 圈固定测试项目）：起链 = 按拓扑序逐节点自动真跑到底。
+// 前端只造请求 + 发——闸在后端 path-lock，非测试项目造不了钥匙、按钮单独开不了闸。
+export function startProjectWorkflowChain(
+  request: ProjectWorkflowChainRunRequest,
+): Promise<ProjectWorkflowChainRunResult> {
+  ensureTauriRuntime();
+  return invoke<ProjectWorkflowChainRunResult>("start_project_workflow_chain", { request });
+}
+export function stopProjectWorkflowChain(
+  request: ProjectWorkflowChainStopRequest,
+): Promise<ProjectWorkflowChainRunResult> {
+  ensureTauriRuntime();
+  return invoke<ProjectWorkflowChainRunResult>("stop_project_workflow_chain", { request });
 }
 
 // P3 E · 多工作流底座（架构 §12）。

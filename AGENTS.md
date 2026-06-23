@@ -16,7 +16,7 @@
 1. 让 codex 在**非测试的真实（生产）项目目录**真执行——写文件 / 跑命令。〔2026-06-22 细化：固定测试项目 `/Users/yoyi/codex-workflow-mario-test`（专用开发靶子、git 可回滚）跑进去 = **轻档·随便读写**；前提 path-lock 仍锁死该测试项目 + 沙箱不外溢（松了就回高危）。temp/沙箱、该测试项目都不算本条；**其它真实项目仍是本条高危**。〕
 2. **写** `/Users/yoyi/.codex`，或读其**凭据**（auth/token/secret）。注：`.codex` 一般会话/工具内容**读已放开**（记忆 `feedback-codex-home-read-allowed`）
 3. 改动**安全闸 / 沙箱 / codex 审批逻辑**本身
-4. （将来）开启**自动连环 / 多项目接力**执行
+4. （将来）开启**自动连环 / 多项目接力**执行。〔2026-06-23 细化：**固定测试项目 `/Users/yoyi/codex-workflow-mario-test` 内的自动连环 = 轻档·可做**（前提 path-lock+沙箱守住、runaway上限/可中断/审计/回滚 四护栏在；松了回高危）；非测试真实项目的连环、多项目接力、auto-approve 仍本条高危。见 `decisions/2026-06-23-test-project-auto-chain-light-tier-v1.md`。〕
 5. `git push` / 对外发布 / 删除不可恢复数据
 
 ## 二、两档流程

@@ -37,6 +37,8 @@ import {
   canvasLoad,
   canvasSave,
   executeProjectWorkflowNode,
+  startProjectWorkflowChain,
+  stopProjectWorkflowChain,
   getProjectWorkflowNodes,
   listProjectWorkflows,
   submitProjectWorkflowDraft,
@@ -358,6 +360,44 @@ export function ProjectWorkflowCanvasView({
       setRunningProjectNode(false);
     }
   }, [selectedProjectNode, project.project_root, onNotice, onReloadWorkflowState]);
+  // P1 工作流自动连环（决策 2026-06-23 · 圈固定测试项目）：起链 = 按拓扑序逐节点自动真跑到底，
+  // 无逐步审批。前端只造请求 + 发；闸在后端 path-lock，非测试项目造不了钥匙、按钮单独开不了闸。
+  // start 调用同步阻塞到整条链跑完/停下；期间可点「停链」（另一条命令置 stop 标志，节点边界生效）。
+  const [runningChain, setRunningChain] = useState(false);
+  const startChain = useCallback(async () => {
+    if (!selectedWorkflowId) {
+      onNotice("请先选一个工作流再起链");
+      return;
+    }
+    setRunningChain(true);
+    try {
+      const result = await startProjectWorkflowChain({
+        project_root: project.project_root,
+        workflow_id: selectedWorkflowId,
+      });
+      onNotice(`链「${result.state}」：${result.dispatched_count} 个节点已派发。${result.message}`);
+      onReloadWorkflowState?.();
+    } catch (e) {
+      onNotice(`起链被拦截或失败：${messageOf(e)}`);
+    } finally {
+      setRunningChain(false);
+    }
+  }, [selectedWorkflowId, project.project_root, onNotice, onReloadWorkflowState]);
+  const stopChain = useCallback(async () => {
+    if (!selectedWorkflowId) {
+      return;
+    }
+    try {
+      const result = await stopProjectWorkflowChain({
+        project_root: project.project_root,
+        workflow_id: selectedWorkflowId,
+      });
+      onNotice(`已请求停链：${result.message}`);
+      onReloadWorkflowState?.();
+    } catch (e) {
+      onNotice(`停链失败：${messageOf(e)}`);
+    }
+  }, [selectedWorkflowId, project.project_root, onNotice, onReloadWorkflowState]);
   const blackboardOverlay = useMemo(
     () =>
       buildBlackboardCandidateOverlay({
@@ -643,6 +683,28 @@ export function ProjectWorkflowCanvasView({
               }
             >
               {runningProjectNode ? "运行中…" : "▶ 运行选中节点"}
+            </button>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => void startChain()}
+              disabled={runningChain || !selectedWorkflowId}
+              title={
+                selectedWorkflowId
+                  ? "自动连环：按拓扑序逐节点真跑到底（圈固定测试项目；失败即停、可中断、有 runaway 上限）"
+                  : "先选一个工作流"
+              }
+            >
+              {runningChain ? "连环跑中…" : "▶▶ 开始链"}
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => void stopChain()}
+              disabled={!runningChain}
+              title="在下个节点边界停链（已完成节点保留，可断点续）"
+            >
+              ■ 停链
             </button>
             <Badge tone={projectWorkflow ? "candidate" : "warning"}>{projectWorkflow ? projectWorkflow.state : "缺 workflow"}</Badge>
             {/* P3：过程内容进按需抽屉——这个按钮唤起 / 收起右侧详情抽屉。 */}

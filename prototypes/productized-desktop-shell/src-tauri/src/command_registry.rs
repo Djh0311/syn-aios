@@ -97,6 +97,8 @@ macro_rules! workbench_command_handler {
             execute_workflow_node_dispatch,
             execute_experiment_node_dispatch,
             execute_project_workflow_node,
+            start_project_workflow_chain,
+            stop_project_workflow_chain,
             list_project_workflows,
             submit_project_workflow_draft,
             get_project_workflow_nodes,
