@@ -11,7 +11,8 @@
 - **前端其余（B 线已收口）**：拆瘦 App 1104→695 / 记忆页 1340→676 / 工作流侧栏 953→340；全 views 渐进披露。
 - **工作流画布 P3 · 多工作流编排（B–E + 点二 + C#2/B/A止血 + 快照刷新 + A真正解，已提交）**：项目面一项目存 N 个工作流——新建 / 编辑（加载现有进草案）/ 列表选择 / 切换查看 / 提交写回（运行性检查 + 备份 + 原子写 + 审计）；**画布建的工作流也能真跑**（C#2：派发接 `workflow_id` + 自动建临时 work_item + resume 会话）、**提交/运行后画布快照自动重载**（修「新建工作流切不过去」）、编辑剪失效会话绑定（B）、编辑显示真角色（A止血）、**只读视图忠实渲染真实节点**（A真正解：去 goal 框/泳道骨架、清死码）。全锁固定测试项目，path-lock 闸在派发上游、沙箱 `codex_local_runner` 字节未动。**真机过**：建/切/提交/真跑/只读对图通、codex 只动测试目录。机器：cargo **566/0** / typecheck0 / offline 15+r4 / build 279。**④d 已全收口、剩可选架构债。**
 - **工作流画布·全屏 HUD 界面重做（真机过、本次 commit）**：项目界面改全窗——画布占满整窗（除边框）、控件四周悬浮（顶=工作流选择器/新建/编辑/4 入口/状态 pill、左=节点调色板、右=选中节点面板按需、底=运行/保存）、过程内容进按需「详情抽屉」默认收起、Memory 一个开发者详情折真删。**纯前端零后端**（扫 diff 0 碰闸/沙箱/manual_relay）；**真机过**：全屏+平移+高度不塌、四边对位不挡、详情抽屉干净、实验画布回归、跑节点正常。方案 `docs/plans/2026-06-23-workflow-canvas-fullbleed-hud-redesign-v1.md`。
-- 后端基线：`cargo test --lib` = **567 passed / 0 failed**（2026-06-23 本机）。
+- **工作流自动连环（中间·半自动 收口）= P1+P2+#19 已落地·真机全验（2026-06-23）**：薄 controller `workflow_chain_controller.rs` 按拓扑序逐节点自动连跑（圈固定测试项目·跨高危#4 下放轻档，决策 `decisions/2026-06-23-test-project-auto-chain-light-tier-v1.md`），复用已 gated `execute_project_workflow_node_at`（不旁路/不新开闸/闸字节未碰）；四护栏 runaway上限(min(节点数,50))/可中断/审计/回滚 + 断点续；**P2 发令台** `WorkflowCommandConsoleView`（打『按计划跑 <名>』起链·只启动停·不绕状态机·非测试项目被闸拒）；**#19** HUD 顶栏实时链进度。**真机全验**：完整链 director→subagent→reviewer 跑通(~9min)、沙箱写隔离(`chain-proof.txt` 只落测试项目)、停/断点续/失败即停 6×/UI 不冻。cargo 579/0。⚠️ **P1=顺序连跑、非多智能体编排**（不传数据/主管不派活/审查不复核——那是 #20，见③）。设计 `docs/plans/2026-06-23-workflow-mid-tier-semi-auto-chained-execution-v1.md`（已收口对齐）、交接 `handoffs/2026-06-23-workflow-chain-p1-inflight-handoff-v1.md`。
+- 后端基线：`cargo test --lib` = **579 passed / 0 failed**（2026-06-23 本机）。
 
 ## 二、在做什么
 
@@ -24,23 +25,20 @@
 - **工作流引擎解封·第一刀 = 适配器真跑已验**（高危#1 用户授权下，2026-06-21）：`codex_local_runner.rs` 的 `RealWorkflowNodeCodexRunner`（复用 `command_plan_for`+`run_real_codex_process`）+ `commands.rs` 双闸（真实项目零变化）。**实物核过**：直接调适配器在测试项目 `/Users/yoyi/codex-workflow-mario-test` 真起一次 codex，codex 建了 `workflow-real-run-proof.txt`（内容对）、沙箱只动测试目录没外溢、exit 0；new_session 路径通。`cargo test --lib` 555 + #[ignore] 真跑测试。决策 `decisions/2026-06-21-next-step-unseal-workflow-engine-for-test-project-v1.md`。
 - **工作流引擎解封·走通已验（全派发路径真跑）**：bootstrap 工作流 → 绑真会话 `019ed9f7` → `execute_workflow_node_dispatch_for_index_at`（= 双闸命令过闸后的真实现）→ 适配器 resume → 真 codex 建 `workflow-fulldispatch-proof.txt`（内容对）、沙箱只动测试目录、dispatch `state=completed` exit0。`#[ignore]` 集成测试 `real_run_full_dispatch_resume`。**即:工作流 worker 节点已能经生产派发路径真跑 codex。**（注:派发是 resume 已绑真会话那套——节点需先绑一个真 codex 会话。）
 - 运行工作流画布·真机对图打磨：代码 P1–P4 完成，剩起 Tauri 微调视觉（未做）。
-- **工作流自动连环 P1（圈固定测试项目·跨高危#4 下放，决策 2026-06-23）= 已建·本次 commit·部分真机**：薄 controller `workflow_chain_controller.rs` 按拓扑序逐节点连跑，复用已 gated 的 `execute_project_workflow_node_at`（不旁路/不新开闸/`codex_local_runner`·`manual_relay`·闸 字节未碰）；四护栏 runaway上限(min(节点数,50))/可中断(节点边界 stop 标志)/审计/回滚 + 断点续；命令 `start/stop_project_workflow_chain`（start = async+`spawn_blocking` 防冻 UI）+ 画布起/停链按钮。cargo **578/0**（+11 测试）。**真机验过**：director 跑通、停链成、UI 不冻、**失败即停 6× 坐实**（subagent 空 prompt→报错→链停→reviewer 不跑）、断点续。**真机全验过（2026-06-23）**：完整链跑通（director→subagent→reviewer 都 completed，~9min）、**沙箱写隔离**（subagent workspace-write 写 `chain-proof.txt` 只落测试项目、home/Documents/Desktop/tmp 无外溢）、停链/断点续/失败即停 6×/UI 不冻。**高危#4 安全底线守住。**⚠️ **P1 = 顺序节点跑批，不是多智能体编排**：图边只定顺序、不传数据、主管不派活给子agent、审查不复核产出（那是乙/四角色引擎，未做）。决策 `decisions/2026-06-23-test-project-auto-chain-light-tier-v1.md`、交接 `handoffs/2026-06-23-workflow-chain-p1-inflight-handoff-v1.md`。
 - **画布编辑保存修复（真机确认·本次 commit）**：跑过链/节点后累积的 `canvas_run` 临时 work_item（无任务包 artifact）曾让 submit + 显示的运行性检查全 blocked → **编辑工作流存不下来**（真机踩到、绕了好几刀才定位）。修：submit + 读模型 run_check 都**剔除 canvas_run 临时件**（只看定义结构 + 真任务包件；真跑就绪 / path-lock / 沙箱 / fail-stop 一字未动·**安全没削**）+ 前端提交改用引擎实时编辑态（不依赖手动保存）。回归 `submit_project_workflow_draft_not_blocked_by_canvas_run_work_items`、`rejects_without_director` 仍过、cargo **579/0**。**真机确认**：subagent/审查 prompt 编辑存得住。
 
 ## 三、下一步
 
-> 画布主线全收口。**自动连环 P1（圈测试项目·跨高危#4）= 已建+本次 commit+部分真机**（见①；两道闸经"直接干"已过，决策 2026-06-23）。**下一步**：
+> 画布主线 + **中间·半自动（自动连环 P1+P2+#19）全收口**（见①，2026-06-23 真机全验、两道闸经"直接干"已过、设计文档已对齐）。**下一步**：
 
-1. ✅ **P2 发令台（对话启动）= 已做+真机过**：左栏「流转」组新增「发令台」视图（`WorkflowCommandConsoleView`）——列测试项目工作流 → 打『按计划跑 <名>』起链 / 『停 <名>』停链 + 命令日志 + 实时状态（复用 #19 轮询）。对话只启动/停、真跑仍走 gated 链控制器（圈测试项目、不绕状态机·principles §4）、非测试项目被闸拒。
-2. ✅ **画布链运行态实时显示（#19）= 已做+真机过**：链跑期间 HUD 顶栏每 2.5s 轮询、显示 `链 N/M ✓director ⏳subagent •reviewer` 实时进度（不再空白"连环跑中…"）。后端只读命令 `get_project_workflow_chain_status`。
-3. **多智能体编排（待方向）**：主管派子agent / 审查复核产出 = 乙核心，需解封/适配四角色引擎 `workflow_execution_entrypoints.rs`，比 P2 大；P1 只是顺序跑批、不做编排。
-4. **轻档积压**：✅ **canvas_run 临时件累积已清**（每节点封顶 1 件 + 1 绑定，按稳定 `origin_node_id` 剔——`current_node_id` 会随 dispatch 漂；dispatch 审计留痕不动）；✅ **run_check 对画布已对齐**（submit + 显示都剔 canvas_run、不再误显 blocked——见 `0593fc2`；「按节点会话+prompt 正面判可行性」是增强、留 #20）。**剩**：画布手感打磨 / 节点对话编辑 NL（架构 §10）/ 文档归档·死码清理〔`workbench_sqlite_*` 勿删〕/ 旧运行画布对图。
-5. **仍锁**：真跑进非测试真实项目（高危#1·明确授权不可省）。
+1. **#20 真编排（下一主线·待你拍 甲案/乙案 + 是否先出设计）**：节点间传数据（主管产出→子agent输入→审查接产出）+ 主管真驱动派发，**非各节点独立 resume 自己会话**。**不是从零**——锁着的四角色引擎 `workflow_execution_entrypoints.rs:1489`（`run_workflow_machine_at`）已有多轮多角色环 + 角色分沙箱（仅 dev 可写）+ 收敛判定 + 审计 + 备份，stub 测过；**缺**：① 真数据传递（现仅传一行压缩摘要 `last_message_summary`，完整产出已落 `last_message_path` 但没往下传）② 主管真派活（现固定序列、各角色独立会话）③ 解封接真 runner（踩高危#4：需"测试项目 auto-chain 下放"决策覆盖到此路径 + 明确授权；并核 `execute_workflow_node_dispatch_at` 是否带 path-lock+护栏）。咨询线评估：**走甲案**（升级引擎·真产出传递·保留各角色独立会话），乙案（主管 spawn 子agent）多半要 codex 侧支持、做不到只能模拟回甲。
+2. **轻档积压**：画布手感打磨 / 节点对话编辑 NL（架构 §10）/ 文档归档·死码清理〔`workbench_sqlite_*` 勿删〕/ 旧运行画布对图。P2 发令台仍是固定命令格式，**真·NL 主对话启动**留给乙/北极星。
+3. **仍锁**：真跑进非测试真实项目（高危#1·明确授权不可省）；乙·无人值守自动连环（高危#4 上档、放开非测试项目）。
 
 ## 四、锁着的 / 没接（区分三种「不在线上默认」，别压成「deferred」一个词——那是上一版误报之源）
 
 **a) 故意锁（impl 完整、可解条件明确）**
-- 工作流多节点编排引擎：前后端双锁（`App.tsx:547` / `commands.rs:1789`→legacy blocked）；四角色真环实现完整（`workflow_execution_entrypoints.rs:1489`），但**只 stub 测过、无真 runner**。⚠️ 主导线正解封到固定测试项目（见 ②）。
+- 工作流多节点编排引擎（四角色机器 `run_workflow_machine_at`）：前后端双锁（`App.tsx:547` / `commands.rs:1789`→legacy blocked）；四角色真环实现完整（`workflow_execution_entrypoints.rs:1489`），但**只 stub 测过、无真 runner**；**数据传递仅一行摘要、主管不真派活**。**= #20 真编排的底座**（见 ③：解封到测试项目 + 升级真产出传递）。
 - product-command Phase B / 受控 real resume：对真实项目封，探针跑过。
 - 真跑 codex 进**非测试真实项目**（你的实际仓/生产）：仍锁、用户授权那一下不可省。**固定测试项目跑 = 轻档·随便读写**（path-lock + 沙箱守住；2026-06-22 下放，见 `decisions/2026-06-22-p3-test-project-real-run-light-tier-v1.md`）。
 
@@ -49,7 +47,7 @@
 - 统一记忆层 + 真攒记忆：见 ①。冻结的只有「切 DB」+「多 agent 专属门」，不是整块 deferred。
 
 **c) 没建（终局）**
-- 乙·自动连环 / 多项目接力：风险到这才真大，没开。**北极星**：主管对话说"按计划开干"→ 总指导自动执行画布编排好的工作流 → 直到完成。开时重护栏加回来（可中断/边界/审计/可回滚）+ 明确授权 + 守 principles §4（经状态机+权限，不靠聊天绕过改状态）。
+- 乙·自动连环 / 多项目接力：风险到这才真大，没开。**北极星**：主管对话说"按计划开干"→ 总指导自动执行画布编排好的工作流 → 直到完成。开时重护栏加回来（可中断/边界/审计/可回滚）+ 明确授权 + 守 principles §4（经状态机+权限，不靠聊天绕过改状态）。注：中间·半自动已把"圈测试项目的自动连跑"建好（见①），乙 = 其上放开非测试项目 + 重护栏拧生产 + 真·NL 主对话 + 明确授权。
 - **真跑进任意真实项目（非测试项目）= 另一道锁**：现两面真跑都只打固定测试项目；放开任意真实项目需明确授权，不在当前计划。
 
 **d) P3 已知限制 — 已全部收口（剩可选架构债）**
@@ -60,4 +58,4 @@
 
 ---
 
-*阶梯：甲·手动中转（已收口）→ 中间·半自动（下下步）→ 乙·自动连环（终局）。**本文每次 commit 必回写**（AGENTS.md §五）。证据正本：`handoffs/2026-06-21-full-project-fact-reconciliation-result-v1.md`。**主导线交接（画布 P3 在飞）：`handoffs/2026-06-22-main-line-handoff-canvas-p3-inflight-v1.md`。***
+*阶梯：甲·手动中转（已收口）→ 中间·半自动（已收口·圈测试项目自动连跑）→ 乙·自动连环（终局）。**本文每次 commit 必回写**（AGENTS.md §五）。证据正本：`handoffs/2026-06-21-full-project-fact-reconciliation-result-v1.md`。**主导线交接（画布 P3 在飞）：`handoffs/2026-06-22-main-line-handoff-canvas-p3-inflight-v1.md`。***
