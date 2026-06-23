@@ -3701,6 +3701,179 @@ mod tests {
         assert_eq!(result.dispatch.state, "completed");
     }
 
+    // S1-③·正向真跑（高危#1 轻档·固定测试项目）：真 codex 经 execute_project_workflow_node_at
+    // （= S1 合并强闸所在层）真跑一个画布工作流节点，第一次用真 codex 验 S1 闸在真实执行里成立。
+    // 与 real_run_full_dispatch_resume 的关键区别：那个直调 execute_workflow_node_dispatch_for_index_at
+    // （在闸之后那层，绕闸）；本测试走 execute_project_workflow_node_at（过闸）——闸不放行就会在起
+    // runner 前返回 real_execution_gate_blocked，所以「completed」本身即证明真 codex 过了
+    // decide_real_execution_command（authorized·path-lock 命中）。默认 #[ignore]；显式
+    // `cargo test --lib s1_step3_real_run_through_gate -- --ignored --nocapture` 才起真 codex。
+    #[test]
+    #[ignore = "S1-③: spawns real codex THROUGH the S1 gate (execute_project_workflow_node_at) in the test project"]
+    fn s1_step3_real_run_through_gate() {
+        let test_root = "/Users/yoyi/codex-workflow-mario-test";
+        let real_session = "019ed9f7-c0c2-7213-b871-6d18959b7c24";
+        let proof_token = unix_timestamp_string();
+        // 跑前清掉旧 proof，确保断言看到的是本次产物。
+        let proof_path = format!("{test_root}/s1-step3-proof.txt");
+        let _ = fs::remove_file(&proof_path);
+        let dir = std::env::temp_dir().join(format!("s1-step3-gate-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let project = fixture_project(test_root);
+        let index = fixture_dispatch_index(test_root, real_session);
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
+        // 任务包 objective → artifact.brief → fields.goals → objective → prompt_preview → codex 真 prompt。
+        let objective = format!(
+            "在当前项目根目录创建文件 s1-step3-proof.txt，只写入一行内容：S1-step3 gate real-run ok {proof_token}。完成后用一句话说明你创建了该文件，不要修改任何其它文件。"
+        );
+        create_task_draft_at(
+            &path,
+            &TaskDraftRequest {
+                project_root: test_root.to_string(),
+                title: format!("S1-③ 过闸真跑 {proof_token}"),
+                objective: objective.clone(),
+                assigned_role: Some("codex-dev".to_string()),
+            },
+        )
+        .expect("work item should exist");
+        let work_item_id =
+            optional_string_from(&read_json_file(&path)["work_items"][0], "work_item_id")
+                .expect("work item id should exist");
+        update_work_item_state_at(
+            &path,
+            &fixture_work_item_state_update_request(test_root, &work_item_id, "ready_to_dispatch"),
+        )
+        .expect("work item should be ready");
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let session = fixture_session(real_session, test_root, true);
+        bind_workflow_node_codex_session_at(
+            &path,
+            &fixture_node_session_bind_request(
+                test_root,
+                &node_id,
+                Some(&work_item_id),
+                real_session,
+            ),
+            &session,
+        )
+        .expect("binding real session should write");
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let request = ProjectWorkflowNodeRunRequest {
+            project_root: test_root.to_string(),
+            node_id,
+            work_item_id,
+            workflow_id: None,
+        };
+        let readback_db_path = codex_db::default_state_db_path();
+        let result =
+            execute_project_workflow_node_at(&path, &index, &readback_db_path, &runner, &request)
+                .expect("S1 闸应 authorized 放行并走通真派发到 completed");
+        println!(
+            "[S1_STEP3] state={} exit={:?} summary={:?}",
+            result.dispatch.state, result.dispatch.exit_code, result.dispatch.last_message_summary
+        );
+        assert_eq!(result.dispatch.state, "completed", "派发应 completed");
+        assert_eq!(result.dispatch.exit_code, Some(0), "codex exit 应为 0");
+        let proof = fs::read_to_string(&proof_path)
+            .unwrap_or_else(|e| panic!("proof 文件应在测试项目内生成 {proof_path}：{e}"));
+        assert!(
+            proof.contains(&proof_token),
+            "proof 文件应含本次 token {proof_token}，实际：{proof}"
+        );
+        println!("[S1_STEP3] proof_path={proof_path} content={proof:?}");
+    }
+
+    // S1-③·非测试拦截（关键·只验"被拦"、绝不真跑进非测试）：把 project_root 换成非测试路径走
+    // execute_project_workflow_node_at，期望 S1 闸在起 runner 前返回 real_execution_gate_blocked。
+    // runner 用 panic-stub——一旦被调即 panic（= 即便闸有 bug 也绝不真起 codex 进非测试，守 §3 铁律）。
+    // 常驻回归（去 #[ignore]）：铁律在产品路径的护栏——安全（panic-stub 保证不起 codex）、快。
+    #[test]
+    fn s1_step3_nontest_root_blocked_before_runner() {
+        struct MustNotRunRunner;
+        impl CodexResumeRunner for MustNotRunRunner {
+            fn resume_with_options(
+                &self,
+                _thread_id: &str,
+                _prompt: &str,
+                _last_message_path: &Path,
+                _options: &CodexResumeRequestOptions,
+            ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String>
+            {
+                panic!(
+                    "S1-③ 铁律违规：非测试 project_root 到达了 runner（本应被 S1 闸拦截，绝不真起 codex 进非测试）"
+                );
+            }
+        }
+        let nontest_root = std::env::temp_dir()
+            .join(format!("s1-step3-nontest-{}", unix_timestamp_string()))
+            .display()
+            .to_string();
+        let fake_session = "thread-s1-step3-nontest";
+        let dir = std::env::temp_dir().join(format!(
+            "s1-step3-nontest-state-{}",
+            unix_timestamp_string()
+        ));
+        let path = dir.join("workflow-state.v0.json");
+        let project = fixture_project(&nontest_root);
+        let index = fixture_dispatch_index(&nontest_root, fake_session);
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
+        create_task_draft_at(
+            &path,
+            &fixture_task_draft_request(&nontest_root, "S1-③ 非测试拦截用例"),
+        )
+        .expect("work item should exist");
+        let work_item_id =
+            optional_string_from(&read_json_file(&path)["work_items"][0], "work_item_id")
+                .expect("work item id should exist");
+        update_work_item_state_at(
+            &path,
+            &fixture_work_item_state_update_request(
+                &nontest_root,
+                &work_item_id,
+                "ready_to_dispatch",
+            ),
+        )
+        .expect("work item should be ready");
+        let workflow_id = default_workflow_id(&nontest_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let session = fixture_session(fake_session, &nontest_root, true);
+        bind_workflow_node_codex_session_at(
+            &path,
+            &fixture_node_session_bind_request(
+                &nontest_root,
+                &node_id,
+                Some(&work_item_id),
+                fake_session,
+            ),
+            &session,
+        )
+        .expect("binding should write");
+        let runner = MustNotRunRunner;
+        let request = ProjectWorkflowNodeRunRequest {
+            project_root: nontest_root.clone(),
+            node_id,
+            work_item_id,
+            workflow_id: None,
+        };
+        let readback_db_path = codex_db::default_state_db_path();
+        let error =
+            execute_project_workflow_node_at(&path, &index, &readback_db_path, &runner, &request)
+                .expect_err("非测试 project_root 应被 S1 闸拦截、不起 runner");
+        assert!(
+            error.contains("real_execution_gate_blocked"),
+            "应是 S1 闸拦截错误（real_execution_gate_blocked），实际：{error}"
+        );
+        // MustNotRunRunner 未 panic（没被调）+ 非测试路径未被创建 = 没起 codex 进非测试。
+        assert!(
+            !std::path::Path::new(&nontest_root).exists(),
+            "非测试路径不应有任何写入（codex 不该被起）"
+        );
+        println!("[S1_STEP3_NONTEST] blocked_error={error}");
+    }
+
     // 宽松 stub：不像 StubCodexResumeRunner 那样硬编码 execution_cwd=/Users/yoyi（那是某旧
     // fixture 绑死的）；本 runner 只验证「走到了真跑这步」，回 exit 0 + readback。实验命令的
     // execution_cwd 应是固定测试项目（codex_resume_options_for_context 取 instruction 的值）。
