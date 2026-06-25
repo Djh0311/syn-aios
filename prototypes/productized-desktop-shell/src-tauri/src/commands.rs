@@ -858,6 +858,11 @@ fn run_project_workflow_automation_j2_b_b1(
     request: ProjectWorkflowAutomationJ2BB1Input,
     state: tauri::State<'_, AppState>,
 ) -> Result<ProjectWorkflowAutomationJ2BB1Output, String> {
+    // 旁路封堵：j2_b_b1 真跑写死 J2_B_B1_PROJECT_ROOT（非测试 Documents/mario test）→ 此 gate 永远拦、封死真跑。
+    require_test_project_path_lock(
+        project_workflow_automation::J2_B_B1_PROJECT_ROOT,
+        "run_project_workflow_automation_j2_b_b1",
+    )?;
     project_workflow_automation::run_project_workflow_automation_j2_b_b1_at(
         &state.workflow_state_path,
         &request,
@@ -871,6 +876,11 @@ fn run_project_workflow_automation_j2_b_b2(
     request: ProjectWorkflowAutomationJ2BB2Input,
     state: tauri::State<'_, AppState>,
 ) -> Result<ProjectWorkflowAutomationJ2BB2Output, String> {
+    // 旁路封堵：j2_b_b2 真跑写死 J2_B_B2_PROJECT_ROOT（非测试 product-line/tmp 隔离项目、workspace-write）→ 此 gate 永远拦、封死真跑。
+    require_test_project_path_lock(
+        project_workflow_automation::J2_B_B2_PROJECT_ROOT,
+        "run_project_workflow_automation_j2_b_b2",
+    )?;
     project_workflow_automation::run_project_workflow_automation_j2_b_b2_at(
         &state.workflow_state_path,
         &request,
@@ -885,6 +895,11 @@ fn run_project_workflow_automation_k3_b(
     state: tauri::State<'_, AppState>,
 ) -> Result<ProjectWorkflowAutomationK3BOutput, String> {
     ensure_k3_b_tauri_no_real_harness_request(&request)?;
+    // 旁路封堵：k3_b 真跑 root = request.project_root（兜底 config 也是非测试）→ 非测试一律拦。
+    require_test_project_path_lock(
+        request.project_root.as_deref().unwrap_or_default(),
+        "run_project_workflow_automation_k3_b",
+    )?;
     project_workflow_automation::run_project_workflow_automation_k3_b_at(
         &state.workflow_state_path,
         &request,
@@ -1077,6 +1092,11 @@ fn run_controlled_session_continuation_real_resume_phase_b(
     request: RunControlledSessionContinuationRealResumePhaseBInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<RunControlledSessionContinuationRealResumePhaseBOutput, String> {
+    // 旁路封堵：H5 直连真 resume 此前无 path-lock（A 线 store 不动，只在命令包装层补闸）。
+    require_test_project_path_lock(
+        &request.authorization.project_root,
+        "run_controlled_session_continuation_real_resume_phase_b",
+    )?;
     session_continuation_store::run_real_resume_phase_b(
         &state.workflow_state_path,
         &request,
@@ -1676,6 +1696,20 @@ const WORKFLOW_ENGINE_TEST_PROJECT_ROOT: &str = "/Users/yoyi/codex-workflow-mari
 
 fn workflow_engine_test_project_unsealed(project_root: &str) -> bool {
     project_root == WORKFLOW_ENGINE_TEST_PROJECT_ROOT
+}
+
+// 旁路封堵（2026-06-24·用户授权破例封 deprecated 旧桩旁路）：旧桩 automation(j2_b_b1/k3_b) 与 H5 直连
+// (controlled_session_continuation) 的真 runner 产品入口此前**无 path-lock**，可绕过 S1 闸真跑 codex 进
+// 非测试项目。在这些 #[tauri::command] 产品入口补 path-lock：只放行固定测试项目，非测试 → legacy blocked、
+// 不起 runner。与 execute_workflow_node_dispatch 同款；gate 在命令包装层（不被单测调）→ A 线 store / 沙箱 /
+// 旧桩内层 _at/_with_runner 一字不动、既有测试零影响。**gate 在「真跑实际用的那个 root」**（j2_b_b1 写死
+// J2_B_B1_PROJECT_ROOT，故 gate 它 → 永远拦＝封死该 deprecated 入口的真跑）。
+fn require_test_project_path_lock(project_root: &str, command_name: &str) -> Result<(), String> {
+    if workflow_engine_test_project_unsealed(project_root) {
+        Ok(())
+    } else {
+        Err(legacy_product_command_blocked_message(command_name))
+    }
 }
 
 #[tauri::command]

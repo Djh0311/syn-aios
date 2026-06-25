@@ -12,7 +12,8 @@
 - **工作流画布 P3 · 多工作流编排（B–E + 点二 + C#2/B/A止血 + 快照刷新 + A真正解，已提交）**：项目面一项目存 N 个工作流——新建 / 编辑（加载现有进草案）/ 列表选择 / 切换查看 / 提交写回（运行性检查 + 备份 + 原子写 + 审计）；**画布建的工作流也能真跑**（C#2：派发接 `workflow_id` + 自动建临时 work_item + resume 会话）、**提交/运行后画布快照自动重载**（修「新建工作流切不过去」）、编辑剪失效会话绑定（B）、编辑显示真角色（A止血）、**只读视图忠实渲染真实节点**（A真正解：去 goal 框/泳道骨架、清死码）。全锁固定测试项目，path-lock 闸在派发上游、沙箱 `codex_local_runner` 字节未动。**真机过**：建/切/提交/真跑/只读对图通、codex 只动测试目录。机器：cargo **566/0** / typecheck0 / offline 15+r4 / build 279。**④d 已全收口、剩可选架构债。**
 - **工作流画布·全屏 HUD 界面重做（真机过、本次 commit）**：项目界面改全窗——画布占满整窗（除边框）、控件四周悬浮（顶=工作流选择器/新建/编辑/4 入口/状态 pill、左=节点调色板、右=选中节点面板按需、底=运行/保存）、过程内容进按需「详情抽屉」默认收起、Memory 一个开发者详情折真删。**纯前端零后端**（扫 diff 0 碰闸/沙箱/manual_relay）；**真机过**：全屏+平移+高度不塌、四边对位不挡、详情抽屉干净、实验画布回归、跑节点正常。方案 `docs/plans/2026-06-23-workflow-canvas-fullbleed-hud-redesign-v1.md`。
 - **工作流自动连环（中间·半自动 收口）= P1+P2+#19 已落地·真机全验（2026-06-23）**：薄 controller `workflow_chain_controller.rs` 按拓扑序逐节点自动连跑（圈固定测试项目·跨高危#4 下放轻档，决策 `decisions/2026-06-23-test-project-auto-chain-light-tier-v1.md`），复用已 gated `execute_project_workflow_node_at`（不旁路/不新开闸/闸字节未碰）；四护栏 runaway上限(min(节点数,50))/可中断/审计/回滚 + 断点续；**P2 发令台** `WorkflowCommandConsoleView`（打『按计划跑 <名>』起链·只启动停·不绕状态机·非测试项目被闸拒）；**#19** HUD 顶栏实时链进度。**真机全验**：完整链 director→subagent→reviewer 跑通(~9min)、沙箱写隔离(`chain-proof.txt` 只落测试项目)、停/断点续/失败即停 6×/UI 不冻。cargo 579/0。⚠️ **P1=顺序连跑、非多智能体编排**（不传数据/主管不派活/审查不复核——那是 #20，见③）。设计 `docs/plans/2026-06-23-workflow-mid-tier-semi-auto-chained-execution-v1.md`（已收口对齐）、交接 `handoffs/2026-06-23-workflow-chain-p1-inflight-handoff-v1.md`。
-- 后端基线：`cargo test --lib` = **579 passed / 0 failed**（2026-06-23 本机）。
+- **角色循环真跑端到端（A 线 S2-3）= 已验·本次 commit**：方案→授权→主管拆→**worker 真 codex 经 S1 闸建 proof**→汇报→主管确认→全局复核→看结果，全链真跑出真结果（§6 `#[ignore]` 真跑：`completed/exit0`、proof 含本次 token 落测试项目、沙箱只动测试目录、`.codex` 凭据没碰；**注：真 codex 偶发 flake（早退 exit1 无输出），retry 即过——非代码问题，别把「§6 绿」当稳态**）。**automation 三旧桩入口（j2_b_b1/b2/k3_b）旁路全封 path-lock**（写死非测试 root→恒拦）；PCR phase_b 族 = 授权矩阵守（`runner_call_allowed==phase_b_real_resume_executed`、非旁路·未误 gate）；**无漏网证明**：每条真写入口非 path-lock 即授权矩阵。判决体/runner/沙箱/A 线 store 0-diff。
+- 后端基线：`cargo test --lib` = **584 passed / 0 failed / 27 ignored**（2026-06-25 本机·重跑核过）。
 
 ## 二、在做什么
 
@@ -34,7 +35,7 @@
 
 1. ✅ **S0 瘦身+文档对齐 = 已执行（四闸绿·cargo 575/0·本次 commit）**：删孤儿死码（`ru_dogfood`/`memory_daily_loop`/4 死视图/tauri 死包装，净 −1256 行）+ README 砍纯入口 + roadmap 修 2 断链。**纠偏（已核物）**：`run_workflow_machine` 真实现纠缠深（helper 被另一测试用）→ deferred 留后面 careful 做；`projectCanvasStateExamples` 实为测试夹具 → 保留（审查目录误判 2 处）。**+ S3 加「每日自动记忆采集」为完成标准（原 memory_daily_loop 点子接线通电）。**
 2. ✅ **S1 执行层合一 = 整体完成（实现审过 `d0e1e03` + 真跑验过，本次 commit）**：B `execute_project_workflow_node_at` 真起 runner 前过 A 强闸 `decide_real_execution_command`，path-lock 命中作 `authorization_complete` 必要项（**铁律 authorized⟹path-lock**）。**③ 真跑验证主导线亲验**（不信自报·全部自己重跑）：① 真 codex 经 S1 闸真跑 `completed/exit0`、写 proof 在测试项目内（17s）；② 非测试 root 运行时被拦 `gate_blocked:blocked_waiting_authorization`、panic-stub 零触发=没起 codex；③ 沙箱只动测试目录、`.codex` 凭据没碰（auth.json Jun3）、无外溢。新增 2 个验证测试（② 去 ignore 作**常驻铁律护栏** → cargo **581/0**；① 含真 codex 留 `#[ignore]`）。实现/沙箱/判决体/A线 0-diff。任务包/回交/证据见 `tasks|handoffs/2026-06-24-s1-*`。非阻断:旧 5 处 path-lock 留作纵深防御、pre-existing fmt 债另起整备。
-3. **S2 救活+全盘统一**（核心）：A 角色循环原样接 B 现前端 + **记忆闭环全救** + 整理 A 旧面板残留 + 可用性（方案授权制 UI/收字段/编辑 UX）。
+3. **S2 救活+全盘统一**（核心）：✅ **S2-3 角色循环真跑端到端 + automation 旁路全封 = 已验·本次 commit**（后端/集成证明角色循环能真跑出结果，见①）。**剩余**：A 角色循环接前端 = **工作流 + 记忆中心界面布局重做**（用户定的大调整，超越原「就地提升」轻档批 `stash@{0}`）+ **记忆闭环全救** + 可用性（方案授权制 UI/收字段/编辑 UX）。
 4. **S3 做需求**（统一后）：agent 层/NL 拆解/一句话启动/角色补全/套模版（= 本会话对话扒清版需求，非 backlog）。
 5. **仍锁/后置**：真跑非测试真实项目（高危#1）；乙·自动连环（高危#4）。
 

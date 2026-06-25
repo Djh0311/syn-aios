@@ -27,7 +27,7 @@ const J2_SCHEMA: &str = "project_workflow_automation.v1";
 const J2_EVENT_TYPE: &str = "project_workflow_automation_phase_a_recorded";
 const J2_SOURCE_KIND: &str = "stage_j_j2_project_workflow_automation";
 const J2_B_B1_EVENT_TYPE: &str = "project_workflow_automation_j2_b_b1_phase_b_recorded";
-const J2_B_B1_PROJECT_ROOT: &str = "/Users/yoyi/Documents/mario test";
+pub(crate) const J2_B_B1_PROJECT_ROOT: &str = "/Users/yoyi/Documents/mario test";
 const J2_B_B1_PROJECT_ID: &str = "project:users-yoyi-documents-mario-test";
 const J2_B_B1_WORKFLOW_ID: &str = "workflow:users-yoyi-documents-mario-test:default";
 const J2_B_B1_NODE_ID: &str = "workflow:users-yoyi-documents-mario-test:default:node:codex-dev";
@@ -42,7 +42,7 @@ const J2_B_B1_PROMPT_HASH: &str =
 const J2_B_B1_READBACK_MARKER: &str = "J2_B_MARIO_TEST_DEVELOPER_RUN_UNIT_READ_ONLY_OK_2026_06_09";
 const J2_B_B1_CANONICAL_PROMPT: &str = "You are the codex-local developer run unit for Stage J / J2-B project workflow automation read-only closed-loop probe.\n\nScope:\n- Project: /Users/yoyi/Documents/mario test\n- Workflow: workflow:users-yoyi-documents-mario-test:default\n- Run unit: developer_execution\n- Operation: resume only\n- Sandbox: read-only\n- Marker: J2_B_MARIO_TEST_DEVELOPER_RUN_UNIT_READ_ONLY_OK_2026_06_09\n\nRules:\n- Do not modify files.\n- Do not run commands.\n- Do not read secrets, auth tokens, .env files, keychain data, OAuth credentials, provider credentials, rollout data, or full transcripts.\n- Reply only with the marker and a minimal structured worker report candidate.\n";
 const J2_B_B2_EVENT_TYPE: &str = "project_workflow_automation_j2_b_b2_phase_b_recorded";
-const J2_B_B2_PROJECT_ROOT: &str =
+pub(crate) const J2_B_B2_PROJECT_ROOT: &str =
     "/Users/yoyi/workspace/product-line/tmp/stage-j-j2-b-isolated-project";
 const J2_B_B2_PROJECT_ID: &str = "project:stage-j-j2-b-isolated-project";
 const J2_B_B2_WORKFLOW_ID: &str = "workflow:stage-j-j2-b-isolated-project:default";

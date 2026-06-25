@@ -4034,6 +4034,450 @@ mod tests {
         );
     }
 
+    // S2-3·全链 stub 集成：把 C 阶段角色循环 8 步串成一条真任务端到端（stub worker）——证明编排在
+    // 真实命令上跑得通、worker **经 S1 闸**（execute_project_workflow_node_at）被派发。stub runner 不起
+    // 真 codex（自动测试守死线）；真跑 codex 是 §6 单独步（#[ignore]，见 s2_3_real_run_role_loop_through_gate）。
+    // 死线：worker 步用固定测试项目 root → path-lock 命中 → S1 闸授权放行；命令本体/闸/沙箱 0-diff。
+    #[test]
+    fn s2_3_role_loop_full_chain_through_gate_with_stub() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT; // path-lock 命中 → ⑤ 经 S1 闸授权放行
+        let thread_id = "thread-s2-3-stub";
+        let dir = test_temp_dir("s2-3-full-chain-stub");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let project = fixture_project(test_root);
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
+
+        // ①②③ 方案 → 授权 → 边界复核（真命令链，推到 active 授权）
+        let (proposal, authorization, revision) =
+            create_active_project_director_authorization_fixture(
+                &path,
+                test_root,
+                thread_id,
+                timestamp_ms,
+            );
+
+        // ④ 主管拆 + 准备：先给 worker 节点(codex-dev)绑会话，再 prepare（产 prepared dispatch、不执行）
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(test_root, &node_id, None, thread_id),
+        )
+        .expect("node binding should write");
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+                vec![],
+            ),
+        )
+        .expect("授权范围内应准备出 worker 派发");
+        assert_eq!(
+            prepared.prepared_dispatches.len(),
+            1,
+            "主管拆任务应准备 1 个 worker 派发"
+        );
+        let prep = &prepared.prepared_dispatches[0];
+        let prep_work_item = prep
+            .work_item_id
+            .clone()
+            .expect("prepared dispatch 应有 work_item_id（带任务包目标）");
+        let prep_node = prep
+            .workflow_node_id
+            .clone()
+            .expect("prepared dispatch 应有 workflow_node_id");
+
+        // ④→⑤ glue：从 prepared dispatch 提 node/work_item 组请求喂⑤（样板 chain_controller:427）。worker
+        // 真派发经 S1 闸（stub runner）；用 prepared 的 work_item（带任务包 objective）→ execute 从任务包构指令。
+        // ⑤ 不放行会在起 runner 前 Err（real_execution_gate_blocked），故 completed 即证明过了 S1 闸（path-lock 命中）。
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let run_request = ProjectWorkflowNodeRunRequest {
+            project_root: test_root.to_string(),
+            node_id: prep_node.clone(),
+            work_item_id: prep_work_item.clone(),
+            workflow_id: Some(workflow_id.clone()),
+        };
+        let run =
+            execute_project_workflow_node_at(&path, &index, &index_path, &runner, &run_request)
+                .expect("worker 经 S1 闸应授权放行并走通派发到 completed");
+        assert_eq!(run.dispatch.state, "completed", "worker 派发应 completed");
+        let worker_node_id = run.dispatch.node_id.clone();
+        let worker_work_item_id = run.dispatch.work_item_id.clone();
+        let worker_dispatch_id = run.dispatch.dispatch_id.clone();
+
+        // ⑥ worker 汇报（引用⑤的真 dispatch/work_item/node）
+        let report = record_worker_structured_report_at(
+            &path,
+            &fixture_c5_worker_report_input(
+                test_root,
+                &worker_work_item_id,
+                &worker_dispatch_id,
+                &worker_node_id,
+            ),
+        )
+        .expect("worker 结构化汇报应写 audit");
+
+        // ⑦ 主管确认过程事实
+        record_project_director_process_fact_decision_at(
+            &path,
+            &fixture_c5_process_fact_decision_input(
+                test_root,
+                &report.audit_event_id,
+                &worker_dispatch_id,
+                "confirm_process_fact",
+            ),
+        )
+        .expect("主管应确认过程事实");
+
+        // ⑧ 全局复核 + 用户决定（看真结果）
+        record_global_final_result_review_at(
+            &path,
+            &GlobalFinalResultReviewInput {
+                project_root: test_root.to_string(),
+                project_id: project_id(test_root),
+                workflow_id: workflow_id.clone(),
+                authorization_id: authorization.authorization_id.clone(),
+                proposal_id: proposal.proposal_id.clone(),
+                actor_id: "global_director".to_string(),
+                actor_role: "global_director".to_string(),
+                decision: "accepted".to_string(),
+                summary: "全局复核：角色循环端到端跑通、过程事实已确认。".to_string(),
+                evidence_refs: vec!["evidence:s2-3-final-review:001".to_string()],
+                accepted_process_fact_ids: vec![format!(
+                    "process-fact:{}",
+                    stable_id(&report.audit_event_id)
+                )],
+                open_issues: vec![],
+                deferred_items: vec![],
+                expected_workflow_revision: None,
+            },
+        )
+        .expect("全局最终复核应通过");
+        record_user_result_decision_at(
+            &path,
+            &UserResultDecisionInput {
+                project_root: test_root.to_string(),
+                project_id: project_id(test_root),
+                workflow_id: workflow_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                actor_role: "user".to_string(),
+                decision: "accept_result".to_string(),
+                summary: "用户验收：接受角色循环结果。".to_string(),
+                requested_changes: vec![],
+                accepted_review_id: None,
+                expected_workflow_revision: None,
+            },
+        )
+        .expect("用户结果决定应记录");
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // S2-3·path-lock 负向（铁律）：角色循环即便授权了方案、准备了派发，worker 步(⑤)在**非测试 root**
+    // 仍被 S1 闸拦——role-loop 授权 ≠ path-lock 旁路（④ prepare 不自带 path-lock，全靠⑤的 S1 闸兜底）。
+    // panic-stub：被调即 panic（即便闸有 bug 也绝不真起 codex 进非测试，守 §3 死线）。
+    #[test]
+    fn s2_3_role_loop_worker_blocked_at_nontest_root() {
+        struct MustNotRunRunner;
+        impl CodexResumeRunner for MustNotRunRunner {
+            fn resume_with_options(
+                &self,
+                _thread_id: &str,
+                _prompt: &str,
+                _last_message_path: &Path,
+                _options: &CodexResumeRequestOptions,
+            ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String>
+            {
+                panic!("S2-3 铁律违规：worker 在非测试 project_root 到达了 runner（应被 S1 闸拦）");
+            }
+        }
+        let timestamp_ms = 1_765_300_000_000;
+        let nontest_root = "/tmp/s2-3-nontest-roleloop";
+        let thread_id = "thread-s2-3-nontest";
+        let dir = test_temp_dir("s2-3-nontest-roleloop");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let project = fixture_project(nontest_root);
+        let index = fixture_dispatch_index(nontest_root, thread_id);
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
+        // ①②③④：非测试 root 也能授权+准备（path-lock 不在这几步）
+        let (proposal, authorization, revision) =
+            create_active_project_director_authorization_fixture(
+                &path,
+                nontest_root,
+                thread_id,
+                timestamp_ms,
+            );
+        let workflow_id = default_workflow_id(nontest_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(nontest_root, &node_id, None, thread_id),
+        )
+        .expect("node binding should write");
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                nontest_root,
+                &proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+                vec![],
+            ),
+        )
+        .expect("非测试 root 的 prepare 仍可准备（path-lock 在 worker 步⑤兜底，不在④）");
+        let prep = &prepared.prepared_dispatches[0];
+        // ⑤ worker 步：非测试 root → S1 闸拦、panic-stub 绝不被调
+        let runner = MustNotRunRunner;
+        let run_request = ProjectWorkflowNodeRunRequest {
+            project_root: nontest_root.to_string(),
+            node_id: prep.workflow_node_id.clone().expect("prepared node id"),
+            work_item_id: prep.work_item_id.clone().expect("prepared work_item_id"),
+            workflow_id: Some(workflow_id.clone()),
+        };
+        let err =
+            execute_project_workflow_node_at(&path, &index, &index_path, &runner, &run_request)
+                .expect_err("worker 步在非测试 root 应被 S1 闸拦、不起 runner");
+        assert!(
+            err.contains("real_execution_gate_blocked"),
+            "应是 S1 闸拦截（real_execution_gate_blocked），实际：{err}"
+        );
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // S2-3·§6 真跑（高危#1·固定测试项目轻档·默认 #[ignore]）：worker 真 codex 经 C 阶段角色循环 + S1 闸
+    // 建真文件。自定义 proposal 的 goal_summary/proposed_steps（→ planned_task.objective → 任务包 goals →
+    // codex prompt）让 worker 写 s2-3-loop-proof.txt（含本次 token）。worker 步走 execute_project_workflow_node_at
+    // （S1 闸）——非 authorized 会在起 runner 前 Err，故 completed + proof 即证明真 codex 过了闸（path-lock 命中）。
+    // 显式 `cargo test --lib s2_3_real_run_role_loop_builds_proof_through_gate -- --ignored --nocapture` 才起真 codex。
+    #[test]
+    #[ignore = "S2-3 §6: spawns real codex through the C-stage role loop + S1 gate in the test project"]
+    fn s2_3_real_run_role_loop_builds_proof_through_gate() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = "/Users/yoyi/codex-workflow-mario-test";
+        let real_session = "019ed9f7-c0c2-7213-b871-6d18959b7c24";
+        let thread_id = real_session;
+        let proof_token = unix_timestamp_string();
+        let proof_path = format!("{test_root}/s2-3-loop-proof.txt");
+        let _ = fs::remove_file(&proof_path);
+        let dir = test_temp_dir("s2-3-real-run-roleloop");
+        let path = dir.join("workflow-state.v0.json");
+        let project = fixture_project(test_root);
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
+
+        // ①②③ 自定义 proposal（goal_summary/proposed_steps 注入 proof 指令）→ 确认建授权 → 边界复核激活
+        let mut proposal_input = fixture_project_consultation_proposal_input(test_root);
+        proposal_input.scope_draft.allowed_agent_ids = vec![thread_id.to_string()];
+        proposal_input.goal_summary = format!(
+            "在当前项目根目录创建文件 s2-3-loop-proof.txt，只写入一行：s2-3 role-loop real-run ok {proof_token}"
+        );
+        proposal_input.proposed_steps = vec![
+            format!(
+                "在当前项目根目录创建文件 s2-3-loop-proof.txt，写入一行内容：s2-3 role-loop real-run ok {proof_token}"
+            ),
+            "完成后用一句话说明你创建了该文件，不要修改任何其它文件。".to_string(),
+        ];
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &proposal_input,
+            timestamp_ms,
+            "write-s2-3-realrun-proposal",
+        )
+        .expect("proposal should create");
+        let confirmed = project_consultation_proposal_store::record_decision(
+            &path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "用户确认 S2-3 §6 真跑方案。".to_string(),
+                expected_proposal_store_revision: Some(created.store_revision),
+                expected_plan_authorization_store_revision: None,
+            },
+            timestamp_ms + 1,
+            "write-s2-3-realrun-confirm",
+            "write-s2-3-realrun-auth",
+            "write-s2-3-realrun-auth-user",
+        )
+        .expect("confirm should create authorization");
+        let authorization = confirmed
+            .plan_authorization
+            .expect("confirmed proposal should link authorization");
+        let revision = confirmed
+            .plan_authorization_store_revision
+            .expect("confirmed proposal should return revision");
+        let activated = plan_authorization_store::record_global_boundary_review_with_proposal(
+            &path,
+            &fixture_global_boundary_review_input(
+                test_root,
+                &confirmed.proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+            ),
+            timestamp_ms + 2,
+            "write-s2-3-realrun-boundary",
+        )
+        .expect("global boundary review should activate authorization");
+
+        // ④ 主管拆 + 准备（先绑 worker 节点会话）
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(test_root, &node_id, None, thread_id),
+        )
+        .expect("node binding should write");
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &confirmed.proposal.proposal_id,
+                &activated.authorization.authorization_id,
+                activated.store_revision,
+                vec![],
+            ),
+        )
+        .expect("授权范围内应准备出 worker 派发");
+        let prep = &prepared.prepared_dispatches[0];
+
+        // ⑤ worker 真派发：真 codex 经 S1 闸（path-lock 命中测试项目 → authorized）→ 建 proof 文件
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let readback_db_path = codex_db::default_state_db_path();
+        let run_request = ProjectWorkflowNodeRunRequest {
+            project_root: test_root.to_string(),
+            node_id: prep.workflow_node_id.clone().expect("prepared node id"),
+            work_item_id: prep.work_item_id.clone().expect("prepared work_item_id"),
+            workflow_id: Some(workflow_id.clone()),
+        };
+        let run = execute_project_workflow_node_at(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &run_request,
+        )
+        .expect("worker 经 S1 闸应授权放行并走通真派发到 completed");
+        println!(
+            "[S2_3_REALRUN] state={} exit={:?} summary={:?}",
+            run.dispatch.state, run.dispatch.exit_code, run.dispatch.last_message_summary
+        );
+        assert_eq!(run.dispatch.state, "completed", "worker 真派发应 completed");
+        assert_eq!(run.dispatch.exit_code, Some(0), "codex exit 应为 0");
+        let proof = fs::read_to_string(&proof_path)
+            .unwrap_or_else(|e| panic!("worker 应在测试项目内建 proof 文件 {proof_path}：{e}"));
+        assert!(
+            proof.contains(&proof_token),
+            "proof 应含本次 token {proof_token}，实际：{proof}"
+        );
+        println!("[S2_3_REALRUN] proof_path={proof_path} content={proof:?}");
+
+        // ⑥⑦⑧ 汇报 → 主管确认 → 全局复核 + 用户决定（看真结果）
+        let report = record_worker_structured_report_at(
+            &path,
+            &fixture_c5_worker_report_input(
+                test_root,
+                &run.dispatch.work_item_id,
+                &run.dispatch.dispatch_id,
+                &run.dispatch.node_id,
+            ),
+        )
+        .expect("worker 汇报应写 audit");
+        record_project_director_process_fact_decision_at(
+            &path,
+            &fixture_c5_process_fact_decision_input(
+                test_root,
+                &report.audit_event_id,
+                &run.dispatch.dispatch_id,
+                "confirm_process_fact",
+            ),
+        )
+        .expect("主管应确认过程事实");
+        record_global_final_result_review_at(
+            &path,
+            &GlobalFinalResultReviewInput {
+                project_root: test_root.to_string(),
+                project_id: project_id(test_root),
+                workflow_id: workflow_id.clone(),
+                authorization_id: activated.authorization.authorization_id.clone(),
+                proposal_id: confirmed.proposal.proposal_id.clone(),
+                actor_id: "global_director".to_string(),
+                actor_role: "global_director".to_string(),
+                decision: "accepted".to_string(),
+                summary: "全局复核：worker 真跑出真结果、过程事实已确认。".to_string(),
+                evidence_refs: vec!["evidence:s2-3-realrun-final:001".to_string()],
+                accepted_process_fact_ids: vec![format!(
+                    "process-fact:{}",
+                    stable_id(&report.audit_event_id)
+                )],
+                open_issues: vec![],
+                deferred_items: vec![],
+                expected_workflow_revision: None,
+            },
+        )
+        .expect("全局最终复核应通过");
+        record_user_result_decision_at(
+            &path,
+            &UserResultDecisionInput {
+                project_root: test_root.to_string(),
+                project_id: project_id(test_root),
+                workflow_id: workflow_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                actor_role: "user".to_string(),
+                decision: "accept_result".to_string(),
+                summary: "用户验收：接受 S2-3 真跑结果。".to_string(),
+                requested_changes: vec![],
+                accepted_review_id: None,
+                expected_workflow_revision: None,
+            },
+        )
+        .expect("用户结果决定应记录");
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // S2-3·旁路封堵：旧桩/H5 真 runner 产品入口的 path-lock 守卫——非测试 root（含 j2_b_b1 写死的
+    // Documents/mario test、空 root）一律拦，仅固定测试项目放行。守卫只在 #[tauri::command] 包装层用
+    // （不被单测调），内层 _at/_with_runner 零影响。
+    #[test]
+    fn s2_3_bypass_wrappers_path_lock_blocks_nontest_allows_test() {
+        assert!(require_test_project_path_lock("/tmp/not-test", "x").is_err());
+        assert!(
+            require_test_project_path_lock(project_workflow_automation::J2_B_B1_PROJECT_ROOT, "x")
+                .is_err(),
+            "j2_b_b1 写死的 Documents/mario test（非测试）应被拦"
+        );
+        assert!(
+            require_test_project_path_lock(project_workflow_automation::J2_B_B2_PROJECT_ROOT, "x")
+                .is_err(),
+            "j2_b_b2 写死的 product-line/tmp 隔离项目（非测试·workspace-write）应被拦"
+        );
+        assert!(require_test_project_path_lock("", "x").is_err());
+        assert!(
+            require_test_project_path_lock(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "x").is_ok(),
+            "固定测试项目应放行"
+        );
+    }
+
     // P3 项目面真跑（C 映射）·机器闸：用已存在的 work_item（带任务包）+ 绑定，stub runner 验证
     // execute_project_workflow_node_at 从任务包构造指令 + 走通派发到 completed。
     #[test]
