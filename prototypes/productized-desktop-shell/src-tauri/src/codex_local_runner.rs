@@ -259,6 +259,107 @@ impl crate::CodexResumeRunner for RealWorkflowNodeCodexRunner {
     }
 }
 
+// ===== S3 咨询第一刀·只读 confinement（结构性硬钉只读）=====
+// 复用现成 command_plan_for / 沙箱（**字节不改**）+ RealCodexLocalPhaseBProcessRunner；只在这里「喂一个
+// 只能只读的请求」。死线：sandbox="read-only" + allowed_write_roots=[] **写死在构造里、不收权限参数**，
+// 调用方永远拿不到改成可写/可执行的机会 → 咨询 codex 结构性只读、不走 worker 执行闸也写不了/跑不了命令。
+
+/// 构造一个**只读** codex 请求（read-only 沙箱·写盘根为空·cwd=被咨询项目根）。纯函数、可单测断言只读。
+pub(crate) fn build_readonly_consult_request(
+    project_root: &str,
+    prompt: &str,
+) -> CodexLocalExecutionRequest {
+    CodexLocalExecutionRequest {
+        request_version: 1,
+        adapter_id: "codex-local".to_string(),
+        operation_id: "new_session".to_string(),
+        project_id: format!("consult:{}", crate::utils::hash::short_hash(project_root)),
+        project_root: project_root.to_string(),
+        workflow_id: String::new(),
+        node_id: String::new(),
+        session_id: None,
+        work_item_id: None,
+        continuation_id: None,
+        target_cwd: project_root.to_string(),
+        allowed_write_roots: vec![], // 写死空：read-only → 无 --add-dir、不能写
+        sandbox: "read-only".to_string(), // 写死只读
+        prompt_source_kind: "consultant_readonly".to_string(),
+        prompt_summary: prompt.chars().take(160).collect(),
+        prompt_sha256: crate::utils::hash::sha256_hex(prompt),
+        prompt_ref: format!(
+            "consult-readonly:{}",
+            crate::utils::hash::short_hash(prompt)
+        ),
+        readback_plan: crate::CodexLocalReadbackPlan {
+            strategy: "required".to_string(),
+            required: true,
+            expected_sources: vec!["consultation_proposal".to_string()],
+            unavailable_behavior: "readback_unavailable_or_failed_keeps_result_count_null"
+                .to_string(),
+            trust_policy: "workbench_managed_refs_only_no_full_transcript_by_default".to_string(),
+            warnings: vec![],
+        },
+        requested_by: "consultant_agent_readonly".to_string(),
+        user_confirmation_state: "none_required_readonly".to_string(),
+        authorization_scope_id: None,
+        runtime_log_refs: vec![],
+        audit_refs: vec![],
+        active_attempts: vec![],
+        warnings: vec!["consultant_readonly_enforced_in_constructor".to_string()],
+    }
+}
+
+/// 一次性只读起 codex 读项目、抠出最后消息文本。只读 confinement 见 build_readonly_consult_request。
+pub(crate) fn readonly_codex_consult(
+    project_root: &str,
+    prompt: &str,
+    timeout_ms: Option<i64>,
+) -> Result<String, String> {
+    let request = build_readonly_consult_request(project_root, prompt);
+    // 只读咨询**不是 workflow 节点执行**：guard 的「执行身份」(work_item/node/workflow IDs) 与「执行授权」
+    // (用户确认/授权范围/审计 ref) 这 6 道不适用——只读已由 sandbox=read-only + 写盘根空**结构性**保证，
+    // 不写不跑命令、无执行可授权。故只对**读相关安全** reason 拦（adapter/路径越界/密钥 deny/prompt 边界/
+    // command_plan 仍照拦）；执行身份/授权 reason 豁免。同 S1 canvas_node 排除 3 道授权 reason 的思路、不碰 guard 本体。
+    const CONSULT_READONLY_EXEMPT_GUARD_REASONS: [&str; 6] = [
+        "user_confirmation_required",
+        "authorization_scope_missing",
+        "audit_ref_missing",
+        "new_session_requires_work_item_id",
+        "node_id_missing",
+        "workflow_id_missing",
+    ];
+    let guard = inspect_codex_local_execution_guard(&request);
+    let blocking: Vec<String> = guard
+        .reasons
+        .iter()
+        .filter(|reason| !CONSULT_READONLY_EXEMPT_GUARD_REASONS.contains(&reason.as_str()))
+        .cloned()
+        .collect();
+    if !blocking.is_empty() {
+        return Err(format!("consultant_readonly_blocked:{}", blocking.join(",")));
+    }
+    let command_plan = command_plan_for(&request);
+    let last_message_path = std::env::temp_dir().join(format!(
+        "consult-last-{}.txt",
+        crate::utils::hash::short_hash(prompt)
+    ));
+    let runner = RealCodexLocalPhaseBProcessRunner;
+    let result = runner.run_phase_b(
+        &request,
+        &command_plan,
+        prompt,
+        &last_message_path,
+        timeout_ms,
+    );
+    if !result.real_codex_executed {
+        return Err(result
+            .failure_message
+            .unwrap_or_else(|| "真实 codex 未执行".to_string()));
+    }
+    std::fs::read_to_string(&last_message_path)
+        .map_err(|error| format!("consult_last_message_read_failed:{error}"))
+}
+
 pub(crate) fn inspect_codex_local_execution_guard(
     request: &CodexLocalExecutionRequest,
 ) -> CodexLocalExecutionGuard {

@@ -270,6 +270,9 @@ include!("workflow_execution_entrypoints.rs");
 // P1 工作流自动连环 controller（链驱动逐节点真跑，圈固定测试项目；决策 2026-06-23）。
 include!("workflow_chain_controller.rs");
 
+// S3 agent 智能层·咨询第一刀（契约 trait + ProjectContext 装配 + v0 静态档案 + CliConsultantAgent 只读 + 喂 C1）。
+include!("consultant_agent.rs");
+
 fn find_work_item<'a>(
     value: &'a Value,
     workflow_id: &str,
@@ -4476,6 +4479,197 @@ mod tests {
             require_test_project_path_lock(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "x").is_ok(),
             "固定测试项目应放行"
         );
+    }
+
+    // ===== S3 咨询第一刀·stub TDD（自动测试绝不真起 codex）=====
+
+    // stub ConsultantAgent：不起 codex，按 ctx/question 回固定结构化方案——证编排，不证脑。
+    struct StubConsultant;
+    impl ConsultantAgent for StubConsultant {
+        fn consult(
+            &self,
+            ctx: &ProjectContext,
+            question: &str,
+        ) -> Result<ConsultationProposal, String> {
+            Ok(ConsultationProposal {
+                user_goal: format!("就「{question}」给方向"),
+                goal_summary: format!("基于 {} 的入口文档定方向", ctx.project_name),
+                scope_note: "只读咨询、不执行".to_string(),
+                reasoning: vec![format!("入口文档存在={}", ctx.entry_document.is_some())],
+                risks: vec![ConsultationRisk {
+                    severity: "warning".to_string(),
+                    summary: "文档可能过期".to_string(),
+                    mitigation: "交叉核对".to_string(),
+                }],
+                must_stop_points: vec!["需用户确认范围".to_string()],
+                next_steps: vec!["进角色循环授权".to_string()],
+            })
+        }
+    }
+
+    fn s3_make_fixture_project(name: &str) -> PathBuf {
+        let dir = test_temp_dir(name);
+        let docs = dir.join("docs");
+        fs::create_dir_all(&docs).expect("docs dir should exist");
+        fs::write(docs.join("README.md"), "# 测试项目入口\n\n进度：开发中。\n")
+            .expect("readme write");
+        fs::write(docs.join("01-需求.md"), "需求内容").expect("doc1 write");
+        fs::write(dir.join("note.md"), "根级文档").expect("doc2 write");
+        dir
+    }
+
+    #[test]
+    fn s3_project_context_assembles_entry_doc_map_and_signal() {
+        let dir = s3_make_fixture_project("s3-ctx-assemble");
+        let ctx = load_project_context(&dir.to_string_lossy()).expect("装配应成功");
+        assert!(
+            ctx.entry_document
+                .as_deref()
+                .unwrap_or("")
+                .contains("测试项目入口"),
+            "入口文档全文应注入"
+        );
+        assert_eq!(
+            ctx.project_name, "测试项目入口",
+            "项目名取入口文档首个 # 标题"
+        );
+        assert!(
+            ctx.document_map.iter().any(|p| p.ends_with("README.md")),
+            "地图含 README"
+        );
+        assert!(
+            ctx.document_map.iter().any(|p| p.contains("01-需求")),
+            "地图含子目录文档"
+        );
+        assert!(
+            ctx.document_map.iter().any(|p| p.ends_with("note.md")),
+            "地图含根级文档"
+        );
+        assert!(
+            ctx.version_signal.starts_with("mtime:") || ctx.version_signal.starts_with("git:"),
+            "信号应是 git 或 mtime 降级：{}",
+            ctx.version_signal
+        );
+        assert!(
+            ctx.blackboard_summary.is_none() && ctx.memory_summary.is_none(),
+            "无工作台黑板/记忆 → 空（防御式降级）"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn s3_project_context_degrades_when_no_entry_doc() {
+        let dir = test_temp_dir("s3-ctx-no-entry");
+        fs::create_dir_all(&dir).expect("dir should exist");
+        fs::write(dir.join("data.txt"), "无 md").expect("write");
+        let ctx = load_project_context(&dir.to_string_lossy()).expect("无入口也应优雅装配");
+        assert!(ctx.entry_document.is_none(), "无入口文档 → None");
+        assert!(!ctx.project_name.is_empty(), "项目名退回目录名");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn s3_consultant_full_chain_stub_feeds_c1() {
+        let dir = s3_make_fixture_project("s3-fullchain");
+        let project_root = dir.to_string_lossy().to_string();
+        // 装配 ProjectContext → stub 咨询 → 产出
+        let ctx = load_project_context(&project_root).expect("ctx");
+        let agent = StubConsultant;
+        let proposal = agent
+            .consult(&ctx, "这个项目下一步该做什么?")
+            .expect("stub 咨询");
+        assert!(!proposal.goal_summary.is_empty());
+        // 映射进 C1 输入
+        let input = map_consultation_to_c1_input(&proposal, &project_root, "consultant-fixture");
+        assert!(
+            matches!(
+                input.created_by_role,
+                ProjectConsultationProposalCreatorRole::ProjectConsultant
+            ),
+            "创建者=项目咨询"
+        );
+        assert!(
+            input.scope_draft.allowed_write_roots.is_empty(),
+            "咨询只读 → 写盘根空"
+        );
+        assert!(!input.risks.is_empty() && !input.proposed_steps.is_empty());
+        // 喂 C1：bootstrap workflow + create_proposal
+        let state_dir = test_temp_dir("s3-fullchain-state");
+        let path = state_dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(&project_root)).expect("workflow");
+        let output = project_consultation_proposal_store::create_proposal(
+            &path,
+            &input,
+            1_765_300_000_000,
+            "write-s3-consult",
+        )
+        .expect("ConsultationProposal 应喂得进 C1");
+        assert!(!output.proposal.proposal_id.is_empty(), "C1 应建出方案");
+        let _ = fs::remove_dir_all(dir);
+        let _ = fs::remove_dir_all(state_dir);
+    }
+
+    #[test]
+    fn s3_readonly_consult_request_is_structurally_readonly() {
+        let project = "/Users/yoyi/project/some-consult-target";
+        let req = codex_local_runner::build_readonly_consult_request(project, "读项目答问题");
+        // 结构性只读：read-only 沙箱、写盘根空、cwd=被咨询项目、不带授权产物
+        assert_eq!(req.sandbox, "read-only", "必须只读沙箱");
+        assert!(
+            req.allowed_write_roots.is_empty(),
+            "写盘根必须空 → 无 --add-dir、不能写"
+        );
+        assert_eq!(req.target_cwd, project, "cwd=被咨询项目");
+        assert_eq!(req.project_root, project);
+        assert!(
+            req.authorization_scope_id.is_none(),
+            "不带授权 scope（不走授权路）"
+        );
+    }
+
+    #[test]
+    fn s3_parse_consultation_proposal_extracts_json_block() {
+        let raw = "我读了 docs/README.md 和红队评审。\n\n```json\n{\"user_goal\":\"核对收口\",\"goal_summary\":\"抽查 M0 红队覆盖\",\"scope_note\":\"只读核对\",\"reasoning\":[\"红队 19 条 vs 开发计划 M0 交叉\"],\"risks\":[{\"severity\":\"blocker\",\"summary\":\"有一条没接\",\"mitigation\":\"补进 M0\"}],\"must_stop_points\":[\"补全前不开工\"],\"next_steps\":[\"列出缺口\"]}\n```\n";
+        let p = parse_consultation_proposal(raw).expect("应抠出 json 块");
+        assert_eq!(p.goal_summary, "抽查 M0 红队覆盖");
+        assert_eq!(p.risks.len(), 1);
+        assert_eq!(p.risks[0].severity, "blocker");
+        assert_eq!(p.reasoning.len(), 1);
+    }
+
+    #[test]
+    fn s3_parse_consultation_proposal_rejects_empty() {
+        assert!(
+            parse_consultation_proposal("没有 json 块的纯文本").is_err(),
+            "无结构化产出应报错"
+        );
+    }
+
+    // S3·§6 真咨询（高危·只读上真项目·用户在场·默认 #[ignore]）：CliConsultantAgent 上猫猫点菜 + 防幻觉真题。
+    // 真跑=spec §6 单独步；显式 `cargo test --lib s3_real_consult_mao_mao_dian_cai -- --ignored --nocapture` 才起真 codex。
+    #[test]
+    #[ignore = "S3 §6: real read-only codex consultation on a real non-test project (user present)"]
+    fn s3_real_consult_mao_mao_dian_cai() {
+        let project = "/Users/yoyi/project/猫猫点菜小程序";
+        let ctx = load_project_context(project).expect("装配猫猫点菜 ProjectContext");
+        assert!(
+            ctx.entry_document.is_some(),
+            "猫猫点菜应有入口文档(docs/README.md)"
+        );
+        let agent = CliConsultantAgent::default();
+        let question = "红队 19 条说全收口，抽查开发计划 M0，有没有红队点了、开发计划没接的?";
+        let proposal = agent
+            .consult(&ctx, question)
+            .expect("真咨询应产出结构化方案");
+        println!("[S3_CONSULT] goal_summary={}", proposal.goal_summary);
+        println!("[S3_CONSULT] reasoning={:?}", proposal.reasoning);
+        println!("[S3_CONSULT] risks={:?}", proposal.risks);
+        assert!(
+            !proposal.goal_summary.trim().is_empty() && !proposal.reasoning.is_empty(),
+            "答案应落地非空"
+        );
+        let input = map_consultation_to_c1_input(&proposal, project, "consultant");
+        assert!(!input.proposed_steps.is_empty(), "产出应喂得进 C1");
     }
 
     // P3 项目面真跑（C 映射）·机器闸：用已存在的 work_item（带任务包）+ 绑定，stub runner 验证
