@@ -36,6 +36,8 @@ pub(crate) struct ProjectContext {
     pub(crate) project_name: String,
     pub(crate) entry_document: Option<String>,
     pub(crate) document_map: Vec<String>,
+    // tier-1 策展核心：注入文档正文（codex exec 这模式不 on-demand 读、只啃注入 → 靠它喂全文）。(相对路径, 正文)
+    pub(crate) injected_documents: Vec<(String, String)>,
     pub(crate) version_signal: String,
     pub(crate) blackboard_summary: Option<String>,
     pub(crate) memory_summary: Option<String>,
@@ -162,6 +164,37 @@ fn consultant_first_heading(text: &str) -> Option<String> {
     })
 }
 
+// tier-1 策展核心：把文档地图里的 .md 正文读进来注入（codex exec 这模式不 on-demand 读，靠注入喂全文）。
+// 防爆：每篇截断 20000 字、合计 150000 字；被咨询项目只读（只读内容、绝不写）。tier-2 才改 on-demand 工具。
+fn consultant_load_documents(
+    root: &std::path::Path,
+    document_map: &[String],
+) -> Vec<(String, String)> {
+    const PER_DOC_CHARS: usize = 20_000;
+    const TOTAL_CHARS: usize = 150_000;
+    let mut out = Vec::new();
+    let mut total = 0usize;
+    for rel in document_map {
+        if total >= TOTAL_CHARS {
+            break;
+        }
+        let raw = match std::fs::read_to_string(root.join(rel)) {
+            Ok(content) => content,
+            Err(_) => continue,
+        };
+        let content = if raw.chars().count() > PER_DOC_CHARS {
+            let mut truncated: String = raw.chars().take(PER_DOC_CHARS).collect();
+            truncated.push_str("\n…(本文档过长已截断)…");
+            truncated
+        } else {
+            raw
+        };
+        total += content.chars().count();
+        out.push((rel.clone(), content));
+    }
+    out
+}
+
 // 装配 ProjectContext：有啥塞啥、不假设齐全（防御式降级）。黑板/记忆：被咨询项目通常无工作台数据 → None。
 pub(crate) fn load_project_context(project_root: &str) -> Result<ProjectContext, String> {
     let root = std::path::Path::new(project_root);
@@ -170,6 +203,7 @@ pub(crate) fn load_project_context(project_root: &str) -> Result<ProjectContext,
     }
     let entry_document = consultant_find_entry_document(root).map(|(_, text)| text);
     let document_map = consultant_build_document_map(root);
+    let injected_documents = consultant_load_documents(root, &document_map);
     let version_signal = consultant_version_signal(root);
     let project_name = entry_document
         .as_deref()
@@ -184,6 +218,7 @@ pub(crate) fn load_project_context(project_root: &str) -> Result<ProjectContext,
         project_name,
         entry_document,
         document_map,
+        injected_documents,
         version_signal,
         blackboard_summary: None,
         memory_summary: None,
@@ -207,15 +242,19 @@ fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
         "项目根: {}\n项目: {}\n最新信号: {}\n",
         ctx.project_root, ctx.project_name, ctx.version_signal
     ));
-    match &ctx.entry_document {
-        Some(doc) => p.push_str(&format!("\n--- 入口文档（全文）---\n{doc}\n")),
-        None => p.push_str("\n（未找到入口文档；用只读工具去读项目，别假设。）\n"),
-    }
     if !ctx.document_map.is_empty() {
         p.push_str(&format!(
             "\n--- 文档/结构地图 ---\n{}\n",
             ctx.document_map.join("\n")
         ));
+    }
+    if ctx.injected_documents.is_empty() {
+        p.push_str("\n（未注入任何项目文档正文。）\n");
+    } else {
+        p.push_str("\n--- 项目文档正文（已注入·你只能依据这些作答）---\n");
+        for (path, content) in &ctx.injected_documents {
+            p.push_str(&format!("\n### 文件: {path}\n{content}\n"));
+        }
     }
     if let Some(bb) = &ctx.blackboard_summary {
         p.push_str(&format!("\n--- 黑板摘要 ---\n{bb}\n"));
@@ -227,13 +266,14 @@ fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
     p.push_str(
         r#"
 ===== 怎么答 =====
-你在只读沙箱里(只能读、不能写、不能跑命令)。需要核实就只读地读这个项目里的文档,别假设。
+你**读不到**未注入的文件(这个模式没有按需读取工具);**只依据上面已注入的文档正文作答**,不许假设未注入的内容存在。
+要交叉核对(如红队 vs 开发计划),就在已注入的对应文档正文里逐条找依据并原文引用。
 答完,在最后输出且仅输出一个 ```json 代码块作为结构化产出,严格这个结构:
 {
   "user_goal": "用户想达成的",
   "goal_summary": "一句话目标",
   "scope_note": "范围(做什么/不做什么)",
-  "reasoning": ["为什么这么判(引用你真读到的依据)"],
+  "reasoning": ["为什么这么判(引用你依据的已注入文档原文)"],
   "risks": [{"severity":"info|warning|blocker","summary":"风险/不确定","mitigation":"怎么缓解"}],
   "must_stop_points": ["必停点"],
   "next_steps": ["建议的下一步"]
@@ -326,7 +366,9 @@ pub(crate) struct CliConsultantAgent {
 impl Default for CliConsultantAgent {
     fn default() -> Self {
         Self {
-            timeout_ms: Some(180_000),
+            // 真咨询要 codex 只读交叉读多篇文档(红队/开发计划)+出结构化 JSON，180s 撞超时被 kill（取不回答案）。
+            // 调到 420s 留足只读+推理+JSON 的余量；被咨询项目仍只读（confinement 不变）。
+            timeout_ms: Some(420_000),
         }
     }
 }

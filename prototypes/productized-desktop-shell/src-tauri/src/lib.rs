@@ -4555,6 +4555,19 @@ mod tests {
             ctx.blackboard_summary.is_none() && ctx.memory_summary.is_none(),
             "无工作台黑板/记忆 → 空（防御式降级）"
         );
+        // tier-1 策展核心：文档**正文**被注入（不只路径）——codex exec 不 on-demand 读、靠这个喂全文。
+        assert!(
+            ctx.injected_documents
+                .iter()
+                .any(|(path, content)| path.ends_with("README.md")
+                    && content.contains("测试项目入口")),
+            "入口文档正文应被注入（codex 靠注入读、不 on-demand）"
+        );
+        assert!(
+            ctx.injected_documents.len() >= 2,
+            "策展核心应注入多篇文档正文（README + 子目录文档），实际 {}",
+            ctx.injected_documents.len()
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -4643,6 +4656,38 @@ mod tests {
         assert!(
             parse_consultation_proposal("没有 json 块的纯文本").is_err(),
             "无结构化产出应报错"
+        );
+    }
+
+    // S3·探针（§2C·诊断 tier-1 codex exec 到底 on-demand 读不读项目文件）：经真 consult 路 readonly_codex_consult，
+    // 硬命令 codex 读「红队正文」(内容**不在**注入的 README) 并逐字引红队专属串。引到=能读(没读·修 prompt)；引不出=不读(修注入)。
+    #[test]
+    #[ignore = "S3 §2C diag: does tier-1 codex exec read project files on-demand (real codex)"]
+    fn s3_diag_codex_reads_redteam_file() {
+        let project = "/Users/yoyi/project/猫猫点菜小程序";
+        let prompt = "你在只读沙箱里(只能读、不能写、不能跑命令)。请用你的只读文件读取能力，读取这个文件的正文：\n\
+docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
+读到后，逐字原文引用它「红队结论(BLUF)」里关于微信对个人主体三条红线的那句原话(含『禁 UGC』那串)，以及严重度数量表里 P0/P1/P2 的数量。\n\
+只输出你从该文件里逐字引到的原文。如果你无法读取该文件，就只回一句：无法读取文件。";
+        let raw = codex_local_runner::readonly_codex_consult(project, prompt, Some(180_000))
+            .unwrap_or_else(|e| format!("<consult Err: {e}>"));
+        println!("[S3_PROBE] raw=\n{raw}");
+        let markers = [
+            "禁 UGC",
+            "限本人使用",
+            "暂缓全量开发",
+            "验证 spike",
+            "P0 阻断",
+        ];
+        let hit: Vec<&str> = markers
+            .iter()
+            .filter(|m| raw.contains(**m))
+            .copied()
+            .collect();
+        println!(
+            "[S3_PROBE] codex_read_file={} 命中红队专属标记={:?}",
+            !hit.is_empty(),
+            hit
         );
     }
 
