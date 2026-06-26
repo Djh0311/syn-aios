@@ -4871,6 +4871,364 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
+    // S3·主管档案钉死「自包含任务」（修真跑根因：worker 隔离上下文只看 objective、拿不到方案）。
+    #[test]
+    fn s3_director_prompt_requires_self_contained_tasks() {
+        let (proposal, dir) = s3_director_fixture_proposal("s3-director-selfcontained");
+        let ctx = load_project_context(WORKFLOW_ENGINE_TEST_PROJECT_ROOT).expect("ctx");
+        let prompt = director_build_prompt(&ctx, &proposal);
+        assert!(prompt.contains("自包含"), "档案应要求自包含任务");
+        assert!(
+            prompt.contains("绝不") && prompt.contains("参见"),
+            "应明令禁「参见方案/上文」引用"
+        );
+        assert!(
+            prompt.contains("完整路径"),
+            "应要求把目标文件完整路径写进 objective"
+        );
+        assert!(prompt.contains("结构化返回"), "应要求 worker 结构化返回");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // ===== S3·主管→派发联调（LM planned_tasks → prepare → S1 闸 → worker）·stub 集成 =====
+    // 复用 S2-3 全链结构，把 prepare 的 vec![]兜底 换成 **director 的显式 planned_tasks**；闸/派发/沙箱 0-diff。
+    #[test]
+    fn s3_director_dispatch_integration_stub() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-s3-dir-dispatch";
+        let dir = test_temp_dir("s3-director-dispatch");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (proposal, authorization, revision) =
+            create_active_project_director_authorization_fixture(
+                &path,
+                test_root,
+                thread_id,
+                timestamp_ms,
+            );
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(test_root, &node_id, None, thread_id),
+        )
+        .expect("bind codex-dev");
+        let ctx = load_project_context(test_root).expect("ctx");
+        // 主管 LM(stub) 拆 planned_tasks（target_role=codex-dev → c4_node_id 映射到已绑节点）
+        let planned = StubDirector.plan(&ctx, &proposal).expect("director plan");
+        // prepare 用 director **显式** planned_tasks（非 vec![] 兜底）
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+                planned.clone(),
+            ),
+        )
+        .expect("prepare with director planned_tasks");
+        assert!(
+            !prepared.prepared_dispatches.is_empty(),
+            "director planned_tasks 应过授权 guard 产出 prepared dispatch"
+        );
+        let prep = &prepared.prepared_dispatches[0];
+        let prep_node = prep.workflow_node_id.clone().expect("prepared node");
+        let prep_work_item = prep.work_item_id.clone().expect("prepared work_item");
+        assert_eq!(prep_node, node_id, "director 任务(codex-dev)映射到已绑节点");
+        // execute 过 S1 闸（stub runner）→ worker 跑 LM 计划的任务
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let run = execute_project_workflow_node_at(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &ProjectWorkflowNodeRunRequest {
+                project_root: test_root.to_string(),
+                node_id: prep_node,
+                work_item_id: prep_work_item,
+                workflow_id: Some(workflow_id),
+            },
+        )
+        .expect("worker 经 S1 闸应授权放行并 completed");
+        assert_eq!(
+            run.dispatch.state, "completed",
+            "LM 主管计划真驱动的 worker 应 completed"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // S3·主管→派发真跑（§5 单独步·用户在场·固定测试项目·默认 #[ignore]）：真 director LM 拆已授权方案 →
+    // prepare → 派第一个任务 → worker 真 codex 跑出真结果。自定义 proof-goal 方案，让 director 拆出写文件任务。
+    // 显式 `cargo test --lib s3_director_dispatch_real_run -- --ignored --nocapture` 才起真 codex。
+    #[test]
+    #[ignore = "S3 director-dispatch: real LM plan drives a real worker codex run in the test project (user present)"]
+    fn s3_director_dispatch_real_run() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let real_session = "019ed9f7-c0c2-7213-b871-6d18959b7c24";
+        let proof_token = unix_timestamp_string();
+        let proof_path = format!("{test_root}/s3-director-dispatch-proof.txt");
+        let _ = fs::remove_file(&proof_path);
+        let dir = test_temp_dir("s3-director-dispatch-real");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index(test_root, real_session);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        // 自定义 proof-goal 方案 → 确认建授权 → 边界复核激活
+        let mut proposal_input = fixture_project_consultation_proposal_input(test_root);
+        proposal_input.scope_draft.allowed_agent_ids = vec![real_session.to_string()];
+        proposal_input.goal_summary = format!(
+            "在当前项目根目录创建文件 s3-director-dispatch-proof.txt，只写入一行：s3 director dispatch ok {proof_token}"
+        );
+        proposal_input.proposed_steps = vec![format!(
+            "创建文件 s3-director-dispatch-proof.txt，写入一行内容：s3 director dispatch ok {proof_token}"
+        )];
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &proposal_input,
+            timestamp_ms,
+            "write-s3-dispatch-proposal",
+        )
+        .expect("proposal");
+        let confirmed = project_consultation_proposal_store::record_decision(
+            &path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "用户确认 S3 派发真跑方案。".to_string(),
+                expected_proposal_store_revision: Some(created.store_revision),
+                expected_plan_authorization_store_revision: None,
+            },
+            timestamp_ms + 1,
+            "write-s3-dispatch-confirm",
+            "write-s3-dispatch-auth",
+            "write-s3-dispatch-auth-user",
+        )
+        .expect("confirm");
+        let authorization = confirmed.plan_authorization.expect("authorization");
+        let revision = confirmed
+            .plan_authorization_store_revision
+            .expect("revision");
+        let activated = plan_authorization_store::record_global_boundary_review_with_proposal(
+            &path,
+            &fixture_global_boundary_review_input(
+                test_root,
+                &confirmed.proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+            ),
+            timestamp_ms + 2,
+            "write-s3-dispatch-boundary",
+        )
+        .expect("boundary review activate");
+        // 真 director LM 拆解
+        let ctx = load_project_context(test_root).expect("ctx");
+        let planned = CliDirectorAgent::default()
+            .plan(&ctx, &confirmed.proposal)
+            .expect("real director plan");
+        println!("[S3_DISPATCH] director planned {} task(s)", planned.len());
+        for t in &planned {
+            println!("[S3_DISPATCH]   task: {} | {}", t.title, t.objective);
+        }
+        assert!(!planned.is_empty(), "director 应拆出任务");
+        // bind + prepare(director planned_tasks)
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(test_root, &node_id, None, real_session),
+        )
+        .expect("bind");
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &confirmed.proposal.proposal_id,
+                &activated.authorization.authorization_id,
+                activated.store_revision,
+                planned.clone(),
+            ),
+        )
+        .expect("prepare");
+        let prep = &prepared.prepared_dispatches[0];
+        // worker 真 codex 跑第一个任务（过 S1 闸）
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let readback_db_path = codex_db::default_state_db_path();
+        let run = execute_project_workflow_node_at(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &ProjectWorkflowNodeRunRequest {
+                project_root: test_root.to_string(),
+                node_id: prep.workflow_node_id.clone().expect("node"),
+                work_item_id: prep.work_item_id.clone().expect("work_item"),
+                workflow_id: Some(workflow_id),
+            },
+        )
+        .expect("worker 经 S1 闸真跑应 completed");
+        println!(
+            "[S3_DISPATCH] worker state={} exit={:?} summary={:?}",
+            run.dispatch.state, run.dispatch.exit_code, run.dispatch.last_message_summary
+        );
+        assert_eq!(run.dispatch.state, "completed");
+        let proof = fs::read_to_string(&proof_path)
+            .unwrap_or_else(|e| panic!("LM 计划应驱动 worker 建 proof {proof_path}：{e}"));
+        assert!(
+            proof.contains(&proof_token),
+            "proof 应含本次 token {proof_token}，实际：{proof}"
+        );
+        println!("[S3_DISPATCH] proof={proof:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // ===== S3·主管→worker 多任务依赖链（薄驱动·拓扑序+失败即停+runaway）·stub =====
+
+    // 共享 setup：bind codex-dev + create_active 方案 + StubDirector 多任务 + prepare → 返回链驱动所需件。
+    fn s3_director_prepared_chain(
+        name: &str,
+    ) -> (PathBuf, PathBuf, Value, PathBuf, String, AuthorizedPreparedDispatchResult) {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-s3-chain";
+        let dir = test_temp_dir(name);
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (proposal, authorization, revision) =
+            create_active_project_director_authorization_fixture(
+                &path,
+                test_root,
+                thread_id,
+                timestamp_ms,
+            );
+        let workflow_id = default_workflow_id(test_root);
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(
+                test_root,
+                &format!("{workflow_id}:node:codex-dev"),
+                None,
+                thread_id,
+            ),
+        )
+        .expect("bind");
+        let ctx = load_project_context(test_root).expect("ctx");
+        let planned = StubDirector.plan(&ctx, &proposal).expect("plan");
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+                planned,
+            ),
+        )
+        .expect("prepare");
+        (dir, path, index, index_path, workflow_id, prepared)
+    }
+
+    #[test]
+    fn s3_director_chain_runs_all_prepared_tasks_topo() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("s3-director-chain-ok");
+        let prepared_count = prepared
+            .plan
+            .planned_tasks
+            .iter()
+            .filter(|t| t.work_item_id.is_some())
+            .count();
+        assert!(prepared_count >= 1, "至少 1 个任务被 prepare 授权");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &prepared.plan.planned_tasks,
+            10,
+        )
+        .expect("chain");
+        assert!(
+            outcome.stopped_reason.is_none(),
+            "应按拓扑序全跑完无失败：{:?}",
+            outcome.stopped_reason
+        );
+        assert_eq!(
+            outcome.completed, prepared_count,
+            "所有 prepared 任务按序跑完"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 失败即停：worker 第一步就失败 → 链停、不继续。
+    struct FailingChainRunner;
+    impl CodexResumeRunner for FailingChainRunner {
+        fn resume_with_options(
+            &self,
+            _thread_id: &str,
+            _prompt: &str,
+            _last_message_path: &Path,
+            _options: &CodexResumeRequestOptions,
+        ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String> {
+            Err("boom: worker failed".to_string())
+        }
+    }
+
+    #[test]
+    fn s3_director_chain_fail_stop_halts() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("s3-director-chain-fail");
+        let runner = FailingChainRunner;
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &prepared.plan.planned_tasks,
+            10,
+        )
+        .expect("chain returns outcome");
+        assert!(
+            outcome
+                .stopped_reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("fail_stop"),
+            "worker 失败应即停：{:?}",
+            outcome.stopped_reason
+        );
+        assert_eq!(outcome.completed, 0, "第一步就失败 → 0 完成");
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // P3 项目面真跑（C 映射）·机器闸：用已存在的 work_item（带任务包）+ 绑定，stub runner 验证
     // execute_project_workflow_node_at 从任务包构造指令 + 走通派发到 completed。
     #[test]
