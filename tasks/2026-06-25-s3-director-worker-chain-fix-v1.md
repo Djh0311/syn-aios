@@ -1,5 +1,7 @@
 # 实现任务包：S3 主管→worker 链修复（自包含任务 + 多任务依赖链）· 主导线 → 执行线 v1
 
+> ⚠️ **已被 `tasks/2026-06-26-s3-director-chain-fix-interrupt-and-realrun-v1.md` 取代（2026-06-26）。** 本包说「② 链待建」**不准**：薄链驱动 `run_director_task_chain` 实建于 `75ab2c0`，已修对（B1 filter）+ 补可中断（B2）+ §5 真跑出 proof（见 `CURRENT.md` ②）。**勿据此重建链。** 留档作 canon 漂移记录。
+
 日期：2026-06-25　性质：**高危#4-轻档**（固定测试项目内的自动连环——多 worker 按依赖跑；4 护栏在 + S1 闸每节点 + path-lock；真跑用户在场）。
 上游：单任务派发接线已建·**未 commit**（stub 在 lib.rs，真跑 FAILED）；失败根因 + 修法见 Agent SDK 深挖（主导线核过官方文档）。**本包修对它 + 上链。**
 

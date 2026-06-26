@@ -200,14 +200,31 @@ impl DirectorAgent for CliDirectorAgent {
 
 // ===== S3 主管→worker 链驱动（薄·按 depends_on 拓扑序跑 prepared 的 planned_tasks）=====
 // 复用 execute_project_workflow_node_at（**S1 闸/沙箱·每节点 path-lock**）+ workflow_chain_topological_order
-// （现成拓扑·都在 crate root，chain controller 本体 0-diff）+ prepare 产的 work_items。
-// 护栏：拓扑序 / 失败即停 / runaway 上限 / 审计（每节点经 execute 写 dispatch 记录）。
-// 同-role 多任务共享 1 节点没关系——每次 execute 用**该任务自己的 work_item**（objective 各异）按序真跑。
-// 注：可中断（mid-chain async stop）是 chain controller 长链才需的护栏，本薄驱动是短链同步执行、暂不含。
+// （现成拓扑）+ chain controller 的链记录/停链/审计 helper（ensure_chain_run_record / set_chain_node_state /
+// chain_run_stop_requested / finalize_chain_run / append_chain_audit）——全在 crate root 同模块（include!），
+// 只调不改 → `workflow_chain_controller.rs` **本体 byte-0-diff**，无需开可见性。
+// 4 护栏全在：① runaway 上限（max_nodes=min(max_tasks,任务数,硬顶50)）② **可中断**（每任务边界 read-fresh
+// 查 stop_requested → 停；现成 `stop_project_workflow_chain` 命令按 workflow_id+running 能找到本驱动的链记录）
+// ③ 审计（链起/每任务 start·done·skip·fail/链停·完成·失败 都进 audit_events）④ 可回滚（起链前 backup +
+// execute 每派发 backup）。同-role 多任务共享 1 节点没关系——每次 execute 用**该任务自己的 work_item**
+// （objective 各异）按序真跑；链记录的「节点」按 **planned_task_id** 编址（≠工作流 node_id，避免同-role 撞键）。
+#[derive(Debug, Clone)]
+pub(crate) struct DirectorChainStep {
+    pub(crate) planned_task_id: String,
+    pub(crate) title: String,
+    // "completed" | "failed" | "skipped"
+    pub(crate) state: String,
+}
+
+#[derive(Debug)]
 pub(crate) struct DirectorChainOutcome {
     pub(crate) total: usize,
     pub(crate) dispatched: usize,
     pub(crate) completed: usize,
+    pub(crate) skipped: usize,
+    pub(crate) chain_run_id: String,
+    pub(crate) steps: Vec<DirectorChainStep>,
+    pub(crate) warnings: Vec<String>,
     pub(crate) stopped_reason: Option<String>,
 }
 
@@ -221,75 +238,352 @@ pub(crate) fn run_director_task_chain(
     tasks: &[ProjectDirectorPlannedTask],
     max_tasks: usize,
 ) -> Result<DirectorChainOutcome, String> {
+    use std::collections::BTreeSet;
+
+    // 死线·圈固定测试项目（高危#4-轻档前提）：非测试 root 在驱动入口直接拒——连链记录都不建、零副作用。
+    // 与现成命令同款 path-lock（require_test_project_path_lock·纯路径检查）；闸/沙箱本体不动。execute 每节点
+    // 另有 S1 闸，这里是入口侧第二道（defense-in-depth），坐实「圈测试项目」、防非测试 root 留下脏链记录。
+    require_test_project_path_lock(project_root, "run_director_task_chain")?;
+
+    // F5·健壮：重复 title 会让拓扑/find 取第一个、后一个永不跑 → 直接拒（不静默丢任务）。
+    let mut seen_titles: BTreeSet<&str> = BTreeSet::new();
+    for task in tasks {
+        if !seen_titles.insert(task.title.as_str()) {
+            return Err(format!(
+                "planned_tasks 含重复 title「{}」——拓扑按 title 建边会让后一个任务永不跑，拒绝起链",
+                task.title
+            ));
+        }
+    }
     let titles: Vec<String> = tasks.iter().map(|task| task.title.clone()).collect();
-    let edges: Vec<(String, String)> = tasks
+    let title_set: BTreeSet<&str> = titles.iter().map(String::as_str).collect();
+
+    // 拓扑边 = depends_on；F5·健壮：依赖指向不存在的 title → 记 warning（不静默丢，便于排错），不建该边。
+    let mut warnings: Vec<String> = Vec::new();
+    let mut edges: Vec<(String, String)> = Vec::new();
+    for task in tasks {
+        for dep in &task.depends_on {
+            if title_set.contains(dep.as_str()) {
+                edges.push((dep.clone(), task.title.clone()));
+            } else {
+                warnings.push(format!(
+                    "任务「{}」依赖不存在的前置「{dep}」——该依赖被忽略（拓扑序不含它）",
+                    task.title
+                ));
+            }
+        }
+    }
+    let order_titles = workflow_chain_topological_order(&titles, &edges)?;
+    // 链记录的节点序 = 拓扑序的 planned_task_id（每个任务一个节点，按 planned_task_id 编址）。
+    let order_task_ids: Vec<String> = order_titles
         .iter()
-        .flat_map(|task| {
-            task.depends_on
-                .iter()
-                .map(|dep| (dep.clone(), task.title.clone()))
-                .collect::<Vec<_>>()
-        })
+        .filter_map(|title| tasks.iter().find(|task| &task.title == title))
+        .map(|task| task.planned_task_id.clone())
         .collect();
-    let order = workflow_chain_topological_order(&titles, &edges)?;
+
     let total = tasks.len();
+    // runaway 上限：min(请求, 任务数, 硬顶 50)，至少 1（同 controller 语义）。
+    let max_nodes = max_tasks
+        .min(total)
+        .min(WORKFLOW_CHAIN_MAX_NODES_HARD_CAP)
+        .max(1);
+    let pid = project_id(project_root);
+
+    // 起链：建/续 running 链记录 + 起链前 backup（可回滚）+ 审计「链起」。
+    let start_ts = unix_timestamp_string();
+    let mut value = read_workflow_state_value(path)?;
+    let chain_run_id =
+        ensure_chain_run_record(&mut value, &pid, workflow_id, &order_task_ids, max_nodes, &start_ts)?;
+    backup_workflow_state_file(path, &start_ts)?;
+    append_chain_audit(
+        &mut value,
+        &chain_run_id,
+        workflow_id,
+        "workflow_chain_run_started",
+        "ready",
+        "running",
+        &start_ts,
+        "主管→worker 薄链驱动起链（圈固定测试项目，决策 2026-06-23）：按 depends_on 拓扑序逐任务过 S1 闸真跑、失败即停、可中断、有 runaway 上限。",
+    )?;
+    write_validated_workflow_state(path, &value)?;
+
     let mut dispatched = 0usize;
     let mut completed = 0usize;
-    for title in &order {
-        let task = match tasks.iter().find(|task| &task.title == title) {
+    let mut skipped = 0usize;
+    let mut steps: Vec<DirectorChainStep> = Vec::new();
+
+    for task_id in &order_task_ids {
+        let task = match tasks.iter().find(|task| &task.planned_task_id == task_id) {
             Some(task) => task,
             None => continue,
         };
-        // 只跑 prepare 授权过的任务（有 work_item + node）；被 guard 拦 / needs_binding 的跳过。
-        let (node_id, work_item_id) =
-            match (task.workflow_node_id.clone(), task.work_item_id.clone()) {
-                (Some(node), Some(work_item)) => (node, work_item),
-                _ => continue,
-            };
-        if dispatched >= max_tasks {
+        // 每任务边界重读（execute 会写文件；同时拿 stop_requested 最新值）。
+        let mut current = read_workflow_state_value(path)?;
+        // 断点续：本任务已 completed → 跳过。
+        if chain_node_state(&current, &chain_run_id, task_id).as_deref() == Some("completed") {
+            continue;
+        }
+        // 可中断（护栏②）：收到停链请求 → 在任务边界停（已完成任务保留、可断点续）。
+        if chain_run_stop_requested(&current, &chain_run_id) {
+            let ts = unix_timestamp_string();
+            finalize_chain_run(&mut current, &chain_run_id, "stopped", &ts);
+            append_chain_audit(
+                &mut current,
+                &chain_run_id,
+                workflow_id,
+                "workflow_chain_run_stopped",
+                "running",
+                "stopped",
+                &ts,
+                "收到停链请求，已在任务边界停下（已完成任务保留，可断点续）。",
+            )?;
+            write_validated_workflow_state(path, &current)?;
             return Ok(DirectorChainOutcome {
                 total,
                 dispatched,
                 completed,
-                stopped_reason: Some(format!("runaway_cap_reached:{max_tasks}")),
+                skipped,
+                chain_run_id,
+                steps,
+                warnings,
+                stopped_reason: Some("user_stop_requested".to_string()),
             });
         }
+        // B1·修撒谎 filter：annotate 给**所有**任务（含 blocked/needs_binding）都设了 work_item+node
+        // （c4_c6:1805/1807），所以旧的「(Some,Some)=>…,_=>continue」永不跳过、那句「被 guard 拦的跳过」
+        // 是假的。改为**按授权状态过滤**：只派 status=="prepared"；blocked/needs_binding/其它 → 记 skipped、
+        // 不进 execute（不在未授权任务上真起 codex）。
+        if task.status != "prepared" {
+            let ts = unix_timestamp_string();
+            set_chain_node_state(
+                &mut current,
+                &chain_run_id,
+                task_id,
+                "skipped",
+                None,
+                Some(&format!("status={}（非 prepared，未授权派发）", task.status)),
+            );
+            append_chain_audit(
+                &mut current,
+                &chain_run_id,
+                workflow_id,
+                "workflow_chain_node_skipped",
+                "pending",
+                "skipped",
+                &ts,
+                &format!(
+                    "任务「{}」status={}（blocked/needs_binding 等，非 prepared），跳过不派发。",
+                    task.title, task.status
+                ),
+            )?;
+            write_validated_workflow_state(path, &current)?;
+            skipped += 1;
+            steps.push(DirectorChainStep {
+                planned_task_id: task_id.clone(),
+                title: task.title.clone(),
+                state: "skipped".to_string(),
+            });
+            continue;
+        }
+        // prepared 理应有 node+work_item（annotate 无条件设）；防御：缺则记 skipped、不派。
+        let (node_id, work_item_id) = match (task.workflow_node_id.clone(), task.work_item_id.clone())
+        {
+            (Some(node), Some(work_item)) => (node, work_item),
+            _ => {
+                let ts = unix_timestamp_string();
+                set_chain_node_state(
+                    &mut current,
+                    &chain_run_id,
+                    task_id,
+                    "skipped",
+                    None,
+                    Some("prepared 但缺 node/work_item（异常），跳过不派发"),
+                );
+                append_chain_audit(
+                    &mut current,
+                    &chain_run_id,
+                    workflow_id,
+                    "workflow_chain_node_skipped",
+                    "pending",
+                    "skipped",
+                    &ts,
+                    &format!("任务「{}」status=prepared 但缺 node/work_item，跳过。", task.title),
+                )?;
+                write_validated_workflow_state(path, &current)?;
+                skipped += 1;
+                steps.push(DirectorChainStep {
+                    planned_task_id: task_id.clone(),
+                    title: task.title.clone(),
+                    state: "skipped".to_string(),
+                });
+                continue;
+            }
+        };
+        // runaway 上限（护栏①）：只对真派发计数（skipped 不占额），超额 → 停链。
+        if dispatched >= max_nodes {
+            let ts = unix_timestamp_string();
+            finalize_chain_run(&mut current, &chain_run_id, "stopped", &ts);
+            append_chain_audit(
+                &mut current,
+                &chain_run_id,
+                workflow_id,
+                "workflow_chain_run_stopped",
+                "running",
+                "stopped",
+                &ts,
+                &format!("达到 runaway 上限（{max_nodes} 个任务），已停链。"),
+            )?;
+            write_validated_workflow_state(path, &current)?;
+            return Ok(DirectorChainOutcome {
+                total,
+                dispatched,
+                completed,
+                skipped,
+                chain_run_id,
+                steps,
+                warnings,
+                stopped_reason: Some(format!("runaway_cap_reached:{max_nodes}")),
+            });
+        }
+        // 标 running + 审计 node-start。
+        let ts_start = unix_timestamp_string();
+        set_chain_node_state(&mut current, &chain_run_id, task_id, "running", None, None);
+        append_chain_audit(
+            &mut current,
+            &chain_run_id,
+            workflow_id,
+            "workflow_chain_node_started",
+            "pending",
+            "running",
+            &ts_start,
+            &format!(
+                "薄链驱动：派发任务「{}」（node {node_id} / work_item {work_item_id}）",
+                task.title
+            ),
+        )?;
+        write_validated_workflow_state(path, &current)?;
         dispatched += 1;
+
+        // 真派发：复用 gated 的 _at（S1 闸 + 沙箱 + resume 会话），**本体不动**。
         let request = ProjectWorkflowNodeRunRequest {
             project_root: project_root.to_string(),
             node_id,
             work_item_id,
             workflow_id: Some(workflow_id.to_string()),
         };
-        match execute_project_workflow_node_at(path, index, readback_db_path, runner, &request) {
+        let outcome =
+            execute_project_workflow_node_at(path, index, readback_db_path, runner, &request);
+
+        // 重读（execute 写过文件，避免覆盖它的写入）。
+        let mut after = read_workflow_state_value(path)?;
+        let ts_done = unix_timestamp_string();
+        match outcome {
             Ok(result) if result.dispatch.state == "completed" => {
+                let dispatch_id = result.dispatch.dispatch_id.clone();
+                set_chain_node_state(
+                    &mut after,
+                    &chain_run_id,
+                    task_id,
+                    "completed",
+                    Some(&dispatch_id),
+                    None,
+                );
+                append_chain_audit(
+                    &mut after,
+                    &chain_run_id,
+                    workflow_id,
+                    "workflow_chain_node_completed",
+                    "running",
+                    "completed",
+                    &ts_done,
+                    &format!("薄链驱动：任务「{}」真派发成功（dispatch {dispatch_id}）", task.title),
+                )?;
+                write_validated_workflow_state(path, &after)?;
                 completed += 1;
-            }
-            Ok(result) => {
-                return Ok(DirectorChainOutcome {
-                    total,
-                    dispatched,
-                    completed,
-                    stopped_reason: Some(format!(
-                        "fail_stop:node_not_completed:{title}:{}",
-                        result.dispatch.state
-                    )),
+                steps.push(DirectorChainStep {
+                    planned_task_id: task_id.clone(),
+                    title: task.title.clone(),
+                    state: "completed".to_string(),
                 });
             }
-            Err(error) => {
+            // 失败即停（护栏·不自动重试/不跳过，防在老失败任务上打转）。
+            other => {
+                let fail_msg = match &other {
+                    Ok(result) => format!("worker 派发未完成（state={}）", result.dispatch.state),
+                    Err(error) => error.clone(),
+                };
+                set_chain_node_state(
+                    &mut after,
+                    &chain_run_id,
+                    task_id,
+                    "failed",
+                    None,
+                    Some(&fail_msg),
+                );
+                append_chain_audit(
+                    &mut after,
+                    &chain_run_id,
+                    workflow_id,
+                    "workflow_chain_node_failed",
+                    "running",
+                    "failed",
+                    &ts_done,
+                    &format!("薄链驱动：任务「{}」失败即停——{fail_msg}", task.title),
+                )?;
+                finalize_chain_run(&mut after, &chain_run_id, "failed", &ts_done);
+                append_chain_audit(
+                    &mut after,
+                    &chain_run_id,
+                    workflow_id,
+                    "workflow_chain_run_failed",
+                    "running",
+                    "failed",
+                    &ts_done,
+                    &format!("任务「{}」失败，已停链（失败即停、不自动重试）：{fail_msg}", task.title),
+                )?;
+                write_validated_workflow_state(path, &after)?;
+                steps.push(DirectorChainStep {
+                    planned_task_id: task_id.clone(),
+                    title: task.title.clone(),
+                    state: "failed".to_string(),
+                });
                 return Ok(DirectorChainOutcome {
                     total,
                     dispatched,
                     completed,
-                    stopped_reason: Some(format!("fail_stop:node_error:{title}:{error}")),
+                    skipped,
+                    chain_run_id,
+                    steps,
+                    warnings,
+                    stopped_reason: Some(format!("fail_stop:node_error:{}:{fail_msg}", task.title)),
                 });
             }
         }
     }
+
+    // 收尾：completed + 审计「链完成」。
+    let ts_close = unix_timestamp_string();
+    let mut closing = read_workflow_state_value(path)?;
+    finalize_chain_run(&mut closing, &chain_run_id, "completed", &ts_close);
+    append_chain_audit(
+        &mut closing,
+        &chain_run_id,
+        workflow_id,
+        "workflow_chain_run_completed",
+        "running",
+        "completed",
+        &ts_close,
+        "主管→worker 薄链驱动完成：所有 prepared 任务按 depends_on 序真派发成功。",
+    )?;
+    write_validated_workflow_state(path, &closing)?;
     Ok(DirectorChainOutcome {
         total,
         dispatched,
         completed,
+        skipped,
+        chain_run_id,
+        steps,
+        warnings,
         stopped_reason: None,
     })
 }

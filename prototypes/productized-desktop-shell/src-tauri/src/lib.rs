@@ -5096,12 +5096,225 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
+    // S3·§5 真链跑（单独步·用户在场·固定测试项目·默认 #[ignore]）：真 director LM 把多步 proof-goal 方案
+    // 拆成**自包含任务链**（建文件→回读核验→建第二文件）→ 薄驱动按 depends_on 序逐任务过 S1 闸真跑 →
+    // **多 worker 真 codex 接连跑** → 最终真建出 proof + 回读核验。证「LM 多步计划真驱动 worker 链干成事」。
+    // 显式 `cargo test --lib s3_director_chain_real_run -- --ignored --nocapture` 才起真 codex。
+    #[test]
+    #[ignore = "S3 director-chain: real LM multi-step plan drives a real multi-worker codex chain in the test project (user present)"]
+    fn s3_director_chain_real_run() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let real_session = "019ed9f7-c0c2-7213-b871-6d18959b7c24";
+        let proof_token = unix_timestamp_string();
+        let proof_a = format!("{test_root}/s3-chain-proof-a.txt");
+        let proof_b = format!("{test_root}/s3-chain-proof-b.txt");
+        let _ = fs::remove_file(&proof_a);
+        let _ = fs::remove_file(&proof_b);
+        let dir = test_temp_dir("s3-director-chain-real");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index(test_root, real_session);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        // 多步 proof-goal 方案（强制拆 ≥2 步、第二步回读依赖第一步）→ 确认建授权 → 边界复核激活。
+        let mut proposal_input = fixture_project_consultation_proposal_input(test_root);
+        proposal_input.scope_draft.allowed_agent_ids = vec![real_session.to_string()];
+        // 授权 scope 与 proof 写入目标对齐（authorize 测试项目根）——证 §3「worker 写范围 = 授权 scope 派生·不扩」，
+        // 不让授权(/src)与目标(根)自相矛盾。注：真实沙箱写界本就是 project_root（commands.rs·path-lock 限测试项目），
+        // 此处只把授权记录摆正、与实际一致。
+        proposal_input.scope_draft.allowed_write_roots = vec![test_root.to_string()];
+        proposal_input.scope_draft.allowed_read_roots = vec![test_root.to_string()];
+        proposal_input.goal_summary = format!(
+            "分两步在当前项目根目录建证据，第二步依赖第一步：① 创建 s3-chain-proof-a.txt，只写入一行：a {proof_token}；② 先读回 s3-chain-proof-a.txt 确认其内容含 {proof_token}，确认后再创建 s3-chain-proof-b.txt，只写入一行：verified {proof_token}。"
+        );
+        proposal_input.proposed_steps = vec![
+            format!("创建 s3-chain-proof-a.txt，写入一行：a {proof_token}"),
+            format!(
+                "读回 s3-chain-proof-a.txt 核验含 {proof_token}，再创建 s3-chain-proof-b.txt 写入一行：verified {proof_token}（本步依赖上一步的产出）"
+            ),
+        ];
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &proposal_input,
+            timestamp_ms,
+            "write-s3-chain-proposal",
+        )
+        .expect("proposal");
+        let confirmed = project_consultation_proposal_store::record_decision(
+            &path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "用户确认 S3 真链跑方案。".to_string(),
+                expected_proposal_store_revision: Some(created.store_revision),
+                expected_plan_authorization_store_revision: None,
+            },
+            timestamp_ms + 1,
+            "write-s3-chain-confirm",
+            "write-s3-chain-auth",
+            "write-s3-chain-auth-user",
+        )
+        .expect("confirm");
+        let authorization = confirmed.plan_authorization.expect("authorization");
+        let revision = confirmed
+            .plan_authorization_store_revision
+            .expect("revision");
+        let activated = plan_authorization_store::record_global_boundary_review_with_proposal(
+            &path,
+            &fixture_global_boundary_review_input(
+                test_root,
+                &confirmed.proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+            ),
+            timestamp_ms + 2,
+            "write-s3-chain-boundary",
+        )
+        .expect("boundary review activate");
+        // 真 director LM 拆解成自包含任务链（应 ≥2 任务、带 depends_on）。
+        let ctx = load_project_context(test_root).expect("ctx");
+        let planned = CliDirectorAgent::default()
+            .plan(&ctx, &confirmed.proposal)
+            .expect("real director plan");
+        println!("[S3_CHAIN] director planned {} task(s)", planned.len());
+        for t in &planned {
+            println!(
+                "[S3_CHAIN]   task: {} | deps={:?} | {}",
+                t.title, t.depends_on, t.objective
+            );
+        }
+        assert!(
+            planned.len() >= 2,
+            "director 应把多步方案拆成 ≥2 任务的链（实际 {}）",
+            planned.len()
+        );
+        // 自包含核验：objective 不含「参见方案/上文」引用词（worker 在隔离上下文拿不到方案）。
+        for t in &planned {
+            for bad in ["参见", "上文", "上一步", "如方案", "见方案"] {
+                assert!(
+                    !t.objective.contains(bad),
+                    "任务「{}」objective 含引用词「{bad}」，非自包含：{}",
+                    t.title,
+                    t.objective
+                );
+            }
+        }
+        // 真实依赖链核验（证「核对→创建→回读」非两个独立写）：须有带 depends_on 的任务，且其 objective
+        // 真的把「回读 proof_a + 核验」写进去——否则只是两个无关写文件、谈不上链。
+        let dependent = planned
+            .iter()
+            .find(|t| !t.depends_on.is_empty())
+            .expect("应有带 depends_on 的任务（链有真实依赖，非平行写）");
+        assert!(
+            ["读回", "读取", "proof_a", "核验", "读 proof", "读 s3-chain-proof-a"]
+                .iter()
+                .any(|kw| dependent.objective.contains(kw)),
+            "依赖任务 objective 应含回读/核验 proof_a 的步骤（证 LM 拆的是 核对→创建→回读 真依赖链），实际：{}",
+            dependent.objective
+        );
+        // bind + prepare(director planned_tasks)。
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(test_root, &node_id, None, real_session),
+        )
+        .expect("bind");
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &confirmed.proposal.proposal_id,
+                &activated.authorization.authorization_id,
+                activated.store_revision,
+                planned.clone(),
+            ),
+        )
+        .expect("prepare");
+        let prepared_count = prepared
+            .plan
+            .planned_tasks
+            .iter()
+            .filter(|t| t.status == "prepared")
+            .count();
+        println!("[S3_CHAIN] prepared {prepared_count} task(s)");
+        assert!(
+            prepared_count >= 2,
+            "应有 ≥2 个 prepared 任务真跑成链（实际 {prepared_count}）"
+        );
+        // 薄驱动按 depends_on 序真跑多 worker（每步过 S1 闸·真 codex）。
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let readback_db_path = codex_db::default_state_db_path();
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            test_root,
+            &workflow_id,
+            &prepared.plan.planned_tasks,
+            50,
+        )
+        .expect("真链跑应返回结果");
+        println!(
+            "[S3_CHAIN] outcome total={} dispatched={} completed={} skipped={} stop={:?}",
+            outcome.total,
+            outcome.dispatched,
+            outcome.completed,
+            outcome.skipped,
+            outcome.stopped_reason
+        );
+        for s in &outcome.steps {
+            println!("[S3_CHAIN]   step: {} -> {}", s.title, s.state);
+        }
+        assert!(
+            outcome.stopped_reason.is_none(),
+            "链应按序全跑完无失败：{:?}",
+            outcome.stopped_reason
+        );
+        assert!(
+            outcome.dispatched >= 2,
+            "应真派发 ≥2 个任务（防驱动循环提前早退），实际 {}",
+            outcome.dispatched
+        );
+        assert!(
+            outcome.completed >= 2,
+            "应 ≥2 个 worker 接连真跑完成（实际 {}）",
+            outcome.completed
+        );
+        // 最终 proof：两个文件都真建出、内容含本次 token（回读核验在第二步真发生）。
+        let a = fs::read_to_string(&proof_a)
+            .unwrap_or_else(|e| panic!("第一步应建 proof_a {proof_a}：{e}"));
+        let b = fs::read_to_string(&proof_b)
+            .unwrap_or_else(|e| panic!("第二步（依赖回读）应建 proof_b {proof_b}：{e}"));
+        assert!(
+            a.contains(&proof_token),
+            "proof_a 应含 token {proof_token}，实际：{a}"
+        );
+        assert!(
+            b.contains(&proof_token),
+            "proof_b 应含 token {proof_token}，实际：{b}"
+        );
+        println!("[S3_CHAIN] proof_a={a:?} proof_b={b:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // ===== S3·主管→worker 多任务依赖链（薄驱动·拓扑序+失败即停+runaway）·stub =====
 
     // 共享 setup：bind codex-dev + create_active 方案 + StubDirector 多任务 + prepare → 返回链驱动所需件。
     fn s3_director_prepared_chain(
         name: &str,
-    ) -> (PathBuf, PathBuf, Value, PathBuf, String, AuthorizedPreparedDispatchResult) {
+    ) -> (
+        PathBuf,
+        PathBuf,
+        Value,
+        PathBuf,
+        String,
+        AuthorizedPreparedDispatchResult,
+    ) {
         let timestamp_ms = 1_765_300_000_000;
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
         let thread_id = "thread-s3-chain";
@@ -5150,13 +5363,18 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
     fn s3_director_chain_runs_all_prepared_tasks_topo() {
         let (dir, path, index, index_path, workflow_id, prepared) =
             s3_director_prepared_chain("s3-director-chain-ok");
+        // F4·按**授权状态**数（status=="prepared"），不是「有 work_item」——annotate 给所有任务都设了
+        // work_item，旧口径恒为全量、量不出授权。
         let prepared_count = prepared
             .plan
             .planned_tasks
             .iter()
-            .filter(|t| t.work_item_id.is_some())
+            .filter(|t| t.status == "prepared")
             .count();
-        assert!(prepared_count >= 1, "至少 1 个任务被 prepare 授权");
+        assert!(
+            prepared_count >= 2,
+            "多任务链：至少 2 个任务被 prepare 授权"
+        );
         let runner = PermissiveExperimentRunner {
             stats: CodexDispatchReadbackStats {
                 transcript_event_count: 3,
@@ -5180,9 +5398,260 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             outcome.stopped_reason
         );
         assert_eq!(
+            outcome.total,
+            prepared.plan.planned_tasks.len(),
+            "total = 计划任务总数（含非 prepared）"
+        );
+        assert!(!outcome.chain_run_id.is_empty(), "应建出链运行记录 id");
+        assert_eq!(
             outcome.completed, prepared_count,
             "所有 prepared 任务按序跑完"
         );
+        assert_eq!(outcome.dispatched, prepared_count, "真派发数 = prepared 数");
+        assert_eq!(outcome.skipped, 0, "全 prepared → 0 跳过");
+        assert!(outcome.warnings.is_empty(), "依赖自洽 → 无 dangling 警告");
+        // F4·依赖序断言：「搭骨架」必须先于「接业务」真跑（depends_on 拓扑序生效）。
+        let pos = |title: &str| {
+            outcome
+                .steps
+                .iter()
+                .position(|s| s.title == title)
+                .unwrap_or_else(|| panic!("steps 应含「{title}」：{:?}", outcome.steps))
+        };
+        assert!(
+            pos("搭骨架") < pos("接业务"),
+            "依赖序：搭骨架 应先于 接业务，实际 steps={:?}",
+            outcome.steps
+        );
+        assert!(
+            outcome.steps.iter().all(|s| !s.planned_task_id.is_empty()),
+            "每步应带 planned_task_id（链记录按它编址）"
+        );
+        // 链记录收尾为 completed + 审计在。
+        assert!(
+            audit_has(&path, "workflow_chain_run_completed"),
+            "应有链完成审计"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // B1·只派 status=="prepared"：把一个任务手动置 blocked → 断言它被跳过（不进 execute）、其余照跑。
+    #[test]
+    fn s3_director_chain_skips_non_prepared_tasks() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("s3-director-chain-skip");
+        let mut tasks = prepared.plan.planned_tasks.clone();
+        assert!(tasks.len() >= 2, "需要多任务来验证跳过");
+        // 把依赖任务「接业务」置 blocked（它带 work_item+node，但未授权派发）。
+        let blocked_title = "接业务".to_string();
+        for task in tasks.iter_mut() {
+            if task.title == blocked_title {
+                task.status = "blocked".to_string();
+                task.blocked_reasons = vec!["测试：人为置 blocked".to_string()];
+            }
+        }
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &tasks,
+            10,
+        )
+        .expect("chain");
+        assert!(outcome.stopped_reason.is_none(), "跳过 blocked 不致停链");
+        assert_eq!(outcome.skipped, 1, "1 个 blocked 任务被跳过");
+        assert_eq!(outcome.completed, 1, "只剩 1 个 prepared 任务真跑");
+        let blocked_step = outcome
+            .steps
+            .iter()
+            .find(|s| s.title == blocked_title)
+            .expect("steps 应记录被跳过的任务");
+        assert_eq!(
+            blocked_step.state, "skipped",
+            "blocked 任务记为 skipped（未 execute）"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // B2·可中断：runner 跑完第一个任务后，**调用现成 stop_project_workflow_chain_at**（证停命令 0-diff
+    // 就能找到本驱动建的 running 链记录）→ 下个任务边界停。
+    #[test]
+    fn s3_director_chain_interrupts_at_task_boundary_on_stop() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("s3-director-chain-stop");
+        struct StopViaCommandRunner {
+            state_path: PathBuf,
+            project_root: String,
+            workflow_id: String,
+            stats: CodexDispatchReadbackStats,
+        }
+        impl CodexResumeRunner for StopViaCommandRunner {
+            fn resume_with_options(
+                &self,
+                _thread_id: &str,
+                _prompt: &str,
+                last_message_path: &Path,
+                _options: &CodexResumeRequestOptions,
+            ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String>
+            {
+                if let Some(parent) = last_message_path.parent() {
+                    fs::create_dir_all(parent).ok();
+                }
+                fs::write(last_message_path, "STOP_VIA_CMD_OK").ok();
+                // 模拟用户点「停链」：走现成停链命令（按 workflow_id+running 找记录）。能找到 → 证明
+                // 本薄驱动建的链记录被现成 stop 命令认得（0-diff 复用）。
+                stop_project_workflow_chain_at(
+                    &self.state_path,
+                    &ProjectWorkflowChainStopRequest {
+                        project_root: self.project_root.clone(),
+                        workflow_id: self.workflow_id.clone(),
+                    },
+                )
+                .expect("现成 stop_project_workflow_chain 应能找到并停本驱动的 running 链记录");
+                Ok((
+                    CodexResumeRunResult {
+                        exit_code: 0,
+                        timed_out: false,
+                        stderr_summary: None,
+                    },
+                    WorkflowNodeDispatchExecutionOptions {
+                        readback_stats: Some(self.stats.clone()),
+                    },
+                ))
+            }
+        }
+        let runner = StopViaCommandRunner {
+            state_path: path.clone(),
+            project_root: WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string(),
+            workflow_id: workflow_id.clone(),
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &prepared.plan.planned_tasks,
+            10,
+        )
+        .expect("chain");
+        assert_eq!(
+            outcome.stopped_reason.as_deref(),
+            Some("user_stop_requested"),
+            "收到停 → 任务边界停：{:?}",
+            outcome.stopped_reason
+        );
+        assert_eq!(outcome.completed, 1, "只完成第一个，停在边界");
+        assert_eq!(outcome.dispatched, 1, "只派发了第一个");
+        assert!(
+            audit_has(&path, "workflow_chain_run_stopped"),
+            "应有停链审计"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // F5·健壮：重复 title → 报错（防后一个永不跑）；dangling 依赖 → 记 warning 不静默丢。
+    #[test]
+    fn s3_director_chain_rejects_duplicate_titles_and_warns_dangling_dep() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("s3-director-chain-robust");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        // 重复 title → Err（不真起链）。
+        let mut dup = prepared.plan.planned_tasks.clone();
+        if let Some(first_title) = dup.first().map(|t| t.title.clone()) {
+            if let Some(last) = dup.last_mut() {
+                last.title = first_title;
+            }
+        }
+        let dup_err = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &dup,
+            10,
+        );
+        assert!(dup_err.is_err(), "重复 title 应拒绝起链");
+        assert!(
+            dup_err.unwrap_err().contains("重复 title"),
+            "错误信息应点名重复 title"
+        );
+        // dangling 依赖 → 记 warning（不静默丢），链照跑。
+        let mut dangling = prepared.plan.planned_tasks.clone();
+        if let Some(first) = dangling.first_mut() {
+            first.depends_on = vec!["不存在的前置任务X".to_string()];
+        }
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &dangling,
+            10,
+        )
+        .expect("dangling 依赖不致起链失败");
+        assert!(
+            outcome.warnings.iter().any(|w| w.contains("不存在的前置")),
+            "dangling 依赖应记 warning：{:?}",
+            outcome.warnings
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // path-lock·反：非测试 root → 驱动入口直接拒（零副作用：不建链记录、不起 codex）。
+    // 「正」side（测试项目 + 授权 → 真跑）由 s3_director_chain_runs_all_prepared_tasks_topo 覆盖。
+    #[test]
+    fn s3_director_chain_blocks_non_test_project() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("s3-director-chain-nontest");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let result = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            "/tmp/some-non-test-project",
+            &workflow_id,
+            &prepared.plan.planned_tasks,
+            10,
+        );
+        assert!(result.is_err(), "非测试 root 应被 path-lock 闸拦");
+        // 零副作用：没建任何链记录（连环根本没起）。
+        let value = read_workflow_state_value(&path).expect("state readable");
+        let chain_runs_empty = value
+            .get("workflow_chain_runs")
+            .and_then(|runs| runs.as_array())
+            .map(|runs| runs.is_empty())
+            .unwrap_or(true);
+        assert!(chain_runs_empty, "非测试 root 不应建任何链记录");
         let _ = fs::remove_dir_all(dir);
     }
 
