@@ -274,6 +274,9 @@ include!("workflow_chain_controller.rs");
 // S3 agent 智能层·咨询第一刀（契约 trait + ProjectContext 装配 + v0 静态档案 + CliConsultantAgent 只读 + 喂 C1）。
 include!("consultant_agent.rs");
 
+// S3 agent 智能层·项目主管第一刀（复用咨询 harness：读已授权方案 → LM 只读拆解 → planned_tasks → 喂 prepare）。
+include!("director_agent.rs");
+
 fn find_work_item<'a>(
     value: &'a Value,
     workflow_id: &str,
@@ -4716,6 +4719,156 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         );
         let input = map_consultation_to_c1_input(&proposal, project, "consultant");
         assert!(!input.proposed_steps.is_empty(), "产出应喂得进 C1");
+    }
+
+    // ===== S3·项目主管 agent·stub TDD（自动测试不真起 codex）=====
+
+    fn s3_director_fixture_proposal(name: &str) -> (ProjectConsultationProposal, PathBuf) {
+        let dir = test_temp_dir(name);
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(WORKFLOW_ENGINE_TEST_PROJECT_ROOT))
+            .expect("workflow should exist");
+        let (proposal, _auth, _rev) = create_active_project_director_authorization_fixture(
+            &path,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            "thread-s3-dir-fx",
+            1_765_300_000_000,
+        );
+        (proposal, dir)
+    }
+
+    // stub DirectorAgent：不起 codex，按 proposal 产 2 个有依赖的 task（scope 取自授权 scope_draft）。
+    struct StubDirector;
+    impl DirectorAgent for StubDirector {
+        fn plan(
+            &self,
+            _ctx: &ProjectContext,
+            proposal: &ProjectConsultationProposal,
+        ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+            let scope = director_task_scope_from_proposal(proposal, "codex-dev");
+            let mk = |id: usize, title: &str, objective: &str, deps: Vec<String>| {
+                ProjectDirectorPlannedTask {
+                    planned_task_id: format!("planned-task:{}:{}", proposal.workflow_id, id),
+                    title: title.to_string(),
+                    objective: objective.to_string(),
+                    scope: scope.clone(),
+                    depends_on: deps,
+                    acceptance_criteria: vec!["可验收".to_string()],
+                    report_format: vec!["做了什么".to_string()],
+                    status: "planned".to_string(),
+                    guard_result: None,
+                    work_item_id: None,
+                    workflow_node_id: None,
+                    task_package_id: None,
+                    memory_packet_snapshot_id: None,
+                    prepared_dispatch_id: None,
+                    blocked_reasons: vec![],
+                }
+            };
+            Ok(vec![
+                mk(
+                    1,
+                    "搭骨架",
+                    &format!("就 {} 搭基础结构", proposal.goal_summary),
+                    vec![],
+                ),
+                mk(2, "接业务", "在骨架上接业务", vec!["搭骨架".to_string()]),
+            ])
+        }
+    }
+
+    #[test]
+    fn s3_director_stub_plans_valid_tasks_feed_prepare() {
+        let (proposal, dir) = s3_director_fixture_proposal("s3-director-stub");
+        let ctx = load_project_context(WORKFLOW_ENGINE_TEST_PROJECT_ROOT).expect("ctx");
+        let plan = StubDirector.plan(&ctx, &proposal).expect("director plan");
+        assert_eq!(plan.len(), 2);
+        assert!(!plan[0].title.is_empty() && !plan[0].objective.is_empty());
+        // scope 取自**已授权 scope_draft**（LM 不扩范围）
+        assert_eq!(
+            plan[0].scope.allowed_write_scope, proposal.scope_draft.allowed_write_roots,
+            "写盘 scope 取自授权 scope_draft"
+        );
+        assert_eq!(plan[0].scope.project_id, proposal.project_id);
+        // depends_on 自洽：task2 依赖 task1.title
+        assert!(plan[1].depends_on.contains(&plan[0].title), "依赖自洽");
+        // 下游字段留空（主管不填，由 prepare/派发机器填）
+        assert!(plan[0].work_item_id.is_none() && plan[0].prepared_dispatch_id.is_none());
+        // 喂得进 prepare_authorized_auto_dispatch 入参（映射对）
+        let prepare_input = fixture_project_director_prepare_input(
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &proposal.proposal_id,
+            &proposal
+                .plan_authorization_id
+                .clone()
+                .unwrap_or_else(|| "plan-auth:x".to_string()),
+            1,
+            plan.clone(),
+        );
+        assert_eq!(
+            prepare_input.planned_tasks.len(),
+            2,
+            "planned_tasks 喂进 prepare 入参"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn s3_director_parse_plan_extracts_tasks() {
+        let (proposal, dir) = s3_director_fixture_proposal("s3-director-parse");
+        let raw = "拆解如下:\n```json\n[{\"title\":\"建表\",\"objective\":\"建 7 集合\",\"target_role\":\"codex-dev\",\"depends_on\":[],\"acceptance_criteria\":[\"表建好\"],\"report_format\":[\"建了哪些表\"]},{\"title\":\"云函数公共层\",\"objective\":\"取 OPENID 中间件\",\"target_role\":\"codex-dev\",\"depends_on\":[\"建表\"],\"acceptance_criteria\":[\"中间件通\"],\"report_format\":[\"接口清单\"]}]\n```";
+        let plan = parse_director_plan(raw, &proposal).expect("parse director plan");
+        assert_eq!(plan.len(), 2);
+        assert_eq!(plan[0].title, "建表");
+        assert_eq!(plan[1].depends_on, vec!["建表".to_string()]);
+        // scope 取自授权 scope_draft；下游字段留空
+        assert_eq!(
+            plan[0].scope.allowed_write_scope,
+            proposal.scope_draft.allowed_write_roots
+        );
+        assert!(plan[1].work_item_id.is_none());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn s3_director_parse_plan_rejects_empty_or_bad() {
+        let (proposal, dir) = s3_director_fixture_proposal("s3-director-parse-bad");
+        assert!(parse_director_plan("没有 json 块", &proposal).is_err());
+        assert!(
+            parse_director_plan("```json\n[]\n```", &proposal).is_err(),
+            "空任务列表应报错"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // S3·项目主管真跑（§5 单独步·用户在场·只读·默认 #[ignore]）：真 LM 拆解已授权方案 → planned_tasks。
+    // 显式 `cargo test --lib s3_director_real_plan -- --ignored --nocapture` 才起真 codex（只读 confinement·项目不可写）。
+    #[test]
+    #[ignore = "S3 director: real read-only LM decomposition of an authorized proposal (user present)"]
+    fn s3_director_real_plan() {
+        let (proposal, dir) = s3_director_fixture_proposal("s3-director-real");
+        let ctx = load_project_context(WORKFLOW_ENGINE_TEST_PROJECT_ROOT).expect("ctx");
+        let plan = CliDirectorAgent::default()
+            .plan(&ctx, &proposal)
+            .expect("real director plan should return planned_tasks");
+        println!("[S3_DIRECTOR] task_count={}", plan.len());
+        for t in &plan {
+            println!(
+                "[S3_DIRECTOR] - {} | objective={} | depends_on={:?}",
+                t.title, t.objective, t.depends_on
+            );
+        }
+        assert!(!plan.is_empty(), "应拆出至少 1 个任务");
+        assert!(
+            plan.iter()
+                .all(|t| !t.title.trim().is_empty() && !t.objective.trim().is_empty()),
+            "每个任务 title/objective 非空"
+        );
+        // scope 仍取自授权 scope_draft（LM 不扩范围）
+        assert!(plan
+            .iter()
+            .all(|t| t.scope.allowed_write_scope == proposal.scope_draft.allowed_write_roots));
+        let _ = fs::remove_dir_all(dir);
     }
 
     // P3 项目面真跑（C 映射）·机器闸：用已存在的 work_item（带任务包）+ 绑定，stub runner 验证
