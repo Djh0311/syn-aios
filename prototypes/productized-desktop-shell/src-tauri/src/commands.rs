@@ -662,12 +662,31 @@ fn record_plan_authorization_user_confirmation(
     request: RecordPlanAuthorizationUserConfirmationInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<RecordPlanAuthorizationOutput, String> {
-    plan_authorization_store::record_user_confirmation(
+    let result = plan_authorization_store::record_user_confirmation(
         &state.workflow_state_path,
         &request,
         unix_timestamp_ms(),
         &format!("write-plan-authorization-user-{}", unix_timestamp_nanos()),
-    )
+    )?;
+    let captured_at = unix_timestamp_string();
+    let project_id_value = project_id(&request.project_root);
+    let workflow_id_value = default_workflow_id(&request.project_root);
+    let ctx = memory_daily_loop::MemoryDailyLoopContext {
+        project_root: &request.project_root,
+        project_id: &project_id_value,
+        workflow_id: &workflow_id_value,
+        workflow_node_id: None,
+        run_unit_id: None,
+        actor_id: &request.actor_id,
+        created_at: &captured_at,
+    };
+    l5_capture_governance_best_effort(
+        &state.workflow_state_path,
+        memory_daily_loop::plan_authorization_capture_input(&ctx, &request),
+        &captured_at,
+        "plan-auth",
+    );
+    Ok(result)
 }
 
 #[tauri::command]
@@ -923,12 +942,54 @@ fn ensure_k3_b_tauri_no_real_harness_request(
     Ok(())
 }
 
+// S3 L5 best-effort 采集挂钩：治理命令记录成功后调它把事件采成待确认候选；**失败只吞成 warning、绝不改主返回**
+// （采集是旁路、不能拖垮治理命令）。挂在 #[tauri::command] wrapper（不挂 _at）→ 既有 _at 测试 0-diff、不破回归。
+fn l5_capture_governance_best_effort(
+    path: &std::path::Path,
+    mapped: Result<CaptureMemoryEventInput, String>,
+    captured_at: &str,
+    tag: &str,
+) {
+    let input = match mapped {
+        Ok(input) => input,
+        Err(_) => return,
+    };
+    let nanos = unix_timestamp_nanos();
+    let cap = format!("write-l5-{tag}-cap-{nanos}");
+    let obs = format!("write-l5-{tag}-obs-{nanos}");
+    let cand = format!("write-l5-{tag}-cand-{nanos}");
+    let write_ids = memory_daily_loop::MemoryDailyLoopWriteIds {
+        capture_write_id: &cap,
+        observation_write_id: &obs,
+        candidate_write_id: &cand,
+    };
+    let _ =
+        memory_daily_loop::capture_governance_event_best_effort(path, &input, captured_at, &write_ids);
+}
+
 #[tauri::command]
 fn record_worker_structured_report(
     request: WorkerStructuredReportInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowStateMutationResult, String> {
-    record_worker_structured_report_at(&state.workflow_state_path, &request)
+    let result = record_worker_structured_report_at(&state.workflow_state_path, &request)?;
+    let captured_at = unix_timestamp_string();
+    let ctx = memory_daily_loop::MemoryDailyLoopContext {
+        project_root: &request.project_root,
+        project_id: &request.project_id,
+        workflow_id: &request.workflow_id,
+        workflow_node_id: Some(&request.workflow_node_id),
+        run_unit_id: None,
+        actor_id: &request.actor_role,
+        created_at: &captured_at,
+    };
+    l5_capture_governance_best_effort(
+        &state.workflow_state_path,
+        memory_daily_loop::worker_report_capture_input(&ctx, &request),
+        &captured_at,
+        "wr",
+    );
+    Ok(result)
 }
 
 #[tauri::command]
@@ -944,7 +1005,24 @@ fn record_global_final_result_review(
     request: GlobalFinalResultReviewInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowStateMutationResult, String> {
-    record_global_final_result_review_at(&state.workflow_state_path, &request)
+    let result = record_global_final_result_review_at(&state.workflow_state_path, &request)?;
+    let captured_at = unix_timestamp_string();
+    let ctx = memory_daily_loop::MemoryDailyLoopContext {
+        project_root: &request.project_root,
+        project_id: &request.project_id,
+        workflow_id: &request.workflow_id,
+        workflow_node_id: None,
+        run_unit_id: None,
+        actor_id: &request.actor_id,
+        created_at: &captured_at,
+    };
+    l5_capture_governance_best_effort(
+        &state.workflow_state_path,
+        memory_daily_loop::final_review_capture_input(&ctx, &request),
+        &captured_at,
+        "final-review",
+    );
+    Ok(result)
 }
 
 #[tauri::command]
