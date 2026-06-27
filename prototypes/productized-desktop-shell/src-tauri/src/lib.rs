@@ -4626,6 +4626,78 @@ mod tests {
         let _ = fs::remove_dir_all(state_dir);
     }
 
+    // ===== P2·件 A：run_project_consultation 编排（目标 → 咨询 LM 出方案）·stub =====
+
+    // 全链 stub：注入假咨询（不起 codex）→ 命令内层 → 方案写进 store·status=PendingUserConfirmation·没自动确认
+    // （plan_authorization_id None + plan-auth store 无 active）+ map 无损（goal/risks/steps）。
+    #[test]
+    fn run_project_consultation_writes_pending_proposal_no_autoconfirm() {
+        let proj = s3_make_fixture_project("p2-consult-stub");
+        let project_root = proj.to_string_lossy().to_string();
+        let state_dir = test_temp_dir("p2-consult-state");
+        let path = state_dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(&project_root)).expect("workflow");
+        let proposal = run_project_consultation_inner(
+            &path,
+            &StubConsultant,
+            &project_root,
+            "这个项目下一步该做什么?",
+            "tester",
+        )
+        .expect("咨询出方案应写进 store");
+        assert!(!proposal.proposal_id.is_empty(), "应建出方案");
+        assert!(
+            matches!(
+                proposal.status,
+                ProjectConsultationProposalStatus::PendingUserConfirmation
+            ),
+            "出的方案应 PendingUserConfirmation（人闸不省·不自动确认）：{:?}",
+            proposal.status
+        );
+        assert!(proposal.plan_authorization_id.is_none(), "不应自动建授权");
+        assert!(!proposal.goal_summary.is_empty(), "方案应有目标");
+        assert!(
+            !proposal.risks.is_empty() && !proposal.proposed_steps.is_empty(),
+            "map 无损：风险/步骤应进方案"
+        );
+        // 没自动授权：plan-auth store 无 active 授权。
+        let auth_store =
+            plan_authorization_store::load_store(&path, unix_timestamp_ms()).expect("auth store");
+        assert!(
+            !auth_store
+                .authorizations
+                .iter()
+                .any(|a| matches!(a.status, PlanAuthorizationStatus::Active)),
+            "咨询出方案不应自动建/激活授权"
+        );
+        let _ = fs::remove_dir_all(proj);
+        let _ = fs::remove_dir_all(state_dir);
+    }
+
+    // 只读不碰闸：咨询命令只出方案——不起 worker、不建派发/链记录（结构性只读）。
+    #[test]
+    fn run_project_consultation_is_readonly_no_dispatch() {
+        let proj = s3_make_fixture_project("p2-consult-readonly");
+        let project_root = proj.to_string_lossy().to_string();
+        let state_dir = test_temp_dir("p2-consult-readonly-state");
+        let path = state_dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(&project_root)).expect("workflow");
+        run_project_consultation_inner(&path, &StubConsultant, &project_root, "下一步?", "tester")
+            .expect("咨询出方案");
+        let value = read_workflow_state_value(&path).expect("state readable");
+        let empty = |key: &str| {
+            value
+                .get(key)
+                .and_then(|v| v.as_array())
+                .map(|a| a.is_empty())
+                .unwrap_or(true)
+        };
+        assert!(empty("workflow_node_dispatches"), "咨询只读·不应建派发");
+        assert!(empty("workflow_chain_runs"), "咨询只读·不应建链记录");
+        let _ = fs::remove_dir_all(proj);
+        let _ = fs::remove_dir_all(state_dir);
+    }
+
     #[test]
     fn s3_readonly_consult_request_is_structurally_readonly() {
         let project = "/Users/yoyi/project/some-consult-target";
@@ -4719,6 +4791,48 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         );
         let input = map_consultation_to_c1_input(&proposal, project, "consultant");
         assert!(!input.proposed_steps.is_empty(), "产出应喂得进 C1");
+    }
+
+    // P2·§5 真跑（单独步·用户在场·真咨询只读·默认 #[ignore]）：真项目（猫猫点菜·只读）+ 目标 → **经命令内层** →
+    // CliConsultantAgent 真 codex 只读咨询 → 出 grounded 方案 → 写进 store（PendingUserConfirmation·没自动确认）。
+    // 证「一个命令把目标→AI 出方案跑通」。显式 `cargo test --lib run_project_consultation_real_run -- --ignored --nocapture`。
+    // 只读·读真实非测试项目不碰高危#1（只读豁免决策 2026-06-25）；flake → retry（咨询偶发·核方案实物）。
+    #[test]
+    #[ignore = "P2 consultant-LM: one command turns a goal into an AI-consulted proposal (real read-only codex) on a real project (user present)"]
+    fn run_project_consultation_real_run() {
+        let project = "/Users/yoyi/project/猫猫点菜小程序";
+        let state_dir = test_temp_dir("p2-consult-real-state");
+        let path = state_dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(project)).expect("workflow");
+        let consultant = CliConsultantAgent::default();
+        let proposal = run_project_consultation_inner(
+            &path,
+            &consultant,
+            project,
+            "红队 19 条说全收口，抽查开发计划 M0，有没有红队点了、开发计划没接的?",
+            "user-fixture",
+        )
+        .expect("一个命令应把目标→AI 出方案跑通");
+        println!(
+            "[P2_CONSULT] proposal_id={} status={:?} goal={}",
+            proposal.proposal_id, proposal.status, proposal.goal_summary
+        );
+        println!("[P2_CONSULT] steps={:?}", proposal.proposed_steps);
+        assert!(!proposal.proposal_id.is_empty(), "应建出方案");
+        assert!(
+            !proposal.goal_summary.trim().is_empty() && !proposal.proposed_steps.is_empty(),
+            "AI 方案应落地非空（grounded）"
+        );
+        assert!(
+            matches!(
+                proposal.status,
+                ProjectConsultationProposalStatus::PendingUserConfirmation
+            ),
+            "出方案就停·等用户确认（人闸不省）：{:?}",
+            proposal.status
+        );
+        assert!(proposal.plan_authorization_id.is_none(), "不自动建授权");
+        let _ = fs::remove_dir_all(state_dir);
     }
 
     // ===== S3·项目主管 agent·stub TDD（自动测试不真起 codex）=====

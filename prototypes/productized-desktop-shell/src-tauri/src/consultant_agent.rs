@@ -448,3 +448,70 @@ pub(crate) fn map_consultation_to_c1_input(
         expected_store_revision: None,
     }
 }
+
+// ===== P2·件 A：接咨询 LM 出方案命令（目标 → AI 真咨询 → 写进方案 store·PendingUserConfirmation）=====
+// 收目标 → load_project_context → consultant.consult（真 codex 只读·CliConsultantAgent；stub 测试注假咨询不起 codex）
+// → map_consultation_to_c1_input → create_proposal（status=PendingUserConfirmation·**不自动确认**）→ 返回新方案。
+// 复用 consult/map/create **本体 0-diff**；咨询结构性只读（readonly_codex_consult·不碰执行闸·不写·不起 worker）。
+// 出方案就停：不确认、不边界复核、不让授权生效（人闸不省·principles §4）。
+#[derive(serde::Deserialize)]
+pub(crate) struct RunProjectConsultationRequest {
+    pub(crate) project_root: String,
+    pub(crate) goal: String,
+    #[serde(default)]
+    pub(crate) actor_id: Option<String>,
+    // workflow_id 保留（前端请求形）：方案在 prepare 阶段才绑 workflow，本命令出方案不用它（故 allow dead_code）。
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub(crate) workflow_id: Option<String>,
+}
+
+// 内层（同步·spawn_blocking 里调；可单测·注入 stub 咨询不起 codex）。
+fn run_project_consultation_inner(
+    path: &std::path::Path,
+    consultant: &dyn ConsultantAgent,
+    project_root: &str,
+    goal: &str,
+    actor_id: &str,
+) -> Result<ProjectConsultationProposal, String> {
+    // 1. 装配 ProjectContext（注入策展文档正文·tier-1）。
+    let ctx = load_project_context(project_root)?;
+    // 2. 咨询 LM 出方案（结构性只读·readonly_codex_consult·不碰执行闸）。
+    let proposal = consultant.consult(&ctx, goal)?;
+    // 3. 映射进 C1 输入。
+    let input = map_consultation_to_c1_input(&proposal, project_root, actor_id);
+    // 4. 写进方案 store（status=PendingUserConfirmation·**不自动确认**·等用户走方案授权）。
+    let write_id = format!("run-project-consultation:{}", unix_timestamp_nanos());
+    let output = project_consultation_proposal_store::create_proposal(
+        path,
+        &input,
+        unix_timestamp_ms(),
+        &write_id,
+    )?;
+    Ok(output.proposal)
+}
+
+#[tauri::command]
+async fn run_project_consultation(
+    request: RunProjectConsultationRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<ProjectConsultationProposal, String> {
+    // path 在 await 前从 state 取（State 不能跨进 'static 闭包）；咨询真 codex 长耗时 → spawn_blocking 不冻 UI。
+    let path = state.workflow_state_path.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let consultant = CliConsultantAgent::default();
+        let actor_id = request
+            .actor_id
+            .clone()
+            .unwrap_or_else(|| "project-consultant".to_string());
+        run_project_consultation_inner(
+            &path,
+            &consultant,
+            &request.project_root,
+            &request.goal,
+            &actor_id,
+        )
+    })
+    .await
+    .map_err(|error| format!("咨询执行线程异常：{error}"))?
+}
