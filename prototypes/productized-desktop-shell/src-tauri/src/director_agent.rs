@@ -208,7 +208,7 @@ impl DirectorAgent for CliDirectorAgent {
 // ③ 审计（链起/每任务 start·done·skip·fail/链停·完成·失败 都进 audit_events）④ 可回滚（起链前 backup +
 // execute 每派发 backup）。同-role 多任务共享 1 节点没关系——每次 execute 用**该任务自己的 work_item**
 // （objective 各异）按序真跑；链记录的「节点」按 **planned_task_id** 编址（≠工作流 node_id，避免同-role 撞键）。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct DirectorChainStep {
     pub(crate) planned_task_id: String,
     pub(crate) title: String,
@@ -216,7 +216,7 @@ pub(crate) struct DirectorChainStep {
     pub(crate) state: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub(crate) struct DirectorChainOutcome {
     pub(crate) total: usize,
     pub(crate) dispatched: usize,
@@ -586,4 +586,47 @@ pub(crate) fn run_director_task_chain(
         warnings,
         stopped_reason: None,
     })
+}
+
+// ===== C1·生产起链命令（app 内 async 起整条主管链；停/进度复用现成命令）=====
+// 收前端回传的「已审 planned_tasks」(preview→用户审→prepare 返回那份·含 depends_on) → spawn_blocking 调现成
+// run_director_task_chain（每节点过 S1 闸·入口 require_test_project_path_lock 圈测试项目）→ 返回 outcome。
+// 死线：① async+spawn_blocking（同步会冻 UI + 停链抢不到线程 = 可中断形同虚设，照 start_project_workflow_chain
+// 范本）② 不重跑 LM（C1 不持有 director、只收 planned_tasks——跑的就是用户审过的计划）③ 不自建更松入口（圈
+// 测试项目全靠 driver 入口的 require_test_project_path_lock）④ 停/进度复用 stop_project_workflow_chain /
+// get_project_workflow_chain_status（0 新命令）。gate/沙箱/execute/prepare/controller/driver 本体 0-diff。
+#[derive(serde::Deserialize)]
+pub(crate) struct StartProjectDirectorChainRequest {
+    pub(crate) project_root: String,
+    pub(crate) workflow_id: String,
+    // 前端从 prepare 返回回传的已审计划（含 depends_on/已 annotate）——绝不在此重跑 LM。
+    pub(crate) planned_tasks: Vec<ProjectDirectorPlannedTask>,
+    #[serde(default)]
+    pub(crate) max_nodes: Option<usize>,
+}
+
+#[tauri::command]
+async fn start_project_director_chain(
+    request: StartProjectDirectorChainRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<DirectorChainOutcome, String> {
+    // index/path 在 await 前从 state 取（State 不能跨进 'static 闭包）——同 start_project_workflow_chain 范本。
+    let path = state.workflow_state_path.clone();
+    let index = read_index(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let readback_db_path = codex_db::default_state_db_path();
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        run_director_task_chain(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &request.project_root,
+            &request.workflow_id,
+            &request.planned_tasks,
+            request.max_nodes.unwrap_or(50),
+        )
+    })
+    .await
+    .map_err(|error| format!("主管链执行线程异常：{error}"))?
 }

@@ -5097,11 +5097,12 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
     }
 
     // S3·§5 真链跑（单独步·用户在场·固定测试项目·默认 #[ignore]）：真 director LM 把多步 proof-goal 方案
-    // 拆成**自包含任务链**（建文件→回读核验→建第二文件）→ 薄驱动按 depends_on 序逐任务过 S1 闸真跑 →
-    // **多 worker 真 codex 接连跑** → 最终真建出 proof + 回读核验。证「LM 多步计划真驱动 worker 链干成事」。
+    // 拆成**自包含任务链**（建文件→回读核验→建第二文件）→ **经 C1 起链请求（StartProjectDirectorChainRequest·
+    // 前端回传已审计划）走命令路径** → 薄驱动按 depends_on 序逐任务过 S1 闸真跑 → **多 worker 真 codex 接连跑**
+    // → 最终真建出 proof + 回读核验。证「LM 多步计划经 app 命令路径真驱动 worker 链干成事」（C1·§5）。
     // 显式 `cargo test --lib s3_director_chain_real_run -- --ignored --nocapture` 才起真 codex。
     #[test]
-    #[ignore = "S3 director-chain: real LM multi-step plan drives a real multi-worker codex chain in the test project (user present)"]
+    #[ignore = "S3 director-chain C1: real LM multi-step plan drives a real codex chain through the start-chain command request path (user present)"]
     fn s3_director_chain_real_run() {
         let timestamp_ms = 1_765_300_000_000;
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
@@ -5245,7 +5246,16 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             prepared_count >= 2,
             "应有 ≥2 个 prepared 任务真跑成链（实际 {prepared_count}）"
         );
-        // 薄驱动按 depends_on 序真跑多 worker（每步过 S1 闸·真 codex）。
+        // C1·走命令路径：模拟前端把 prepare 返回的「已审 planned_tasks」经 JSON 回传给 start_project_director_chain
+        // 请求（**不重跑 LM**），下面按命令内层（spawn_blocking 闭包）的同款调用真跑这份回传计划。
+        let request: StartProjectDirectorChainRequest = serde_json::from_value(serde_json::json!({
+            "project_root": test_root,
+            "workflow_id": workflow_id,
+            "planned_tasks": prepared.plan.planned_tasks,
+            "max_nodes": 50,
+        }))
+        .expect("起链请求应能反序列化前端回传的已审计划");
+        // 薄驱动按 depends_on 序真跑多 worker（每步过 S1 闸·真 codex）——经命令请求字段（= start_project_director_chain 内层）。
         let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
         let readback_db_path = codex_db::default_state_db_path();
         let outcome = run_director_task_chain(
@@ -5253,10 +5263,10 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &index,
             &readback_db_path,
             &runner,
-            test_root,
-            &workflow_id,
-            &prepared.plan.planned_tasks,
-            50,
+            &request.project_root,
+            &request.workflow_id,
+            &request.planned_tasks,
+            request.max_nodes.unwrap_or(50),
         )
         .expect("真链跑应返回结果");
         println!(
@@ -5299,6 +5309,235 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "proof_b 应含 token {proof_token}，实际：{b}"
         );
         println!("[S3_CHAIN] proof_a={a:?} proof_b={b:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // C1·§5 补：真·中途停（单独步·用户在场·固定测试项目·默认 #[ignore]）：真 director LM 拆 2-任务依赖链 →
+    // 经命令路径起链真跑 → **另起线程在 task1 链节点变 running 时调现成 stop_project_workflow_chain_at（=用户点停）**
+    // → task2 边界抓到 flag 被跳。证「真 codex 链 + 现成停命令」app 层中途停端到端：proof_a 在、proof_b 不在。
+    // 显式 `cargo test --lib s3_director_chain_real_run_interrupts_mid_chain -- --ignored --nocapture` 才起真 codex。
+    // flake（真 codex）：task1 偶发早退→completed==0；极端时序 task2 抢跑→completed==2。皆 flake → retry（核 proof 实物分辨）。
+    #[test]
+    #[ignore = "S3 director-chain C1: real codex chain stopped mid-way via the real stop command (user present, timing-based, retry on flake)"]
+    fn s3_director_chain_real_run_interrupts_mid_chain() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let real_session = "019ed9f7-c0c2-7213-b871-6d18959b7c24";
+        let proof_token = unix_timestamp_string();
+        let proof_a = format!("{test_root}/s3-chain-midstop-proof-a.txt");
+        let proof_b = format!("{test_root}/s3-chain-midstop-proof-b.txt");
+        let _ = fs::remove_file(&proof_a);
+        let _ = fs::remove_file(&proof_b);
+        let dir = test_temp_dir("s3-director-chain-midstop");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index(test_root, real_session);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        // 多步 proof-goal 方案（同 §5·独立 proof 文件名）→ 确认 → 边界复核激活。
+        let mut proposal_input = fixture_project_consultation_proposal_input(test_root);
+        proposal_input.scope_draft.allowed_agent_ids = vec![real_session.to_string()];
+        proposal_input.scope_draft.allowed_write_roots = vec![test_root.to_string()];
+        proposal_input.scope_draft.allowed_read_roots = vec![test_root.to_string()];
+        proposal_input.goal_summary = format!(
+            "分两步在当前项目根目录建证据，第二步依赖第一步：① 创建 s3-chain-midstop-proof-a.txt，只写入一行：a {proof_token}；② 先读回 s3-chain-midstop-proof-a.txt 确认其内容含 {proof_token}，确认后再创建 s3-chain-midstop-proof-b.txt，只写入一行：verified {proof_token}。"
+        );
+        proposal_input.proposed_steps = vec![
+            format!("创建 s3-chain-midstop-proof-a.txt，写入一行：a {proof_token}"),
+            format!(
+                "读回 s3-chain-midstop-proof-a.txt 核验含 {proof_token}，再创建 s3-chain-midstop-proof-b.txt 写入一行：verified {proof_token}（本步依赖上一步的产出）"
+            ),
+        ];
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &proposal_input,
+            timestamp_ms,
+            "write-s3-midstop-proposal",
+        )
+        .expect("proposal");
+        let confirmed = project_consultation_proposal_store::record_decision(
+            &path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "用户确认 S3 中途停真跑方案。".to_string(),
+                expected_proposal_store_revision: Some(created.store_revision),
+                expected_plan_authorization_store_revision: None,
+            },
+            timestamp_ms + 1,
+            "write-s3-midstop-confirm",
+            "write-s3-midstop-auth",
+            "write-s3-midstop-auth-user",
+        )
+        .expect("confirm");
+        let authorization = confirmed.plan_authorization.expect("authorization");
+        let revision = confirmed
+            .plan_authorization_store_revision
+            .expect("revision");
+        let activated = plan_authorization_store::record_global_boundary_review_with_proposal(
+            &path,
+            &fixture_global_boundary_review_input(
+                test_root,
+                &confirmed.proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+            ),
+            timestamp_ms + 2,
+            "write-s3-midstop-boundary",
+        )
+        .expect("boundary review activate");
+        let ctx = load_project_context(test_root).expect("ctx");
+        let planned = CliDirectorAgent::default()
+            .plan(&ctx, &confirmed.proposal)
+            .expect("real director plan");
+        assert!(
+            planned.len() >= 2,
+            "应拆出 ≥2 任务的链（实际 {}）",
+            planned.len()
+        );
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(test_root, &node_id, None, real_session),
+        )
+        .expect("bind");
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &confirmed.proposal.proposal_id,
+                &activated.authorization.authorization_id,
+                activated.store_revision,
+                planned.clone(),
+            ),
+        )
+        .expect("prepare");
+        let prepared_count = prepared
+            .plan
+            .planned_tasks
+            .iter()
+            .filter(|t| t.status == "prepared")
+            .count();
+        assert!(
+            prepared_count >= 2,
+            "应有 ≥2 个 prepared 任务（实际 {prepared_count}）"
+        );
+        // task1 = 无依赖那个（链记录节点按 planned_task_id 编址，停链线程据此查 task1 边界）。
+        let task1_id = prepared
+            .plan
+            .planned_tasks
+            .iter()
+            .find(|t| t.depends_on.is_empty() && t.status == "prepared")
+            .map(|t| t.planned_task_id.clone())
+            .expect("应有无依赖的 task1");
+        // 经 C1 起链请求（前端回传已审计划·走命令路径）。
+        let request: StartProjectDirectorChainRequest = serde_json::from_value(serde_json::json!({
+            "project_root": test_root,
+            "workflow_id": workflow_id,
+            "planned_tasks": prepared.plan.planned_tasks,
+            "max_nodes": 50,
+        }))
+        .expect("起链请求反序列化");
+        // 「用户点停」模拟线程：本链 task1 节点变 running/completed（= task1 边界已过、worker 在跑/已完）时，调
+        // **现成** stop_project_workflow_chain_at 置 flag。设在 task1 的 ~30s running 窗口内 → task2 边界稳抓到。
+        // 轮询上限防卡死（600×100ms=60s）。
+        let stop_path = path.clone();
+        let stop_workflow_id = workflow_id.clone();
+        let stopper = std::thread::spawn(move || {
+            for _ in 0..600 {
+                if let Ok(value) = read_workflow_state_value(&stop_path) {
+                    if let Some(run) = latest_chain_run_for(
+                        &value,
+                        WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+                        &stop_workflow_id,
+                    ) {
+                        if let Some(chain_run_id) = optional_string_from(&run, "chain_run_id") {
+                            let node_state = chain_node_state(&value, &chain_run_id, &task1_id);
+                            if matches!(node_state.as_deref(), Some("running") | Some("completed"))
+                            {
+                                // stop_issued 反映停链命令是否真成功（非「调过」），好分辨 flake 与真 bug。
+                                return stop_project_workflow_chain_at(
+                                    &stop_path,
+                                    &ProjectWorkflowChainStopRequest {
+                                        project_root: WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string(),
+                                        workflow_id: stop_workflow_id.clone(),
+                                    },
+                                )
+                                .is_ok();
+                            }
+                        }
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            false
+        });
+        // 主线程：经命令内层真跑链（真 codex）。
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let readback_db_path = codex_db::default_state_db_path();
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &request.project_root,
+            &request.workflow_id,
+            &request.planned_tasks,
+            request.max_nodes.unwrap_or(50),
+        )
+        .expect("真链跑应返回结果");
+        let stop_issued = stopper.join().unwrap_or(false);
+        println!(
+            "[S3_MIDSTOP] stop_issued={stop_issued} completed={} dispatched={} stop={:?}",
+            outcome.completed, outcome.dispatched, outcome.stopped_reason
+        );
+        for s in &outcome.steps {
+            println!("[S3_MIDSTOP]   step: {} -> {}", s.title, s.state);
+        }
+        assert!(stop_issued, "停链线程应在 task1 边界后真发出停链命令");
+        // 中途停核验：task1 完、task2 停在边界。
+        assert_eq!(
+            outcome.stopped_reason.as_deref(),
+            Some("user_stop_requested"),
+            "应因用户停链在边界停：{:?}（flake：早退→completed0/时序→completed2，retry）",
+            outcome.stopped_reason
+        );
+        assert_eq!(
+            outcome.completed, 1,
+            "task1 完成、task2 被停（实际 {}·flake retry）",
+            outcome.completed
+        );
+        assert_eq!(
+            outcome.dispatched, 1,
+            "只派发 task1（实际 {}）",
+            outcome.dispatched
+        );
+        // 最关键实物：proof_a 真建（task1 跑了·含本次 token）、proof_b 不存在（task2 从没跑）= 真停在两任务之间。
+        let a = fs::read_to_string(&proof_a)
+            .unwrap_or_else(|e| panic!("task1 应真建 proof_a {proof_a}：{e}"));
+        assert!(
+            a.contains(&proof_token),
+            "proof_a 应含本次 token {proof_token}，实际：{a}"
+        );
+        assert!(
+            !std::path::Path::new(&proof_b).exists(),
+            "task2 应被中途停、proof_b 不该存在 {proof_b}"
+        );
+        // 链记录 stopped + 停链审计。
+        let value = read_workflow_state_value(&path).expect("state readable");
+        let run = latest_chain_run_for(&value, test_root, &workflow_id).expect("应能读到本链记录");
+        assert_eq!(
+            optional_string_from(&run, "state").as_deref(),
+            Some("stopped"),
+            "链记录应 state=stopped"
+        );
+        assert!(
+            audit_has(&path, "workflow_chain_run_stopped"),
+            "应有停链审计事件"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -5695,6 +5934,110 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             outcome.stopped_reason
         );
         assert_eq!(outcome.completed, 0, "第一步就失败 → 0 完成");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // ===== C1·生产起链命令（start_project_director_chain）·stub =====
+
+    // C1 命令线契约（真新增面）：prepare 返回的「已审 planned_tasks」经 JSON 往返回传给起链请求 → 计划无损
+    // （depends_on/status 保住）→ 驱动跑这份（= 用户审过的、**不重跑 LM**）→ outcome 能 Serialize 回前端。
+    #[test]
+    fn s3_director_chain_command_carries_approved_plan_and_serializes_outcome() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("s3-director-chain-cmd");
+        // 模拟前端：把 prepare 返回的 planned_tasks 经 JSON 往返回传给起链命令请求。
+        let request_json = serde_json::json!({
+            "project_root": WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            "workflow_id": workflow_id,
+            "planned_tasks": prepared.plan.planned_tasks,
+            "max_nodes": 10,
+        });
+        let request: StartProjectDirectorChainRequest =
+            serde_json::from_value(request_json).expect("起链请求应能反序列化前端回传的已审计划");
+        // 计划无损：任务数 / depends_on / status 与 prepare 产出一致（跑的就是用户审过的那份）。
+        assert_eq!(
+            request.planned_tasks.len(),
+            prepared.plan.planned_tasks.len(),
+            "回传计划任务数应无损"
+        );
+        for (got, want) in request
+            .planned_tasks
+            .iter()
+            .zip(prepared.plan.planned_tasks.iter())
+        {
+            assert_eq!(got.planned_task_id, want.planned_task_id);
+            assert_eq!(got.depends_on, want.depends_on, "depends_on 应无损往返");
+            assert_eq!(got.status, want.status, "status 应无损往返");
+        }
+        // 命令内层（= async 壳里 spawn_blocking 调的那一下）：跑回传的计划，不构造任何 director（不重跑 LM）。
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &request.project_root,
+            &request.workflow_id,
+            &request.planned_tasks,
+            request.max_nodes.unwrap_or(50),
+        )
+        .expect("命令内层应起链跑通");
+        assert!(outcome.completed >= 2, "回传的多任务计划应按序跑完");
+        // outcome 能 Serialize 回前端（命令返回类型）。
+        let serialized = serde_json::to_value(&outcome).expect("outcome 应能 Serialize 给前端");
+        assert_eq!(
+            serialized["completed"],
+            serde_json::json!(outcome.completed)
+        );
+        assert!(
+            serialized["chain_run_id"].is_string(),
+            "序列化 outcome 应含 chain_run_id"
+        );
+        assert!(serialized["steps"].is_array(), "序列化 outcome 应含 steps");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // C1 进度复用（0 新命令）：主管链跑完后，现成 get_project_workflow_chain_status 的内层
+    // latest_chain_run_for 能按 project_root+workflow_id 读到本驱动建的链记录（state=completed）。
+    #[test]
+    fn s3_director_chain_command_status_reuse_reads_director_record() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("s3-director-chain-status");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &prepared.plan.planned_tasks,
+            10,
+        )
+        .expect("chain");
+        let value = read_workflow_state_value(&path).expect("state readable");
+        let record = latest_chain_run_for(&value, WORKFLOW_ENGINE_TEST_PROJECT_ROOT, &workflow_id)
+            .expect("现成进度命令应能按 project+workflow 读到主管链记录");
+        assert_eq!(
+            optional_string_from(&record, "chain_run_id").as_deref(),
+            Some(outcome.chain_run_id.as_str()),
+            "进度命令读到的应是本次主管链记录"
+        );
+        assert_eq!(
+            optional_string_from(&record, "state").as_deref(),
+            Some("completed"),
+            "跑完后链记录 state=completed"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
