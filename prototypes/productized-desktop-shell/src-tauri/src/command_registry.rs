@@ -101,6 +101,7 @@ macro_rules! workbench_command_handler {
             stop_project_workflow_chain,
             get_project_workflow_chain_status,
             start_project_director_chain,
+            auto_advance_authorized_role_loop,
             list_project_workflows,
             submit_project_workflow_draft,
             get_project_workflow_nodes,

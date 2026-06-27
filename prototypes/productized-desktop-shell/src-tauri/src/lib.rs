@@ -6041,6 +6041,322 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
+    // ===== P1·角色循环「授权后自动推进」编排（auto_advance_authorized_role_loop）·stub =====
+
+    // setup：bootstrap + 造 active 方案授权（proposal + 激活）+ 可选绑 codex-dev 会话 → 返回编排所需件。
+    fn auto_advance_fixture(name: &str, bind_session: bool) -> (PathBuf, PathBuf, Value, String) {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-auto-advance";
+        let dir = test_temp_dir(name);
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        create_active_project_director_authorization_fixture(
+            &path,
+            test_root,
+            thread_id,
+            timestamp_ms,
+        );
+        let workflow_id = default_workflow_id(test_root);
+        if bind_session {
+            bind_workflow_node_codex_session_for_index_at(
+                &path,
+                &index,
+                &fixture_node_session_bind_request(
+                    test_root,
+                    &format!("{workflow_id}:node:codex-dev"),
+                    None,
+                    thread_id,
+                ),
+            )
+            .expect("bind");
+        }
+        (dir, index_path, index, workflow_id)
+    }
+
+    // 全链 stub：active 授权 + 绑会话 → 编排 → StubDirector 拆 → prepare → 链跑 → stage=ran + 链 completed + 审计在。
+    #[test]
+    fn auto_advance_runs_chain_when_authorized_and_bound() {
+        let (dir, index_path, index, workflow_id) = auto_advance_fixture("auto-advance-ran", true);
+        let path = dir.join("workflow-state.v0.json");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let outcome = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            "tester",
+            10,
+        )
+        .expect("授权+绑会话应自动推进跑通");
+        assert_eq!(outcome.stage, "ran", "应跑到链：{outcome:?}");
+        let chain = outcome.chain_outcome.expect("ran 应带 chain_outcome");
+        assert!(
+            chain.completed >= 2,
+            "应跑完 ≥2 worker：{}",
+            chain.completed
+        );
+        assert!(
+            audit_has(&path, "role_loop_auto_advance_started"),
+            "应有编排起审计"
+        );
+        assert!(
+            audit_has(&path, "role_loop_auto_advance_ran"),
+            "应有链跑审计"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 件 C-1：没绑会话 → prepared==0/needs_binding → 停在 needs_binding、不跑链（链记录都没建）。
+    #[test]
+    fn auto_advance_stops_at_needs_binding_when_unbound() {
+        let (dir, index_path, index, workflow_id) =
+            auto_advance_fixture("auto-advance-needsbind", false);
+        let path = dir.join("workflow-state.v0.json");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 0,
+                transcript_target_hits: 0,
+            },
+        };
+        let outcome = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            "tester",
+            10,
+        )
+        .expect("没绑会话也应返回 outcome（停在 needs_binding）");
+        assert_eq!(
+            outcome.stage, "needs_binding",
+            "没绑应停在 needs_binding：{outcome:?}"
+        );
+        assert_eq!(outcome.prepared_count, 0, "没绑 → 0 prepared");
+        assert!(outcome.needs_binding_count > 0, "应有 needs_binding 任务");
+        assert!(outcome.chain_outcome.is_none(), "停在 needs_binding 不跑链");
+        // 链根本没起：没有任何链运行记录。
+        let value = read_workflow_state_value(&path).expect("state readable");
+        assert!(
+            latest_chain_run_for(&value, WORKFLOW_ENGINE_TEST_PROJECT_ROOT, &workflow_id).is_none(),
+            "停在 needs_binding 不应建链记录"
+        );
+        assert!(
+            audit_has(&path, "role_loop_auto_advance_stopped"),
+            "应有停因审计"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 人闸不省：无 active 授权 → 直接拒（不创建、不跳过授权）。
+    #[test]
+    fn auto_advance_rejects_without_active_authorization() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("auto-advance-noauth");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, "thread-noauth");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        // 故意不造授权。
+        let workflow_id = default_workflow_id(test_root);
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 0,
+                transcript_target_hits: 0,
+            },
+        };
+        let result = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            test_root,
+            &workflow_id,
+            "tester",
+            10,
+        );
+        assert!(result.is_err(), "无 active 授权应被拒");
+        assert!(
+            result.unwrap_err().contains("active"),
+            "错误应点名缺 active 授权"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 入口 path-lock（决策 2026-06-27 纵深防御）：非测试 root 在 LM 拆 / prepare 之前直接被拒。
+    #[test]
+    fn auto_advance_blocks_non_test_project() {
+        let non_test = "/tmp/some-non-test-project";
+        let dir = test_temp_dir("auto-advance-nontest");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(non_test, "thread-nontest");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 0,
+                transcript_target_hits: 0,
+            },
+        };
+        let result = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            non_test,
+            "wf",
+            "tester",
+            10,
+        );
+        assert!(result.is_err(), "非测试 root 应被入口 path-lock 拒");
+        // 有意义：错误须是 path-lock 那条（不是"缺授权"），证 path-lock 在 LM / prepare 之前真拦。
+        assert!(
+            result
+                .unwrap_err()
+                .contains("legacy_product_command_blocked"),
+            "应是 path-lock 拒绝（legacy_product_command_blocked），证入口提前拦"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // P1·§5 真跑（单独步·用户在场·固定测试项目·默认 #[ignore]）：测试项目造 active 授权（proof-goal）+ 绑真
+    // Codex 会话 → **经编排一下** → 真主管 LM 拆 → prepare → worker 链真 codex 接连跑 → proof 建出。证「一个
+    // 命令把授权后自动推进跑通」。显式 `cargo test --lib auto_advance_authorized_role_loop_real_run -- --ignored --nocapture`。
+    // flake：真 codex 偶发早退 → retry（核 proof 实物）。无授权拦由 stub auto_advance_rejects_without_active_authorization 证。
+    #[test]
+    #[ignore = "P1 role-loop auto-advance: one command drives authorized auto-advance (real director LM + real worker codex chain) in the test project (user present)"]
+    fn auto_advance_authorized_role_loop_real_run() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let real_session = "019ed9f7-c0c2-7213-b871-6d18959b7c24";
+        let proof_token = unix_timestamp_string();
+        let proof_a = format!("{test_root}/auto-advance-proof-a.txt");
+        let proof_b = format!("{test_root}/auto-advance-proof-b.txt");
+        let _ = fs::remove_file(&proof_a);
+        let _ = fs::remove_file(&proof_b);
+        let dir = test_temp_dir("auto-advance-real");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index(test_root, real_session);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        // active 授权 proof-goal 方案（scope 圈测试项目根·绑 real_session）→ 确认 → 边界复核激活。
+        let mut proposal_input = fixture_project_consultation_proposal_input(test_root);
+        proposal_input.scope_draft.allowed_agent_ids = vec![real_session.to_string()];
+        proposal_input.scope_draft.allowed_write_roots = vec![test_root.to_string()];
+        proposal_input.scope_draft.allowed_read_roots = vec![test_root.to_string()];
+        proposal_input.goal_summary = format!(
+            "分两步在当前项目根目录建证据，第二步依赖第一步：① 创建 auto-advance-proof-a.txt，只写入一行：a {proof_token}；② 先读回 auto-advance-proof-a.txt 确认其内容含 {proof_token}，确认后再创建 auto-advance-proof-b.txt，只写入一行：verified {proof_token}。"
+        );
+        proposal_input.proposed_steps = vec![
+            format!("创建 auto-advance-proof-a.txt，写入一行：a {proof_token}"),
+            format!(
+                "读回 auto-advance-proof-a.txt 核验含 {proof_token}，再创建 auto-advance-proof-b.txt 写入一行：verified {proof_token}（本步依赖上一步）"
+            ),
+        ];
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &proposal_input,
+            timestamp_ms,
+            "write-auto-advance-proposal",
+        )
+        .expect("proposal");
+        let confirmed = project_consultation_proposal_store::record_decision(
+            &path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "用户确认 P1 自动推进真跑方案。".to_string(),
+                expected_proposal_store_revision: Some(created.store_revision),
+                expected_plan_authorization_store_revision: None,
+            },
+            timestamp_ms + 1,
+            "write-auto-advance-confirm",
+            "write-auto-advance-auth",
+            "write-auto-advance-auth-user",
+        )
+        .expect("confirm");
+        let authorization = confirmed.plan_authorization.expect("authorization");
+        let revision = confirmed
+            .plan_authorization_store_revision
+            .expect("revision");
+        plan_authorization_store::record_global_boundary_review_with_proposal(
+            &path,
+            &fixture_global_boundary_review_input(
+                test_root,
+                &confirmed.proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+            ),
+            timestamp_ms + 2,
+            "write-auto-advance-boundary",
+        )
+        .expect("boundary review activate");
+        // 绑真 Codex 会话到 codex-dev 节点（自动推进要派 worker 真跑）。
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(test_root, &node_id, None, real_session),
+        )
+        .expect("bind");
+        // 一个命令：授权后自动推进（真主管 LM 拆 + 真 worker codex 链）。
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let readback_db_path = codex_db::default_state_db_path();
+        let director = CliDirectorAgent::default();
+        let outcome = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &director,
+            test_root,
+            &workflow_id,
+            "user-fixture",
+            50,
+        )
+        .expect("授权后自动推进应跑通");
+        println!(
+            "[P1_AUTO] stage={} planned={} prepared={} completed={:?} stop={:?}",
+            outcome.stage,
+            outcome.planned_task_count,
+            outcome.prepared_count,
+            outcome.chain_outcome.as_ref().map(|c| c.completed),
+            outcome.stop_reason
+        );
+        assert_eq!(outcome.stage, "ran", "应一路推进到链跑：{outcome:?}");
+        let chain = outcome.chain_outcome.expect("ran 应带 chain_outcome");
+        assert!(
+            chain.completed >= 1,
+            "应 ≥1 worker 真跑完成：{}",
+            chain.completed
+        );
+        // proof 实物：proof_a 建出含本次 token（worker 真跑了·内容对）。
+        let a = fs::read_to_string(&proof_a)
+            .unwrap_or_else(|e| panic!("worker 应真建 proof_a {proof_a}：{e}"));
+        assert!(
+            a.contains(&proof_token),
+            "proof_a 应含本次 token {proof_token}，实际：{a}"
+        );
+        println!("[P1_AUTO] proof_a={a:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // P3 项目面真跑（C 映射）·机器闸：用已存在的 work_item（带任务包）+ 绑定，stub runner 验证
     // execute_project_workflow_node_at 从任务包构造指令 + 走通派发到 completed。
     #[test]

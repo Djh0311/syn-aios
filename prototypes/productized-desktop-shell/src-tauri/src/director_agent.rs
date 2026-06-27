@@ -630,3 +630,235 @@ async fn start_project_director_chain(
     .await
     .map_err(|error| format!("主管链执行线程异常：{error}"))?
 }
+
+// ===== P1·角色循环「授权后自动推进」编排命令（件 B + 件 C-1）=====
+// 查 active 方案授权（人闸·不创建不跳过）→ 主管 LM 拆任务（preview）→ prepare → 件 C-1 分流（没绑/越界/无可派 → 停 +
+// 可见）→ prepared 出来就跑 worker 链（run_director_task_chain·四护栏·入口 path-lock 圈测试项目）。
+// 复用现成 preview/prepare/chain **本体 0-diff**，只新增编排；每阶段审计进 audit_events（canonical 形）。
+#[derive(serde::Deserialize)]
+pub(crate) struct AutoAdvanceAuthorizedRoleLoopRequest {
+    pub(crate) project_root: String,
+    pub(crate) workflow_id: String,
+    #[serde(default)]
+    pub(crate) max_nodes: Option<usize>,
+    #[serde(default)]
+    pub(crate) actor_id: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub(crate) struct AutoAdvanceRoleLoopOutcome {
+    // "ran" | "needs_binding" | "blocked" | "no_dispatchable"
+    pub(crate) stage: String,
+    pub(crate) planned_task_count: usize,
+    pub(crate) prepared_count: usize,
+    pub(crate) needs_binding_count: usize,
+    pub(crate) blocked_count: usize,
+    pub(crate) message: String,
+    pub(crate) chain_outcome: Option<DirectorChainOutcome>,
+    pub(crate) stop_reason: Option<String>,
+}
+
+// 编排级审计：append 进 audit_events（canonical 形·与初始化/c4 事件同字段），读改写一次（不与复用 fn 的写交错）。
+fn append_role_loop_auto_advance_audit(
+    path: &std::path::Path,
+    workflow_id: &str,
+    actor_id: &str,
+    event_type: &str,
+    reason: &str,
+) -> Result<(), String> {
+    let mut value = read_workflow_state_value(path)?;
+    let ts = unix_timestamp_string();
+    array_mut(&mut value, "audit_events")?.push(serde_json::json!({
+        "event_id": format!("role-loop-auto-advance:{event_type}:{ts}"),
+        "event_type": event_type,
+        "target_ref": workflow_id,
+        "actor_ref": actor_id,
+        "source_kind": "role_loop_auto_advance",
+        "permission_level": "workflow_event_record",
+        "created_at": ts,
+        "reason": reason,
+    }));
+    write_validated_workflow_state(path, &value)
+}
+
+// 编排内层（同步·spawn_blocking 里调；可单测·stub runner）。
+fn run_auto_advance_authorized_role_loop(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    director: &dyn DirectorAgent,
+    project_root: &str,
+    workflow_id: &str,
+    actor_id: &str,
+    max_nodes: usize,
+) -> Result<AutoAdvanceRoleLoopOutcome, String> {
+    // 死线·圈固定测试项目（决策 2026-06-27）：非测试 root 入口直接拒——在 LM 拆 / prepare 之前提前拦
+    // （纵深防御，不只靠链入口的晚拦）。与现成命令同款 path-lock，闸 / 沙箱本体不动。
+    require_test_project_path_lock(project_root, "auto_advance_authorized_role_loop")?;
+    let timestamp_ms = unix_timestamp_ms();
+    let pid = project_id(project_root);
+    // 1. 查 active 方案授权（人闸不省·不创建不跳过；查不到即拒）。
+    let store = plan_authorization_store::load_store(path, timestamp_ms)?;
+    let active = store
+        .authorizations
+        .iter()
+        .rev()
+        .find(|authorization| {
+            authorization.project_id == pid
+                && authorization.workflow_id == workflow_id
+                && authorization.status == PlanAuthorizationStatus::Active
+                && authorization
+                    .expires_at_ms
+                    .is_none_or(|expires_at_ms| expires_at_ms > timestamp_ms)
+        })
+        .ok_or_else(|| {
+            "无 active 方案授权：请先确认方案 + 全局边界复核（自动推进不创建、不跳过授权）。".to_string()
+        })?;
+    let proposal_id = active
+        .source_proposal_id
+        .clone()
+        .ok_or_else(|| "active 授权缺 source_proposal_id；无法自动推进。".to_string())?;
+    let authorization_id = active.authorization_id.clone();
+    let auth_revision = store.revision;
+    append_role_loop_auto_advance_audit(
+        path,
+        workflow_id,
+        actor_id,
+        "role_loop_auto_advance_started",
+        "已查到 active 方案授权，开始授权范围内自动推进：拆任务 → prepare →（没绑/越界则停）→ 链跑。",
+    )?;
+    // 2. 主管 LM 拆任务（授权范围内）：加载 ctx + active 授权对应的已确认方案 → director.plan
+    //    （真主管 LM·CliDirectorAgent；stub 测试注入假 director 不起 codex）。
+    let ctx = load_project_context(project_root)?;
+    let proposal_store = project_consultation_proposal_store::load_store(path, timestamp_ms)?;
+    let proposal = proposal_store
+        .proposals
+        .iter()
+        .find(|proposal| proposal.proposal_id == proposal_id)
+        .ok_or_else(|| format!("找不到 active 授权对应的已确认方案：{proposal_id}"))?;
+    let planned_tasks = director.plan(&ctx, proposal)?;
+    // 3. prepare（→ prepared dispatches·授权范围内·把 LM 拆的任务接进派发机器）。
+    let prepare_input = PrepareAuthorizedAutoDispatchInput {
+        project_root: project_root.to_string(),
+        project_id: pid.clone(),
+        workflow_id: workflow_id.to_string(),
+        proposal_id: proposal_id.clone(),
+        authorization_id: authorization_id.clone(),
+        actor_id: actor_id.to_string(),
+        planned_tasks,
+        expected_workflow_revision: None,
+        expected_authorization_revision: Some(auth_revision),
+    };
+    let prepared = prepare_authorized_auto_dispatch_for_index_at(path, index, &prepare_input)?;
+    let planned_task_count = prepared.plan.planned_task_count;
+    let prepared_count = prepared.plan.prepared_dispatch_count;
+    let needs_binding_count = prepared.plan.needs_binding_count;
+    let blocked_count = prepared.plan.blocked_count;
+    // 4. 件 C-1 分流：没 prepared 就停（越界/没绑/无可派）——可见、等用户、不自动绑、不重试。
+    if prepared_count == 0 {
+        let (stage, message) = if blocked_count > 0 {
+            (
+                "blocked",
+                "有越界任务被阻断（超授权范围）；停下等用户处理，不自动推进。".to_string(),
+            )
+        } else if needs_binding_count > 0 {
+            (
+                "needs_binding",
+                "需先给 codex-dev 节点绑一条 Codex 会话再自动推进（本命令不自动绑会话）。".to_string(),
+            )
+        } else {
+            (
+                "no_dispatchable",
+                "没有可派发的 prepared 任务；停。".to_string(),
+            )
+        };
+        append_role_loop_auto_advance_audit(
+            path,
+            workflow_id,
+            actor_id,
+            "role_loop_auto_advance_stopped",
+            &format!("自动推进停在 {stage}：{message}"),
+        )?;
+        return Ok(AutoAdvanceRoleLoopOutcome {
+            stage: stage.to_string(),
+            planned_task_count,
+            prepared_count,
+            needs_binding_count,
+            blocked_count,
+            message,
+            chain_outcome: None,
+            stop_reason: Some(stage.to_string()),
+        });
+    }
+    // 5. prepared 出来 → 跑 worker 链（四护栏·入口 path-lock 圈测试项目·失败即停）。
+    let outcome = run_director_task_chain(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        project_root,
+        workflow_id,
+        &prepared.plan.planned_tasks,
+        max_nodes,
+    )?;
+    let stop_reason = outcome.stopped_reason.clone();
+    let message = format!(
+        "授权后自动推进跑完 worker 链：completed {} / dispatched {}{}",
+        outcome.completed,
+        outcome.dispatched,
+        stop_reason
+            .as_deref()
+            .map(|reason| format!("；停因 {reason}"))
+            .unwrap_or_else(|| "；全跑完".to_string())
+    );
+    append_role_loop_auto_advance_audit(
+        path,
+        workflow_id,
+        actor_id,
+        "role_loop_auto_advance_ran",
+        &message,
+    )?;
+    Ok(AutoAdvanceRoleLoopOutcome {
+        stage: "ran".to_string(),
+        planned_task_count,
+        prepared_count,
+        needs_binding_count,
+        blocked_count,
+        message,
+        chain_outcome: Some(outcome),
+        stop_reason,
+    })
+}
+
+#[tauri::command]
+async fn auto_advance_authorized_role_loop(
+    request: AutoAdvanceAuthorizedRoleLoopRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<AutoAdvanceRoleLoopOutcome, String> {
+    // index/path 在 await 前从 state 取（State 不能跨进 'static 闭包）——同 start_project_director_chain 范本。
+    let path = state.workflow_state_path.clone();
+    let index = read_index(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let readback_db_path = codex_db::default_state_db_path();
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let director = CliDirectorAgent::default();
+        let actor_id = request
+            .actor_id
+            .clone()
+            .unwrap_or_else(|| "role-loop-auto-advance".to_string());
+        run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &director,
+            &request.project_root,
+            &request.workflow_id,
+            &actor_id,
+            request.max_nodes.unwrap_or(50),
+        )
+    })
+    .await
+    .map_err(|error| format!("自动推进执行线程异常：{error}"))?
+}
