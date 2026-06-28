@@ -1638,12 +1638,19 @@ fn project_director_authorization_context(
     let project = find_index_project(index, project_root_value)
         .ok_or_else(|| "项目不在当前索引内，已拒绝项目主管拆任务。".to_string())?;
     let expected_project_id = project_id(project_root_value);
-    let expected_workflow_id = default_workflow_id(project_root_value);
     if project_id_value != expected_project_id {
         return Err("C4 输入 project_id 与 project_root 推导结果不一致。".to_string());
     }
-    if workflow_id != expected_workflow_id {
-        return Err("C4 输入 workflow_id 与 project_root 默认 workflow 不一致。".to_string());
+    // (b) 放开「只认默认工作流」：角色循环可跑在项目内**任意合法（已存在）工作流**上，不再死锚 default_workflow_id。
+    // 这是简化假设、**非安全闸**——真执行仍走 execute 的 path-lock（圈测试项目）+ 沙箱 + 四护栏（本包不碰·0-diff）；
+    // workflow_id 不影响 path-lock。补合法性闸：workflow_id 必须是该项目内**已存在**的工作流，否则拒（防注入不存在/
+    // 跨项目工作流；project_id 仍按 root 推导一致；跨项目还会被后面「方案 project_id/workflow_id 必须匹配」二次拦）。
+    let workflow_state_value = read_workflow_state_value(path)?;
+    if !workflow_exists(&workflow_state_value, workflow_id) {
+        return Err(
+            "C4 输入 workflow_id 不是本项目内合法工作流（不存在或未提交）；请先在项目里建/提交该工作流。"
+                .to_string(),
+        );
     }
     let timestamp_ms = unix_timestamp_ms();
     let proposal_store = project_consultation_proposal_store::load_store(path, timestamp_ms)?;

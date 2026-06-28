@@ -6008,6 +6008,143 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
+    // ===== (b) 放开「角色循环只认默认工作流」→ 可跑在项目内任意合法工作流上 ·stub =====
+
+    // 放开核心证据：建第二条（非默认）工作流 → 在它上面 proposal→确认→边界复核激活 → C4 主管 preview 在那条
+    // 非默认工作流上跑通（不再被"必须默认"拦），plan.workflow_id = 那条。
+    #[test]
+    fn role_loop_runs_on_non_default_project_workflow() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-nondefault-wf";
+        let dir = test_temp_dir("role-loop-nondefault");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        // 1. 建第二条（非默认）工作流（带 director 节点）。
+        submit_project_workflow_draft_at(
+            &path,
+            &SubmitProjectWorkflowDraftRequest {
+                project_root: test_root.to_string(),
+                workflow_id: None,
+                title: "非默认角色循环工作流".to_string(),
+                nodes: vec![
+                    json!({"id":"d1","kind":"director","label":"主管","prompt":"统筹","position":{"x":1,"y":2}}),
+                    json!({"id":"a1","kind":"subagent","label":"开发","prompt":"写","position":{"x":3,"y":4}}),
+                ],
+                edges: vec![json!({"id":"e1","from":"d1","to":"a1"})],
+            },
+        )
+        .expect("submit 2nd workflow");
+        let wid = read_json_file(&path)["workflows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|w| optional_string_from(w, "title").as_deref() == Some("非默认角色循环工作流"))
+            .and_then(|w| optional_string_from(w, "workflow_id"))
+            .expect("new workflow id");
+        assert_ne!(wid, default_workflow_id(test_root), "确认是非默认工作流");
+        // 2. 在非默认工作流上 proposal → 确认 → 边界复核激活（workflow_id 全程 = wid·不用 default 夹具）。
+        let mut input = fixture_project_consultation_proposal_input(test_root);
+        input.workflow_id = Some(wid.clone());
+        input.scope_draft.allowed_agent_ids = vec![thread_id.to_string()];
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &input,
+            timestamp_ms,
+            "write-nondefault-proposal",
+        )
+        .expect("非默认工作流已存在 → 方案应能创建");
+        let confirmed = project_consultation_proposal_store::record_decision(
+            &path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "确认非默认工作流方案。".to_string(),
+                expected_proposal_store_revision: Some(created.store_revision),
+                expected_plan_authorization_store_revision: None,
+            },
+            timestamp_ms + 1,
+            "write-nondefault-confirm",
+            "write-nondefault-auth",
+            "write-nondefault-auth-user",
+        )
+        .expect("confirm");
+        let authorization = confirmed.plan_authorization.expect("auth");
+        let revision = confirmed
+            .plan_authorization_store_revision
+            .expect("revision");
+        // 边界复核输入手搭（workflow_id=wid·default 夹具硬编默认不能用）。
+        let activated = plan_authorization_store::record_global_boundary_review_with_proposal(
+            &path,
+            &RecordGlobalBoundaryReviewInput {
+                project_root: test_root.to_string(),
+                project_id: project_id(test_root),
+                workflow_id: wid.clone(),
+                proposal_id: confirmed.proposal.proposal_id.clone(),
+                authorization_id: authorization.authorization_id.clone(),
+                actor_id: "global-director-fixture".to_string(),
+                review_status: "approved".to_string(),
+                summary: "全局主管复核通过非默认工作流方案边界。".to_string(),
+                checklist: fixture_global_boundary_review_checklist(),
+                findings: vec![],
+                expected_authorization_revision: Some(revision),
+            },
+            timestamp_ms + 2,
+            "write-nondefault-boundary",
+        )
+        .expect("activate");
+        // 3. C4 主管 preview 在非默认工作流上跑通（放开生效）。
+        let preview_input = PreviewProjectDirectorTaskPlanInput {
+            project_root: test_root.to_string(),
+            project_id: project_id(test_root),
+            workflow_id: wid.clone(),
+            proposal_id: confirmed.proposal.proposal_id.clone(),
+            authorization_id: activated.authorization.authorization_id.clone(),
+            actor_id: "project_director".to_string(),
+            expected_authorization_revision: Some(activated.store_revision),
+        };
+        let plan = preview_project_director_task_plan_for_index_at(&path, &index, &preview_input)
+            .expect("preview 应在非默认工作流上跑通（放开 C4「只认默认」）");
+        assert_eq!(plan.workflow_id, wid, "计划应落在那条非默认工作流上");
+        assert!(!plan.planned_tasks.is_empty(), "应拆出任务");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 合法性闸：放开 ≠ 任意串都过——传不存在的 workflow_id → 拒（防注入不存在/跨项目工作流）。
+    #[test]
+    fn role_loop_rejects_unknown_workflow() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-unknown-wf";
+        let dir = test_temp_dir("role-loop-unknown");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (proposal, authorization, revision) =
+            create_active_project_director_authorization_fixture(
+                &path,
+                test_root,
+                thread_id,
+                timestamp_ms,
+            );
+        // 传一个不存在的 workflow_id（默认方案/授权在·但 workflow 不存在）→ 拒。
+        let preview_input = PreviewProjectDirectorTaskPlanInput {
+            project_root: test_root.to_string(),
+            project_id: project_id(test_root),
+            workflow_id: "workflow:does-not-exist".to_string(),
+            proposal_id: proposal.proposal_id.clone(),
+            authorization_id: authorization.authorization_id.clone(),
+            actor_id: "project_director".to_string(),
+            expected_authorization_revision: Some(revision),
+        };
+        let result = preview_project_director_task_plan_for_index_at(&path, &index, &preview_input);
+        assert!(result.is_err(), "不存在的 workflow_id 应被拒（合法性闸）");
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // 失败即停：worker 第一步就失败 → 链停、不继续。
     struct FailingChainRunner;
     impl CodexResumeRunner for FailingChainRunner {
