@@ -313,14 +313,14 @@ export function RightDetailPanel({
             <summary>开发者详情：统一命令读模型</summary>
             <div className="audit-summary-list">
               <div className="audit-summary-item">
-                <strong>store revision</strong>
+                <strong>存储版本</strong>
                 <span>{productCommandReadModel?.store_revision ?? 0}</span>
-                <em>sidecar path：{productCommandReadModel?.sidecar_path ?? "未生成"}</em>
+                <em>边车路径：{productCommandReadModel?.sidecar_path ?? "未生成"}</em>
               </div>
               <div className="audit-summary-item">
-                <strong>runner entry</strong>
+                <strong>运行器入口</strong>
                 <span>{productEntryStatusLabel(productCommandReadModel?.runner_entry_status)}</span>
-                <em>legacy：{productEntryStatusLabel(productCommandReadModel?.legacy_entry_status)}</em>
+                <em>旧入口：{productEntryStatusLabel(productCommandReadModel?.legacy_entry_status)}</em>
               </div>
               {failureStopRetryItems.map((item) => (
                 <div className="audit-summary-item" key={item.kind}>

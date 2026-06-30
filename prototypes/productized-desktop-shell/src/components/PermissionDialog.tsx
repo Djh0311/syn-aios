@@ -122,7 +122,7 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
             </div>
             <div className="permission-detail">
               <span>执行边界</span>
-              <strong>本动作不执行 codex exec/resume、不发送 prompt、不写 .codex、不解锁 K3-B2。</strong>
+              <strong>本动作不执行 codex exec/resume、不发送提示词、不写 .codex、不解锁 K3-B2。</strong>
             </div>
             <div className="permission-detail">
               <span>风险说明</span>
@@ -856,7 +856,7 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
             </div>
             <div className="permission-detail">
               <span>边界</span>
-              <strong>只记录 J2-A Phase A no-op；不发送 prompt，不执行真实 Codex，不写项目文件。</strong>
+              <strong>只记录 J2-A Phase A no-op；不发送提示词，不执行真实 Codex，不写项目文件。</strong>
             </div>
           </>
         ) : null}
@@ -1006,9 +1006,9 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
             : action.kind === "record-mature-pattern-decision"
             ? "该动作只会在你确认后写入 M12 成熟模式辅助状态文件；只有用户确认正式化时才会联动 formal-memories.v1.json，候选和报告不会直接进入任务包。"
             : action.kind === "run-project-workflow-automation-phase-a"
-            ? "该动作只会在你确认后生成项目自动编排 Level A run units，并记录 Product Command Phase A no-op、runtime/audit/readback unavailable、worker report、捕获来源和 observation；不发送 prompt、不执行真实 Codex、不写 /Users/yoyi/.codex、不写项目文件。"
+            ? "该动作只会在你确认后生成项目自动编排 Level A run units，并记录 Product Command Phase A no-op、runtime/audit/readback unavailable、worker report、捕获来源和 observation；不发送提示词、不执行真实 Codex、不写 /Users/yoyi/.codex、不写项目文件。"
             : action.kind === "record-operation-control-decision"
-            ? "该动作只会记录 L3 操作控制决策和待处理状态；不调用 runner、不执行 Codex、不发送 prompt、不停止或重启真实进程、不解锁 K3-B2。"
+            ? "该动作只会记录 L3 操作控制决策和待处理状态；不调用 runner、不执行 Codex、不发送提示词、不停止或重启真实进程、不解锁 K3-B2。"
             : action.kind === "adopt-memory-candidate-to-formal-memory"
             ? "该动作只会在你确认后通过 M2 采纳门写入 formal-memories.v1.json，并保留候选、来源、版本和审计；不会自动采纳其他候选。"
             : action.kind === "adopt-memory-candidates-to-formal-memory-batch"

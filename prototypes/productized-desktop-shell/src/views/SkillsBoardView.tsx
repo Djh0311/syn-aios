@@ -18,14 +18,14 @@ export function SkillsBoardView({ skills, plugins, projects }: SkillsBoardViewPr
     <section className="view-stack">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Skill</p>
-          <h2>Skill 能力库</h2>
+          <p className="eyebrow">技能</p>
+          <h2>技能能力库</h2>
         </div>
         <p className="muted">查看可复用能力、适用场景和当前可用性；这里不加载、不编辑、不自动推荐。</p>
       </div>
 
       <div className="object-summary-grid">
-        <SummaryTile label="可复用能力" value={`${skills.length} 个`} hint="来自当前工作台可见 Skill" />
+        <SummaryTile label="可复用能力" value={`${skills.length} 个`} hint="来自当前工作台可见技能" />
         <SummaryTile label="适用场景" value={`${Object.keys(bySource).length} 类`} hint="按系统、本地和插件来源粗分" />
         <SummaryTile label="最近使用" value="未接入" hint="暂无使用事件，不伪造热度" />
         <SummaryTile label="当前可用性" value={skills.length ? "可查看" : "待配置"} hint="仅代表可见，不代表已加载到智能体" />
@@ -39,8 +39,8 @@ export function SkillsBoardView({ skills, plugins, projects }: SkillsBoardViewPr
             ))
           ) : (
             <div className="board-card muted-card">
-              <strong>暂无 Skill</strong>
-              <span>当前工作台还没有可见 Skill；可到设置的开发者区查看来源和接入边界。</span>
+              <strong>暂无技能</strong>
+              <span>当前工作台还没有可见技能；可到设置的开发者区查看来源和接入边界。</span>
             </div>
           )}
         </ObjectColumn>
@@ -52,14 +52,14 @@ export function SkillsBoardView({ skills, plugins, projects }: SkillsBoardViewPr
                 <strong>{sourceLabel(source)}</strong>
                 <span>{scenarioLabel(source)}</span>
                 <div className="badge-row">
-                  <Badge tone="neutral">{items.length} 个 Skill</Badge>
+                  <Badge tone="neutral">{items.length} 个技能</Badge>
                 </div>
               </div>
             ))
           ) : (
             <div className="board-card muted-card">
               <strong>场景待补充</strong>
-              <span>没有可见 Skill 时不推断适用场景。</span>
+              <span>没有可见技能时不推断适用场景。</span>
             </div>
           )}
         </ObjectColumn>
@@ -67,12 +67,12 @@ export function SkillsBoardView({ skills, plugins, projects }: SkillsBoardViewPr
         <ObjectColumn title="最近使用" tone="unknown">
           <div className="board-card muted-card">
             <strong>暂无使用事件</strong>
-            <span>当前只知道哪些 Skill 可见；不知道最近由谁、在哪个项目里使用过。</span>
+            <span>当前只知道哪些技能可见；不知道最近由谁、在哪个项目里使用过。</span>
           </div>
           {pluginSkills.slice(0, 3).map((skill) => (
             <div className="board-card" key={skill.skill_id}>
               <strong>{skill.title}</strong>
-              <span>插件 Skill，可作为后续使用记录的候选对象。</span>
+              <span>插件技能，可作为后续使用记录的候选对象。</span>
               <div className="badge-row">
                 <Badge tone="unknown">未见最近使用</Badge>
               </div>
@@ -83,7 +83,7 @@ export function SkillsBoardView({ skills, plugins, projects }: SkillsBoardViewPr
         <ObjectColumn title="当前可用性" tone="unknown">
           <div className="board-card">
             <strong>{skills.length ? "可查看，未声明已加载" : "待配置"}</strong>
-            <span>这里不把可见 Skill 等同于已加载、已推荐或已绑定项目。</span>
+            <span>这里不把可见技能等同于已加载、已推荐或已绑定项目。</span>
             <div className="badge-row">
               <Badge tone="candidate">项目 {projectCount}</Badge>
               <Badge tone="unknown">使用关系待补</Badge>
@@ -157,9 +157,9 @@ function groupSkillsBySource(skills: SkillRecord[]) {
 }
 
 function sourceLabel(sourceType: string) {
-  if (sourceType === "plugin") return "插件 Skill";
-  if (sourceType === "system") return "系统 Skill";
-  if (sourceType === "user") return "本地 Skill";
+  if (sourceType === "plugin") return "插件技能";
+  if (sourceType === "system") return "系统技能";
+  if (sourceType === "user") return "本地技能";
   return "来源未知";
 }
 

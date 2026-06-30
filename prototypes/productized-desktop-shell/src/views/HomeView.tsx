@@ -83,7 +83,7 @@ export function HomeView({ snapshot, workflowState = null, onNavigate }: HomeVie
     ...snapshot.skills.slice(0, 1).map((skill) => ({
       key: skill.skill_id,
       label: skill.title,
-      meta: `Skill · ${skill.source_type}`,
+      meta: `技能 · ${skill.source_type}`,
       tone: "ok" as const,
       view: "skills" as const,
     })),
@@ -94,8 +94,8 @@ export function HomeView({ snapshot, workflowState = null, onNavigate }: HomeVie
     <div className="ink-home-stage home-ink-stage home-workbench-stage">
       {/* sr-only anchors required by offline interaction tests */}
       <p className="sr-only">最近项来自索引近似口径，不是真实使用事件。</p>
-      <p className="sr-only">Skill</p>
-      <p className="sr-only">Harness</p>
+      <p className="sr-only">技能</p>
+      <p className="sr-only">运行器</p>
       <p className="sr-only">运行中工作流</p>
       <button className="sr-only" type="button" onClick={() => onNavigate("agents")}>
         打开智能体
@@ -106,7 +106,7 @@ export function HomeView({ snapshot, workflowState = null, onNavigate }: HomeVie
           <p className="eyebrow">工作台 · 此刻</p>
           <h1>{actionCount ? `${actionCount} 件需要你看一眼` : "当前没有必须处理的阻断"}</h1>
           <p className="muted">
-            项目 {snapshot.summary.project_count} · 智能体 {snapshot.summary.session_count} · Skill {snapshot.summary.skill_count} · Harness {harnessCount}
+            项目 {snapshot.summary.project_count} · 智能体 {snapshot.summary.session_count} · 技能 {snapshot.summary.skill_count} · 运行器 {harnessCount}
           </p>
         </div>
         <div className="home-action-buttons" aria-label="待处理入口">
@@ -147,12 +147,12 @@ export function HomeView({ snapshot, workflowState = null, onNavigate }: HomeVie
         <div className="home-recent-grid">
           <HomeFeed rows={recentWorkRows} onNavigate={onNavigate} />
           <button className="home-entry-tile" type="button" onClick={() => onNavigate("skills")}>
-            <span>Skill</span>
+            <span>技能</span>
             <strong>{snapshot.summary.skill_count}</strong>
             <em>可复用能力</em>
           </button>
           <button className="home-entry-tile" type="button" onClick={() => onNavigate("harness")}>
-            <span>Harness</span>
+            <span>运行器</span>
             <strong>{harnessCount}</strong>
             <em>运行器资源</em>
           </button>

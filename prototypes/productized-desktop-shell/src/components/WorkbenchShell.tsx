@@ -185,7 +185,8 @@ function WorkbenchTopbar({
           <input
             value={query}
             onChange={(event) => onQueryChange(event.currentTarget.value)}
-            aria-label="跨项目、跨智能体、跨工作流检索"
+            placeholder="搜索"
+            aria-label="搜索"
           />
         </label>
         {topbarReviewCount > 0 ? (

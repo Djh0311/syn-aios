@@ -85,7 +85,7 @@ export function userFacingAgentError(rawError: string): AgentUserFacingError {
         : `没发出去：${humanReasons[0] ?? "安全边界阻断了这次发送"}。`;
     const nextStep =
       reasons.includes("manual_relay_denied_material_requested")
-        ? "删掉凭据、token、.codex、完整 transcript 或内部 prompt 相关请求后再发送；原始 reason 在“开发者详情”里。"
+        ? "删掉凭据、token、.codex、完整会话记录或内部提示词相关请求后再发送；原始 reason 在“开发者详情”里。"
         : "按提示修正目标或正文后再发送；原始 reason 在“开发者详情”里。";
     return { title, nextStep, raw };
   }

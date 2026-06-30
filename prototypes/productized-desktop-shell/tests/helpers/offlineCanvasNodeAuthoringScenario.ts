@@ -31,7 +31,7 @@ export function runCanvasNodeAuthoringScenario() {
   // A3 · a newly created node seeds a free payload with sensible defaults.
   const seeded = createNodeData("reviewer");
   assert(seeded.kind === "reviewer", "A3 新建节点应带自由 kind");
-  assert(seeded.status === "draft" && seeded.sandbox === "read-only", "A3 新建节点应有默认状态灯/沙箱");
+  assert(seeded.status === "草稿" && seeded.sandbox === "read-only", "A3 新建节点应有默认状态灯/沙箱");
 
   // A4 · the full free payload (kind/prompt/sandbox/status/custom fields) survives
   // the persist round-trip unchanged.
@@ -75,7 +75,7 @@ export function runCanvasNodeAuthoringScenario() {
   const legacyData = canvasNodeToData(legacy);
   assert(legacyData.kind === "director", "向后兼容：无 kind 的旧节点应回落到 role 作为 kind");
   assert(
-    legacyData.fields.length === 0 && legacyData.prompt === "" && legacyData.status === "draft",
+    legacyData.fields.length === 0 && legacyData.prompt === "" && legacyData.status === "草稿",
     "向后兼容：旧节点自由字段应默认空 / 默认状态",
   );
 

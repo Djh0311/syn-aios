@@ -254,7 +254,7 @@ export function RunningWorkflowsView({
                 <p className="empty-line">当前没有需要排队关注的运行项。</p>
               )}
             </div>
-            <p className="muted small-note">运行队列是派生读模型；重试、停止、恢复和重启都必须先进入确认，不会自动调用 runner。</p>
+            <p className="muted small-note">运行队列是派生读模型；重试、停止、恢复和重启都必须先进入确认，不会自动调用运行器。</p>
           </section>
 
           <DailyMemoryCandidateInbox
@@ -399,7 +399,7 @@ export function RunningWorkflowsView({
               <SummaryTile label="等待确认" value={`${productCommandReadModel?.pending_decision_count ?? 0}`} hint="需要用户处理时进入待办" />
               <SummaryTile label="受控记录" value={`${productCommandReadModel?.running_attempt_count ?? 0}`} hint="不等于真实 Codex 自由运行" />
               <SummaryTile label="阻断" value={`${productCommandReadModel?.blocked_attempt_count ?? 0}`} hint="guard / diagnostics / duplicate 等边界" />
-              <SummaryTile label="最近状态" value={productAttemptStatusLabel(productCommandReadModel?.last_attempt_status)} hint="只读 read model 字段" />
+              <SummaryTile label="最近状态" value={productAttemptStatusLabel(productCommandReadModel?.last_attempt_status)} hint="只读读模型字段" />
               <SummaryTile label="失败" value={`${failureStopRetry?.failure_count ?? 0}`} hint="不会自动恢复或自动重试" />
               <SummaryTile label="读回异常" value={`${failureStopRetry?.readback_issue_count ?? 0}`} hint="未知 / 不可用不显示成 0" />
               <SummaryTile label="重新确认" value={failureStopRetry?.retry_requires_new_user_confirmation ? "需要" : "未要求"} hint="再次执行前需要用户确认" />
@@ -424,10 +424,10 @@ export function RunningWorkflowsView({
             <details className="project-dev-details">
               <summary>开发者详情：统一命令读模型</summary>
               <div className="running-summary-grid compact">
-                <SummaryTile label="store revision" value={`${productCommandReadModel?.store_revision ?? 0}`} hint="sidecar 修订" />
-                <SummaryTile label="sidecar path" value={productCommandReadModel?.sidecar_path ? pathTail(productCommandReadModel.sidecar_path) : "未生成"} hint="完整路径不铺普通首屏" />
-                <SummaryTile label="legacy entry" value={productEntryStatusLabel(productCommandReadModel?.legacy_entry_status)} hint="旧入口封口状态" />
-                <SummaryTile label="runner entry" value={productEntryStatusLabel(productCommandReadModel?.runner_entry_status)} hint="runner 边界状态" />
+                <SummaryTile label="存储版本" value={`${productCommandReadModel?.store_revision ?? 0}`} hint="边车修订" />
+                <SummaryTile label="边车路径" value={productCommandReadModel?.sidecar_path ? pathTail(productCommandReadModel.sidecar_path) : "未生成"} hint="完整路径不铺普通首屏" />
+                <SummaryTile label="旧入口" value={productEntryStatusLabel(productCommandReadModel?.legacy_entry_status)} hint="旧入口封口状态" />
+                <SummaryTile label="运行器入口" value={productEntryStatusLabel(productCommandReadModel?.runner_entry_status)} hint="运行器边界状态" />
                 {failureStopRetryItems.map((item) => (
                   <SummaryTile
                     label={item.kind}
@@ -603,7 +603,7 @@ function RunningCanvasWorkspaceLayout({
   activeNodeId: string | null;
   activeDetail: ProjectCanvasNodeDetail | null;
   canvasMode: CanvasMode;
-  onSelectNode: (nodeId: string) => void;
+  onSelectNode: (nodeId: string | null) => void;
   onSelectMode: (mode: CanvasMode) => void;
 }) {
   return (

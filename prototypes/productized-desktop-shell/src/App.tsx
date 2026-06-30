@@ -11,6 +11,7 @@ import {
   captureMemoryEvent,
   createMemoryCandidateFromObservation,
   createProjectConsultationProposal,
+  runProjectConsultation,
   createTaskDraft,
   createMemoryCandidate,
   generateStageCAcceptanceSummary,
@@ -64,6 +65,11 @@ import {
   browserPreviewSnapshot,
   browserPreviewTranscript,
 } from "./lib/browserPreviewSnapshot";
+import {
+  browserPreviewPlanAuthorizationStore,
+  browserPreviewProposalStore,
+  browserPreviewWorkflowState,
+} from "./lib/browserPreviewWorkflowState";
 import { emptySnapshot } from "./lib/emptySnapshot";
 import { loadWorkbenchSnapshotFromPageQueries } from "./lib/pageReadModelRuntime";
 import { deriveSecretaryContext } from "./lib/secretaryReadModel";
@@ -137,7 +143,9 @@ export function App() {
     setError(false);
     if (browserPreviewEnabled) {
       setSnapshot(browserPreviewSnapshot);
-      setWorkflowState(null);
+      setWorkflowState(browserPreviewWorkflowState);
+      setPlanAuthorizationStore(browserPreviewPlanAuthorizationStore);
+      setProjectConsultationProposalStore(browserPreviewProposalStore);
       setNotice("浏览器预览模式：使用示例会话数据；真实读取和发送请用 Tauri 桌面壳。");
       return;
     }
@@ -155,7 +163,9 @@ export function App() {
 
   async function reloadWorkflowState() {
     if (browserPreviewEnabled) {
-      setWorkflowState(null);
+      setWorkflowState(browserPreviewWorkflowState);
+      setPlanAuthorizationStore(browserPreviewPlanAuthorizationStore);
+      setProjectConsultationProposalStore(browserPreviewProposalStore);
       setWorkflowStateError(null);
       setWorkflowStateLoading(false);
       return;
@@ -416,6 +426,14 @@ export function App() {
         const result = await createProjectConsultationProposal(pendingAction.projectConsultationProposalCreation);
         await reloadCandidateStores();
         setNotice(`项目咨询方案草案已创建：${result.proposal.status}；等待用户确认，不会启动真实工作者。`);
+      } else if (pendingAction.kind === "run-project-consultation") {
+        if (!pendingAction.runProjectConsultation) {
+          throw new Error("AI 出方案缺少目标请求对象");
+        }
+        // 真 codex 只读咨询（异步·可能耗时数分钟）→ 写一份待确认方案；不自动确认（人闸守住）。
+        const proposal = await runProjectConsultation(pendingAction.runProjectConsultation);
+        await reloadCandidateStores();
+        setNotice(`AI 已出方案：${proposal.status}；请在方案授权卡里审阅、确认或要求修改，本轮未启动真实工作者。`);
       } else if (pendingAction.kind === "record-project-consultation-proposal-decision") {
         if (!pendingAction.projectConsultationProposalDecision) {
           throw new Error("项目咨询方案决定缺少待写入对象");
@@ -493,10 +511,10 @@ export function App() {
         setSnapshot(nextSnapshot);
         await reloadWorkflowState();
         setNotice(
-          `项目自动编排 Level A 已记录：${result.plan.run_units.length} 个 run unit；状态 ${result.status}；未发送 prompt、未执行真实 Codex。`,
+          `项目自动编排 Level A 已记录：${result.plan.run_units.length} 个 run unit；状态 ${result.status}；未发送提示词、未执行真实 Codex。`,
         );
       } else if (pendingAction.kind === "record-k3-b1-manual-recovery-submission") {
-        setNotice("K3-B1 手动回交路径已进入待主管线复核提示；L1 不执行真实 Codex、不发送 prompt、不自动接受成功。");
+        setNotice("K3-B1 手动回交路径已进入待主管线复核提示；L1 不执行真实 Codex、不发送提示词、不自动接受成功。");
       } else if (pendingAction.kind === "request-k3-b1-renewed-risk-approval") {
         setNotice("K3-B1 重新授权申请只进入待安全审查提示；L1 不继承旧授权、不启动 retry、不解锁 K3-B2。");
       } else if (pendingAction.kind === "record-operation-control-decision") {
@@ -676,10 +694,21 @@ export function App() {
           memoryLintStore,
           memoryEntityRelationStore,
           memoryPatternStore,
-          onPreviewTaskMemoryPacket: previewTaskMemoryPacket,
-          onPreviewProjectDirectorTaskPlan: previewProjectDirectorTaskPlan,
-          onPreviewFormalMemoryLifecycle: previewFormalMemoryLifecycleOperation,
-          onPreviewMemoryEntityRelationCandidates: previewMemoryEntityRelationCandidates,
+          // 浏览器预览（无 Tauri）下，这些预览回调底层会同步抛 ensureTauriRuntime 错误；
+          // 画布视图在挂载时会自动触发任务包 / 拆任务预览，会把首屏炸到错误边界。
+          // 预览模式改成返回 rejected promise，调用方 .catch 会把它当成「预览不可用」的内联提示，不崩。
+          onPreviewTaskMemoryPacket: browserPreviewEnabled
+            ? () => Promise.reject(new Error("浏览器预览模式：任务包记忆预览需用 Tauri 桌面壳。"))
+            : previewTaskMemoryPacket,
+          onPreviewProjectDirectorTaskPlan: browserPreviewEnabled
+            ? () => Promise.reject(new Error("浏览器预览模式：拆任务预览需用 Tauri 桌面壳。"))
+            : previewProjectDirectorTaskPlan,
+          onPreviewFormalMemoryLifecycle: browserPreviewEnabled
+            ? () => Promise.reject(new Error("浏览器预览模式：记忆生命周期预览需用 Tauri 桌面壳。"))
+            : previewFormalMemoryLifecycleOperation,
+          onPreviewMemoryEntityRelationCandidates: browserPreviewEnabled
+            ? () => Promise.reject(new Error("浏览器预览模式：记忆实体关系预览需用 Tauri 桌面壳。"))
+            : previewMemoryEntityRelationCandidates,
         })}
     </WorkbenchShell>
   );

@@ -388,6 +388,9 @@ pub(crate) fn map_consultation_to_c1_input(
     proposal: &ConsultationProposal,
     project_root: &str,
     actor_id: &str,
+    // 件 D 修：把方案打上当前工作流标签（前端方案卡按 project_id/workflow_id 严格过滤；不打标签 → 显不出来、下游授权/自动推进也连不上）。
+    project_id: Option<&str>,
+    workflow_id: Option<&str>,
 ) -> CreateProjectConsultationProposalInput {
     let head: String = proposal.goal_summary.trim().chars().take(40).collect();
     let title = if head.is_empty() {
@@ -423,8 +426,8 @@ pub(crate) fn map_consultation_to_c1_input(
     };
     CreateProjectConsultationProposalInput {
         project_root: project_root.to_string(),
-        project_id: None,
-        workflow_id: None,
+        project_id: project_id.map(|value| value.to_string()),
+        workflow_id: workflow_id.map(|value| value.to_string()),
         title,
         user_goal: proposal.user_goal.clone(),
         goal_summary: proposal.goal_summary.clone(),
@@ -460,9 +463,10 @@ pub(crate) struct RunProjectConsultationRequest {
     pub(crate) goal: String,
     #[serde(default)]
     pub(crate) actor_id: Option<String>,
-    // workflow_id 保留（前端请求形）：方案在 prepare 阶段才绑 workflow，本命令出方案不用它（故 allow dead_code）。
+    // 件 D 修：方案打上当前工作流标签（前端已有 project_id/workflow_id，传进来）；否则前端方案卡过滤掉看不到、下游授权/自动推进也连不上。
     #[serde(default)]
-    #[allow(dead_code)]
+    pub(crate) project_id: Option<String>,
+    #[serde(default)]
     pub(crate) workflow_id: Option<String>,
 }
 
@@ -473,13 +477,15 @@ fn run_project_consultation_inner(
     project_root: &str,
     goal: &str,
     actor_id: &str,
+    project_id: Option<&str>,
+    workflow_id: Option<&str>,
 ) -> Result<ProjectConsultationProposal, String> {
     // 1. 装配 ProjectContext（注入策展文档正文·tier-1）。
     let ctx = load_project_context(project_root)?;
     // 2. 咨询 LM 出方案（结构性只读·readonly_codex_consult·不碰执行闸）。
     let proposal = consultant.consult(&ctx, goal)?;
     // 3. 映射进 C1 输入。
-    let input = map_consultation_to_c1_input(&proposal, project_root, actor_id);
+    let input = map_consultation_to_c1_input(&proposal, project_root, actor_id, project_id, workflow_id);
     // 4. 写进方案 store（status=PendingUserConfirmation·**不自动确认**·等用户走方案授权）。
     let write_id = format!("run-project-consultation:{}", unix_timestamp_nanos());
     let output = project_consultation_proposal_store::create_proposal(
@@ -510,6 +516,8 @@ async fn run_project_consultation(
             &request.project_root,
             &request.goal,
             &actor_id,
+            request.project_id.as_deref(),
+            request.workflow_id.as_deref(),
         )
     })
     .await

@@ -41,7 +41,7 @@ const operationSpecs: SessionOperationSpec[] = [
     reads_full_transcript: false,
     requires_model_access: true,
     requires_runtime_handle: false,
-    audit_requirement: "必须绑定 work item、prompt 预览、权限信封、结构化 command plan、attempt、readback 和失败审计。",
+    audit_requirement: "必须绑定 work item、提示词预览、权限信封、结构化 command plan、attempt、readback 和失败审计。",
     unavailable_reason: "H3.1 只实现新会话 request / guard / permission envelope / no-op runner；真实 codex exec 新会话未授权。",
     future_task_hint: "H3-B 需单独冻结 fixture、权限信封、真实执行范围、readback 和 /Users/yoyi/.codex 读写授权。",
     warnings: [
@@ -66,7 +66,7 @@ const operationSpecs: SessionOperationSpec[] = [
     reads_full_transcript: false,
     requires_model_access: true,
     requires_runtime_handle: false,
-    audit_requirement: "必须定义 prompt 预览、用户确认、执行记录、readback 和失败处理审计。",
+    audit_requirement: "必须定义提示词预览、用户确认、执行记录、readback 和失败处理审计。",
     unavailable_reason: "会话中心仍是只读历史浏览器；发送路径、权限和 readback 尚未单独定义。",
     future_task_hint: "E3 或后续任务需定义 adapter runner、用户确认、审计、写入范围和失败恢复。",
     warnings: ["requires_future_authorization_task", "no_session_operation_execution_in_e2"],
@@ -123,7 +123,7 @@ const operationSpecs: SessionOperationSpec[] = [
     reads_full_transcript: false,
     requires_model_access: true,
     requires_runtime_handle: false,
-    audit_requirement: "必须绑定会话校验、prompt 预览、权限、超时、运行日志和 readback 审计。",
+    audit_requirement: "必须绑定会话校验、提示词预览、权限、超时、运行日志和 readback 审计。",
     unavailable_reason: "workflow dispatch 的受控 resume 属于项目工作流语境，不等于会话中心通用 resume。",
     future_task_hint: "后续任务需决定是否复用 workflow dispatch 或建立单独 session adapter runner。",
     warnings: [

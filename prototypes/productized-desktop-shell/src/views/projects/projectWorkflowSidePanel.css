@@ -9,6 +9,45 @@
   overflow: visible;
 }
 
+/* 件 D · 人话呈现：方案授权 / 一键自动推进卡顶部的「人话」摘要——一等内容，视觉比下方原始字段更突出。 */
+.role-loop-plain {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(35, 108, 104, 0.26);
+  border-left: 3px solid var(--accent, #236c68);
+  border-radius: 8px;
+  background: rgba(35, 108, 104, 0.06);
+}
+
+.role-loop-plain-lead {
+  margin: 0;
+  color: var(--ink-deep);
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 13.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.role-loop-plain-note {
+  margin: 0;
+  color: var(--ink-mid);
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.role-loop-plain-note strong {
+  color: var(--warning, #9b4a18);
+  font-weight: 600;
+}
+
+/* 一键自动推进卡：主路径，左缘高亮一下与下方手动挡区分。 */
+.role-loop-auto-advance {
+  border-left: 3px solid var(--accent, #236c68);
+}
+
 .project-side-primary {
   display: grid;
   align-content: start;

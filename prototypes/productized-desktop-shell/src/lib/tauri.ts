@@ -15,6 +15,12 @@ import type {
   ProjectWorkflowChainStopRequest,
   ProjectWorkflowChainRunResult,
   ProjectWorkflowChainStatus,
+  StartProjectDirectorChainRequest,
+  DirectorChainOutcome,
+  RunProjectConsultationRequest,
+  AutoAdvanceAuthorizedRoleLoopRequest,
+  AutoAdvanceRoleLoopOutcome,
+  ProjectConsultationProposal,
   ProjectWorkflowListItem,
   SubmitProjectWorkflowDraftRequest,
   WorkflowTemplate,
@@ -817,6 +823,32 @@ export function getProjectWorkflowChainStatus(
     projectRoot,
     workflowId,
   });
+}
+// C1 主管链：起整条主管链（收前端回传的已审 planned_tasks·后端 spawn_blocking 调 run_director_task_chain）。
+// 停/进度复用上面的 stopProjectWorkflowChain / getProjectWorkflowChainStatus（主管链建同种链记录）。
+export function startProjectDirectorChain(
+  request: StartProjectDirectorChainRequest,
+): Promise<DirectorChainOutcome> {
+  ensureTauriRuntime();
+  return invoke<DirectorChainOutcome>("start_project_director_chain", { request });
+}
+
+// 件 A · 接咨询 LM（出方案自动化）：目标 → 真 codex 只读咨询 → 写一份 PendingUserConfirmation 方案（不自动确认·人闸守住）。
+// 异步长耗时（真 codex），前端只造请求 + 发；返回新建的方案（同 ProjectConsultationProposal 形）。
+export function runProjectConsultation(
+  request: RunProjectConsultationRequest,
+): Promise<ProjectConsultationProposal> {
+  ensureTauriRuntime();
+  return invoke<ProjectConsultationProposal>("run_project_consultation", { request });
+}
+
+// 件 B · 授权后自动推进（核心·步骤塌缩）：前提 = 已有 active 授权；一下串 拆任务→prepare→worker 链跑。
+// 前端只造请求 + 发，闸在后端（path-lock 圈测试项目·无 active 授权后端拒）；按 outcome.stage 分支展示。
+export function autoAdvanceAuthorizedRoleLoop(
+  request: AutoAdvanceAuthorizedRoleLoopRequest,
+): Promise<AutoAdvanceRoleLoopOutcome> {
+  ensureTauriRuntime();
+  return invoke<AutoAdvanceRoleLoopOutcome>("auto_advance_authorized_role_loop", { request });
 }
 
 // P3 E · 多工作流底座（架构 §12）。

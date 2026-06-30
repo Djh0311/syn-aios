@@ -1,7 +1,7 @@
 import { emptySnapshot } from "./emptySnapshot";
 import type { CodexSessionPage, CodexSessionPageRequest, CodexTranscript, ProjectRecord, SessionRecord, WorkbenchSnapshot } from "./types";
 
-const previewProjectRoot = "/Users/yoyi/workspace/product-line/prototypes/productized-desktop-shell";
+export const previewProjectRoot = "/Users/yoyi/workspace/product-line/prototypes/productized-desktop-shell";
 const previewUpdatedAt = Date.parse("2026-06-19T10:00:00.000Z");
 
 const previewProject: ProjectRecord = {

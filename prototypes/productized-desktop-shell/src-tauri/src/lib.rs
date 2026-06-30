@@ -4597,7 +4597,7 @@ mod tests {
             .expect("stub 咨询");
         assert!(!proposal.goal_summary.is_empty());
         // 映射进 C1 输入
-        let input = map_consultation_to_c1_input(&proposal, &project_root, "consultant-fixture");
+        let input = map_consultation_to_c1_input(&proposal, &project_root, "consultant-fixture", None, None);
         assert!(
             matches!(
                 input.created_by_role,
@@ -4643,6 +4643,8 @@ mod tests {
             &project_root,
             "这个项目下一步该做什么?",
             "tester",
+            None,
+            None,
         )
         .expect("咨询出方案应写进 store");
         assert!(!proposal.proposal_id.is_empty(), "应建出方案");
@@ -4682,7 +4684,7 @@ mod tests {
         let state_dir = test_temp_dir("p2-consult-readonly-state");
         let path = state_dir.join("workflow-state.v0.json");
         bootstrap_project_workflow_at(&path, &fixture_project(&project_root)).expect("workflow");
-        run_project_consultation_inner(&path, &StubConsultant, &project_root, "下一步?", "tester")
+        run_project_consultation_inner(&path, &StubConsultant, &project_root, "下一步?", "tester", None, None)
             .expect("咨询出方案");
         let value = read_workflow_state_value(&path).expect("state readable");
         let empty = |key: &str| {
@@ -4789,7 +4791,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             !proposal.goal_summary.trim().is_empty() && !proposal.reasoning.is_empty(),
             "答案应落地非空"
         );
-        let input = map_consultation_to_c1_input(&proposal, project, "consultant");
+        let input = map_consultation_to_c1_input(&proposal, project, "consultant", None, None);
         assert!(!input.proposed_steps.is_empty(), "产出应喂得进 C1");
     }
 
@@ -4811,6 +4813,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             project,
             "红队 19 条说全收口，抽查开发计划 M0，有没有红队点了、开发计划没接的?",
             "user-fixture",
+            None,
+            None,
         )
         .expect("一个命令应把目标→AI 出方案跑通");
         println!(

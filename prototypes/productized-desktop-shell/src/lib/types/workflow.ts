@@ -314,6 +314,64 @@ export type ProjectDirectorTaskPlan = {
   warnings: string[];
 };
 
+// C1 主管链起链命令（逐字对 Rust director_agent.rs 的 StartProjectDirectorChainRequest / DirectorChainOutcome）。
+// planned_tasks 必须传 prepare 返回的「已审·status==prepared」那份——传 preview 会被后端 B1 filter 全跳成空链。
+export type StartProjectDirectorChainRequest = {
+  project_root: string;
+  workflow_id: string;
+  planned_tasks: ProjectDirectorPlannedTask[];
+  max_nodes?: number;
+};
+
+export type DirectorChainStep = {
+  planned_task_id: string;
+  title: string;
+  state: string;
+};
+
+export type DirectorChainOutcome = {
+  total: number;
+  dispatched: number;
+  completed: number;
+  skipped: number;
+  chain_run_id: string;
+  steps: DirectorChainStep[];
+  warnings: string[];
+  stopped_reason: string | null;
+};
+
+// 件 A · 接咨询 LM（出方案自动化）。逐字对 Rust consultant_agent.rs 的 RunProjectConsultationRequest。
+// 出方案 = 真 codex 只读咨询（异步·长耗时）→ 后端写一份 status=PendingUserConfirmation 的方案（不自动确认）。
+export type RunProjectConsultationRequest = {
+  project_root: string;
+  goal: string;
+  actor_id?: string;
+  // 件 D 修：方案要打上当前工作流标签（否则前端方案卡按 project_id/workflow_id 严格过滤会看不到、下游授权也连不上）。
+  project_id?: string;
+  workflow_id?: string;
+};
+
+// 件 B · 授权后自动推进。逐字对 Rust director_agent.rs 的 AutoAdvanceAuthorizedRoleLoopRequest / AutoAdvanceRoleLoopOutcome。
+// 前提 = 该工作流已有 active 授权（方案授权 + 边界复核都过）；前端只造请求 + 发，闸在后端 path-lock。
+export type AutoAdvanceAuthorizedRoleLoopRequest = {
+  project_root: string;
+  workflow_id: string;
+  max_nodes?: number;
+  actor_id?: string;
+};
+
+export type AutoAdvanceRoleLoopOutcome = {
+  // "ran" | "needs_binding" | "blocked" | "no_dispatchable"
+  stage: string;
+  planned_task_count: number;
+  prepared_count: number;
+  needs_binding_count: number;
+  blocked_count: number;
+  message: string;
+  chain_outcome: DirectorChainOutcome | null;
+  stop_reason: string | null;
+};
+
 export type PreviewProjectDirectorTaskPlanInput = {
   project_root: string;
   project_id: string;
@@ -1516,6 +1574,7 @@ export type PathActionKind =
   | "run-memory-maintenance"
   | "record-mature-pattern-decision"
   | "create-project-consultation-proposal"
+  | "run-project-consultation"
   | "record-project-consultation-proposal-decision"
   | "record-global-boundary-review"
   | "prepare-authorized-auto-dispatch"
@@ -1577,6 +1636,7 @@ export type PendingAction = {
   maturePatternDecision?: RecordMaturePatternDecisionInput;
   maturePatternCandidate?: MaturePatternCandidate;
   projectConsultationProposalCreation?: CreateProjectConsultationProposalInput;
+  runProjectConsultation?: RunProjectConsultationRequest;
   projectConsultationProposalDecision?: RecordProjectConsultationProposalDecisionInput;
   projectConsultationProposalPreview?: {
     title: string;

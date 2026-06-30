@@ -1,35 +1,26 @@
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { Badge } from "../../components/Badge";
-import { projectWorkflowCanvasBoundary } from "../../lib/canvasSurfaceBoundaries";
 import type { ProjectCanvasNode, ProjectWorkflowCanvasReadModel } from "../../lib/projectCanvas";
 import type {
   TaskPackage,
   WorkflowStateSnapshot,
 } from "../../lib/types";
 import {
-  ProjectCanvasAttentionPanel,
-  ProjectCanvasEditBoundaryPanel,
-  ProjectCanvasSurfaceBoundaryPanel,
   badgeToneForCanvasStatus,
   type ProjectWorkflowCanvasSidePanelProps,
 } from "./ProjectWorkflowCanvasView";
 import {
   GlobalBoundaryReviewCard,
-  PlanAuthorizationSummaryCard,
   ProjectConsultationProposalCard,
   ProjectDirectorTaskPlanCard,
+  AutoAdvanceRoleLoopButton,
 } from "./ProjectWorkflowGovernancePanels";
 import {
-  CandidateGovernanceStrip,
-} from "./ProjectWorkflowMemoryPanels";
-import {
-  ProjectUnifiedExecutionStateCard,
   WorkItemOrchestrationCard,
 } from "./ProjectWorkflowExecutionPanels";
 import { ProjectCanvasDetailLine } from "./ProjectCanvasDetailPrimitives";
-import { ProjectCanvasDerivedSummary } from "./ProjectWorkflowDerivedPanels";
-import { K3B1RecoveryCard } from "./ProjectWorkflowRecoveryPanels";
-import { WorkflowRunCheckDetails, WorkflowRunCheckPanel } from "./ProjectWorkflowRunCheckPanel";
+import { WorkflowRunCheckDetails } from "./ProjectWorkflowRunCheckPanel";
 import {
   stateLabel,
 } from "./projectWorkflowLabels";
@@ -79,62 +70,68 @@ export function ProjectCanvasSidePanel({
   onOpenAgentSession,
   onInspectWorkflowRunCheck,
 }: ProjectWorkflowCanvasSidePanelProps) {
-  const selectedNode = canvasModel.nodes.find((node) => node.node_id === selectedNodeId) ?? canvasModel.nodes[0] ?? null;
-  const detail = selectedNode ? canvasModel.detail_panels[selectedNode.detail_panel_id] : null;
-  const emptyWorkflowPanel = (
-    <section className="project-canvas-detail-card">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">缺少项目工作流</p>
-          <h3>只显示空画布占位</h3>
-        </div>
-        <Badge tone="warning">未创建</Badge>
-      </div>
-      <p className="muted small-note">创建默认工作流会写工作台自己的工作流状态；不会写 Codex 状态库。</p>
-      <div className="workflow-state-actions">
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={() =>
-            onRequestAction({
-              kind: "bootstrap-project-workflow",
-              label: "创建项目默认工作流草稿",
-              path: project.project_root,
-              source: "索引内项目路径",
-              boundary:
-                "给工作台自己的 workflow-state.v0.json 写入项目、workflow、默认节点、默认边和 audit；不写 .codex、不写 Codex 状态库、不写项目业务目录。",
-            })
-          }
-        >
-          创建默认工作流草稿
-        </button>
-      </div>
-    </section>
-  );
+  // 全局「显示开发者细节」开关：默认关（侧栏带 hide-dev-detail 类，靠 CSS display:none 隐藏所有 agent-boundary-details）。
+  // 用 CSS 隐藏而非条件渲染——折叠内容仍在 renderToStaticMarkup 输出里，离线断言照数得到。
+  const [showDevDetail, setShowDevDetail] = useState(false);
 
   return (
-    <aside className="project-canvas-side-panel" aria-label="节点详情和项目工作流控制">
-      <section className="project-side-primary" aria-label="主要工作流信息">
-        {detail ? <ProjectCanvasNodeDetailView detail={detail} node={selectedNode} /> : null}
-        {/* D·统一执行状态卡偏诊断/治理深，整卡默认收起折叠（仍在 markup 里，离线断言照过）。 */}
-        <ProjectSidePanelFold title="统一执行状态" description="运行态 / 自动化 / 真执行命令（诊断，默认收起）">
-          <ProjectUnifiedExecutionStateCard
+    <aside
+      className={`project-canvas-side-panel${showDevDetail ? "" : " hide-dev-detail"}`}
+      aria-label="节点详情和项目工作流控制"
+    >
+      <label className="project-side-dev-detail-toggle">
+        <input
+          type="checkbox"
+          checked={showDevDetail}
+          onChange={(event) => setShowDevDetail(event.currentTarget.checked)}
+        />
+        显示开发者细节
+      </label>
+      {/* 节点详情已挪到画布节点旁的小面板（ProjectWorkflowCanvasView 的 NodeToolbar / 静态舞台），抽屉只剩工作流详情。 */}
+
+      {/* 砍一波（细调）：角色循环主线（方案与授权）= 常驻一等、置顶摊开（说目标→出方案→审→批→一键自动推进）。
+          节点详情常驻；工作项执行 / 事实与记忆 / 运行检查（含统一执行链路协议 dump）全默认收起、沉到下面。
+          一切只动「显隐 + 折叠层级」——内容仍在 markup 里，离线断言照过。 */}
+      <ProjectSidePanelSection title="方案与授权" description="说目标 → AI 出方案 → 你审 → 批 → 一键自动推进" defaultOpen={true}>
+        <ProjectConsultationProposalCard
+          project={project}
+          projectWorkflow={projectWorkflow}
+          selectedTask={selectedTask}
+          selectedTaskPackage={selectedTaskPackage}
+          summary={projectConsultationProposalSummary}
+          planAuthorizationRevision={planAuthorizationSummary.revision}
+          onRequestAction={onRequestAction}
+        />
+        {/* 件 D 核心：一键自动推进（方案授权生效后才出现）——主路径，放拆任务卡之上。 */}
+        <AutoAdvanceRoleLoopButton project={project} request={projectDirectorTaskPlanRequest} />
+        <ProjectDirectorTaskPlanCard
+          project={project}
+          request={projectDirectorTaskPlanRequest}
+          plan={projectDirectorTaskPlan}
+          loading={projectDirectorTaskPlanLoading}
+          error={projectDirectorTaskPlanError}
+          workflowRevision={workflowRevision}
+          onPreview={onPreviewProjectDirectorTaskPlan}
+          onRequestAction={onRequestAction}
+        />
+        {/* 全局边界复核偏治理深，默认收起折叠（文案被离线断言，折不删）。
+            方案授权摘要卡已裁掉（与拆任务计划 / 全局复核信息重叠）——展示层删除，组件定义保留。 */}
+        <ProjectSidePanelFold title="全局边界复核" description="授权 / 守卫 / 复核结论（治理深，默认收起）">
+          <GlobalBoundaryReviewCard
             project={project}
             projectWorkflow={projectWorkflow}
-            derivedWorkflow={derivedWorkflow}
-            selectedTask={selectedTask}
-            selectedTaskPackage={selectedTaskPackage}
-            runtimeSessionAttention={runtimeSessionAttention}
-            realExecutionProductCommands={realExecutionProductCommands}
-            projectWorkflowAutomation={projectWorkflowAutomation}
-            taskMemoryPacketPreview={taskMemoryPacketPreview}
-            taskMemoryPacketLoading={taskMemoryPacketLoading}
-            taskMemoryPacketError={taskMemoryPacketError}
-            workflowRevision={workflowRevision}
+            proposalSummary={projectConsultationProposalSummary}
+            planAuthorizationSummary={planAuthorizationSummary}
+            guardResult={autoDispatchGuardResult}
+            guardError={autoDispatchGuardError}
             onRequestAction={onRequestAction}
           />
         </ProjectSidePanelFold>
-        {selectedTask && projectWorkflow ? (
+      </ProjectSidePanelSection>
+
+      {/* 砍一波：工作项执行（派发 / 会话绑定 / C5汇报 / C6 / 回收 + 旧封存入口）= 当前最臃肿区，整段默认收起。 */}
+      {selectedTask && projectWorkflow ? (
+        <ProjectSidePanelSection title="工作项执行" description="派发 / 会话绑定 / 工作者汇报 / 总指导回收 / 下一步（默认收起）" defaultOpen={false}>
           <WorkItemOrchestrationCard
             project={project}
             projectId={projectId}
@@ -154,102 +151,9 @@ export function ProjectCanvasSidePanel({
             onRequestAction={onRequestAction}
             onOpenAgentSession={onOpenAgentSession}
           />
-        ) : null}
-      </section>
+        </ProjectSidePanelSection>
+      ) : null}
 
-      <ProjectSidePanelSection title="运行检查" description="恢复、关注、边界和 run check" defaultOpen={false}>
-        <K3B1RecoveryCard
-          recovery={k3B1Recovery}
-          projectRoot={project.project_root}
-          onRequestAction={onRequestAction}
-        />
-        <ProjectCanvasAttentionPanel canvasModel={canvasModel} />
-        {/* E·纯声明类（画布面边界 / 编辑边界）：其声明文案被离线断言可见
-            （shellDerivedWorkflowExpectedTexts：项目工作流画布 / 编辑 / 布局边界 …），按安全门不能真删，
-            折进默认收起折叠（仍在 markup 里，断言照过）。 */}
-        <ProjectSidePanelFold title="画布边界声明" description="画布面 / 编辑边界（纯声明，默认收起）">
-          <ProjectCanvasSurfaceBoundaryPanel boundary={projectWorkflowCanvasBoundary} />
-          <ProjectCanvasEditBoundaryPanel boundary={canvasModel.edit_boundary} />
-        </ProjectSidePanelFold>
-        {projectWorkflow ? (
-          <WorkflowRunCheckPanel
-            projectRoot={project.project_root}
-            workflowId={projectWorkflow.workflow_id}
-            derivedStatus={derivedWorkflow?.run_check_status ?? null}
-            onInspectWorkflowRunCheck={onInspectWorkflowRunCheck}
-          />
-        ) : emptyWorkflowPanel}
-      </ProjectSidePanelSection>
-
-      <ProjectSidePanelSection title="方案与授权" description="方案草案、全局复核和拆任务准备" defaultOpen={false}>
-        <ProjectConsultationProposalCard
-          project={project}
-          projectWorkflow={projectWorkflow}
-          selectedTask={selectedTask}
-          selectedTaskPackage={selectedTaskPackage}
-          summary={projectConsultationProposalSummary}
-          planAuthorizationRevision={planAuthorizationSummary.revision}
-          onRequestAction={onRequestAction}
-        />
-        {/* D·全局边界复核偏治理深，整卡默认收起折叠。 */}
-        <ProjectSidePanelFold title="全局边界复核" description="授权 / 守卫 / 复核结论（治理深，默认收起）">
-          <GlobalBoundaryReviewCard
-            project={project}
-            projectWorkflow={projectWorkflow}
-            proposalSummary={projectConsultationProposalSummary}
-            planAuthorizationSummary={planAuthorizationSummary}
-            guardResult={autoDispatchGuardResult}
-            guardError={autoDispatchGuardError}
-            onRequestAction={onRequestAction}
-          />
-        </ProjectSidePanelFold>
-        <ProjectDirectorTaskPlanCard
-          project={project}
-          request={projectDirectorTaskPlanRequest}
-          plan={projectDirectorTaskPlan}
-          loading={projectDirectorTaskPlanLoading}
-          error={projectDirectorTaskPlanError}
-          workflowRevision={workflowRevision}
-          onPreview={onPreviewProjectDirectorTaskPlan}
-          onRequestAction={onRequestAction}
-        />
-        {/* F·方案授权摘要与「拆任务计划 / 全局复核」重叠：其文案被离线断言可见（workflowCanvasWithDraftExpectedTexts），
-            按安全门「砍只在文案不在任何 ExpectedTexts 时」——这里在，故折不删，默认收起折叠。 */}
-        <ProjectSidePanelFold title="方案授权摘要" description="与拆任务计划 / 全局复核重叠，默认收起">
-          <PlanAuthorizationSummaryCard
-            summary={planAuthorizationSummary}
-            guardResult={autoDispatchGuardResult}
-            guardError={autoDispatchGuardError}
-          />
-        </ProjectSidePanelFold>
-      </ProjectSidePanelSection>
-
-      <ProjectSidePanelSection title="事实与记忆" description="派生工作流、候选记忆和黑板摘要" defaultOpen={false}>
-        {derivedWorkflow ? (
-          <ProjectCanvasDerivedSummary workflow={derivedWorkflow} selectedTaskPackage={selectedTaskPackage} />
-        ) : null}
-        <CandidateGovernanceStrip
-          project={project}
-          projectWorkflow={projectWorkflow}
-          selectedTaskPackage={selectedTaskPackage}
-          blackboard={projectBlackboard}
-          blackboardOverlay={blackboardOverlay}
-          observationSummary={observationSummary}
-          observationStoreRevision={observationStoreRevision}
-          observations={observations}
-          memorySummary={memorySummary}
-          formalSummary={formalSummary}
-          memoryLintSummary={memoryLintSummary}
-          memoryLintFindings={memoryLintFindings}
-          blackboardStoreRevision={blackboardStoreRevision}
-          memoryStoreRevision={memoryStoreRevision}
-          memoryCandidates={memoryCandidates}
-          taskMemoryPacketPreview={taskMemoryPacketPreview}
-          taskMemoryPacketLoading={taskMemoryPacketLoading}
-          taskMemoryPacketError={taskMemoryPacketError}
-          onRequestAction={onRequestAction}
-        />
-      </ProjectSidePanelSection>
     </aside>
   );
 }
@@ -317,64 +221,86 @@ function ProjectSidePanelFold({
   );
 }
 
-function ProjectCanvasNodeDetailView({ detail, node }: { detail: NonNullable<ProjectWorkflowCanvasReadModel["detail_panels"][string]>; node: ProjectCanvasNode | null }) {
+// 后端工作流引擎吐的机器警告码（snake_case，如 previous_state_closure_retest_timed_out、
+// legacy_workflow_node_dispatch_not_h5_unified_product_command）是英文噪音。用户定（2026-06-30 警告码处理=完全不显示）：
+// 节点详情一律不显示这些码。判据：值按分隔符切开后，每个 token 都是「全小写、含下划线」的机器码；
+// 中文内容、含中文的安全状态警告不命中，照常保留。
+function isMachineCodeValue(value: string): boolean {
+  const tokens = String(value).trim().split(/[;；,，\s]+/).filter(Boolean);
+  return tokens.length > 0 && tokens.every((token) => /^[a-z][a-z0-9_:]*$/.test(token) && token.includes("_"));
+}
+
+// 警告码隐掉后「用户摘要/节点状态」可能空，给一句始终都有的中文状态概况（按节点状态映射成人话）。
+function nodeStateHint(state: string): string {
+  const HINT: Record<string, string> = {
+    empty: "尚未配置",
+    idle: "空闲，等待派发",
+    draft: "草稿，待完善",
+    prepared: "已准备，待派发",
+    ready_to_dispatch: "待派发到运行器",
+    running: "正在执行",
+    waiting_for_permission: "等待授权批准",
+    needs_review: "等待复核",
+    retry_pending: "等待重试",
+    failed: "执行失败，需排查",
+    timed_out: "已超时，需重试或排查",
+    readback_unavailable: "结果读回不可用",
+    cancelled: "已取消",
+    ready_for_review: "待回收结果",
+    accepted: "已接受完成",
+    needs_changes: "需修改后继续",
+    paused: "已暂停",
+  };
+  return HINT[state] ?? `当前${stateLabel(state)}`;
+}
+
+export function ProjectCanvasNodeDetailView({ detail, node }: { detail: NonNullable<ProjectWorkflowCanvasReadModel["detail_panels"][string]>; node: ProjectCanvasNode | null }) {
   const layers = projectCanvasDetailLayers(detail);
-  const renderSection = (section: ProjectCanvasDetailSectionView) => (
-    <article className={`project-canvas-detail-section ${section.kind}`} key={section.section_id}>
-      <strong>{section.title}</strong>
-      {section.items.map((item) => (
-        <ProjectCanvasDetailLine item={item} key={item.item_id} />
-      ))}
-    </article>
-  );
+  const renderSection = (section: ProjectCanvasDetailSectionView) => {
+    const items = section.items
+      // 砍一波（按删画布详情那次的办法）：原始 ref（如 workflow node 长 ID）是日常噪音，隐掉。
+      // 用户定继续砍：当前节点(=头部重复)、当前状态(=徽章重复)、谁能处理(信息量低) 三行。
+      .filter((item) => !["当前节点", "当前状态", "谁能处理"].includes(String(item.label).trim()))
+      .filter((item) => !/^workflow:.*:node:/.test(String(item.value).trim()))
+      // 用户定（警告码处理=完全不显示）：后端 snake_case 机器警告码是英文噪音，节点详情一律隐掉；中文保留。
+      .filter((item) => !isMachineCodeValue(String(item.value)))
+      // 空 warning（warning: 无）也隐掉。
+      .filter(
+        (item) =>
+          !(
+            ["warning", "警告"].includes(String(item.label).trim().toLowerCase()) &&
+            ["", "无", "none", "-", "—"].includes(String(item.value).trim().toLowerCase())
+          ),
+      );
+    if (!items.length) return null;
+    return (
+      <article className={`project-canvas-detail-section ${section.kind}`} key={section.section_id}>
+        <strong>{section.title}</strong>
+        {items.map((item) => (
+          <ProjectCanvasDetailLine item={item} key={item.item_id} />
+        ))}
+      </article>
+    );
+  };
   return (
     <section className="project-canvas-detail-card node-detail-panel">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">节点详情</p>
           <h3>{detail.title}</h3>
-          {detail.summary ? <p className="path-text">{detail.summary}</p> : null}
+          {/* 精简：去掉重复的 summary（多是节点 kind，如 director——和标题/徽章重复）。 */}
         </div>
         <Badge tone={badgeToneForCanvasStatus(node?.status ?? "unknown")}>{node ? stateLabel(node.status) : "未知"}</Badge>
       </div>
+      {/* 用户定（2026-06-30）：警告码隐掉后「用户摘要/节点状态」可能空，补一句始终都有的中文状态概况。 */}
+      {node ? <p className="node-detail-summary">{nodeStateHint(node.status)}</p> : null}
+      {/* 砍一波（拍平）：节点详情只剩「用户摘要」一层，去掉层 <details> 包裹 + 层标题 +「节点详情·更多」折叠，
+          直接把 user_summary 的 primary section 行（为什么停下 / 下一步 …）渲染出来。节点详情 = 头部 + 直接几行 + warnings。 */}
       <div className="project-canvas-detail-layers">
-        {layers.map((layer) => {
-          const primarySections = layer.sections.filter(isNodeDetailPrimarySection);
-          const moreSections = layer.sections.filter((section) => !isNodeDetailPrimarySection(section));
-          return (
-            <details className={`project-canvas-detail-layer ${layer.layer}`} key={layer.layer} open={layer.defaultOpen}>
-              <summary>
-                <span>{detailLayerTitle(layer.layer)}</span>
-                <em>{detailLayerDescription(layer.layer)}</em>
-              </summary>
-              <div className="project-canvas-detail-sections">
-                {primarySections.map(renderSection)}
-                {moreSections.length ? (
-                  <details className="project-canvas-detail-more">
-                    <summary>
-                      <span>节点详情·更多</span>
-                      <em>知识库 / 工具 / 验收 / 审查要求 / harness（默认收起）</em>
-                    </summary>
-                    <div className="project-canvas-detail-sections">
-                      {moreSections.map(renderSection)}
-                    </div>
-                  </details>
-                ) : null}
-              </div>
-            </details>
-          );
-        })}
+        {layers.flatMap((layer) => layer.sections.filter(isNodeDetailPrimarySection)).map(renderSection)}
       </div>
-      <div className="project-canvas-actions" aria-label="节点允许动作">
-        {detail.allowed_actions.map((action) => (
-          <span className={action.enabled ? "enabled" : "disabled"} key={action.action_id} title={action.boundary}>
-            {action.label}
-            {action.requires_confirmation ? " / 需确认弹层" : " / 只读"}
-            {!action.enabled && action.disabled_reason ? `：${action.disabled_reason}` : ""}
-          </span>
-        ))}
-      </div>
-      {detail.warnings.map((warning) => (
+      {/* 用户定（警告码处理=完全不显示）：隐掉后端 snake_case 机器警告码；含中文的安全状态警告仍保留。 */}
+      {detail.warnings.filter((warning) => !isMachineCodeValue(warning)).map((warning) => (
         <p className="state-warning" key={warning}>{warning}</p>
       ))}
     </section>
@@ -384,7 +310,8 @@ function ProjectCanvasNodeDetailView({ detail, node }: { detail: NonNullable<Pro
 type ProjectCanvasDetailSectionView = NonNullable<ProjectWorkflowCanvasReadModel["detail_panels"][string]>["sections"][number];
 
 function projectCanvasDetailLayers(detail: NonNullable<ProjectWorkflowCanvasReadModel["detail_panels"][string]>) {
-  const layerOrder: Array<ProjectCanvasDetailSectionView["layer"]> = ["user_summary", "project_director", "technical_details"];
+  // 砍一波（用户定）：项目主管信息 / 技术详情两整层砍掉，节点详情只留「用户摘要」。
+  const layerOrder: Array<ProjectCanvasDetailSectionView["layer"]> = ["user_summary"];
   return layerOrder
     .map((layer) => {
       const sections = detail.sections.filter((section) => section.layer === layer);
@@ -395,16 +322,4 @@ function projectCanvasDetailLayers(detail: NonNullable<ProjectWorkflowCanvasRead
       };
     })
     .filter((layer) => layer.sections.length);
-}
-
-function detailLayerTitle(layer: ProjectCanvasDetailSectionView["layer"]) {
-  if (layer === "user_summary") return "用户摘要";
-  if (layer === "project_director") return "项目主管信息";
-  return "技术详情";
-}
-
-function detailLayerDescription(layer: ProjectCanvasDetailSectionView["layer"]) {
-  if (layer === "user_summary") return "状态、原因、下一步";
-  if (layer === "project_director") return "任务包、记忆、权限、读回";
-  return "来源引用、审计、证据、交接";
 }

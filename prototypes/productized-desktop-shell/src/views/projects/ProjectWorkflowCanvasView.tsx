@@ -5,6 +5,7 @@ import {
   Handle,
   MarkerType,
   MiniMap,
+  NodeToolbar,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -80,6 +81,7 @@ import type {
   WorkflowStateSnapshot,
 } from "../../lib/types";
 import { selectedTaskDraftFor } from "./ProjectWorkspaceShell";
+import { ProjectCanvasNodeDetailView } from "./ProjectWorkflowSidePanel";
 
 export type ProjectWorkflowCanvasSidePanelProps = {
   canvasModel: ProjectWorkflowCanvasReadModel;
@@ -150,6 +152,9 @@ type ProjectWorkflowCanvasViewProps = {
   onPreviewProjectDirectorTaskPlan?: (request: PreviewProjectDirectorTaskPlanInput) => Promise<ProjectDirectorTaskPlan>;
   initialTaskMemoryPacketPreview?: TaskMemoryPacketBuildOutput | null;
   renderSidePanel: (props: ProjectWorkflowCanvasSidePanelProps) => ReactNode;
+  // 把画布编辑态上报给宿主（顶部「返回项目」据此切到「返回」）+ 暴露退出编辑入口供顶部按钮调用。
+  onEditingChange?: (editing: boolean) => void;
+  exitEditingRef?: RefObject<(() => void) | null>;
 };
 
 export function ProjectWorkflowCanvasView({
@@ -177,6 +182,8 @@ export function ProjectWorkflowCanvasView({
   onPreviewProjectDirectorTaskPlan,
   initialTaskMemoryPacketPreview,
   renderSidePanel,
+  onEditingChange,
+  exitEditingRef,
 }: ProjectWorkflowCanvasViewProps) {
   // P3 E · 多工作流底座（架构 §12）：项目存 N 个工作流，列表/选择器 + 新建/编辑。
   const [workflows, setWorkflows] = useState<ProjectWorkflowListItem[]>([]);
@@ -219,6 +226,19 @@ export function ProjectWorkflowCanvasView({
   // 在跑，一律改草案 → 提交 → 通过（运行性 / 控制核心·权限·审计，P3 重档）才生效。
   const [editing, setEditing] = useState(false);
   const [editingMode, setEditingMode] = useState<"edit" | "new">("edit");
+  // 上报编辑态给宿主（ProjectDetail），顶部「返回项目」据此切「返回」；卸载时回报 false。
+  useEffect(() => {
+    onEditingChange?.(editing);
+  }, [editing, onEditingChange]);
+  useEffect(() => () => onEditingChange?.(false), [onEditingChange]);
+  // 暴露「退出编辑」给顶部「返回」按钮调用。
+  useEffect(() => {
+    if (!exitEditingRef) return;
+    exitEditingRef.current = () => setEditing(false);
+    return () => {
+      if (exitEditingRef) exitEditingRef.current = null;
+    };
+  }, [exitEditingRef]);
   // P3 砍杂项：过程内容（侧栏 audit/dispatch/attention/读回 + 状态原因长文）默认隐，
   // 点顶边「详情」按钮才唤起抽屉。日常视图只剩画布 + 四边。
   // SSR / 离线静态渲染（无 window、无人点按钮）默认展开——治理内容需可被服务端 / 离线契约
@@ -342,7 +362,7 @@ export function ProjectWorkflowCanvasView({
   const selectedProjectNode = useMemo(
     () =>
       canvasModel.nodes.find(
-        (node) => node.node_id === (selectedCanvasNodeId ?? canvasModel.viewport_hint.selected_node_id),
+        (node) => node.node_id === selectedCanvasNodeId,
       ) ?? null,
     [canvasModel, selectedCanvasNodeId],
   );
@@ -485,11 +505,15 @@ export function ProjectWorkflowCanvasView({
   const [projectDirectorTaskPlanError, setProjectDirectorTaskPlanError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSelectedCanvasNodeId((current) =>
-      current && canvasModel.nodes.some((node) => node.node_id === current)
+    setSelectedCanvasNodeId((current) => {
+      // 用户显式收起节点详情（点 × / 点画布空白 → null）时保持取消选中，
+      // 别被默认 hint 重新选上（否则节点详情就「常驻」收不起来了）。
+      if (current === null) return null;
+      // 选中节点仍在模型里就保留；否则（切了工作流 / stale）才落回默认 hint。
+      return canvasModel.nodes.some((node) => node.node_id === current)
         ? current
-        : canvasModel.viewport_hint.selected_node_id,
-    );
+        : canvasModel.viewport_hint.selected_node_id;
+    });
   }, [canvasModel]);
 
   useEffect(() => {
@@ -642,7 +666,8 @@ export function ProjectWorkflowCanvasView({
     <section className="workflow-canvas workflow-canvas-fullbleed" aria-label="项目级工作流画布">
       {editing ? (
         <>
-          {/* P3 砍杂项：删 eyebrow + h3 + path 头部块，编辑动作压成底边一条悬浮 HUD（提交 / 返回），
+          {/* P3 砍杂项：删 eyebrow + h3 + path 头部块。编辑动作（提交 / 返回）并入引擎底边动作条同一行
+              （editActions 插槽，与 ▶运行选中节点 并排），不再单独浮一条顶边 HUD。
               草案说明缩到提交按钮 title。画布 / 调色板 / 节点面板由引擎自己四边铺开。 */}
           <div className="project-canvas-plan project-canvas-plan--fullbleed" aria-label="项目工作流草案（可编辑）">
             <ReactFlowProvider>
@@ -652,20 +677,20 @@ export function ProjectWorkflowCanvasView({
                 sessions={sessions}
                 onNotice={onNotice}
                 onDraftChange={handleDraftChange}
+                editActions={
+                  <>
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => void submitDraft()}
+                      title="改的是草案，运行中的工作流不动；提交并通过后才生效（经控制核心 / 权限 / 审计）"
+                    >
+                      {editingMode === "new" ? "提交为新工作流" : "提交更新"}
+                    </button>
+                  </>
+                }
               />
             </ReactFlowProvider>
-            {/* 编辑动作 HUD：悬浮顶边（避开引擎底边动作条），提交 / 返回。 */}
-            <div className="canvas-hud canvas-edit-actions-hud" aria-label="草案编辑动作">
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => void submitDraft()}
-                title="改的是草案，运行中的工作流不动；提交并通过后才生效（经控制核心 / 权限 / 审计）"
-              >
-                {editingMode === "new" ? "提交为新工作流" : "提交更新"}
-              </button>
-              <button className="secondary-button" type="button" onClick={() => setEditing(false)}>返回运行状态</button>
-            </div>
           </div>
         </>
       ) : (
@@ -674,17 +699,21 @@ export function ProjectWorkflowCanvasView({
             HUD 容器 pointer-events:none、内部控件 pointer-events:auto，不挡画布平移缩放。 */}
         <ProjectWorkflowReactFlowCanvas
           canvasModel={canvasModel}
-          selectedNodeId={selectedCanvasNodeId ?? canvasModel.viewport_hint.selected_node_id}
-          onSelectNode={setSelectedCanvasNodeId}
+          selectedNodeId={selectedCanvasNodeId ?? ""}
+          onSelectNode={(nodeId) => {
+            setSelectedCanvasNodeId(nodeId);
+            // 节点详情现在锚在画布节点旁的小面板，点节点不再自动展开抽屉；
+            // 抽屉 =「工作流详情」，由顶边按钮手动开。
+          }}
+          onPaneClick={() => {
+            // 用户要求：点画布空白处收起所有面板（取消选中 → 节点旁小面板消失；并收起工作流详情抽屉）。
+            setSelectedCanvasNodeId(null);
+            setDetailDrawerOpen(false);
+          }}
         />
 
         <div className="canvas-hud canvas-hud-top" aria-label="工作流顶边操作 HUD">
-          <span className="canvas-hud-project-tag" title={project.project_root}>
-            {projectWorkflow ? projectWorkflow.title : project.name}
-          </span>
-          {projectConfig.showProjectRuleBar ? (
-            <ProjectRuleStatusBar canvasModel={canvasModel} runCheckStatus={derivedWorkflow?.run_check_status ?? null} />
-          ) : null}
+          {/* 用户细调：删底边「项目名标签」(topbar 已有) + 「项目规则状态条」(空态/运行性/0 nodes… 冗余·运行性在侧栏运行检查里)。 */}
           <div className="workflow-state-actions">
             {workflows.length > 0 ? (
               <select
@@ -766,15 +795,15 @@ export function ProjectWorkflowCanvasView({
               </span>
             ) : null}
             <Badge tone={projectWorkflow ? "candidate" : "warning"}>{projectWorkflow ? projectWorkflow.state : "缺 workflow"}</Badge>
-            {/* P3：过程内容进按需抽屉——这个按钮唤起 / 收起右侧详情抽屉。 */}
+            {/* P3：过程内容进按需抽屉——这个按钮唤起 / 收起右侧「工作流详情」抽屉（节点详情已挪到节点旁小面板）。 */}
             <button
               className="secondary-button canvas-detail-toggle"
               type="button"
               aria-pressed={detailDrawerOpen}
               onClick={() => setDetailDrawerOpen((open) => !open)}
-              title="审计 / 派发 / 关注 / 读回 / 状态原因等过程内容（默认隐，点开查看）"
+              title="方案与授权 / 工作项执行 / 全局边界复核等工作流详情（默认隐，点开查看）"
             >
-              {detailDrawerOpen ? "收起详情" : "详情"}
+              {detailDrawerOpen ? "收起工作流详情" : "工作流详情"}
             </button>
           </div>
         </div>
@@ -785,7 +814,7 @@ export function ProjectWorkflowCanvasView({
         <div className="canvas-hud canvas-hud-side canvas-detail-drawer" aria-label="工作流详情抽屉（按需）">
         {renderSidePanel({
           canvasModel,
-          selectedNodeId: selectedCanvasNodeId ?? canvasModel.viewport_hint.selected_node_id,
+          selectedNodeId: selectedCanvasNodeId ?? "",
           project,
           projectId: canvasModel.project_id,
           sessions,
@@ -868,6 +897,9 @@ function runCheckStatusLabel(status: WorkflowRunCheck["status"] | null) {
 type ProjectCanvasFlowNodeData = {
   canvasNode: ProjectCanvasNode;
   selected: boolean;
+  detail?: ProjectWorkflowCanvasReadModel["detail_panels"][string];
+  // 节点旁小面板的「收起」回调（取消选中 → 面板消失）。
+  onClose?: () => void;
 };
 
 type ProjectCanvasFlowNode = Node<ProjectCanvasFlowNodeData, "projectCanvasNode">;
@@ -881,27 +913,31 @@ export function ProjectWorkflowReactFlowCanvas({
   canvasModel,
   selectedNodeId,
   onSelectNode,
+  onPaneClick,
 }: {
   canvasModel: ProjectWorkflowCanvasReadModel;
   selectedNodeId: string;
-  onSelectNode: (nodeId: string) => void;
+  onSelectNode: (nodeId: string | null) => void;
+  onPaneClick?: () => void;
 }) {
   // window 守卫放在 hooks 之前：服务端 / 离线测试（直接以普通函数调用本组件）走静态舞台，
   // 不调用任何 hook；浏览器侧才进入下面的 React Flow 内层组件。
   if (typeof window === "undefined") {
     return <ProjectCanvasStaticStage canvasModel={canvasModel} selectedNodeId={selectedNodeId} onSelectNode={onSelectNode} />;
   }
-  return <ProjectWorkflowReactFlowCanvasBrowser canvasModel={canvasModel} selectedNodeId={selectedNodeId} onSelectNode={onSelectNode} />;
+  return <ProjectWorkflowReactFlowCanvasBrowser canvasModel={canvasModel} selectedNodeId={selectedNodeId} onSelectNode={onSelectNode} onPaneClick={onPaneClick} />;
 }
 
 function ProjectWorkflowReactFlowCanvasBrowser({
   canvasModel,
   selectedNodeId,
   onSelectNode,
+  onPaneClick,
 }: {
   canvasModel: ProjectWorkflowCanvasReadModel;
   selectedNodeId: string;
-  onSelectNode: (nodeId: string) => void;
+  onSelectNode: (nodeId: string | null) => void;
+  onPaneClick?: () => void;
 }) {
   const flowNodes = useMemo<ProjectCanvasFlowNode[]>(
     () =>
@@ -915,11 +951,14 @@ function ProjectWorkflowReactFlowCanvasBrowser({
         data: {
           canvasNode: node,
           selected: node.node_id === selectedNodeId,
+          // detail_panels 以 detail_panel_id 为键（= `${node_id}:detail`），不是 node_id。
+          detail: canvasModel.detail_panels[node.detail_panel_id],
+          onClose: () => onSelectNode(null),
         },
         selectable: true,
         draggable: false,
       })),
-    [canvasModel.nodes, selectedNodeId],
+    [canvasModel.nodes, canvasModel.detail_panels, selectedNodeId, onSelectNode],
   );
   const flowEdges = useMemo<ProjectCanvasFlowEdge[]>(
     () =>
@@ -960,6 +999,7 @@ function ProjectWorkflowReactFlowCanvasBrowser({
           minZoom={0.35}
           maxZoom={1.5}
           onNodeClick={(_, node) => onSelectNode(node.id)}
+          onPaneClick={() => onPaneClick?.()}
           proOptions={{ hideAttribution: true }}
         >
           <Background gap={28} />
@@ -978,7 +1018,7 @@ function ProjectCanvasStaticStage({
 }: {
   canvasModel: ProjectWorkflowCanvasReadModel;
   selectedNodeId: string;
-  onSelectNode: (nodeId: string) => void;
+  onSelectNode: (nodeId: string | null) => void;
 }) {
   return (
     <div className="project-flow-stage static" aria-label="项目画布静态状态样例">
@@ -992,17 +1032,36 @@ function ProjectCanvasStaticStage({
       <ProjectCanvasAttentionStrip canvasModel={canvasModel} />
       <div className="project-canvas-static-lanes">
         {canvasModel.nodes.map((node) => (
-          <button
-            className={`project-canvas-static-node ${node.node_type} ${node.status} ${node.node_id === selectedNodeId ? "selected" : ""}`}
-            key={node.node_id}
-            type="button"
-            onClick={() => onSelectNode(node.node_id)}
-          >
-            <span>{canvasNodeTypeLabel(node.node_type)}</span>
-            <strong>{node.title}</strong>
-            <em>{node.subtitle ?? node.status}</em>
-            <small>{stateLabel(node.status)}</small>
-          </button>
+          <div className="project-canvas-static-node-slot" key={node.node_id}>
+            <button
+              className={`project-canvas-static-node ${node.node_type} ${node.status} ${node.node_id === selectedNodeId ? "selected" : ""}`}
+              type="button"
+              onClick={() => onSelectNode(node.node_id)}
+            >
+              <span>{canvasNodeTypeLabel(node.node_type)}</span>
+              <strong>{node.title}</strong>
+              <em>{node.subtitle ?? node.status}</em>
+              <small>{stateLabel(node.status)}</small>
+            </button>
+            {/* 节点详情小面板：离线/静态路径在选中节点旁直接渲染（与 React Flow 的 NodeToolbar 同一面板）。
+                detail_panels 以 detail_panel_id 为键（= `${node_id}:detail`）。 */}
+            {node.node_id === selectedNodeId && canvasModel.detail_panels[node.detail_panel_id] ? (
+              <div className="project-node-mini-panel">
+                <button
+                  className="mini-panel-close"
+                  type="button"
+                  aria-label="收起节点详情"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectNode(null);
+                  }}
+                >
+                  ×
+                </button>
+                <ProjectCanvasNodeDetailView detail={canvasModel.detail_panels[node.detail_panel_id]!} node={node} />
+              </div>
+            ) : null}
+          </div>
         ))}
       </div>
     </div>
@@ -1128,6 +1187,27 @@ function ProjectCanvasFlowNodeView({ data }: NodeProps<ProjectCanvasFlowNode>) {
   return (
     <div className={`project-flow-node ${node.node_type} ${node.status} ${data.selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Left} />
+      {/* 节点详情：锚在选中节点右侧的小面板（替代旧的右侧抽屉里的节点详情）。 */}
+      <NodeToolbar isVisible={data.selected} position={Position.Right} offset={12}>
+        {data.detail ? (
+          <div className="project-node-mini-panel">
+            <button
+              className="mini-panel-close"
+              type="button"
+              aria-label="收起节点详情"
+              onClick={(event) => {
+                // React 合成事件按组件树冒泡：NodeToolbar 在组件树里仍是节点子组件，
+                // 不挡住就会冒泡到 React Flow 的 onNodeClick 把节点又选回来。
+                event.stopPropagation();
+                data.onClose?.();
+              }}
+            >
+              ×
+            </button>
+            <ProjectCanvasNodeDetailView detail={data.detail} node={data.canvasNode} />
+          </div>
+        ) : null}
+      </NodeToolbar>
       <div className="project-flow-node-head">
         <span>{canvasNodeTypeLabel(node.node_type)}</span>
         <b>{stateLabel(node.status)}</b>

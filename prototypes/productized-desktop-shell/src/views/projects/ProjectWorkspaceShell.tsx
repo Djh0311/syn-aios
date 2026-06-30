@@ -104,6 +104,9 @@ export type ProjectDetailProps = {
 
 export type ProjectWorkspaceShellProps = ProjectDetailProps & {
   workflowPanel?: ReactNode;
+  // 画布编辑态（由 ProjectDetail 上提）：true 且在工作流 tab 时，顶部「返回项目」切成「返回」，点它退出编辑。
+  canvasEditing?: boolean;
+  onCanvasBack?: () => void;
 };
 
 export function ProjectWorkspaceShell({
@@ -120,6 +123,8 @@ export function ProjectWorkspaceShell({
   onRenderTaskPreview,
   onInspectDispatchReadiness,
   workflowPanel = null,
+  canvasEditing = false,
+  onCanvasBack,
 }: ProjectWorkspaceShellProps) {
   const projectWorkflow = workflowState?.project_workflows.find((workflow) => workflow.project_root === project.project_root) ?? null;
   const derivedWorkflow = projectWorkflow?.derived_workflow ?? null;
@@ -135,9 +140,15 @@ export function ProjectWorkspaceShell({
     <section className="project-detail-content project-detail-content--fullwindow">
       <div className="project-hud-top" aria-label="项目顶边操作 HUD">
         <header className="project-workspace-head project-workspace-head--compact">
-          <button className="secondary-button project-back-button" type="button" onClick={onBackToGallery}>
-            ← 返回项目
-          </button>
+          {canvasEditing && selectedTool === "workflow" ? (
+            <button className="secondary-button project-back-button" type="button" onClick={onCanvasBack}>
+              ← 返回
+            </button>
+          ) : (
+            <button className="secondary-button project-back-button" type="button" onClick={onBackToGallery}>
+              ← 返回项目
+            </button>
+          )}
           <div className="project-workspace-title">
             <h1 title={project.project_root}>{project.name}</h1>
           </div>
@@ -243,13 +254,13 @@ function ProjectWorkspaceStatusStrip({
         tone={hasWorkflow ? "candidate" : "unknown"}
       />
       <ProjectWorkspaceStatusCell
-        label="Harness"
+        label="运行器"
         value={compactListText(harnessRequirements, "未要求运行器")}
         note={hasTaskPackage ? "派生字段" : "未生成派生字段"}
         tone={harnessRequirements.length ? "candidate" : "unknown"}
       />
       <ProjectWorkspaceStatusCell
-        label="Skill"
+        label="技能"
         value={compactListText(skillNames, "未声明技能")}
         note={hasTaskPackage ? "派生字段" : "未生成派生字段"}
         tone={skillNames.length ? "candidate" : "unknown"}

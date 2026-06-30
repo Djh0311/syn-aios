@@ -2526,6 +2526,14 @@ button:disabled {
   background: #fbfcf8;
 }
 
+/* 节点详情顶部一句中文状态概况（警告码隐掉后兜底，不让面板空着）。 */
+.node-detail-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 .workflow-blueprint-canvas {
   background:
     linear-gradient(rgba(216, 223, 219, 0.42) 1px, transparent 1px),
@@ -5220,6 +5228,34 @@ textarea {
   height: calc(100vh - var(--topbar-h) - var(--space-6) * 2);
   min-height: 0;
   gap: 8px;
+}
+/* 实验画布全屏（对齐项目画布）：逃出 .main-panel 的 --space-6 内边距、按视口定高铺满整窗。
+   实验 config embedded（无自带 .canvas-head），四边 HUD（调色板 / 编辑 / 动作）浮在画布上。 */
+.canvas-view-fullwindow {
+  margin: calc(var(--space-6) * -1);
+  height: calc(100vh - var(--topbar-h) - var(--dock-h));
+  overflow: hidden;
+}
+.canvas-view-fullwindow > .canvas-view {
+  height: 100%;
+}
+/* 节点编辑器顶部「删除节点」按钮（danger 描边小钮）。纯前端删图节点，不执行。 */
+.canvas-node-delete {
+  align-self: flex-start;
+  padding: 4px 11px;
+  border: 1px solid var(--danger, #a14242);
+  border-radius: 999px;
+  background: rgba(161, 66, 66, 0.08);
+  color: var(--danger, #a14242);
+  font-size: 11px;
+  cursor: pointer;
+}
+.canvas-node-delete:hover:not(:disabled) {
+  background: rgba(161, 66, 66, 0.16);
+}
+.canvas-node-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .canvas-view .canvas-head {
   display: flex;
@@ -8015,7 +8051,25 @@ textarea {
 }
 .project-workspace-head--compact .project-workspace-meta {
   flex-wrap: nowrap;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
+}
+/* 「设置」按钮在紧凑头里配成圆角 pill（原来是方框、和旁边圆 pill 不齐）。 */
+.project-workspace-head--compact .project-settings-menu summary {
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+/* 用户细调：① 4-tab 切换组件移到顶部最左；② 返回项目去边框（纯文字链）；③ 隐藏项目名 h1（topbar 已有"最近项目 X"，冗余）。 */
+.project-detail-content--fullwindow .project-tool-tabs {
+  order: -1;
+}
+.project-workspace-head--compact .project-back-button {
+  border-color: transparent;
+  background: transparent;
+}
+.project-workspace-head--compact .project-workspace-title {
+  display: none;
 }
 
 /* 状态条压成紧凑 pill 组（不占整条横幅）。 */
@@ -8114,6 +8168,7 @@ textarea {
 .project-workspace-meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   justify-content: flex-end;
   color: var(--ink-light);
@@ -8349,6 +8404,14 @@ textarea {
   border-radius: 8px;
 }
 
+/* 修顶部串字重叠：画布自带的顶部状态条/关注条（top:12/48·z:5）会和浮在上面的项目 chrome
+   （.project-hud-top·z:18 但背景透明）撞叠、透出来（真机/预览实测「没有 workflow 读模型…」串到 header 后面）。
+   这俩信息在底边 HUD 状态条 + 侧栏关注面板里都有，冗余——项目全屏面隐藏即可（display:none 仍在 DOM，离线断言照过）。 */
+.project-canvas-fullbleed-stage .project-canvas-status-bar,
+.project-canvas-fullbleed-stage .project-canvas-attention-strip {
+  display: none;
+}
+
 /* HUD 容器：默认不挡画布（pointer-events:none），内部交互控件再各自打开。 */
 .canvas-hud {
   position: absolute;
@@ -8505,28 +8568,62 @@ textarea {
   pointer-events: auto;
 }
 
-/* 左边：节点调色板竖排。 */
+/* 用户细调：调色板从左上挪到右上。容器类名 -left 沿用（仅作内容标识），水平锚点改 right。 */
 .canvas-engine-hud-left {
   top: 12px;
-  left: 12px;
+  right: 12px;
   max-height: calc(100% - 24px);
   overflow: auto;
 }
 .canvas-engine-hud-left .canvas-palette {
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
-  padding: 8px;
+  gap: 5px;
+  padding: 9px;
   border: 1px solid var(--hair-2, #d8d3c5);
-  border-radius: 8px;
-  background: rgba(245, 241, 232, 0.94);
+  border-radius: 12px;
+  background: rgba(245, 241, 232, 0.95);
+}
+/* 调色板重做：贴合暖纸风（胶囊 / 细线 / accent 只落在圆点 / 扁平）。原先 chip 退回浏览器默认按钮
+   （灰底·outset 斜边·方角），与整体风格冲突——这里给引擎 HUD 内的 chip 一套显式样式取代默认。 */
+.canvas-engine-hud .canvas-palette-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--hair, rgba(28, 31, 36, 0.1));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--ink-mid, #4a4d54);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 80ms ease;
+}
+.canvas-engine-hud .canvas-palette-chip:hover:not(:disabled) {
+  background: var(--rice-2, #efeadd);
+  border-color: var(--ink-mist, #b6b3a8);
+}
+.canvas-engine-hud .canvas-palette-chip:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.canvas-engine-hud .canvas-palette-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.canvas-engine-hud .canvas-palette-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
 }
 
-/* 右边：选中节点才出现的节点面板，可滚动。 */
+/* 用户细调：节点编辑面板随调色板对调，挪到左上（选中节点才出现，可滚动）。类名 -right 沿用，锚点改 left。 */
 .canvas-engine-hud-right {
-  top: 12px;
-  right: 12px;
-  bottom: 56px;
+  top: 56px;
+  left: 12px;
+  max-height: calc(100% - 186px);
   width: min(320px, 34vw);
   overflow: auto;
   padding: 10px 12px;
@@ -8544,6 +8641,14 @@ textarea {
   font-size: 11px;
   opacity: 0.7;
   overflow-wrap: anywhere;
+}
+.canvas-engine-hud-right .cne-id .cne-id-line {
+  display: block;
+}
+.canvas-engine-hud-right .cne-id .cne-id-line strong {
+  margin-right: 4px;
+  font-weight: 600;
+  opacity: 0.7;
 }
 .canvas-engine-hud-right label {
   display: flex;
@@ -8611,8 +8716,8 @@ textarea {
 /* 底边：运行 / 保存 / 紧凑动作 + 「更多」折叠。可换行。 */
 .canvas-engine-hud-bottom {
   bottom: 12px;
-  left: 12px;
-  right: 12px;
+  left: 96px;
+  right: 224px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -8642,6 +8747,14 @@ textarea {
   border-color: #c8602b;
   background: #fff3e6;
 }
+/* 宿主塞进来的草案动作（提交 / 返回）：右推到底边动作条同一行末尾，与 ▶运行选中节点 并排。 */
+.canvas-engine-edit-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* React Flow 自带缩放控件(左下)/小地图(右下)/署名保持默认贴底角；底边动作条已左右内缩让出这两个角，不再相撞。 */
 .canvas-engine-hud-bottom .canvas-reset-confirm {
   display: inline-flex;
   align-items: center;
@@ -8740,21 +8853,6 @@ textarea {
   height: 100%;
   min-width: 0;
 }
-/* 编辑动作 HUD（提交 / 返回）悬浮顶边，避开引擎底边动作条。 */
-.canvas-edit-actions-hud {
-  position: absolute;
-  z-index: 13;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
-  pointer-events: none;
-}
-.canvas-edit-actions-hud > button {
-  pointer-events: auto;
-}
-
 /* P3 详情抽屉切换按钮（顶边 HUD 内，沿用 secondary-button 基样）。 */
 .canvas-detail-toggle[aria-pressed="true"] {
   background: #eef2e8;
@@ -8898,6 +8996,81 @@ textarea {
   font-weight: 400;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+/* 静态舞台每个节点格：节点按钮 + 选中时的节点详情小面板纵向堆叠。 */
+.project-canvas-static-node-slot {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.project-canvas-static-node-slot > .project-canvas-static-node {
+  width: 100%;
+}
+
+/* 节点详情小面板：锚在画布节点旁（React Flow NodeToolbar / 静态舞台）的窄卡片，
+   复用 .node-detail-panel 的暖纸观感（白底 + var(--line) 边框 + 圆角）。 */
+.project-node-mini-panel {
+  position: relative; /* 收起按钮（右上角 ×）的定位锚点 */
+  max-width: 288px;
+  min-width: 208px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: var(--shadow);
+  font-size: var(--text-sm);
+  text-align: left;
+}
+
+/* 小面板里的节点详情卡去掉自身边框/底色，避免双层卡片（外层小面板已给纸观感）。 */
+.project-node-mini-panel .node-detail-panel {
+  gap: 7px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* 收起按钮：右上角小叉，素净；hover 才显底。 */
+.mini-panel-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.mini-panel-close:hover {
+  background: rgba(28, 31, 36, 0.06);
+  color: var(--ink);
+}
+
+/* 排布精简：标题行留出右上角收起钮的位置（别让「空闲」徽章撞上 ×）。 */
+.project-node-mini-panel .panel-heading {
+  padding-right: 22px;
+}
+
+/* 排布精简：去掉术语 section 标题「用户摘要 / 节点状态」+ 拍平内层盒，省得盒中盒。
+   strong 用 display:none 隐藏（仍在 markup 里，离线断言照过）。 */
+.project-node-mini-panel .project-canvas-detail-section {
+  background: transparent;
+  padding: 0;
+  border: none;
+}
+.project-node-mini-panel .project-canvas-detail-section > strong {
+  display: none;
 }
 
 .project-flow-node {
@@ -10034,4 +10207,26 @@ textarea {
     max-height: min(42vh, 420px);
     overflow: auto;
   }
+}
+
+/* 全局「显示开发者细节」开关：默认隐藏所有 agent-boundary-details 折叠。
+   用 display:none 而非条件渲染——renderToStaticMarkup 仍输出内容，离线断言照数得到。 */
+.hide-dev-detail .agent-boundary-details {
+  display: none;
+}
+
+/* 侧栏顶部开关本体样式 */
+.project-side-dev-detail-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ui-muted, #6b6b6b);
+  cursor: pointer;
+  user-select: none;
+}
+.project-side-dev-detail-toggle input {
+  cursor: pointer;
 }

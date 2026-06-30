@@ -152,15 +152,25 @@ export function renderActiveWorkbenchView({
         onRequestAction={onRequestAction}
         onLoadTranscript={browserPreviewData?.loadTranscript ?? loadCodexSessionTranscript}
         onRenderTaskPreview={(projectRoot, workItemId) =>
-          renderTaskPackagePreview({ project_root: projectRoot, work_item_id: workItemId })
+          browserPreviewData
+            ? Promise.reject(new Error("浏览器预览模式：任务包预览需用 Tauri 桌面壳。"))
+            : renderTaskPackagePreview({ project_root: projectRoot, work_item_id: workItemId })
         }
         onInspectDispatchReadiness={(projectRoot, workItemId) =>
-          inspectTaskPackageDispatchReadiness({ project_root: projectRoot, work_item_id: workItemId })
+          browserPreviewData
+            ? Promise.reject(new Error("浏览器预览模式：派发准备检查需用 Tauri 桌面壳。"))
+            : inspectTaskPackageDispatchReadiness({ project_root: projectRoot, work_item_id: workItemId })
         }
         onInspectWorkflowRunCheck={(projectRoot, workflowId) =>
-          inspectWorkflowRunCheck({ project_root: projectRoot, workflow_id: workflowId })
+          browserPreviewData
+            ? Promise.reject(new Error("浏览器预览模式：运行检查需用 Tauri 桌面壳。"))
+            : inspectWorkflowRunCheck({ project_root: projectRoot, workflow_id: workflowId })
         }
-        onInspectAutoDispatchAuthorization={inspectAutoDispatchAuthorization}
+        onInspectAutoDispatchAuthorization={
+          browserPreviewData
+            ? () => Promise.reject(new Error("浏览器预览模式：自动派发授权检查需用 Tauri 桌面壳。"))
+            : inspectAutoDispatchAuthorization
+        }
         onPreviewTaskMemoryPacket={onPreviewTaskMemoryPacket}
         onPreviewProjectDirectorTaskPlan={onPreviewProjectDirectorTaskPlan}
         onOpenAgentSession={onOpenAgentSession}
@@ -181,11 +191,13 @@ export function renderActiveWorkbenchView({
     // 实验画布（沙盒）：已扶正到主栏入口。项目工作流的「运行状态」归项目面
     // （画布架构方案 P1/P2 项目面运行状态视图），不再单列「运行中工作流」入口。
     return (
-      <CanvasViewWithProvider
-        canvasId="default"
-        sessions={snapshot.sessions}
-        onNotice={onNotice}
-      />
+      <div className="canvas-view-fullwindow">
+        <CanvasViewWithProvider
+          canvasId="default"
+          sessions={snapshot.sessions}
+          onNotice={onNotice}
+        />
+      </div>
     );
   }
 
@@ -325,15 +337,15 @@ export function renderActiveWorkbenchView({
         kicker="工具入口"
         hasRealSnapshot={hasRealSnapshot}
         items={harnessItems}
-        summary="展示 Harness 资源和适配器动作索引；这里不提供直接运行按钮，避免工具入口绕过项目授权。"
+        summary="展示运行器资源和适配器动作索引；这里不提供直接运行按钮，避免工具入口绕过项目授权。"
         primaryStat={`${harnessItems.length} 个资源`}
         secondaryStat="执行后置"
         sections={[
           {
-            title: "Harness 资源",
+            title: "运行器资源",
             eyebrow: "来自项目资源索引",
             items: harnessItems,
-            emptyText: "当前索引没有提供 Harness 资源。",
+            emptyText: "当前索引没有提供运行器资源。",
           },
           {
             title: "适配器动作",

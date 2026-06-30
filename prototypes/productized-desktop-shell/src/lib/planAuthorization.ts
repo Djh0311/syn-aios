@@ -184,5 +184,5 @@ export function summarizeGlobalBoundaryReview(
 
 function planAuthorizationDisplayText(authorization: PlanAuthorization) {
   const status = planAuthorizationStatusLabels[authorization.status] ?? authorization.status;
-  return `${status}；角色 ${authorization.scope.allowed_role_ids.length} / agent ${authorization.scope.allowed_agent_ids.length} / 读 ${authorization.scope.allowed_read_roots.length} / 写 ${authorization.scope.allowed_write_roots.length} / 工具 ${authorization.scope.allowed_tools.length} / 检查 ${authorization.scope.allowed_checks.length} / 停止条件 ${authorization.scope.stop_conditions.length}`;
+  return `${status}；角色 ${authorization.scope.allowed_role_ids.length} / 智能体 ${authorization.scope.allowed_agent_ids.length} / 读 ${authorization.scope.allowed_read_roots.length} / 写 ${authorization.scope.allowed_write_roots.length} / 工具 ${authorization.scope.allowed_tools.length} / 检查 ${authorization.scope.allowed_checks.length} / 停止条件 ${authorization.scope.stop_conditions.length}`;
 }

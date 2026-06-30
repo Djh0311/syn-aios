@@ -39,10 +39,10 @@ export function ProjectWorkflowDraftPanel({
         <Badge tone={projectWorkflow ? "candidate" : "unknown"}>{projectWorkflow ? "已创建" : "未创建"}</Badge>
       </div>
       <div className="workflow-draft-grid">
-        <DetailLine label="workflow" value={projectWorkflow?.workflow_id || "未创建"} />
-        <DetailLine label="state" value={projectWorkflow?.state || "未创建"} />
-        <DetailLine label="nodes" value={String(projectWorkflow?.node_count ?? 0)} />
-        <DetailLine label="edges" value={String(projectWorkflow?.edge_count ?? 0)} />
+        <DetailLine label="工作流" value={projectWorkflow?.workflow_id || "未创建"} />
+        <DetailLine label="状态" value={projectWorkflow?.state || "未创建"} />
+        <DetailLine label="节点" value={String(projectWorkflow?.node_count ?? 0)} />
+        <DetailLine label="边" value={String(projectWorkflow?.edge_count ?? 0)} />
         <DetailLine label="任务草稿" value={`${projectWorkflow?.task_draft_count ?? 0} 个`} />
       </div>
       <div className="workflow-state-actions">
