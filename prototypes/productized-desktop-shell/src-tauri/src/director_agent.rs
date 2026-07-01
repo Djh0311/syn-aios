@@ -757,10 +757,26 @@ fn run_auto_advance_authorized_role_loop(
     let blocked_count = prepared.plan.blocked_count;
     // 4. 件 C-1 分流：没 prepared 就停（越界/没绑/无可派）——可见、等用户、不自动绑、不重试。
     if prepared_count == 0 {
+        // 收集具体停因（方案缺了什么·给用户可操作反馈，别只笼统说"越界"）：汇被阻断任务的 blocked_reasons。
+        let reasons: Vec<String> = prepared
+            .plan
+            .planned_tasks
+            .iter()
+            .flat_map(|task| task.blocked_reasons.iter().cloned())
+            .collect::<std::collections::BTreeSet<String>>()
+            .into_iter()
+            .collect();
+        let reasons_text = if reasons.is_empty() {
+            String::new()
+        } else {
+            format!("（具体：{}）", reasons.join("；"))
+        };
         let (stage, message) = if blocked_count > 0 {
             (
                 "blocked",
-                "有越界任务被阻断（超授权范围）；停下等用户处理，不自动推进。".to_string(),
+                format!(
+                    "有任务超出方案授权范围被阻断{reasons_text}——方案缺了它该写的内容（如写范围/工具/检查）。请重新让 AI 出方案（把这些写进去）或在方案里补上，再自动推进。"
+                ),
             )
         } else if needs_binding_count > 0 {
             (
