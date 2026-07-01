@@ -15,7 +15,7 @@ type SettingsViewProps = {
 const developerDescriptions: Partial<Record<ViewKey, string>> = {
   proposal: "收纳建议方案入口；用于查看方案草案和确认边界。",
   workflow: "实验、模板、草图和后置画布资料；不是项目工作流事实源。",
-  tools: "工具和 Harness 资源的只读索引说明；不提供直接运行按钮。",
+  tools: "工具和运行器资源的只读索引说明；不提供直接运行按钮。",
   models: "模型、凭据、供应方和适配器边界说明；不读取密钥、令牌或认证授权材料。",
 };
 
@@ -62,11 +62,11 @@ export function SettingsView({
           <div className="settings-fact-grid">
             <SettingFact label="项目" value={`${pageReadModel.general.project_count}`} />
             <SettingFact label="智能体会话" value={`${pageReadModel.general.session_count}`} />
-            <SettingFact label="Skill" value={`${pageReadModel.general.skill_count}`} />
+            <SettingFact label="技能" value={`${pageReadModel.general.skill_count}`} />
             <SettingFact label="工作流" value={`${pageReadModel.general.workflow_count}`} />
           </div>
           <p className="muted small-note">
-            普通主导航展示项目、智能体、想法箱、知识库、记忆层、Skill、Harness、运行中工作流；开发和内部边界统一从本页进入。
+            普通主导航展示项目、智能体、想法箱、知识库、记忆层、技能、运行器、运行中工作流；开发和内部边界统一从本页进入。
           </p>
           {workflowStateError ? <p className="rail-error">事实层读取失败：{workflowStateError}</p> : null}
         </section>
@@ -141,7 +141,7 @@ export function SettingsView({
           />
           <BoundaryItem
             title="迁移边界"
-            value="contract only"
+            value="仅冻结合同"
             note="R4-A1 不新增 Tauri command，不拆页面大组件，不重做视觉或布局。"
           />
         </div>

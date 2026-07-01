@@ -205,7 +205,7 @@ export function CodexControlEntryPanel({
         product_command_id: prepareOutput.product_command_id ?? "",
         expected_store_revision: prepareOutput.store_revision,
         confirmed_by: "user",
-        risk_acknowledgement: "用户确认 J1-A 只记录受控命令和 Phase A，不发送 prompt，不执行真实 Codex。",
+        risk_acknowledgement: "用户确认 J1-A 只记录受控命令和 Phase A，不发送提示词，不执行真实 Codex。",
         allowed_once: true,
         reason: "J1-A controlled Codex control entry confirmation.",
         requested_by: "user",
@@ -280,7 +280,7 @@ export function CodexControlEntryPanel({
             value={targetSessionId}
             onChange={(event) => setTargetSessionId(event.currentTarget.value)}
           >
-            <option value="">选择 session</option>
+            <option value="">选择会话</option>
             {projectSessions.map((session) => (
               <option key={session.thread_id} value={session.thread_id}>
                 {session.title || session.thread_id}
@@ -308,13 +308,13 @@ export function CodexControlEntryPanel({
         <span>任务正文</span>
         <textarea
           value={promptBody}
-          placeholder="这里的正文只用于运行时。J1-A 不发送、不写 sidecar、不写 runtime log、不写记忆。"
+          placeholder="这里的正文只用于运行时。J1-A 不发送、不写边车、不写运行日志、不写记忆。"
           rows={5}
           onChange={(event) => setPromptBody(event.currentTarget.value)}
         />
       </label>
       <div className="codex-control-boundary">
-        <span>任务正文保存策略：只计算摘要引用和 sha256；正文不进入工作台 sidecar、runtime log、audit 或记忆。</span>
+        <span>任务正文保存策略：只计算摘要引用和 sha256；正文不进入工作台边车、运行日志、审计或记忆。</span>
         <span>记忆影响：本入口后续只产生观察 / 候选来源，不会自动写正式记忆。</span>
         <span>执行边界根：{projectRoot ? pathTail(projectRoot) : "待选择"}；只读沙箱下不代表项目写授权。</span>
         <span>临时运行绑定：{selectedProjectWorkflow ? selectedProjectWorkflow.title : "J1 临时运行"}；Product Command 会绑定项目 / workflow / work item，不作为游离控制台。</span>
@@ -367,9 +367,9 @@ export function CodexControlEntryPanel({
         <details className="agent-boundary-details nested-boundary-details">
           <summary className="agent-boundary-summary">开发者详情：受控命令读模型</summary>
           <div className="codex-control-status-grid">
-            <span>store revision：{localReadModel.store_revision ?? 0}</span>
-            <span>store：{localReadModel.store_available ? "可用" : "不可用 / 未生成"}</span>
-            <span>sidecar：{localReadModel.sidecar_name ?? "未生成"}</span>
+            <span>存储版本：{localReadModel.store_revision ?? 0}</span>
+            <span>存储：{localReadModel.store_available ? "可用" : "不可用 / 未生成"}</span>
+            <span>边车：{localReadModel.sidecar_name ?? "未生成"}</span>
           </div>
         </details>
       ) : null}
@@ -526,10 +526,10 @@ export function UnifiedExecutionStatusPanel({
       <details className="agent-boundary-details nested-boundary-details">
         <summary className="agent-boundary-summary">开发者详情：统一命令读模型</summary>
         <div className="h2-execution-decision-summary">
-          <span>store revision：{realExecutionProductCommands?.store_revision ?? 0}</span>
-          <span>sidecar：{realExecutionProductCommands?.sidecar_name ?? "未生成"}</span>
-          <span>store：{realExecutionProductCommands?.store_available ? "可用" : "不可用 / 未生成"}</span>
-          <span>runner：{productEntryStatusLabel(realExecutionProductCommands?.runner_entry_status)}</span>
+          <span>存储版本：{realExecutionProductCommands?.store_revision ?? 0}</span>
+          <span>边车：{realExecutionProductCommands?.sidecar_name ?? "未生成"}</span>
+          <span>存储：{realExecutionProductCommands?.store_available ? "可用" : "不可用 / 未生成"}</span>
+          <span>运行器：{productEntryStatusLabel(realExecutionProductCommands?.runner_entry_status)}</span>
           <span>adapter_id={surface.adapter_id}</span>
           <span>operation_id={surface.operation_id}</span>
         </div>

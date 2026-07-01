@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type {
   AutoDispatchGuardInput,
   AutoDispatchGuardResult,
@@ -187,7 +187,31 @@ export function filterProjectSessionsForProject(sessions: SessionRecord[], proje
   return sessions.filter((session) => session.project_root === project.project_root);
 }
 
+type ProjectDetailCanvasEditing = {
+  canvasEditing: boolean;
+  onCanvasBack: () => void;
+  onEditingChange: (editing: boolean) => void;
+  exitEditingRef: RefObject<(() => void) | null>;
+};
+
 export function ProjectDetail(props: ProjectDetailProps) {
+  // 离线/SSR：findElement(findButtonByText) 会把组件当普通函数调用，组件内 hooks 触发 "Invalid hook call"。
+  // 无 window 时走不调 hooks 的渲染（不接编辑态提升；顶部按钮恒「返回项目」，离线不测编辑切换）。
+  if (typeof window === "undefined") {
+    return renderProjectDetailShell(props, null);
+  }
+  // 画布编辑态提到这里：顶部「返回项目」在编辑态切成「返回」（点它退出编辑回工作流运行界面）。
+  const [canvasEditing, setCanvasEditing] = useState(false);
+  const exitCanvasEditingRef = useRef<(() => void) | null>(null);
+  return renderProjectDetailShell(props, {
+    canvasEditing,
+    onCanvasBack: () => exitCanvasEditingRef.current?.(),
+    onEditingChange: setCanvasEditing,
+    exitEditingRef: exitCanvasEditingRef,
+  });
+}
+
+function renderProjectDetailShell(props: ProjectDetailProps, editing: ProjectDetailCanvasEditing | null) {
   const {
     project,
     sessions,
@@ -215,6 +239,8 @@ export function ProjectDetail(props: ProjectDetailProps) {
   return (
     <ProjectWorkspaceShell
       {...props}
+      canvasEditing={editing?.canvasEditing}
+      onCanvasBack={editing?.onCanvasBack}
       workflowPanel={
         <ProjectWorkflowCanvasView
           project={project}
@@ -241,6 +267,8 @@ export function ProjectDetail(props: ProjectDetailProps) {
           onPreviewProjectDirectorTaskPlan={onPreviewProjectDirectorTaskPlan}
           initialTaskMemoryPacketPreview={taskMemoryPacketPreview}
           renderSidePanel={(sidePanelProps) => <ProjectCanvasSidePanel {...sidePanelProps} />}
+          onEditingChange={editing?.onEditingChange}
+          exitEditingRef={editing?.exitEditingRef}
         />
       }
     />

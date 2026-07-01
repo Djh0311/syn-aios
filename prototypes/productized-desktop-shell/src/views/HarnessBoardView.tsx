@@ -31,8 +31,8 @@ export function HarnessBoardView({ projects }: HarnessBoardViewProps) {
       <p className="sr-only">文件夹级运行器资源 · 文件级运行器候选</p>
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Harness</p>
-          <h2>Harness 能力库</h2>
+          <p className="eyebrow">运行器</p>
+          <h2>运行器能力库</h2>
         </div>
         <p className="muted">查看运行器能力、可运行范围和等待配置原因；这里不新增运行按钮，候选不代表可运行或已验证。</p>
       </div>
@@ -50,7 +50,7 @@ export function HarnessBoardView({ projects }: HarnessBoardViewProps) {
             capabilityNames.slice(0, 8).map((capability) => (
               <div className="board-card" key={capability}>
                 <strong>{capability}</strong>
-                <span>由 Harness 资源声明的能力；是否执行仍取决于项目任务和权限。</span>
+                <span>由运行器资源声明的能力；是否执行仍取决于项目任务和权限。</span>
               </div>
             ))
           ) : resources.length ? (
@@ -62,8 +62,8 @@ export function HarnessBoardView({ projects }: HarnessBoardViewProps) {
             ))
           ) : (
             <div className="board-card muted-card">
-              <strong>暂无 Harness 资源</strong>
-              <span>当前工作台没有可见 Harness；可在设置的开发者区检查来源。</span>
+              <strong>暂无运行器资源</strong>
+              <span>当前工作台没有可见运行器；可在设置的开发者区检查来源。</span>
             </div>
           )}
         </ObjectColumn>
@@ -91,7 +91,7 @@ export function HarnessBoardView({ projects }: HarnessBoardViewProps) {
         <ObjectColumn title="最近运行" tone="unknown">
           <div className="board-card muted-card">
             <strong>暂无运行记录</strong>
-            <span>当前只展示 Harness 对象；没有 runtime log 证据时不展示最近运行结果。</span>
+            <span>当前只展示运行器对象；没有运行日志证据时不展示最近运行结果。</span>
           </div>
           {resources.slice(0, 3).map((resource) => (
             <div className="board-card" key={`recent-placeholder-${resource.projectRoot}-${resource.root_path}`}>
@@ -113,7 +113,7 @@ export function HarnessBoardView({ projects }: HarnessBoardViewProps) {
               {candidates.slice(0, 3).map((candidate) => (
                 <div className="board-card" key={`candidate-${candidate.projectRoot}-${candidate.path}`}>
                   <strong>{candidate.name || pathName(candidate.path)}</strong>
-                  <span>文件候选；需要补充为 Harness 资源后才能进入可运行范围。</span>
+                  <span>文件候选；需要补充为运行器资源后才能进入可运行范围。</span>
                 </div>
               ))}
             </>
@@ -131,21 +131,21 @@ export function HarnessBoardView({ projects }: HarnessBoardViewProps) {
         <div className="content-grid two">
           <article className="panel">
             <div className="panel-heading">
-              <h3>文件夹级 Harness 资源</h3>
+              <h3>文件夹级运行器资源</h3>
               <Badge tone="warning">候选资源，未验证</Badge>
             </div>
             <div className="resource-list">
               {resources.length ? (
                 resources.map((resource) => <ResourceCard resource={resource} key={`${resource.projectRoot}-${resource.root_path}`} />)
               ) : (
-                <p className="empty-line">当前没有 Harness 资源。</p>
+                <p className="empty-line">当前没有运行器资源。</p>
               )}
             </div>
           </article>
 
           <article className="panel">
             <div className="panel-heading">
-              <h3>文件级 Harness 候选</h3>
+              <h3>文件级运行器候选</h3>
               <Badge tone="candidate">兼容保留</Badge>
             </div>
             <div className="resource-list compact-resource-list">
@@ -154,7 +154,7 @@ export function HarnessBoardView({ projects }: HarnessBoardViewProps) {
                   <CandidateCard candidate={candidate} key={`${candidate.projectRoot}-${candidate.path}`} />
                 ))
               ) : (
-                <p className="empty-line">当前没有 Harness 候选。</p>
+                <p className="empty-line">当前没有运行器候选。</p>
               )}
             </div>
           </article>
