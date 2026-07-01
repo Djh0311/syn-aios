@@ -38,7 +38,6 @@ import {
   buildBootstrapProjectWorkflowAction,
   buildPermissionDecisionAction,
   buildUnbindNodeSessionAction,
-  buildUserReviewedInstructionPreviewAction,
   expectedInitializeWorkflowStateAction,
 } from "./helpers/offlineWorkflowActionFixtures";
 import {
@@ -2842,10 +2841,6 @@ function runShellScenario() {
     !workflowProjectWithDerivedMarkup.includes('class="project-candidate-governance"'),
     "项目工作流主区域不应再把候选治理作为独立 strip",
   );
-  assert(
-    workflowProjectWithDerivedMarkup.includes("project-candidate-governance-card"),
-    "候选治理仍应保留为项目画布侧栏详情卡",
-  );
   for (const forbiddenText of [
     ...shellTexts.derivedWorkflowForbiddenTexts,
     ...canvasBoundaryForbiddenPhrases,
@@ -2911,25 +2906,9 @@ function runShellScenario() {
     />
   );
 
-  capturedAction = null;
-  const instructionBoundaryButton = findButtonByText(workflowControlCardWithDraft, "确认指令边界");
-  assert(instructionBoundaryButton, "可控执行协议区缺少确认指令边界按钮");
-  const previewInstruction = instructionBoundaryButton.props?.onClick;
-  assert(typeof previewInstruction === "function", "确认指令边界按钮没有 onClick");
-  previewInstruction({ preventDefault() {}, stopPropagation() {} });
-  const userReviewedInstruction = workflowStateWithProjectWorkflow.project_workflows[0].execution_controls[0].user_reviewed_instruction;
-  assert(userReviewedInstruction, "用户审核业务指令 fixture 缺失");
-  assertDeepEqual(
-    capturedAction,
-    buildUserReviewedInstructionPreviewAction(project.project_root, userReviewedInstruction),
-    "用户审核业务指令边界动作不匹配",
-  );
-  const instructionDialogText = visibleText(
-    <PermissionDialog action={capturedAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
-  );
-  for (const expectedText of shellTexts.instructionDialogExpectedTexts) {
-    assert(instructionDialogText.includes(expectedText), `用户审核业务指令确认弹层缺少 ${expectedText}`);
-  }
+  // 裁剪运行态抽屉：可控执行协议区（含 instruction 明细 + 「确认指令边界」按钮）已从展示层删除，
+  // 对应的「找按钮 + 触发 preview-user-reviewed-instruction 动作 + 校验弹层」正向断言一并移除。
+  // 注：派发指令框仍常驻展示「用户审核业务指令」摘要 / 边界（安全语义不弱化）。
 
   const c5PanelText = visibleText(workflowControlCardWithDraft);
   for (const expectedText of shellTexts.c5PanelExpectedTexts) {
@@ -3185,16 +3164,6 @@ function runShellScenario() {
   for (const expectedText of shellTexts.unbindDialogExpectedTexts) {
     assert(unbindDialogText.includes(expectedText), `解除节点会话确认弹层缺少 ${expectedText}`);
   }
-  capturedAction = null;
-  const dispatchButton = findButtonByText(workflowControlCardWithDraft, "旧安全派发已封存");
-  assert(dispatchButton, "工作流编排区缺少旧安全派发封存按钮");
-  assert(dispatchButton.props?.disabled, "旧安全派发按钮应保持禁用");
-  assert(!dispatchButton.props?.onClick, "旧安全派发按钮不应再触发 pending action");
-  const businessDispatchButton = findButtonByText(workflowControlCardWithDraft, "旧业务派发已封存");
-  assert(businessDispatchButton, "工作流编排区缺少旧业务派发封存按钮");
-  assert(businessDispatchButton.props?.disabled, "旧业务派发按钮应保持禁用");
-  assert(!businessDispatchButton.props?.onClick, "旧业务派发按钮不应再触发 pending action");
-  assert(capturedAction === null, "封存的旧派发按钮不应生成待确认动作");
   capturedAction = null;
   const advanceButton = findButtonByText(workflowControlCardWithDraft, "标记执行中");
   assert(advanceButton, "工作流编排区缺少推进到执行中按钮");

@@ -47,7 +47,7 @@ for (const expectedText of [
   "页面读模型合同",
   "R4-A1",
   "2 个页面合同",
-  "contract only",
+  "仅冻结合同",
   "页面仍使用既有 WorkbenchSnapshot",
   "HomePageReadModel",
   "AgentsPageReadModel",

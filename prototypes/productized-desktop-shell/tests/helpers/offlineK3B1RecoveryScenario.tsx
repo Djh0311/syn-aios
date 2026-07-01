@@ -35,22 +35,8 @@ export function runK3B1BlockedRecoveryProductPathScenario({
     />,
   );
 
-  for (const expectedText of [
-    "K3-B1 被安全审查再次阻断",
-    "会向外部服务发送项目/session 派生 prompt",
-    "写入 Codex 本地状态",
-    "手动运行并回交",
-    "重新授权申请",
-    "更窄本地执行桥",
-    "结果数：未知/不可用",
-    "K3-B2 继续阻断",
-    "主管线复核前不改变成功状态",
-    "K3_B1_REAL_EXECUTION_AUTHORIZED=stage-k-k3-b1-mario-test-workflow-read-only",
-    "cargo test --lib project_workflow_automation::tests::k3_b1_real_mario_test_workflow_resume_requires_env_authorization -- --ignored --exact --nocapture",
-    "ab0442e86e75900ab47b293328e4a2b46512ae68868799b94e8608ffedd57039",
-  ]) {
-    assert(text.includes(expectedText), `L1 recovery 卡片缺少文案：${expectedText}`);
-  }
+  // K3B1RecoveryCard 已从项目工作流侧栏删除（UI 删除任务），其正向文案断言整段移除；
+  // 下方 forbiddenText 反向断言保留（防虚假声称），read model（recovery.*）断言也保留。
 
   for (const forbiddenText of [
     "K3-B1 retry 成功",
