@@ -19,18 +19,12 @@ import {
   directorDecisionLabel,
   directorReviewSummary,
   dispatchNodeIdForWorkItem,
-  executionControlStateLabel,
-  failureVisibilityLabel,
   globalFinalReviewActionLabel,
   globalFinalReviewStatusLabel,
   permissionDecisionLabel,
   permissionStatusLabel,
-  permissionVisibilityLabel,
   processFactDecisionLabel,
-  processFactReviewLabel,
   projectWorkflowDispatchesForCurrentWorkItem,
-  readbackVisibilityLabel,
-  stageGateStatusLabel,
   userResultDecisionActionLabel,
   userResultDecisionStatusLabel,
   workflowNodeLabel,
@@ -132,9 +126,10 @@ export function WorkItemOrchestrationCard({
         <DetailLine label="当前位置" value={workflowNodeLabel(workItem.current_node_id)} />
         <DetailLine label="派发位置" value={workflowNodeLabel(dispatchNodeId)} />
         <DetailLine label="下一步" value={workItem.next_action_label || "缺少状态规则"} />
+        {/* 会话绑定值隐掉机器码 project_binding_source（如 index_inferred）后缀，只留中文会话标题；中文字段保留。 */}
         <DetailLine
           label="会话绑定"
-          value={currentBinding ? `${currentBinding.session_title} / ${currentBinding.project_binding_source}` : "未绑定；请选择已有 Codex 会话"}
+          value={currentBinding ? currentBinding.session_title : "未绑定；请选择已有 Codex 会话"}
         />
       </div>
       <details className="work-item-secondary-fold">
@@ -158,7 +153,6 @@ export function WorkItemOrchestrationCard({
               <span>{currentBinding.native_thread_id}</span>
             </details>
             <span>更新时间：{formatDate(currentBinding.session_updated_at_ms)}</span>
-            <span>项目归属来源：{currentBinding.project_binding_source}</span>
             <span>读取状态：{currentBinding.rollout_exists ? "可读取" : "缺回放记录"}</span>
             {currentBinding.warnings.length ? <em>警告：{currentBinding.warnings.join("，")}</em> : null}
             <div className="workflow-state-actions">
@@ -227,11 +221,6 @@ export function WorkItemOrchestrationCard({
             <p className="eyebrow">派发指令</p>
             <h3>{currentBinding ? "节点派发" : "缺少节点会话绑定"}</h3>
           </div>
-          <Badge tone="unknown">旧入口已封存</Badge>
-        </div>
-        <div className="dispatch-preview-block">
-          <span>安全探针提示词</span>
-          <strong>请只回复这一句：WORKFLOW_NODE_DISPATCH_OK_2026_05_29</strong>
         </div>
         {userReviewedInstruction ? (
           <div className="dispatch-preview-block">
@@ -246,25 +235,6 @@ export function WorkItemOrchestrationCard({
             <em>超时 / 重试：{userReviewedInstruction.timeout_seconds ?? "未登记"} 秒 / {userReviewedInstruction.max_retries} 次</em>
           </div>
         ) : null}
-        <p className="state-warning">
-          旧节点派发入口已在 K2.5 封存；项目真实执行必须走统一 Product Command，不再从这里调用 legacy wrapper。
-        </p>
-        <div className="workflow-state-actions">
-          <button
-            className="primary-button"
-            type="button"
-            disabled
-          >
-            旧安全派发已封存
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            disabled
-          >
-            旧业务派发已封存
-          </button>
-        </div>
         {recentDispatch ? (
           <div className="dispatch-result-card">
             <strong>{recentDispatch.state}</strong>
@@ -282,42 +252,11 @@ export function WorkItemOrchestrationCard({
           <p className="muted small-note">当前工作项还没有节点派发记录。</p>
         )}
       </div>
-      {/* B·折：工作流机器旧入口（全封存声明，无结果）默认收起。 */}
+      {/* B·折：权限请求队列（安全闸，次要块默认收起）。可控执行协议 / 执行尝试明细已裁掉。 */}
       <details className="work-item-secondary-fold">
         <summary>
-          <span>工作流机器（旧入口已封存）</span>
-          <em>总指导循环闭环旧入口声明（默认收起）</em>
-        </summary>
-      <div className="node-dispatch-box">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">工作流机器</p>
-            <h3>总指导循环闭环</h3>
-          </div>
-          <Badge tone="unknown">旧入口已封存</Badge>
-        </div>
-        <div className="dispatch-preview-block">
-          <span>闭环顺序</span>
-          <strong>总指导 → 开发线 → 验证线 → 回收线 → 总指导结论 → 下一轮</strong>
-          <em>目标完成才收口；否则继续下一轮，最多 3 轮。</em>
-        </div>
-        <p className="state-warning">旧工作流机器入口已封存；K3 自动化编排必须走统一 Product Command 主路径。</p>
-        <div className="workflow-state-actions">
-          <button
-            className="primary-button"
-            type="button"
-            disabled
-          >
-            旧闭环已封存
-          </button>
-        </div>
-      </div>
-      </details>
-      {/* B·折：可控执行协议 / 权限请求队列 / 执行尝试记录（次要），默认收起。 */}
-      <details className="work-item-secondary-fold">
-        <summary>
-          <span>可控执行协议 / 权限 / 执行尝试</span>
-          <em>会话绑定外的执行控制次要块（默认收起）</em>
+          <span>权限请求队列</span>
+          <em>会话绑定外的权限请求安全闸（默认收起）</em>
         </summary>
       <ExecutionControlPanel
         control={executionControl}
@@ -368,27 +307,16 @@ export function WorkItemOrchestrationCard({
             {workItem.state === "ready_for_review" ? "待回收" : stateLabel(workItem.state)}
           </Badge>
         </div>
+        {/* 简化：只留一句「收没收」的中文状态，砍掉派发结果 / 复核明细卡（含机器码、ID、命中数等）。 */}
         {completedDispatch ? (
-          <div className="dispatch-result-card">
-            <strong>{completedDispatch.last_message_summary || "无最终回复摘要"}</strong>
-            <span>派发：{completedDispatch.dispatch_id}</span>
-            <span>事件：{completedDispatch.transcript_event_count ?? "未回读"}</span>
-            <span>命中：{completedDispatch.transcript_target_hits ?? "未回读"}</span>
-            {completedDispatch.warnings.length ? <em>警告：{completedDispatch.warnings.join("，")}</em> : null}
-          </div>
+          recentDirectorReview ? (
+            <p className="muted small-note">已回收：{directorDecisionLabel(recentDirectorReview.decision)}。</p>
+          ) : (
+            <p className="muted small-note">已完成派发，待回收结果。</p>
+          )
         ) : (
           <p className="state-warning">当前工作项还没有已完成派发记录，不能记录总指导回收。</p>
         )}
-        {recentDirectorReview ? (
-          <div className="dispatch-result-card">
-            <strong>{directorDecisionLabel(recentDirectorReview.decision)}</strong>
-            <em>{recentDirectorReview.summary}</em>
-            <details className="agent-boundary-details">
-              <summary className="agent-boundary-summary">开发者详情</summary>
-              <span>复核 ID：{recentDirectorReview.review_id}</span>
-            </details>
-          </div>
-        ) : null}
         <div className="workflow-state-actions" aria-label="总指导回收动作">
           {(["accepted", "needs_changes", "paused", "discarded"] as const).map((decision) => (
             <button
@@ -446,20 +374,7 @@ export function WorkItemOrchestrationCard({
           </button>
         ))}
       </div>
-      <div className="audit-summary-list" aria-label="最近审计事件">
-        <p className="eyebrow">最近审计事件</p>
-        {workItem.recent_audit_events.length ? (
-          workItem.recent_audit_events.map((event) => (
-            <div className="audit-summary-item" key={event.event_id}>
-              <strong>{event.event_type}</strong>
-              <span>{stateLabel(event.before_state || "")} 到 {stateLabel(event.after_state || "")}</span>
-              <em>{event.reason || event.created_at || event.event_id}</em>
-            </div>
-          ))
-        ) : (
-          <p className="muted small-note">当前工作项还没有状态推进审计事件。</p>
-        )}
-      </div>
+      {/* 裁掉「最近审计事件」整块（审计明细列表）——只动展示层。 */}
     </article>
   );
 }
@@ -524,37 +439,14 @@ function ProcessFactConfirmationPanel({
           {confirmedFactCount ? "已记录观察" : pendingConfirmationCount ? "待确认" : "准备中"}
         </Badge>
       </div>
-      <div className="workflow-draft-grid">
-        <DetailLine label="汇报数量" value={`${reports.length} 条`} />
-        <DetailLine label="待确认事实" value={`${pendingConfirmationCount} 条`} />
-        <DetailLine label="已确认事实" value={`${confirmedFactCount} 条`} />
-        <DetailLine label="读回" value={readbackVisibilityLabel(recentDispatch)} />
-        <DetailLine label="权限" value={permissionVisibilityLabel(permissionRequests)} />
-        <DetailLine label="失败" value={failureVisibilityLabel(executionAttempts, reports)} />
-      </div>
+      {/* 简化：只留最新一条工作者汇报的中文摘要，砍数字栅格 + 过程事实复核明细 + 未决问题列表（含机器码 / 角色码 / 证据 ref）。 */}
       {latestReport ? (
         <div className="dispatch-result-card">
-          <strong>{latestReport.actor_role || "工作者"} / {latestReport.acceptance_status}</strong>
           <span>{latestReport.summary}</span>
-          <em>证据：{latestReport.evidence_refs.join("；") || "未登记"} / 问题：{latestReport.open_issues.slice(0, 3).join("；") || "无"}</em>
         </div>
       ) : (
         <p className="muted small-note">当前工作项还没有工作者结构化汇报；准备派发不能解释为真实工作者产出。</p>
       )}
-      {processFactReviews.slice(0, 2).map((review) => (
-        <div className="dispatch-result-card" key={review.review_id}>
-          <strong>{processFactReviewLabel(review.result)}</strong>
-          <span>{review.summary || "未登记摘要"}</span>
-          <em>{review.observation_ids.length ? "已记录为观察，仍不是正式记忆" : "未写观察"}</em>
-        </div>
-      ))}
-      {openIssues.length ? (
-        <ul className="state-warning-list">
-          {openIssues.slice(0, 3).map((issue) => (
-            <li key={issue}>{issue}</li>
-          ))}
-        </ul>
-      ) : null}
       <div className="workflow-state-actions" aria-label="C5 工作者汇报动作">
         <button
           className="secondary-button"
@@ -687,11 +579,9 @@ function WorkflowResultSummaryPanel({
     ...c5Issues,
   ]);
   const deferredItems = dedupeUiStrings(resultSummary?.deferred_items ?? stageSummary?.deferred_items ?? []);
-  const passedCount = stageSummary?.gates.filter((gate) => gate.status === "passed").length ?? 0;
+  // 门禁计数：仅 Badge tone 还要 blocked / needs_changes 两项（栅格已砍）。
   const blockedCount = stageSummary?.gates.filter((gate) => gate.status === "blocked").length ?? 0;
   const needsChangesCount = stageSummary?.gates.filter((gate) => gate.status === "needs_changes").length ?? 0;
-  const missingCount = stageSummary?.gates.filter((gate) => gate.status === "missing_evidence").length ?? 0;
-  const deferredCount = stageSummary?.gates.filter((gate) => gate.status === "deferred").length ?? 0;
   const proposal = projectConsultationProposalSummary.latest_proposal;
   const authorization = projectConsultationProposalSummary.linked_plan_authorization;
   const canRecordGlobalReview = Boolean(
@@ -715,12 +605,8 @@ function WorkflowResultSummaryPanel({
           {stageSummary?.accepted_as_stage_c_complete ? "阶段 C 已验收" : resultSummary?.final_review_status === "pending" ? "待复核" : "进行中"}
         </Badge>
       </div>
-      <div className="workflow-draft-grid">
-        <DetailLine label="最终复核" value={globalFinalReviewStatusLabel(resultSummary?.final_review_status ?? "pending")} />
-        <DetailLine label="用户决定" value={userResultDecisionStatusLabel(resultSummary?.user_decision_status ?? "pending")} />
-        <DetailLine label="阶段门禁" value={`${passedCount} 通过 / ${missingCount} 缺证据 / ${needsChangesCount} 需改 / ${blockedCount} 阻断 / ${deferredCount} 后置`} />
-        <DetailLine label="过程事实" value={`${confirmedFactIds.length} 条`} />
-      </div>
+      {/* 简化：只留「结果接没接受」的最终复核 / 用户决定一句话 + 动作按钮；
+          砍数字栅格（阶段门禁 / 过程事实计数）、阶段门禁摘要卡、未决项 / 后置项列表。 */}
       {resultSummary?.final_review_id ? (
         <div className="dispatch-result-card">
           <strong>全局主管已完成最终复核</strong>
@@ -745,27 +631,7 @@ function WorkflowResultSummaryPanel({
       ) : (
         <p className="muted small-note">用户结果决定尚未记录；全局最终复核不能自动代表用户接受。</p>
       )}
-      {stageSummary ? (
-        <div className="dispatch-result-card">
-          <strong>{stageSummary.accepted_as_stage_c_complete ? "阶段 C 验收门禁已通过" : "阶段 C 门禁摘要"}</strong>
-          <span>{stageSummary.gates.slice(0, 5).map((gate) => `${gate.label}：${stageGateStatusLabel(gate.status)}`).join(" / ")}</span>
-          <em>{stageSummary.accepted_as_stage_c_complete ? "仍不代表中间版本整体完成" : "缺口和后置项仍需单独处理"}</em>
-        </div>
-      ) : null}
-      {openItems.length ? (
-        <ul className="state-warning-list">
-          {openItems.slice(0, 5).map((issue) => (
-            <li key={issue}>{issue}</li>
-          ))}
-        </ul>
-      ) : null}
-      {deferredItems.length ? (
-        <ul className="state-warning-list">
-          {deferredItems.slice(0, 5).map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      ) : null}
+      {/* 砍：阶段门禁摘要卡 + 未决项(openItems) + 后置项(deferredItems) 明细列表。 */}
       <div className="workflow-state-actions" aria-label="C6 结果复核动作">
         {(["accepted", "needs_changes", "blocked"] as const).map((decision) => (
           <button
@@ -870,54 +736,13 @@ function ExecutionControlPanel({
   workItem: TaskDraftSummary;
   onRequestAction: (action: PendingAction) => void;
 }) {
-  const instruction = control?.user_reviewed_instruction ?? null;
+  void control;
+  void attempts;
+  // 裁掉「可控执行协议」整块（heading + 重试/超时/取消栅格 + 协议说明 + instruction 明细预览）
+  // 与「失败 / 重试 / 超时 / 取消」整块（执行尝试记录）——只动展示层。
+  // ⚠️ 安全闸保留：下面「权限请求队列」原样常驻。
   return (
     <div className="execution-control-box">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">可控执行协议</p>
-          <h3>{control ? executionControlStateLabel(control.control_state) : "协议未登记"}</h3>
-        </div>
-        <Badge tone={control ? "candidate" : "unknown"}>{control ? executionControlStateLabel(control.long_task_state) : "只读占位"}</Badge>
-      </div>
-      <div className="workflow-draft-grid">
-        <DetailLine label="重试" value={control ? `${control.retry_count}/${control.max_retries}` : "未登记"} />
-        <DetailLine label="超时" value={control?.timeout_seconds ? `${control.timeout_seconds} 秒` : "未登记"} />
-        <DetailLine label="取消" value={control?.cancel_requested_at || "未请求"} />
-        <DetailLine label="失败原因" value={control?.failure_reason || "无"} />
-      </div>
-      <p className="muted small-note">
-        这里只展示协议能力和用户审核边界；不执行真实业务任务、不恢复会话、不发送 Codex 消息。
-      </p>
-      {instruction ? (
-        <div className="instruction-preview-card">
-          <span>用户审核业务指令</span>
-          <strong>{instruction.summary || "未填写摘要"}</strong>
-          <em>{instruction.objective || "未填写目标"}</em>
-          <pre>{instruction.preview_markdown}</pre>
-          <div className="workflow-state-actions">
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() =>
-                onRequestAction({
-                  kind: "preview-user-reviewed-instruction",
-                  label: "确认用户审核业务指令边界",
-                  path: projectRoot,
-                  source: "索引内项目路径",
-                  boundary:
-                    "只确认用户审核业务指令的结构化预览和边界；本版本不执行 codex exec resume、不发送 Codex 消息、不写 /Users/yoyi/.codex、不读取完整会话记录。",
-                  userReviewedInstruction: instruction,
-                })
-              }
-            >
-              确认指令边界
-            </button>
-          </div>
-        </div>
-      ) : (
-        <p className="state-warning">还没有用户审核业务指令结构；真实业务派发保持阻塞。</p>
-      )}
       <div className="permission-queue" aria-label="权限请求队列">
         <p className="eyebrow">权限请求队列</p>
         {permissionRequests.length ? (
@@ -960,20 +785,7 @@ function ExecutionControlPanel({
           <p className="muted small-note">当前没有待展示的权限请求。</p>
         )}
       </div>
-      <div className="attempt-list" aria-label="执行尝试记录">
-        <p className="eyebrow">失败 / 重试 / 超时 / 取消</p>
-        {attempts.length ? (
-          attempts.map((attempt) => (
-            <div className="attempt-card" key={attempt.attempt_id}>
-              <strong>第 {attempt.attempt_no} 次 / {executionControlStateLabel(attempt.state)}</strong>
-              <span>{attempt.failure_reason || attempt.retry_scheduled_at || attempt.timed_out_at || attempt.cancel_requested_at || "无异常记录"}</span>
-              {attempt.warnings.length ? <em>警告：{attempt.warnings.join("，")}</em> : null}
-            </div>
-          ))
-        ) : (
-          <p className="muted small-note">当前没有执行尝试记录。</p>
-        )}
-      </div>
+      {/* 裁掉「失败 / 重试 / 超时 / 取消」整块（执行尝试记录列表）——只动展示层。 */}
     </div>
   );
 }

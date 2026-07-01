@@ -122,34 +122,6 @@ export function ProjectUnifiedExecutionStateCard({
           {recentDispatch?.state ?? selectedTask?.state ?? "无派发"}
         </Badge>
       </div>
-      <div className="workflow-draft-grid">
-        <DetailLine label="统一命令状态" value={projectProductCommandStatusLabel(realExecutionProductCommands)} />
-        <DetailLine label="命令数" value={`${realExecutionProductCommands?.command_count ?? 0}`} />
-        <DetailLine label="等待确认" value={`${realExecutionProductCommands?.pending_decision_count ?? 0}`} />
-        <DetailLine label="受控记录" value={`${realExecutionProductCommands?.running_attempt_count ?? 0}`} />
-        <DetailLine label="阻断" value={`${realExecutionProductCommands?.blocked_attempt_count ?? 0}`} />
-        <DetailLine label="最近状态" value={projectAttemptStatusLabel(realExecutionProductCommands?.last_attempt_status)} />
-        <DetailLine label="读回边界" value="未知 / 不可用（不可用不等于 0）" />
-        <DetailLine label="失败 / 阻断 / 读回" value={`${failureStopRetry?.failure_count ?? 0} / ${failureStopRetry?.blocked_count ?? 0} / ${failureStopRetry?.readback_issue_count ?? 0}`} />
-        <DetailLine label="重新确认" value={failureStopRetry?.retry_requires_new_user_confirmation ? "需要重新确认" : "当前未要求"} />
-        <DetailLine label="停止请求" value={`${failureStopRetry?.manual_stop_requested_count ?? 0}`} />
-        <DetailLine label="旧派发记录" value={recentDispatch ? "历史派发记录可见，不是统一产品命令" : "未见旧派发记录"} />
-        <DetailLine label="旧派发目标会话" value={recentDispatch?.native_thread_id ?? "未绑定"} />
-        <DetailLine label="运行关注" value={projectRuntimeAttentionValue(attention)} />
-        <DetailLine label="任务包" value={selectedTaskPackage?.task_package_id ?? "未生成"} />
-        <DetailLine label="任务记忆包" value={taskMemoryPacketLoading ? "读取中" : taskMemoryPacketError ? "预览失败" : memorySummary.display_text} />
-        <DetailLine label="权限" value={permissionLabel} />
-        <DetailLine label="尝试记录" value={latestAttempt ? `${latestAttempt.state} #${latestAttempt.attempt_no}` : "未见执行尝试"} />
-        <DetailLine label="读回" value={readbackLabel} />
-        <DetailLine label="工作者汇报" value={reports.length ? `${reports.length} 条候选汇报` : "未见工作者汇报"} />
-        <DetailLine label="过程事实" value={reportReviews.length ? `${reportReviews.length} 条主管决定` : "未确认过程事实"} />
-        <DetailLine label="自动编排" value={automation ? projectAutomationStatusLabel(automation.latest_status) : "未记录"} />
-        <DetailLine label="自动编排阶段" value={automation?.latest_plan ? projectAutomationPhaseLabel(automation.latest_plan.current_phase) : "未记录"} />
-        <DetailLine label="编排等待确认" value={`${automation?.waiting_user_count ?? 0} 项`} />
-        <DetailLine label="编排阻断" value={`${automation?.blocked_count ?? 0} 项`} />
-        <DetailLine label="编排读回" value={`${automation?.readback_unknown_count ?? 0} 项未知`} />
-        <DetailLine label="编排捕获" value={`${automation?.capture_event_count ?? 0} 个来源`} />
-      </div>
       {automation?.latest_plan ? (
         <div className="workflow-compact-list">
           {automationUnits.slice(0, 5).map((unit) => (
@@ -192,7 +164,7 @@ export function ProjectUnifiedExecutionStateCard({
               path: project.project_root,
               source: "索引内项目路径",
               boundary:
-                "写入工作台自有 product command / continuation / runtime / audit / observation 边界记录；不发送 prompt、不执行真实 Codex、不写 /Users/yoyi/.codex、不写项目文件。",
+                "写入工作台自有 product command / continuation / runtime / audit / observation 边界记录；不发送提示词、不执行真实 Codex、不写 /Users/yoyi/.codex、不写项目文件。",
               projectWorkflowAutomation: {
                 project_root: project.project_root,
                 project_id: projectWorkflow.project_id,
@@ -206,7 +178,7 @@ export function ProjectUnifiedExecutionStateCard({
                 sandbox: "read-only",
                 requested_by: "user",
                 confirmed_by: "user",
-                risk_acknowledgement: "确认 K3 Level A 只记录 Phase A no-op，不发送 prompt、不执行真实 Codex。",
+                risk_acknowledgement: "确认 K3 Level A 只记录 Phase A no-op，不发送提示词、不执行真实 Codex。",
                 reason: "用户从项目页生成项目自动编排 Level A 非真实闭环。",
                 expected_workflow_revision: workflowRevision,
                 expected_product_command_store_revision: realExecutionProductCommands?.store_revision ?? null,
@@ -261,11 +233,11 @@ export function ProjectUnifiedExecutionStateCard({
       <details className="project-dev-details">
         <summary>开发者详情：统一命令读模型</summary>
         <div className="workflow-draft-grid">
-          <DetailLine label="store revision" value={`${realExecutionProductCommands?.store_revision ?? 0}`} />
-          <DetailLine label="sidecar" value={realExecutionProductCommands?.sidecar_name ?? "未生成"} />
+          <DetailLine label="存储版本" value={`${realExecutionProductCommands?.store_revision ?? 0}`} />
+          <DetailLine label="边车" value={realExecutionProductCommands?.sidecar_name ?? "未生成"} />
           <DetailLine label="普通入口" value={projectProductEntryStatusLabel(realExecutionProductCommands?.ordinary_product_entry_status)} />
           <DetailLine label="旧入口" value={projectProductEntryStatusLabel(realExecutionProductCommands?.legacy_entry_status)} />
-          <DetailLine label="runner" value={projectProductEntryStatusLabel(realExecutionProductCommands?.runner_entry_status)} />
+          <DetailLine label="运行器" value={projectProductEntryStatusLabel(realExecutionProductCommands?.runner_entry_status)} />
           <DetailLine label="Level B" value={realExecutionProductCommands?.level_b_authorization_required ? "仍需单独授权" : "当前读模型未要求"} />
           {failureStopRetryItems.map((item) => (
             <DetailLine

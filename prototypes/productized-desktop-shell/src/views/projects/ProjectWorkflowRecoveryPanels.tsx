@@ -34,7 +34,7 @@ export function K3B1RecoveryCard({
         <Badge tone="warning">阻断</Badge>
       </div>
       <p className="muted small-note">
-        阻断原因：真实 Codex resume 会向外部服务发送项目/session 派生 prompt，并写入 Codex 本地状态。
+        阻断原因：真实 Codex resume 会向外部服务发送项目/session 派生提示词，并写入 Codex 本地状态。
       </p>
       <div className="workflow-draft-grid">
         <SummaryTile label="当前状态" value="安全审查再次阻断" hint="blocked_by_safety_review_again" />
@@ -126,7 +126,7 @@ export function K3B1RecoveryCard({
               path: projectRoot,
               source: "索引内项目路径",
               boundary:
-                "只记录用户准备按 exact command 回交材料的产品路径；不执行 codex exec/resume、不发送 prompt、不写 .codex、不自动接受成功。",
+                "只记录用户准备按 exact command 回交材料的产品路径；不执行 codex exec/resume、不发送提示词、不写 .codex、不自动接受成功。",
               k3B1RecoveryAction: {
                 execution_point_id: recovery.execution_point_id,
                 recovery_choice: "manual_exact_command_submission",
@@ -150,7 +150,7 @@ export function K3B1RecoveryCard({
               path: projectRoot,
               source: "索引内项目路径",
               boundary:
-                "只记录重新授权申请意图；用户需另窗明确批准 prompt 外发和 .codex 写入风险，L1 不启动真实 retry。",
+                "只记录重新授权申请意图；用户需另窗明确批准提示词外发和 .codex 写入风险，L1 不启动真实 retry。",
               k3B1RecoveryAction: {
                 execution_point_id: recovery.execution_point_id,
                 recovery_choice: "renewed_risk_approval_request",
@@ -167,15 +167,15 @@ export function K3B1RecoveryCard({
       <details className="project-canvas-detail-layer technical_details">
         <summary>
           <span>开发者字段</span>
-          <em>只显示引用和 hash，不显示 prompt body、完整 transcript 或 .codex 内容</em>
+          <em>只显示引用和 hash，不显示提示词正文、完整会话记录或 .codex 内容</em>
         </summary>
         <div className="workflow-draft-grid">
           {recovery.developer_details.map((detail) => (
             <PrimitiveDetailLine label={detail.label} value={detail.value} key={detail.label} />
           ))}
-          <PrimitiveDetailLine label="runtime log" value={recovery.runtime_boundary.allowed_summary} />
-          <PrimitiveDetailLine label="audit event" value={recovery.audit_boundary.event_type} />
-          <PrimitiveDetailLine label="memory capture" value={recovery.memory_capture_boundary.suggested_candidate_text} />
+          <PrimitiveDetailLine label="运行日志" value={recovery.runtime_boundary.allowed_summary} />
+          <PrimitiveDetailLine label="审计事件" value={recovery.audit_boundary.event_type} />
+          <PrimitiveDetailLine label="记忆捕获" value={recovery.memory_capture_boundary.suggested_candidate_text} />
         </div>
       </details>
       {recovery.warnings.map((warning) => (

@@ -57,7 +57,7 @@ export function DerivedWorkflowSummary({
         <DetailLine label="节点" value={`${workflow.nodes.length} 个`} />
         <DetailLine label="任务包" value={`${workflow.task_packages.length} 个`} />
         <DetailLine label="当前阶段" value={workflow.current_stage || "未登记"} />
-        <DetailLine label="owner" value={workflow.owner_role || "未登记"} />
+        <DetailLine label="负责角色" value={workflow.owner_role || "未登记"} />
         <DetailLine label="风险" value={workflow.risk_level || "未登记"} />
       </div>
       {workflow.warnings.map((warning) => (
@@ -71,11 +71,6 @@ export function DerivedWorkflowSummary({
         <p className="muted small-note">派生读模型里还没有任务包；不会根据草稿标题自动生成业务事实。</p>
       )}
       <WorkflowBlueprintCanvas workflow={workflow} selectedTaskPackage={selectedTaskPackage} />
-      <WorkflowLedgerPanel workflow={workflow} />
-      <WorkflowReportReviewExceptionPanel workflow={workflow} />
-      <WorkflowStateMachinePanel workflow={workflow} />
-      <WorkflowInterfaceBoundaryPanel workflow={workflow} />
-      <WorkflowAcceptanceScenarioPanel workflow={workflow} />
     </section>
   );
 }
@@ -172,9 +167,9 @@ function WorkflowBlueprintCanvas({
         <p className="eyebrow">节点详情</p>
         <div className="workflow-draft-grid">
           <DetailLine label="知识权限" value={selectedTaskPackage ? listText(selectedTaskPackage.available_knowledge_refs, "空：显式资料引用为空") : "未选择任务包"} />
-          <DetailLine label="tool permission" value={selectedTaskPackage ? listText(selectedTaskPackage.callable_tool_capabilities, "empty：没有工具白名单") : "未选择任务包"} />
-          <DetailLine label="model" value={selectedTaskPackage?.model_id || "missing：必须显式指定"} />
-          <DetailLine label="skills" value={selectedTaskPackage ? listText(selectedTaskPackage.available_skills, "empty：未声明技能") : "未选择任务包"} />
+          <DetailLine label="工具权限" value={selectedTaskPackage ? listText(selectedTaskPackage.callable_tool_capabilities, "空：没有工具白名单") : "未选择任务包"} />
+          <DetailLine label="模型" value={selectedTaskPackage?.model_id || "缺失：必须显式指定"} />
+          <DetailLine label="技能" value={selectedTaskPackage ? listText(selectedTaskPackage.available_skills, "空：未声明技能") : "未选择任务包"} />
           <DetailLine label="验收标准" value={selectedTaskPackage ? listText(selectedTaskPackage.acceptance_criteria, "缺失：缺验收标准") : "未选择任务包"} />
           <DetailLine label="复核要求" value={workflow.review_results.length ? `${workflow.review_results.length} 条审查结果` : "未登记"} />
           <DetailLine label="运行器要求" value={selectedTaskPackage ? listText(selectedTaskPackage.harness_requirements, "空：运行器不是普通节点") : "未选择任务包"} />
@@ -183,172 +178,6 @@ function WorkflowBlueprintCanvas({
         </div>
       </div>
       <p className="muted small-note">手动确认、知识读取、工具调用、普通权限读取不作为默认主节点；运行器只影响检查、任务包模板和完成判定。</p>
-    </div>
-  );
-}
-
-function WorkflowLedgerPanel({ workflow }: { workflow: DerivedWorkflow }) {
-  return (
-    <div className="workflow-ledger-panel">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">工作流账本</p>
-          <h3>只追加摘要和引用</h3>
-        </div>
-        <Badge tone="unknown">{workflow.ledger_entries.length} 条</Badge>
-      </div>
-      <div className="workflow-compact-list">
-        {workflow.ledger_entries.slice(0, 6).map((entry) => (
-          <div className="workflow-compact-item" key={entry.ledger_entry_id}>
-            <strong>{entry.entry_type}</strong>
-            <span>{entry.summary || "未登记摘要"}</span>
-            <em>来源：{entry.source_refs.join("；") || "无"} / 审计：{entry.audit_refs.join("；") || "无"} / 工具：{entry.tool_call_refs.join("；") || "无全文"}</em>
-          </div>
-        ))}
-        {!workflow.ledger_entries.length ? <p className="muted small-note">暂无账本摘要；不会把工具输出全文铺进画布。</p> : null}
-      </div>
-    </div>
-  );
-}
-
-function WorkflowReportReviewExceptionPanel({ workflow }: { workflow: DerivedWorkflow }) {
-  return (
-    <div className="workflow-report-review-grid">
-      <div className="workflow-report-panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">子智能体汇报</p>
-            <h3>只能提交汇报、风险和权限请求</h3>
-          </div>
-          <Badge tone="unknown">{workflow.subagent_reports.length}</Badge>
-        </div>
-        {workflow.subagent_reports.slice(0, 3).map((report) => (
-          <div className="workflow-compact-item" key={report.report_id}>
-            <strong>{report.actor_role || "unknown"} / {report.acceptance_status}</strong>
-            <span>{report.summary}</span>
-            <em>证据：{report.evidence_refs.join("；") || "无"} / 风险：{report.direction_risks.join("；") || "无"}</em>
-          </div>
-        ))}
-        {!workflow.subagent_reports.length ? <p className="muted small-note">暂无子智能体汇报。</p> : null}
-      </div>
-      <div className="workflow-report-panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">审查结果</p>
-            <h3>通过不等于完成</h3>
-          </div>
-          <Badge tone="unknown">{workflow.review_results.length}</Badge>
-        </div>
-        {workflow.review_results.slice(0, 3).map((review) => (
-          <div className="workflow-compact-item" key={review.review_id}>
-            <strong>{review.result}</strong>
-            <span>{review.summary || "未登记摘要"}</span>
-            <em>{review.requires_director_confirmation ? "仍需项目主管确认" : "无需主管确认"} / can_complete={String(review.can_complete_node)}</em>
-          </div>
-        ))}
-        {!workflow.review_results.length ? <p className="muted small-note">暂无审查结果。</p> : null}
-      </div>
-      <div className="workflow-report-panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">异常通知</p>
-            <h3>待办中心 / 运行中入口</h3>
-          </div>
-          <Badge tone={workflow.exceptions.length ? "warning" : "candidate"}>{workflow.exceptions.length}</Badge>
-        </div>
-        {workflow.exceptions.slice(0, 4).map((exception) => (
-          <div className="workflow-compact-item" key={exception.exception_id}>
-            <strong>{exception.exception_type} / {exception.status}</strong>
-            <span>{exception.summary}</span>
-            {exception.warnings.length ? <em>{exception.warnings.join("；")}</em> : null}
-          </div>
-        ))}
-        {!workflow.exceptions.length ? <p className="muted small-note">暂无异常、待处理确认或运行中阻塞。</p> : null}
-      </div>
-    </div>
-  );
-}
-
-function WorkflowStateMachinePanel({ workflow }: { workflow: DerivedWorkflow }) {
-  const gate = workflow.state_machine.completion_gate;
-  return (
-    <div className="workflow-state-machine-panel">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">状态机和完成判定</p>
-          <h3>{gate.can_complete ? "项目主管可确认完成" : "项目主管完成闸门未满足"}</h3>
-        </div>
-        <Badge tone={gate.can_complete ? "candidate" : "warning"}>{gate.can_complete ? "可完成" : "阻断"}</Badge>
-      </div>
-      <div className="workflow-draft-grid">
-        <DetailLine label="工作流允许迁移" value={workflow.state_machine.workflow_allowed_transitions.slice(0, 4).join("；")} />
-        <DetailLine label="工作流拒绝迁移" value={workflow.state_machine.workflow_rejected_transitions.join("；")} />
-        <DetailLine label="节点允许迁移" value={workflow.state_machine.node_allowed_transitions.slice(0, 4).join("；")} />
-        <DetailLine label="节点拒绝迁移" value={workflow.state_machine.node_rejected_transitions.join("；")} />
-        <DetailLine label="缺失项" value={gate.missing.join("；") || "无"} />
-      </div>
-      {workflow.state_machine.warnings.map((warning) => (
-        <p className="state-warning" key={warning}>{warning}</p>
-      ))}
-    </div>
-  );
-}
-
-function WorkflowInterfaceBoundaryPanel({ workflow }: { workflow: DerivedWorkflow }) {
-  const boundaries = workflow.interface_boundaries;
-  const rows = [
-    boundaries.proposal_interface,
-    boundaries.memory_candidate_interface,
-    boundaries.knowledge_refs_interface,
-    boundaries.tool_capability_registry,
-    boundaries.model_pool_selector,
-    boundaries.harness_requirement_provider,
-    boundaries.audit_refs_interface,
-  ];
-  return (
-    <div className="workflow-interface-panel">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">接口边界</p>
-          <h3>保守默认</h3>
-        </div>
-        <Badge tone="unknown">桩执行</Badge>
-      </div>
-      <div className="workflow-compact-list">
-        {rows.map((boundary) => (
-          <div className="workflow-compact-item" key={boundary.interface_id}>
-            <strong>{boundary.interface_id}</strong>
-            <span>允许：{boundary.allowed.join("；") || "无"}</span>
-            <em>阻止：{boundary.blocked.join("；") || "无"}</em>
-          </div>
-        ))}
-      </div>
-      {boundaries.warnings.map((warning) => (
-        <p className="state-warning" key={warning}>{warning}</p>
-      ))}
-    </div>
-  );
-}
-
-function WorkflowAcceptanceScenarioPanel({ workflow }: { workflow: DerivedWorkflow }) {
-  return (
-    <div className="workflow-acceptance-panel">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">端到端验收场景</p>
-          <h3>测试样例和界面展示验收</h3>
-        </div>
-        <Badge tone="unknown">{workflow.acceptance_scenarios.length}</Badge>
-      </div>
-      <div className="workflow-compact-list">
-        {workflow.acceptance_scenarios.map((scenario) => (
-          <div className="workflow-compact-item" key={scenario.scenario_id}>
-            <strong>{scenario.scenario_id} / {scenario.title}</strong>
-            <span>{scenario.status}</span>
-            <em>{scenario.expected.join("；")}</em>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

@@ -11,7 +11,6 @@ import {
   summarizeProjectDirectorTaskPlan,
 } from "../../lib/projectDirectorTaskPlan";
 import {
-  projectConsultationProposalStatusLabels,
   summarizeProjectConsultationProposalStore,
 } from "../../lib/projectConsultationProposal";
 import type {
@@ -22,11 +21,20 @@ import type {
   ProjectConsultationProposal,
   ProjectConsultationProposalDecisionKind,
   ProjectDirectorTaskPlan,
+  DirectorChainOutcome,
+  ProjectWorkflowChainStatus,
+  AutoAdvanceRoleLoopOutcome,
   ProjectRecord,
   TaskDraftSummary,
   TaskPackage,
   WorkflowStateSnapshot,
 } from "../../lib/types";
+import {
+  autoAdvanceAuthorizedRoleLoop,
+  getProjectWorkflowChainStatus,
+  startProjectDirectorChain,
+  stopProjectWorkflowChain,
+} from "../../lib/tauri";
 import { DetailLine } from "./projectWorkflowLabels";
 
 export function ProjectDirectorTaskPlanCard({
@@ -62,18 +70,12 @@ export function ProjectDirectorTaskPlanCard({
         </div>
         <Badge tone={projectDirectorTaskPlanTone(plan, loading, error)}>{summary.status_label}</Badge>
       </div>
-      <div className="workflow-draft-grid">
-        <DetailLine label="planned" value={String(summary.planned_task_count)} />
-        <DetailLine label="prepared" value={String(summary.prepared_dispatch_count)} />
-        <DetailLine label="needs_binding" value={String(summary.needs_binding_count)} />
-        <DetailLine label="blocked" value={String(summary.blocked_count)} />
-        <DetailLine label="记忆快照" value={summary.memory_text} />
-      </div>
+      {/* 裁掉数字栅格（已计划 / 已准备 / 待绑定 / 已阻断 / 记忆快照）——只动展示层；标题/状态/按钮保留。 */}
       {error ? <p className="state-warning">拆任务草案读取失败：{error}</p> : null}
       <details className="agent-boundary-details">
         <summary className="agent-boundary-summary">开发者详情</summary>
         <div className="workflow-draft-grid">
-          <DetailLine label="active 授权" value={summary.active_authorization_id ?? request?.authorization_id ?? "暂无"} />
+          <DetailLine label="生效授权" value={summary.active_authorization_id ?? request?.authorization_id ?? "暂无"} />
         </div>
       </details>
       {summary.blocked_reasons.map((reason) => (
@@ -92,6 +94,11 @@ export function ProjectDirectorTaskPlanCard({
       ) : (
         <p className="muted small-note">生成拆任务草案后才会显示工作者子任务摘要。</p>
       )}
+      {!request && !loading ? (
+        <p className="state-warning">
+          还不能「生成拆任务草案」：需先在上方完成 ① 确认方案范围 → ② 全局边界复核通过（出现生效授权）后再回到这里。
+        </p>
+      ) : null}
       <div className="workflow-state-actions">
         <button className="secondary-button" type="button" disabled={previewDisabled} onClick={onPreview}>
           {loading ? "正在生成" : "生成拆任务草案"}
@@ -117,9 +124,284 @@ export function ProjectDirectorTaskPlanCard({
         </button>
       </div>
       {prepareBlockedReason ? <p className="state-warning">{prepareBlockedReason}</p> : null}
-      <p className="muted small-note">只创建准备记录，不启动工作者、不执行 codex exec resume、不写 /Users/yoyi/.codex。</p>
+      {/* C1 手动挡（override）：按计划开干整条主管链。hooks 抽进带 typeof window 守卫的子组件，
+          否则离线 findButtonByText 平铺调用本卡会撞 useState（无 dispatcher）——backend 线挂起件漏了这点。 */}
+      <DirectorChainRunButton plan={plan} />
     </section>
   );
+}
+
+// C1 主管链运行按钮（手动挡/override）：含 useState/useEffect/真起链命令。
+// typeof window 守卫放 hooks 之前——离线测试以普通函数平铺调用组件（findButtonByText/renderComposite·无 React dispatcher），
+// 守卫在服务端/离线先返回 null、不触任何 hook；浏览器侧才进 hooks。（同 ProjectWorkflowReactFlowCanvas 套路。）
+function DirectorChainRunButton({ plan }: { plan: ProjectDirectorTaskPlan | null }) {
+  if (typeof window === "undefined") return null;
+  return <DirectorChainRunButtonBrowser plan={plan} />;
+}
+
+function DirectorChainRunButtonBrowser({ plan }: { plan: ProjectDirectorTaskPlan | null }) {
+  const [chainRunning, setChainRunning] = useState(false);
+  const [chainOutcome, setChainOutcome] = useState<DirectorChainOutcome | null>(null);
+  const [chainStatus, setChainStatus] = useState<ProjectWorkflowChainStatus | null>(null);
+  const [chainError, setChainError] = useState<string | null>(null);
+  // 钉死：只用 status==prepared 那份（传 preview 那份后端 B1 filter 会全跳成空链）。
+  const preparedTasks = plan ? plan.planned_tasks.filter((task) => task.status === "prepared") : [];
+  const canRunChain =
+    !!plan && plan.prepared_dispatch_count > 0 && preparedTasks.length > 0 && !chainRunning;
+
+  // 链跑期间轮询运行态（复用 #19 只读命令；主管链记录同种结构）。
+  useEffect(() => {
+    if (!chainRunning || !plan) return;
+    const projectRoot = plan.project_root;
+    const workflowId = plan.workflow_id;
+    let active = true;
+    const poll = async () => {
+      try {
+        const status = await getProjectWorkflowChainStatus(projectRoot, workflowId);
+        if (active && status) setChainStatus(status);
+      } catch {
+        // 轮询失败不致命
+      }
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 2500);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [chainRunning, plan]);
+
+  async function runDirectorChain() {
+    if (!plan) return;
+    // 现取 prepared 那份（防闭包拿到旧值），空则不发——绝不把 preview 计划送去空跑。
+    const tasks = plan.planned_tasks.filter((task) => task.status === "prepared");
+    if (tasks.length === 0) return;
+    setChainRunning(true);
+    setChainError(null);
+    setChainOutcome(null);
+    setChainStatus(null);
+    try {
+      const outcome = await startProjectDirectorChain({
+        project_root: plan.project_root,
+        workflow_id: plan.workflow_id,
+        planned_tasks: tasks,
+      });
+      setChainOutcome(outcome);
+    } catch (chainStartError) {
+      setChainError(
+        chainStartError instanceof Error ? chainStartError.message : String(chainStartError),
+      );
+    } finally {
+      setChainRunning(false);
+    }
+  }
+
+  async function stopDirectorChain() {
+    if (!plan) return;
+    try {
+      await stopProjectWorkflowChain({
+        project_root: plan.project_root,
+        workflow_id: plan.workflow_id,
+      });
+    } catch (chainStopError) {
+      setChainError(
+        chainStopError instanceof Error ? chainStopError.message : String(chainStopError),
+      );
+    }
+  }
+
+  return (
+    <>
+      <div className="workflow-state-actions">
+        <button
+          className="primary-button"
+          type="button"
+          disabled={!canRunChain}
+          onClick={() => void runDirectorChain()}
+        >
+          {chainRunning ? "主管链运行中…" : "按计划开干（整条主管链）"}
+        </button>
+        {chainRunning ? (
+          <button className="secondary-button" type="button" onClick={() => void stopDirectorChain()}>
+            停链
+          </button>
+        ) : null}
+      </div>
+      <p className="muted small-note">
+        ⚠️ 在固定测试项目真起 Codex 链（真执行·非预览）：按已准备任务依赖序逐个真跑工作者；非测试项目被后端闸拒。
+      </p>
+      {plan && plan.prepared_dispatch_count === 0 && !chainRunning ? (
+        <p className="muted small-note">先「准备授权范围内派发」并刷新拆任务草案（出现已准备任务）后才能开干。</p>
+      ) : null}
+      {chainStatus ? (
+        <div className="workflow-compact-list" aria-label="主管链进度">
+          <div className="workflow-compact-item">
+            <strong>链状态</strong>
+            <span>{chainStatus.state}</span>
+          </div>
+          {chainStatus.nodes.map((node) => (
+            <div className="workflow-compact-item" key={node.node_id}>
+              <strong>{node.node_id}</strong>
+              <span>{node.state}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {chainOutcome ? (
+        <p className="muted small-note">
+          主管链结束：completed {chainOutcome.completed} / dispatched {chainOutcome.dispatched} / skipped{" "}
+          {chainOutcome.skipped}
+          {chainOutcome.stopped_reason ? `；停因 ${chainOutcome.stopped_reason}` : "；全跑完"}
+        </p>
+      ) : null}
+      {chainError ? <p className="state-warning">主管链失败：{chainError}</p> : null}
+    </>
+  );
+}
+
+// 件 D 核心 · 一键自动推进（步骤塌缩）：方案授权生效后出现，一下把 拆任务→prepare→worker 链跑 串完，
+// 取代手点那 3 步。前端只造请求 + 发，闸在后端 path-lock（无 active 授权 / 非测试项目后端拒）。
+// hooks 进 typeof window 守卫子组件（离线平铺调用安全·同 DirectorChainRunButton）。
+export function AutoAdvanceRoleLoopButton({
+  project,
+  request,
+}: {
+  project: ProjectRecord;
+  request: PreviewProjectDirectorTaskPlanInput | null;
+}) {
+  if (typeof window === "undefined") return null;
+  // 只在已授权（active 授权 + 边界复核通过 → request 非空）后才出现；没授权时不渲染（人闸前不给一键跑）。
+  if (!request) return null;
+  return <AutoAdvanceRoleLoopButtonBrowser project={project} request={request} />;
+}
+
+function AutoAdvanceRoleLoopButtonBrowser({
+  project,
+  request,
+}: {
+  project: ProjectRecord;
+  request: PreviewProjectDirectorTaskPlanInput;
+}) {
+  void project;
+  const [running, setRunning] = useState(false);
+  const [outcome, setOutcome] = useState<AutoAdvanceRoleLoopOutcome | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [chainStatus, setChainStatus] = useState<ProjectWorkflowChainStatus | null>(null);
+
+  // 链跑起来（stage==ran）后轮询进度，复用现成只读命令（与 C1 同种链记录）。
+  useEffect(() => {
+    if (outcome?.stage !== "ran") return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const status = await getProjectWorkflowChainStatus(request.project_root, request.workflow_id);
+        if (active && status) setChainStatus(status);
+      } catch {
+        // 轮询失败不致命
+      }
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 2500);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [outcome?.stage, request.project_root, request.workflow_id]);
+
+  async function runAutoAdvance() {
+    setRunning(true);
+    setError(null);
+    setOutcome(null);
+    setChainStatus(null);
+    try {
+      const result = await autoAdvanceAuthorizedRoleLoop({
+        project_root: request.project_root,
+        workflow_id: request.workflow_id,
+        actor_id: "user",
+      });
+      setOutcome(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <section className="project-canvas-detail-card role-loop-auto-advance" aria-label="一键自动推进">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">一键自动推进</p>
+          <h3>授权范围内自动跑：拆任务 → 准备 → 工作者链跑</h3>
+        </div>
+        <Badge tone={outcome?.stage === "ran" ? "candidate" : outcome ? "warning" : "unknown"}>
+          {outcome ? autoAdvanceStageLabel(outcome.stage) : running ? "运行中" : "待运行"}
+        </Badge>
+      </div>
+      <div className="role-loop-plain" aria-label="一键自动推进在做什么（人话）">
+        <p className="role-loop-plain-lead">
+          方案已授权 → 点这个，AI 自动把「拆任务 + 准备派发 + 工作者链跑」一口气做完，你不用再手点那 3 步。
+        </p>
+        <p className="role-loop-plain-note">
+          ⚠️ 这是<strong>真执行·非预览</strong>：在固定测试项目真起 Codex 工作者链。碰到没绑会话 / 越界 / 失败会停下问你；非测试项目被后端闸拒。
+        </p>
+      </div>
+      <div className="workflow-state-actions">
+        <button className="primary-button" type="button" disabled={running} onClick={() => void runAutoAdvance()}>
+          {running ? "自动推进中…" : "▶▶ 一键自动推进"}
+        </button>
+      </div>
+      {error ? <p className="state-warning">自动推进失败：{error}</p> : null}
+      {outcome ? (
+        <>
+          <div className="workflow-draft-grid">
+            <DetailLine label="阶段" value={autoAdvanceStageLabel(outcome.stage)} />
+            <DetailLine label="拆出任务" value={String(outcome.planned_task_count)} />
+            <DetailLine label="已准备" value={String(outcome.prepared_count)} />
+            <DetailLine label="待绑会话" value={String(outcome.needs_binding_count)} />
+            <DetailLine label="越界阻断" value={String(outcome.blocked_count)} />
+          </div>
+          <p className={outcome.stage === "ran" ? "muted small-note" : "state-warning"}>{outcome.message}</p>
+          {outcome.stage === "needs_binding" ? (
+            <p className="state-warning">
+              差会话绑定：到下面「工作项执行 · 节点会话绑定」给 codex-dev 节点选一条已有 Codex 会话，再回来点一键自动推进。
+            </p>
+          ) : null}
+          {outcome.stop_reason ? <p className="state-warning">停因：{outcome.stop_reason}</p> : null}
+          {outcome.chain_outcome ? (
+            <p className="muted small-note">
+              链：completed {outcome.chain_outcome.completed} / dispatched {outcome.chain_outcome.dispatched} / skipped{" "}
+              {outcome.chain_outcome.skipped}
+              {outcome.chain_outcome.stopped_reason ? `；停因 ${outcome.chain_outcome.stopped_reason}` : ""}
+            </p>
+          ) : null}
+          {chainStatus ? (
+            <div className="workflow-compact-list" aria-label="自动推进链进度">
+              <div className="workflow-compact-item">
+                <strong>链状态</strong>
+                <span>{chainStatus.state}</span>
+              </div>
+              {chainStatus.nodes.map((node) => (
+                <div className="workflow-compact-item" key={node.node_id}>
+                  <strong>{node.node_id}</strong>
+                  <span>{node.state}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+      <p className="muted small-note">下面「拆任务草案 / 准备派发 / 按计划开干」是手动挡——想分步看 / 干预时用；日常走上面这一键即可。</p>
+    </section>
+  );
+}
+
+function autoAdvanceStageLabel(stage: string) {
+  if (stage === "ran") return "已自动推进 / 链在跑";
+  if (stage === "needs_binding") return "差会话绑定";
+  if (stage === "blocked") return "越界阻断";
+  if (stage === "no_dispatchable") return "无可派发";
+  return stage;
 }
 
 function projectDirectorTaskPlanHeadline(
@@ -151,12 +433,13 @@ function projectDirectorPrepareBlockedReason(
   loading: boolean,
   error: string | null,
 ) {
-  if (!request) return "缺少 active 授权或已确认方案，不能准备派发。";
+  if (!request) return "缺少生效授权或已确认方案，不能准备派发。";
   if (loading) return "拆任务草案生成中，暂不能准备派发。";
   if (error) return "拆任务草案读取失败，暂不能准备派发。";
   if (!plan) return "请先生成拆任务草案。";
   if (plan.blocked_count > 0) return "越界任务已阻断";
-  if (plan.needs_binding_count > 0) return "等待会话绑定后才能准备派发";
+  if (plan.needs_binding_count > 0)
+    return "等待会话绑定：需先给 codex-dev 节点绑定一条已有 Codex 会话（到执行面板「节点会话绑定 · 选择已有 Codex 会话」选一条），再回来「准备授权范围内派发」。";
   if (plan.prepared_dispatch_count >= plan.planned_task_count && plan.planned_task_count > 0) {
     return "已准备；仍未执行工作者";
   }
@@ -216,6 +499,8 @@ export function ProjectConsultationProposalCard({
 }) {
   const proposal = summary.latest_proposal;
   const [decisionSummary, setDecisionSummary] = useState("");
+  // 件 D · 说目标：让 AI 真咨询出方案的输入（取代手填模板）。
+  const [goal, setGoal] = useState("");
 
   useEffect(() => {
     setDecisionSummary("");
@@ -230,7 +515,6 @@ export function ProjectConsultationProposalCard({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">项目咨询方案草案</p>
-          <h3>{summary.display_text}</h3>
         </div>
         <Badge tone={proposal?.status === "user_confirmed" ? "candidate" : proposal ? "warning" : "unknown"}>
           {summary.status_label}
@@ -239,8 +523,44 @@ export function ProjectConsultationProposalCard({
 
       {!proposal ? (
         <>
-          <p className="muted small-note">还没有项目咨询方案草案。可以先创建模板草案；不会调用真实项目咨询智能体。</p>
+          {/* 件 D · 说目标 → AI 出方案（主路径）：真 codex 只读咨询出方案，取代手填模板。 */}
           {projectWorkflow ? (
+            <div className="role-loop-consult-trigger">
+              <label className="proposal-decision-field">
+                <span>说目标 — 想让 AI 围绕什么出方案？</span>
+                <textarea
+                  value={goal}
+                  onChange={(event) => setGoal(event.target.value)}
+                  placeholder="例：把首页加载从 3 秒优化到 1 秒内，先让红队找瓶颈、再改。"
+                />
+              </label>
+              <div className="workflow-state-actions">
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={!goal.trim()}
+                  onClick={() => onRequestAction(buildRunProjectConsultationAction(project, projectWorkflow, goal.trim()))}
+                >
+                  让 AI 出方案
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <>
+          {/* 砍一波（从用户实际使用出发）：只留「想达成」给用户决策；会动到哪/分几步/必停点等细节栅格 + 步骤列表已砍。
+              所有安全状态 state-warning（确认/缺授权回链等）原样保留，安全语义不弱化。 */}
+          <div className="role-loop-plain" aria-label="这份方案在说什么（人话）">
+            <p className="role-loop-plain-lead">想达成：{proposal.goal_summary}</p>
+          </div>
+          {summary.authorization_missing_after_confirmation ? (
+            <p className="state-warning">方案已确认但缺少 C1 授权回链；不能显示为可自动推进。</p>
+          ) : null}
+          {proposal.status === "user_confirmed" ? (
+            <p className="state-warning">已记录用户确认；仍需全局主管复核后才可自动推进。</p>
+          ) : null}
+          {(proposal.status === "rejected" || proposal.status === "changes_requested") && projectWorkflow ? (
             <div className="workflow-state-actions">
               <button
                 className="secondary-button"
@@ -257,38 +577,9 @@ export function ProjectConsultationProposalCard({
                   )
                 }
               >
-                创建方案草案
+                重新创建方案草案
               </button>
             </div>
-          ) : (
-            <p className="state-warning">缺少项目工作流，暂不能创建方案草案。</p>
-          )}
-        </>
-      ) : (
-        <>
-          <div className="workflow-draft-grid">
-            <DetailLine label="状态" value={projectConsultationProposalStatusLabels[proposal.status] ?? proposal.status} />
-            <DetailLine label="目标" value={proposal.goal_summary} />
-            <DetailLine label="步骤" value={String(proposal.proposed_steps.length)} />
-            <DetailLine label="风险" value={String(proposal.risks.length)} />
-            <DetailLine label="读写范围" value={`读 ${proposal.scope_draft.allowed_read_roots.length} / 写 ${proposal.scope_draft.allowed_write_roots.length}`} />
-            <DetailLine label="工具 / 检查" value={`工具 ${proposal.scope_draft.allowed_tools.length} / 检查 ${proposal.scope_draft.allowed_checks.length}`} />
-            <DetailLine label="停止条件" value={String(proposal.scope_draft.stop_conditions.length)} />
-            <DetailLine
-              label="授权回链"
-              value={summary.linked_plan_authorization?.status ?? (proposal.plan_authorization_id ? "缺失" : "未建立")}
-            />
-          </div>
-          <ul className="proposal-scope-list" aria-label="方案主要步骤">
-            {proposal.proposed_steps.slice(0, 4).map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ul>
-          {summary.authorization_missing_after_confirmation ? (
-            <p className="state-warning">方案已确认但缺少 C1 授权回链；不能显示为可自动推进。</p>
-          ) : null}
-          {proposal.status === "user_confirmed" ? (
-            <p className="state-warning">已记录用户确认；仍需全局主管复核后才可自动推进。</p>
           ) : null}
           {canDecide ? (
             <>
@@ -358,10 +649,8 @@ export function ProjectConsultationProposalCard({
               </div>
             </>
           ) : null}
-          {summary.latest_decision ? <p className="muted small-note">最近决定：{summary.latest_decision.summary}</p> : null}
         </>
       )}
-      <p className="muted small-note">C2 只记录方案草案和用户决定；本轮不会启动真实工作者。</p>
     </section>
   );
 }
@@ -495,9 +784,31 @@ export function GlobalBoundaryReviewCard({
           </div>
         </>
       ) : null}
-      <p className="muted small-note">C3 只记录全局边界复核和授权状态；不会启动工作者。</p>
     </section>
   );
+}
+
+// 件 D · 说目标 → AI 出方案：构造 run-project-consultation 动作（经确认弹层 = 真执行提示，App 执行 + 刷新方案 store）。
+export function buildRunProjectConsultationAction(
+  project: ProjectRecord,
+  projectWorkflow: WorkflowStateSnapshot["project_workflows"][number],
+  goal: string,
+): PendingAction {
+  return {
+    kind: "run-project-consultation",
+    label: "让 AI 出方案（项目咨询）",
+    path: project.project_root,
+    source: "索引内项目路径",
+    boundary:
+      "真起 Codex 只读咨询、读项目上下文出一份方案，写成「待用户确认」草案；结构性只读、不碰执行闸、不启动工作者、不写 /Users/yoyi/.codex；方案不自动确认。",
+    runProjectConsultation: {
+      project_root: project.project_root,
+      project_id: projectWorkflow.project_id,
+      workflow_id: projectWorkflow.workflow_id,
+      goal,
+      actor_id: "user",
+    },
+  };
 }
 
 export function buildProjectConsultationProposalCreationAction(
@@ -729,7 +1040,7 @@ export function PlanAuthorizationSummaryCard({
       </div>
       <div className="workflow-draft-grid">
         <DetailLine label="允许角色" value={String(summary.actor_scope?.allowed_role_ids.length ?? 0)} />
-        <DetailLine label="允许 agent" value={String(summary.actor_scope?.allowed_agent_ids.length ?? 0)} />
+        <DetailLine label="允许智能体" value={String(summary.actor_scope?.allowed_agent_ids.length ?? 0)} />
         <DetailLine label="读写范围" value={`读 ${summary.resource_scope?.allowed_read_roots.length ?? 0} / 写 ${summary.resource_scope?.allowed_write_roots.length ?? 0}`} />
         <DetailLine label="工具 / 检查" value={`工具 ${summary.resource_scope?.allowed_tools.length ?? 0} / 检查 ${summary.resource_scope?.allowed_checks.length ?? 0}`} />
         <DetailLine label="停止条件" value={String(summary.stop_condition_count)} />
@@ -739,16 +1050,15 @@ export function PlanAuthorizationSummaryCard({
       <details className="agent-boundary-details">
         <summary className="agent-boundary-summary">开发者详情</summary>
         <div className="workflow-draft-grid">
-          <DetailLine label="sidecar" value={`${summary.sidecar_name} / rev ${summary.revision}`} />
+          <DetailLine label="边车" value={`${summary.sidecar_name} / 版本 ${summary.revision}`} />
           <DetailLine label="授权对象" value={summary.latest_authorization_id ?? "未建立"} />
-          <DetailLine label="active 授权" value={summary.active_authorization_id ?? "暂无"} />
+          <DetailLine label="生效授权" value={summary.active_authorization_id ?? "暂无"} />
           <DetailLine label="最近审计" value={summary.recent_audit_event_id ?? "暂无"} />
         </div>
       </details>
       {blockedReasons.map((reason) => (
         <p className="state-warning" key={reason}>{reason}</p>
       ))}
-      <p className="muted small-note">本摘要只读；授权检查由控制核心执行；本轮未执行真实工作者。</p>
     </section>
   );
 }

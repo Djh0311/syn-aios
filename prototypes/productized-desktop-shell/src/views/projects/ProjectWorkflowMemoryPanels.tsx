@@ -137,17 +137,17 @@ export function CandidateGovernanceStrip({
       <details className="agent-boundary-details">
         <summary className="agent-boundary-summary">开发者详情</summary>
         <div className="workflow-draft-grid">
-          <DetailLine label="黑板 sidecar" value={blackboardOverlay.sidecar_name} />
+          <DetailLine label="黑板边车" value={blackboardOverlay.sidecar_name} />
           <DetailLine label="观察辅助状态文件" value={observationSummary.sidecar_name} />
           <DetailLine label="最近观察审计" value={observationSummary.recent_audit_event?.event_type ?? "暂无"} />
           <DetailLine label="最近观察候选" value={observationSummary.recent_candidate_key ?? "暂无"} />
-          <DetailLine label="记忆 sidecar" value={memorySummary.sidecar_name} />
+          <DetailLine label="记忆边车" value={memorySummary.sidecar_name} />
           <DetailLine label="adopted_memory_id" value={memorySummary.first_adoption?.adopted_memory_id ?? "暂无"} />
           <DetailLine label="adopted_version_id" value={memorySummary.first_adoption?.adopted_version_id ?? "暂无"} />
           <DetailLine label="adopted_audit_event_id" value={memorySummary.first_adoption?.adopted_audit_event_id ?? "暂无"} />
-          <DetailLine label="正式记忆 sidecar" value={formalSummary.sidecar_name} />
+          <DetailLine label="正式记忆边车" value={formalSummary.sidecar_name} />
           <DetailLine label="最近正式记忆审计" value={formalSummary.recent_audit_event?.event_type ?? "暂无"} />
-          <DetailLine label="记忆 lint sidecar" value={memoryLintSummary.sidecar_name} />
+          <DetailLine label="记忆检查边车" value={memoryLintSummary.sidecar_name} />
           <DetailLine label="最近检查运行" value={memoryLintSummary.recent_run ? `${memoryLintSummary.recent_run.status} / ${memoryLintSummary.recent_run.reason}` : "暂无"} />
           <DetailLine label="任务包记忆快照" value={taskPackageMemorySummary.snapshot_id ? `${taskPackageMemorySummary.snapshot_id} / ${taskPackageMemorySummary.stale ? "过期" : "新鲜"}` : "未生成"} />
         </div>
@@ -180,7 +180,7 @@ export function CandidateGovernanceStrip({
       </div>
       <div className="workflow-compact-list" aria-label="记忆检查发现摘要">
         <div className="workflow-compact-item">
-          <strong>记忆 lint 阻断摘要 / rev {memoryLintSummary.revision}</strong>
+          <strong>记忆检查阻断摘要 / 版本 {memoryLintSummary.revision}</strong>
           <span>{memoryLintSummary.display_text}</span>
           <em>阻断级发现会阻止进入任务包；检查只生成待处理发现；不会自动修改正式记忆。</em>
         </div>
@@ -288,10 +288,6 @@ export function CandidateGovernanceStrip({
           </button>
         ) : null}
       </div>
-      <p className="muted small-note">工作流观察只记录明确事件和来源；观察可生成候选，候选仍需确认 / 采纳；观察不是正式记忆。</p>
-      <p className="muted small-note">候选确认只写候选辅助状态文件；不写正式事实、不写正式长期记忆、不推进工作流状态。</p>
-      <p className="muted small-note">受控正式记忆读取 formal-memories.v1.json；创建时写入版本和审计；候选采纳需走受控动作；任务包记忆注入使用生成时冻结快照。</p>
-      <p className="muted small-note">检查只生成待处理发现；阻断级发现会阻止进入任务包；不会自动修改正式记忆。</p>
       {observationSummary.warnings.slice(0, 3).map((warning) => (
         <p className="state-warning" key={warning}>{warning}</p>
       ))}

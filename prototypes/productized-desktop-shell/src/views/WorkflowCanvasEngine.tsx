@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
   ReactFlow,
   Background,
@@ -67,6 +68,9 @@ type WorkflowCanvasEngineProps = {
   // 宿主（项目面）订阅画布编辑态：每次改动把最新 canvas 推上来，提交时直接用内存里的实时图，
   // 绕开"先手动保存再提交 + 读盘"整条链（真机实测刷盘方案修不动，改走实时推送）。
   onDraftChange?: (canvas: CanvasDefinition) => void;
+  // 宿主（项目编辑面）把「提交 / 返回」等草案动作塞进底边动作条同一行（与 ▶运行选中节点 并排），
+  // 不再单独浮一条顶边 HUD。实验面不传 → 不渲染。
+  editActions?: ReactNode;
 };
 
 type FlowNode = Node<CanvasNodeData>;
@@ -105,7 +109,7 @@ function fromFlow(canvas: CanvasDefinition, nodes: FlowNode[], edges: Edge[]): C
   };
 }
 
-export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice, onDraftChange }: WorkflowCanvasEngineProps) {
+export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice, onDraftChange, editActions }: WorkflowCanvasEngineProps) {
   const [canvas, setCanvas] = useState<CanvasDefinition | null>(null);
   const [nodes, setNodes] = useState<FlowNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -124,6 +128,30 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice, onD
   const reload = useCallback(async () => {
     setBusy(true);
     setError(null);
+    // 浏览器预览（DEV 且非 Tauri 窗口）：后端不可用，canvasLoad 会抛错→走 fallback、引擎渲染不出来。
+    // 这里改起一张空画布让引擎照常铺四边 HUD（调色板 / 节点面板 / 底边动作条），供布局预览与重叠检测。
+    // 纯前端、不读不写后端；真机（Tauri）下条件为假，照常走下面的 canvasLoad。
+    if (import.meta.env?.DEV === true && !("__TAURI_INTERNALS__" in window)) {
+      const now = new Date().toISOString();
+      const blank: CanvasDefinition = {
+        schema_version: "canvas-v1",
+        canvas_id: canvasId,
+        display_name: "浏览器预览画布",
+        project_root: config.kind === "project" ? config.projectRoot ?? null : null,
+        scope: config.kind === "project" ? "project" : "experiment",
+        nodes: [],
+        edges: [],
+        created_at: now,
+        updated_at: now,
+        warnings: [],
+      };
+      setCanvas(blank);
+      setNodes(toFlowNodes(blank));
+      setEdges(toFlowEdges(blank));
+      setDirty(false);
+      setBusy(false);
+      return;
+    }
     try {
       const loaded = await canvasLoad(canvasId);
       // Project surface: bind the canvas to its project + stamp scope on load so
@@ -197,6 +225,14 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice, onD
       return [...curr, fn];
     });
     setSelected(id);
+    setDirty(true);
+  }, []);
+
+  // 删除选中节点（连带它的连线）。纯前端图编辑，不执行。
+  const deleteNode = useCallback((id: string) => {
+    setNodes((curr) => curr.filter((n) => n.id !== id));
+    setEdges((curr) => curr.filter((e) => e.source !== id && e.target !== id));
+    setSelected((cur) => (cur === id ? null : cur));
     setDirty(true);
   }, []);
 
@@ -502,7 +538,7 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice, onD
         {nodes.length === 0 ? (
           <div className="canvas-empty-guide" role="note">
             <strong>空白画布</strong>
-            <span>左边「节点调色板」点一个种类，或在空白处双击，建第一个节点。</span>
+            <span>右边「节点调色板」点一个种类，或在空白处双击，建第一个节点。</span>
           </div>
         ) : null}
         <ReactFlow
@@ -527,7 +563,7 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice, onD
           <MiniMap />
         </ReactFlow>
 
-        {/* 左边 HUD：节点调色板（编辑态竖排）。点种类建节点；空白双击也可建。 */}
+        {/* 右边 HUD：节点调色板（编辑态竖排）。点种类建节点；空白双击也可建。（用户细调：从左挪到右） */}
         <div className="canvas-engine-hud canvas-engine-hud-left" aria-label="节点调色板">
           <div className="canvas-palette">
             {NODE_KIND_PRESETS.map((preset) => (
@@ -535,7 +571,6 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice, onD
                 key={preset.kind}
                 type="button"
                 className="canvas-palette-chip"
-                style={{ borderColor: preset.accent }}
                 onClick={() => addNode(preset.kind)}
                 disabled={busy}
                 title={preset.hint}
@@ -547,15 +582,17 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice, onD
           </div>
         </div>
 
-        {/* 右边 HUD：选中节点才出现的节点面板（名称/提示词等；开发者字段折进默认收起区）。 */}
+        {/* 左边 HUD：选中节点才出现的节点面板（名称/提示词等；开发者字段折进默认收起区）。（用户细调：从右挪到左） */}
         {selectedNode ? (
           <div className="canvas-engine-hud canvas-engine-hud-right" aria-label="节点编辑">
             <NodeEditor
               node={selectedNode}
               sessions={sessions}
               surface={config.kind === "experiment" ? "experiment" : "project"}
+              projectName={config.kind === "project" && config.projectRoot ? pathTail(config.projectRoot) : "实验画布"}
               onChange={updateSelected}
               onRun={() => void runSelectedNode()}
+              onDelete={() => deleteNode(selectedNode.id)}
               disabled={busy}
             />
           </div>
@@ -596,21 +633,10 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice, onD
             )
           ) : null}
 
-          {/* P3 砍杂项：成熟模式 + 边界说明折进默认收起的「更多」区，日常看不到。 */}
+          {/* P3 砍杂项：成熟模式 + 边界说明折进默认收起区（标签「成熟模式」），日常看不到。 */}
           <details className="canvas-engine-more">
-            <summary>更多（成熟模式 / 边界）</summary>
+            <summary>成熟模式</summary>
             <fieldset>
-              <legend>成熟模式</legend>
-              <label>
-                模式标题
-                <input
-                  type="text"
-                  value={templateTitle}
-                  onChange={(e) => setTemplateTitle(e.target.value)}
-                  placeholder={canvas?.display_name || "未命名工作流"}
-                  disabled={busy}
-                />
-              </label>
               <button onClick={() => void saveAsTemplate()} disabled={busy || nodes.length === 0}>
                 ＋ 把这张存成成熟模式
               </button>
@@ -655,8 +681,9 @@ export function WorkflowCanvasEngine({ config, canvasId, sessions, onNotice, onD
                 </ul>
               )}
             </fieldset>
-            <ExperimentCanvasBoundaryPanel boundary={config.boundary} />
           </details>
+          {/* 宿主塞进来的草案动作（提交 / 返回）：右推到底边动作条同一行末尾。 */}
+          {editActions ? <span className="canvas-engine-edit-actions">{editActions}</span> : null}
         </div>
       </div>
     </section>
@@ -690,7 +717,7 @@ function CanvasFlowNode({ data, selected }: NodeProps<FlowNode>) {
           <div className="cnc-prompt"><dt>提示</dt><dd>{preview}</dd></div>
         ) : null}
         {data.fields.length > 0 ? (
-          <div><dt>自定义</dt><dd>{data.fields.length} 项</dd></div>
+          <div><dt>备注</dt><dd>{data.fields.length} 项</dd></div>
         ) : null}
       </dl>
       <Handle type="source" position={Position.Right} />
@@ -702,15 +729,19 @@ function NodeEditor({
   node,
   sessions,
   surface,
+  projectName,
   onChange,
   onRun,
+  onDelete,
   disabled,
 }: {
   node: FlowNode;
   sessions: SessionRecord[];
   surface: "experiment" | "project";
+  projectName: string;
   onChange: (patch: Partial<CanvasNodeData>) => void;
   onRun: () => void;
+  onDelete: () => void;
   disabled: boolean;
 }) {
   const data = node.data;
@@ -725,11 +756,27 @@ function NodeEditor({
   const removeField = (id: string) => {
     onChange({ fields: data.fields.filter((f) => f.id !== id) });
   };
+  // 节点上方原来显示无意义的内部编号，改成真实归属：项目 + 绑定的对话标题（没绑会话则标「未绑定会话」）。
+  const boundThreadId = data.session.mode === "resume" ? data.session.thread_id.trim() : "";
+  const boundSession = boundThreadId ? sessions.find((s) => s.thread_id === boundThreadId) ?? null : null;
+  const conversationTitle = boundSession
+    ? boundSession.title || boundSession.thread_id
+    : boundThreadId || "未绑定会话";
   return (
     <div className="canvas-node-editor">
       <p className="cne-id">
-        <strong>编号：</strong> <code>{node.id}</code>
+        <span className="cne-id-line"><strong>项目</strong> {projectName}</span>
+        <span className="cne-id-line"><strong>对话</strong> {conversationTitle}</span>
       </p>
+      <button
+        type="button"
+        className="canvas-node-delete"
+        onClick={onDelete}
+        disabled={disabled}
+        title="从画布删除这个节点（连带它的连线）"
+      >
+        删除节点
+      </button>
       <label>
         名称
         <input
@@ -750,7 +797,7 @@ function NodeEditor({
       </label>
       {/* P3 砍杂项：种类 / 状态 / 技能 / 自定义字段折进默认收起的「字段 / 高级」区，日常看不到。 */}
       <details className="canvas-advanced-details">
-        <summary>字段 / 高级（种类 · 状态 · 技能 · 自定义字段）</summary>
+        <summary>字段 / 高级（种类 · 状态 · 技能 · 备注）</summary>
         <label>
           种类（自由）
           <input
@@ -791,7 +838,7 @@ function NodeEditor({
           />
         </label>
         <fieldset className="canvas-custom-fields">
-          <legend>自定义字段</legend>
+          <legend>备注</legend>
           {data.fields.map((field) => (
             <div className="canvas-custom-field-row" key={field.id}>
               <input
@@ -815,7 +862,7 @@ function NodeEditor({
               </button>
             </div>
           ))}
-          <button type="button" onClick={addField} disabled={disabled}>+ 字段</button>
+          <button type="button" onClick={addField} disabled={disabled}>+ 备注</button>
         </fieldset>
       </details>
       <details className="canvas-exec-details">
