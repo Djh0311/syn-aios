@@ -78,11 +78,17 @@ const STATUS_TONES: Record<string, string> = {
   running: "#c8602b",
   blocked: "#a14242",
   done: "#3a6a77",
+  // 中文状态灯（编辑器默认走中文）；上面的英文键保留，兼容旧画布 / 派生工作流的英文状态。
+  草稿: "#b9b3a6",
+  就绪: "#5a6f4a",
+  进行中: "#c8602b",
+  受阻: "#a14242",
+  完成: "#3a6a77",
 };
 
-// Editor suggestions trimmed to the common few; `status` stays a free input, so
-// typing "running"/"blocked" still works and still gets its tone.
-export const STATUS_PRESETS = ["draft", "ready", "done"];
+// 编辑器只建议常用几个；`status` 仍是自由文本，打「进行中」「受阻」也认、也有配色。
+// 中文为主；旧画布存的英文值（STATUS_TONES 保留英文键）仍能正确上色。
+export const STATUS_PRESETS = ["草稿", "就绪", "完成"];
 
 export function statusTone(status: string): string {
   return STATUS_TONES[status.trim().toLowerCase()] ?? "#b9b3a6";
@@ -107,7 +113,7 @@ export function createNodeData(kind: string): CanvasNodeData {
     name: preset && preset.kind !== "custom" ? preset.label : "新节点",
     kind,
     role: preset?.role ?? "subagent",
-    status: "draft",
+    status: "草稿",
     prompt: "",
     sandbox: "read-only",
     skill: (preset?.role ?? "subagent") === "subagent" ? "" : null,
@@ -166,7 +172,7 @@ export function canvasNodeToData(node: CanvasNode): CanvasNodeData {
     name: node.label,
     kind: node.kind && node.kind.trim() ? node.kind : node.role,
     role: node.role,
-    status: readString(raw, "status", "draft"),
+    status: readString(raw, "status", "草稿"),
     prompt: readString(raw, "prompt", ""),
     sandbox: readString(raw, "sandbox", "read-only"),
     skill: node.skill ?? null,
@@ -232,7 +238,7 @@ export function nodeRunReadiness(
     if (data.session.mode === "new") {
       return { ready: false, reason: "实验面本期只支持续已有会话（开新会话未启用）" };
     }
-    if (!data.prompt.trim()) return { ready: false, reason: "未填 prompt（节点要做什么）" };
+    if (!data.prompt.trim()) return { ready: false, reason: "未填提示词（节点要做什么）" };
     return { ready: true, reason: null };
   }
   if (!data.work_item_id.trim()) return { ready: false, reason: "未填工作项 ID（workflow-state 绑定）" };

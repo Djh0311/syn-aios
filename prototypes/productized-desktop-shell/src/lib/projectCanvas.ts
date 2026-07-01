@@ -910,7 +910,8 @@ function buildRoleNode({
     node_id: nodeId,
     node_type: role.node_type,
     title: workflowNode?.title ?? role.title,
-    subtitle: binding?.session_title ?? workflowNode?.assigned_role ?? role.subtitle,
+    // 用户要求节点卡换中文：去掉英文 assigned_role（director/review…），落到中文角色提示 role.subtitle。
+    subtitle: binding?.session_title ?? role.subtitle,
     status,
     role_id: role.role_id,
     work_item_id: selectedTask?.work_item_id ?? null,
@@ -918,7 +919,7 @@ function buildRoleNode({
     position_hint: { lane: role.lane, order: roleLanes.indexOf(role) + 1, x: role.x, y: role.y },
     badges: [
       badge("role", role.subtitle, "neutral", refs),
-      badge("status", status, toneForStatus(status), refs),
+      badge("status", statusLabel(status), toneForStatus(status), refs),
       ...(binding ? [badge("binding", binding.rollout_exists ? "已绑定" : "缺回放记录", binding.rollout_exists ? "ready" : "warning", refs)] : []),
       ...(permissionRequests.some((request) => request.status === "pending") ? [badge("permission", "待权限", "blocked", refs)] : []),
       ...(warnings.length ? [badge("warning", `${warnings.length} 条警告`, "warning", refs)] : []),
@@ -975,15 +976,15 @@ function buildWorkflowNodeCanvas({
     node_id: nodeId,
     node_type: "dev_line",
     title: wfNode.title || slug,
-    subtitle: binding?.session_title ?? wfNode.node_type ?? "画布节点",
+    subtitle: binding?.session_title ?? "画布节点",
     status,
     role_id: wfNode.assigned_role ?? null,
     work_item_id: selectedTask?.work_item_id ?? null,
     workflow_node_id: workflowNodeId,
     position_hint: { lane: "execution", order: index + 1, x: 260 + index * 240, y: 340 },
     badges: [
-      badge("type", wfNode.node_type || "节点", "neutral", refs),
-      badge("status", status, toneForStatus(status), refs),
+      badge("type", "画布节点", "neutral", refs),
+      badge("status", statusLabel(status), toneForStatus(status), refs),
       ...(binding ? [badge("binding", binding.rollout_exists ? "已绑定" : "缺回放记录", binding.rollout_exists ? "ready" : "warning", refs)] : []),
       ...(warnings.length ? [badge("warning", `${warnings.length} 条警告`, "warning", refs)] : []),
     ],
@@ -1197,7 +1198,7 @@ function buildDetail(
           item("prompt-kind", "模式", dispatch.prompt_kind, "text", [ref("dispatch", dispatch.dispatch_id, dispatch.state)]),
           item("last-message", "最后摘要", dispatch.last_message_summary ?? "未回读", "text", [ref("dispatch", dispatch.dispatch_id, dispatch.state)]),
           item("authorization", "授权检查", dispatch.authorization_check?.status ?? dispatch.plan_authorization_id ?? "未登记", dispatch.authorization_check?.status === "blocked" ? "blocked" : "status", [ref("authorization_check", dispatch.dispatch_id, dispatch.authorization_check?.status ?? "未登记")]),
-          item("warnings", "warning", dispatch.warnings.join("；") || "无", dispatch.warnings.length ? "warning" : "text", [ref("dispatch", dispatch.dispatch_id, dispatch.state)]),
+          item("warnings", "警告", dispatch.warnings.join("；") || "无", dispatch.warnings.length ? "warning" : "text", [ref("dispatch", dispatch.dispatch_id, dispatch.state)]),
         ])
       : null,
     dispatch

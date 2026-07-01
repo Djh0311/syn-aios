@@ -49,6 +49,9 @@ export const experimentCanvasSurfaceConfig: CanvasSurfaceConfig = {
   realRunTarget: "fixed_test_project",
   authority: "free_canvas_def",
   showProjectRuleBar: false,
+  // 用户要求：实验画布做成和项目画布一样的全屏 → embedded（引擎不渲染自带 .canvas-head 头部），
+  // 由 ActiveWorkbenchView 的 .canvas-view-fullwindow 壳逃出 main padding、铺满整窗。
+  embedded: true,
 };
 
 // Project surface (real, controlled): same engine, bound to a real project.
