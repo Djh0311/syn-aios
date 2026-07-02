@@ -368,6 +368,22 @@ function AutoAdvanceRoleLoopButtonBrowser({
             </p>
           ) : null}
           {outcome.stop_reason ? <p className="state-warning">停因：{outcome.stop_reason}</p> : null}
+          {outcome.stage === "blocked" ||
+          /写范围|范围为空/.test(`${outcome.message ?? ""} ${outcome.stop_reason ?? ""}`) ? (
+            <button
+              type="button"
+              className="secondary-button auto-advance-refix-button"
+              onClick={() => {
+                // 纯前端锚点：直达同侧栏「方案与授权」的方案卡（阻断时那里可拒绝当前方案 → 重新说目标出方案）；
+                // 说目标输入在场时顺手聚焦。不发任何后端调用。
+                const card = document.getElementById("project-consultation-card");
+                card?.scrollIntoView({ behavior: "smooth", block: "start" });
+                (document.getElementById("project-consultation-goal-input") as HTMLTextAreaElement | null)?.focus();
+              }}
+            >
+              ↻ 去重新出方案（说清读写范围）
+            </button>
+          ) : null}
           {outcome.chain_outcome ? (
             <p className="muted small-note">
               链：completed {outcome.chain_outcome.completed} / dispatched {outcome.chain_outcome.dispatched} / skipped{" "}
@@ -511,7 +527,7 @@ export function ProjectConsultationProposalCard({
     "用户确认项目咨询方案范围；仍需全局主管复核后才可自动推进，本轮不会启动真实工作者。";
 
   return (
-    <section className="project-canvas-detail-card" aria-label="项目咨询方案草案">
+    <section id="project-consultation-card" className="project-canvas-detail-card" aria-label="项目咨询方案草案">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">项目咨询方案草案</p>
@@ -559,6 +575,32 @@ export function ProjectConsultationProposalCard({
           ) : null}
           {proposal.status === "user_confirmed" ? (
             <p className="state-warning">已记录用户确认；仍需全局主管复核后才可自动推进。</p>
+          ) : null}
+          {/* 已确认方案没有决策/重新创建按钮（canDecide 只认 draft/pending，重新创建只认 rejected/changes_requested）。
+              一旦确认→授权→自动推进阻断（如「授权写入范围为空」），用户在此本无路重新出方案。补一个「重新说目标出方案」入口，
+              复用现成 AI 咨询动作（buildRunProjectConsultationAction）——不加新后端调用；自动推进卡的「去重新出方案」按钮滚到这。 */}
+          {proposal.status === "user_confirmed" && projectWorkflow ? (
+            <div className="role-loop-consult-trigger" aria-label="重新说目标出方案">
+              <label className="proposal-decision-field">
+                <span>被阻断 / 想改方案？重新说目标让 AI 出新方案（会带上执行需要的读写范围）</span>
+                <textarea
+                  id="project-consultation-goal-input"
+                  value={goal}
+                  onChange={(event) => setGoal(event.target.value)}
+                  placeholder="例：把首页加载优化到 1 秒内，允许改 src/ 下文件（把要写的目录说清）。"
+                />
+              </label>
+              <div className="workflow-state-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={!goal.trim()}
+                  onClick={() => onRequestAction(buildRunProjectConsultationAction(project, projectWorkflow, goal.trim()))}
+                >
+                  让 AI 重新出方案
+                </button>
+              </div>
+            </div>
           ) : null}
           {(proposal.status === "rejected" || proposal.status === "changes_requested") && projectWorkflow ? (
             <div className="workflow-state-actions">
