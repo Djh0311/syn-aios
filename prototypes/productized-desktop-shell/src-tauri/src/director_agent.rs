@@ -228,6 +228,50 @@ pub(crate) struct DirectorChainOutcome {
     pub(crate) stopped_reason: Option<String>,
 }
 
+// 2.4：重试前把 work_item 走**现成合法跳转**复位到 ready_to_dispatch（首次失败推离了它）——用现成
+// update_work_item_state_at（限默认工作流），非默认工作流复位不成则返回 false（不重试·不硬闯状态机）。
+// 逐步 fire（running→failed→needs_changes→ready_to_dispatch·非法跳转各步自忽略），以末步是否到 ready_to_dispatch 为准。
+fn reset_work_item_for_retry(
+    path: &std::path::Path,
+    project_root: &str,
+    work_item_id: &str,
+) -> bool {
+    let step = |next_state: &str| {
+        update_work_item_state_at(
+            path,
+            &WorkItemStateUpdateRequest {
+                project_root: project_root.to_string(),
+                work_item_id: work_item_id.to_string(),
+                next_state: next_state.to_string(),
+            },
+        )
+        .is_ok()
+    };
+    let _ = step("failed"); // 若卡在 running：running→failed（已 failed 则非法·忽略）
+    let _ = step("needs_changes"); // failed/timed_out → needs_changes
+    step("ready_to_dispatch") // needs_changes → ready_to_dispatch（末步·返回是否复位成功）
+}
+
+// 2.4：判 tier-1 偶发早退（exit≠0 且非 timeout / 非沙箱-gate·记忆 real-codex-run-flaky）——这类才自动重试一次。
+// 保守：Err（gate 拦 / spawn 失败等）不认作早退（不 retry）；state 已 completed 更不是。
+fn is_tier1_early_exit(outcome: &Result<WorkflowNodeDispatchResult, String>) -> bool {
+    match outcome {
+        Ok(result) => {
+            let dispatch = &result.dispatch;
+            dispatch.state != "completed"
+                && dispatch
+                    .warnings
+                    .iter()
+                    .any(|w| w == "codex_resume_exit_nonzero")
+                && !dispatch
+                    .warnings
+                    .iter()
+                    .any(|w| w == "timeout" || w.contains("sandbox"))
+        }
+        Err(_) => false,
+    }
+}
+
 pub(crate) fn run_director_task_chain(
     path: &std::path::Path,
     index: &Value,
@@ -471,8 +515,21 @@ pub(crate) fn run_director_task_chain(
             work_item_id,
             workflow_id: Some(workflow_id.to_string()),
         };
-        let outcome =
+        let mut outcome =
             execute_project_workflow_node_at(path, index, readback_db_path, runner, &request);
+
+        // 2.4 flaky 自动重试一次：仅 tier-1 偶发早退（exit≠0·非 timeout·非沙箱/gate·记忆 real-codex-run-flaky）
+        // 原地重试一次；越权被拒/闸拦/超时按原语义不 retry（is_tier1_early_exit 只认早退特征）。**不循环**。
+        // 首次失败已把 work_item 推离 ready_to_dispatch → 重试前走**现成合法跳转**（failed→needs_changes→
+        // ready_to_dispatch）复位；复位不成（如非默认工作流·update_work_item_state_at 限默认）则不重试。
+        if is_tier1_early_exit(&outcome) && reset_work_item_for_retry(path, project_root, &request.work_item_id) {
+            push_unique(
+                &mut warnings,
+                &format!("任务「{}」worker 偶发早退（exit≠0 无输出），已自动重试一次。", task.title),
+            );
+            outcome =
+                execute_project_workflow_node_at(path, index, readback_db_path, runner, &request);
+        }
 
         // 重读（execute 写过文件，避免覆盖它的写入）。
         let mut after = read_workflow_state_value(path)?;
@@ -614,6 +671,8 @@ async fn start_project_director_chain(
     let path = state.workflow_state_path.clone();
     let index = read_index(&state)?;
     tauri::async_runtime::spawn_blocking(move || {
+        // 2.5 起链前复查授权仍 active（批与跑之间可能被撤/过期）——C1 直接收 planned_tasks 起链，尤需此复查。
+        require_active_authorization(&path, &request.project_root, &request.workflow_id)?;
         let readback_db_path = codex_db::default_state_db_path();
         let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
         run_director_task_chain(
@@ -679,6 +738,34 @@ fn append_role_loop_auto_advance_audit(
         "reason": reason,
     }));
     write_validated_workflow_state(path, &value)
+}
+
+// 2.5 起链前复查方案授权仍 active（批与跑之间可能被撤/过期）；无 active → 拒。复用 active 授权解析口径。
+// 调用处加缝——不改 run_director_task_chain / 授权 store 本体。
+fn require_active_authorization(
+    path: &std::path::Path,
+    project_root: &str,
+    workflow_id: &str,
+) -> Result<(), String> {
+    let timestamp_ms = unix_timestamp_ms();
+    let pid = project_id(project_root);
+    let store = plan_authorization_store::load_store(path, timestamp_ms)?;
+    let active = store.authorizations.iter().any(|authorization| {
+        authorization.project_id == pid
+            && authorization.workflow_id == workflow_id
+            && authorization.status == PlanAuthorizationStatus::Active
+            && authorization
+                .expires_at_ms
+                .is_none_or(|expires_at_ms| expires_at_ms > timestamp_ms)
+    });
+    if active {
+        Ok(())
+    } else {
+        Err(
+            "方案授权已失效或被撤销（批与跑之间被撤/过期）；不能起链。请重新确认方案 + 全局边界复核。"
+                .to_string(),
+        )
+    }
 }
 
 // 编排内层（同步·spawn_blocking 里调；可单测·stub runner）。
@@ -807,7 +894,9 @@ fn run_auto_advance_authorized_role_loop(
             stop_reason: Some(stage.to_string()),
         });
     }
-    // 5. prepared 出来 → 跑 worker 链（四护栏·入口 path-lock 圈测试项目·失败即停）。
+    // 5. prepared 出来 → **起链前复查授权仍 active**（2.5·批与拆/prepare 之间 LM 耗时长·可能被撤/过期）→ 跑 worker 链
+    //    （四护栏·入口 path-lock 圈测试项目·失败即停）。
+    require_active_authorization(path, project_root, workflow_id)?;
     let outcome = run_director_task_chain(
         path,
         index,
@@ -877,4 +966,171 @@ async fn auto_advance_authorized_role_loop(
     })
     .await
     .map_err(|error| format!("自动推进执行线程异常：{error}"))?
+}
+
+// ===== 交办地基 2.2·合流命令：用户点[允许并开始] → 一口气 确认方案→边界复核→授权生效→(绑会话)→自动推进 =====
+// **人闸不省**：本命令 = 用户刚点[允许]的直接效果——step1 校验方案 = PendingUserConfirmation、本次调用记录用户确认；
+// **无任何免用户路径**（不给定时器/链/别的命令调用口）。步骤全复用现成状态机（record_decision / boundary review /
+// auto_advance 内层），不旁路。session_choice=new（自动新建会话）本刀未接——主管链 resume-only（P3 C 决策）·见回交。
+#[derive(serde::Deserialize)]
+pub(crate) struct ConfirmAndStartAuthorizedRunRequest {
+    pub(crate) project_root: String,
+    pub(crate) proposal_id: String,
+    pub(crate) session_choice: String, // "existing" | "new"（new 本刀未接）
+    #[serde(default)]
+    pub(crate) session_id: Option<String>, // session_choice=existing 时的现有 Codex 会话 thread_id
+    #[serde(default)]
+    pub(crate) actor_id: Option<String>,
+    #[serde(default)]
+    pub(crate) max_nodes: Option<usize>,
+}
+
+// 内层（同步·spawn_blocking 里调；可单测·stub 咨询/主管/链）。
+fn run_confirm_and_start_authorized_run_inner(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    director: &dyn DirectorAgent,
+    request: &ConfirmAndStartAuthorizedRunRequest,
+) -> Result<AutoAdvanceRoleLoopOutcome, String> {
+    // 死线·圈固定测试项目（与 auto_advance 同款·非测试 root 提前拒）。
+    require_test_project_path_lock(&request.project_root, "confirm_and_start_authorized_run")?;
+    let actor_id = request
+        .actor_id
+        .clone()
+        .unwrap_or_else(|| "user".to_string());
+    let timestamp_ms = unix_timestamp_ms();
+    // 1. 载方案 + 校**人闸**：必须 PendingUserConfirmation（本命令=用户刚点允许·不接其它状态·不创建方案）。
+    let proposal_store = project_consultation_proposal_store::load_store(path, timestamp_ms)?;
+    let proposal = proposal_store
+        .proposals
+        .iter()
+        .find(|proposal| proposal.proposal_id == request.proposal_id)
+        .ok_or_else(|| format!("找不到方案：{}", request.proposal_id))?;
+    if proposal.status != ProjectConsultationProposalStatus::PendingUserConfirmation {
+        return Err(format!(
+            "方案不是「待用户确认」状态（当前 {:?}）；本命令只表达「用户刚点允许」、不接其它状态。",
+            proposal.status
+        ));
+    }
+    let workflow_id = proposal.workflow_id.clone();
+    let proposal_store_revision = proposal_store.revision;
+    // 2. 记录用户确认（现成 record_decision·Confirm·actor=用户）→ 建授权。
+    let confirmed = project_consultation_proposal_store::record_decision(
+        path,
+        &RecordProjectConsultationProposalDecisionInput {
+            project_root: request.project_root.clone(),
+            proposal_id: request.proposal_id.clone(),
+            actor_id: actor_id.clone(),
+            decision: ProjectConsultationProposalDecisionKind::Confirm,
+            summary: "用户点[允许并开始]：确认方案。".to_string(),
+            expected_proposal_store_revision: Some(proposal_store_revision),
+            expected_plan_authorization_store_revision: None,
+        },
+        timestamp_ms,
+        &format!("confirm-and-start-confirm:{}", unix_timestamp_nanos()),
+        &format!("confirm-and-start-auth:{}", unix_timestamp_nanos()),
+        &format!("confirm-and-start-auth-user:{}", unix_timestamp_nanos()),
+    )?;
+    let authorization = confirmed
+        .plan_authorization
+        .ok_or_else(|| "确认方案未产出授权对象".to_string())?;
+    let revision = confirmed
+        .plan_authorization_store_revision
+        .ok_or_else(|| "确认方案未产出授权 revision".to_string())?;
+    // 3. 记录全局边界复核（Phase A 用户演全局主管·actor=用户·approved）→ 授权生效。
+    plan_authorization_store::record_global_boundary_review_with_proposal(
+        path,
+        &RecordGlobalBoundaryReviewInput {
+            project_root: request.project_root.clone(),
+            project_id: project_id(&request.project_root),
+            workflow_id: workflow_id.clone(),
+            proposal_id: confirmed.proposal.proposal_id.clone(),
+            authorization_id: authorization.authorization_id.clone(),
+            actor_id: actor_id.clone(),
+            review_status: "approved".to_string(),
+            summary: "用户点[允许并开始]：同时作全局边界批准（Phase A·用户演全局主管）。".to_string(),
+            checklist: GlobalBoundaryReviewChecklist {
+                architecture_boundary_checked: true,
+                cross_project_impact_checked: true,
+                permission_scope_checked: true,
+                read_write_scope_checked: true,
+                tool_and_check_scope_checked: true,
+                memory_boundary_checked: true,
+                stop_conditions_checked: true,
+                acceptance_criteria_checked: true,
+            },
+            findings: vec![],
+            expected_authorization_revision: Some(revision),
+        },
+        timestamp_ms + 1,
+        &format!("confirm-and-start-boundary:{}", unix_timestamp_nanos()),
+    )?;
+    // 4. 绑会话（2.3）：existing → 绑传入的现有 Codex 会话（绑失败即停·停因人话·不静默）；new → 本刀未接（清错）。
+    match request.session_choice.as_str() {
+        "existing" => {
+            let session_id = request.session_id.as_deref().ok_or_else(|| {
+                "session_choice=existing 需给 session_id（要绑的现有 Codex 会话）。".to_string()
+            })?;
+            let node_id = format!("{workflow_id}:node:codex-dev");
+            bind_workflow_node_codex_session_for_index_at(
+                path,
+                index,
+                &WorkflowNodeSessionBindRequest {
+                    project_root: request.project_root.clone(),
+                    node_id,
+                    work_item_id: None,
+                    thread_id: session_id.to_string(),
+                },
+            )
+            .map_err(|error| format!("绑定现有会话失败（会话没找到/不可用）：{error}"))?;
+        }
+        "new" => {
+            return Err(
+                "自动新建会话本刀未接（主管链 resume-only·P3 C 决策）；请选一条现有 Codex 会话（session_choice=existing + session_id）。"
+                    .to_string(),
+            );
+        }
+        other => {
+            return Err(format!("未知 session_choice：{other}（本刀只支持 existing）"));
+        }
+    }
+    // 5. 自动推进（现成 auto_advance 内层·resolve active 授权 → LM 拆 → prepare → 起链前复查授权 → 链）。
+    run_auto_advance_authorized_role_loop(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        director,
+        &request.project_root,
+        &workflow_id,
+        &actor_id,
+        request.max_nodes.unwrap_or(50),
+    )
+}
+
+#[tauri::command]
+async fn confirm_and_start_authorized_run(
+    request: ConfirmAndStartAuthorizedRunRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<AutoAdvanceRoleLoopOutcome, String> {
+    // index/path 在 await 前从 state 取；真 codex 长耗时 → spawn_blocking 不冻 UI（同范本）。
+    let path = state.workflow_state_path.clone();
+    let index = read_index(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let readback_db_path = codex_db::default_state_db_path();
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let director = CliDirectorAgent::default();
+        run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &director,
+            &request,
+        )
+    })
+    .await
+    .map_err(|error| format!("合流执行线程异常：{error}"))?
 }

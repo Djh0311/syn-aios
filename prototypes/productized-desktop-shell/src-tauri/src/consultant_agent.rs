@@ -13,6 +13,16 @@ pub(crate) struct ConsultationRisk {
     pub(crate) mitigation: String,
 }
 
+// 执行范围（像开发任务包那样）：咨询在方案里**自己提出**下游执行需要的写范围/目标文件/工具/检查。
+// 可空：纯问答咨询不需要下游改任何东西 → None。**后端只忠实透传·绝不默认/兜底缺失的写范围（用户硬约束）。**
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub(crate) struct ConsultationExecutionScope {
+    pub(crate) write_roots: Vec<String>,  // 写范围：下游执行可写的目录（须在被咨询项目根内）
+    pub(crate) target_files: Vec<String>, // 目标文件：预期改动的具体文件·相对项目根（细粒度·可空）
+    pub(crate) tools: Vec<String>,        // 工具：下游 worker 需要的能力（要写就得含写能力，如 write_file/apply_patch）
+    pub(crate) checks: Vec<String>,       // 验收检查：怎么验（如 cargo test / npm test）
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ConsultationProposal {
     pub(crate) user_goal: String,
@@ -22,6 +32,8 @@ pub(crate) struct ConsultationProposal {
     pub(crate) risks: Vec<ConsultationRisk>,
     pub(crate) must_stop_points: Vec<String>,
     pub(crate) next_steps: Vec<String>,
+    // None = 纯咨询/只读·不需要下游改任何东西；Some = 咨询判定要下游真改东西·带执行范围。
+    pub(crate) execution_scope: Option<ConsultationExecutionScope>,
 }
 
 pub(crate) trait ConsultantAgent {
@@ -229,9 +241,9 @@ pub(crate) fn load_project_context(project_root: &str) -> Result<ProjectContext,
 const CONSULTANT_V0_PROFILE: &str = r#"你是「项目咨询」。
 职责:解答用户对这个项目的问题、帮定大方向。你不主导执行(那是项目主管)、不自己改任何东西。
 铁律·落地:每个判断都必须基于你真读到的项目状态。不确定就用工具去读——不许假设某文件/状态/历史存在。结论里引用读到的具体依据。
-边界:只读、不写、不执行。给的是建议和方向。若认为该真跑某事,写进方案交项目主管走授权——你自己永不触发执行。
+边界:只读、不写、不执行。你**永不触发执行、也永不自己写**。但你可以(该有时必须)在方案里【提名下游执行需要的写范围/工具】——那是交用户授权、交项目主管派活的**方案内容**,不是你动手。
 风格:直接、先讲风险和不确定、不讨好。该泼冷水就泼。
-产出:结构化咨询方案——目标/范围/为什么这么判/风险与不确定/必停点/建议的下一步。这份进角色循环交用户审。"#;
+产出:结构化咨询方案——目标/范围/【要下游真改东西时·像开发任务包那样圈"写范围(可写目录)+目标文件+工具+验收检查"】/为什么这么判/风险与不确定/必停点/建议的下一步。这份进角色循环交用户审。"#;
 
 // prompt 拼装：静态档案 + ProjectContext（有啥塞啥）+ 用户问题 + 输出格式（要一个 json 块好抠）。
 fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
@@ -276,8 +288,16 @@ fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
   "reasoning": ["为什么这么判(引用你依据的已注入文档原文)"],
   "risks": [{"severity":"info|warning|blocker","summary":"风险/不确定","mitigation":"怎么缓解"}],
   "must_stop_points": ["必停点"],
-  "next_steps": ["建议的下一步"]
-}"#,
+  "next_steps": ["建议的下一步"],
+  "execution_scope": {
+    "target_files": ["预期改动的具体文件·相对项目根(尽量列出·可空)"],
+    "checks": ["怎么验收,如 cargo test / npm test / 浏览器打开看效果"]
+  }
+}
+**判断这个目标要不要下游真改代码/文件**:
+- 要改 → 给出 execution_scope 块,写清"会改哪些文件(target_files)+怎么验收(checks)"。这是你方案的一部分。
+  (写范围/工具由系统按固定档位装配·你不用报;多报的字段会被忽略。)
+- 只是回答问题、不需要改任何东西 → execution_scope 给 **null**,并在 scope_note 注明"纯咨询/只读"。"#,
     );
     p
 }
@@ -290,6 +310,18 @@ struct ConsultRiskJson {
     summary: String,
     #[serde(default)]
     mitigation: String,
+}
+
+#[derive(serde::Deserialize)]
+struct ConsultExecutionScopeJson {
+    #[serde(default)]
+    write_roots: Vec<String>,
+    #[serde(default)]
+    target_files: Vec<String>,
+    #[serde(default)]
+    tools: Vec<String>,
+    #[serde(default)]
+    checks: Vec<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -308,6 +340,9 @@ struct ConsultProposalJson {
     must_stop_points: Vec<String>,
     #[serde(default)]
     next_steps: Vec<String>,
+    // 向后兼容：旧样本没这块 → None；codex 给 null / 整块缺 / write_roots 全空 → 视作纯咨询(None)。
+    #[serde(default)]
+    execution_scope: Option<ConsultExecutionScopeJson>,
 }
 
 // 从 codex 输出抠最后一个 ```json 块（无围栏则退到首尾大括号）。
@@ -355,6 +390,19 @@ pub(crate) fn parse_consultation_proposal(raw: &str) -> Result<ConsultationPropo
             .collect(),
         must_stop_points: dto.must_stop_points,
         next_steps: dto.next_steps,
+        // 执行范围·Some/None = 咨询是否给了 execution_scope 块（判定要下游改东西）：给了块 → Some；null / 缺 → None
+        // （纯咨询/只读）。交办地基 2.1：写范围来源改为**档位**后，Some 不再取决于 write_roots——咨询报的
+        // write_roots/tools 留作向后兼容但下游 map 忽略（用档位）；下游真正用的是 checks/target_files。
+        execution_scope: dto.execution_scope.map(|es| ConsultationExecutionScope {
+            write_roots: es
+                .write_roots
+                .into_iter()
+                .filter(|root| !root.trim().is_empty())
+                .collect(),
+            target_files: es.target_files,
+            tools: es.tools,
+            checks: es.checks,
+        }),
     })
 }
 
@@ -383,19 +431,34 @@ impl ConsultantAgent for CliConsultantAgent {
     }
 }
 
+// 交办地基 2.1·档位（PROFILE_EDIT_TEST_PROJECT）：编辑类目标的执行范围**写死**——写范围=固定测试项目根、
+// 工具=读+写能力、角色=codex-dev+project_director。**不可由请求参数改写**（防"能预览任意项目"滑成"能改任意
+// 项目"）。真执行仍 path-lock + 沙箱 + 四护栏兜底。返回 (write_roots, tools, role_ids)。
+fn profile_edit_test_project_scope() -> (Vec<String>, Vec<String>, Vec<String>) {
+    (
+        vec![WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string()],
+        vec![
+            "read_file".to_string(),
+            "write_file".to_string(),
+            "apply_patch".to_string(),
+        ],
+        vec!["codex-dev".to_string(), "project_director".to_string()],
+    )
+}
+
 // ===== 喂 C1（ConsultationProposal → create_project_consultation_proposal 输入）=====
 pub(crate) fn map_consultation_to_c1_input(
     proposal: &ConsultationProposal,
     project_root: &str,
     actor_id: &str,
-) -> CreateProjectConsultationProposalInput {
+) -> Result<CreateProjectConsultationProposalInput, String> {
     let head: String = proposal.goal_summary.trim().chars().take(40).collect();
     let title = if head.is_empty() {
         "咨询方案".to_string()
     } else {
         format!("咨询方案：{head}")
     };
-    let proposed_steps: Vec<String> = proposal
+    let mut proposed_steps: Vec<String> = proposal
         .reasoning
         .iter()
         .chain(proposal.next_steps.iter())
@@ -421,19 +484,37 @@ pub(crate) fn map_consultation_to_c1_input(
     } else {
         proposal.must_stop_points.clone()
     };
-    CreateProjectConsultationProposalInput {
-        project_root: project_root.to_string(),
-        project_id: None,
-        workflow_id: None,
-        title,
-        user_goal: proposal.user_goal.clone(),
-        goal_summary: proposal.goal_summary.clone(),
-        proposed_steps,
-        scope_draft: ProjectConsultationProposalScopeDraft {
+    // 按 execution_scope 分流：要改东西 → **档位装配**（write/tools/roles 写死·固定测试项目），或纯咨询只读。
+    let scope_draft = match &proposal.execution_scope {
+        // 有执行范围（交办地基 2.1）：write/tools/roles 从**写死的档位**填（不可参数化·防"预览任意项目"滑成
+        // "改任意项目"）；checks 仍用咨询提的、target_files 仍进 proposed_steps。写范围来源换成档位后，原
+        // "write_roots 越界拒"护栏对象消失（档位=测试项目根·恒合法），故移除。
+        Some(es) => {
+            // target_files 不丢：塞进 proposed_steps 最前（让方案卡/主管看到具体文件）。
+            if !es.target_files.is_empty() {
+                proposed_steps.insert(0, format!("目标文件：{}", es.target_files.join("、")));
+            }
+            let (profile_write_roots, profile_tools, profile_roles) =
+                profile_edit_test_project_scope();
+            ProjectConsultationProposalScopeDraft {
+                allowed_role_ids: profile_roles, // ← 档位：codex-dev + project_director
+                allowed_agent_ids: vec![],
+                allowed_read_roots: vec![project_root.to_string()],
+                allowed_write_roots: profile_write_roots, // ← 档位：固定测试项目根（写死）
+                allowed_tools: profile_tools,             // ← 档位：读+写能力（写死）
+                allowed_checks: es.checks.clone(),        // ← 仍用咨询提的
+                allowed_task_package_kinds: vec!["task_package".to_string()],
+                stop_conditions,
+                max_worker_dispatches: None,
+                max_runtime_minutes: None,
+            }
+        }
+        // 纯咨询/只读：保持只读·空写范围——这是忠实映射"咨询判定不需要改东西"，**不是**默认兜底缺失的写范围。
+        None => ProjectConsultationProposalScopeDraft {
             allowed_role_ids: vec!["project_consultant".to_string()],
             allowed_agent_ids: vec![],
             allowed_read_roots: vec![project_root.to_string()],
-            allowed_write_roots: vec![], // 咨询只读
+            allowed_write_roots: vec![],
             allowed_tools: vec!["read_file".to_string()],
             allowed_checks: vec![],
             allowed_task_package_kinds: vec!["task_package".to_string()],
@@ -441,12 +522,22 @@ pub(crate) fn map_consultation_to_c1_input(
             max_worker_dispatches: None,
             max_runtime_minutes: None,
         },
+    };
+    Ok(CreateProjectConsultationProposalInput {
+        project_root: project_root.to_string(),
+        project_id: None,
+        workflow_id: None,
+        title,
+        user_goal: proposal.user_goal.clone(),
+        goal_summary: proposal.goal_summary.clone(),
+        proposed_steps,
+        scope_draft,
         risks,
         acceptance_criteria,
         created_by_role: ProjectConsultationProposalCreatorRole::ProjectConsultant,
         actor_id: actor_id.to_string(),
         expected_store_revision: None,
-    }
+    })
 }
 
 // ===== P2·件 A：接咨询 LM 出方案命令（目标 → AI 真咨询 → 写进方案 store·PendingUserConfirmation）=====
@@ -478,8 +569,8 @@ fn run_project_consultation_inner(
     let ctx = load_project_context(project_root)?;
     // 2. 咨询 LM 出方案（结构性只读·readonly_codex_consult·不碰执行闸）。
     let proposal = consultant.consult(&ctx, goal)?;
-    // 3. 映射进 C1 输入。
-    let input = map_consultation_to_c1_input(&proposal, project_root, actor_id);
+    // 3. 映射进 C1 输入（含咨询提的执行范围；写范围越界/空值 → Err 早报）。
+    let input = map_consultation_to_c1_input(&proposal, project_root, actor_id)?;
     // 4. 写进方案 store（status=PendingUserConfirmation·**不自动确认**·等用户走方案授权）。
     let write_id = format!("run-project-consultation:{}", unix_timestamp_nanos());
     let output = project_consultation_proposal_store::create_proposal(

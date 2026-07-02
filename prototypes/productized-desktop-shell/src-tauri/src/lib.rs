@@ -4507,6 +4507,7 @@ mod tests {
                 }],
                 must_stop_points: vec!["需用户确认范围".to_string()],
                 next_steps: vec!["进角色循环授权".to_string()],
+                execution_scope: None, // 只读咨询 stub·不需要下游改东西
             })
         }
     }
@@ -4597,7 +4598,8 @@ mod tests {
             .expect("stub 咨询");
         assert!(!proposal.goal_summary.is_empty());
         // 映射进 C1 输入
-        let input = map_consultation_to_c1_input(&proposal, &project_root, "consultant-fixture");
+        let input = map_consultation_to_c1_input(&proposal, &project_root, "consultant-fixture")
+            .expect("map 应成功（纯咨询 stub·无执行范围）");
         assert!(
             matches!(
                 input.created_by_role,
@@ -4789,8 +4791,183 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             !proposal.goal_summary.trim().is_empty() && !proposal.reasoning.is_empty(),
             "答案应落地非空"
         );
-        let input = map_consultation_to_c1_input(&proposal, project, "consultant");
+        let input = map_consultation_to_c1_input(&proposal, project, "consultant").expect("map");
         assert!(!input.proposed_steps.is_empty(), "产出应喂得进 C1");
+    }
+
+    // §5 真跑·咨询判定要改东西→给执行范围块（单独步·#[ignore]·真 codex 只读·用户在场）：对"要改代码"目标 → 真咨询
+    // 应给 execution_scope 块（判定改东西·非纯咨询）；map 后写范围非空(=档位) + 带 codex-dev 角色（修用户踩的
+    // "写入范围为空"/"角色不在授权范围"两卡点）。flake→retry（核方案实物·记忆 real-codex-run-flaky）。
+    #[test]
+    #[ignore = "consultant execution-scope: real read-only codex consult on a change-goal yields an execution_scope block; map assembles profile write range (user present)"]
+    fn consultant_real_consult_yields_execution_scope_for_change_goal() {
+        let project = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let ctx = load_project_context(project).expect("ctx");
+        let proposal = CliConsultantAgent::default()
+            .consult(
+                &ctx,
+                "我要在这个项目里新增一个小功能、需要真改代码文件——给我落地方案，圈清要改哪些文件、怎么验收。",
+            )
+            .expect("真咨询应产出方案");
+        println!("[CONSULT_SCOPE] goal={}", proposal.goal_summary);
+        println!(
+            "[CONSULT_SCOPE] execution_scope={:?}",
+            proposal.execution_scope
+        );
+        assert!(
+            proposal.execution_scope.is_some(),
+            "要改代码的目标·咨询应给 execution_scope 块（判定改东西·非纯咨询/只读）"
+        );
+        // map 按档位装配 → 写范围非空(=固定测试项目根) + 接上 codex-dev（两卡点都不再触发）。
+        let input = map_consultation_to_c1_input(&proposal, project, "consultant").expect("map");
+        assert!(
+            !input.scope_draft.allowed_write_roots.is_empty(),
+            "map 后写范围非空"
+        );
+        assert!(
+            input
+                .scope_draft
+                .allowed_role_ids
+                .contains(&"codex-dev".to_string()),
+            "map 后带 codex-dev 执行角色"
+        );
+        println!(
+            "[CONSULT_SCOPE] mapped write_roots={:?} roles={:?}",
+            input.scope_draft.allowed_write_roots, input.scope_draft.allowed_role_ids
+        );
+    }
+
+    // ===== 咨询方案自带执行范围（execution_scope）·map 透传 / 不默认 / 护栏 / 解析向后兼容 ·stub =====
+
+    fn consult_proposal_fixture(
+        execution_scope: Option<ConsultationExecutionScope>,
+    ) -> ConsultationProposal {
+        ConsultationProposal {
+            user_goal: "改点东西".to_string(),
+            goal_summary: "在 src 下改文件".to_string(),
+            scope_note: "范围".to_string(),
+            reasoning: vec!["因为".to_string()],
+            risks: vec![],
+            must_stop_points: vec![],
+            next_steps: vec!["下一步".to_string()],
+            execution_scope,
+        }
+    }
+
+    // 交办地基 2.1：有执行范围 → map 按**档位**装配 write/tools/roles（写死·固定测试项目·忽略咨询报的 write/tools）
+    // + 仍用咨询提的 checks + target_files 进 steps。
+    #[test]
+    fn consult_map_assembles_profile_and_keeps_consult_checks() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            write_roots: vec!["咨询乱报的/路径".to_string()], // 应被忽略（用档位）
+            target_files: vec!["src/main.rs".to_string()],
+            tools: vec!["咨询乱报的工具".to_string()], // 应被忽略（用档位）
+            checks: vec!["cargo test".to_string()],
+        }));
+        let input = map_consultation_to_c1_input(&proposal, test_root, "tester").expect("map");
+        assert_eq!(
+            input.scope_draft.allowed_write_roots,
+            vec![test_root.to_string()],
+            "写范围=档位（固定测试项目根·非咨询报的）"
+        );
+        assert!(
+            input
+                .scope_draft
+                .allowed_tools
+                .contains(&"write_file".to_string()),
+            "工具=档位（含写能力·非咨询报的）"
+        );
+        assert_eq!(
+            input.scope_draft.allowed_checks,
+            vec!["cargo test".to_string()],
+            "checks 仍用咨询提的"
+        );
+        assert!(
+            input
+                .scope_draft
+                .allowed_role_ids
+                .contains(&"codex-dev".to_string()),
+            "档位含 codex-dev 执行角色（否则会卡在「目标角色不在授权范围内」）"
+        );
+        assert!(
+            input
+                .proposed_steps
+                .iter()
+                .any(|s| s.contains("src/main.rs")),
+            "target_files 不丢·进 proposed_steps"
+        );
+    }
+
+    // 纯咨询（execution_scope=None）：map 保持只读·空写范围·project_consultant——证不默认写范围。
+    #[test]
+    fn consult_map_readonly_when_no_execution_scope() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let input = map_consultation_to_c1_input(&consult_proposal_fixture(None), test_root, "t")
+            .expect("map");
+        assert!(
+            input.scope_draft.allowed_write_roots.is_empty(),
+            "纯咨询·写范围空（不默认兜底）"
+        );
+        assert_eq!(
+            input.scope_draft.allowed_tools,
+            vec!["read_file".to_string()],
+            "纯咨询·只读工具"
+        );
+        assert_eq!(
+            input.scope_draft.allowed_role_ids,
+            vec!["project_consultant".to_string()],
+            "纯咨询·角色只读"
+        );
+    }
+
+    // 安全不变量（2.1 档位写死）：写范围来源是**档位·不可参数化**——咨询乱报/恶意 write_roots 一律被忽略，
+    // scope 里的写范围恒 = 固定测试项目根（防"能预览任意项目"滑成"能改任意项目"）。map 不因此报错（不再有越界护栏）。
+    #[test]
+    fn consult_map_write_scope_hardcoded_ignores_consult_paths() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            write_roots: vec!["/etc".to_string(), "../../escape".to_string()],
+            ..Default::default()
+        }));
+        let input = map_consultation_to_c1_input(&proposal, test_root, "t").expect("map");
+        assert_eq!(
+            input.scope_draft.allowed_write_roots,
+            vec![test_root.to_string()],
+            "写范围恒=档位（固定测试项目根）·咨询报的 /etc、../../escape 被忽略"
+        );
+    }
+
+    // 解析·Some/None = 给没给 execution_scope 块（新口径）+ 向后兼容旧样本（带 write_roots 的老块）。
+    #[test]
+    fn parse_consultation_proposal_execution_scope_backward_compat() {
+        // 旧样本（老 prompt·带 write_roots）→ Some（块在），write_roots 保留（下游 map 忽略·用档位）。
+        let old_style = "```json\n{\"user_goal\":\"g\",\"goal_summary\":\"s\",\"scope_note\":\"n\",\"reasoning\":[\"r\"],\"risks\":[],\"must_stop_points\":[],\"next_steps\":[],\"execution_scope\":{\"write_roots\":[\"src\"],\"target_files\":[\"src/a.rs\"],\"tools\":[\"write_file\"],\"checks\":[\"cargo test\"]}}\n```";
+        let es = parse_consultation_proposal(old_style)
+            .expect("解析老块")
+            .execution_scope
+            .expect("给了块 → Some");
+        assert_eq!(es.target_files, vec!["src/a.rs".to_string()]);
+        // 新 prompt 样本（只报 target_files/checks·不报 write_roots）→ 仍 Some（块在=判定改东西）。
+        let new_style = "```json\n{\"user_goal\":\"g\",\"goal_summary\":\"s\",\"scope_note\":\"n\",\"reasoning\":[\"r\"],\"risks\":[],\"must_stop_points\":[],\"next_steps\":[],\"execution_scope\":{\"target_files\":[\"a.rs\"],\"checks\":[\"cargo test\"]}}\n```";
+        let es2 = parse_consultation_proposal(new_style)
+            .expect("解析新块")
+            .execution_scope
+            .expect("给了块（不报 write_roots）→ 仍 Some");
+        assert!(
+            es2.write_roots.is_empty(),
+            "新 prompt 不报 write_roots（下游用档位）"
+        );
+        assert_eq!(es2.checks, vec!["cargo test".to_string()]);
+        // 纯咨询（无 execution_scope 块 / null）→ None。
+        let pure = "```json\n{\"user_goal\":\"g\",\"goal_summary\":\"s\",\"scope_note\":\"n\",\"reasoning\":[\"r\"],\"risks\":[],\"must_stop_points\":[],\"next_steps\":[]}\n```";
+        assert!(
+            parse_consultation_proposal(pure)
+                .expect("纯咨询仍解析")
+                .execution_scope
+                .is_none(),
+            "无 execution_scope 块 → None（纯咨询/只读）"
+        );
     }
 
     // P2·§5 真跑（单独步·用户在场·真咨询只读·默认 #[ignore]）：真项目（猫猫点菜·只读）+ 目标 → **经命令内层** →
@@ -6484,6 +6661,382 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
+    // ===== 交办地基·刀1：2.4 flaky retry / 2.5 授权复查 / 2.2 合流命令 / 2.3-existing ·stub =====
+
+    // 早退一次后成功的 runner（call0 → exit1 无输出=偶发早退；此后 → exit0 完成）。
+    struct RetryFlakyThenOkRunner {
+        calls: std::sync::atomic::AtomicUsize,
+        stats: CodexDispatchReadbackStats,
+    }
+    impl CodexResumeRunner for RetryFlakyThenOkRunner {
+        fn resume_with_options(
+            &self,
+            _thread_id: &str,
+            _prompt: &str,
+            last_message_path: &Path,
+            _options: &CodexResumeRequestOptions,
+        ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String> {
+            let n = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if n == 0 {
+                return Ok((
+                    CodexResumeRunResult {
+                        exit_code: 1,
+                        timed_out: false,
+                        stderr_summary: None,
+                    },
+                    WorkflowNodeDispatchExecutionOptions {
+                        readback_stats: None,
+                    },
+                ));
+            }
+            if let Some(parent) = last_message_path.parent() {
+                fs::create_dir_all(parent).ok();
+            }
+            fs::write(last_message_path, "RETRY_OK").ok();
+            Ok((
+                CodexResumeRunResult {
+                    exit_code: 0,
+                    timed_out: false,
+                    stderr_summary: None,
+                },
+                WorkflowNodeDispatchExecutionOptions {
+                    readback_stats: Some(self.stats.clone()),
+                },
+            ))
+        }
+    }
+
+    // 始终早退（exit1 无输出）——证 retry 只一次·不循环，仍会 fail-stop。
+    struct AlwaysEarlyExitRunner;
+    impl CodexResumeRunner for AlwaysEarlyExitRunner {
+        fn resume_with_options(
+            &self,
+            _t: &str,
+            _p: &str,
+            _l: &Path,
+            _o: &CodexResumeRequestOptions,
+        ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String> {
+            Ok((
+                CodexResumeRunResult {
+                    exit_code: 1,
+                    timed_out: false,
+                    stderr_summary: None,
+                },
+                WorkflowNodeDispatchExecutionOptions {
+                    readback_stats: None,
+                },
+            ))
+        }
+    }
+
+    // 超时（exit≠0 但 timed_out）——证 timeout **不** retry（只早退才 retry）。
+    struct TimeoutRunner;
+    impl CodexResumeRunner for TimeoutRunner {
+        fn resume_with_options(
+            &self,
+            _t: &str,
+            _p: &str,
+            _l: &Path,
+            _o: &CodexResumeRequestOptions,
+        ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String> {
+            Ok((
+                CodexResumeRunResult {
+                    exit_code: 1,
+                    timed_out: true,
+                    stderr_summary: Some("timeout".to_string()),
+                },
+                WorkflowNodeDispatchExecutionOptions {
+                    readback_stats: None,
+                },
+            ))
+        }
+    }
+
+    // 2.4：偶发早退 → 自动重试一次 → 成功；warnings 记「已自动重试」。
+    #[test]
+    fn chain_retries_once_on_early_exit_then_succeeds() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("chain-retry-ok");
+        let runner = RetryFlakyThenOkRunner {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &prepared.plan.planned_tasks,
+            10,
+        )
+        .expect("chain");
+        assert!(
+            outcome.stopped_reason.is_none() && outcome.completed >= 1,
+            "偶发早退重试一次后应跑通：{outcome:?}"
+        );
+        assert!(
+            outcome.warnings.iter().any(|w| w.contains("自动重试")),
+            "warnings 应记已自动重试：{:?}",
+            outcome.warnings
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.4：始终早退 → 重试一次仍败 → fail-stop（证只一次·不循环）。
+    #[test]
+    fn chain_fail_stops_after_single_retry_on_persistent_early_exit() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("chain-retry-persist");
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &AlwaysEarlyExitRunner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &prepared.plan.planned_tasks,
+            10,
+        )
+        .expect("chain returns outcome");
+        assert!(
+            outcome
+                .stopped_reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("fail_stop"),
+            "持续早退·重试一次仍败 → fail-stop（不循环）：{:?}",
+            outcome.stopped_reason
+        );
+        assert!(
+            outcome.warnings.iter().any(|w| w.contains("自动重试")),
+            "应记重试过一次"
+        );
+        assert_eq!(outcome.completed, 0, "都没完成");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.4：timeout **不** retry（只早退才 retry）——无「自动重试」warning、直接 fail-stop。
+    #[test]
+    fn chain_does_not_retry_timeout() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("chain-timeout-noretry");
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &TimeoutRunner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &prepared.plan.planned_tasks,
+            10,
+        )
+        .expect("chain returns outcome");
+        assert!(
+            outcome
+                .stopped_reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("fail_stop"),
+            "timeout 直接 fail-stop：{:?}",
+            outcome.stopped_reason
+        );
+        assert!(
+            !outcome.warnings.iter().any(|w| w.contains("自动重试")),
+            "timeout 不应触发重试：{:?}",
+            outcome.warnings
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.5：授权在 → require_active_authorization Ok；撤销后 → 拒（起链前复查）。
+    #[test]
+    fn require_active_authorization_ok_then_rejects_revoked() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("require-active-auth");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (_proposal, authorization, revision) =
+            create_active_project_director_authorization_fixture(
+                &path,
+                test_root,
+                "thread-recheck",
+                1_765_300_000_000,
+            );
+        let workflow_id = default_workflow_id(test_root);
+        require_active_authorization(&path, test_root, &workflow_id).expect("active → Ok");
+        // 撤销授权 → 复查应拒。
+        plan_authorization_store::revoke_authorization(
+            &path,
+            &RevokePlanAuthorizationInput {
+                project_root: test_root.to_string(),
+                authorization_id: authorization.authorization_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                actor_role: "global_director".to_string(),
+                reason: "测试撤销".to_string(),
+                expected_store_revision: Some(revision),
+            },
+            1_765_300_000_100,
+            "write-revoke",
+        )
+        .expect("revoke");
+        assert!(
+            require_active_authorization(&path, test_root, &workflow_id).is_err(),
+            "授权撤销后·起链前复查应拒"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.2 + 2.3-existing：Pending 方案 + 点[允许并开始] + 绑现有会话 → 确认→复核→授权→绑→自动推进 一气跑完（stub）。
+    #[test]
+    fn confirm_and_start_runs_from_pending_with_existing_session() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-jiaoban";
+        let dir = test_temp_dir("confirm-and-start");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        // 造 Pending 方案（要改东西·execution_scope Some → map → 档位 写范围 + codex-dev）。
+        let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            write_roots: vec![],
+            target_files: vec!["a.rs".to_string()],
+            tools: vec![],
+            checks: vec!["cargo test".to_string()],
+        }));
+        let c1_input =
+            map_consultation_to_c1_input(&proposal, test_root, "consultant").expect("map");
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &c1_input,
+            1_765_300_000_000,
+            "write-jiaoban-proposal",
+        )
+        .expect("proposal");
+        assert!(
+            matches!(
+                created.proposal.status,
+                ProjectConsultationProposalStatus::PendingUserConfirmation
+            ),
+            "方案应 Pending"
+        );
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let request = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: created.proposal.proposal_id.clone(),
+            session_choice: "existing".to_string(),
+            session_id: Some(thread_id.to_string()),
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+        };
+        let outcome = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            &request,
+        )
+        .expect("合流应一气跑完");
+        assert_eq!(
+            outcome.stage, "ran",
+            "确认→复核→授权→绑→链 一气跑完：{outcome:?}"
+        );
+        assert!(
+            outcome
+                .chain_outcome
+                .map(|c| c.completed >= 1)
+                .unwrap_or(false),
+            "worker 链应跑出结果"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.2 人闸 + 2.3-new 未接：非 Pending 方案 → 拒；session_choice=new → 清错。
+    #[test]
+    fn confirm_and_start_rejects_non_pending_and_new_session() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("confirm-and-start-guard");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, "thread-guard");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        // 已 active 的方案（非 Pending）——人闸应拒。
+        let (proposal, _auth, _rev) = create_active_project_director_authorization_fixture(
+            &path,
+            test_root,
+            "thread-guard",
+            1_765_300_000_000,
+        );
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 0,
+                transcript_target_hits: 0,
+            },
+        };
+        let non_pending = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: proposal.proposal_id.clone(),
+            session_choice: "existing".to_string(),
+            session_id: Some("thread-guard".to_string()),
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+        };
+        assert!(
+            run_confirm_and_start_authorized_run_inner(
+                &path,
+                &index,
+                &index_path,
+                &runner,
+                &StubDirector,
+                &non_pending,
+            )
+            .is_err(),
+            "非 Pending 方案·人闸应拒（本命令只表达用户刚点允许）"
+        );
+        // session_choice=new → 清错（本刀未接·非静默）。需一个 Pending 方案触到 session 分流前。
+        let proposal2 = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            target_files: vec!["a.rs".to_string()],
+            ..Default::default()
+        }));
+        let c1 = map_consultation_to_c1_input(&proposal2, test_root, "consultant").expect("map");
+        let created2 = project_consultation_proposal_store::create_proposal(
+            &path,
+            &c1,
+            1_765_300_001_000,
+            "write-guard-proposal2",
+        )
+        .expect("proposal2");
+        let new_choice = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: created2.proposal.proposal_id.clone(),
+            session_choice: "new".to_string(),
+            session_id: None,
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+        };
+        let err = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            &new_choice,
+        )
+        .expect_err("new 未接应拒");
+        assert!(err.contains("新建会话"), "错误应点名新建会话未接：{err}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // P1·§5 真跑（单独步·用户在场·固定测试项目·默认 #[ignore]）：测试项目造 active 授权（proof-goal）+ 绑真
     // Codex 会话 → **经编排一下** → 真主管 LM 拆 → prepare → worker 链真 codex 接连跑 → proof 建出。证「一个
     // 命令把授权后自动推进跑通」。显式 `cargo test --lib auto_advance_authorized_role_loop_real_run -- --ignored --nocapture`。
@@ -6605,6 +7158,85 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "proof_a 应含本次 token {proof_token}，实际：{a}"
         );
         println!("[P1_AUTO] proof_a={a:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 交办地基·刀1 §4 真跑（单独步·#[ignore]·测试项目·真 codex）：Pending proof-goal 方案 + 点[允许并开始] + 绑
+    // 现有会话 → **合流一个命令**（确认→复核→授权→绑→自动推进：真主管 LM 拆 + 真 worker 链）→ proof 落测试项目。
+    // 证「点一下允许 → 测试项目里自动跑完出 proof」。flake→retry（记忆 real-codex-run-flaky·核 proof 实物）。
+    #[test]
+    #[ignore = "交办地基·刀1: one [允许并开始] command runs confirm→boundary→auth→bind→auto-advance (real LM + real worker) to proof (user present)"]
+    fn confirm_and_start_authorized_run_real_run() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let real_session = "019ed9f7-c0c2-7213-b871-6d18959b7c24";
+        let proof_token = unix_timestamp_string();
+        let proof = format!("{test_root}/jiaoban-proof.txt");
+        let _ = fs::remove_file(&proof);
+        let dir = test_temp_dir("jiaoban-real");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index(test_root, real_session);
+        let readback_db_path = codex_db::default_state_db_path();
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        // 造 Pending proof-goal 方案（execution_scope Some·要改→档位 写范围；goal 让主管 LM 拆出建 proof 的任务）。
+        let mut cproposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            target_files: vec!["jiaoban-proof.txt".to_string()],
+            ..Default::default()
+        }));
+        cproposal.user_goal =
+            format!("在项目根建 jiaoban-proof.txt，写一行：jiaoban ok {proof_token}");
+        cproposal.goal_summary = format!(
+            "在当前项目根目录创建文件 jiaoban-proof.txt，只写入一行：jiaoban ok {proof_token}"
+        );
+        cproposal.next_steps = vec![format!(
+            "创建 jiaoban-proof.txt，写入一行内容：jiaoban ok {proof_token}"
+        )];
+        let c1_input =
+            map_consultation_to_c1_input(&cproposal, test_root, "consultant").expect("map");
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &c1_input,
+            1_765_300_000_000,
+            "write-jiaoban-real-proposal",
+        )
+        .expect("proposal");
+        // 合流：用户点[允许并开始] + 绑现有真会话。
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let director = CliDirectorAgent::default();
+        let request = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: created.proposal.proposal_id.clone(),
+            session_choice: "existing".to_string(),
+            session_id: Some(real_session.to_string()),
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(50),
+        };
+        let outcome = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &director,
+            &request,
+        )
+        .expect("合流一个命令应一气跑完");
+        println!(
+            "[JIAOBAN] stage={} prepared={} completed={:?} stop={:?}",
+            outcome.stage,
+            outcome.prepared_count,
+            outcome.chain_outcome.as_ref().map(|c| c.completed),
+            outcome.stop_reason
+        );
+        assert_eq!(
+            outcome.stage, "ran",
+            "点一下[允许并开始]→一气跑完：{outcome:?}"
+        );
+        let content = fs::read_to_string(&proof)
+            .unwrap_or_else(|e| panic!("worker 应真建 proof {proof}：{e}"));
+        assert!(
+            content.contains(&proof_token),
+            "proof 应含本次 token {proof_token}，实际：{content}"
+        );
+        println!("[JIAOBAN] proof={content:?}");
         let _ = fs::remove_dir_all(dir);
     }
 
