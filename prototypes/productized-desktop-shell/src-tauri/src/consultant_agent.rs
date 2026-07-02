@@ -17,10 +17,10 @@ pub(crate) struct ConsultationRisk {
 // 可空：纯问答咨询不需要下游改任何东西 → None。**后端只忠实透传·绝不默认/兜底缺失的写范围（用户硬约束）。**
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub(crate) struct ConsultationExecutionScope {
-    pub(crate) write_roots: Vec<String>,  // 写范围：下游执行可写的目录（须在被咨询项目根内）
+    pub(crate) write_roots: Vec<String>, // 写范围：下游执行可写的目录（须在被咨询项目根内）
     pub(crate) target_files: Vec<String>, // 目标文件：预期改动的具体文件·相对项目根（细粒度·可空）
-    pub(crate) tools: Vec<String>,        // 工具：下游 worker 需要的能力（要写就得含写能力，如 write_file/apply_patch）
-    pub(crate) checks: Vec<String>,       // 验收检查：怎么验（如 cargo test / npm test）
+    pub(crate) tools: Vec<String>, // 工具：下游 worker 需要的能力（要写就得含写能力，如 write_file/apply_patch）
+    pub(crate) checks: Vec<String>, // 验收检查：怎么验（如 cargo test / npm test）
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,10 +34,13 @@ pub(crate) struct ConsultationProposal {
     pub(crate) next_steps: Vec<String>,
     // None = 纯咨询/只读·不需要下游改任何东西；Some = 咨询判定要下游真改东西·带执行范围。
     pub(crate) execution_scope: Option<ConsultationExecutionScope>,
+    // 交办·刀2 2.5：咨询判「这活是否值得拆成多步工作流」（复杂活 true·简单/纯咨询 false）。UI 用它决定图区出不出现。
+    pub(crate) suggest_workflow: bool,
 }
 
 pub(crate) trait ConsultantAgent {
-    fn consult(&self, ctx: &ProjectContext, question: &str) -> Result<ConsultationProposal, String>;
+    fn consult(&self, ctx: &ProjectContext, question: &str)
+        -> Result<ConsultationProposal, String>;
 }
 
 // ===== ProjectContext（注入·策展核心）=====
@@ -292,12 +295,16 @@ fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
   "execution_scope": {
     "target_files": ["预期改动的具体文件·相对项目根(尽量列出·可空)"],
     "checks": ["怎么验收,如 cargo test / npm test / 浏览器打开看效果"]
-  }
+  },
+  "suggest_workflow": true
 }
 **判断这个目标要不要下游真改代码/文件**:
 - 要改 → 给出 execution_scope 块,写清"会改哪些文件(target_files)+怎么验收(checks)"。这是你方案的一部分。
   (写范围/工具由系统按固定档位装配·你不用报;多报的字段会被忽略。)
-- 只是回答问题、不需要改任何东西 → execution_scope 给 **null**,并在 scope_note 注明"纯咨询/只读"。"#,
+- 只是回答问题、不需要改任何东西 → execution_scope 给 **null**,并在 scope_note 注明"纯咨询/只读"。
+**判断这活值不值得拆成多步工作流(suggest_workflow)**:
+- 需要多步、有先后依赖、值得先看工序图再动手(复杂改造/多文件协作) → suggest_workflow=**true**。
+- 一两步就完、或纯咨询不改东西 → suggest_workflow=**false**(缺省)。"#,
     );
     p
 }
@@ -343,6 +350,9 @@ struct ConsultProposalJson {
     // 向后兼容：旧样本没这块 → None；codex 给 null / 整块缺 / write_roots 全空 → 视作纯咨询(None)。
     #[serde(default)]
     execution_scope: Option<ConsultExecutionScopeJson>,
+    // 2.5：向后兼容——旧样本缺此字段 → false（纯咨询/简单活默认不建议工作流）。
+    #[serde(default)]
+    suggest_workflow: bool,
 }
 
 // 从 codex 输出抠最后一个 ```json 块（无围栏则退到首尾大括号）。
@@ -403,6 +413,8 @@ pub(crate) fn parse_consultation_proposal(raw: &str) -> Result<ConsultationPropo
             tools: es.tools,
             checks: es.checks,
         }),
+        // 2.5：咨询判定的「建议按工作流」（缺省 false）。
+        suggest_workflow: dto.suggest_workflow,
     })
 }
 
@@ -422,11 +434,18 @@ impl Default for CliConsultantAgent {
 }
 
 impl ConsultantAgent for CliConsultantAgent {
-    fn consult(&self, ctx: &ProjectContext, question: &str) -> Result<ConsultationProposal, String> {
+    fn consult(
+        &self,
+        ctx: &ProjectContext,
+        question: &str,
+    ) -> Result<ConsultationProposal, String> {
         let prompt = consultant_build_prompt(ctx, question);
         // 结构性只读：readonly_codex_consult 写死 read-only 沙箱·写盘根空·不走执行闸（codex_local_runner）。
-        let raw =
-            codex_local_runner::readonly_codex_consult(&ctx.project_root, &prompt, self.timeout_ms)?;
+        let raw = codex_local_runner::readonly_codex_consult(
+            &ctx.project_root,
+            &prompt,
+            self.timeout_ms,
+        )?;
         parse_consultation_proposal(&raw)
     }
 }
@@ -468,7 +487,10 @@ pub(crate) fn map_consultation_to_c1_input(
         .risks
         .iter()
         .map(|r| ProjectConsultationProposalRisk {
-            risk_id: format!("risk:consult:{}", crate::utils::hash::short_hash(&r.summary)),
+            risk_id: format!(
+                "risk:consult:{}",
+                crate::utils::hash::short_hash(&r.summary)
+            ),
             severity: r.severity.clone(),
             summary: r.summary.clone(),
             mitigation: r.mitigation.clone(),
@@ -535,6 +557,8 @@ pub(crate) fn map_consultation_to_c1_input(
         risks,
         acceptance_criteria,
         created_by_role: ProjectConsultationProposalCreatorRole::ProjectConsultant,
+        // 2.5：透传咨询的「建议按工作流」判定（写范围/工具走档位·此标记只影响 UI 图区显隐·不碰授权）。
+        suggest_workflow: proposal.suggest_workflow,
         actor_id: actor_id.to_string(),
         expected_store_revision: None,
     })

@@ -92,6 +92,11 @@ fn prepare_authorized_auto_dispatch_for_index_at(
         timestamp_ms,
     );
 
+    // 2.3·任务级工序图（纯加法）：收「过了 guard 的」任务的 (任务节点 id, planned_task_id, title, depends_on)，
+    // 循环后据此建依赖边。task_node_order 只对**已物化**任务递增（blocked 不建节点·不占位·§3 边界语义不动）。
+    let mut task_graph: Vec<(String, String, String, Vec<String>)> = Vec::new();
+    let mut task_node_order = 0usize;
+
     for task in &mut annotated {
         if task
             .guard_result
@@ -122,6 +127,17 @@ fn prepare_authorized_auto_dispatch_for_index_at(
 
         ensure_c4_backup(path, &timestamp, &mut backup_path)?;
         ensure_project_director_worker_node(&mut value, &node_id, task, &timestamp)?;
+        // 2.3·加法：给「过了 guard 的」每个任务额外落一个任务级节点（≠上面的 role 节点·带 :task: 后缀·无执行口），
+        // 并记进 task_graph 供循环后建依赖边。老 role 节点/work_item/binding/workflow_node_id 锚全部原样。
+        let task_level_node_id =
+            ensure_project_director_task_level_node(&mut value, task, task_node_order, &timestamp)?;
+        task_node_order += 1;
+        task_graph.push((
+            task_level_node_id,
+            task.planned_task_id.clone(),
+            task.title.clone(),
+            task.depends_on.clone(),
+        ));
         ensure_project_director_work_item(
             &mut value,
             &work_item_id,
@@ -244,6 +260,37 @@ fn prepare_authorized_auto_dispatch_for_index_at(
         )?;
     }
 
+    // 2.3·依赖边（循环后·所有任务级节点都已建·才能 title→节点 id 映射）：depends_on 按 title 连（同链的先例·
+    // director_agent run_director_task_chain）。悬空依赖（title 不在已物化任务集里·如指向 blocked 任务）→记
+    // warning **不建边**。纯加法·edge_exists 幂等（重跑 prepare 不重复建）。写在 backup-write 之前 → 随现成 write 落盘。
+    let mut graph_warnings: Vec<String> = Vec::new();
+    let title_to_node: std::collections::BTreeMap<&str, (&str, &str)> = task_graph
+        .iter()
+        .map(|(node_id, planned_task_id, title, _)| {
+            (title.as_str(), (node_id.as_str(), planned_task_id.as_str()))
+        })
+        .collect();
+    for (to_node_id, to_planned_task_id, to_title, depends_on) in &task_graph {
+        for dep_title in depends_on {
+            match title_to_node.get(dep_title.as_str()) {
+                Some((from_node_id, from_planned_task_id)) => {
+                    ensure_project_director_task_dep_edge(
+                        &mut value,
+                        &request.workflow_id,
+                        from_node_id,
+                        to_node_id,
+                        from_planned_task_id,
+                        to_planned_task_id,
+                        &timestamp,
+                    )?;
+                }
+                None => graph_warnings.push(format!(
+                    "任务「{to_title}」依赖「{dep_title}」未在已授权任务里建节点（悬空/被阻断），未建依赖边。"
+                )),
+            }
+        }
+    }
+
     if backup_path.is_some() {
         value["updated_at"] = Value::String(timestamp.clone());
         write_validated_workflow_state(path, &value)?;
@@ -269,7 +316,9 @@ fn prepare_authorized_auto_dispatch_for_index_at(
     );
     let prepared_dispatches = prepared_dispatch_read_models_from_plan(&plan, &updated_value);
     let snapshot = read_workflow_state_snapshot(path)?;
-    let warnings = plan.warnings.clone();
+    // 2.3：把工序图悬空依赖 warning 并入返回（现成 plan.warnings 之外的加法·不改 plan 组装）。
+    let mut warnings = plan.warnings.clone();
+    warnings.extend(graph_warnings);
     Ok(AuthorizedPreparedDispatchResult {
         message: format!(
             "项目主管拆任务已准备：planned {} / prepared {} / needs_binding {} / blocked {}；已准备；仍未执行 worker。",
@@ -2134,6 +2183,83 @@ fn ensure_project_director_worker_node(
           "warnings": []
         }));
     }
+    Ok(())
+}
+
+// 交办·刀2 2.3·任务级节点（纯加法·落画布让用户看工序图）。**与 role 节点分离**：
+// - node_id = `{workflow_id}:node:task:{stable_id(planned_task_id)}`——**带后缀·绝不等于 bootstrap 保留节点
+//   `{wf}:node:task`**（那个是任务包草稿节点·精确匹配·lib.rs update_task_node_state）。
+// - source_ref = planned_task_id（配对锚·链回刷状态按它找；≠ planned_task.workflow_node_id 语义·坑②不动）。
+// - 无 work_item / 无 binding 指向它 → read model 天然无 task_package_id → **天然不就绪·无执行口**（§3）。
+// - position 按 order_index 错开（role 节点固定 x:560,y:120·任务级铺在下方网格·不叠·坑③）。
+// - node_exists 幂等：已存在**不重复建、也不覆盖 state**（state 归链回刷·2.3 尾）——重跑 prepare 不抹进度。
+// 返回该任务级节点 node_id（供依赖边配对）。
+fn ensure_project_director_task_level_node(
+    value: &mut Value,
+    task: &ProjectDirectorPlannedTask,
+    order_index: usize,
+    timestamp: &str,
+) -> Result<String, String> {
+    let node_id = format!(
+        "{}:node:task:{}",
+        task.scope.workflow_id,
+        stable_id(&task.planned_task_id)
+    );
+    if node_exists(value, &task.scope.workflow_id, &node_id) {
+        return Ok(node_id);
+    }
+    let x = 200 + ((order_index % 4) as i64) * 240;
+    let y = 360 + ((order_index / 4) as i64) * 160;
+    array_mut(value, "nodes")?.push(json!({
+      "node_id": node_id,
+      "workflow_id": task.scope.workflow_id,
+      "node_type": "project_director_task",
+      "title": task.title,
+      "state": "ready_to_dispatch",
+      "source_kind": "project_director_task_plan",
+      "source_ref": task.planned_task_id,
+      "permission_level": "plan_authorized_prepared",
+      "position": { "x": x, "y": y },
+      "created_at": timestamp,
+      "updated_at": timestamp,
+      "warnings": []
+    }));
+    Ok(node_id)
+}
+
+// 2.3·任务级依赖边（depends_on·title→任务节点 id 已在调用处映射好）。edge_exists 幂等·edge_type=depends_on；
+// read model derive_workflow_nodes 按 to_node_id 反推 depends_on（=from_node_id 集）→ 画布显示依赖箭头。
+fn ensure_project_director_task_dep_edge(
+    value: &mut Value,
+    workflow_id: &str,
+    from_node_id: &str,
+    to_node_id: &str,
+    from_planned_task_id: &str,
+    to_planned_task_id: &str,
+    timestamp: &str,
+) -> Result<(), String> {
+    let edge_id = format!(
+        "{workflow_id}:edge:director-task-dep:{}:{}",
+        stable_id(from_planned_task_id),
+        stable_id(to_planned_task_id)
+    );
+    if edge_exists(value, &edge_id) {
+        return Ok(());
+    }
+    array_mut(value, "edges")?.push(json!({
+      "edge_id": edge_id,
+      "workflow_id": workflow_id,
+      "from_node_id": from_node_id,
+      "to_node_id": to_node_id,
+      "edge_type": "depends_on",
+      "state": "ready_to_dispatch",
+      "source_kind": "project_director_task_plan",
+      "source_ref": to_planned_task_id,
+      "permission_level": "plan_authorized_prepared",
+      "created_at": timestamp,
+      "updated_at": timestamp,
+      "warnings": []
+    }));
     Ok(())
 }
 

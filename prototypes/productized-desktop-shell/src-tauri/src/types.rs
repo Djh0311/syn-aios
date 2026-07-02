@@ -2215,6 +2215,10 @@ struct ProjectConsultationProposal {
     status: ProjectConsultationProposalStatus,
     plan_authorization_id: Option<String>,
     created_by_role: ProjectConsultationProposalCreatorRole,
+    // 交办·刀2 2.5：咨询 AI 判「这活是否值得拆成多步工作流」（UI 用它决定图区要不要出现）。
+    // #[serde(default)]：老持久化数据缺此字段 → false（向后兼容·不破旧 store 反序列化）。
+    #[serde(default)]
+    suggest_workflow: bool,
     created_at_ms: i64,
     updated_at_ms: i64,
 }
@@ -2286,6 +2290,9 @@ struct CreateProjectConsultationProposalInput {
     risks: Vec<ProjectConsultationProposalRisk>,
     acceptance_criteria: Vec<String>,
     created_by_role: ProjectConsultationProposalCreatorRole,
+    // 交办·刀2 2.5：咨询判定的「建议按工作流」轻标记透传（缺省 false·老调用方/样本不受影响）。
+    #[serde(default)]
+    suggest_workflow: bool,
     actor_id: String,
     expected_store_revision: Option<i64>,
 }

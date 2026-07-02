@@ -9,6 +9,16 @@ pub(crate) trait DirectorAgent {
         ctx: &ProjectContext,
         proposal: &ProjectConsultationProposal,
     ) -> Result<Vec<ProjectDirectorPlannedTask>, String>;
+
+    // 2.1 批前预拆（待确认方案·仅预览）：与 plan 同拆解、只是 prompt 措辞不同（不对 LM 说「已授权」）。
+    // 默认回落到 plan（stub 测试 director 无需另实现·返回同一份 canned 任务）。
+    fn plan_preview(
+        &self,
+        ctx: &ProjectContext,
+        proposal: &ProjectConsultationProposal,
+    ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+        self.plan(ctx, proposal)
+    }
 }
 
 // ===== v0 静态主管档案 =====
@@ -19,10 +29,23 @@ const DIRECTOR_V0_PROFILE: &str = r#"你是「项目主管」。
 边界:只读、只规划、不执行、不自己派发。真派发由用户审过后走授权闸——你只产计划。
 风格:任务粒度适中、依赖清晰、可验收;不堆废话。"#;
 
+// 2.1：拆解 prompt 分「已授权」（auto_advance/合流·真派发前）与「待确认·仅预览」（批前预拆·别对 LM 说已授权）两措辞。
 fn director_build_prompt(ctx: &ProjectContext, proposal: &ProjectConsultationProposal) -> String {
+    director_build_prompt_variant(ctx, proposal, false)
+}
+
+fn director_build_prompt_variant(
+    ctx: &ProjectContext,
+    proposal: &ProjectConsultationProposal,
+    is_preview: bool,
+) -> String {
     let mut p = String::new();
     p.push_str(DIRECTOR_V0_PROFILE);
-    p.push_str("\n\n===== 已授权方案（要拆的就是它）=====\n");
+    p.push_str(if is_preview {
+        "\n\n===== 待确认方案（仅预览·尚未授权·先看会拆成什么图）=====\n"
+    } else {
+        "\n\n===== 已授权方案（要拆的就是它）=====\n"
+    });
     p.push_str(&format!(
         "方案标题: {}\n用户目标: {}\n一句话目标: {}\n",
         proposal.title, proposal.user_goal, proposal.goal_summary
@@ -65,7 +88,7 @@ fn director_build_prompt(ctx: &ProjectContext, proposal: &ProjectConsultationPro
     p.push_str(
         r#"
 ===== 怎么拆 =====
-把已授权方案拆成有序的 worker 任务(通常 1-6 个)。只依据上面注入的方案+文档,不假设未注入内容。
+把这份方案拆成有序的 worker 任务(通常 1-6 个)。只依据上面注入的方案+文档,不假设未注入内容。
 **每个 objective 必须自包含**:把目标文件的完整路径、要写的具体内容、依据的事实**原样写进 objective**——worker 只看这段、不看方案/不看别的任务也能独立干完。**绝不写"参见方案/见上文/如上所述/见上一步"。**
 report_format 写清 worker 该**结构化返回**什么(做了啥 / 产出在哪 / 成败),好让链/主管 parse 了往下走。
 在最后输出且仅输出一个 ```json 代码块,是一个任务数组,严格这个结构:
@@ -192,8 +215,26 @@ impl DirectorAgent for CliDirectorAgent {
     ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
         let prompt = director_build_prompt(ctx, proposal);
         // 复用咨询的只读 confinement：readonly_codex_consult（read-only 沙箱·写盘根空·项目只读·不走执行闸）。
-        let raw =
-            codex_local_runner::readonly_codex_consult(&ctx.project_root, &prompt, self.timeout_ms)?;
+        let raw = codex_local_runner::readonly_codex_consult(
+            &ctx.project_root,
+            &prompt,
+            self.timeout_ms,
+        )?;
+        parse_director_plan(&raw, proposal)
+    }
+
+    // 2.1 预拆：同一只读 confinement，只把 prompt 换成「待确认·仅预览」措辞（别对 LM 说已授权）。
+    fn plan_preview(
+        &self,
+        ctx: &ProjectContext,
+        proposal: &ProjectConsultationProposal,
+    ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+        let prompt = director_build_prompt_variant(ctx, proposal, true);
+        let raw = codex_local_runner::readonly_codex_consult(
+            &ctx.project_root,
+            &prompt,
+            self.timeout_ms,
+        )?;
         parse_director_plan(&raw, proposal)
     }
 }
@@ -272,6 +313,66 @@ fn is_tier1_early_exit(outcome: &Result<WorkflowNodeDispatchResult, String>) -> 
     }
 }
 
+// 2.4·拆步 retry：判 director.plan 是否 tier-1 偶发早退——codex 起了(过闸)但没落 last-message 文件。
+// slice1 实测唯一确定信号 = `consult_last_message_read_failed`（记忆 jiaoban-retry-gap-director-consult-step）；
+// 它只在 real_codex_executed=true 之后出现，与 gate 拦(readonly_blocked)/解析失败(json/空任务)/沙箱-gate/超时
+// 各自的错误串互斥 → 这些**不命中**、不 retry（照 §2.4「gate/解析类不 retry」）。保守：只认这一个信号。
+fn is_director_plan_flaky_early_exit(error: &str) -> bool {
+    error.contains("consult_last_message_read_failed")
+}
+
+// 2.4：director.plan / plan_preview 拆步偶发早退 → **原地重试一次（不循环）**；二次失败照常报错。
+// gate/解析类错误不命中判据 → 直接透传原错误（不 retry）。返回 (planned_tasks, 是否发生过重试)。
+fn director_plan_with_retry(
+    director: &dyn DirectorAgent,
+    ctx: &ProjectContext,
+    proposal: &ProjectConsultationProposal,
+    preview: bool,
+) -> Result<(Vec<ProjectDirectorPlannedTask>, bool), String> {
+    let run = |director: &dyn DirectorAgent| {
+        if preview {
+            director.plan_preview(ctx, proposal)
+        } else {
+            director.plan(ctx, proposal)
+        }
+    };
+    match run(director) {
+        Ok(tasks) => Ok((tasks, false)),
+        Err(error) if is_director_plan_flaky_early_exit(&error) => {
+            // 偶发早退：原地重试一次（不循环）。
+            run(director).map(|tasks| (tasks, true))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+// 2.2·所批即所跑：校验合流带进的「用户批过的图」——非空 + 每个任务 scope 的 project/workflow 必须与本授权一致
+// （防串项目/串工作流的图混入）。**越界写范围等不在此判**——交下游 prepare guard 逐个钳/拒（只能拦不能扩·安全不降）。
+fn validate_approved_planned_tasks(
+    tasks: &[ProjectDirectorPlannedTask],
+    workflow_id: &str,
+    project_id_value: &str,
+) -> Result<(), String> {
+    if tasks.is_empty() {
+        return Err("合流带入的「已批任务图」为空；拒绝（空图不跑）。".to_string());
+    }
+    for task in tasks {
+        if task.scope.workflow_id != workflow_id {
+            return Err(format!(
+                "已批任务「{}」的 workflow_id（{}）与本次授权（{workflow_id}）不一致；拒绝。",
+                task.title, task.scope.workflow_id
+            ));
+        }
+        if task.scope.project_id != project_id_value {
+            return Err(format!(
+                "已批任务「{}」的 project_id（{}）与本次授权（{project_id_value}）不一致；拒绝。",
+                task.title, task.scope.project_id
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn run_director_task_chain(
     path: &std::path::Path,
     index: &Value,
@@ -336,8 +437,14 @@ pub(crate) fn run_director_task_chain(
     // 起链：建/续 running 链记录 + 起链前 backup（可回滚）+ 审计「链起」。
     let start_ts = unix_timestamp_string();
     let mut value = read_workflow_state_value(path)?;
-    let chain_run_id =
-        ensure_chain_run_record(&mut value, &pid, workflow_id, &order_task_ids, max_nodes, &start_ts)?;
+    let chain_run_id = ensure_chain_run_record(
+        &mut value,
+        &pid,
+        workflow_id,
+        &order_task_ids,
+        max_nodes,
+        &start_ts,
+    )?;
     backup_workflow_state_file(path, &start_ts)?;
     append_chain_audit(
         &mut value,
@@ -405,7 +512,10 @@ pub(crate) fn run_director_task_chain(
                 task_id,
                 "skipped",
                 None,
-                Some(&format!("status={}（非 prepared，未授权派发）", task.status)),
+                Some(&format!(
+                    "status={}（非 prepared，未授权派发）",
+                    task.status
+                )),
             );
             append_chain_audit(
                 &mut current,
@@ -430,39 +540,42 @@ pub(crate) fn run_director_task_chain(
             continue;
         }
         // prepared 理应有 node+work_item（annotate 无条件设）；防御：缺则记 skipped、不派。
-        let (node_id, work_item_id) = match (task.workflow_node_id.clone(), task.work_item_id.clone())
-        {
-            (Some(node), Some(work_item)) => (node, work_item),
-            _ => {
-                let ts = unix_timestamp_string();
-                set_chain_node_state(
-                    &mut current,
-                    &chain_run_id,
-                    task_id,
-                    "skipped",
-                    None,
-                    Some("prepared 但缺 node/work_item（异常），跳过不派发"),
-                );
-                append_chain_audit(
-                    &mut current,
-                    &chain_run_id,
-                    workflow_id,
-                    "workflow_chain_node_skipped",
-                    "pending",
-                    "skipped",
-                    &ts,
-                    &format!("任务「{}」status=prepared 但缺 node/work_item，跳过。", task.title),
-                )?;
-                write_validated_workflow_state(path, &current)?;
-                skipped += 1;
-                steps.push(DirectorChainStep {
-                    planned_task_id: task_id.clone(),
-                    title: task.title.clone(),
-                    state: "skipped".to_string(),
-                });
-                continue;
-            }
-        };
+        let (node_id, work_item_id) =
+            match (task.workflow_node_id.clone(), task.work_item_id.clone()) {
+                (Some(node), Some(work_item)) => (node, work_item),
+                _ => {
+                    let ts = unix_timestamp_string();
+                    set_chain_node_state(
+                        &mut current,
+                        &chain_run_id,
+                        task_id,
+                        "skipped",
+                        None,
+                        Some("prepared 但缺 node/work_item（异常），跳过不派发"),
+                    );
+                    append_chain_audit(
+                        &mut current,
+                        &chain_run_id,
+                        workflow_id,
+                        "workflow_chain_node_skipped",
+                        "pending",
+                        "skipped",
+                        &ts,
+                        &format!(
+                            "任务「{}」status=prepared 但缺 node/work_item，跳过。",
+                            task.title
+                        ),
+                    )?;
+                    write_validated_workflow_state(path, &current)?;
+                    skipped += 1;
+                    steps.push(DirectorChainStep {
+                        planned_task_id: task_id.clone(),
+                        title: task.title.clone(),
+                        state: "skipped".to_string(),
+                    });
+                    continue;
+                }
+            };
         // runaway 上限（护栏①）：只对真派发计数（skipped 不占额），超额 → 停链。
         if dispatched >= max_nodes {
             let ts = unix_timestamp_string();
@@ -522,10 +635,15 @@ pub(crate) fn run_director_task_chain(
         // 原地重试一次；越权被拒/闸拦/超时按原语义不 retry（is_tier1_early_exit 只认早退特征）。**不循环**。
         // 首次失败已把 work_item 推离 ready_to_dispatch → 重试前走**现成合法跳转**（failed→needs_changes→
         // ready_to_dispatch）复位；复位不成（如非默认工作流·update_work_item_state_at 限默认）则不重试。
-        if is_tier1_early_exit(&outcome) && reset_work_item_for_retry(path, project_root, &request.work_item_id) {
+        if is_tier1_early_exit(&outcome)
+            && reset_work_item_for_retry(path, project_root, &request.work_item_id)
+        {
             push_unique(
                 &mut warnings,
-                &format!("任务「{}」worker 偶发早退（exit≠0 无输出），已自动重试一次。", task.title),
+                &format!(
+                    "任务「{}」worker 偶发早退（exit≠0 无输出），已自动重试一次。",
+                    task.title
+                ),
             );
             outcome =
                 execute_project_workflow_node_at(path, index, readback_db_path, runner, &request);
@@ -534,6 +652,14 @@ pub(crate) fn run_director_task_chain(
         // 重读（execute 写过文件，避免覆盖它的写入）。
         let mut after = read_workflow_state_value(path)?;
         let ts_done = unix_timestamp_string();
+        // 2.3 尾·加法小缝：对应**任务级节点**（prepare 按 source_ref=planned_task_id 建的 {wf}:node:task:{stable_id}）
+        // 顺带把 state 刷成 completed/failed，让画布进度跟链走。update_node_state_for_id 找不到即 no-op（无任务级
+        // 节点的旧链/resume 路径不受影响）——**不碰链判决体**（set_chain_node_state / 停链 / finalize 全原样）。
+        let task_level_node_id = format!(
+            "{}:node:task:{}",
+            task.scope.workflow_id,
+            stable_id(task_id)
+        );
         match outcome {
             Ok(result) if result.dispatch.state == "completed" => {
                 let dispatch_id = result.dispatch.dispatch_id.clone();
@@ -545,6 +671,7 @@ pub(crate) fn run_director_task_chain(
                     Some(&dispatch_id),
                     None,
                 );
+                update_node_state_for_id(&mut after, &task_level_node_id, "completed", &ts_done)?;
                 append_chain_audit(
                     &mut after,
                     &chain_run_id,
@@ -553,7 +680,10 @@ pub(crate) fn run_director_task_chain(
                     "running",
                     "completed",
                     &ts_done,
-                    &format!("薄链驱动：任务「{}」真派发成功（dispatch {dispatch_id}）", task.title),
+                    &format!(
+                        "薄链驱动：任务「{}」真派发成功（dispatch {dispatch_id}）",
+                        task.title
+                    ),
                 )?;
                 write_validated_workflow_state(path, &after)?;
                 completed += 1;
@@ -577,6 +707,7 @@ pub(crate) fn run_director_task_chain(
                     None,
                     Some(&fail_msg),
                 );
+                update_node_state_for_id(&mut after, &task_level_node_id, "failed", &ts_done)?;
                 append_chain_audit(
                     &mut after,
                     &chain_run_id,
@@ -596,7 +727,10 @@ pub(crate) fn run_director_task_chain(
                     "running",
                     "failed",
                     &ts_done,
-                    &format!("任务「{}」失败，已停链（失败即停、不自动重试）：{fail_msg}", task.title),
+                    &format!(
+                        "任务「{}」失败，已停链（失败即停、不自动重试）：{fail_msg}",
+                        task.title
+                    ),
                 )?;
                 write_validated_workflow_state(path, &after)?;
                 steps.push(DirectorChainStep {
@@ -779,6 +913,8 @@ fn run_auto_advance_authorized_role_loop(
     workflow_id: &str,
     actor_id: &str,
     max_nodes: usize,
+    // 2.2 所批即所跑：Some=合流带进的「用户批过的图」→ 跳过 director.plan 原样执行；None=现状（批后 LM 拆）。
+    approved_planned_tasks: Option<&[ProjectDirectorPlannedTask]>,
 ) -> Result<AutoAdvanceRoleLoopOutcome, String> {
     // 死线·圈固定测试项目（决策 2026-06-27）：非测试 root 入口直接拒——在 LM 拆 / prepare 之前提前拦
     // （纵深防御，不只靠链入口的晚拦）。与现成命令同款 path-lock，闸 / 沙箱本体不动。
@@ -800,7 +936,8 @@ fn run_auto_advance_authorized_role_loop(
                     .is_none_or(|expires_at_ms| expires_at_ms > timestamp_ms)
         })
         .ok_or_else(|| {
-            "无 active 方案授权：请先确认方案 + 全局边界复核（自动推进不创建、不跳过授权）。".to_string()
+            "无 active 方案授权：请先确认方案 + 全局边界复核（自动推进不创建、不跳过授权）。"
+                .to_string()
         })?;
     let proposal_id = active
         .source_proposal_id
@@ -815,16 +952,47 @@ fn run_auto_advance_authorized_role_loop(
         "role_loop_auto_advance_started",
         "已查到 active 方案授权，开始授权范围内自动推进：拆任务 → prepare →（没绑/越界则停）→ 链跑。",
     )?;
-    // 2. 主管 LM 拆任务（授权范围内）：加载 ctx + active 授权对应的已确认方案 → director.plan
-    //    （真主管 LM·CliDirectorAgent；stub 测试注入假 director 不起 codex）。
-    let ctx = load_project_context(project_root)?;
-    let proposal_store = project_consultation_proposal_store::load_store(path, timestamp_ms)?;
-    let proposal = proposal_store
-        .proposals
-        .iter()
-        .find(|proposal| proposal.proposal_id == proposal_id)
-        .ok_or_else(|| format!("找不到 active 授权对应的已确认方案：{proposal_id}"))?;
-    let planned_tasks = director.plan(&ctx, proposal)?;
+    // 2. 拿到 planned_tasks —— 两条路：
+    //    (a) 2.2 所批即所跑：合流带进「用户批过的图」→ **跳过 director.plan**（不重跑 LM·消除重拆不确定性）；
+    //        一致性校验（workflow_id/project 一致·空数组拒），越界仍由下游 prepare guard 逐个钳/拒（此处不放行）。
+    //    (b) 现状：加载 ctx + active 授权对应的已确认方案 → director.plan（真主管 LM），2.4 偶发早退自动重试一次。
+    let planned_tasks = match approved_planned_tasks {
+        Some(approved) => {
+            validate_approved_planned_tasks(approved, workflow_id, &pid)?;
+            append_role_loop_auto_advance_audit(
+                path,
+                workflow_id,
+                actor_id,
+                "role_loop_used_approved_plan_graph",
+                &format!(
+                    "所批即所跑：采用用户批过的 {} 个任务图，跳过主管重拆（原样进 prepare·guard 仍逐个复核）。",
+                    approved.len()
+                ),
+            )?;
+            approved.to_vec()
+        }
+        None => {
+            let ctx = load_project_context(project_root)?;
+            let proposal_store =
+                project_consultation_proposal_store::load_store(path, timestamp_ms)?;
+            let proposal = proposal_store
+                .proposals
+                .iter()
+                .find(|proposal| proposal.proposal_id == proposal_id)
+                .ok_or_else(|| format!("找不到 active 授权对应的已确认方案：{proposal_id}"))?;
+            let (tasks, retried) = director_plan_with_retry(director, &ctx, proposal, false)?;
+            if retried {
+                append_role_loop_auto_advance_audit(
+                    path,
+                    workflow_id,
+                    actor_id,
+                    "role_loop_director_plan_retried",
+                    "主管拆任务偶发早退（consult 无输出），已自动重试一次。",
+                )?;
+            }
+            tasks
+        }
+    };
     // 3. prepare（→ prepared dispatches·授权范围内·把 LM 拆的任务接进派发机器）。
     let prepare_input = PrepareAuthorizedAutoDispatchInput {
         project_root: project_root.to_string(),
@@ -868,7 +1036,8 @@ fn run_auto_advance_authorized_role_loop(
         } else if needs_binding_count > 0 {
             (
                 "needs_binding",
-                "需先给 codex-dev 节点绑一条 Codex 会话再自动推进（本命令不自动绑会话）。".to_string(),
+                "需先给 codex-dev 节点绑一条 Codex 会话再自动推进（本命令不自动绑会话）。"
+                    .to_string(),
             )
         } else {
             (
@@ -962,6 +1131,8 @@ async fn auto_advance_authorized_role_loop(
             &request.workflow_id,
             &actor_id,
             request.max_nodes.unwrap_or(50),
+            // 独立自动推进命令：无「已批图」入口 → 现状 LM 拆（2.2 只在合流命令收图）。
+            None,
         )
     })
     .await
@@ -983,6 +1154,9 @@ pub(crate) struct ConfirmAndStartAuthorizedRunRequest {
     pub(crate) actor_id: Option<String>,
     #[serde(default)]
     pub(crate) max_nodes: Option<usize>,
+    // 2.2 所批即所跑：前端回传「用户批过的那份图」（预拆→审→回传）。Some=原样跑不重拆；None/缺=批后 LM 拆（现状）。
+    #[serde(default)]
+    pub(crate) approved_planned_tasks: Option<Vec<ProjectDirectorPlannedTask>>,
 }
 
 // 内层（同步·spawn_blocking 里调；可单测·stub 咨询/主管/链）。
@@ -1050,7 +1224,8 @@ fn run_confirm_and_start_authorized_run_inner(
             authorization_id: authorization.authorization_id.clone(),
             actor_id: actor_id.clone(),
             review_status: "approved".to_string(),
-            summary: "用户点[允许并开始]：同时作全局边界批准（Phase A·用户演全局主管）。".to_string(),
+            summary: "用户点[允许并开始]：同时作全局边界批准（Phase A·用户演全局主管）。"
+                .to_string(),
             checklist: GlobalBoundaryReviewChecklist {
                 architecture_boundary_checked: true,
                 cross_project_impact_checked: true,
@@ -1093,10 +1268,13 @@ fn run_confirm_and_start_authorized_run_inner(
             );
         }
         other => {
-            return Err(format!("未知 session_choice：{other}（本刀只支持 existing）"));
+            return Err(format!(
+                "未知 session_choice：{other}（本刀只支持 existing）"
+            ));
         }
     }
-    // 5. 自动推进（现成 auto_advance 内层·resolve active 授权 → LM 拆 → prepare → 起链前复查授权 → 链）。
+    // 5. 自动推进（现成 auto_advance 内层·resolve active 授权 →〔2.2 有已批图则跳过 LM 原样跑〕→ prepare →
+    //    起链前复查授权 → 链）。approved_planned_tasks=Some 时所批即所跑（预拆给用户看的那份=真跑的那份）。
     run_auto_advance_authorized_role_loop(
         path,
         index,
@@ -1107,6 +1285,7 @@ fn run_confirm_and_start_authorized_run_inner(
         &workflow_id,
         &actor_id,
         request.max_nodes.unwrap_or(50),
+        request.approved_planned_tasks.as_deref(),
     )
 }
 
@@ -1133,4 +1312,78 @@ async fn confirm_and_start_authorized_run(
     })
     .await
     .map_err(|error| format!("合流执行线程异常：{error}"))?
+}
+
+// ===== 交办·刀2 2.1·只读预拆命令：批前看图（pending 方案 → 主管 LM 拆图 → 原样返回·零写盘）=====
+// 死线：**零写盘·不 annotate·不 prepare·不碰链**——只 load 方案 + load ctx + director.plan_preview → 返回
+// planned_tasks + warnings。执行**唯一入口仍是合流人闸**（预拆产物不直通执行）。path-lock **不加**（与
+// run_project_consultation 同款只读咨询形先例·决策 2026-06-25：只读可任意项目·唯一防线=readonly_codex_consult
+// 的 read-only 沙箱）。接受 PendingUserConfirmation（批前看图）；已确认方案也能拆（预览无状态·幂等）。
+#[derive(serde::Deserialize)]
+pub(crate) struct PreviewPendingProposalDirectorPlanRequest {
+    pub(crate) project_root: String,
+    pub(crate) proposal_id: String,
+}
+
+#[derive(serde::Serialize, Debug)]
+pub(crate) struct PreviewPendingProposalDirectorPlanOutcome {
+    pub(crate) planned_tasks: Vec<ProjectDirectorPlannedTask>,
+    pub(crate) warnings: Vec<String>,
+}
+
+// 内层（同步·spawn_blocking 里调；可单测·stub director）。
+fn run_preview_pending_proposal_director_plan_inner(
+    path: &std::path::Path,
+    director: &dyn DirectorAgent,
+    request: &PreviewPendingProposalDirectorPlanRequest,
+) -> Result<PreviewPendingProposalDirectorPlanOutcome, String> {
+    let timestamp_ms = unix_timestamp_ms();
+    // 1. 取方案（接受任意状态·预览无副作用无执行口）——只读取、不改状态、不记决策。
+    let proposal_store = project_consultation_proposal_store::load_store(path, timestamp_ms)?;
+    let proposal = proposal_store
+        .proposals
+        .iter()
+        .find(|proposal| proposal.proposal_id == request.proposal_id)
+        .ok_or_else(|| format!("找不到方案：{}", request.proposal_id))?;
+    // 2. load ctx + 主管 LM 预拆（待确认措辞·2.4 偶发早退自动重试一次）。零写盘。
+    let ctx = load_project_context(&request.project_root)?;
+    let (planned_tasks, retried) = director_plan_with_retry(director, &ctx, proposal, true)?;
+    let mut warnings: Vec<String> = Vec::new();
+    if retried {
+        warnings.push("主管拆任务偶发早退（consult 无输出），已自动重试一次。".to_string());
+    }
+    // 3. 悬空依赖 warning（照链的先例·title 不在任务集里的依赖）——预拆只提示、**不建边**（零写盘）。
+    let titles: std::collections::BTreeSet<&str> = planned_tasks
+        .iter()
+        .map(|task| task.title.as_str())
+        .collect();
+    for task in &planned_tasks {
+        for dep in &task.depends_on {
+            if !titles.contains(dep.as_str()) {
+                warnings.push(format!(
+                    "任务「{}」依赖不存在的前置「{dep}」（悬空·真跑时拓扑序不含它）",
+                    task.title
+                ));
+            }
+        }
+    }
+    Ok(PreviewPendingProposalDirectorPlanOutcome {
+        planned_tasks,
+        warnings,
+    })
+}
+
+#[tauri::command]
+async fn preview_pending_proposal_director_plan(
+    request: PreviewPendingProposalDirectorPlanRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<PreviewPendingProposalDirectorPlanOutcome, String> {
+    // 真 LM 只读 420s 级 → spawn_blocking 不冻 UI（同范本）。
+    let path = state.workflow_state_path.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let director = CliDirectorAgent::default();
+        run_preview_pending_proposal_director_plan_inner(&path, &director, &request)
+    })
+    .await
+    .map_err(|error| format!("预拆执行线程异常：{error}"))?
 }

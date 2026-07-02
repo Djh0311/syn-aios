@@ -101,6 +101,8 @@ pub(crate) fn create_proposal(
         status: ProjectConsultationProposalStatus::PendingUserConfirmation,
         plan_authorization_id: None,
         created_by_role: input.created_by_role,
+        // 交办·刀2 2.5：透传咨询的「建议按工作流」轻标记（map 从咨询 LM 判定填入 input）。
+        suggest_workflow: input.suggest_workflow,
         created_at_ms: timestamp_ms,
         updated_at_ms: timestamp_ms,
     };

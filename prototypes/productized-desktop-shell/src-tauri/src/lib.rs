@@ -2666,6 +2666,7 @@ mod tests {
             }],
             acceptance_criteria: vec!["确认后授权仍停在待全局复核。".to_string()],
             created_by_role: ProjectConsultationProposalCreatorRole::ProjectConsultant,
+            suggest_workflow: false,
             actor_id: "project-consultation-fixture".to_string(),
             expected_store_revision: None,
         }
@@ -4508,6 +4509,7 @@ mod tests {
                 must_stop_points: vec!["需用户确认范围".to_string()],
                 next_steps: vec!["进角色循环授权".to_string()],
                 execution_scope: None, // 只读咨询 stub·不需要下游改东西
+                suggest_workflow: false,
             })
         }
     }
@@ -4851,6 +4853,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             must_stop_points: vec![],
             next_steps: vec!["下一步".to_string()],
             execution_scope,
+            suggest_workflow: false,
         }
     }
 
@@ -6525,6 +6528,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &workflow_id,
             "tester",
             10,
+            None,
         )
         .expect("授权+绑会话应自动推进跑通");
         assert_eq!(outcome.stage, "ran", "应跑到链：{outcome:?}");
@@ -6567,6 +6571,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &workflow_id,
             "tester",
             10,
+            None,
         )
         .expect("没绑会话也应返回 outcome（停在 needs_binding）");
         assert_eq!(
@@ -6616,6 +6621,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &workflow_id,
             "tester",
             10,
+            None,
         );
         assert!(result.is_err(), "无 active 授权应被拒");
         assert!(
@@ -6649,6 +6655,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "wf",
             "tester",
             10,
+            None,
         );
         assert!(result.is_err(), "非测试 root 应被入口 path-lock 拒");
         // 有意义：错误须是 path-lock 那条（不是"缺授权"），证 path-lock 在 LM / prepare 之前真拦。
@@ -6937,6 +6944,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             session_id: Some(thread_id.to_string()),
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(10),
+            approved_planned_tasks: None,
         };
         let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
@@ -6990,6 +6998,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             session_id: Some("thread-guard".to_string()),
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(10),
+            approved_planned_tasks: None,
         };
         assert!(
             run_confirm_and_start_authorized_run_inner(
@@ -7023,6 +7032,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             session_id: None,
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(10),
+            approved_planned_tasks: None,
         };
         let err = run_confirm_and_start_authorized_run_inner(
             &path,
@@ -7133,6 +7143,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &workflow_id,
             "user-fixture",
             50,
+            None,
         )
         .expect("授权后自动推进应跑通");
         println!(
@@ -7209,6 +7220,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             session_id: Some(real_session.to_string()),
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(50),
+            approved_planned_tasks: None,
         };
         let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
@@ -7237,6 +7249,661 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "proof 应含本次 token {proof_token}，实际：{content}"
         );
         println!("[JIAOBAN] proof={content:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // ===== 交办·刀2 后端（预拆 / 所批即所跑 / 任务级节点边 / 拆步 retry）·stub =====
+
+    // 造一个最小合规 planned task（scope 落在 fixture 授权范围内·codex-dev·{root}/src 可写）。
+    fn jiaoban_test_planned_task(
+        workflow_id: &str,
+        id: usize,
+        title: &str,
+        deps: Vec<String>,
+    ) -> ProjectDirectorPlannedTask {
+        let root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        ProjectDirectorPlannedTask {
+            planned_task_id: format!("planned-task:{workflow_id}:{id}"),
+            title: title.to_string(),
+            objective: format!("自包含指令：{title}"),
+            scope: ProjectDirectorTaskScope {
+                project_id: project_id(root),
+                workflow_id: workflow_id.to_string(),
+                target_role: "codex-dev".to_string(),
+                task_package_kind: "task_package".to_string(),
+                allowed_read_scope: vec![root.to_string()],
+                allowed_write_scope: vec![format!("{root}/src")],
+                callable_tool_capabilities: vec!["read_file".to_string()],
+                required_checks: vec![],
+                stop_conditions: vec![],
+            },
+            depends_on: deps,
+            acceptance_criteria: vec!["ok".to_string()],
+            report_format: vec!["done".to_string()],
+            status: "planned".to_string(),
+            guard_result: None,
+            work_item_id: None,
+            workflow_node_id: None,
+            task_package_id: None,
+            memory_packet_snapshot_id: None,
+            prepared_dispatch_id: None,
+            blocked_reasons: vec![],
+        }
+    }
+
+    // 目录内所有文件的 (名, 字节) 快照（排序）——比对前后证「零写盘」。
+    fn jiaoban_dir_snapshot(dir: &Path) -> Vec<(String, Vec<u8>)> {
+        let mut out: Vec<(String, Vec<u8>)> = fs::read_dir(dir)
+            .expect("read dir")
+            .filter_map(|entry| {
+                let p = entry.ok()?.path();
+                if p.is_file() {
+                    Some((
+                        p.file_name()?.to_string_lossy().to_string(),
+                        fs::read(&p).ok()?,
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+
+    // 计数 director：前 err_until 次返回 err_msg，之后返回 tasks。验 2.4 retry 判据/次数。
+    struct CountingDirector {
+        err_until: usize,
+        err_msg: String,
+        tasks: Vec<ProjectDirectorPlannedTask>,
+        calls: std::cell::RefCell<usize>,
+    }
+    impl DirectorAgent for CountingDirector {
+        fn plan(
+            &self,
+            _ctx: &ProjectContext,
+            _proposal: &ProjectConsultationProposal,
+        ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+            let mut calls = self.calls.borrow_mut();
+            *calls += 1;
+            if *calls <= self.err_until {
+                Err(self.err_msg.clone())
+            } else {
+                Ok(self.tasks.clone())
+            }
+        }
+    }
+
+    // 炸弹 director：plan 被调即 panic——验「带 approved 图时 director.plan 绝不被调」。
+    struct BombDirector;
+    impl DirectorAgent for BombDirector {
+        fn plan(
+            &self,
+            _ctx: &ProjectContext,
+            _proposal: &ProjectConsultationProposal,
+        ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+            panic!("所批即所跑：带 approved 图时不该调用 director.plan（应跳过重拆）");
+        }
+    }
+
+    // 2.1·预拆：PendingUserConfirmation 方案 → 预拆出含依赖的任务图 + **零写盘**。
+    #[test]
+    fn jiaoban_preview_pending_proposal_plans_with_deps_zero_writes() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("jiaoban-preview");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let input = fixture_project_consultation_proposal_input(test_root);
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &input,
+            1_765_300_000_000,
+            "write-preview-proposal",
+        )
+        .expect("proposal");
+        assert_eq!(
+            created.proposal.status,
+            ProjectConsultationProposalStatus::PendingUserConfirmation,
+            "预拆针对的是待确认方案"
+        );
+        let before = jiaoban_dir_snapshot(&dir);
+        let request = PreviewPendingProposalDirectorPlanRequest {
+            project_root: test_root.to_string(),
+            proposal_id: created.proposal.proposal_id.clone(),
+        };
+        let outcome =
+            run_preview_pending_proposal_director_plan_inner(&path, &StubDirector, &request)
+                .expect("pending 方案应能预拆");
+        assert!(
+            !outcome.planned_tasks.is_empty(),
+            "预拆应产出任务：{outcome:?}"
+        );
+        assert!(
+            outcome
+                .planned_tasks
+                .iter()
+                .any(|task| !task.depends_on.is_empty()),
+            "预拆图应含依赖关系（StubDirector task2 依赖 task1）"
+        );
+        let after = jiaoban_dir_snapshot(&dir);
+        assert_eq!(before, after, "预拆必须零写盘（目录文件字节前后一致）");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.1·预拆幂等无状态：已确认方案也能预览（不校 Pending-only·预览无副作用）。
+    #[test]
+    fn jiaoban_preview_works_on_confirmed_proposal() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("jiaoban-preview-confirmed");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (proposal, _auth, _rev) = create_active_project_director_authorization_fixture(
+            &path,
+            test_root,
+            "thread-preview-confirmed",
+            1_765_300_000_000,
+        );
+        let request = PreviewPendingProposalDirectorPlanRequest {
+            project_root: test_root.to_string(),
+            proposal_id: proposal.proposal_id.clone(),
+        };
+        let outcome =
+            run_preview_pending_proposal_director_plan_inner(&path, &StubDirector, &request)
+                .expect("已确认方案也应可预览（幂等·无状态）");
+        assert!(!outcome.planned_tasks.is_empty(), "已确认方案预览也出图");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.4·拆步 retry：consult 偶发早退（consult_last_message_read_failed）→ 原地重试一次成功 + 标记 retried。
+    #[test]
+    fn jiaoban_director_plan_retries_once_on_consult_early_exit() {
+        let director = CountingDirector {
+            err_until: 1,
+            err_msg: "consult_last_message_read_failed:No such file (os error 2)".to_string(),
+            tasks: vec![jiaoban_test_planned_task("wf", 1, "t", vec![])],
+            calls: std::cell::RefCell::new(0),
+        };
+        let ctx = load_project_context(WORKFLOW_ENGINE_TEST_PROJECT_ROOT).expect("ctx");
+        let (proposal, pdir) = s3_director_fixture_proposal("jiaoban-retry-ok");
+        let (tasks, retried) = director_plan_with_retry(&director, &ctx, &proposal, false)
+            .expect("偶发早退应重试一次后成功");
+        assert!(retried, "应标记发生过重试");
+        assert_eq!(tasks.len(), 1, "重试后拿到任务");
+        assert_eq!(
+            *director.calls.borrow(),
+            2,
+            "恰好调 2 次（首次 + 重试一次）"
+        );
+        let _ = fs::remove_dir_all(pdir);
+    }
+
+    // 2.4·不循环：两次都早退 → 报错停（只重试一次·不无限重试）。
+    #[test]
+    fn jiaoban_director_plan_stops_after_second_failure() {
+        let director = CountingDirector {
+            err_until: 2,
+            err_msg: "consult_last_message_read_failed:still gone".to_string(),
+            tasks: vec![jiaoban_test_planned_task("wf", 1, "t", vec![])],
+            calls: std::cell::RefCell::new(0),
+        };
+        let ctx = load_project_context(WORKFLOW_ENGINE_TEST_PROJECT_ROOT).expect("ctx");
+        let (proposal, pdir) = s3_director_fixture_proposal("jiaoban-retry-stop");
+        let result = director_plan_with_retry(&director, &ctx, &proposal, false);
+        assert!(result.is_err(), "连续两次早退应报错：{result:?}");
+        assert_eq!(*director.calls.borrow(), 2, "只重试一次·不循环（共 2 次）");
+        let _ = fs::remove_dir_all(pdir);
+    }
+
+    // 2.4·解析类不 retry：json 解析失败不是偶发早退 → 立即报错·不重试。
+    #[test]
+    fn jiaoban_director_plan_no_retry_on_parse_error() {
+        let director = CountingDirector {
+            err_until: 1,
+            err_msg: "主管 plan json 解析失败:expected value".to_string(),
+            tasks: vec![jiaoban_test_planned_task("wf", 1, "t", vec![])],
+            calls: std::cell::RefCell::new(0),
+        };
+        let ctx = load_project_context(WORKFLOW_ENGINE_TEST_PROJECT_ROOT).expect("ctx");
+        let (proposal, pdir) = s3_director_fixture_proposal("jiaoban-retry-parse");
+        let result = director_plan_with_retry(&director, &ctx, &proposal, false);
+        assert!(result.is_err(), "解析错应直接报错");
+        assert_eq!(*director.calls.borrow(), 1, "解析类不 retry（只调 1 次）");
+        let _ = fs::remove_dir_all(pdir);
+    }
+
+    // 2.3·任务级节点 + 依赖边落画布（纯加法）：一任务一节点、id 带后缀不撞保留节点、position 错开、depends_on 建边、
+    // 老 role/保留节点原样、重跑幂等。
+    #[test]
+    fn jiaoban_prepare_writes_task_level_nodes_and_dep_edges() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-jiaoban-nodes";
+        let dir = test_temp_dir("jiaoban-task-nodes");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (proposal, authorization, revision) =
+            create_active_project_director_authorization_fixture(
+                &path,
+                test_root,
+                thread_id,
+                timestamp_ms,
+            );
+        let workflow_id = default_workflow_id(test_root);
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(
+                test_root,
+                &format!("{workflow_id}:node:codex-dev"),
+                None,
+                thread_id,
+            ),
+        )
+        .expect("bind");
+        let ctx = load_project_context(test_root).expect("ctx");
+        let planned = StubDirector.plan(&ctx, &proposal).expect("plan"); // 搭骨架 / 接业务(dep 搭骨架)
+        prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+                planned.clone(),
+            ),
+        )
+        .expect("prepare");
+        let state = read_workflow_state_value(&path).expect("state");
+        let task_nodes: Vec<&Value> = state["nodes"]
+            .as_array()
+            .expect("nodes")
+            .iter()
+            .filter(|node| {
+                optional_string_from(node, "node_type").as_deref() == Some("project_director_task")
+            })
+            .collect();
+        assert_eq!(task_nodes.len(), 2, "两个任务 → 两个任务级节点");
+        let reserved = format!("{workflow_id}:node:task");
+        for node in &task_nodes {
+            let node_id = optional_string_from(node, "node_id").expect("node_id");
+            assert!(
+                node_id.starts_with(&format!("{workflow_id}:node:task:")),
+                "任务级 id 带 :task: 后缀：{node_id}"
+            );
+            assert_ne!(node_id, reserved, "绝不等于 bootstrap 保留节点");
+        }
+        assert_ne!(
+            task_nodes[0]["position"], task_nodes[1]["position"],
+            "position 应按 index 错开、不叠"
+        );
+        let dep_edges: Vec<&Value> = state["edges"]
+            .as_array()
+            .expect("edges")
+            .iter()
+            .filter(|edge| optional_string_from(edge, "edge_type").as_deref() == Some("depends_on"))
+            .collect();
+        assert_eq!(dep_edges.len(), 1, "接业务→搭骨架 一条 depends_on 边");
+        assert!(
+            node_exists(&state, &workflow_id, &reserved),
+            "bootstrap 保留节点 {reserved} 不受扰"
+        );
+        assert!(
+            node_exists(
+                &state,
+                &workflow_id,
+                &format!("{workflow_id}:node:codex-dev")
+            ),
+            "老 role 节点原样"
+        );
+        // 幂等：重跑 prepare 不翻倍
+        prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+                planned,
+            ),
+        )
+        .expect("prepare rerun");
+        let state2 = read_workflow_state_value(&path).expect("state2");
+        let count2 = state2["nodes"]
+            .as_array()
+            .expect("nodes2")
+            .iter()
+            .filter(|node| {
+                optional_string_from(node, "node_type").as_deref() == Some("project_director_task")
+            })
+            .count();
+        assert_eq!(count2, 2, "重跑 prepare 幂等·任务级节点不重复建");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.3·悬空依赖记 warning 不建边（依赖指向未物化的 title）。
+    #[test]
+    fn jiaoban_prepare_dangling_dep_warns_no_edge() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-jiaoban-dangling";
+        let dir = test_temp_dir("jiaoban-dangling");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (proposal, authorization, revision) =
+            create_active_project_director_authorization_fixture(
+                &path,
+                test_root,
+                thread_id,
+                timestamp_ms,
+            );
+        let workflow_id = default_workflow_id(test_root);
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(
+                test_root,
+                &format!("{workflow_id}:node:codex-dev"),
+                None,
+                thread_id,
+            ),
+        )
+        .expect("bind");
+        let ctx = load_project_context(test_root).expect("ctx");
+        let mut planned = StubDirector.plan(&ctx, &proposal).expect("plan");
+        planned[0].depends_on = vec!["幽灵前置".to_string()]; // 搭骨架 依赖一个不存在的 title
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+                planned,
+            ),
+        )
+        .expect("prepare");
+        assert!(
+            prepared.warnings.iter().any(|w| w.contains("幽灵前置")),
+            "悬空依赖应记 warning：{:?}",
+            prepared.warnings
+        );
+        let state = read_workflow_state_value(&path).expect("state");
+        assert!(
+            !state["edges"]
+                .as_array()
+                .expect("edges")
+                .iter()
+                .any(|edge| optional_string_from(edge, "source_ref")
+                    .as_deref()
+                    .is_some_and(|r| r.contains("幽灵"))),
+            "悬空依赖不建边"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.2·所批即所跑：带 approved 图 → 跳过 director.plan（BombDirector 不炸）+ 跑的就是那份图。
+    #[test]
+    fn jiaoban_auto_advance_uses_approved_graph_skips_plan() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-jiaoban-approved";
+        let dir = test_temp_dir("jiaoban-approved");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (proposal, _auth, _rev) = create_active_project_director_authorization_fixture(
+            &path,
+            test_root,
+            thread_id,
+            timestamp_ms,
+        );
+        let workflow_id = default_workflow_id(test_root);
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(
+                test_root,
+                &format!("{workflow_id}:node:codex-dev"),
+                None,
+                thread_id,
+            ),
+        )
+        .expect("bind");
+        let ctx = load_project_context(test_root).expect("ctx");
+        let approved = StubDirector.plan(&ctx, &proposal).expect("approved graph"); // 用户批过的图
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        // BombDirector：若跳过逻辑失效而调 plan → panic 炸测试。
+        let outcome = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &BombDirector,
+            test_root,
+            &workflow_id,
+            "user",
+            10,
+            Some(&approved),
+        )
+        .expect("所批即所跑应一路跑到链");
+        assert_eq!(outcome.stage, "ran", "带 approved 图应跑到链：{outcome:?}");
+        let chain = outcome.chain_outcome.expect("ran 带 chain");
+        let ran: std::collections::BTreeSet<String> =
+            chain.steps.iter().map(|step| step.title.clone()).collect();
+        let want: std::collections::BTreeSet<String> =
+            approved.iter().map(|task| task.title.clone()).collect();
+        assert_eq!(
+            ran, want,
+            "跑的就是 approved 那几个任务（objective 原样·不重拆）"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.2·一致性校验：approved 图的 workflow_id 与本次授权不一致 → 拒（防串工作流）。
+    #[test]
+    fn jiaoban_auto_advance_rejects_approved_graph_workflow_mismatch() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-jiaoban-mismatch";
+        let dir = test_temp_dir("jiaoban-mismatch");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        create_active_project_director_authorization_fixture(
+            &path,
+            test_root,
+            thread_id,
+            timestamp_ms,
+        );
+        let workflow_id = default_workflow_id(test_root);
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(
+                test_root,
+                &format!("{workflow_id}:node:codex-dev"),
+                None,
+                thread_id,
+            ),
+        )
+        .expect("bind");
+        // 串了工作流的 approved 图（scope.workflow_id ≠ 本授权）。
+        let bad = vec![jiaoban_test_planned_task(
+            "some-other-workflow",
+            1,
+            "越权",
+            vec![],
+        )];
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let result = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &BombDirector,
+            test_root,
+            &workflow_id,
+            "user",
+            10,
+            Some(&bad),
+        );
+        assert!(
+            result.is_err_and(|error| error.contains("不一致")),
+            "workflow 不匹配的已批图应被拒"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.5·咨询标记向后兼容：带 suggest_workflow 解析出真值；老样本缺字段 → false。
+    #[test]
+    fn jiaoban_parse_consultation_suggest_workflow_backward_compat() {
+        let with = "```json\n{\"goal_summary\":\"g\",\"reasoning\":[\"r\"],\"suggest_workflow\":true}\n```";
+        let parsed = parse_consultation_proposal(with).expect("parse with field");
+        assert!(parsed.suggest_workflow, "显式 true 应解析出 true");
+        let without = "```json\n{\"goal_summary\":\"g\",\"reasoning\":[\"r\"]}\n```";
+        let parsed_old = parse_consultation_proposal(without).expect("parse old sample");
+        assert!(
+            !parsed_old.suggest_workflow,
+            "老样本缺字段 → false（向后兼容）"
+        );
+    }
+
+    // 交办·刀2 §4 真跑（单独步·#[ignore]·测试项目·真 codex）：批前**预拆**(真主管 LM 出图·零写盘) →
+    // **合流带图**(所批即所跑·approved_planned_tasks·跳过重拆·真 worker 链) → proof 落测试项目 + 画布读模型里
+    // 任务级节点在、链完成后 state 刷 completed。证「预拆看的那份 = 真跑那份 + 图真落画布」。
+    // flake→retry（记忆 real-codex-run-flaky·核 proof/state 实物·预拆步已内建 2.4 自动重试一次）。
+    #[test]
+    #[ignore = "交办·刀2 §4: preview (real LM graph, zero-write) → confirm_and_start with that approved graph (real worker) → proof + task-level nodes on canvas (user present)"]
+    fn jiaoban_preview_then_confirm_with_graph_real_run() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let real_session = "019ed9f7-c0c2-7213-b871-6d18959b7c24";
+        let proof_token = unix_timestamp_string();
+        let proof = format!("{test_root}/jiaoban-slice2-proof.txt");
+        let _ = fs::remove_file(&proof);
+        let dir = test_temp_dir("jiaoban-slice2-real");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index(test_root, real_session);
+        let readback_db_path = codex_db::default_state_db_path();
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let mut cproposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            target_files: vec!["jiaoban-slice2-proof.txt".to_string()],
+            ..Default::default()
+        }));
+        cproposal.user_goal =
+            format!("在项目根建 jiaoban-slice2-proof.txt，写一行：slice2 ok {proof_token}");
+        cproposal.goal_summary = format!(
+            "在当前项目根目录创建文件 jiaoban-slice2-proof.txt，只写入一行：slice2 ok {proof_token}"
+        );
+        cproposal.next_steps = vec![format!(
+            "创建 jiaoban-slice2-proof.txt，写入一行内容：slice2 ok {proof_token}"
+        )];
+        let c1_input =
+            map_consultation_to_c1_input(&cproposal, test_root, "consultant").expect("map");
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &c1_input,
+            1_765_300_000_000,
+            "write-slice2-real-proposal",
+        )
+        .expect("proposal");
+        let director = CliDirectorAgent::default();
+        // 1) 批前预拆（真主管 LM 出图·零写盘·2.4 偶发早退自动重试一次）
+        let preview = run_preview_pending_proposal_director_plan_inner(
+            &path,
+            &director,
+            &PreviewPendingProposalDirectorPlanRequest {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+            },
+        )
+        .expect("批前预拆真 LM 出图");
+        println!(
+            "[JIAOBAN2] preview tasks={} warnings={:?}",
+            preview.planned_tasks.len(),
+            preview.warnings
+        );
+        assert!(!preview.planned_tasks.is_empty(), "预拆应出 ≥1 任务");
+        // 2) 合流带图：所批即所跑（用预拆那份·跳过重拆·真 worker 链）
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let request = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: created.proposal.proposal_id.clone(),
+            session_choice: "existing".to_string(),
+            session_id: Some(real_session.to_string()),
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(50),
+            approved_planned_tasks: Some(preview.planned_tasks.clone()),
+        };
+        let outcome = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &director,
+            &request,
+        )
+        .expect("合流带图应一气跑完");
+        println!(
+            "[JIAOBAN2] stage={} prepared={} completed={:?}",
+            outcome.stage,
+            outcome.prepared_count,
+            outcome.chain_outcome.as_ref().map(|c| c.completed)
+        );
+        assert_eq!(outcome.stage, "ran", "合流带图应跑到链：{outcome:?}");
+        // 3) proof 实物
+        let content = fs::read_to_string(&proof)
+            .unwrap_or_else(|e| panic!("worker 应真建 proof {proof}：{e}"));
+        assert!(
+            content.contains(&proof_token),
+            "proof 应含 token {proof_token}，实际：{content}"
+        );
+        println!("[JIAOBAN2] proof={content:?}");
+        // 4) 画布读模型：任务级节点一任务一个 + 链完成后至少一个 state 刷成 completed（2.3 尾）
+        let state = read_workflow_state_value(&path).expect("state");
+        let task_nodes: Vec<&Value> = state["nodes"]
+            .as_array()
+            .expect("nodes")
+            .iter()
+            .filter(|node| {
+                optional_string_from(node, "node_type").as_deref() == Some("project_director_task")
+            })
+            .collect();
+        assert_eq!(
+            task_nodes.len(),
+            preview.planned_tasks.len(),
+            "任务级节点一任务一个（预拆图原样落画布）"
+        );
+        assert!(
+            task_nodes
+                .iter()
+                .any(|node| optional_string_from(node, "state").as_deref() == Some("completed")),
+            "链完成后至少一个任务级节点 state 刷成 completed（2.3 尾）"
+        );
+        println!(
+            "[JIAOBAN2] task_nodes={} states={:?}",
+            task_nodes.len(),
+            task_nodes
+                .iter()
+                .map(|node| optional_string_from(node, "state"))
+                .collect::<Vec<_>>()
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
