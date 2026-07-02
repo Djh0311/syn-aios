@@ -101,7 +101,7 @@ type ProjectsViewProps = {
 export function ProjectsView(props: ProjectsViewProps) {
   const { projects, sessions, workflowState = null } = props;
   const [selectedRoot, setSelectedRoot] = useState<string | null>(null);
-  const [selectedTool, setSelectedTool] = useState<ProjectToolKey>("workflow");
+  const [selectedTool, setSelectedTool] = useState<ProjectToolKey>("jiaoban");
   const selectedProject = selectedRoot ? projects.find((project) => project.project_root === selectedRoot) ?? null : null;
   const projectSessions = useMemo(
     () => (selectedProject ? filterProjectSessionsForProject(sessions, selectedProject) : []),
@@ -115,7 +115,7 @@ export function ProjectsView(props: ProjectsViewProps) {
   }, [projects, selectedRoot]);
 
   useEffect(() => {
-    setSelectedTool("workflow");
+    setSelectedTool("jiaoban");
   }, [selectedProject?.project_root]);
 
   if (!projects.length) {

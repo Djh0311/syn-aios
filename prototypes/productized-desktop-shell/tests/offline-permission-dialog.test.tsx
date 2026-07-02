@@ -2558,7 +2558,10 @@ function runShellScenario() {
     assert(!agentViewText.includes(forbiddenText), `AgentView 新方向不应出现 ${forbiddenText}`);
   }
 
-  const projectText = visibleText(<ProjectDetail project={project} sessions={[session]} onRequestAction={captureAction} />);
+  // 交办 tab 成默认页后，「总览」内容改由显式 selectedTool="overview" 验（默认页是交办面，见 jiaoban tab 场景）。
+  const projectText = visibleText(
+    <ProjectDetail project={project} sessions={[session]} selectedTool="overview" onRequestAction={captureAction} />,
+  );
   for (const expectedText of shellTexts.projectOverviewExpectedTexts) {
     assert(projectText.includes(expectedText), `项目工作流缺少 ${expectedText}`);
   }
@@ -2571,7 +2574,7 @@ function runShellScenario() {
   assert(projectResourcesText.includes("展开资源详情"), "项目资源页应把资源详情收进 disclosure");
 
   const projectAgentButton = findButtonByText(
-    <ProjectDetail project={project} sessions={[session]} onRequestAction={captureAction} />,
+    <ProjectDetail project={project} sessions={[session]} selectedTool="overview" onRequestAction={captureAction} />,
     "在智能体中打开",
   );
   assert(projectAgentButton, "项目总览缺少智能体会话入口");

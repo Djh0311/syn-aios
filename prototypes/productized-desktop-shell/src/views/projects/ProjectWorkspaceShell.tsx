@@ -38,6 +38,7 @@ import {
 } from "./ProjectOverviewPanels";
 import { ProjectHandoffEvidencePanel, ProjectResourcesPanel } from "./ProjectReferencePanels";
 import { ProjectWorkflowDraftPanel, selectedTaskDraftFor } from "./ProjectTaskDraftPanels";
+import { ProjectJiaobanPanel } from "./ProjectJiaobanPanel";
 
 export {
   TaskDispatchFieldCorrectionEditor,
@@ -52,7 +53,7 @@ export {
   selectedTaskDraftFor,
 } from "./ProjectTaskDraftPanels";
 
-export type ProjectWorkspaceToolKey = "overview" | "workflow" | "handoff-evidence" | "resources";
+export type ProjectWorkspaceToolKey = "jiaoban" | "overview" | "workflow" | "handoff-evidence" | "resources";
 export type ProjectToolKey =
   | ProjectWorkspaceToolKey
   | "agent-sessions"
@@ -62,6 +63,7 @@ export type ProjectToolKey =
   | "settings";
 
 export const projectTools: Array<{ key: ProjectWorkspaceToolKey; label: string; shortLabel: string }> = [
+  { key: "jiaoban", label: "交办", shortLabel: "交办" },
   { key: "overview", label: "项目总览", shortLabel: "总览" },
   { key: "workflow", label: "项目工作流", shortLabel: "工作流" },
   { key: "handoff-evidence", label: "交接 / 证据", shortLabel: "交接" },
@@ -115,7 +117,9 @@ export function ProjectWorkspaceShell({
   workflowState = null,
   blackboardCandidateStore = null,
   memoryCandidateStore = null,
-  selectedTool = "overview",
+  planAuthorizationStore = null,
+  projectConsultationProposalStore = null,
+  selectedTool = "jiaoban",
   onSelectTool = () => {},
   onOpenAgentSession = () => {},
   onBackToGallery,
@@ -191,7 +195,17 @@ export function ProjectWorkspaceShell({
       </div>
 
       <div className={`project-layout${selectedTool === "workflow" ? " project-layout--canvas" : ""}`}>
-        {selectedTool === "overview" ? (
+        {selectedTool === "jiaoban" ? (
+          <ProjectJiaobanPanel
+            project={project}
+            sessions={sessions}
+            workflowState={workflowState}
+            projectConsultationProposalStore={projectConsultationProposalStore}
+            planAuthorizationStore={planAuthorizationStore}
+            onRequestAction={onRequestAction}
+            onOpenAgentSession={onOpenAgentSession}
+          />
+        ) : selectedTool === "overview" ? (
           <ProjectOverview
             project={project}
             sessions={sessions}

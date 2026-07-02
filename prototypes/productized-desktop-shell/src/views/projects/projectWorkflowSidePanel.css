@@ -411,3 +411,115 @@
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
+
+/* ============================================================
+   交办 tab（ProjectJiaobanPanel）· 五态一块面
+   居中一列（神似原型 /tmp/jiaoban-prototype.html）；复用 .project-canvas-detail-card /
+   .role-loop-plain / .proposal-decision-field / .workflow-state-actions 的现成卡与控件样式，
+   这里只补交办专属的排布与字段/单选/授权提示/进度小圈。
+   ============================================================ */
+.project-jiaoban {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+.project-jiaoban-col {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: 620px;
+  align-content: start;
+}
+
+/* 方案要点 / 交货结果里的字段行：标签弱化，正文一等。 */
+.jiaoban-field {
+  margin: 0;
+  color: var(--ink-deep);
+  font-size: 13.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.jiaoban-field-label {
+  color: var(--ink-mid);
+  margin-right: 4px;
+}
+.jiaoban-plan-body {
+  gap: 8px;
+}
+
+/* 用哪个对话干：单选组。 */
+.jiaoban-session-pick {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--hair-2);
+  border-radius: 8px;
+}
+.jiaoban-session-pick legend {
+  padding: 0 4px;
+  color: var(--ink-mid);
+  font-size: 12px;
+}
+.jiaoban-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-deep);
+  font-size: 13px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.jiaoban-radio input {
+  flex: none;
+}
+
+/* 🔓 需要你允许：改这个测试项目。 */
+.jiaoban-grant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.jiaoban-amend input {
+  width: 100%;
+}
+
+/* 干活小转圈。 */
+.jiaoban-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  vertical-align: -1px;
+  animation: jiaoban-spin 0.8s linear infinite;
+}
+@keyframes jiaoban-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.jiaoban-done-title {
+  color: var(--ok);
+}
+.jiaoban-blocked-title {
+  color: var(--warning);
+}
+
+.jiaoban-worksmap-placeholder {
+  text-align: center;
+  opacity: 0.75;
+}
