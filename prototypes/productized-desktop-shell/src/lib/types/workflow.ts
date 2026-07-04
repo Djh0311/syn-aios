@@ -360,6 +360,18 @@ export type AutoAdvanceAuthorizedRoleLoopRequest = {
   actor_id?: string;
 };
 
+// 合流命令请求（刀1 已注册 confirm_and_start_authorized_run）：用户点[允许并开始]的一下 →
+// 后端一口气 确认方案→边界复核→授权生效→绑现有会话→自动推进。session_choice 本刀只支持 "existing"
+// （"new" 后端会清错拒·下一阶段接）。对已确认/旧方案后端会干净拒（方案不是待用户确认状态）。
+export type ConfirmAndStartAuthorizedRunRequest = {
+  project_root: string;
+  proposal_id: string;
+  session_choice: "existing" | "new";
+  session_id?: string; // session_choice=existing 时要绑的现有 Codex 会话 thread_id
+  actor_id?: string;
+  max_nodes?: number;
+};
+
 export type AutoAdvanceRoleLoopOutcome = {
   // "ran" | "needs_binding" | "blocked" | "no_dispatchable"
   stage: string;

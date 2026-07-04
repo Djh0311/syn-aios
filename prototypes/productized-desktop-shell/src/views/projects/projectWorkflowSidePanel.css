@@ -448,7 +448,29 @@
   gap: 8px;
 }
 
-/* 用哪个对话干：单选组。 */
+/* 旧方案黄条 / 「说」面上次停因摘要：与授权提示同族的告警块。 */
+.jiaoban-stale-banner,
+.jiaoban-say-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* 方案生成时间：弱化一行。 */
+.jiaoban-field-time {
+  color: var(--ink-mid);
+  font-size: 12.5px;
+}
+
+/* 用哪个对话干：收纳块（默认一行摘要，点开才展开）。 */
 .jiaoban-session-pick {
   display: grid;
   gap: 8px;
@@ -463,6 +485,56 @@
   color: var(--ink-mid);
   font-size: 12px;
 }
+/* 收起时的一行摘要（可点开）。 */
+.jiaoban-session-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: var(--ink-deep);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.jiaoban-session-summary-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jiaoban-session-caret {
+  flex: none;
+  color: var(--ink-mid);
+}
+.jiaoban-session-expand {
+  display: grid;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--hair-2);
+}
+.jiaoban-session-rest {
+  display: grid;
+  gap: 8px;
+}
+.jiaoban-session-search {
+  width: 100%;
+}
+.jiaoban-linklike {
+  align-self: start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.jiaoban-session-empty {
+  gap: 6px;
+}
 .jiaoban-radio {
   display: flex;
   align-items: center;
@@ -474,6 +546,19 @@
 }
 .jiaoban-radio input {
   flex: none;
+}
+/* 「开个新的」下一阶段支持：置灰不可选。 */
+.jiaoban-radio-disabled {
+  color: var(--ink-mist);
+  cursor: not-allowed;
+}
+.jiaoban-soon {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--hair-2);
+  border-radius: 999px;
+  color: var(--ink-mid);
+  font-size: 11px;
 }
 
 /* 🔓 需要你允许：改这个测试项目。 */

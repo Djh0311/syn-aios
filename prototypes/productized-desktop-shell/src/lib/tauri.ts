@@ -20,6 +20,7 @@ import type {
   RunProjectConsultationRequest,
   AutoAdvanceAuthorizedRoleLoopRequest,
   AutoAdvanceRoleLoopOutcome,
+  ConfirmAndStartAuthorizedRunRequest,
   ProjectConsultationProposal,
   ProjectWorkflowListItem,
   SubmitProjectWorkflowDraftRequest,
@@ -849,6 +850,16 @@ export function autoAdvanceAuthorizedRoleLoop(
 ): Promise<AutoAdvanceRoleLoopOutcome> {
   ensureTauriRuntime();
   return invoke<AutoAdvanceRoleLoopOutcome>("auto_advance_authorized_role_loop", { request });
+}
+
+// 交办地基 2.2 合流命令（刀1 已注册）：用户点[允许并开始]那一下 → 后端一原子命令做完
+// 确认方案 + 边界复核 + 授权生效 + 绑现有会话 + 自动推进；返回同形 outcome（组件按 stage 分支不变）。
+// 纯封装、不带逻辑：前端只造请求 + 发；人闸仍是用户点击那一下，闸在后端 path-lock（圈固定测试项目）。
+export function confirmAndStartAuthorizedRun(
+  request: ConfirmAndStartAuthorizedRunRequest,
+): Promise<AutoAdvanceRoleLoopOutcome> {
+  ensureTauriRuntime();
+  return invoke<AutoAdvanceRoleLoopOutcome>("confirm_and_start_authorized_run", { request });
 }
 
 // P3 E · 多工作流底座（架构 §12）。
