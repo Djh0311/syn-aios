@@ -397,6 +397,113 @@ fn clamp_planned_task_roles(
     warnings
 }
 
+// fix4 2.1·残料接管（pre-prepare reconcile·核心）：上一轮跑挂会遗留**本轮同名**工作项（planned_task_id 是
+// workflow+序号定址→重拆撞旧）——ready_for_review（活完成审查没记）/ running（派发后进程死）/ failed / timed_out。
+// C4 保护（c4_c6:existing∈{running,ready_for_review,accepted,failed,timed_out,cancelled}→拒）**是对的、不改**；
+// 这里在 prepare **之前**，把**本轮 planned ids 派生的**遗留工作项走**合法状态机**（复用 reset_work_item_for_retry·
+// 每步经 update_work_item_state_at·合法迁移自带审计·**绝不直接改 JSON state 字段**）复位到 ready_to_dispatch、
+// 离开被保护状态。**只扫本轮 ids**（canvas-run 等别人的残料不碰）；accepted/cancelled（终态/人工态）**不接管**、
+// 留 C4 照拒（报错文案已可行动·fix3-UI 兜底）。合法迁移表已核（control_core：ready_for_review→needs_changes 等全在）。
+fn reconcile_stale_work_items_for_plan(
+    path: &std::path::Path,
+    project_root: &str,
+    planned_tasks: &[ProjectDirectorPlannedTask],
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    let mut reconciled = 0usize;
+    // 只读一次快照扫各任务状态（work_item_id 各异·互不影响；复位走 update_work_item_state_at 各自 read-fresh）。
+    let Ok(value) = read_workflow_state_value(path) else {
+        return warnings; // 读不到状态就不接管（prepare 会照常处理/报错）。
+    };
+    for task in planned_tasks {
+        let work_item_id = c4_work_item_id(&task.scope.workflow_id, &task.planned_task_id);
+        let Some(state) = find_work_item(&value, &task.scope.workflow_id, &work_item_id)
+            .and_then(|item| optional_string_from(item, "state"))
+        else {
+            continue; // 本轮该任务尚无工作项（干净）→ 无需接管。
+        };
+        match state.as_str() {
+            // 遗留活料：走合法行走器复位到 ready_to_dispatch（离开 C4 被保护状态·重新可派）。
+            "running" | "ready_for_review" | "failed" | "timed_out" => {
+                if reset_work_item_for_retry(path, project_root, &work_item_id) {
+                    reconciled += 1;
+                } else {
+                    warnings.push(format!(
+                        "工作项「{work_item_id}」（{state}）合法复位未走通，交 C4 照拒兜底。"
+                    ));
+                }
+            }
+            // 终态/人工态：不接管（罕见）——留 C4 照拒。
+            "accepted" | "cancelled" => {
+                warnings.push(format!(
+                    "工作项「{work_item_id}」处于 {state}（终态/人工态），不接管、交 C4 处理。"
+                ));
+            }
+            // draft / ready_to_dispatch / needs_changes / paused 等——无需接管。
+            _ => {}
+        }
+    }
+    if reconciled > 0 {
+        warnings.insert(
+            0,
+            format!("已接管上一轮遗留的 {reconciled} 个工作项（合法打回、重新派发）。"),
+        );
+    }
+    warnings
+}
+
+// fix4 2.2·重拆即新链（fresh-run·**只 re-plan 路径调**）：起链前把该 workflow **未收尾**的旧链记录
+// （state∈{running,stopped}·镜像 ensure_chain_run_record 的续跑判据）用现成 finalize_chain_run 正式标结为
+// superseded（+ 审计「被新一轮重拆取代」），之后 ensure 走**新建记录**分支（不再跨轮乱续）。controller 本体
+// 0-diff（只调 finalize_chain_run/append_chain_audit）。返回 Some(人话) 表示标结过、供 outcome warnings 用。
+fn finalize_stale_chain_for_replan(
+    path: &std::path::Path,
+    project_root: &str,
+    workflow_id: &str,
+) -> Result<Option<String>, String> {
+    let mut value = read_workflow_state_value(path)?;
+    let pid = project_id(project_root);
+    let stale = value
+        .get("workflow_chain_runs")
+        .and_then(Value::as_array)
+        .and_then(|runs| {
+            runs.iter()
+                .find(|run| {
+                    optional_string_from(run, "workflow_id").as_deref() == Some(workflow_id)
+                        && optional_string_from(run, "project_id").as_deref() == Some(pid.as_str())
+                        && matches!(
+                            optional_string_from(run, "state").as_deref(),
+                            Some("running") | Some("stopped")
+                        )
+                })
+                .map(|run| {
+                    (
+                        optional_string_from(run, "chain_run_id").unwrap_or_default(),
+                        optional_string_from(run, "state").unwrap_or_default(),
+                    )
+                })
+        });
+    let Some((chain_run_id, before_state)) = stale else {
+        return Ok(None); // 没有未收尾旧链 → 无需标结（干净起链）。
+    };
+    let ts = unix_timestamp_string();
+    finalize_chain_run(&mut value, &chain_run_id, "superseded", &ts);
+    append_chain_audit(
+        &mut value,
+        &chain_run_id,
+        workflow_id,
+        "workflow_chain_run_superseded",
+        &before_state,
+        "superseded",
+        &ts,
+        "上一轮未收尾的链记录被新一轮重拆取代，已正式标结（本轮从头重跑）。",
+    )?;
+    write_validated_workflow_state(path, &value)?;
+    Ok(Some(
+        "上一轮未收尾的运行已标结，本轮从头重跑（不再接续）。".to_string(),
+    ))
+}
+
 pub(crate) fn run_director_task_chain(
     path: &std::path::Path,
     index: &Value,
@@ -1011,8 +1118,8 @@ fn run_auto_advance_authorized_role_loop(
         //    (a) 2.2 所批即所跑：合流带进「用户批过的图」→ **跳过 director.plan**（不重跑 LM·消除重拆不确定性）；
         //        一致性校验（workflow_id/project 一致·空数组拒），越界仍由下游 prepare guard 逐个钳/拒（此处不放行）。
         //    (b) 现状：加载 ctx + active 授权对应的已确认方案 → director.plan（真主管 LM），2.4 偶发早退自动重试一次。
-        // fix3 2.1：角色钳位警告（只在 None=LM 现拆那路产生；Some=所批即所跑的图已在预拆钳过·此处空）。→ outcome.warnings。
-        let mut role_clamp_warnings: Vec<String> = Vec::new();
+        // outcome.warnings 累加器：fix3 角色钳位（只 None 路）+ fix4 残料接管（两路）+ fix4 旧链标结（只 re-plan）。
+        let mut advance_warnings: Vec<String> = Vec::new();
         let planned_tasks = match approved_planned_tasks {
             Some(approved) => {
                 validate_approved_planned_tasks(approved, workflow_id, &pid)?;
@@ -1049,11 +1156,19 @@ fn run_auto_advance_authorized_role_loop(
                     )?;
                 }
                 // fix3 2.1：把 LM 编的界外角色归一到 codex-dev（只收不放）+ 出人话警告。
-                role_clamp_warnings =
-                    clamp_planned_task_roles(&mut tasks, &proposal.scope_draft.allowed_role_ids);
+                advance_warnings.extend(clamp_planned_task_roles(
+                    &mut tasks,
+                    &proposal.scope_draft.allowed_role_ids,
+                ));
                 tasks
             }
         };
+        // fix4 2.1：prepare **之前**接管本轮遗留工作项（re-plan 与 approved 两路都做·合法复位·离开 C4 保护状态）。
+        advance_warnings.extend(reconcile_stale_work_items_for_plan(
+            path,
+            project_root,
+            &planned_tasks,
+        ));
         // 3. prepare（→ prepared dispatches·授权范围内·把 LM 拆的任务接进派发机器）。
         let prepare_input = PrepareAuthorizedAutoDispatchInput {
             project_root: project_root.to_string(),
@@ -1122,8 +1237,17 @@ fn run_auto_advance_authorized_role_loop(
                 message,
                 chain_outcome: None,
                 stop_reason: Some(stage.to_string()),
-                warnings: role_clamp_warnings.clone(),
+                warnings: advance_warnings.clone(),
             });
+        }
+        // fix4 2.2：**只 re-plan（None）路径**——起链前把该 workflow 未收尾的旧链记录正式标结（superseded），
+        // 之后 run_director_task_chain 里的 ensure 走「新建记录」分支、fix3 的「已接续」不再触发（re-plan=从头重来）。
+        // approved（Some·所批即所跑）/ C1 的**续跑语义不动**（不 finalize·仍走既有断点续）。
+        if approved_planned_tasks.is_none() {
+            if let Some(message) = finalize_stale_chain_for_replan(path, project_root, workflow_id)?
+            {
+                push_unique(&mut advance_warnings, &message);
+            }
         }
         // 5. prepared 出来 → **起链前复查授权仍 active**（2.5·批与拆/prepare 之间 LM 耗时长·可能被撤/过期）→ 跑 worker 链
         //    （四护栏·入口 path-lock 圈测试项目·失败即停）。
@@ -1164,7 +1288,7 @@ fn run_auto_advance_authorized_role_loop(
             message,
             chain_outcome: Some(outcome),
             stop_reason,
-            warnings: role_clamp_warnings,
+            warnings: advance_warnings,
         })
     })();
     // fix3 2.2：拆/prepare/起链的任何 Err（含 retry 后仍败）→ 留档再返回。stage=blocked/needs_binding 走的是

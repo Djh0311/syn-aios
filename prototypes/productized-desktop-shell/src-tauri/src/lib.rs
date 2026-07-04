@@ -8181,14 +8181,15 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
-    // 2.3·接续告知：预置一条 running 旧链记录 → 再跑 → chain.warnings 含「已接续」+ 中断处任务被重派完成。
-    #[test]
-    fn jiaoban_fix3_resuming_prior_run_warns_and_reruns() {
-        let (dir, index_path, index, workflow_id) = auto_advance_fixture("fix3-resume", true);
-        let path = dir.join("workflow-state.v0.json");
-        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
-        // 注入一条 running 旧链记录（同 workflow/project·模拟上次进程没了没收尾）。
-        let mut value = read_workflow_state_value(&path).expect("state");
+    // 读某 work_item 当前 state（fix4 残料测试用）。
+    fn fix4_work_item_state(path: &Path, workflow_id: &str, work_item_id: &str) -> Option<String> {
+        find_work_item(&read_json_file(path), workflow_id, work_item_id)
+            .and_then(|item| optional_string_from(item, "state"))
+    }
+
+    // 注入一条 running 旧链记录（同 workflow/project·模拟上次进程没了没收尾）。
+    fn fix4_inject_running_chain(path: &Path, workflow_id: &str, test_root: &str) {
+        let mut value = read_workflow_state_value(path).expect("state");
         ensure_array_mut(&mut value, "workflow_chain_runs")
             .expect("arr")
             .push(json!({
@@ -8202,13 +8203,28 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
               "ended_at": Value::Null,
               "nodes": []
             }));
-        write_validated_workflow_state(&path, &value).expect("inject running chain");
-        let runner = PermissiveExperimentRunner {
+        write_validated_workflow_state(path, &value).expect("inject running chain");
+    }
+
+    fn fix4_permissive_runner() -> PermissiveExperimentRunner {
+        PermissiveExperimentRunner {
             stats: CodexDispatchReadbackStats {
                 transcript_event_count: 3,
                 transcript_target_hits: 1,
             },
-        };
+        }
+    }
+
+    // fix4 2.2·重拆即新链（re-plan）：挂 running 旧链 → re-plan 跑 → 旧记录标结 superseded + outcome.warnings 含
+    // 「标结/重跑」+ 全程无「已接续」+ 新链另起 + 任务完成。
+    #[test]
+    fn jiaoban_fix4_replan_supersedes_stale_chain() {
+        let (dir, index_path, index, workflow_id) =
+            auto_advance_fixture("fix4-replan-supersede", true);
+        let path = dir.join("workflow-state.v0.json");
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        fix4_inject_running_chain(&path, &workflow_id, test_root);
+        let runner = fix4_permissive_runner();
         let outcome = run_auto_advance_authorized_role_loop(
             &path,
             &index,
@@ -8221,14 +8237,365 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             10,
             None,
         )
-        .expect("接续后应跑通");
+        .expect("re-plan 应跑通");
+        let runs = read_json_file(&path)["workflow_chain_runs"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        let prior = runs
+            .iter()
+            .find(|r| {
+                optional_string_from(r, "chain_run_id").as_deref() == Some("prior-interrupted")
+            })
+            .expect("prior 记录还在");
+        assert_eq!(
+            optional_string_from(prior, "state").as_deref(),
+            Some("superseded"),
+            "旧链应被标结 superseded（离开 running/stopped）"
+        );
+        assert!(
+            runs.iter().any(|r| {
+                optional_string_from(r, "chain_run_id").as_deref() != Some("prior-interrupted")
+            }),
+            "应另起新链记录（≠prior-interrupted）"
+        );
+        let chain = outcome.chain_outcome.expect("ran 带 chain");
+        assert!(
+            outcome
+                .warnings
+                .iter()
+                .any(|w| w.contains("标结") || w.contains("重跑")),
+            "re-plan 应告知重来：{:?}",
+            outcome.warnings
+        );
+        assert!(
+            !outcome
+                .warnings
+                .iter()
+                .chain(chain.warnings.iter())
+                .any(|w| w.contains("已接续")),
+            "re-plan 不该出现「已接续」：outcome={:?} chain={:?}",
+            outcome.warnings,
+            chain.warnings
+        );
+        assert!(chain.completed >= 1, "本轮任务应完成");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // fix4 2.2·approved 续跑不动：挂 running 旧链 → approved（所批即所跑）→ 仍接续（不标结）·chain.warnings 含「已接续」。
+    #[test]
+    fn jiaoban_fix4_approved_still_resumes_stale_chain() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-fix4-approved-resume";
+        let dir = test_temp_dir("fix4-approved-resume");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (proposal, _auth, _rev) = create_active_project_director_authorization_fixture(
+            &path,
+            test_root,
+            thread_id,
+            timestamp_ms,
+        );
+        let workflow_id = default_workflow_id(test_root);
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(
+                test_root,
+                &format!("{workflow_id}:node:codex-dev"),
+                None,
+                thread_id,
+            ),
+        )
+        .expect("bind");
+        let ctx = load_project_context(test_root).expect("ctx");
+        let approved = StubDirector.plan(&ctx, &proposal).expect("approved graph");
+        fix4_inject_running_chain(&path, &workflow_id, test_root);
+        let runner = fix4_permissive_runner();
+        let outcome = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &BombDirector,
+            test_root,
+            &workflow_id,
+            "tester",
+            10,
+            Some(&approved),
+        )
+        .expect("approved 应跑通");
+        let prior_state = read_json_file(&path)["workflow_chain_runs"]
+            .as_array()
+            .and_then(|runs| {
+                runs.iter()
+                    .find(|r| {
+                        optional_string_from(r, "chain_run_id").as_deref()
+                            == Some("prior-interrupted")
+                    })
+                    .and_then(|r| optional_string_from(r, "state"))
+            });
+        assert_ne!(
+            prior_state.as_deref(),
+            Some("superseded"),
+            "approved 路不标结旧链（续跑语义不动）"
+        );
         let chain = outcome.chain_outcome.expect("ran 带 chain");
         assert!(
             chain.warnings.iter().any(|w| w.contains("已接续")),
-            "接续旧链应告知：{:?}",
+            "approved 续跑应仍告知「已接续」：{:?}",
             chain.warnings
         );
-        assert!(chain.completed >= 1, "中断处任务应被重派并完成");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // fix4 2.1·残料接管：task1 遗留 ready_for_review + task2 遗留 running（撞 C4 保护）→ re-plan → 合法复位 →
+    // prepare 过、ran、warnings 含「已接管」。
+    #[test]
+    fn jiaoban_fix4_reconcile_stale_residue_unblocks_replan() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-fix4-reconcile";
+        let dir = test_temp_dir("fix4-reconcile");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (proposal, authorization, revision) =
+            create_active_project_director_authorization_fixture(
+                &path,
+                test_root,
+                thread_id,
+                timestamp_ms,
+            );
+        let workflow_id = default_workflow_id(test_root);
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(
+                test_root,
+                &format!("{workflow_id}:node:codex-dev"),
+                None,
+                thread_id,
+            ),
+        )
+        .expect("bind");
+        let ctx = load_project_context(test_root).expect("ctx");
+        let planned = StubDirector.plan(&ctx, &proposal).expect("plan"); // 2 任务
+                                                                         // 第一轮 prepare：建工作项（ready_to_dispatch）。
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+                planned.clone(),
+            ),
+        )
+        .expect("prepare1");
+        let wid1 = prepared.plan.planned_tasks[0]
+            .work_item_id
+            .clone()
+            .expect("wid1");
+        let wid2 = prepared.plan.planned_tasks[1]
+            .work_item_id
+            .clone()
+            .expect("wid2");
+        // 造线上同款残料：task1 → ready_for_review（活完成审查没记）、task2 → running（派发后进程死）。
+        let step = |wid: &str, next: &str| {
+            update_work_item_state_at(
+                &path,
+                &WorkItemStateUpdateRequest {
+                    project_root: test_root.to_string(),
+                    work_item_id: wid.to_string(),
+                    next_state: next.to_string(),
+                },
+            )
+            .expect("set residue state");
+        };
+        step(&wid1, "running");
+        step(&wid1, "ready_for_review");
+        step(&wid2, "running");
+        assert_eq!(
+            fix4_work_item_state(&path, &workflow_id, &wid1).as_deref(),
+            Some("ready_for_review"),
+            "task1 残料就位"
+        );
+        // re-plan 再跑 → reconcile 接管 → prepare 过 → ran + 已接管。
+        let runner = fix4_permissive_runner();
+        let outcome = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            test_root,
+            &workflow_id,
+            "tester",
+            10,
+            None,
+        )
+        .expect("残料接管后 re-plan 应跑通");
+        assert_eq!(
+            outcome.stage, "ran",
+            "残料被合法接管后 re-plan 应 ran（而非被 C4 卡死）：{outcome:?}"
+        );
+        assert!(
+            outcome.warnings.iter().any(|w| w.contains("已接管")),
+            "应告知接管：{:?}",
+            outcome.warnings
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // fix4 2.1·accepted 不接管：accepted 残料 → C4 照拒（Err）+ 状态不被改（终态不碰）。
+    #[test]
+    fn jiaoban_fix4_reconcile_skips_accepted_residue() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-fix4-accepted";
+        let dir = test_temp_dir("fix4-accepted");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (proposal, authorization, revision) =
+            create_active_project_director_authorization_fixture(
+                &path,
+                test_root,
+                thread_id,
+                timestamp_ms,
+            );
+        let workflow_id = default_workflow_id(test_root);
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(
+                test_root,
+                &format!("{workflow_id}:node:codex-dev"),
+                None,
+                thread_id,
+            ),
+        )
+        .expect("bind");
+        let ctx = load_project_context(test_root).expect("ctx");
+        let planned = StubDirector.plan(&ctx, &proposal).expect("plan");
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+                planned.clone(),
+            ),
+        )
+        .expect("prepare1");
+        let wid1 = prepared.plan.planned_tasks[0]
+            .work_item_id
+            .clone()
+            .expect("wid1");
+        // task1 走到 accepted（终态）：ready_to_dispatch→running→ready_for_review→accepted。
+        for next in ["running", "ready_for_review", "accepted"] {
+            update_work_item_state_at(
+                &path,
+                &WorkItemStateUpdateRequest {
+                    project_root: test_root.to_string(),
+                    work_item_id: wid1.clone(),
+                    next_state: next.to_string(),
+                },
+            )
+            .expect("to accepted");
+        }
+        let runner = fix4_permissive_runner();
+        let result = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            test_root,
+            &workflow_id,
+            "tester",
+            10,
+            None,
+        );
+        assert!(
+            result.is_err(),
+            "accepted 残料不接管 → C4 照拒 → Err（不吞错）"
+        );
+        assert_eq!(
+            fix4_work_item_state(&path, &workflow_id, &wid1).as_deref(),
+            Some("accepted"),
+            "accepted 终态未被接管·状态不变"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // fix4 2.1·只碰本轮 ids：外来（canvas-run 形状）id 的 ready_for_review 残料 → reconcile 不碰（防全库扫荡）。
+    #[test]
+    fn jiaoban_fix4_reconcile_only_touches_planned_ids() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-fix4-foreign";
+        let dir = test_temp_dir("fix4-foreign");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (proposal, authorization, revision) =
+            create_active_project_director_authorization_fixture(
+                &path,
+                test_root,
+                thread_id,
+                timestamp_ms,
+            );
+        let workflow_id = default_workflow_id(test_root);
+        let ctx = load_project_context(test_root).expect("ctx");
+        let planned = StubDirector.plan(&ctx, &proposal).expect("plan");
+        // 先 prepare 建出正规工作项（拿一个真 work_item 的完整形状去克隆）。
+        prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &fixture_project_director_prepare_input(
+                test_root,
+                &proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+                planned.clone(),
+            ),
+        )
+        .expect("prepare1");
+        // 注入一条**外来 id**（canvas-run 形状·不在本轮 planned 派生集）的 ready_for_review 残料（克隆真形状改 id/state）。
+        let foreign_id = "canvas-run:work-item:foreign-legacy-1";
+        let mut value = read_workflow_state_value(&path).expect("state");
+        let mut foreign = value["work_items"]
+            .as_array()
+            .and_then(|items| items.first())
+            .cloned()
+            .expect("有一个真工作项可克隆");
+        foreign["work_item_id"] = json!(foreign_id);
+        foreign["state"] = json!("ready_for_review");
+        ensure_array_mut(&mut value, "work_items")
+            .expect("arr")
+            .push(foreign);
+        write_validated_workflow_state(&path, &value).expect("inject foreign");
+        // 直接调 reconcile（本轮 planned）——外来 id 不在派生集 → 不该被碰。
+        let warnings = reconcile_stale_work_items_for_plan(&path, test_root, &planned);
+        assert_eq!(
+            fix4_work_item_state(&path, &workflow_id, foreign_id).as_deref(),
+            Some("ready_for_review"),
+            "外来（canvas-run）残料不该被 reconcile 碰（只扫本轮 ids）"
+        );
+        assert!(
+            !warnings.iter().any(|w| w.contains(foreign_id)),
+            "reconcile 不该提及外来 id：{warnings:?}"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
