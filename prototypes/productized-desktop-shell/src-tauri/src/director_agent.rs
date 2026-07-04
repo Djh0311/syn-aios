@@ -373,6 +373,30 @@ fn validate_approved_planned_tasks(
     Ok(())
 }
 
+// fix3 2.1·角色钳位（核心·治「莫名被拦」最大类）：主管 LM 常给任务自由编 target_role（如「reviewer」），
+// 而授权 allowed_role_ids 只含档位那几个（codex-dev / project_director）→ 现状会撞 control_core guard 的
+// 「目标角色不在授权范围内」→ blocked。这里把**界外角色归一到 codex-dev**（codex-dev 本就在授权名单·**只收不放**、
+// 不改 write/tools/checks、绝不把界外名加进授权），并把一条人话警告带出（→ outcome/preview 的 warnings）。
+// **只钳新拆产物**（plan / plan_preview 两路都过这里）；`validate_approved_planned_tasks` 不调本函数——回传数据
+// 不静默改、界外照 guard 兜底拦（安全不降）。空 target_role 已在 director_task_scope_from_proposal 归 codex-dev。
+fn clamp_planned_task_roles(
+    tasks: &mut [ProjectDirectorPlannedTask],
+    allowed_role_ids: &[String],
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for task in tasks.iter_mut() {
+        if !allowed_role_ids.contains(&task.scope.target_role) {
+            let original = task.scope.target_role.clone();
+            task.scope.target_role = "codex-dev".to_string();
+            warnings.push(format!(
+                "任务「{}」的角色「{original}」不在授权名单，已按 codex-dev 执行。",
+                task.title
+            ));
+        }
+    }
+    warnings
+}
+
 pub(crate) fn run_director_task_chain(
     path: &std::path::Path,
     index: &Value,
@@ -437,6 +461,29 @@ pub(crate) fn run_director_task_chain(
     // 起链：建/续 running 链记录 + 起链前 backup（可回滚）+ 审计「链起」。
     let start_ts = unix_timestamp_string();
     let mut value = read_workflow_state_value(path)?;
+    // fix3 2.3·接续告知（只读检测·`workflow_chain_controller.rs` 本体 0-diff）：ensure_chain_run_record 会**复用**
+    // 本 workflow 已有的 running/stopped 链记录断点续（completed 任务跳过、中断处的任务会重跑）——这里**镜像它的
+    // 复用判据**(workflow_id+project_id+state∈{running,stopped})只读探一下，命中就给用户一句告知（不然静默重跑·
+    // 用户不知情）。只读、不改链记录，检测放调用方。
+    let resuming_prior_run = value
+        .get("workflow_chain_runs")
+        .and_then(Value::as_array)
+        .is_some_and(|runs| {
+            runs.iter().any(|run| {
+                optional_string_from(run, "workflow_id").as_deref() == Some(workflow_id)
+                    && optional_string_from(run, "project_id").as_deref() == Some(pid.as_str())
+                    && matches!(
+                        optional_string_from(run, "state").as_deref(),
+                        Some("running") | Some("stopped")
+                    )
+            })
+        });
+    if resuming_prior_run {
+        push_unique(
+            &mut warnings,
+            "已接续上次中断的运行：中断处未完成的任务会重跑（已完成的跳过）。",
+        );
+    }
     let chain_run_id = ensure_chain_run_record(
         &mut value,
         &pid,
@@ -849,6 +896,10 @@ pub(crate) struct AutoAdvanceRoleLoopOutcome {
     pub(crate) message: String,
     pub(crate) chain_outcome: Option<DirectorChainOutcome>,
     pub(crate) stop_reason: Option<String>,
+    // fix3 2.1：非致命提示（如角色钳位「任务 X 角色 Y 不在授权名单，已按 codex-dev 执行」）。
+    // 加法字段·前端可忽略；None 路（所批即所跑·approved 已在预拆钳过）不重复钳，此处为空。
+    #[serde(default)]
+    pub(crate) warnings: Vec<String>,
 }
 
 // 编排级审计：append 进 audit_events（canonical 形·与初始化/c4 事件同字段），读改写一次（不与复用 fn 的写交错）。
@@ -952,14 +1003,20 @@ fn run_auto_advance_authorized_role_loop(
         "role_loop_auto_advance_started",
         "已查到 active 方案授权，开始授权范围内自动推进：拆任务 → prepare →（没绑/越界则停）→ 链跑。",
     )?;
-    // 2. 拿到 planned_tasks —— 两条路：
-    //    (a) 2.2 所批即所跑：合流带进「用户批过的图」→ **跳过 director.plan**（不重跑 LM·消除重拆不确定性）；
-    //        一致性校验（workflow_id/project 一致·空数组拒），越界仍由下游 prepare guard 逐个钳/拒（此处不放行）。
-    //    (b) 现状：加载 ctx + active 授权对应的已确认方案 → director.plan（真主管 LM），2.4 偶发早退自动重试一次。
-    let planned_tasks = match approved_planned_tasks {
-        Some(approved) => {
-            validate_approved_planned_tasks(approved, workflow_id, &pid)?;
-            append_role_loop_auto_advance_audit(
+    // fix3 2.2：从这里（拆任务起）往后**任何失败**都先 append 一条 stopped 审计（阶段+人话·永久留档，
+    // 别只活在前端内存/重开 app 就没）再返回 Err——用 IIFE 兜住所有 `?` 与早返回点，一处捕获、绝不漏。
+    // 只 append、不改任何既有状态；失败仍失败（Err 语义不变·不吞错）。早期 path-lock/无 active 授权在此之前、不记。
+    let advance_result: Result<AutoAdvanceRoleLoopOutcome, String> = (|| {
+        // 2. 拿到 planned_tasks —— 两条路：
+        //    (a) 2.2 所批即所跑：合流带进「用户批过的图」→ **跳过 director.plan**（不重跑 LM·消除重拆不确定性）；
+        //        一致性校验（workflow_id/project 一致·空数组拒），越界仍由下游 prepare guard 逐个钳/拒（此处不放行）。
+        //    (b) 现状：加载 ctx + active 授权对应的已确认方案 → director.plan（真主管 LM），2.4 偶发早退自动重试一次。
+        // fix3 2.1：角色钳位警告（只在 None=LM 现拆那路产生；Some=所批即所跑的图已在预拆钳过·此处空）。→ outcome.warnings。
+        let mut role_clamp_warnings: Vec<String> = Vec::new();
+        let planned_tasks = match approved_planned_tasks {
+            Some(approved) => {
+                validate_approved_planned_tasks(approved, workflow_id, &pid)?;
+                append_role_loop_auto_advance_audit(
                 path,
                 workflow_id,
                 actor_id,
@@ -969,140 +1026,159 @@ fn run_auto_advance_authorized_role_loop(
                     approved.len()
                 ),
             )?;
-            approved.to_vec()
-        }
-        None => {
-            let ctx = load_project_context(project_root)?;
-            let proposal_store =
-                project_consultation_proposal_store::load_store(path, timestamp_ms)?;
-            let proposal = proposal_store
-                .proposals
-                .iter()
-                .find(|proposal| proposal.proposal_id == proposal_id)
-                .ok_or_else(|| format!("找不到 active 授权对应的已确认方案：{proposal_id}"))?;
-            let (tasks, retried) = director_plan_with_retry(director, &ctx, proposal, false)?;
-            if retried {
-                append_role_loop_auto_advance_audit(
-                    path,
-                    workflow_id,
-                    actor_id,
-                    "role_loop_director_plan_retried",
-                    "主管拆任务偶发早退（consult 无输出），已自动重试一次。",
-                )?;
+                approved.to_vec()
             }
-            tasks
-        }
-    };
-    // 3. prepare（→ prepared dispatches·授权范围内·把 LM 拆的任务接进派发机器）。
-    let prepare_input = PrepareAuthorizedAutoDispatchInput {
-        project_root: project_root.to_string(),
-        project_id: pid.clone(),
-        workflow_id: workflow_id.to_string(),
-        proposal_id: proposal_id.clone(),
-        authorization_id: authorization_id.clone(),
-        actor_id: actor_id.to_string(),
-        planned_tasks,
-        expected_workflow_revision: None,
-        expected_authorization_revision: Some(auth_revision),
-    };
-    let prepared = prepare_authorized_auto_dispatch_for_index_at(path, index, &prepare_input)?;
-    let planned_task_count = prepared.plan.planned_task_count;
-    let prepared_count = prepared.plan.prepared_dispatch_count;
-    let needs_binding_count = prepared.plan.needs_binding_count;
-    let blocked_count = prepared.plan.blocked_count;
-    // 4. 件 C-1 分流：没 prepared 就停（越界/没绑/无可派）——可见、等用户、不自动绑、不重试。
-    if prepared_count == 0 {
-        // 收集具体停因（方案缺了什么·给用户可操作反馈，别只笼统说"越界"）：汇被阻断任务的 blocked_reasons。
-        let reasons: Vec<String> = prepared
-            .plan
-            .planned_tasks
-            .iter()
-            .flat_map(|task| task.blocked_reasons.iter().cloned())
-            .collect::<std::collections::BTreeSet<String>>()
-            .into_iter()
-            .collect();
-        let reasons_text = if reasons.is_empty() {
-            String::new()
-        } else {
-            format!("（具体：{}）", reasons.join("；"))
+            None => {
+                let ctx = load_project_context(project_root)?;
+                let proposal_store =
+                    project_consultation_proposal_store::load_store(path, timestamp_ms)?;
+                let proposal = proposal_store
+                    .proposals
+                    .iter()
+                    .find(|proposal| proposal.proposal_id == proposal_id)
+                    .ok_or_else(|| format!("找不到 active 授权对应的已确认方案：{proposal_id}"))?;
+                let (mut tasks, retried) =
+                    director_plan_with_retry(director, &ctx, proposal, false)?;
+                if retried {
+                    append_role_loop_auto_advance_audit(
+                        path,
+                        workflow_id,
+                        actor_id,
+                        "role_loop_director_plan_retried",
+                        "主管拆任务偶发早退（consult 无输出），已自动重试一次。",
+                    )?;
+                }
+                // fix3 2.1：把 LM 编的界外角色归一到 codex-dev（只收不放）+ 出人话警告。
+                role_clamp_warnings =
+                    clamp_planned_task_roles(&mut tasks, &proposal.scope_draft.allowed_role_ids);
+                tasks
+            }
         };
-        let (stage, message) = if blocked_count > 0 {
-            (
+        // 3. prepare（→ prepared dispatches·授权范围内·把 LM 拆的任务接进派发机器）。
+        let prepare_input = PrepareAuthorizedAutoDispatchInput {
+            project_root: project_root.to_string(),
+            project_id: pid.clone(),
+            workflow_id: workflow_id.to_string(),
+            proposal_id: proposal_id.clone(),
+            authorization_id: authorization_id.clone(),
+            actor_id: actor_id.to_string(),
+            planned_tasks,
+            expected_workflow_revision: None,
+            expected_authorization_revision: Some(auth_revision),
+        };
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(path, index, &prepare_input)?;
+        let planned_task_count = prepared.plan.planned_task_count;
+        let prepared_count = prepared.plan.prepared_dispatch_count;
+        let needs_binding_count = prepared.plan.needs_binding_count;
+        let blocked_count = prepared.plan.blocked_count;
+        // 4. 件 C-1 分流：没 prepared 就停（越界/没绑/无可派）——可见、等用户、不自动绑、不重试。
+        if prepared_count == 0 {
+            // 收集具体停因（方案缺了什么·给用户可操作反馈，别只笼统说"越界"）：汇被阻断任务的 blocked_reasons。
+            let reasons: Vec<String> = prepared
+                .plan
+                .planned_tasks
+                .iter()
+                .flat_map(|task| task.blocked_reasons.iter().cloned())
+                .collect::<std::collections::BTreeSet<String>>()
+                .into_iter()
+                .collect();
+            let reasons_text = if reasons.is_empty() {
+                String::new()
+            } else {
+                format!("（具体：{}）", reasons.join("；"))
+            };
+            let (stage, message) = if blocked_count > 0 {
+                (
                 "blocked",
                 format!(
                     "有任务超出方案授权范围被阻断{reasons_text}——方案缺了它该写的内容（如写范围/工具/检查）。请重新让 AI 出方案（把这些写进去）或在方案里补上，再自动推进。"
                 ),
             )
-        } else if needs_binding_count > 0 {
-            (
-                "needs_binding",
-                "需先给 codex-dev 节点绑一条 Codex 会话再自动推进（本命令不自动绑会话）。"
-                    .to_string(),
-            )
-        } else {
-            (
-                "no_dispatchable",
-                "没有可派发的 prepared 任务；停。".to_string(),
-            )
-        };
+            } else if needs_binding_count > 0 {
+                (
+                    "needs_binding",
+                    "需先给 codex-dev 节点绑一条 Codex 会话再自动推进（本命令不自动绑会话）。"
+                        .to_string(),
+                )
+            } else {
+                (
+                    "no_dispatchable",
+                    "没有可派发的 prepared 任务；停。".to_string(),
+                )
+            };
+            append_role_loop_auto_advance_audit(
+                path,
+                workflow_id,
+                actor_id,
+                "role_loop_auto_advance_stopped",
+                &format!("自动推进停在 {stage}：{message}"),
+            )?;
+            return Ok(AutoAdvanceRoleLoopOutcome {
+                stage: stage.to_string(),
+                planned_task_count,
+                prepared_count,
+                needs_binding_count,
+                blocked_count,
+                message,
+                chain_outcome: None,
+                stop_reason: Some(stage.to_string()),
+                warnings: role_clamp_warnings.clone(),
+            });
+        }
+        // 5. prepared 出来 → **起链前复查授权仍 active**（2.5·批与拆/prepare 之间 LM 耗时长·可能被撤/过期）→ 跑 worker 链
+        //    （四护栏·入口 path-lock 圈测试项目·失败即停）。
+        require_active_authorization(path, project_root, workflow_id)?;
+        let outcome = run_director_task_chain(
+            path,
+            index,
+            readback_db_path,
+            runner,
+            project_root,
+            workflow_id,
+            &prepared.plan.planned_tasks,
+            max_nodes,
+        )?;
+        let stop_reason = outcome.stopped_reason.clone();
+        let message = format!(
+            "授权后自动推进跑完 worker 链：completed {} / dispatched {}{}",
+            outcome.completed,
+            outcome.dispatched,
+            stop_reason
+                .as_deref()
+                .map(|reason| format!("；停因 {reason}"))
+                .unwrap_or_else(|| "；全跑完".to_string())
+        );
         append_role_loop_auto_advance_audit(
             path,
             workflow_id,
             actor_id,
-            "role_loop_auto_advance_stopped",
-            &format!("自动推进停在 {stage}：{message}"),
+            "role_loop_auto_advance_ran",
+            &message,
         )?;
-        return Ok(AutoAdvanceRoleLoopOutcome {
-            stage: stage.to_string(),
+        Ok(AutoAdvanceRoleLoopOutcome {
+            stage: "ran".to_string(),
             planned_task_count,
             prepared_count,
             needs_binding_count,
             blocked_count,
             message,
-            chain_outcome: None,
-            stop_reason: Some(stage.to_string()),
-        });
+            chain_outcome: Some(outcome),
+            stop_reason,
+            warnings: role_clamp_warnings,
+        })
+    })();
+    // fix3 2.2：拆/prepare/起链的任何 Err（含 retry 后仍败）→ 留档再返回。stage=blocked/needs_binding 走的是
+    // Ok（内层已各记 stopped），不进这里；这里只补「确认后失败但没记」的那批（今晚审计空白的根因）。
+    if let Err(error) = &advance_result {
+        let _ = append_role_loop_auto_advance_audit(
+            path,
+            workflow_id,
+            actor_id,
+            "role_loop_auto_advance_stopped",
+            &format!("自动推进失败（已留档）：{error}"),
+        );
     }
-    // 5. prepared 出来 → **起链前复查授权仍 active**（2.5·批与拆/prepare 之间 LM 耗时长·可能被撤/过期）→ 跑 worker 链
-    //    （四护栏·入口 path-lock 圈测试项目·失败即停）。
-    require_active_authorization(path, project_root, workflow_id)?;
-    let outcome = run_director_task_chain(
-        path,
-        index,
-        readback_db_path,
-        runner,
-        project_root,
-        workflow_id,
-        &prepared.plan.planned_tasks,
-        max_nodes,
-    )?;
-    let stop_reason = outcome.stopped_reason.clone();
-    let message = format!(
-        "授权后自动推进跑完 worker 链：completed {} / dispatched {}{}",
-        outcome.completed,
-        outcome.dispatched,
-        stop_reason
-            .as_deref()
-            .map(|reason| format!("；停因 {reason}"))
-            .unwrap_or_else(|| "；全跑完".to_string())
-    );
-    append_role_loop_auto_advance_audit(
-        path,
-        workflow_id,
-        actor_id,
-        "role_loop_auto_advance_ran",
-        &message,
-    )?;
-    Ok(AutoAdvanceRoleLoopOutcome {
-        stage: "ran".to_string(),
-        planned_task_count,
-        prepared_count,
-        needs_binding_count,
-        blocked_count,
-        message,
-        chain_outcome: Some(outcome),
-        stop_reason,
-    })
+    advance_result
 }
 
 #[tauri::command]
@@ -1207,72 +1283,88 @@ fn run_confirm_and_start_authorized_run_inner(
         &format!("confirm-and-start-auth:{}", unix_timestamp_nanos()),
         &format!("confirm-and-start-auth-user:{}", unix_timestamp_nanos()),
     )?;
-    let authorization = confirmed
-        .plan_authorization
-        .ok_or_else(|| "确认方案未产出授权对象".to_string())?;
-    let revision = confirmed
-        .plan_authorization_store_revision
-        .ok_or_else(|| "确认方案未产出授权 revision".to_string())?;
-    // 3. 记录全局边界复核（Phase A 用户演全局主管·actor=用户·approved）→ 授权生效。
-    plan_authorization_store::record_global_boundary_review_with_proposal(
-        path,
-        &RecordGlobalBoundaryReviewInput {
-            project_root: request.project_root.clone(),
-            project_id: project_id(&request.project_root),
-            workflow_id: workflow_id.clone(),
-            proposal_id: confirmed.proposal.proposal_id.clone(),
-            authorization_id: authorization.authorization_id.clone(),
-            actor_id: actor_id.clone(),
-            review_status: "approved".to_string(),
-            summary: "用户点[允许并开始]：同时作全局边界批准（Phase A·用户演全局主管）。"
-                .to_string(),
-            checklist: GlobalBoundaryReviewChecklist {
-                architecture_boundary_checked: true,
-                cross_project_impact_checked: true,
-                permission_scope_checked: true,
-                read_write_scope_checked: true,
-                tool_and_check_scope_checked: true,
-                memory_boundary_checked: true,
-                stop_conditions_checked: true,
-                acceptance_criteria_checked: true,
-            },
-            findings: vec![],
-            expected_authorization_revision: Some(revision),
-        },
-        timestamp_ms + 1,
-        &format!("confirm-and-start-boundary:{}", unix_timestamp_nanos()),
-    )?;
-    // 4. 绑会话（2.3）：existing → 绑传入的现有 Codex 会话（绑失败即停·停因人话·不静默）；new → 本刀未接（清错）。
-    match request.session_choice.as_str() {
-        "existing" => {
-            let session_id = request.session_id.as_deref().ok_or_else(|| {
-                "session_choice=existing 需给 session_id（要绑的现有 Codex 会话）。".to_string()
-            })?;
-            let node_id = format!("{workflow_id}:node:codex-dev");
-            bind_workflow_node_codex_session_for_index_at(
-                path,
-                index,
-                &WorkflowNodeSessionBindRequest {
-                    project_root: request.project_root.clone(),
-                    node_id,
-                    work_item_id: None,
-                    thread_id: session_id.to_string(),
+    // fix3 2.2：record_decision（确认）**成功之后**的任何失败（授权提取/边界复核/绑会话）→ 先 append stopped
+    // 审计（人话）再返回 Err（治「今晚审计只有 started、之后空白」）。step5 auto_advance 由它自己留档、不含在此
+    // （避免双记）；record_decision 本身失败=确认闸没过、按包不记（在此之前）。只 append、不改状态、不吞错。
+    let post_confirm: Result<(), String> = (|| {
+        let authorization = confirmed
+            .plan_authorization
+            .ok_or_else(|| "确认方案未产出授权对象".to_string())?;
+        let revision = confirmed
+            .plan_authorization_store_revision
+            .ok_or_else(|| "确认方案未产出授权 revision".to_string())?;
+        // 3. 记录全局边界复核（Phase A 用户演全局主管·actor=用户·approved）→ 授权生效。
+        plan_authorization_store::record_global_boundary_review_with_proposal(
+            path,
+            &RecordGlobalBoundaryReviewInput {
+                project_root: request.project_root.clone(),
+                project_id: project_id(&request.project_root),
+                workflow_id: workflow_id.clone(),
+                proposal_id: confirmed.proposal.proposal_id.clone(),
+                authorization_id: authorization.authorization_id.clone(),
+                actor_id: actor_id.clone(),
+                review_status: "approved".to_string(),
+                summary: "用户点[允许并开始]：同时作全局边界批准（Phase A·用户演全局主管）。"
+                    .to_string(),
+                checklist: GlobalBoundaryReviewChecklist {
+                    architecture_boundary_checked: true,
+                    cross_project_impact_checked: true,
+                    permission_scope_checked: true,
+                    read_write_scope_checked: true,
+                    tool_and_check_scope_checked: true,
+                    memory_boundary_checked: true,
+                    stop_conditions_checked: true,
+                    acceptance_criteria_checked: true,
                 },
-            )
-            .map_err(|error| format!("绑定现有会话失败（会话没找到/不可用）：{error}"))?;
-        }
-        "new" => {
-            return Err(
+                findings: vec![],
+                expected_authorization_revision: Some(revision),
+            },
+            timestamp_ms + 1,
+            &format!("confirm-and-start-boundary:{}", unix_timestamp_nanos()),
+        )?;
+        // 4. 绑会话（2.3）：existing → 绑传入的现有 Codex 会话（绑失败即停·停因人话·不静默）；new → 本刀未接（清错）。
+        match request.session_choice.as_str() {
+            "existing" => {
+                let session_id = request.session_id.as_deref().ok_or_else(|| {
+                    "session_choice=existing 需给 session_id（要绑的现有 Codex 会话）。".to_string()
+                })?;
+                let node_id = format!("{workflow_id}:node:codex-dev");
+                bind_workflow_node_codex_session_for_index_at(
+                    path,
+                    index,
+                    &WorkflowNodeSessionBindRequest {
+                        project_root: request.project_root.clone(),
+                        node_id,
+                        work_item_id: None,
+                        thread_id: session_id.to_string(),
+                    },
+                )
+                .map_err(|error| format!("绑定现有会话失败（会话没找到/不可用）：{error}"))?;
+            }
+            "new" => {
+                return Err(
                 "自动新建会话本刀未接（主管链 resume-only·P3 C 决策）；请选一条现有 Codex 会话（session_choice=existing + session_id）。"
                     .to_string(),
             );
+            }
+            other => {
+                return Err(format!(
+                    "未知 session_choice：{other}（本刀只支持 existing）"
+                ));
+            }
         }
-        other => {
-            return Err(format!(
-                "未知 session_choice：{other}（本刀只支持 existing）"
-            ));
-        }
+        Ok(())
+    })();
+    if let Err(error) = &post_confirm {
+        let _ = append_role_loop_auto_advance_audit(
+            path,
+            &workflow_id,
+            &actor_id,
+            "role_loop_auto_advance_stopped",
+            &format!("合流在自动推进前失败（已留档）：{error}"),
+        );
     }
+    post_confirm?;
     // 5. 自动推进（现成 auto_advance 内层·resolve active 授权 →〔2.2 有已批图则跳过 LM 原样跑〕→ prepare →
     //    起链前复查授权 → 链）。approved_planned_tasks=Some 时所批即所跑（预拆给用户看的那份=真跑的那份）。
     run_auto_advance_authorized_role_loop(
@@ -1347,11 +1439,16 @@ fn run_preview_pending_proposal_director_plan_inner(
         .ok_or_else(|| format!("找不到方案：{}", request.proposal_id))?;
     // 2. load ctx + 主管 LM 预拆（待确认措辞·2.4 偶发早退自动重试一次）。零写盘。
     let ctx = load_project_context(&request.project_root)?;
-    let (planned_tasks, retried) = director_plan_with_retry(director, &ctx, proposal, true)?;
+    let (mut planned_tasks, retried) = director_plan_with_retry(director, &ctx, proposal, true)?;
     let mut warnings: Vec<String> = Vec::new();
     if retried {
         warnings.push("主管拆任务偶发早退（consult 无输出），已自动重试一次。".to_string());
     }
+    // fix3 2.1：预拆给用户看的图必须**已钳后**（所见即所跑）——界外角色归一 codex-dev + 人话警告。
+    warnings.extend(clamp_planned_task_roles(
+        &mut planned_tasks,
+        &proposal.scope_draft.allowed_role_ids,
+    ));
     // 3. 悬空依赖 warning（照链的先例·title 不在任务集里的依赖）——预拆只提示、**不建边**（零写盘）。
     let titles: std::collections::BTreeSet<&str> = planned_tasks
         .iter()

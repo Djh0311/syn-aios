@@ -7907,6 +7907,331 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
+    // ===== 交办 fix3 后端（角色钳位 / 失败留档 / 接续告知）·stub =====
+
+    // 界外角色 director：吐 target_role="reviewer"（不在档位授权集）——验钳位。plan_preview 默认回落到 plan。
+    struct ReviewerDirector;
+    impl DirectorAgent for ReviewerDirector {
+        fn plan(
+            &self,
+            _ctx: &ProjectContext,
+            proposal: &ProjectConsultationProposal,
+        ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+            let scope = director_task_scope_from_proposal(proposal, "reviewer");
+            Ok(vec![ProjectDirectorPlannedTask {
+                planned_task_id: format!("planned-task:{}:1", proposal.workflow_id),
+                title: "审查任务".to_string(),
+                objective: "自包含：审查一下".to_string(),
+                scope,
+                depends_on: vec![],
+                acceptance_criteria: vec!["ok".to_string()],
+                report_format: vec!["done".to_string()],
+                status: "planned".to_string(),
+                guard_result: None,
+                work_item_id: None,
+                workflow_node_id: None,
+                task_package_id: None,
+                memory_packet_snapshot_id: None,
+                prepared_dispatch_id: None,
+                blocked_reasons: vec![],
+            }])
+        }
+    }
+
+    fn jiaoban_task_with_role(
+        workflow_id: &str,
+        id: usize,
+        title: &str,
+        role: &str,
+    ) -> ProjectDirectorPlannedTask {
+        let mut task = jiaoban_test_planned_task(workflow_id, id, title, vec![]);
+        task.scope.target_role = role.to_string();
+        task
+    }
+
+    // 2.1·钳位核心：界外角色归一 codex-dev + 出警告；授权集内（codex-dev/project_director）原样不动。
+    #[test]
+    fn jiaoban_fix3_clamp_only_out_of_set_roles() {
+        let allowed = vec!["codex-dev".to_string(), "project_director".to_string()];
+        let mut tasks = vec![
+            jiaoban_task_with_role("wf", 1, "a", "reviewer"),
+            jiaoban_task_with_role("wf", 2, "b", "codex-dev"),
+            jiaoban_task_with_role("wf", 3, "c", "project_director"),
+        ];
+        let warnings = clamp_planned_task_roles(&mut tasks, &allowed);
+        assert_eq!(
+            tasks[0].scope.target_role, "codex-dev",
+            "界外 reviewer→codex-dev"
+        );
+        assert_eq!(tasks[1].scope.target_role, "codex-dev", "codex-dev 原样");
+        assert_eq!(
+            tasks[2].scope.target_role, "project_director",
+            "project_director 在授权集·原样"
+        );
+        assert_eq!(warnings.len(), 1, "只 reviewer 一条警告");
+        assert!(warnings[0].contains("reviewer") && warnings[0].contains("codex-dev"));
+    }
+
+    // 2.1·plan_preview 路：预拆给用户看的图必须已钳后（所见即所跑）+ 警告在。
+    #[test]
+    fn jiaoban_fix3_clamp_in_preview_path() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("fix3-clamp-preview");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let input = fixture_project_consultation_proposal_input(test_root);
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &input,
+            1_765_300_000_000,
+            "write-fix3-preview",
+        )
+        .expect("proposal");
+        let outcome = run_preview_pending_proposal_director_plan_inner(
+            &path,
+            &ReviewerDirector,
+            &PreviewPendingProposalDirectorPlanRequest {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+            },
+        )
+        .expect("preview");
+        assert!(
+            outcome
+                .planned_tasks
+                .iter()
+                .all(|task| task.scope.target_role == "codex-dev"),
+            "预拆图角色应已钳成 codex-dev"
+        );
+        assert!(
+            outcome.warnings.iter().any(|w| w.contains("reviewer")),
+            "预拆应带钳位警告：{:?}",
+            outcome.warnings
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.1·plan 路（auto_advance）：界外角色钳成 codex-dev 后**能跑通**（而非撞 guard 变 blocked）+ outcome.warnings 带钳位。
+    #[test]
+    fn jiaoban_fix3_clamp_unblocks_in_auto_advance() {
+        let (dir, index_path, index, workflow_id) = auto_advance_fixture("fix3-clamp-ran", true);
+        let path = dir.join("workflow-state.v0.json");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let outcome = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &ReviewerDirector,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            "tester",
+            10,
+            None,
+        )
+        .expect("钳后应跑通");
+        assert_eq!(
+            outcome.stage, "ran",
+            "界外角色钳成 codex-dev 后应 ran（而非 blocked）：{outcome:?}"
+        );
+        assert!(
+            outcome
+                .warnings
+                .iter()
+                .any(|w| w.contains("reviewer") && w.contains("codex-dev")),
+            "outcome.warnings 应带钳位：{:?}",
+            outcome.warnings
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.1·辨析：所批即所跑（approved）路**不钳**——界外角色照 guard 兜底拦成 blocked（回传数据不静默改·安全不降）。
+    #[test]
+    fn jiaoban_fix3_approved_out_of_set_role_not_clamped_blocked() {
+        let (dir, index_path, index, workflow_id) =
+            auto_advance_fixture("fix3-approved-noclamp", true);
+        let path = dir.join("workflow-state.v0.json");
+        let approved = vec![jiaoban_task_with_role(&workflow_id, 1, "审查", "reviewer")];
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let outcome = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &BombDirector,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            "tester",
+            10,
+            Some(&approved),
+        )
+        .expect("approved 路不炸 director");
+        assert_eq!(
+            outcome.stage, "blocked",
+            "approved 图界外角色不钳、guard 兜底拦→blocked：{outcome:?}"
+        );
+        assert!(
+            outcome.warnings.is_empty(),
+            "approved 路不钳→无钳位警告：{:?}",
+            outcome.warnings
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.2·留档：拆步两次早退（retry 后仍败）→ 返回 Err（不吞错）+ 审计里有带人话的 stopped 事件。
+    #[test]
+    fn jiaoban_fix3_plan_failure_after_started_is_audited() {
+        let (dir, index_path, index, workflow_id) = auto_advance_fixture("fix3-audit-err", true);
+        let path = dir.join("workflow-state.v0.json");
+        let director = CountingDirector {
+            err_until: 2,
+            err_msg: "consult_last_message_read_failed:gone".to_string(),
+            tasks: vec![],
+            calls: std::cell::RefCell::new(0),
+        };
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let result = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &director,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            "tester",
+            10,
+            None,
+        );
+        assert!(result.is_err(), "拆步连败（retry 后仍败）应返回 Err·不吞错");
+        assert_eq!(*director.calls.borrow(), 2, "retry 一次·共 2 次");
+        let state = read_json_file(&path);
+        let has_err_stopped = state["audit_events"]
+            .as_array()
+            .expect("audit_events")
+            .iter()
+            .any(|event| {
+                optional_string_from(event, "event_type").as_deref()
+                    == Some("role_loop_auto_advance_stopped")
+                    && optional_string_from(event, "reason")
+                        .is_some_and(|reason| reason.contains("失败（已留档）"))
+            });
+        assert!(has_err_stopped, "确认后失败应写带人话的 stopped 审计");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.2·确认前拒不多写：非 Pending 方案 → 合流 step1 拒（record_decision 之前）→ 不写 stopped 审计。
+    #[test]
+    fn jiaoban_fix3_confirm_pre_decision_reject_no_stopped_audit() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("fix3-pre-decision");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index(test_root, "thread-fix3-pre");
+        let readback_db_path = codex_db::default_state_db_path();
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        // create_active_...fixture 把方案推到 UserConfirmed（非 PendingUserConfirmation）。
+        let (proposal, _auth, _rev) = create_active_project_director_authorization_fixture(
+            &path,
+            test_root,
+            "thread-fix3-pre",
+            1_765_300_000_000,
+        );
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 0,
+                transcript_target_hits: 0,
+            },
+        };
+        let request = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: proposal.proposal_id.clone(),
+            session_choice: "existing".to_string(),
+            session_id: Some("thread-fix3-pre".to_string()),
+            actor_id: Some("user".to_string()),
+            max_nodes: Some(10),
+            approved_planned_tasks: None,
+        };
+        let result = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &BombDirector,
+            &request,
+        );
+        assert!(result.is_err(), "非 Pending 方案应拒");
+        assert!(
+            !audit_has(&path, "role_loop_auto_advance_stopped"),
+            "确认前（record_decision 之前）的拒不写 stopped 审计"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 2.3·接续告知：预置一条 running 旧链记录 → 再跑 → chain.warnings 含「已接续」+ 中断处任务被重派完成。
+    #[test]
+    fn jiaoban_fix3_resuming_prior_run_warns_and_reruns() {
+        let (dir, index_path, index, workflow_id) = auto_advance_fixture("fix3-resume", true);
+        let path = dir.join("workflow-state.v0.json");
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        // 注入一条 running 旧链记录（同 workflow/project·模拟上次进程没了没收尾）。
+        let mut value = read_workflow_state_value(&path).expect("state");
+        ensure_array_mut(&mut value, "workflow_chain_runs")
+            .expect("arr")
+            .push(json!({
+              "chain_run_id": "prior-interrupted",
+              "project_id": project_id(test_root),
+              "workflow_id": workflow_id,
+              "state": "running",
+              "stop_requested": false,
+              "max_nodes": 10,
+              "started_at": "t0",
+              "ended_at": Value::Null,
+              "nodes": []
+            }));
+        write_validated_workflow_state(&path, &value).expect("inject running chain");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let outcome = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            test_root,
+            &workflow_id,
+            "tester",
+            10,
+            None,
+        )
+        .expect("接续后应跑通");
+        let chain = outcome.chain_outcome.expect("ran 带 chain");
+        assert!(
+            chain.warnings.iter().any(|w| w.contains("已接续")),
+            "接续旧链应告知：{:?}",
+            chain.warnings
+        );
+        assert!(chain.completed >= 1, "中断处任务应被重派并完成");
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // P3 项目面真跑（C 映射）·机器闸：用已存在的 work_item（带任务包）+ 绑定，stub runner 验证
     // execute_project_workflow_node_at 从任务包构造指令 + 走通派发到 completed。
     #[test]
