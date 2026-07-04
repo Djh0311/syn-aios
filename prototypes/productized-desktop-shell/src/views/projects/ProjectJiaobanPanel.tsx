@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/Badge";
 import { summarizeProjectConsultationProposalStore } from "../../lib/projectConsultationProposal";
 import {
+  autoAdvanceAuthorizedRoleLoop,
   confirmAndStartAuthorizedRun,
   getProjectWorkflowChainStatus,
   stopProjectWorkflowChain,
@@ -58,6 +59,9 @@ type JiaobanRunCache = {
   startError: string | null;
   lastStopReason: string | null; // 卡住原因，重新出方案时带回「说」面
   ranProposalId: string | null; // 这一轮真按下[允许并开始]批的方案 id（区分「新方案到达」用）
+  // 合流命令对「已确认/旧方案」拒绝时置 true：这条路授权本还活着，卡住脸要给[接着跑,不用重批]而非只给重出方案。
+  // 换 tab 回来也要记得给这个口，故进缓存。
+  continueHint: boolean | null;
 };
 const jiaobanRunCacheByProject = new Map<string, JiaobanRunCache>();
 
@@ -71,6 +75,7 @@ function writeJiaobanRunCache(projectRoot: string, patch: Partial<JiaobanRunCach
     startError: null,
     lastStopReason: null,
     ranProposalId: null,
+    continueHint: null,
   };
   jiaobanRunCacheByProject.set(projectRoot, { ...prev, ...patch });
 }
@@ -144,6 +149,8 @@ function ProjectJiaobanPanelBrowser({
   const [starting, setStarting] = useState(false);
   const [outcome, setOutcome] = useState<AutoAdvanceRoleLoopOutcome | null>(cached?.outcome ?? null);
   const [startError, setStartError] = useState<string | null>(cached?.startError ?? null);
+  // 合流命令拒「方案不是待用户确认」时置 true → 卡住脸给[接着跑,不用重批]。
+  const [continueHint, setContinueHint] = useState<boolean>(cached?.continueHint ?? false);
   const [chainStatus, setChainStatus] = useState<ProjectWorkflowChainStatus | null>(null);
   const runningRef = useRef(false);
   // 这一轮真按下[允许并开始]批的方案 id（从缓存恢复）。用来判「有没有来一份新方案」。
@@ -170,6 +177,7 @@ function ProjectJiaobanPanelBrowser({
     setManualPhase(null);
     setOutcome(null);
     setStartError(null);
+    setContinueHint(false);
     setChainStatus(null);
     setAmendment("");
     ranProposalIdRef.current = null;
@@ -260,11 +268,66 @@ function ProjectJiaobanPanelBrowser({
       setManualPhase(nextPhase);
       writeJiaobanRunCache(projectRoot, { manualPhase: nextPhase, outcome, startError: null });
     } catch (e) {
-      // 合流命令对「已确认/旧方案」会干净拒（后端：方案不是待用户确认状态）→ 翻成人话 + 引导重新说目标。
+      // 合流命令对「已确认」会干净拒（后端：方案不是待用户确认状态）。这不是坏了——授权本还活着，
+      // 直接调 auto_advance 就能从拆任务接着跑。故这一类翻成「已经批过了，点接着跑」+ 卡住脸给[接着跑]。
+      const alreadyConfirmed = isAlreadyConfirmedRejection(e);
       const humanized = humanizeAuthorizeError(e);
       setStartError(humanized);
+      setContinueHint(alreadyConfirmed);
       setManualPhase("blocked");
-      writeJiaobanRunCache(projectRoot, { manualPhase: "blocked", startError: humanized, lastStopReason: humanized });
+      writeJiaobanRunCache(projectRoot, {
+        manualPhase: "blocked",
+        startError: humanized,
+        lastStopReason: humanized,
+        continueHint: alreadyConfirmed,
+      });
+    } finally {
+      setStarting(false);
+      runningRef.current = false;
+    }
+  }
+
+  // 接着跑，不用重批：方案已 user_confirmed（授权还活着）时的重试口——不走合流命令（会被「已确认」拒），
+  // 直接调现成 autoAdvanceAuthorizedRoleLoop 从拆任务接着推进。防冻套路同 authorizeAndStart：
+  // 先切「正在干」相位再 await、runningRef 防重入、缓存同步；返回走现有 outcome→脸 映射。
+  async function continueRun() {
+    if (!projectWorkflow || starting || runningRef.current) return;
+    runningRef.current = true;
+    setStarting(true);
+    setStartError(null);
+    setContinueHint(false);
+    setOutcome(null);
+    setChainStatus(null);
+    setManualPhase("running");
+    writeJiaobanRunCache(projectRoot, {
+      manualPhase: "running",
+      outcome: null,
+      startError: null,
+      continueHint: false,
+    });
+    try {
+      const nextOutcome = await autoAdvanceAuthorizedRoleLoop({
+        project_root: projectWorkflow.project_root,
+        workflow_id: projectWorkflow.workflow_id,
+        actor_id: "user",
+      });
+      const nextPhase: JiaobanPhase = nextOutcome.stage === "ran" ? "running" : "blocked";
+      setOutcome(nextOutcome);
+      setManualPhase(nextPhase);
+      writeJiaobanRunCache(projectRoot, { manualPhase: nextPhase, outcome: nextOutcome, startError: null });
+    } catch (e) {
+      // 接着跑也可能失败（如授权真过期）→ 翻人话进卡住脸。若仍是「已确认」类，continueHint 留着还给[接着跑]。
+      const alreadyConfirmed = isAlreadyConfirmedRejection(e);
+      const humanized = humanizeAuthorizeError(e);
+      setStartError(humanized);
+      setContinueHint(alreadyConfirmed);
+      setManualPhase("blocked");
+      writeJiaobanRunCache(projectRoot, {
+        manualPhase: "blocked",
+        startError: humanized,
+        lastStopReason: humanized,
+        continueHint: alreadyConfirmed,
+      });
     } finally {
       setStarting(false);
       runningRef.current = false;
@@ -295,6 +358,7 @@ function ProjectJiaobanPanelBrowser({
     setManualPhase("say");
     setOutcome(null);
     setStartError(null);
+    setContinueHint(false);
     setChainStatus(null);
     setAmendment("");
     ranProposalIdRef.current = null;
@@ -371,6 +435,11 @@ function ProjectJiaobanPanelBrowser({
   const proposalAge = latestProposal ? proposalAgeDays(latestProposal.created_at_ms) : 0;
   const proposalIsStale = proposalAge >= 1;
 
+  // [接着跑] 出现的硬前提（§2.1）：方案已 user_confirmed（授权还活着，本不用重批）。
+  // 两条来路都算数：① 当前 latestProposal.status==user_confirmed；② 合流命令刚拒过「已确认」(continueHint)——
+  // 后者时 store 里那份就是已确认态，只是 summary 可能还没刷到，故 continueHint 直接放行。
+  const planIsConfirmed = latestProposal?.status === "user_confirmed" || continueHint;
+
   return (
     <section className="project-jiaoban" aria-label="交办">
       <div className="project-jiaoban-col">
@@ -414,9 +483,15 @@ function ProjectJiaobanPanelBrowser({
           <JiaobanBlockedState
             outcome={outcome}
             error={startError}
+            planIsConfirmed={planIsConfirmed}
+            sessions={projectSessions}
+            sessionChoice={sessionChoice}
+            onSessionChoiceChange={setSessionChoice}
+            onContinueRun={() => void continueRun()}
             onRePlan={backToSay}
+            starting={starting}
             // 「去工作流看看」需切 tab（onSelectTool 在外壳），本包红线「不动外壳」→ 不在此接线；
-            // 保留入口能力（prop 已在），置 null 即不渲染该次按钮，主按钮「重新出方案」永在。
+            // 保留入口能力（prop 已在），置 null 即不渲染该次按钮，主按钮永在（配对表兜底至少一个主按钮）。
             onOpenWorkflow={null}
           />
         ) : null}
@@ -800,6 +875,8 @@ function JiaobanDoneState({
     ? `完成 ${chain.completed} 步${chain.stopped_reason ? `；中途停了：${chain.stopped_reason}` : ""}。`
     : outcome?.message || "做完了。";
   const proof = summarizeProof(chainStatus);
+  // fix3 后端新 warnings（如「角色已按 codex-dev 执行」「已接续上次中断的运行」）→ 小字列出，不挡主路径。
+  const warnings = chain?.warnings ?? [];
 
   return (
     <div className="project-canvas-detail-card jiaoban-done" aria-label="做好了">
@@ -818,6 +895,13 @@ function JiaobanDoneState({
         <span className="jiaoban-field-label">产出：</span>
         {proof ?? "详情见工作流 tab。"}
       </p>
+      {warnings.length > 0 ? (
+        <ul className="jiaoban-warnings muted small-note" aria-label="附带说明">
+          {warnings.map((w, i) => (
+            <li key={i}>{w}</li>
+          ))}
+        </ul>
+      ) : null}
       <div className="workflow-state-actions">
         <button className="primary-button" type="button" onClick={onContinue}>
           继续弄别的
@@ -827,16 +911,114 @@ function JiaobanDoneState({
   );
 }
 
-// 5. 卡住（永不冻）
-function JiaobanBlockedState({
+// 停因→动作 死配对（§2.2）。给定 outcome / error / 方案是否已确认，判这张卡住脸该主打哪个按钮。
+// 铁律：绝不返回零按钮（fallback 双给[接着跑]+[重新说目标]）。
+type BlockedPlan = {
+  // 主按钮语义：continue=[接着跑,不用重批]，replan=[重新说目标出新方案]，session=先选一条会话（选完再[接着跑]）。
+  primary: "continue" | "replan" | "session";
+  // 是否同时给次按钮（另一条出路）。
+  showReplanSecondary: boolean;
+  showContinueSecondary: boolean;
+  // 主按钮上方的一句提示（如「上一步失败了，接着跑会从拆任务重来」）。
+  note: string | null;
+};
+
+// 关键词特征判定（都在前端 message/stop_reason 里找人话词，不碰后端）。
+// export 供离线 DOM 断言测试直接喂各类停因验按钮（行为中性，不改运行时）。
+export function classifyBlocked(
+  outcome: AutoAdvanceRoleLoopOutcome | null,
+  error: string | null,
+  planIsConfirmed: boolean,
+): BlockedPlan {
+  const stage = outcome?.stage ?? "";
+  const text = `${outcome?.stop_reason ?? ""} ${outcome?.message ?? ""} ${error ?? ""}`;
+
+  // 1) needs_binding / 会话类 → 先选一条会话，选完回[接着跑]。
+  const needsBinding =
+    stage === "needs_binding" ||
+    (outcome?.needs_binding_count ?? 0) > 0 ||
+    /没.{0,3}会话|选.{0,3}会话|绑.{0,4}会话|哪个对话|接现有|会话.{0,3}(缺|没|未)/.test(text);
+  if (needsBinding) {
+    // 会话类：选会话是正路；但方案已确认时，选完就能[接着跑]，故次按钮给 continue。
+    return {
+      primary: "session",
+      showReplanSecondary: true,
+      showContinueSecondary: planIsConfirmed,
+      note: null,
+    };
+  }
+
+  // 2) blocked·写范围 / 方案内容类（message 含「方案缺 / 写范围 / 重新让 AI 出方案」）→ 重新说目标。
+  //    这类是方案本身不够（少写范围、内容缺），接着跑也过不去，得回去出新方案。
+  const planContentIssue = /方案.{0,3}(缺|不全|不够|有问题|没.{0,2}写)|写范围|可写|允许.{0,2}改|重新.{0,4}方案|重新让.{0,3}出/.test(
+    text,
+  );
+  if (planContentIssue) {
+    return {
+      primary: "replan",
+      showReplanSecondary: false,
+      // 方案已确认时仍给个[接着跑]次口（万一只是复核噪音，接着跑能过）。
+      showContinueSecondary: planIsConfirmed,
+      note: null,
+    };
+  }
+
+  // 3) startError / 拆任务失败 / 超时 / flaky → [接着跑]（注明「上一步失败了，接着跑会从拆任务重来」）。
+  const transientFailure =
+    /拆任务|超时|timeout|timed out|失败|重试|中断|flaky|临时|偶发|网络|连接/i.test(text) ||
+    (!!error && !planContentIssue); // startError 走到这（非方案内容类）多为合流/推进途中失败
+  if (transientFailure && planIsConfirmed) {
+    return {
+      primary: "continue",
+      showReplanSecondary: true,
+      showContinueSecondary: false,
+      note: "上一步失败了，接着跑会从拆任务重来。",
+    };
+  }
+
+  // 4) blocked·其它（含「角色」类·fix3 后端钳位后应基本消失）→ [接着跑]主、重新说目标次。
+  if (planIsConfirmed && (stage === "blocked" || stage === "no_dispatchable" || !!outcome)) {
+    return {
+      primary: "continue",
+      showReplanSecondary: true,
+      showContinueSecondary: false,
+      note: null,
+    };
+  }
+
+  // 5) 兜底（识别不了 / 方案未确认无法接着跑）→ 至少给[重新说目标]；方案已确认再补[接着跑]。
+  //    绝不零按钮。
+  return {
+    primary: "replan",
+    showReplanSecondary: false,
+    showContinueSecondary: planIsConfirmed,
+    note: null,
+  };
+}
+
+// 5. 卡住（永不冻）：按停因死配对给「能点的正确按钮」。绝不零按钮终态。
+// export 供离线 DOM 断言测试直接挂载验各分支按钮（行为中性，不改运行时）。
+export function JiaobanBlockedState({
   outcome,
   error,
+  planIsConfirmed,
+  sessions,
+  sessionChoice,
+  onSessionChoiceChange,
+  onContinueRun,
   onRePlan,
+  starting,
   onOpenWorkflow,
 }: {
   outcome: AutoAdvanceRoleLoopOutcome | null;
   error: string | null;
+  planIsConfirmed: boolean;
+  sessions: SessionRecord[];
+  sessionChoice: string | null;
+  onSessionChoiceChange: (value: string | null) => void;
+  onContinueRun: () => void;
   onRePlan: () => void;
+  starting: boolean;
   onOpenWorkflow: (() => void) | null;
 }) {
   // 停因人话：直接用后端 message / stop_reason（已带具体原因，不包糊话盖住）；再兜底一句 error。
@@ -845,6 +1027,34 @@ function JiaobanBlockedState({
     outcome?.message?.trim() ||
     error?.trim() ||
     "碰到拿不准的地方，先停下了。";
+
+  const plan = classifyBlocked(outcome, error, planIsConfirmed);
+  const warnings = outcome?.chain_outcome?.warnings ?? [];
+
+  // 主/次按钮拼装。continue 主按钮统一文案「接着跑（方案已批过，不用重批）」。
+  const continueBtn = (isPrimary: boolean) => (
+    <button
+      key="continue"
+      className={isPrimary ? "primary-button" : "secondary-button"}
+      type="button"
+      disabled={starting}
+      onClick={onContinueRun}
+    >
+      {starting ? "正在开始…" : "接着跑（方案已批过，不用重批）"}
+    </button>
+  );
+  const replanBtn = (isPrimary: boolean) => (
+    <button
+      key="replan"
+      className={isPrimary ? "primary-button" : "secondary-button"}
+      type="button"
+      disabled={starting}
+      onClick={onRePlan}
+    >
+      重新说目标出新方案
+    </button>
+  );
+
   return (
     <div className="project-canvas-detail-card jiaoban-blocked" aria-label="卡住了">
       <div className="panel-heading">
@@ -856,17 +1066,47 @@ function JiaobanBlockedState({
       </div>
       <div className="role-loop-plain" aria-label="停下的原因（人话）">
         <p className="role-loop-plain-lead">{reason}</p>
+        {plan.note ? <p className="role-loop-plain-note">{plan.note}</p> : null}
       </div>
+
+      {/* 会话类：把选会话入口直接嵌进卡住脸——选完就能点下面[接着跑]。 */}
+      {plan.primary === "session" ? (
+        <JiaobanSessionPicker
+          sessions={sessions}
+          sessionChoice={sessionChoice}
+          onSessionChoiceChange={onSessionChoiceChange}
+        />
+      ) : null}
+
       <div className="workflow-state-actions">
-        <button className="primary-button" type="button" onClick={onRePlan}>
-          重新出方案
-        </button>
+        {plan.primary === "continue" ? continueBtn(true) : null}
+        {plan.primary === "replan" ? replanBtn(true) : null}
+        {plan.primary === "session" ? (
+          // 会话类主路径 = 上面选一条；这里的主按钮是选完[接着跑]（方案已确认时可点，否则引导重新说目标）。
+          planIsConfirmed ? (
+            continueBtn(true)
+          ) : (
+            replanBtn(true)
+          )
+        ) : null}
+        {plan.showContinueSecondary && plan.primary !== "continue" ? continueBtn(false) : null}
+        {plan.showReplanSecondary && plan.primary !== "replan" ? replanBtn(false) : null}
         {onOpenWorkflow ? (
           <button className="secondary-button" type="button" onClick={onOpenWorkflow}>
             去工作流看看
           </button>
         ) : null}
       </div>
+
+      {/* fix3 后端新 warnings（如「角色已按 codex-dev 执行」）→ 小字列出，不挡主路径。 */}
+      {warnings.length > 0 ? (
+        <ul className="jiaoban-warnings muted small-note" aria-label="附带说明">
+          {warnings.map((w, i) => (
+            <li key={i}>{w}</li>
+          ))}
+        </ul>
+      ) : null}
+
       <p className="muted small-note">卡了总给下一步，不会停在死路。</p>
     </div>
   );
@@ -878,13 +1118,26 @@ function JiaobanBlockedState({
 // 授权生效 + 绑现有会话 + 自动推进；返回同形 outcome，组件按 stage 分支不变。人闸不省。
 // ============================================================
 
-// 合流命令的报错翻人话。最要紧的一类：对「已确认/旧方案」后端会拒（方案不是待用户确认状态）——
-// 那不是系统坏了，是这份方案已经用过/过期，引导用户重新说目标出一版新的。
+// 判是不是合流命令对「已确认」方案的那一类干净拒（方案不是待用户确认状态）。
+// 命中 → 授权本还活着、不用重批，卡住脸该给[接着跑,不用重批]（而非引导重新出方案）。
+function isAlreadyConfirmedRejection(e: unknown): boolean {
+  const raw = e instanceof Error ? e.message : String(e);
+  return (
+    raw.includes("待用户确认") ||
+    raw.includes("PendingUserConfirmation") ||
+    raw.includes("不是「待") ||
+    raw.includes("方案不是待")
+  );
+}
+
+// 合流命令的报错翻人话。最要紧的一类：对「已确认」方案后端会拒（方案不是待用户确认状态）——
+// 那不是系统坏了，是这份方案已经批过、授权还活着，引导用户点[接着跑,不用重批]而非重批。
 function humanizeAuthorizeError(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
   // 后端拒词：ProjectConsultationProposalStatus 不是 PendingUserConfirmation 时的那句。
-  if (raw.includes("待用户确认") || raw.includes("PendingUserConfirmation") || raw.includes("不是「待")) {
-    return "这份方案已经用过或已过期（不再是待确认状态），没法再从它开始。点「重新出方案」，说一遍目标出一版新的。";
+  // 这份已批过 → 不裸抛原始错误，翻成「已经批过了，点下面接着跑」。
+  if (isAlreadyConfirmedRejection(e)) {
+    return "这份方案已经批过了——不用重批，点下面「接着跑」，会从拆任务接着往下推进。";
   }
   if (raw.includes("找不到方案")) {
     return "找不到这份方案了（可能已被新方案取代）。点「重新出方案」重新说一遍目标。";
@@ -904,9 +1157,11 @@ function extractTargetFiles(proposedSteps: string[]): string | null {
   return files || null;
 }
 
-// 链状态 → 「正在…第 x/y 步」。拿不到就给个中性进行时。
+// 链状态 → 「正在…第 x/y 步」。链事件还没出现的阶段（拿不到节点）= 主管还在拆任务，据实说清可能很久。
 function humanizeChainProgress(chainStatus: ProjectWorkflowChainStatus | null): string {
-  if (!chainStatus || chainStatus.nodes.length === 0) return "AI 正在动手…";
+  if (!chainStatus || chainStatus.nodes.length === 0) {
+    return "主管正在拆任务…（最长可能十几分钟，偶尔自动重试）";
+  }
   const total = chainStatus.nodes.length;
   const done = countDoneNodes(chainStatus);
   const current = Math.min(done + 1, total);
