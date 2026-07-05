@@ -1053,9 +1053,18 @@ fn find_index_thread_or_sqlite(index: &Value, thread_id: &str) -> Option<Session
     if let Some(session) = find_index_thread(index, thread_id) {
         return Some(session);
     }
-    let rows = codex_db::read_threads(&codex_db::default_state_db_path()).ok()?;
-    rows.into_iter()
-        .find(|row| row.thread_id == thread_id)
+    let db_path = codex_db::default_state_db_path();
+    let rows = codex_db::read_threads(&db_path).ok()?;
+    if let Some(row) = rows.into_iter().find(|row| row.thread_id == thread_id) {
+        return Some(session_record_from_codex_thread(row));
+    }
+    // 方案a 真跑逮到（2026-07-05）：`codex exec` 产的会话 has_user_event=0，被 read_threads 的
+    // **列表显示过滤**（has_user_event=1/非 subagent）滤掉 → 按 id 也永远找不到（交办新会话
+    // 出生后绑定被拒的根因）。这里最后按主键精确查一次（存在性语义，不是列表语义）。
+    // 找到 ≠ 能执行：执行闸（S1/path-lock/沙箱）全在下游、一字未动。
+    codex_db::find_thread_by_id(&db_path, thread_id)
+        .ok()
+        .flatten()
         .map(session_record_from_codex_thread)
 }
 
@@ -5071,6 +5080,50 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         }
     }
 
+    // ===== 方案a·新会话出生口 stubs（合流 session_choice=new 单测用·不碰真 relay）=====
+    // 成功桩：记录收到的初始化文案、返回固定 thread_id。
+    struct StubJiaobanSessionCreator {
+        thread_id: &'static str,
+        received_texts: std::cell::RefCell<Vec<String>>,
+    }
+    impl JiaobanNewSessionCreator for StubJiaobanSessionCreator {
+        fn create_initialized_session(
+            &self,
+            initialization_text: &str,
+            _requested_by: &str,
+        ) -> Result<String, String> {
+            self.received_texts
+                .borrow_mut()
+                .push(initialization_text.to_string());
+            Ok(self.thread_id.to_string())
+        }
+    }
+    // 失败桩：模拟 relay 建会话失败（人话原因）。
+    struct FailingJiaobanSessionCreator {
+        called: std::cell::RefCell<bool>,
+    }
+    impl JiaobanNewSessionCreator for FailingJiaobanSessionCreator {
+        fn create_initialized_session(
+            &self,
+            _initialization_text: &str,
+            _requested_by: &str,
+        ) -> Result<String, String> {
+            *self.called.borrow_mut() = true;
+            Err("codex 起不来（stub）".to_string())
+        }
+    }
+    // 炸桩：existing 分支/被拒路径**绝不该**碰新会话出生口——碰到即 panic（回归护栏）。
+    struct PanicJiaobanSessionCreator;
+    impl JiaobanNewSessionCreator for PanicJiaobanSessionCreator {
+        fn create_initialized_session(
+            &self,
+            _initialization_text: &str,
+            _requested_by: &str,
+        ) -> Result<String, String> {
+            panic!("此路径不该触发新会话出生口（existing/被拒路径必须与 relay 无关）");
+        }
+    }
+
     #[test]
     fn s3_director_stub_plans_valid_tasks_feed_prepare() {
         let (proposal, dir) = s3_director_fixture_proposal("s3-director-stub");
@@ -6952,6 +7005,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &index_path,
             &runner,
             &StubDirector,
+            // 回归护栏：existing 分支绝不碰新会话出生口（碰到即 panic）。
+            &PanicJiaobanSessionCreator,
             &request,
         )
         .expect("合流应一气跑完");
@@ -6969,7 +7024,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
-    // 2.2 人闸 + 2.3-new 未接：非 Pending 方案 → 拒；session_choice=new → 清错。
+    // 2.2 人闸：非 Pending 方案 → 拒；未知 session_choice → 清错。（原「new 清错拒」断言已被方案a 取代——
+    // new 现在真接了，见 confirm_and_start_new_session_* 三测。）
     #[test]
     fn confirm_and_start_rejects_non_pending_and_new_session() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
@@ -7007,12 +7063,13 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 &index_path,
                 &runner,
                 &StubDirector,
+                &PanicJiaobanSessionCreator,
                 &non_pending,
             )
             .is_err(),
             "非 Pending 方案·人闸应拒（本命令只表达用户刚点允许）"
         );
-        // session_choice=new → 清错（本刀未接·非静默）。需一个 Pending 方案触到 session 分流前。
+        // 未知 session_choice → 清错（非静默）。需一个 Pending 方案触到 session 分流前。
         let proposal2 = consult_proposal_fixture(Some(ConsultationExecutionScope {
             target_files: vec!["a.rs".to_string()],
             ..Default::default()
@@ -7025,9 +7082,161 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "write-guard-proposal2",
         )
         .expect("proposal2");
-        let new_choice = ConfirmAndStartAuthorizedRunRequest {
+        let weird_choice = ConfirmAndStartAuthorizedRunRequest {
             project_root: test_root.to_string(),
             proposal_id: created2.proposal.proposal_id.clone(),
+            session_choice: "both".to_string(),
+            session_id: None,
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+            approved_planned_tasks: None,
+        };
+        let err = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            &PanicJiaobanSessionCreator,
+            &weird_choice,
+        )
+        .expect_err("未知 session_choice 应拒");
+        assert!(
+            err.contains("未知 session_choice"),
+            "错误应点名未知选项：{err}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 方案a·先生后绑①（stub 出生口）：session_choice=new → 建会话 → existing 同款绑定 → 链照旧推进全通；
+    // outcome 带「已为这单活新建会话」人话说明；初始化文案人话点名方案（出生口收到的就是这份）。
+    #[test]
+    fn confirm_and_start_new_session_births_binds_and_advances() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let new_thread = "thread-plan-a-birth";
+        let dir = test_temp_dir("confirm-and-start-new");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        // 索引里备着 stub 会话（真路径里新会话靠实时 sqlite 回退；单测用索引命中即可）。
+        let index = fixture_dispatch_index(test_root, new_thread);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            write_roots: vec![],
+            target_files: vec!["a.rs".to_string()],
+            tools: vec![],
+            checks: vec!["cargo test".to_string()],
+        }));
+        let c1_input =
+            map_consultation_to_c1_input(&proposal, test_root, "consultant").expect("map");
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &c1_input,
+            1_765_300_000_000,
+            "write-plan-a-proposal",
+        )
+        .expect("proposal");
+        let creator = StubJiaobanSessionCreator {
+            thread_id: new_thread,
+            received_texts: std::cell::RefCell::new(vec![]),
+        };
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let request = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: created.proposal.proposal_id.clone(),
+            session_choice: "new".to_string(),
+            session_id: None,
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+            approved_planned_tasks: None,
+        };
+        let outcome = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            &creator,
+            &request,
+        )
+        .expect("new 分支应一气跑完（建→绑→推进）");
+        assert_eq!(outcome.stage, "ran", "建→绑→链应全通：{outcome:?}");
+        assert!(
+            outcome
+                .chain_outcome
+                .as_ref()
+                .map(|chain| chain.completed >= 1)
+                .unwrap_or(false),
+            "worker 链应跑出结果"
+        );
+        assert!(
+            outcome
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("新建会话") && warning.contains(new_thread)),
+            "outcome 应带新建会话人话说明（含 thread）：{:?}",
+            outcome.warnings
+        );
+        let texts = creator.received_texts.borrow();
+        assert_eq!(texts.len(), 1, "出生口应恰好被调一次");
+        assert!(
+            texts[0].contains("交办新会话初始化") && texts[0].contains(&created.proposal.title),
+            "初始化文案应人话点名方案：{}",
+            texts[0]
+        );
+        // 绑定实物：existing 同款绑定机器把新 thread 写进 workflow_node_session_bindings。
+        let state = read_json_file(&path);
+        let bound = state["workflow_node_session_bindings"]
+            .as_array()
+            .and_then(|bindings| {
+                bindings
+                    .iter()
+                    .find_map(|binding| optional_string_from(binding, "native_thread_id"))
+            })
+            .expect("应有节点会话绑定");
+        assert_eq!(bound, new_thread, "绑的就是出生口回执的 thread");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 方案a·先生后绑②：出生口失败 → 人话错「新会话没建起来」+ fix3 stopped 留档；**不静默回落 existing**
+    //（返回 Err 本身即证没回落——回落只能以 Ok 收场；且确实走的是出生口）。
+    #[test]
+    fn confirm_and_start_new_session_failure_audits_no_fallback() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("confirm-and-start-new-fail");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, "thread-unused");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            target_files: vec!["a.rs".to_string()],
+            ..Default::default()
+        }));
+        let c1_input =
+            map_consultation_to_c1_input(&proposal, test_root, "consultant").expect("map");
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &c1_input,
+            1_765_300_000_000,
+            "write-plan-a-fail-proposal",
+        )
+        .expect("proposal");
+        let creator = FailingJiaobanSessionCreator {
+            called: std::cell::RefCell::new(false),
+        };
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 0,
+                transcript_target_hits: 0,
+            },
+        };
+        let request = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: created.proposal.proposal_id.clone(),
             session_choice: "new".to_string(),
             session_id: None,
             actor_id: Some("user-fixture".to_string()),
@@ -7040,10 +7249,220 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &index_path,
             &runner,
             &StubDirector,
-            &new_choice,
+            &creator,
+            &request,
         )
-        .expect_err("new 未接应拒");
-        assert!(err.contains("新建会话"), "错误应点名新建会话未接：{err}");
+        .expect_err("出生失败应停（Err），不静默回落 existing");
+        assert!(
+            err.contains("新会话没建起来") && err.contains("codex 起不来"),
+            "人话错应点名建会话失败与原因：{err}"
+        );
+        assert!(
+            *creator.called.borrow(),
+            "确实走的是出生口（不是悄悄改走别的路）"
+        );
+        // fix3 留档：确认后失败必写 stopped 审计（人话停因进 reason）。
+        assert!(
+            audit_has(&path, "role_loop_auto_advance_stopped"),
+            "确认后失败应留 stopped 审计"
+        );
+        let state_text = fs::read_to_string(&path).expect("state");
+        assert!(
+            state_text.contains("新会话没建起来"),
+            "审计 reason 应带人话停因"
+        );
+        // 没绑任何会话（出生失败连 thread 都没有 → 绑定数组不存在或为空）。
+        let state = read_json_file(&path);
+        let binding_count = state["workflow_node_session_bindings"]
+            .as_array()
+            .map(|bindings| bindings.len())
+            .unwrap_or(0);
+        assert_eq!(binding_count, 0, "失败路径不该绑任何会话");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 方案a·先生后绑③：非测试项目 root → path-lock 在建会话之前就拒（出生口一次没被碰=Panic 桩没炸）。
+    #[test]
+    fn confirm_and_start_new_session_rejected_outside_test_project() {
+        let dir = test_temp_dir("confirm-and-start-new-lock");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_dispatch_index("/Users/yoyi/some-real-project", "thread-x");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 0,
+                transcript_target_hits: 0,
+            },
+        };
+        let request = ConfirmAndStartAuthorizedRunRequest {
+            project_root: "/Users/yoyi/some-real-project".to_string(),
+            proposal_id: "proposal-x".to_string(),
+            session_choice: "new".to_string(),
+            session_id: None,
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+            approved_planned_tasks: None,
+        };
+        let err = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &path,
+            &runner,
+            &StubDirector,
+            &PanicJiaobanSessionCreator,
+            &request,
+        )
+        .expect_err("非测试 root 应拒（path-lock 在最前）");
+        assert!(
+            err.contains("legacy_product_command_blocked"),
+            "应是 path-lock 拒：{err}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 方案a·§4 真跑（单独步·#[ignore]·固定测试项目·用户点击直接效果语义）：session_choice=new 一路到 proof——
+    // 真经现成 relay 单次路径建会话（初始化消息真跑 codex）→ 回执取 thread_id → existing 同款绑定 →
+    // 链 resume 的就是它（所批即所跑单任务·真 worker 建 proof）。核实物：绑定记录=真新 thread、该 thread 在
+    // codex 侧真存在（实时 sqlite 查得到·不在本测试静态索引里）、proof 含本次 token、`.codex` 凭据没碰（auth mtime）。
+    // 显式 `cargo test --lib confirm_and_start_new_session_real_run -- --ignored --nocapture`。
+    // flake：真 codex 偶发早退 → retry（记忆 real-codex-run-flaky·核实物）。
+    #[test]
+    #[ignore = "方案a: session_choice=new births a real codex session via manual_relay once-path, binds it, chain resumes it to proof (user present, test project)"]
+    fn confirm_and_start_new_session_real_run() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let proof_token = unix_timestamp_string();
+        let proof = format!("{test_root}/jiaoban-plan-a-proof.txt");
+        let _ = fs::remove_file(&proof);
+        // `.codex` 凭据死线：记录 auth.json mtime，跑完必须没变。
+        let auth_path = std::path::PathBuf::from(std::env::var("HOME").expect("HOME"))
+            .join(".codex")
+            .join("auth.json");
+        let auth_mtime_before = fs::metadata(&auth_path)
+            .and_then(|meta| meta.modified())
+            .expect("auth.json mtime before");
+        let dir = test_temp_dir("plan-a-new-real");
+        let path = dir.join("workflow-state.v0.json");
+        // 静态索引只带占位 thread——真新会话必须靠「实时 sqlite 回退」被绑定/被找到（bind 路A）。
+        let index = fixture_dispatch_index(test_root, "thread-placeholder-not-used");
+        let readback_db_path = codex_db::default_state_db_path();
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let mut cproposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            target_files: vec!["jiaoban-plan-a-proof.txt".to_string()],
+            ..Default::default()
+        }));
+        cproposal.user_goal =
+            format!("在项目根建 jiaoban-plan-a-proof.txt，写一行：plan-a ok {proof_token}");
+        cproposal.goal_summary = format!(
+            "在当前项目根目录创建文件 jiaoban-plan-a-proof.txt，只写入一行：plan-a ok {proof_token}"
+        );
+        cproposal.next_steps = vec![format!(
+            "创建 jiaoban-plan-a-proof.txt，写入一行内容：plan-a ok {proof_token}"
+        )];
+        let c1_input =
+            map_consultation_to_c1_input(&cproposal, test_root, "consultant").expect("map");
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &c1_input,
+            1_765_300_000_000,
+            "write-plan-a-real-proposal",
+        )
+        .expect("proposal");
+        // 所批即所跑单任务（自包含 objective）——跳过真 LM 拆，聚焦本包新链路：出生→绑→resume。
+        let scope = director_task_scope_from_proposal(&created.proposal, "codex-dev");
+        let task = ProjectDirectorPlannedTask {
+            planned_task_id: format!("planned-task:{}:1", created.proposal.workflow_id),
+            title: "建 proof".to_string(),
+            objective: format!(
+                "在当前项目根目录创建文件 jiaoban-plan-a-proof.txt，只写入一行：plan-a ok {proof_token}。不改其它任何文件。"
+            ),
+            scope,
+            depends_on: vec![],
+            acceptance_criteria: vec![format!("jiaoban-plan-a-proof.txt 存在且含 {proof_token}")],
+            report_format: vec!["做了什么".to_string()],
+            status: "planned".to_string(),
+            guard_result: None,
+            work_item_id: None,
+            workflow_node_id: None,
+            task_package_id: None,
+            memory_packet_snapshot_id: None,
+            prepared_dispatch_id: None,
+            blocked_reasons: vec![],
+        };
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let request = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: created.proposal.proposal_id.clone(),
+            session_choice: "new".to_string(),
+            session_id: None,
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+            approved_planned_tasks: Some(vec![task]),
+        };
+        let outcome = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &CliDirectorAgent::default(),
+            &ManualRelayJiaobanNewSessionCreator,
+            &request,
+        )
+        .expect("方案a 真跑应一气跑完（真建会话→绑→真 worker 链）");
+        println!(
+            "[PLAN_A] stage={} completed={:?} warnings={:?}",
+            outcome.stage,
+            outcome.chain_outcome.as_ref().map(|chain| chain.completed),
+            outcome.warnings
+        );
+        assert_eq!(outcome.stage, "ran", "建→绑→链应全通：{outcome:?}");
+        assert!(
+            outcome
+                .chain_outcome
+                .as_ref()
+                .map(|chain| chain.completed >= 1)
+                .unwrap_or(false),
+            "worker 应真跑完成"
+        );
+        // 绑定实物：state 里 codex-dev 节点绑的 thread（= 出生回执 thread，人话说明里也带同一个）。
+        let state = read_json_file(&path);
+        let bound_thread = state["workflow_node_session_bindings"]
+            .as_array()
+            .and_then(|bindings| {
+                bindings
+                    .iter()
+                    .find_map(|binding| optional_string_from(binding, "native_thread_id"))
+            })
+            .expect("应有节点会话绑定");
+        assert_ne!(
+            bound_thread, "thread-placeholder-not-used",
+            "绑的必须是真新会话，不是静态索引占位"
+        );
+        assert!(
+            outcome
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("新建会话") && warning.contains(&bound_thread)),
+            "人话说明里的 thread 应与绑定一致：{:?}",
+            outcome.warnings
+        );
+        // 会话实物：真新 thread 在 codex 侧存在（静态索引没有它 → 只能是实时 sqlite 查到 = 真建出来的）。
+        let session = find_index_thread_or_sqlite(&index, &bound_thread)
+            .expect("新会话应真存在于 codex 侧（实时 sqlite）");
+        println!(
+            "[PLAN_A] birth thread={bound_thread} rollout_exists={}",
+            session.rollout_exists
+        );
+        // proof 实物：worker 链 resume 的就是这条新会话、真跑出 proof。
+        let proof_text = fs::read_to_string(&proof)
+            .unwrap_or_else(|error| panic!("worker 应真建 proof {proof}：{error}"));
+        assert!(
+            proof_text.contains(&proof_token),
+            "proof 应含本次 token {proof_token}，实际：{proof_text}"
+        );
+        // `.codex` 凭据死线：auth.json 没被碰。
+        let auth_mtime_after = fs::metadata(&auth_path)
+            .and_then(|meta| meta.modified())
+            .expect("auth.json mtime after");
+        assert_eq!(auth_mtime_before, auth_mtime_after, ".codex 凭据不许被碰");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -7228,6 +7647,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &readback_db_path,
             &runner,
             &director,
+            &ManualRelayJiaobanNewSessionCreator,
             &request,
         )
         .expect("合流一个命令应一气跑完");
@@ -7857,6 +8277,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &readback_db_path,
             &runner,
             &director,
+            &ManualRelayJiaobanNewSessionCreator,
             &request,
         )
         .expect("合流带图应一气跑完");
@@ -8171,6 +8592,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &readback_db_path,
             &runner,
             &BombDirector,
+            &PanicJiaobanSessionCreator,
             &request,
         );
         assert!(result.is_err(), "非 Pending 方案应拒");

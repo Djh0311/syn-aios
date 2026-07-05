@@ -110,6 +110,57 @@ pub fn read_threads(db_path: &Path) -> Result<Vec<CodexThreadRow>, String> {
     }
 }
 
+/// 按主键精确查一条 thread（**存在性语义**）。与 read_threads_page 的**列表显示过滤**
+/// （has_user_event=1、过滤 subagent、归档开关）刻意不同：`codex exec` 产的会话
+/// has_user_event=0，在会话列表里合理隐藏，但「按 id 校验这条会话是否真实存在」时必须
+/// 找得到——2026-07-05 方案a 真跑逮到：交办新会话（relay new_session=codex exec）出生后
+/// 绑定被「会话不在当前索引内」拒，根因就是存在性校验借用了列表查询。只读、不动列表查询本体。
+pub fn find_thread_by_id(
+    db_path: &Path,
+    thread_id: &str,
+) -> Result<Option<CodexThreadRow>, String> {
+    if !db_path.exists() {
+        return Err(format!("找不到 codex 状态库：{}", db_path.display()));
+    }
+    let conn = Connection::open_with_flags(
+        db_path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
+    )
+    .map_err(|e| format!("打开 sqlite 失败 {}：{e}", db_path.display()))?;
+    let sql = r#"
+        SELECT
+            id,
+            COALESCE(NULLIF(title, ''), '未命名会话') AS title,
+            cwd,
+            updated_at_ms,
+            archived,
+            rollout_path,
+            model,
+            reasoning_effort,
+            thread_source
+        FROM threads
+        WHERE id = ?1
+        LIMIT 1
+    "#;
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("准备查询失败：{e}"))?;
+    let mut rows = stmt
+        .query_map(rusqlite::params![thread_id], decode_thread_row)
+        .map_err(|e| format!("执行查询失败：{e}"))?;
+    match rows.next() {
+        None => Ok(None),
+        Some(row) => {
+            let mut thread = row.map_err(|e| format!("行解码失败：{e}"))?;
+            let display_titles = read_session_index_titles(db_path);
+            if let Some(title) = display_titles.get(&thread.thread_id) {
+                thread.title = truncate_display_title(title);
+            }
+            Ok(Some(thread))
+        }
+    }
+}
+
 /// Read one page of non-archived threads by default.
 /// This keeps session shell loading bounded while preserving the older read_threads() helper.
 pub fn read_threads_page(
@@ -430,6 +481,33 @@ mod tests {
 
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].title, "第一句话标题");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 方案a 根因回归（2026-07-05）：`codex exec` 产的会话 has_user_event=0 → 列表查询
+    // （read_threads·显示过滤）合理看不见；但按 id 精确查（find_thread_by_id·存在性语义）必须找得到。
+    #[test]
+    fn find_thread_by_id_sees_exec_thread_hidden_from_list() {
+        let dir = temp_dir("codex-find-by-id");
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let db_path = dir.join("state_5.sqlite");
+        create_threads_db(&db_path);
+        insert_thread(&db_path, "thread-exec", "exec 会话", 5_000, 0, 0);
+        let listed = read_threads(&db_path).expect("read threads");
+        assert!(
+            listed.iter().all(|row| row.thread_id != "thread-exec"),
+            "列表查询应看不见 has_user_event=0 的 exec 会话（显示过滤原样）"
+        );
+        let found = find_thread_by_id(&db_path, "thread-exec")
+            .expect("query ok")
+            .expect("按 id 应找到 exec 会话");
+        assert_eq!(found.thread_id, "thread-exec");
+        assert!(
+            find_thread_by_id(&db_path, "thread-none")
+                .expect("query ok")
+                .is_none(),
+            "不存在的 id 返回 None"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

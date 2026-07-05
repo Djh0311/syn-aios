@@ -1471,12 +1471,108 @@ async fn auto_advance_authorized_role_loop(
 // ===== 交办地基 2.2·合流命令：用户点[允许并开始] → 一口气 确认方案→边界复核→授权生效→(绑会话)→自动推进 =====
 // **人闸不省**：本命令 = 用户刚点[允许]的直接效果——step1 校验方案 = PendingUserConfirmation、本次调用记录用户确认；
 // **无任何免用户路径**（不给定时器/链/别的命令调用口）。步骤全复用现成状态机（record_decision / boundary review /
-// auto_advance 内层），不旁路。session_choice=new（自动新建会话）本刀未接——主管链 resume-only（P3 C 决策）·见回交。
+// auto_advance 内层），不旁路。session_choice=new = 方案a「先生后绑」（2026-07-05 决策
+// decisions/2026-07-05-jiaoban-new-session-birth-before-bind-v1.md）：先经现成 manual_relay GUI 直发
+// new_session 单次路径在固定测试项目真建一条会话（初始化消息）→ 回执取 thread_id → 走 existing 同款绑定；
+// 链照旧 resume（execute 的 resume-only 不反转·commands/runner/relay 本体只调不改）。
+
+// 方案a·新会话出生口（可注入·单测 stub）：成功返回新会话 thread_id；失败返回人话原因。
+// 失败由调用方走 fix3 留档（stopped 审计），**不静默回落 existing**。
+pub(crate) trait JiaobanNewSessionCreator {
+    fn create_initialized_session(
+        &self,
+        initialization_text: &str,
+        requested_by: &str,
+    ) -> Result<String, String>;
+}
+
+// 初始化等待预算：与 worker 单任务预算（600s）同级封顶；正常初始化 ~15-60s（决策已认）。
+const JIAOBAN_NEW_SESSION_TIMEOUT_MS: u128 = 600_000;
+const JIAOBAN_NEW_SESSION_POLL_INTERVAL_MS: u64 = 1_000;
+// 出生→可绑的兜底等待预算：主因（exec 会话被列表显示过滤挡住）已在 find_thread_by_id 修掉；
+// 这里只兜「codex 进程退出后 thread 行落它自家 sqlite 晚一拍」的窗口——成功即 break、零成本。
+const JIAOBAN_NEW_SESSION_BIND_VISIBILITY_BUDGET_MS: u128 = 30_000;
+
+// 真实现：调 relay 现成单次路径（spawn 返回 running 回执）→ 轮询到终态 → 回执取 thread_id。
+// relay 内部闸原样生效（guard 拒/查重拒 → 人话转述，不绕不伪造）；cwd **写死固定测试项目**（不可参数化）。
+pub(crate) struct ManualRelayJiaobanNewSessionCreator;
+
+impl JiaobanNewSessionCreator for ManualRelayJiaobanNewSessionCreator {
+    fn create_initialized_session(
+        &self,
+        initialization_text: &str,
+        requested_by: &str,
+    ) -> Result<String, String> {
+        let input = manual_relay::ManualRelayGuiDirectNewSessionInput {
+            original_user_text: initialization_text.to_string(),
+            target_project_root: WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string(),
+            target_cwd: WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string(),
+            sandbox: "workspace-write".to_string(),
+            allowed_write_roots: vec![WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string()],
+            requested_by: requested_by.to_string(),
+        };
+        let mut receipt = manual_relay::run_manual_relay_gui_direct_new_session_once(
+            input,
+            &unix_timestamp_string(),
+        )
+        .map_err(|error| format!("relay 拒了/起不来（{error}）"))?;
+        let relay_attempt_id = receipt.relay_attempt_id.clone();
+        let started = std::time::Instant::now();
+        while receipt.status == "running" {
+            if started.elapsed().as_millis() >= JIAOBAN_NEW_SESSION_TIMEOUT_MS {
+                let stop_note = match manual_relay::stop_manual_relay_attempt(
+                    manual_relay::ManualRelayStopInput {
+                        relay_attempt_id: relay_attempt_id.clone(),
+                        requested_by: requested_by.to_string(),
+                    },
+                    &unix_timestamp_string(),
+                ) {
+                    Ok(_) => "初始化进程已停掉",
+                    Err(_) => "且停进程失败（可能残留，可到中转页手动停）",
+                };
+                return Err(format!(
+                    "初始化超时（超过 {} 秒还没跑完），{stop_note}",
+                    JIAOBAN_NEW_SESSION_TIMEOUT_MS / 1000
+                ));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(
+                JIAOBAN_NEW_SESSION_POLL_INTERVAL_MS,
+            ));
+            receipt = manual_relay::poll_manual_relay_attempt(
+                manual_relay::ManualRelayPollInput {
+                    relay_attempt_id: relay_attempt_id.clone(),
+                    requested_by: requested_by.to_string(),
+                },
+                &unix_timestamp_string(),
+            )
+            .map_err(|error| format!("初始化进程查不到状态了（{error}）"))?;
+        }
+        if receipt.status != "completed_real_codex" {
+            let stderr_note = receipt
+                .thread_event_summary
+                .stderr_summary
+                .as_deref()
+                .map(|s| format!("；stderr：{s}"))
+                .unwrap_or_default();
+            return Err(format!(
+                "初始化没跑完（状态 {}，exit {:?}）{stderr_note}",
+                receipt.status, receipt.exit_code
+            ));
+        }
+        receipt
+            .thread_event_summary
+            .thread_id
+            .clone()
+            .filter(|thread_id| !thread_id.trim().is_empty())
+            .ok_or_else(|| "初始化跑完了但回执里没有 thread_id（拿不到新会话号）".to_string())
+    }
+}
+
 #[derive(serde::Deserialize)]
 pub(crate) struct ConfirmAndStartAuthorizedRunRequest {
     pub(crate) project_root: String,
     pub(crate) proposal_id: String,
-    pub(crate) session_choice: String, // "existing" | "new"（new 本刀未接）
+    pub(crate) session_choice: String, // "existing" | "new"（new=方案a 先生后绑）
     #[serde(default)]
     pub(crate) session_id: Option<String>, // session_choice=existing 时的现有 Codex 会话 thread_id
     #[serde(default)]
@@ -1488,13 +1584,14 @@ pub(crate) struct ConfirmAndStartAuthorizedRunRequest {
     pub(crate) approved_planned_tasks: Option<Vec<ProjectDirectorPlannedTask>>,
 }
 
-// 内层（同步·spawn_blocking 里调；可单测·stub 咨询/主管/链）。
+// 内层（同步·spawn_blocking 里调；可单测·stub 咨询/主管/链/新会话出生口）。
 fn run_confirm_and_start_authorized_run_inner(
     path: &std::path::Path,
     index: &Value,
     readback_db_path: &std::path::Path,
     runner: &dyn CodexResumeRunner,
     director: &dyn DirectorAgent,
+    session_creator: &dyn JiaobanNewSessionCreator,
     request: &ConfirmAndStartAuthorizedRunRequest,
 ) -> Result<AutoAdvanceRoleLoopOutcome, String> {
     // 死线·圈固定测试项目（与 auto_advance 同款·非测试 root 提前拒）。
@@ -1536,9 +1633,11 @@ fn run_confirm_and_start_authorized_run_inner(
         &format!("confirm-and-start-auth:{}", unix_timestamp_nanos()),
         &format!("confirm-and-start-auth-user:{}", unix_timestamp_nanos()),
     )?;
-    // fix3 2.2：record_decision（确认）**成功之后**的任何失败（授权提取/边界复核/绑会话）→ 先 append stopped
-    // 审计（人话）再返回 Err（治「今晚审计只有 started、之后空白」）。step5 auto_advance 由它自己留档、不含在此
-    // （避免双记）；record_decision 本身失败=确认闸没过、按包不记（在此之前）。只 append、不改状态、不吞错。
+    // fix3 2.2：record_decision（确认）**成功之后**的任何失败（授权提取/边界复核/建会话/绑会话）→ 先 append
+    // stopped 审计（人话）再返回 Err（治「今晚审计只有 started、之后空白」）。step5 auto_advance 由它自己留档、
+    // 不含在此（避免双记）；record_decision 本身失败=确认闸没过、按包不记（在此之前）。只 append、不改状态、不吞错。
+    // 方案a：new 分支建成会话后产一句人话说明（让等待有名目），随 outcome.warnings 带出。
+    let mut new_session_notice: Option<String> = None;
     let post_confirm: Result<(), String> = (|| {
         let authorization = confirmed
             .plan_authorization
@@ -1575,7 +1674,9 @@ fn run_confirm_and_start_authorized_run_inner(
             timestamp_ms + 1,
             &format!("confirm-and-start-boundary:{}", unix_timestamp_nanos()),
         )?;
-        // 4. 绑会话（2.3）：existing → 绑传入的现有 Codex 会话（绑失败即停·停因人话·不静默）；new → 本刀未接（清错）。
+        // 4. 绑会话（2.3）：existing → 绑传入的现有 Codex 会话（绑失败即停·停因人话·不静默）；
+        //    new → 方案a「先生后绑」：先经现成 relay 单次路径真建一条会话（固定测试项目·初始化消息）→
+        //    回执取 thread_id → 走 existing **同一套绑定**；失败即停（外层留档），不静默回落 existing。
         match request.session_choice.as_str() {
             "existing" => {
                 let session_id = request.session_id.as_deref().ok_or_else(|| {
@@ -1595,14 +1696,50 @@ fn run_confirm_and_start_authorized_run_inner(
                 .map_err(|error| format!("绑定现有会话失败（会话没找到/不可用）：{error}"))?;
             }
             "new" => {
-                return Err(
-                "自动新建会话本刀未接（主管链 resume-only·P3 C 决策）；请选一条现有 Codex 会话（session_choice=existing + session_id）。"
-                    .to_string(),
-            );
+                let initialization_text = format!(
+                    "交办新会话初始化：这条会话专用于承接方案「{}」的 worker 任务（工作流 {workflow_id}）。现在先不要改动任何文件，回复「已就位」即可；具体任务稍后会逐条发来。",
+                    confirmed.proposal.title
+                );
+                let thread_id = session_creator
+                    .create_initialized_session(&initialization_text, &actor_id)
+                    .map_err(|error| format!("新会话没建起来：{error}"))?;
+                let node_id = format!("{workflow_id}:node:codex-dev");
+                let bind_request = WorkflowNodeSessionBindRequest {
+                    project_root: request.project_root.clone(),
+                    node_id,
+                    work_item_id: None,
+                    thread_id: thread_id.clone(),
+                };
+                // 同一套绑定机器（existing 同款）；只多一层「等 codex 落库可见」的重试——
+                // 仅对「会话不在当前索引内」这一类可见性时差重试，其余错误原样即停。
+                let bind_started = std::time::Instant::now();
+                loop {
+                    match bind_workflow_node_codex_session_for_index_at(path, index, &bind_request)
+                    {
+                        Ok(_) => break,
+                        Err(error)
+                            if error.contains("会话不在当前索引内")
+                                && bind_started.elapsed().as_millis()
+                                    < JIAOBAN_NEW_SESSION_BIND_VISIBILITY_BUDGET_MS =>
+                        {
+                            std::thread::sleep(std::time::Duration::from_millis(
+                                JIAOBAN_NEW_SESSION_POLL_INTERVAL_MS,
+                            ));
+                        }
+                        Err(error) => {
+                            return Err(format!(
+                                "新会话已建（thread {thread_id}）但绑定失败：{error}"
+                            ));
+                        }
+                    }
+                }
+                new_session_notice = Some(format!(
+                    "已为这单活新建会话（初始化 ~1 分钟·thread {thread_id}）。"
+                ));
             }
             other => {
                 return Err(format!(
-                    "未知 session_choice：{other}（本刀只支持 existing）"
+                    "未知 session_choice：{other}（只支持 existing | new）"
                 ));
             }
         }
@@ -1620,7 +1757,7 @@ fn run_confirm_and_start_authorized_run_inner(
     post_confirm?;
     // 5. 自动推进（现成 auto_advance 内层·resolve active 授权 →〔2.2 有已批图则跳过 LM 原样跑〕→ prepare →
     //    起链前复查授权 → 链）。approved_planned_tasks=Some 时所批即所跑（预拆给用户看的那份=真跑的那份）。
-    run_auto_advance_authorized_role_loop(
+    let mut outcome = run_auto_advance_authorized_role_loop(
         path,
         index,
         readback_db_path,
@@ -1631,7 +1768,11 @@ fn run_confirm_and_start_authorized_run_inner(
         &actor_id,
         request.max_nodes.unwrap_or(50),
         request.approved_planned_tasks.as_deref(),
-    )
+    )?;
+    if let Some(notice) = new_session_notice {
+        outcome.warnings.push(notice);
+    }
+    Ok(outcome)
 }
 
 #[tauri::command]
@@ -1652,6 +1793,7 @@ async fn confirm_and_start_authorized_run(
             &readback_db_path,
             &runner,
             &director,
+            &ManualRelayJiaobanNewSessionCreator,
             &request,
         )
     })
