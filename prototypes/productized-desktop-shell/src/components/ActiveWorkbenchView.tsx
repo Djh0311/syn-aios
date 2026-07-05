@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { SourceStylePlaceholder } from "./SourceStylePlaceholder";
 import {
   inspectAutoDispatchAuthorization,
@@ -332,34 +334,37 @@ export function renderActiveWorkbenchView({
       .slice(0, 6)
       .map((operation) => `${operation.label} · ${operation.adapter_id}`);
     return (
-      <SourceStylePlaceholder
-        title="工具"
-        kicker="工具入口"
-        hasRealSnapshot={hasRealSnapshot}
-        items={harnessItems}
-        summary="展示运行器资源和适配器动作索引；这里不提供直接运行按钮，避免工具入口绕过项目授权。"
-        primaryStat={`${harnessItems.length} 个资源`}
-        secondaryStat="执行后置"
-        sections={[
-          {
-            title: "运行器资源",
-            eyebrow: "来自项目资源索引",
-            items: harnessItems,
-            emptyText: "当前索引没有提供运行器资源。",
-          },
-          {
-            title: "适配器动作",
-            eyebrow: "来自 session operations",
-            items: adapterActionItems,
-            emptyText: "当前没有可展示的适配器动作索引。",
-          },
-        ]}
-        boundary={{
-          title: "工具边界",
-          text: "工具真实执行必须回到项目页、权限弹层或既有受控链路；本页不开执行器、不接入 Codex 运行、不写外部状态。",
-          status: "只读",
-        }}
-      />
+      <>
+        <SourceStylePlaceholder
+          title="工具"
+          kicker="工具入口"
+          hasRealSnapshot={hasRealSnapshot}
+          items={harnessItems}
+          summary="展示运行器资源和适配器动作索引；这里不提供直接运行按钮，避免工具入口绕过项目授权。"
+          primaryStat={`${harnessItems.length} 个资源`}
+          secondaryStat="执行后置"
+          sections={[
+            {
+              title: "运行器资源",
+              eyebrow: "来自项目资源索引",
+              items: harnessItems,
+              emptyText: "当前索引没有提供运行器资源。",
+            },
+            {
+              title: "适配器动作",
+              eyebrow: "来自 session operations",
+              items: adapterActionItems,
+              emptyText: "当前没有可展示的适配器动作索引。",
+            },
+          ]}
+          boundary={{
+            title: "工具边界",
+            text: "工具真实执行必须回到项目页、权限弹层或既有受控链路；本页不接入 Codex 运行、不碰凭据。唯一例外：下方「清理画布历史残料」做合法可逆的状态归档（ready_for_review→paused · 不删 · 带审计）。",
+            status: "维护",
+          }}
+        />
+        <CanvasRunResidueSweeperCard />
+      </>
     );
   }
 
@@ -416,4 +421,147 @@ export function renderActiveWorkbenchView({
   }
 
   return <HomeView snapshot={snapshot} workflowState={workflowState} onNavigate={onNavigate} />;
+}
+
+type CanvasRunResidueItem = {
+  work_item_id: string;
+  workflow_id: string;
+  age_days: number;
+  swept: boolean;
+};
+
+type SweepCanvasRunResidueResult = {
+  dry_run: boolean;
+  matched_count: number;
+  swept_count: number;
+  items: CanvasRunResidueItem[];
+  audit_event_id: string | null;
+  backup_path: string | null;
+  message: string;
+};
+
+// dev-only 维护触发口：canvas-run 历史残料合法归档（ready_for_review → paused）。
+// 先 dry-run 盘点，用户确认后再执行。直接 invoke（本包文件面不含 lib/tauri.ts，故不加 wrapper）。
+function CanvasRunResidueSweeperCard() {
+  const [preview, setPreview] = useState<SweepCanvasRunResidueResult | null>(null);
+  const [done, setDone] = useState<SweepCanvasRunResidueResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // 页面内两步确认（Tauri webview 不弹 window.confirm，会静默失败）。
+  const [confirming, setConfirming] = useState(false);
+
+  const runSweep = async (dryRun: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await invoke<SweepCanvasRunResidueResult>("sweep_canvas_run_residue", {
+        request: { project_root: null, dry_run: dryRun, now_ms: Date.now() },
+      });
+      if (dryRun) {
+        setPreview(result);
+        setDone(null);
+      } else {
+        setDone(result);
+        setPreview(null);
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section
+      style={{
+        marginTop: 16,
+        padding: 16,
+        border: "1px solid var(--border-subtle, #333)",
+        borderRadius: 10,
+      }}
+    >
+      <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>清理画布历史残料</h3>
+      <p style={{ margin: "0 0 12px", opacity: 0.7, fontSize: 13, lineHeight: 1.5 }}>
+        把「canvas-run 形状 + 待审(ready_for_review) + 超 7 天」的历史工作项合法归档为 paused（一步合法 ·
+        可逆 · 不删记录 · 带审计）。先盘点，确认后再执行。
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setConfirming(false);
+            void runSweep(true);
+          }}
+        >
+          {busy ? "处理中…" : "盘点（dry-run）"}
+        </button>
+        {preview && preview.matched_count > 0 ? (
+          confirming ? (
+            <>
+              <span style={{ fontSize: 13 }}>确认归档 {preview.matched_count} 条？</span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setConfirming(false);
+                  void runSweep(false);
+                }}
+              >
+                确认执行
+              </button>
+              <button type="button" disabled={busy} onClick={() => setConfirming(false)}>
+                取消
+              </button>
+            </>
+          ) : (
+            <button type="button" disabled={busy} onClick={() => setConfirming(true)}>
+              执行归档（{preview.matched_count} 条 → paused）
+            </button>
+          )
+        ) : null}
+      </div>
+      {error ? (
+        <p style={{ color: "var(--danger, #e55b5b)", marginTop: 12, fontSize: 13 }}>出错：{error}</p>
+      ) : null}
+      {preview ? (
+        <div style={{ marginTop: 12 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 13 }}>
+            找到 {preview.matched_count} 条{preview.matched_count > 0 ? "，预览如下：" : "。"}
+          </p>
+          {preview.matched_count === 0 ? (
+            <p style={{ opacity: 0.6, fontSize: 13 }}>没有命中的残料，无需清理。</p>
+          ) : (
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: 18,
+                maxHeight: 220,
+                overflow: "auto",
+                fontSize: 12,
+                lineHeight: 1.6,
+              }}
+            >
+              {preview.items.map((item) => (
+                <li key={item.work_item_id}>
+                  <code>{item.work_item_id}</code>
+                  <span style={{ opacity: 0.6 }}> · {item.age_days} 天</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+      {done ? (
+        <div style={{ marginTop: 12 }}>
+          <p style={{ margin: 0, color: "var(--success, #4caf72)", fontSize: 13 }}>{done.message}</p>
+          {done.backup_path ? (
+            <p style={{ margin: "4px 0 0", opacity: 0.6, fontSize: 12 }}>
+              已备份：<code>{done.backup_path}</code>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
 }

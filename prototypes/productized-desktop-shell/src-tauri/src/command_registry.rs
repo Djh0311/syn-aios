@@ -1,6 +1,10 @@
 // Tauri command registry split out during Root Treatment R2-B1.
 // This file is included at crate root so command wrapper visibility and names stay unchanged.
 
+// Store 卫生维护命令模块（canvas-run 历史残料合法归档）。挂在此处而非 lib.rs：
+// 本文件 include! 进 crate root，故此声明等价于在 crate root 挂子模块，且保持 lib.rs 0-diff。
+mod store_hygiene;
+
 macro_rules! workbench_command_handler {
     () => {
         tauri::generate_handler![
@@ -127,7 +131,8 @@ macro_rules! workbench_command_handler {
             mcp::commands::save_workflow_template,
             mcp::commands::list_workflow_templates,
             mcp::commands::load_workflow_template,
-            mcp::commands::delete_workflow_template
+            mcp::commands::delete_workflow_template,
+            store_hygiene::sweep_canvas_run_residue
         ]
     };
 }
