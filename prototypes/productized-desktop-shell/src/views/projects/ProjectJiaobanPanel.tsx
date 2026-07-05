@@ -62,6 +62,8 @@ type JiaobanRunCache = {
   // 合流命令对「已确认/旧方案」拒绝时置 true：这条路授权本还活着，卡住脸要给[接着跑,不用重批]而非只给重出方案。
   // 换 tab 回来也要记得给这个口，故进缓存。
   continueHint: boolean | null;
+  // fix6-v2：这一轮点击[允许并开始]/[接着跑]的时刻（ms）。判「这轮的链」用（chainStatus.started_at >= 它）；重挂载恢复。
+  runStartedAtMs: number | null;
 };
 const jiaobanRunCacheByProject = new Map<string, JiaobanRunCache>();
 
@@ -76,6 +78,7 @@ function writeJiaobanRunCache(projectRoot: string, patch: Partial<JiaobanRunCach
     lastStopReason: null,
     ranProposalId: null,
     continueHint: null,
+    runStartedAtMs: null,
   };
   jiaobanRunCacheByProject.set(projectRoot, { ...prev, ...patch });
 }
@@ -155,6 +158,8 @@ function ProjectJiaobanPanelBrowser({
   const runningRef = useRef(false);
   // 这一轮真按下[允许并开始]批的方案 id（从缓存恢复）。用来判「有没有来一份新方案」。
   const ranProposalIdRef = useRef<string | null>(cached?.ranProposalId ?? null);
+  // fix6-v2：本轮点击时刻（ms，缓存恢复）。判「这轮的链」：chainStatus.started_at >= 它才算本轮（旧链更早、天然排除）。
+  const [runStartedAtMs, setRunStartedAtMs] = useState<number | null>(cached?.runStartedAtMs ?? null);
 
   // 状态防丢的关键判断：**只在「出现一份新的、待用户确认的方案」时**清上一轮开始态、回到「批」。
   // 反过来，下面几种一律不清（旧实现漏了这些，导致结果被抹）：
@@ -198,9 +203,12 @@ function ProjectJiaobanPanelBrowser({
     }
   }, [projectSessions]);
 
-  // 干活期间轮询进度（复用现成只读命令）。stage==ran 才轮。
+  // 干活期间轮询进度（复用现成只读命令）。fix6：改成 phase==running 就轮——
+  // 点允许/接着跑那刻（相位先行）即开轮，执行期步骤逐格亮；重挂载后 phase 从缓存恢复=running→照轮→371 兜底翻脸=自愈。
+  // （原守 outcome.stage==ran，但合流/接着跑是同步跑到底才返回、跑中 outcome 恒 null，重挂载新实例 outcome 也 null → 整个执行期一格不轮、卡「正在干」。）
   useEffect(() => {
-    if (outcome?.stage !== "ran" || !projectWorkflow) return;
+    // 用 manualPhase（phase 常量定义在本 effect 之后、直接用会 TDZ；running 只可能来自 manualPhase，二者等价）。
+    if (manualPhase !== "running" || !projectWorkflow) return;
     const { project_root: projectRoot, workflow_id: workflowId } = projectWorkflow;
     let active = true;
     const poll = async () => {
@@ -217,10 +225,14 @@ function ProjectJiaobanPanelBrowser({
       active = false;
       clearInterval(id);
     };
-  }, [outcome?.stage, projectWorkflow]);
+  }, [manualPhase, projectWorkflow]);
 
   // 当前该显哪张脸：手动相位优先；否则由「有没有方案」决定说/批。
   const phase: JiaobanPhase = manualPhase ?? (latestProposal ? "authorize" : "say");
+  // fix6-v2：只认「这一轮」的链——started_at（后端 ms）>= 本轮点击时刻。旧链时间戳更早、天然排除，
+  // 防拆任务期（本轮链还没起、轮询却拿到旧链的绿状态）提前翻交货 / 显旧步骤。链没起 = null → 照显「主管正在拆任务」。
+  const thisRoundChainStatus =
+    chainStatus && runStartedAtMs != null && Number(chainStatus.started_at) >= runStartedAtMs ? chainStatus : null;
 
   // ---- 动作 ----
 
@@ -243,6 +255,8 @@ function ProjectJiaobanPanelBrowser({
     // ★ 一进来立刻上「正在干」脸——不等 await 回来（await 可能几十秒~几分钟，中间不能无脸看着像冻死）。
     runningRef.current = true;
     ranProposalIdRef.current = latestProposal.proposal_id;
+    const runStartedAt = Date.now(); // fix6-v2：本轮起点，判「这轮的链」用
+    setRunStartedAtMs(runStartedAt);
     setStarting(true);
     setStartError(null);
     setOutcome(null);
@@ -253,6 +267,7 @@ function ProjectJiaobanPanelBrowser({
       outcome: null,
       startError: null,
       ranProposalId: latestProposal.proposal_id,
+      runStartedAtMs: runStartedAt,
     });
     try {
       // 合流命令只支持 existing（绑现有会话）；"开个新的"(null) 下一阶段接，这里当作没选会话。
@@ -263,7 +278,8 @@ function ProjectJiaobanPanelBrowser({
         session_id: sessionChoice ?? undefined,
         actor_id: "user",
       });
-      const nextPhase: JiaobanPhase = outcome.stage === "ran" ? "running" : "blocked";
+      // fix6：命令返回 ran = 链已跑完（chain_outcome 在返回体里）→ 直接翻交货脸，不设 running 干等轮询。
+      const nextPhase: JiaobanPhase = outcome.stage === "ran" ? "done" : "blocked";
       setOutcome(outcome);
       setManualPhase(nextPhase);
       writeJiaobanRunCache(projectRoot, { manualPhase: nextPhase, outcome, startError: null });
@@ -293,6 +309,8 @@ function ProjectJiaobanPanelBrowser({
   async function continueRun() {
     if (!projectWorkflow || starting || runningRef.current) return;
     runningRef.current = true;
+    const runStartedAt = Date.now(); // fix6-v2：本轮起点
+    setRunStartedAtMs(runStartedAt);
     setStarting(true);
     setStartError(null);
     setContinueHint(false);
@@ -304,6 +322,7 @@ function ProjectJiaobanPanelBrowser({
       outcome: null,
       startError: null,
       continueHint: false,
+      runStartedAtMs: runStartedAt,
     });
     try {
       const nextOutcome = await autoAdvanceAuthorizedRoleLoop({
@@ -311,7 +330,8 @@ function ProjectJiaobanPanelBrowser({
         workflow_id: projectWorkflow.workflow_id,
         actor_id: "user",
       });
-      const nextPhase: JiaobanPhase = nextOutcome.stage === "ran" ? "running" : "blocked";
+      // fix6：ran = 链已跑完 → 直接交货脸，不干等轮询。
+      const nextPhase: JiaobanPhase = nextOutcome.stage === "ran" ? "done" : "blocked";
       setOutcome(nextOutcome);
       setManualPhase(nextPhase);
       writeJiaobanRunCache(projectRoot, { manualPhase: nextPhase, outcome: nextOutcome, startError: null });
@@ -368,12 +388,13 @@ function ProjectJiaobanPanelBrowser({
   // 干完了没有：链状态是否收尾（人话「做好了」）。
   useEffect(() => {
     if (phase !== "running") return;
-    if (chainStatus && /(finished|completed|done|succeeded|aborted|stopped|failed)/i.test(chainStatus.state)) {
+    // fix6-v2：只认「这一轮」的链收尾才翻交货——防旧链的 completed 状态在拆任务期把新一轮提前翻脸。
+    if (thisRoundChainStatus && /(finished|completed|done|succeeded|aborted|stopped|failed)/i.test(thisRoundChainStatus.state)) {
       // 链跑到头 → 交货（aborted/failed 也进交货并给下一步，永不冻；细节人话见结果行）。
       setManualPhase("done");
       writeJiaobanRunCache(projectRoot, { manualPhase: "done" });
     }
-  }, [phase, chainStatus, projectRoot]);
+  }, [phase, thisRoundChainStatus, projectRoot]);
 
   // 非测试项目：老实标注 + 跳智能体直连，不装能跑。
   if (!isTestProject) {
@@ -472,7 +493,7 @@ function ProjectJiaobanPanelBrowser({
         ) : null}
 
         {phase === "running" ? (
-          <JiaobanRunningState chainStatus={chainStatus} onStop={() => void stopRun()} />
+          <JiaobanRunningState chainStatus={thisRoundChainStatus} onStop={() => void stopRun()} />
         ) : null}
 
         {phase === "done" ? (

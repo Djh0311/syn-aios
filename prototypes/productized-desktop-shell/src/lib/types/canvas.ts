@@ -145,6 +145,8 @@ export type ProjectWorkflowChainRunResult = {
 export type ProjectWorkflowChainStatus = {
   chain_run_id: string;
   state: string;
+  // 后端已返（ms 字符串，源自 unix_timestamp_string）；前端原漏声明。fix6-v2 用它判「这一轮的链」。
+  started_at?: string;
   nodes: { node_id: string; state: string }[];
 };
 
