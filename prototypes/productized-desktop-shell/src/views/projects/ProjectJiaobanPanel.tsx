@@ -66,6 +66,8 @@ type JiaobanRunCache = {
   continueHint: boolean | null;
   // fix6-v2：这一轮点击[允许并开始]/[接着跑]的时刻（ms）。判「这轮的链」用（chainStatus.started_at >= 它）；重挂载恢复。
   runStartedAtMs: number | null;
+  // 方案a：本轮是不是「开个新的」（new）。运行脸 new 时补「正在新建会话（约 1 分钟）」提示；缓存恢复。
+  runIsNewSession: boolean;
 };
 const jiaobanRunCacheByProject = new Map<string, JiaobanRunCache>();
 
@@ -81,6 +83,7 @@ function writeJiaobanRunCache(projectRoot: string, patch: Partial<JiaobanRunCach
     ranProposalId: null,
     continueHint: null,
     runStartedAtMs: null,
+    runIsNewSession: false,
   };
   jiaobanRunCacheByProject.set(projectRoot, { ...prev, ...patch });
 }
@@ -177,6 +180,8 @@ function ProjectJiaobanPanelBrowser({
   const ranProposalIdRef = useRef<string | null>(cached?.ranProposalId ?? null);
   // fix6-v2：本轮点击时刻（ms，缓存恢复）。判「这轮的链」：chainStatus.started_at >= 它才算本轮（旧链更早、天然排除）。
   const [runStartedAtMs, setRunStartedAtMs] = useState<number | null>(cached?.runStartedAtMs ?? null);
+  // 方案a：本轮是不是「开个新的」。运行脸 new 时补「正在新建会话」提示；缓存恢复。
+  const [runIsNewSession, setRunIsNewSession] = useState<boolean>(cached?.runIsNewSession ?? false);
 
   // 刀2「批前看图」：复杂活（proposal.suggest_workflow）或用户开「按工作流来」→ 批前预拆工序图给用户看。
   // 结果按 proposal_id 缓存（切 tab 回来不重拆·下面 effect 命中即恢复）；loading/error 是瞬态。
@@ -338,7 +343,9 @@ function ProjectJiaobanPanelBrowser({
     runningRef.current = true;
     ranProposalIdRef.current = latestProposal.proposal_id;
     const runStartedAt = Date.now(); // fix6-v2：本轮起点，判「这轮的链」用
+    const isNewSession = !sessionChoice; // 方案a：没选现有会话 = 「开个新的」→ new
     setRunStartedAtMs(runStartedAt);
+    setRunIsNewSession(isNewSession);
     setStarting(true);
     setStartError(null);
     setOutcome(null);
@@ -350,9 +357,11 @@ function ProjectJiaobanPanelBrowser({
       startError: null,
       ranProposalId: latestProposal.proposal_id,
       runStartedAtMs: runStartedAt,
+      runIsNewSession: isNewSession,
     });
     try {
-      // 合流命令只支持 existing（绑现有会话）；"开个新的"(null) 下一阶段接，这里当作没选会话。
+      // 方案a：sessionChoice=null → 传 session_choice:"new" 不传 session_id（后端 014c254 先生后绑真建会话）；
+      // 有值 → existing 绑现有会话（原样不动）。
       const outcome = await confirmAndStartAuthorizedRun({
         project_root: projectRoot,
         proposal_id: latestProposal.proposal_id,
@@ -395,6 +404,7 @@ function ProjectJiaobanPanelBrowser({
     runningRef.current = true;
     const runStartedAt = Date.now(); // fix6-v2：本轮起点
     setRunStartedAtMs(runStartedAt);
+    setRunIsNewSession(false); // 方案a：接着跑用现有链，不是新建会话
     setStarting(true);
     setStartError(null);
     setContinueHint(false);
@@ -407,6 +417,7 @@ function ProjectJiaobanPanelBrowser({
       startError: null,
       continueHint: false,
       runStartedAtMs: runStartedAt,
+      runIsNewSession: false,
     });
     try {
       const nextOutcome = await autoAdvanceAuthorizedRoleLoop({
@@ -584,7 +595,11 @@ function ProjectJiaobanPanelBrowser({
         ) : null}
 
         {phase === "running" ? (
-          <JiaobanRunningState chainStatus={thisRoundChainStatus} onStop={() => void stopRun()} />
+          <JiaobanRunningState
+            chainStatus={thisRoundChainStatus}
+            isNewSession={runIsNewSession}
+            onStop={() => void stopRun()}
+          />
         ) : null}
 
         {phase === "done" ? (
@@ -999,10 +1014,15 @@ function JiaobanSessionPicker({
 
       {open ? (
         <div className="jiaoban-session-expand">
-          {/* 「开个新的」下一阶段支持（用户已拍方案 a 下阶段）→ 置灰不可选。 */}
-          <label className="jiaoban-radio jiaoban-radio-disabled" aria-disabled="true">
-            <input type="radio" name="jiaoban-session" disabled checked={false} readOnly />
-            开个新的 <span className="jiaoban-soon">下一阶段支持</span>
+          {/* 方案a：「开个新的」已解禁（后端 014c254 先生后绑真建会话）。选它 = sessionChoice=null → 请求传 new。 */}
+          <label className="jiaoban-radio">
+            <input
+              type="radio"
+              name="jiaoban-session"
+              checked={sessionChoice === null}
+              onChange={() => onSessionChoiceChange(null)}
+            />
+            开个新的（为这单活新建一个对话）
           </label>
 
           {recent.map((session) => (
@@ -1065,9 +1085,11 @@ function JiaobanSessionPicker({
 // 3. 干（人话进度）
 function JiaobanRunningState({
   chainStatus,
+  isNewSession,
   onStop,
 }: {
   chainStatus: ProjectWorkflowChainStatus | null;
+  isNewSession: boolean;
   onStop: () => void;
 }) {
   const progress = humanizeChainProgress(chainStatus);
@@ -1084,6 +1106,9 @@ function JiaobanRunningState({
         <p className="role-loop-plain-lead">
           <span className="jiaoban-spinner" aria-hidden="true" /> {progress}
         </p>
+        {isNewSession ? (
+          <p className="muted small-note">正在为这单活新建会话（约 1 分钟）…</p>
+        ) : null}
       </div>
       <div className="workflow-state-actions">
         <button className="secondary-button" type="button" onClick={onStop}>
