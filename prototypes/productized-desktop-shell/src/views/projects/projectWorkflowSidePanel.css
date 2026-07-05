@@ -464,6 +464,22 @@
   overflow-wrap: anywhere;
 }
 
+/* fix8：出方案失败上脸——醒目红条（供给类专句 / 后端原话）。绝不静默死。 */
+.jiaoban-consult-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--danger-border, rgba(138, 40, 40, 0.25));
+  border-radius: 8px;
+  background: var(--danger-bg, #fdf0f0);
+  color: var(--danger, #8a2828);
+  font-size: 13.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 /* 方案生成时间：弱化一行。 */
 .jiaoban-field-time {
   color: var(--ink-mid);

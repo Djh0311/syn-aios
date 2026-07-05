@@ -96,6 +96,8 @@ type ProjectsViewProps = {
   onPreviewProjectDirectorTaskPlan?: (request: PreviewProjectDirectorTaskPlanInput) => Promise<ProjectDirectorTaskPlan>;
   taskMemoryPacketPreview?: TaskMemoryPacketBuildOutput | null;
   onOpenAgentSession?: (threadId: string) => void;
+  // fix8：穿到交办面板 → 出方案成功刷店进批脸。{...props} spread 自动传给 Shell。
+  onProposalStoreRefresh?: () => Promise<void>;
 };
 
 export function ProjectsView(props: ProjectsViewProps) {

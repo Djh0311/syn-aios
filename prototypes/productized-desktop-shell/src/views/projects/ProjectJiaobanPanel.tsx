@@ -6,6 +6,7 @@ import {
   confirmAndStartAuthorizedRun,
   getProjectWorkflowChainStatus,
   previewPendingProposalDirectorPlan,
+  runProjectConsultation,
   stopProjectWorkflowChain,
 } from "../../lib/tauri";
 import type {
@@ -20,7 +21,6 @@ import type {
   SessionRecord,
   WorkflowStateSnapshot,
 } from "../../lib/types";
-import { buildRunProjectConsultationAction } from "./ProjectWorkflowGovernancePanels";
 
 // 固定测试项目（自动干只在这真跑；非它则老实标注·跳智能体直连）。与 WorkflowCommandConsoleView 同一常量。
 const TEST_PROJECT_ROOT = "/Users/yoyi/codex-workflow-mario-test";
@@ -33,6 +33,9 @@ export type ProjectJiaobanPanelProps = {
   planAuthorizationStore: PlanAuthorizationStoreV1 | null;
   onRequestAction: (action: PendingAction) => void;
   onOpenAgentSession: (threadId: string) => void;
+  // fix8：出方案成功后刷新方案店（App 的 reloadCandidateStores 穿下来）→ latestProposal 更新 → 自动进批脸。
+  // 可选：mock/gallery callsite 可不传（刷新走 noop，不崩）。
+  onProposalStoreRefresh?: () => Promise<void>;
 };
 
 // 交办面 = 项目默认页。同一容器随状态换脸（说 → 批 → 干 → 交货 / 卡住），不弹窗、永不冻。
@@ -131,6 +134,7 @@ function ProjectJiaobanPanelBrowser({
   planAuthorizationStore,
   onRequestAction,
   onOpenAgentSession,
+  onProposalStoreRefresh,
 }: ProjectJiaobanPanelProps) {
   const projectWorkflow =
     workflowState?.project_workflows.find((workflow) => workflow.project_root === project.project_root) ?? null;
@@ -176,6 +180,10 @@ function ProjectJiaobanPanelBrowser({
   const [continueHint, setContinueHint] = useState<boolean>(cached?.continueHint ?? false);
   const [chainStatus, setChainStatus] = useState<ProjectWorkflowChainStatus | null>(null);
   const runningRef = useRef(false);
+  // fix8：出方案（说/改要求）直调期间的 loading/失败态 + 防重入。失败人话上脸，绝不静默、目标不清空。
+  const [consultLoading, setConsultLoading] = useState(false);
+  const [consultError, setConsultError] = useState<string | null>(null);
+  const consultingRef = useRef(false);
   // 这一轮真按下[允许并开始]批的方案 id（从缓存恢复）。用来判「有没有来一份新方案」。
   const ranProposalIdRef = useRef<string | null>(cached?.ranProposalId ?? null);
   // fix6-v2：本轮点击时刻（ms，缓存恢复）。判「这轮的链」：chainStatus.started_at >= 它才算本轮（旧链更早、天然排除）。
@@ -269,17 +277,38 @@ function ProjectJiaobanPanelBrowser({
 
   // ---- 动作 ----
 
-  // 说 → 出方案：走确认弹层（真执行提示）+ App 侧调 runProjectConsultation（异步·1–2 分钟）。
-  function submitGoal(text: string) {
-    if (!projectWorkflow || !text.trim()) return;
-    onRequestAction(buildRunProjectConsultationAction(project, projectWorkflow, text.trim()));
+  // fix8：说 → 出方案 = 面板直调 runProjectConsultation（去掉那层通用确认弹层：咨询只读·决策 2026-06-25 豁免·
+  // 人闸=[允许并开始]那一下不动）。自管 loading/失败态，失败人话上脸 + 目标不清空；防重入。成功后刷店→自动进批脸。
+  async function runConsultation(goal: string) {
+    if (!projectWorkflow || !goal.trim() || consultingRef.current) return;
+    consultingRef.current = true;
+    setConsultLoading(true);
+    setConsultError(null);
+    try {
+      await runProjectConsultation({
+        project_root: projectRoot,
+        project_id: projectWorkflow.project_id,
+        workflow_id: projectWorkflow.workflow_id,
+        goal: goal.trim(),
+        actor_id: "user",
+      });
+      await onProposalStoreRefresh?.(); // 刷方案店 → latestProposal 更新 → phase 推导自动进批脸
+    } catch (e) {
+      setConsultError(humanizeConsultError(e)); // 失败上脸（供给类专句/后端原话），绝不静默
+    } finally {
+      consultingRef.current = false;
+      setConsultLoading(false);
+    }
   }
 
-  // 按我说的改：原目标 + 这句意见拼成新目标，重调 runProjectConsultation（新方案仍在本卡出）。
+  function submitGoal(text: string) {
+    void runConsultation(text);
+  }
+
+  // 按我说的改：原目标 + 这句意见拼成新目标，重出方案（同一直调路径）。
   function submitAmendment() {
-    if (!projectWorkflow || !amendment.trim() || !latestProposal) return;
-    const merged = `${latestProposal.user_goal}\n\n补充意见：${amendment.trim()}`;
-    onRequestAction(buildRunProjectConsultationAction(project, projectWorkflow, merged));
+    if (!amendment.trim() || !latestProposal) return;
+    void runConsultation(`${latestProposal.user_goal}\n\n补充意见：${amendment.trim()}`);
   }
 
   // 刀2「批前看图」触发条件 = 工作流开关开着（AI 建议时开关默认开·见上面 reset effect；用户也可手动开/关）。
@@ -565,6 +594,9 @@ function ProjectJiaobanPanelBrowser({
             onGoalChange={setGoal}
             onSubmit={() => submitGoal(goal)}
             lastStopHint={sayHint}
+            loading={consultLoading}
+            error={consultError}
+            onEditAgain={() => setConsultError(null)}
           />
         ) : null}
 
@@ -584,6 +616,8 @@ function ProjectJiaobanPanelBrowser({
             onRePlan={backToSay}
             onDecline={backToSay}
             starting={starting}
+            consultLoading={consultLoading}
+            consultError={consultError}
             worksmapSwitchOn={workflowSwitchOn}
             onToggleWorksmapSwitch={setWorkflowSwitchOn}
             worksmapTasks={previewTasks}
@@ -638,11 +672,17 @@ function JiaobanSayState({
   onGoalChange,
   onSubmit,
   lastStopHint,
+  loading,
+  error,
+  onEditAgain,
 }: {
   goal: string;
   onGoalChange: (value: string) => void;
   onSubmit: () => void;
   lastStopHint: string | null;
+  loading: boolean;
+  error: string | null;
+  onEditAgain: () => void;
 }) {
   return (
     <div className="project-canvas-detail-card jiaoban-say" aria-label="想让 AI 干点啥">
@@ -657,21 +697,42 @@ function JiaobanSayState({
           上次停在：{lastStopHint}——目标已带回来，改一改再出一版新方案。
         </div>
       ) : null}
+      {/* fix8：出方案失败上脸——人话（供给类专句/后端原话）+ 目标不清空，绝不静默死。 */}
+      {error ? (
+        <div className="jiaoban-consult-error" role="alert" aria-label="出方案没成">
+          <span aria-hidden="true">⚠</span> {error}
+        </div>
+      ) : null}
       <label className="proposal-decision-field">
-        <span>说一句话，AI 会读项目、想个方案给你审。</span>
+        <span>说一句话，AI 会读你的项目、想个方案给你审。</span>
         <textarea
           value={goal}
           onChange={(event) => onGoalChange(event.target.value)}
           placeholder="例：给这小游戏加个计分板——吃到东西 +1、显示在右上角。"
           rows={4}
+          disabled={loading}
         />
       </label>
       <div className="workflow-state-actions">
-        <button className="primary-button" type="button" disabled={!goal.trim()} onClick={onSubmit}>
-          出方案
-        </button>
+        {error && !loading ? (
+          // 失败态：绝不零按钮——[重试]（重发原目标·目标还在框里）+ [改要求]（回编辑态改了再出）。
+          <>
+            <button className="primary-button" type="button" disabled={!goal.trim()} onClick={onSubmit}>
+              重试
+            </button>
+            <button className="secondary-button" type="button" onClick={onEditAgain}>
+              改要求
+            </button>
+          </>
+        ) : (
+          <button className="primary-button" type="button" disabled={loading || !goal.trim()} onClick={onSubmit}>
+            {loading ? "AI 正在读项目、想方案…（约 1–2 分钟）" : "出方案"}
+          </button>
+        )}
       </div>
-      <p className="muted small-note">AI 读项目、想方案要花点时间（大约 1–2 分钟），这期间界面不会卡。</p>
+      <p className="muted small-note">
+        AI 会读你的项目、想方案，大约 1–2 分钟；这期间界面不会卡，也可以先去忙别的。
+      </p>
     </div>
   );
 }
@@ -692,6 +753,8 @@ function JiaobanAuthorizeState({
   onRePlan,
   onDecline,
   starting,
+  consultLoading,
+  consultError,
   worksmapSwitchOn,
   onToggleWorksmapSwitch,
   worksmapTasks,
@@ -714,6 +777,8 @@ function JiaobanAuthorizeState({
   onRePlan: () => void;
   onDecline: () => void;
   starting: boolean;
+  consultLoading: boolean;
+  consultError: string | null;
   worksmapSwitchOn: boolean;
   onToggleWorksmapSwitch: (value: boolean) => void;
   worksmapTasks: ProjectDirectorPlannedTask[] | null;
@@ -811,8 +876,18 @@ function JiaobanAuthorizeState({
           value={amendment}
           onChange={(event) => onAmendmentChange(event.target.value)}
           placeholder="例：改成暗色、分数存下来…"
+          disabled={consultLoading}
         />
       </label>
+
+      {/* fix8：改要求出新方案期间/失败也上脸——loading 提示 + 失败人话，绝不静默。 */}
+      {consultLoading ? (
+        <p className="muted small-note">正在出新方案…（约 1–2 分钟）</p>
+      ) : consultError ? (
+        <div className="jiaoban-consult-error" role="alert" aria-label="出方案没成">
+          <span aria-hidden="true">⚠</span> {consultError}
+        </div>
+      ) : null}
 
       {worksmapNote ? (
         <p className={`jiaoban-worksmap-cta ${worksmapReady ? "ready" : ""}`}>{worksmapNote}</p>
@@ -822,13 +897,18 @@ function JiaobanAuthorizeState({
         {proposalIsStale ? (
           // 旧方案：主按钮 = 重新说目标；[允许并开始] 降为次按钮（防再批库存），但仍可手动点。
           <>
-            <button className="primary-button" type="button" disabled={starting} onClick={onRePlan}>
-              重新说目标出新方案
+            <button
+              className="primary-button"
+              type="button"
+              disabled={starting || consultLoading}
+              onClick={onRePlan}
+            >
+              {consultLoading ? "正在出新方案…" : "重新说目标出新方案"}
             </button>
             <button
               className="secondary-button"
               type="button"
-              disabled={starting}
+              disabled={starting || consultLoading}
               onClick={onAuthorizeAndStart}
             >
               {starting ? "正在开始…" : "仍要允许并开始（旧方案）"}
@@ -839,7 +919,7 @@ function JiaobanAuthorizeState({
             <button
               className="primary-button"
               type="button"
-              disabled={starting}
+              disabled={starting || consultLoading}
               onClick={onAuthorizeAndStart}
             >
               {starting ? "正在开始…" : "允许并开始"}
@@ -847,10 +927,10 @@ function JiaobanAuthorizeState({
             <button
               className="secondary-button"
               type="button"
-              disabled={starting || !amendment.trim()}
+              disabled={starting || consultLoading || !amendment.trim()}
               onClick={onAmend}
             >
-              按我说的改
+              {consultLoading ? "正在出新方案…" : "按我说的改"}
             </button>
           </>
         )}
@@ -1391,9 +1471,35 @@ function isAlreadyConfirmedRejection(e: unknown): boolean {
   );
 }
 
+// fix8：供给类错误识别（codex 额度 / 订阅 / 登录 / 服务不可用）。姊妹后端包会带 codex_provider_unavailable:
+// 前缀 + 人话，直接取其人话；后端未落地前用兜底关键词匹配。返回 null = 不是供给类（交给别的 humanize）。
+function humanizeProviderUnavailable(e: unknown): string | null {
+  const raw = e instanceof Error ? e.message : String(e ?? "");
+  const marker = "codex_provider_unavailable";
+  if (raw.includes(marker)) {
+    const after = raw.split(marker)[1]?.replace(/^["'\s]*[:：]?["'\s]*/, "").trim();
+    return after && after.length > 0 ? after : "codex 额度 / 订阅 / 登录不可用——处理后点重试。";
+  }
+  if (/\b403\b|SUBSCRIPTION|quota|usage limit|\b401\b|unauthorized|consult_last_message_read_failed/i.test(raw)) {
+    return "codex 服务不可用（常见：额度用完 / 订阅过期 / 登录失效）——处理后点重试；若是网络抽风，重试一次通常就过。";
+  }
+  return null;
+}
+
+// fix8：出方案失败的人话。先认供给类；否则显后端原话（有）；再兜底一句「点重试或改要求」。绝不静默。
+function humanizeConsultError(e: unknown): string {
+  const provider = humanizeProviderUnavailable(e);
+  if (provider) return provider;
+  const raw = e instanceof Error ? e.message : String(e ?? "");
+  return raw && raw.trim().length > 0 ? raw : "出方案没成——可以点重试，或改一下要求再来一版。";
+}
+
 // 合流命令的报错翻人话。最要紧的一类：对「已确认」方案后端会拒（方案不是待用户确认状态）——
 // 那不是系统坏了，是这份方案已经批过、授权还活着，引导用户点[接着跑,不用重批]而非重批。
 function humanizeAuthorizeError(e: unknown): string {
+  // fix8：合流 / 接着跑撞供给死时，同用供给类人话（否则裸抛英文栈让人以为系统坏了）。
+  const provider = humanizeProviderUnavailable(e);
+  if (provider) return provider;
   const raw = e instanceof Error ? e.message : String(e);
   // 后端拒词：ProjectConsultationProposalStatus 不是 PendingUserConfirmation 时的那句。
   // 这份已批过 → 不裸抛原始错误，翻成「已经批过了，点下面接着跑」。

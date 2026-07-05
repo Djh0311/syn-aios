@@ -71,6 +71,8 @@ export type ActiveWorkbenchViewProps = {
   onReloadWorkflowState: () => void;
   onNotice: (msg: string) => void;
   onOpenAgentSession: (threadId: string) => void;
+  // fix8：出方案成功刷店（穿到交办面板）。App 的 reloadCandidateStores 穿下来。
+  onProposalStoreRefresh?: () => Promise<void>;
   onPreviewTaskMemoryPacket?: (request: TaskMemoryPacketBuildInput) => Promise<TaskMemoryPacketBuildOutput>;
   onPreviewProjectDirectorTaskPlan?: (request: PreviewProjectDirectorTaskPlanInput) => Promise<ProjectDirectorTaskPlan>;
   onPreviewFormalMemoryLifecycle?: Parameters<typeof MemoryCenterView>[0]["onPreviewFormalMemoryLifecycle"];
@@ -89,6 +91,7 @@ export function renderActiveWorkbenchView({
   onNotice,
   hasRealSnapshot,
   onOpenAgentSession,
+  onProposalStoreRefresh,
   focusedAgentThreadId,
   blackboardCandidateStore,
   planAuthorizationStore,
@@ -152,6 +155,7 @@ export function renderActiveWorkbenchView({
         workflowStateError={workflowStateError}
         onReloadWorkflowState={onReloadWorkflowState}
         onRequestAction={onRequestAction}
+        onProposalStoreRefresh={onProposalStoreRefresh}
         onLoadTranscript={browserPreviewData?.loadTranscript ?? loadCodexSessionTranscript}
         onRenderTaskPreview={(projectRoot, workItemId) =>
           browserPreviewData

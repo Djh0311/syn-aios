@@ -91,6 +91,8 @@ export type ProjectDetailProps = {
   onOpenAgentSession?: (threadId: string) => void;
   onBackToGallery?: () => void;
   onRequestAction: (action: PendingAction) => void;
+  // fix8：出方案成功后刷新方案店（穿到交办面板 → 自动进批脸）。可选，mock/gallery 可不传。
+  onProposalStoreRefresh?: () => Promise<void>;
   // Notice sink for the editable project-plan canvas (engine save / template /
   // run feedback). Optional so offline / gallery callsites needn't supply it.
   onNotice?: (msg: string) => void;
@@ -124,6 +126,7 @@ export function ProjectWorkspaceShell({
   onOpenAgentSession = () => {},
   onBackToGallery,
   onRequestAction,
+  onProposalStoreRefresh,
   onRenderTaskPreview,
   onInspectDispatchReadiness,
   workflowPanel = null,
@@ -204,6 +207,7 @@ export function ProjectWorkspaceShell({
             planAuthorizationStore={planAuthorizationStore}
             onRequestAction={onRequestAction}
             onOpenAgentSession={onOpenAgentSession}
+            onProposalStoreRefresh={onProposalStoreRefresh}
           />
         ) : selectedTool === "overview" ? (
           <ProjectOverview

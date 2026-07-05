@@ -671,6 +671,7 @@ export function App() {
           workflowStateError,
           onReloadWorkflowState: reloadWorkflowState,
           onNotice: setNotice,
+          onProposalStoreRefresh: reloadCandidateStores,
           hasRealSnapshot: Boolean(filteredSnapshot),
           onOpenAgentSession: (threadId) => {
             setFocusedAgentThreadId(threadId);
