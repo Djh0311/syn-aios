@@ -280,7 +280,14 @@ function ProjectJiaobanPanelBrowser({
   // fix8：说 → 出方案 = 面板直调 runProjectConsultation（去掉那层通用确认弹层：咨询只读·决策 2026-06-25 豁免·
   // 人闸=[允许并开始]那一下不动）。自管 loading/失败态，失败人话上脸 + 目标不清空；防重入。成功后刷店→自动进批脸。
   async function runConsultation(goal: string) {
-    if (!projectWorkflow || !goal.trim() || consultingRef.current) return;
+    // 永不冻：projectWorkflow 缺失不是用户的错，也绝不许无声——说清楚、可行动。
+    if (!projectWorkflow) {
+      setConsultError(
+        `这个项目的工作流数据没加载出来（快照里 ${workflowState ? `有 ${workflowState.project_workflows.length} 条工作流、但没有匹配 ${projectRoot} 的` : "workflowState 为空——快照读取失败"}）。重开项目试试；还不行把这行话发给主导线。`,
+      );
+      return;
+    }
+    if (!goal.trim() || consultingRef.current) return;
     consultingRef.current = true;
     setConsultLoading(true);
     setConsultError(null);
