@@ -7891,6 +7891,58 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(pdir);
     }
 
+    // fix8·供给类不 retry（consult 侧）：codex_provider_unavailable（额度/订阅/登录）不是抽风 →
+    // 立即报错·不重试（否则白等一分钟）。
+    #[test]
+    fn jiaoban_director_plan_no_retry_on_provider_unavailable() {
+        let director = CountingDirector {
+            err_until: 1,
+            err_msg: "codex_provider_unavailable:codex 供给不可用（403 订阅/额度/登录类）"
+                .to_string(),
+            tasks: vec![jiaoban_test_planned_task("wf", 1, "t", vec![])],
+            calls: std::cell::RefCell::new(0),
+        };
+        let ctx = load_project_context(WORKFLOW_ENGINE_TEST_PROJECT_ROOT).expect("ctx");
+        let (proposal, pdir) = s3_director_fixture_proposal("jiaoban-retry-provider");
+        let result = director_plan_with_retry(&director, &ctx, &proposal, false);
+        assert!(result.is_err(), "供给类应直接报错（不重试）");
+        assert_eq!(
+            *director.calls.borrow(),
+            1,
+            "供给类不 retry（只调 1 次·不白等）"
+        );
+        let _ = fs::remove_dir_all(pdir);
+    }
+
+    // fix8·worker resume 侧：stderr 命中供给特征 → warnings 带 codex_provider_unavailable
+    // （供 is_tier1_early_exit 排除重试 + UI 上脸）；普通错不误标、成败判定不变。
+    #[test]
+    fn fix8_classify_codex_resume_failure_flags_provider() {
+        let no_instruction: Option<UserReviewedInstructionInput> = None;
+        let hit = classify_codex_resume_failure(
+            1,
+            false,
+            &no_instruction,
+            "Reconnecting... 5/5 ERROR: unexpected status 403 Forbidden: SUBSCRIPTION_NOT_FOUND",
+        );
+        assert!(
+            hit.iter().any(|w| w.contains("codex_provider_unavailable")),
+            "供给类 stderr 应上 provider 标签：{hit:?}"
+        );
+        let miss =
+            classify_codex_resume_failure(1, false, &no_instruction, "some random compile error");
+        assert!(
+            !miss
+                .iter()
+                .any(|w| w.contains("codex_provider_unavailable")),
+            "普通错不该误标 provider：{miss:?}"
+        );
+        assert!(
+            miss.iter().any(|w| w == "codex_resume_exit_nonzero"),
+            "普通非 0 退出仍标 exit_nonzero（成败判定不变）：{miss:?}"
+        );
+    }
+
     // 2.3·任务级节点 + 依赖边落画布（纯加法）：一任务一节点、id 带后缀不撞保留节点、position 错开、depends_on 建边、
     // 老 role/保留节点原样、重跑幂等。
     #[test]

@@ -221,6 +221,11 @@ fn classify_codex_resume_failure(
     error: &str,
 ) -> Vec<String> {
     let mut warnings = Vec::new();
+    // fix8：codex resume 的 stderr（error）命中供给类特征→加 provider 标签，供 is_tier1_early_exit
+    // 排除重试 + UI 上脸。只加报告标签，不改判决体（仍按 exit_code 走 write_failed_dispatch）。
+    if let Some(human) = codex_local_runner::classify_codex_provider_failure(error) {
+        warnings.push(format!("codex_provider_unavailable:{human}"));
+    }
     if timed_out {
         warnings.push("timeout".to_string());
     }

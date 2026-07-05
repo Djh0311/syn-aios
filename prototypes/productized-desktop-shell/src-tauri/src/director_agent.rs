@@ -308,6 +308,11 @@ fn is_tier1_early_exit(outcome: &Result<WorkflowNodeDispatchResult, String>) -> 
                     .warnings
                     .iter()
                     .any(|w| w == "timeout" || w.contains("sandbox"))
+                // fix8：供给类失败（额度/订阅/登录）不是抽风，重试=白等，排除不 retry。
+                && !dispatch
+                    .warnings
+                    .iter()
+                    .any(|w| w.contains("codex_provider_unavailable"))
         }
         Err(_) => false,
     }
@@ -318,6 +323,10 @@ fn is_tier1_early_exit(outcome: &Result<WorkflowNodeDispatchResult, String>) -> 
 // 它只在 real_codex_executed=true 之后出现，与 gate 拦(readonly_blocked)/解析失败(json/空任务)/沙箱-gate/超时
 // 各自的错误串互斥 → 这些**不命中**、不 retry（照 §2.4「gate/解析类不 retry」）。保守：只认这一个信号。
 fn is_director_plan_flaky_early_exit(error: &str) -> bool {
+    // fix8：供给类失败（额度/订阅/登录）不是抽风，重试=白等一分钟，明确排除。
+    if error.contains("codex_provider_unavailable") {
+        return false;
+    }
     error.contains("consult_last_message_read_failed")
 }
 

@@ -351,13 +351,69 @@ pub(crate) fn readonly_codex_consult(
         &last_message_path,
         timeout_ms,
     );
+    // fix8：从 runner 结果取 stderr 尾巴（run_phase_b 已把 stderr 压成 stderr_summary warning，
+    // 不补捕、不改 runner 本体）；命中供给类特征→人话前缀 codex_provider_unavailable，
+    // 未命中→原错误 + stderr 尾巴（真相别再被吞）。只影响报告，不改成败判定。
+    let stderr_tail = result
+        .warnings
+        .iter()
+        .find_map(|warning| warning.strip_prefix("stderr_summary:"))
+        .unwrap_or("")
+        .to_string();
     if !result.real_codex_executed {
-        return Err(result
+        if let Some(human) = classify_codex_provider_failure(&stderr_tail) {
+            return Err(format!("codex_provider_unavailable:{human}"));
+        }
+        let base = result
             .failure_message
-            .unwrap_or_else(|| "真实 codex 未执行".to_string()));
+            .unwrap_or_else(|| "真实 codex 未执行".to_string());
+        return Err(append_stderr_tail(base, &stderr_tail));
     }
-    std::fs::read_to_string(&last_message_path)
-        .map_err(|error| format!("consult_last_message_read_failed:{error}"))
+    std::fs::read_to_string(&last_message_path).map_err(|error| {
+        if let Some(human) = classify_codex_provider_failure(&stderr_tail) {
+            format!("codex_provider_unavailable:{human}")
+        } else {
+            append_stderr_tail(
+                format!("consult_last_message_read_failed:{error}"),
+                &stderr_tail,
+            )
+        }
+    })
+}
+
+/// fix8·供给类失败分类：codex stderr 尾巴命中「额度/订阅/登录/供给不可用」特征→返回人话；否则 None。
+/// 保守表（大小写不敏感），拿不准不归类（宁可报原始错）。只影响报告与 retry 判据，不改成败判定。
+pub(crate) fn classify_codex_provider_failure(stderr_tail: &str) -> Option<String> {
+    let text = stderr_tail.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let hit = lower.contains("subscription_not_found")
+        || lower.contains("usage limit")
+        || lower.contains("quota")
+        || lower.contains("unauthorized")
+        || lower.contains("403")
+        || lower.contains("401")
+        || (lower.contains("reconnecting") && lower.contains("5/5"));
+    if !hit {
+        return None;
+    }
+    let snippet: String = text.chars().take(200).collect();
+    Some(format!(
+        "codex 供给不可用（403 订阅/额度/登录类，非网络抽风）：{snippet}——请检查订阅/额度/登录，别空重试。"
+    ))
+}
+
+/// 未命中供给类时，把 stderr 尾巴（截 200）附在原错误后，避免真相被吞。
+fn append_stderr_tail(base: String, stderr_tail: &str) -> String {
+    let tail = stderr_tail.trim();
+    if tail.is_empty() {
+        base
+    } else {
+        let snippet: String = tail.chars().take(200).collect();
+        format!("{base}｜stderr:{snippet}")
+    }
 }
 
 pub(crate) fn inspect_codex_local_execution_guard(
@@ -1661,6 +1717,43 @@ fn contains_sensitive_fragment(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // fix8·供给类失败分类：403/订阅/额度/登录特征命中→人话 Some；空/普通错→None（保守·不误判）。
+    #[test]
+    fn fix8_classify_codex_provider_failure_hits_and_misses() {
+        // 主导线抓的真实样本（403 订阅到期）→ 命中。
+        let real = "Reconnecting... 5/5 ERROR: unexpected status 403 Forbidden: {\"code\":\"SUBSCRIPTION_NOT_FOUND\",\"message\":\"No active subscription found\"}";
+        assert!(
+            classify_codex_provider_failure(real).is_some(),
+            "403/SUBSCRIPTION 应命中"
+        );
+        // 各特征逐个命中（大小写不敏感）。
+        for sample in [
+            "unexpected status 401 UNAUTHORIZED",
+            "you have hit your USAGE LIMIT for this month",
+            "quota exceeded",
+            "subscription_not_found",
+            "Reconnecting... 5/5 then gave up",
+        ] {
+            assert!(
+                classify_codex_provider_failure(sample).is_some(),
+                "应命中供给类：{sample}"
+            );
+        }
+        // 空 / 普通错（无供给特征）→ 不命中，走原错误（不误判）。
+        assert!(
+            classify_codex_provider_failure("").is_none(),
+            "空 stderr 不归类"
+        );
+        assert!(
+            classify_codex_provider_failure("thread 'main' panicked at foo.rs line 12").is_none(),
+            "普通崩溃不该被误判成供给类"
+        );
+        assert!(
+            classify_codex_provider_failure("Reconnecting... 1/5").is_none(),
+            "只重连 1/5（未到 5/5）不足以判供给类"
+        );
+    }
 
     // 引擎解封·第一刀的真跑验证(高危#1)。默认 #[ignore],只在显式
     // `cargo test --lib real_run_workflow_node_adapter -- --ignored --nocapture` 时起真 codex。
