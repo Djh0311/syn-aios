@@ -504,6 +504,129 @@ fn finalize_stale_chain_for_replan(
     ))
 }
 
+// fix5·超龄判据（推导）：worker 单次派发 timeout=600s（commands.rs:2352·max_retries=0），runner 到时**必杀** →
+// 一条 running 派发记录的**物理最长窗口 = 600s**。翻倍容错（刀1 链级 retry 会另起记录、时间戳滞后、时钟偏移）=
+// 20 分钟；再加余量 → **30 分钟**。超过它还 running 的派发**物理上不可能仍活着**——唯一解释是进程中途死了、
+// 留下永久墓碑（has_inflight_dispatch 只数 running → 卡死该工作流一切新派发）。> 物理上限 = 绝不误杀真活。
+const STALE_RUNNING_DISPATCH_MS: i64 = 1_800_000; // 30 分钟
+
+// fix5·残料终章（中断遗留的 running 派发记录标结）：挂在 fix4 reconcile 同位置（auto_advance 两分支合流后·
+// prepare 前）。扫**本轮 (workflow, 角色节点)** 上的 running 派发记录：**确证已死**（age>物理上限）的标结为 failed
+// （解除 S1 的 duplicate_blocked）+ 审计；**未超龄/缺时间戳**的**绝不碰**（可能真在跑·留给闸拦=保护原语义·出人话）。
+// 派发记录**无迁移表**（状态由 execute 流内联写·commands 注释）——这是包 §2.2 批准的**受控定点接管**：只改匹配记录的
+// **state + warnings 两字段**（别的字段/别的记录一律不动）、必带审计。S1 闸/has_inflight/execute 一字不动。
+fn reconcile_stale_running_dispatches(
+    path: &std::path::Path,
+    planned_tasks: &[ProjectDirectorPlannedTask],
+    now_ms: i64,
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    let Ok(mut value) = read_workflow_state_value(path) else {
+        return warnings; // 读不到状态就不接管（prepare/闸会照常处理）。
+    };
+    // 本轮节点集：planned_tasks 的 target_role（fix3 钳位后）→ c4_node_id 去重。**只碰这些**。
+    let node_ids: std::collections::BTreeSet<String> = planned_tasks
+        .iter()
+        .map(|task| c4_node_id(&task.scope.workflow_id, &task.scope.target_role))
+        .collect();
+    if node_ids.is_empty() {
+        return warnings;
+    }
+    // 第一遍（只读）：找本轮节点上的 running 派发，判超龄。
+    let mut to_supersede: Vec<(String, String)> = Vec::new(); // (dispatch_id, node_id)
+    if let Some(dispatches) = value
+        .get("workflow_node_dispatches")
+        .and_then(Value::as_array)
+    {
+        for dispatch in dispatches {
+            // 只碰 running（prepared 是每次派发的 orphan·闸不数·不碰；failed/completed/timed_out 终态不碰）。
+            if optional_string_from(dispatch, "state").as_deref() != Some("running") {
+                continue;
+            }
+            let Some(node_id) = optional_string_from(dispatch, "node_id") else {
+                continue;
+            };
+            if !node_ids.contains(&node_id) {
+                continue; // 别的 workflow / canvas / 别的节点——不扫。
+            }
+            let Some(dispatch_id) = optional_string_from(dispatch, "dispatch_id") else {
+                continue;
+            };
+            // age = now - started_at_ms（缺则退到 created_at_ms）。两者都缺 → 无法证明超龄 → 不碰（防误杀）。
+            match i64_value(dispatch, "started_at_ms")
+                .or_else(|| i64_value(dispatch, "created_at_ms"))
+            {
+                Some(started_ms)
+                    if now_ms.saturating_sub(started_ms) > STALE_RUNNING_DISPATCH_MS =>
+                {
+                    to_supersede.push((dispatch_id, node_id));
+                }
+                Some(started_ms) => {
+                    let minutes = now_ms.saturating_sub(started_ms) / 60_000;
+                    warnings.push(format!(
+                        "节点「{node_id}」可能仍有一次执行没结束（约 {minutes} 分钟前起）；本轮若被拦请稍后再试。"
+                    ));
+                }
+                None => {
+                    warnings.push(format!(
+                        "节点「{node_id}」有一条 running 执行记录但缺起始时间戳，无法判超龄、不接管（本轮若被拦请稍后再试）。"
+                    ));
+                }
+            }
+        }
+    }
+    if to_supersede.is_empty() {
+        return warnings;
+    }
+    // 第二遍（定点接管）：只改匹配记录的 state→failed + append 一条 warnings 说明（别的字段不动）。
+    if let Some(dispatches) = value
+        .get_mut("workflow_node_dispatches")
+        .and_then(Value::as_array_mut)
+    {
+        for dispatch in dispatches.iter_mut() {
+            let Some(dispatch_id) = optional_string_from(dispatch, "dispatch_id") else {
+                continue;
+            };
+            if !to_supersede.iter().any(|(id, _)| id == &dispatch_id) {
+                continue;
+            }
+            dispatch["state"] = json!("failed");
+            if let Some(list) = dispatch.get_mut("warnings").and_then(Value::as_array_mut) {
+                list.push(json!(
+                    "上次运行进程中断遗留，已由新一轮标结（stale_running_dispatch_superseded）。"
+                ));
+            }
+        }
+    }
+    // 审计（每条一 event·带 dispatch_id/node_id·只 append）。
+    let ts = unix_timestamp_string();
+    for (dispatch_id, node_id) in &to_supersede {
+        if let Ok(events) = array_mut(&mut value, "audit_events") {
+            events.push(json!({
+                "event_id": format!("stale-running-dispatch-superseded:{dispatch_id}:{ts}"),
+                "event_type": "stale_running_dispatch_superseded",
+                "target_ref": node_id,
+                "actor_ref": "role_loop_auto_advance",
+                "source_kind": "stale_dispatch_reconcile",
+                "permission_level": "workflow_event_record",
+                "dispatch_id": dispatch_id,
+                "created_at": ts,
+                "reason": "上次运行进程中断遗留的 running 派发记录（超龄·物理上不可能仍在跑），已标结 failed 以解除 duplicate_blocked。",
+            }));
+        }
+    }
+    if write_validated_workflow_state(path, &value).is_ok() {
+        warnings.insert(
+            0,
+            format!(
+                "已标结 {} 条上次中断遗留的执行记录（超龄·解除 duplicate_blocked）。",
+                to_supersede.len()
+            ),
+        );
+    }
+    warnings
+}
+
 pub(crate) fn run_director_task_chain(
     path: &std::path::Path,
     index: &Value,
@@ -1168,6 +1291,12 @@ fn run_auto_advance_authorized_role_loop(
             path,
             project_root,
             &planned_tasks,
+        ));
+        // fix5 2.2：prepare 前把本轮节点上**超龄**的 running 派发墓碑标结（解除 S1 duplicate_blocked）；未超龄不碰。
+        advance_warnings.extend(reconcile_stale_running_dispatches(
+            path,
+            &planned_tasks,
+            unix_timestamp_ms(),
         ));
         // 3. prepare（→ prepared dispatches·授权范围内·把 LM 拆的任务接进派发机器）。
         let prepare_input = PrepareAuthorizedAutoDispatchInput {

@@ -8599,6 +8599,307 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
+    // ===== 交办 fix5（中断遗留的 running 派发墓碑标结）·stub =====
+
+    fn fix5_inject_dispatch(
+        path: &Path,
+        dispatch_id: &str,
+        workflow_id: &str,
+        node_id: &str,
+        state: &str,
+        started_at_ms: i64,
+    ) {
+        let mut v = read_workflow_state_value(path).expect("state");
+        ensure_array_mut(&mut v, "workflow_node_dispatches")
+            .expect("arr")
+            .push(json!({
+              "dispatch_id": dispatch_id,
+              "workflow_id": workflow_id,
+              "node_id": node_id,
+              "state": state,
+              "started_at_ms": started_at_ms,
+              "warnings": []
+            }));
+        write_validated_workflow_state(path, &v).expect("inject dispatch");
+    }
+
+    fn fix5_dispatch_state(path: &Path, dispatch_id: &str) -> Option<String> {
+        read_json_file(path)["workflow_node_dispatches"]
+            .as_array()?
+            .iter()
+            .find(|d| optional_string_from(d, "dispatch_id").as_deref() == Some(dispatch_id))
+            .and_then(|d| optional_string_from(d, "state"))
+    }
+
+    // fix5·复刻撞死：本轮 codex-dev 节点上超龄（40 分钟前·>30min 物理上限）running 墓碑 → 标结 failed + 审计 + warning。
+    #[test]
+    fn jiaoban_fix5_supersedes_stale_running_dispatch() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("fix5-supersede");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let now_ms = 2_000_000_000_000i64;
+        fix5_inject_dispatch(
+            &path,
+            "d-stale-1",
+            &workflow_id,
+            &node_id,
+            "running",
+            now_ms - 40 * 60_000,
+        );
+        let planned = vec![jiaoban_test_planned_task(&workflow_id, 1, "t", vec![])]; // role codex-dev
+        let warnings = reconcile_stale_running_dispatches(&path, &planned, now_ms);
+        assert_eq!(
+            fix5_dispatch_state(&path, "d-stale-1").as_deref(),
+            Some("failed"),
+            "超龄 running 墓碑应标结 failed"
+        );
+        let d = read_json_file(&path)["workflow_node_dispatches"]
+            .as_array()
+            .and_then(|a| {
+                a.iter()
+                    .find(|d| {
+                        optional_string_from(d, "dispatch_id").as_deref() == Some("d-stale-1")
+                    })
+                    .cloned()
+            })
+            .expect("dispatch 在");
+        assert!(
+            string_array(&d, "warnings")
+                .iter()
+                .any(|w| w.contains("中断遗留")),
+            "记录应带说明 warning"
+        );
+        assert!(
+            warnings.iter().any(|w| w.contains("已标结")),
+            "outcome 应告知已标结：{warnings:?}"
+        );
+        assert!(
+            audit_has(&path, "stale_running_dispatch_superseded"),
+            "标结应有审计事件"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // fix5·防误杀：新鲜（1 分钟前）running 不被碰 + 出「可能仍在执行」人话 + 无标结/审计。
+    #[test]
+    fn jiaoban_fix5_fresh_running_dispatch_not_touched() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("fix5-fresh");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let now_ms = 2_000_000_000_000i64;
+        fix5_inject_dispatch(
+            &path,
+            "d-fresh",
+            &workflow_id,
+            &node_id,
+            "running",
+            now_ms - 60_000,
+        );
+        let planned = vec![jiaoban_test_planned_task(&workflow_id, 1, "t", vec![])];
+        let warnings = reconcile_stale_running_dispatches(&path, &planned, now_ms);
+        assert_eq!(
+            fix5_dispatch_state(&path, "d-fresh").as_deref(),
+            Some("running"),
+            "新鲜 running 绝不被碰（防误杀真活）"
+        );
+        assert!(
+            warnings.iter().any(|w| w.contains("可能仍有一次执行")),
+            "应出「可能仍在执行」人话：{warnings:?}"
+        );
+        assert!(!warnings.iter().any(|w| w.contains("已标结")), "不该标结");
+        assert!(
+            !audit_has(&path, "stale_running_dispatch_superseded"),
+            "不该有标结审计"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // fix5·范围纪律：别的 workflow / canvas 形状 node / prepared / 终态 —— 全不被碰（逐类断言原样）。
+    #[test]
+    fn jiaoban_fix5_scope_only_touches_planned_node_running() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("fix5-scope");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let now_ms = 2_000_000_000_000i64;
+        let old = now_ms - 40 * 60_000;
+        fix5_inject_dispatch(
+            &path,
+            "d-other-wf",
+            "other-workflow",
+            "other-workflow:node:codex-dev",
+            "running",
+            old,
+        ); // 别的 workflow
+        fix5_inject_dispatch(
+            &path,
+            "d-canvas",
+            &workflow_id,
+            &format!("{workflow_id}:node:canvas-legacy"),
+            "running",
+            old,
+        ); // 本 wf·非本轮节点
+        fix5_inject_dispatch(&path, "d-prepared", &workflow_id, &node_id, "prepared", old); // 本轮节点·非 running
+        fix5_inject_dispatch(
+            &path,
+            "d-completed",
+            &workflow_id,
+            &node_id,
+            "completed",
+            old,
+        ); // 终态
+        let planned = vec![jiaoban_test_planned_task(&workflow_id, 1, "t", vec![])]; // 本轮节点=codex-dev
+        let warnings = reconcile_stale_running_dispatches(&path, &planned, now_ms);
+        assert_eq!(
+            fix5_dispatch_state(&path, "d-other-wf").as_deref(),
+            Some("running"),
+            "别的 workflow 的 running 不扫"
+        );
+        assert_eq!(
+            fix5_dispatch_state(&path, "d-canvas").as_deref(),
+            Some("running"),
+            "本 wf 但非本轮节点（canvas 形状）不碰"
+        );
+        assert_eq!(
+            fix5_dispatch_state(&path, "d-prepared").as_deref(),
+            Some("prepared"),
+            "prepared 不碰（闸不数它）"
+        );
+        assert_eq!(
+            fix5_dispatch_state(&path, "d-completed").as_deref(),
+            Some("completed"),
+            "终态不碰"
+        );
+        assert!(
+            !warnings.iter().any(|w| w.contains("已标结")),
+            "没有匹配的超龄 running → 不标结：{warnings:?}"
+        );
+        assert!(!audit_has(&path, "stale_running_dispatch_superseded"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // fix5·端到端（re-plan 两分支同享挂载点）：注入线上同款墓碑（codex-dev·running·1 小时前）→ auto_advance →
+    // 标结解除 duplicate_blocked → 链跑通 ran + 墓碑 failed + warnings 告知。
+    #[test]
+    fn jiaoban_fix5_replan_unblocks_after_superseding_stale_dispatch() {
+        let (dir, index_path, index, workflow_id) = auto_advance_fixture("fix5-unblock", true);
+        let path = dir.join("workflow-state.v0.json");
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let now_ms = unix_timestamp_ms();
+        fix5_inject_dispatch(
+            &path,
+            "d-crash-tombstone",
+            &workflow_id,
+            &node_id,
+            "running",
+            now_ms - 60 * 60_000,
+        ); // 1 小时前
+        let runner = fix4_permissive_runner();
+        let outcome = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            test_root,
+            &workflow_id,
+            "tester",
+            10,
+            None,
+        )
+        .expect("标结墓碑后应跑通");
+        assert_eq!(
+            outcome.stage, "ran",
+            "超龄墓碑标结后 re-plan 应 ran（不再 duplicate_blocked）：{outcome:?}"
+        );
+        assert!(
+            outcome.warnings.iter().any(|w| w.contains("已标结")),
+            "应告知标结：{:?}",
+            outcome.warnings
+        );
+        assert_eq!(
+            fix5_dispatch_state(&path, "d-crash-tombstone").as_deref(),
+            Some("failed"),
+            "墓碑记录应被标结 failed"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // fix5·approved 路同享：挂载点在两分支合流后 → approved（所批即所跑）路径也标结超龄墓碑（§4 明列）。
+    #[test]
+    fn jiaoban_fix5_approved_path_also_supersedes_stale_dispatch() {
+        let timestamp_ms = 1_765_300_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-fix5-approved";
+        let dir = test_temp_dir("fix5-approved");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let (proposal, _auth, _rev) = create_active_project_director_authorization_fixture(
+            &path,
+            test_root,
+            thread_id,
+            timestamp_ms,
+        );
+        let workflow_id = default_workflow_id(test_root);
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(
+                test_root,
+                &format!("{workflow_id}:node:codex-dev"),
+                None,
+                thread_id,
+            ),
+        )
+        .expect("bind");
+        let ctx = load_project_context(test_root).expect("ctx");
+        let approved = StubDirector.plan(&ctx, &proposal).expect("approved graph");
+        let now_ms = unix_timestamp_ms();
+        fix5_inject_dispatch(
+            &path,
+            "d-approved-tombstone",
+            &workflow_id,
+            &format!("{workflow_id}:node:codex-dev"),
+            "running",
+            now_ms - 60 * 60_000,
+        );
+        let runner = fix4_permissive_runner();
+        let outcome = run_auto_advance_authorized_role_loop(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &BombDirector,
+            test_root,
+            &workflow_id,
+            "tester",
+            10,
+            Some(&approved),
+        )
+        .expect("approved 标结墓碑后应跑通");
+        assert_eq!(
+            outcome.stage, "ran",
+            "approved 路也应标结墓碑后 ran：{outcome:?}"
+        );
+        assert_eq!(
+            fix5_dispatch_state(&path, "d-approved-tombstone").as_deref(),
+            Some("failed"),
+            "approved 路墓碑也被标结（挂载点两分支同享）"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // P3 项目面真跑（C 映射）·机器闸：用已存在的 work_item（带任务包）+ 绑定，stub runner 验证
     // execute_project_workflow_node_at 从任务包构造指令 + 走通派发到 completed。
     #[test]
