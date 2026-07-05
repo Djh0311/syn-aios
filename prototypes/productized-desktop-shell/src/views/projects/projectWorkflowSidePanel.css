@@ -620,7 +620,7 @@
 .jiaoban-worksmap-suggest {
   padding: 1px 8px;
   border-radius: 10px;
-  background: var(--accent-soft, rgba(80, 130, 255, 0.12));
+  background: var(--accent-bg, rgba(42, 107, 94, 0.12));
   color: var(--accent);
   font-size: 11.5px;
 }
@@ -634,17 +634,34 @@
   font-size: 13px;
   color: var(--ink-mid);
 }
-.jiaoban-worksmap-list {
-  margin: 0 0 8px;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 6px;
-}
-.jiaoban-worksmap-item {
+/* fix7：步骤框纵向流——一眼像流程图（框 + 向下箭头），替代原编号列表。 */
+.jiaoban-worksmap-graph {
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  align-items: stretch;
+  margin: 0 0 8px;
+}
+.jiaoban-worksmap-node-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.jiaoban-worksmap-arrow {
+  color: var(--ink-mid);
+  font-size: 13px;
+  line-height: 1;
+  margin: 3px 0;
+  opacity: 0.65;
+}
+.jiaoban-worksmap-node {
+  display: flex;
+  align-items: center;
   gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.14));
+  border-radius: 8px;
+  background: var(--panel-raised, #ffffff);
   font-size: 13px;
 }
 .jiaoban-worksmap-step {
@@ -655,7 +672,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--chip-bg, rgba(0, 0, 0, 0.06));
+  background: var(--panel-soft, rgba(28, 31, 36, 0.05));
   color: var(--ink-mid);
   font-size: 11px;
 }
@@ -663,8 +680,38 @@
   font-weight: 500;
 }
 .jiaoban-worksmap-dep {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: var(--panel-soft, rgba(28, 31, 36, 0.05));
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: 11.5px;
+}
+/* fix7：图画好那一刻高亮一次（不循环）。graph 从 loading 切到 tasks = 新 mount → 动画自动跑一次。 */
+.jiaoban-worksmap-arrived {
+  animation: jiaoban-worksmap-pop 1.5s ease-out 1;
+}
+@keyframes jiaoban-worksmap-pop {
+  0% {
+    box-shadow: 0 0 0 0 rgba(42, 107, 94, 0);
+  }
+  25% {
+    box-shadow: 0 0 0 4px rgba(42, 107, 94, 0.32);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+  }
+}
+/* fix7：按钮旁状态话——图好了的到场提示（用户视线所在）。 */
+.jiaoban-worksmap-cta {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--ink-mid);
+}
+.jiaoban-worksmap-cta.ready {
+  color: var(--ok);
+  font-weight: 600;
 }
 .jiaoban-worksmap-warnings {
   margin: 6px 0 0;

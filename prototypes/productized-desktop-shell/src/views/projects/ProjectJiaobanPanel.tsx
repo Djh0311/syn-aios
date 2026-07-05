@@ -709,6 +709,16 @@ function JiaobanAuthorizeState({
 }) {
   const targetFiles = extractTargetFiles(proposal.proposed_steps);
   const willWrite = proposal.scope_draft.allowed_write_roots.length > 0;
+  // fix7：按钮旁「工序图状态话」——图好那刻在用户视线所在（按钮上方）给到场提示，把「所批即所跑」说出口。
+  const worksmapReady = !worksmapLoading && !worksmapError && !!(worksmapTasks && worksmapTasks.length);
+  const worksmapNote =
+    !worksmapSwitchOn || worksmapError
+      ? null
+      : worksmapLoading
+        ? "工序图绘制中…（可先批，先批就按现场拆）"
+        : worksmapReady
+          ? "✓ 工序图好了——你批的就是这份图"
+          : null;
 
   return (
     <div className="project-canvas-detail-card jiaoban-authorize" aria-label="AI 的方案">
@@ -788,6 +798,10 @@ function JiaobanAuthorizeState({
           placeholder="例：改成暗色、分数存下来…"
         />
       </label>
+
+      {worksmapNote ? (
+        <p className={`jiaoban-worksmap-cta ${worksmapReady ? "ready" : ""}`}>{worksmapNote}</p>
+      ) : null}
 
       <div className="workflow-state-actions">
         {proposalIsStale ? (
@@ -877,17 +891,30 @@ function JiaobanWorksmap({
             </div>
           ) : tasks && tasks.length ? (
             <>
-              <ol className="jiaoban-worksmap-list">
-                {tasks.map((task, index) => (
-                  <li key={task.planned_task_id} className="jiaoban-worksmap-item">
-                    <span className="jiaoban-worksmap-step">{index + 1}</span>
-                    <span className="jiaoban-worksmap-task">{task.title}</span>
-                    {task.depends_on.length ? (
-                      <span className="jiaoban-worksmap-dep">← 等：{task.depends_on.join("、")}</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ol>
+              {/* fix7：步骤框纵向流——一眼像流程图（框 + 向下箭头）。简单先后靠箭头表达；等多个/跨步的
+                  依赖（不是紧邻上一步）才在框里挂「等：X」小标签补充。arrived class 让图画好那刻高亮一次。 */}
+              <div className="jiaoban-worksmap-graph jiaoban-worksmap-arrived">
+                {tasks.map((task, index) => {
+                  const prevTitle = index > 0 ? tasks[index - 1].title : null;
+                  const extraDeps = task.depends_on.filter((dep) => dep !== prevTitle);
+                  return (
+                    <div key={task.planned_task_id} className="jiaoban-worksmap-node-wrap">
+                      {index > 0 ? (
+                        <span className="jiaoban-worksmap-arrow" aria-hidden="true">
+                          ↓
+                        </span>
+                      ) : null}
+                      <div className="jiaoban-worksmap-node">
+                        <span className="jiaoban-worksmap-step">{index + 1}</span>
+                        <span className="jiaoban-worksmap-task">{task.title}</span>
+                        {extraDeps.length ? (
+                          <span className="jiaoban-worksmap-dep">等：{extraDeps.join("、")}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
               {warnings.length ? (
                 <ul className="jiaoban-worksmap-warnings" aria-label="工序图提醒">
                   {warnings.map((warning, index) => (
