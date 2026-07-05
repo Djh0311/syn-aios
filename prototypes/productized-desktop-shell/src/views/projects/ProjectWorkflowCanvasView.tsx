@@ -366,6 +366,9 @@ export function ProjectWorkflowCanvasView({
       ) ?? null,
     [canvasModel, selectedCanvasNodeId],
   );
+  // 刀2：任务级节点（workflow_node_id 含 :node:task:）是「窗口不是操作台」——只看不点、不给运行入口
+  // （决策 §条件式工序图）。它们是主管拆出的任务视图，执行走交办/链，不在只读画布上单点派发。
+  const selectedNodeIsTaskWindow = Boolean(selectedProjectNode?.workflow_node_id?.includes(":node:task:"));
   // P3 项目面真跑（架构方案 §9 的 C 映射）：选中只读运行态里一个节点 → 派发它的 work_item。
   // 节点 = workflow-state work_item 本体（无手绑）；后端从任务包构造指令、用节点既有会话绑定
   // resume。前端不判闸——非固定测试项目仍被后端 path-lock 挡下、零执行。
@@ -373,6 +376,11 @@ export function ProjectWorkflowCanvasView({
     const node = selectedProjectNode;
     if (!node?.workflow_node_id) {
       onNotice("请先选中一个节点再运行");
+      return;
+    }
+    // 刀2 防御：任务节点是查看窗口，不在这里单独跑（按钮已 disabled，这里双保险防其它路径调入）。
+    if (node.workflow_node_id.includes(":node:task:")) {
+      onNotice("任务节点是查看窗口，不在这里单独跑——执行走「交办」或「开始链」。");
       return;
     }
     setRunningProjectNode(true);
@@ -744,11 +752,13 @@ export function ProjectWorkflowCanvasView({
               className="primary-button"
               type="button"
               onClick={() => void runSelectedProjectNode()}
-              disabled={runningProjectNode || !selectedProjectNode?.workflow_node_id}
+              disabled={runningProjectNode || !selectedProjectNode?.workflow_node_id || selectedNodeIsTaskWindow}
               title={
-                selectedProjectNode?.workflow_node_id
-                  ? "派发选中节点（经 path-lock 闸真跑；画布建的节点会自动建临时 work_item + 用节点 resume 会话）"
-                  : "先选中一个节点"
+                selectedNodeIsTaskWindow
+                  ? "任务节点是查看窗口，不在这里单独跑——执行走「交办」或「开始链」"
+                  : selectedProjectNode?.workflow_node_id
+                    ? "派发选中节点（经 path-lock 闸真跑；画布建的节点会自动建临时 work_item + 用节点 resume 会话）"
+                    : "先选中一个节点"
               }
             >
               {runningProjectNode ? "运行中…" : "▶ 运行选中节点"}
@@ -962,17 +972,22 @@ function ProjectWorkflowReactFlowCanvasBrowser({
   );
   const flowEdges = useMemo<ProjectCanvasFlowEdge[]>(
     () =>
-      canvasModel.edges.map((edge) => ({
-        id: edge.edge_id,
-        source: edge.source_node_id,
-        target: edge.target_node_id,
-        label: edge.label ?? undefined,
-        type: "smoothstep",
-        animated: edge.status === "active",
-        markerEnd: { type: MarkerType.ArrowClosed },
-        data: { canvasEdge: edge },
-        className: `project-canvas-edge ${edge.status}`,
-      })),
+      canvasModel.edges.map((edge) => {
+        // 刀2：依赖边走虚线 + 淡色，与角色骨架实边区分（表达任务「谁等谁」的先后，非职责流）。
+        const isDependency = edge.edge_type === "dependency_flow";
+        return {
+          id: edge.edge_id,
+          source: edge.source_node_id,
+          target: edge.target_node_id,
+          label: edge.label ?? undefined,
+          type: "smoothstep",
+          animated: edge.status === "active",
+          markerEnd: { type: MarkerType.ArrowClosed },
+          style: isDependency ? { strokeDasharray: "6 4", stroke: "#9aa0a6" } : undefined,
+          data: { canvasEdge: edge },
+          className: `project-canvas-edge ${edge.status} ${edge.edge_type}`,
+        };
+      }),
     [canvasModel.edges],
   );
 

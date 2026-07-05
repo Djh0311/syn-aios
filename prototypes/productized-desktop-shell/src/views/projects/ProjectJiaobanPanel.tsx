@@ -5,6 +5,7 @@ import {
   autoAdvanceAuthorizedRoleLoop,
   confirmAndStartAuthorizedRun,
   getProjectWorkflowChainStatus,
+  previewPendingProposalDirectorPlan,
   stopProjectWorkflowChain,
 } from "../../lib/tauri";
 import type {
@@ -12,6 +13,7 @@ import type {
   PendingAction,
   PlanAuthorizationStoreV1,
   ProjectConsultationProposal,
+  ProjectDirectorPlannedTask,
   ProjectConsultationProposalStoreV1,
   ProjectRecord,
   ProjectWorkflowChainStatus,
@@ -84,6 +86,21 @@ function writeJiaobanRunCache(projectRoot: string, patch: Partial<JiaobanRunCach
 }
 function clearJiaobanRunCache(projectRoot: string) {
   jiaobanRunCacheByProject.delete(projectRoot);
+}
+
+// 刀2「批前看图」预拆结果缓存 by proposal_id：预拆真 LM 1-7 分钟，切 tab/重挂载回来不重拆。只缓存成功结果
+// （失败/进行中是瞬态 state，不进缓存——重来时按需重拆）。同一份方案的图批时原样回传给后端，所见即所跑。
+type JiaobanPreviewCache = {
+  tasks: ProjectDirectorPlannedTask[];
+  warnings: string[];
+};
+const jiaobanPreviewCacheByProposal = new Map<string, JiaobanPreviewCache>();
+
+// 预拆偶发早退（flaky·后端已自动重试一次仍可能空）→ 人话，优雅降级：不影响批。
+function humanizePreviewError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  if (/找不到方案|proposal/i.test(raw)) return "这份方案暂时读不到，工序图没画出来（可重试）。";
+  return "工序图没画出来（可重试）；不影响你批。";
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -160,6 +177,17 @@ function ProjectJiaobanPanelBrowser({
   const ranProposalIdRef = useRef<string | null>(cached?.ranProposalId ?? null);
   // fix6-v2：本轮点击时刻（ms，缓存恢复）。判「这轮的链」：chainStatus.started_at >= 它才算本轮（旧链更早、天然排除）。
   const [runStartedAtMs, setRunStartedAtMs] = useState<number | null>(cached?.runStartedAtMs ?? null);
+
+  // 刀2「批前看图」：复杂活（proposal.suggest_workflow）或用户开「按工作流来」→ 批前预拆工序图给用户看。
+  // 结果按 proposal_id 缓存（切 tab 回来不重拆·下面 effect 命中即恢复）；loading/error 是瞬态。
+  // 批时 previewTasks 原样回传后端 = 所见即所跑；简单活/预拆失败则 previewTasks 为空 → 不传 → 后端照旧拆。
+  const [workflowSwitchOn, setWorkflowSwitchOn] = useState(latestProposal?.suggest_workflow === true);
+  const [previewTasks, setPreviewTasks] = useState<ProjectDirectorPlannedTask[] | null>(null);
+  const [previewWarnings, setPreviewWarnings] = useState<string[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewNonce, setPreviewNonce] = useState(0); // 重试 bump：effect 依赖没变时强制重跑预拆
+  const previewLoadingRef = useRef(false);
 
   // 状态防丢的关键判断：**只在「出现一份新的、待用户确认的方案」时**清上一轮开始态、回到「批」。
   // 反过来，下面几种一律不清（旧实现漏了这些，导致结果被抹）：
@@ -249,6 +277,60 @@ function ProjectJiaobanPanelBrowser({
     onRequestAction(buildRunProjectConsultationAction(project, projectWorkflow, merged));
   }
 
+  // 刀2「批前看图」触发条件 = 工作流开关开着（AI 建议时开关默认开·见上面 reset effect；用户也可手动开/关）。
+  // 简单活默认关 → 不触发、不加一秒等待。
+  const shouldPreviewWorksmap = workflowSwitchOn;
+
+  // 换方案（新 proposal_id）→ 清上一份预拆展示态 + 关开关；新方案按需重新触发/命中缓存。
+  useEffect(() => {
+    setPreviewTasks(null);
+    setPreviewWarnings([]);
+    setPreviewError(null);
+    setWorkflowSwitchOn(latestProposal?.suggest_workflow === true);
+    previewLoadingRef.current = false;
+  }, [latestProposal?.proposal_id]);
+
+  // 预拆触发：命中缓存直接恢复（切 tab 回来不重拆）；否则异步调后端预拆（零写盘·1-7 分钟），持住结果。防重入靠 ref。
+  useEffect(() => {
+    const proposalId = latestProposal?.proposal_id;
+    if (!proposalId || !shouldPreviewWorksmap) return;
+    const cachedPreview = jiaobanPreviewCacheByProposal.get(proposalId);
+    if (cachedPreview) {
+      setPreviewTasks(cachedPreview.tasks);
+      setPreviewWarnings(cachedPreview.warnings);
+      setPreviewError(null);
+      return;
+    }
+    if (previewLoadingRef.current) return;
+    previewLoadingRef.current = true;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    previewPendingProposalDirectorPlan({ project_root: projectRoot, proposal_id: proposalId })
+      .then((result) => {
+        jiaobanPreviewCacheByProposal.set(proposalId, { tasks: result.planned_tasks, warnings: result.warnings });
+        setPreviewTasks(result.planned_tasks);
+        setPreviewWarnings(result.warnings);
+      })
+      .catch((error) => {
+        setPreviewError(humanizePreviewError(error));
+      })
+      .finally(() => {
+        previewLoadingRef.current = false;
+        setPreviewLoading(false);
+      });
+  }, [latestProposal?.proposal_id, shouldPreviewWorksmap, projectRoot, previewNonce]);
+
+  // 重试预拆：清该方案缓存 + bump nonce 让上面 effect 重跑。
+  function retryPreview() {
+    const proposalId = latestProposal?.proposal_id;
+    if (!proposalId) return;
+    jiaobanPreviewCacheByProposal.delete(proposalId);
+    previewLoadingRef.current = false;
+    setPreviewError(null);
+    setPreviewTasks(null);
+    setPreviewNonce((nonce) => nonce + 1);
+  }
+
   // 允许并开始 = 方案授权人闸那一下。走刀1 合流命令 confirm_and_start_authorized_run（见 lib/tauri）。
   async function authorizeAndStart() {
     if (!projectWorkflow || !latestProposal || starting || runningRef.current) return;
@@ -277,6 +359,8 @@ function ProjectJiaobanPanelBrowser({
         session_choice: sessionChoice ? "existing" : "new",
         session_id: sessionChoice ?? undefined,
         actor_id: "user",
+        // 刀2 所批即所跑：批前预拆成功过就把那份图原样带回 → 后端照图跑不重拆；简单活/预拆失败 previewTasks 空 → 不传。
+        approved_planned_tasks: previewTasks ?? undefined,
       });
       // fix6：命令返回 ran = 链已跑完（chain_outcome 在返回体里）→ 直接翻交货脸，不设 running 干等轮询。
       const nextPhase: JiaobanPhase = outcome.stage === "ran" ? "done" : "blocked";
@@ -489,6 +573,13 @@ function ProjectJiaobanPanelBrowser({
             onRePlan={backToSay}
             onDecline={backToSay}
             starting={starting}
+            worksmapSwitchOn={workflowSwitchOn}
+            onToggleWorksmapSwitch={setWorkflowSwitchOn}
+            worksmapTasks={previewTasks}
+            worksmapWarnings={previewWarnings}
+            worksmapLoading={previewLoading}
+            worksmapError={previewError}
+            onRetryWorksmap={retryPreview}
           />
         ) : null}
 
@@ -497,7 +588,7 @@ function ProjectJiaobanPanelBrowser({
         ) : null}
 
         {phase === "done" ? (
-          <JiaobanDoneState outcome={outcome} chainStatus={chainStatus} onContinue={backToSay} />
+          <JiaobanDoneState outcome={outcome} chainStatus={thisRoundChainStatus} onContinue={backToSay} />
         ) : null}
 
         {phase === "blocked" ? (
@@ -517,8 +608,6 @@ function ProjectJiaobanPanelBrowser({
           />
         ) : null}
 
-        {/* 刀2 占位：复杂活的工序图稍后加（本包不实现）。 */}
-        <p className="muted small-note jiaoban-worksmap-placeholder">复杂活的工序图稍后加。</p>
       </div>
     </section>
   );
@@ -588,6 +677,13 @@ function JiaobanAuthorizeState({
   onRePlan,
   onDecline,
   starting,
+  worksmapSwitchOn,
+  onToggleWorksmapSwitch,
+  worksmapTasks,
+  worksmapWarnings,
+  worksmapLoading,
+  worksmapError,
+  onRetryWorksmap,
 }: {
   proposal: ProjectConsultationProposal;
   proposalTimeText: string;
@@ -603,6 +699,13 @@ function JiaobanAuthorizeState({
   onRePlan: () => void;
   onDecline: () => void;
   starting: boolean;
+  worksmapSwitchOn: boolean;
+  onToggleWorksmapSwitch: (value: boolean) => void;
+  worksmapTasks: ProjectDirectorPlannedTask[] | null;
+  worksmapWarnings: string[];
+  worksmapLoading: boolean;
+  worksmapError: string | null;
+  onRetryWorksmap: () => void;
 }) {
   const targetFiles = extractTargetFiles(proposal.proposed_steps);
   const willWrite = proposal.scope_draft.allowed_write_roots.length > 0;
@@ -650,6 +753,17 @@ function JiaobanAuthorizeState({
           {proposalTimeText}
         </p>
       </div>
+
+      <JiaobanWorksmap
+        suggestWorkflow={proposal.suggest_workflow === true}
+        switchOn={worksmapSwitchOn}
+        onToggleSwitch={onToggleWorksmapSwitch}
+        loading={worksmapLoading}
+        tasks={worksmapTasks}
+        warnings={worksmapWarnings}
+        error={worksmapError}
+        onRetry={onRetryWorksmap}
+      />
 
       <JiaobanSessionPicker
         sessions={sessions}
@@ -716,6 +830,80 @@ function JiaobanAuthorizeState({
         </button>
       </div>
       <p className="muted small-note">点「允许并开始」= 允许这段自动跑，后面不再逐步问你。</p>
+    </div>
+  );
+}
+
+// 刀2「批前看图」·工序图区。开关开着（AI 建议时默认开·可手动关）才显图；不用重型图库——任务名 +「等：X」
+// 表达先后（planned_tasks[].depends_on 是前置任务的 title）。预拆慢/失败都不挡批：loading 照常可批、失败给
+// 重试 + 人话「不影响批」。词表：只显 title，不露 node_id/planned_task_id。
+function JiaobanWorksmap({
+  suggestWorkflow,
+  switchOn,
+  onToggleSwitch,
+  loading,
+  tasks,
+  warnings,
+  error,
+  onRetry,
+}: {
+  suggestWorkflow: boolean;
+  switchOn: boolean;
+  onToggleSwitch: (value: boolean) => void;
+  loading: boolean;
+  tasks: ProjectDirectorPlannedTask[] | null;
+  warnings: string[];
+  error: string | null;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="jiaoban-worksmap" aria-label="工序图">
+      <label className="jiaoban-worksmap-toggle">
+        <input type="checkbox" checked={switchOn} onChange={(event) => onToggleSwitch(event.target.checked)} />
+        <span>按工作流来（先看工序图再动手）</span>
+        {suggestWorkflow ? <span className="jiaoban-worksmap-suggest">AI 建议：这活值得先看图</span> : null}
+      </label>
+
+      {switchOn ? (
+        <div className="jiaoban-worksmap-body">
+          {loading ? (
+            <p className="muted small-note">正在画工序图…（大约 1–7 分钟，这期间可以照常批）</p>
+          ) : error ? (
+            <div className="jiaoban-worksmap-error" role="note">
+              <span>{error}</span>
+              <button className="secondary-button" type="button" onClick={onRetry}>
+                重试
+              </button>
+            </div>
+          ) : tasks && tasks.length ? (
+            <>
+              <ol className="jiaoban-worksmap-list">
+                {tasks.map((task, index) => (
+                  <li key={task.planned_task_id} className="jiaoban-worksmap-item">
+                    <span className="jiaoban-worksmap-step">{index + 1}</span>
+                    <span className="jiaoban-worksmap-task">{task.title}</span>
+                    {task.depends_on.length ? (
+                      <span className="jiaoban-worksmap-dep">← 等：{task.depends_on.join("、")}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ol>
+              {warnings.length ? (
+                <ul className="jiaoban-worksmap-warnings" aria-label="工序图提醒">
+                  {warnings.map((warning, index) => (
+                    <li key={index}>{warning}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <p className="muted small-note">完整工序图可在上方「工作流」标签里看大图。</p>
+            </>
+          ) : tasks ? (
+            <p className="muted small-note">这活拆下来就一步，不用画图，直接批就行。</p>
+          ) : (
+            <p className="muted small-note">正在准备工序图…</p>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

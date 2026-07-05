@@ -21,6 +21,8 @@ import type {
   AutoAdvanceAuthorizedRoleLoopRequest,
   AutoAdvanceRoleLoopOutcome,
   ConfirmAndStartAuthorizedRunRequest,
+  PreviewPendingProposalDirectorPlanRequest,
+  PreviewPendingProposalDirectorPlanOutcome,
   ProjectConsultationProposal,
   ProjectWorkflowListItem,
   SubmitProjectWorkflowDraftRequest,
@@ -860,6 +862,15 @@ export function confirmAndStartAuthorizedRun(
 ): Promise<AutoAdvanceRoleLoopOutcome> {
   ensureTauriRuntime();
   return invoke<AutoAdvanceRoleLoopOutcome>("confirm_and_start_authorized_run", { request });
+}
+
+// 刀2「批前看图」封装：对 pending 方案只读预拆工序图（零写盘·真 LM 1-7 分钟·偶发 flaky）。纯封装无逻辑；
+// 前端拿 planned_tasks 画迷你图 + 原样回传给 confirm 的 approved_planned_tasks（所见即所跑）。
+export function previewPendingProposalDirectorPlan(
+  request: PreviewPendingProposalDirectorPlanRequest,
+): Promise<PreviewPendingProposalDirectorPlanOutcome> {
+  ensureTauriRuntime();
+  return invoke<PreviewPendingProposalDirectorPlanOutcome>("preview_pending_proposal_director_plan", { request });
 }
 
 // P3 E · 多工作流底座（架构 §12）。

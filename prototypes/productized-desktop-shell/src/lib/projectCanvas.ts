@@ -118,7 +118,9 @@ export type ProjectCanvasEdgeType =
   | "handoff_flow"
   | "review_flow"
   | "evidence_reference"
-  | "blocking_relation";
+  | "blocking_relation"
+  // 刀2：任务节点之间的「谁等谁」依赖（来自 WorkflowNode.depends_on）。视觉上走虚线，与角色骨架实边区分。
+  | "dependency_flow";
 
 export type ProjectCanvasEdgeStatus = "idle" | "active" | "blocked" | "completed" | "warning" | "unknown";
 
@@ -610,7 +612,7 @@ export function deriveProjectWorkflowCanvasReadModel({
     });
   }
 
-  const edges = buildEdges(workflowId, nodes, selectedTask);
+  const edges = buildEdges(workflowId, nodes, workflowNodes, selectedTask);
   const selectedNodeId = preferredSelectedNodeId(nodes, selectedTask);
   const editBoundary = buildProjectWorkflowEditBoundary({
     workflowId,
@@ -1065,7 +1067,12 @@ function buildSidecarNodes({
   return [...permissionNodes, ...blackboardNodes];
 }
 
-function buildEdges(workflowId: string, nodes: ProjectCanvasNode[], selectedTask: TaskDraftSummary | null): ProjectCanvasEdge[] {
+function buildEdges(
+  workflowId: string,
+  nodes: ProjectCanvasNode[],
+  workflowNodes: WorkflowNode[],
+  selectedTask: TaskDraftSummary | null,
+): ProjectCanvasEdge[] {
   const node = (suffix: string) => `${workflowId}:canvas:${suffix}`;
   const roleEdges: ProjectCanvasEdge[] = [
     edge("goal-director", "responsibility_flow", node("goal"), node("director"), "目标"),
@@ -1080,7 +1087,28 @@ function buildEdges(workflowId: string, nodes: ProjectCanvasNode[], selectedTask
       const targetRole = roleSuffixForWorkflowNode(item.workflow_node_id ?? dispatchNodeIdForTask(selectedTask));
       return edge(`sidecar-${index}`, "blocking_relation", item.node_id, node(targetRole), item.node_type === "permission_request" ? "阻塞" : "候选");
     });
-  return [...roleEdges, ...sidecarEdges].filter((item) =>
+  // 刀2：任务节点依赖连线。WorkflowNode.depends_on 是 node_id 引用；从已生成 nodes 反查
+  // workflow_node_id→canvas node_id——角色节点用固定 role suffix、任务节点用 split(":node:") slug，
+  // 但两者都设了 workflow_node_id 字段，反查一律对得上；**不手拼 canvas id**，避免端点对不上而静默丢边。
+  const canvasIdByWorkflowNode = new Map<string, string>();
+  for (const item of nodes) {
+    if (item.workflow_node_id) canvasIdByWorkflowNode.set(item.workflow_node_id, item.node_id);
+  }
+  // 角色骨架边已表达角色间流向；depends_on 命中同一对时不重复画（否则一实一虚叠着）。
+  const roleEdgePairs = new Set(roleEdges.map((item) => `${item.source_node_id}>>${item.target_node_id}`));
+  const dependencyEdges: ProjectCanvasEdge[] = [];
+  let dependencyIndex = 0;
+  for (const wfNode of workflowNodes) {
+    const targetCanvasId = canvasIdByWorkflowNode.get(wfNode.workflow_node_id);
+    if (!targetCanvasId) continue;
+    for (const dependency of wfNode.depends_on) {
+      const sourceCanvasId = canvasIdByWorkflowNode.get(dependency);
+      if (!sourceCanvasId || sourceCanvasId === targetCanvasId) continue;
+      if (roleEdgePairs.has(`${sourceCanvasId}>>${targetCanvasId}`)) continue;
+      dependencyEdges.push(edge(`dep-${dependencyIndex++}`, "dependency_flow", sourceCanvasId, targetCanvasId, "依赖"));
+    }
+  }
+  return [...roleEdges, ...dependencyEdges, ...sidecarEdges].filter((item) =>
     nodes.some((nodeItem) => nodeItem.node_id === item.source_node_id) && nodes.some((nodeItem) => nodeItem.node_id === item.target_node_id),
   );
 

@@ -370,6 +370,21 @@ export type ConfirmAndStartAuthorizedRunRequest = {
   session_id?: string; // session_choice=existing 时要绑的现有 Codex 会话 thread_id
   actor_id?: string;
   max_nodes?: number;
+  // 刀2「所批即所跑」：批前预拆过就把那份图原样带回 → 后端跳过重拆、照图执行（后端 director_agent.rs
+  // ConfirmAndStartAuthorizedRunRequest.approved_planned_tasks 收；不传=现状：批后 LM 拆）。
+  approved_planned_tasks?: ProjectDirectorPlannedTask[];
+};
+
+// 刀2「批前看图」：对 pending 方案只读预拆工序图（零写盘·1-7 分钟·偶发 flaky·后端已自动重试一次）。
+// 后端 preview_pending_proposal_director_plan。返回的 planned_tasks 已钳后=所见即所跑，可原样回传给上面
+// 的 approved_planned_tasks。
+export type PreviewPendingProposalDirectorPlanRequest = {
+  project_root: string;
+  proposal_id: string;
+};
+export type PreviewPendingProposalDirectorPlanOutcome = {
+  planned_tasks: ProjectDirectorPlannedTask[];
+  warnings: string[];
 };
 
 export type AutoAdvanceRoleLoopOutcome = {
@@ -751,6 +766,9 @@ export type ProjectConsultationProposal = {
   created_by_role: ProjectConsultationProposalCreatorRole;
   created_at_ms: number;
   updated_at_ms: number;
+  // 刀2：咨询判「这活值不值得先看工序图」（后端 types.rs ProjectConsultationProposal.suggest_workflow）。
+  // 只影响授权卡图区显隐·不碰授权/写范围。可选：旧方案数据无此字段时按 false 处理。
+  suggest_workflow?: boolean;
 };
 
 export type ProjectConsultationProposalDecision = {
