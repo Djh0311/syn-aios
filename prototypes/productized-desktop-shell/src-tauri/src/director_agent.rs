@@ -1307,7 +1307,9 @@ fn run_auto_advance_authorized_role_loop(
                 approved.to_vec()
             }
             None => {
-                let ctx = load_project_context(project_root)?;
+                // 刀B·记忆召回（真实 path·不死锚）：重拆前用手里的 path 填本项目记忆，与预拆/咨询同覆盖。
+                let mut ctx = load_project_context(project_root)?;
+                ctx.memory_summary = recall_project_memory_summary_at(path, project_root);
                 let proposal_store =
                     project_consultation_proposal_store::load_store(path, timestamp_ms)?;
                 let proposal = proposal_store
@@ -1881,7 +1883,9 @@ fn run_preview_pending_proposal_director_plan_inner(
         .find(|proposal| proposal.proposal_id == request.proposal_id)
         .ok_or_else(|| format!("找不到方案：{}", request.proposal_id))?;
     // 2. load ctx + 主管 LM 预拆（待确认措辞·2.4 偶发早退自动重试一次）。零写盘。
-    let ctx = load_project_context(&request.project_root)?;
+    // 刀B·记忆召回（真实 path·不死锚）：用手里的 path 填本项目记忆，与咨询/重拆同覆盖。
+    let mut ctx = load_project_context(&request.project_root)?;
+    ctx.memory_summary = recall_project_memory_summary_at(path, &request.project_root);
     let (mut planned_tasks, retried) = director_plan_with_retry(director, &ctx, proposal, true)?;
     let mut warnings: Vec<String> = Vec::new();
     if retried {

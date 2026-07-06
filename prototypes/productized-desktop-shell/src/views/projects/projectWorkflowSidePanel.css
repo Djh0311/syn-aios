@@ -813,3 +813,28 @@
   color: #666;
   background: rgba(150, 150, 150, 0.15);
 }
+/* 刀B·事实确认：绿✓行的 [属实,沉淀] 按钮 + 已沉淀标记。 */
+.jiaoban-fact-btn {
+  font-size: 12px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  border: 1px solid #4caf72;
+  color: #2e7d4f;
+  background: rgba(46, 125, 79, 0.06);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.jiaoban-fact-btn:hover {
+  background: rgba(46, 125, 79, 0.14);
+}
+.jiaoban-fact-done {
+  font-size: 12px;
+  color: #2e7d4f;
+  white-space: nowrap;
+}
+/* 刀B·记忆召回计数：说脸一行「出方案会带上 N 条项目记忆」。 */
+.jiaoban-recall-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #6b6b6b;
+}

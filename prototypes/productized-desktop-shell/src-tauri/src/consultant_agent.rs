@@ -210,7 +210,50 @@ fn consultant_load_documents(
     out
 }
 
-// 装配 ProjectContext：有啥塞啥、不假设齐全（防御式降级）。黑板/记忆：被咨询项目通常无工作台数据 → None。
+/// 刀B·记忆召回：从正式记忆 store（workflow_state_path 侧车）取本项目 + 活跃态记忆填 memory_summary。
+/// **只读**·store 读失败/坏 → None（静默降级·召回是增益不是闸·绝不挡咨询）。
+fn recall_project_memory_summary_at(
+    state_path: &std::path::Path,
+    project_root: &str,
+) -> Option<String> {
+    let store = formal_memory_store::load_store(state_path, &unix_timestamp_string()).ok()?;
+    recall_from_store(&store, project_root)
+}
+
+/// 纯逻辑：从已 load 的 store filter「本项目 project_id 匹配 + 活跃态」，按更新时间倒序顶格 5 条，
+/// 渲染人话行「[类型] claim——body 首行」。空 → None。
+fn recall_from_store(store: &FormalMemoryStoreV1, project_root: &str) -> Option<String> {
+    let target = project_id(project_root);
+    let mut records: Vec<&MemoryRecord> = store
+        .records
+        .iter()
+        .filter(|record| {
+            record.status == MemoryLifecycleStatus::MemoryActive
+                && record.scope.project_id.as_deref() == Some(target.as_str())
+        })
+        .collect();
+    records.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    records.truncate(5);
+    if records.is_empty() {
+        return None;
+    }
+    let lines: Vec<String> = records
+        .iter()
+        .map(|record| {
+            let body_first = record.body.lines().next().unwrap_or("").trim();
+            format!(
+                "[{}] {}——{}",
+                record.memory_type,
+                record.claim.trim(),
+                body_first
+            )
+        })
+        .collect();
+    Some(lines.join("\n"))
+}
+
+// 装配 ProjectContext：有啥塞啥、不假设齐全（防御式降级）。黑板→None（无工作台数据）；
+// 记忆→刀B 召回：从正式记忆 store 侧车填 memory_summary（只读·失败静默 None·绝不挡咨询）。
 pub(crate) fn load_project_context(project_root: &str) -> Result<ProjectContext, String> {
     let root = std::path::Path::new(project_root);
     if !root.is_dir() {
@@ -236,6 +279,8 @@ pub(crate) fn load_project_context(project_root: &str) -> Result<ProjectContext,
         injected_documents,
         version_signal,
         blackboard_summary: None,
+        // 纯装配：memory_summary 由各调用方用**手里的真实 path** 填（不在此死锚 default_workflow_state_path——
+        // 本仓「死锚默认不穿真值」两次前科：C4 默认工作流 e2e 卡点 / update_work_item_state_at:477 绕行）。
         memory_summary: None,
     })
 }
@@ -589,8 +634,9 @@ fn run_project_consultation_inner(
     goal: &str,
     actor_id: &str,
 ) -> Result<ProjectConsultationProposal, String> {
-    // 1. 装配 ProjectContext（注入策展文档正文·tier-1）。
-    let ctx = load_project_context(project_root)?;
+    // 1. 装配 ProjectContext（注入策展文档正文·tier-1）+ 用**手里的真实 path** 召回本项目记忆（刀B·真值不死锚）。
+    let mut ctx = load_project_context(project_root)?;
+    ctx.memory_summary = recall_project_memory_summary_at(path, project_root);
     // 2. 咨询 LM 出方案（结构性只读·readonly_codex_consult·不碰执行闸）。
     let proposal = consultant.consult(&ctx, goal)?;
     // 3. 映射进 C1 输入（含咨询提的执行范围；写范围越界/空值 → Err 早报）。
@@ -629,4 +675,176 @@ async fn run_project_consultation(
     })
     .await
     .map_err(|error| format!("咨询执行线程异常：{error}"))?
+}
+
+// 刀B·记忆召回单测。独特 mod 名（consultant_agent 经 include! 进 crate root，用 `tests` 会撞 crate 根
+// mod tests；用独特名既满足「测试进 consultant 自己的 mod、不进 lib.rs」，又不冲突）。
+#[cfg(test)]
+mod consultant_recall_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn store_with(records: serde_json::Value) -> FormalMemoryStoreV1 {
+        serde_json::from_value(json!({
+            "store_version": "formal_memory_store_v1",
+            "project_id": null,
+            "workflow_id": null,
+            "revision": 1,
+            "records": records,
+            "versions": [],
+            "audit_events": [],
+            "updated_at": "2026-07-06",
+            "warnings": []
+        }))
+        .expect("fixture store 应可反序列化")
+    }
+
+    fn record_json(
+        project_id_value: &str,
+        memory_type: &str,
+        claim: &str,
+        body: &str,
+        status: &str,
+        updated_at: &str,
+    ) -> serde_json::Value {
+        json!({
+            "memory_id": format!("mem:{claim}"),
+            "schema_version": "memory_record_v1",
+            "record_version": 1,
+            "scope": {
+                "scope_id": "s",
+                "scope_type": "workflow",
+                "user_id": null,
+                "project_id": project_id_value,
+                "workflow_id": null,
+                "session_id": null,
+                "role_ids": [],
+                "document_refs": [],
+                "permission_policy_ref": null,
+                "model_export_policy": "no_export",
+                "valid_from": updated_at,
+                "valid_until": null
+            },
+            "memory_type": memory_type,
+            "claim": claim,
+            "body": body,
+            "source_refs": [],
+            "status": status,
+            "supersedes_memory_id": null,
+            "superseded_by_memory_id": null,
+            "conflict_refs": [],
+            "audit_refs": [],
+            "created_at": updated_at,
+            "updated_at": updated_at
+        })
+    }
+
+    #[test]
+    fn recall_active_project_records_ordered_and_filtered() {
+        let pid = project_id("/tmp/proj-a");
+        let store = store_with(json!([
+            record_json(
+                &pid,
+                "workflow_summary",
+                "做了A",
+                "证据A\n第二行",
+                "memory_active",
+                "2026-07-01"
+            ),
+            record_json(
+                &pid,
+                "process_fact",
+                "做了B",
+                "证据B",
+                "memory_active",
+                "2026-07-02"
+            ),
+            // 别项目 → 不召回
+            record_json(
+                "project:other",
+                "workflow_summary",
+                "别项目记忆",
+                "x",
+                "memory_active",
+                "2026-07-09"
+            ),
+            // 本项目但非活跃态 → 不召回
+            record_json(
+                &pid,
+                "workflow_summary",
+                "已退休记忆",
+                "x",
+                "memory_deprecated",
+                "2026-07-09"
+            ),
+        ]));
+        let summary = recall_from_store(&store, "/tmp/proj-a").expect("有活跃项目记忆 → Some");
+        assert!(
+            summary.contains("做了A") && summary.contains("做了B"),
+            "召回本项目两条活跃记忆：{summary}"
+        );
+        assert!(!summary.contains("别项目记忆"), "别项目不召回");
+        assert!(!summary.contains("已退休记忆"), "非活跃态不召回");
+        assert!(
+            summary.contains("[workflow_summary] 做了A——证据A"),
+            "人话行格式 + body 只取首行"
+        );
+        assert!(!summary.contains("第二行"), "body 只取首行");
+        assert!(summary.lines().count() <= 5, "顶格 5 条");
+        assert!(
+            summary.find("做了B").unwrap() < summary.find("做了A").unwrap(),
+            "更新时间倒序：B(07-02) 在 A(07-01) 前"
+        );
+    }
+
+    #[test]
+    fn recall_none_when_no_active_match() {
+        let store = store_with(json!([record_json(
+            "project:other",
+            "workflow_summary",
+            "别项目",
+            "x",
+            "memory_active",
+            "2026-07-01"
+        ),]));
+        assert!(
+            recall_from_store(&store, "/tmp/proj-a").is_none(),
+            "本项目 0 条 → None"
+        );
+        assert!(
+            recall_from_store(&store_with(json!([])), "/tmp/proj-a").is_none(),
+            "空 store → None"
+        );
+    }
+
+    #[test]
+    fn recall_broken_sidecar_none_not_err() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("recall-broken-{}", unix_timestamp_string()));
+        fs::create_dir_all(&dir).unwrap();
+        let state_path = dir.join("workflow-state.v0.json");
+        fs::write(&state_path, "{}").unwrap();
+        fs::write(dir.join("formal-memories.v1.json"), "{not valid json").unwrap();
+        // 坏 sidecar → load_store Err → 静默 None（不 panic、不 Err、不挡咨询）。
+        assert!(
+            recall_project_memory_summary_at(&state_path, "/tmp/proj-a").is_none(),
+            "坏 sidecar → None 不 Err"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 防回潜：load_project_context 恢复纯装配、**不再自带召回**（死锚 default 已挪走）；
+    // 召回由各调用方用手里的真实 path 填（consultant / 预拆 / 重拆 三处）。
+    #[test]
+    fn load_project_context_does_not_self_recall() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("ctx-no-recall-{}", unix_timestamp_string()));
+        fs::create_dir_all(&dir).unwrap();
+        let ctx = load_project_context(&dir.to_string_lossy()).expect("装配应成功");
+        assert!(
+            ctx.memory_summary.is_none(),
+            "load_project_context 必须纯装配·不自带召回（防死锚回潜）"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
 }

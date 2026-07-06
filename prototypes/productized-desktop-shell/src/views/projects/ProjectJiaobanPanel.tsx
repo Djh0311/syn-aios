@@ -5,12 +5,14 @@ import {
   autoAdvanceAuthorizedRoleLoop,
   confirmAndStartAuthorizedRun,
   getProjectWorkflowChainStatus,
+  loadFormalMemoryStore,
   previewPendingProposalDirectorPlan,
   runProjectConsultation,
   stopProjectWorkflowChain,
 } from "../../lib/tauri";
 import type {
   AutoAdvanceRoleLoopOutcome,
+  CreateMemoryCandidateInput,
   DirectorChainStep,
   PendingAction,
   PlanAuthorizationStoreV1,
@@ -176,6 +178,29 @@ function ProjectJiaobanPanelBrowser({
   const cached = readJiaobanRunCache(projectRoot);
   const [manualPhase, setManualPhase] = useState<JiaobanPhase | null>(cached?.manualPhase ?? null);
   const [goal, setGoal] = useState("");
+  // 刀B·记忆召回计数：说脸预告「出方案会带上 N 条项目记忆」（同后端召回口径：本项目 project_id + 活跃态）。
+  // 只读 formal store·失败静默 0（召回是增益不是闸）。
+  const [memoryCount, setMemoryCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    void loadFormalMemoryStore()
+      .then((store) => {
+        if (!alive) return;
+        setMemoryCount(
+          store.records.filter(
+            (record) =>
+              record.status === "memory_active" &&
+              record.scope.project_id === projectWorkflow?.project_id,
+          ).length,
+        );
+      })
+      .catch(() => {
+        if (alive) setMemoryCount(0);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [projectWorkflow?.project_id]);
   const [amendment, setAmendment] = useState("");
   // 「说」面顶部的上次停因摘要（重新出方案时带过来；空则不显示）。
   const [sayHint, setSayHint] = useState<string | null>(null);
@@ -613,15 +638,22 @@ function ProjectJiaobanPanelBrowser({
     <section className="project-jiaoban" aria-label="交办">
       <div className="project-jiaoban-col">
         {phase === "say" ? (
-          <JiaobanSayState
-            goal={goal}
-            onGoalChange={setGoal}
-            onSubmit={() => submitGoal(goal)}
-            lastStopHint={sayHint}
-            loading={consultLoading}
-            error={consultError}
-            onEditAgain={() => setConsultError(null)}
-          />
+          <>
+            {memoryCount > 0 ? (
+              <p className="jiaoban-recall-hint" role="note" aria-label="记忆召回">
+                出方案会带上 {memoryCount} 条项目记忆
+              </p>
+            ) : null}
+            <JiaobanSayState
+              goal={goal}
+              onGoalChange={setGoal}
+              onSubmit={() => submitGoal(goal)}
+              lastStopHint={sayHint}
+              loading={consultLoading}
+              error={consultError}
+              onEditAgain={() => setConsultError(null)}
+            />
+          </>
         ) : null}
 
         {phase === "authorize" && latestProposal ? (
@@ -661,7 +693,17 @@ function ProjectJiaobanPanelBrowser({
         ) : null}
 
         {phase === "done" ? (
-          <JiaobanDoneState outcome={outcome} chainStatus={thisRoundChainStatus} onContinue={backToSay} />
+          <JiaobanDoneState
+            outcome={outcome}
+            chainStatus={thisRoundChainStatus}
+            onContinue={backToSay}
+            onRequestAction={onRequestAction}
+            factCtx={{
+              projectRoot: project.project_root,
+              projectId: projectWorkflow?.project_id ?? null,
+              workflowId: projectWorkflow?.workflow_id ?? null,
+            }}
+          />
         ) : null}
 
         {phase === "blocked" ? (
@@ -1276,7 +1318,74 @@ export function jiaobanDoneTitle(steps: DirectorChainStep[]): string {
 }
 
 // 交货脸/失败脸每任务一行：任务标题 + 自述一句 + 人话徽章。无 steps → 不渲染（零回退）。
-export function JiaobanStepReportList({ steps }: { steps: DirectorChainStep[] }) {
+// 刀B·事实确认上下文（构造记忆候选需要的项目锚）。
+export type FactMemoryContext = {
+  projectRoot: string;
+  projectId?: string | null;
+  workflowId?: string | null;
+};
+
+// 刀B·事实确认：把「绿✓且有自述」的任务行构造成记忆**候选**入参（候选≠正式·待治理转正·治理一字不动）。
+// claim=自述、body=标题+确认语；memory_type/risk/sensitive 取核查后合法最保守档（workflow_summary/low/project）。
+export function buildFactMemoryCandidate(
+  step: DirectorChainStep,
+  ctx: FactMemoryContext,
+): CreateMemoryCandidateInput {
+  const nowIso = new Date().toISOString();
+  const claim = (step.report_summary ?? step.title).trim();
+  const scopeId = ctx.projectId ? `scope:${ctx.projectId}` : `scope:project:${ctx.projectRoot}`;
+  return {
+    project_root: ctx.projectRoot,
+    project_id: ctx.projectId ?? null,
+    workflow_id: ctx.workflowId ?? null,
+    scope: {
+      scope_id: scopeId,
+      scope_type: "project",
+      user_id: null,
+      project_id: ctx.projectId ?? null,
+      workflow_id: null,
+      session_id: null,
+      role_ids: [],
+      document_refs: [],
+      permission_policy_ref: null,
+      model_export_policy: "local_only",
+      valid_from: nowIso,
+      valid_until: null,
+    },
+    memory_type: "workflow_summary",
+    claim,
+    body: `任务「${step.title}」经用户在交货脸确认属实。自述：${step.report_summary ?? "（无）"}`,
+    source_refs: [
+      {
+        source_ref_id: `worker-report:${step.planned_task_id}`,
+        source_type: "workflow_summary",
+        source_id: ctx.workflowId ?? null,
+        source_title: step.title,
+        anchor: step.planned_task_id,
+        captured_at: nowIso,
+        authority_level: "user_confirmed",
+        sensitive_level: "project",
+      },
+    ],
+    generated_by_role: "user",
+    generated_from: "explicit_user_confirmation",
+    risk_level: "low",
+    sensitive_level: "project",
+    requires_user_confirmation: true,
+    review_reason: "用户在交货脸确认任务属实，沉淀为项目记忆候选（候选≠正式，待治理转正）。",
+    expected_store_revision: null,
+  };
+}
+
+export function JiaobanStepReportList({
+  steps,
+  onConfirmFact,
+  confirmedTaskIds,
+}: {
+  steps: DirectorChainStep[];
+  onConfirmFact?: (step: DirectorChainStep) => void;
+  confirmedTaskIds?: ReadonlySet<string>;
+}) {
   if (!steps || steps.length === 0) {
     return null;
   }
@@ -1294,6 +1403,19 @@ export function JiaobanStepReportList({ steps }: { steps: DirectorChainStep[] })
               {flag.tone === "yellow" ? "⚠ " : ""}
               {flag.badge}
             </span>
+            {flag.kind === "ok" && step.report_summary && onConfirmFact ? (
+              confirmedTaskIds?.has(step.planned_task_id) ? (
+                <span className="jiaoban-fact-done">已沉淀 ✓</span>
+              ) : (
+                <button
+                  type="button"
+                  className="jiaoban-fact-btn"
+                  onClick={() => onConfirmFact(step)}
+                >
+                  属实，沉淀
+                </button>
+              )
+            ) : null}
           </li>
         );
       })}
@@ -1306,12 +1428,31 @@ function JiaobanDoneState({
   outcome,
   chainStatus,
   onContinue,
+  onRequestAction,
+  factCtx,
 }: {
   outcome: AutoAdvanceRoleLoopOutcome | null;
   chainStatus: ProjectWorkflowChainStatus | null;
   onContinue: () => void;
+  onRequestAction: (action: PendingAction) => void;
+  factCtx: FactMemoryContext | null;
 }) {
   const chain = outcome?.chain_outcome ?? null;
+  // 刀B·事实确认本地态（防重复点·经现成 create-memory-candidate PendingAction 走确认弹层）。
+  const [confirmedTaskIds, setConfirmedTaskIds] = useState<ReadonlySet<string>>(() => new Set());
+  const onConfirmFact = factCtx
+    ? (step: DirectorChainStep) => {
+        onRequestAction({
+          kind: "create-memory-candidate",
+          label: `沉淀记忆候选：${step.title}`,
+          path: factCtx.projectRoot,
+          source: "Tauri 应用数据目录",
+          boundary: "只产候选、不是正式记忆；候选待治理转正才进正式记忆库。",
+          memoryCandidateCreation: buildFactMemoryCandidate(step, factCtx),
+        });
+        setConfirmedTaskIds((prev) => new Set(prev).add(step.planned_task_id));
+      }
+    : undefined;
   const stepsDone = chain?.completed ?? countDoneNodes(chainStatus);
   const resultLine = chain
     ? `完成 ${chain.completed} 步${chain.stopped_reason ? `；中途停了：${chain.stopped_reason}` : ""}。`
@@ -1333,7 +1474,11 @@ function JiaobanDoneState({
         <p className="role-loop-plain-lead">{resultLine}</p>
         {stepsDone > 0 ? <p className="role-loop-plain-note">这次做完 {stepsDone} 步。</p> : null}
       </div>
-      <JiaobanStepReportList steps={chain?.steps ?? []} />
+      <JiaobanStepReportList
+        steps={chain?.steps ?? []}
+        onConfirmFact={onConfirmFact}
+        confirmedTaskIds={confirmedTaskIds}
+      />
       <p className="jiaoban-field">
         <span className="jiaoban-field-label">产出：</span>
         {proof ?? "详情见工作流 tab。"}
