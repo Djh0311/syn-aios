@@ -55,6 +55,10 @@ export function ProjectJiaobanPanel(props: ProjectJiaobanPanelProps) {
 // 交办进度（人话化用）。stage 与后端 outcome/链状态解耦——这里只管「说给用户听」。
 type JiaobanPhase = "say" | "authorize" | "running" | "done" | "blocked";
 
+// 方案a fix：「开个新的」的显式哨兵值。此前用 null 一词两用（"还没定" 与 "用户选了新建"），
+// 重挂载/默认效果会把用户的显式选择无声改回「接现有」（真机踩到：明确选了新建却路由到旧对话）。
+const NEW_SESSION_CHOICE = "__new_session__";
+
 // 结果防丢：换 tab 会卸载本面板（ProjectWorkspaceShell 条件渲染），本地 state 全丢。
 // 故把「一轮开始的结果」按 project_root 缓存在模块级，重挂载时恢复——切走再回来结果还在。
 // 只缓存呈现所需的最小集：手动相位 + outcome + 报错 + 上次停因（供重出方案预填）+ 这一轮批的方案 id。
@@ -71,6 +75,8 @@ type JiaobanRunCache = {
   runStartedAtMs: number | null;
   // 方案a：本轮是不是「开个新的」（new）。运行脸 new 时补「正在新建会话（约 1 分钟）」提示；缓存恢复。
   runIsNewSession: boolean;
+  // 方案a fix：会话选择跨重挂载保留（NEW_SESSION_CHOICE / thread_id / null=未定）。
+  sessionChoice: string | null;
 };
 const jiaobanRunCacheByProject = new Map<string, JiaobanRunCache>();
 
@@ -87,6 +93,7 @@ function writeJiaobanRunCache(projectRoot: string, patch: Partial<JiaobanRunCach
     continueHint: null,
     runStartedAtMs: null,
     runIsNewSession: false,
+    sessionChoice: null,
   };
   jiaobanRunCacheByProject.set(projectRoot, { ...prev, ...patch });
 }
@@ -172,7 +179,13 @@ function ProjectJiaobanPanelBrowser({
   // 「说」面顶部的上次停因摘要（重新出方案时带过来；空则不显示）。
   const [sayHint, setSayHint] = useState<string | null>(null);
   // 「用哪个对话干」：默认选最近一条现有会话（下面 effect 里补默认；null 只在真无会话时保留）。
-  const [sessionChoice, setSessionChoice] = useState<string | null>(null);
+  const [sessionChoice, setSessionChoiceState] = useState<string | null>(cached?.sessionChoice ?? null);
+  // 方案a fix：用户任何显式选择（新建/某条现有）都进缓存 → 重挂载不丢、默认效果不覆盖。
+  function setSessionChoice(value: string | null) {
+    setSessionChoiceState(value);
+    sessionDefaultedRef.current = true;
+    writeJiaobanRunCache(projectRoot, { sessionChoice: value });
+  }
   const [starting, setStarting] = useState(false);
   const [outcome, setOutcome] = useState<AutoAdvanceRoleLoopOutcome | null>(cached?.outcome ?? null);
   const [startError, setStartError] = useState<string | null>(cached?.startError ?? null);
@@ -239,7 +252,9 @@ function ProjectJiaobanPanelBrowser({
       (a, b) => (b.updated_at_ms ?? 0) - (a.updated_at_ms ?? 0),
     )[0];
     if (latest) {
-      setSessionChoice(latest.thread_id);
+      // 方案a fix：函数式「只填空位」——用户已选（含 NEW_SESSION_CHOICE）绝不覆盖（旧写法会把
+      // 显式的「开个新的」无声改回最新会话）。
+      setSessionChoiceState((prev) => prev ?? latest.thread_id);
       sessionDefaultedRef.current = true;
     }
   }, [projectSessions]);
@@ -379,7 +394,8 @@ function ProjectJiaobanPanelBrowser({
     runningRef.current = true;
     ranProposalIdRef.current = latestProposal.proposal_id;
     const runStartedAt = Date.now(); // fix6-v2：本轮起点，判「这轮的链」用
-    const isNewSession = !sessionChoice; // 方案a：没选现有会话 = 「开个新的」→ new
+    // 方案a fix：显式哨兵或真无会话（null）都算 new；现有 thread_id 才是 existing。
+    const isNewSession = sessionChoice === NEW_SESSION_CHOICE || sessionChoice === null;
     setRunStartedAtMs(runStartedAt);
     setRunIsNewSession(isNewSession);
     setStarting(true);
@@ -401,8 +417,8 @@ function ProjectJiaobanPanelBrowser({
       const outcome = await confirmAndStartAuthorizedRun({
         project_root: projectRoot,
         proposal_id: latestProposal.proposal_id,
-        session_choice: sessionChoice ? "existing" : "new",
-        session_id: sessionChoice ?? undefined,
+        session_choice: isNewSession ? "new" : "existing",
+        session_id: isNewSession ? undefined : (sessionChoice ?? undefined),
         actor_id: "user",
         // 刀2 所批即所跑：批前预拆成功过就把那份图原样带回 → 后端照图跑不重拆；简单活/预拆失败 previewTasks 空 → 不传。
         approved_planned_tasks: previewTasks ?? undefined,
@@ -1058,7 +1074,11 @@ function JiaobanSessionPicker({
     [sessions],
   );
   const selected = sorted.find((s) => s.thread_id === sessionChoice) ?? null;
-  const summaryTitle = selected?.title || selected?.thread_id || sorted[0]?.title || "选一条对话";
+  // 方案a fix：收起行必须说真话——选了新建就显「开个新的」，别拿最新旧会话标题冒充（真机踩到的帮凶）。
+  const summaryTitle =
+    sessionChoice === NEW_SESSION_CHOICE
+      ? "开个新的（为这单活新建对话）"
+      : selected?.title || selected?.thread_id || `${sorted[0]?.title ?? "选一条对话"}（默认）`;
 
   // 无可用会话：给人话提示，不给空壳单选。
   if (sorted.length === 0) {
@@ -1093,7 +1113,9 @@ function JiaobanSessionPicker({
         onClick={() => setOpen((v) => !v)}
       >
         <span className="jiaoban-field-label">用哪个对话干：</span>
-        <span className="jiaoban-session-summary-value">接现有 · {summaryTitle}</span>
+        <span className="jiaoban-session-summary-value">
+          {sessionChoice === NEW_SESSION_CHOICE ? summaryTitle : `接现有 · ${summaryTitle}`}
+        </span>
         <span aria-hidden="true" className="jiaoban-session-caret">
           {open ? "▴" : "▾"}
         </span>
@@ -1101,13 +1123,13 @@ function JiaobanSessionPicker({
 
       {open ? (
         <div className="jiaoban-session-expand">
-          {/* 方案a：「开个新的」已解禁（后端 014c254 先生后绑真建会话）。选它 = sessionChoice=null → 请求传 new。 */}
+          {/* 方案a fix：「开个新的」用显式哨兵（不再用 null 一词两用）——重挂载/默认效果都不会吞掉这个选择。 */}
           <label className="jiaoban-radio">
             <input
               type="radio"
               name="jiaoban-session"
-              checked={sessionChoice === null}
-              onChange={() => onSessionChoiceChange(null)}
+              checked={sessionChoice === NEW_SESSION_CHOICE}
+              onChange={() => onSessionChoiceChange(NEW_SESSION_CHOICE)}
             />
             开个新的（为这单活新建一个对话）
           </label>
