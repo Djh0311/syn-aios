@@ -2343,6 +2343,10 @@ fn ensure_project_director_task_package_artifact(
                 optional_string_from(artifact, "artifact_id").as_deref() == Some(artifact_id)
             })
         });
+    // fix·worker 回程契约：goals 追加主管拆的 report_format 各项（原有数据一直没人用·现在接上）
+    // + 确定性契约段（worker 最后必须交且仅交一个 json 块）。**确定性拼接·不经 LM**；objective 仍在首位。
+    let goals_with_contract =
+        worker_report::build_goals_with_contract(&task.objective, &task.report_format);
     let artifact_value = json!({
       "artifact_id": artifact_id,
       "artifact_type": "task_package",
@@ -2362,7 +2366,7 @@ fn ensure_project_director_task_package_artifact(
         format!("来自项目主管 C4 拆任务；项目：{}", project.name),
         "prepared dispatch 只是准备态记录，仍未执行 worker。"
       ],
-      "goals": [task.objective],
+      "goals": goals_with_contract,
       "allowed_read": task.scope.allowed_read_scope,
       "allowed_write": task.scope.allowed_write_scope,
       "forbidden_actions": [

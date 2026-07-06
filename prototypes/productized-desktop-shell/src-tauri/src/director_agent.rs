@@ -255,6 +255,10 @@ pub(crate) struct DirectorChainStep {
     pub(crate) title: String,
     // "completed" | "failed" | "skipped"
     pub(crate) state: String,
+    // fix·worker 回程契约：did（status）一句话摘要；无契约报文/非完成时 None（serde 加法·前端渐进接）。
+    pub(crate) report_summary: Option<String>,
+    // fix·worker 回程契约：每任务级报文诊断（落库失败 / 有输出没按契约）；无则 None。**不进链级 warnings**。
+    pub(crate) report_warning: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -822,6 +826,8 @@ pub(crate) fn run_director_task_chain(
                 planned_task_id: task_id.clone(),
                 title: task.title.clone(),
                 state: "skipped".to_string(),
+                report_summary: None,
+                report_warning: None,
             });
             continue;
         }
@@ -858,6 +864,8 @@ pub(crate) fn run_director_task_chain(
                         planned_task_id: task_id.clone(),
                         title: task.title.clone(),
                         state: "skipped".to_string(),
+                        report_summary: None,
+                        report_warning: None,
                     });
                     continue;
                 }
@@ -973,10 +981,33 @@ pub(crate) fn run_director_task_chain(
                 )?;
                 write_validated_workflow_state(path, &after)?;
                 completed += 1;
+
+                // fix·worker 回程契约：任务完成后读 worker 最后消息全文 → 解析 → best-effort 落库 → 带摘要。
+                // **只归档不驱动**：无论解析/落库成败，任务恒算 completed（state 下面写死、不 retry/不停链/不改迁移）。
+                let last_message_full = result
+                    .dispatch
+                    .last_message_path
+                    .as_deref()
+                    .and_then(|last_message_path| std::fs::read_to_string(last_message_path).ok())
+                    .unwrap_or_default();
+                let report_outcome = worker_report::consume_worker_report_after_completion(
+                    path,
+                    project_root,
+                    &result.dispatch.project_id,
+                    &result.dispatch.workflow_id,
+                    &result.dispatch.node_id,
+                    &result.dispatch.work_item_id,
+                    Some(dispatch_id.as_str()),
+                    &task.scope.target_role,
+                    &task.title,
+                    &last_message_full,
+                );
                 steps.push(DirectorChainStep {
                     planned_task_id: task_id.clone(),
                     title: task.title.clone(),
                     state: "completed".to_string(),
+                    report_summary: report_outcome.report_summary,
+                    report_warning: report_outcome.report_warning,
                 });
             }
             // 失败即停（护栏·不自动重试/不跳过，防在老失败任务上打转）。
@@ -1023,6 +1054,8 @@ pub(crate) fn run_director_task_chain(
                     planned_task_id: task_id.clone(),
                     title: task.title.clone(),
                     state: "failed".to_string(),
+                    report_summary: None,
+                    report_warning: None,
                 });
                 return Ok(DirectorChainOutcome {
                     total,

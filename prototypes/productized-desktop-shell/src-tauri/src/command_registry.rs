@@ -5,6 +5,10 @@
 // 本文件 include! 进 crate root，故此声明等价于在 crate root 挂子模块，且保持 lib.rs 0-diff。
 mod store_hygiene;
 
+// worker 回程契约模块（报文契约 + 解析 + 链消费核心）。同 store_hygiene 借道挂载，保持 lib.rs 0-diff。
+// 无 tauri command（纯协议/消费逻辑），故只挂 mod、不进 generate_handler!。
+mod worker_report;
+
 macro_rules! workbench_command_handler {
     () => {
         tauri::generate_handler![
