@@ -259,6 +259,8 @@ pub(crate) struct DirectorChainStep {
     pub(crate) report_summary: Option<String>,
     // fix·worker 回程契约：每任务级报文诊断（落库失败 / 有输出没按契约）；无则 None。**不进链级 warnings**。
     pub(crate) report_warning: Option<String>,
+    // 刀A·口供上脸：worker 自报 status（done|partial|failed）；没交口供 → None。前端据此判黄牌（呈现不驱动·黄牌不是闸）。
+    pub(crate) report_status: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -828,6 +830,7 @@ pub(crate) fn run_director_task_chain(
                 state: "skipped".to_string(),
                 report_summary: None,
                 report_warning: None,
+                report_status: None,
             });
             continue;
         }
@@ -866,6 +869,7 @@ pub(crate) fn run_director_task_chain(
                         state: "skipped".to_string(),
                         report_summary: None,
                         report_warning: None,
+                        report_status: None,
                     });
                     continue;
                 }
@@ -1008,6 +1012,7 @@ pub(crate) fn run_director_task_chain(
                     state: "completed".to_string(),
                     report_summary: report_outcome.report_summary,
                     report_warning: report_outcome.report_warning,
+                    report_status: report_outcome.report_status,
                 });
             }
             // 失败即停（护栏·不自动重试/不跳过，防在老失败任务上打转）。
@@ -1056,6 +1061,7 @@ pub(crate) fn run_director_task_chain(
                     state: "failed".to_string(),
                     report_summary: None,
                     report_warning: None,
+                    report_status: None,
                 });
                 return Ok(DirectorChainOutcome {
                     total,

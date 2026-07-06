@@ -55,6 +55,19 @@ pub(crate) struct WorkerReportConsumeOutcome {
     /// **放 step 级、不进链级 outcome.warnings**——链级只留结构警告（dangling 依赖等），
     /// worker 报文是每任务的内容层诊断，混入会污染链级语义、也会惊动既有 fake 链测试。
     pub(crate) report_warning: Option<String>,
+    /// 刀A·口供上脸：worker 自报 status（done|partial|failed 原值）；status 空/没交口供 → None。
+    /// 前端据此判黄牌（呈现不驱动·黄牌不是闸）。
+    pub(crate) report_status: Option<String>,
+}
+
+/// 从口供 status 归一化出 step.report_status：trim 后空 → None，否则 Some(原值)。
+fn report_status_field(status: &str) -> Option<String> {
+    let trimmed = status.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 /// 链每任务**完成后**消费一次 worker 最后消息（全文）：解析 → best-effort 落库（现成登记机器·
@@ -92,12 +105,14 @@ pub(crate) fn consume_worker_report_after_completion(
                 Ok(_) => WorkerReportConsumeOutcome {
                     report_summary: Some(summary),
                     report_warning: None,
+                    report_status: report_status_field(&report.status),
                 },
                 Err(err) => WorkerReportConsumeOutcome {
                     report_summary: Some(summary),
                     report_warning: Some(format!(
                         "任务「{task_title}」报文落库失败（不影响任务完成）：{err}"
                     )),
+                    report_status: report_status_field(&report.status),
                 },
             }
         }
@@ -115,6 +130,7 @@ pub(crate) fn consume_worker_report_after_completion(
             WorkerReportConsumeOutcome {
                 report_summary: None,
                 report_warning,
+                report_status: None,
             }
         }
     }
@@ -429,6 +445,48 @@ mod tests {
             "应出落库失败 step 级诊断 warning：{:?}",
             outcome.report_warning
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 刀A·口供上脸：consume 把 worker 自报 status 透传进 report_status（done/partial/缺失三态）。
+    #[test]
+    fn report_status_passthrough_three_states() {
+        let dir = tmp_dir("status");
+        let path = write_fixture_store(&dir);
+        let run = |msg: &str| {
+            consume_worker_report_after_completion(
+                &path,
+                "/p",
+                "proj",
+                "wf-1",
+                "wf-1:node:director",
+                "wi-1",
+                None,
+                "developer",
+                "任务T",
+                msg,
+            )
+        };
+        assert_eq!(
+            run("```json\n{\"did\":\"d\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"e\"]}\n```")
+                .report_status
+                .as_deref(),
+            Some("done"),
+            "done 透传"
+        );
+        assert_eq!(
+            run("```json\n{\"did\":\"d\",\"outputs\":[],\"status\":\"partial\",\"evidence\":[\"e\"]}\n```")
+                .report_status
+                .as_deref(),
+            Some("partial"),
+            "partial 透传"
+        );
+        assert_eq!(
+            run("```json\n{\"did\":\"d\",\"outputs\":[],\"evidence\":[\"e\"]}\n```").report_status,
+            None,
+            "有块缺 status → None"
+        );
+        assert_eq!(run("没有 json 块").report_status, None, "没交口供 → None");
         let _ = fs::remove_dir_all(dir);
     }
 }

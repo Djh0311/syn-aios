@@ -752,3 +752,64 @@
 .jiaoban-warnings li {
   overflow-wrap: anywhere;
 }
+
+/* 刀A·口供上脸：交货脸/失败脸每任务一行（标题 + 自述 + 徽章）。黄牌=自报没干完，一眼可辨。 */
+.jiaoban-step-report {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.jiaoban-step-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+}
+.jiaoban-step-row.tone-yellow {
+  border-left-color: #d9a441;
+  background: rgba(217, 164, 65, 0.08);
+}
+.jiaoban-step-row.tone-red {
+  border-left-color: #e05656;
+  background: rgba(224, 86, 86, 0.08);
+}
+.jiaoban-step-row.tone-gray {
+  border-left-color: #b0b0b0;
+}
+.jiaoban-step-title {
+  font-weight: 600;
+}
+.jiaoban-step-say {
+  color: var(--text-muted, #6b6b6b);
+  font-size: 13px;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+.jiaoban-step-badge {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.jiaoban-step-badge.tone-green {
+  color: #2e7d4f;
+  background: rgba(46, 125, 79, 0.12);
+}
+.jiaoban-step-badge.tone-yellow {
+  color: #a86a00;
+  background: rgba(217, 164, 65, 0.18);
+}
+.jiaoban-step-badge.tone-red {
+  color: #b23b3b;
+  background: rgba(224, 86, 86, 0.15);
+}
+.jiaoban-step-badge.tone-gray {
+  color: #666;
+  background: rgba(150, 150, 150, 0.15);
+}

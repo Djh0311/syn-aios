@@ -11,6 +11,7 @@ import {
 } from "../../lib/tauri";
 import type {
   AutoAdvanceRoleLoopOutcome,
+  DirectorChainStep,
   PendingAction,
   PlanAuthorizationStoreV1,
   ProjectConsultationProposal,
@@ -1229,6 +1230,77 @@ function JiaobanRunningState({
   );
 }
 
+// 刀A·口供上脸：单步徽章判定。执行态(failed/skipped)优先于自述；completed 才看 worker 口供。
+export type StepReportFlag = {
+  kind: "ok" | "yellow" | "fail" | "skip";
+  badge: string;
+  tone: "green" | "yellow" | "red" | "gray";
+};
+
+export function stepReportFlag(step: DirectorChainStep): StepReportFlag {
+  if (step.state === "failed") {
+    return { kind: "fail", badge: "失败", tone: "red" };
+  }
+  if (step.state === "skipped") {
+    return { kind: "skip", badge: "跳过", tone: "gray" };
+  }
+  // 到这里视为已完成——看 worker 自述，自报没干完的不许装全绿。
+  if (step.report_warning) {
+    return { kind: "yellow", badge: step.report_warning, tone: "yellow" };
+  }
+  if (!step.report_summary) {
+    return { kind: "yellow", badge: "没交汇报", tone: "yellow" };
+  }
+  const status = step.report_status ?? "";
+  if (status === "done") {
+    return { kind: "ok", badge: "自述：做好了", tone: "green" };
+  }
+  if (status === "partial") {
+    return { kind: "yellow", badge: "自述：没干完", tone: "yellow" };
+  }
+  if (status === "failed") {
+    return { kind: "yellow", badge: "自述：失败", tone: "yellow" };
+  }
+  return { kind: "yellow", badge: "自述：状态不明", tone: "yellow" };
+}
+
+// 黄牌数：只数「完成但自述有问题」的 yellow（failed/skipped 是执行态红/灰，不计入黄牌 N）。
+export function countYellowFlags(steps: DirectorChainStep[]): number {
+  return steps.filter((step) => stepReportFlag(step).kind === "yellow").length;
+}
+
+// 标题联动：有黄牌 → 「✓ 做好了（有 N 项要看一眼）」；全绿 → 「✓ 做好了」。自报没干完的不许装全绿。
+export function jiaobanDoneTitle(steps: DirectorChainStep[]): string {
+  const yellow = countYellowFlags(steps);
+  return yellow > 0 ? `✓ 做好了（有 ${yellow} 项要看一眼）` : "✓ 做好了";
+}
+
+// 交货脸/失败脸每任务一行：任务标题 + 自述一句 + 人话徽章。无 steps → 不渲染（零回退）。
+export function JiaobanStepReportList({ steps }: { steps: DirectorChainStep[] }) {
+  if (!steps || steps.length === 0) {
+    return null;
+  }
+  return (
+    <ul className="jiaoban-step-report" aria-label="每一步的自述">
+      {steps.map((step) => {
+        const flag = stepReportFlag(step);
+        return (
+          <li key={step.planned_task_id} className={`jiaoban-step-row tone-${flag.tone}`}>
+            <span className="jiaoban-step-title">{step.title}</span>
+            {step.report_summary ? (
+              <span className="jiaoban-step-say">{step.report_summary}</span>
+            ) : null}
+            <span className={`jiaoban-step-badge tone-${flag.tone}`}>
+              {flag.tone === "yellow" ? "⚠ " : ""}
+              {flag.badge}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 // 4. 交货
 function JiaobanDoneState({
   outcome,
@@ -1253,7 +1325,7 @@ function JiaobanDoneState({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">交办</p>
-          <h3 className="jiaoban-done-title">✓ 做好了</h3>
+          <h3 className="jiaoban-done-title">{jiaobanDoneTitle(chain?.steps ?? [])}</h3>
         </div>
         <Badge tone="candidate">已交货</Badge>
       </div>
@@ -1261,6 +1333,7 @@ function JiaobanDoneState({
         <p className="role-loop-plain-lead">{resultLine}</p>
         {stepsDone > 0 ? <p className="role-loop-plain-note">这次做完 {stepsDone} 步。</p> : null}
       </div>
+      <JiaobanStepReportList steps={chain?.steps ?? []} />
       <p className="jiaoban-field">
         <span className="jiaoban-field-label">产出：</span>
         {proof ?? "详情见工作流 tab。"}

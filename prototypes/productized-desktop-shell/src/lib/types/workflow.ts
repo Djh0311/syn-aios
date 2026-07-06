@@ -327,6 +327,10 @@ export type DirectorChainStep = {
   planned_task_id: string;
   title: string;
   state: string;
+  // 刀A·口供上脸（serde 加法·老数据可能缺）：worker 自述摘要 / 每任务诊断 / 自报 status（done|partial|failed）。
+  report_summary?: string | null;
+  report_warning?: string | null;
+  report_status?: string | null;
 };
 
 export type DirectorChainOutcome = {
