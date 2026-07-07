@@ -3987,19 +3987,24 @@ sleep 30
         }
     }
 
+    // 2026-07-08 根治「12-failed 级联」(四次现身·重跑即绿):任一测试**持锁期间 panic** → 三把
+    // Mutex 中毒 → 之后 23 个测试全在这里的 expect 上炸=一个真抽风带崩一片。修法:**中毒恢复**
+    // (into_inner)——串行锁不带数据,中毒仅意味着"前一个测试挂了",串行语义分毫不损;两张登记表
+    // 恢复后照旧 clear() = 反而回到已知空态。真正的首发抽风从此不再被级联淹没,下次现身即可定位。
+    // (只动测试 mod 的调用侧;active_attempts/consumed_confirmations 生产本体 0-diff。)
     fn test_guard() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         let guard = LOCK
             .get_or_init(|| Mutex::new(()))
             .lock()
-            .expect("manual relay test lock should not poison");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         active_attempts()
             .lock()
-            .expect("manual relay registry should not poison")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clear();
         consumed_confirmations()
             .lock()
-            .expect("manual relay confirmation registry should not poison")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clear();
         guard
     }

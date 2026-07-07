@@ -64,10 +64,10 @@
 
 **3b. 并行双线（07-08·原型线跑 M1 期间）**
 - **② 工作历史·后端读模型包已写待派**：`tasks/2026-07-08-run-history-read-model-backend-v1.md`（纯只读新模块·六态含「批了没跑」·跨店无外键=按 workflow+时间窗诚实近似[correlation 字段如实标·红线:不许改写入路径加字段]·零 UI——UI 半包等原型 M1 拍板）；
-- **① manual_relay 并行测试脆弱根治 = 主导线亲自诊断中**（4 次现身·先找 Mutex 中毒级联根源再定直修或出包）。
+- **① manual_relay 12-failed 级联 = 已根治（07-08 主导线直修·本次 commit）**：根因钉死——测试串行锁 `test_guard` 三把 Mutex 全用 `.expect`，任一测试**持锁期间 panic** → 锁中毒 → 之后 23 个测试全在 expect 上炸（1 个真抽风带崩 11 个=四次现身的 12-failed 本相，也解释重跑即绿/串行全过）。修 = **中毒恢复** `into_inner`（串行锁不带数据、语义分毫不损；两张登记表恢复后照旧 clear=回到已知空态；**只动测试 mod 调用侧·生产本体 0-diff**）。实证：修后 8 跑——1 次复现仅 **1 failed**（以前必 12）+ 7 绿；fmt 净。**残留：首发抽风本尊未定位**（间歇约 1/8·下次现身将以单个具名失败+真 panic 信息出现，届时定点修）。
 
 **4. 盯着的（不是活·是警报器）**
-- manual_relay 并行测试脆弱（Mutex 中毒级联·**四次现身**[07-07 B2 核时 690/12·名单全 manual_relay·重跑 702/0]·重跑即绿·serial/隔离全过 = 预存并发争用非回归）；**tier-1 输出不稳家族**（三案在册：consult 早退[retry 兜]/`suggest_workflow` 摇摆[手动开关兜]/execution_scope 漏交[07-07 两撞·fix9 确定性守卫+诚实脸兜]——新接 tier-1 输出字段时默认它会缺会错，下游必须有确定性兜底）；「死锚默认」家族三处前科（C4 / `update_work_item_state_at:477` / `load_project_context` 未遂）——新代码碰 `default_workflow_*` 一律警觉，防回潜断言已立一处；2 条 init-only 孤儿会话（无害·已报备）。
+- manual_relay 首发抽风（**级联已根治** 07-08·见 3b①；剩单个间歇真抽风未定位·下次以具名单失败现身即可定点修——盯降级为「等它自曝」）；**tier-1 输出不稳家族**（三案在册：consult 早退[retry 兜]/`suggest_workflow` 摇摆[手动开关兜]/execution_scope 漏交[07-07 两撞·fix9 确定性守卫+诚实脸兜]——新接 tier-1 输出字段时默认它会缺会错，下游必须有确定性兜底）；「死锚默认」家族三处前科（C4 / `update_work_item_state_at:477` / `load_project_context` 未遂）——新代码碰 `default_workflow_*` 一律警觉，防回潜断言已立一处；2 条 init-only 孤儿会话（无害·已报备）。
 
 **5. 阶段外·随时可做（不受任何阶段/治理约束）**
 - **异地备份·代码半边 = done（07-07·另一对话执行·主导线核实物过）**：origin = `git@github.com:Djh0311/syn-aios.git`（私有·SSH·`core.sshCommand` 指专用钥=仓内本地配置不入库）；**9 分支全推**、remote main == 本地 `049c58a` 逐 hash 对齐（主导线 ls-remote 复核）、**恢复演练过**（clone→log 一致→CURRENT 逐字节同→删临时目录）——真备份非空推。执行线报备：auto 模式外泄闸拦过一次验证命令（**未绕闸**·拆成只读验证通过）；「收口 commit 后顺手 push」习惯是否写进 AGENTS.md = **待用户拍**（未拍前 push 仍逐次问·高危#5）。kickoff 存档 `handoffs/2026-07-07-offsite-backup-git-push-kickoff-v1.md`。**剩余小件仍零副本·知情挂账**：3 个 Claude 记忆库（<200K·非 git）+ workbench 线上 store（146M·正式记忆/口供/审计——06-13 清单后新长出的命门）+ `~/.codex` 会话史；加密打包半边用户暂不做、复议随时。codexbridge 已有 origin（Gan-Xing/CodexBridge）非零副本。
