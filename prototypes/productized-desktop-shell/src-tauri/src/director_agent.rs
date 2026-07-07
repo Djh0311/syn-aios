@@ -85,6 +85,14 @@ fn director_build_prompt_variant(
             p.push_str(&format!("\n### 文件: {path}\n{content}\n"));
         }
     }
+    // 刀B 补渲染（2026-07-08·质量债线报备逮到的既有暗债）：memory_summary 自刀B 起在重拆/预拆
+    // 两处被填，但本渲染器一直没输出——填了没上脸=召回对主管半失效。补上（None 不渲染·与咨询侧
+    // 「--- 项目记忆 ---」块同语义：参考不指令）。
+    if let Some(memory) = &ctx.memory_summary {
+        p.push_str(&format!(
+            "\n--- 项目记忆（已确认的正式记忆·拆解时参考·仍以注入文档为准）---\n{memory}\n"
+        ));
+    }
     // 质量债·redo 幂等：重拆时喂「本单已完成事实」（只 re-plan 分支填此字段；首跑所批即所跑不经此
     // prompt、批前预拆不填 → 两处天然不渲染）。只事实不指令、只摘要不产物本体。
     if let Some(prior) = &ctx.prior_completed_summary {
@@ -2987,6 +2995,31 @@ mod quality_debt_tests {
         assert!(prompt.contains("本单已完成"), "块标题在");
         assert!(prompt.contains("别重复执行这些动作"), "禁令在");
         assert!(prompt.contains("已删除第三个巡逻怪"), "事实在");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 刀B 补渲染回归（质量债线报备逮到的暗债）：memory_summary 填了必须上主管 prompt；None 不渲染。
+    #[test]
+    fn prompt_renders_memory_summary_when_filled() {
+        let dir = tmp_dir("prompt-mem");
+        let path = dir.join("workflow-state.v0.json");
+        // seed_active_run 的绑定写死 "thread-qdebt"——索引必须给同号（否则「不在索引内」拒绑）。
+        let index = fixture_index(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "thread-qdebt");
+        let _wf = seed_active_run(&path, &index, WORKFLOW_ENGINE_TEST_PROJECT_ROOT);
+        let store = project_consultation_proposal_store::load_store(&path, unix_timestamp_ms())
+            .expect("store");
+        let proposal = &store.proposals[0];
+        let mut ctx = load_project_context(WORKFLOW_ENGINE_TEST_PROJECT_ROOT).expect("ctx");
+        assert!(
+            !director_build_prompt(&ctx, proposal).contains("项目记忆"),
+            "None → 不渲染"
+        );
+        ctx.memory_summary =
+            Some("[workflow_summary] 游戏怪物已被删到 0——改怪物数先核现状".to_string());
+        let prompt = director_build_prompt(&ctx, proposal);
+        assert!(prompt.contains("--- 项目记忆"), "块标题在");
+        assert!(prompt.contains("游戏怪物已被删到 0"), "记忆内容在");
+        assert!(prompt.contains("仍以注入文档为准"), "参考不指令的措辞在");
         let _ = fs::remove_dir_all(dir);
     }
 
