@@ -450,6 +450,7 @@
 
 /* 旧方案黄条 / 「说」面上次停因摘要：与授权提示同族的告警块。 */
 .jiaoban-stale-banner,
+.jiaoban-advice-only-banner,
 .jiaoban-say-hint {
   display: flex;
   align-items: flex-start;
@@ -548,16 +549,24 @@
   font-size: 12.5px;
   cursor: pointer;
 }
-/* 批卡收纳行：摘要按钮 + 行尾「看原始对话」并排（新建/未定不显 link 时摘要独占整行）。 */
+/* 批卡收纳行：摘要按钮 + 行尾「看原始对话」并排（新建/未定不显 link 时摘要独占整行）。
+   fix9 量到（480px 容器·scrollWidth 1920）：本行是 .jiaoban-session-pick（grid）的 item，
+   grid item 默认 min-width:auto → 长标题把整行撑破、summary-value 的 ellipsis 失效。 */
 .jiaoban-session-summary-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 .jiaoban-session-summary-row .jiaoban-session-summary {
   flex: 1 1 auto;
   width: auto;
   min-width: 0;
+}
+/* fix9 复量补刀：行宽被约束后，「用哪个对话干：」label 会被 value 挤成竖排——label 不参与压缩
+   （压缩全让给 value，value 本就 ellipsis），label 恒一行。 */
+.jiaoban-session-summary .jiaoban-field-label {
+  flex: none;
 }
 /* 「看原始对话」桥入口：复用 jiaoban-linklike 的 accent 小链接样式，仅加不换行/间距。
    各脸里跟在段落后自成一行；批卡行内靠右不压缩、垂直居中（下条覆盖去掉上间距）。 */

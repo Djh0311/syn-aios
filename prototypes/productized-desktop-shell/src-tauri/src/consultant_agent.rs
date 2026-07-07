@@ -344,6 +344,7 @@ fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
   "suggest_workflow": true
 }
 **判断这个目标要不要下游真改代码/文件**:
+- **凡用户目标涉及创建/修改/删除任何文件或功能,必须输出 execution_scope**(target_files 按最合理猜测填,宁可猜也别省略);仅当目标是纯提问/纯分析时才给 null。漏给这个字段=用户批的方案会变成不能动手的空转单。
 - 要改 → 给出 execution_scope 块,写清"会改哪些文件(target_files)+怎么验收(checks)"。这是你方案的一部分。
   (写范围/工具由系统按固定档位装配·你不用报;多报的字段会被忽略。)
 - 只是回答问题、不需要改任何东西 → execution_scope 给 **null**,并在 scope_note 注明"纯咨询/只读"。

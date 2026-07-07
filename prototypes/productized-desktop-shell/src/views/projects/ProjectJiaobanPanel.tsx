@@ -910,7 +910,8 @@ function JiaobanSayState({
 }
 
 // 2. 批（授权卡·定稿字段）
-function JiaobanAuthorizeState({
+// export 供离线 DOM 断言（fix9 诚实脸两态；renderToStaticMarkup 渲染·不平铺调用）。
+export function JiaobanAuthorizeState({
   proposal,
   proposalTimeText,
   proposalIsStale,
@@ -993,6 +994,15 @@ function JiaobanAuthorizeState({
         </div>
       ) : null}
 
+      {/* fix9·纯建议诚实脸：写根空（=咨询判定不改文件）→ 批前就喊出来，别等批完空转才发现
+          （2026-07-07 两撞：tier-1 偶发不交 execution_scope，用户批了两份空转方案）。 */}
+      {!willWrite ? (
+        <div className="jiaoban-advice-only-banner" role="note" aria-label="纯建议方案提醒">
+          <span aria-hidden="true">⚠</span> 这份方案<strong>不会改任何文件</strong>——它是纯建议。
+          你的目标若是要动手改东西，别批这份，点下面「重新出方案（要动手）」。
+        </div>
+      ) : null}
+
       <div className="role-loop-plain jiaoban-plan-body" aria-label="方案要点（人话）">
         <p className="jiaoban-field">
           <span className="jiaoban-field-label">目标：</span>
@@ -1071,7 +1081,28 @@ function JiaobanAuthorizeState({
       ) : null}
 
       <div className="workflow-state-actions">
-        {proposalIsStale ? (
+        {!willWrite ? (
+          // fix9·纯建议方案：主按钮改道 [重新出方案（要动手）]；[允许并开始] 降为次按钮**不删死**
+          //（用户真想收下纯建议也有路；点了会被后端开工口守卫人话拒，现有失败上脸机制接得住）。
+          <>
+            <button
+              className="primary-button"
+              type="button"
+              disabled={starting || consultLoading}
+              onClick={onRePlan}
+            >
+              {consultLoading ? "正在出新方案…" : "重新出方案（要动手）"}
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={starting || consultLoading}
+              onClick={onAuthorizeAndStart}
+            >
+              {starting ? "正在开始…" : "仍要允许并开始（纯建议）"}
+            </button>
+          </>
+        ) : proposalIsStale ? (
           // 旧方案：主按钮 = 重新说目标；[允许并开始] 降为次按钮（防再批库存），但仍可手动点。
           <>
             <button

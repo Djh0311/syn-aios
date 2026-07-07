@@ -1274,6 +1274,19 @@ fn run_auto_advance_authorized_role_loop(
         .ok_or_else(|| "active 授权缺 source_proposal_id；无法自动推进。".to_string())?;
     let authorization_id = active.authorization_id.clone();
     let auth_revision = store.revision;
+    // fix9·[接着跑]口同款守卫：空写根 active 授权（16:48/16:55 已有两份残留在盘）→ 人话停，
+    // 不进 LM 拆/prepare（存量空授权从「坑」变「哑」，零 store 手术）。started 审计之前拦=没开始就不记 started。
+    if active.scope.allowed_write_roots.is_empty() {
+        let message = "这单的授权没带可执行范围（多半是方案被判成了纯建议），接着跑也只会空转。请点[重新出方案]把要动手的内容说清楚——写范围由系统自动装配，不需要你手填。".to_string();
+        let _ = append_role_loop_auto_advance_audit(
+            path,
+            workflow_id,
+            actor_id,
+            "role_loop_auto_advance_stopped",
+            &format!("接着跑口拒空写根授权（未进拆任务/prepare）：{message}"),
+        );
+        return Err(message);
+    }
     append_role_loop_auto_advance_audit(
         path,
         workflow_id,
@@ -1383,9 +1396,10 @@ fn run_auto_advance_authorized_role_loop(
             };
             let (stage, message) = if blocked_count > 0 {
                 (
+                // fix9 改口：老话教用户「在方案里补上」写范围——档位时代写范围由系统装配、用户没处补（死胡同）。
                 "blocked",
                 format!(
-                    "有任务超出方案授权范围被阻断{reasons_text}——方案缺了它该写的内容（如写范围/工具/检查）。请重新让 AI 出方案（把这些写进去）或在方案里补上，再自动推进。"
+                    "有任务超出方案授权范围被阻断{reasons_text}——这单的授权没带可执行范围（多半是方案被判成了纯建议）。请点[重新出方案]把要动手的内容说清楚——写范围由系统自动装配，不需要你手填。"
                 ),
             )
             } else if needs_binding_count > 0 {
@@ -1666,6 +1680,22 @@ fn run_confirm_and_start_authorized_run_inner(
     }
     let workflow_id = proposal.workflow_id.clone();
     let proposal_store_revision = proposal_store.revision;
+    // fix9·开工口守卫（确定性·零 LM 依赖·2026-07-07 16:48/16:55 两撞）：tier-1 咨询偶发不交
+    // execution_scope → 分流忠实映射成纯建议只读方案（写根空）。这种方案点[允许并开始]只会建
+    // 空写根授权 → prepare 逐任务拦 → 空转。在人闸校验之后、**建授权之前**人话拒——不建授权、
+    // 不绑会话、不起链（16:48 那种空授权垃圾不再入库）。留档走现有 stopped 事件族（不新开）。
+    // 注：当前档位世界「写根空 ⇔ 纯建议」；将来若出现「只读但要跑检查」的新档位形态，本守卫须随分流一起升级。
+    if proposal.scope_draft.allowed_write_roots.is_empty() {
+        let message = "这份方案是纯建议（咨询判定不需要改文件），没有可执行范围，开工只会空转。想让 AI 动手：点[重新出方案]，把要改什么说清楚（带上文件名/功能名更稳）。".to_string();
+        let _ = append_role_loop_auto_advance_audit(
+            path,
+            &workflow_id,
+            &actor_id,
+            "role_loop_auto_advance_stopped",
+            &format!("开工口拒纯建议方案（写根空·未建授权未起链）：{message}"),
+        );
+        return Err(message);
+    }
     // 2. 记录用户确认（现成 record_decision·Confirm·actor=用户）→ 建授权。
     let confirmed = project_consultation_proposal_store::record_decision(
         path,
@@ -1930,4 +1960,364 @@ async fn preview_pending_proposal_director_plan(
     })
     .await
     .map_err(|error| format!("预拆执行线程异常：{error}"))?
+}
+
+// ===== fix9·开工口守卫单测（自包含·照 worker_report/B1 先例不依赖 lib.rs 测试 helper）=====
+// 复刻 2026-07-07 16:48/16:55 事故形态：tier-1 不交 execution_scope → 真分流产出写根空纯建议方案。
+#[cfg(test)]
+mod fix9_tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn tmp_dir(tag: &str) -> PathBuf {
+        let uniq = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!("fix9-{tag}-{uniq}"));
+        fs::create_dir_all(&dir).expect("tmp dir");
+        dir
+    }
+
+    fn fixture_project_record(project_root: &str) -> ProjectRecord {
+        ProjectRecord {
+            project_root: project_root.to_string(),
+            name: "测试项目".to_string(),
+            active_hint: true,
+            thread_count: 0,
+            active_thread_count: 0,
+            archived_thread_count: 0,
+            latest_updated_at_ms: None,
+            authority_files: vec![],
+            handoff_files: vec![],
+            evidence_files: vec![],
+            harness_candidates: vec![],
+            harness_resources: vec![],
+            context_warnings: vec![],
+            warnings: vec![],
+        }
+    }
+
+    // 碰到即炸的桩：守卫必须在 LM/链/新会话之前拦住——任何一桩被调都说明守卫漏了。
+    struct PanicRunner;
+    impl CodexResumeRunner for PanicRunner {
+        fn resume_with_options(
+            &self,
+            _thread_id: &str,
+            _prompt: &str,
+            _last_message_path: &std::path::Path,
+            _options: &CodexResumeRequestOptions,
+        ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String> {
+            panic!("fix9 守卫应在 runner 之前拦住");
+        }
+    }
+    struct PanicDirector;
+    impl DirectorAgent for PanicDirector {
+        fn plan(
+            &self,
+            _ctx: &ProjectContext,
+            _proposal: &ProjectConsultationProposal,
+        ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+            panic!("fix9 守卫应在主管 LM 拆任务之前拦住");
+        }
+    }
+    struct PanicCreator;
+    impl JiaobanNewSessionCreator for PanicCreator {
+        fn create_initialized_session(
+            &self,
+            _initialization_text: &str,
+            _requested_by: &str,
+        ) -> Result<String, String> {
+            panic!("fix9 守卫应在新会话出生口之前拦住");
+        }
+    }
+
+    /// 真分流产出的纯建议方案（execution_scope=None → 写根空）：直接用生产 API 造，
+    /// 顺带断言事故形态成立（分流本体 0-diff，这里只是消费它）。
+    fn create_advice_only_pending_proposal(
+        path: &std::path::Path,
+        project_root: &str,
+    ) -> ProjectConsultationProposal {
+        let consult = ConsultationProposal {
+            user_goal: "加回 1 个怪".to_string(),
+            goal_summary: "在游戏里加回 1 个怪物".to_string(),
+            scope_note: "（tier-1 忘了给 execution_scope 的事故形态）".to_string(),
+            reasoning: vec!["复刻 16:48 事故".to_string()],
+            risks: vec![],
+            must_stop_points: vec![],
+            next_steps: vec!["加怪".to_string()],
+            execution_scope: None,
+            suggest_workflow: false,
+        };
+        let c1 = map_consultation_to_c1_input(&consult, project_root, "consultant").expect("map");
+        assert!(
+            c1.scope_draft.allowed_write_roots.is_empty(),
+            "前置：None 支应映射成写根空（事故形态成立）"
+        );
+        project_consultation_proposal_store::create_proposal(
+            path,
+            &c1,
+            unix_timestamp_ms(),
+            &format!("fix9-proposal:{}", unix_timestamp_nanos()),
+        )
+        .expect("create proposal")
+        .proposal
+    }
+
+    fn read_state_json(path: &std::path::Path) -> serde_json::Value {
+        serde_json::from_str(&fs::read_to_string(path).expect("read state")).expect("parse state")
+    }
+
+    fn stopped_audit_reasons(state: &serde_json::Value) -> Vec<String> {
+        state["audit_events"]
+            .as_array()
+            .map(|events| {
+                events
+                    .iter()
+                    .filter(|event| event["event_type"] == "role_loop_auto_advance_stopped")
+                    .filter_map(|event| event["reason"].as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    // §4①：纯建议方案（写根空）→ 合流拒·人话对·授权店零新增·方案仍 Pending·stopped 留档·
+    // 三个 panic 桩全没炸（没建授权没绑会话没起链）。
+    #[test]
+    fn fix9_confirm_rejects_advice_only_proposal_before_authorization() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("confirm-guard");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project_record(test_root))
+            .expect("bootstrap");
+        let proposal = create_advice_only_pending_proposal(&path, test_root);
+        let request = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: proposal.proposal_id.clone(),
+            session_choice: "existing".to_string(),
+            session_id: Some("thread-any".to_string()),
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+            approved_planned_tasks: None,
+        };
+        let err = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &serde_json::json!({"projects": []}),
+            &dir.join("readback.sqlite"),
+            &PanicRunner,
+            &PanicDirector,
+            &PanicCreator,
+            &request,
+        )
+        .expect_err("纯建议方案应被开工口拒");
+        assert!(
+            err.contains("纯建议") && err.contains("重新出方案"),
+            "人话应点名纯建议并指对路：{err}"
+        );
+        // 授权店零新增（16:48 那种空授权垃圾不再入库）。
+        let auth_store =
+            plan_authorization_store::load_store(&path, unix_timestamp_ms()).expect("auth store");
+        assert!(
+            auth_store.authorizations.is_empty(),
+            "不许建授权：{:?}",
+            auth_store.authorizations.len()
+        );
+        // 方案仍 Pending（record_decision 没跑·人闸语义没动）。
+        let proposal_store =
+            project_consultation_proposal_store::load_store(&path, unix_timestamp_ms())
+                .expect("proposal store");
+        assert!(
+            matches!(
+                proposal_store.proposals[0].status,
+                ProjectConsultationProposalStatus::PendingUserConfirmation
+            ),
+            "方案应仍是待确认（守卫在确认之前）"
+        );
+        // 留档走现有 stopped 事件族。
+        let state = read_state_json(&path);
+        let reasons = stopped_audit_reasons(&state);
+        assert!(
+            reasons
+                .iter()
+                .any(|reason| reason.contains("开工口拒纯建议")),
+            "应留 stopped 审计：{reasons:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4②：空写根 active 授权（盘上残留形态·全程生产 API 造）+ [接着跑] → 人话停·不进拆任务/prepare
+    // （panic 桩没炸）·不记 started·记 stopped。
+    #[test]
+    fn fix9_auto_advance_rejects_empty_write_root_active_authorization() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("advance-guard");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project_record(test_root))
+            .expect("bootstrap");
+        let proposal = create_advice_only_pending_proposal(&path, test_root);
+        // 复刻 16:48 存量链路：确认 + 边界复核 → 空写根授权 active（当时守卫不存在，垃圾已入库）。
+        let confirmed = project_consultation_proposal_store::record_decision(
+            &path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: test_root.to_string(),
+                proposal_id: proposal.proposal_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "复刻事故：确认纯建议方案。".to_string(),
+                expected_proposal_store_revision: None,
+                expected_plan_authorization_store_revision: None,
+            },
+            unix_timestamp_ms(),
+            &format!("fix9-confirm:{}", unix_timestamp_nanos()),
+            &format!("fix9-auth:{}", unix_timestamp_nanos()),
+            &format!("fix9-auth-user:{}", unix_timestamp_nanos()),
+        )
+        .expect("confirm");
+        let authorization = confirmed.plan_authorization.expect("授权对象");
+        plan_authorization_store::record_global_boundary_review_with_proposal(
+            &path,
+            &RecordGlobalBoundaryReviewInput {
+                project_root: test_root.to_string(),
+                project_id: project_id(test_root),
+                workflow_id: proposal.workflow_id.clone(),
+                proposal_id: proposal.proposal_id.clone(),
+                authorization_id: authorization.authorization_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                review_status: "approved".to_string(),
+                summary: "复刻事故：边界批准。".to_string(),
+                checklist: GlobalBoundaryReviewChecklist {
+                    architecture_boundary_checked: true,
+                    cross_project_impact_checked: true,
+                    permission_scope_checked: true,
+                    read_write_scope_checked: true,
+                    tool_and_check_scope_checked: true,
+                    memory_boundary_checked: true,
+                    stop_conditions_checked: true,
+                    acceptance_criteria_checked: true,
+                },
+                findings: vec![],
+                expected_authorization_revision: confirmed.plan_authorization_store_revision,
+            },
+            unix_timestamp_ms(),
+            &format!("fix9-boundary:{}", unix_timestamp_nanos()),
+        )
+        .expect("boundary review → active");
+        // 前置：确实存在空写根 active 授权（事故残留形态成立）。
+        let auth_store =
+            plan_authorization_store::load_store(&path, unix_timestamp_ms()).expect("auth store");
+        let active = auth_store
+            .authorizations
+            .iter()
+            .find(|authorization| authorization.status == PlanAuthorizationStatus::Active)
+            .expect("应有 active 授权");
+        assert!(
+            active.scope.allowed_write_roots.is_empty(),
+            "前置：active 授权写根应为空（事故形态）"
+        );
+        // [接着跑] → 守卫人话停。
+        let err = run_auto_advance_authorized_role_loop(
+            &path,
+            &serde_json::json!({"projects": []}),
+            &dir.join("readback.sqlite"),
+            &PanicRunner,
+            &PanicDirector,
+            test_root,
+            &proposal.workflow_id,
+            "user-fixture",
+            10,
+            None,
+        )
+        .expect_err("空写根授权应被接着跑口拒");
+        assert!(
+            err.contains("没带可执行范围") && err.contains("重新出方案"),
+            "人话应指对路：{err}"
+        );
+        let state = read_state_json(&path);
+        let reasons = stopped_audit_reasons(&state);
+        assert!(
+            reasons
+                .iter()
+                .any(|reason| reason.contains("接着跑口拒空写根授权")),
+            "应留 stopped 审计：{reasons:?}"
+        );
+        let started = state["audit_events"]
+            .as_array()
+            .map(|events| {
+                events
+                    .iter()
+                    .any(|event| event["event_type"] == "role_loop_auto_advance_started")
+            })
+            .unwrap_or(false);
+        assert!(!started, "守卫在 started 之前拦=没开始就不记 started");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4③：正常档位方案（execution_scope Some → 档位写根非空）不触守卫——走到人闸之后的正常路径
+    // （本测只验「守卫不误伤」：同请求打到绑会话步才因假会话失败，而非被纯建议拒）。
+    #[test]
+    fn fix9_guard_does_not_touch_profile_backed_proposal() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("no-false-positive");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project_record(test_root))
+            .expect("bootstrap");
+        let consult = ConsultationProposal {
+            user_goal: "加回 1 个怪".to_string(),
+            goal_summary: "在游戏里加回 1 个怪物".to_string(),
+            scope_note: "要改文件".to_string(),
+            reasoning: vec!["r".to_string()],
+            risks: vec![],
+            must_stop_points: vec![],
+            next_steps: vec!["改 index.html".to_string()],
+            execution_scope: Some(ConsultationExecutionScope {
+                write_roots: vec![],
+                target_files: vec!["index.html".to_string()],
+                tools: vec![],
+                checks: vec!["浏览器打开看效果".to_string()],
+            }),
+            suggest_workflow: false,
+        };
+        let c1 = map_consultation_to_c1_input(&consult, test_root, "consultant").expect("map");
+        assert!(
+            !c1.scope_draft.allowed_write_roots.is_empty(),
+            "前置：档位方案写根非空"
+        );
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &c1,
+            unix_timestamp_ms(),
+            &format!("fix9-normal:{}", unix_timestamp_nanos()),
+        )
+        .expect("create");
+        let request = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: created.proposal.proposal_id.clone(),
+            session_choice: "existing".to_string(),
+            session_id: Some("thread-not-in-index".to_string()),
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+            approved_planned_tasks: None,
+        };
+        let err = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &serde_json::json!({"projects": [{"project_root": test_root}]}),
+            &dir.join("readback.sqlite"),
+            &PanicRunner,
+            &PanicDirector,
+            &PanicCreator,
+            &request,
+        )
+        .expect_err("会走到绑会话步并因假会话失败（证明没被纯建议守卫拦）");
+        assert!(
+            !err.contains("纯建议"),
+            "正常档位方案不得被纯建议守卫误伤：{err}"
+        );
+        assert!(
+            err.contains("绑定现有会话失败"),
+            "应死在绑会话步（守卫之后的正常路径）：{err}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
 }
