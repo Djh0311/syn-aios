@@ -10,6 +10,7 @@ const testEntries = [
   "tests/report-on-face-yellow-flag.test.tsx",
   "tests/report-fact-confirm-recall.test.tsx",
   "tests/raw-session-bridge.test.tsx",
+  "tests/global-supervisor-review-section.test.tsx",
   "tests/r4-page-read-model-settings.test.tsx",
   "tests/r4-page-read-model-query-contract.test.ts",
   "tests/r4-page-read-model-runtime.test.ts",

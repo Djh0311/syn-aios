@@ -9,6 +9,11 @@ mod store_hygiene;
 // 无 tauri command（纯协议/消费逻辑），故只挂 mod、不进 generate_handler!。
 mod worker_report;
 
+// B1·全局主管复核（advisory）：agent（读盘→只读 consult→意见）+ 复核记录 sidecar store。
+// 同 worker_report 借道挂载，保持 lib.rs 0-diff；命令 run_global_supervisor_review 进 generate_handler!。
+mod global_supervisor_agent;
+mod global_supervisor_review_store;
+
 macro_rules! workbench_command_handler {
     () => {
         tauri::generate_handler![
@@ -113,6 +118,7 @@ macro_rules! workbench_command_handler {
             confirm_and_start_authorized_run,
             preview_pending_proposal_director_plan,
             run_project_consultation,
+            global_supervisor_agent::run_global_supervisor_review,
             list_project_workflows,
             submit_project_workflow_draft,
             get_project_workflow_nodes,

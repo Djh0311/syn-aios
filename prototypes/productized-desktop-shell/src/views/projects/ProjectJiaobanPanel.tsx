@@ -7,6 +7,7 @@ import {
   getProjectWorkflowChainStatus,
   loadFormalMemoryStore,
   previewPendingProposalDirectorPlan,
+  runGlobalSupervisorReview,
   runProjectConsultation,
   stopProjectWorkflowChain,
 } from "../../lib/tauri";
@@ -14,6 +15,7 @@ import type {
   AutoAdvanceRoleLoopOutcome,
   CreateMemoryCandidateInput,
   DirectorChainStep,
+  GlobalSupervisorReviewOutcome,
   PendingAction,
   PlanAuthorizationStoreV1,
   ProjectConsultationProposal,
@@ -81,6 +83,9 @@ type JiaobanRunCache = {
   runIsNewSession: boolean;
   // 方案a fix：会话选择跨重挂载保留（NEW_SESSION_CHOICE / thread_id / null=未定）。
   sessionChoice: string | null;
+  // B1：本轮全局主管复核结果（key=chain_started_at·结果态缓存；loading 是瞬态不缓存——
+  // 重挂载后按幂等键补拉，后端幂等命中秒回不重烧）。
+  supervisorReview: { key: string; outcome: GlobalSupervisorReviewOutcome } | null;
 };
 const jiaobanRunCacheByProject = new Map<string, JiaobanRunCache>();
 
@@ -98,6 +103,7 @@ function writeJiaobanRunCache(projectRoot: string, patch: Partial<JiaobanRunCach
     runStartedAtMs: null,
     runIsNewSession: false,
     sessionChoice: null,
+    supervisorReview: null,
   };
   jiaobanRunCacheByProject.set(projectRoot, { ...prev, ...patch });
 }
@@ -317,6 +323,77 @@ function ProjectJiaobanPanelBrowser({
   const thisRoundChainStatus =
     chainStatus && runStartedAtMs != null && Number(chainStatus.started_at) >= runStartedAtMs ? chainStatus : null;
 
+  // ===== B1·全局主管复核（advisory·意见不是闸）=====
+  // 交货翻脸 → 自动起复核（fire-and-forget·async 不挡交货·定稿第 3 条）；幂等防重烧（后端同轮
+  // 记录直接回、[重新复核]/[重试] 才 force）；结果态缓存进 JiaobanRunCache（重挂载先读缓存、
+  // 无缓存按幂等键补拉——后端幂等命中秒回不重烧）。前端只传定位键，复核内容全在后端盘上读。
+  const [supervisorReview, setSupervisorReview] = useState<{
+    key: string;
+    outcome: GlobalSupervisorReviewOutcome;
+  } | null>(cached?.supervisorReview ?? null);
+  const [supervisorLoading, setSupervisorLoading] = useState(false);
+  const supervisorInflightRef = useRef(false);
+
+  async function requestSupervisorReview(chainStartedAt: string, force: boolean) {
+    if (!projectWorkflow || supervisorInflightRef.current) return;
+    supervisorInflightRef.current = true;
+    setSupervisorLoading(true);
+    try {
+      const outcome = await runGlobalSupervisorReview({
+        project_root: projectRoot,
+        workflow_id: projectWorkflow.workflow_id,
+        chain_started_at: chainStartedAt,
+        force,
+      });
+      setSupervisorReview({ key: chainStartedAt, outcome });
+      writeJiaobanRunCache(projectRoot, { supervisorReview: { key: chainStartedAt, outcome } });
+    } catch (e) {
+      // 复核失败不挡任何事：兜「复核不可用（人话）+ 重试」，绝不零出路、绝不断交货脸。
+      const fallback: GlobalSupervisorReviewOutcome = {
+        status: "unavailable",
+        review: null,
+        reason: e instanceof Error ? e.message : String(e),
+        warnings: [],
+      };
+      setSupervisorReview({ key: chainStartedAt, outcome: fallback });
+      writeJiaobanRunCache(projectRoot, { supervisorReview: { key: chainStartedAt, outcome: fallback } });
+    } finally {
+      supervisorInflightRef.current = false;
+      setSupervisorLoading(false);
+    }
+  }
+
+  // 交货翻脸自动触发。定位键 = 本轮链 started_at；ran 直翻 done 时轮询已停、thisRoundChainStatus
+  // 可能为 null → 用现成只读命令补拉一次，并按 fix6-v2 同口径校验（started_at >= 本轮起点）防拿旧轮。
+  // 拿不到键 → 本次不复核（区块零渲染·复核缺席不挡交货）。
+  useEffect(() => {
+    if (phase !== "done" || !projectWorkflow) return;
+    let cancelled = false;
+    const resolveKeyThenRun = async () => {
+      let startedAt: string | null = thisRoundChainStatus?.started_at ?? null;
+      if (!startedAt) {
+        try {
+          const status = await getProjectWorkflowChainStatus(projectRoot, projectWorkflow.workflow_id);
+          const candidate = status?.started_at ?? null;
+          if (candidate && (runStartedAtMs == null || Number(candidate) >= runStartedAtMs)) {
+            startedAt = candidate;
+          }
+        } catch {
+          // 拿不到定位键：本次不复核（不冻、不猜轮次）。
+        }
+      }
+      if (cancelled || !startedAt) return;
+      if (supervisorReview?.key === startedAt) return; // 本轮结果已在（含缓存恢复），不重发。
+      void requestSupervisorReview(startedAt, false);
+    };
+    void resolveKeyThenRun();
+    return () => {
+      cancelled = true;
+    };
+    // requestSupervisorReview 每渲染新建（组件内 async fn）——依赖只锚触发条件与幂等键，防 effect 空转。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, thisRoundChainStatus?.started_at, projectWorkflow?.workflow_id, supervisorReview?.key]);
+
   // ---- 动作 ----
 
   // fix8：说 → 出方案 = 面板直调 runProjectConsultation（去掉那层通用确认弹层：咨询只读·决策 2026-06-25 豁免·
@@ -429,6 +506,7 @@ function ProjectJiaobanPanelBrowser({
     setStartError(null);
     setOutcome(null);
     setChainStatus(null);
+    setSupervisorReview(null); // B1：新一轮开跑，上一轮复核意见随之清（防旧轮意见冒充本轮）。
     setManualPhase("running");
     writeJiaobanRunCache(projectRoot, {
       manualPhase: "running",
@@ -437,6 +515,7 @@ function ProjectJiaobanPanelBrowser({
       ranProposalId: latestProposal.proposal_id,
       runStartedAtMs: runStartedAt,
       runIsNewSession: isNewSession,
+      supervisorReview: null,
     });
     try {
       // 方案a：sessionChoice=null → 传 session_choice:"new" 不传 session_id（后端 014c254 先生后绑真建会话）；
@@ -489,6 +568,7 @@ function ProjectJiaobanPanelBrowser({
     setContinueHint(false);
     setOutcome(null);
     setChainStatus(null);
+    setSupervisorReview(null); // B1：新一轮开跑，上一轮复核意见随之清。
     setManualPhase("running");
     writeJiaobanRunCache(projectRoot, {
       manualPhase: "running",
@@ -497,6 +577,7 @@ function ProjectJiaobanPanelBrowser({
       continueHint: false,
       runStartedAtMs: runStartedAt,
       runIsNewSession: false,
+      supervisorReview: null,
     });
     try {
       const nextOutcome = await autoAdvanceAuthorizedRoleLoop({
@@ -718,6 +799,14 @@ function ProjectJiaobanPanelBrowser({
             sessionChoice={sessionChoice}
             latestSessionThreadId={latestSessionThreadId}
             onOpenAgentSession={onOpenAgentSession}
+            supervisorLoading={supervisorLoading}
+            supervisorOutcome={supervisorReview?.outcome ?? null}
+            onSupervisorRetry={() => {
+              // [重试]/[重新复核]：force 穿透幂等重跑。键优先取已有结果的轮键，兜底本轮链 started_at。
+              const key = supervisorReview?.key ?? thisRoundChainStatus?.started_at ?? null;
+              if (key) void requestSupervisorReview(key, true);
+            }}
+            onSupervisorReplan={backToSay}
           />
         ) : null}
 
@@ -1499,6 +1588,89 @@ export function JiaobanStepReportList({
   );
 }
 
+// B1·全局主管复核区（纯展示·无 hooks·export 供离线 DOM 断言直接调）。
+// 词表死线：「全局主管意见/复核意见」——**不是审批**（意见不是闸，按钮全走现成用户动作）。
+// 四态：loading / 意见到（总判 + 每任务点评 + 建议动作按钮）/ 不可用（人话 + [重试]·绝不零出路）/
+// 没起（outcome null 且不 loading → 零渲染，如无本轮链、旧数据）。
+export function JiaobanSupervisorReviewSection({
+  loading,
+  outcome,
+  onRetry,
+  onReplan,
+}: {
+  loading: boolean;
+  outcome: GlobalSupervisorReviewOutcome | null;
+  onRetry: () => void;
+  onReplan: () => void;
+}) {
+  if (loading) {
+    return (
+      <div className="jiaoban-supervisor" aria-label="全局主管意见">
+        <p className="jiaoban-field-label jiaoban-supervisor-title">全局主管意见</p>
+        <p className="muted small-note">
+          <span className="jiaoban-spinner" aria-hidden="true" /> 全局主管复核中…（约 2-7 分钟，不影响交货）
+        </p>
+      </div>
+    );
+  }
+  if (!outcome) return null;
+  const review = outcome.status === "ready" ? (outcome.review ?? null) : null;
+  if (!review) {
+    // 不可用：人话原因 + [重试]（force）——复核缺席不挡任何事，但绝不零出路。
+    const reason = outcome.reason?.trim() || outcome.review?.unavailable_reason?.trim() || "原因不明";
+    return (
+      <div className="jiaoban-supervisor" aria-label="全局主管意见">
+        <p className="jiaoban-field-label jiaoban-supervisor-title">全局主管意见</p>
+        <p className="muted small-note">复核不可用：{reason}</p>
+        <button className="secondary-button" type="button" onClick={onRetry}>
+          重试复核
+        </button>
+      </div>
+    );
+  }
+  // 总判一行（词表：意见，不是审批）。
+  const overallLine =
+    review.overall === "pass"
+      ? "✓ 全局主管看过：这轮没发现问题"
+      : review.overall === "needs_rework"
+        ? "⚠ 全局主管意见：建议打回重拆"
+        : "⚠ 全局主管意见：建议你亲自核验";
+  const overallTone = review.overall === "pass" ? "jiaoban-supervisor-pass" : "jiaoban-supervisor-flag";
+  return (
+    <div className="jiaoban-supervisor" aria-label="全局主管意见">
+      <p className="jiaoban-field-label jiaoban-supervisor-title">全局主管意见</p>
+      <p className={`jiaoban-supervisor-overall ${overallTone}`}>{overallLine}</p>
+      {review.summary.trim() ? <p className="jiaoban-supervisor-summary">{review.summary}</p> : null}
+      {review.tasks.length > 0 ? (
+        <ul className="jiaoban-supervisor-tasks" aria-label="每任务点评">
+          {review.tasks.map((task, index) => (
+            <li key={index} className={task.verdict === "issue" ? "jiaoban-supervisor-issue" : undefined}>
+              {task.verdict === "issue" ? "⚠ " : ""}
+              {task.title ? `${task.title}：` : ""}
+              {task.comment}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {review.suggested_action === "replan" ? (
+        <div className="workflow-state-actions">
+          <button className="secondary-button" type="button" onClick={onReplan}>
+            按建议打回重拆
+          </button>
+        </div>
+      ) : null}
+      {review.suggested_action === "human_verify" ? (
+        <p className="jiaoban-supervisor-note">
+          建议你亲验：{review.human_note.trim() || "亲自核验这轮结果。"}
+        </p>
+      ) : null}
+      <button className="jiaoban-linklike jiaoban-supervisor-rerun" type="button" onClick={onRetry}>
+        重新复核
+      </button>
+    </div>
+  );
+}
+
 // 4. 交货
 function JiaobanDoneState({
   outcome,
@@ -1509,6 +1681,10 @@ function JiaobanDoneState({
   sessionChoice,
   latestSessionThreadId,
   onOpenAgentSession,
+  supervisorLoading,
+  supervisorOutcome,
+  onSupervisorRetry,
+  onSupervisorReplan,
 }: {
   outcome: AutoAdvanceRoleLoopOutcome | null;
   chainStatus: ProjectWorkflowChainStatus | null;
@@ -1519,6 +1695,11 @@ function JiaobanDoneState({
   sessionChoice: string | null;
   latestSessionThreadId: string | null;
   onOpenAgentSession?: (threadId: string) => void;
+  // B1·全局主管复核区（advisory）：意见 + 建议动作按钮（按钮走现成用户动作·意见不是闸）。
+  supervisorLoading: boolean;
+  supervisorOutcome: GlobalSupervisorReviewOutcome | null;
+  onSupervisorRetry: () => void;
+  onSupervisorReplan: () => void;
 }) {
   const chain = outcome?.chain_outcome ?? null;
   // 刀B·事实确认本地态（防重复点·经现成 create-memory-candidate PendingAction 走确认弹层）。
@@ -1570,6 +1751,13 @@ function JiaobanDoneState({
         sessionChoice={sessionChoice}
         latestSessionThreadId={latestSessionThreadId}
         onOpenAgentSession={onOpenAgentSession}
+      />
+      {/* B1：全局主管复核区——交货后 async 后填（loading/意见/不可用+重试），不挡上面交货内容。 */}
+      <JiaobanSupervisorReviewSection
+        loading={supervisorLoading}
+        outcome={supervisorOutcome}
+        onRetry={onSupervisorRetry}
+        onReplan={onSupervisorReplan}
       />
       {warnings.length > 0 ? (
         <ul className="jiaoban-warnings muted small-note" aria-label="附带说明">

@@ -570,6 +570,51 @@
   margin-top: 0;
   align-self: center;
 }
+/* B1·全局主管复核区（交货脸内·advisory）：与交货内容分隔的小块，不抢主按钮视觉。 */
+.jiaoban-supervisor {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--hair-2);
+  border-radius: 8px;
+}
+.jiaoban-supervisor-title {
+  margin: 0;
+}
+.jiaoban-supervisor-overall {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.jiaoban-supervisor-pass {
+  color: var(--accent);
+}
+.jiaoban-supervisor-flag {
+  color: var(--warning);
+}
+.jiaoban-supervisor-summary {
+  margin: 0;
+  font-size: 13px;
+}
+.jiaoban-supervisor-tasks {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  display: grid;
+  gap: 4px;
+}
+.jiaoban-supervisor-issue {
+  color: var(--warning);
+}
+.jiaoban-supervisor-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-mid);
+}
+.jiaoban-supervisor-rerun {
+  justify-self: start;
+}
 .jiaoban-session-empty {
   gap: 6px;
 }

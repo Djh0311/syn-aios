@@ -23,6 +23,8 @@ import type {
   ConfirmAndStartAuthorizedRunRequest,
   PreviewPendingProposalDirectorPlanRequest,
   PreviewPendingProposalDirectorPlanOutcome,
+  RunGlobalSupervisorReviewRequest,
+  GlobalSupervisorReviewOutcome,
   ProjectConsultationProposal,
   ProjectWorkflowListItem,
   SubmitProjectWorkflowDraftRequest,
@@ -862,6 +864,15 @@ export function confirmAndStartAuthorizedRun(
 ): Promise<AutoAdvanceRoleLoopOutcome> {
   ensureTauriRuntime();
   return invoke<AutoAdvanceRoleLoopOutcome>("confirm_and_start_authorized_run", { request });
+}
+
+// B1·全局主管复核（advisory·意见不是闸）：交货后自动触发，读盘复核本轮口供出意见；幂等防重烧
+// （同轮已有记录直接回、[重新复核]/[重试] 才 force）。纯封装无逻辑；输入只传定位键（内容后端盘读）。
+export function runGlobalSupervisorReview(
+  request: RunGlobalSupervisorReviewRequest,
+): Promise<GlobalSupervisorReviewOutcome> {
+  ensureTauriRuntime();
+  return invoke<GlobalSupervisorReviewOutcome>("run_global_supervisor_review", { request });
 }
 
 // 刀2「批前看图」封装：对 pending 方案只读预拆工序图（零写盘·真 LM 1-7 分钟·偶发 flaky）。纯封装无逻辑；

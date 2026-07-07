@@ -1871,3 +1871,43 @@ export type WorkflowPermissionDecisionRequest = {
   request_id: string;
   decision: "approved" | "rejected";
 };
+
+// ===== B1·全局主管复核（advisory·意见不是闸）——与后端 global_supervisor_agent/store 同形 =====
+
+export type GlobalSupervisorTaskVerdict = {
+  title: string;
+  verdict: string; // "ok" | "issue"（后端已归一化·未知保守归 issue）
+  comment: string;
+};
+
+export type GlobalSupervisorReviewRecord = {
+  review_id: string;
+  project_id: string;
+  workflow_id: string;
+  chain_started_at: string; // 幂等键半边（链记录 started_at 毫秒字符串）
+  status: string; // "ready" | "unavailable"
+  overall: string; // "pass" | "needs_rework" | "needs_human_check"
+  summary: string;
+  suggested_action: string; // "none" | "replan" | "human_verify"
+  human_note: string;
+  tasks: GlobalSupervisorTaskVerdict[];
+  unavailable_reason?: string | null;
+  model: string; // §10-1 换脑可定位
+  profile_version: string;
+  created_at_ms: number;
+  updated_at_ms: number;
+};
+
+export type GlobalSupervisorReviewOutcome = {
+  status: string; // "ready" | "unavailable"
+  review?: GlobalSupervisorReviewRecord | null;
+  reason?: string | null;
+  warnings: string[];
+};
+
+export type RunGlobalSupervisorReviewRequest = {
+  project_root: string;
+  workflow_id: string;
+  chain_started_at: string;
+  force?: boolean; // [重新复核]/[重试] 才 true（幂等防重烧）
+};
