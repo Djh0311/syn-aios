@@ -41,6 +41,8 @@
 
 ### 关键数据异地备份（2026-06-13，用户）
 
+- **状态（2026-07-07·主导线核过）**：**代码半边 done**——product-line 已推私有 remote `Djh0311/syn-aios`（9 分支·hash 对齐·**恢复演练过**）；「零离机副本」对本仓已不成立。剩余小件仍零副本：Claude 记忆库现为**三**个（补：`-Users-yoyi-workspace`）、workbench 线上 store 146M（06-13 后新长出的命门·建议补进本条资产清单）、`~/.codex` 会话史——加密打包半边用户知情暂缓；「commit 后顺手 push」自动化习惯待拍（AGENTS.md）。
+
 - 是什么：给"外化心智"做器官冗余——product-line 全仓（含 git 历史）、两个 Claude 记忆库（`~/.claude/projects/-Users-yoyi/memory/`、`~/.claude/projects/-Users-yoyi-workspace-product-line/memory/`）、codexbridge 蓝图与吸收文档，定期备份到网盘/异地（git 私有 remote 或 bundle + 加密压缩包）。
 - 为什么：extended mind 讨论的直接结论——这些文件按"丢了像失忆"判据已是用户与公司心智的组成部分，目前**全部只存在于一台 Mac 上，零离机副本**（git 无 remote）。卸载的代价 = 胶水失效时比不卸载更惨，备份是胶水的保险。用户原话："丢失我的 mac 存储会像要了我的命"。
 - 怎么算完：关键清单成文 + 自动化（定时脚本 / Time Machine + 网盘双轨）+ **恢复演练一次**（没演练过恢复的备份等于没有备份）。
