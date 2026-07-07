@@ -56,6 +56,9 @@ pub(crate) struct ProjectContext {
     pub(crate) version_signal: String,
     pub(crate) blackboard_summary: Option<String>,
     pub(crate) memory_summary: Option<String>,
+    // 质量债·redo 幂等：本单授权窗内「已完成事实」摘要（口供 did/status/产物文件名·不搬产物本体）。
+    // 只由 director **重拆分支**（调用方·真实 path）填；load_project_context 纯装配不填（死锚纪律照 memory_summary）。
+    pub(crate) prior_completed_summary: Option<String>,
 }
 
 // curated core：root 或 docs/ 下找入口文档（README/CURRENT/index，因项目而异）。返回 (相对路径, 全文)。
@@ -282,6 +285,8 @@ pub(crate) fn load_project_context(project_root: &str) -> Result<ProjectContext,
         // 纯装配：memory_summary 由各调用方用**手里的真实 path** 填（不在此死锚 default_workflow_state_path——
         // 本仓「死锚默认不穿真值」两次前科：C4 默认工作流 e2e 卡点 / update_work_item_state_at:477 绕行）。
         memory_summary: None,
+        // 同款死锚纪律：已完成事实只由 director 重拆分支用真实 path 填。
+        prior_completed_summary: None,
     })
 }
 
@@ -845,6 +850,10 @@ mod consultant_recall_tests {
         assert!(
             ctx.memory_summary.is_none(),
             "load_project_context 必须纯装配·不自带召回（防死锚回潜）"
+        );
+        assert!(
+            ctx.prior_completed_summary.is_none(),
+            "load_project_context 不填已完成事实——由 director 重拆分支用真实 path 填（防死锚回潜·同款）"
         );
         let _ = fs::remove_dir_all(dir);
     }

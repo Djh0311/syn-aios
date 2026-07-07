@@ -85,6 +85,13 @@ fn director_build_prompt_variant(
             p.push_str(&format!("\n### 文件: {path}\n{content}\n"));
         }
     }
+    // 质量债·redo 幂等：重拆时喂「本单已完成事实」（只 re-plan 分支填此字段；首跑所批即所跑不经此
+    // prompt、批前预拆不填 → 两处天然不渲染）。只事实不指令、只摘要不产物本体。
+    if let Some(prior) = &ctx.prior_completed_summary {
+        p.push_str(&format!(
+            "\n--- 本单已完成（**别重复执行这些动作**·以下是已归档的 worker 自述）---\n{prior}\n重拆的新计划不得再包含与上面等价的动作；上轮超时/失败的任务可以拆细或简化后重排。\n"
+        ));
+    }
     p.push_str(
         r#"
 ===== 怎么拆 =====
@@ -517,6 +524,141 @@ fn finalize_stale_chain_for_replan(
     Ok(Some(
         "上一轮未收尾的运行已标结，本轮从头重跑（不再接续）。".to_string(),
     ))
+}
+
+// ===== 质量债·redo 幂等：收集「本单已完成事实」（喂重拆·2026-07-06 双删案）=====
+// 全走 audit_events 时间窗（授权 created_at 之后 → 多轮叠加 A+B 都在）：
+//   ① 口供事件（worker_structured_report_recorded·B1 同一读法同构）→ 「任务标题」— did 首行（status）+ 产物文件名；
+//   ② 完成但没交口供：链完成审计（workflow_chain_node_completed）里有、口供里没有的任务 → 「标题」—（无自述·执行态 completed）；
+//   ③ 超时事实：链失败审计 reason 含 ·timed_out 标记（classify 现成 "timeout" 信号的忠实投影）→ 「标题」— 上轮超时被杀。
+// 0 条 → None（现状）；读失败 → None 不挡重拆（增益不是闸·同记忆召回先例）。
+// 词表死线：只事实摘要（did/status/产物**文件名**），不搬产物内容本体（「产物喂下一步」用户明令另批）。
+fn collect_prior_completed_summary(
+    path: &std::path::Path,
+    workflow_id: &str,
+    authorization_created_at_ms: i64,
+) -> Option<String> {
+    let value = read_workflow_state_value(path).ok()?;
+    let events = value.get("audit_events")?.as_array()?;
+    let in_window = |event: &&Value| -> bool {
+        optional_string_from(event, "workflow_id").as_deref() == Some(workflow_id)
+            && optional_string_from(event, "created_at")
+                .and_then(|created| created.parse::<i64>().ok())
+                .map(|created| created >= authorization_created_at_ms)
+                .unwrap_or(false)
+    };
+    let clip = |text: &str, max: usize| -> String {
+        let first_line = text.trim().lines().next().unwrap_or("").trim();
+        let chars: Vec<char> = first_line.chars().collect();
+        if chars.len() <= max {
+            first_line.to_string()
+        } else {
+            format!("{}…", chars[..max].iter().collect::<String>())
+        }
+    };
+    // 审计 reason 里抠「任务「X」」的标题。
+    let title_from_reason = |reason: &str| -> Option<String> {
+        let start = reason.find('「')? + '「'.len_utf8();
+        let end = reason[start..].find('」')? + start;
+        Some(reason[start..end].to_string())
+    };
+    let mut lines: Vec<String> = Vec::new();
+    let mut reported_titles: Vec<String> = Vec::new();
+    // ① 口供行（标题从 work_items 拿·prepare 用 task.title 写入）。
+    for event in events.iter().filter(|event| {
+        in_window(event)
+            && optional_string_from(event, "event_type").as_deref()
+                == Some("worker_structured_report_recorded")
+    }) {
+        let work_item_id = optional_string_from(event, "work_item_id").unwrap_or_default();
+        let title = find_work_item(&value, workflow_id, &work_item_id)
+            .and_then(|item| optional_string_from(item, "title"))
+            .unwrap_or_else(|| "（未命名任务）".to_string());
+        let did = clip(
+            &optional_string_from(event, "executed_what").unwrap_or_default(),
+            120,
+        );
+        let status = optional_string_from(event, "acceptance_status").unwrap_or_default();
+        let outputs = clip(
+            &optional_string_from(event, "changed_what").unwrap_or_default(),
+            120,
+        );
+        lines.push(format!("「{title}」— {did}（{status}）；产物：{outputs}"));
+        reported_titles.push(title);
+    }
+    // ② 完成但没交口供（链完成审计有、口供没有）。
+    for event in events.iter().filter(|event| {
+        in_window(event)
+            && optional_string_from(event, "event_type").as_deref()
+                == Some("workflow_chain_node_completed")
+    }) {
+        if let Some(title) =
+            optional_string_from(event, "reason").and_then(|reason| title_from_reason(&reason))
+        {
+            if !reported_titles.contains(&title) {
+                lines.push(format!("「{title}」—（无自述·执行态 completed）"));
+                reported_titles.push(title);
+            }
+        }
+    }
+    // ③ 上轮超时事实（喂「考虑拆细」·[接着跑]人肉路径同样受益——读盘不依赖谁触发的重拆）。
+    for event in events.iter().filter(|event| {
+        in_window(event)
+            && optional_string_from(event, "event_type").as_deref()
+                == Some("workflow_chain_node_failed")
+            && optional_string_from(event, "reason")
+                .map(|reason| reason.contains("·timed_out"))
+                .unwrap_or(false)
+    }) {
+        if let Some(title) =
+            optional_string_from(event, "reason").and_then(|reason| title_from_reason(&reason))
+        {
+            let line = format!("「{title}」— 上轮超时被杀（考虑拆细或简化后重排）");
+            if !lines.contains(&line) {
+                lines.push(line);
+            }
+        }
+    }
+    if lines.is_empty() {
+        return None;
+    }
+    lines.truncate(12);
+    Some(lines.join("\n"))
+}
+
+// ===== 质量债·超时反馈边：从链停因判「任务超时导致的 fail-stop」（不新造分类——
+// `·timed_out` 标记来自 classify 落在 dispatch.warnings 的现成 "timeout" 信号，链 fail_msg 忠实带出：
+// `fail_stop:node_error:{title}:worker 派发未完成（state=failed·timed_out）`）。
+// 供给类（Err 路）/gate 拒（Err 路）/普通 failed（无标记）都不含 `·timed_out` → 不触发。
+fn chain_timeout_fail_stop_task(stopped_reason: Option<&str>) -> Option<String> {
+    let reason = stopped_reason?;
+    let rest = reason.strip_prefix("fail_stop:node_error:")?;
+    if !reason.contains("·timed_out") {
+        return None;
+    }
+    Some(
+        rest.rsplit_once(':')
+            .map(|(title, _)| title)
+            .unwrap_or(rest)
+            .to_string(),
+    )
+}
+
+// 反馈边放行判定（抽出供单测直击）：停因是任务超时 && 用户没点过停（读盘上链记录 stop_requested·
+// 现成 helper；读不到盘 → 保守不自动续）→ Some(超时任务标题)。
+fn timeout_auto_replan_decision(
+    path: &std::path::Path,
+    chain: &DirectorChainOutcome,
+) -> Option<String> {
+    let title = chain_timeout_fail_stop_task(chain.stopped_reason.as_deref())?;
+    let user_asked_stop = read_workflow_state_value(path)
+        .map(|value| chain_run_stop_requested(&value, &chain.chain_run_id))
+        .unwrap_or(true);
+    if user_asked_stop {
+        None
+    } else {
+        Some(title)
+    }
 }
 
 // fix5·超龄判据（推导）：worker 单次派发 timeout=600s（commands.rs:2352·max_retries=0），runner 到时**必杀** →
@@ -1018,7 +1160,25 @@ pub(crate) fn run_director_task_chain(
             // 失败即停（护栏·不自动重试/不跳过，防在老失败任务上打转）。
             other => {
                 let fail_msg = match &other {
-                    Ok(result) => format!("worker 派发未完成（state={}）", result.dispatch.state),
+                    Ok(result) => {
+                        // 质量债·超时可辨：dispatch.state 恒 "failed"（write_failed_dispatch 设计），
+                        // timed_out 语义在 classify 落进 dispatch.warnings 的现成 "timeout" 信号——
+                        // 带进停因（·timed_out 标记），反馈边/已完成事实收集按它判，不新造分类。
+                        let timed_out_tag = if result
+                            .dispatch
+                            .warnings
+                            .iter()
+                            .any(|warning| warning == "timeout")
+                        {
+                            "·timed_out"
+                        } else {
+                            ""
+                        };
+                        format!(
+                            "worker 派发未完成（state={}{timed_out_tag}）",
+                            result.dispatch.state
+                        )
+                    }
                     Err(error) => error.clone(),
                 };
                 set_chain_node_state(
@@ -1242,8 +1402,39 @@ fn run_auto_advance_authorized_role_loop(
     workflow_id: &str,
     actor_id: &str,
     max_nodes: usize,
+    approved_planned_tasks: Option<&[ProjectDirectorPlannedTask]>,
+) -> Result<AutoAdvanceRoleLoopOutcome, String> {
+    // 质量债·超时反馈边：预算**写死 1**（要改另拍）——薄壳保签名（既有调用点/lib.rs 测试 0 改动）。
+    run_auto_advance_authorized_role_loop_with_timeout_budget(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        director,
+        project_root,
+        workflow_id,
+        actor_id,
+        max_nodes,
+        approved_planned_tasks,
+        1,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_auto_advance_authorized_role_loop_with_timeout_budget(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    director: &dyn DirectorAgent,
+    project_root: &str,
+    workflow_id: &str,
+    actor_id: &str,
+    max_nodes: usize,
     // 2.2 所批即所跑：Some=合流带进的「用户批过的图」→ 跳过 director.plan 原样执行；None=现状（批后 LM 拆）。
     approved_planned_tasks: Option<&[ProjectDirectorPlannedTask]>,
+    // 债二·超时自动重拆剩余预算（壳传 1·递归传 0 → 两连超时只重拆一次·不许无人值守循环）。
+    timeout_auto_replan_budget: usize,
 ) -> Result<AutoAdvanceRoleLoopOutcome, String> {
     // 死线·圈固定测试项目（决策 2026-06-27）：非测试 root 入口直接拒——在 LM 拆 / prepare 之前提前拦
     // （纵深防御，不只靠链入口的晚拦）。与现成命令同款 path-lock，闸 / 沙箱本体不动。
@@ -1274,6 +1465,8 @@ fn run_auto_advance_authorized_role_loop(
         .ok_or_else(|| "active 授权缺 source_proposal_id；无法自动推进。".to_string())?;
     let authorization_id = active.authorization_id.clone();
     let auth_revision = store.revision;
+    // 质量债·redo 幂等：授权时间窗起点（created_at 之后的口供/链审计都算「本单已完成」——多轮叠加全覆盖）。
+    let auth_created_at_ms = active.created_at_ms;
     // fix9·[接着跑]口同款守卫：空写根 active 授权（16:48/16:55 已有两份残留在盘）→ 人话停，
     // 不进 LM 拆/prepare（存量空授权从「坑」变「哑」，零 store 手术）。started 审计之前拦=没开始就不记 started。
     if active.scope.allowed_write_roots.is_empty() {
@@ -1323,6 +1516,10 @@ fn run_auto_advance_authorized_role_loop(
                 // 刀B·记忆召回（真实 path·不死锚）：重拆前用手里的 path 填本项目记忆，与预拆/咨询同覆盖。
                 let mut ctx = load_project_context(project_root)?;
                 ctx.memory_summary = recall_project_memory_summary_at(path, project_root);
+                // 质量债·redo 幂等（只 re-plan 分支·调用方真 path 填·死锚纪律照刀B）：授权窗内
+                // 已完成事实喂重拆——「这些干完了，别重做」（2026-07-06 双删案根治）。失败 None 不挡重拆。
+                ctx.prior_completed_summary =
+                    collect_prior_completed_summary(path, workflow_id, auth_created_at_ms);
                 let proposal_store =
                     project_consultation_proposal_store::load_store(path, timestamp_ms)?;
                 let proposal = proposal_store
@@ -1494,6 +1691,65 @@ fn run_auto_advance_authorized_role_loop(
             "role_loop_auto_advance_stopped",
             &format!("自动推进失败（已留档）：{error}"),
         );
+    }
+    // ===== 质量债·超时反馈边：任务超时导致链 fail-stop → 自动打回主管重拆**一次** =====
+    // 信任级 = fix3 [接着跑,不用重批]（已确认方案+active 授权下重拆不需重批），只是省了那下人肉点击；
+    // **只给 timeout**（供给类/gate 拒/普通 failed 不走——额度死自动重拆=白烧、gate 拒=该人看）；
+    // 递归走**现成** re-plan 路（approved=None）——授权复查（1253 双点）/fix9 守卫/path-lock/prepare guard/
+    // 四护栏全套照过，不复制路径；预算递减 → 新一轮再 fail-stop（含再超时）预算=0 直接回到人（永不冻）。
+    if timeout_auto_replan_budget > 0 {
+        if let Ok(outcome) = &advance_result {
+            if let Some(chain) = &outcome.chain_outcome {
+                if let Some(timed_out_title) = timeout_auto_replan_decision(path, chain) {
+                    {
+                        let _ = append_role_loop_auto_advance_audit(
+                            path,
+                            workflow_id,
+                            actor_id,
+                            "role_loop_timeout_auto_replan",
+                            &format!(
+                                "任务「{timed_out_title}」超时，自动打回主管重拆（1/1·重拆带已完成事实·授权复查与全套闸照过）。"
+                            ),
+                        );
+                        return match run_auto_advance_authorized_role_loop_with_timeout_budget(
+                            path,
+                            index,
+                            readback_db_path,
+                            runner,
+                            director,
+                            project_root,
+                            workflow_id,
+                            actor_id,
+                            max_nodes,
+                            None, // 重拆 = re-plan 路（自然带上已完成事实 + 超时事实行）
+                            timeout_auto_replan_budget - 1,
+                        ) {
+                            Ok(mut second) => {
+                                second.warnings.insert(
+                                    0,
+                                    format!(
+                                        "任务「{timed_out_title}」上轮超时，已自动打回主管重拆 1 次。"
+                                    ),
+                                );
+                                // 新一轮又没跑完（任何原因）→ 人话前缀说明预算已用，回到人。
+                                if second
+                                    .chain_outcome
+                                    .as_ref()
+                                    .and_then(|chain| chain.stopped_reason.as_ref())
+                                    .is_some()
+                                    || second.stage != "ran"
+                                {
+                                    second.message =
+                                        format!("已自动重拆过 1 次：{}", second.message);
+                                }
+                                Ok(second)
+                            }
+                            Err(error) => Err(format!("已自动重拆过 1 次，仍失败：{error}")),
+                        };
+                    }
+                }
+            }
+        }
     }
     advance_result
 }
@@ -2317,6 +2573,670 @@ mod fix9_tests {
         assert!(
             err.contains("绑定现有会话失败"),
             "应死在绑会话步（守卫之后的正常路径）：{err}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+}
+
+// ===== 质量债·redo 幂等 + 超时反馈边 单测（自包含·照 fix9_tests 先例不依赖 lib.rs helper）=====
+#[cfg(test)]
+mod quality_debt_tests {
+    use super::*;
+    use std::cell::{Cell, RefCell};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn tmp_dir(tag: &str) -> PathBuf {
+        let uniq = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!("qdebt-{tag}-{uniq}"));
+        fs::create_dir_all(&dir).expect("tmp dir");
+        dir
+    }
+
+    fn fixture_project_record(project_root: &str) -> ProjectRecord {
+        ProjectRecord {
+            project_root: project_root.to_string(),
+            name: "测试项目".to_string(),
+            active_hint: true,
+            thread_count: 0,
+            active_thread_count: 0,
+            archived_thread_count: 0,
+            latest_updated_at_ms: None,
+            authority_files: vec![],
+            handoff_files: vec![],
+            evidence_files: vec![],
+            harness_candidates: vec![],
+            harness_resources: vec![],
+            context_warnings: vec![],
+            warnings: vec![],
+        }
+    }
+
+    fn fixture_index(project_root: &str, thread_id: &str) -> Value {
+        serde_json::json!({
+          "projects": [{ "project_root": project_root }],
+          "threads": [{
+            "thread_id": thread_id,
+            "project_root": project_root,
+            "title": format!("Session {thread_id}"),
+            "rollout_exists": true,
+            "rollout_path": format!("/tmp/{thread_id}.jsonl")
+          }]
+        })
+    }
+
+    // 造 active 授权（档位方案·写根非空）+ 绑会话 → auto_advance 可一路跑到链。
+    fn seed_active_run(path: &std::path::Path, index: &Value, test_root: &str) -> String {
+        bootstrap_project_workflow_at(path, &fixture_project_record(test_root)).expect("bootstrap");
+        let consult = ConsultationProposal {
+            user_goal: "减少一个怪物".to_string(),
+            goal_summary: "把游戏里的怪物减一个".to_string(),
+            scope_note: "改文件".to_string(),
+            reasoning: vec!["r".to_string()],
+            risks: vec![],
+            must_stop_points: vec![],
+            next_steps: vec!["改 index.html".to_string()],
+            execution_scope: Some(ConsultationExecutionScope {
+                write_roots: vec![],
+                target_files: vec!["index.html".to_string()],
+                tools: vec![],
+                checks: vec![],
+            }),
+            suggest_workflow: false,
+        };
+        let c1 = map_consultation_to_c1_input(&consult, test_root, "consultant").expect("map");
+        let created = project_consultation_proposal_store::create_proposal(
+            path,
+            &c1,
+            unix_timestamp_ms(),
+            &format!("qdebt-proposal:{}", unix_timestamp_nanos()),
+        )
+        .expect("proposal");
+        let confirmed = project_consultation_proposal_store::record_decision(
+            path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "质量债测试确认。".to_string(),
+                expected_proposal_store_revision: None,
+                expected_plan_authorization_store_revision: None,
+            },
+            unix_timestamp_ms(),
+            &format!("qdebt-confirm:{}", unix_timestamp_nanos()),
+            &format!("qdebt-auth:{}", unix_timestamp_nanos()),
+            &format!("qdebt-auth-user:{}", unix_timestamp_nanos()),
+        )
+        .expect("confirm");
+        let authorization = confirmed.plan_authorization.expect("授权对象");
+        plan_authorization_store::record_global_boundary_review_with_proposal(
+            path,
+            &RecordGlobalBoundaryReviewInput {
+                project_root: test_root.to_string(),
+                project_id: project_id(test_root),
+                workflow_id: created.proposal.workflow_id.clone(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                authorization_id: authorization.authorization_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                review_status: "approved".to_string(),
+                summary: "质量债测试边界批准。".to_string(),
+                checklist: GlobalBoundaryReviewChecklist {
+                    architecture_boundary_checked: true,
+                    cross_project_impact_checked: true,
+                    permission_scope_checked: true,
+                    read_write_scope_checked: true,
+                    tool_and_check_scope_checked: true,
+                    memory_boundary_checked: true,
+                    stop_conditions_checked: true,
+                    acceptance_criteria_checked: true,
+                },
+                findings: vec![],
+                expected_authorization_revision: confirmed.plan_authorization_store_revision,
+            },
+            unix_timestamp_ms(),
+            &format!("qdebt-boundary:{}", unix_timestamp_nanos()),
+        )
+        .expect("boundary → active");
+        let workflow_id = created.proposal.workflow_id.clone();
+        // 绑会话（codex-dev 节点·existing 同款机器）——auto_advance 的链要 resume 它。
+        bind_workflow_node_codex_session_for_index_at(
+            path,
+            index,
+            &WorkflowNodeSessionBindRequest {
+                project_root: test_root.to_string(),
+                node_id: format!("{workflow_id}:node:codex-dev"),
+                work_item_id: None,
+                thread_id: "thread-qdebt".to_string(),
+            },
+        )
+        .expect("bind session");
+        workflow_id
+    }
+
+    // 拆任务 stub：每次被调记录收到的 ctx.prior_completed_summary；产 2 任务（t2 依赖 t1）。
+    struct RecordingDirector {
+        calls: Cell<usize>,
+        seen_prior: RefCell<Vec<Option<String>>>,
+    }
+    impl RecordingDirector {
+        fn new() -> Self {
+            Self {
+                calls: Cell::new(0),
+                seen_prior: RefCell::new(vec![]),
+            }
+        }
+    }
+    impl DirectorAgent for RecordingDirector {
+        fn plan(
+            &self,
+            ctx: &ProjectContext,
+            proposal: &ProjectConsultationProposal,
+        ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+            self.calls.set(self.calls.get() + 1);
+            self.seen_prior
+                .borrow_mut()
+                .push(ctx.prior_completed_summary.clone());
+            let scope = director_task_scope_from_proposal(proposal, "codex-dev");
+            let mk = |id: usize, title: &str, deps: Vec<String>| ProjectDirectorPlannedTask {
+                planned_task_id: format!("planned-task:{}:{}", proposal.workflow_id, id),
+                title: title.to_string(),
+                objective: format!("自包含目标：{title}"),
+                scope: scope.clone(),
+                depends_on: deps,
+                acceptance_criteria: vec!["可验收".to_string()],
+                report_format: vec!["做了什么".to_string()],
+                status: "planned".to_string(),
+                guard_result: None,
+                work_item_id: None,
+                workflow_node_id: None,
+                task_package_id: None,
+                memory_packet_snapshot_id: None,
+                prepared_dispatch_id: None,
+                blocked_reasons: vec![],
+            };
+            Ok(vec![
+                mk(1, "删一个怪", vec![]),
+                mk(2, "浏览器验收", vec!["删一个怪".to_string()]),
+            ])
+        }
+    }
+
+    struct BombDirector2;
+    impl DirectorAgent for BombDirector2 {
+        fn plan(
+            &self,
+            _ctx: &ProjectContext,
+            _proposal: &ProjectConsultationProposal,
+        ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+            panic!("approved graph 路径不得调 director");
+        }
+    }
+
+    // 脚本化 runner：按序弹出行为（"ok"=完成+契约口供 / "timeout"=超时被杀 / "fail"=普通失败 /
+    // "provider_err"=供给类 Err / 脚本耗尽默认 ok）。
+    struct ScriptedRunner {
+        script: RefCell<Vec<&'static str>>,
+        calls: Cell<usize>,
+    }
+    impl ScriptedRunner {
+        fn new(script: Vec<&'static str>) -> Self {
+            Self {
+                script: RefCell::new(script),
+                calls: Cell::new(0),
+            }
+        }
+    }
+    impl CodexResumeRunner for ScriptedRunner {
+        fn resume_with_options(
+            &self,
+            _thread_id: &str,
+            _prompt: &str,
+            last_message_path: &Path,
+            _options: &CodexResumeRequestOptions,
+        ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String> {
+            self.calls.set(self.calls.get() + 1);
+            let behavior = {
+                let mut script = self.script.borrow_mut();
+                if script.is_empty() {
+                    "ok"
+                } else {
+                    script.remove(0)
+                }
+            };
+            if behavior == "provider_err" {
+                return Err("codex_provider_unavailable:codex 额度用完了".to_string());
+            }
+            if let Some(parent) = last_message_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            match behavior {
+                "ok" => {
+                    let _ = fs::write(
+                        last_message_path,
+                        "干完了。\n```json\n{\"did\":\"已删除第三个巡逻怪\",\"outputs\":[\"/t/index.html\"],\"status\":\"done\",\"evidence\":[\"看过\"]}\n```",
+                    );
+                    Ok((
+                        CodexResumeRunResult {
+                            exit_code: 0,
+                            timed_out: false,
+                            stderr_summary: None,
+                        },
+                        WorkflowNodeDispatchExecutionOptions {
+                            readback_stats: Some(CodexDispatchReadbackStats {
+                                transcript_event_count: 3,
+                                transcript_target_hits: 1,
+                            }),
+                        },
+                    ))
+                }
+                "timeout" => Ok((
+                    CodexResumeRunResult {
+                        exit_code: 124,
+                        timed_out: true,
+                        stderr_summary: Some("killed after timeout".to_string()),
+                    },
+                    WorkflowNodeDispatchExecutionOptions {
+                        readback_stats: None,
+                    },
+                )),
+                _ => Ok((
+                    CodexResumeRunResult {
+                        exit_code: 1,
+                        timed_out: false,
+                        stderr_summary: Some("boom".to_string()),
+                    },
+                    WorkflowNodeDispatchExecutionOptions {
+                        readback_stats: None,
+                    },
+                )),
+            }
+        }
+    }
+
+    fn run_loop(
+        path: &std::path::Path,
+        index: &Value,
+        dir: &std::path::Path,
+        runner: &dyn CodexResumeRunner,
+        director: &dyn DirectorAgent,
+        test_root: &str,
+        workflow_id: &str,
+        approved: Option<&[ProjectDirectorPlannedTask]>,
+    ) -> Result<AutoAdvanceRoleLoopOutcome, String> {
+        run_auto_advance_authorized_role_loop(
+            path,
+            index,
+            &dir.join("readback.sqlite"),
+            runner,
+            director,
+            test_root,
+            workflow_id,
+            "user-fixture",
+            10,
+            approved,
+        )
+    }
+
+    fn audit_reasons(path: &std::path::Path, event_type: &str) -> Vec<String> {
+        let state: Value =
+            serde_json::from_str(&fs::read_to_string(path).expect("state")).expect("json");
+        state["audit_events"]
+            .as_array()
+            .map(|events| {
+                events
+                    .iter()
+                    .filter(|event| event["event_type"] == event_type)
+                    .filter_map(|event| event["reason"].as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    // §4①②·collect 直测：双删案复刻（口供行含 did+status+产物文件名·标题从 work_item）+ 多轮累计
+    // （窗内两轮都在·窗外旧口供不进）+ 无自述行 + 超时行 + 0 条 None + 读失败 None。
+    #[test]
+    fn collect_prior_completed_facts_double_delete_case() {
+        let dir = tmp_dir("collect");
+        let path = dir.join("workflow-state.v0.json");
+        let state = serde_json::json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "updated_at": "seed",
+            "projects": [], "agent_adapters": [], "workflows": [{"workflow_id": "wf-1"}],
+            "nodes": [], "edges": [],
+            "work_items": [
+                {"workflow_id": "wf-1", "work_item_id": "wi-1", "state": "accepted", "title": "删一个怪"},
+                {"workflow_id": "wf-1", "work_item_id": "wi-2", "state": "accepted", "title": "第二轮再删"}
+            ],
+            "artifacts": [], "reviews": [],
+            "audit_events": [
+                {"event_id": "r1", "event_type": "worker_structured_report_recorded", "workflow_id": "wf-1",
+                 "work_item_id": "wi-1", "created_at": "2000",
+                 "executed_what": "已删除第三个巡逻怪", "changed_what": "/t/index.html",
+                 "acceptance_status": "reported_completed"},
+                {"event_id": "r2", "event_type": "worker_structured_report_recorded", "workflow_id": "wf-1",
+                 "work_item_id": "wi-2", "created_at": "3000",
+                 "executed_what": "又删掉一个（第二轮）", "changed_what": "/t/index.html",
+                 "acceptance_status": "reported_completed"},
+                {"event_id": "r-old", "event_type": "worker_structured_report_recorded", "workflow_id": "wf-1",
+                 "work_item_id": "wi-1", "created_at": "500",
+                 "executed_what": "上一单授权的旧口供（不该进）", "changed_what": "x",
+                 "acceptance_status": "reported_completed"},
+                {"event_id": "c1", "event_type": "workflow_chain_node_completed", "workflow_id": "wf-1",
+                 "created_at": "2100", "reason": "薄链驱动：任务「静默完成的任务」真派发成功（dispatch d1）"},
+                {"event_id": "f1", "event_type": "workflow_chain_node_failed", "workflow_id": "wf-1",
+                 "created_at": "2200", "reason": "薄链驱动：任务「浏览器验收」失败即停——worker 派发未完成（state=failed·timed_out）"}
+            ],
+            "capabilities": [], "harness_resources": []
+        });
+        fs::write(&path, serde_json::to_string_pretty(&state).unwrap()).expect("write");
+        let summary = collect_prior_completed_summary(&path, "wf-1", 1000).expect("应有事实块");
+        assert!(
+            summary.contains("「删一个怪」"),
+            "标题从 work_item：{summary}"
+        );
+        assert!(summary.contains("已删除第三个巡逻怪"), "did 在：{summary}");
+        assert!(summary.contains("reported_completed"), "status 在");
+        assert!(
+            summary.contains("/t/index.html"),
+            "产物文件名在（不搬内容本体）"
+        );
+        assert!(
+            summary.contains("又删掉一个（第二轮）"),
+            "多轮累计：第二轮也在"
+        );
+        assert!(!summary.contains("旧口供"), "窗外（授权前）不进");
+        assert!(
+            summary.contains("「静默完成的任务」—（无自述·执行态 completed）"),
+            "完成没口供 → 无自述行：{summary}"
+        );
+        assert!(
+            summary.contains("「浏览器验收」— 上轮超时被杀"),
+            "超时事实行在：{summary}"
+        );
+        // 0 条 → None（窗推到未来）。
+        assert!(collect_prior_completed_summary(&path, "wf-1", 999_999).is_none());
+        // 读失败 → None 不挡重拆。
+        assert!(collect_prior_completed_summary(&dir.join("no-such.json"), "wf-1", 0).is_none());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4①·prompt 渲染：ctx 填了 → 事实块+禁令在；None → 不渲染（首跑/预拆天然如此）。
+    #[test]
+    fn prompt_renders_prior_facts_block_only_when_filled() {
+        let dir = tmp_dir("prompt");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_index(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "thread-qdebt");
+        let _wf = seed_active_run(&path, &index, WORKFLOW_ENGINE_TEST_PROJECT_ROOT);
+        let store = project_consultation_proposal_store::load_store(&path, unix_timestamp_ms())
+            .expect("store");
+        let proposal = &store.proposals[0];
+        let mut ctx = load_project_context(WORKFLOW_ENGINE_TEST_PROJECT_ROOT).expect("ctx");
+        assert!(
+            !director_build_prompt(&ctx, proposal).contains("本单已完成"),
+            "None → 不渲染"
+        );
+        ctx.prior_completed_summary =
+            Some("「删一个怪」— 已删除第三个巡逻怪（reported_completed）".to_string());
+        let prompt = director_build_prompt(&ctx, proposal);
+        assert!(prompt.contains("本单已完成"), "块标题在");
+        assert!(prompt.contains("别重复执行这些动作"), "禁令在");
+        assert!(prompt.contains("已删除第三个巡逻怪"), "事实在");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4③+①链级：t1 完成（真口供落库）→ t2 超时 → 自动打回重拆 1 次（审计在）→ 第二轮 ran；
+    // 重拆 director 收到的 ctx.prior 含 t1 事实（双删案根治的端到端形）。
+    #[test]
+    fn timeout_triggers_one_auto_replan_with_facts_then_ran() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("auto-replan");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_index(test_root, "thread-qdebt");
+        let workflow_id = seed_active_run(&path, &index, test_root);
+        let director = RecordingDirector::new();
+        // 第一轮：t1 ok（落真口供）、t2 timeout；第二轮（重拆后）：全 ok。
+        let runner = ScriptedRunner::new(vec!["ok", "timeout"]);
+        let outcome = run_loop(
+            &path,
+            &index,
+            &dir,
+            &runner,
+            &director,
+            test_root,
+            &workflow_id,
+            None,
+        )
+        .expect("超时应自动重拆后跑完");
+        assert_eq!(outcome.stage, "ran", "{outcome:?}");
+        assert!(
+            outcome
+                .warnings
+                .iter()
+                .any(|w| w.contains("已自动打回主管重拆 1 次")),
+            "warnings 记自动重拆：{:?}",
+            outcome.warnings
+        );
+        assert_eq!(director.calls.get(), 2, "初拆 + 超时重拆 = 2 次");
+        let seen = director.seen_prior.borrow();
+        assert!(seen[0].is_none(), "首拆无前轮事实");
+        let second_prior = seen[1].clone().expect("重拆应带已完成事实");
+        assert!(
+            second_prior.contains("已删除第三个巡逻怪"),
+            "重拆看到 t1 口供（双删案根治）：{second_prior}"
+        );
+        assert!(
+            second_prior.contains("上轮超时被杀"),
+            "重拆看到超时事实：{second_prior}"
+        );
+        let replan_audits = audit_reasons(&path, "role_loop_timeout_auto_replan");
+        assert_eq!(replan_audits.len(), 1, "自动重拆审计恰一条");
+        assert!(replan_audits[0].contains("浏览器验收"), "审计点名超时任务");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4④⑤·预算=1 不循环：两连超时只重拆一次，第二轮停·人话含「已自动重拆过 1 次」。
+    #[test]
+    fn budget_one_no_loop_on_consecutive_timeouts() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("budget");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_index(test_root, "thread-qdebt");
+        let workflow_id = seed_active_run(&path, &index, test_root);
+        let director = RecordingDirector::new();
+        let runner = ScriptedRunner::new(vec!["timeout", "timeout", "timeout", "timeout"]);
+        let outcome = run_loop(
+            &path,
+            &index,
+            &dir,
+            &runner,
+            &director,
+            test_root,
+            &workflow_id,
+            None,
+        )
+        .expect("第二轮停但返回 Ok outcome");
+        assert_eq!(director.calls.get(), 2, "预算 1：只重拆一次·绝不循环");
+        assert!(
+            outcome.message.starts_with("已自动重拆过 1 次"),
+            "人话前缀：{}",
+            outcome.message
+        );
+        assert!(
+            outcome
+                .chain_outcome
+                .as_ref()
+                .and_then(|chain| chain.stopped_reason.as_deref())
+                .map(|reason| reason.contains("·timed_out"))
+                .unwrap_or(false),
+            "第二轮仍超时停·回到人"
+        );
+        assert_eq!(
+            audit_reasons(&path, "role_loop_timeout_auto_replan").len(),
+            1,
+            "审计恰一条（不循环）"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4⑥·非 timeout 失败不触发：普通 failed / 供给类 Err 都不自动重拆。
+    #[test]
+    fn non_timeout_failures_do_not_trigger_replan() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        // 普通 failed（state=failed）。
+        let dir = tmp_dir("no-trigger-fail");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_index(test_root, "thread-qdebt");
+        let workflow_id = seed_active_run(&path, &index, test_root);
+        let director = RecordingDirector::new();
+        let runner = ScriptedRunner::new(vec!["fail"]);
+        let outcome = run_loop(
+            &path,
+            &index,
+            &dir,
+            &runner,
+            &director,
+            test_root,
+            &workflow_id,
+            None,
+        )
+        .expect("失败即停仍 Ok outcome");
+        assert_eq!(director.calls.get(), 1, "普通 failed 不重拆");
+        assert!(audit_reasons(&path, "role_loop_timeout_auto_replan").is_empty());
+        assert!(!outcome.message.contains("已自动重拆"));
+        let _ = fs::remove_dir_all(dir);
+        // 供给类 Err（execute Err 路·停因不含 ·timed_out 标记）。
+        let dir2 = tmp_dir("no-trigger-provider");
+        let path2 = dir2.join("workflow-state.v0.json");
+        let workflow_id2 = seed_active_run(&path2, &index, test_root);
+        let director2 = RecordingDirector::new();
+        let runner2 = ScriptedRunner::new(vec!["provider_err"]);
+        let _ = run_loop(
+            &path2,
+            &index,
+            &dir2,
+            &runner2,
+            &director2,
+            test_root,
+            &workflow_id2,
+            None,
+        );
+        assert_eq!(director2.calls.get(), 1, "供给类不重拆（额度死重拆=白烧）");
+        assert!(audit_reasons(&path2, "role_loop_timeout_auto_replan").is_empty());
+        let _ = fs::remove_dir_all(dir2);
+    }
+
+    // §4⑦·approved graph（所批即所跑）首跑路径两件 0 触碰：director 不被调（Bomb 没炸）、无喂料、
+    // 跑通 ran、无重拆审计。
+    #[test]
+    fn approved_graph_path_untouched() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("approved");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_index(test_root, "thread-qdebt");
+        let workflow_id = seed_active_run(&path, &index, test_root);
+        let store = project_consultation_proposal_store::load_store(&path, unix_timestamp_ms())
+            .expect("store");
+        let proposal = &store.proposals[0];
+        let scope = director_task_scope_from_proposal(proposal, "codex-dev");
+        let approved = vec![ProjectDirectorPlannedTask {
+            planned_task_id: format!("planned-task:{workflow_id}:1"),
+            title: "唯一任务".to_string(),
+            objective: "自包含".to_string(),
+            scope,
+            depends_on: vec![],
+            acceptance_criteria: vec!["ok".to_string()],
+            report_format: vec!["r".to_string()],
+            status: "planned".to_string(),
+            guard_result: None,
+            work_item_id: None,
+            workflow_node_id: None,
+            task_package_id: None,
+            memory_packet_snapshot_id: None,
+            prepared_dispatch_id: None,
+            blocked_reasons: vec![],
+        }];
+        let runner = ScriptedRunner::new(vec!["ok"]);
+        let outcome = run_loop(
+            &path,
+            &index,
+            &dir,
+            &runner,
+            &BombDirector2,
+            test_root,
+            &workflow_id,
+            Some(&approved),
+        )
+        .expect("approved 路照旧全通");
+        assert_eq!(outcome.stage, "ran");
+        assert!(audit_reasons(&path, "role_loop_timeout_auto_replan").is_empty());
+        assert!(!outcome.warnings.iter().any(|w| w.contains("自动打回")));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4⑧·stop_requested：用户点过停 → 判定层拒绝自动续（含判别函数本身的三分覆盖）。
+    #[test]
+    fn stop_requested_blocks_auto_replan_decision() {
+        // 判别函数：timeout 形入选；user_stop/普通 fail/供给类不入。
+        assert!(chain_timeout_fail_stop_task(Some(
+            "fail_stop:node_error:浏览器验收:worker 派发未完成（state=failed·timed_out）"
+        ))
+        .map(|title| title == "浏览器验收")
+        .unwrap_or(false));
+        assert!(chain_timeout_fail_stop_task(Some("user_stop_requested")).is_none());
+        assert!(chain_timeout_fail_stop_task(Some(
+            "fail_stop:node_error:任务:worker 派发未完成（state=failed）"
+        ))
+        .is_none());
+        assert!(chain_timeout_fail_stop_task(Some(
+            "fail_stop:node_error:任务:codex_provider_unavailable:额度用完了"
+        ))
+        .is_none());
+        assert!(chain_timeout_fail_stop_task(None).is_none());
+        // 判定层：盘上 stop_requested=true → None（点过停不自动续）；false → Some。
+        let dir = tmp_dir("stop-req");
+        let path = dir.join("workflow-state.v0.json");
+        let mk_state = |stop_requested: bool| {
+            serde_json::json!({
+                "schema_version": "workflow_state_v0", "workflow_version": 1, "updated_at": "seed",
+                "projects": [], "agent_adapters": [], "workflows": [{"workflow_id": "wf-1"}],
+                "nodes": [], "edges": [], "work_items": [], "artifacts": [], "reviews": [],
+                "audit_events": [], "capabilities": [], "harness_resources": [],
+                "workflow_chain_runs": [{
+                    "chain_run_id": "chain-x", "project_id": "p", "workflow_id": "wf-1",
+                    "state": "failed", "stop_requested": stop_requested,
+                    "started_at": "1000", "ended_at": "2000", "nodes": []
+                }]
+            })
+        };
+        let chain = DirectorChainOutcome {
+            total: 1,
+            dispatched: 1,
+            completed: 0,
+            skipped: 0,
+            chain_run_id: "chain-x".to_string(),
+            steps: vec![],
+            warnings: vec![],
+            stopped_reason: Some(
+                "fail_stop:node_error:浏览器验收:worker 派发未完成（state=failed·timed_out）"
+                    .to_string(),
+            ),
+        };
+        fs::write(&path, serde_json::to_string(&mk_state(true)).unwrap()).unwrap();
+        assert!(
+            timeout_auto_replan_decision(&path, &chain).is_none(),
+            "用户点过停 → 不自动续"
+        );
+        fs::write(&path, serde_json::to_string(&mk_state(false)).unwrap()).unwrap();
+        assert_eq!(
+            timeout_auto_replan_decision(&path, &chain).as_deref(),
+            Some("浏览器验收"),
+            "没点停 + timeout 形 → 放行"
         );
         let _ = fs::remove_dir_all(dir);
     }
