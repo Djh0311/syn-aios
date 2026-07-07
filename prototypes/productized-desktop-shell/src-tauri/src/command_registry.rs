@@ -14,6 +14,9 @@ mod worker_report;
 mod global_supervisor_agent;
 mod global_supervisor_review_store;
 
+// B3·秘书 agent（按需解释·零写入零 store）：读盘装配「待拍板事实」→ 只读 consult → 纯文本。
+mod secretary_agent;
+
 macro_rules! workbench_command_handler {
     () => {
         tauri::generate_handler![
@@ -120,6 +123,8 @@ macro_rules! workbench_command_handler {
             run_project_consultation,
             global_supervisor_agent::run_global_supervisor_review,
             global_supervisor_agent::run_global_supervisor_boundary_review,
+            global_supervisor_review_store::load_global_supervisor_review_store,
+            secretary_agent::run_secretary_explain,
             list_project_workflows,
             submit_project_workflow_draft,
             get_project_workflow_nodes,

@@ -432,6 +432,18 @@ fn prune_backups(backup_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+// B3·整店只读 load 命令（照 load_formal_memory_store 家族先例·store 本体语义 0-diff）：
+// 秘书「待你拍板」面要读主管两类意见。走 soft 语义（不存在/损坏 → 空店），秘书面板零炸优先；
+// warnings 属诊断细节、此命令不透出（下次写盘自会备份坏文件）。只读，无任何写路径。
+#[tauri::command]
+pub(crate) fn load_global_supervisor_review_store(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<GlobalSupervisorReviewStoreV1, String> {
+    let (store, _warnings) =
+        load_store_soft(&state.workflow_state_path, crate::unix_timestamp_ms());
+    Ok(store)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

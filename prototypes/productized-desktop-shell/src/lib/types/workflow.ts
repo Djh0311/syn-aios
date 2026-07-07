@@ -1942,3 +1942,42 @@ export type RunGlobalSupervisorBoundaryReviewRequest = {
   proposal_id: string;
   force?: boolean; // [重试] 才 true（幂等防重烧）
 };
+
+// ===== B3·主管复核整店只读类型 + 秘书解释 =====
+
+export type GlobalSupervisorReviewAuditEvent = {
+  event_id: string;
+  event_type: string;
+  workflow_id: string;
+  chain_started_at: string;
+  review_status: string;
+  actor_ref: string;
+  created_at_ms: number;
+};
+
+export type GlobalSupervisorBoundaryReviewAuditEvent = {
+  event_id: string;
+  event_type: string;
+  proposal_id: string;
+  review_status: string;
+  actor_ref: string;
+  created_at_ms: number;
+};
+
+// 与后端 GlobalSupervisorReviewStoreV1 同形（B1 reviews + B2 boundary_reviews 两半·soft load 不炸）。
+export type GlobalSupervisorReviewStoreV1 = {
+  schema_version: string;
+  revision: number;
+  updated_at_ms: number;
+  reviews: GlobalSupervisorReviewRecord[];
+  audit_events: GlobalSupervisorReviewAuditEvent[];
+  boundary_reviews: GlobalSupervisorBoundaryReviewRecord[];
+  boundary_audit_events: GlobalSupervisorBoundaryReviewAuditEvent[];
+};
+
+// B3·秘书按需解释（零持久·前端会话内缓存）。
+export type SecretaryExplainOutcome = {
+  status: string; // "ready" | "unavailable"
+  explanation?: string | null;
+  reason?: string | null;
+};

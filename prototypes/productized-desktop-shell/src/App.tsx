@@ -22,6 +22,7 @@ import {
   loadMemoryCaptureStore,
   loadMemoryCandidateStore,
   loadMemoryEntityRelationStore,
+  loadGlobalSupervisorReviewStore,
   loadMemoryLintStore,
   loadMemoryPatternStore,
   loadObservationStore,
@@ -74,7 +75,7 @@ import { emptySnapshot } from "./lib/emptySnapshot";
 import { loadWorkbenchSnapshotFromPageQueries } from "./lib/pageReadModelRuntime";
 import { deriveSecretaryContext } from "./lib/secretaryReadModel";
 import { setTauriWindowTitle } from "./lib/tauriWindow";
-import type { BlackboardCandidateStoreV1, FormalMemoryStoreV1, MemoryCaptureStoreV1, MemoryCandidateStoreV1, MemoryEntityRelationStoreV1, MemoryLintStoreV1, MemoryPatternStoreV1, ObservationStoreV1, PendingAction, PlanAuthorizationStoreV1, ProjectConsultationProposalStoreV1, WorkbenchSnapshot, WorkflowStateSnapshot } from "./lib/types";
+import type { BlackboardCandidateStoreV1, FormalMemoryStoreV1, GlobalSupervisorReviewStoreV1, MemoryCaptureStoreV1, MemoryCandidateStoreV1, MemoryEntityRelationStoreV1, MemoryLintStoreV1, MemoryPatternStoreV1, ObservationStoreV1, PendingAction, PlanAuthorizationStoreV1, ProjectConsultationProposalStoreV1, WorkbenchSnapshot, WorkflowStateSnapshot } from "./lib/types";
 import { devNavItems, homeNavItem, primaryNavItems, settingsNavItem, workspaceRailItems } from "./lib/workbenchNavigation";
 import type { RightPanelKey, ViewKey } from "./lib/workbenchNavigation";
 
@@ -118,6 +119,8 @@ export function App() {
   const [memoryLintStore, setMemoryLintStore] = useState<MemoryLintStoreV1 | null>(null);
   const [memoryEntityRelationStore, setMemoryEntityRelationStore] = useState<MemoryEntityRelationStoreV1 | null>(null);
   const [memoryPatternStore, setMemoryPatternStore] = useState<MemoryPatternStoreV1 | null>(null);
+  // B3·秘书「待你拍板」数据源之一（主管两类意见·只读整店）。
+  const [supervisorReviewStore, setSupervisorReviewStore] = useState<GlobalSupervisorReviewStoreV1 | null>(null);
   const [activeRightPanel, setActiveRightPanel] = useState<RightPanelKey | null>(null);
   const [focusedAgentThreadId, setFocusedAgentThreadId] = useState<string | null>(null);
 
@@ -198,6 +201,7 @@ export function App() {
         nextMemoryLintStore,
         nextMemoryEntityRelationStore,
         nextMemoryPatternStore,
+        nextSupervisorReviewStore,
       ] = await Promise.all([
         loadBlackboardCandidateStore(),
         loadPlanAuthorizationStore(),
@@ -209,6 +213,7 @@ export function App() {
         loadMemoryLintStore(),
         loadMemoryEntityRelationStore(),
         loadMemoryPatternStore(),
+        loadGlobalSupervisorReviewStore(),
       ]);
       setBlackboardCandidateStore(nextBlackboardStore);
       setPlanAuthorizationStore(nextPlanAuthorizationStore);
@@ -220,6 +225,7 @@ export function App() {
       setMemoryLintStore(nextMemoryLintStore);
       setMemoryEntityRelationStore(nextMemoryEntityRelationStore);
       setMemoryPatternStore(nextMemoryPatternStore);
+      setSupervisorReviewStore(nextSupervisorReviewStore);
     } catch (loadError) {
       setNotice(`记忆治理读取失败：${messageOf(loadError)}`);
       setError(true);
@@ -623,8 +629,10 @@ export function App() {
         memoryCaptureStore,
         memoryCandidateStore,
         workflowStateError,
+        proposalStore: projectConsultationProposalStore,
+        supervisorReviewStore,
       }),
-    [displaySnapshot, workflowState, blackboardCandidateStore, memoryCaptureStore, memoryCandidateStore, workflowStateError],
+    [displaySnapshot, workflowState, blackboardCandidateStore, memoryCaptureStore, memoryCandidateStore, workflowStateError, projectConsultationProposalStore, supervisorReviewStore],
   );
   const pendingReviewCount =
     workflowState?.project_workflows.reduce(

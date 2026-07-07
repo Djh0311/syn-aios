@@ -27,6 +27,8 @@ import type {
   GlobalSupervisorReviewOutcome,
   RunGlobalSupervisorBoundaryReviewRequest,
   GlobalSupervisorBoundaryReviewOutcome,
+  GlobalSupervisorReviewStoreV1,
+  SecretaryExplainOutcome,
   ProjectConsultationProposal,
   ProjectWorkflowListItem,
   SubmitProjectWorkflowDraftRequest,
@@ -411,6 +413,18 @@ export function generateStageCAcceptanceSummary(
 export function loadProjectConsultationProposalStore(): Promise<ProjectConsultationProposalStoreV1> {
   ensureTauriRuntime();
   return invoke<ProjectConsultationProposalStoreV1>("load_project_consultation_proposal_store");
+}
+
+// B3·主管复核整店只读 load（秘书「待你拍板」面数据源之一·soft 语义损坏空店不炸）。纯封装无逻辑。
+export function loadGlobalSupervisorReviewStore(): Promise<GlobalSupervisorReviewStoreV1> {
+  ensureTauriRuntime();
+  return invoke<GlobalSupervisorReviewStoreV1>("load_global_supervisor_review_store");
+}
+
+// B3·秘书按需解释（唯一烧额度处·用户点才花·后端盘读事实·零持久）。纯封装无逻辑。
+export function runSecretaryExplain(): Promise<SecretaryExplainOutcome> {
+  ensureTauriRuntime();
+  return invoke<SecretaryExplainOutcome>("run_secretary_explain");
 }
 
 export function createProjectConsultationProposal(

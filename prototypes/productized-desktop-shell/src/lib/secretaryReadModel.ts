@@ -10,11 +10,13 @@ import type {
   BlackboardCandidateState,
   BlackboardCandidateStoreV1,
   BlackboardEntry,
+  GlobalSupervisorReviewStoreV1,
   MemoryCandidate,
   MemoryCaptureStoreV1,
   MemoryCandidateStoreV1,
   MemoryLifecycleStatus,
   ProjectBlackboard,
+  ProjectConsultationProposalStoreV1,
   ProjectRecord,
   ProjectWorkflowSummary,
   ProviderAvailabilitySummary,
@@ -174,6 +176,30 @@ export type SecretaryActionProposal = {
   blocked_reason: string;
 };
 
+// ===== B3·「待你拍板」清单（全部确定性读盘·零 LM·秒出）=====
+
+export type SecretaryPendingBoardEntry = {
+  entry_id: string;
+  /// 人话标题（不露 proposal_id/verdict 枚举原文）。
+  title: string;
+  /// 人话一句补充（可空串）。
+  detail: string;
+  /// 去处提示（纯文字·B3 不做跳转接线）。
+  where_hint: string;
+};
+
+export type SecretaryPendingBoard = {
+  /// 三组合计（供 Brief 顶部「需要你确认」并入）。
+  total: number;
+  /// 待批方案（status=pending_user_confirmation）。
+  pending_proposals: SecretaryPendingBoardEntry[];
+  /// 全局主管提醒：结果复核 needs_human_check/human_verify + 批前 mismatch（caution 刻意不入——
+  /// 批卡上提醒过的，堆进秘书面就是噪音）。
+  supervisor_reminders: SecretaryPendingBoardEntry[];
+  /// 记忆候选：引用现有 pending 计数（不重复算），计数 >0 才有一条聚合条目。
+  memory_candidate_entry: SecretaryPendingBoardEntry | null;
+};
+
 export type SecretaryContext = {
   context_id: string;
   source_kind: "derived_read_model";
@@ -184,6 +210,7 @@ export type SecretaryContext = {
   suggestions: SecretarySuggestion[];
   memory_candidates: SecretaryMemoryCandidate[];
   action_proposals: SecretaryActionProposal[];
+  pending_board: SecretaryPendingBoard;
   warnings: string[];
 };
 
@@ -198,8 +225,20 @@ export function deriveSecretaryContext(input: {
   memoryCaptureStore?: MemoryCaptureStoreV1 | null;
   memoryCandidateStore?: MemoryCandidateStoreV1 | null;
   workflowStateError?: string | null;
+  // B3·加法输入（可选·旧调用不炸）：方案店 + 主管复核整店 → 派生「待你拍板」清单。
+  proposalStore?: ProjectConsultationProposalStoreV1 | null;
+  supervisorReviewStore?: GlobalSupervisorReviewStoreV1 | null;
 }): SecretaryContext {
-  const { snapshot, workflowState = null, blackboardCandidateStore = null, memoryCaptureStore = null, memoryCandidateStore = null, workflowStateError = null } = input;
+  const {
+    snapshot,
+    workflowState = null,
+    blackboardCandidateStore = null,
+    memoryCaptureStore = null,
+    memoryCandidateStore = null,
+    workflowStateError = null,
+    proposalStore = null,
+    supervisorReviewStore = null,
+  } = input;
   const workflows = workflowState?.project_workflows ?? [];
   const blackboards = workflowState?.project_blackboards ?? [];
   const permissions = workflows.flatMap((workflow) => workflow.permission_requests);
@@ -292,6 +331,11 @@ export function deriveSecretaryContext(input: {
     memoryCandidates,
     attempts,
   });
+  const pendingBoard = buildPendingBoard({
+    proposalStore,
+    supervisorReviewStore,
+    pendingMemoryCandidateCount: pendingMemoryCandidates.length,
+  });
 
   return {
     context_id: [
@@ -337,12 +381,90 @@ export function deriveSecretaryContext(input: {
     suggestions,
     memory_candidates: memoryCandidates,
     action_proposals: actionProposals,
+    pending_board: pendingBoard,
     warnings: [
       readOnlyWarning,
       "secretary_suggestions_are_not_fact_changes",
       "secretary_memory_candidates_are_not_formal_memory",
     ],
   };
+}
+
+// ===== B3·「待你拍板」组装（确定性·零 LM·词表人话不露枚举原文）=====
+function buildPendingBoard(input: {
+  proposalStore: ProjectConsultationProposalStoreV1 | null;
+  supervisorReviewStore: GlobalSupervisorReviewStoreV1 | null;
+  pendingMemoryCandidateCount: number;
+}): SecretaryPendingBoard {
+  // 1. 待批方案（口径照批卡 stale 判据：日历日「不是今天」→ 标旧）。
+  const pendingProposals: SecretaryPendingBoardEntry[] = (input.proposalStore?.proposals ?? [])
+    .filter((proposal) => proposal.status === "pending_user_confirmation")
+    .map((proposal) => {
+      const ageDays = calendarAgeDays(proposal.created_at_ms);
+      return {
+        entry_id: `pending-proposal:${proposal.proposal_id}`,
+        title: `方案「${proposal.title}」等你批`,
+        detail: ageDays >= 1 ? `${ageDays} 天前生成的旧方案，建议先看看还作不作数` : "今天生成",
+        where_hint: "在交办页批",
+      };
+    });
+  // 2. 全局主管提醒：结果复核（needs_human_check / human_verify）+ 批前边界 mismatch。
+  //    caution 刻意排除（批卡上已提醒过·再进秘书面=噪音）；unavailable/没跑成的不进（没有意见可提醒）。
+  const supervisorReminders: SecretaryPendingBoardEntry[] = [
+    ...(input.supervisorReviewStore?.reviews ?? [])
+      .filter(
+        (review) =>
+          review.status === "ready" &&
+          (review.overall === "needs_human_check" || review.suggested_action === "human_verify"),
+      )
+      .map((review) => ({
+        entry_id: `supervisor-review:${review.review_id}`,
+        title: "主管看过上一单结果，建议你亲自核验",
+        detail: firstSentence(review.human_note || review.summary),
+        where_hint: "在交办页交货区看",
+      })),
+    ...(input.supervisorReviewStore?.boundary_reviews ?? [])
+      .filter((review) => review.status === "ready" && review.verdict === "mismatch")
+      .map((review) => ({
+        entry_id: `supervisor-boundary:${review.review_id}`,
+        title: "主管说有份方案对不上你的目标",
+        detail: firstSentence(review.summary),
+        where_hint: "在交办页批卡上看",
+      })),
+  ];
+  // 3. 记忆候选：引用现有计数（不重复算），>0 才有一条聚合条目。
+  const memoryCandidateEntry: SecretaryPendingBoardEntry | null =
+    input.pendingMemoryCandidateCount > 0
+      ? {
+          entry_id: "pending-memory-candidates",
+          title: `${input.pendingMemoryCandidateCount} 条记忆候选等你确认`,
+          detail: "候选不等于工作台已经长期记住",
+          where_hint: "在记忆中心处理",
+        }
+      : null;
+  return {
+    total: pendingProposals.length + supervisorReminders.length + (memoryCandidateEntry ? 1 : 0),
+    pending_proposals: pendingProposals,
+    supervisor_reminders: supervisorReminders,
+    memory_candidate_entry: memoryCandidateEntry,
+  };
+}
+
+// 日历日年龄（照批卡 proposalAgeDays 口径：跨日历日才算 1 天，避免刚过午夜误判）。
+function calendarAgeDays(createdAtMs: number): number {
+  const created = new Date(createdAtMs);
+  const now = new Date();
+  const createdDay = new Date(created.getFullYear(), created.getMonth(), created.getDate()).getTime();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.max(0, Math.round((today - createdDay) / (24 * 60 * 60 * 1000)));
+}
+
+// 取首句（提醒条目只给一句·句号/换行截断）。
+function firstSentence(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  const cut = trimmed.split(/[。\n]/)[0] ?? trimmed;
+  return cut.length < trimmed.length ? `${cut}。` : trimmed;
 }
 
 function adapterDescriptorsForSnapshot(
