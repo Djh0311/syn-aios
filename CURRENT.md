@@ -62,6 +62,10 @@
 - 清理债：`run_workflow_machine` 真实现待 careful 删（helper 有测试纠缠·S0 deferred）；prepared 孤儿派发 store 卫生（deferred）。
 - 文档小口子：principles.md §1/§5 仍引 `tasks/README.md`（该文件已改一行指针，引用不断链；改正文等下次动 principles 时顺手）。
 
+**3b. 并行双线（07-08·原型线跑 M1 期间）**
+- **② 工作历史·后端读模型包已写待派**：`tasks/2026-07-08-run-history-read-model-backend-v1.md`（纯只读新模块·六态含「批了没跑」·跨店无外键=按 workflow+时间窗诚实近似[correlation 字段如实标·红线:不许改写入路径加字段]·零 UI——UI 半包等原型 M1 拍板）；
+- **① manual_relay 并行测试脆弱根治 = 主导线亲自诊断中**（4 次现身·先找 Mutex 中毒级联根源再定直修或出包）。
+
 **4. 盯着的（不是活·是警报器）**
 - manual_relay 并行测试脆弱（Mutex 中毒级联·**四次现身**[07-07 B2 核时 690/12·名单全 manual_relay·重跑 702/0]·重跑即绿·serial/隔离全过 = 预存并发争用非回归）；**tier-1 输出不稳家族**（三案在册：consult 早退[retry 兜]/`suggest_workflow` 摇摆[手动开关兜]/execution_scope 漏交[07-07 两撞·fix9 确定性守卫+诚实脸兜]——新接 tier-1 输出字段时默认它会缺会错，下游必须有确定性兜底）；「死锚默认」家族三处前科（C4 / `update_work_item_state_at:477` / `load_project_context` 未遂）——新代码碰 `default_workflow_*` 一律警觉，防回潜断言已立一处；2 条 init-only 孤儿会话（无害·已报备）。
 
