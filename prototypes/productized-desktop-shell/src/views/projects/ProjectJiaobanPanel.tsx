@@ -1091,8 +1091,12 @@ export function JiaobanAuthorizeState({
       {/* 旧方案不冒充当前：不是今天生成 → 顶部黄条 + 主按钮换「重新说目标」，防再批库存。 */}
       {proposalIsStale ? (
         <div className="jiaoban-stale-banner" role="note" aria-label="旧方案提醒">
-          <span aria-hidden="true">⚠</span> 这是 {proposalAgeDays} 天前的旧方案（生成于 {proposalTimeText}
-          ）。项目可能已经变了，建议重新说一遍目标、出一版新的。
+          <span aria-hidden="true">⚠</span>
+          {/* 同 advice-only 警条：正文包单 span 防 flex 拆柱（此条现在恰好没内联元素才幸免，统一防）。 */}
+          <span className="jiaoban-banner-body">
+            这是 {proposalAgeDays} 天前的旧方案（生成于 {proposalTimeText}
+            ）。项目可能已经变了，建议重新说一遍目标、出一版新的。
+          </span>
         </div>
       ) : null}
 
@@ -1100,8 +1104,13 @@ export function JiaobanAuthorizeState({
           （2026-07-07 两撞：tier-1 偶发不交 execution_scope，用户批了两份空转方案）。 */}
       {!willWrite ? (
         <div className="jiaoban-advice-only-banner" role="note" aria-label="纯建议方案提醒">
-          <span aria-hidden="true">⚠</span> 这份方案<strong>不会改任何文件</strong>——它是纯建议。
-          你的目标若是要动手改东西，别批这份，点下面「重新出方案（要动手）」。
+          <span aria-hidden="true">⚠</span>
+          {/* 正文必须是**单个** flex item：banner 家族是 display:flex，裸文本+<strong> 会被拆成
+              多个匿名 item 挤成竖柱（07-07 用户真机截图逮到）。包一层 span=正文内联流恢复。 */}
+          <span className="jiaoban-banner-body">
+            这份方案<strong>不会改任何文件</strong>——它是纯建议。
+            你的目标若是要动手改东西，别批这份，点下面「重新出方案（要动手）」。
+          </span>
         </div>
       ) : null}
 

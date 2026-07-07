@@ -449,6 +449,11 @@
 }
 
 /* 旧方案黄条 / 「说」面上次停因摘要：与授权提示同族的告警块。 */
+/* 警条正文：单 flex item（防裸文本+内联元素被拆成竖柱——07-07 真机截图逮到）。 */
+.jiaoban-banner-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .jiaoban-stale-banner,
 .jiaoban-advice-only-banner,
 .jiaoban-say-hint {
