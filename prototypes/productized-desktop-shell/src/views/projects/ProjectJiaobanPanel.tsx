@@ -7,6 +7,7 @@ import {
   getProjectWorkflowChainStatus,
   loadFormalMemoryStore,
   previewPendingProposalDirectorPlan,
+  runGlobalSupervisorBoundaryReview,
   runGlobalSupervisorReview,
   runProjectConsultation,
   stopProjectWorkflowChain,
@@ -15,6 +16,7 @@ import type {
   AutoAdvanceRoleLoopOutcome,
   CreateMemoryCandidateInput,
   DirectorChainStep,
+  GlobalSupervisorBoundaryReviewOutcome,
   GlobalSupervisorReviewOutcome,
   PendingAction,
   PlanAuthorizationStoreV1,
@@ -141,6 +143,20 @@ function formatProposalTime(createdAtMs: number): string {
   const d = new Date(createdAtMs);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// B2·批前边界意见缓存 by proposal_id（照 worksmap 先例·重挂载先读缓存不重烧）。后端已按 proposal_id 幂等；
+// 前端缓存让切 tab/重挂载回来 0 往返。ready 与 unavailable 都缓存（unavailable 走 [重试] force 才重跑）。
+const jiaobanBoundaryReviewCacheByProposal = new Map<string, GlobalSupervisorBoundaryReviewOutcome>();
+
+// B2 触发判据（纯函数·export 供离线断言）：只对「今天生成的 pending 方案」触发——stale 不触发=省额度；
+// 纯建议方案（写根空）照常触发（它点破 mismatch 与 fix9 警条互证）。
+export function shouldRequestBoundaryReview(
+  proposal: { status: string; created_at_ms: number } | null | undefined,
+): boolean {
+  if (!proposal) return false;
+  if (!["draft", "pending_user_confirmation"].includes(proposal.status)) return false;
+  return proposalAgeDays(proposal.created_at_ms) < 1; // 今天生成的才触发
 }
 
 function ProjectJiaobanPanelBrowser({
@@ -393,6 +409,71 @@ function ProjectJiaobanPanelBrowser({
     // requestSupervisorReview 每渲染新建（组件内 async fn）——依赖只锚触发条件与幂等键，防 effect 空转。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, thisRoundChainStatus?.started_at, projectWorkflow?.workflow_id, supervisorReview?.key]);
+
+  // ===== B2·全局主管·批前边界意见（advisory·意见不是闸）=====
+  // 批脸自动触发（async·不挡批·§2.2）：只对「今天生成的 pending 方案」触发（stale 不触发=省额度；纯建议方案
+  // 照常触发·点破 mismatch 与 fix9 警条互证）。结果按 proposal_id 缓存（照 worksmap 先例·重挂载先读缓存，
+  // 后端 proposal_id 幂等命中秒回不重烧）。前端只传定位键，内容后端盘读。
+  const [boundaryReview, setBoundaryReview] = useState<{
+    proposalId: string;
+    outcome: GlobalSupervisorBoundaryReviewOutcome;
+  } | null>(() => {
+    const proposalId = latestProposal?.proposal_id;
+    if (!proposalId) return null;
+    const cached = jiaobanBoundaryReviewCacheByProposal.get(proposalId);
+    return cached ? { proposalId, outcome: cached } : null;
+  });
+  const [boundaryLoading, setBoundaryLoading] = useState(false);
+  // 记「正在为哪份方案飞」——改要求换了新方案时不硬锁（新方案照常触发·两条只读 consult 并行属预期）。
+  const boundaryInflightRef = useRef<string | null>(null);
+
+  async function requestBoundaryReview(proposalId: string, force: boolean) {
+    if (boundaryInflightRef.current === proposalId) return; // 同方案已在飞·不重发
+    boundaryInflightRef.current = proposalId;
+    setBoundaryLoading(true);
+    try {
+      const outcome = await runGlobalSupervisorBoundaryReview({
+        project_root: projectRoot,
+        proposal_id: proposalId,
+        force,
+      });
+      setBoundaryReview({ proposalId, outcome });
+      jiaobanBoundaryReviewCacheByProposal.set(proposalId, outcome);
+    } catch (e) {
+      // 意见失败绝不挡批：兜「不可用（人话）+ 重试」，绝不零出路、绝不断批脸。
+      const fallback: GlobalSupervisorBoundaryReviewOutcome = {
+        status: "unavailable",
+        review: null,
+        reason: e instanceof Error ? e.message : String(e),
+        warnings: [],
+      };
+      setBoundaryReview({ proposalId, outcome: fallback });
+      jiaobanBoundaryReviewCacheByProposal.set(proposalId, fallback);
+    } finally {
+      // 只由「当前在飞的那份」收尾（被新方案接管时不误清）。
+      if (boundaryInflightRef.current === proposalId) {
+        boundaryInflightRef.current = null;
+        setBoundaryLoading(false);
+      }
+    }
+  }
+
+  // 批脸挂载/方案切换自动触发。命中缓存直接恢复（重挂载不重烧）；否则对「今天的 pending 方案」invoke。
+  // stale/非 pending → 不触发（区块零渲染·意见缺席不挡批）。
+  useEffect(() => {
+    if (phase !== "authorize") return;
+    const proposalId = latestProposal?.proposal_id ?? null;
+    if (!proposalId || !shouldRequestBoundaryReview(latestProposal)) return;
+    const cached = jiaobanBoundaryReviewCacheByProposal.get(proposalId);
+    if (cached) {
+      setBoundaryReview({ proposalId, outcome: cached });
+      return;
+    }
+    if (boundaryReview?.proposalId === proposalId) return; // 已有本方案结果（含刚 set），不重发。
+    void requestBoundaryReview(proposalId, false);
+    // requestBoundaryReview 每渲染新建——依赖只锚触发条件与方案 id，防 effect 空转。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, latestProposal?.proposal_id, latestProposal?.status]);
 
   // ---- 动作 ----
 
@@ -711,6 +792,14 @@ function ProjectJiaobanPanelBrowser({
   const proposalAge = latestProposal ? proposalAgeDays(latestProposal.created_at_ms) : 0;
   const proposalIsStale = proposalAge >= 1;
 
+  // B2 展示门控：意见永远跟着当前这份方案（proposalId 对上才显·防旧方案意见冒充新方案）。
+  const boundaryForThisProposal =
+    boundaryReview && latestProposal && boundaryReview.proposalId === latestProposal.proposal_id
+      ? boundaryReview.outcome
+      : null;
+  const boundaryLoadingForThisProposal =
+    boundaryLoading && !boundaryForThisProposal && shouldRequestBoundaryReview(latestProposal);
+
   // [接着跑] 出现的硬前提（§2.1）：方案已 user_confirmed（授权还活着，本不用重批）。
   // 两条来路都算数：① 当前 latestProposal.status==user_confirmed；② 合流命令刚拒过「已确认」(continueHint)——
   // 后者时 store 里那份就是已确认态，只是 summary 可能还没刷到，故 continueHint 直接放行。
@@ -770,6 +859,12 @@ function ProjectJiaobanPanelBrowser({
             worksmapLoading={previewLoading}
             worksmapError={previewError}
             onRetryWorksmap={retryPreview}
+            boundaryLoading={boundaryLoadingForThisProposal}
+            boundaryOutcome={boundaryForThisProposal}
+            onBoundaryRetry={() => {
+              // [重试]：force 穿透幂等重跑本方案的边界意见。
+              if (latestProposal) void requestBoundaryReview(latestProposal.proposal_id, true);
+            }}
             onOpenAgentSession={onOpenAgentSession}
           />
         ) : null}
@@ -935,6 +1030,9 @@ export function JiaobanAuthorizeState({
   worksmapLoading,
   worksmapError,
   onRetryWorksmap,
+  boundaryLoading,
+  boundaryOutcome,
+  onBoundaryRetry,
   onOpenAgentSession,
 }: {
   proposal: ProjectConsultationProposal;
@@ -960,6 +1058,10 @@ export function JiaobanAuthorizeState({
   worksmapLoading: boolean;
   worksmapError: string | null;
   onRetryWorksmap: () => void;
+  // B2·全局主管批前边界意见（advisory·意见不是闸·async·缺席不挡批）。
+  boundaryLoading: boolean;
+  boundaryOutcome: GlobalSupervisorBoundaryReviewOutcome | null;
+  onBoundaryRetry: () => void;
   // 「看原始对话」桥：批卡收纳行入口（**必填**·透传给 picker）。批卡是任务点名的主入口，
   // 设必填让上游漏传直接 tsc 报错——防「组件接了、上游忘喂、入口静默不显」的假绿（审查线逮到过）。
   onOpenAgentSession: (threadId: string) => void;
@@ -1029,6 +1131,13 @@ export function JiaobanAuthorizeState({
           {proposalTimeText}
         </p>
       </div>
+
+      {/* B2·全局主管批前边界意见：方案要点之后、按钮区之前。async 后填·意见没到也可以先批（不拦事）。 */}
+      <JiaobanBoundaryReviewSection
+        loading={boundaryLoading}
+        outcome={boundaryOutcome}
+        onRetry={onBoundaryRetry}
+      />
 
       <JiaobanWorksmap
         suggestWorkflow={proposal.suggest_workflow === true}
@@ -1147,6 +1256,72 @@ export function JiaobanAuthorizeState({
         </button>
       </div>
       <p className="muted small-note">点「允许并开始」= 允许这段自动跑，后面不再逐步问你。</p>
+    </div>
+  );
+}
+
+// B2·全局主管批前边界意见区（纯展示·无 hooks·export 供离线 DOM 断言直接调）。
+// 词表死线：「全局主管意见/边界意见」——**不是审批**（意见不是闸·不拦批·按钮区行为一概不变）。
+// 四态：loading / 意见到（verdict 人话行 + points 列表·mismatch 告警调）/ 不可用（人话 + [重试]）/
+// 没触发（outcome null 且不 loading → 零渲染，如 stale 方案/无方案/意见缺席）。
+export function JiaobanBoundaryReviewSection({
+  loading,
+  outcome,
+  onRetry,
+}: {
+  loading: boolean;
+  outcome: GlobalSupervisorBoundaryReviewOutcome | null;
+  onRetry: () => void;
+}) {
+  if (loading) {
+    return (
+      <div className="jiaoban-boundary" aria-label="全局主管意见">
+        <p className="jiaoban-field-label jiaoban-boundary-title">全局主管意见（批前边界）</p>
+        <p className="muted small-note">
+          <span className="jiaoban-spinner" aria-hidden="true" /> 全局主管正在看边界…（意见没到也可以先批——它不拦事）
+        </p>
+      </div>
+    );
+  }
+  if (!outcome) return null;
+  const review = outcome.status === "ready" ? (outcome.review ?? null) : null;
+  if (!review) {
+    // 不可用：人话原因 + [重试]（force）——意见缺席不挡批，但绝不零出路。
+    const reason = outcome.reason?.trim() || outcome.review?.unavailable_reason?.trim() || "原因不明";
+    return (
+      <div className="jiaoban-boundary" aria-label="全局主管意见">
+        <p className="jiaoban-field-label jiaoban-boundary-title">全局主管意见（批前边界）</p>
+        <p className="muted small-note">边界意见暂时不可用：{reason}（不影响你批）</p>
+        <button className="secondary-button" type="button" onClick={onRetry}>
+          重试
+        </button>
+      </div>
+    );
+  }
+  // verdict 人话行（词表：意见，不是审批）。mismatch/caution 告警调、looks_ok 一行绿。
+  const verdictLine =
+    review.verdict === "looks_ok"
+      ? "✓ 全局主管看过：范围和你的目标对得上"
+      : review.verdict === "mismatch"
+        ? "⚠ 全局主管意见：这方案好像对不上你的目标"
+        : "⚠ 全局主管提醒：有几处要留意一下";
+  const verdictTone = review.verdict === "looks_ok" ? "jiaoban-boundary-ok" : "jiaoban-boundary-flag";
+  return (
+    <div className="jiaoban-boundary" aria-label="全局主管意见">
+      <p className="jiaoban-field-label jiaoban-boundary-title">全局主管意见（批前边界）</p>
+      <p className={`jiaoban-boundary-verdict ${verdictTone}`}>{verdictLine}</p>
+      {review.summary.trim() ? <p className="jiaoban-boundary-summary">{review.summary}</p> : null}
+      {review.points.length > 0 ? (
+        <ul className="jiaoban-boundary-points" aria-label="边界意见要点">
+          {review.points.map((point, index) => (
+            <li key={index}>{point}</li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="muted small-note jiaoban-boundary-foot">这只是提醒，批不批还是你说了算。</p>
+      <button className="jiaoban-linklike jiaoban-boundary-rerun" type="button" onClick={onRetry}>
+        重新看一遍
+      </button>
     </div>
   );
 }

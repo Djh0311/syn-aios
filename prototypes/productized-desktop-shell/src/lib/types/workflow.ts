@@ -1911,3 +1911,34 @@ export type RunGlobalSupervisorReviewRequest = {
   chain_started_at: string;
   force?: boolean; // [重新复核]/[重试] 才 true（幂等防重烧）
 };
+
+// ===== B2·全局主管·批前边界意见（advisory·意见不是闸）——与后端同形 =====
+// 注意与既有 GlobalBoundaryReview*（旧 checklist 入闸族）区分：这是「全局主管」批前意见，加 Supervisor 前缀。
+
+export type GlobalSupervisorBoundaryReviewRecord = {
+  review_id: string;
+  project_id: string;
+  proposal_id: string; // 幂等键（一份方案一条）
+  status: string; // "ready" | "unavailable"
+  verdict: string; // "looks_ok" | "mismatch" | "caution"（后端归一化·未知/审批腔保守归 caution）
+  points: string[]; // 点破的短句
+  summary: string;
+  unavailable_reason?: string | null;
+  model: string; // §10-1 换脑可定位
+  profile_version: string;
+  created_at_ms: number;
+  updated_at_ms: number;
+};
+
+export type GlobalSupervisorBoundaryReviewOutcome = {
+  status: string; // "ready" | "unavailable"
+  review?: GlobalSupervisorBoundaryReviewRecord | null;
+  reason?: string | null;
+  warnings: string[];
+};
+
+export type RunGlobalSupervisorBoundaryReviewRequest = {
+  project_root: string;
+  proposal_id: string;
+  force?: boolean; // [重试] 才 true（幂等防重烧）
+};

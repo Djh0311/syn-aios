@@ -25,6 +25,8 @@ import type {
   PreviewPendingProposalDirectorPlanOutcome,
   RunGlobalSupervisorReviewRequest,
   GlobalSupervisorReviewOutcome,
+  RunGlobalSupervisorBoundaryReviewRequest,
+  GlobalSupervisorBoundaryReviewOutcome,
   ProjectConsultationProposal,
   ProjectWorkflowListItem,
   SubmitProjectWorkflowDraftRequest,
@@ -873,6 +875,15 @@ export function runGlobalSupervisorReview(
 ): Promise<GlobalSupervisorReviewOutcome> {
   ensureTauriRuntime();
   return invoke<GlobalSupervisorReviewOutcome>("run_global_supervisor_review", { request });
+}
+
+// B2·全局主管批前边界意见（advisory·意见不是闸）：批脸自动触发，读盘上 pending 方案出「目标 vs 方案」意见；
+// 幂等 by proposal_id（同方案已有记录直接回、[重试] 才 force）。纯封装无逻辑；输入只传定位键（内容后端盘读）。
+export function runGlobalSupervisorBoundaryReview(
+  request: RunGlobalSupervisorBoundaryReviewRequest,
+): Promise<GlobalSupervisorBoundaryReviewOutcome> {
+  ensureTauriRuntime();
+  return invoke<GlobalSupervisorBoundaryReviewOutcome>("run_global_supervisor_boundary_review", { request });
 }
 
 // 刀2「批前看图」封装：对 pending 方案只读预拆工序图（零写盘·真 LM 1-7 分钟·偶发 flaky）。纯封装无逻辑；

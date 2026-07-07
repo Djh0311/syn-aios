@@ -119,6 +119,7 @@ macro_rules! workbench_command_handler {
             preview_pending_proposal_director_plan,
             run_project_consultation,
             global_supervisor_agent::run_global_supervisor_review,
+            global_supervisor_agent::run_global_supervisor_boundary_review,
             list_project_workflows,
             submit_project_workflow_draft,
             get_project_workflow_nodes,

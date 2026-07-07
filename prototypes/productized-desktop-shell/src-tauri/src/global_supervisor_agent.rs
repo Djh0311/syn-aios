@@ -19,7 +19,8 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::global_supervisor_review_store::{
-    self, GlobalSupervisorReviewRecord, GlobalSupervisorTaskVerdict,
+    self, GlobalSupervisorBoundaryReviewRecord, GlobalSupervisorReviewRecord,
+    GlobalSupervisorTaskVerdict,
 };
 
 /// §10-1 换脑可定位：档案版本随记录落盘（档案文本变更时手动 bump）。
@@ -564,6 +565,316 @@ pub(crate) async fn run_global_supervisor_review(
     .map_err(|error| format!("复核执行线程异常：{error}"))
 }
 
+// ============================================================================
+// B2·全局主管·批前边界意见（authorize card 上「这方案对不对得上你的目标」）。
+//
+// 任务包：tasks/2026-07-07-phase-b2-boundary-opinion-on-authorize-card-v1.md
+//
+// 与 B1（结果复核·跑后·读口供）同族、同 harness（readonly consult / extract_json_block /
+// project_id / unix_timestamp_ms 全复用），只是钩点不同：**批前**读盘上 pending 方案，出一句
+// 「范围/目标对不对得上」的人话意见，上授权卡。
+//
+// 安全属性照 B1 同款：意见不是闸（不拦批·不驱动状态·词表禁「审批」）；结构性只读（readonly consult）；
+// 唯一写 = store 的 boundary_reviews + 内嵌审计；幂等 by proposal_id（含 unavailable·防重烧）；
+// 任何失败不 Err 断面板（status="unavailable" + 人话）。
+// ============================================================================
+
+/// B2 档案版本（独立于 B1 结果复核档案·档案文本变更时手动 bump）。
+pub(crate) const GLOBAL_SUPERVISOR_BOUNDARY_PROFILE_VERSION: &str =
+    "global-supervisor-boundary-profile.v1";
+
+/// B2 档案：角色 = 全局主管·批前边界复核（**不是审批者**）。检查四件（§2.1）。
+const GLOBAL_SUPERVISOR_BOUNDARY_PROFILE_TEXT: &str = "你是本项目的「全局主管」，职责是**批前边界复核**——在用户批准方案、动手执行之前，读一遍用户的目标和这份方案，给一句人话意见：范围和目标对不对得上。你不是审批者：你的意见不拦任何事，批不批、动不动手都在用户手里。重点看四件：\n1. **目标与方案对不对得上**：用户明说要动手改东西（改文件/做功能），方案却是纯建议、一个文件都不改（允许改动的写根为空）——这是最该点破的错配，务必直说「你要动手，这方案不会改任何文件」；\n2. **越界苗头**：方案步骤里若出现测试项目之外的路径、写 ~/.codex、git push、删除不可逆数据等字样，点名提醒；\n3. **步骤与验收齐不齐**：有没有明确步骤、改完怎么验；\n4. **风险漏报**：明显该提的风险方案里没提。\n保守：证据不足、拿不准就说拿不准（verdict 用 caution），别脑补、别夸大；全中文、人话、简短。";
+
+/// B2 回程契约段（确定性文本）。
+const GLOBAL_SUPERVISOR_BOUNDARY_CONTRACT_TEXT: &str = "回程契约（务必遵守）：最后输出**且仅输出**一个 ```json 代码块，严格形如 {\"verdict\":\"looks_ok|mismatch|caution\",\"points\":[\"一句话点评\",\"...\"],\"summary\":\"总评一两句\"}。verdict：looks_ok=目标与方案对得上、没明显问题；mismatch=目标与方案对不上（如用户要动手却纯建议、写根空）；caution=有要留意的地方或拿不准。points 放你点破的短句（没有就空数组）。不要在这个 json 块之后再写任何字。";
+
+/// B2 LM 输出投影（serde 全 default 软着陆）。
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+pub(crate) struct BoundaryReviewJson {
+    #[serde(default)]
+    pub(crate) verdict: String,
+    #[serde(default)]
+    pub(crate) points: Vec<String>,
+    #[serde(default)]
+    pub(crate) summary: String,
+}
+
+/// 从主管最后消息抠出并解析边界意见 json（复用 B1 同款抠取器·软着陆）。
+pub(crate) fn parse_boundary_review(raw: &str) -> Option<BoundaryReviewJson> {
+    let block = crate::consultant_extract_json_block(raw)?;
+    serde_json::from_str::<BoundaryReviewJson>(&block).ok()
+}
+
+/// 词表归一化（保守向）：verdict 未知/审批腔 → caution（拿不准当拿不准·不给错信号）。
+pub(crate) fn normalize_boundary_verdict(raw: &str) -> String {
+    match raw.trim() {
+        "looks_ok" | "mismatch" | "caution" => raw.trim().to_string(),
+        _ => "caution".to_string(),
+    }
+}
+
+/// B2 复核输入（全从盘读·一份 pending 方案的要点）。
+#[derive(Debug, Clone, Default)]
+pub(crate) struct BoundaryReviewInput {
+    pub(crate) proposal_title: String,
+    pub(crate) user_goal: String,
+    pub(crate) goal_summary: String,
+    pub(crate) proposed_steps: Vec<String>,
+    pub(crate) allowed_write_roots: Vec<String>,
+    pub(crate) allowed_role_ids: Vec<String>,
+    pub(crate) allowed_tools: Vec<String>,
+    pub(crate) allowed_checks: Vec<String>,
+    pub(crate) acceptance_criteria: Vec<String>,
+    pub(crate) risks: Vec<(String, String)>, // (severity, summary)
+}
+
+/// 读盘组 B2 输入：按 proposal_id 从 proposal store 定位一份方案（不限状态——前端只对今天的 pending
+/// 触发，后端只管按 id 取）。找不到 → Err（调用方软着陆成 unavailable·不落盘）。
+pub(crate) fn load_boundary_review_input(
+    state_path: &Path,
+    proposal_id: &str,
+) -> Result<BoundaryReviewInput, String> {
+    let timestamp_ms = crate::unix_timestamp_ms();
+    let store = crate::project_consultation_proposal_store::load_store(state_path, timestamp_ms)
+        .map_err(|error| format!("读方案库失败：{error}"))?;
+    let proposal = store
+        .proposals
+        .iter()
+        .find(|proposal| proposal.proposal_id == proposal_id)
+        .ok_or_else(|| "没找到这份方案（可能已被替换或清理）".to_string())?;
+    Ok(BoundaryReviewInput {
+        proposal_title: proposal.title.clone(),
+        user_goal: proposal.user_goal.clone(),
+        goal_summary: proposal.goal_summary.clone(),
+        proposed_steps: proposal.proposed_steps.clone(),
+        allowed_write_roots: proposal.scope_draft.allowed_write_roots.clone(),
+        allowed_role_ids: proposal.scope_draft.allowed_role_ids.clone(),
+        allowed_tools: proposal.scope_draft.allowed_tools.clone(),
+        allowed_checks: proposal.scope_draft.allowed_checks.clone(),
+        acceptance_criteria: proposal.acceptance_criteria.clone(),
+        risks: proposal
+            .risks
+            .iter()
+            .map(|risk| (risk.severity.clone(), risk.summary.clone()))
+            .collect(),
+    })
+}
+
+/// 组 B2 prompt（档案 + 盘上方案要点 + 契约段·确定性拼接不经 LM）。
+pub(crate) fn build_boundary_prompt(input: &BoundaryReviewInput) -> String {
+    let mut sections: Vec<String> = vec![GLOBAL_SUPERVISOR_BOUNDARY_PROFILE_TEXT.to_string()];
+    // 用户目标（原话·判「要不要动手」的最关键素材）。
+    let mut goal_block = format!("【用户目标（原话）】{}", clip(&input.user_goal, 600));
+    if !input.goal_summary.trim().is_empty() {
+        goal_block.push_str(&format!(
+            "\n方案对目标的复述：{}",
+            clip(&input.goal_summary, 400)
+        ));
+    }
+    sections.push(goal_block);
+    // 方案要点。
+    let mut steps_block = format!("【方案：{}】步骤：", clip(&input.proposal_title, 200));
+    if input.proposed_steps.is_empty() {
+        steps_block.push_str("（方案没列具体步骤）");
+    } else {
+        for (index, step) in input.proposed_steps.iter().take(12).enumerate() {
+            steps_block.push_str(&format!("\n{}. {}", index + 1, clip(step, 300)));
+        }
+    }
+    sections.push(steps_block);
+    // 范围（写根/角色/工具/checks）——写根空是「纯建议」的硬信号。
+    let mut scope_block = String::from("【方案范围】");
+    scope_block.push_str(&format!(
+        "\n允许改动的文件范围（写根）：{}",
+        if input.allowed_write_roots.is_empty() {
+            "（空——这方案不会改任何文件！用户目标若是要动手，这就是错配）".to_string()
+        } else {
+            input.allowed_write_roots.join("；")
+        }
+    ));
+    if !input.allowed_role_ids.is_empty() {
+        scope_block.push_str(&format!("\n角色：{}", input.allowed_role_ids.join("、")));
+    }
+    if !input.allowed_tools.is_empty() {
+        scope_block.push_str(&format!("\n工具：{}", input.allowed_tools.join("、")));
+    }
+    if !input.allowed_checks.is_empty() {
+        scope_block.push_str(&format!("\n验证手段：{}", input.allowed_checks.join("、")));
+    }
+    sections.push(scope_block);
+    // 验收标准。
+    if input.acceptance_criteria.is_empty() {
+        sections.push("【验收标准】方案没写「改完怎么验」——若该有，请点出来。".to_string());
+    } else {
+        sections.push(format!(
+            "【验收标准】{}",
+            input
+                .acceptance_criteria
+                .iter()
+                .map(|criteria| clip(criteria, 200))
+                .collect::<Vec<_>>()
+                .join("；")
+        ));
+    }
+    // 风险。
+    if input.risks.is_empty() {
+        sections.push(
+            "【方案自列风险】方案没列任何风险——若这活明显有该提的风险，请指出漏报。".to_string(),
+        );
+    } else {
+        let mut risks_block = "【方案自列风险】".to_string();
+        for (severity, summary) in &input.risks {
+            risks_block.push_str(&format!("\n- [{}] {}", severity, clip(summary, 200)));
+        }
+        sections.push(risks_block);
+    }
+    sections.push(GLOBAL_SUPERVISOR_BOUNDARY_CONTRACT_TEXT.to_string());
+    sections.join("\n\n")
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct RunGlobalSupervisorBoundaryReviewRequest {
+    pub(crate) project_root: String,
+    /// 前端只传定位键（哪份方案），不传内容（输入全从盘读·不收转述）。
+    pub(crate) proposal_id: String,
+    #[serde(default)]
+    pub(crate) force: bool,
+}
+
+/// 返回结构（**任何失败不 Err 断面板**）：status="ready"（意见在 review 里）| "unavailable"（reason 人话·可 [重试]）。
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct GlobalSupervisorBoundaryReviewOutcome {
+    pub(crate) status: String,
+    pub(crate) review: Option<GlobalSupervisorBoundaryReviewRecord>,
+    pub(crate) reason: Option<String>,
+    pub(crate) warnings: Vec<String>,
+}
+
+/// B2 核心（同步·可注入 consult 供单测 stub 计次）。
+/// 幂等（成本护栏）：同 proposal_id 已有记录（**含 unavailable**）且 !force → 直接返回、不 consult；
+/// [重试] 走 force=true。
+pub(crate) fn run_global_supervisor_boundary_review_core<F>(
+    state_path: &Path,
+    request: &RunGlobalSupervisorBoundaryReviewRequest,
+    consult: F,
+) -> GlobalSupervisorBoundaryReviewOutcome
+where
+    F: Fn(&str, &str) -> Result<String, String>,
+{
+    let timestamp_ms = crate::unix_timestamp_ms();
+    let mut warnings: Vec<String> = Vec::new();
+    if request.proposal_id.trim().is_empty() {
+        return GlobalSupervisorBoundaryReviewOutcome {
+            status: "unavailable".to_string(),
+            review: None,
+            reason: Some("缺 proposal_id（不知道要看哪份方案）".to_string()),
+            warnings,
+        };
+    }
+    // 1. 幂等命中：已有记录且非 force → 原样返回（不 consult·不写盘）。
+    let (store, load_warnings) =
+        global_supervisor_review_store::load_store_soft(state_path, timestamp_ms);
+    warnings.extend(load_warnings);
+    if !request.force {
+        if let Some(existing) =
+            global_supervisor_review_store::find_boundary_review(&store, &request.proposal_id)
+        {
+            return GlobalSupervisorBoundaryReviewOutcome {
+                status: existing.status.clone(),
+                reason: existing.unavailable_reason.clone(),
+                review: Some(existing.clone()),
+                warnings,
+            };
+        }
+    }
+    // 2. 读盘组输入（方案找不到 → unavailable、不落盘：键不对落了也是垃圾）。
+    let input = match load_boundary_review_input(state_path, &request.proposal_id) {
+        Ok(input) => input,
+        Err(error) => {
+            return GlobalSupervisorBoundaryReviewOutcome {
+                status: "unavailable".to_string(),
+                review: None,
+                reason: Some(format!("边界意见不可用：{error}")),
+                warnings,
+            };
+        }
+    };
+    let prompt = build_boundary_prompt(&input);
+    // 3. consult（只读）→ 解析 → 归一化；失败落「不可用」记录（可重试）。
+    let base_record = GlobalSupervisorBoundaryReviewRecord {
+        review_id: format!("global-supervisor-boundary-review:{}", request.proposal_id),
+        project_id: crate::project_id(&request.project_root),
+        proposal_id: request.proposal_id.clone(),
+        model: GLOBAL_SUPERVISOR_MODEL_LABEL.to_string(),
+        profile_version: GLOBAL_SUPERVISOR_BOUNDARY_PROFILE_VERSION.to_string(),
+        ..Default::default()
+    };
+    let record = match consult(&request.project_root, &prompt) {
+        Ok(raw) => match parse_boundary_review(&raw) {
+            Some(parsed) => GlobalSupervisorBoundaryReviewRecord {
+                status: "ready".to_string(),
+                verdict: normalize_boundary_verdict(&parsed.verdict),
+                points: parsed
+                    .points
+                    .into_iter()
+                    .map(|point| point.trim().to_string())
+                    .filter(|point| !point.is_empty())
+                    .collect(),
+                summary: parsed.summary.trim().to_string(),
+                unavailable_reason: None,
+                ..base_record.clone()
+            },
+            None => GlobalSupervisorBoundaryReviewRecord {
+                status: "unavailable".to_string(),
+                unavailable_reason: Some("全局主管没按契约交回意见 json（可重试）".to_string()),
+                ..base_record.clone()
+            },
+        },
+        Err(error) => GlobalSupervisorBoundaryReviewRecord {
+            status: "unavailable".to_string(),
+            unavailable_reason: Some(humanize_consult_error(&error)),
+            ..base_record.clone()
+        },
+    };
+    // 4. 落库（唯一写入面·只碰 boundary_reviews）。写失败也不 Err——意见还在返回体里。
+    match global_supervisor_review_store::upsert_boundary_review(
+        state_path,
+        record.clone(),
+        "global_supervisor_agent",
+        timestamp_ms,
+    ) {
+        Ok(_) => {}
+        Err(error) => warnings.push(format!("边界意见落库失败（意见仍返回）：{error}")),
+    }
+    GlobalSupervisorBoundaryReviewOutcome {
+        status: record.status.clone(),
+        reason: record.unavailable_reason.clone(),
+        review: Some(record),
+        warnings,
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn run_global_supervisor_boundary_review(
+    request: RunGlobalSupervisorBoundaryReviewRequest,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<GlobalSupervisorBoundaryReviewOutcome, String> {
+    // 真 consult 长耗时 → spawn_blocking 不冻 UI（同 B1/咨询范本）；path 在 await 前取（不用死锚默认）。
+    let path = state.workflow_state_path.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        run_global_supervisor_boundary_review_core(&path, &request, |project_root, prompt| {
+            crate::codex_local_runner::readonly_codex_consult(
+                project_root,
+                prompt,
+                Some(GLOBAL_SUPERVISOR_CONSULT_TIMEOUT_MS),
+            )
+        })
+    })
+    .await
+    .map_err(|error| format!("边界意见执行线程异常：{error}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -920,6 +1231,348 @@ mod tests {
         let auth_after = fs::metadata(&auth_path)
             .and_then(|meta| meta.modified())
             .ok();
+        assert_eq!(auth_before, auth_after, ".codex 凭据不许被碰");
+    }
+
+    // ========================================================================
+    // B2·批前边界意见 单测（§4）
+    // ========================================================================
+
+    /// 手写一份 pending 方案 sidecar（写到 proposal store 真实 sidecar 路径·全字段·避免 serde 缺字段）。
+    /// write_roots 空 = 纯建议方案（money-shot：目标要动手 vs 写根空 = mismatch）。
+    fn write_proposal_fixture(
+        state_path: &Path,
+        project_root: &str,
+        proposal_id: &str,
+        user_goal: &str,
+        write_roots: &[&str],
+    ) {
+        let sidecar = crate::project_consultation_proposal_store::sidecar_path(state_path)
+            .expect("proposal sidecar path");
+        if let Some(parent) = sidecar.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let store = serde_json::json!({
+            "schema_version": "project_consultation_proposal_store.v1",
+            "revision": 1,
+            "proposals": [{
+                "proposal_id": proposal_id,
+                "schema_version": "project_consultation_proposal.v1",
+                "project_id": crate::project_id(project_root),
+                "workflow_id": "wf-1",
+                "title": "加个暂停功能",
+                "user_goal": user_goal,
+                "goal_summary": "给游戏加暂停键",
+                "proposed_steps": ["建议你考虑加暂停", "可以研究一下键盘事件监听"],
+                "scope_draft": {
+                    "allowed_role_ids": [],
+                    "allowed_agent_ids": [],
+                    "allowed_read_roots": [],
+                    "allowed_write_roots": write_roots,
+                    "allowed_tools": [],
+                    "allowed_checks": [],
+                    "allowed_task_package_kinds": [],
+                    "stop_conditions": [],
+                    "max_worker_dispatches": null,
+                    "max_runtime_minutes": null
+                },
+                "risks": [],
+                "acceptance_criteria": ["打开游戏能按 P 键暂停"],
+                "status": "pending_user_confirmation",
+                "plan_authorization_id": null,
+                "created_by_role": "project_consultant",
+                "suggest_workflow": false,
+                "created_at_ms": 1000,
+                "updated_at_ms": 1000
+            }],
+            "decisions": [],
+            "audit_events": [],
+            "updated_at_ms": 1000,
+            "warnings": []
+        });
+        fs::write(&sidecar, serde_json::to_string_pretty(&store).unwrap())
+            .expect("write proposal sidecar");
+    }
+
+    const GOOD_BOUNDARY: &str = "看了下方案。\n```json\n{\"verdict\":\"mismatch\",\"points\":[\"你说要动手加暂停功能，但这方案的允许写根是空的——它不会改任何文件\",\"步骤是「建议你考虑」这类话，不是能落地执行的动作\"],\"summary\":\"目标要动手、方案是纯建议，对不上；别急着批\"}\n```";
+
+    // §4·schema 三态①：合法块解析 + 归一化透传。
+    #[test]
+    fn boundary_parses_valid_block() {
+        let parsed = parse_boundary_review(GOOD_BOUNDARY).expect("合法块应解析");
+        assert_eq!(parsed.verdict, "mismatch");
+        assert_eq!(parsed.points.len(), 2);
+        assert!(parsed.summary.contains("对不上"));
+    }
+
+    // §4·schema 三态②：缺字段 default 容忍 + 归一化保守向（未知/审批腔 → caution）。
+    #[test]
+    fn boundary_missing_fields_default_and_normalize_conservative() {
+        let parsed = parse_boundary_review("```json\n{\"summary\":\"只给了总评\"}\n```")
+            .expect("缺字段也解析");
+        assert_eq!(parsed.summary, "只给了总评");
+        assert!(parsed.points.is_empty());
+        assert_eq!(normalize_boundary_verdict(""), "caution");
+        assert_eq!(
+            normalize_boundary_verdict("approved"),
+            "caution",
+            "审批腔归 caution"
+        );
+        assert_eq!(normalize_boundary_verdict("looks_ok"), "looks_ok");
+        assert_eq!(normalize_boundary_verdict("mismatch"), "mismatch");
+        assert_eq!(normalize_boundary_verdict("caution"), "caution");
+    }
+
+    // §4·schema 三态③：坏 json / 无块 → None（软着陆）。
+    #[test]
+    fn boundary_broken_or_missing_block_is_none() {
+        assert!(parse_boundary_review("没有块").is_none());
+        assert!(parse_boundary_review("```json\n{坏的\n```").is_none());
+    }
+
+    // 读盘 + prompt 组装：用户目标进 prompt、写根空触发硬信号提示、契约段在。
+    #[test]
+    fn boundary_load_input_and_prompt_grounded() {
+        let dir = tmp_dir("b2input");
+        let path = write_fixture_state(&dir, "/p/root"); // 复用 B1 的 workflow-state 骨架
+        write_proposal_fixture(
+            &path,
+            "/p/root",
+            "prop-1",
+            "帮我把游戏加个暂停功能，按 P 键暂停",
+            &[],
+        );
+        let input = load_boundary_review_input(&path, "prop-1").expect("输入应组出来");
+        assert!(input.user_goal.contains("暂停"));
+        assert!(input.allowed_write_roots.is_empty(), "纯建议方案写根空");
+        let prompt = build_boundary_prompt(&input);
+        assert!(prompt.contains("按 P 键暂停"), "用户目标原话进 prompt");
+        assert!(
+            prompt.contains("不会改任何文件"),
+            "写根空 → 硬信号提示进 prompt"
+        );
+        assert!(prompt.contains("批前边界复核"), "档案在");
+        assert!(prompt.contains("回程契约"), "契约段在");
+        // 方案不存在 → Err 人话。
+        let err = load_boundary_review_input(&path, "prop-x").expect_err("错 id 应报");
+        assert!(err.contains("没找到这份方案"), "人话：{err}");
+        // 空验收/空风险分支（纯函数·手搭 input·不落盘）：prompt 点出「没写验收」「没列风险」。
+        let bare = BoundaryReviewInput {
+            user_goal: "随便看看".to_string(),
+            goal_summary: "看看".to_string(),
+            proposed_steps: vec!["看一眼".to_string()],
+            ..Default::default()
+        };
+        let bare_prompt = build_boundary_prompt(&bare);
+        assert!(bare_prompt.contains("没写「改完怎么验」"), "空验收提示");
+        assert!(bare_prompt.contains("没列任何风险"), "空风险提示");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4·money-shot：纯建议方案 → mismatch 意见 + 落库 + 幂等命中不重跑（stub 计次=1）+ force 重跑（=2）。
+    #[test]
+    fn boundary_core_ready_mismatch_idempotent_and_force() {
+        let dir = tmp_dir("b2core");
+        let path = write_fixture_state(&dir, "/p/root");
+        write_proposal_fixture(&path, "/p/root", "prop-1", "帮我动手加暂停功能", &[]);
+        let calls = Cell::new(0usize);
+        let consult = |_root: &str, _prompt: &str| {
+            calls.set(calls.get() + 1);
+            Ok(GOOD_BOUNDARY.to_string())
+        };
+        let request = RunGlobalSupervisorBoundaryReviewRequest {
+            project_root: "/p/root".to_string(),
+            proposal_id: "prop-1".to_string(),
+            force: false,
+        };
+        let first = run_global_supervisor_boundary_review_core(&path, &request, consult);
+        assert_eq!(first.status, "ready", "{:?}", first.reason);
+        assert_eq!(calls.get(), 1);
+        let review = first.review.expect("ready 应带记录");
+        assert_eq!(review.verdict, "mismatch", "点破目标 vs 纯建议错配");
+        assert_eq!(review.points.len(), 2);
+        assert_eq!(review.model, GLOBAL_SUPERVISOR_MODEL_LABEL);
+        assert_eq!(
+            review.profile_version, GLOBAL_SUPERVISOR_BOUNDARY_PROFILE_VERSION,
+            "B2 档案版本落记录"
+        );
+        // 幂等命中：第二次非 force 不再 consult。
+        let second = run_global_supervisor_boundary_review_core(&path, &request, consult);
+        assert_eq!(second.status, "ready");
+        assert_eq!(calls.get(), 1, "幂等命中不得重烧 consult");
+        // force 重跑。
+        let forced = RunGlobalSupervisorBoundaryReviewRequest {
+            force: true,
+            ..request.clone()
+        };
+        let third = run_global_supervisor_boundary_review_core(&path, &forced, consult);
+        assert_eq!(third.status, "ready");
+        assert_eq!(calls.get(), 2, "force 才重跑");
+        // 落库单条（同 proposal_id 覆盖不追加）+ B2 内嵌审计在。
+        let (store, _) = global_supervisor_review_store::load_store_soft(&path, 0);
+        assert_eq!(store.boundary_reviews.len(), 1, "同 proposal_id 覆盖不追加");
+        assert!(store
+            .boundary_audit_events
+            .iter()
+            .any(|event| event.event_type == "global_supervisor_boundary_review_recorded"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4：供给类失败 → 人话（剥前缀）+ 落「不可用」可重试；方案不存在 → unavailable 但不落盘。
+    #[test]
+    fn boundary_provider_failure_humanized_and_missing_proposal_not_recorded() {
+        let dir = tmp_dir("b2fail");
+        let path = write_fixture_state(&dir, "/p/root");
+        write_proposal_fixture(
+            &path,
+            "/p/root",
+            "prop-1",
+            "帮我动手加暂停功能",
+            &["/p/root"],
+        );
+        let calls = Cell::new(0usize);
+        let failing = |_root: &str, _prompt: &str| {
+            calls.set(calls.get() + 1);
+            Err("codex_provider_unavailable:codex 额度用完了，明天再试".to_string())
+        };
+        let request = RunGlobalSupervisorBoundaryReviewRequest {
+            project_root: "/p/root".to_string(),
+            proposal_id: "prop-1".to_string(),
+            force: false,
+        };
+        let outcome = run_global_supervisor_boundary_review_core(&path, &request, failing);
+        assert_eq!(outcome.status, "unavailable");
+        let reason = outcome.reason.clone().expect("应带人话原因");
+        assert!(reason.contains("额度用完"), "供给类人话直取：{reason}");
+        assert!(
+            !reason.contains("codex_provider_unavailable:"),
+            "前缀应剥掉"
+        );
+        // unavailable 也落记录（可重试）+ 参与幂等（自动路不重烧）。
+        let again = run_global_supervisor_boundary_review_core(&path, &request, failing);
+        assert_eq!(again.status, "unavailable");
+        assert_eq!(calls.get(), 1, "unavailable 也参与幂等·自动路不重烧");
+        // force + 供给恢复 → ready 覆盖同 proposal_id。
+        let recovered = |_root: &str, _prompt: &str| Ok(GOOD_BOUNDARY.to_string());
+        let forced = RunGlobalSupervisorBoundaryReviewRequest {
+            force: true,
+            ..request.clone()
+        };
+        let retried = run_global_supervisor_boundary_review_core(&path, &forced, recovered);
+        assert_eq!(retried.status, "ready");
+        let (store, _) = global_supervisor_review_store::load_store_soft(&path, 9_999);
+        assert_eq!(store.boundary_reviews.len(), 1, "同键覆盖不追加");
+        // 方案不存在：unavailable + 不落盘（键不对落了也是垃圾）。
+        let missing = RunGlobalSupervisorBoundaryReviewRequest {
+            project_root: "/p/root".to_string(),
+            proposal_id: "prop-nope".to_string(),
+            force: false,
+        };
+        let out2 = run_global_supervisor_boundary_review_core(&path, &missing, recovered);
+        assert_eq!(out2.status, "unavailable");
+        assert!(out2.reason.unwrap_or_default().contains("没找到这份方案"));
+        let (store2, _) = global_supervisor_review_store::load_store_soft(&path, 9_998);
+        assert!(
+            global_supervisor_review_store::find_boundary_review(&store2, "prop-nope").is_none(),
+            "错 id 不落盘"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4·真跑（单独步·#[ignore]·固定测试项目·额度在）：对盘上真 pending 方案出 grounded 边界意见。
+    // 显式 `cargo test --lib global_supervisor_boundary_review_real_run -- --ignored --nocapture`。
+    // 最佳夹具 = 盘上纯建议方案（目标要动手 vs 写根空），意见应点破 mismatch（B2 money-shot）。
+    #[test]
+    #[ignore = "B2 global supervisor boundary review: real read-only opinion on a pending proposal in the test project (user present, quota available)"]
+    fn global_supervisor_boundary_review_real_run() {
+        let state_path = crate::default_workflow_state_path();
+        assert!(
+            state_path.exists(),
+            "真 store 应存在：{}",
+            state_path.display()
+        );
+        let auth_path = PathBuf::from(std::env::var("HOME").expect("HOME"))
+            .join(".codex")
+            .join("auth.json");
+        let auth_before = fs::metadata(&auth_path).and_then(|m| m.modified()).ok();
+        // 从盘上取一份方案（优先纯建议方案=写根空·money-shot；否则取最新一份）。
+        let store = crate::project_consultation_proposal_store::load_store(
+            &state_path,
+            crate::unix_timestamp_ms(),
+        )
+        .expect("load proposal store");
+        // 可选定向：设 B2_REAL_PROPOSAL_ID 精确挑一份方案（核实物/复现 money-shot 用）；否则默认取
+        // 最新纯建议方案（写根空），再兜底最新一份。默认行为不变=向后兼容。
+        let forced_id = std::env::var("B2_REAL_PROPOSAL_ID").ok();
+        let proposal = match forced_id.as_deref() {
+            Some(id) if !id.trim().is_empty() => store
+                .proposals
+                .iter()
+                .find(|proposal| proposal.proposal_id == id)
+                .unwrap_or_else(|| panic!("B2_REAL_PROPOSAL_ID={id} 不在盘上"))
+                .clone(),
+            _ => store
+                .proposals
+                .iter()
+                .filter(|proposal| proposal.scope_draft.allowed_write_roots.is_empty())
+                .max_by_key(|proposal| proposal.created_at_ms)
+                .or_else(|| {
+                    store
+                        .proposals
+                        .iter()
+                        .max_by_key(|proposal| proposal.created_at_ms)
+                })
+                .expect("盘上应有至少一份方案（先真机说一个目标出方案）")
+                .clone(),
+        };
+        println!(
+            "[B2_REAL] 方案 id={} 标题={} 写根空={}",
+            proposal.proposal_id,
+            proposal.title,
+            proposal.scope_draft.allowed_write_roots.is_empty()
+        );
+        let request = RunGlobalSupervisorBoundaryReviewRequest {
+            project_root: "/Users/yoyi/codex-workflow-mario-test".to_string(),
+            proposal_id: proposal.proposal_id.clone(),
+            force: true,
+        };
+        let outcome =
+            run_global_supervisor_boundary_review_core(&state_path, &request, |root, prompt| {
+                crate::codex_local_runner::readonly_codex_consult(root, prompt, Some(420_000))
+            });
+        println!(
+            "[B2_REAL] status={} reason={:?}",
+            outcome.status, outcome.reason
+        );
+        let review = outcome.review.clone().expect("应带记录");
+        println!(
+            "[B2_REAL] verdict={} summary={}",
+            review.verdict, review.summary
+        );
+        for point in &review.points {
+            println!("[B2_REAL] - {point}");
+        }
+        assert_eq!(
+            outcome.status, "ready",
+            "真边界意见应出：{:?}",
+            outcome.reason
+        );
+        assert!(!review.summary.trim().is_empty(), "总评非空");
+        // 落库 + B2 内嵌审计在。
+        let (saved_store, _) = global_supervisor_review_store::load_store_soft(&state_path, 0);
+        assert!(
+            global_supervisor_review_store::find_boundary_review(
+                &saved_store,
+                &proposal.proposal_id
+            )
+            .is_some(),
+            "记录应落盘"
+        );
+        assert!(saved_store
+            .boundary_audit_events
+            .iter()
+            .any(|event| event.event_type == "global_supervisor_boundary_review_recorded"));
+        let auth_after = fs::metadata(&auth_path).and_then(|m| m.modified()).ok();
         assert_eq!(auth_before, auth_after, ".codex 凭据不许被碰");
     }
 }

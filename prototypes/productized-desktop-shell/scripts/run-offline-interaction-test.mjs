@@ -9,6 +9,7 @@ const testEntries = [
   "tests/offline-permission-dialog.test.tsx",
   "tests/report-on-face-yellow-flag.test.tsx",
   "tests/report-fact-confirm-recall.test.tsx",
+  "tests/report-boundary-opinion.test.tsx",
   "tests/raw-session-bridge.test.tsx",
   "tests/global-supervisor-review-section.test.tsx",
   "tests/advice-only-authorize-face.test.tsx",

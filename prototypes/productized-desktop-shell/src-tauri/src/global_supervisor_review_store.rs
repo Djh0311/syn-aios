@@ -96,6 +96,65 @@ pub(crate) struct GlobalSupervisorReviewAuditEvent {
     pub(crate) created_at_ms: i64,
 }
 
+// ===== B2·批前边界意见（加法扩展·独立集合·旧 reviews/audit_events 语义 0-diff） =====
+//
+// B1（结果复核·按 workflow_id+chain_started_at）与 B2（批前边界·按 proposal_id）是同一 store 的两半：
+// 各存各的集合、各带各的内嵌审计。新字段全 `#[serde(default)]` → 旧 sidecar 缺字段照样反序列化
+// （loader 容忍缺字段·schema_version 沿用 v1 不 bump=零 gate 收益、避免动版本常量波及）。
+
+/// 一份方案的批前边界意见记录。status="ready"（意见在）| "unavailable"（没跑成·可重试）。
+/// 幂等键 = proposal_id（一份方案一条·[重试] 才 force 重跑）。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct GlobalSupervisorBoundaryReviewRecord {
+    #[serde(default)]
+    pub(crate) review_id: String,
+    #[serde(default)]
+    pub(crate) project_id: String,
+    /// 幂等键：方案 id（与 proposal store 同源）。
+    #[serde(default)]
+    pub(crate) proposal_id: String,
+    #[serde(default)]
+    pub(crate) status: String,
+    /// "looks_ok" | "mismatch" | "caution"（未知/审批腔归一化为 caution·保守）。
+    #[serde(default)]
+    pub(crate) verdict: String,
+    /// 点破的短句（目标错配/越界苗头/验收缺/风险漏报）。
+    #[serde(default)]
+    pub(crate) points: Vec<String>,
+    #[serde(default)]
+    pub(crate) summary: String,
+    /// status="unavailable" 时的人话原因（供给类/解析失败等）。
+    #[serde(default)]
+    pub(crate) unavailable_reason: Option<String>,
+    /// §10-1 换脑可定位（零成本半边）：本次意见用的模型与档案版本。
+    #[serde(default)]
+    pub(crate) model: String,
+    #[serde(default)]
+    pub(crate) profile_version: String,
+    #[serde(default)]
+    pub(crate) created_at_ms: i64,
+    #[serde(default)]
+    pub(crate) updated_at_ms: i64,
+}
+
+/// B2 内嵌审计事件（独立于 B1 的 audit_events·照同款内嵌先例）。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct GlobalSupervisorBoundaryReviewAuditEvent {
+    #[serde(default)]
+    pub(crate) event_id: String,
+    /// 固定 "global_supervisor_boundary_review_recorded"。
+    #[serde(default)]
+    pub(crate) event_type: String,
+    #[serde(default)]
+    pub(crate) proposal_id: String,
+    #[serde(default)]
+    pub(crate) review_status: String,
+    #[serde(default)]
+    pub(crate) actor_ref: String,
+    #[serde(default)]
+    pub(crate) created_at_ms: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct GlobalSupervisorReviewStoreV1 {
     pub(crate) schema_version: String,
@@ -105,6 +164,12 @@ pub(crate) struct GlobalSupervisorReviewStoreV1 {
     pub(crate) reviews: Vec<GlobalSupervisorReviewRecord>,
     #[serde(default)]
     pub(crate) audit_events: Vec<GlobalSupervisorReviewAuditEvent>,
+    /// B2·批前边界意见（加法·按 proposal_id）。旧 sidecar 缺此字段 → 空 vec。
+    #[serde(default)]
+    pub(crate) boundary_reviews: Vec<GlobalSupervisorBoundaryReviewRecord>,
+    /// B2 内嵌审计（加法）。旧 sidecar 缺此字段 → 空 vec。
+    #[serde(default)]
+    pub(crate) boundary_audit_events: Vec<GlobalSupervisorBoundaryReviewAuditEvent>,
 }
 
 fn empty_store(timestamp_ms: i64) -> GlobalSupervisorReviewStoreV1 {
@@ -114,6 +179,8 @@ fn empty_store(timestamp_ms: i64) -> GlobalSupervisorReviewStoreV1 {
         updated_at_ms: timestamp_ms,
         reviews: Vec::new(),
         audit_events: Vec::new(),
+        boundary_reviews: Vec::new(),
+        boundary_audit_events: Vec::new(),
     }
 }
 
@@ -214,6 +281,67 @@ pub(crate) fn upsert_review(
         actor_ref: actor_ref.to_string(),
         created_at_ms: timestamp_ms,
     });
+    write_store_atomic(&sidecar, &store, timestamp_ms)?;
+    Ok(store)
+}
+
+/// B2·按幂等键 proposal_id 找一条批前边界意见记录。
+pub(crate) fn find_boundary_review<'a>(
+    store: &'a GlobalSupervisorReviewStoreV1,
+    proposal_id: &str,
+) -> Option<&'a GlobalSupervisorBoundaryReviewRecord> {
+    store
+        .boundary_reviews
+        .iter()
+        .find(|review| review.proposal_id == proposal_id)
+}
+
+/// B2·upsert 一条批前边界意见（同 proposal_id 替换、否则追加）+ 内嵌 B2 审计 + revision 递增 + 原子写。
+/// 复用 B1 同款原子写机制；**只碰 boundary_reviews / boundary_audit_events**——旧 reviews/audit_events 不动。
+pub(crate) fn upsert_boundary_review(
+    workflow_state_path: &Path,
+    record: GlobalSupervisorBoundaryReviewRecord,
+    actor_ref: &str,
+    timestamp_ms: i64,
+) -> Result<GlobalSupervisorReviewStoreV1, String> {
+    if record.proposal_id.trim().is_empty() {
+        return Err("批前边界意见记录缺 proposal_id（幂等键），拒绝落库".to_string());
+    }
+    let sidecar = sidecar_path(workflow_state_path)?;
+    let (mut store, _warnings) = load_store_soft(workflow_state_path, timestamp_ms);
+    let existing = store
+        .boundary_reviews
+        .iter()
+        .position(|review| review.proposal_id == record.proposal_id);
+    let mut record = record;
+    record.updated_at_ms = timestamp_ms;
+    match existing {
+        Some(index) => {
+            // 保留首次 created_at（重试/force 重跑是同一份方案的更新，不伪造新生时刻）。
+            let created = store.boundary_reviews[index].created_at_ms;
+            record.created_at_ms = if created > 0 { created } else { timestamp_ms };
+            store.boundary_reviews[index] = record.clone();
+        }
+        None => {
+            record.created_at_ms = timestamp_ms;
+            store.boundary_reviews.push(record.clone());
+        }
+    }
+    store.revision += 1;
+    store.updated_at_ms = timestamp_ms;
+    store
+        .boundary_audit_events
+        .push(GlobalSupervisorBoundaryReviewAuditEvent {
+            event_id: format!(
+                "global-supervisor-boundary-review:{}:{timestamp_ms}",
+                record.proposal_id
+            ),
+            event_type: "global_supervisor_boundary_review_recorded".to_string(),
+            proposal_id: record.proposal_id.clone(),
+            review_status: record.status.clone(),
+            actor_ref: actor_ref.to_string(),
+            created_at_ms: timestamp_ms,
+        });
     write_store_atomic(&sidecar, &store, timestamp_ms)?;
     Ok(store)
 }
@@ -440,6 +568,121 @@ mod tests {
         let mut bad2 = record("wf-1", "", "ready");
         bad2.chain_started_at = String::new();
         assert!(upsert_review(&state_path, bad2, "tester", 1_000).is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // ===== B2·批前边界意见（加法自证：旧 reviews 集合语义 0-diff） =====
+
+    fn boundary_record(proposal_id: &str, status: &str) -> GlobalSupervisorBoundaryReviewRecord {
+        GlobalSupervisorBoundaryReviewRecord {
+            review_id: format!("boundary:{proposal_id}"),
+            project_id: "proj".to_string(),
+            proposal_id: proposal_id.to_string(),
+            status: status.to_string(),
+            verdict: "mismatch".to_string(),
+            points: vec!["你要动手，这方案不改任何文件".to_string()],
+            summary: "目标与方案对不上".to_string(),
+            model: "codex-cli-default".to_string(),
+            profile_version: "global-supervisor-boundary-profile.v1".to_string(),
+            ..Default::default()
+        }
+    }
+
+    // §4：boundary_reviews 往返（upsert/find/同键替换/revision）+ 内嵌 B2 审计 + 旧 reviews 集合不受扰。
+    #[test]
+    fn boundary_roundtrip_and_leaves_b1_reviews_untouched() {
+        let (dir, state_path) = tmp_state_path("boundary");
+        // 先放一条 B1 结果复核，再放 B2 边界意见——两半各存各的、互不干扰。
+        upsert_review(
+            &state_path,
+            record("wf-1", "1000", "ready"),
+            "tester",
+            1_000,
+        )
+        .expect("b1");
+        let store = upsert_boundary_review(
+            &state_path,
+            boundary_record("prop-1", "ready"),
+            "global_supervisor_agent",
+            2_000,
+        )
+        .expect("b2 upsert");
+        assert_eq!(store.revision, 2, "两次写各递增一次");
+        // 加法自证：B1 的 reviews / audit_events 一条不少、语义不变。
+        assert_eq!(store.reviews.len(), 1, "旧 reviews 集合不受扰");
+        assert_eq!(store.audit_events.len(), 1, "旧 audit_events 集合不受扰");
+        assert!(find_review(&store, "wf-1", "1000").is_some(), "B1 记录仍在");
+        // B2 落 boundary_reviews + boundary_audit_events。
+        let (loaded, warnings) = load_store_soft(&state_path, 3_000);
+        assert!(warnings.is_empty(), "干净店无 warning：{warnings:?}");
+        let found = find_boundary_review(&loaded, "prop-1").expect("应找到边界意见");
+        assert_eq!(found.verdict, "mismatch");
+        assert_eq!(found.points.len(), 1);
+        assert_eq!(found.model, "codex-cli-default", "§10-1 model 落盘");
+        assert_eq!(loaded.boundary_audit_events.len(), 1);
+        assert_eq!(
+            loaded.boundary_audit_events[0].event_type,
+            "global_supervisor_boundary_review_recorded"
+        );
+        assert_eq!(loaded.boundary_audit_events[0].proposal_id, "prop-1");
+        // 同 proposal_id upsert 替换不追加 + created_at 保留首次。
+        let created_first = found.created_at_ms;
+        let store2 = upsert_boundary_review(
+            &state_path,
+            boundary_record("prop-1", "ready"),
+            "global_supervisor_agent",
+            4_000,
+        )
+        .expect("b2 upsert2");
+        assert_eq!(
+            store2.boundary_reviews.len(),
+            1,
+            "同 proposal_id 替换不追加"
+        );
+        assert_eq!(
+            store2.boundary_reviews[0].created_at_ms, created_first,
+            "created_at 保留首次"
+        );
+        assert_eq!(store2.boundary_reviews[0].updated_at_ms, 4_000);
+        // 不同 proposal_id 追加。
+        let store3 = upsert_boundary_review(
+            &state_path,
+            boundary_record("prop-2", "unavailable"),
+            "global_supervisor_agent",
+            5_000,
+        )
+        .expect("b2 upsert3");
+        assert_eq!(store3.boundary_reviews.len(), 2);
+        assert!(find_boundary_review(&store3, "prop-2").is_some());
+        assert!(find_boundary_review(&store3, "prop-x").is_none());
+        // B1 仍 1 条（B2 追加没碰旧集合）。
+        assert_eq!(store3.reviews.len(), 1, "写三次 B2 后 B1 仍一条");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4：旧格式 sidecar（无 boundary_* 字段）loader 容忍 → 空 vec 反序列化，不 Err。
+    #[test]
+    fn legacy_sidecar_without_boundary_fields_loads_soft() {
+        let (dir, state_path) = tmp_state_path("legacy");
+        let sidecar = sidecar_path(&state_path).expect("sidecar path");
+        // 旧 v1 店：只有 reviews/audit_events，没有 boundary_* 字段。
+        fs::write(
+            &sidecar,
+            r#"{"schema_version":"global_supervisor_review_store.v1","revision":1,"updated_at_ms":10,"reviews":[],"audit_events":[]}"#,
+        )
+        .expect("write legacy");
+        let (loaded, warnings) = load_store_soft(&state_path, 1_000);
+        assert!(warnings.is_empty(), "旧格式不该报 warning：{warnings:?}");
+        assert!(loaded.boundary_reviews.is_empty(), "缺字段 → 空 vec");
+        assert!(loaded.boundary_audit_events.is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn boundary_missing_proposal_id_rejected() {
+        let (dir, state_path) = tmp_state_path("bnokey");
+        let bad = boundary_record("", "ready");
+        assert!(upsert_boundary_review(&state_path, bad, "tester", 1_000).is_err());
         let _ = fs::remove_dir_all(dir);
     }
 }

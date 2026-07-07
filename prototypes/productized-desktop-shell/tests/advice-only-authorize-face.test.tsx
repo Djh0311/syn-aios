@@ -69,6 +69,9 @@ function html(allowedWriteRoots: string[]): string {
       worksmapLoading={false}
       worksmapError={null}
       onRetryWorksmap={noop}
+      boundaryLoading={false}
+      boundaryOutcome={null}
+      onBoundaryRetry={noop}
       onOpenAgentSession={noop}
     />,
   );

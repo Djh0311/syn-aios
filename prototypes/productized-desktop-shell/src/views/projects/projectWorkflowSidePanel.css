@@ -624,6 +624,46 @@
 .jiaoban-supervisor-rerun {
   justify-self: start;
 }
+/* B2·全局主管批前边界意见（批脸·advisory·意见不是闸）。承 jiaoban-supervisor 同族样式。 */
+.jiaoban-boundary {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--hair-2);
+  border-radius: 8px;
+}
+.jiaoban-boundary-title {
+  margin: 0;
+}
+.jiaoban-boundary-verdict {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.jiaoban-boundary-ok {
+  color: var(--accent);
+}
+.jiaoban-boundary-flag {
+  color: var(--warning);
+}
+.jiaoban-boundary-summary {
+  margin: 0;
+  font-size: 13px;
+}
+.jiaoban-boundary-points {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  display: grid;
+  gap: 4px;
+}
+.jiaoban-boundary-foot {
+  margin: 0;
+}
+.jiaoban-boundary-rerun {
+  justify-self: start;
+}
 .jiaoban-session-empty {
   gap: 6px;
 }
