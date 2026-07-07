@@ -27,6 +27,8 @@ import type {
   GlobalSupervisorReviewOutcome,
   RunGlobalSupervisorBoundaryReviewRequest,
   GlobalSupervisorBoundaryReviewOutcome,
+  ListProjectRunHistoryRequest,
+  RunHistoryList,
   GlobalSupervisorReviewStoreV1,
   SecretaryExplainOutcome,
   ProjectConsultationProposal,
@@ -898,6 +900,12 @@ export function runGlobalSupervisorBoundaryReview(
 ): Promise<GlobalSupervisorBoundaryReviewOutcome> {
   ensureTauriRuntime();
   return invoke<GlobalSupervisorBoundaryReviewOutcome>("run_global_supervisor_boundary_review", { request });
+}
+
+// 工作历史·后端读模型（纯只读·跨店按 workflow+时间窗拼单列表）。薄封装无逻辑；零 UI（UI 半包等 M1）。
+export function listProjectRunHistory(request: ListProjectRunHistoryRequest): Promise<RunHistoryList> {
+  ensureTauriRuntime();
+  return invoke<RunHistoryList>("list_project_run_history", { request });
 }
 
 // 刀2「批前看图」封装：对 pending 方案只读预拆工序图（零写盘·真 LM 1-7 分钟·偶发 flaky）。纯封装无逻辑；

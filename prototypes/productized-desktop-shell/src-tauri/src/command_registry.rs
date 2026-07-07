@@ -17,6 +17,9 @@ mod global_supervisor_review_store;
 // B3·秘书 agent（按需解释·零写入零 store）：读盘装配「待拍板事实」→ 只读 consult → 纯文本。
 mod secretary_agent;
 
+// 工作历史·后端读模型（纯只读·跨店按 workflow+时间窗拼单列表）；命令 list_project_run_history 进 generate_handler!。
+mod run_history_read_model;
+
 macro_rules! workbench_command_handler {
     () => {
         tauri::generate_handler![
@@ -125,6 +128,7 @@ macro_rules! workbench_command_handler {
             global_supervisor_agent::run_global_supervisor_boundary_review,
             global_supervisor_review_store::load_global_supervisor_review_store,
             secretary_agent::run_secretary_explain,
+            run_history_read_model::list_project_run_history,
             list_project_workflows,
             submit_project_workflow_draft,
             get_project_workflow_nodes,

@@ -63,7 +63,7 @@
 - 文档小口子：principles.md §1/§5 仍引 `tasks/README.md`（该文件已改一行指针，引用不断链；改正文等下次动 principles 时顺手）。
 
 **3b. 并行双线（07-08·原型线跑 M1 期间）**
-- **② 工作历史·后端读模型包已写待派**：`tasks/2026-07-08-run-history-read-model-backend-v1.md`（纯只读新模块·六态含「批了没跑」·跨店无外键=按 workflow+时间窗诚实近似[correlation 字段如实标·红线:不许改写入路径加字段]·零 UI——UI 半包等原型 M1 拍板）；
+- **② 工作历史·后端读模型 = done·主导线核过·本次 commit·零 UI**（`tasks/2026-07-08-run-history-read-model-backend-v1.md`）：新 `run_history_read_model.rs`（982 行·`list_project_run_history`·纯只读零 LM 零审计）——方案为脊、链按 workflow+时间窗归单（`correlation` 如实标 exact/time_window·歧义注明）、六态+三终态（declined/superseded/changes_requested——盘上真有·不映射会漏「没做」）、state=稳定英文键+state_note 人话。核实物（主导线全项重跑）：**723/0/42**（+11）+ 12 测 ok + 三闸绿 + fmt 净 + 死线全 0-diff + 增量逐字节吻合（+4/+8/+52 全加法）+ **线上归属独立复算一致**（链 1783431637295→方案 :1783431025925 ✓·B2 两条边界意见按 proposal_id 精确挂 ✓）。**三报备全准**：① 包 §0.2 纠错——授权**有** `source_proposal_id`（17/17 全填·主导线部分读误判「无此字段」=「判缺失先读全原件」第二案已记忆加严）；链仍无任何外键，时间窗设计不变；「链→auth→source_proposal_id」备选归属源=可选精化暂不做；② 探针逮到线上停因黑话（real_execution_gate_blocked:…）→ 砍节点 message 透传、卡住只给人话尾巴（§3 死线合规优先·具体停因留工作流详情/UI 半包）；③ 超字面六态+英文 state 键=UI 干净契约·准。**UI 半包等原型 M1 拍板**；
 - **① manual_relay 12-failed 级联 = 已根治（07-08 主导线直修·本次 commit）**：根因钉死——测试串行锁 `test_guard` 三把 Mutex 全用 `.expect`，任一测试**持锁期间 panic** → 锁中毒 → 之后 23 个测试全在 expect 上炸（1 个真抽风带崩 11 个=四次现身的 12-failed 本相，也解释重跑即绿/串行全过）。修 = **中毒恢复** `into_inner`（串行锁不带数据、语义分毫不损；两张登记表恢复后照旧 clear=回到已知空态；**只动测试 mod 调用侧·生产本体 0-diff**）。实证：修后 8 跑——1 次复现仅 **1 failed**（以前必 12）+ 7 绿；fmt 净。**残留：首发抽风本尊未定位**（间歇约 1/8·下次现身将以单个具名失败+真 panic 信息出现，届时定点修）。
 
 **4. 盯着的（不是活·是警报器）**

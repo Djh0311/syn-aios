@@ -1943,6 +1943,58 @@ export type RunGlobalSupervisorBoundaryReviewRequest = {
   force?: boolean; // [重试] 才 true（幂等防重烧）
 };
 
+// ===== 工作历史·后端读模型（按单列史·纯只读）——与后端 run_history_read_model 同形。零 UI（半包等 M1）。 =====
+
+// state 是稳定机器键（UI 自己映射人话/配色）；state_note 才是人话一句。
+// 键：pending（待批）/ advice_only（纯建议·写根空）/ confirmed_not_run（批了没跑）/ running（跑着）/
+//     blocked（卡住）/ delivered（交货）/ declined（已回绝）/ superseded（被替代）/ changes_requested（要改）。
+export type RunHistoryState =
+  | "pending"
+  | "advice_only"
+  | "confirmed_not_run"
+  | "running"
+  | "blocked"
+  | "delivered"
+  | "declined"
+  | "superseded"
+  | "changes_requested";
+
+export type RunHistoryChain = {
+  started_at: string;
+  done_count: number;
+  total_count: number;
+};
+
+export type RunHistoryReviewFlags = {
+  result_verdict?: string | null; // "pass"|"needs_rework"|"needs_human_check"（随链时间窗归单）
+  boundary_verdict?: string | null; // "looks_ok"|"mismatch"|"caution"（按 proposal_id 精确挂）
+};
+
+export type RunHistoryEntry = {
+  proposal_id: string;
+  workflow_id: string;
+  goal_text: string;
+  created_at_ms: number;
+  state: RunHistoryState | string;
+  state_note: string;
+  advice_only: boolean;
+  chain?: RunHistoryChain | null;
+  review_flags: RunHistoryReviewFlags;
+  correlation: "exact" | "time_window" | string; // 跨店关联如实标：exact / 时间窗近似
+};
+
+export type RunHistoryList = {
+  entries: RunHistoryEntry[];
+  total: number; // limit 前总单数
+  warnings: string[]; // 软着陆报备（某店缺失/损坏）
+};
+
+export type ListProjectRunHistoryRequest = {
+  project_root: string;
+  workflow_id?: string | null; // 不传=该项目全工作流
+  limit?: number | null; // 默认 50
+};
+
 // ===== B3·主管复核整店只读类型 + 秘书解释 =====
 
 export type GlobalSupervisorReviewAuditEvent = {
