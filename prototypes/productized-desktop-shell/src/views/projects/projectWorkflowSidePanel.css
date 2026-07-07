@@ -548,6 +548,28 @@
   font-size: 12.5px;
   cursor: pointer;
 }
+/* 批卡收纳行：摘要按钮 + 行尾「看原始对话」并排（新建/未定不显 link 时摘要独占整行）。 */
+.jiaoban-session-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.jiaoban-session-summary-row .jiaoban-session-summary {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+/* 「看原始对话」桥入口：复用 jiaoban-linklike 的 accent 小链接样式，仅加不换行/间距。
+   各脸里跟在段落后自成一行；批卡行内靠右不压缩、垂直居中（下条覆盖去掉上间距）。 */
+.jiaoban-raw-session-link {
+  flex: none;
+  margin-top: 6px;
+  white-space: nowrap;
+}
+.jiaoban-session-summary-row .jiaoban-raw-session-link {
+  margin-top: 0;
+  align-self: center;
+}
 .jiaoban-session-empty {
   gap: 6px;
 }

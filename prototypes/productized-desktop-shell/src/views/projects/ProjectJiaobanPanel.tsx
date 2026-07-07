@@ -60,7 +60,8 @@ type JiaobanPhase = "say" | "authorize" | "running" | "done" | "blocked";
 
 // 方案a fix：「开个新的」的显式哨兵值。此前用 null 一词两用（"还没定" 与 "用户选了新建"），
 // 重挂载/默认效果会把用户的显式选择无声改回「接现有」（真机踩到：明确选了新建却路由到旧对话）。
-const NEW_SESSION_CHOICE = "__new_session__";
+// export 供离线 DOM 断言测试对齐哨兵值（纯暴露·不改会话选择语义）。
+export const NEW_SESSION_CHOICE = "__new_session__";
 
 // 结果防丢：换 tab 会卸载本面板（ProjectWorkspaceShell 条件渲染），本地 state 全丢。
 // 故把「一轮开始的结果」按 project_root 缓存在模块级，重挂载时恢复——切走再回来结果还在。
@@ -634,6 +635,13 @@ function ProjectJiaobanPanelBrowser({
   // 后者时 store 里那份就是已确认态，只是 summary 可能还没刷到，故 continueHint 直接放行。
   const planIsConfirmed = latestProposal?.status === "user_confirmed" || continueHint;
 
+  // 「看原始对话」桥·兜底会话：本项目最近一条会话的 thread_id（按更新时间倒序头一条）。
+  // 哨兵单（新会话·真 id 前端拿不到）跑中/交货/卡住时用它兜底「看最近对话」。不 mutate 原数组。
+  const latestSessionThreadId =
+    [...projectSessions].sort(
+      (a, b) => (b.updated_at_ms ?? 0) - (a.updated_at_ms ?? 0),
+    )[0]?.thread_id ?? null;
+
   return (
     <section className="project-jiaoban" aria-label="交办">
       <div className="project-jiaoban-col">
@@ -681,6 +689,7 @@ function ProjectJiaobanPanelBrowser({
             worksmapLoading={previewLoading}
             worksmapError={previewError}
             onRetryWorksmap={retryPreview}
+            onOpenAgentSession={onOpenAgentSession}
           />
         ) : null}
 
@@ -689,6 +698,9 @@ function ProjectJiaobanPanelBrowser({
             chainStatus={thisRoundChainStatus}
             isNewSession={runIsNewSession}
             onStop={() => void stopRun()}
+            sessionChoice={sessionChoice}
+            latestSessionThreadId={latestSessionThreadId}
+            onOpenAgentSession={onOpenAgentSession}
           />
         ) : null}
 
@@ -703,6 +715,9 @@ function ProjectJiaobanPanelBrowser({
               projectId: projectWorkflow?.project_id ?? null,
               workflowId: projectWorkflow?.workflow_id ?? null,
             }}
+            sessionChoice={sessionChoice}
+            latestSessionThreadId={latestSessionThreadId}
+            onOpenAgentSession={onOpenAgentSession}
           />
         ) : null}
 
@@ -720,6 +735,8 @@ function ProjectJiaobanPanelBrowser({
             // 「去工作流看看」需切 tab（onSelectTool 在外壳），本包红线「不动外壳」→ 不在此接线；
             // 保留入口能力（prop 已在），置 null 即不渲染该次按钮，主按钮永在（配对表兜底至少一个主按钮）。
             onOpenWorkflow={null}
+            latestSessionThreadId={latestSessionThreadId}
+            onOpenAgentSession={onOpenAgentSession}
           />
         ) : null}
 
@@ -828,6 +845,7 @@ function JiaobanAuthorizeState({
   worksmapLoading,
   worksmapError,
   onRetryWorksmap,
+  onOpenAgentSession,
 }: {
   proposal: ProjectConsultationProposal;
   proposalTimeText: string;
@@ -852,6 +870,9 @@ function JiaobanAuthorizeState({
   worksmapLoading: boolean;
   worksmapError: string | null;
   onRetryWorksmap: () => void;
+  // 「看原始对话」桥：批卡收纳行入口（**必填**·透传给 picker）。批卡是任务点名的主入口，
+  // 设必填让上游漏传直接 tsc 报错——防「组件接了、上游忘喂、入口静默不显」的假绿（审查线逮到过）。
+  onOpenAgentSession: (threadId: string) => void;
 }) {
   const targetFiles = extractTargetFiles(proposal.proposed_steps);
   const willWrite = proposal.scope_draft.allowed_write_roots.length > 0;
@@ -925,6 +946,7 @@ function JiaobanAuthorizeState({
         sessions={sessions}
         sessionChoice={sessionChoice}
         onSessionChoiceChange={onSessionChoiceChange}
+        onOpenAgentSession={onOpenAgentSession}
       />
 
       {willWrite ? (
@@ -1096,16 +1118,51 @@ function JiaobanWorksmap({
   );
 }
 
+// 「看原始对话」桥（定稿承诺补做·2026-07-06）：凡能确定对话的地方给一键钻进智能体页。
+// 判据诚实三态：sessionChoice=真 thread_id → 「看原始对话」（就是本单那条）；
+// 哨兵/未定（新会话单——真 id 前端拿不到，别猜别反查）→ 给了 latestSessionThreadId 才显
+// 「看最近对话」（最近≈本单但不保证，词表不吹大）；两者皆无 → 零渲染。
+// 纯导航：走已存在的 onOpenAgentSession（App 级 setFocusedAgentThreadId + 切智能体页，现成）。
+// 无 hooks·export——离线 DOM 断言可直接走元素树点 onClick（harness 限制：带 hooks 的只能静态标记断言）。
+export function JiaobanRawSessionLink({
+  sessionChoice,
+  latestSessionThreadId = null,
+  onOpenAgentSession,
+}: {
+  sessionChoice: string | null;
+  latestSessionThreadId?: string | null;
+  onOpenAgentSession: ((threadId: string) => void) | undefined;
+}) {
+  if (!onOpenAgentSession) return null;
+  const realThreadId =
+    sessionChoice && sessionChoice !== NEW_SESSION_CHOICE ? sessionChoice : null;
+  const target = realThreadId ?? latestSessionThreadId;
+  if (!target) return null;
+  return (
+    <button
+      type="button"
+      className="jiaoban-linklike jiaoban-raw-session-link"
+      onClick={() => onOpenAgentSession(target)}
+    >
+      {realThreadId ? "看原始对话" : "看最近对话"}
+    </button>
+  );
+}
+
 // 会话收纳：默认收起一行「用哪个对话干：接现有 · <最近一条标题> ▾」，点开才展开选择。
 // 展开后：最近 5 条直列 + 其余折叠/可搜；「开个新的」置灰标「下一阶段支持」（用户已拍方案 a 下阶段）。
-function JiaobanSessionPicker({
+// export 供离线 DOM 断言（带 hooks → 测试只静态标记断言，不平铺调用）。
+export function JiaobanSessionPicker({
   sessions,
   sessionChoice,
   onSessionChoiceChange,
+  onOpenAgentSession,
 }: {
   sessions: SessionRecord[];
   sessionChoice: string | null;
   onSessionChoiceChange: (value: string | null) => void;
+  // 「看原始对话」桥（可选）：批卡传、卡住脸不传（卡住脸自己有面级入口，防一脸双入口）。
+  onOpenAgentSession?: (threadId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -1149,20 +1206,27 @@ function JiaobanSessionPicker({
 
   return (
     <div className="jiaoban-session-pick" aria-label="用哪个对话干">
-      <button
-        type="button"
-        className="jiaoban-session-summary"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="jiaoban-field-label">用哪个对话干：</span>
-        <span className="jiaoban-session-summary-value">
-          {sessionChoice === NEW_SESSION_CHOICE ? summaryTitle : `接现有 · ${summaryTitle}`}
-        </span>
-        <span aria-hidden="true" className="jiaoban-session-caret">
-          {open ? "▴" : "▾"}
-        </span>
-      </button>
+      <div className="jiaoban-session-summary-row">
+        <button
+          type="button"
+          className="jiaoban-session-summary"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span className="jiaoban-field-label">用哪个对话干：</span>
+          <span className="jiaoban-session-summary-value">
+            {sessionChoice === NEW_SESSION_CHOICE ? summaryTitle : `接现有 · ${summaryTitle}`}
+          </span>
+          <span aria-hidden="true" className="jiaoban-session-caret">
+            {open ? "▴" : "▾"}
+          </span>
+        </button>
+        {/* 行尾「看原始对话」：只在选了「接现有:X」时显（新建/未定 → 会话还没生，没得看——诚实不显）。 */}
+        <JiaobanRawSessionLink
+          sessionChoice={sessionChoice}
+          onOpenAgentSession={onOpenAgentSession}
+        />
+      </div>
 
       {open ? (
         <div className="jiaoban-session-expand">
@@ -1239,10 +1303,17 @@ function JiaobanRunningState({
   chainStatus,
   isNewSession,
   onStop,
+  sessionChoice,
+  latestSessionThreadId,
+  onOpenAgentSession,
 }: {
   chainStatus: ProjectWorkflowChainStatus | null;
   isNewSession: boolean;
   onStop: () => void;
+  // 「看原始对话」桥：existing 单跑中→看原始对话（能看实时进度）；哨兵单→latestSession 兜底看最近对话。
+  sessionChoice: string | null;
+  latestSessionThreadId: string | null;
+  onOpenAgentSession?: (threadId: string) => void;
 }) {
   const progress = humanizeChainProgress(chainStatus);
   return (
@@ -1262,6 +1333,11 @@ function JiaobanRunningState({
           <p className="muted small-note">正在为这单活新建会话（约 1 分钟）…</p>
         ) : null}
       </div>
+      <JiaobanRawSessionLink
+        sessionChoice={sessionChoice}
+        latestSessionThreadId={latestSessionThreadId}
+        onOpenAgentSession={onOpenAgentSession}
+      />
       <div className="workflow-state-actions">
         <button className="secondary-button" type="button" onClick={onStop}>
           停下
@@ -1430,12 +1506,19 @@ function JiaobanDoneState({
   onContinue,
   onRequestAction,
   factCtx,
+  sessionChoice,
+  latestSessionThreadId,
+  onOpenAgentSession,
 }: {
   outcome: AutoAdvanceRoleLoopOutcome | null;
   chainStatus: ProjectWorkflowChainStatus | null;
   onContinue: () => void;
   onRequestAction: (action: PendingAction) => void;
   factCtx: FactMemoryContext | null;
+  // 「看原始对话」桥：existing 单→看原始对话（就是干这单的那条）；哨兵单→latestSession 兜底看最近对话。
+  sessionChoice: string | null;
+  latestSessionThreadId: string | null;
+  onOpenAgentSession?: (threadId: string) => void;
 }) {
   const chain = outcome?.chain_outcome ?? null;
   // 刀B·事实确认本地态（防重复点·经现成 create-memory-candidate PendingAction 走确认弹层）。
@@ -1483,6 +1566,11 @@ function JiaobanDoneState({
         <span className="jiaoban-field-label">产出：</span>
         {proof ?? "详情见工作流 tab。"}
       </p>
+      <JiaobanRawSessionLink
+        sessionChoice={sessionChoice}
+        latestSessionThreadId={latestSessionThreadId}
+        onOpenAgentSession={onOpenAgentSession}
+      />
       {warnings.length > 0 ? (
         <ul className="jiaoban-warnings muted small-note" aria-label="附带说明">
           {warnings.map((w, i) => (
@@ -1597,6 +1685,8 @@ export function JiaobanBlockedState({
   onRePlan,
   starting,
   onOpenWorkflow,
+  latestSessionThreadId,
+  onOpenAgentSession,
 }: {
   outcome: AutoAdvanceRoleLoopOutcome | null;
   error: string | null;
@@ -1608,6 +1698,10 @@ export function JiaobanBlockedState({
   onRePlan: () => void;
   starting: boolean;
   onOpenWorkflow: (() => void) | null;
+  // 「看原始对话」桥：面级入口（卡住脸不放 picker 行内入口·防一脸双入口）。existing 单→看原始对话；
+  // 哨兵单→latestSession 兜底看最近对话；皆无→不显。
+  latestSessionThreadId: string | null;
+  onOpenAgentSession?: (threadId: string) => void;
 }) {
   // 停因人话：直接用后端 message / stop_reason（已带具体原因，不包糊话盖住）；再兜底一句 error。
   const reason =
@@ -1685,6 +1779,13 @@ export function JiaobanBlockedState({
           </button>
         ) : null}
       </div>
+
+      {/* 面级「看原始对话」：卡了想看它到底干了啥的天然下钻路（picker 行内入口不放·防一脸双入口）。 */}
+      <JiaobanRawSessionLink
+        sessionChoice={sessionChoice}
+        latestSessionThreadId={latestSessionThreadId}
+        onOpenAgentSession={onOpenAgentSession}
+      />
 
       {/* fix3 后端新 warnings（如「角色已按 codex-dev 执行」）→ 小字列出，不挡主路径。 */}
       {warnings.length > 0 ? (
