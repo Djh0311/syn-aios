@@ -3606,4 +3606,214 @@ mod quality_debt_tests {
         assert_eq!(creator.calls.get(), 3, "每任务一次");
         assert!(t1 != t2 && t2 != t3 && t1 != t3, "各任务 thread 互异");
     }
+
+    // §8·①链级集成测（一次链调用覆盖三断言）：3 任务链经 run_director_task_chain_with_session_creator 真跑
+    // （stub 会话工厂 + 记录 runner），直证：creator 被调 3 次 + 各任务 dispatch 用各自新 thread + 3 个
+    // target_session_id 互异且物化。prepared-chain 夹具经现成 prepare 造（不手搓状态）。
+    #[test]
+    fn c1_chain_creates_per_task_session_dispatches_with_it_and_materializes() {
+        // 每任务返回互异新 thread（都在 index 里·bind 才认）。
+        struct DistinctCreator {
+            calls: Cell<usize>,
+        }
+        impl JiaobanNewSessionCreator for DistinctCreator {
+            fn create_initialized_session(&self, _text: &str, _by: &str) -> Result<String, String> {
+                let n = self.calls.get() + 1;
+                self.calls.set(n);
+                Ok(format!("thread-c1-task-{n}"))
+            }
+        }
+        // 记录每次 dispatch 拿到的 thread_id（证「各任务用各自会话」）+ 写口供 → completed。
+        struct RecordingRunner {
+            threads: RefCell<Vec<String>>,
+        }
+        impl CodexResumeRunner for RecordingRunner {
+            fn resume_with_options(
+                &self,
+                thread_id: &str,
+                _prompt: &str,
+                last_message_path: &Path,
+                _options: &CodexResumeRequestOptions,
+            ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String>
+            {
+                self.threads.borrow_mut().push(thread_id.to_string());
+                if let Some(parent) = last_message_path.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let _ = fs::write(
+                    last_message_path,
+                    "干完了。\n```json\n{\"did\":\"x\",\"outputs\":[],\"status\":\"done\",\"evidence\":[]}\n```",
+                );
+                Ok((
+                    CodexResumeRunResult {
+                        exit_code: 0,
+                        timed_out: false,
+                        stderr_summary: None,
+                    },
+                    WorkflowNodeDispatchExecutionOptions {
+                        readback_stats: Some(CodexDispatchReadbackStats {
+                            transcript_event_count: 3,
+                            transcript_target_hits: 1,
+                        }),
+                    },
+                ))
+            }
+        }
+
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("c1-chain");
+        let path = dir.join("workflow-state.v0.json");
+        // 4 线索引：thread-qdebt（seed 绑）+ 3 个任务会话线（C1 每任务绑·bind 认索引里的线）。
+        let threads_json: Vec<Value> = [
+            "thread-qdebt",
+            "thread-c1-task-1",
+            "thread-c1-task-2",
+            "thread-c1-task-3",
+        ]
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "thread_id": t, "project_root": test_root, "title": format!("Session {t}"),
+                "rollout_exists": true, "rollout_path": format!("/tmp/{t}.jsonl")
+            })
+        })
+        .collect();
+        let index = serde_json::json!({
+            "projects": [{ "project_root": test_root }],
+            "threads": threads_json
+        });
+        let workflow_id = seed_active_run(&path, &index, test_root);
+        let pstore = project_consultation_proposal_store::load_store(&path, unix_timestamp_ms())
+            .expect("pstore");
+        let proposal = pstore.proposals[0].clone();
+        let astore =
+            plan_authorization_store::load_store(&path, unix_timestamp_ms()).expect("astore");
+        let auth = astore
+            .authorizations
+            .iter()
+            .find(|a| a.workflow_id == workflow_id && a.status == PlanAuthorizationStatus::Active)
+            .expect("active auth");
+        let scope = director_task_scope_from_proposal(&proposal, "codex-dev");
+        let mk = |id: usize, title: &str, deps: Vec<String>| ProjectDirectorPlannedTask {
+            planned_task_id: format!("planned-task:{workflow_id}:{id}"),
+            title: title.to_string(),
+            objective: format!("自包含：{title}"),
+            scope: scope.clone(),
+            depends_on: deps,
+            acceptance_criteria: vec!["ok".to_string()],
+            report_format: vec!["r".to_string()],
+            status: "planned".to_string(),
+            guard_result: None,
+            work_item_id: None,
+            workflow_node_id: None,
+            task_package_id: None,
+            memory_packet_snapshot_id: None,
+            prepared_dispatch_id: None,
+            blocked_reasons: vec![],
+        };
+        let planned = vec![
+            mk(1, "任务甲", vec![]),
+            mk(2, "任务乙", vec!["任务甲".to_string()]),
+            mk(3, "任务丙", vec!["任务乙".to_string()]),
+        ];
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &PrepareAuthorizedAutoDispatchInput {
+                project_root: test_root.to_string(),
+                project_id: project_id(test_root),
+                workflow_id: workflow_id.clone(),
+                proposal_id: proposal.proposal_id.clone(),
+                authorization_id: auth.authorization_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                planned_tasks: planned,
+                expected_workflow_revision: None,
+                expected_authorization_revision: None,
+            },
+        )
+        .expect("prepare");
+        assert_eq!(
+            prepared.plan.prepared_dispatch_count, 3,
+            "3 任务应全 prepared"
+        );
+
+        let creator = DistinctCreator {
+            calls: Cell::new(0),
+        };
+        let runner = RecordingRunner {
+            threads: RefCell::new(vec![]),
+        };
+        let readback = dir.join("readback.db");
+        let outcome = run_director_task_chain_with_session_creator(
+            &path,
+            &index,
+            &readback,
+            &runner,
+            test_root,
+            &workflow_id,
+            &prepared.plan.planned_tasks,
+            50,
+            &creator,
+        )
+        .expect("C1 链应跑完");
+
+        // 断言①：会话工厂每任务一次 = 3。
+        assert_eq!(creator.calls.get(), 3, "① creator 被调 3 次");
+        assert_eq!(outcome.completed, 3, "3 任务全完成");
+        // 断言②：各任务 dispatch 用各自新 thread（互异·且是新建会话号）。
+        let threads = runner.threads.borrow();
+        assert_eq!(threads.len(), 3, "3 任务各 dispatch 一次");
+        let distinct: std::collections::BTreeSet<&String> = threads.iter().collect();
+        assert_eq!(
+            distinct.len(),
+            3,
+            "② 各任务 dispatch thread 互异：{threads:?}"
+        );
+        assert!(
+            threads.iter().all(|t| t.starts_with("thread-c1-task-")),
+            "② dispatch 用的是新建会话线：{threads:?}"
+        );
+        // 断言③：3 个 target_session_id 物化进各任务 artifact 且互异。
+        let value = read_workflow_state_value(&path).unwrap();
+        let artifacts = value["artifacts"].as_array().cloned().unwrap_or_default();
+        let session_ids: std::collections::BTreeSet<String> = prepared
+            .plan
+            .planned_tasks
+            .iter()
+            .filter_map(|task| task.task_package_id.as_ref())
+            .filter_map(|aid| {
+                artifacts.iter().find(|a| {
+                    optional_string_from(a, "artifact_id").as_deref() == Some(aid.as_str())
+                })
+            })
+            .filter_map(|a| optional_string_from(a, "target_session_id"))
+            .collect();
+        assert_eq!(
+            session_ids.len(),
+            3,
+            "③ 3 个 target_session_id 物化且互异：{session_ids:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §8·②真跑耗时（单独步·#[ignore]·固定测试项目·额度在）：真建一条会话，量「每任务 +约 1 分钟」的
+    // 单次实数（N 任务链的会话开销 = N × 本数·线性）。显式 `cargo test --lib c1_session_creation_timing_real
+    // -- --ignored --nocapture`。核实物：真 thread_id + 耗时打印。
+    #[test]
+    #[ignore = "C1 timing: really create one 先生后绑 session in the test project and print elapsed (user present, quota available)"]
+    fn c1_session_creation_timing_real() {
+        let started = std::time::Instant::now();
+        let thread_id = ManualRelayJiaobanNewSessionCreator
+            .create_initialized_session(
+                "交办任务专用会话（耗时实测）：本会话只用于测量新建会话耗时。回复「已就位」即可，别改任何文件。",
+                "director_chain_timing",
+            )
+            .expect("真建会话应成功（额度在·测试项目）");
+        let elapsed_ms = started.elapsed().as_millis();
+        println!("[C1_TIMING] 单次先生后绑建会话耗时 = {elapsed_ms} ms（thread {thread_id}）");
+        println!(
+            "[C1_TIMING] N 任务链会话总开销 ≈ N × {elapsed_ms} ms（每任务一条·线性·知情代价）"
+        );
+        assert!(!thread_id.trim().is_empty(), "应拿到真 thread_id");
+    }
 }
