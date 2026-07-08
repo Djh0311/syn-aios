@@ -12,11 +12,11 @@
 
 ## 二、在做什么
 
-- **Phase B2·执行闭环深化 = 当前阶段（2026-07-08 定）**：每任务独立对话、传递全走工作台、worker 求助通道、主管总结+终标。正本：定稿 `decisions/2026-07-08-phase-b2-execution-loop-final-v1.md` + 拆解 `docs/plans/2026-07-08-next-stage-execution-loop-breakdown-v1.md`（v1.1·两轮权威文档通读拆定）。切片：**C0 调研与差量 schema（包已出待派 `tasks/2026-07-08-phase-b2-c0-research-and-gap-schema-v1.md`）** → C1 每任务独立会话 → C2 任务包 v2 → C3 求助通道 → C4 主管总结终标（确定性初筛+LM 兜底）→ C5 上脸审计。schema 正本 = `docs/workflow-task-package-design-v1.md` §3/§4/§5（C0 只出差量）；canon 演化已记：会话跟**任务**走（车间模型旧句修订·见定稿）。
+- **Phase B2·执行闭环深化 = 当前阶段（2026-07-08 定）**：每任务独立对话、传递全走工作台、worker 求助通道、主管总结+终标。正本：定稿 `decisions/2026-07-08-phase-b2-execution-loop-final-v1.md` + 拆解 `docs/plans/2026-07-08-next-stage-execution-loop-breakdown-v1.md`（v1.1·两轮权威文档通读拆定）。切片：**C0 = done·核过（调研报告 `docs/research/2026-07-08-agent-collab-transfer-reference-for-b2-v1.md` 转正为 B2 设计参考正本——五发现：契约严格度待拍/codex `multi_agent`+`memories` 默认开启/求助字段三条并行互不相通[恒空·启发式·独立bool·三处亲验实锤]/C4 缺口确认[链自动completed·failed 只有结束一条路]/M4 架构性不能接）→ 主导线七拍落 `decisions/2026-07-08-b2-transfer-protocol-gap-final-v1.md`（求助=强信号不可软着陆·收敛实现A为唯一真源·双特性入不吸收+C1 运行时防护硬闸·口供摘要独立通道·C2 首务命名统一·C4 四选一·C5 词表对齐）** → **C1 包已出待派 `tasks/2026-07-08-phase-b2-c1-session-per-task-v1.md`**（每任务独立会话·先生后绑搬到每任务·target_session_id 真赋值·拐杖退役·失败不回落·+1min 知情代价要实测数）→ C2 任务包 v2 → C3 求助通道（含 dispatch cancelled 终态）→ C4 主管总结终标 → C5 上脸审计。schema 正本 = `docs/workflow-task-package-design-v1.md` §3/§4/§5（C0 只出差量）；canon 演化已记：会话跟**任务**走（车间模型旧句修订·见定稿）。
 
 ## 三、下一步
 
-1. **C0 派出** → 回交核实物 → 主导线落中转协议差量定稿 → C1 起逐片包（dispatch 可逆终态并入派发语义重整）。
+1. **C1 派出** → 回交核实物 → C2 起逐片（每片真机过再下一片）。
 2. **等用户真机顺手**：工作历史栏/秘书看板计数/拉窄不挤 三点；秘书两入口对调+归队右栏一眼；记忆转正加餐（转正一条→出方案见「带上 N 条」）。
 3. **搁置待点火**：整台工作台原型（用户想清楚再做；资产留存：现状说明书/v1 已认元素/颗粒度四拍）。
 4. **挂账**：备份剩余小件（3 记忆库+workbench store 146M+`~/.codex` 零副本·用户知情）｜「commit 后顺手 push」写不写进 AGENTS 未答｜principles 引 `tasks/README.md` 文字小口子｜旧线（画布真机对图 / 手感打磨 / A4·C default-safe 待真机 / 会话模型 P3 / 记忆中心布局重做=Phase D）。
