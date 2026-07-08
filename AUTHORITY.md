@@ -15,6 +15,8 @@
 
 ## 长期参考
 - `principles.md`：长期原则。
+- `docs/2026-07-08-workbench-current-feature-inventory-for-prototype-v1.md`：**产品现状说明书**（逐面盘点今天真有什么·每阶段收口刷）。
+- `docs/memory-layer-consolidated-canon-v1.md`：记忆层正本索引（schema=R3 契约 17 表·治理规则·M1–M13 口径）。
 - `docs/workbench-frontend-display-boundary-v1.md`：前端平台边界（桌面 Tauri，不做 mobile）。
 
 ## 已废弃（旧重型流程，见 `AGENTS.md` v2）
