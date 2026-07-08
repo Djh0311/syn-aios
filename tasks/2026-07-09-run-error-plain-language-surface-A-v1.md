@@ -1,6 +1,6 @@
 # 实现任务包:A·运行错误上脸(人话诊断层)· 主导线 → 执行线 v1(草案·待派)
 
-日期:2026-07-09　性质:**轻档**(后端翻译层+读模型+前端呈现;不碰 runner 冻结核/安全闸)。状态:**草案·C1 收尾轮清后再派**(避免与 C1 执行线撞车·并让 A 吸收 auto_advance 接线后的最终形态)。上承:提案 `docs/plans/2026-07-09-run-error-surface-plain-language-proposal-v1.md`(方向已拍·反馈必人话)。
+日期:2026-07-09　性质:**轻档**(后端翻译层+读模型+前端呈现;冻结核/安全闸 0-diff·但收编 fix8 报告层要动 runner 报告区·见 §3)。落位:**B2 尾片 C6(观测补强·用户 07-09「顺手做」)**。状态:**待派·C1 收尾轮清后派**(避免与 C1 执行线撞车·并让 A 吸收 auto_advance 接线后的最终形态);**两派前决定已拍(§8)**。上承:提案 `docs/plans/2026-07-09-run-error-surface-plain-language-proposal-v1.md`(方向已拍·反馈必人话)。
 
 ## 0. 接手须知(冷启即读·本包自包含)
 
@@ -27,8 +27,9 @@
 
 ### 2.1 错误族全谱分类器(翻译层核心)
 
-- **新增**(建议独立模块 `run_error_translation.rs`·或 fix8 分类器同文件的报告层区·**避开 `command_plan_for` 冻结核**):`classify_run_error(raw: &str) -> RunErrorHuman { family, human, raw_snippet }`;
-- **错误族(保守表·大小写不敏感·延续 fix8「拿不准不装」)**:① 供给类(复用现成 `classify_codex_provider_failure` 判据·别重造) ② 断供/网络(reconnecting/stream disconnected) ③ 超时(timed_out·与既有超时打回主管一致) ④ 沙箱/权限拒绝(sandbox/permission denied/read-only) ⑤ 命令失败(exit code≠0·带命令上下文) ⑥ codex 内部子系统(memories_write/no such table 类·翻「codex 自身某子系统报错·一般不影响本次任务」) ⑦ 口供读取失败(`consult_last_message_read_failed`);
+- **新增独立模块** `run_error_translation.rs`:`classify_run_error(raw: &str) -> RunErrorHuman { family, human, raw_snippet }`;
+- **收编 fix8(用户 07-09 拍)**:把现成 `classify_codex_provider_failure`(codex_local_runner.rs:386)的**供给类判据整段搬进**新模块作为族①,**删掉 runner 里的老函数**,把两个调用点(:364/:373 `if let Some(human) = classify_codex_provider_failure(...)`)改调新模块 `classify_run_error`——单一真源,不留两套(理由:老函数仅 ~20 行、留着两套翻译器会漂移)。**注意:这动的是 runner 报告层不是冻结核**,边界见 §3;
+- **错误族(保守表·大小写不敏感·延续 fix8「拿不准不装」)**:① 供给类(收编老判据:`subscription_not_found`/`usage limit`/`quota`/`unauthorized`/`403`/`401`/`reconnecting 5/5`) ② 断供/网络(reconnecting/stream disconnected) ③ 超时(timed_out·与既有超时打回主管一致) ④ 沙箱/权限拒绝(sandbox/permission denied/read-only) ⑤ 命令失败(exit code≠0·带命令上下文) ⑥ codex 内部子系统(memories_write/no such table 类·翻「codex 自身某子系统报错·一般不影响本次任务」) ⑦ 口供读取失败(`consult_last_message_read_failed`);
 - **unknown 兜底(保守归一化纪律)**:未命中任何族 → `family=unknown`、`human="未识别错误(附原文供排查)"`、`raw_snippet` 带原文——**不硬编假人话**;
 - **结构化不吞真相**:`raw_snippet` 永远保留原文(截断安全),替代现在「人话」与「原文」二选一挤进一个 error string 的做法。
 
@@ -46,10 +47,12 @@
 
 - C5 = 链 `event_type` 向 13 词表对齐 + `entry_type` 枚举校验(审计账本层)。A 的错误事件**天然是 audit 事件一类**,但 A 只做「翻译 + 呈现」;**审计词表/枚举归 C5**——A 落错误呈现字段时用现成事件写入口,不新造 event_type 命名(碰到要新造 → 停手·归 C5 一起拍)。
 
-## 3. 安全死线
+## 3. 安全死线(收编改了原「runner 全 0-diff」·精确重划)
 
-- **0-diff**:`command_plan_for` / `run_real_codex_process` / 沙箱 / 任何安全闸 / 人闸 / prepare guard / 四护栏——A 全程不碰(A 在报告层与呈现层·不进执行核);
-- 不改任何节点成败判定/链态驱动(A 纯增呈现·delegation 与 C1 首轮同纪律);
+- **冻结核 0-diff(绝不碰)**:`command_plan_for`(codex_local_runner.rs:1586)/ `run_real_codex_process` / `RealCodexLocalPhaseBProcessRunner::run_phase_b` 进程本体 / 沙箱 / 任何安全闸 / 人闸 / prepare guard / 四护栏;
+- **收编可动区(仅此·用户 07-09 授权)**:runner **报告层**——`classify_codex_provider_failure`(:386·删)+ `append_stderr_tail`(:409·并入或保留)+ 消费 run_phase_b 结果做翻译的那段(:354-381 两调用点改调新模块)。**判据:改的是"拿到结果后怎么翻译呈现",不是"怎么起进程/怎么沙箱/怎么判成败"**;
+- **红线**:收编若发现必须动冻结核(command_plan_for/run_phase_b 本体/沙箱)才能完成 → **停手报回**,不许为收编松冻结核;
+- 不改任何节点成败判定/链态驱动(A 纯增呈现·翻译层"只影响报告不改成败"是 fix8 原纪律·收编后照守);
 - `.codex` 凭据不碰;真跑属测试项目轻档。
 
 ## 4. 验收
@@ -66,9 +69,10 @@
 
 ## 7. 不接受为
 
-- 裸错误/stderr 直接上脸(违 07-09 硬约束·必人话) / unknown 硬编假人话(必保守兜底带原文) / 碰 `command_plan_for`·`run_real_codex_process`·沙箱·安全闸 / 改成败判定或链态 / 新造 audit event_type(归 C5) / 做 B(开发者工具·未拍) / 呈现变成闸(黄牌哲学:呈现不阻断)。
+- 裸错误/stderr 直接上脸(违 07-09 硬约束·必人话) / unknown 硬编假人话(必保守兜底带原文) / 碰冻结核 `command_plan_for`·`run_phase_b` 进程本体·沙箱·安全闸(收编只动报告层·见 §3) / 留两套翻译器不删老的(用户拍收编=单一真源) / 改成败判定或链态 / 新造 audit event_type(归 C5) / 做 B(开发者工具·未拍) / 呈现变成闸(黄牌哲学:呈现不阻断)。
 
-## 8. 待主导线派前确认(草案遗留)
+## 8. 派前决定(用户 2026-07-09 已拍·闭)
 
-- A 落位:B2 尾追一片(命 C6?) vs Phase C——C1 收尾轮清后随 roadmap 定;
-- `classify_codex_provider_failure` 处置:A 新分类器**复用**其判据(不动它)vs 收编重构——倾向前者(保 fix8 现状·A 只加不改);派前主导线定。
+- ✅ **A 落位 = B2 尾片 C6**(观测补强·「顺手做」·不等 Phase C)——roadmap B2 行加 C6;
+- ✅ **fix8 分类器 = 收编**(不是复用):供给类判据整段搬进新模块、删 runner 老函数、改两调用点——单一真源(理由:老函数 ~20 行·两套会漂移)。死线精确重划见 §3;
+- 唯一剩的排期约束:**C1 收尾轮清后才派**(不与 C1 执行线撞 runner·且吸收 auto_advance 最终形态)。
