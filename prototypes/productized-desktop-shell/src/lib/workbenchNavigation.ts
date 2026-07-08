@@ -12,7 +12,9 @@ export type ViewKey =
   | "harness"
   | "tools"
   | "models"
-  | "settings";
+  | "settings"
+  // Part②·秘书看板视图（经铃 / 右栏「打开看板」可达；不进左导航——红线）。
+  | "secretary_board";
 
 export type RightPanelKey = "notifications" | "todos" | "audit" | "running" | "ideas" | "secretary";
 

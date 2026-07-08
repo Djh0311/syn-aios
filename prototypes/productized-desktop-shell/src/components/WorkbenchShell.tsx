@@ -77,7 +77,11 @@ export function WorkbenchShell({
   onReloadWorkflowState: () => void;
 }) {
   return (
-    <div className={`app-shell ${activeRightPanel ? "right-pane-open" : ""}`}>
+    <div
+      className={`app-shell ${activeRightPanel ? "right-pane-open" : ""} ${
+        activeRightPanel === "secretary" ? "right-pane-secretary" : ""
+      }`}
+    >
       <WorkbenchTopbar
         displaySnapshot={displaySnapshot}
         error={error}
@@ -111,6 +115,7 @@ export function WorkbenchShell({
 
       <WorkbenchStatusRail
         activeRightPanel={activeRightPanel}
+        activeView={activeView}
         displaySnapshot={displaySnapshot}
         error={error}
         memoryCandidateStore={memoryCandidateStore}
@@ -136,10 +141,10 @@ export function WorkbenchShell({
       />
 
       <button
-        className={`secretary-float ${activeRightPanel === "secretary" ? "active" : ""}`}
+        className={`secretary-float ${activeView === "secretary_board" ? "active" : ""}`}
         type="button"
-        aria-label="打开秘书"
-        onClick={() => onActiveRightPanelChange((current) => (current === "secretary" ? null : "secretary"))}
+        aria-label="打开秘书看板"
+        onClick={() => onActiveViewChange("secretary_board")}
       >
         <span aria-hidden="true">秘</span>
         {topbarReviewCount > 0 ? <i>{topbarReviewCount}</i> : null}
@@ -255,6 +260,7 @@ function WorkbenchSidebar({
 
 function WorkbenchStatusRail({
   activeRightPanel,
+  activeView,
   displaySnapshot,
   error,
   memoryCandidateStore,
@@ -270,6 +276,7 @@ function WorkbenchStatusRail({
   onReloadWorkflowState,
 }: {
   activeRightPanel: RightPanelKey | null;
+  activeView: ViewKey;
   displaySnapshot: WorkbenchSnapshot;
   error: boolean;
   memoryCandidateStore: MemoryCandidateStoreV1 | null;
@@ -289,13 +296,19 @@ function WorkbenchStatusRail({
       <div className="right-icon-strip">
         {workspaceRailItems.map((item) => (
           <button
-            className={`rail-icon-button ${activeRightPanel === item.key ? "active" : ""}`}
+            className={`rail-icon-button ${
+              (item.key === "secretary" ? activeView === "secretary_board" : activeRightPanel === item.key) ? "active" : ""
+            }`}
             key={item.key}
             type="button"
-            title={item.label}
-            aria-label={item.label}
-            aria-expanded={activeRightPanel === item.key}
-            onClick={() => onActiveRightPanelChange((current) => (current === item.key ? null : item.key))}
+            title={item.key === "secretary" ? "秘书看板" : item.label}
+            aria-label={item.key === "secretary" ? "秘书看板" : item.label}
+            aria-expanded={item.key === "secretary" ? activeView === "secretary_board" : activeRightPanel === item.key}
+            onClick={() =>
+              item.key === "secretary"
+                ? onActiveViewChange("secretary_board")
+                : onActiveRightPanelChange((current) => (current === item.key ? null : item.key))
+            }
           >
             <span aria-hidden="true">{item.glyph}</span>
           </button>

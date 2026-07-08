@@ -7607,6 +7607,154 @@ textarea {
   background: rgba(235, 229, 212, 0.72);
 }
 
+/* ===== Part②·秘书右栏 overlay（§7 硬线：展开不推挤主区）=====
+   只对秘书 panel：右列不撑宽（主区 grid 保持原宽·不缩），摘要面板浮在右侧细条左缘。其它 panel 照旧。 */
+.app-shell.right-pane-secretary.right-pane-open {
+  grid-template-columns: var(--rail-left) minmax(0, 1fr) var(--rail-right);
+}
+.app-shell.right-pane-secretary .right-detail {
+  position: fixed;
+  top: var(--topbar-h, 46px);
+  right: var(--rail-right, 58px);
+  bottom: var(--dock-h, 64px);
+  width: min(360px, 82vw);
+  z-index: 40;
+  overflow: auto;
+  background: var(--rice, #f5f1e8);
+  border-left: 1px solid var(--hair-2);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.16);
+}
+.secretary-open-board {
+  width: 100%;
+  margin: 4px 0 2px;
+}
+
+/* ===== Part②·秘书看板视图（四列泳道·卡片式·长相基准 v1 secFull 升级）===== */
+.secretary-board {
+  max-width: 1200px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 8px 4px 4px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.secretary-board-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.secretary-board-head h2 {
+  font-size: 20px;
+  margin: 2px 0 4px;
+}
+.secretary-board-explain {
+  flex: none;
+  max-width: 360px;
+}
+.secretary-board-columns {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+  gap: 14px;
+}
+.secretary-board-column {
+  background: var(--panel-soft, rgba(28, 31, 36, 0.035));
+  border: 1px solid var(--line, #dbd7cf);
+  border-radius: 10px;
+  padding: 12px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+.secretary-board-column-head {
+  flex: none;
+}
+/* 列卡片区独立滚动——列表不超主界面容器（stage overflow:hidden，看板撑满高、每列内滚）。 */
+.secretary-board-column-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 2px;
+}
+.secretary-board-column-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.secretary-board-column-head strong {
+  font-size: 14px;
+}
+.secretary-board-column-head span {
+  font-size: 12px;
+  color: var(--ink-mid);
+  background: var(--panel-raised, #fff);
+  border-radius: 9px;
+  padding: 1px 8px;
+}
+.secretary-board-empty {
+  margin: 4px 0;
+  opacity: 0.7;
+}
+.secretary-board-card {
+  background: var(--panel-raised, #fff);
+  border: 1px solid var(--line, #dbd7cf);
+  border-radius: 8px;
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.secretary-board-card-title {
+  font-weight: 500;
+}
+.secretary-board-card .muted {
+  font-size: 12px;
+}
+.secretary-board-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+.secretary-board-where {
+  font-size: 11.5px;
+  color: var(--ink-light, #9a8f80);
+}
+.secretary-board-go {
+  flex: none;
+  padding: 2px 10px;
+  font-size: 12px;
+}
+.secretary-board-foot {
+  flex: none;
+  margin-top: 12px;
+  text-align: center;
+}
+@media (max-width: 1000px) {
+  .secretary-board-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 620px) {
+  .secretary-board-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
 .pane-close {
   width: 26px;
   height: 26px;

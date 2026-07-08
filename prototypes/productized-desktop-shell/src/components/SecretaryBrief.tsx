@@ -5,7 +5,7 @@ import type { SecretaryContext, SecretaryPendingBoard, SecretaryRiskSignal } fro
 // B3·[让 AI 解释现状] 会话内缓存（模块级·照 JiaobanRunCache 先例）：面板关了重开不重烧，再点才重跑。
 let cachedExplanation: string | null = null;
 
-export function SecretaryBrief({ context }: { context: SecretaryContext }) {
+export function SecretaryBrief({ context, onOpenBoard }: { context: SecretaryContext; onOpenBoard?: () => void }) {
   const topRisks = context.risk_signals.slice(0, 3);
   const topSuggestions = context.suggestions.slice(0, 3);
   // B3：顶部「需要你确认」并入待拍板总数（原三计数 + pending_board 里非重复的两组——
@@ -37,7 +37,7 @@ export function SecretaryBrief({ context }: { context: SecretaryContext }) {
         <span>候选，不是正式记忆</span>
       </div>
       <SecretaryPendingBoardSection board={context.pending_board} />
-      <SecretaryExplainSection />
+      {onOpenBoard ? <SecretaryOpenBoardButton onOpen={onOpenBoard} /> : null}
       <SecretaryList title="风险" items={topRisks.map((risk) => `${riskTone(risk)} ${risk.title}`)} emptyText="暂无高信号风险" />
       <SecretaryList title="建议" items={topSuggestions.map((suggestion) => suggestion.title)} emptyText="暂无需要确认的建议" />
       <p className="muted small-note">来源：快照 / 工作流状态 / 候选辅助状态文件 / 适配器描述；秘书模型只读。</p>
@@ -91,7 +91,7 @@ export function SecretaryPendingBoardSection({ board }: { board: SecretaryPendin
 // memo 包裹是**必要的**（非性能优化）：离线 harness 的 findElement/renderComposite 会把 type 为
 // function 的组件当普通函数平铺调用（hooks 必炸·ProjectJiaobanPanel 注释点名过的限制）；
 // memo 元素 type 是 object → harness 当叶子跳过；真渲染（Tauri/renderToStaticMarkup）不受影响。
-const SecretaryExplainSection = memo(function SecretaryExplainSection() {
+export const SecretaryExplainSection = memo(function SecretaryExplainSection() {
   const [explainState, setExplainState] = useState<
     | { phase: "idle" }
     | { phase: "loading" }
@@ -142,6 +142,16 @@ const SecretaryExplainSection = memo(function SecretaryExplainSection() {
         </button>
       )}
     </div>
+  );
+});
+
+// [打开看板↗]：memo 包裹同 SecretaryExplainSection——离线 harness 把 memo 元素当叶子跳过（秘书右栏
+// 「除关闭按钮外无操作按钮」的只读断言据此成立），真渲染（Tauri）正常显示可点。这是导航入口，非写入。
+const SecretaryOpenBoardButton = memo(function SecretaryOpenBoardButton({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button className="secondary-button secretary-open-board" type="button" onClick={onOpen}>
+      打开看板 ↗
+    </button>
   );
 });
 

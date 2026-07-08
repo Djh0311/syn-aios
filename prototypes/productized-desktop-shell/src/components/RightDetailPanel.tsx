@@ -64,7 +64,7 @@ export function RightDetailPanel({
           <p className="muted small-note">秘书入口只展示派生读模型；不写事实、不派发任务、不批准权限、不写正式记忆。</p>
         </section>
         <section className="status-pane">
-          <SecretaryBrief context={secretaryContext} />
+          <SecretaryBrief context={secretaryContext} onOpenBoard={() => onNavigate("secretary_board")} />
         </section>
       </div>
     );

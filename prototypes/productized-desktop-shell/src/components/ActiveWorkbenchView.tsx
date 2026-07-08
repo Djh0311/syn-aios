@@ -30,6 +30,7 @@ import type {
   WorkflowStateSnapshot,
 } from "../lib/types";
 import { devNavItems, type ViewKey } from "../lib/workbenchNavigation";
+import type { SecretaryContext } from "../lib/secretaryReadModel";
 import { AgentView } from "../views/AgentView";
 import { CanvasViewWithProvider } from "../views/CanvasView";
 import { WorkflowCommandConsoleView } from "../views/WorkflowCommandConsoleView";
@@ -39,6 +40,7 @@ import { KnowledgeBaseView } from "../views/KnowledgeBaseView";
 import { MemoryCenterView } from "../views/MemoryCenterView";
 import { ProjectsView } from "../views/ProjectsView";
 import { SettingsView } from "../views/SettingsView";
+import { SecretaryBoardView } from "./SecretaryBoardView";
 import { SkillsBoardView } from "../views/SkillsBoardView";
 
 type BrowserPreviewData = {
@@ -68,6 +70,8 @@ export type ActiveWorkbenchViewProps = {
   browserPreviewData?: BrowserPreviewData;
   onRequestAction: (action: PendingAction) => void;
   onNavigate: (view: ViewKey) => void;
+  // App 一定传（secretaryContext 派生·672 穿参）；设可选让现有离线测试的其它 view 调用不必补它。
+  secretaryContext?: SecretaryContext;
   onReloadWorkflowState: () => void;
   onNotice: (msg: string) => void;
   onOpenAgentSession: (threadId: string) => void;
@@ -84,6 +88,7 @@ export function renderActiveWorkbenchView({
   snapshot,
   onRequestAction,
   onNavigate,
+  secretaryContext,
   workflowState,
   workflowStateLoading,
   workflowStateError,
@@ -109,6 +114,11 @@ export function renderActiveWorkbenchView({
   onPreviewMemoryEntityRelationCandidates,
   browserPreviewData,
 }: ActiveWorkbenchViewProps) {
+  if (view === "secretary_board") {
+    return secretaryContext ? (
+      <SecretaryBoardView context={secretaryContext} onNavigate={onNavigate} />
+    ) : null;
+  }
   if (view === "agents") {
     return (
       <AgentView

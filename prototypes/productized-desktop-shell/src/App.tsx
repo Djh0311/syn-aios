@@ -674,6 +674,7 @@ export function App() {
           snapshot: displaySnapshot,
           onRequestAction: setPendingAction,
           onNavigate: setActiveView,
+          secretaryContext,
           workflowState,
           workflowStateLoading,
           workflowStateError,

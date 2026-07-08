@@ -15,6 +15,7 @@ const testEntries = [
   "tests/advice-only-authorize-face.test.tsx",
   "tests/secretary-pending-board.test.ts",
   "tests/secretary-pending-board-face.test.tsx",
+  "tests/jiaoban-history-and-secretary-board.test.tsx",
   "tests/r4-page-read-model-settings.test.tsx",
   "tests/r4-page-read-model-query-contract.test.ts",
   "tests/r4-page-read-model-runtime.test.ts",
