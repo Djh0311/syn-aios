@@ -294,21 +294,16 @@ function WorkbenchStatusRail({
   return (
     <aside className="status-rail ink-shell" aria-label="工作台入口">
       <div className="right-icon-strip">
+        {/* 07-08 用户对调秘书两入口：右侧栏图标 = 开侧边栏摘要（浮层）；右下角浮钮 = 开秘书界面（看板）。 */}
         {workspaceRailItems.map((item) => (
           <button
-            className={`rail-icon-button ${
-              (item.key === "secretary" ? activeView === "secretary_board" : activeRightPanel === item.key) ? "active" : ""
-            }`}
+            className={`rail-icon-button ${activeRightPanel === item.key ? "active" : ""}`}
             key={item.key}
             type="button"
-            title={item.key === "secretary" ? "秘书看板" : item.label}
-            aria-label={item.key === "secretary" ? "秘书看板" : item.label}
-            aria-expanded={item.key === "secretary" ? activeView === "secretary_board" : activeRightPanel === item.key}
-            onClick={() =>
-              item.key === "secretary"
-                ? onActiveViewChange("secretary_board")
-                : onActiveRightPanelChange((current) => (current === item.key ? null : item.key))
-            }
+            title={item.key === "secretary" ? "秘书摘要" : item.label}
+            aria-label={item.key === "secretary" ? "打开侧边栏摘要" : item.label}
+            aria-expanded={activeRightPanel === item.key}
+            onClick={() => onActiveRightPanelChange((current) => (current === item.key ? null : item.key))}
           >
             <span aria-hidden="true">{item.glyph}</span>
           </button>
