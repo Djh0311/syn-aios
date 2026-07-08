@@ -77,11 +77,8 @@ export function WorkbenchShell({
   onReloadWorkflowState: () => void;
 }) {
   return (
-    <div
-      className={`app-shell ${activeRightPanel ? "right-pane-open" : ""} ${
-        activeRightPanel === "secretary" ? "right-pane-secretary" : ""
-      }`}
-    >
+    // 07-08 用户二调：秘书摘要归队右侧栏——与通知/待办同一套面板开法，不再单独浮层。
+    <div className={`app-shell ${activeRightPanel ? "right-pane-open" : ""}`}>
       <WorkbenchTopbar
         displaySnapshot={displaySnapshot}
         error={error}

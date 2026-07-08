@@ -7607,23 +7607,8 @@ textarea {
   background: rgba(235, 229, 212, 0.72);
 }
 
-/* ===== Part②·秘书右栏 overlay（§7 硬线：展开不推挤主区）=====
-   只对秘书 panel：右列不撑宽（主区 grid 保持原宽·不缩），摘要面板浮在右侧细条左缘。其它 panel 照旧。 */
-.app-shell.right-pane-secretary.right-pane-open {
-  grid-template-columns: var(--rail-left) minmax(0, 1fr) var(--rail-right);
-}
-.app-shell.right-pane-secretary .right-detail {
-  position: fixed;
-  top: var(--topbar-h, 46px);
-  right: var(--rail-right, 58px);
-  bottom: var(--dock-h, 64px);
-  width: min(360px, 82vw);
-  z-index: 40;
-  overflow: auto;
-  background: var(--rice, #f5f1e8);
-  border-left: 1px solid var(--hair-2);
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.16);
-}
+/* 07-08 用户二调：秘书摘要归队右侧栏（与通知/待办同一套面板开法）——原「秘书单独浮层」样式撤除；
+   「大内容不挤主区」由秘书看板（专门界面）承担。 */
 .secretary-open-board {
   width: 100%;
   margin: 4px 0 2px;
