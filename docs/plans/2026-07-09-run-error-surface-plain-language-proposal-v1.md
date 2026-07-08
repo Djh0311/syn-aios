@@ -32,4 +32,4 @@ worker/codex 跑挂时,**原始诊断层现在工作台一处看不到**。实�
 
 ## 转包条件
 
-C1 收尾轮(§8:链级集成测/真跑耗时/auto_advance 接 C1)收口后,主导线出 A 的颗粒度任务包(翻译层映射范围 + 两层脸 UI 位置 + 与 C5 的边界)供用户拍;B 待用户定方向。
+**A 颗粒度包已起草(2026-07-09·并行于 C1 收尾轮)**:`tasks/2026-07-09-run-error-plain-language-surface-A-v1.md`(草案·待派)——翻译层核心=把 fix8 `classify_codex_provider_failure` 从「只认供给类」推广成错误族全谱分类器(结构化`{人话/原文/族}`·unknown 保守兜底),接 run-history 详情位,前端两层脸。**待派前定两事**(见该包 §8):A 落位(B2 尾追 vs Phase C)+ `classify_codex_provider_failure` 复用 vs 收编。C1 收尾轮清后派。B 待用户定方向。
