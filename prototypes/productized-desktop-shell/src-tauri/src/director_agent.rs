@@ -792,6 +792,8 @@ fn reconcile_stale_running_dispatches(
     warnings
 }
 
+// C1·每任务独立会话：**公有签名不变**（lib.rs 0-diff·手动挡/旧测试照走）。无 session_creator = 拐杖退役后的
+// 只读兼容路径（沿用节点旧绑定 resume）；C1 生产主路径走 run_director_task_chain_with_session_creator。
 pub(crate) fn run_director_task_chain(
     path: &std::path::Path,
     index: &Value,
@@ -801,6 +803,56 @@ pub(crate) fn run_director_task_chain(
     workflow_id: &str,
     tasks: &[ProjectDirectorPlannedTask],
     max_tasks: usize,
+) -> Result<DirectorChainOutcome, String> {
+    run_director_task_chain_inner(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        project_root,
+        workflow_id,
+        tasks,
+        max_tasks,
+        None,
+    )
+}
+
+// C1 主路径：每任务派发前经现成先生后绑建一条以任务命名的专属新会话 → 绑到本任务角色节点 → 该任务用新会话
+// resume。worker 只吃工作台发的任务包（上下文隔离从「顺带记得」变「制度保证」的会话半边）。
+pub(crate) fn run_director_task_chain_with_session_creator(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    project_root: &str,
+    workflow_id: &str,
+    tasks: &[ProjectDirectorPlannedTask],
+    max_tasks: usize,
+    session_creator: &dyn JiaobanNewSessionCreator,
+) -> Result<DirectorChainOutcome, String> {
+    run_director_task_chain_inner(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        project_root,
+        workflow_id,
+        tasks,
+        max_tasks,
+        Some(session_creator),
+    )
+}
+
+fn run_director_task_chain_inner(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    project_root: &str,
+    workflow_id: &str,
+    tasks: &[ProjectDirectorPlannedTask],
+    max_tasks: usize,
+    session_creator: Option<&dyn JiaobanNewSessionCreator>,
 ) -> Result<DirectorChainOutcome, String> {
     use std::collections::BTreeSet;
 
@@ -1069,6 +1121,86 @@ pub(crate) fn run_director_task_chain(
         write_validated_workflow_state(path, &current)?;
         dispatched += 1;
 
+        // C1·每任务独立会话（session_creator=Some=生产主路径）：派发前经现成先生后绑建一条**以任务命名**的
+        // 专属新会话 → 绑到本任务角色节点 → 该任务用新会话 resume（worker 只吃工作台发的任务包）。
+        // **失败=该任务失败即停**（人话含「新建会话失败」·供给类经 fix8 前缀），**绝不静默回落共用会话**
+        // （回落=拐杖复活·§7 禁）；链不崩。无 creator（手动挡/旧测试=None）跳过本块 → 沿用节点旧绑定 resume。
+        if let Some(creator) = session_creator {
+            if let Err(session_error) = create_and_bind_task_session(
+                path,
+                index,
+                project_root,
+                workflow_id,
+                &node_id,
+                &work_item_id,
+                task,
+                creator,
+            ) {
+                let ts_fail = unix_timestamp_string();
+                let mut failing = read_workflow_state_value(path)?;
+                let task_node = format!(
+                    "{}:node:task:{}",
+                    task.scope.workflow_id,
+                    stable_id(task_id)
+                );
+                set_chain_node_state(
+                    &mut failing,
+                    &chain_run_id,
+                    task_id,
+                    "failed",
+                    None,
+                    Some(&session_error),
+                );
+                update_node_state_for_id(&mut failing, &task_node, "failed", &ts_fail)?;
+                append_chain_audit(
+                    &mut failing,
+                    &chain_run_id,
+                    workflow_id,
+                    "workflow_chain_node_failed",
+                    "running",
+                    "failed",
+                    &ts_fail,
+                    &format!(
+                        "薄链驱动：任务「{}」新建会话失败即停——{session_error}",
+                        task.title
+                    ),
+                )?;
+                finalize_chain_run(&mut failing, &chain_run_id, "failed", &ts_fail);
+                append_chain_audit(
+                    &mut failing,
+                    &chain_run_id,
+                    workflow_id,
+                    "workflow_chain_run_failed",
+                    "running",
+                    "failed",
+                    &ts_fail,
+                    &format!(
+                        "任务「{}」新建会话失败，已停链（失败即停·不回落共用会话）：{session_error}",
+                        task.title
+                    ),
+                )?;
+                write_validated_workflow_state(path, &failing)?;
+                steps.push(DirectorChainStep {
+                    planned_task_id: task_id.clone(),
+                    title: task.title.clone(),
+                    state: "failed".to_string(),
+                    report_summary: None,
+                    report_warning: None,
+                    report_status: None,
+                });
+                return Ok(DirectorChainOutcome {
+                    total,
+                    dispatched,
+                    completed,
+                    skipped,
+                    chain_run_id,
+                    steps,
+                    warnings,
+                    stopped_reason: Some(format!("fail_stop:session_create:{}", task.title)),
+                });
+            }
+        }
+
         // 真派发：复用 gated 的 _at（S1 闸 + 沙箱 + resume 会话），**本体不动**。
         let request = ProjectWorkflowNodeRunRequest {
             project_root: project_root.to_string(),
@@ -1272,6 +1404,85 @@ pub(crate) fn run_director_task_chain(
     })
 }
 
+// C1·建+绑一条任务专属会话（先生后绑单次路径·existing 绑定机器·别新造第二套）。成功返回新会话 thread_id；
+// 失败返回人话（供给类经 create_initialized_session 已带 fix8 前缀）。成功后把 target_session_id 回填任务包
+// artifact（C0 差量 §5.1 的 C1 项·加法一处）。绑定审计走 bind_workflow_node_codex_session_for_index_at 自带的
+// 事件族（不新开）；cwd/沙箱写死固定测试项目（在 creator 内·不可参数化）。
+fn create_and_bind_task_session(
+    path: &std::path::Path,
+    index: &Value,
+    project_root: &str,
+    workflow_id: &str,
+    node_id: &str,
+    work_item_id: &str,
+    task: &ProjectDirectorPlannedTask,
+    creator: &dyn JiaobanNewSessionCreator,
+) -> Result<String, String> {
+    // 会话初始化消息 = 以任务命名（截断安全·智能体页列表可辨），只叫它「就位」，别改文件（任务随后经任务包发）。
+    let clipped_title: String = task.title.chars().take(80).collect();
+    let init_text = format!(
+        "交办任务专用会话：本会话只承接任务「{clipped_title}」（工作流 {workflow_id}）。现在先别改任何文件，回复「已就位」即可；任务详情随后经任务包发来。"
+    );
+    let thread_id = creator
+        .create_initialized_session(&init_text, "director_chain")
+        .map_err(|error| format!("新建会话失败：{error}"))?;
+    // 绑到本任务角色节点（existing 同款机器）；只对「会话落 codex 自家 sqlite 晚一拍」的可见性时差重试。
+    let bind_request = WorkflowNodeSessionBindRequest {
+        project_root: project_root.to_string(),
+        node_id: node_id.to_string(),
+        work_item_id: Some(work_item_id.to_string()),
+        thread_id: thread_id.clone(),
+    };
+    let bind_started = std::time::Instant::now();
+    loop {
+        match bind_workflow_node_codex_session_for_index_at(path, index, &bind_request) {
+            Ok(_) => break,
+            Err(error)
+                if error.contains("会话不在当前索引内")
+                    && bind_started.elapsed().as_millis()
+                        < JIAOBAN_NEW_SESSION_BIND_VISIBILITY_BUDGET_MS =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(
+                    JIAOBAN_NEW_SESSION_POLL_INTERVAL_MS,
+                ));
+            }
+            Err(error) => {
+                return Err(format!(
+                    "新会话已建（thread {thread_id}）但绑定失败：{error}"
+                ));
+            }
+        }
+    }
+    // target_session_id 回填任务包 artifact（找不到即 no-op·防御式不崩链）。
+    let mut value = read_workflow_state_value(path)?;
+    if set_task_artifact_target_session_id(&mut value, task, &thread_id) {
+        write_validated_workflow_state(path, &value)?;
+    }
+    Ok(thread_id)
+}
+
+// C1·把新会话 thread_id 回填任务包 artifact 的 target_session_id。找到并回填 → true；缺 artifact_id/artifact
+// → false（no-op·不崩）。**只写 target_session_id 一个字段**，不碰 artifact 其它字段/判决体。
+fn set_task_artifact_target_session_id(
+    value: &mut Value,
+    task: &ProjectDirectorPlannedTask,
+    thread_id: &str,
+) -> bool {
+    let artifact_id = match task.task_package_id.as_deref() {
+        Some(id) => id,
+        None => return false,
+    };
+    if let Some(artifacts) = value.get_mut("artifacts").and_then(Value::as_array_mut) {
+        for artifact in artifacts.iter_mut() {
+            if optional_string_from(artifact, "artifact_id").as_deref() == Some(artifact_id) {
+                artifact["target_session_id"] = Value::String(thread_id.to_string());
+                return true;
+            }
+        }
+    }
+    false
+}
+
 // ===== C1·生产起链命令（app 内 async 起整条主管链；停/进度复用现成命令）=====
 // 收前端回传的「已审 planned_tasks」(preview→用户审→prepare 返回那份·含 depends_on) → spawn_blocking 调现成
 // run_director_task_chain（每节点过 S1 闸·入口 require_test_project_path_lock 圈测试项目）→ 返回 outcome。
@@ -1302,7 +1513,8 @@ async fn start_project_director_chain(
         require_active_authorization(&path, &request.project_root, &request.workflow_id)?;
         let readback_db_path = codex_db::default_state_db_path();
         let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
-        run_director_task_chain(
+        // C1·生产主路径：每任务先生后绑建专属会话（真 relay 单次路径）。拐杖退役=此处不再走旧共用绑定。
+        run_director_task_chain_with_session_creator(
             &path,
             &index,
             &readback_db_path,
@@ -1311,6 +1523,7 @@ async fn start_project_director_chain(
             &request.workflow_id,
             &request.planned_tasks,
             request.max_nodes.unwrap_or(50),
+            &ManualRelayJiaobanNewSessionCreator,
         )
     })
     .await
@@ -3272,5 +3485,125 @@ mod quality_debt_tests {
             "没点停 + timeout 形 → 放行"
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    // ===== C1·每任务独立会话 单测 =====
+
+    // 造一个 prepared 任务（带 task_package_id·scope 从盘上真方案派生·复用现有夹具）。
+    fn c1_fixture_task(
+        path: &Path,
+        index: &Value,
+        artifact_id: Option<&str>,
+    ) -> ProjectDirectorPlannedTask {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let workflow_id = seed_active_run(path, index, test_root);
+        let store = project_consultation_proposal_store::load_store(path, unix_timestamp_ms())
+            .expect("store");
+        let scope = director_task_scope_from_proposal(&store.proposals[0], "codex-dev");
+        ProjectDirectorPlannedTask {
+            planned_task_id: format!("planned-task:{workflow_id}:1"),
+            title: "任务甲：删一个巡逻怪".to_string(),
+            objective: "自包含".to_string(),
+            scope,
+            depends_on: vec![],
+            acceptance_criteria: vec!["ok".to_string()],
+            report_format: vec!["r".to_string()],
+            status: "prepared".to_string(),
+            guard_result: None,
+            work_item_id: Some("wi-1".to_string()),
+            workflow_node_id: Some("node-1".to_string()),
+            task_package_id: artifact_id.map(str::to_string),
+            memory_packet_snapshot_id: None,
+            prepared_dispatch_id: None,
+            blocked_reasons: vec![],
+        }
+    }
+
+    // §4：target_session_id 物化——命中 artifact 回填 thread；缺 artifact / 无 task_package_id → no-op false（不崩）。
+    #[test]
+    fn c1_materialize_target_session_id_into_artifact() {
+        let dir = tmp_dir("c1-mat");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_index(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "thread-qdebt");
+        let task = c1_fixture_task(&path, &index, Some("art-c1"));
+        let mut value = serde_json::json!({
+            "artifacts": [ {"artifact_id": "art-c1", "target_session_id": Value::Null} ]
+        });
+        assert!(set_task_artifact_target_session_id(
+            &mut value,
+            &task,
+            "thread-xyz"
+        ));
+        assert_eq!(value["artifacts"][0]["target_session_id"], "thread-xyz");
+        // 缺 artifact → false（no-op·不崩）。
+        let mut empty = serde_json::json!({ "artifacts": [] });
+        assert!(!set_task_artifact_target_session_id(&mut empty, &task, "t"));
+        // 无 task_package_id → false（不重新 seed·直接改字段）。
+        let mut no_id = task.clone();
+        no_id.task_package_id = None;
+        assert!(!set_task_artifact_target_session_id(
+            &mut value, &no_id, "t2"
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4：建会话失败 = fail-loud（返回 Err·供给类人话透传），**绝不静默回落共用会话**（不返回 Ok）。
+    #[test]
+    fn c1_session_create_failure_is_loud_no_fallback() {
+        struct FailingCreator;
+        impl JiaobanNewSessionCreator for FailingCreator {
+            fn create_initialized_session(&self, _text: &str, _by: &str) -> Result<String, String> {
+                Err("codex_provider_unavailable:codex 额度用完了".to_string())
+            }
+        }
+        let dir = tmp_dir("c1-fail");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_index(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "thread-qdebt");
+        let task = c1_fixture_task(&path, &index, Some("art-x"));
+        let err = create_and_bind_task_session(
+            &path,
+            &index,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            "wf-1",
+            "node-1",
+            "wi-1",
+            &task,
+            &FailingCreator,
+        )
+        .expect_err("建会话失败必须 fail-loud 返回 Err，不许静默回落共用会话");
+        assert!(err.contains("新建会话失败"), "人话前缀：{err}");
+        assert!(err.contains("额度用完"), "供给类人话透传：{err}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // §4·计次：注入 stub 会话工厂被调 N 次、各任务 thread 互异（工厂本体契约·链级 3× 见回交真跑）。
+    #[test]
+    fn c1_stub_session_factory_counts_and_distinct_threads() {
+        struct CountingCreator {
+            calls: Cell<usize>,
+        }
+        impl JiaobanNewSessionCreator for CountingCreator {
+            fn create_initialized_session(&self, text: &str, _by: &str) -> Result<String, String> {
+                let n = self.calls.get() + 1;
+                self.calls.set(n);
+                // 会话以任务命名可辨（智能体页列表）：init 文本里带任务标题。
+                assert!(text.contains("任务"), "初始化消息应含任务名：{text}");
+                Ok(format!("thread-task-{n}"))
+            }
+        }
+        let creator = CountingCreator {
+            calls: Cell::new(0),
+        };
+        let t1 = creator
+            .create_initialized_session("承接任务「甲」", "director_chain")
+            .unwrap();
+        let t2 = creator
+            .create_initialized_session("承接任务「乙」", "director_chain")
+            .unwrap();
+        let t3 = creator
+            .create_initialized_session("承接任务「丙」", "director_chain")
+            .unwrap();
+        assert_eq!(creator.calls.get(), 3, "每任务一次");
+        assert!(t1 != t2 && t2 != t3 && t1 != t3, "各任务 thread 互异");
     }
 }

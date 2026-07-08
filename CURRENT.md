@@ -12,15 +12,15 @@
 
 ## 二、在做什么
 
-- **Phase B2·执行闭环深化 = 当前阶段（2026-07-08 定）**：每任务独立对话、传递全走工作台、worker 求助通道、主管总结+终标。正本：定稿 `decisions/2026-07-08-phase-b2-execution-loop-final-v1.md` + 拆解 `docs/plans/2026-07-08-next-stage-execution-loop-breakdown-v1.md`（v1.1·两轮权威文档通读拆定）。切片：**C0 = done·核过（调研报告 `docs/research/2026-07-08-agent-collab-transfer-reference-for-b2-v1.md` 转正为 B2 设计参考正本——五发现：契约严格度待拍/codex `multi_agent`+`memories` 默认开启/求助字段三条并行互不相通[恒空·启发式·独立bool·三处亲验实锤]/C4 缺口确认[链自动completed·failed 只有结束一条路]/M4 架构性不能接）→ 主导线七拍落 `decisions/2026-07-08-b2-transfer-protocol-gap-final-v1.md`（求助=强信号不可软着陆·收敛实现A为唯一真源·双特性入不吸收+C1 运行时防护硬闸·口供摘要独立通道·C2 首务命名统一·C4 四选一·C5 词表对齐）** → **C1 包已出待派 `tasks/2026-07-08-phase-b2-c1-session-per-task-v1.md`**（每任务独立会话·先生后绑搬到每任务·target_session_id 真赋值·拐杖退役·失败不回落·+1min 知情代价要实测数）→ C2 任务包 v2 → C3 求助通道（含 dispatch cancelled 终态）→ C4 主管总结终标 → C5 上脸审计。schema 正本 = `docs/workflow-task-package-design-v1.md` §3/§4/§5（C0 只出差量）；canon 演化已记：会话跟**任务**走（车间模型旧句修订·见定稿）。
+- **Phase B2·执行闭环深化 = 当前阶段（2026-07-08 定）**：每任务独立对话、传递全走工作台、worker 求助通道、主管总结+终标。正本：定稿 `decisions/2026-07-08-phase-b2-execution-loop-final-v1.md` + 拆解 `docs/plans/2026-07-08-next-stage-execution-loop-breakdown-v1.md`（v1.1·两轮权威文档通读拆定）。切片：**C0 = done·核过（调研报告 `docs/research/2026-07-08-agent-collab-transfer-reference-for-b2-v1.md` 转正为 B2 设计参考正本——五发现：契约严格度待拍/codex `multi_agent`+`memories` 默认开启/求助字段三条并行互不相通[恒空·启发式·独立bool·三处亲验实锤]/C4 缺口确认[链自动completed·failed 只有结束一条路]/M4 架构性不能接）→ 主导线七拍落 `decisions/2026-07-08-b2-transfer-protocol-gap-final-v1.md`（求助=强信号不可软着陆·收敛实现A为唯一真源·双特性入不吸收+C1 运行时防护硬闸·口供摘要独立通道·C2 首务命名统一·C4 四选一·C5 词表对齐）** → **C1 = 首轮核过·收尾轮待派 `tasks/2026-07-08-phase-b2-c1-session-per-task-v1.md`（v1.2）**：核心已落地机器验过（每任务先生后绑建专属会话·失败即停不回落·target_session_id 物化·直起链切 C1·3 单测绿·725/0/42·死线全 0-diff 主导线亲验）；**收尾轮三项待做（包 §8）**：链级 3× 集成测 / 真跑耗时实数 / auto_advance 接 C1（现直起链走 C1、auto_advance 仍拐杖·两生产路径不一致不能过夜到 C2）。**memories 处置 = v1.2 观察模式（07-09 用户终拍）**：注入实锤但实害零[07-07 晚 21:38 起 7/98 会话·+3346 tok/次·三面零渗出·任务间搬运未成品·multi_agent 不自发子 agent]→ 暂不加旗·runner 保全 0-diff·先跑观察·工作台自建记忆开关记为将来候选；known-gap 不吹全隔离（会话级隔离·记忆层跨会话仍通）——见七拍修订记录。→ C2 任务包 v2 → C3 求助通道（含 dispatch cancelled 终态）→ C4 主管总结终标 → C5 上脸审计。schema 正本 = `docs/workflow-task-package-design-v1.md` §3/§4/§5（C0 只出差量）；canon 演化已记：会话跟**任务**走（车间模型旧句修订·见定稿）。
 
 ## 三、下一步
 
-1. **C1 派出** → 回交核实物 → C2 起逐片（每片真机过再下一片）。
+1. **C1 收尾轮派出**（包 §8：链级集成测+真跑耗时+auto_advance 接 C1）→ 回交核实物 → C2 起逐片（每片真机过再下一片）。
 2. **等用户真机顺手**：工作历史栏/秘书看板计数/拉窄不挤 三点；秘书两入口对调+归队右栏一眼；记忆转正加餐（转正一条→出方案见「带上 N 条」）。
 3. **搁置待点火**：整台工作台原型（用户想清楚再做；资产留存：现状说明书/v1 已认元素/颗粒度四拍）。
 4. **挂账**：备份剩余小件（3 记忆库+workbench store 146M+`~/.codex` 零副本·用户知情）｜「commit 后顺手 push」写不写进 AGENTS 未答｜principles 引 `tasks/README.md` 文字小口子｜旧线（画布真机对图 / 手感打磨 / A4·C default-safe 待真机 / 会话模型 P3 / 记忆中心布局重做=Phase D）。
-5. **盯着的（警报器）**：manual_relay 首发抽风（级联已根治·下次以具名单失败现身即定点修）｜tier-1 输出不稳家族三案（新接 LM 字段必配确定性兜底）｜「死锚默认」家族三前科（碰 `default_workflow_*` 一律警觉）｜prepared 148 条已裁认账（正解并入 B2）。
+5. **盯着的（警报器）**：manual_relay 首发抽风（级联已根治·**07-09 C1 核测头回以单具名失败现身** `manual_relay_gui_direct_running_poll...`·重跑即绿·坐标已定·定点修待排）｜tier-1 输出不稳家族三案（新接 LM 字段必配确定性兜底）｜「死锚默认」家族三前科（碰 `default_workflow_*` 一律警觉）｜prepared 148 条已裁认账（正解并入 B2）｜**codex 特性会一夜自开**（memories 07-07 晚 21:38 自启前科——观察模式下每切片收口重跑渗出三查+池内工作台条目计数,codex 升级后同步复核）。
 
 ## 四、锁着的 / 没接
 

@@ -2390,6 +2390,9 @@ fn ensure_project_director_task_package_artifact(
       "max_memory_items": 8,
       "max_estimated_tokens": 2000,
       "project_director_planned_task_id": task.planned_task_id,
+      // C1·每任务独立会话：物化态先置 null（会话在链派该任务前才由 director 先生后绑建出并回填 thread_id）。
+      // 纯加法一键·不碰判决体/guard；无 C1 的旧路径（手动挡/None）保持 null，语义 0-diff。
+      "target_session_id": Value::Null,
       "created_at": timestamp,
       "updated_at": timestamp,
       "warnings": ["prepared_dispatch_is_not_worker_execution"]
