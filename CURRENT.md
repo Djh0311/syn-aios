@@ -59,7 +59,8 @@
 **3. 旧线挂账（交办前的·都开着·排期随缘）**
 - 运行工作流画布真机对图（① 自注「唯一没验」）；画布操作手感打磨（「还有点不舒服」待细化）；A4 重载不丢 / C default-safe 待真机；会话/作用域模型 P1/P2 已建**真机 UI 未验**、P3 重档后置；实验画布会话选择器仍临时版（datalist）。
 - **记忆中心界面布局重做**（含记忆 inbox 复位·原 S2 剩余孤儿）——本次翻页钉进路线图 **Phase D**（用户若改判归秘书则移 Phase B，拍板时说）。
-- 清理债：`run_workflow_machine` 真实现待 careful 删（helper 有测试纠缠·S0 deferred）；prepared 孤儿派发 store 卫生（deferred）。
+- 清理债：**清理小包已写待派** `tasks/2026-07-08-cleanup-workflow-machine-and-prepared-orphans-v1.md`（两账一包：a run_workflow_machine 废实现删=**保签名换体**·调用面 commands/main/registry 0-diff·共用 helper 宁留勿断·lib.rs 只删不加；b prepared 孤儿卫生=store_hygiene 第二把扫帚·线上粗扫 148 处 "state":"prepared" 实锤·dry-run 默认·合法迁移 stop-gate·真 schema=平铺顶层非 project_workflows 嵌套）。
+- **④ 产物喂下一步 = 拍板简报已出（07-08·见对话）**：现状三事实（链内任务共用绑定会话=A 的上下文对 B 天然可见/A 产物落盘 worker 本可读/口供 outputs 已归档+已完成事实已喂重拆）；三选项 A 口供摘要进下一任务 prompt（推荐·确定性零敏感）/B 产物内容本体注入（token+敏感·等真需求）/C 不做（靠同会话+磁盘）。**等用户拍**。
 - 文档小口子：principles.md §1/§5 仍引 `tasks/README.md`（该文件已改一行指针，引用不断链；改正文等下次动 principles 时顺手）。
 
 **3b. 并行双线（07-08·原型线跑 M1 期间）**
