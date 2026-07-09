@@ -1828,6 +1828,9 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
             planned_tasks,
             expected_workflow_revision: None,
             expected_authorization_revision: Some(auth_revision),
+            // C1·mode 信号（一处赋值·别造第二套判断）：Some(creator)=C1 自动路=链会每任务绑 →
+            // prepare 产 prepared·thread 延迟；None=手动挡/旧壳=现状 needs_binding 判定不变。
+            chain_binds_per_task: session_creator.is_some(),
         };
         let prepared = prepare_authorized_auto_dispatch_for_index_at(path, index, &prepare_input)?;
         let planned_task_count = prepared.plan.planned_task_count;
@@ -2249,8 +2252,7 @@ fn run_confirm_and_start_authorized_run_inner(
     // fix3 2.2：record_decision（确认）**成功之后**的任何失败（授权提取/边界复核/建会话/绑会话）→ 先 append
     // stopped 审计（人话）再返回 Err（治「今晚审计只有 started、之后空白」）。step5 auto_advance 由它自己留档、
     // 不含在此（避免双记）；record_decision 本身失败=确认闸没过、按包不记（在此之前）。只 append、不改状态、不吞错。
-    // 方案a：new 分支建成会话后产一句人话说明（让等待有名目），随 outcome.warnings 带出。
-    let mut new_session_notice: Option<String> = None;
+    // C1 收官：原 new 分支的「S0 单条会话说明」已随退 S0 移除（每任务新会话说明由链侧机制给）。
     let post_confirm: Result<(), String> = (|| {
         let authorization = confirmed
             .plan_authorization
@@ -2309,46 +2311,10 @@ fn run_confirm_and_start_authorized_run_inner(
                 .map_err(|error| format!("绑定现有会话失败（会话没找到/不可用）：{error}"))?;
             }
             "new" => {
-                let initialization_text = format!(
-                    "交办新会话初始化：这条会话专用于承接方案「{}」的 worker 任务（工作流 {workflow_id}）。现在先不要改动任何文件，回复「已就位」即可；具体任务稍后会逐条发来。",
-                    confirmed.proposal.title
-                );
-                let thread_id = session_creator
-                    .create_initialized_session(&initialization_text, &actor_id)
-                    .map_err(|error| format!("新会话没建起来：{error}"))?;
-                let node_id = format!("{workflow_id}:node:codex-dev");
-                let bind_request = WorkflowNodeSessionBindRequest {
-                    project_root: request.project_root.clone(),
-                    node_id,
-                    work_item_id: None,
-                    thread_id: thread_id.clone(),
-                };
-                // 同一套绑定机器（existing 同款）；只多一层「等 codex 落库可见」的重试——
-                // 仅对「会话不在当前索引内」这一类可见性时差重试，其余错误原样即停。
-                let bind_started = std::time::Instant::now();
-                loop {
-                    match bind_workflow_node_codex_session_for_index_at(path, index, &bind_request)
-                    {
-                        Ok(_) => break,
-                        Err(error)
-                            if error.contains("会话不在当前索引内")
-                                && bind_started.elapsed().as_millis()
-                                    < JIAOBAN_NEW_SESSION_BIND_VISIBILITY_BUDGET_MS =>
-                        {
-                            std::thread::sleep(std::time::Duration::from_millis(
-                                JIAOBAN_NEW_SESSION_POLL_INTERVAL_MS,
-                            ));
-                        }
-                        Err(error) => {
-                            return Err(format!(
-                                "新会话已建（thread {thread_id}）但绑定失败：{error}"
-                            ));
-                        }
-                    }
-                }
-                new_session_notice = Some(format!(
-                    "已为这单活新建会话（初始化 ~1 分钟·thread {thread_id}）。"
-                ));
+                // C1 架构收官（用户拍 A·2026-07-09·prepare C1-aware 后不死结）：**退掉「合流开头建单条 S0」用法**
+                // ——不再一次性建会话+绑 codex-dev 节点。每任务先生后绑改到下面推进段（session_choice=new →
+                // _with_session_creator·prepare 走 chain_binds_per_task=true 产 prepared·链每任务各开）。
+                // **先生后绑机制保留**·只是从「合流一次建 S0」改成「每任务各建」（三条路统一每任务）。
             }
             other => {
                 return Err(format!(
@@ -2370,21 +2336,36 @@ fn run_confirm_and_start_authorized_run_inner(
     post_confirm?;
     // 5. 自动推进（现成 auto_advance 内层·resolve active 授权 →〔2.2 有已批图则跳过 LM 原样跑〕→ prepare →
     //    起链前复查授权 → 链）。approved_planned_tasks=Some 时所批即所跑（预拆给用户看的那份=真跑的那份）。
-    let mut outcome = run_auto_advance_authorized_role_loop(
-        path,
-        index,
-        readback_db_path,
-        runner,
-        director,
-        &request.project_root,
-        &workflow_id,
-        &actor_id,
-        request.max_nodes.unwrap_or(50),
-        request.approved_planned_tasks.as_deref(),
-    )?;
-    if let Some(notice) = new_session_notice {
-        outcome.warnings.push(notice);
-    }
+    // C1·mode 分流（canon 2026-07-09·收官）：new=新对话 → 每任务先生后绑（Some·复用[接着跑]已落的
+    // _with_session_creator·prepare 走 chain_binds_per_task=true）；existing=手动挡 → 跑手动绑的那条（None）。
+    // session_creator 在 new 路每任务被调（测试注入 stub·existing 路不碰它=PanicCreator 守卫零误伤）。
+    let outcome = match request.session_choice.as_str() {
+        "new" => run_auto_advance_authorized_role_loop_with_session_creator(
+            path,
+            index,
+            readback_db_path,
+            runner,
+            director,
+            &request.project_root,
+            &workflow_id,
+            &actor_id,
+            request.max_nodes.unwrap_or(50),
+            request.approved_planned_tasks.as_deref(),
+            session_creator,
+        )?,
+        _ => run_auto_advance_authorized_role_loop(
+            path,
+            index,
+            readback_db_path,
+            runner,
+            director,
+            &request.project_root,
+            &workflow_id,
+            &actor_id,
+            request.max_nodes.unwrap_or(50),
+            request.approved_planned_tasks.as_deref(),
+        )?,
+    };
     Ok(outcome)
 }
 
@@ -3785,6 +3766,7 @@ mod quality_debt_tests {
                 planned_tasks: planned,
                 expected_workflow_revision: None,
                 expected_authorization_revision: None,
+                chain_binds_per_task: false,
             },
         )
         .expect("prepare");

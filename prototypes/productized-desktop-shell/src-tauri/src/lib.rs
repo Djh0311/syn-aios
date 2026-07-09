@@ -2339,6 +2339,7 @@ mod tests {
             planned_tasks,
             expected_workflow_revision: None,
             expected_authorization_revision: Some(authorization_revision),
+            chain_binds_per_task: false,
         }
     }
 
@@ -7110,15 +7111,31 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
 
     // 方案a·先生后绑①（stub 出生口）：session_choice=new → 建会话 → existing 同款绑定 → 链照旧推进全通；
     // outcome 带「已为这单活新建会话」人话说明；初始化文案人话点名方案（出生口收到的就是这份）。
+    // C1 收官（canon 2026-07-09·prepare C1-aware 后合流-new 退 S0）：合流 session_choice=new →
+    // **每任务**先生后绑（非 S0 一次性）——prepare 走 chain_binds_per_task=true 产 prepared·链每任务各建会话。
+    // 断言 C1 每任务信号：出生口被调=任务数（S0 时代恒 1·C1=N）· 各任务 target_session_id 互异物化 ·
+    // 初始化文案是「任务专用会话」逐条人话（非 S0 的「新会话初始化」总纲）。原 S0 版断言 texts.len()==1 /
+    // 单条 codex-dev 绑定 / 新会话 notice = 拐杖，退 S0 后失效，按 C1 每任务改写（守卫零改·失败无回落见下一测）。
     #[test]
     fn confirm_and_start_new_session_births_binds_and_advances() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
-        let new_thread = "thread-plan-a-birth";
         let dir = test_temp_dir("confirm-and-start-new");
         let path = dir.join("workflow-state.v0.json");
         let index_path = dir.join("codex-index.json");
-        // 索引里备着 stub 会话（真路径里新会话靠实时 sqlite 回退；单测用索引命中即可）。
-        let index = fixture_dispatch_index(test_root, new_thread);
+        // C1 每任务各开新会话 → 索引须含每任务的新 thread（StubDirector 拆 2 任务 → 2 条·对齐出生口回执）。
+        let threads_json: Vec<Value> = ["thread-c1-new-1", "thread-c1-new-2"]
+            .iter()
+            .map(|t| {
+                json!({
+                    "thread_id": t, "project_root": test_root, "title": format!("Session {t}"),
+                    "rollout_exists": true, "rollout_path": format!("/tmp/{t}.jsonl")
+                })
+            })
+            .collect();
+        let index = json!({
+            "projects": [{ "project_root": test_root }],
+            "threads": threads_json
+        });
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
         let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
             write_roots: vec![],
@@ -7135,9 +7152,22 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "write-plan-a-proposal",
         )
         .expect("proposal");
-        let creator = StubJiaobanSessionCreator {
-            thread_id: new_thread,
-            received_texts: std::cell::RefCell::new(vec![]),
+        // C1·每任务先生后绑：出生口每次返回互异 thread（对齐索引里那 2 条）+ 记初始化文案。
+        struct DistinctCreator {
+            calls: std::cell::Cell<usize>,
+            texts: std::cell::RefCell<Vec<String>>,
+        }
+        impl JiaobanNewSessionCreator for DistinctCreator {
+            fn create_initialized_session(&self, text: &str, _by: &str) -> Result<String, String> {
+                self.texts.borrow_mut().push(text.to_string());
+                let n = self.calls.get() + 1;
+                self.calls.set(n);
+                Ok(format!("thread-c1-new-{n}"))
+            }
+        }
+        let creator = DistinctCreator {
+            calls: std::cell::Cell::new(0),
+            texts: std::cell::RefCell::new(vec![]),
         };
         let runner = PermissiveExperimentRunner {
             stats: CodexDispatchReadbackStats {
@@ -7163,7 +7193,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &creator,
             &request,
         )
-        .expect("new 分支应一气跑完（建→绑→推进）");
+        .expect("new 分支应一气跑完（每任务建→绑→推进）");
         assert_eq!(outcome.stage, "ran", "建→绑→链应全通：{outcome:?}");
         assert!(
             outcome
@@ -7173,37 +7203,46 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 .unwrap_or(false),
             "worker 链应跑出结果"
         );
+        // C1-aware 核证：全新未绑 + chain_binds_per_task=true → prepare **跳过 needs_binding**、产 prepared·
+        // thread 延迟，留**透明审计新变体**（Edit C/D）——退 S0 前这里恒 needs_binding·0 prepared·空转。
         assert!(
-            outcome
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("新建会话") && warning.contains(new_thread)),
-            "outcome 应带新建会话人话说明（含 thread）：{:?}",
-            outcome.warnings
+            audit_has(&path, "authorized_prepared_dispatch_thread_deferred"),
+            "C1 deferred 应留透明审计变体 authorized_prepared_dispatch_thread_deferred（证 prepare 走了延迟路·非 needs_binding）"
         );
-        let texts = creator.received_texts.borrow();
-        assert_eq!(texts.len(), 1, "出生口应恰好被调一次");
+        // C1 每任务信号①：出生口被调=任务数（StubDirector 拆 2 → 2 次；S0 时代恒 1）。
+        assert_eq!(
+            creator.calls.get(),
+            2,
+            "C1 每任务各建会话·出生口应被调 2 次（非 S0 一次性）"
+        );
+        // C1 每任务信号②：初始化文案逐条是「任务专用会话」人话（非 S0 的总纲式「新会话初始化」）。
+        let texts = creator.texts.borrow();
         assert!(
-            texts[0].contains("交办新会话初始化") && texts[0].contains(&created.proposal.title),
-            "初始化文案应人话点名方案：{}",
-            texts[0]
+            !texts.is_empty() && texts.iter().all(|t| t.contains("交办任务专用会话")),
+            "每条初始化文案应人话点名任务专用：{texts:?}"
         );
-        // 绑定实物：existing 同款绑定机器把新 thread 写进 workflow_node_session_bindings。
+        // C1 每任务信号③：各任务 target_session_id 互异物化（先生后绑把新 thread 回填任务包 artifact）。
         let state = read_json_file(&path);
-        let bound = state["workflow_node_session_bindings"]
+        let session_ids: std::collections::BTreeSet<String> = state["artifacts"]
             .as_array()
-            .and_then(|bindings| {
-                bindings
-                    .iter()
-                    .find_map(|binding| optional_string_from(binding, "native_thread_id"))
-            })
-            .expect("应有节点会话绑定");
-        assert_eq!(bound, new_thread, "绑的就是出生口回执的 thread");
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|artifact| optional_string_from(artifact, "target_session_id"))
+            .collect();
+        assert_eq!(
+            session_ids.len(),
+            2,
+            "2 任务各物化互异 target_session_id：{session_ids:?}"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
-    // 方案a·先生后绑②：出生口失败 → 人话错「新会话没建起来」+ fix3 stopped 留档；**不静默回落 existing**
-    //（返回 Err 本身即证没回落——回落只能以 Ok 收场；且确实走的是出生口）。
+    // C1 收官（canon 2026-07-09·合流-new 退 S0 后）：建会话失败发生在**链内每任务**（create_and_bind·
+    // director_agent:1128），不再是 S0 一次性预建。**守卫语义保留**：失败即停·**不回落共用会话**·**不派空会话**
+    //（execute 在 create_and_bind 成功后才走·失败在 execute 前 return → 派不到空会话）。形态变：S0 时代外层返
+    // Err；C1 链自身 Ok+stopped_reason=fail_stop:session_create（auto_advance 内层已留档·非外抛 Err）。
+    // 这是**守卫测**（失败无回落·§4 对抗式自检的测试面证据），不是拐杖——按 C1 形态微调、语义一字不松。
     #[test]
     fn confirm_and_start_new_session_failure_audits_no_fallback() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
@@ -7243,7 +7282,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             max_nodes: Some(10),
             approved_planned_tasks: None,
         };
-        let err = run_confirm_and_start_authorized_run_inner(
+        let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
             &index,
             &index_path,
@@ -7252,32 +7291,42 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &creator,
             &request,
         )
-        .expect_err("出生失败应停（Err），不静默回落 existing");
-        assert!(
-            err.contains("新会话没建起来") && err.contains("codex 起不来"),
-            "人话错应点名建会话失败与原因：{err}"
-        );
+        .expect("C1 链内建会话失败即停走 Ok（链自报 stopped）·不外抛 Err");
+        // ① 确实走了出生口（不是悄悄改走别的路/回落）。
         assert!(
             *creator.called.borrow(),
             "确实走的是出生口（不是悄悄改走别的路）"
         );
-        // fix3 留档：确认后失败必写 stopped 审计（人话停因进 reason）。
+        // ② 失败即停信号：链因建会话失败停（stopped_reason=fail_stop:session_create:…）·非跑完。
+        let chain = outcome.chain_outcome.as_ref().expect("应有链结果");
         assert!(
-            audit_has(&path, "role_loop_auto_advance_stopped"),
-            "确认后失败应留 stopped 审计"
+            chain
+                .stopped_reason
+                .as_deref()
+                .map(|reason| reason.starts_with("fail_stop:session_create:"))
+                .unwrap_or(false),
+            "应因建会话失败即停：{:?}",
+            chain.stopped_reason
         );
-        let state_text = fs::read_to_string(&path).expect("state");
-        assert!(
-            state_text.contains("新会话没建起来"),
-            "审计 reason 应带人话停因"
+        // ③ **不派空会话**（§4 测试面）：execute 在 create_and_bind 成功后才走，建失败即停在 execute 前 →
+        //    一个任务都没 completed。
+        assert_eq!(
+            chain.completed, 0,
+            "失败即停不该有任务派发完成（不派空会话）"
         );
-        // 没绑任何会话（出生失败连 thread 都没有 → 绑定数组不存在或为空）。
+        // ④ **不回落**：create 失败在 bind 之前 → 没绑任何会话（不静默回落 existing/共用）。
         let state = read_json_file(&path);
         let binding_count = state["workflow_node_session_bindings"]
             .as_array()
             .map(|bindings| bindings.len())
             .unwrap_or(0);
-        assert_eq!(binding_count, 0, "失败路径不该绑任何会话");
+        assert_eq!(binding_count, 0, "失败路径不该绑任何会话（不回落）");
+        // ⑤ 留档：状态里带人话停因（建会话失败与原因·透明不吞）。
+        let state_text = fs::read_to_string(&path).expect("state");
+        assert!(
+            state_text.contains("新建会话失败") && state_text.contains("codex 起不来"),
+            "留档应带人话停因（建会话失败与原因）"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -7319,14 +7368,16 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
-    // 方案a·§4 真跑（单独步·#[ignore]·固定测试项目·用户点击直接效果语义）：session_choice=new 一路到 proof——
-    // 真经现成 relay 单次路径建会话（初始化消息真跑 codex）→ 回执取 thread_id → existing 同款绑定 →
-    // 链 resume 的就是它（所批即所跑单任务·真 worker 建 proof）。核实物：绑定记录=真新 thread、该 thread 在
-    // codex 侧真存在（实时 sqlite 查得到·不在本测试静态索引里）、proof 含本次 token、`.codex` 凭据没碰（auth mtime）。
-    // 显式 `cargo test --lib confirm_and_start_new_session_real_run -- --ignored --nocapture`。
+    // C1 收官·§4 真跑（单独步·#[ignore]·固定测试项目·用户点击直接效果语义）：**全新未绑**工作流走合流
+    // session_choice=new 一路到 proof——退 S0 后，prepare 走 chain_binds_per_task=true **不空转 needs_binding**、产
+    // prepared·thread 延迟；链**每任务**经现成 relay 建一条任务命名新会话（真跑 codex 初始化）→ 绑任务节点 →
+    // resume 它跑出 proof（**无 S0 孤儿**·无预绑）。核实物：绑定记录=真新 thread、该 thread 在 codex 侧真存在
+    //（实时 sqlite 查得到·不在本测试静态索引里）、proof 含本次 token、`.codex` 凭据没碰（auth mtime）。多任务
+    // N 条互异会话由离线测 births_binds_and_advances(creator.calls==2·2 互异 target_session_id) 已证·此处聚焦真
+    // codex 端到端单任务。显式 `cargo test --lib confirm_and_start_new_session_real_run -- --ignored --nocapture`。
     // flake：真 codex 偶发早退 → retry（记忆 real-codex-run-flaky·核实物）。
     #[test]
-    #[ignore = "方案a: session_choice=new births a real codex session via manual_relay once-path, binds it, chain resumes it to proof (user present, test project)"]
+    #[ignore = "C1: confluence session_choice=new (unbound workflow, no needs_binding stall) births a real per-task codex session in-chain, binds it, resumes to proof — no S0 orphan (user present, test project)"]
     fn confirm_and_start_new_session_real_run() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
         let proof_token = unix_timestamp_string();
@@ -7422,7 +7473,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 .unwrap_or(false),
             "worker 应真跑完成"
         );
-        // 绑定实物：state 里 codex-dev 节点绑的 thread（= 出生回执 thread，人话说明里也带同一个）。
+        // 绑定实物：C1 下链每任务把新会话绑到**任务节点**（先生后绑）→ state 里存在一条真新 thread 的绑定。
         let state = read_json_file(&path);
         let bound_thread = state["workflow_node_session_bindings"]
             .as_array()
@@ -7436,13 +7487,19 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             bound_thread, "thread-placeholder-not-used",
             "绑的必须是真新会话，不是静态索引占位"
         );
-        assert!(
-            outcome
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("新建会话") && warning.contains(&bound_thread)),
-            "人话说明里的 thread 应与绑定一致：{:?}",
-            outcome.warnings
+        // C1 每任务物化：新会话 thread 回填任务包 artifact 的 target_session_id（退 S0 后无「新建会话」总纲 notice·
+        // 每任务会话由链侧建·此处核 target_session_id 与绑定一致即证 resume 的就是这条新会话）。
+        let materialized_session = state["artifacts"]
+            .as_array()
+            .and_then(|artifacts| {
+                artifacts
+                    .iter()
+                    .find_map(|artifact| optional_string_from(artifact, "target_session_id"))
+            })
+            .expect("应有任务包 target_session_id 物化");
+        assert_eq!(
+            materialized_session, bound_thread,
+            "物化的 target_session_id 应与绑定的新会话一致：{materialized_session} vs {bound_thread}"
         );
         // 会话实物：真新 thread 在 codex 侧存在（静态索引没有它 → 只能是实时 sqlite 查到 = 真建出来的）。
         let session = find_index_thread_or_sqlite(&index, &bound_thread)

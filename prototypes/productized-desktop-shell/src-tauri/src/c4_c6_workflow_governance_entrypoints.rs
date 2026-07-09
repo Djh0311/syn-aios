@@ -165,34 +165,42 @@ fn prepare_authorized_auto_dispatch_for_index_at(
         )?;
 
         let binding = active_binding_for_planned_task(index, &value, &node_id, &work_item_id);
-        let Some(binding) = binding else {
-            task.status = "needs_binding".to_string();
-            push_unique(&mut task.blocked_reasons, "等待绑定会话后才能准备派发。");
-            audit_event_id = push_authorized_prepared_dispatch_blocked_audit(
-                &mut value,
-                task,
-                &context.authorization.authorization_id,
-                &timestamp,
-                "authorized_prepared_dispatch_blocked",
-                "项目主管拆任务已生成任务包草案和记忆快照，但目标 worker 节点缺少 active binding；未创建 prepared dispatch。",
-            )?;
-            continue;
-        };
-        if !binding.rollout_exists {
-            task.status = "needs_binding".to_string();
-            push_unique(
-                &mut task.blocked_reasons,
-                "绑定会话 rollout 不可用，等待重新绑定。",
-            );
-            audit_event_id = push_authorized_prepared_dispatch_blocked_audit(
-                &mut value,
-                task,
-                &context.authorization.authorization_id,
-                &timestamp,
-                "authorized_prepared_dispatch_blocked",
-                "项目主管拆任务已生成任务包草案和记忆快照，但绑定会话不可用；未创建 prepared dispatch。",
-            )?;
-            continue;
+        // C1·chain_binds_per_task（canon 2026-07-09·架构收官）：链会每任务 create_and_bind 真会话 → 无绑定/
+        // rollout 缺时**不判 needs_binding**，改产 prepared·thread 延迟（下方 binding_id/native_thread_id 置 null +
+        // thread_binding_deferred 标记 + 审计变体·透明不吞）。**只放宽「有无会话」就绪判定·授权/安全一条不松**
+        // （guard_result 授权检查照旧）。false 路（手动挡/existing/前端预 prepare）needs_binding 判定**逐字不变**。
+        let thread_deferred = request.chain_binds_per_task
+            && binding.as_ref().map(|b| !b.rollout_exists).unwrap_or(true);
+        if !thread_deferred {
+            let Some(binding) = binding.as_ref() else {
+                task.status = "needs_binding".to_string();
+                push_unique(&mut task.blocked_reasons, "等待绑定会话后才能准备派发。");
+                audit_event_id = push_authorized_prepared_dispatch_blocked_audit(
+                    &mut value,
+                    task,
+                    &context.authorization.authorization_id,
+                    &timestamp,
+                    "authorized_prepared_dispatch_blocked",
+                    "项目主管拆任务已生成任务包草案和记忆快照，但目标 worker 节点缺少 active binding；未创建 prepared dispatch。",
+                )?;
+                continue;
+            };
+            if !binding.rollout_exists {
+                task.status = "needs_binding".to_string();
+                push_unique(
+                    &mut task.blocked_reasons,
+                    "绑定会话 rollout 不可用，等待重新绑定。",
+                );
+                audit_event_id = push_authorized_prepared_dispatch_blocked_audit(
+                    &mut value,
+                    task,
+                    &context.authorization.authorization_id,
+                    &timestamp,
+                    "authorized_prepared_dispatch_blocked",
+                    "项目主管拆任务已生成任务包草案和记忆快照，但绑定会话不可用；未创建 prepared dispatch。",
+                )?;
+                continue;
+            }
         }
 
         if let Some(existing_dispatch) = existing_prepared_dispatch_for_planned_task(
@@ -215,14 +223,26 @@ fn prepare_authorized_auto_dispatch_for_index_at(
         let authorization_check = task.guard_result.clone().ok_or_else(|| {
             "项目主管 planned task 缺少授权检查结果，不能创建 prepared dispatch".to_string()
         })?;
+        // C1 延迟：thread_deferred 时 binding_id/native_thread_id 置 null（链每任务补真会话·下游据
+        // thread_binding_deferred 知道）；非延迟（含 false 路真绑定）用真绑定。授权检查上面已取·不受影响。
+        let (binding_id_json, native_thread_json, binding_warnings): (Value, Value, Vec<String>) =
+            match binding.as_ref() {
+                Some(existing) if !thread_deferred => (
+                    json!(existing.binding_id),
+                    json!(existing.native_thread_id),
+                    existing.warnings.clone(),
+                ),
+                _ => (Value::Null, Value::Null, Vec::new()),
+            };
         array_mut(&mut value, "workflow_node_dispatches")?.push(json!({
           "dispatch_id": dispatch_id,
           "project_id": context.authorization.project_id,
           "workflow_id": context.authorization.workflow_id,
           "node_id": node_id,
           "work_item_id": work_item_id,
-          "binding_id": binding.binding_id,
-          "native_thread_id": binding.native_thread_id,
+          "binding_id": binding_id_json,
+          "native_thread_id": native_thread_json,
+          "thread_binding_deferred": thread_deferred,
           "prompt_preview": prompt_preview,
           "prompt_kind": "authorized_prepared_auto_dispatch",
           "memory_packet_snapshot_id": memory_snapshot.snapshot_id,
@@ -243,7 +263,10 @@ fn prepare_authorized_auto_dispatch_for_index_at(
                   "prepared_only_no_worker_execution".to_string(),
                   "task_memory_packet_snapshot_attached".to_string()
               ];
-              warnings.extend(binding.warnings.clone());
+              if thread_deferred {
+                  warnings.push("thread_binding_deferred_chain_binds_per_task".to_string());
+              }
+              warnings.extend(binding_warnings.clone());
               warnings
           }),
           "created_at_ms": timestamp_ms,
@@ -251,13 +274,24 @@ fn prepare_authorized_auto_dispatch_for_index_at(
         }));
         task.status = "prepared".to_string();
         task.prepared_dispatch_id = Some(dispatch_id.clone());
-        audit_event_id = push_authorized_prepared_dispatch_created_audit(
-            &mut value,
-            task,
-            &dispatch_id,
-            &context.authorization.authorization_id,
-            &timestamp,
-        )?;
+        // C1 延迟：透明审计新变体（不吞·主导线可见「thread 由链补」）；非延迟走原 created 审计。
+        audit_event_id = if thread_deferred {
+            push_authorized_prepared_dispatch_thread_deferred_audit(
+                &mut value,
+                task,
+                &dispatch_id,
+                &context.authorization.authorization_id,
+                &timestamp,
+            )?
+        } else {
+            push_authorized_prepared_dispatch_created_audit(
+                &mut value,
+                task,
+                &dispatch_id,
+                &context.authorization.authorization_id,
+                &timestamp,
+            )?
+        };
     }
 
     // 2.3·依赖边（循环后·所有任务级节点都已建·才能 title→节点 id 映射）：depends_on 按 title 连（同链的先例·
@@ -2544,6 +2578,36 @@ fn push_authorized_prepared_dispatch_created_audit(
       "after_state": "prepared",
       "created_at": timestamp,
       "reason": format!("项目主管在 active 授权 {} 范围内创建 prepared dispatch {}；只写准备态记录，仍未执行 worker。", authorization_id, dispatch_id),
+      "plan_authorization_id": authorization_id,
+      "project_director_planned_task_id": task.planned_task_id
+    }));
+    Ok(audit_event_id)
+}
+
+// C1·thread 延迟审计变体（canon 2026-07-09）：chain_binds_per_task=true 时产 prepared 但 thread 由链每任务补。
+// 透明留档（不吞）——与 created 同族·只是 event_type/reason 点明「thread 延迟·链会 create_and_bind」。
+fn push_authorized_prepared_dispatch_thread_deferred_audit(
+    value: &mut Value,
+    task: &ProjectDirectorPlannedTask,
+    dispatch_id: &str,
+    authorization_id: &str,
+    timestamp: &str,
+) -> Result<String, String> {
+    let audit_event_id = format!(
+        "audit:authorized-prepared-dispatch-thread-deferred:{}:{timestamp}",
+        stable_id(dispatch_id)
+    );
+    array_mut(value, "audit_events")?.push(json!({
+      "event_id": audit_event_id,
+      "event_type": "authorized_prepared_dispatch_thread_deferred",
+      "target_ref": task.work_item_id,
+      "actor_ref": "project_director",
+      "source_kind": "workspace_state",
+      "permission_level": "plan_authorized_prepared",
+      "before_state": "ready_to_dispatch",
+      "after_state": "prepared",
+      "created_at": timestamp,
+      "reason": format!("项目主管在 active 授权 {} 范围内创建 prepared dispatch {}；C1 自动路——会话未预绑，thread 由链每任务 create_and_bind 补（授权/安全未松·仅放宽「有无会话」就绪判定）。", authorization_id, dispatch_id),
       "plan_authorization_id": authorization_id,
       "project_director_planned_task_id": task.planned_task_id
     }));

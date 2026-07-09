@@ -2509,6 +2509,12 @@ struct PrepareAuthorizedAutoDispatchInput {
     planned_tasks: Vec<ProjectDirectorPlannedTask>,
     expected_workflow_revision: Option<i64>,
     expected_authorization_revision: Option<i64>,
+    // C1·chain_binds_per_task（canon 2026-07-09·架构收官）：true=链会每任务 create_and_bind 真会话（C1 自动路）
+    // → prepare 不因「无会话/rollout 缺」判 needs_binding，改产 prepared·thread 延迟由链补。false（手动挡/
+    // existing/前端预 prepare·**默认**·serde default 旧调用零改）=现状 needs_binding 判定逐字不变。
+    // **只放宽「有无会话」就绪判定·授权/安全一条不松。**
+    #[serde(default)]
+    chain_binds_per_task: bool,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
