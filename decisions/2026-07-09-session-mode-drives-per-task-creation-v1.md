@@ -23,4 +23,8 @@
 
 ## 生效
 
-即日;auto_advance 接 C1 的外科手术包据此拆(`tasks/2026-07-09-auto-advance-connect-c1-surgical-v1.md`)。
+即日;auto_advance 接 C1 的外科手术包据此拆(`tasks/2026-07-09-auto-advance-connect-c1-surgical-v1.md`·独立[接着跑]已落地核过 commit 8de5a7a)。
+
+## 补拍(2026-07-09·合流-new)
+
+用户拍 **A**:合流命令 `session_choice=="new"` 也走 C1 每任务(退掉「合流开头建单条 S0」用法·**先生后绑机制保留改每任务用**);`existing` 手动挡不动。收官包 `tasks/2026-07-09-jiaoban-new-retire-s0-to-c1-per-task-v1.md`。**注**:此举退的是 2026-07-05 先生后绑决策里「合流一次性建 S0」这个用法(单 S0 → 每任务),先生后绑机制本身沿用;那份决策相应过时点在本包收口时回写。
