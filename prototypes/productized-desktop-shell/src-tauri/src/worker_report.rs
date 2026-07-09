@@ -5,10 +5,10 @@
 // 本模块只定义「契约 + 解析 + 链消费的可测核心」：
 //   - 契约文本（确定性追加给 worker，不经 LM）；
 //   - 从 worker 最后消息抠出 json 块并解析（软着陆：抠不到/坏 json → None，不 Err）；
-//   - 链每任务完成后消费一次：解析 → 组登记入参 → best-effort 调现成登记机器落库 → 出摘要。
+//   - 链每任务完成后消费一次：解析 → 组登记入参 → best-effort 调现成登记机器落库 → 出摘要/求助信号。
 //
-// 安全属性（安全死线）：**只归档不驱动**——本模块不改任何执行决策/成败/重试/状态迁移；
-// 落库走现成 `record_worker_structured_report_at`（自带校验），best-effort（失败只出 warning、不断链）。
+// 安全属性（安全死线）：完成汇报仍只归档不驱动；求助只暴露强信号，由链调用方停在
+// waiting_decision。落库走现成 `record_worker_structured_report_at`（自带校验），best-effort。
 
 use serde::Deserialize;
 use std::path::Path;
@@ -25,10 +25,18 @@ pub(crate) struct WorkerReport {
     pub(crate) status: String,
     #[serde(default)]
     pub(crate) evidence: Vec<String>,
+    #[serde(default)]
+    pub(crate) permission_requests: Vec<String>,
+    #[serde(default)]
+    pub(crate) open_issues: Vec<String>,
+    #[serde(default)]
+    pub(crate) direction_risks: Vec<String>,
+    #[serde(default)]
+    pub(crate) follow_up_suggestions: Vec<String>,
 }
 
 /// 追加给 worker 的契约段（确定性文本·不经 LM·同 consultant/director 的 json 块成熟套路）。
-pub(crate) const WORKER_REPORT_CONTRACT_TEXT: &str = "回程契约（务必遵守）：干完后，最后输出**且仅输出**一个 ```json 代码块，严格形如 {\"did\":\"一句话说清做了什么\",\"outputs\":[\"产出文件的完整路径\"],\"status\":\"done|partial|failed\",\"evidence\":[\"怎么证明：命令输出/文件/测试名\"]}。outputs 写产出文件的完整路径；没有产出就写空数组 []。不要在这个 json 块之后再写任何字。";
+pub(crate) const WORKER_REPORT_CONTRACT_TEXT: &str = "回程契约（务必遵守）：干完后，最后输出**且仅输出**一个 ```json 代码块，严格形如 {\"did\":\"一句话说清做了什么\",\"outputs\":[\"产出文件的完整路径\"],\"status\":\"done|partial|failed\",\"evidence\":[\"怎么证明：命令输出/文件/测试名\"]}。outputs 写产出文件的完整路径；没有产出就写空数组 []。若被阻塞、需要更多权限或资料、或认为方向可能错，status 填 \"blocked\"，并在同一个 json 里填写求助字段：\"permission_requests\":[\"缺什么权限或资料\"],\"open_issues\":[\"卡在哪里\"],\"direction_risks\":[\"为什么方向可能不对\"],\"follow_up_suggestions\":[\"建议主管下一步怎么处理\"]。完成路仍只使用 done|partial|failed。不要在这个 json 块之后再写任何字。";
 
 /// 物化时给任务包 artifact 的 goals 追加契约：objective 首位 + 主管拆的 report_format 各项 + 契约文本。
 /// 确定性拼接·不经 LM（安全死线：契约段不给 LM 发挥空间）。
@@ -47,6 +55,16 @@ pub(crate) fn parse_worker_report(raw: &str) -> Option<WorkerReport> {
     serde_json::from_str::<WorkerReport>(&block).ok()
 }
 
+pub(crate) fn help_signal_from_raw(raw: &str) -> Option<WorkerReportHelpSignal> {
+    match parse_worker_report(raw) {
+        Some(report) => {
+            let summary = worker_report_summary(&report);
+            worker_report_help_signal(&report, &summary)
+        }
+        None => suspected_help_signal(raw),
+    }
+}
+
 /// 链消费一次 worker 报文的结果：都放 **step 级**（不进链级 outcome.warnings）。
 pub(crate) struct WorkerReportConsumeOutcome {
     /// did（status）一句话摘要；无契约报文时 None。
@@ -58,6 +76,18 @@ pub(crate) struct WorkerReportConsumeOutcome {
     /// 刀A·口供上脸：worker 自报 status（done|partial|failed 原值）；status 空/没交口供 → None。
     /// 前端据此判黄牌（呈现不驱动·黄牌不是闸）。
     pub(crate) report_status: Option<String>,
+    /// C3a·worker 求助强信号：blocked 或求助字段非空时返回；调用方据此停在 waiting_decision。
+    pub(crate) help_signal: Option<WorkerReportHelpSignal>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkerReportHelpSignal {
+    pub(crate) status: String,
+    pub(crate) summary: String,
+    pub(crate) open_issues: Vec<String>,
+    pub(crate) permission_requests: Vec<String>,
+    pub(crate) direction_risks: Vec<String>,
+    pub(crate) follow_up_suggestions: Vec<String>,
 }
 
 /// 从口供 status 归一化出 step.report_status：trim 后空 → None，否则 Some(原值)。
@@ -71,7 +101,7 @@ fn report_status_field(status: &str) -> Option<String> {
 }
 
 /// 链每任务**完成后**消费一次 worker 最后消息（全文）：解析 → best-effort 落库（现成登记机器·
-/// 自带校验）→ 出摘要。**只归档不驱动**：无论解析/落库成败都不改任务成败（调用方 completed 仍 completed）。
+/// 自带校验）→ 出摘要或求助强信号。
 /// - Some(report) → 组登记入参调 `record_worker_structured_report_at`；落库失败仅出 warning、不断链；
 ///   summary = did（status）。
 /// - None（无块/坏 json）→ warning（附原文尾 200 字）+ summary None；任务仍算完成（软着陆）。
@@ -91,6 +121,7 @@ pub(crate) fn consume_worker_report_after_completion(
     match parse_worker_report(last_message_full) {
         Some(report) => {
             let summary = worker_report_summary(&report);
+            let help_signal = worker_report_help_signal(&report, &summary);
             let input = build_report_input(
                 project_root,
                 project_id,
@@ -103,20 +134,38 @@ pub(crate) fn consume_worker_report_after_completion(
             );
             match crate::record_worker_structured_report_at(state_path, &input) {
                 Ok(_) => WorkerReportConsumeOutcome {
-                    report_summary: Some(summary),
+                    report_summary: if help_signal.is_some() {
+                        None
+                    } else {
+                        Some(summary.clone())
+                    },
                     report_warning: None,
                     report_status: report_status_field(&report.status),
+                    help_signal,
                 },
                 Err(err) => WorkerReportConsumeOutcome {
-                    report_summary: Some(summary),
+                    report_summary: if help_signal.is_some() {
+                        None
+                    } else {
+                        Some(summary.clone())
+                    },
                     report_warning: Some(format!(
                         "任务「{task_title}」报文落库失败（不影响任务完成）：{err}"
                     )),
                     report_status: report_status_field(&report.status),
+                    help_signal,
                 },
             }
         }
         None => {
+            if let Some(help_signal) = suspected_help_signal(last_message_full) {
+                return WorkerReportConsumeOutcome {
+                    report_summary: None,
+                    report_warning: None,
+                    report_status: None,
+                    help_signal: Some(help_signal),
+                };
+            }
             // 有内容但抠不到契约块 → worker 没守契约，出一条诊断；last_message 为空（无输出/非真跑）→ 无从判断，静默。
             // 两种情形任务都恒算完成（只归档不驱动）。
             let report_warning = if last_message_full.trim().is_empty() {
@@ -131,9 +180,79 @@ pub(crate) fn consume_worker_report_after_completion(
                 report_summary: None,
                 report_warning,
                 report_status: None,
+                help_signal: None,
             }
         }
     }
+}
+
+fn worker_report_has_help_signal(report: &WorkerReport) -> bool {
+    report.status.trim().eq_ignore_ascii_case("blocked")
+        || !report.permission_requests.is_empty()
+        || !report.open_issues.is_empty()
+        || !report.direction_risks.is_empty()
+        || !report.follow_up_suggestions.is_empty()
+}
+
+fn worker_report_help_signal(
+    report: &WorkerReport,
+    summary: &str,
+) -> Option<WorkerReportHelpSignal> {
+    if !worker_report_has_help_signal(report) {
+        return None;
+    }
+    let status = if report.status.trim().is_empty() {
+        "blocked".to_string()
+    } else {
+        report.status.trim().to_string()
+    };
+    Some(WorkerReportHelpSignal {
+        status,
+        summary: summary.to_string(),
+        open_issues: report.open_issues.clone(),
+        permission_requests: report.permission_requests.clone(),
+        direction_risks: report.direction_risks.clone(),
+        follow_up_suggestions: report.follow_up_suggestions.clone(),
+    })
+}
+
+fn suspected_help_signal(raw: &str) -> Option<WorkerReportHelpSignal> {
+    let text = raw.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let lowered = text.to_lowercase();
+    let markers = [
+        "blocked",
+        "blocker",
+        "need permission",
+        "permission denied",
+        "permission",
+        "stuck",
+        "求助",
+        "卡住",
+        "需要权限",
+        "缺权限",
+        "权限不足",
+        "资料不足",
+        "缺资料",
+        "无法继续",
+        "方向错误",
+        "方向可能错",
+        "方向不对",
+    ];
+    if !markers.iter().any(|marker| lowered.contains(marker)) {
+        return None;
+    }
+    let tail = tail_chars(text, 200);
+    Some(WorkerReportHelpSignal {
+        status: "suspected_blocked".to_string(),
+        summary: format!("疑似求助·主管必看（原文尾：{tail}）"),
+        open_issues: vec![format!("疑似求助原文尾：{tail}")],
+        permission_requests: Vec::new(),
+        direction_risks: Vec::new(),
+        follow_up_suggestions: vec!["请项目主管判断是否补充权限、资料或调整方向。".to_string()],
+    })
 }
 
 /// 链步骤摘要：一句话「did（status）」，缺则占位。serde 加法，前端渐进接。
@@ -181,14 +300,18 @@ fn build_report_input(
     } else {
         did.to_string()
     };
-    // 契约 status（done|partial|failed）→ 登记机器 acceptance_status 白名单
+    // 契约 status（done|partial|failed|blocked）→ 登记机器 acceptance_status 白名单
     // （reported_completed|reported_not_completed|blocked|needs_rework）。
     // 空/未知保守映射为 reported_not_completed（不谎报完成）。
-    let acceptance_status = match status.to_lowercase().as_str() {
-        "done" => "reported_completed",
-        "partial" => "needs_rework",
-        "failed" => "reported_not_completed",
-        _ => "reported_not_completed",
+    let acceptance_status = if worker_report_has_help_signal(report) {
+        "blocked"
+    } else {
+        match status.to_lowercase().as_str() {
+            "done" => "reported_completed",
+            "partial" => "needs_rework",
+            "failed" => "reported_not_completed",
+            _ => "reported_not_completed",
+        }
     }
     .to_string();
     // evidence_refs 必须非空（validate 硬要求）：报文 evidence 空则兜一条指向最后消息。
@@ -209,10 +332,10 @@ fn build_report_input(
         changed_what,
         summary,
         evidence_refs,
-        open_issues: Vec::new(),
-        permission_requests: Vec::new(),
-        direction_risks: Vec::new(),
-        follow_up_suggestions: Vec::new(),
+        open_issues: report.open_issues.clone(),
+        permission_requests: report.permission_requests.clone(),
+        direction_risks: report.direction_risks.clone(),
+        follow_up_suggestions: report.follow_up_suggestions.clone(),
         acceptance_status,
         // source_refs 必须非空（validate 硬要求）：一条指向 worker 最后消息/派发的来源引用。
         source_refs: vec![crate::ObservationSourceRef {
@@ -262,6 +385,26 @@ mod tests {
         assert_eq!(report.status, "partial");
         assert!(report.outputs.is_empty());
         assert!(report.evidence.is_empty());
+    }
+
+    #[test]
+    fn parses_blocked_help_fields_with_defaults() {
+        let legacy = parse_worker_report(
+            "```json\n{\"did\":\"旧报文\",\"outputs\":[],\"status\":\"done\",\"evidence\":[]}\n```",
+        )
+        .expect("旧报文缺求助字段也应解析");
+        assert!(legacy.permission_requests.is_empty());
+        assert!(legacy.open_issues.is_empty());
+        assert!(legacy.direction_risks.is_empty());
+        assert!(legacy.follow_up_suggestions.is_empty());
+
+        let raw = "```json\n{\"did\":\"卡住\",\"outputs\":[],\"status\":\"blocked\",\"evidence\":[\"缺权限\"],\"permission_requests\":[\"需要读取 /secure\"],\"open_issues\":[\"缺验收数据\"],\"direction_risks\":[\"当前方向可能会改错文件\"],\"follow_up_suggestions\":[\"请主管补充目标文件\"]}\n```";
+        let report = parse_worker_report(raw).expect("blocked 求助报文应解析");
+        assert_eq!(report.status, "blocked");
+        assert_eq!(report.permission_requests, vec!["需要读取 /secure"]);
+        assert_eq!(report.open_issues, vec!["缺验收数据"]);
+        assert_eq!(report.direction_risks, vec!["当前方向可能会改错文件"]);
+        assert_eq!(report.follow_up_suggestions, vec!["请主管补充目标文件"]);
     }
 
     #[test]
@@ -445,6 +588,75 @@ mod tests {
             "应出落库失败 step 级诊断 warning：{:?}",
             outcome.report_warning
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn consume_blocked_report_returns_help_signal_and_records_real_fields() {
+        let dir = tmp_dir("blocked");
+        let path = write_fixture_store(&dir);
+        let msg = "我需要主管处理。\n```json\n{\"did\":\"权限不足，无法继续\",\"outputs\":[],\"status\":\"blocked\",\"evidence\":[\"读 /secure 被拒\"],\"permission_requests\":[\"请授权读取 /secure\"],\"open_issues\":[\"缺少真实配置文件\"],\"direction_risks\":[\"继续猜会误改沙箱\"],\"follow_up_suggestions\":[\"主管补充路径后重派\"]}\n```";
+        let outcome = consume_worker_report_after_completion(
+            &path,
+            "/p",
+            "proj",
+            "wf-1",
+            "wf-1:node:director",
+            "wi-1",
+            None,
+            "developer",
+            "任务T",
+            msg,
+        );
+        let help = outcome.help_signal.as_ref().expect("blocked 应返求助信号");
+        assert_eq!(help.status, "blocked");
+        assert!(help.summary.contains("权限不足"));
+        assert_eq!(help.permission_requests, vec!["请授权读取 /secure"]);
+        assert_eq!(help.open_issues, vec!["缺少真实配置文件"]);
+        assert_eq!(help.direction_risks, vec!["继续猜会误改沙箱"]);
+        assert_eq!(help.follow_up_suggestions, vec!["主管补充路径后重派"]);
+        assert_eq!(outcome.report_summary, None, "求助不是完成摘要");
+        assert_eq!(outcome.report_status.as_deref(), Some("blocked"));
+
+        let after: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let recorded = after["audit_events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|event| event["event_type"] == "worker_structured_report_recorded")
+            .expect("求助也应经登记机器落库，成为唯一真源");
+        assert_eq!(recorded["acceptance_status"], "blocked");
+        assert_eq!(recorded["permission_requests"][0], "请授权读取 /secure");
+        assert_eq!(recorded["open_issues"][0], "缺少真实配置文件");
+        assert_eq!(recorded["direction_risks"][0], "继续猜会误改沙箱");
+        assert_eq!(recorded["follow_up_suggestions"][0], "主管补充路径后重派");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn consume_suspected_help_without_valid_json_escalates_to_help_signal() {
+        let dir = tmp_dir("suspected-help");
+        let path = write_fixture_store(&dir);
+        let before = fs::read(&path).unwrap();
+        let outcome = consume_worker_report_after_completion(
+            &path,
+            "/p",
+            "proj",
+            "wf-1",
+            "wf-1:node:director",
+            "wi-1",
+            None,
+            "developer",
+            "任务T",
+            "我卡住了，需要权限读取 /secure。\n```json\n{\"status\":\"blocked\",\n```",
+        );
+        let help = outcome.help_signal.expect("疑似求助坏 json 应升级");
+        assert_eq!(help.status, "suspected_blocked");
+        assert!(help.summary.contains("疑似求助"));
+        assert!(help.open_issues.iter().any(|item| item.contains("我卡住了")));
+        assert!(outcome.report_warning.is_none(), "疑似求助不能降成普通 warning");
+        assert_eq!(fs::read(&path).unwrap(), before, "坏 json 不写 store");
         let _ = fs::remove_dir_all(dir);
     }
 

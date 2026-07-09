@@ -16,7 +16,8 @@
 
 ## 三、下一步
 
-1. **C3 = worker 求助通道·拆两片（C2 已闭）**：measure-first 亲读契约链发现现状 consume 只有「完成」一条路（worker_report:79·恒算完成）、四求助字段恒空（212-215 Vec::new）、blocked 是死值（187 match 不产）。**C3a·核心=包待派 `tasks/2026-07-09-phase-b2-c3a-worker-help-channel-core-v1.md`**（契约加 blocked 求助路径+WorkerReport 加求助字段 serde default+consume 加求助分支[→等待·不当完成·疑似求助保守升级不软着陆]+链停该任务待主管不崩+激活 blocked+填真源=实现A 成唯一真源）→ **C3b·收敛后置**（退役启发式 workflow_read_model:922+读模型投影真源+unresolved_direction_risk bool 接真源+dispatch cancelled 终态·waiting_decision 机器已存在接真源即可）。→ C3a 派核过 → C3b → C4。
+1. **C3b 起（C3a 已核过）= 求助收敛+终态**：退役启发式（workflow_read_model:922 `contains("direction")`）+ 读模型改只投影 C3a 真源 + `unresolved_direction_risk` bool 接真源或删 + dispatch cancelled 终态（waiting_decision 机器 C3a 已用·收编即可）。→ 拆包派出 → C4。
+   - **C3a（worker 求助通道核心）= done·核过**：契约加 blocked 求助路径·WorkerReport 加四求助字段 serde default·consume 加求助分支（`help_signal_from_raw`:可解析走结构化判定[status=blocked/字段]·不可解析才走 17 词表 suspected·**完成路无假阳性**）·链 help→`waiting_decision` 早 return[不计 completed·停后续·主管必看·fallback「suspected_blocked」]·激活 blocked·填真源=实现A 成唯一真源。735/0/43·2 文件·死线全 0-diff·fmt 权威净·完成汇报软着陆逐字未动（主导线亲读三条行为属性坐实）。
    - **C2（命名统一）= done·核过**（objective→task_goal+serde alias·物化三键归正·读方全切·731/0/43·死线 0-diff·fmt 权威闸净）。**allowed_write 隔离记债**:h5_project_dispatch_bridge:44 缺键 fallback→project_root=fail-open→改名前先修·单独一步。
    - **A（工作台会话可见）+ C1 四会话徽标 = 用户真机验过·OK**（只秘书有问题·见挂账）。
 2. **秘书入口·已修完·待真机确认**：用户 07-09 真机剩这一个问题·已收。根因:「打开秘书」四字钮是 dock 里的 chip(WorkbenchShell)、不是我先前核的「秘」浮钮——多入口组件认错;且 WorkbenchDock 没收看板导航 prop、chip 够不到看板。**两处修**:①「打开秘书」chip 接 `secretary_board`(开看板)；②浮钮(`.secretary-float`)**撤开看板行为、改 div 占位**(用户拍:浮钮界面未显·留作将来「桌面宠物」角色位·非入口)。typecheck+build 双过·**待用户重建 app 确认**:点「打开秘书」开看板。记忆转正加餐（另项）。

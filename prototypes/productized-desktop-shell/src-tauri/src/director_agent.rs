@@ -658,6 +658,23 @@ fn chain_timeout_fail_stop_task(stopped_reason: Option<&str>) -> Option<String> 
     )
 }
 
+fn worker_help_message(help: &worker_report::WorkerReportHelpSignal) -> String {
+    let mut parts = vec![format!("worker 求助·待主管：{}", help.summary)];
+    if !help.permission_requests.is_empty() {
+        parts.push(format!("权限/资料：{}", help.permission_requests.join("；")));
+    }
+    if !help.open_issues.is_empty() {
+        parts.push(format!("卡点：{}", help.open_issues.join("；")));
+    }
+    if !help.direction_risks.is_empty() {
+        parts.push(format!("方向风险：{}", help.direction_risks.join("；")));
+    }
+    if !help.follow_up_suggestions.is_empty() {
+        parts.push(format!("建议：{}", help.follow_up_suggestions.join("；")));
+    }
+    parts.join("；")
+}
+
 // 反馈边放行判定（抽出供单测直击）：停因是任务超时 && 用户没点过停（读盘上链记录 stop_requested·
 // 现成 helper；读不到盘 → 保守不自动续）→ Some(超时任务标题)。
 fn timeout_auto_replan_decision(
@@ -1249,6 +1266,92 @@ fn run_director_task_chain_inner(
         match outcome {
             Ok(result) if result.dispatch.state == "completed" => {
                 let dispatch_id = result.dispatch.dispatch_id.clone();
+                let last_message_full = result
+                    .dispatch
+                    .last_message_path
+                    .as_deref()
+                    .and_then(|last_message_path| std::fs::read_to_string(last_message_path).ok())
+                    .unwrap_or_default();
+                if worker_report::help_signal_from_raw(&last_message_full).is_some() {
+                    let report_outcome = worker_report::consume_worker_report_after_completion(
+                        path,
+                        project_root,
+                        &result.dispatch.project_id,
+                        &result.dispatch.workflow_id,
+                        &result.dispatch.node_id,
+                        &result.dispatch.work_item_id,
+                        Some(dispatch_id.as_str()),
+                        &task.scope.target_role,
+                        &task.title,
+                        &last_message_full,
+                    );
+                    let help_signal = report_outcome.help_signal.clone().unwrap_or_else(|| {
+                        worker_report::WorkerReportHelpSignal {
+                            status: "suspected_blocked".to_string(),
+                            summary: "worker 疑似求助·主管必看".to_string(),
+                            open_issues: vec![],
+                            permission_requests: vec![],
+                            direction_risks: vec![],
+                            follow_up_suggestions: vec![],
+                        }
+                    });
+                    let mut after_help = read_workflow_state_value(path)?;
+                    let help_message = worker_help_message(&help_signal);
+                    set_chain_node_state(
+                        &mut after_help,
+                        &chain_run_id,
+                        task_id,
+                        "waiting_decision",
+                        Some(&dispatch_id),
+                        Some(&help_message),
+                    );
+                    update_node_state_for_id(
+                        &mut after_help,
+                        &task_level_node_id,
+                        "waiting_decision",
+                        &ts_done,
+                    )?;
+                    append_chain_audit(
+                        &mut after_help,
+                        &chain_run_id,
+                        workflow_id,
+                        "workflow_chain_node_waiting_decision",
+                        "running",
+                        "waiting_decision",
+                        &ts_done,
+                        &format!("薄链驱动：任务「{}」worker 求助，待主管决策——{help_message}", task.title),
+                    )?;
+                    finalize_chain_run(&mut after_help, &chain_run_id, "waiting_decision", &ts_done);
+                    append_chain_audit(
+                        &mut after_help,
+                        &chain_run_id,
+                        workflow_id,
+                        "workflow_chain_run_waiting_decision",
+                        "running",
+                        "waiting_decision",
+                        &ts_done,
+                        &format!("任务「{}」worker 求助，链已停在 waiting_decision。", task.title),
+                    )?;
+                    write_validated_workflow_state(path, &after_help)?;
+                    steps.push(DirectorChainStep {
+                        planned_task_id: task_id.clone(),
+                        title: task.title.clone(),
+                        state: "waiting_decision".to_string(),
+                        report_summary: Some(help_signal.summary),
+                        report_warning: report_outcome.report_warning,
+                        report_status: report_outcome.report_status,
+                    });
+                    return Ok(DirectorChainOutcome {
+                        total,
+                        dispatched,
+                        completed,
+                        skipped,
+                        chain_run_id,
+                        steps,
+                        warnings,
+                        stopped_reason: Some(format!("waiting_decision:worker_help:{}", task.title)),
+                    });
+                }
                 set_chain_node_state(
                     &mut after,
                     &chain_run_id,
@@ -1275,13 +1378,7 @@ fn run_director_task_chain_inner(
                 completed += 1;
 
                 // fix·worker 回程契约：任务完成后读 worker 最后消息全文 → 解析 → best-effort 落库 → 带摘要。
-                // **只归档不驱动**：无论解析/落库成败，任务恒算 completed（state 下面写死、不 retry/不停链/不改迁移）。
-                let last_message_full = result
-                    .dispatch
-                    .last_message_path
-                    .as_deref()
-                    .and_then(|last_message_path| std::fs::read_to_string(last_message_path).ok())
-                    .unwrap_or_default();
+                // **完成路只归档不驱动**：无论解析/落库成败，任务恒算 completed（不 retry/不停链/不改迁移）。
                 let report_outcome = worker_report::consume_worker_report_after_completion(
                     path,
                     project_root,
@@ -3041,8 +3138,8 @@ mod quality_debt_tests {
         }
     }
 
-    // 脚本化 runner：按序弹出行为（"ok"=完成+契约口供 / "timeout"=超时被杀 / "fail"=普通失败 /
-    // "provider_err"=供给类 Err / 脚本耗尽默认 ok）。
+    // 脚本化 runner：按序弹出行为（"ok"=完成+契约口供 / "blocked"=完成态返回求助口供 /
+    // "timeout"=超时被杀 / "fail"=普通失败 / "provider_err"=供给类 Err / 脚本耗尽默认 ok）。
     struct ScriptedRunner {
         script: RefCell<Vec<&'static str>>,
         calls: Cell<usize>,
@@ -3083,6 +3180,25 @@ mod quality_debt_tests {
                     let _ = fs::write(
                         last_message_path,
                         "干完了。\n```json\n{\"did\":\"已删除第三个巡逻怪\",\"outputs\":[\"/t/index.html\"],\"status\":\"done\",\"evidence\":[\"看过\"]}\n```",
+                    );
+                    Ok((
+                        CodexResumeRunResult {
+                            exit_code: 0,
+                            timed_out: false,
+                            stderr_summary: None,
+                        },
+                        WorkflowNodeDispatchExecutionOptions {
+                            readback_stats: Some(CodexDispatchReadbackStats {
+                                transcript_event_count: 3,
+                                transcript_target_hits: 1,
+                            }),
+                        },
+                    ))
+                }
+                "blocked" => {
+                    let _ = fs::write(
+                        last_message_path,
+                        "我需要主管处理。\n```json\n{\"did\":\"缺权限无法继续\",\"outputs\":[],\"status\":\"blocked\",\"evidence\":[\"读 /secure 被拒\"],\"permission_requests\":[\"请授权读取 /secure\"],\"open_issues\":[\"缺少真实配置文件\"],\"direction_risks\":[\"继续猜会误改沙箱\"],\"follow_up_suggestions\":[\"主管补充路径后重派\"]}\n```",
                     );
                     Ok((
                         CodexResumeRunResult {
@@ -3465,6 +3581,74 @@ mod quality_debt_tests {
         assert_eq!(outcome.stage, "ran");
         assert!(audit_reasons(&path, "role_loop_timeout_auto_replan").is_empty());
         assert!(!outcome.warnings.iter().any(|w| w.contains("自动打回")));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn worker_help_signal_stops_chain_at_waiting_decision_without_completing_task() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("worker-help");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_index(test_root, "thread-qdebt");
+        let workflow_id = seed_active_run(&path, &index, test_root);
+        let director = RecordingDirector::new();
+        let runner = ScriptedRunner::new(vec!["blocked", "ok"]);
+        let outcome = run_loop(
+            &path,
+            &index,
+            &dir,
+            &runner,
+            &director,
+            test_root,
+            &workflow_id,
+            None,
+        )
+        .expect("worker 求助应停链等待主管，不应崩");
+        let chain = outcome.chain_outcome.as_ref().expect("应有链结果");
+        assert_eq!(
+            chain.stopped_reason.as_deref(),
+            Some("waiting_decision:worker_help:删一个怪")
+        );
+        assert_eq!(chain.completed, 0, "求助任务不能计 completed");
+        assert_eq!(chain.steps.len(), 1, "求助后不继续跑后续任务");
+        assert_eq!(chain.steps[0].state, "waiting_decision");
+        assert!(chain.steps[0]
+            .report_summary
+            .as_deref()
+            .unwrap_or("")
+            .contains("缺权限无法继续"));
+        assert_eq!(chain.steps[0].report_status.as_deref(), Some("blocked"));
+
+        let state: Value =
+            serde_json::from_str(&fs::read_to_string(&path).expect("state")).expect("json");
+        let chain_node = state["workflow_chain_runs"][0]["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|node| node["node_id"].as_str().unwrap_or("").ends_with(":1"))
+            .expect("第一任务链节点");
+        assert_eq!(chain_node["state"], "waiting_decision");
+        assert!(chain_node["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("worker 求助"));
+        let task_node_id = format!("{workflow_id}:node:task:{}", stable_id(&format!("planned-task:{workflow_id}:1")));
+        let task_node = state["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|node| node["node_id"] == task_node_id)
+            .expect("任务级节点");
+        assert_eq!(task_node["state"], "waiting_decision");
+        let help_audits = audit_reasons(&path, "workflow_chain_node_waiting_decision");
+        assert_eq!(help_audits.len(), 1);
+        assert!(help_audits[0].contains("worker 求助"));
+        assert!(help_audits[0].contains("请授权读取 /secure"));
+        let completed_audits = audit_reasons(&path, "workflow_chain_node_completed");
+        assert!(
+            completed_audits.is_empty(),
+            "求助任务不能先写 completed 审计：{completed_audits:?}"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
