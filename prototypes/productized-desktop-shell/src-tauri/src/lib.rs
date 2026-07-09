@@ -1762,6 +1762,7 @@ include!("index_host_app_entrypoints.rs");
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::cell::{Cell, RefCell};
 
     fn k3_b_command_guard_test_input(
         runtime_prompt_body: Option<String>,
@@ -6118,6 +6119,69 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         tasks
     }
 
+    fn c4c_failed_task_fixture(
+        name: &str,
+        index: Option<Value>,
+    ) -> (
+        PathBuf,
+        PathBuf,
+        Value,
+        PathBuf,
+        String,
+        ProjectDirectorPlannedTask,
+        String,
+    ) {
+        let (dir, path, default_index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain(name);
+        let index = index.unwrap_or(default_index);
+        let tasks = c4a_single_prepared_task(&prepared);
+        let failing = FailingCodexResumeRunner {
+            exit_code: 1,
+            timed_out: false,
+        };
+        let failed = run_director_task_chain(
+            &path,
+            &index,
+            &index_path,
+            &failing,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &tasks,
+            1,
+        )
+        .expect("fixture chain should fail-stop");
+        assert_eq!(failed.steps[0].state, "failed");
+        (
+            dir,
+            path,
+            index,
+            index_path,
+            workflow_id,
+            tasks[0].clone(),
+            failed.chain_run_id,
+        )
+    }
+
+    fn c4c_failed_action_request(
+        action: &str,
+        workflow_id: &str,
+        chain_run_id: &str,
+        task: &ProjectDirectorPlannedTask,
+    ) -> ProjectDirectorFailedActionRequest {
+        ProjectDirectorFailedActionRequest {
+            project_root: WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string(),
+            workflow_id: workflow_id.to_string(),
+            chain_run_id: chain_run_id.to_string(),
+            planned_task_id: task.planned_task_id.clone(),
+            action: action.to_string(),
+            actor_role: "project_director".to_string(),
+            actor_id: Some("project_director_fixture".to_string()),
+            explicit_retry_or_reopen: action == "retry" || action == "change_session",
+            planned_task: Some(task.clone()),
+            max_nodes: Some(1),
+        }
+    }
+
     #[derive(Clone)]
     struct StubDirectorFinalMarker {
         calls: std::cell::Cell<usize>,
@@ -6407,6 +6471,234 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "求助路停因应保持 C3 waiting_decision：{:?}",
             outcome.stopped_reason
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c4c_failed_action_retry_requires_director_and_explicit_reopen() {
+        let (dir, path, index, index_path, workflow_id, task, chain_run_id) =
+            c4c_failed_task_fixture("c4c-failed-retry", None);
+        let runner = c4a_report_runner("done", &["retry evidence"], &[]);
+        let mut request = c4c_failed_action_request("retry", &workflow_id, &chain_run_id, &task);
+        request.actor_role = "subagent".to_string();
+        let err = run_project_director_failed_action(&path, &index, &index_path, &runner, &request)
+            .expect_err("非 project_director 不得 reopen failed 节点");
+        assert!(err.contains("project_director"), "错误应点名主管门：{err}");
+
+        request.actor_role = "project_director".to_string();
+        request.explicit_retry_or_reopen = false;
+        let err = run_project_director_failed_action(&path, &index, &index_path, &runner, &request)
+            .expect_err("failed->running 必须 explicit retry/reopen");
+        assert!(err.contains("explicit"), "错误应点名显式重试：{err}");
+
+        request.explicit_retry_or_reopen = true;
+        let outcome =
+            run_project_director_failed_action(&path, &index, &index_path, &runner, &request)
+                .expect("主管显式 retry 应复用现有链驱动重跑单任务");
+        assert_eq!(outcome.transition_to, "running");
+        assert_eq!(outcome.action, "retry");
+        let chain = outcome.chain_outcome.expect("retry 应触发既有链驱动");
+        assert_eq!(chain.completed, 1);
+        assert!(audit_has(&path, "workflow_chain_node_failed_action_retry"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c4c_failed_action_rework_reuses_c4a_budget_and_reset() {
+        let (dir, path, index, index_path, workflow_id, task, chain_run_id) =
+            c4c_failed_task_fixture("c4c-failed-rework", None);
+        let runner = c4a_report_runner("done", &["unused"], &[]);
+        let request = c4c_failed_action_request("rework", &workflow_id, &chain_run_id, &task);
+        let outcome =
+            run_project_director_failed_action(&path, &index, &index_path, &runner, &request)
+                .expect("failed rework should reuse C4a reset + budget");
+        assert_eq!(outcome.transition_to, "needs_rework");
+        assert!(outcome.chain_outcome.is_none(), "rework 不应真跑 codex");
+        let value = read_json_file(&path);
+        assert_eq!(
+            chain_node_state(&value, &chain_run_id, &task.planned_task_id).as_deref(),
+            Some("needs_rework")
+        );
+        assert_eq!(
+            chain_node_usize_field(
+                &value,
+                &chain_run_id,
+                &task.planned_task_id,
+                "director_rework_attempts"
+            ),
+            1
+        );
+        let work_item_id = task.work_item_id.as_deref().expect("prepared work item");
+        let work_item_state = value["work_items"]
+            .as_array()
+            .and_then(|items| {
+                items.iter().find(|item| {
+                    optional_string_from(item, "work_item_id").as_deref() == Some(work_item_id)
+                })
+            })
+            .and_then(|item| optional_string_from(item, "state"));
+        assert_eq!(
+            work_item_state.as_deref(),
+            Some("ready_to_dispatch"),
+            "rework 应复用 C4a reset，把 work_item 复位到可重做"
+        );
+        assert!(audit_has(&path, "workflow_chain_node_failed_action_rework"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c4c_failed_action_rework_budget_exhausted_does_not_loop() {
+        let (dir, path, index, index_path, workflow_id, task, chain_run_id) =
+            c4c_failed_task_fixture("c4c-failed-rework-budget", None);
+        let mut value = read_json_file(&path);
+        set_chain_node_usize_field(
+            &mut value,
+            &chain_run_id,
+            &task.planned_task_id,
+            "director_rework_attempts",
+            DIRECTOR_FINAL_REWORK_BUDGET,
+        );
+        write_validated_workflow_state(&path, &value).expect("fixture budget write");
+        let runner = c4a_report_runner("done", &["unused"], &[]);
+        let request = c4c_failed_action_request("rework", &workflow_id, &chain_run_id, &task);
+        let err = run_project_director_failed_action(&path, &index, &index_path, &runner, &request)
+            .expect_err("预算耗尽不得继续退回/重跑");
+        assert!(
+            err.contains("director_rework_budget_exhausted"),
+            "错误应点明预算耗尽：{err}"
+        );
+        let value = read_json_file(&path);
+        assert_eq!(
+            chain_node_state(&value, &chain_run_id, &task.planned_task_id).as_deref(),
+            Some("failed"),
+            "预算耗尽不应把 failed 静默改成 needs_rework"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c4c_failed_action_change_session_reuses_c1_create_bind_then_runs_single_task() {
+        struct OneShotCreator {
+            calls: Cell<usize>,
+        }
+        impl JiaobanNewSessionCreator for OneShotCreator {
+            fn create_initialized_session(&self, text: &str, _by: &str) -> Result<String, String> {
+                self.calls.set(self.calls.get() + 1);
+                assert!(text.contains("交办任务专用会话"));
+                Ok("thread-c4c-new".to_string())
+            }
+        }
+        struct RecordingRunner {
+            threads: RefCell<Vec<String>>,
+        }
+        impl CodexResumeRunner for RecordingRunner {
+            fn resume_with_options(
+                &self,
+                thread_id: &str,
+                _prompt: &str,
+                last_message_path: &Path,
+                _options: &CodexResumeRequestOptions,
+            ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String>
+            {
+                self.threads.borrow_mut().push(thread_id.to_string());
+                if let Some(parent) = last_message_path.parent() {
+                    fs::create_dir_all(parent)
+                        .map_err(|error| format!("fixture output dir create failed: {error}"))?;
+                }
+                fs::write(
+                    last_message_path,
+                    format!(
+                        "```json\n{}\n```",
+                        c4a_worker_report("done", &["change session evidence"], &[])
+                    ),
+                )
+                .map_err(|error| format!("fixture last message write failed: {error}"))?;
+                Ok((
+                    CodexResumeRunResult {
+                        exit_code: 0,
+                        timed_out: false,
+                        stderr_summary: None,
+                    },
+                    WorkflowNodeDispatchExecutionOptions {
+                        readback_stats: Some(CodexDispatchReadbackStats {
+                            transcript_event_count: 3,
+                            transcript_target_hits: 1,
+                        }),
+                    },
+                ))
+            }
+        }
+
+        let index = fixture_multi_thread_index(
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &["thread-s3-chain", "thread-c4c-new"],
+        );
+        let (dir, path, index, index_path, workflow_id, task, chain_run_id) =
+            c4c_failed_task_fixture("c4c-failed-change-session", Some(index));
+        let creator = OneShotCreator {
+            calls: Cell::new(0),
+        };
+        let runner = RecordingRunner {
+            threads: RefCell::new(vec![]),
+        };
+        let request =
+            c4c_failed_action_request("change_session", &workflow_id, &chain_run_id, &task);
+        let outcome = run_project_director_failed_action_with_session_creator(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &request,
+            &creator,
+        )
+        .expect("change_session 应复用 C1 create_and_bind 后重跑单任务");
+        assert_eq!(creator.calls.get(), 1, "只给失败任务建 1 条新会话");
+        assert_eq!(outcome.transition_to, "running");
+        assert_eq!(outcome.new_session_id.as_deref(), Some("thread-c4c-new"));
+        assert_eq!(
+            runner.threads.borrow().as_slice(),
+            &["thread-c4c-new".to_string()],
+            "重跑应使用刚绑定的新会话"
+        );
+        assert_eq!(
+            outcome
+                .chain_outcome
+                .expect("change_session 应真跑")
+                .completed,
+            1
+        );
+        assert!(audit_has(
+            &path,
+            "workflow_chain_node_failed_action_change_session"
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c4c_failed_action_archive_uses_existing_failed_to_archived_transition() {
+        let (dir, path, index, index_path, workflow_id, task, chain_run_id) =
+            c4c_failed_task_fixture("c4c-failed-archive", None);
+        let runner = c4a_report_runner("done", &["unused"], &[]);
+        let request = c4c_failed_action_request("archive", &workflow_id, &chain_run_id, &task);
+        let outcome =
+            run_project_director_failed_action(&path, &index, &index_path, &runner, &request)
+                .expect("archive 应复用 failed->archived 转移");
+        assert_eq!(outcome.transition_to, "archived");
+        assert!(outcome.chain_outcome.is_none(), "archive 不应真跑 codex");
+        let value = read_json_file(&path);
+        let run = chain_run_record(&value, &chain_run_id).expect("chain run");
+        assert_eq!(
+            optional_string_from(run, "state").as_deref(),
+            Some("archived")
+        );
+        assert_eq!(
+            chain_node_state(&value, &chain_run_id, &task.planned_task_id).as_deref(),
+            Some("archived")
+        );
+        assert!(audit_has(
+            &path,
+            "workflow_chain_node_failed_action_archive"
+        ));
         let _ = fs::remove_dir_all(dir);
     }
 

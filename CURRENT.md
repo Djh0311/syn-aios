@@ -16,7 +16,8 @@
 
 ## 三、下一步
 
-1. **C4c·failed 四选一·包待派 `tasks/2026-07-09-phase-b2-c4c-failed-four-way-v1.md`（C4 最后一片）**：**防重造 grep 已核·四块大半现成、C4c=接线不造**——退回复用 C4a `reset_work_item_for_director_rework`+预算、换会话复用 C1 `create_and_bind`、结束用现成 `("failed","archived")`、重试接现成 `workflow_transition_allowed`(1398 未接线)；经现成 transition 校验+project_director 门；**重试/换会话重跑 codex 走现有人闸·不自动连环**。→ 派核过 → C5（上脸+审计·轻）→ B2 收官。
+1. **C5 起（C4 整块已闭·B2 主体做完·剩这一片）= 上脸+审计（较轻）**：链自定义 `event_type`(`workflow_chain_*`) 向正本 13 词表对齐或建映射 + `entry_type` 裸 String 升运行时校验(C0 §5.2)。→ 拆包派出 → **B2 收官**。
+   - **C4（主管总结+终标·三片全 done·核过）**：C4a 七查终标(确定性初筛全绿零 LM/黄牌 LM 判过退回/断供 waiting 保守)+C4b 主管总结→记忆候选(一次链·候选态不转正·软着陆)+**C4c failed 四选一**(退回复用 C4a·换会话复用 C1 `create_and_bind`·结束 archived·重试接现成规则;**重跑过 transition+project_director+path-lock+授权·单任务硬钳不自动连环·没重造机器**·751/0/43·4 文件死线 0-diff·fmt 净·主导线亲读四命根)。防重造 grep 挡住了退回/换会话本可能各造一套。
    - **C4b（主管总结→记忆候选）= done·核过**：链末（finalize completed 2131 后）主管 LM 出工作流总结（一次/链）→ ①上货脸 DirectorChainOutcome.director_summary ②经现成 `capture_event`(director:696·source=final_review) 喂候选=`candidate_needs_review` **不自动转正**（候选机器 capture_bus/candidate_store/control_core 全 0-diff·确认门没碰）；总结=增益（失败只 warning·链已 completed 不受影响·软着陆）。746/0/43·死线全 0-diff·fmt 权威净·主导线亲读核过。
    - **C4a（主管七查+终标）= done·核过**：确定性初筛①-⑤全绿直过零 LM/黄牌走主管 LM 判过或退回(needs_rework 预算制·耗尽 waiting_decision)/LM 断供 waiting_decision 保守不蒙混；C3 求助路 1647 短路早于终标不受影响。744/0/43·亲读六命根。
    - **C4a（主管七查+终标）= done·核过**：完成分支从「解析即自动 completed」改为主管终标——确定性初筛①-⑤全绿直过 completed(**零 LM**·1749 不调 final_marker)/黄牌走主管 LM 判过(completed)或退回(needs_rework·预算制 attempts 累计·耗尽→waiting_decision)/LM 断供→waiting_decision 保守不蒙混;确定性初筛拿不准全走黄牌(缺报文/status≠done/acceptance≠completed/evidence 空/required_checks 配了无真源/direction_risks 有);C3 求助路 1647 短路早于 1727 完成分支不受影响。744/0/43·2 文件死线全 0-diff·fmt 权威净·主导线亲读六条命根坐实。

@@ -120,6 +120,7 @@ macro_rules! workbench_command_handler {
             stop_project_workflow_chain,
             get_project_workflow_chain_status,
             start_project_director_chain,
+            apply_project_director_failed_action,
             auto_advance_authorized_role_loop,
             confirm_and_start_authorized_run,
             preview_pending_proposal_director_plan,

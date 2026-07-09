@@ -1374,6 +1374,7 @@ const WORKFLOW_ALLOWED_TRANSITIONS: &[(&str, &str)] = &[
     ("running", "completed"),
     ("running", "failed"),
     ("completed", "archived"),
+    ("failed", "running"),
     ("failed", "archived"),
 ];
 
@@ -1390,6 +1391,9 @@ const NODE_ALLOWED_TRANSITIONS: &[(&str, &str)] = &[
     ("reviewing", "returned"),
     ("returned", "running"),
     ("running", "failed"),
+    ("failed", "running"),
+    ("failed", "needs_rework"),
+    ("failed", "archived"),
     ("running", "paused"),
     ("paused", "running"),
     ("waiting", "skipped"),
@@ -1421,6 +1425,9 @@ fn workflow_node_transition_allowed(
     }
     if from == "failed" && to == "running" {
         return actor_role == "project_director" && explicit_retry_or_reopen;
+    }
+    if from == "failed" && (to == "needs_rework" || to == "archived") {
+        return actor_role == "project_director";
     }
     NODE_ALLOWED_TRANSITIONS
         .iter()
