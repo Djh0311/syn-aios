@@ -41,7 +41,7 @@
     }
 
     #[test]
-    fn subagent_report_derives_required_fields_and_direction_risk() {
+    fn subagent_report_projects_help_fields_from_worker_report_truth_source() {
         let workflow_id = default_workflow_id("/tmp/indexed-project");
         let dispatches = vec![json!({
           "dispatch_id": "dispatch:report:001",
@@ -53,35 +53,131 @@
           "state": "completed",
           "last_message_summary": "改了 README，发现 direction risk。",
           "last_message_path": "/tmp/report.md",
-          "warnings": ["direction_risk:需求冲突"],
-          "follow_up_suggestions": ["请项目主管裁决方向。"],
+          "warnings": ["direction_risk:旧 warning 不是真源"],
           "acceptance_status": "reported_not_completed"
         })];
-        let permission_requests = vec![json!({
-          "request_id": "permission:001",
+        let audit_events = vec![json!({
+          "event_id": "audit:worker-report:001",
+          "event_type": "worker_structured_report_recorded",
           "workflow_id": workflow_id,
+          "node_id": format!("{workflow_id}:node:codex-dev"),
           "work_item_id": "work-item:001",
-          "status": "pending",
-          "reason": "需要写入 README。",
-          "requested_at": "2026-06-01T00:00:00Z"
+          "dispatch_id": "dispatch:report:001",
+          "actor_ref": "codex-dev",
+          "reason": "worker blocked",
+          "open_issues": ["缺少验收口径"],
+          "permission_requests": ["请授权读取 /secure"],
+          "direction_risks": ["方向A 可能错"],
+          "follow_up_suggestions": ["请主管裁决方向"],
+          "acceptance_status": "blocked"
         })];
-        let reports = derive_subagent_reports(&workflow_id, &dispatches, &[], &permission_requests);
+        let reports = derive_subagent_reports(&workflow_id, &dispatches, &audit_events, &[]);
 
-        assert_eq!(reports.len(), 1);
-        let report = &reports[0];
+        let report = reports
+            .iter()
+            .find(|report| report.report_id == "report:dispatch:report:001")
+            .expect("dispatch 派生报告应存在");
         assert_eq!(report.actor_role.as_deref(), Some("codex-dev"));
         assert!(report.executed_what.contains("修改 README"));
         assert!(report.changed_what.contains("改了 README"));
         assert_eq!(report.evidence_refs, vec!["/tmp/report.md".to_string()]);
+        assert_eq!(report.open_issues, vec!["缺少验收口径".to_string()]);
         assert_eq!(
             report.permission_requests,
-            vec!["permission:001".to_string()]
+            vec!["请授权读取 /secure".to_string()]
         );
+        assert_eq!(report.direction_risks, vec!["方向A 可能错".to_string()]);
+        assert_eq!(report.follow_up_suggestions, vec!["请主管裁决方向".to_string()]);
+        assert_eq!(report.acceptance_status, "blocked");
         assert_eq!(
-            report.direction_risks,
-            vec!["direction_risk:需求冲突".to_string()]
+            report.warnings,
+            vec!["direction_risk:旧 warning 不是真源".to_string()]
         );
-        assert_eq!(report.acceptance_status, "reported_not_completed");
+    }
+
+    #[test]
+    fn subagent_report_does_not_infer_help_fields_from_dispatch_warnings() {
+        let workflow_id = default_workflow_id("/tmp/indexed-project");
+        let dispatches = vec![json!({
+          "dispatch_id": "dispatch:report:002",
+          "workflow_id": workflow_id,
+          "node_id": format!("{workflow_id}:node:codex-dev"),
+          "work_item_id": "work-item:002",
+          "native_thread_id": "thread-002",
+          "prompt_preview": "执行：修改 README。",
+          "state": "completed",
+          "last_message_summary": "改了 README。",
+          "last_message_path": "/tmp/report.md",
+          "warnings": ["direction risk 只是运行警告"],
+          "follow_up_suggestions": ["旧 dispatch 建议不是真源"],
+          "acceptance_status": "reported_completed"
+        })];
+        let permission_requests = vec![json!({
+          "request_id": "permission:002",
+          "workflow_id": workflow_id,
+          "work_item_id": "work-item:002",
+          "status": "pending",
+          "reason": "结构性权限请求，不是 worker 自述。",
+          "requested_at": "2026-06-01T00:00:00Z"
+        })];
+        let reports = derive_subagent_reports(&workflow_id, &dispatches, &[], &permission_requests);
+        let report = reports
+            .iter()
+            .find(|report| report.report_id == "report:dispatch:report:002")
+            .expect("dispatch 派生报告应存在");
+
+        assert!(report.open_issues.is_empty());
+        assert!(report.permission_requests.is_empty());
+        assert!(report.direction_risks.is_empty());
+        assert!(report.follow_up_suggestions.is_empty());
+        assert_eq!(
+            report.warnings,
+            vec!["direction risk 只是运行警告".to_string()]
+        );
+    }
+
+    #[test]
+    fn subagent_report_does_not_cross_project_help_fields_by_same_node() {
+        let workflow_id = default_workflow_id("/tmp/indexed-project");
+        let dispatches = vec![json!({
+          "dispatch_id": "dispatch:report:003",
+          "workflow_id": workflow_id,
+          "node_id": format!("{workflow_id}:node:codex-dev"),
+          "work_item_id": "work-item:003",
+          "native_thread_id": "thread-003",
+          "prompt_preview": "执行：修改 README。",
+          "state": "completed",
+          "last_message_summary": "改了 README。",
+          "last_message_path": "/tmp/report.md",
+          "warnings": [],
+          "acceptance_status": "reported_completed"
+        })];
+        let audit_events = vec![json!({
+          "event_id": "audit:worker-report:other",
+          "event_type": "worker_structured_report_recorded",
+          "workflow_id": workflow_id,
+          "node_id": format!("{workflow_id}:node:codex-dev"),
+          "work_item_id": "work-item:other",
+          "dispatch_id": "dispatch:other",
+          "actor_ref": "codex-dev",
+          "reason": "other worker report",
+          "open_issues": ["别的任务卡点"],
+          "permission_requests": ["别的任务权限"],
+          "direction_risks": ["别的任务方向风险"],
+          "follow_up_suggestions": ["别的任务建议"],
+          "acceptance_status": "blocked"
+        })];
+        let reports = derive_subagent_reports(&workflow_id, &dispatches, &audit_events, &[]);
+        let report = reports
+            .iter()
+            .find(|report| report.report_id == "report:dispatch:report:003")
+            .expect("dispatch 派生报告应存在");
+
+        assert!(report.open_issues.is_empty());
+        assert!(report.permission_requests.is_empty());
+        assert!(report.direction_risks.is_empty());
+        assert!(report.follow_up_suggestions.is_empty());
+        assert_eq!(report.acceptance_status, "reported_completed");
     }
 
     #[test]
@@ -108,13 +204,14 @@
     }
 
     #[test]
-    fn workflow_exception_detects_timeout_permission_review_direction_and_harness() {
+    fn workflow_exception_ignores_dead_unresolved_direction_artifact_field() {
         let workflow_id = default_workflow_id("/tmp/indexed-project");
         let artifacts = vec![json!({
           "artifact_id": "artifact:001",
           "artifact_type": "task_package",
           "workflow_id": workflow_id,
           "unresolved_direction_risk": true,
+          "risk_flags": ["unresolved_direction_risk"],
           "harness_blocked": true,
           "warnings": ["fixture"]
         })];
@@ -179,7 +276,7 @@
         assert!(types.contains(&"subagent_timeout"));
         assert!(types.contains(&"long_permission_wait"));
         assert!(types.contains(&"repeated_review_return"));
-        assert!(types.contains(&"unresolved_direction_risk"));
+        assert!(!types.contains(&"unresolved_direction_risk"));
         assert!(types.contains(&"harness_blocked"));
     }
 
@@ -230,6 +327,18 @@
         assert!(workflow_node_transition_allowed(
             "waiting_decision",
             "running",
+            "project_director",
+            false
+        ));
+        assert!(!workflow_node_transition_allowed(
+            "waiting_decision",
+            "cancelled",
+            "subagent",
+            false
+        ));
+        assert!(workflow_node_transition_allowed(
+            "waiting_decision",
+            "cancelled",
             "project_director",
             false
         ));
@@ -296,7 +405,7 @@
         let gate = director_completion_gate(Some(&package), &reviews, &[]);
         assert!(gate.can_complete);
 
-        let blocked = director_completion_gate(
+        let ignored_dead_direction_exception = director_completion_gate(
             Some(&package),
             &reviews,
             &[WorkflowException {
@@ -309,8 +418,13 @@
                 warnings: vec![],
             }],
         );
-        assert!(!blocked.can_complete);
-        assert!(blocked.missing.contains(&"no_unresolved_risk".to_string()));
+        assert!(ignored_dead_direction_exception.can_complete);
+        assert!(!ignored_dead_direction_exception
+            .required
+            .contains(&"no_unresolved_risk".to_string()));
+        assert!(!ignored_dead_direction_exception
+            .missing
+            .contains(&"no_unresolved_risk".to_string()));
     }
 
     #[test]

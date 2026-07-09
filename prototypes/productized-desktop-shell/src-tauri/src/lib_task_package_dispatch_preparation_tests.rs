@@ -124,6 +124,80 @@
     }
 
     #[test]
+    fn workflow_run_check_ignores_dead_unresolved_direction_artifact_field() {
+        let dir = std::env::temp_dir().join(format!(
+            "workflow-run-check-dead-direction-{}",
+            unix_timestamp_string()
+        ));
+        let path = dir.join("workflow-state.v0.json");
+        let tasks_dir = dir.join("tasks");
+        let project = fixture_project("/tmp/indexed-project");
+        let workflow_id = default_workflow_id(&project.project_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let thread_id = "thread-001";
+        let index = fixture_dispatch_index(&project.project_root, thread_id);
+
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
+        create_task_draft_at(
+            &path,
+            &fixture_task_draft_request(&project.project_root, "旧方向风险字段任务"),
+        )
+        .expect("task draft should exist");
+        let value = read_json_file(&path);
+        let work_item_id = optional_string_from(&value["work_items"][0], "work_item_id")
+            .expect("work item id should exist");
+        let mut fields = ready_fields_update_request(&project.project_root, &work_item_id);
+        fields.fields.assigned_line = "Codex 开发线".to_string();
+        update_task_package_draft_fields_at(&path, &fields).expect("fields should save");
+        mark_task_package_fixture_ready(&path, "codex-test-model");
+        generate_task_package_file_at(
+            &path,
+            &project,
+            &fixture_task_file_generation_request(&project.project_root, &work_item_id),
+            &tasks_dir,
+        )
+        .expect("file should generate");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(
+                &project.project_root,
+                &node_id,
+                Some(&work_item_id),
+                thread_id,
+            ),
+        )
+        .expect("binding should write");
+        let mut value = read_json_file(&path);
+        let artifact = value["artifacts"]
+            .as_array_mut()
+            .expect("artifacts should be array")
+            .first_mut()
+            .expect("task package artifact should exist");
+        artifact["unresolved_direction_risk"] = Value::Bool(true);
+        artifact["risk_flags"] = json!(["unresolved_direction_risk"]);
+        write_validated_workflow_state(&path, &value).expect("fixture old field should write");
+
+        let check = inspect_workflow_run_check_at(
+            &path,
+            &project,
+            &WorkflowRunCheckRequest {
+                project_root: project.project_root.clone(),
+                workflow_id: None,
+            },
+        )
+        .expect("run check should inspect");
+
+        assert_ne!(check.status, "blocked", "{:?}", check.blocked_reasons);
+        assert!(check
+            .checks
+            .iter()
+            .all(|item| item.check_id != "unresolved_conflict"));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn task_package_blocks_missing_report_model_and_stale_after_edit() {
         let dir =
             std::env::temp_dir().join(format!("task-package-stale-{}", unix_timestamp_string()));

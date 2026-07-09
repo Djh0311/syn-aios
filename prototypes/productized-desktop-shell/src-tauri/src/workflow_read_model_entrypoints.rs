@@ -904,7 +904,7 @@ fn derive_subagent_reports(
     workflow_id: &str,
     node_dispatches: &[Value],
     audit_events: &[Value],
-    permission_requests: &[Value],
+    _permission_requests: &[Value],
 ) -> Vec<SubagentReport> {
     let mut reports = node_dispatches
         .iter()
@@ -916,19 +916,20 @@ fn derive_subagent_reports(
             let dispatch_id = optional_string_from(dispatch, "dispatch_id")
                 .unwrap_or_else(|| "dispatch:missing".to_string());
             let work_item_id = optional_string_from(dispatch, "work_item_id").unwrap_or_default();
+            let workflow_node_id = optional_string_from(dispatch, "node_id");
+            let worker_report = matching_worker_report_event(
+                workflow_id,
+                &dispatch_id,
+                &work_item_id,
+                workflow_node_id.as_deref(),
+                audit_events,
+            );
             let warnings = string_array(dispatch, "warnings");
-            let direction_risks = warnings
-                .iter()
-                .filter(|warning| warning.contains("direction") || warning.contains("risk"))
-                .cloned()
-                .collect::<Vec<_>>();
             SubagentReport {
                 report_id: format!("report:{dispatch_id}"),
                 workflow_id: workflow_id.to_string(),
-                workflow_node_id: optional_string_from(dispatch, "node_id"),
-                actor_role: dispatch_role_from_node(
-                    optional_string_from(dispatch, "node_id").as_deref(),
-                ),
+                workflow_node_id: workflow_node_id.clone(),
+                actor_role: dispatch_role_from_node(workflow_node_id.as_deref()),
                 executed_what: optional_string_from(dispatch, "prompt_preview")
                     .map(|value| compact_ledger_summary(&value))
                     .unwrap_or_else(|| "未登记执行内容".to_string()),
@@ -939,18 +940,21 @@ fn derive_subagent_reports(
                 evidence_refs: optional_string_from(dispatch, "last_message_path")
                     .into_iter()
                     .collect(),
-                open_issues: warnings.clone(),
-                permission_requests: permission_requests
-                    .iter()
-                    .filter(|request| {
-                        optional_string_from(request, "work_item_id").as_deref()
-                            == Some(work_item_id.as_str())
-                    })
-                    .filter_map(|request| optional_string_from(request, "request_id"))
-                    .collect(),
-                direction_risks,
-                follow_up_suggestions: string_array(dispatch, "follow_up_suggestions"),
-                acceptance_status: optional_string_from(dispatch, "acceptance_status")
+                open_issues: worker_report
+                    .map(|event| string_array(event, "open_issues"))
+                    .unwrap_or_default(),
+                permission_requests: worker_report
+                    .map(|event| string_array(event, "permission_requests"))
+                    .unwrap_or_default(),
+                direction_risks: worker_report
+                    .map(|event| string_array(event, "direction_risks"))
+                    .unwrap_or_default(),
+                follow_up_suggestions: worker_report
+                    .map(|event| string_array(event, "follow_up_suggestions"))
+                    .unwrap_or_default(),
+                acceptance_status: worker_report
+                    .and_then(|event| optional_string_from(event, "acceptance_status"))
+                    .or_else(|| optional_string_from(dispatch, "acceptance_status"))
                     .unwrap_or_else(|| "reported_not_completed".to_string()),
                 warnings,
             }
@@ -994,6 +998,44 @@ fn derive_subagent_reports(
         });
     }
     reports
+}
+
+fn matching_worker_report_event<'a>(
+    workflow_id: &str,
+    dispatch_id: &str,
+    work_item_id: &str,
+    workflow_node_id: Option<&str>,
+    audit_events: &'a [Value],
+) -> Option<&'a Value> {
+    audit_events.iter().rev().find(|event| {
+        if optional_string_from(event, "event_type").as_deref()
+            != Some("worker_structured_report_recorded")
+            || !audit_event_matches_workflow(event, workflow_id)
+        {
+            return false;
+        }
+        if let Some(event_dispatch_id) = optional_string_from(event, "dispatch_id") {
+            return event_dispatch_id == dispatch_id;
+        }
+        if let Some(event_work_item_id) = optional_string_from(event, "work_item_id") {
+            return !work_item_id.is_empty() && event_work_item_id == work_item_id;
+        }
+        workflow_node_id.is_some_and(|node_id| {
+            optional_string_from(event, "node_id").as_deref() == Some(node_id)
+        })
+    })
+}
+
+fn audit_event_matches_workflow(event: &Value, workflow_id: &str) -> bool {
+    optional_string_from(event, "workflow_id")
+        .as_deref()
+        .map_or_else(
+            || {
+                optional_string_from(event, "target_ref")
+                    .is_some_and(|target| target.contains(workflow_id))
+            },
+            |event_workflow_id| event_workflow_id == workflow_id,
+        )
 }
 
 fn dispatch_role_from_node(node_id: Option<&str>) -> Option<String> {
@@ -1237,25 +1279,6 @@ fn derive_workflow_exceptions(
         optional_string_from(artifact, "workflow_id").as_deref() == Some(workflow_id)
             || optional_string_from(artifact, "artifact_type").as_deref() == Some("task_package")
     }) {
-        if bool_value(artifact, "unresolved_direction_risk")
-            || string_array(artifact, "risk_flags")
-                .iter()
-                .any(|risk| risk.contains("unresolved"))
-        {
-            exceptions.push(WorkflowException {
-                exception_id: format!(
-                    "exception:direction:{}",
-                    optional_string_from(artifact, "artifact_id")
-                        .unwrap_or_else(|| "artifact:missing".to_string())
-                ),
-                workflow_id: workflow_id.to_string(),
-                workflow_node_id: optional_string_from(artifact, "node_id"),
-                exception_type: "unresolved_direction_risk".to_string(),
-                summary: "存在未解决方向风险；进入 waiting_decision，不自动继续。".to_string(),
-                status: "waiting_decision".to_string(),
-                warnings: string_array(artifact, "warnings"),
-            });
-        }
         if bool_value(artifact, "harness_blocked") {
             exceptions.push(WorkflowException {
                 exception_id: format!(
@@ -1361,6 +1384,7 @@ const NODE_ALLOWED_TRANSITIONS: &[(&str, &str)] = &[
     ("waiting_permission", "running"),
     ("running", "waiting_decision"),
     ("waiting_decision", "running"),
+    ("waiting_decision", "cancelled"),
     ("running", "reviewing"),
     ("reviewing", "passed"),
     ("reviewing", "returned"),
@@ -1389,7 +1413,10 @@ fn workflow_node_transition_allowed(
     if to == "passed" && actor_role != "review" && actor_role != "project_director" {
         return false;
     }
-    if from == "waiting_decision" && to == "running" && actor_role != "project_director" {
+    if from == "waiting_decision"
+        && (to == "running" || to == "cancelled")
+        && actor_role != "project_director"
+    {
         return false;
     }
     if from == "failed" && to == "running" {
@@ -1403,14 +1430,13 @@ fn workflow_node_transition_allowed(
 fn director_completion_gate(
     task_package: Option<&TaskPackage>,
     review_results: &[ReviewResult],
-    exceptions: &[WorkflowException],
+    _exceptions: &[WorkflowException],
 ) -> DirectorCompletionGate {
     let required = vec![
         "task_goal_completed".to_string(),
         "acceptance_criteria_met".to_string(),
         "evidence_refs_exist".to_string(),
         "review_or_harness_passed_when_required".to_string(),
-        "no_unresolved_risk".to_string(),
         "memory_candidate_step_recorded".to_string(),
         "final_user_report_need_recorded".to_string(),
     ];
@@ -1452,12 +1478,6 @@ fn director_completion_gate(
         .any(|result| !result.evidence_refs.is_empty())
     {
         missing.push("evidence_refs_exist".to_string());
-    }
-    if exceptions
-        .iter()
-        .any(|exception| exception.exception_type == "unresolved_direction_risk")
-    {
-        missing.push("no_unresolved_risk".to_string());
     }
     missing.sort();
     missing.dedup();
@@ -1540,15 +1560,15 @@ fn workflow_acceptance_scenarios(
     task_packages: &[TaskPackage],
     subagent_reports: &[SubagentReport],
     review_results: &[ReviewResult],
-    exceptions: &[WorkflowException],
+    _exceptions: &[WorkflowException],
 ) -> Vec<WorkflowAcceptanceScenario> {
     vec![
         WorkflowAcceptanceScenario {
             scenario_id: "10.1".to_string(),
             title: "子智能体发现方向风险".to_string(),
-            status: if exceptions
+            status: if subagent_reports
                 .iter()
-                .any(|exception| exception.exception_type == "unresolved_direction_risk")
+                .any(|report| !report.direction_risks.is_empty())
             {
                 "covered_by_fixture".to_string()
             } else {
@@ -1559,10 +1579,10 @@ fn workflow_acceptance_scenarios(
                 "node_enters_waiting_decision".to_string(),
                 "subagent_does_not_ask_user_directly".to_string(),
             ],
-            evidence_refs: exceptions
+            evidence_refs: subagent_reports
                 .iter()
-                .filter(|exception| exception.exception_type == "unresolved_direction_risk")
-                .map(|exception| exception.exception_id.clone())
+                .filter(|report| !report.direction_risks.is_empty())
+                .map(|report| report.report_id.clone())
                 .collect(),
             warnings: vec![],
         },

@@ -313,25 +313,6 @@ fn inspect_workflow_run_check_from_value(
             Some(&work_item_id),
         );
 
-        let unresolved_risk = artifact.is_some_and(|artifact| {
-            bool_value(artifact, "unresolved_direction_risk")
-                || string_array(artifact, "risk_flags")
-                    .iter()
-                    .any(|risk| risk.contains("unresolved"))
-        });
-        push_check(
-            &mut checks,
-            "unresolved_conflict",
-            "未解决方向风险",
-            if unresolved_risk { "blocked" } else { "pass" },
-            if unresolved_risk {
-                "有未解决方向风险；进入等待决策。"
-            } else {
-                "没有登记未解决方向风险。"
-            },
-            Some(&work_item_id),
-        );
-
         let requires_knowledge =
             artifact.is_some_and(|artifact| bool_value(artifact, "requires_knowledge_refs"));
         let knowledge = artifact

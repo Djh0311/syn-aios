@@ -451,7 +451,7 @@
             .expect("task package artifact should exist");
         artifact["available_memory_refs"] = json!(["memory:candidate:001"]);
         artifact["available_knowledge_refs"] = json!(["knowledge:ref:001"]);
-        let dispatch_id_value = {
+        let (dispatch_id_value, node_id_value) = {
             let dispatch = value["workflow_node_dispatches"]
                 .as_array_mut()
                 .expect("dispatches should be array")
@@ -461,8 +461,27 @@
             dispatch["prompt_preview"] = json!("工具摘要，只保留摘要和引用。");
             dispatch["tool_call_ref"] = json!("tool-call:blackboard:001");
             dispatch["warnings"] = json!(["direction_risk_blackboard"]);
-            dispatch["dispatch_id"].clone()
+            (dispatch["dispatch_id"].clone(), dispatch["node_id"].clone())
         };
+        value["audit_events"]
+            .as_array_mut()
+            .expect("audit events should be array")
+            .push(json!({
+                "event_id": "audit:blackboard:worker-report:001",
+                "event_type": "worker_structured_report_recorded",
+                "workflow_id": workflow_id,
+                "node_id": node_id_value,
+                "work_item_id": work_item_id,
+                "dispatch_id": dispatch_id_value.clone(),
+                "actor_ref": "codex-dev",
+                "reason": "worker reported direction risk",
+                "open_issues": [],
+                "permission_requests": [],
+                "direction_risks": ["direction_risk_blackboard"],
+                "follow_up_suggestions": [],
+                "acceptance_status": "blocked",
+                "warnings": []
+            }));
         if !value
             .get("permission_requests")
             .is_some_and(Value::is_array)
