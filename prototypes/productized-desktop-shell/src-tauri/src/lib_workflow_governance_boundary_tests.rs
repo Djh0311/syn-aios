@@ -41,6 +41,135 @@
     }
 
     #[test]
+    fn workflow_ledger_maps_chain_audit_entry_types_exactly() {
+        let workflow_id = default_workflow_id("/tmp/indexed-project");
+        let events = vec![
+            ("started", "workflow_chain_node_started", "subagent_started"),
+            ("completed", "workflow_chain_node_completed", "node_passed"),
+            (
+                "deterministic",
+                "workflow_chain_node_director_deterministic_completed",
+                "node_passed",
+            ),
+            (
+                "lm",
+                "workflow_chain_node_director_lm_completed",
+                "node_passed",
+            ),
+            ("failed", "workflow_chain_node_failed", "node_failed"),
+            (
+                "needs-rework",
+                "workflow_chain_node_needs_rework",
+                "node_returned",
+            ),
+            (
+                "failed-action-rework",
+                "workflow_chain_node_failed_action_rework",
+                "node_returned",
+            ),
+            (
+                "failed-action-archive",
+                "workflow_chain_node_failed_action_archive",
+                "user_decision",
+            ),
+            (
+                "failed-action-retry",
+                "workflow_chain_node_failed_action_retry",
+                "user_decision",
+            ),
+            (
+                "failed-action-change-session",
+                "workflow_chain_node_failed_action_change_session",
+                "user_decision",
+            ),
+            (
+                "waiting-decision",
+                "workflow_chain_node_waiting_decision",
+                "waiting_decision",
+            ),
+            ("skipped", "workflow_chain_node_skipped", "node_skipped"),
+            ("cancelled", "workflow_chain_node_cancelled", "node_cancelled"),
+            ("summary", "workflow_chain_director_summary", "director_summary"),
+            ("run-started", "workflow_chain_run_started", "subagent_started"),
+            ("run-completed", "workflow_chain_run_completed", "node_passed"),
+            ("run-failed", "workflow_chain_run_failed", "node_failed"),
+            (
+                "run-waiting",
+                "workflow_chain_run_waiting_decision",
+                "waiting_decision",
+            ),
+            ("run-stopped", "workflow_chain_run_stopped", "node_returned"),
+            ("run-superseded", "workflow_chain_run_superseded", "node_returned"),
+            (
+                "run-stop-requested",
+                "workflow_chain_run_stop_requested",
+                "user_decision",
+            ),
+        ];
+        let audit_events = events
+            .iter()
+            .map(|(suffix, event_type, _)| {
+                json!({
+                  "event_id": format!("audit:{suffix}"),
+                  "event_type": event_type,
+                  "target_ref": workflow_id,
+                  "actor_ref": "project_director",
+                  "reason": format!("ledger mapping fixture {suffix}"),
+                  "created_at": "2026-07-09T00:00:00Z"
+                })
+            })
+            .collect::<Vec<_>>();
+        let entries = derive_workflow_ledger_entries(&workflow_id, &audit_events, &[], &[], &[]);
+
+        for (suffix, event_type, expected_entry_type) in events {
+            let entry = entries
+                .iter()
+                .find(|entry| entry.ledger_entry_id == format!("audit:{suffix}"))
+                .unwrap_or_else(|| panic!("{event_type} should enter workflow ledger"));
+            assert_eq!(
+                entry.entry_type, expected_entry_type,
+                "{event_type} should map by exact event_type"
+            );
+            assert!(
+                !entry
+                    .risk_flags
+                    .iter()
+                    .any(|warning| warning.starts_with("invalid_ledger_entry_type:")),
+                "{event_type} should be in the ledger entry_type vocabulary: {:?}",
+                entry.risk_flags
+            );
+        }
+    }
+
+    #[test]
+    fn workflow_ledger_validates_entry_type_without_panicking() {
+        assert!(is_valid_ledger_entry_type("waiting_decision"));
+        assert!(is_valid_ledger_entry_type("node_skipped"));
+        assert!(is_valid_ledger_entry_type("node_cancelled"));
+        assert!(!is_valid_ledger_entry_type("workflow_chain_custom_future_event"));
+
+        let workflow_id = default_workflow_id("/tmp/indexed-project");
+        let audit_events = vec![json!({
+          "event_id": "audit:custom-future",
+          "event_type": "workflow_chain_custom_future_event",
+          "target_ref": workflow_id,
+          "actor_ref": "project_director",
+          "reason": "未知未来链事件应软着陆。",
+          "created_at": "2026-07-09T00:00:00Z"
+        })];
+        let entries = derive_workflow_ledger_entries(&workflow_id, &audit_events, &[], &[], &[]);
+        let entry = entries
+            .iter()
+            .find(|entry| entry.ledger_entry_id == "audit:custom-future")
+            .expect("unknown workflow audit still enters ledger");
+
+        assert_eq!(entry.entry_type, "workflow_chain_custom_future_event");
+        assert!(entry.risk_flags.contains(
+            &"invalid_ledger_entry_type:workflow_chain_custom_future_event".to_string()
+        ));
+    }
+
+    #[test]
     fn subagent_report_projects_help_fields_from_worker_report_truth_source() {
         let workflow_id = default_workflow_id("/tmp/indexed-project");
         let dispatches = vec![json!({

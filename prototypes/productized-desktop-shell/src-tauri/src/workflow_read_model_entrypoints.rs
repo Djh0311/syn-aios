@@ -884,7 +884,7 @@ fn derive_workflow_ledger_entries(
     director_reviews: &[Value],
     permission_requests: &[Value],
 ) -> Vec<WorkflowLedgerEntry> {
-    workflow_read_model::derive_workflow_ledger_entries(
+    let mut entries = workflow_read_model::derive_workflow_ledger_entries(
         workflow_id,
         audit_events,
         node_dispatches,
@@ -897,7 +897,11 @@ fn derive_workflow_ledger_entries(
             ledger_entry_type_from_audit,
             compact_ledger_summary,
         },
-    )
+    );
+    for entry in &mut entries {
+        validate_ledger_entry_type(entry);
+    }
+    entries
 }
 
 fn derive_subagent_reports(
@@ -1300,22 +1304,85 @@ fn derive_workflow_exceptions(
 
 const REVIEW_RETURN_EXCEPTION_THRESHOLD: usize = 2;
 
-fn ledger_entry_type_from_audit(event_type: &str) -> String {
-    if event_type.contains("task_package") || event_type == "task_draft_created" {
-        "task_package_created".to_string()
-    } else if event_type.contains("permission_decision") {
-        "user_decision".to_string()
-    } else if event_type.contains("director_review") || event_type.contains("director_summary") {
-        "director_summary".to_string()
-    } else if event_type.contains("failed") {
-        "node_failed".to_string()
-    } else if event_type.contains("returned") {
-        "node_returned".to_string()
-    } else if event_type.contains("passed") || event_type.contains("accepted") {
-        "node_passed".to_string()
-    } else {
-        event_type.to_string()
+const LEDGER_ENTRY_TYPES: &[&str] = &[
+    "task_package_created",
+    "subagent_started",
+    "permission_requested",
+    "permission_granted",
+    "permission_denied",
+    "tool_call_summary",
+    "subagent_report",
+    "review_result",
+    "node_returned",
+    "node_failed",
+    "node_passed",
+    "director_summary",
+    "user_decision",
+    "waiting_decision",
+    "node_skipped",
+    "node_cancelled",
+];
+
+fn is_valid_ledger_entry_type(entry_type: &str) -> bool {
+    LEDGER_ENTRY_TYPES.contains(&entry_type)
+}
+
+fn validate_ledger_entry_type(entry: &mut WorkflowLedgerEntry) {
+    if is_valid_ledger_entry_type(&entry.entry_type) {
+        return;
     }
+    let warning = format!("invalid_ledger_entry_type:{}", entry.entry_type);
+    if !entry.risk_flags.contains(&warning) {
+        entry.risk_flags.push(warning);
+    }
+}
+
+fn ledger_entry_type_from_audit(event_type: &str) -> String {
+    match event_type {
+        "task_draft_created"
+        | "task_node_state_updated"
+        | "task_package_fields_updated"
+        | "task_package_fields_corrected_for_dispatch"
+        | "task_package_file_generated"
+        | "task_memory_packet_injected_into_task_package" => "task_package_created",
+        "workflow_permission_decision_recorded" => "user_decision",
+        "workflow_dispatch_director_review_recorded" | "offline_director_review_recorded" => {
+            "review_result"
+        }
+        "offline_role_dispatch_prepared"
+        | "workflow_chain_node_started"
+        | "workflow_chain_run_started"
+        | "workflow_node_dispatch_prepared"
+        | "workflow_node_dispatch_started" => "subagent_started",
+        "offline_role_result_handoff_recorded"
+        | "workflow_node_dispatch_completed"
+        | "workflow_node_dispatch_readback_completed" => "subagent_report",
+        "workflow_chain_node_completed"
+        | "workflow_chain_node_director_deterministic_completed"
+        | "workflow_chain_node_director_lm_completed"
+        | "workflow_chain_run_completed" => "node_passed",
+        "workflow_chain_node_failed"
+        | "workflow_chain_run_failed"
+        | "workflow_execution_failed"
+        | "workflow_execution_timed_out"
+        | "workflow_node_dispatch_failed" => "node_failed",
+        "workflow_chain_node_needs_rework"
+        | "workflow_chain_node_failed_action_rework"
+        | "workflow_chain_run_stopped"
+        | "workflow_chain_run_superseded" => "node_returned",
+        "workflow_chain_node_failed_action_archive"
+        | "workflow_chain_node_failed_action_change_session"
+        | "workflow_chain_node_failed_action_retry"
+        | "workflow_chain_run_stop_requested" => "user_decision",
+        "workflow_chain_node_waiting_decision" | "workflow_chain_run_waiting_decision" => {
+            "waiting_decision"
+        }
+        "workflow_chain_node_skipped" => "node_skipped",
+        "workflow_chain_node_cancelled" | "workflow_execution_cancelled" => "node_cancelled",
+        "workflow_chain_director_summary" => "director_summary",
+        _ => event_type,
+    }
+    .to_string()
 }
 
 fn compact_ledger_summary(summary: &str) -> String {

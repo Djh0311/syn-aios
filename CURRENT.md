@@ -16,7 +16,8 @@
 
 ## 三、下一步
 
-1. **C5·账本词表对齐·包待派 `tasks/2026-07-09-phase-b2-c5-ledger-vocab-align-v1.md`（B2 最后一片·落地=收官）**：measure-first 亲读——`ledger_entry_type_from_audit`(read_model:1303)contains 启发式**误判**（C4c 的 `failed_action_archive`结束/`_rework`退回都含"failed"→错成 node_failed）+ 真新态(waiting_decision/skipped)不在 13 词表。包:①改**显式精确映射**修误判(主导线给了映射表)②词表**扩纳真新态**(canon 微决策:13 是 B2 前定·加 waiting_decision/node_skipped/node_cancelled·唯一常量)③entry_type 运行时校验(软着陆不崩)。死线:链 event_type 命名/审计写入侧 0-diff(只动读模型映射)。→ 派核过 → **B2 收官**。
+1. **🎉 B2·执行闭环深化 = 整个做完（C0-C5 全 done·核过·2026-07-10 收官）**：蓝图 §12 项目执行闭环落全——每任务独立对话(C1)、任务包 v2 命名统一(C2)、worker 求助通道(C3)、主管七查终标+总结候选+failed 四选一(C4)、账本词表对齐+entry_type 校验(C5)。**人闸一寸没动·全程死线 0-diff·每片 fmt 权威闸核过·没坏码进库**。C5 收尾:`ledger_entry_type_from_audit` contains 启发式改精确 match(修 C4c 的 failed_action 误判)+ 词表扩真新态(唯一常量 LEDGER_ENTRY_TYPES 16 词)+ entry_type 软着陆校验。753/0/43。
+   - **B2 收官待办**：① roadmap 标 B2 ✅ + CURRENT 翻页梳理(同 Phase A/B 收口)② B2 端到端真机走一单(整条闭环:出方案→批→跑→求助/终标/总结→审计上脸)③ 下一步定(C6 错误上脸[已 widen 搁置] / 整台原型[搁置] / 新阶段)。
    - **C4（主管总结+终标·三片全 done·核过）**：C4a 七查终标(确定性初筛全绿零 LM/黄牌 LM 判过退回/断供 waiting 保守)+C4b 主管总结→记忆候选(一次链·候选态不转正·软着陆)+**C4c failed 四选一**(退回复用 C4a·换会话复用 C1 `create_and_bind`·结束 archived·重试接现成规则;**重跑过 transition+project_director+path-lock+授权·单任务硬钳不自动连环·没重造机器**·751/0/43·4 文件死线 0-diff·fmt 净·主导线亲读四命根)。防重造 grep 挡住了退回/换会话本可能各造一套。
    - **C4b（主管总结→记忆候选）= done·核过**：链末（finalize completed 2131 后）主管 LM 出工作流总结（一次/链）→ ①上货脸 DirectorChainOutcome.director_summary ②经现成 `capture_event`(director:696·source=final_review) 喂候选=`candidate_needs_review` **不自动转正**（候选机器 capture_bus/candidate_store/control_core 全 0-diff·确认门没碰）；总结=增益（失败只 warning·链已 completed 不受影响·软着陆）。746/0/43·死线全 0-diff·fmt 权威净·主导线亲读核过。
    - **C4a（主管七查+终标）= done·核过**：确定性初筛①-⑤全绿直过零 LM/黄牌走主管 LM 判过或退回(needs_rework 预算制·耗尽 waiting_decision)/LM 断供 waiting_decision 保守不蒙混；C3 求助路 1647 短路早于终标不受影响。744/0/43·亲读六命根。
