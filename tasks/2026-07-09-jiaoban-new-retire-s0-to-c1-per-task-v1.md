@@ -1,5 +1,7 @@
 # 实现任务包:合流-new 退 S0·走 C1 每任务(C1 收官)· 主导线 → 执行线 v1
 
+> **⛔ 已作废(2026-07-09)——本包前提错误,勿派。** 执行线实测:退 S0 撞 needs_binding 死结(prepare 要节点先绑会话才产 prepared·S0 是那条引导绑定·非多余会话)。主导线核实认账(是本包设计错·非执行线)。用户改拍 **3**:prepare 改 C1-aware。**取代包 = `tasks/2026-07-09-prepare-c1-aware-close-c1-v1.md`**(prepare 一 C1-aware·合流-new 退 S0 就干净了)。保留本文作教训存档(measure-before-guessing 又一例)。
+
 日期:2026-07-09　性质:**轻档**(后端·测试项目圈内)。这是 **C1 收官最后一片**(用户 2026-07-09 拍「A」:合流「新对话」也每任务各开)。正本:canon 决策 `decisions/2026-07-09-session-mode-drives-per-task-creation-v1.md` + C1 定稿。
 
 ## 0. 接手须知(冷启即读·本包自包含)

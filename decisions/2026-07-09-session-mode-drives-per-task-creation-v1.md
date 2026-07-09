@@ -27,4 +27,8 @@
 
 ## 补拍(2026-07-09·合流-new)
 
-用户拍 **A**:合流命令 `session_choice=="new"` 也走 C1 每任务(退掉「合流开头建单条 S0」用法·**先生后绑机制保留改每任务用**);`existing` 手动挡不动。收官包 `tasks/2026-07-09-jiaoban-new-retire-s0-to-c1-per-task-v1.md`。**注**:此举退的是 2026-07-05 先生后绑决策里「合流一次性建 S0」这个用法(单 S0 → 每任务),先生后绑机制本身沿用;那份决策相应过时点在本包收口时回写。
+用户拍 **A**:合流命令 `session_choice=="new"` 也走 C1 每任务。首版收官包(`tasks/...-jiaoban-new-retire-s0...`)直接退 S0——**撞死结作废**。
+
+**死结与再拍(2026-07-09·同日)**:执行线实测退 S0 → 合流-new 恒 needs_binding、链不派。根:**prepare 要节点先绑一条会话才产 `prepared`(c4_c6:167-196)·而 C1 每任务绑在链里、prepare 之后**——S0 是「prepare 前的引导绑定」非多余。主导线核实**认账是本包设计错(没吃透 prepare 就下"退干净"红线)**,非执行线。给用户三选:1 回退单会话 / 2 引导会话 wart / 3 改 prepare 闸。**用户拍 3**。
+
+**3 的实现(前提已核到底)**:prepare 加 `chain_binds_per_task` mode——C1 自动路(session_creator=Some)跳 needs_binding、产 prepared·thread 延迟、由链每任务 create_and_bind 补(失败即停兜底)·**安全闸[path-lock/沙箱/审批]全 0-diff 不碰**(needs_binding 是就绪闸非安全闸·核后从"重档动安全闸"**撤回**为"轻档但敏感核心·自加重档仔细度")。副产品:prepare 一 C1-aware·合流-new 退 S0 变干净。取代包 `tasks/2026-07-09-prepare-c1-aware-close-c1-v1.md`。2026-07-05 先生后绑决策的「合流单 S0」用法过时点随此包收口回写。
