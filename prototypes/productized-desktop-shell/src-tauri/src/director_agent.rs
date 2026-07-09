@@ -55,6 +55,34 @@ pub(crate) trait DirectorFinalMarker {
     fn final_mark(&self, ctx: &DirectorFinalMarkContext) -> Result<DirectorFinalMark, String>;
 }
 
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+pub(crate) struct DirectorWorkflowSummary {
+    pub(crate) summary: String,
+    pub(crate) key_facts: Vec<String>,
+    pub(crate) open_items: Vec<String>,
+    pub(crate) next_suggestions: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct DirectorWorkflowSummaryContext {
+    pub(crate) project_root: String,
+    pub(crate) workflow_id: String,
+    pub(crate) chain_run_id: String,
+    pub(crate) total: usize,
+    pub(crate) dispatched: usize,
+    pub(crate) completed: usize,
+    pub(crate) skipped: usize,
+    pub(crate) steps: Vec<DirectorChainStep>,
+    pub(crate) warnings: Vec<String>,
+}
+
+pub(crate) trait DirectorSummaryGenerator {
+    fn summarize_chain(
+        &self,
+        ctx: &DirectorWorkflowSummaryContext,
+    ) -> Result<DirectorWorkflowSummary, String>;
+}
+
 #[cfg(test)]
 struct FixturePassDirectorFinalMarker;
 
@@ -64,6 +92,24 @@ impl DirectorFinalMarker for FixturePassDirectorFinalMarker {
         Ok(DirectorFinalMark {
             decision: DirectorFinalMarkDecision::Completed,
             reason: "测试夹具兼容：旧链测试不烧真实主管 LM。".to_string(),
+        })
+    }
+}
+
+#[cfg(test)]
+struct FixtureDirectorSummaryGenerator;
+
+#[cfg(test)]
+impl DirectorSummaryGenerator for FixtureDirectorSummaryGenerator {
+    fn summarize_chain(
+        &self,
+        ctx: &DirectorWorkflowSummaryContext,
+    ) -> Result<DirectorWorkflowSummary, String> {
+        Ok(DirectorWorkflowSummary {
+            summary: format!("测试夹具主管总结：链 {} 已完成。", ctx.chain_run_id),
+            key_facts: vec![format!("已完成任务数：{}", ctx.completed)],
+            open_items: vec![],
+            next_suggestions: vec!["测试夹具：候选仍需人工确认。".to_string()],
         })
     }
 }
@@ -334,12 +380,39 @@ impl DirectorFinalMarker for CliDirectorAgent {
     }
 }
 
+impl DirectorSummaryGenerator for CliDirectorAgent {
+    fn summarize_chain(
+        &self,
+        ctx: &DirectorWorkflowSummaryContext,
+    ) -> Result<DirectorWorkflowSummary, String> {
+        let prompt = director_workflow_summary_prompt(ctx);
+        let raw = codex_local_runner::readonly_codex_consult(
+            &ctx.project_root,
+            &prompt,
+            self.timeout_ms,
+        )?;
+        parse_director_workflow_summary(&raw)
+    }
+}
+
 #[derive(serde::Deserialize)]
 struct DirectorFinalMarkJson {
     #[serde(default)]
     decision: String,
     #[serde(default)]
     reason: String,
+}
+
+#[derive(serde::Deserialize)]
+struct DirectorWorkflowSummaryJson {
+    #[serde(default)]
+    summary: String,
+    #[serde(default)]
+    key_facts: Vec<String>,
+    #[serde(default)]
+    open_items: Vec<String>,
+    #[serde(default)]
+    next_suggestions: Vec<String>,
 }
 
 fn director_final_mark_prompt(ctx: &DirectorFinalMarkContext) -> String {
@@ -424,6 +497,210 @@ fn parse_director_final_mark(raw: &str) -> Result<DirectorFinalMark, String> {
         parsed.reason.trim().to_string()
     };
     Ok(DirectorFinalMark { decision, reason })
+}
+
+fn director_workflow_summary_prompt(ctx: &DirectorWorkflowSummaryContext) -> String {
+    let steps = ctx
+        .steps
+        .iter()
+        .map(|step| {
+            format!(
+                "- {} [{}]: summary={} warning={} status={}",
+                step.title,
+                step.state,
+                step.report_summary
+                    .as_deref()
+                    .unwrap_or("无 worker 摘要"),
+                step.report_warning
+                    .as_deref()
+                    .unwrap_or("无 warning"),
+                step.report_status.as_deref().unwrap_or("unknown")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let warnings = if ctx.warnings.is_empty() {
+        "[]".to_string()
+    } else {
+        ctx.warnings.join("；")
+    };
+    format!(
+        r#"你是项目主管，正在为一条已经 completed 的 worker 链写终局总结。总结只用于货脸呈现和记忆候选，不是完成闸。
+
+硬约束：
+- 只能输出一个 ```json 代码块。
+- 不要包含 full transcript/raw stdout/raw stderr/prompt body/auth token/oauth/keychain/.env/rollout/provider credential 等敏感词。
+- summary 用一句人话说明本链做成了什么。
+- key_facts/open_items/next_suggestions 都是字符串数组；没有就给空数组。
+
+链：
+workflow_id: {workflow_id}
+chain_run_id: {chain_run_id}
+计数：total={total}, dispatched={dispatched}, completed={completed}, skipped={skipped}
+warnings: {warnings}
+
+任务结果：
+{steps}
+
+输出格式：
+```json
+{{"summary":"一句话工作流总结","key_facts":["关键事实"],"open_items":[],"next_suggestions":["后续建议"]}}
+```"#,
+        workflow_id = ctx.workflow_id,
+        chain_run_id = ctx.chain_run_id,
+        total = ctx.total,
+        dispatched = ctx.dispatched,
+        completed = ctx.completed,
+        skipped = ctx.skipped,
+        warnings = warnings,
+        steps = steps,
+    )
+}
+
+fn parse_director_workflow_summary(raw: &str) -> Result<DirectorWorkflowSummary, String> {
+    let json = consultant_extract_json_block(raw)
+        .ok_or_else(|| "主管总结输出里没找到结构化 json 块".to_string())?;
+    let parsed: DirectorWorkflowSummaryJson =
+        serde_json::from_str(&json).map_err(|error| format!("主管总结 json 解析失败:{error}"))?;
+    let summary = parsed.summary.trim().to_string();
+    if summary.is_empty() {
+        return Err("主管总结 summary 为空".to_string());
+    }
+    Ok(DirectorWorkflowSummary {
+        summary,
+        key_facts: parsed
+            .key_facts
+            .into_iter()
+            .map(|item| item.trim().to_string())
+            .filter(|item| !item.is_empty())
+            .collect(),
+        open_items: parsed
+            .open_items
+            .into_iter()
+            .map(|item| item.trim().to_string())
+            .filter(|item| !item.is_empty())
+            .collect(),
+        next_suggestions: parsed
+            .next_suggestions
+            .into_iter()
+            .map(|item| item.trim().to_string())
+            .filter(|item| !item.is_empty())
+            .collect(),
+    })
+}
+
+fn director_summary_body(summary: &DirectorWorkflowSummary) -> String {
+    let mut lines = vec![summary.summary.clone()];
+    if !summary.key_facts.is_empty() {
+        lines.push(format!("关键事实：{}", summary.key_facts.join("；")));
+    }
+    if !summary.open_items.is_empty() {
+        lines.push(format!("未决项：{}", summary.open_items.join("；")));
+    }
+    if !summary.next_suggestions.is_empty() {
+        lines.push(format!("后续建议：{}", summary.next_suggestions.join("；")));
+    }
+    lines.join("\n")
+}
+
+fn director_summary_scope(project_root: &str, workflow_id: &str, timestamp: &str) -> MemoryScope {
+    let pid = project_id(project_root);
+    MemoryScope {
+        scope_id: format!("memory-scope:workflow-summary:{}", stable_id(workflow_id)),
+        scope_type: "workflow".to_string(),
+        user_id: None,
+        project_id: Some(pid),
+        workflow_id: Some(workflow_id.to_string()),
+        session_id: None,
+        role_ids: vec!["project_director".to_string()],
+        document_refs: vec![],
+        permission_policy_ref: None,
+        model_export_policy: "local_only".to_string(),
+        valid_from: timestamp.to_string(),
+        valid_until: None,
+    }
+}
+
+fn capture_director_summary_candidate(
+    path: &std::path::Path,
+    project_root: &str,
+    workflow_id: &str,
+    chain_run_id: &str,
+    summary: &DirectorWorkflowSummary,
+    timestamp: &str,
+) -> Result<CaptureMemoryEventOutput, String> {
+    let pid = project_id(project_root);
+    let source_ref_id = format!(
+        "source:director-summary:{}:{}",
+        stable_id(workflow_id),
+        stable_id(chain_run_id)
+    );
+    let source_id = format!("director-summary:{chain_run_id}");
+    let body = director_summary_body(summary);
+    let input = CaptureMemoryEventInput {
+        project_root: project_root.to_string(),
+        project_id: Some(pid.clone()),
+        workflow_id: Some(workflow_id.to_string()),
+        workflow_node_id: None,
+        run_unit_id: Some(chain_run_id.to_string()),
+        product_command_id: None,
+        product_attempt_id: None,
+        runtime_log_ref: None,
+        audit_refs: vec![format!("workflow_chain_director_summary:{chain_run_id}")],
+        readback_ref: None,
+        task_package_ref: None,
+        memory_packet_ref: None,
+        scope: director_summary_scope(project_root, workflow_id, timestamp),
+        source_type: "final_review".to_string(),
+        source_refs: vec![MemoryCaptureSourceRef {
+            source_ref_id,
+            source_type: "final_review".to_string(),
+            source_id,
+            project_id: Some(pid),
+            workflow_id: Some(workflow_id.to_string()),
+            workflow_node_id: None,
+            run_unit_id: Some(chain_run_id.to_string()),
+            product_command_id: None,
+            product_attempt_id: None,
+            runtime_log_ref: None,
+            audit_ref_id: Some(format!("workflow_chain_director_summary:{chain_run_id}")),
+            readback_ref: None,
+            task_package_ref: None,
+            memory_packet_ref: None,
+            evidence_ref: Some(format!("workflow_chain_run:{chain_run_id}")),
+            summary: summary.summary.clone(),
+            sensitive_level: "internal".to_string(),
+            created_at: timestamp.to_string(),
+        }],
+        summary: summary.summary.clone(),
+        evidence_summary: format!("主管总结来自 completed 链运行 {chain_run_id}。"),
+        sensitivity: "internal".to_string(),
+        candidate_policy: "candidate_allowed".to_string(),
+        generated_by_role: "project_director".to_string(),
+        actor_id: "project-director:c4b".to_string(),
+        risk_level: "low".to_string(),
+        reason: "C4b 链末主管总结生成记忆候选；候选仍需确认门转正。".to_string(),
+        candidate: Some(MemoryCaptureCandidateDraft {
+            memory_type: "workflow_summary".to_string(),
+            claim: summary.summary.clone(),
+            body,
+            review_reason: "C4b 从链末主管总结生成候选；这不是正式记忆，需人工确认。"
+                .to_string(),
+            requires_user_confirmation: true,
+            actor_role: "project_director".to_string(),
+        }),
+        expected_capture_store_revision: None,
+        expected_observation_store_revision: None,
+        expected_candidate_store_revision: None,
+    };
+    memory_capture_bus::capture_event(
+        path,
+        &input,
+        timestamp,
+        &format!("director-summary-capture:{chain_run_id}"),
+        &format!("director-summary-observation:{chain_run_id}"),
+        &format!("director-summary-candidate:{chain_run_id}"),
+    )
 }
 
 fn director_final_screen(
@@ -533,6 +810,7 @@ pub(crate) struct DirectorChainOutcome {
     pub(crate) skipped: usize,
     pub(crate) chain_run_id: String,
     pub(crate) steps: Vec<DirectorChainStep>,
+    pub(crate) director_summary: Option<DirectorWorkflowSummary>,
     pub(crate) warnings: Vec<String>,
     pub(crate) stopped_reason: Option<String>,
 }
@@ -1141,6 +1419,10 @@ pub(crate) fn run_director_task_chain(
     let final_marker = FixturePassDirectorFinalMarker;
     #[cfg(not(test))]
     let final_marker = CliDirectorAgent::default();
+    #[cfg(test)]
+    let summary_generator = FixtureDirectorSummaryGenerator;
+    #[cfg(not(test))]
+    let summary_generator = CliDirectorAgent::default();
     run_director_task_chain_inner(
         path,
         index,
@@ -1152,6 +1434,7 @@ pub(crate) fn run_director_task_chain(
         max_tasks,
         None,
         &final_marker,
+        &summary_generator,
     )
 }
 
@@ -1166,6 +1449,36 @@ pub(crate) fn run_director_task_chain_with_final_marker(
     max_tasks: usize,
     final_marker: &dyn DirectorFinalMarker,
 ) -> Result<DirectorChainOutcome, String> {
+    #[cfg(test)]
+    let summary_generator = FixtureDirectorSummaryGenerator;
+    #[cfg(not(test))]
+    let summary_generator = CliDirectorAgent::default();
+    run_director_task_chain_with_markers(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        project_root,
+        workflow_id,
+        tasks,
+        max_tasks,
+        final_marker,
+        &summary_generator,
+    )
+}
+
+pub(crate) fn run_director_task_chain_with_markers(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    project_root: &str,
+    workflow_id: &str,
+    tasks: &[ProjectDirectorPlannedTask],
+    max_tasks: usize,
+    final_marker: &dyn DirectorFinalMarker,
+    summary_generator: &dyn DirectorSummaryGenerator,
+) -> Result<DirectorChainOutcome, String> {
     run_director_task_chain_inner(
         path,
         index,
@@ -1177,6 +1490,7 @@ pub(crate) fn run_director_task_chain_with_final_marker(
         max_tasks,
         None,
         final_marker,
+        summary_generator,
     )
 }
 
@@ -1197,6 +1511,10 @@ pub(crate) fn run_director_task_chain_with_session_creator(
     let final_marker = FixturePassDirectorFinalMarker;
     #[cfg(not(test))]
     let final_marker = CliDirectorAgent::default();
+    #[cfg(test)]
+    let summary_generator = FixtureDirectorSummaryGenerator;
+    #[cfg(not(test))]
+    let summary_generator = CliDirectorAgent::default();
     run_director_task_chain_with_session_creator_and_final_marker(
         path,
         index,
@@ -1208,6 +1526,7 @@ pub(crate) fn run_director_task_chain_with_session_creator(
         max_tasks,
         session_creator,
         &final_marker,
+        &summary_generator,
     )
 }
 
@@ -1222,6 +1541,7 @@ pub(crate) fn run_director_task_chain_with_session_creator_and_final_marker(
     max_tasks: usize,
     session_creator: &dyn JiaobanNewSessionCreator,
     final_marker: &dyn DirectorFinalMarker,
+    summary_generator: &dyn DirectorSummaryGenerator,
 ) -> Result<DirectorChainOutcome, String> {
     run_director_task_chain_inner(
         path,
@@ -1234,6 +1554,7 @@ pub(crate) fn run_director_task_chain_with_session_creator_and_final_marker(
         max_tasks,
         Some(session_creator),
         final_marker,
+        summary_generator,
     )
 }
 
@@ -1248,6 +1569,7 @@ fn run_director_task_chain_inner(
     max_tasks: usize,
     session_creator: Option<&dyn JiaobanNewSessionCreator>,
     final_marker: &dyn DirectorFinalMarker,
+    summary_generator: &dyn DirectorSummaryGenerator,
 ) -> Result<DirectorChainOutcome, String> {
     use std::collections::BTreeSet;
 
@@ -1385,6 +1707,7 @@ fn run_director_task_chain_inner(
                 skipped,
                 chain_run_id,
                 steps,
+                director_summary: None,
                 warnings,
                 stopped_reason: Some("user_stop_requested".to_string()),
             });
@@ -1493,6 +1816,7 @@ fn run_director_task_chain_inner(
                 skipped,
                 chain_run_id,
                 steps,
+                director_summary: None,
                 warnings,
                 stopped_reason: Some(format!("runaway_cap_reached:{max_nodes}")),
             });
@@ -1590,6 +1914,7 @@ fn run_director_task_chain_inner(
                     skipped,
                     chain_run_id,
                     steps,
+                    director_summary: None,
                     warnings,
                     stopped_reason: Some(format!("fail_stop:session_create:{}", task.title)),
                 });
@@ -1720,6 +2045,7 @@ fn run_director_task_chain_inner(
                         skipped,
                         chain_run_id,
                         steps,
+                        director_summary: None,
                         warnings,
                         stopped_reason: Some(format!("waiting_decision:worker_help:{}", task.title)),
                     });
@@ -1911,6 +2237,7 @@ fn run_director_task_chain_inner(
                                 skipped,
                                 chain_run_id,
                                 steps,
+                                director_summary: None,
                                 warnings,
                                 stopped_reason: Some(format!(
                                     "needs_rework:director_final_mark:{}",
@@ -1974,6 +2301,7 @@ fn run_director_task_chain_inner(
                             skipped,
                             chain_run_id,
                             steps,
+                            director_summary: None,
                             warnings,
                             stopped_reason: Some(format!(
                                 "waiting_decision:director_final_mark_budget_exhausted:{}",
@@ -2036,6 +2364,7 @@ fn run_director_task_chain_inner(
                             skipped,
                             chain_run_id,
                             steps,
+                            director_summary: None,
                             warnings,
                             stopped_reason: Some(format!(
                                 "waiting_decision:director_final_mark_unavailable:{}",
@@ -2118,6 +2447,7 @@ fn run_director_task_chain_inner(
                     skipped,
                     chain_run_id,
                     steps,
+                    director_summary: None,
                     warnings,
                     stopped_reason: Some(format!("fail_stop:node_error:{}:{fail_msg}", task.title)),
                 });
@@ -2140,6 +2470,71 @@ fn run_director_task_chain_inner(
         "主管→worker 薄链驱动完成：所有 prepared 任务按 depends_on 序真派发成功。",
     )?;
     write_validated_workflow_state(path, &closing)?;
+    let summary_context = DirectorWorkflowSummaryContext {
+        project_root: project_root.to_string(),
+        workflow_id: workflow_id.to_string(),
+        chain_run_id: chain_run_id.clone(),
+        total,
+        dispatched,
+        completed,
+        skipped,
+        steps: steps.clone(),
+        warnings: warnings.clone(),
+    };
+    let director_summary = match summary_generator.summarize_chain(&summary_context) {
+        Ok(summary) => {
+            let capture_result = capture_director_summary_candidate(
+                path,
+                project_root,
+                workflow_id,
+                &chain_run_id,
+                &summary,
+                &ts_close,
+            );
+            let candidate_note = match capture_result {
+                Ok(output) => output
+                    .capture_event
+                    .candidate_key
+                    .as_deref()
+                    .map(|candidate_key| format!("候选：{candidate_key}"))
+                    .unwrap_or_else(|| "未生成候选".to_string()),
+                Err(error) => {
+                    push_unique(
+                        &mut warnings,
+                        &format!("director_summary_capture_failed:{error}"),
+                    );
+                    "候选生成失败（已软着陆）".to_string()
+                }
+            };
+            match read_workflow_state_value(path).and_then(|mut summary_state| {
+                append_chain_audit(
+                    &mut summary_state,
+                    &chain_run_id,
+                    workflow_id,
+                    "workflow_chain_director_summary",
+                    "completed",
+                    "completed",
+                    &ts_close,
+                    &format!("主管链末总结已生成：{}；{candidate_note}", summary.summary),
+                )?;
+                write_validated_workflow_state(path, &summary_state)
+            }) {
+                Ok(_) => {}
+                Err(error) => push_unique(
+                    &mut warnings,
+                    &format!("director_summary_audit_failed:{error}"),
+                ),
+            }
+            Some(summary)
+        }
+        Err(error) => {
+            push_unique(
+                &mut warnings,
+                &format!("director_summary_unavailable:{error}"),
+            );
+            None
+        }
+    };
     Ok(DirectorChainOutcome {
         total,
         dispatched,
@@ -2147,6 +2542,7 @@ fn run_director_task_chain_inner(
         skipped,
         chain_run_id,
         steps,
+        director_summary,
         warnings,
         stopped_reason: None,
     })
@@ -4339,6 +4735,7 @@ mod quality_debt_tests {
             skipped: 0,
             chain_run_id: "chain-x".to_string(),
             steps: vec![],
+            director_summary: None,
             warnings: vec![],
             stopped_reason: Some(
                 "fail_stop:node_error:浏览器验收:worker 派发未完成（state=failed·timed_out）"

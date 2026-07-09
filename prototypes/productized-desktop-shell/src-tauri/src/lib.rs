@@ -6098,6 +6098,26 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         vec![task]
     }
 
+    fn c4b_prepared_tasks_without_required_checks(
+        prepared: &AuthorizedPreparedDispatchResult,
+    ) -> Vec<ProjectDirectorPlannedTask> {
+        let mut tasks = prepared
+            .plan
+            .planned_tasks
+            .iter()
+            .filter(|task| task.status == "prepared")
+            .cloned()
+            .collect::<Vec<_>>();
+        assert!(
+            tasks.len() >= 2,
+            "C4b once-per-chain test needs multiple tasks"
+        );
+        for task in tasks.iter_mut() {
+            task.scope.required_checks.clear();
+        }
+        tasks
+    }
+
     #[derive(Clone)]
     struct StubDirectorFinalMarker {
         calls: std::cell::Cell<usize>,
@@ -6135,6 +6155,43 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
 
     impl DirectorFinalMarker for StubDirectorFinalMarker {
         fn final_mark(&self, _ctx: &DirectorFinalMarkContext) -> Result<DirectorFinalMark, String> {
+            self.calls.set(self.calls.get() + 1);
+            self.result.clone()
+        }
+    }
+
+    #[derive(Clone)]
+    struct StubDirectorSummaryGenerator {
+        calls: std::cell::Cell<usize>,
+        result: Result<DirectorWorkflowSummary, String>,
+    }
+
+    impl StubDirectorSummaryGenerator {
+        fn summarized(summary: &str) -> Self {
+            Self {
+                calls: std::cell::Cell::new(0),
+                result: Ok(DirectorWorkflowSummary {
+                    summary: summary.to_string(),
+                    key_facts: vec!["关键事实：链路已按任务完成".to_string()],
+                    open_items: vec!["未决项：无".to_string()],
+                    next_suggestions: vec!["后续建议：进入人工确认记忆候选".to_string()],
+                }),
+            }
+        }
+
+        fn unavailable(reason: &str) -> Self {
+            Self {
+                calls: std::cell::Cell::new(0),
+                result: Err(reason.to_string()),
+            }
+        }
+    }
+
+    impl DirectorSummaryGenerator for StubDirectorSummaryGenerator {
+        fn summarize_chain(
+            &self,
+            _ctx: &DirectorWorkflowSummaryContext,
+        ) -> Result<DirectorWorkflowSummary, String> {
             self.calls.set(self.calls.get() + 1);
             self.result.clone()
         }
@@ -6349,6 +6406,114 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 .contains("worker_help"),
             "求助路停因应保持 C3 waiting_decision：{:?}",
             outcome.stopped_reason
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c4b_director_summary_creates_candidate_once_after_chain_completed() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("c4b-summary-candidate");
+        let tasks = c4b_prepared_tasks_without_required_checks(&prepared);
+        let runner = c4a_report_runner("done", &["cargo test c4b 通过"], &[]);
+        let final_marker = StubDirectorFinalMarker::unavailable("green should not call final LM");
+        let summary_generator =
+            StubDirectorSummaryGenerator::summarized("主管总结：本链完成了 C4b 验证任务。");
+        let outcome = run_director_task_chain_with_markers(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &tasks,
+            10,
+            &final_marker,
+            &summary_generator,
+        )
+        .expect("chain should complete with director summary");
+        assert_eq!(final_marker.calls.get(), 0, "全绿终标仍不得调用 LM");
+        assert_eq!(summary_generator.calls.get(), 1, "链末总结只允许每链一次");
+        assert_eq!(outcome.completed, tasks.len());
+        assert!(outcome.stopped_reason.is_none());
+        assert_eq!(
+            outcome
+                .director_summary
+                .as_ref()
+                .map(|summary| summary.summary.as_str()),
+            Some("主管总结：本链完成了 C4b 验证任务。")
+        );
+        assert!(audit_has(&path, "workflow_chain_director_summary"));
+        let candidate_store = memory_candidate_store::load_store(&path, "2026-07-09T00:00:00Z")
+            .expect("candidate store should load");
+        assert_eq!(candidate_store.candidates.len(), 1);
+        let candidate = &candidate_store.candidates[0];
+        assert_eq!(
+            memory_candidate_store::memory_status_name(candidate.status),
+            "candidate_needs_review",
+            "capture_event 只能生成候选态，不能自动转正"
+        );
+        assert!(
+            candidate.generated_from.starts_with("observation:"),
+            "候选应从 observation 派生：{}",
+            candidate.generated_from
+        );
+        assert_eq!(candidate.generated_by_role, "project_director");
+        assert!(
+            candidate
+                .source_refs
+                .iter()
+                .any(|source| source.source_type == "director_review"),
+            "候选来源应经 final_review 映射到 director_review"
+        );
+        assert!(
+            formal_memory_store::load_store(&path, "2026-07-09T00:00:00Z")
+                .expect("formal memory store should load")
+                .records
+                .is_empty()
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c4b_director_summary_unavailable_keeps_chain_completed_with_warning() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("c4b-summary-unavailable");
+        let tasks = c4a_single_prepared_task(&prepared);
+        let runner = c4a_report_runner("done", &["cargo test c4b 通过"], &[]);
+        let final_marker = StubDirectorFinalMarker::unavailable("green should not call final LM");
+        let summary_generator =
+            StubDirectorSummaryGenerator::unavailable("codex_provider_unavailable:summary");
+        let outcome = run_director_task_chain_with_markers(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &tasks,
+            10,
+            &final_marker,
+            &summary_generator,
+        )
+        .expect("summary failure should soft land");
+        assert_eq!(summary_generator.calls.get(), 1);
+        assert_eq!(outcome.completed, 1);
+        assert!(outcome.stopped_reason.is_none());
+        assert!(outcome.director_summary.is_none());
+        assert!(
+            outcome
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("director_summary_unavailable")),
+            "总结失败应进 warning，不阻断链：{:?}",
+            outcome.warnings
+        );
+        assert!(
+            memory_candidate_store::load_store(&path, "2026-07-09T00:00:00Z")
+                .expect("candidate store should load")
+                .candidates
+                .is_empty()
         );
         let _ = fs::remove_dir_all(dir);
     }
