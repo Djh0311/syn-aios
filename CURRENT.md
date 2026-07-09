@@ -22,10 +22,11 @@
    - **C3a（worker 求助通道核心）= done·核过**：契约加 blocked 求助路径·WorkerReport 加四求助字段 serde default·consume 加求助分支（`help_signal_from_raw`:可解析走结构化判定[status=blocked/字段]·不可解析才走 17 词表 suspected·**完成路无假阳性**）·链 help→`waiting_decision` 早 return[不计 completed·停后续·主管必看·fallback「suspected_blocked」]·激活 blocked·填真源=实现A 成唯一真源。735/0/43·2 文件·死线全 0-diff·fmt 权威净·完成汇报软着陆逐字未动（主导线亲读三条行为属性坐实）。
    - **C2（命名统一）= done·核过**（objective→task_goal+serde alias·物化三键归正·读方全切·731/0/43·死线 0-diff·fmt 权威闸净）。**allowed_write 隔离记债**:h5_project_dispatch_bridge:44 缺键 fallback→project_root=fail-open→改名前先修·单独一步。
    - **A（工作台会话可见）+ C1 四会话徽标 = 用户真机验过·OK**（只秘书有问题·见挂账）。
-2. **秘书入口 = done·用户真机验过（07-09）**：「打开秘书」chip 接看板 + 浮钮撤开看板行为留作桌面宠物占位——用户真机确认 OK。记忆转正加餐（另项·未做）。
-3. **搁置待点火**：整台工作台原型（用户想清楚再做；资产留存：现状说明书/v1 已认元素/颗粒度四拍）｜**运行错误上脸(A=B2 尾片 C6·反馈必人话)+ 开发者工具(B·方式未定)**：提案 `docs/plans/2026-07-09-run-error-surface-plain-language-proposal-v1.md`；**A 包起草待派 `tasks/2026-07-09-run-error-plain-language-surface-A-v1.md`（两派前决定已闭:落位=B2 C6「顺手做」·fix8=收编成错误族全谱;死线精确重划=冻结核 0-diff·报告层可收编;C1 收尾轮清后派）**；B 待用户定方向。
-4. **挂账**：备份剩余小件（3 记忆库+workbench store 146M+`~/.codex` 零副本·用户知情）｜「commit 后顺手 push」写不写进 AGENTS 未答｜principles 引 `tasks/README.md` 文字小口子｜旧线（画布真机对图 / 手感打磨 / A4·C default-safe 待真机 / 会话模型 P3 / 记忆中心布局重做=Phase D）。
-5. **盯着的（警报器）**：manual_relay 首发抽风（级联已根治·**07-09 C1 核测头回以单具名失败现身** `manual_relay_gui_direct_running_poll...`·重跑即绿·坐标已定·定点修待排）｜tier-1 输出不稳家族三案（新接 LM 字段必配确定性兜底）｜「死锚默认」家族三前科（碰 `default_workflow_*` 一律警觉）｜prepared 148 条已裁认账（正解并入 B2）｜**codex 特性会一夜自开**（memories 07-07 晚 21:38 自启前科——观察模式下每切片收口重跑渗出三查+池内工作台条目计数,codex 升级后同步复核）。
+2. **防重造轮子·两只读普查包待派（便宜模型·另对话·07-09）**：主导线画像只深在 B2 竖线、写"加新能力"包没做"全仓是否已有"普查=有重造风险(C0 已实证 SubagentReport 两套并行·C3 才收敛)。包①回扫最近加新能力包(A 会话列表/C6 错误翻译/C4b 总结候选)查有没有重造 `tasks/2026-07-09-dup-check-recent-new-capability-packages-v1.md`；包②接旧图(6 月 lib.rs 代码地图+接缝图+会话契约清单+harness catalog)补全刷新全仓能力地图 `tasks/2026-07-09-capability-inventory-map-refresh-v1.md`。**都只读·判断留主导线·便宜模型只 grep 摆证据**。→ 回交主导线核+以后写包先对图。**流程补丁**:写"加新能力"包前 grep 范围从改动区放大到全仓。
+3. **秘书入口 = done·用户真机验过（07-09）**：「打开秘书」chip 接看板 + 浮钮撤开看板行为留作桌面宠物占位——用户真机确认 OK。记忆转正加餐（另项·未做）。
+4. **搁置待点火**：整台工作台原型（用户想清楚再做；资产留存：现状说明书/v1 已认元素/颗粒度四拍）｜**运行错误上脸(A=B2 尾片 C6·反馈必人话)+ 开发者工具(B·方式未定)**：提案 `docs/plans/2026-07-09-run-error-surface-plain-language-proposal-v1.md`；**A 包起草待派 `tasks/2026-07-09-run-error-plain-language-surface-A-v1.md`（两派前决定已闭:落位=B2 C6「顺手做」·fix8=收编成错误族全谱;死线精确重划=冻结核 0-diff·报告层可收编;C1 收尾轮清后派）**；B 待用户定方向。
+5. **挂账**：备份剩余小件（3 记忆库+workbench store 146M+`~/.codex` 零副本·用户知情）｜「commit 后顺手 push」写不写进 AGENTS 未答｜principles 引 `tasks/README.md` 文字小口子｜旧线（画布真机对图 / 手感打磨 / A4·C default-safe 待真机 / 会话模型 P3 / 记忆中心布局重做=Phase D）。
+6. **盯着的（警报器）**：manual_relay 首发抽风（级联已根治·**07-09 C1 核测头回以单具名失败现身** `manual_relay_gui_direct_running_poll...`·重跑即绿·坐标已定·定点修待排）｜tier-1 输出不稳家族三案（新接 LM 字段必配确定性兜底）｜「死锚默认」家族三前科（碰 `default_workflow_*` 一律警觉）｜prepared 148 条已裁认账（正解并入 B2）｜**codex 特性会一夜自开**（memories 07-07 晚 21:38 自启前科——观察模式下每切片收口重跑渗出三查+池内工作台条目计数,codex 升级后同步复核）。
 
 ## 四、锁着的 / 没接
 
