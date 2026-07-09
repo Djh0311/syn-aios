@@ -16,7 +16,7 @@
 
 ## 三、下一步
 
-1. **C4b 起（C4a 已核过）= 主管总结→记忆候选**（§4.8+七查⑥⑦:工作流末主管出总结→上货脸主导位+进记忆候选[架构§8.2 候选来源·转正走确认·与现行[属实]确认制零冲突]）。→ 拆包派出 → C4c(failed 四选一) → C5。
+1. **C4b·主管总结→记忆候选·包待派 `tasks/2026-07-09-phase-b2-c4b-director-summary-memory-candidate-v1.md`**：measure-first 亲读——链末 finalize completed 在 director:2131；候选机器现成 `memory_capture_bus::capture_event`(:42·含 final_review 来源·走 control_core 校验·落 memory_candidate_store)；转正走[属实]确认门(架构§8.2·不动)。包:链末主管 LM 出工作流总结(**一次/链**·守成本)→①上货脸 DirectorChainOutcome.director_summary ②经 capture_event 喂候选(现成校验·**候选态不自动转正**)；总结=增益(失败软着陆不崩链·区别 C4a 终标)。→ 派核过 → C4c(failed 四选一) → C5。
    - **C4a（主管七查+终标）= done·核过**：完成分支从「解析即自动 completed」改为主管终标——确定性初筛①-⑤全绿直过 completed(**零 LM**·1749 不调 final_marker)/黄牌走主管 LM 判过(completed)或退回(needs_rework·预算制 attempts 累计·耗尽→waiting_decision)/LM 断供→waiting_decision 保守不蒙混;确定性初筛拿不准全走黄牌(缺报文/status≠done/acceptance≠completed/evidence 空/required_checks 配了无真源/direction_risks 有);C3 求助路 1647 短路早于 1727 完成分支不受影响。744/0/43·2 文件死线全 0-diff·fmt 权威净·主导线亲读六条命根坐实。
    - **C3（worker 求助通道）= 整块 done·核过**：C3a 立真源（契约加 blocked+四求助字段+consume 求助分支→waiting_decision 早 return 不计 completed+疑似求助保守升级+实现A 成唯一真源）；**C3b 收敛**（derive_subagent_reports 改投影 `worker_structured_report_recorded` 真源·多键关联防串源·无真源→空不猜；退役 922 contains 启发式生产零残留；unresolved_direction_risk+unresolved_conflict 死读删净；dispatch cancelled 终态·仅 project_director 可取消）。738/0/43·死线全 0-diff·fmt 权威净·主导线亲读核过。
    - **C3a（worker 求助通道核心）= done·核过**：契约加 blocked 求助路径·WorkerReport 加四求助字段 serde default·consume 加求助分支（`help_signal_from_raw`:可解析走结构化判定[status=blocked/字段]·不可解析才走 17 词表 suspected·**完成路无假阳性**）·链 help→`waiting_decision` 早 return[不计 completed·停后续·主管必看·fallback「suspected_blocked」]·激活 blocked·填真源=实现A 成唯一真源。735/0/43·2 文件·死线全 0-diff·fmt 权威净·完成汇报软着陆逐字未动（主导线亲读三条行为属性坐实）。
