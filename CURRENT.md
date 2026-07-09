@@ -16,9 +16,10 @@
 
 ## 三、下一步
 
-1. **C2 = 任务包 v2·三层命名统一（A 已提交·让位）**（§5.1 差量:task_goal/allowed_read_scope/report_format 三层对齐 + timeout_policy/failure_policy/available_skills/available_knowledge_refs 补 + forbidden_actions/model_id 硬编码改可配·碰 types/c4_c6/director_agent/worker_report/commands.rs）→ 拆包派出 → 逐片真机过。
+1. **C2 = 任务包 v2·三层命名统一·包待派 `tasks/2026-07-09-phase-b2-c2-task-package-v2-naming-v1.md`**：measure-first 亲读三层（planned_task.objective≠task_goal·物化把 4 键翻成 brief/required_return/allowed_read/allowed_write·TaskPackage struct 活的用正本名）。**scope 发现**:比标题宽（3 活层·4 字符串键·~10 读方）且 **`allowed_write` 被 real_execution_command 读·喂沙箱写权限=攸关**。包拆法:2.1-2.4 核心统一（objective→task_goal 编译校验·三键改名 grep 清零·新字段 additive·forbidden/model 可配）+ **§2.5 allowed_write 隔离**（先验沙箱失配模式·fail-open/拿不准就停手报回归单独一步·吸取 S0 教训宁隔离不一锅端）。→ 派出核实物 → C3。
    - **A（工作台会话可见·修显示 bug）= done·核过**（死线 0-diff·crux 测两侧覆盖·730/0/43·fmt 新增码净）；**待用户真机一眼**:重建 app 后智能体页看今天那 4 条「交办任务专用会话」带徽标出没出。
-3. **等用户真机顺手**：工作历史栏/秘书看板计数/拉窄不挤 三点；秘书两入口对调（已核代码:输入栏边「秘」钮=开看板·对得上）；**接着跑在卡住脸不在历史栏（主导线曾误述已纠）**；记忆转正加餐。
+   - **秘书入口未修完**（用户 07-09:右侧有明确「打开秘书」四字组件·和我核的输入栏边「秘」钮不是同一个·**疑多入口组件·待 C2 后专查右侧那个**）。
+2. **等用户真机顺手**：工作历史栏/秘书看板计数/拉窄不挤 三点；**接着跑在卡住脸不在历史栏（主导线曾误述已纠）**；记忆转正加餐。
 3. **搁置待点火**：整台工作台原型（用户想清楚再做；资产留存：现状说明书/v1 已认元素/颗粒度四拍）｜**运行错误上脸(A=B2 尾片 C6·反馈必人话)+ 开发者工具(B·方式未定)**：提案 `docs/plans/2026-07-09-run-error-surface-plain-language-proposal-v1.md`；**A 包起草待派 `tasks/2026-07-09-run-error-plain-language-surface-A-v1.md`（两派前决定已闭:落位=B2 C6「顺手做」·fix8=收编成错误族全谱;死线精确重划=冻结核 0-diff·报告层可收编;C1 收尾轮清后派）**；B 待用户定方向。
 4. **挂账**：备份剩余小件（3 记忆库+workbench store 146M+`~/.codex` 零副本·用户知情）｜「commit 后顺手 push」写不写进 AGENTS 未答｜principles 引 `tasks/README.md` 文字小口子｜旧线（画布真机对图 / 手感打磨 / A4·C default-safe 待真机 / 会话模型 P3 / 记忆中心布局重做=Phase D）。
 5. **盯着的（警报器）**：manual_relay 首发抽风（级联已根治·**07-09 C1 核测头回以单具名失败现身** `manual_relay_gui_direct_running_poll...`·重跑即绿·坐标已定·定点修待排）｜tier-1 输出不稳家族三案（新接 LM 字段必配确定性兜底）｜「死锚默认」家族三前科（碰 `default_workflow_*` 一律警觉）｜prepared 148 条已裁认账（正解并入 B2）｜**codex 特性会一夜自开**（memories 07-07 晚 21:38 自启前科——观察模式下每切片收口重跑渗出三查+池内工作台条目计数,codex 升级后同步复核）。
