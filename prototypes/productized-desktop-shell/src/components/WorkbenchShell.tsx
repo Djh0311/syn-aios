@@ -128,7 +128,10 @@ export function WorkbenchShell({
         onReloadWorkflowState={onReloadWorkflowState}
       />
 
-      <WorkbenchDock onActiveRightPanelChange={onActiveRightPanelChange} />
+      <WorkbenchDock
+        onActiveRightPanelChange={onActiveRightPanelChange}
+        onActiveViewChange={onActiveViewChange}
+      />
 
       <PermissionDialog
         action={pendingAction}
@@ -340,8 +343,10 @@ function WorkbenchStatusRail({
 
 function WorkbenchDock({
   onActiveRightPanelChange,
+  onActiveViewChange,
 }: {
   onActiveRightPanelChange: Dispatch<SetStateAction<RightPanelKey | null>>;
+  onActiveViewChange: (view: ViewKey) => void;
 }) {
   return (
     <footer className="dock ink-shell" aria-label="秘书对话框">
@@ -368,7 +373,7 @@ function WorkbenchDock({
           <button className="chip" type="button" onClick={() => onActiveRightPanelChange("secretary")}>整理</button>
           <button className="chip" type="button" onClick={() => onActiveRightPanelChange("secretary")}>提醒</button>
           <button className="chip" type="button" onClick={() => onActiveRightPanelChange("secretary")}>影响面</button>
-          <button className="chip send" type="button" onClick={() => onActiveRightPanelChange("secretary")}>打开秘书</button>
+          <button className="chip send" type="button" onClick={() => onActiveViewChange("secretary_board")}>打开秘书</button>
         </div>
       </div>
     </footer>
