@@ -1626,6 +1626,7 @@ fn run_auto_advance_authorized_role_loop(
     approved_planned_tasks: Option<&[ProjectDirectorPlannedTask]>,
 ) -> Result<AutoAdvanceRoleLoopOutcome, String> {
     // 质量债·超时反馈边：预算**写死 1**（要改另拍）——薄壳保签名（既有调用点/lib.rs 测试 0 改动）。
+    // C1·mode-aware：本公有壳 = 拐杖路（session_creator=None）——手动挡/existing/旧测试照走预绑 resume·守卫零改。
     run_auto_advance_authorized_role_loop_with_timeout_budget(
         path,
         index,
@@ -1638,6 +1639,39 @@ fn run_auto_advance_authorized_role_loop(
         max_nodes,
         approved_planned_tasks,
         1,
+        None,
+    )
+}
+
+// C1·自动/新对话免管路主入口（canon 2026-07-09）：每任务经现成先生后绑建专属新会话。独立[接着跑]（无
+// session_choice·天然新对话模式）走这条。lib.rs 旧测试仍调公有壳（None）→ 守卫/拐杖测零改。
+#[allow(clippy::too_many_arguments)]
+fn run_auto_advance_authorized_role_loop_with_session_creator(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    director: &dyn DirectorAgent,
+    project_root: &str,
+    workflow_id: &str,
+    actor_id: &str,
+    max_nodes: usize,
+    approved_planned_tasks: Option<&[ProjectDirectorPlannedTask]>,
+    session_creator: &dyn JiaobanNewSessionCreator,
+) -> Result<AutoAdvanceRoleLoopOutcome, String> {
+    run_auto_advance_authorized_role_loop_with_timeout_budget(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        director,
+        project_root,
+        workflow_id,
+        actor_id,
+        max_nodes,
+        approved_planned_tasks,
+        1,
+        Some(session_creator),
     )
 }
 
@@ -1656,6 +1690,10 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
     approved_planned_tasks: Option<&[ProjectDirectorPlannedTask]>,
     // 债二·超时自动重拆剩余预算（壳传 1·递归传 0 → 两连超时只重拆一次·不许无人值守循环）。
     timeout_auto_replan_budget: usize,
+    // C1·mode-aware（canon 2026-07-09）：Some=新对话/自动免管路 → 每任务先生后绑建专属会话；
+    // None=拐杖（手动挡/existing/旧测试）→ 沿用节点预绑 resume。守卫（path-lock/授权/拒绝）在会话创建之前
+    // 就拦，故 None/Some 都不误伤 PanicCreator 守卫。
+    session_creator: Option<&dyn JiaobanNewSessionCreator>,
 ) -> Result<AutoAdvanceRoleLoopOutcome, String> {
     // 死线·圈固定测试项目（决策 2026-06-27）：非测试 root 入口直接拒——在 LM 拆 / prepare 之前提前拦
     // （纵深防御，不只靠链入口的晚拦）。与现成命令同款 path-lock，闸 / 沙箱本体不动。
@@ -1863,16 +1901,31 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
         // 5. prepared 出来 → **起链前复查授权仍 active**（2.5·批与拆/prepare 之间 LM 耗时长·可能被撤/过期）→ 跑 worker 链
         //    （四护栏·入口 path-lock 圈测试项目·失败即停）。
         require_active_authorization(path, project_root, workflow_id)?;
-        let outcome = run_director_task_chain(
-            path,
-            index,
-            readback_db_path,
-            runner,
-            project_root,
-            workflow_id,
-            &prepared.plan.planned_tasks,
-            max_nodes,
-        )?;
+        // C1·mode-aware：新对话/自动路（Some）→ 复用首轮 run_director_task_chain_with_session_creator 每任务先生后绑；
+        // 拐杖路（None·手动挡/existing）→ 沿用节点预绑 resume。**别造第二套**·失败即停在 chain 里已立（不回落）。
+        let outcome = match session_creator {
+            Some(creator) => run_director_task_chain_with_session_creator(
+                path,
+                index,
+                readback_db_path,
+                runner,
+                project_root,
+                workflow_id,
+                &prepared.plan.planned_tasks,
+                max_nodes,
+                creator,
+            )?,
+            None => run_director_task_chain(
+                path,
+                index,
+                readback_db_path,
+                runner,
+                project_root,
+                workflow_id,
+                &prepared.plan.planned_tasks,
+                max_nodes,
+            )?,
+        };
         let stop_reason = outcome.stopped_reason.clone();
         let message = format!(
             "授权后自动推进跑完 worker 链：completed {} / dispatched {}{}",
@@ -1944,6 +1997,7 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                             max_nodes,
                             None, // 重拆 = re-plan 路（自然带上已完成事实 + 超时事实行）
                             timeout_auto_replan_budget - 1,
+                            session_creator, // C1·重拆轮同 mode（Some 则每任务仍新会话·透传）
                         ) {
                             Ok(mut second) => {
                                 second.warnings.insert(
@@ -1991,7 +2045,8 @@ async fn auto_advance_authorized_role_loop(
             .actor_id
             .clone()
             .unwrap_or_else(|| "role-loop-auto-advance".to_string());
-        run_auto_advance_authorized_role_loop(
+        // C1·独立[接着跑]=天然新对话免管路（无 session_choice·canon 2026-07-09）→ 每任务先生后绑建专属会话。
+        run_auto_advance_authorized_role_loop_with_session_creator(
             &path,
             &index,
             &readback_db_path,
@@ -2003,6 +2058,7 @@ async fn auto_advance_authorized_role_loop(
             request.max_nodes.unwrap_or(50),
             // 独立自动推进命令：无「已批图」入口 → 现状 LM 拆（2.2 只在合流命令收图）。
             None,
+            &ManualRelayJiaobanNewSessionCreator,
         )
     })
     .await
@@ -3815,5 +3871,160 @@ mod quality_debt_tests {
             "[C1_TIMING] N 任务链会话总开销 ≈ N × {elapsed_ms} ms（每任务一条·线性·知情代价）"
         );
         assert!(!thread_id.trim().is_empty(), "应拿到真 thread_id");
+    }
+
+    // §4·新断言：独立[接着跑]/自动免管路（run_auto_advance_authorized_role_loop_with_session_creator）
+    // 3 任务链 → 每任务先生后绑建新会话（creator 3 次）+ 各任务 dispatch 用各自新 thread 互异 + target_session_id
+    // 互异物化。证「自动路已接 C1 每任务新会话」（对比 6565 拐杖测·公有壳仍跑预绑）。
+    #[test]
+    fn c1_auto_advance_new_conversation_path_creates_per_task_sessions() {
+        struct ThreeTaskDirector;
+        impl DirectorAgent for ThreeTaskDirector {
+            fn plan(
+                &self,
+                _ctx: &ProjectContext,
+                proposal: &ProjectConsultationProposal,
+            ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+                let scope = director_task_scope_from_proposal(proposal, "codex-dev");
+                let mk = |id: usize, title: &str, deps: Vec<String>| ProjectDirectorPlannedTask {
+                    planned_task_id: format!("planned-task:{}:{id}", proposal.workflow_id),
+                    title: title.to_string(),
+                    objective: format!("自包含：{title}"),
+                    scope: scope.clone(),
+                    depends_on: deps,
+                    acceptance_criteria: vec!["ok".to_string()],
+                    report_format: vec!["r".to_string()],
+                    status: "planned".to_string(),
+                    guard_result: None,
+                    work_item_id: None,
+                    workflow_node_id: None,
+                    task_package_id: None,
+                    memory_packet_snapshot_id: None,
+                    prepared_dispatch_id: None,
+                    blocked_reasons: vec![],
+                };
+                Ok(vec![
+                    mk(1, "任务甲", vec![]),
+                    mk(2, "任务乙", vec!["任务甲".to_string()]),
+                    mk(3, "任务丙", vec!["任务乙".to_string()]),
+                ])
+            }
+        }
+        struct DistinctCreator {
+            calls: Cell<usize>,
+        }
+        impl JiaobanNewSessionCreator for DistinctCreator {
+            fn create_initialized_session(&self, _t: &str, _b: &str) -> Result<String, String> {
+                let n = self.calls.get() + 1;
+                self.calls.set(n);
+                Ok(format!("thread-c1-task-{n}"))
+            }
+        }
+        struct RecordingRunner {
+            threads: RefCell<Vec<String>>,
+        }
+        impl CodexResumeRunner for RecordingRunner {
+            fn resume_with_options(
+                &self,
+                thread_id: &str,
+                _p: &str,
+                last_message_path: &Path,
+                _o: &CodexResumeRequestOptions,
+            ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String>
+            {
+                self.threads.borrow_mut().push(thread_id.to_string());
+                if let Some(parent) = last_message_path.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let _ = fs::write(
+                    last_message_path,
+                    "干完了。\n```json\n{\"did\":\"x\",\"outputs\":[],\"status\":\"done\",\"evidence\":[]}\n```",
+                );
+                Ok((
+                    CodexResumeRunResult {
+                        exit_code: 0,
+                        timed_out: false,
+                        stderr_summary: None,
+                    },
+                    WorkflowNodeDispatchExecutionOptions {
+                        readback_stats: Some(CodexDispatchReadbackStats {
+                            transcript_event_count: 3,
+                            transcript_target_hits: 1,
+                        }),
+                    },
+                ))
+            }
+        }
+
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("c1-auto");
+        let path = dir.join("workflow-state.v0.json");
+        let threads_json: Vec<Value> = [
+            "thread-qdebt",
+            "thread-c1-task-1",
+            "thread-c1-task-2",
+            "thread-c1-task-3",
+        ]
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "thread_id": t, "project_root": test_root, "title": format!("Session {t}"),
+                "rollout_exists": true, "rollout_path": format!("/tmp/{t}.jsonl")
+            })
+        })
+        .collect();
+        let index = serde_json::json!({
+            "projects": [{ "project_root": test_root }],
+            "threads": threads_json
+        });
+        let workflow_id = seed_active_run(&path, &index, test_root);
+        let readback = dir.join("readback.db");
+        let creator = DistinctCreator {
+            calls: Cell::new(0),
+        };
+        let runner = RecordingRunner {
+            threads: RefCell::new(vec![]),
+        };
+        let outcome = run_auto_advance_authorized_role_loop_with_session_creator(
+            &path,
+            &index,
+            &readback,
+            &runner,
+            &ThreeTaskDirector,
+            test_root,
+            &workflow_id,
+            "tester",
+            50,
+            None,
+            &creator,
+        )
+        .expect("C1 自动路应跑通");
+        assert_eq!(outcome.stage, "ran", "应跑到链：{outcome:?}");
+        // ① 每任务先生后绑一次。
+        assert_eq!(creator.calls.get(), 3, "① 自动路每任务建新会话·3 次");
+        // ② 各任务 dispatch 用各自新 thread 互异。
+        let threads = runner.threads.borrow();
+        assert_eq!(threads.len(), 3, "3 任务各 dispatch 一次");
+        let distinct: std::collections::BTreeSet<&String> = threads.iter().collect();
+        assert_eq!(distinct.len(), 3, "② dispatch thread 互异：{threads:?}");
+        assert!(
+            threads.iter().all(|t| t.starts_with("thread-c1-task-")),
+            "② dispatch 用新建会话线：{threads:?}"
+        );
+        // ③ target_session_id 互异物化（全 artifact 里非空 target_session_id 恰 3 个互异）。
+        let value = read_workflow_state_value(&path).unwrap();
+        let session_ids: std::collections::BTreeSet<String> = value["artifacts"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|a| optional_string_from(a, "target_session_id"))
+            .collect();
+        assert_eq!(
+            session_ids.len(),
+            3,
+            "③ 3 个 target_session_id 互异物化：{session_ids:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 }
