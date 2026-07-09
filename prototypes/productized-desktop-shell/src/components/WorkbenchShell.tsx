@@ -140,15 +140,12 @@ export function WorkbenchShell({
         onConfirm={() => void onConfirmAction()}
       />
 
-      <button
-        className={`secretary-float ${activeView === "secretary_board" ? "active" : ""}`}
-        type="button"
-        aria-label="打开秘书看板"
-        onClick={() => onActiveViewChange("secretary_board")}
-      >
+      {/* 浮钮 = 将来「桌面宠物」秘书角色的位（当前界面未显·占位待建）。07-09 用户拍：
+          留浮钮、撤它的开看板行为——开看板归 dock 里的「打开秘书」chip。保留 review 计数徽标。 */}
+      <div className="secretary-float" role="img" aria-label="秘书助手（桌面宠物·建设中）">
         <span aria-hidden="true">秘</span>
         {topbarReviewCount > 0 ? <i>{topbarReviewCount}</i> : null}
-      </button>
+      </div>
     </div>
   );
 }
@@ -294,7 +291,8 @@ function WorkbenchStatusRail({
   return (
     <aside className="status-rail ink-shell" aria-label="工作台入口">
       <div className="right-icon-strip">
-        {/* 07-08 用户对调秘书两入口：右侧栏图标 = 开侧边栏摘要（浮层）；右下角浮钮 = 开秘书界面（看板）。 */}
+        {/* 秘书入口（07-09 定）：右侧栏图标 = 开侧边栏摘要（浮层）；dock「打开秘书」chip = 开看板；
+            浮钮（.secretary-float）已撤开看板行为、留作将来「桌面宠物」角色位。 */}
         {workspaceRailItems.map((item) => (
           <button
             className={`rail-icon-button ${activeRightPanel === item.key ? "active" : ""}`}
