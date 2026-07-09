@@ -12534,6 +12534,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             reasoning_effort: Some("offline".to_string()),
             thread_source: Some("offline-fixture".to_string()),
             warnings: vec![],
+            workbench_bound: false,
         }
     }
 

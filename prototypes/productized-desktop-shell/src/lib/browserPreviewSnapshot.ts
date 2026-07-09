@@ -36,6 +36,21 @@ export const browserPreviewSessions: SessionRecord[] = [
     warnings: [],
   },
   {
+    // 工作台绑定的任务会话（codex exec 建·has_user_event=0·经 store 绑定合并进列表）——带「工作台任务」徽标。
+    thread_id: "browser-preview-thread-workbench",
+    title: "交办任务专用会话：搭骨架",
+    project_root: previewProjectRoot,
+    updated_at_ms: previewUpdatedAt - 30 * 60 * 1000,
+    archived: false,
+    rollout_exists: true,
+    rollout_path: "/browser-preview/rollouts/workbench-task.jsonl",
+    model: "gpt-5-codex",
+    reasoning_effort: "medium",
+    thread_source: "codex",
+    warnings: [],
+    workbench_bound: true,
+  },
+  {
     thread_id: "browser-preview-thread-polling",
     title: "轮询恢复与超时",
     project_root: previewProjectRoot,

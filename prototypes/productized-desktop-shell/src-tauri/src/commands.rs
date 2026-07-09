@@ -278,6 +278,19 @@ fn load_codex_session_page(
                 .collect();
             let mut warnings = Vec::new();
             let mut source = "sqlite_page".to_string();
+            // 修显示 bug（2026-07-09）：工作台用 codex exec 建的会话 has_user_event=0，被 read_threads_page 的
+            // 显示过滤藏掉（噪音过滤本体不动·codex_db.rs:90）。仅首页并上 store 绑过工作流节点的会话
+            //（find_thread_by_id 绕过滤解析·标 workbench_bound）——后页这些已在首页显示过·避免重复与分页错乱
+            //（offset 守卫在 helper 内）。软着陆:读 store 失败只出 warning、返回原列表（显示是增益不是闸）。
+            let merge_warnings = merge_workbench_bound_sessions(
+                &mut sessions,
+                &state.workflow_state_path,
+                &db_path,
+                request.offset.unwrap_or(0),
+                request.include_archived.unwrap_or(false),
+                request.archived_only.unwrap_or(false),
+            );
+            warnings.extend(merge_warnings);
             if sessions.is_empty() {
                 if let Some(query) = request.query.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
                     if let Some(codex_home) = db_path.parent() {
@@ -350,6 +363,95 @@ fn load_codex_session_page(
             })
         }
     }
+}
+
+/// 把「工作台绑过工作流节点的会话」合并进列表（修显示 bug：C1 任务会话看不见）。
+///
+/// 背景：工作台经 codex exec 建的会话 `has_user_event=0`，被 `read_threads_page` 的显示过滤
+/// （codex_db.rs:90「Skips threads where has_user_event=0」）合理藏掉——那过滤对 codex 一堆空占位
+/// 噪音有用、**本体不动**。这里只**定向补上**工作台真在用的：判据 = store
+/// `workflow_node_session_bindings[].native_thread_id` 这个硬信号（**不靠标题字符串猜**），用只读、
+/// **绕显示过滤**的 `find_thread_by_id`（codex_db.rs:118）按主键解析，标 `workbench_bound`，
+/// 按 `updated_at_ms DESC, id DESC` 重排（与 sqlite `ORDER BY` 一致·自然按时间交错）。
+///
+/// 软着陆：读 store 失败 / 单条解析失败 → 只出 warning、保留原列表，**不 Err 断列表**
+/// （显示是增益不是闸）。只补不在列表里的（按 thread_id 去重），归档按当前视图口径过滤。
+fn merge_workbench_bound_sessions(
+    sessions: &mut Vec<SessionRecord>,
+    workflow_state_path: &Path,
+    db_path: &Path,
+    offset: usize,
+    include_archived: bool,
+    archived_only: bool,
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    // 仅首页并入（后页这些已在首页显示过·避免重复与分页错乱）。
+    if offset != 0 {
+        return warnings;
+    }
+    let state = match read_workflow_state_value(workflow_state_path) {
+        Ok(value) => value,
+        Err(error) => {
+            warnings.push(format!(
+                "workbench_bound_sessions_skipped_state_unreadable:{error}"
+            ));
+            return warnings;
+        }
+    };
+    // store 绑定的 native_thread_id：非空 · 排除已在列表里的 · 去重。
+    let existing: std::collections::HashSet<String> =
+        sessions.iter().map(|s| s.thread_id.clone()).collect();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let bound_thread_ids: Vec<String> = state
+        .get("workflow_node_session_bindings")
+        .and_then(Value::as_array)
+        .map(|bindings| {
+            bindings
+                .iter()
+                .filter_map(|binding| optional_string_from(binding, "native_thread_id"))
+                .filter(|thread_id| !thread_id.is_empty())
+                .filter(|thread_id| !existing.contains(thread_id))
+                .filter(|thread_id| seen.insert(thread_id.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut added = 0usize;
+    for thread_id in bound_thread_ids {
+        match codex_db::find_thread_by_id(db_path, &thread_id) {
+            Ok(Some(row)) => {
+                // 归档按当前视图口径（与 read_threads_page 显示过滤一致）：archived_only 只收归档的；
+                // 否则非归档收、归档看 include_archived。
+                let visible = if archived_only {
+                    row.archived
+                } else {
+                    include_archived || !row.archived
+                };
+                if !visible {
+                    continue;
+                }
+                let mut record = session_record_from_codex_thread(row);
+                record.workbench_bound = true;
+                sessions.push(record);
+                added += 1;
+            }
+            // 会话不在 codex 侧（已删/尚未落库）——跳过，不算错。
+            Ok(None) => {}
+            Err(error) => {
+                warnings.push(format!(
+                    "workbench_bound_session_resolve_failed:{thread_id}:{error}"
+                ));
+            }
+        }
+    }
+    if added > 0 {
+        // 与 read_threads_page 的 `ORDER BY updated_at_ms DESC, id DESC` 一致·并入后自然按时间交错。
+        sessions.sort_by(|a, b| {
+            let at = a.updated_at_ms.unwrap_or(0);
+            let bt = b.updated_at_ms.unwrap_or(0);
+            bt.cmp(&at).then_with(|| b.thread_id.cmp(&a.thread_id))
+        });
+    }
+    warnings
 }
 
 fn session_matches_query(session: &SessionRecord, query: &str) -> bool {
@@ -503,6 +605,7 @@ fn session_record_from_rollout_path(path: PathBuf, thread_id: String, archived: 
         reasoning_effort,
         thread_source: Some("codex".to_string()),
         warnings: vec!["session_index_pending_rollout_filename_fallback".to_string()],
+        workbench_bound: false,
     }
 }
 
@@ -627,6 +730,219 @@ mod command_rollout_fallback_tests {
         assert!(workflow_engine_test_project_unsealed("/Users/yoyi/codex-workflow-mario-test"));
         // path-lock 那把锁是唯一解封键,常量固定、无隐式放开路径。
         assert_eq!(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "/Users/yoyi/codex-workflow-mario-test");
+    }
+
+    // ===== 修显示 bug：工作台绑定会话在智能体页可见（2026-07-09）=====
+    // 建一个 codex sqlite（含 read_threads_page 用的 threads 表 + has_user_event 列）。
+    fn create_codex_threads_db(path: &Path) {
+        let conn = rusqlite::Connection::open(path).expect("open sqlite");
+        conn.execute_batch(
+            r#"
+            CREATE TABLE threads (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                cwd TEXT NOT NULL,
+                updated_at_ms INTEGER,
+                archived INTEGER NOT NULL,
+                rollout_path TEXT NOT NULL,
+                model TEXT,
+                reasoning_effort TEXT,
+                thread_source TEXT,
+                source TEXT NOT NULL DEFAULT 'cli',
+                has_user_event INTEGER NOT NULL
+            );
+            "#,
+        )
+        .expect("create threads table");
+    }
+    fn insert_codex_thread(
+        path: &Path,
+        thread_id: &str,
+        title: &str,
+        updated_at_ms: i64,
+        archived: i64,
+        has_user_event: i64,
+    ) {
+        let conn = rusqlite::Connection::open(path).expect("open sqlite");
+        conn.execute(
+            "INSERT INTO threads (id, title, cwd, updated_at_ms, archived, rollout_path, \
+             model, reasoning_effort, thread_source, has_user_event) \
+             VALUES (?1, ?2, '/tmp/project', ?3, ?4, '', 'gpt-test', 'medium', 'codex', ?5)",
+            rusqlite::params![thread_id, title, updated_at_ms, archived, has_user_event],
+        )
+        .expect("insert thread");
+    }
+    fn read_first_page(db_path: &Path) -> Vec<SessionRecord> {
+        codex_db::read_threads_page(
+            db_path,
+            codex_db::CodexThreadPageOptions {
+                page_size: 100,
+                offset: 0,
+                include_archived: false,
+                archived_only: false,
+                query: None,
+            },
+        )
+        .expect("read page")
+        .rows
+        .into_iter()
+        .map(session_record_from_codex_thread)
+        .collect()
+    }
+
+    // 两侧都测：store 绑过的 has_user_event=0 会话应出现并标 workbench_bound；没绑的同类噪音仍藏。
+    #[test]
+    fn workbench_bound_session_surfaces_but_unbound_noise_stays_hidden() {
+        let dir = temp_codex_home("workbench-bound-merge");
+        fs::create_dir_all(&dir).expect("mkdir");
+        let db_path = dir.join("state.sqlite");
+        create_codex_threads_db(&db_path);
+        // 普通会话（有用户事件·正常显示）；工作台会话 + 噪音会话都 has_user_event=0（被显示过滤藏）。
+        insert_codex_thread(&db_path, "thread-normal", "普通会话", 3_000, 0, 1);
+        insert_codex_thread(
+            &db_path,
+            "thread-workbench",
+            "交办任务专用会话",
+            5_000,
+            0,
+            0,
+        );
+        insert_codex_thread(&db_path, "thread-noise", "codex 空占位噪音", 4_000, 0, 0);
+        // store 只绑 thread-workbench 到某工作流节点（native_thread_id 硬信号）。
+        let workflow_state_path = dir.join("workflow-state.v0.json");
+        fs::write(
+            &workflow_state_path,
+            json!({
+                "workflow_node_session_bindings": [
+                    { "native_thread_id": "thread-workbench", "node_id": "wf:node:codex-dev" }
+                ]
+            })
+            .to_string(),
+        )
+        .expect("write state");
+
+        // 起点：显示过滤下只见 thread-normal，两条 has_user_event=0 都藏着。
+        let mut sessions = read_first_page(&db_path);
+        let ids0: std::collections::HashSet<&str> =
+            sessions.iter().map(|s| s.thread_id.as_str()).collect();
+        assert!(ids0.contains("thread-normal"), "普通会话应可见");
+        assert!(
+            !ids0.contains("thread-workbench") && !ids0.contains("thread-noise"),
+            "起点：两条 has_user_event=0 会话被显示过滤藏着"
+        );
+
+        let warnings = merge_workbench_bound_sessions(
+            &mut sessions,
+            &workflow_state_path,
+            &db_path,
+            0,
+            false,
+            false,
+        );
+        assert!(warnings.is_empty(), "正常路径无 warning：{warnings:?}");
+
+        // 绑定的出现且标 workbench_bound=true。
+        let bound = sessions
+            .iter()
+            .find(|s| s.thread_id == "thread-workbench")
+            .expect("工作台绑定会话应并进列表");
+        assert!(bound.workbench_bound, "应标 workbench_bound=true");
+        // 没绑定的 has_user_event=0 噪音仍不出现（只补工作台的、没把噪音放出来）。
+        assert!(
+            !sessions.iter().any(|s| s.thread_id == "thread-noise"),
+            "没绑定的噪音会话仍藏（证过滤本体没松）"
+        );
+        // 普通会话不被误标。
+        let normal = sessions
+            .iter()
+            .find(|s| s.thread_id == "thread-normal")
+            .expect("普通会话在");
+        assert!(!normal.workbench_bound, "普通会话不该被标 workbench_bound");
+        // 排序：updated_at_ms DESC → 工作台(5000) 在普通(3000) 前。
+        let pos_wb = sessions
+            .iter()
+            .position(|s| s.thread_id == "thread-workbench")
+            .expect("wb");
+        let pos_n = sessions
+            .iter()
+            .position(|s| s.thread_id == "thread-normal")
+            .expect("n");
+        assert!(
+            pos_wb < pos_n,
+            "按 updated_at_ms 倒序·工作台(5000) 应在普通(3000) 前"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 软着陆：读 store 失败（路径不存在）→ 返回原列表不变 + warning、不 Err 断列表。
+    #[test]
+    fn workbench_bound_merge_soft_lands_when_state_unreadable() {
+        let dir = temp_codex_home("workbench-bound-softland");
+        fs::create_dir_all(&dir).expect("mkdir");
+        let db_path = dir.join("state.sqlite");
+        create_codex_threads_db(&db_path);
+        insert_codex_thread(&db_path, "thread-normal", "普通会话", 3_000, 0, 1);
+        let mut sessions = read_first_page(&db_path);
+        let before = sessions.clone();
+        let missing_state = dir.join("nonexistent-workflow-state.json");
+        let warnings = merge_workbench_bound_sessions(
+            &mut sessions,
+            &missing_state,
+            &db_path,
+            0,
+            false,
+            false,
+        );
+        assert_eq!(sessions, before, "软着陆：读 store 失败返回原列表不变");
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("workbench_bound_sessions_skipped_state_unreadable")),
+            "应出软着陆 warning：{warnings:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 后页（offset>0）不重复注入：工作台会话只在首页并一次。
+    #[test]
+    fn workbench_bound_merge_skips_later_pages() {
+        let dir = temp_codex_home("workbench-bound-laterpage");
+        fs::create_dir_all(&dir).expect("mkdir");
+        let db_path = dir.join("state.sqlite");
+        create_codex_threads_db(&db_path);
+        insert_codex_thread(&db_path, "thread-normal", "普通会话", 3_000, 0, 1);
+        insert_codex_thread(
+            &db_path,
+            "thread-workbench",
+            "交办任务专用会话",
+            5_000,
+            0,
+            0,
+        );
+        let workflow_state_path = dir.join("workflow-state.v0.json");
+        fs::write(
+            &workflow_state_path,
+            json!({
+                "workflow_node_session_bindings": [
+                    { "native_thread_id": "thread-workbench", "node_id": "wf:node:codex-dev" }
+                ]
+            })
+            .to_string(),
+        )
+        .expect("write state");
+        let mut sessions = read_first_page(&db_path);
+        let before = sessions.clone();
+        let warnings = merge_workbench_bound_sessions(
+            &mut sessions,
+            &workflow_state_path,
+            &db_path,
+            100,
+            false,
+            false,
+        );
+        assert_eq!(sessions, before, "后页不注入工作台会话");
+        assert!(warnings.is_empty(), "后页跳过·无 warning：{warnings:?}");
+        let _ = fs::remove_dir_all(dir);
     }
 }
 

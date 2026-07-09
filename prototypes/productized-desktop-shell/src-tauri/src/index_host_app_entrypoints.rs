@@ -45,6 +45,8 @@ fn session_record_from_codex_thread(r: codex_db::CodexThreadRow) -> SessionRecor
         reasoning_effort: r.reasoning_effort,
         thread_source: r.thread_source,
         warnings: r.warnings,
+        // 基础映射默认非工作台绑定；合并 store 绑定会话那步（commands.rs）才置 true。
+        workbench_bound: false,
     }
 }
 
@@ -139,6 +141,7 @@ fn parse_sessions(index: &Value) -> Vec<SessionRecord> {
                     reasoning_effort: optional_string_from(thread, "reasoning_effort"),
                     thread_source: optional_string_from(thread, "thread_source"),
                     warnings: string_array(thread, "warnings"),
+                    workbench_bound: false,
                 })
                 .collect()
         })

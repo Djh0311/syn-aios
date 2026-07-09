@@ -304,6 +304,9 @@ export function AgentSessionList({
                     <span className="sc-line-1">
                       <span className={`sc-dot ${status.tone}`} aria-hidden="true" />
                       <span className="sc-title">{session.title || "未命名会话"}</span>
+                      {session.workbench_bound ? (
+                        <span className="sc-workbench-badge" title="工作台绑定的任务会话（codex exec 建·经工作流节点绑定）">工作台任务</span>
+                      ) : null}
                     </span>
                     <span className="sc-line-2">
                       <span className="sc-time">{relativeTime(session.updated_at_ms)}</span>

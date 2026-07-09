@@ -78,6 +78,10 @@ struct SessionRecord {
     reasoning_effort: Option<String>,
     thread_source: Option<String>,
     warnings: Vec<String>,
+    // 工作台绑过工作流节点的会话标记（智能体页据此打「工作台任务」徽标）。默认 false·serde default 旧路径零改；
+    // 只有 load_codex_session_page 合并 store 绑定会话那步才置 true（判据=store 绑定硬信号·不靠标题猜）。
+    #[serde(default)]
+    workbench_bound: bool,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]

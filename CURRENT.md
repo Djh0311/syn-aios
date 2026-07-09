@@ -4,11 +4,11 @@
 
 ## 一、现在真能用什么（验过的·细节见现状说明书）
 
-- **交办全环（Phase A·真机验收）**：说 → 批（授权卡+批前边界意见+条件式工序图·所批即所跑）→ 干（逐格亮）→ 交货（口供上脸+黄牌+结果复核意见+[属实,沉淀]）/ 卡住（人话停因+死配对按钮·永不冻）；自动面：残料三层自愈 / 角色钳位 / flaky retry / 供给类失败人话 / 纯建议方案双保险（警条+开工口守卫）/ **超时自动打回主管重拆一次** / **重拆带「本单已完成」事实块+项目记忆**；**工作历史左栏**（按单列史九态含「批了没跑」·行内接着跑·旧单详情卡）。
+- **交办全环（Phase A·真机验收）**：说 → 批（授权卡+批前边界意见+条件式工序图·所批即所跑）→ 干（逐格亮）→ 交货（口供上脸+黄牌+结果复核意见+[属实,沉淀]）/ 卡住（人话停因+死配对按钮·永不冻）；自动面：残料三层自愈 / 角色钳位 / flaky retry / 供给类失败人话 / 纯建议方案双保险（警条+开工口守卫）/ **超时自动打回主管重拆一次** / **重拆带「本单已完成」事实块+项目记忆**；**工作历史左栏**（按单列史九态含「批了没跑」·只读浏览+旧单详情卡；[接着跑]在**卡住脸**不在历史栏——主导线 07-09 误述已纠）。
 - **五角色（Phase B·真机验收）**：咨询 / 主管 / worker + **全局主管两钩点**（批前边界+跑后复核·advisory·意见不是闸·词表禁「审批」）+ **秘书**（右栏摘要[与通知待办同开法] + 看板专门界面[四泳道只读] + 按需 AI 解释·零写入）。
 - **记忆环**：治理钩子攒候选 → [属实,沉淀] → 确认转正 → 召回 top5 进咨询/预拆/重拆 prompt（主管 prompt 已渲染）。
-- **画布 / 智能体页 / relay**：多工作流编排+全屏 HUD+任务级节点与依赖边（跑到哪亮到哪）；会话中心（虚拟化/分组/subagent 过滤/`focusedThreadId` 跳入）；manual relay 真发（唯一手动指挥通道）。
-- **工程底**：`cargo test --lib` = **723/0/42**（2026-07-08）·三闸绿；测试基建：manual_relay 12-failed 级联已根治（首发抽风未定位·等自曝）；**异地备份代码半边**（私有 remote `Djh0311/syn-aios`·9 分支·恢复演练过——记忆库/线上 store 仍零副本·知情挂账）。
+- **画布 / 智能体页 / relay**：多工作流编排+全屏 HUD+任务级节点与依赖边（跑到哪亮到哪）；会话中心（虚拟化/分组/subagent 过滤/`focusedThreadId` 跳入）；**智能体页会话列表并显工作台绑定会话**（A·07-09·has_user_event=0 的 exec 任务会话经 store 绑定捞出+「工作台任务」徽标·机器核过·待真机一眼）；manual relay 真发（唯一手动指挥通道）。
+- **工程底**：`cargo test --lib` = **730/0/43**（2026-07-09）·三闸绿；测试基建：manual_relay 12-failed 级联已根治（首发抽风未定位·等自曝）；commands.rs 有 35 块历史 rustfmt 漂移（HEAD 遗留·非新增·全量 rustfmt 会造几百行无关 diff 故不动）；**异地备份代码半边**（私有 remote `Djh0311/syn-aios`·9 分支·恢复演练过——记忆库/线上 store 仍零副本·知情挂账）。
 
 ## 二、在做什么
 
@@ -16,8 +16,8 @@
 
 ## 三、下一步
 
-1. **A·工作台会话可见（修显示 bug·先做）= 包待派 `tasks/2026-07-09-A-workbench-sessions-visible-in-agents-list-v1.md`**：C1 真机验成（store 铁证:4 任务 4 会话全 completed·标题「交办任务专用会话」），但智能体页看不见——根因 `load_codex_session_page`→`read_threads_page` 过滤 `has_user_event=1`，而 exec 建的工作台会话全 =0 被藏（重启无效·非缓存）。修法:列表并上 store 绑过节点的会话（`find_thread_by_id` 绕过滤·标 workbench_bound·徽标）·不动过滤本体/创建/死线。→ 回交核过提交 → 紧接 C2。**（A 先 C2 后=顺序做:两者都碰 commands.rs·并行会撞·用户 07-09 认可顺序）**
-2. **C2 = 任务包 v2·三层命名统一**（§5.1 差量:task_goal/allowed_read_scope/report_format 三层对齐 + timeout_policy/failure_policy/available_skills/available_knowledge_refs 补 + forbidden_actions/model_id 硬编码改可配·碰 types/c4_c6/director_agent/worker_report/commands.rs）→ A 提交后拆包派出 → 逐片真机过。
+1. **C2 = 任务包 v2·三层命名统一（A 已提交·让位）**（§5.1 差量:task_goal/allowed_read_scope/report_format 三层对齐 + timeout_policy/failure_policy/available_skills/available_knowledge_refs 补 + forbidden_actions/model_id 硬编码改可配·碰 types/c4_c6/director_agent/worker_report/commands.rs）→ 拆包派出 → 逐片真机过。
+   - **A（工作台会话可见·修显示 bug）= done·核过**（死线 0-diff·crux 测两侧覆盖·730/0/43·fmt 新增码净）；**待用户真机一眼**:重建 app 后智能体页看今天那 4 条「交办任务专用会话」带徽标出没出。
 3. **等用户真机顺手**：工作历史栏/秘书看板计数/拉窄不挤 三点；秘书两入口对调（已核代码:输入栏边「秘」钮=开看板·对得上）；**接着跑在卡住脸不在历史栏（主导线曾误述已纠）**；记忆转正加餐。
 3. **搁置待点火**：整台工作台原型（用户想清楚再做；资产留存：现状说明书/v1 已认元素/颗粒度四拍）｜**运行错误上脸(A=B2 尾片 C6·反馈必人话)+ 开发者工具(B·方式未定)**：提案 `docs/plans/2026-07-09-run-error-surface-plain-language-proposal-v1.md`；**A 包起草待派 `tasks/2026-07-09-run-error-plain-language-surface-A-v1.md`（两派前决定已闭:落位=B2 C6「顺手做」·fix8=收编成错误族全谱;死线精确重划=冻结核 0-diff·报告层可收编;C1 收尾轮清后派）**；B 待用户定方向。
 4. **挂账**：备份剩余小件（3 记忆库+workbench store 146M+`~/.codex` 零副本·用户知情）｜「commit 后顺手 push」写不写进 AGENTS 未答｜principles 引 `tasks/README.md` 文字小口子｜旧线（画布真机对图 / 手感打磨 / A4·C default-safe 待真机 / 会话模型 P3 / 记忆中心布局重做=Phase D）。

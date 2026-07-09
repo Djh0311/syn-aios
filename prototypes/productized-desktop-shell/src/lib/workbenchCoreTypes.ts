@@ -72,6 +72,8 @@ export type SessionRecord = {
   reasoning_effort?: string | null;
   thread_source?: string | null;
   warnings: string[];
+  // 工作台绑过工作流节点的会话（后端据 store 绑定合并进列表·修「智能体页看不见任务会话」bug）。
+  workbench_bound?: boolean;
 };
 
 export type CodexSessionPageRequest = {
