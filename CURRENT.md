@@ -16,8 +16,9 @@
 
 ## 三、下一步
 
-1. **C2 起（C1 已全闭）= 任务包 v2·三层命名统一**（§5.1 差量:task_goal/allowed_read_scope/report_format 三层对齐 + timeout_policy/failure_policy/available_skills/available_knowledge_refs 补 + forbidden_actions/model_id 硬编码改可配）→ 拆包派出 → 逐片真机过。C1 端到端真跑可随用户真机走一单自然覆盖。
-2. **等用户真机顺手**：工作历史栏/秘书看板计数/拉窄不挤 三点；秘书两入口对调+归队右栏一眼；记忆转正加餐（转正一条→出方案见「带上 N 条」）。
+1. **A·工作台会话可见（修显示 bug·先做）= 包待派 `tasks/2026-07-09-A-workbench-sessions-visible-in-agents-list-v1.md`**：C1 真机验成（store 铁证:4 任务 4 会话全 completed·标题「交办任务专用会话」），但智能体页看不见——根因 `load_codex_session_page`→`read_threads_page` 过滤 `has_user_event=1`，而 exec 建的工作台会话全 =0 被藏（重启无效·非缓存）。修法:列表并上 store 绑过节点的会话（`find_thread_by_id` 绕过滤·标 workbench_bound·徽标）·不动过滤本体/创建/死线。→ 回交核过提交 → 紧接 C2。**（A 先 C2 后=顺序做:两者都碰 commands.rs·并行会撞·用户 07-09 认可顺序）**
+2. **C2 = 任务包 v2·三层命名统一**（§5.1 差量:task_goal/allowed_read_scope/report_format 三层对齐 + timeout_policy/failure_policy/available_skills/available_knowledge_refs 补 + forbidden_actions/model_id 硬编码改可配·碰 types/c4_c6/director_agent/worker_report/commands.rs）→ A 提交后拆包派出 → 逐片真机过。
+3. **等用户真机顺手**：工作历史栏/秘书看板计数/拉窄不挤 三点；秘书两入口对调（已核代码:输入栏边「秘」钮=开看板·对得上）；**接着跑在卡住脸不在历史栏（主导线曾误述已纠）**；记忆转正加餐。
 3. **搁置待点火**：整台工作台原型（用户想清楚再做；资产留存：现状说明书/v1 已认元素/颗粒度四拍）｜**运行错误上脸(A=B2 尾片 C6·反馈必人话)+ 开发者工具(B·方式未定)**：提案 `docs/plans/2026-07-09-run-error-surface-plain-language-proposal-v1.md`；**A 包起草待派 `tasks/2026-07-09-run-error-plain-language-surface-A-v1.md`（两派前决定已闭:落位=B2 C6「顺手做」·fix8=收编成错误族全谱;死线精确重划=冻结核 0-diff·报告层可收编;C1 收尾轮清后派）**；B 待用户定方向。
 4. **挂账**：备份剩余小件（3 记忆库+workbench store 146M+`~/.codex` 零副本·用户知情）｜「commit 后顺手 push」写不写进 AGENTS 未答｜principles 引 `tasks/README.md` 文字小口子｜旧线（画布真机对图 / 手感打磨 / A4·C default-safe 待真机 / 会话模型 P3 / 记忆中心布局重做=Phase D）。
 5. **盯着的（警报器）**：manual_relay 首发抽风（级联已根治·**07-09 C1 核测头回以单具名失败现身** `manual_relay_gui_direct_running_poll...`·重跑即绿·坐标已定·定点修待排）｜tier-1 输出不稳家族三案（新接 LM 字段必配确定性兜底）｜「死锚默认」家族三前科（碰 `default_workflow_*` 一律警觉）｜prepared 148 条已裁认账（正解并入 B2）｜**codex 特性会一夜自开**（memories 07-07 晚 21:38 自启前科——观察模式下每切片收口重跑渗出三查+池内工作台条目计数,codex 升级后同步复核）。
