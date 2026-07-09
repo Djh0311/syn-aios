@@ -1,6 +1,6 @@
 # Current Authority（精简版 v3 · 2026-07-08）
 
-> **本文是唯一「每次工作完必更」的活正本**（四块：能用 / 在做 / 下一步 / 锁着）。per-task 状态以本文为准；排布 = `docs/plans/2026-06-27-complete-workbench-phased-roadmap-v1.md`（只在阶段切换时动）；**能力细节正本 = `docs/2026-07-08-workbench-current-feature-inventory-for-prototype-v1.md`（产品现状说明书·逐面盘点·每阶段收口刷）**。规则见 `AGENTS.md`。完整历史：`archive/2026-07-08-current-full-history-before-slim-v3.md`（v2 全史含 Phase A/B 逐包证据流水）+ git。
+> **本文是唯一「每次工作完必更」的活正本**（四块：能用 / 在做 / 下一步 / 锁着）。per-task 状态以本文为准；排布 = `docs/plans/2026-06-27-complete-workbench-phased-roadmap-v1.md`（只在阶段切换时动）；**能力细节正本 = `docs/2026-07-08-workbench-current-feature-inventory-for-prototype-v1.md`（产品现状说明书·逐面盘点·每阶段收口刷）**。规则见 `AGENTS.md`。**对话交接（2026-07-10·B2 收官）**：`handoffs/2026-07-10-b2-execution-loop-closed-conversation-handoff-v1.md`（新对话接手先读本文+它+记忆）。完整历史：`archive/2026-07-08-current-full-history-before-slim-v3.md`（v2 全史含 Phase A/B 逐包证据流水）+ git。
 
 ## 一、现在真能用什么（验过的·细节见现状说明书）
 
