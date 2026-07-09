@@ -16,7 +16,7 @@
 
 ## 三、下一步
 
-1. **C3b 起（C3a 已核过）= 求助收敛+终态**：退役启发式（workflow_read_model:922 `contains("direction")`）+ 读模型改只投影 C3a 真源 + `unresolved_direction_risk` bool 接真源或删 + dispatch cancelled 终态（waiting_decision 机器 C3a 已用·收编即可）。→ 拆包派出 → C4。
+1. **C3b·求助收敛+终态·包待派 `tasks/2026-07-09-phase-b2-c3b-help-convergence-cancelled-v1.md`**：measure-first 亲读——C3a 真源=`worker_structured_report_recorded` 审计事件(c4_c6:440·带真求助字段)、`derive_subagent_reports`(read_model:903)本就收 audit_events 参数(数据现成没用)、`unresolved_direction_risk` 只读侧无写侧(疑死读)。包:①derive 求助字段改投影真源·退役 922 contains 启发式(真源没有→空·不发明)；②unresolved_direction_risk 接真源或删死读(拿不准停手)；③dispatch cancelled 终态(配 waiting_decision 主管取消)。死线 worker_report/record 本体 0-diff。→ 派核过 → C4。
    - **C3a（worker 求助通道核心）= done·核过**：契约加 blocked 求助路径·WorkerReport 加四求助字段 serde default·consume 加求助分支（`help_signal_from_raw`:可解析走结构化判定[status=blocked/字段]·不可解析才走 17 词表 suspected·**完成路无假阳性**）·链 help→`waiting_decision` 早 return[不计 completed·停后续·主管必看·fallback「suspected_blocked」]·激活 blocked·填真源=实现A 成唯一真源。735/0/43·2 文件·死线全 0-diff·fmt 权威净·完成汇报软着陆逐字未动（主导线亲读三条行为属性坐实）。
    - **C2（命名统一）= done·核过**（objective→task_goal+serde alias·物化三键归正·读方全切·731/0/43·死线 0-diff·fmt 权威闸净）。**allowed_write 隔离记债**:h5_project_dispatch_bridge:44 缺键 fallback→project_root=fail-open→改名前先修·单独一步。
    - **A（工作台会话可见）+ C1 四会话徽标 = 用户真机验过·OK**（只秘书有问题·见挂账）。
