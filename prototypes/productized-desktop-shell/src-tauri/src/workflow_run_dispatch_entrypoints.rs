@@ -180,7 +180,7 @@ fn inspect_workflow_run_check_from_value(
         );
 
         let allowed_read = artifact
-            .map(|artifact| string_array(artifact, "allowed_read"))
+            .map(|artifact| string_array(artifact, "allowed_read_scope"))
             .unwrap_or_default();
         push_check(
             &mut checks,

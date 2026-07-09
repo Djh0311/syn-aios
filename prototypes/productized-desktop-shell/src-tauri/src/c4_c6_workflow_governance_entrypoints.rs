@@ -1845,7 +1845,7 @@ fn deterministic_project_director_planned_tasks(
     vec![ProjectDirectorPlannedTask {
         planned_task_id,
         title: format!("执行已授权方案：{}", context.proposal.title),
-        objective,
+        task_goal: objective,
         scope: ProjectDirectorTaskScope {
             project_id: scope.project_id.clone(),
             workflow_id: scope.workflow_id.clone(),
@@ -1853,9 +1853,15 @@ fn deterministic_project_director_planned_tasks(
             task_package_kind,
             allowed_read_scope: scope.allowed_read_roots.clone(),
             allowed_write_scope: scope.allowed_write_roots.clone(),
+            available_skills: vec![],
+            available_knowledge_refs: vec![],
             callable_tool_capabilities: scope.allowed_tools.clone(),
             required_checks: scope.allowed_checks.clone(),
             stop_conditions,
+            timeout_policy: None,
+            failure_policy: None,
+            forbidden_actions: vec![],
+            model_id: None,
         },
         depends_on: vec![],
         acceptance_criteria: if context.proposal.acceptance_criteria.is_empty() {
@@ -2131,7 +2137,7 @@ fn c4_static_task_blocking_reasons(task: &ProjectDirectorPlannedTask) -> Vec<Str
     if task.title.trim().is_empty() {
         reasons.push("planned task 缺少标题。".to_string());
     }
-    if task.objective.trim().is_empty() {
+    if task.task_goal.trim().is_empty() {
         reasons.push("planned task 缺少目标说明。".to_string());
     }
     if task.scope.allowed_read_scope.is_empty() {
@@ -2378,16 +2384,31 @@ fn ensure_project_director_task_package_artifact(
             })
         });
     // fix·worker 回程契约：goals 追加主管拆的 report_format 各项（原有数据一直没人用·现在接上）
-    // + 确定性契约段（worker 最后必须交且仅交一个 json 块）。**确定性拼接·不经 LM**；objective 仍在首位。
+    // + 确定性契约段（worker 最后必须交且仅交一个 json 块）。**确定性拼接·不经 LM**；task_goal 仍在首位。
     let goals_with_contract =
-        worker_report::build_goals_with_contract(&task.objective, &task.report_format);
+        worker_report::build_goals_with_contract(&task.task_goal, &task.report_format);
+    let forbidden_actions = if task.scope.forbidden_actions.is_empty() {
+        vec![
+            "不读写 `/Users/yoyi/.codex`。".to_string(),
+            "不越过任务包授权范围。".to_string(),
+            "不把 worker 汇报直接写成正式事实或正式记忆。".to_string(),
+            "触发停止条件时先回报项目主管。".to_string(),
+        ]
+    } else {
+        task.scope.forbidden_actions.clone()
+    };
+    let model_id = task
+        .scope
+        .model_id
+        .clone()
+        .unwrap_or_else(|| "codex-local-prepared".to_string());
     let artifact_value = json!({
       "artifact_id": artifact_id,
       "artifact_type": "task_package",
       "project_id": task.scope.project_id,
       "path": Value::Null,
       "title": task.title,
-      "brief": task.objective,
+      "task_goal": task.task_goal,
       "source_kind": "project_director_task_plan",
       "source_ref": work_item_id,
       "permission_level": "plan_authorized_prepared",
@@ -2401,25 +2422,24 @@ fn ensure_project_director_task_package_artifact(
         "prepared dispatch 只是准备态记录，仍未执行 worker。"
       ],
       "goals": goals_with_contract,
-      "allowed_read": task.scope.allowed_read_scope,
+      "allowed_read_scope": task.scope.allowed_read_scope,
       "allowed_write": task.scope.allowed_write_scope,
-      "forbidden_actions": [
-        "不读写 `/Users/yoyi/.codex`。",
-        "不越过任务包授权范围。",
-        "不把 worker 汇报直接写成正式事实或正式记忆。",
-        "触发停止条件时先回报项目主管。"
-      ],
+      "available_skills": task.scope.available_skills,
+      "available_knowledge_refs": task.scope.available_knowledge_refs,
+      "forbidden_actions": forbidden_actions,
       "acceptance_criteria": task.acceptance_criteria,
-      "required_return": task.report_format,
+      "report_format": task.report_format,
       "review_focus": [
         "项目主管确认过程事实前，worker 汇报只作为过程材料。",
         "汇报必须带证据、文件变化、风险和下一步建议。"
       ],
       "callable_tool_capabilities": task.scope.callable_tool_capabilities,
       "harness_requirements": task.scope.required_checks,
+      "timeout_policy": task.scope.timeout_policy,
+      "failure_policy": task.scope.failure_policy,
       "target_role": task.scope.target_role,
       "task_package_kind": task.scope.task_package_kind,
-      "model_id": "codex-local-prepared",
+      "model_id": model_id,
       "model_context_policy": "local_only",
       "max_memory_items": 8,
       "max_estimated_tokens": 2000,
@@ -2460,9 +2480,14 @@ fn project_director_memory_snapshot(
         workflow_id: Some(task.scope.workflow_id.clone()),
         task_id: Some(work_item_id.to_string()),
         role_id: task.scope.target_role.clone(),
-        task_goal: task.objective.clone(),
+        task_goal: task.task_goal.clone(),
         retrieval_intent: "worker_task".to_string(),
-        target_model_id: Some("codex-local-prepared".to_string()),
+        target_model_id: Some(
+            task.scope
+                .model_id
+                .clone()
+                .unwrap_or_else(|| "codex-local-prepared".to_string()),
+        ),
         model_context_policy: "local_only".to_string(),
         max_memory_items: 8,
         max_estimated_tokens: 2000,
@@ -2651,7 +2676,7 @@ fn render_project_director_prepared_prompt(
     format!(
         "你将接收一个项目主管拆出的 worker 任务包准备态。\n\n任务：{}\n\n目标：\n{}\n\n授权边界：\n- 读取：{}\n- 写入：{}\n- 工具：{}\n- 检查：{}\n\n验收标准：\n{}\n\n必须回传：\n{}\n\n边界：prepared dispatch 只是工作台准备态记录；当前还未执行 worker。\n\n{}",
         task.title,
-        task.objective,
+        task.task_goal,
         markdown_list_or_empty(&task.scope.allowed_read_scope),
         markdown_list_or_empty(&task.scope.allowed_write_scope),
         markdown_list_or_empty(&task.scope.callable_tool_capabilities),

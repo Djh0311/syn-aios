@@ -314,6 +314,218 @@
     }
 
     #[test]
+    fn project_director_task_package_uses_v2_canonical_names_and_defaults() {
+        let workflow_id = "workflow:c2:naming";
+        let work_item_id = "work-item:c2:naming:1";
+        let artifact_id = "artifact:c2:naming:1";
+        let project_root = "/tmp/c2-naming-project";
+        let project = fixture_project(project_root);
+        let mut state = json!({
+          "artifacts": [],
+          "work_items": [{
+            "work_item_id": work_item_id,
+            "workflow_id": workflow_id,
+            "title": "C2 命名",
+            "state": "ready_to_dispatch",
+            "assigned_role_id": "codex-dev",
+            "current_node_id": format!("{workflow_id}:node:codex-dev")
+          }]
+        });
+        let task = ProjectDirectorPlannedTask {
+            planned_task_id: "planned-task:c2:naming:1".to_string(),
+            title: "C2 命名".to_string(),
+            task_goal: "把任务包字段统一到正本命名。".to_string(),
+            scope: ProjectDirectorTaskScope {
+                project_id: project_id(project_root),
+                workflow_id: workflow_id.to_string(),
+                target_role: "codex-dev".to_string(),
+                task_package_kind: "task_package".to_string(),
+                allowed_read_scope: vec![project_root.to_string()],
+                allowed_write_scope: vec![format!("{project_root}/src")],
+                callable_tool_capabilities: vec!["read_file".to_string()],
+                required_checks: vec!["cargo test".to_string()],
+                stop_conditions: vec!["发现沙箱失配就停".to_string()],
+                timeout_policy: Some("600s".to_string()),
+                failure_policy: Some("return_to_director".to_string()),
+                available_skills: vec!["rust".to_string()],
+                available_knowledge_refs: vec!["docs/workflow-task-package-design-v1.md#3.4".to_string()],
+                forbidden_actions: vec!["不改 execute 本体".to_string()],
+                model_id: Some("codex-c2".to_string()),
+            },
+            depends_on: vec![],
+            acceptance_criteria: vec!["旧三键不再物化".to_string()],
+            report_format: vec!["做了什么".to_string()],
+            status: "planned".to_string(),
+            guard_result: None,
+            work_item_id: Some(work_item_id.to_string()),
+            workflow_node_id: Some(format!("{workflow_id}:node:codex-dev")),
+            task_package_id: Some(artifact_id.to_string()),
+            memory_packet_snapshot_id: None,
+            prepared_dispatch_id: None,
+            blocked_reasons: vec![],
+        };
+        let memory_snapshot = test_empty_memory_snapshot(workflow_id, work_item_id, artifact_id);
+
+        ensure_project_director_task_package_artifact(
+            &mut state,
+            &project,
+            work_item_id,
+            artifact_id,
+            &task,
+            &memory_snapshot,
+            "2026-07-09T00:00:00Z",
+        )
+        .expect("project director task package should materialize");
+
+        let artifact = state["artifacts"][0].as_object().expect("artifact object");
+        assert_eq!(
+            artifact.get("task_goal").and_then(Value::as_str),
+            Some("把任务包字段统一到正本命名。")
+        );
+        assert_eq!(artifact.get("report_format").and_then(Value::as_array).unwrap().len(), 1);
+        assert_eq!(
+            artifact
+                .get("allowed_read_scope")
+                .and_then(Value::as_array)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(artifact.get("brief").is_none());
+        assert!(artifact.get("required_return").is_none());
+        assert!(artifact.get("allowed_read").is_none());
+        assert_eq!(
+            artifact.get("forbidden_actions").and_then(Value::as_array).unwrap()[0],
+            "不改 execute 本体"
+        );
+        assert_eq!(artifact.get("model_id").and_then(Value::as_str), Some("codex-c2"));
+
+        let packages = derive_task_packages(
+            workflow_id,
+            &project_id(project_root),
+            project_root,
+            state["work_items"].as_array().unwrap(),
+            state["artifacts"].as_array().unwrap(),
+            &[],
+        );
+        assert_eq!(packages.len(), 1);
+        assert_eq!(
+            packages[0].task_goal.as_deref(),
+            Some("把任务包字段统一到正本命名。")
+        );
+        assert_eq!(packages[0].report_format, vec!["做了什么".to_string()]);
+        assert_eq!(packages[0].timeout_policy.as_deref(), Some("600s"));
+        assert_eq!(
+            packages[0].failure_policy.as_deref(),
+            Some("return_to_director")
+        );
+        assert_eq!(packages[0].available_skills, vec!["rust".to_string()]);
+        assert_eq!(
+            packages[0].available_knowledge_refs,
+            vec!["docs/workflow-task-package-design-v1.md#3.4".to_string()]
+        );
+
+        let old_scope: ProjectDirectorTaskScope = serde_json::from_value(json!({
+          "project_id": "project:c2:old",
+          "workflow_id": "workflow:c2:old",
+          "target_role": "codex-dev",
+          "task_package_kind": "task_package",
+          "allowed_read_scope": [project_root],
+          "allowed_write_scope": [format!("{project_root}/src")],
+          "callable_tool_capabilities": [],
+          "required_checks": [],
+          "stop_conditions": []
+        }))
+        .expect("old planned task scope json should default new fields");
+        assert!(old_scope.timeout_policy.is_none());
+        assert!(old_scope.failure_policy.is_none());
+        assert!(old_scope.available_skills.is_empty());
+        assert!(old_scope.available_knowledge_refs.is_empty());
+        assert!(old_scope.forbidden_actions.is_empty());
+        assert!(old_scope.model_id.is_none());
+
+        let default_task = ProjectDirectorPlannedTask {
+            planned_task_id: "planned-task:c2:naming:default".to_string(),
+            title: "C2 默认兜底".to_string(),
+            task_goal: "验证默认 forbidden/model。".to_string(),
+            scope: old_scope,
+            depends_on: vec![],
+            acceptance_criteria: vec!["默认保护仍在".to_string()],
+            report_format: vec!["证据".to_string()],
+            status: "planned".to_string(),
+            guard_result: None,
+            work_item_id: Some("work-item:c2:naming:default".to_string()),
+            workflow_node_id: Some(format!("{workflow_id}:node:codex-dev")),
+            task_package_id: Some("artifact:c2:naming:default".to_string()),
+            memory_packet_snapshot_id: None,
+            prepared_dispatch_id: None,
+            blocked_reasons: vec![],
+        };
+        ensure_project_director_task_package_artifact(
+            &mut state,
+            &project,
+            "work-item:c2:naming:default",
+            "artifact:c2:naming:default",
+            &default_task,
+            &test_empty_memory_snapshot(
+                workflow_id,
+                "work-item:c2:naming:default",
+                "artifact:c2:naming:default",
+            ),
+            "2026-07-09T00:00:00Z",
+        )
+        .expect("default task package should materialize");
+        let default_artifact = state["artifacts"][1].as_object().expect("artifact object");
+        assert_eq!(
+            default_artifact
+                .get("forbidden_actions")
+                .and_then(Value::as_array)
+                .unwrap()
+                .len(),
+            4
+        );
+        assert_eq!(
+            default_artifact.get("model_id").and_then(Value::as_str),
+            Some("codex-local-prepared")
+        );
+    }
+
+    fn test_empty_memory_snapshot(
+        workflow_id: &str,
+        work_item_id: &str,
+        artifact_id: &str,
+    ) -> TaskPackageMemoryPacketSnapshot {
+        TaskPackageMemoryPacketSnapshot {
+            snapshot_id: format!("snapshot:{work_item_id}"),
+            schema_version: "task_package_memory_packet_snapshot.v1".to_string(),
+            source_packet_id: "packet:c2:naming".to_string(),
+            project_id: Some("project:c2:naming".to_string()),
+            workflow_id: Some(workflow_id.to_string()),
+            work_item_id: work_item_id.to_string(),
+            task_package_artifact_id: Some(artifact_id.to_string()),
+            role_id: "codex-dev".to_string(),
+            retrieval_intent: "worker_task".to_string(),
+            included_memories: vec![],
+            excluded_items: vec![],
+            review_materials: vec![],
+            store_revisions: TaskPackageMemoryPacketStoreRevisions {
+                formal_store_revision: 0,
+                candidate_store_revision: 0,
+                observation_store_revision: 0,
+                lint_store_revision: Some(0),
+                entity_relation_store_revision: Some(0),
+            },
+            estimated_tokens: 0,
+            max_estimated_tokens: 2000,
+            fingerprint: "fingerprint:c2:naming".to_string(),
+            generated_at: "2026-07-09T00:00:00Z".to_string(),
+            stale: false,
+            stale_reasons: vec![],
+            warnings: vec![],
+        }
+    }
+
+    #[test]
     fn workflow_interfaces_keep_conservative_boundaries() {
         let boundaries = workflow_interface_boundaries();
         assert!(boundaries

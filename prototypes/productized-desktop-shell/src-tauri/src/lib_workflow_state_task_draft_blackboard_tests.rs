@@ -217,7 +217,7 @@
         assert_eq!(value["work_items"][0]["adapter_id"], "codex-local");
         assert_eq!(value["artifacts"][0]["artifact_type"], "task_package");
         assert_eq!(
-            value["artifacts"][0]["brief"],
+            value["artifacts"][0]["task_goal"],
             "写入 work_items 和 artifacts"
         );
         assert!(value["artifacts"][0]["path"].is_null());

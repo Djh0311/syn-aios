@@ -8,7 +8,7 @@
 - **五角色（Phase B·真机验收）**：咨询 / 主管 / worker + **全局主管两钩点**（批前边界+跑后复核·advisory·意见不是闸·词表禁「审批」）+ **秘书**（右栏摘要[与通知待办同开法] + 看板专门界面[四泳道只读] + 按需 AI 解释·零写入）。
 - **记忆环**：治理钩子攒候选 → [属实,沉淀] → 确认转正 → 召回 top5 进咨询/预拆/重拆 prompt（主管 prompt 已渲染）。
 - **画布 / 智能体页 / relay**：多工作流编排+全屏 HUD+任务级节点与依赖边（跑到哪亮到哪）；会话中心（虚拟化/分组/subagent 过滤/`focusedThreadId` 跳入）；**智能体页会话列表并显工作台绑定会话**（A·07-09·has_user_event=0 的 exec 任务会话经 store 绑定捞出+「工作台任务」徽标·机器核过·待真机一眼）；manual relay 真发（唯一手动指挥通道）。
-- **工程底**：`cargo test --lib` = **730/0/43**（2026-07-09）·三闸绿；测试基建：manual_relay 12-failed 级联已根治（首发抽风未定位·等自曝）；commands.rs 有 35 块历史 rustfmt 漂移（HEAD 遗留·非新增·全量 rustfmt 会造几百行无关 diff 故不动）；**异地备份代码半边**（私有 remote `Djh0311/syn-aios`·9 分支·恢复演练过——记忆库/线上 store 仍零副本·知情挂账）。
+- **工程底**：`cargo test --lib` = **731/0/43**（2026-07-09）·三闸绿；测试基建：manual_relay 12-failed 级联已根治（首发抽风未定位·等自曝）；**fmt 核法**:验 fmt 用**权威 `cargo fmt --check`**（非 ad-hoc `rustfmt --edition 2021`——后者设置不符项目 rustfmt 配置·会误报 commands.rs/测试文件几百行假阳性·我先前「commands.rs 35 块」即此误报·已纠）；真历史漂移只在 `codex_db.rs`(9)/`codex_local_runner.rs`(4)/`mcp/storage.rs`(1)·全量 rustfmt 会造无关 diff 故不动；**异地备份代码半边**（私有 remote `Djh0311/syn-aios`·9 分支·恢复演练过——记忆库/线上 store 仍零副本·知情挂账）。
 
 ## 二、在做什么
 
@@ -16,7 +16,8 @@
 
 ## 三、下一步
 
-1. **C2 = 任务包 v2·三层命名统一·包待派 `tasks/2026-07-09-phase-b2-c2-task-package-v2-naming-v1.md`**：measure-first 亲读三层（planned_task.objective≠task_goal·物化把 4 键翻成 brief/required_return/allowed_read/allowed_write·TaskPackage struct 活的用正本名）。**scope 发现**:比标题宽（3 活层·4 字符串键·~10 读方）且 **`allowed_write` 被 real_execution_command 读·喂沙箱写权限=攸关**。包拆法:2.1-2.4 核心统一（objective→task_goal 编译校验·三键改名 grep 清零·新字段 additive·forbidden/model 可配）+ **§2.5 allowed_write 隔离**（先验沙箱失配模式·fail-open/拿不准就停手报回归单独一步·吸取 S0 教训宁隔离不一锅端）。→ 派出核实物 → C3。
+1. **C3 起（C2 已闭）= worker 求助通道**（七拍①③:求助=强信号不可软着陆·收敛实现A为唯一真源·含 dispatch cancelled 终态）。→ 拆包派出 → 逐片真机过。
+   - **C2（任务包 v2 命名统一）= done·核过**（objective→task_goal 编译校验+serde alias 兼容旧 JSON·物化三键 brief/required_return/allowed_read→正本名·读方全切 grep 证残留皆非-C2[user_reviewed_instruction 独立结构]·新字段 additive·forbidden/model 可配兜底·731/0/43·死线 real_execution/runner/commands 0-diff·fmt 权威闸净）。**allowed_write 隔离记债**:h5_project_dispatch_bridge:44 缺键 fallback→project_root=**fail-open 权限放宽**（先于 C2 存在）→ 改名前须先修这个 fail-open·归单独一步（执行线正确验出并停手没硬改·验证了隔离决定值）。
    - **A（工作台会话可见·修显示 bug）= done·核过**（死线 0-diff·crux 测两侧覆盖·730/0/43·fmt 新增码净）；**待用户真机一眼**:重建 app 后智能体页看今天那 4 条「交办任务专用会话」带徽标出没出。
    - **秘书入口未修完**（用户 07-09:右侧有明确「打开秘书」四字组件·和我核的输入栏边「秘」钮不是同一个·**疑多入口组件·待 C2 后专查右侧那个**）。
 2. **等用户真机顺手**：工作历史栏/秘书看板计数/拉窄不挤 三点；**接着跑在卡住脸不在历史栏（主导线曾误述已纠）**；记忆转正加餐。

@@ -2442,16 +2442,29 @@ struct ProjectDirectorTaskScope {
     task_package_kind: String,
     allowed_read_scope: Vec<String>,
     allowed_write_scope: Vec<String>,
+    #[serde(default)]
+    available_skills: Vec<String>,
+    #[serde(default)]
+    available_knowledge_refs: Vec<String>,
     callable_tool_capabilities: Vec<String>,
     required_checks: Vec<String>,
     stop_conditions: Vec<String>,
+    #[serde(default)]
+    timeout_policy: Option<String>,
+    #[serde(default)]
+    failure_policy: Option<String>,
+    #[serde(default)]
+    forbidden_actions: Vec<String>,
+    #[serde(default)]
+    model_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 struct ProjectDirectorPlannedTask {
     planned_task_id: String,
     title: String,
-    objective: String,
+    #[serde(default, alias = "objective")]
+    task_goal: String,
     scope: ProjectDirectorTaskScope,
     depends_on: Vec<String>,
     acceptance_criteria: Vec<String>,

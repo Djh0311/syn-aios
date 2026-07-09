@@ -387,7 +387,7 @@ fn create_task_draft_at(
       "project_id": project_id(&request.project_root),
       "path": Value::Null,
       "title": normalized_title,
-      "brief": request.objective.trim(),
+      "task_goal": request.objective.trim(),
       "source_kind": "workspace_state",
       "source_ref": work_item_id,
       "permission_level": "user_confirmed_write",
@@ -598,16 +598,16 @@ fn update_task_package_fields_at(
         "当前 work item 找不到 task_package artifact；无法更新任务包字段".to_string()
     })?;
     artifact["title"] = Value::String(title_for_work_item);
-    artifact["brief"] = Value::String(join_lines(&request.fields.goals));
+    artifact["task_goal"] = Value::String(join_lines(&request.fields.goals));
     artifact["task_name"] = Value::String(task_name);
     artifact["assigned_line"] = Value::String(assigned_line);
     artifact["background"] = string_vec_value(&request.fields.background);
     artifact["goals"] = string_vec_value(&request.fields.goals);
-    artifact["allowed_read"] = string_vec_value(&request.fields.allowed_read);
+    artifact["allowed_read_scope"] = string_vec_value(&request.fields.allowed_read);
     artifact["allowed_write"] = string_vec_value(&request.fields.allowed_write);
     artifact["forbidden_actions"] = string_vec_value(&request.fields.forbidden_actions);
     artifact["acceptance_criteria"] = string_vec_value(&request.fields.acceptance_criteria);
-    artifact["required_return"] = string_vec_value(&request.fields.required_return);
+    artifact["report_format"] = string_vec_value(&request.fields.required_return);
     artifact["review_focus"] = string_vec_value(&request.fields.review_focus);
     artifact["template_version"] = Value::String("task_package_v1".to_string());
     artifact["version"] = Value::Number((i64_value(artifact, "version").unwrap_or(0) + 1).into());
@@ -948,7 +948,7 @@ fn inspect_task_package_dispatch_readiness_at(
     if optional_string_from(artifact, "model_id").is_none() {
         blocking_reasons.push("缺模型；系统不会自动选择模型。".to_string());
     }
-    if string_array(artifact, "required_return").is_empty() {
+    if string_array(artifact, "report_format").is_empty() {
         blocking_reasons.push("缺 report format；必须回传格式未登记。".to_string());
     }
     if bool_value(artifact, "requires_harness")

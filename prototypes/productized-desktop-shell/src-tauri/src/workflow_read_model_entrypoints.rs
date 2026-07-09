@@ -797,10 +797,10 @@ fn derive_task_packages(
                     })
                     .and_then(|binding| optional_string_from(binding, "native_thread_id"))
             });
-            let allowed_read_scope = string_array(artifact, "allowed_read");
+            let allowed_read_scope = string_array(artifact, "allowed_read_scope");
             let allowed_write_scope = string_array(artifact, "allowed_write");
             let acceptance_criteria = string_array(artifact, "acceptance_criteria");
-            let report_format = string_array(artifact, "required_return");
+            let report_format = string_array(artifact, "report_format");
             let mut missing_fields = Vec::new();
             if allowed_read_scope.is_empty() {
                 missing_fields.push("allowed_read_scope".to_string());
@@ -839,7 +839,7 @@ fn derive_task_packages(
                 project_id: project_id_value.to_string(),
                 target_session_id,
                 target_role,
-                task_goal: optional_string_from(artifact, "brief")
+                task_goal: optional_string_from(artifact, "task_goal")
                     .or_else(|| optional_string_from(work_item, "title")),
                 allowed_read_scope,
                 allowed_write_scope,

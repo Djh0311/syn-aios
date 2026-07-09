@@ -23,9 +23,9 @@ pub(crate) trait DirectorAgent {
 
 // ===== v0 静态主管档案 =====
 const DIRECTOR_V0_PROFILE: &str = r#"你是「项目主管」。
-职责:把已授权的方案拆成可派发给 worker 的具体任务。每个任务定清:做什么(objective)、依赖顺序(depends_on)、验收标准(acceptance_criteria)、汇报格式(report_format)。
-铁律·自包含(最重要):**worker 在干净隔离上下文里执行,只看到这个任务的 objective 字符串——看不到这份方案、看不到别的任务、不能按需读文件。** 所以每个 objective 必须把执行所需的一切**写全进去**:目标文件的**完整路径**、**要写的具体内容**、依据的事实/数据**原样抄进来**。**绝不许写"按已注入方案/参见上文/见上一步/如方案所述"——worker 根本看不到那些。** 你已拿到方案,你的职责就是把它**翻译成 worker 只看 objective 就能独立干完的自包含指令**。
-铁律·落地:只依据已注入的方案正文和项目上下文拆,不假设未注入的内容存在。任务对得上方案 objective,不加方案没授权的事。
+职责:把已授权的方案拆成可派发给 worker 的具体任务。每个任务定清:做什么(task_goal)、依赖顺序(depends_on)、验收标准(acceptance_criteria)、汇报格式(report_format)。
+铁律·自包含(最重要):**worker 在干净隔离上下文里执行,只看到这个任务的 task_goal 字符串——看不到这份方案、看不到别的任务、不能按需读文件。** 所以每个 task_goal 必须把执行所需的一切**写全进去**:目标文件的**完整路径**、**要写的具体内容**、依据的事实/数据**原样抄进来**。**绝不许写"按已注入方案/参见上文/见上一步/如方案所述"——worker 根本看不到那些。** 你已拿到方案,你的职责就是把它**翻译成 worker 只看 task_goal 就能独立干完的自包含指令**。
+铁律·落地:只依据已注入的方案正文和项目上下文拆,不假设未注入的内容存在。任务对得上方案目标,不加方案没授权的事。
 边界:只读、只规划、不执行、不自己派发。真派发由用户审过后走授权闸——你只产计划。
 风格:任务粒度适中、依赖清晰、可验收;不堆废话。"#;
 
@@ -104,13 +104,13 @@ fn director_build_prompt_variant(
         r#"
 ===== 怎么拆 =====
 把这份方案拆成有序的 worker 任务(通常 1-6 个)。只依据上面注入的方案+文档,不假设未注入内容。
-**每个 objective 必须自包含**:把目标文件的完整路径、要写的具体内容、依据的事实**原样写进 objective**——worker 只看这段、不看方案/不看别的任务也能独立干完。**绝不写"参见方案/见上文/如上所述/见上一步"。**
+**每个 task_goal 必须自包含**:把目标文件的完整路径、要写的具体内容、依据的事实**原样写进 task_goal**——worker 只看这段、不看方案/不看别的任务也能独立干完。**绝不写"参见方案/见上文/如上所述/见上一步"。**
 report_format 写清 worker 该**结构化返回**什么(做了啥 / 产出在哪 / 成败),好让链/主管 parse 了往下走。
 在最后输出且仅输出一个 ```json 代码块,是一个任务数组,严格这个结构:
 [
   {
     "title": "任务名",
-    "objective": "自包含完整指令:做什么 + 目标文件完整路径 + 要写的具体内容 + 依据(worker 只看这段就能干,不引用方案/别任务)",
+    "task_goal": "自包含完整指令:做什么 + 目标文件完整路径 + 要写的具体内容 + 依据(worker 只看这段就能干,不引用方案/别任务)",
     "target_role": "执行角色(如 codex-dev)",
     "depends_on": ["前置任务的 title(无前置则空数组)"],
     "acceptance_criteria": ["怎么算这个任务完成"],
@@ -125,8 +125,8 @@ report_format 写清 worker 该**结构化返回**什么(做了啥 / 产出在�
 struct DirectorTaskJson {
     #[serde(default)]
     title: String,
-    #[serde(default)]
-    objective: String,
+    #[serde(default, alias = "objective")]
+    task_goal: String,
     #[serde(default)]
     target_role: String,
     #[serde(default)]
@@ -161,6 +161,12 @@ fn director_task_scope_from_proposal(
         callable_tool_capabilities: proposal.scope_draft.allowed_tools.clone(),
         required_checks: proposal.scope_draft.allowed_checks.clone(),
         stop_conditions: proposal.scope_draft.stop_conditions.clone(),
+        timeout_policy: None,
+        failure_policy: None,
+        available_skills: vec![],
+        available_knowledge_refs: vec![],
+        forbidden_actions: vec![],
+        model_id: None,
     }
 }
 
@@ -189,7 +195,7 @@ pub(crate) fn parse_director_plan(
             ProjectDirectorPlannedTask {
                 planned_task_id: format!("planned-task:{}:{}", proposal.workflow_id, index + 1),
                 title: task.title,
-                objective: task.objective,
+                task_goal: task.task_goal,
                 scope,
                 depends_on: task.depends_on,
                 acceptance_criteria,
@@ -263,7 +269,7 @@ impl DirectorAgent for CliDirectorAgent {
 // 查 stop_requested → 停；现成 `stop_project_workflow_chain` 命令按 workflow_id+running 能找到本驱动的链记录）
 // ③ 审计（链起/每任务 start·done·skip·fail/链停·完成·失败 都进 audit_events）④ 可回滚（起链前 backup +
 // execute 每派发 backup）。同-role 多任务共享 1 节点没关系——每次 execute 用**该任务自己的 work_item**
-// （objective 各异）按序真跑；链记录的「节点」按 **planned_task_id** 编址（≠工作流 node_id，避免同-role 撞键）。
+// （task_goal 各异）按序真跑；链记录的「节点」按 **planned_task_id** 编址（≠工作流 node_id，避免同-role 撞键）。
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct DirectorChainStep {
     pub(crate) planned_task_id: String,
@@ -3003,7 +3009,7 @@ mod quality_debt_tests {
             let mk = |id: usize, title: &str, deps: Vec<String>| ProjectDirectorPlannedTask {
                 planned_task_id: format!("planned-task:{}:{}", proposal.workflow_id, id),
                 title: title.to_string(),
-                objective: format!("自包含目标：{title}"),
+                task_goal: format!("自包含目标：{title}"),
                 scope: scope.clone(),
                 depends_on: deps,
                 acceptance_criteria: vec!["可验收".to_string()],
@@ -3430,7 +3436,7 @@ mod quality_debt_tests {
         let approved = vec![ProjectDirectorPlannedTask {
             planned_task_id: format!("planned-task:{workflow_id}:1"),
             title: "唯一任务".to_string(),
-            objective: "自包含".to_string(),
+            task_goal: "自包含".to_string(),
             scope,
             depends_on: vec![],
             acceptance_criteria: vec!["ok".to_string()],
@@ -3540,7 +3546,7 @@ mod quality_debt_tests {
         ProjectDirectorPlannedTask {
             planned_task_id: format!("planned-task:{workflow_id}:1"),
             title: "任务甲：删一个巡逻怪".to_string(),
-            objective: "自包含".to_string(),
+            task_goal: "自包含".to_string(),
             scope,
             depends_on: vec![],
             acceptance_criteria: vec!["ok".to_string()],
@@ -3734,7 +3740,7 @@ mod quality_debt_tests {
         let mk = |id: usize, title: &str, deps: Vec<String>| ProjectDirectorPlannedTask {
             planned_task_id: format!("planned-task:{workflow_id}:{id}"),
             title: title.to_string(),
-            objective: format!("自包含：{title}"),
+            task_goal: format!("自包含：{title}"),
             scope: scope.clone(),
             depends_on: deps,
             acceptance_criteria: vec!["ok".to_string()],
@@ -3871,7 +3877,7 @@ mod quality_debt_tests {
                 let mk = |id: usize, title: &str, deps: Vec<String>| ProjectDirectorPlannedTask {
                     planned_task_id: format!("planned-task:{}:{id}", proposal.workflow_id),
                     title: title.to_string(),
-                    objective: format!("自包含：{title}"),
+                    task_goal: format!("自包含：{title}"),
                     scope: scope.clone(),
                     depends_on: deps,
                     acceptance_criteria: vec!["ok".to_string()],

@@ -415,12 +415,13 @@ fn task_package_fields_from(
             artifact,
             "goals",
             vec![present_or_placeholder(optional_string_from(
-                artifact, "brief",
+                artifact,
+                "task_goal",
             ))],
         ),
         allowed_read: string_array_or_placeholder(
             artifact,
-            "allowed_read",
+            "allowed_read_scope",
             vec![
                 format!("`{}`", project.project_root),
                 "待补充：草稿未登记更多允许读取清单。".to_string(),
@@ -452,7 +453,7 @@ fn task_package_fields_from(
         ),
         required_return: string_array_or_placeholder(
             artifact,
-            "required_return",
+            "report_format",
             vec![
                 "做了什么".to_string(),
                 "改了哪些文件".to_string(),
@@ -629,7 +630,7 @@ fn preview_warnings(work_item: &Value, artifact: &Value) -> Vec<String> {
     if optional_string_from(work_item, "assigned_role_id").is_none() {
         warnings.push("所属开发线未登记，预览使用未登记。".to_string());
     }
-    if present_or_placeholder(optional_string_from(artifact, "brief")) == "待补充" {
+    if present_or_placeholder(optional_string_from(artifact, "task_goal")) == "待补充" {
         warnings.push("目标说明未登记，预览使用待补充。".to_string());
     }
     warnings.extend(string_array(artifact, "warnings"));
@@ -3741,7 +3742,7 @@ mod tests {
         let index = fixture_dispatch_index(test_root, real_session);
         fs::create_dir_all(&dir).expect("fixture dir should exist");
         bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
-        // 任务包 objective → artifact.brief → fields.goals → objective → prompt_preview → codex 真 prompt。
+        // 任务包 task_goal → artifact.task_goal → fields.goals → objective → prompt_preview → codex 真 prompt。
         let objective = format!(
             "在当前项目根目录创建文件 s1-step3-proof.txt，只写入一行内容：S1-step3 gate real-run ok {proof_token}。完成后用一句话说明你创建了该文件，不要修改任何其它文件。"
         );
@@ -4114,7 +4115,7 @@ mod tests {
             .expect("prepared dispatch 应有 workflow_node_id");
 
         // ④→⑤ glue：从 prepared dispatch 提 node/work_item 组请求喂⑤（样板 chain_controller:427）。worker
-        // 真派发经 S1 闸（stub runner）；用 prepared 的 work_item（带任务包 objective）→ execute 从任务包构指令。
+        // 真派发经 S1 闸（stub runner）；用 prepared 的 work_item（带任务包 task_goal）→ execute 从任务包构指令。
         // ⑤ 不放行会在起 runner 前 Err（real_execution_gate_blocked），故 completed 即证明过了 S1 闸（path-lock 命中）。
         let runner = PermissiveExperimentRunner {
             stats: CodexDispatchReadbackStats {
@@ -4280,7 +4281,7 @@ mod tests {
     }
 
     // S2-3·§6 真跑（高危#1·固定测试项目轻档·默认 #[ignore]）：worker 真 codex 经 C 阶段角色循环 + S1 闸
-    // 建真文件。自定义 proposal 的 goal_summary/proposed_steps（→ planned_task.objective → 任务包 goals →
+    // 建真文件。自定义 proposal 的 goal_summary/proposed_steps（→ planned_task.task_goal → 任务包 goals →
     // codex prompt）让 worker 写 s2-3-loop-proof.txt（含本次 token）。worker 步走 execute_project_workflow_node_at
     // （S1 闸）——非 authorized 会在起 runner 前 Err，故 completed + proof 即证明真 codex 过了闸（path-lock 命中）。
     // 显式 `cargo test --lib s2_3_real_run_role_loop_builds_proof_through_gate -- --ignored --nocapture` 才起真 codex。
@@ -5054,7 +5055,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 ProjectDirectorPlannedTask {
                     planned_task_id: format!("planned-task:{}:{}", proposal.workflow_id, id),
                     title: title.to_string(),
-                    objective: objective.to_string(),
+                    task_goal: objective.to_string(),
                     scope: scope.clone(),
                     depends_on: deps,
                     acceptance_criteria: vec!["可验收".to_string()],
@@ -5131,7 +5132,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let ctx = load_project_context(WORKFLOW_ENGINE_TEST_PROJECT_ROOT).expect("ctx");
         let plan = StubDirector.plan(&ctx, &proposal).expect("director plan");
         assert_eq!(plan.len(), 2);
-        assert!(!plan[0].title.is_empty() && !plan[0].objective.is_empty());
+        assert!(!plan[0].title.is_empty() && !plan[0].task_goal.is_empty());
         // scope 取自**已授权 scope_draft**（LM 不扩范围）
         assert_eq!(
             plan[0].scope.allowed_write_scope, proposal.scope_draft.allowed_write_roots,
@@ -5202,15 +5203,15 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         println!("[S3_DIRECTOR] task_count={}", plan.len());
         for t in &plan {
             println!(
-                "[S3_DIRECTOR] - {} | objective={} | depends_on={:?}",
-                t.title, t.objective, t.depends_on
+                "[S3_DIRECTOR] - {} | task_goal={} | depends_on={:?}",
+                t.title, t.task_goal, t.depends_on
             );
         }
         assert!(!plan.is_empty(), "应拆出至少 1 个任务");
         assert!(
             plan.iter()
-                .all(|t| !t.title.trim().is_empty() && !t.objective.trim().is_empty()),
-            "每个任务 title/objective 非空"
+                .all(|t| !t.title.trim().is_empty() && !t.task_goal.trim().is_empty()),
+            "每个任务 title/task_goal 非空"
         );
         // scope 仍取自授权 scope_draft（LM 不扩范围）
         assert!(plan
@@ -5219,7 +5220,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
-    // S3·主管档案钉死「自包含任务」（修真跑根因：worker 隔离上下文只看 objective、拿不到方案）。
+    // S3·主管档案钉死「自包含任务」（修真跑根因：worker 隔离上下文只看 task_goal、拿不到方案）。
     #[test]
     fn s3_director_prompt_requires_self_contained_tasks() {
         let (proposal, dir) = s3_director_fixture_proposal("s3-director-selfcontained");
@@ -5232,7 +5233,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         );
         assert!(
             prompt.contains("完整路径"),
-            "应要求把目标文件完整路径写进 objective"
+            "应要求把目标文件完整路径写进 task_goal"
         );
         assert!(prompt.contains("结构化返回"), "应要求 worker 结构化返回");
         let _ = fs::remove_dir_all(dir);
@@ -5388,7 +5389,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             .expect("real director plan");
         println!("[S3_DISPATCH] director planned {} task(s)", planned.len());
         for t in &planned {
-            println!("[S3_DISPATCH]   task: {} | {}", t.title, t.objective);
+            println!("[S3_DISPATCH]   task: {} | {}", t.title, t.task_goal);
         }
         assert!(!planned.is_empty(), "director 应拆出任务");
         // bind + prepare(director planned_tasks)
@@ -5530,7 +5531,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         for t in &planned {
             println!(
                 "[S3_CHAIN]   task: {} | deps={:?} | {}",
-                t.title, t.depends_on, t.objective
+                t.title, t.depends_on, t.task_goal
             );
         }
         assert!(
@@ -5538,18 +5539,18 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "director 应把多步方案拆成 ≥2 任务的链（实际 {}）",
             planned.len()
         );
-        // 自包含核验：objective 不含「参见方案/上文」引用词（worker 在隔离上下文拿不到方案）。
+        // 自包含核验：task_goal 不含「参见方案/上文」引用词（worker 在隔离上下文拿不到方案）。
         for t in &planned {
             for bad in ["参见", "上文", "上一步", "如方案", "见方案"] {
                 assert!(
-                    !t.objective.contains(bad),
-                    "任务「{}」objective 含引用词「{bad}」，非自包含：{}",
+                    !t.task_goal.contains(bad),
+                    "任务「{}」task_goal 含引用词「{bad}」，非自包含：{}",
                     t.title,
-                    t.objective
+                    t.task_goal
                 );
             }
         }
-        // 真实依赖链核验（证「核对→创建→回读」非两个独立写）：须有带 depends_on 的任务，且其 objective
+        // 真实依赖链核验（证「核对→创建→回读」非两个独立写）：须有带 depends_on 的任务，且其 task_goal
         // 真的把「回读 proof_a + 核验」写进去——否则只是两个无关写文件、谈不上链。
         let dependent = planned
             .iter()
@@ -5558,9 +5559,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         assert!(
             ["读回", "读取", "proof_a", "核验", "读 proof", "读 s3-chain-proof-a"]
                 .iter()
-                .any(|kw| dependent.objective.contains(kw)),
-            "依赖任务 objective 应含回读/核验 proof_a 的步骤（证 LM 拆的是 核对→创建→回读 真依赖链），实际：{}",
-            dependent.objective
+                .any(|kw| dependent.task_goal.contains(kw)),
+            "依赖任务 task_goal 应含回读/核验 proof_a 的步骤（证 LM 拆的是 核对→创建→回读 真依赖链），实际：{}",
+            dependent.task_goal
         );
         // bind + prepare(director planned_tasks)。
         let workflow_id = default_workflow_id(test_root);
@@ -7417,12 +7418,12 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "write-plan-a-real-proposal",
         )
         .expect("proposal");
-        // 所批即所跑单任务（自包含 objective）——跳过真 LM 拆，聚焦本包新链路：出生→绑→resume。
+        // 所批即所跑单任务（自包含 task_goal）——跳过真 LM 拆，聚焦本包新链路：出生→绑→resume。
         let scope = director_task_scope_from_proposal(&created.proposal, "codex-dev");
         let task = ProjectDirectorPlannedTask {
             planned_task_id: format!("planned-task:{}:1", created.proposal.workflow_id),
             title: "建 proof".to_string(),
-            objective: format!(
+            task_goal: format!(
                 "在当前项目根目录创建文件 jiaoban-plan-a-proof.txt，只写入一行：plan-a ok {proof_token}。不改其它任何文件。"
             ),
             scope,
@@ -7742,7 +7743,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         ProjectDirectorPlannedTask {
             planned_task_id: format!("planned-task:{workflow_id}:{id}"),
             title: title.to_string(),
-            objective: format!("自包含指令：{title}"),
+            task_goal: format!("自包含指令：{title}"),
             scope: ProjectDirectorTaskScope {
                 project_id: project_id(root),
                 workflow_id: workflow_id.to_string(),
@@ -7750,9 +7751,15 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 task_package_kind: "task_package".to_string(),
                 allowed_read_scope: vec![root.to_string()],
                 allowed_write_scope: vec![format!("{root}/src")],
+                available_skills: vec![],
+                available_knowledge_refs: vec![],
                 callable_tool_capabilities: vec!["read_file".to_string()],
                 required_checks: vec![],
                 stop_conditions: vec![],
+                timeout_policy: None,
+                failure_policy: None,
+                forbidden_actions: vec![],
+                model_id: None,
             },
             depends_on: deps,
             acceptance_criteria: vec!["ok".to_string()],
@@ -8234,7 +8241,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             approved.iter().map(|task| task.title.clone()).collect();
         assert_eq!(
             ran, want,
-            "跑的就是 approved 那几个任务（objective 原样·不重拆）"
+            "跑的就是 approved 那几个任务（task_goal 原样·不重拆）"
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -8451,7 +8458,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             Ok(vec![ProjectDirectorPlannedTask {
                 planned_task_id: format!("planned-task:{}:1", proposal.workflow_id),
                 title: "审查任务".to_string(),
-                objective: "自包含：审查一下".to_string(),
+                task_goal: "自包含：审查一下".to_string(),
                 scope,
                 depends_on: vec![],
                 acceptance_criteria: vec!["ok".to_string()],
