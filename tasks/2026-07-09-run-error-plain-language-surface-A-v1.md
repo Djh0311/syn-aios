@@ -29,6 +29,11 @@
 
 - **新增独立模块** `run_error_translation.rs`:`classify_run_error(raw: &str) -> RunErrorHuman { family, human, raw_snippet }`;
 - **收编 fix8(用户 07-09 拍)**:把现成 `classify_codex_provider_failure`(codex_local_runner.rs:386)的**供给类判据整段搬进**新模块作为族①,**删掉 runner 里的老函数**,把两个调用点(:364/:373 `if let Some(human) = classify_codex_provider_failure(...)`)改调新模块 `classify_run_error`——单一真源,不留两套(理由:老函数仅 ~20 行、留着两套翻译器会漂移)。**注意:这动的是 runner 报告层不是冻结核**,边界见 §3;
+- **收编一整家(2026-07-09 能力普查①逼出·别只收 fix8 变第五套)**:现有错误人话翻译**散在四处**,C6 要么收编要么路由过来,**不许再加第五套并行**:
+  1. `classify_codex_provider_failure`(fix8·runner:386)= 底·如上收编;
+  2. **`humanize_consult_error` ×2(`secretary_agent.rs`:185 + `global_supervisor_agent.rs`:410·逐字节 copy-paste 真重复)**= 剥 `codex_provider_unavailable:` 前缀取人话——C6 结构化 `{family,human,raw}` 后这个「前缀 hack」本该消失;**收编时一并消除这两处 copy-paste**(改用结构化模型),**若消除要动 secretary/supervisor 调用点、评估边界后再定是否本片做**(可留 §8 后续);
+  3. `classify_codex_resume_failure`(`workflow_execution_entrypoints.rs`:217·226 调 fix8)= 复用非重复·但它调的是老 `classify_codex_provider_failure`→ **改路由到新 `classify_run_error`**(否则老函数删了它编译不过);
+  - **验收加一条**:改完 `grep -rn 'classify_codex_provider_failure\|humanize_consult_error' 生产码` = 零残留或只剩路由到新模块的调用,证「收编成一套·没留散的」;
 - **错误族(保守表·大小写不敏感·延续 fix8「拿不准不装」)**:① 供给类(收编老判据:`subscription_not_found`/`usage limit`/`quota`/`unauthorized`/`403`/`401`/`reconnecting 5/5`) ② 断供/网络(reconnecting/stream disconnected) ③ 超时(timed_out·与既有超时打回主管一致) ④ 沙箱/权限拒绝(sandbox/permission denied/read-only) ⑤ 命令失败(exit code≠0·带命令上下文) ⑥ codex 内部子系统(memories_write/no such table 类·翻「codex 自身某子系统报错·一般不影响本次任务」) ⑦ 口供读取失败(`consult_last_message_read_failed`);
 - **unknown 兜底(保守归一化纪律)**:未命中任何族 → `family=unknown`、`human="未识别错误(附原文供排查)"`、`raw_snippet` 带原文——**不硬编假人话**;
 - **结构化不吞真相**:`raw_snippet` 永远保留原文(截断安全),替代现在「人话」与「原文」二选一挤进一个 error string 的做法。
