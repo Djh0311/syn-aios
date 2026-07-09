@@ -16,11 +16,10 @@
 
 ## 三、下一步
 
-1. **C3 起（C2 已闭）= worker 求助通道**（七拍①③:求助=强信号不可软着陆·收敛实现A为唯一真源·含 dispatch cancelled 终态）。→ 拆包派出 → 逐片真机过。
-   - **C2（任务包 v2 命名统一）= done·核过**（objective→task_goal 编译校验+serde alias 兼容旧 JSON·物化三键 brief/required_return/allowed_read→正本名·读方全切 grep 证残留皆非-C2[user_reviewed_instruction 独立结构]·新字段 additive·forbidden/model 可配兜底·731/0/43·死线 real_execution/runner/commands 0-diff·fmt 权威闸净）。**allowed_write 隔离记债**:h5_project_dispatch_bridge:44 缺键 fallback→project_root=**fail-open 权限放宽**（先于 C2 存在）→ 改名前须先修这个 fail-open·归单独一步（执行线正确验出并停手没硬改·验证了隔离决定值）。
-   - **A（工作台会话可见·修显示 bug）= done·核过**（死线 0-diff·crux 测两侧覆盖·730/0/43·fmt 新增码净）；**待用户真机一眼**:重建 app 后智能体页看今天那 4 条「交办任务专用会话」带徽标出没出。
-   - **秘书入口未修完**（用户 07-09:右侧有明确「打开秘书」四字组件·和我核的输入栏边「秘」钮不是同一个·**疑多入口组件·待 C2 后专查右侧那个**）。
-2. **等用户真机顺手**：工作历史栏/秘书看板计数/拉窄不挤 三点；**接着跑在卡住脸不在历史栏（主导线曾误述已纠）**；记忆转正加餐。
+1. **C3 = worker 求助通道·拆两片（C2 已闭）**：measure-first 亲读契约链发现现状 consume 只有「完成」一条路（worker_report:79·恒算完成）、四求助字段恒空（212-215 Vec::new）、blocked 是死值（187 match 不产）。**C3a·核心=包待派 `tasks/2026-07-09-phase-b2-c3a-worker-help-channel-core-v1.md`**（契约加 blocked 求助路径+WorkerReport 加求助字段 serde default+consume 加求助分支[→等待·不当完成·疑似求助保守升级不软着陆]+链停该任务待主管不崩+激活 blocked+填真源=实现A 成唯一真源）→ **C3b·收敛后置**（退役启发式 workflow_read_model:922+读模型投影真源+unresolved_direction_risk bool 接真源+dispatch cancelled 终态·waiting_decision 机器已存在接真源即可）。→ C3a 派核过 → C3b → C4。
+   - **C2（命名统一）= done·核过**（objective→task_goal+serde alias·物化三键归正·读方全切·731/0/43·死线 0-diff·fmt 权威闸净）。**allowed_write 隔离记债**:h5_project_dispatch_bridge:44 缺键 fallback→project_root=fail-open→改名前先修·单独一步。
+   - **A（工作台会话可见）+ C1 四会话徽标 = 用户真机验过·OK**（只秘书有问题·见挂账）。
+2. **秘书入口·待专查修（用户真机验剩这一个问题）**：用户 07-09 真机——C1 四会话+徽标 / 工作历史栏 / 看板 / 拉窄 **都 OK**；**只秘书不对**:用户说右侧有明确「打开秘书」四字组件·和我核的输入栏边「秘」钮**不是同一个**·**疑多秘书入口组件·我核错了钮**。C3a 派出后专查右侧那个「打开秘书」组件对它。记忆转正加餐（另项）。
 3. **搁置待点火**：整台工作台原型（用户想清楚再做；资产留存：现状说明书/v1 已认元素/颗粒度四拍）｜**运行错误上脸(A=B2 尾片 C6·反馈必人话)+ 开发者工具(B·方式未定)**：提案 `docs/plans/2026-07-09-run-error-surface-plain-language-proposal-v1.md`；**A 包起草待派 `tasks/2026-07-09-run-error-plain-language-surface-A-v1.md`（两派前决定已闭:落位=B2 C6「顺手做」·fix8=收编成错误族全谱;死线精确重划=冻结核 0-diff·报告层可收编;C1 收尾轮清后派）**；B 待用户定方向。
 4. **挂账**：备份剩余小件（3 记忆库+workbench store 146M+`~/.codex` 零副本·用户知情）｜「commit 后顺手 push」写不写进 AGENTS 未答｜principles 引 `tasks/README.md` 文字小口子｜旧线（画布真机对图 / 手感打磨 / A4·C default-safe 待真机 / 会话模型 P3 / 记忆中心布局重做=Phase D）。
 5. **盯着的（警报器）**：manual_relay 首发抽风（级联已根治·**07-09 C1 核测头回以单具名失败现身** `manual_relay_gui_direct_running_poll...`·重跑即绿·坐标已定·定点修待排）｜tier-1 输出不稳家族三案（新接 LM 字段必配确定性兜底）｜「死锚默认」家族三前科（碰 `default_workflow_*` 一律警觉）｜prepared 148 条已裁认账（正解并入 B2）｜**codex 特性会一夜自开**（memories 07-07 晚 21:38 自启前科——观察模式下每切片收口重跑渗出三查+池内工作台条目计数,codex 升级后同步复核）。
