@@ -6023,6 +6023,336 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
+    struct C4aReportRunner {
+        message: String,
+        stats: CodexDispatchReadbackStats,
+    }
+
+    impl CodexResumeRunner for C4aReportRunner {
+        fn resume_with_options(
+            &self,
+            _thread_id: &str,
+            _prompt: &str,
+            last_message_path: &Path,
+            _options: &CodexResumeRequestOptions,
+        ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String> {
+            if let Some(parent) = last_message_path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|error| format!("fixture output dir create failed: {error}"))?;
+            }
+            fs::write(last_message_path, &self.message)
+                .map_err(|error| format!("fixture last message write failed: {error}"))?;
+            Ok((
+                CodexResumeRunResult {
+                    exit_code: 0,
+                    timed_out: false,
+                    stderr_summary: None,
+                },
+                WorkflowNodeDispatchExecutionOptions {
+                    readback_stats: Some(self.stats.clone()),
+                },
+            ))
+        }
+    }
+
+    fn c4a_worker_report(status: &str, evidence: &[&str], direction_risks: &[&str]) -> String {
+        serde_json::json!({
+            "did": format!("C4a fixture worker status {status}"),
+            "outputs": ["/tmp/c4a-output.txt"],
+            "status": status,
+            "evidence": evidence,
+            "direction_risks": direction_risks,
+        })
+        .to_string()
+    }
+
+    fn c4a_report_runner(
+        status: &str,
+        evidence: &[&str],
+        direction_risks: &[&str],
+    ) -> C4aReportRunner {
+        C4aReportRunner {
+            message: format!(
+                "```json\n{}\n```",
+                c4a_worker_report(status, evidence, direction_risks)
+            ),
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        }
+    }
+
+    fn c4a_single_prepared_task(
+        prepared: &AuthorizedPreparedDispatchResult,
+    ) -> Vec<ProjectDirectorPlannedTask> {
+        let mut task = prepared
+            .plan
+            .planned_tasks
+            .iter()
+            .find(|task| task.status == "prepared")
+            .expect("fixture should have a prepared task")
+            .clone();
+        task.depends_on.clear();
+        task.scope.required_checks.clear();
+        vec![task]
+    }
+
+    #[derive(Clone)]
+    struct StubDirectorFinalMarker {
+        calls: std::cell::Cell<usize>,
+        result: Result<DirectorFinalMark, String>,
+    }
+
+    impl StubDirectorFinalMarker {
+        fn completed(reason: &str) -> Self {
+            Self {
+                calls: std::cell::Cell::new(0),
+                result: Ok(DirectorFinalMark {
+                    decision: DirectorFinalMarkDecision::Completed,
+                    reason: reason.to_string(),
+                }),
+            }
+        }
+
+        fn needs_rework(reason: &str) -> Self {
+            Self {
+                calls: std::cell::Cell::new(0),
+                result: Ok(DirectorFinalMark {
+                    decision: DirectorFinalMarkDecision::NeedsRework,
+                    reason: reason.to_string(),
+                }),
+            }
+        }
+
+        fn unavailable(reason: &str) -> Self {
+            Self {
+                calls: std::cell::Cell::new(0),
+                result: Err(reason.to_string()),
+            }
+        }
+    }
+
+    impl DirectorFinalMarker for StubDirectorFinalMarker {
+        fn final_mark(&self, _ctx: &DirectorFinalMarkContext) -> Result<DirectorFinalMark, String> {
+            self.calls.set(self.calls.get() + 1);
+            self.result.clone()
+        }
+    }
+
+    #[test]
+    fn c4a_director_final_mark_green_report_completes_without_lm() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("c4a-final-green-zero-lm");
+        let tasks = c4a_single_prepared_task(&prepared);
+        let runner = c4a_report_runner("done", &["cargo test c4a 通过"], &[]);
+        let marker = StubDirectorFinalMarker::unavailable("full green must not call LM");
+        let outcome = run_director_task_chain_with_final_marker(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &tasks,
+            10,
+            &marker,
+        )
+        .expect("full green should complete");
+        assert_eq!(marker.calls.get(), 0, "全绿终标不得调用 LM");
+        assert_eq!(outcome.completed, 1);
+        assert!(outcome.stopped_reason.is_none());
+        assert_eq!(outcome.steps[0].state, "completed");
+        assert!(
+            audit_has(
+                &path,
+                "workflow_chain_node_director_deterministic_completed"
+            ),
+            "应记录主管终标·确定性直过审计"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c4a_director_final_mark_yellow_report_uses_lm_pass() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("c4a-final-yellow-lm-pass");
+        let tasks = c4a_single_prepared_task(&prepared);
+        let runner = c4a_report_runner("partial", &["证据有但 status 非 done"], &[]);
+        let marker = StubDirectorFinalMarker::completed("主管判定黄牌仍可接受");
+        let outcome = run_director_task_chain_with_final_marker(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &tasks,
+            10,
+            &marker,
+        )
+        .expect("LM pass should complete");
+        assert_eq!(marker.calls.get(), 1, "黄牌必须调用主管 LM");
+        assert_eq!(outcome.completed, 1);
+        assert!(outcome.stopped_reason.is_none());
+        assert_eq!(outcome.steps[0].state, "completed");
+        assert!(
+            audit_has(&path, "workflow_chain_node_director_lm_completed"),
+            "应记录主管 LM 终标通过审计"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c4a_director_final_mark_yellow_report_rework_spends_budget_and_stops() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("c4a-final-yellow-rework");
+        let tasks = c4a_single_prepared_task(&prepared);
+        let runner = c4a_report_runner("partial", &["证据不足以直过"], &[]);
+        let marker = StubDirectorFinalMarker::needs_rework("需要补证据");
+        let outcome = run_director_task_chain_with_final_marker(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &tasks,
+            10,
+            &marker,
+        )
+        .expect("LM rework should stop for redo");
+        assert_eq!(marker.calls.get(), 1);
+        assert_eq!(outcome.completed, 0);
+        assert_eq!(outcome.steps[0].state, "needs_rework");
+        assert!(
+            outcome
+                .stopped_reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("needs_rework"),
+            "退回应停链待重做：{:?}",
+            outcome.stopped_reason
+        );
+        assert!(audit_has(&path, "workflow_chain_node_needs_rework"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c4a_director_final_mark_rework_budget_exhausted_waits_for_human() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("c4a-final-rework-budget");
+        let tasks = c4a_single_prepared_task(&prepared);
+        let runner = c4a_report_runner("partial", &["仍然证据不足"], &[]);
+        let marker = StubDirectorFinalMarker::needs_rework("仍需返工");
+        let first = run_director_task_chain_with_final_marker(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &tasks,
+            10,
+            &marker,
+        )
+        .expect("first rework should spend budget");
+        assert_eq!(first.steps[0].state, "needs_rework");
+        let second = run_director_task_chain_with_final_marker(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &tasks,
+            10,
+            &marker,
+        )
+        .expect("second rework should stop for human");
+        assert_eq!(marker.calls.get(), 2);
+        assert_eq!(second.completed, 0);
+        assert_eq!(second.steps[0].state, "waiting_decision");
+        assert!(
+            second
+                .stopped_reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("budget_exhausted"),
+            "预算耗尽应待人决策：{:?}",
+            second.stopped_reason
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c4a_director_final_mark_lm_unavailable_does_not_complete() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("c4a-final-lm-unavailable");
+        let tasks = c4a_single_prepared_task(&prepared);
+        let runner = c4a_report_runner("partial", &["证据不足"], &[]);
+        let marker = StubDirectorFinalMarker::unavailable("codex_provider_unavailable:quota");
+        let outcome = run_director_task_chain_with_final_marker(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &tasks,
+            10,
+            &marker,
+        )
+        .expect("LM unavailable should soft stop");
+        assert_eq!(marker.calls.get(), 1);
+        assert_eq!(outcome.completed, 0);
+        assert_eq!(outcome.steps[0].state, "waiting_decision");
+        assert!(
+            outcome
+                .stopped_reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("final_mark_unavailable"),
+            "LM 断供应待人、不 completed：{:?}",
+            outcome.stopped_reason
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c4a_director_final_mark_preserves_worker_help_waiting_decision() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("c4a-final-help-route");
+        let tasks = c4a_single_prepared_task(&prepared);
+        let runner = c4a_report_runner("blocked", &["缺权限"], &["方向可能错"]);
+        let marker = StubDirectorFinalMarker::completed("help route must not call final marker");
+        let outcome = run_director_task_chain_with_final_marker(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &tasks,
+            10,
+            &marker,
+        )
+        .expect("help route should stop");
+        assert_eq!(marker.calls.get(), 0, "求助路不应进入 C4a 终标");
+        assert_eq!(outcome.completed, 0);
+        assert_eq!(outcome.steps[0].state, "waiting_decision");
+        assert!(
+            outcome
+                .stopped_reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("worker_help"),
+            "求助路停因应保持 C3 waiting_decision：{:?}",
+            outcome.stopped_reason
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // B1·只派 status=="prepared"：把一个任务手动置 blocked → 断言它被跳过（不进 execute）、其余照跑。
     #[test]
     fn s3_director_chain_skips_non_prepared_tasks() {

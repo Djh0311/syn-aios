@@ -21,6 +21,68 @@ pub(crate) trait DirectorAgent {
     }
 }
 
+const DIRECTOR_FINAL_REWORK_BUDGET: usize = 1;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum DirectorFinalMarkDecision {
+    Completed,
+    NeedsRework,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DirectorFinalMark {
+    pub(crate) decision: DirectorFinalMarkDecision,
+    pub(crate) reason: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct DirectorFinalMarkContext {
+    pub(crate) project_root: String,
+    pub(crate) workflow_id: String,
+    pub(crate) task_title: String,
+    pub(crate) task_goal: String,
+    pub(crate) acceptance_criteria: Vec<String>,
+    pub(crate) report_status: Option<String>,
+    pub(crate) acceptance_status: String,
+    pub(crate) evidence_refs: Vec<String>,
+    pub(crate) direction_risks: Vec<String>,
+    pub(crate) yellow_reasons: Vec<String>,
+    pub(crate) last_message_tail: String,
+    pub(crate) rework_budget_remaining: usize,
+}
+
+pub(crate) trait DirectorFinalMarker {
+    fn final_mark(&self, ctx: &DirectorFinalMarkContext) -> Result<DirectorFinalMark, String>;
+}
+
+#[cfg(test)]
+struct FixturePassDirectorFinalMarker;
+
+#[cfg(test)]
+impl DirectorFinalMarker for FixturePassDirectorFinalMarker {
+    fn final_mark(&self, _ctx: &DirectorFinalMarkContext) -> Result<DirectorFinalMark, String> {
+        Ok(DirectorFinalMark {
+            decision: DirectorFinalMarkDecision::Completed,
+            reason: "测试夹具兼容：旧链测试不烧真实主管 LM。".to_string(),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DirectorFinalScreen {
+    report_status: Option<String>,
+    acceptance_status: String,
+    evidence_refs: Vec<String>,
+    direction_risks: Vec<String>,
+    yellow_reasons: Vec<String>,
+}
+
+impl DirectorFinalScreen {
+    fn is_green(&self) -> bool {
+        self.yellow_reasons.is_empty()
+    }
+}
+
 // ===== v0 静态主管档案 =====
 const DIRECTOR_V0_PROFILE: &str = r#"你是「项目主管」。
 职责:把已授权的方案拆成可派发给 worker 的具体任务。每个任务定清:做什么(task_goal)、依赖顺序(depends_on)、验收标准(acceptance_criteria)、汇报格式(report_format)。
@@ -260,6 +322,185 @@ impl DirectorAgent for CliDirectorAgent {
     }
 }
 
+impl DirectorFinalMarker for CliDirectorAgent {
+    fn final_mark(&self, ctx: &DirectorFinalMarkContext) -> Result<DirectorFinalMark, String> {
+        let prompt = director_final_mark_prompt(ctx);
+        let raw = codex_local_runner::readonly_codex_consult(
+            &ctx.project_root,
+            &prompt,
+            self.timeout_ms,
+        )?;
+        parse_director_final_mark(&raw)
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct DirectorFinalMarkJson {
+    #[serde(default)]
+    decision: String,
+    #[serde(default)]
+    reason: String,
+}
+
+fn director_final_mark_prompt(ctx: &DirectorFinalMarkContext) -> String {
+    format!(
+        r#"你是项目主管，正在做每任务最终完成标记。你只判断这个 worker 任务是否可终标完成，或是否必须退回重做。
+
+硬约束：
+- 只能输出一个 ```json 代码块。
+- decision 只能是 "completed" 或 "needs_rework"。
+- 证据不足、验收不清、风险未处理时选 "needs_rework"。
+- 不要要求用户补充，除非确实无法判断；这里需要的是任务级过/退回。
+
+任务：
+workflow_id：{workflow_id}
+标题：{title}
+目标：
+{goal}
+
+验收标准：
+{criteria}
+
+worker 回执摘要：
+- report_status: {report_status}
+- acceptance_status: {acceptance_status}
+- evidence_refs: {evidence_refs}
+- direction_risks: {direction_risks}
+- deterministic_yellow_reasons: {yellow_reasons}
+- rework_budget_remaining: {budget}
+
+worker 最后消息尾部：
+{tail}
+
+输出格式：
+```json
+{{"decision":"completed|needs_rework","reason":"一句话说明主管判定理由"}}
+```"#,
+        workflow_id = ctx.workflow_id,
+        title = ctx.task_title,
+        goal = ctx.task_goal,
+        criteria = if ctx.acceptance_criteria.is_empty() {
+            "（未登记）".to_string()
+        } else {
+            ctx.acceptance_criteria.join("\n")
+        },
+        report_status = ctx
+            .report_status
+            .clone()
+            .unwrap_or_else(|| "missing".to_string()),
+        acceptance_status = ctx.acceptance_status,
+        evidence_refs = if ctx.evidence_refs.is_empty() {
+            "[]".to_string()
+        } else {
+            ctx.evidence_refs.join("；")
+        },
+        direction_risks = if ctx.direction_risks.is_empty() {
+            "[]".to_string()
+        } else {
+            ctx.direction_risks.join("；")
+        },
+        yellow_reasons = ctx.yellow_reasons.join("；"),
+        budget = ctx.rework_budget_remaining,
+        tail = ctx.last_message_tail,
+    )
+}
+
+fn parse_director_final_mark(raw: &str) -> Result<DirectorFinalMark, String> {
+    let json = consultant_extract_json_block(raw)
+        .ok_or_else(|| "主管终标输出里没找到结构化 json 块".to_string())?;
+    let parsed: DirectorFinalMarkJson =
+        serde_json::from_str(&json).map_err(|error| format!("主管终标 json 解析失败:{error}"))?;
+    let decision = match parsed.decision.trim().to_lowercase().as_str() {
+        "completed" | "complete" | "pass" | "passed" | "accepted" => {
+            DirectorFinalMarkDecision::Completed
+        }
+        "needs_rework" | "needs-rework" | "rework" | "returned" | "return" | "needs_changes"
+        | "needs-changes" => DirectorFinalMarkDecision::NeedsRework,
+        other => return Err(format!("未知主管终标 decision：{other}")),
+    };
+    let reason = if parsed.reason.trim().is_empty() {
+        "主管终标未给出理由".to_string()
+    } else {
+        parsed.reason.trim().to_string()
+    };
+    Ok(DirectorFinalMark { decision, reason })
+}
+
+fn director_final_screen(
+    task: &ProjectDirectorPlannedTask,
+    report: Option<&worker_report::WorkerReport>,
+) -> DirectorFinalScreen {
+    let mut yellow_reasons = Vec::new();
+    let Some(report) = report else {
+        return DirectorFinalScreen {
+            report_status: None,
+            acceptance_status: "reported_not_completed".to_string(),
+            evidence_refs: vec![],
+            direction_risks: vec![],
+            yellow_reasons: vec!["worker_report_missing".to_string()],
+        };
+    };
+
+    let status = report.status.trim().to_string();
+    let report_status = if status.is_empty() {
+        None
+    } else {
+        Some(status.clone())
+    };
+    let has_help_signal = status.eq_ignore_ascii_case("blocked")
+        || !report.permission_requests.is_empty()
+        || !report.open_issues.is_empty()
+        || !report.direction_risks.is_empty()
+        || !report.follow_up_suggestions.is_empty();
+    let acceptance_status = if has_help_signal {
+        "blocked"
+    } else {
+        match status.to_lowercase().as_str() {
+            "done" => "reported_completed",
+            "partial" => "needs_rework",
+            "failed" => "reported_not_completed",
+            _ => "reported_not_completed",
+        }
+    }
+    .to_string();
+
+    if status != "done" {
+        yellow_reasons.push(format!(
+            "report_status_not_done:{}",
+            if status.is_empty() { "missing" } else { &status }
+        ));
+    }
+    if acceptance_status != "reported_completed" {
+        yellow_reasons.push(format!("acceptance_status_not_completed:{acceptance_status}"));
+    }
+    if report.evidence.is_empty() {
+        yellow_reasons.push("evidence_missing".to_string());
+    }
+    if !task.scope.required_checks.is_empty() {
+        yellow_reasons.push(format!(
+            "required_checks_unverified:{}",
+            task.scope.required_checks.join(",")
+        ));
+    }
+    if !report.direction_risks.is_empty() {
+        yellow_reasons.push("direction_risks_present".to_string());
+    }
+
+    DirectorFinalScreen {
+        report_status,
+        acceptance_status,
+        evidence_refs: report.evidence.clone(),
+        direction_risks: report.direction_risks.clone(),
+        yellow_reasons,
+    }
+}
+
+fn tail_chars(text: &str, n: usize) -> String {
+    let chars: Vec<char> = text.trim().chars().collect();
+    let start = chars.len().saturating_sub(n);
+    chars[start..].iter().collect()
+}
+
 // ===== S3 主管→worker 链驱动（薄·按 depends_on 拓扑序跑 prepared 的 planned_tasks）=====
 // 复用 execute_project_workflow_node_at（**S1 闸/沙箱·每节点 path-lock**）+ workflow_chain_topological_order
 // （现成拓扑）+ chain controller 的链记录/停链/审计 helper（ensure_chain_run_record / set_chain_node_state /
@@ -318,6 +559,75 @@ fn reset_work_item_for_retry(
     let _ = step("failed"); // 若卡在 running：running→failed（已 failed 则非法·忽略）
     let _ = step("needs_changes"); // failed/timed_out → needs_changes
     step("ready_to_dispatch") // needs_changes → ready_to_dispatch（末步·返回是否复位成功）
+}
+
+fn reset_work_item_for_director_rework(
+    path: &std::path::Path,
+    project_root: &str,
+    work_item_id: &str,
+) -> bool {
+    let step = |next_state: &str| {
+        update_work_item_state_at(
+            path,
+            &WorkItemStateUpdateRequest {
+                project_root: project_root.to_string(),
+                work_item_id: work_item_id.to_string(),
+                next_state: next_state.to_string(),
+            },
+        )
+        .is_ok()
+    };
+    let _ = step("needs_changes");
+    step("ready_to_dispatch")
+}
+
+fn chain_node_usize_field(
+    value: &Value,
+    chain_run_id: &str,
+    node_id: &str,
+    field: &str,
+) -> usize {
+    chain_run_record(value, chain_run_id)
+        .and_then(|run| run.get("nodes"))
+        .and_then(Value::as_array)
+        .and_then(|nodes| {
+            nodes
+                .iter()
+                .find(|node| optional_string_from(node, "node_id").as_deref() == Some(node_id))
+        })
+        .and_then(|node| node.get(field))
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as usize
+}
+
+fn set_chain_node_usize_field(
+    value: &mut Value,
+    chain_run_id: &str,
+    node_id: &str,
+    field: &str,
+    count: usize,
+) {
+    let Some(runs) = value
+        .get_mut("workflow_chain_runs")
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    let Some(run) = runs
+        .iter_mut()
+        .find(|run| optional_string_from(run, "chain_run_id").as_deref() == Some(chain_run_id))
+    else {
+        return;
+    };
+    let Some(nodes) = run.get_mut("nodes").and_then(Value::as_array_mut) else {
+        return;
+    };
+    if let Some(node) = nodes
+        .iter_mut()
+        .find(|node| optional_string_from(node, "node_id").as_deref() == Some(node_id))
+    {
+        node[field] = json!(count);
+    }
 }
 
 // 2.4：判 tier-1 偶发早退（exit≠0 且非 timeout / 非沙箱-gate·记忆 real-codex-run-flaky）——这类才自动重试一次。
@@ -827,6 +1137,10 @@ pub(crate) fn run_director_task_chain(
     tasks: &[ProjectDirectorPlannedTask],
     max_tasks: usize,
 ) -> Result<DirectorChainOutcome, String> {
+    #[cfg(test)]
+    let final_marker = FixturePassDirectorFinalMarker;
+    #[cfg(not(test))]
+    let final_marker = CliDirectorAgent::default();
     run_director_task_chain_inner(
         path,
         index,
@@ -837,6 +1151,32 @@ pub(crate) fn run_director_task_chain(
         tasks,
         max_tasks,
         None,
+        &final_marker,
+    )
+}
+
+pub(crate) fn run_director_task_chain_with_final_marker(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    project_root: &str,
+    workflow_id: &str,
+    tasks: &[ProjectDirectorPlannedTask],
+    max_tasks: usize,
+    final_marker: &dyn DirectorFinalMarker,
+) -> Result<DirectorChainOutcome, String> {
+    run_director_task_chain_inner(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        project_root,
+        workflow_id,
+        tasks,
+        max_tasks,
+        None,
+        final_marker,
     )
 }
 
@@ -853,6 +1193,36 @@ pub(crate) fn run_director_task_chain_with_session_creator(
     max_tasks: usize,
     session_creator: &dyn JiaobanNewSessionCreator,
 ) -> Result<DirectorChainOutcome, String> {
+    #[cfg(test)]
+    let final_marker = FixturePassDirectorFinalMarker;
+    #[cfg(not(test))]
+    let final_marker = CliDirectorAgent::default();
+    run_director_task_chain_with_session_creator_and_final_marker(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        project_root,
+        workflow_id,
+        tasks,
+        max_tasks,
+        session_creator,
+        &final_marker,
+    )
+}
+
+pub(crate) fn run_director_task_chain_with_session_creator_and_final_marker(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    project_root: &str,
+    workflow_id: &str,
+    tasks: &[ProjectDirectorPlannedTask],
+    max_tasks: usize,
+    session_creator: &dyn JiaobanNewSessionCreator,
+    final_marker: &dyn DirectorFinalMarker,
+) -> Result<DirectorChainOutcome, String> {
     run_director_task_chain_inner(
         path,
         index,
@@ -863,6 +1233,7 @@ pub(crate) fn run_director_task_chain_with_session_creator(
         tasks,
         max_tasks,
         Some(session_creator),
+        final_marker,
     )
 }
 
@@ -876,6 +1247,7 @@ fn run_director_task_chain_inner(
     tasks: &[ProjectDirectorPlannedTask],
     max_tasks: usize,
     session_creator: Option<&dyn JiaobanNewSessionCreator>,
+    final_marker: &dyn DirectorFinalMarker,
 ) -> Result<DirectorChainOutcome, String> {
     use std::collections::BTreeSet;
 
@@ -1352,33 +1724,7 @@ fn run_director_task_chain_inner(
                         stopped_reason: Some(format!("waiting_decision:worker_help:{}", task.title)),
                     });
                 }
-                set_chain_node_state(
-                    &mut after,
-                    &chain_run_id,
-                    task_id,
-                    "completed",
-                    Some(&dispatch_id),
-                    None,
-                );
-                update_node_state_for_id(&mut after, &task_level_node_id, "completed", &ts_done)?;
-                append_chain_audit(
-                    &mut after,
-                    &chain_run_id,
-                    workflow_id,
-                    "workflow_chain_node_completed",
-                    "running",
-                    "completed",
-                    &ts_done,
-                    &format!(
-                        "薄链驱动：任务「{}」真派发成功（dispatch {dispatch_id}）",
-                        task.title
-                    ),
-                )?;
-                write_validated_workflow_state(path, &after)?;
-                completed += 1;
-
-                // fix·worker 回程契约：任务完成后读 worker 最后消息全文 → 解析 → best-effort 落库 → 带摘要。
-                // **完成路只归档不驱动**：无论解析/落库成败，任务恒算 completed（不 retry/不停链/不改迁移）。
+                let parsed_report = worker_report::parse_worker_report(&last_message_full);
                 let report_outcome = worker_report::consume_worker_report_after_completion(
                     path,
                     project_root,
@@ -1391,14 +1737,313 @@ fn run_director_task_chain_inner(
                     &task.title,
                     &last_message_full,
                 );
-                steps.push(DirectorChainStep {
-                    planned_task_id: task_id.clone(),
-                    title: task.title.clone(),
-                    state: "completed".to_string(),
-                    report_summary: report_outcome.report_summary,
-                    report_warning: report_outcome.report_warning,
-                    report_status: report_outcome.report_status,
-                });
+                let screen = director_final_screen(task, parsed_report.as_ref());
+                let attempts_used = chain_node_usize_field(
+                    &read_workflow_state_value(path)?,
+                    &chain_run_id,
+                    task_id,
+                    "director_rework_attempts",
+                );
+                let remaining_budget =
+                    DIRECTOR_FINAL_REWORK_BUDGET.saturating_sub(attempts_used);
+                let final_decision = if screen.is_green() {
+                    Ok(DirectorFinalMark {
+                        decision: DirectorFinalMarkDecision::Completed,
+                        reason: "主管终标·确定性初筛①-⑤全绿，零 LM 直过。".to_string(),
+                    })
+                } else {
+                    final_marker.final_mark(&DirectorFinalMarkContext {
+                        project_root: project_root.to_string(),
+                        workflow_id: workflow_id.to_string(),
+                        task_title: task.title.clone(),
+                        task_goal: task.task_goal.clone(),
+                        acceptance_criteria: task.acceptance_criteria.clone(),
+                        report_status: screen.report_status.clone(),
+                        acceptance_status: screen.acceptance_status.clone(),
+                        evidence_refs: screen.evidence_refs.clone(),
+                        direction_risks: screen.direction_risks.clone(),
+                        yellow_reasons: screen.yellow_reasons.clone(),
+                        last_message_tail: tail_chars(&last_message_full, 800),
+                        rework_budget_remaining: remaining_budget,
+                    })
+                };
+
+                match final_decision {
+                    Ok(mark) if mark.decision == DirectorFinalMarkDecision::Completed => {
+                        let mut after_mark = read_workflow_state_value(path)?;
+                        set_chain_node_state(
+                            &mut after_mark,
+                            &chain_run_id,
+                            task_id,
+                            "completed",
+                            Some(&dispatch_id),
+                            None,
+                        );
+                        update_node_state_for_id(
+                            &mut after_mark,
+                            &task_level_node_id,
+                            "completed",
+                            &ts_done,
+                        )?;
+                        let final_event = if screen.is_green() {
+                            "workflow_chain_node_director_deterministic_completed"
+                        } else {
+                            "workflow_chain_node_director_lm_completed"
+                        };
+                        append_chain_audit(
+                            &mut after_mark,
+                            &chain_run_id,
+                            workflow_id,
+                            final_event,
+                            "running",
+                            "completed",
+                            &ts_done,
+                            &format!("主管终标通过任务「{}」：{}", task.title, mark.reason),
+                        )?;
+                        append_chain_audit(
+                            &mut after_mark,
+                            &chain_run_id,
+                            workflow_id,
+                            "workflow_chain_node_completed",
+                            "running",
+                            "completed",
+                            &ts_done,
+                            &format!(
+                                "薄链驱动：任务「{}」主管终标 completed（dispatch {dispatch_id}）",
+                                task.title
+                            ),
+                        )?;
+                        write_validated_workflow_state(path, &after_mark)?;
+                        completed += 1;
+                        steps.push(DirectorChainStep {
+                            planned_task_id: task_id.clone(),
+                            title: task.title.clone(),
+                            state: "completed".to_string(),
+                            report_summary: report_outcome.report_summary,
+                            report_warning: report_outcome.report_warning,
+                            report_status: report_outcome.report_status,
+                        });
+                    }
+                    Ok(mark) => {
+                        if remaining_budget > 0 {
+                            let reset_ok = reset_work_item_for_director_rework(
+                                path,
+                                project_root,
+                                &request.work_item_id,
+                            );
+                            let mut after_rework = read_workflow_state_value(path)?;
+                            set_chain_node_state(
+                                &mut after_rework,
+                                &chain_run_id,
+                                task_id,
+                                "needs_rework",
+                                Some(&dispatch_id),
+                                Some(&mark.reason),
+                            );
+                            set_chain_node_usize_field(
+                                &mut after_rework,
+                                &chain_run_id,
+                                task_id,
+                                "director_rework_attempts",
+                                attempts_used + 1,
+                            );
+                            set_chain_node_usize_field(
+                                &mut after_rework,
+                                &chain_run_id,
+                                task_id,
+                                "director_rework_budget",
+                                DIRECTOR_FINAL_REWORK_BUDGET,
+                            );
+                            update_node_state_for_id(
+                                &mut after_rework,
+                                &task_level_node_id,
+                                "needs_rework",
+                                &ts_done,
+                            )?;
+                            append_chain_audit(
+                                &mut after_rework,
+                                &chain_run_id,
+                                workflow_id,
+                                "workflow_chain_node_needs_rework",
+                                "running",
+                                "needs_rework",
+                                &ts_done,
+                                &format!(
+                                    "主管终标退回任务「{}」：{}{}",
+                                    task.title,
+                                    mark.reason,
+                                    if reset_ok {
+                                        "（已复位为可重做）"
+                                    } else {
+                                        "（复位到可重做失败，待人工处理）"
+                                    }
+                                ),
+                            )?;
+                            finalize_chain_run(&mut after_rework, &chain_run_id, "stopped", &ts_done);
+                            append_chain_audit(
+                                &mut after_rework,
+                                &chain_run_id,
+                                workflow_id,
+                                "workflow_chain_run_stopped",
+                                "running",
+                                "stopped",
+                                &ts_done,
+                                &format!(
+                                    "任务「{}」主管终标退回 needs_rework，已消耗返工预算 {}/{}。",
+                                    task.title,
+                                    attempts_used + 1,
+                                    DIRECTOR_FINAL_REWORK_BUDGET
+                                ),
+                            )?;
+                            write_validated_workflow_state(path, &after_rework)?;
+                            steps.push(DirectorChainStep {
+                                planned_task_id: task_id.clone(),
+                                title: task.title.clone(),
+                                state: "needs_rework".to_string(),
+                                report_summary: report_outcome.report_summary,
+                                report_warning: report_outcome.report_warning,
+                                report_status: report_outcome.report_status,
+                            });
+                            return Ok(DirectorChainOutcome {
+                                total,
+                                dispatched,
+                                completed,
+                                skipped,
+                                chain_run_id,
+                                steps,
+                                warnings,
+                                stopped_reason: Some(format!(
+                                    "needs_rework:director_final_mark:{}",
+                                    task.title
+                                )),
+                            });
+                        }
+                        let mut waiting = read_workflow_state_value(path)?;
+                        let wait_message = format!(
+                            "主管终标退回但返工预算已耗尽，待人工决策：{}",
+                            mark.reason
+                        );
+                        set_chain_node_state(
+                            &mut waiting,
+                            &chain_run_id,
+                            task_id,
+                            "waiting_decision",
+                            Some(&dispatch_id),
+                            Some(&wait_message),
+                        );
+                        update_node_state_for_id(
+                            &mut waiting,
+                            &task_level_node_id,
+                            "waiting_decision",
+                            &ts_done,
+                        )?;
+                        append_chain_audit(
+                            &mut waiting,
+                            &chain_run_id,
+                            workflow_id,
+                            "workflow_chain_node_waiting_decision",
+                            "running",
+                            "waiting_decision",
+                            &ts_done,
+                            &format!("任务「{}」主管退回预算耗尽：{wait_message}", task.title),
+                        )?;
+                        finalize_chain_run(&mut waiting, &chain_run_id, "waiting_decision", &ts_done);
+                        append_chain_audit(
+                            &mut waiting,
+                            &chain_run_id,
+                            workflow_id,
+                            "workflow_chain_run_waiting_decision",
+                            "running",
+                            "waiting_decision",
+                            &ts_done,
+                            &format!("任务「{}」返工预算耗尽，链已停在 waiting_decision。", task.title),
+                        )?;
+                        write_validated_workflow_state(path, &waiting)?;
+                        steps.push(DirectorChainStep {
+                            planned_task_id: task_id.clone(),
+                            title: task.title.clone(),
+                            state: "waiting_decision".to_string(),
+                            report_summary: report_outcome.report_summary,
+                            report_warning: report_outcome.report_warning,
+                            report_status: report_outcome.report_status,
+                        });
+                        return Ok(DirectorChainOutcome {
+                            total,
+                            dispatched,
+                            completed,
+                            skipped,
+                            chain_run_id,
+                            steps,
+                            warnings,
+                            stopped_reason: Some(format!(
+                                "waiting_decision:director_final_mark_budget_exhausted:{}",
+                                task.title
+                            )),
+                        });
+                    }
+                    Err(error) => {
+                        let mut waiting = read_workflow_state_value(path)?;
+                        let wait_message =
+                            format!("主管终标 LM 不可用，保守待人工决策：{error}");
+                        set_chain_node_state(
+                            &mut waiting,
+                            &chain_run_id,
+                            task_id,
+                            "waiting_decision",
+                            Some(&dispatch_id),
+                            Some(&wait_message),
+                        );
+                        update_node_state_for_id(
+                            &mut waiting,
+                            &task_level_node_id,
+                            "waiting_decision",
+                            &ts_done,
+                        )?;
+                        append_chain_audit(
+                            &mut waiting,
+                            &chain_run_id,
+                            workflow_id,
+                            "workflow_chain_node_waiting_decision",
+                            "running",
+                            "waiting_decision",
+                            &ts_done,
+                            &format!("任务「{}」主管终标不可用：{wait_message}", task.title),
+                        )?;
+                        finalize_chain_run(&mut waiting, &chain_run_id, "waiting_decision", &ts_done);
+                        append_chain_audit(
+                            &mut waiting,
+                            &chain_run_id,
+                            workflow_id,
+                            "workflow_chain_run_waiting_decision",
+                            "running",
+                            "waiting_decision",
+                            &ts_done,
+                            &format!("任务「{}」主管终标 LM 断供，链已停在 waiting_decision。", task.title),
+                        )?;
+                        write_validated_workflow_state(path, &waiting)?;
+                        steps.push(DirectorChainStep {
+                            planned_task_id: task_id.clone(),
+                            title: task.title.clone(),
+                            state: "waiting_decision".to_string(),
+                            report_summary: report_outcome.report_summary,
+                            report_warning: report_outcome.report_warning,
+                            report_status: report_outcome.report_status,
+                        });
+                        return Ok(DirectorChainOutcome {
+                            total,
+                            dispatched,
+                            completed,
+                            skipped,
+                            chain_run_id,
+                            steps,
+                            warnings,
+                            stopped_reason: Some(format!(
+                                "waiting_decision:director_final_mark_unavailable:{}",
+                                task.title
+                            )),
+                        });
+                    }
+                }
             }
             // 失败即停（护栏·不自动重试/不跳过，防在老失败任务上打转）。
             other => {
