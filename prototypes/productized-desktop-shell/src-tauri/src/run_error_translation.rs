@@ -16,11 +16,11 @@
 
 /// 错误族（稳定机器键·前端自映射人话/配色）。
 ///
-/// 判据顺序 = 具体优先（provider→readback→timeout→codex_subsystem→sandbox→network→command→unknown），
+/// 判据顺序 = 具体优先（version_outdated→provider→readback→timeout→codex_subsystem→sandbox→network→command→unknown），
 /// 防「exit≠0 的命令失败」把更具体的子系统/沙箱错误盖掉。
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct RunErrorHuman {
-    /// "provider_unavailable" | "network" | "timeout" | "sandbox_denied"
+    /// "codex_version_outdated" | "provider_unavailable" | "network" | "timeout" | "sandbox_denied"
     /// | "command_failed" | "codex_subsystem" | "readback_failed" | "unknown"
     pub(crate) family: String,
     /// 人话摘要（默认脸显这个）。
@@ -88,6 +88,19 @@ pub(crate) fn classify_run_error(raw: &str) -> RunErrorHuman {
     let spaced = lower.replace('_', " ");
     let has = |needle: &str| lower.contains(needle) || spaced.contains(needle);
 
+    // ⑧ codex CLI 版本过旧（服务端明确拒答，升级后再试；普通 upgrade 文本不归此族）。
+    let has_version_upgrade_signal = has("requires a newer version") || has("please upgrade");
+    let is_codex_server_rejection = has("requires a newer version of codex")
+        || (has("model") && has("codex"))
+        || ((has("400") || has("bad request")) && has("codex"));
+    if has_version_upgrade_signal && is_codex_server_rejection {
+        return RunErrorHuman {
+            family: "codex_version_outdated".to_string(),
+            human: "codex 版本太旧，升级 CLI 后重试（npm install -g @openai/codex@latest）"
+                .to_string(),
+            raw_snippet,
+        };
+    }
     // ① 供给类（最具体·复用单一真源判据）。
     if classify_provider_failure_human(trimmed).is_some() {
         return RunErrorHuman {
@@ -215,6 +228,31 @@ mod tests {
         assert!(classify_provider_failure_human("").is_none());
         assert!(classify_provider_failure_human("thread 'main' panicked at foo.rs line 12").is_none());
         assert!(classify_provider_failure_human("Reconnecting... 1/5").is_none());
+    }
+
+    // C6：服务端 400 明示 CLI 版本过旧 → 独立错误族、给升级动作、原文照留。
+    #[test]
+    fn codex_version_outdated_real_400_is_translated() {
+        let raw = "400 The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade";
+        let out = classify_run_error(raw);
+        assert_eq!(out.family, "codex_version_outdated");
+        assert_eq!(
+            out.human,
+            "codex 版本太旧，升级 CLI 后重试（npm install -g @openai/codex@latest）"
+        );
+        assert_eq!(out.raw_snippet, raw, "原文照留供下钻");
+    }
+
+    // C6：没有 codex 拒答上下文的普通升级提示，保守回 unknown，不能误报 CLI 版本过旧。
+    #[test]
+    fn ordinary_upgrade_text_is_not_codex_version_outdated() {
+        for raw in [
+            "Please upgrade your Rust toolchain before building",
+            "This plugin requires a newer version; see its README",
+            "The Codex docs say: please upgrade your Rust toolchain",
+        ] {
+            assert_eq!(classify_run_error(raw).family, "unknown", "raw={raw}");
+        }
     }
 
     // 七族各一命中样本 + 大小写不敏感 + 结构化三段齐 + 原文必带。

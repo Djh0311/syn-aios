@@ -1443,6 +1443,7 @@ const WORKFLOW_ALLOWED_TRANSITIONS: &[(&str, &str)] = &[
     ("completed", "archived"),
     ("failed", "running"),
     ("failed", "archived"),
+    ("stopped", "archived"),
 ];
 
 const NODE_ALLOWED_TRANSITIONS: &[(&str, &str)] = &[
@@ -1461,13 +1462,16 @@ const NODE_ALLOWED_TRANSITIONS: &[(&str, &str)] = &[
     ("failed", "running"),
     ("failed", "needs_rework"),
     ("failed", "archived"),
+    ("needs_rework", "running"),
+    ("needs_rework", "needs_rework"),
+    ("needs_rework", "archived"),
     ("running", "paused"),
     ("paused", "running"),
     ("waiting", "skipped"),
 ];
 
 fn workflow_transition_allowed(from: &str, to: &str, explicit_retry_or_reopen: bool) -> bool {
-    if from == "failed" && to == "running" {
+    if matches!(from, "failed" | "stopped") && to == "running" {
         return explicit_retry_or_reopen;
     }
     WORKFLOW_ALLOWED_TRANSITIONS
@@ -1490,10 +1494,12 @@ fn workflow_node_transition_allowed(
     {
         return false;
     }
-    if from == "failed" && to == "running" {
+    if matches!(from, "failed" | "needs_rework") && to == "running" {
         return actor_role == "project_director" && explicit_retry_or_reopen;
     }
-    if from == "failed" && (to == "needs_rework" || to == "archived") {
+    if matches!(from, "failed" | "needs_rework")
+        && (to == "needs_rework" || to == "archived")
+    {
         return actor_role == "project_director";
     }
     NODE_ALLOWED_TRANSITIONS

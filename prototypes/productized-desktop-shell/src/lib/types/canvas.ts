@@ -147,7 +147,7 @@ export type ProjectWorkflowChainStatus = {
   state: string;
   // 后端已返（ms 字符串，源自 unix_timestamp_string）；前端原漏声明。fix6-v2 用它判「这一轮的链」。
   started_at?: string;
-  nodes: { node_id: string; state: string }[];
+  nodes: { node_id: string; state: string; message?: string | null }[];
 };
 
 // P3 E · 多工作流底座（架构 §12）。命名避开 types/workflow.ts 既有的 ProjectWorkflowSummary。

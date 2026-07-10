@@ -6182,6 +6182,42 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         }
     }
 
+    fn c4c_needs_rework_task_fixture(
+        name: &str,
+        index: Option<Value>,
+    ) -> (
+        PathBuf,
+        PathBuf,
+        Value,
+        PathBuf,
+        String,
+        ProjectDirectorPlannedTask,
+        String,
+    ) {
+        let (dir, path, index, index_path, workflow_id, task, chain_run_id) =
+            c4c_failed_task_fixture(name, index);
+        let runner = c4a_report_runner("done", &["unused"], &[]);
+        let request = c4c_failed_action_request("rework", &workflow_id, &chain_run_id, &task);
+        let outcome =
+            run_project_director_failed_action(&path, &index, &index_path, &runner, &request)
+                .expect("fixture should enter needs_rework");
+        assert_eq!(outcome.node_state, "needs_rework");
+        assert_eq!(
+            chain_node_state(&read_json_file(&path), &chain_run_id, &task.planned_task_id)
+                .as_deref(),
+            Some("needs_rework")
+        );
+        (
+            dir,
+            path,
+            index,
+            index_path,
+            workflow_id,
+            task,
+            chain_run_id,
+        )
+    }
+
     #[derive(Clone)]
     struct StubDirectorFinalMarker {
         calls: std::cell::Cell<usize>,
@@ -6500,6 +6536,163 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let chain = outcome.chain_outcome.expect("retry 应触发既有链驱动");
         assert_eq!(chain.completed, 1);
         assert!(audit_has(&path, "workflow_chain_node_failed_action_retry"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn needs_rework_retry_keeps_already_reset_work_item_idempotent_then_runs() {
+        let (dir, path, index, index_path, workflow_id, task, chain_run_id) =
+            c4c_needs_rework_task_fixture("needs-rework-retry-idempotent", None);
+        let work_item_id = task.work_item_id.as_deref().expect("prepared work item");
+        let before = find_work_item(&read_json_file(&path), &workflow_id, work_item_id)
+            .cloned()
+            .expect("work item before retry");
+        assert_eq!(
+            optional_string_from(&before, "state").as_deref(),
+            Some("ready_to_dispatch"),
+            "主管退回夹具应已复位"
+        );
+        assert!(
+            reset_work_item_for_retry(&path, WORKFLOW_ENGINE_TEST_PROJECT_ROOT, work_item_id),
+            "已复位的任务应幂等通过"
+        );
+        assert_eq!(
+            find_work_item(&read_json_file(&path), &workflow_id, work_item_id),
+            Some(&before),
+            "幂等复位不应重复写 work item"
+        );
+
+        let runner = c4a_report_runner("done", &["retry evidence"], &[]);
+        let request = c4c_failed_action_request("retry", &workflow_id, &chain_run_id, &task);
+        let outcome =
+            run_project_director_failed_action(&path, &index, &index_path, &runner, &request)
+                .expect("needs_rework retry should reuse the original session path");
+        assert_eq!(outcome.action, "retry");
+        assert_eq!(
+            outcome.chain_outcome.expect("retry should run").completed,
+            1,
+            "retry should still hand off to the existing chain driver"
+        );
+        assert!(audit_has(&path, "workflow_chain_node_failed_action_retry"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn needs_rework_change_session_reuses_c1_then_runs() {
+        struct OneShotCreator {
+            calls: Cell<usize>,
+        }
+        impl JiaobanNewSessionCreator for OneShotCreator {
+            fn create_initialized_session(&self, text: &str, _by: &str) -> Result<String, String> {
+                self.calls.set(self.calls.get() + 1);
+                assert!(text.contains("交办任务专用会话"));
+                Ok("thread-needs-rework-new".to_string())
+            }
+        }
+
+        let index = fixture_multi_thread_index(
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &["thread-s3-chain", "thread-needs-rework-new"],
+        );
+        let (dir, path, index, index_path, workflow_id, task, chain_run_id) =
+            c4c_needs_rework_task_fixture("needs-rework-change-session", Some(index));
+        let creator = OneShotCreator {
+            calls: Cell::new(0),
+        };
+        let runner = c4a_report_runner("done", &["new session evidence"], &[]);
+        let request =
+            c4c_failed_action_request("change_session", &workflow_id, &chain_run_id, &task);
+        let outcome = run_project_director_failed_action_with_session_creator(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &request,
+            &creator,
+        )
+        .expect("needs_rework change_session should use C1 then run");
+        assert_eq!(creator.calls.get(), 1, "只给退回任务新建 1 条会话");
+        assert_eq!(
+            outcome.new_session_id.as_deref(),
+            Some("thread-needs-rework-new")
+        );
+        assert_eq!(outcome.chain_outcome.expect("should run").completed, 1);
+        assert!(audit_has(
+            &path,
+            "workflow_chain_node_failed_action_change_session"
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn needs_rework_rework_keeps_the_existing_rework_decision_without_spending_again() {
+        let (dir, path, index, index_path, workflow_id, task, chain_run_id) =
+            c4c_needs_rework_task_fixture("needs-rework-rework", None);
+        let runner = c4a_report_runner("done", &["unused"], &[]);
+        let request = c4c_failed_action_request("rework", &workflow_id, &chain_run_id, &task);
+        let outcome =
+            run_project_director_failed_action(&path, &index, &index_path, &runner, &request)
+                .expect("needs_rework rework should remain a user-directed no-op");
+        assert_eq!(outcome.node_state, "needs_rework");
+        let value = read_json_file(&path);
+        assert_eq!(
+            chain_node_usize_field(
+                &value,
+                &chain_run_id,
+                &task.planned_task_id,
+                "director_rework_attempts"
+            ),
+            DIRECTOR_FINAL_REWORK_BUDGET,
+            "already spent final-mark budget must not be charged again"
+        );
+        assert!(audit_has(&path, "workflow_chain_node_failed_action_rework"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn needs_rework_archive_uses_existing_archived_transition() {
+        let (dir, path, index, index_path, workflow_id, task, chain_run_id) =
+            c4c_needs_rework_task_fixture("needs-rework-archive", None);
+        let runner = c4a_report_runner("done", &["unused"], &[]);
+        let request = c4c_failed_action_request("archive", &workflow_id, &chain_run_id, &task);
+        let outcome =
+            run_project_director_failed_action(&path, &index, &index_path, &runner, &request)
+                .expect("needs_rework archive should reuse the archived transition");
+        assert_eq!(outcome.transition_to, "archived");
+        let value = read_json_file(&path);
+        assert_eq!(
+            chain_node_state(&value, &chain_run_id, &task.planned_task_id).as_deref(),
+            Some("archived")
+        );
+        assert!(audit_has(
+            &path,
+            "workflow_chain_node_failed_action_archive"
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn failed_action_rejects_states_other_than_failed_or_needs_rework() {
+        let (dir, path, index, index_path, workflow_id, task, chain_run_id) =
+            c4c_failed_task_fixture("failed-action-other-state", None);
+        let mut value = read_json_file(&path);
+        set_chain_node_state(
+            &mut value,
+            &chain_run_id,
+            &task.planned_task_id,
+            "completed",
+            None,
+            None,
+        );
+        write_validated_workflow_state(&path, &value).expect("fixture state write");
+        let runner = c4a_report_runner("done", &["unused"], &[]);
+        let request = c4c_failed_action_request("archive", &workflow_id, &chain_run_id, &task);
+        let err = run_project_director_failed_action(&path, &index, &index_path, &runner, &request)
+            .expect_err("completed node must remain outside the four-action surface");
+        assert!(
+            err.contains("failed / needs_rework"),
+            "error should name the exact accepted states: {err}"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

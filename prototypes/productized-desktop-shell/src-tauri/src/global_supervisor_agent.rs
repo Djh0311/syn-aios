@@ -16,6 +16,7 @@
 // - **任何失败不 Err 断面板**：返回结构带 status="unavailable"+人话 reason（供给类经 fix8 前缀人话透传）。
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use crate::global_supervisor_review_store::{
@@ -130,8 +131,9 @@ fn clip(text: &str, max_chars: usize) -> String {
 }
 
 /// 读盘组输入：链轮按 (workflow_id, started_at==chain_started_at) 精确匹配（不用「最新一条」，
-/// 防复核期间又起新链串轮）；口供按 (workflow_id + created_at ∈ [started, ended||∞]) 圈本轮
-/// （两者同源 unix 毫秒字符串·可 parse 比较）。链轮找不到 → Err（调用方软着陆成 unavailable）。
+/// 防复核期间又起新链串轮）；口供优先按本轮 run.nodes 的 dispatch_id 精确圈定，避免收尾与口供
+/// 同毫秒竞态；旧 run 记录没有可用 dispatch_id 时才以收尾后 60 秒的窄时间窗软着陆。链轮找不到
+/// → Err（调用方软着陆成 unavailable）。
 pub(crate) fn load_review_input(
     state_path: &Path,
     project_root: &str,
@@ -156,27 +158,34 @@ pub(crate) fn load_review_input(
         .ok_or_else(|| "没找到这一轮的链记录（可能传错轮次，或这轮还没起链）".to_string())?;
     let chain_state = crate::optional_string_from(run, "state").unwrap_or_default();
     let chain_ended_at = crate::optional_string_from(run, "ended_at");
-    let chain_nodes = run
+    let run_nodes = run
         .get("nodes")
         .and_then(serde_json::Value::as_array)
-        .map(|nodes| {
-            nodes
-                .iter()
-                .map(|node| {
-                    (
-                        crate::optional_string_from(node, "node_id").unwrap_or_default(),
-                        crate::optional_string_from(node, "state").unwrap_or_default(),
-                    )
-                })
-                .collect::<Vec<_>>()
-        })
+        .cloned()
         .unwrap_or_default();
-    // 2. 本轮口供（时间窗：started ≤ created_at ≤ ended（没收尾则到现在））。
+    let chain_nodes = run_nodes
+        .iter()
+        .map(|node| {
+            (
+                crate::optional_string_from(node, "node_id").unwrap_or_default(),
+                crate::optional_string_from(node, "state").unwrap_or_default(),
+            )
+        })
+        .collect::<Vec<_>>();
+    // 2. 本轮口供（优先按 dispatch_id；旧 run 才走窄时间窗）。
     let window_start = chain_started_at.parse::<i64>().unwrap_or(0);
     let window_end = chain_ended_at
         .as_deref()
         .and_then(|end| end.parse::<i64>().ok())
+        // 旧 run 记录未落 dispatch_id 时，用窄容差兜住停链和口供同毫秒竞态。
+        // TODO: 历史 run 补齐可匹配标识后，删除这条时间窗回退。
+        .map(|end| end.saturating_add(60_000))
         .unwrap_or(i64::MAX);
+    let run_dispatch_ids = run_nodes
+        .iter()
+        .filter_map(|node| crate::optional_string_from(node, "dispatch_id"))
+        .filter(|dispatch_id| !dispatch_id.trim().is_empty())
+        .collect::<BTreeSet<_>>();
     let reports = value
         .get("audit_events")
         .and_then(serde_json::Value::as_array)
@@ -188,10 +197,16 @@ pub(crate) fn load_review_input(
                         == Some("worker_structured_report_recorded")
                         && crate::optional_string_from(event, "workflow_id").as_deref()
                             == Some(workflow_id)
-                        && crate::optional_string_from(event, "created_at")
-                            .and_then(|created| created.parse::<i64>().ok())
-                            .map(|created| created >= window_start && created <= window_end)
-                            .unwrap_or(false)
+                        && if run_dispatch_ids.is_empty() {
+                            crate::optional_string_from(event, "created_at")
+                                .and_then(|created| created.parse::<i64>().ok())
+                                .map(|created| created >= window_start && created <= window_end)
+                                .unwrap_or(false)
+                        } else {
+                            crate::optional_string_from(event, "dispatch_id")
+                                .map(|dispatch_id| run_dispatch_ids.contains(&dispatch_id))
+                                .unwrap_or(false)
+                        }
                 })
                 .map(|event| WorkerReportProjection {
                     work_item_id: crate::optional_string_from(event, "work_item_id")
@@ -208,28 +223,22 @@ pub(crate) fn load_review_input(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    // 3. 任务级节点执行态（刀2 落画布的 `{wf}:node:task:` 前缀）。
+    // 3. 任务级节点执行态只投影本轮 run.nodes，不能让全局节点的旧轮状态混进复核。
     let task_prefix = format!("{workflow_id}:node:task:");
-    let task_nodes = value
-        .get("nodes")
-        .and_then(serde_json::Value::as_array)
-        .map(|nodes| {
-            nodes
-                .iter()
-                .filter(|node| {
-                    crate::optional_string_from(node, "node_id")
-                        .map(|node_id| node_id.starts_with(&task_prefix))
-                        .unwrap_or(false)
-                })
-                .map(|node| {
-                    (
-                        crate::optional_string_from(node, "node_id").unwrap_or_default(),
-                        crate::optional_string_from(node, "state").unwrap_or_default(),
-                    )
-                })
-                .collect::<Vec<_>>()
+    let task_nodes = run_nodes
+        .iter()
+        .filter(|node| {
+            crate::optional_string_from(node, "node_id")
+                .map(|node_id| node_id.starts_with(&task_prefix))
+                .unwrap_or(false)
         })
-        .unwrap_or_default();
+        .map(|node| {
+            (
+                crate::optional_string_from(node, "node_id").unwrap_or_default(),
+                crate::optional_string_from(node, "state").unwrap_or_default(),
+            )
+        })
+        .collect::<Vec<_>>();
     // 4. 所批方案（该 workflow 最新一条已确认；找不到不拦——prompt 里注明）。
     let timestamp_ms = crate::unix_timestamp_ms();
     let (proposal_title, proposal_goal, proposal_steps, allowed_write_roots) =
@@ -891,8 +900,8 @@ mod tests {
         dir
     }
 
-    /// 最小 fixture store：一轮链（started 1000/ended 2000）+ 窗口内 2 份口供（1 done + 1 partial）
-    /// + 窗口外 1 份（不该被圈进）+ 2 个任务节点。自包含手写、不依赖 lib.rs helper（worker_report 先例）。
+    /// 最小 fixture store：一轮链（started 1000/ended 2000）+ 2 份按 dispatch_id 匹配的口供
+    /// + 上轮口供 + 2 个本轮任务节点。自包含手写、不依赖 lib.rs helper（worker_report 先例）。
     fn write_fixture_state(dir: &Path, project_root: &str) -> PathBuf {
         let pid = crate::project_id(project_root);
         let store = serde_json::json!({
@@ -914,21 +923,21 @@ mod tests {
             "audit_events": [
                 {
                     "event_id": "r1", "event_type": "worker_structured_report_recorded",
-                    "workflow_id": "wf-1", "work_item_id": "wi-1", "created_at": "1500",
+                    "workflow_id": "wf-1", "work_item_id": "wi-1", "dispatch_id": "d-current-1", "created_at": "1500",
                     "executed_what": "建了 index.html 小游戏", "changed_what": "/t/index.html",
                     "acceptance_status": "reported_completed",
                     "evidence_refs": ["文件存在且能打开"], "open_issues": []
                 },
                 {
                     "event_id": "r2", "event_type": "worker_structured_report_recorded",
-                    "workflow_id": "wf-1", "work_item_id": "wi-2", "created_at": "1800",
+                    "workflow_id": "wf-1", "work_item_id": "wi-2", "dispatch_id": "d-current-2", "created_at": "1800",
                     "executed_what": "无法启动浏览器，未完成手动验收", "changed_what": "（无产出）",
                     "acceptance_status": "needs_rework",
                     "evidence_refs": [], "open_issues": ["浏览器起不来"]
                 },
                 {
                     "event_id": "r-out", "event_type": "worker_structured_report_recorded",
-                    "workflow_id": "wf-1", "work_item_id": "wi-old", "created_at": "500",
+                    "workflow_id": "wf-1", "work_item_id": "wi-old", "dispatch_id": "d-old", "created_at": "500",
                     "executed_what": "上一轮的旧口供（不该被圈进）", "changed_what": "x",
                     "acceptance_status": "reported_completed",
                     "evidence_refs": [], "open_issues": []
@@ -940,7 +949,62 @@ mod tests {
                 "chain_run_id": "chain-1", "project_id": pid, "workflow_id": "wf-1",
                 "state": "completed", "stop_requested": false,
                 "started_at": "1000", "ended_at": "2000",
-                "nodes": [{"node_id": "wf-1:node:codex-dev", "state": "completed", "dispatch_id": null, "message": null}]
+                "nodes": [
+                    {"node_id": "wf-1:node:codex-dev", "state": "completed", "dispatch_id": null, "message": null},
+                    {"node_id": "wf-1:node:task:aaa", "state": "completed", "dispatch_id": "d-current-1", "message": null},
+                    {"node_id": "wf-1:node:task:bbb", "state": "completed", "dispatch_id": "d-current-2", "message": null}
+                ]
+            }]
+        });
+        let path = dir.join("workflow-state.v0.json");
+        fs::write(&path, serde_json::to_string_pretty(&store).unwrap()).expect("write state");
+        path
+    }
+
+    /// 案发形状：停链后 1ms 才落的本轮口供，和全局 nodes 中旧轮遗留的 completed。
+    fn write_round_scope_regression_fixture_state(dir: &Path, project_root: &str) -> PathBuf {
+        let pid = crate::project_id(project_root);
+        let store = serde_json::json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "updated_at": "seed",
+            "projects": [],
+            "agent_adapters": [],
+            "workflows": [{"workflow_id": "wf-1"}],
+            "nodes": [
+                {"workflow_id": "wf-1", "node_id": "wf-1:node:task:done", "state": "completed"},
+                {"workflow_id": "wf-1", "node_id": "wf-1:node:task:not-run", "state": "completed"}
+            ],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "audit_events": [
+                {
+                    "event_id": "current-late", "event_type": "worker_structured_report_recorded",
+                    "workflow_id": "wf-1", "node_id": "wf-1:node:task:done",
+                    "work_item_id": "wi-current", "dispatch_id": "d-current", "created_at": "2001",
+                    "executed_what": "本轮任务已交口供", "changed_what": "/t/current.txt",
+                    "acceptance_status": "reported_completed", "evidence_refs": [], "open_issues": []
+                },
+                {
+                    "event_id": "old-round", "event_type": "worker_structured_report_recorded",
+                    "workflow_id": "wf-1", "node_id": "wf-1:node:task:done",
+                    "work_item_id": "wi-old", "dispatch_id": "d-old", "created_at": "500",
+                    "executed_what": "上一轮口供", "changed_what": "/t/old.txt",
+                    "acceptance_status": "reported_completed", "evidence_refs": [], "open_issues": []
+                }
+            ],
+            "capabilities": [],
+            "harness_resources": [],
+            "workflow_chain_runs": [{
+                "chain_run_id": "chain-1", "project_id": pid, "workflow_id": "wf-1",
+                "state": "stopped", "stop_requested": false,
+                "started_at": "1000", "ended_at": "2000",
+                "nodes": [
+                    {"node_id": "wf-1:node:task:done", "state": "completed", "dispatch_id": "d-current", "message": null},
+                    {"node_id": "wf-1:node:task:not-run", "state": "pending", "dispatch_id": null, "message": null}
+                ]
             }]
         });
         let path = dir.join("workflow-state.v0.json");
@@ -983,7 +1047,7 @@ mod tests {
         assert!(parse_supervisor_review("```json\n{坏的\n```").is_none());
     }
 
-    // 读盘：链轮精确匹配 + 口供按时间窗圈本轮（窗外旧口供不进）+ 任务节点圈对。
+    // 读盘：链轮精确匹配 + 口供按本轮 dispatch_id 圈对 + 任务节点按本轮投影。
     #[test]
     fn load_input_scopes_reports_to_this_round() {
         let dir = tmp_dir("scope");
@@ -1011,6 +1075,73 @@ mod tests {
             "任务/口供计数进 prompt"
         );
         assert!(prompt.contains("回程契约"), "契约段在");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn load_input_keeps_late_current_report_and_uses_this_round_task_states() {
+        let dir = tmp_dir("round-scope-regression");
+        let path = write_round_scope_regression_fixture_state(&dir, "/p/root");
+
+        let input = load_review_input(&path, "/p/root", "wf-1", "1000").expect("输入应组出来");
+
+        assert_eq!(input.reports.len(), 1, "同轮 dispatch 的晚 1ms 口供应保留");
+        assert_eq!(input.reports[0].work_item_id, "wi-current");
+        assert!(
+            input
+                .reports
+                .iter()
+                .all(|report| report.work_item_id != "wi-old"),
+            "旧轮口供不得混入"
+        );
+        assert_eq!(
+            input.task_nodes,
+            vec![
+                ("wf-1:node:task:done".to_string(), "completed".to_string()),
+                ("wf-1:node:task:not-run".to_string(), "pending".to_string()),
+            ],
+            "任务态只投影本轮 run.nodes，不能吃全局旧轮 completed"
+        );
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn load_input_uses_narrow_time_fallback_only_when_run_has_no_dispatch_ids() {
+        let dir = tmp_dir("round-scope-fallback");
+        let path = write_round_scope_regression_fixture_state(&dir, "/p/root");
+        let mut state: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).expect("read state")).expect("parse state");
+        for node in state["workflow_chain_runs"][0]["nodes"]
+            .as_array_mut()
+            .expect("run nodes")
+        {
+            node["dispatch_id"] = serde_json::Value::Null;
+        }
+        for event in state["audit_events"].as_array_mut().expect("audit events") {
+            event["dispatch_id"] = serde_json::Value::Null;
+        }
+        state["audit_events"]
+            .as_array_mut()
+            .expect("audit events")
+            .push(serde_json::json!({
+                "event_id": "too-late", "event_type": "worker_structured_report_recorded",
+                "workflow_id": "wf-1", "work_item_id": "wi-too-late", "created_at": "62001",
+                "executed_what": "超过容差", "changed_what": "/t/late.txt",
+                "acceptance_status": "reported_completed", "evidence_refs": [], "open_issues": []
+            }));
+        fs::write(&path, serde_json::to_string_pretty(&state).expect("serialize state"))
+            .expect("write state");
+
+        let input = load_review_input(&path, "/p/root", "wf-1", "1000").expect("输入应组出来");
+
+        assert_eq!(
+            input.reports.len(),
+            1,
+            "回退只纳入 ended_at 后 60 秒内的当前口供"
+        );
+        assert_eq!(input.reports[0].work_item_id, "wi-current");
+
         let _ = fs::remove_dir_all(dir);
     }
 

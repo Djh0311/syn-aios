@@ -855,16 +855,16 @@ fn failed_action_task<'a>(
     let task = request
         .planned_task
         .as_ref()
-        .ok_or_else(|| "failed 四选一处置缺 planned_task，不能复用现有任务包/派发机器。".to_string())?;
+        .ok_or_else(|| "四选一处置缺 planned_task，不能复用现有任务包/派发机器。".to_string())?;
     if task.planned_task_id != request.planned_task_id {
         return Err(format!(
-            "failed 四选一处置 planned_task_id 不一致：request={} task={}",
+            "四选一处置 planned_task_id 不一致：request={} task={}",
             request.planned_task_id, task.planned_task_id
         ));
     }
     if task.scope.workflow_id != request.workflow_id {
         return Err(format!(
-            "failed 四选一处置 workflow_id 不一致：request={} task={}",
+            "四选一处置 workflow_id 不一致：request={} task={}",
             request.workflow_id, task.scope.workflow_id
         ));
     }
@@ -885,7 +885,7 @@ fn failed_action_current_states(
     planned_task_id: &str,
 ) -> Result<(String, String), String> {
     let run = chain_run_record(value, chain_run_id)
-        .ok_or_else(|| format!("找不到 failed 处置目标链运行记录：{chain_run_id}"))?;
+        .ok_or_else(|| format!("找不到四选一处置目标链运行记录：{chain_run_id}"))?;
     let chain_state =
         optional_string_from(run, "state").unwrap_or_else(|| "unknown".to_string());
     let node_state = run
@@ -910,11 +910,11 @@ fn set_chain_run_state_for_failed_action(
     let runs = value
         .get_mut("workflow_chain_runs")
         .and_then(Value::as_array_mut)
-        .ok_or_else(|| "workflow_state 缺 workflow_chain_runs，无法处置 failed 节点".to_string())?;
+        .ok_or_else(|| "workflow_state 缺 workflow_chain_runs，无法处置四选一节点".to_string())?;
     let run = runs
         .iter_mut()
         .find(|run| optional_string_from(run, "chain_run_id").as_deref() == Some(chain_run_id))
-        .ok_or_else(|| format!("找不到 failed 处置目标链运行记录：{chain_run_id}"))?;
+        .ok_or_else(|| format!("找不到四选一处置目标链运行记录：{chain_run_id}"))?;
     run["state"] = json!(state);
     run["ended_at"] = if state == "running" {
         Value::Null
@@ -935,7 +935,7 @@ fn ensure_failed_node_transition(
         Ok(())
     } else {
         Err(format!(
-            "failed 节点处置被 transition_allowed 拒绝：{from}->{to} actor_role={actor_role}（需 project_director） explicit_retry_or_reopen={explicit_retry_or_reopen}"
+            "四选一节点处置被 transition_allowed 拒绝：{from}->{to} actor_role={actor_role}（需 project_director） explicit_retry_or_reopen={explicit_retry_or_reopen}"
         ))
     }
 }
@@ -945,6 +945,7 @@ fn reopen_failed_chain_node_for_action(
     workflow_id: &str,
     chain_run_id: &str,
     task: &ProjectDirectorPlannedTask,
+    from_state: &str,
     action: &str,
     message: &str,
 ) -> Result<(), String> {
@@ -965,7 +966,7 @@ fn reopen_failed_chain_node_for_action(
         chain_run_id,
         workflow_id,
         &format!("workflow_chain_node_failed_action_{action}"),
-        "failed",
+        from_state,
         "running",
         &ts,
         message,
@@ -988,9 +989,9 @@ fn run_project_director_failed_action_inner(
     let value = read_workflow_state_value(path)?;
     let (chain_state, node_state) =
         failed_action_current_states(&value, &request.chain_run_id, &request.planned_task_id)?;
-    if node_state != "failed" {
+    if !matches!(node_state.as_str(), "failed" | "needs_rework") {
         return Err(format!(
-            "failed 四选一只能处置 failed 节点，当前节点状态是 {node_state}"
+            "四选一只能处置 failed / needs_rework 节点，当前节点状态是 {node_state}"
         ));
     }
 
@@ -1002,7 +1003,7 @@ fn run_project_director_failed_action_inner(
                 request.explicit_retry_or_reopen,
             ) {
                 return Err(format!(
-                    "failed 链处置被 transition_allowed 拒绝：{chain_state}->running explicit_retry_or_reopen={}",
+                    "四选一链处置被 transition_allowed 拒绝：{chain_state}->running explicit_retry_or_reopen={}",
                     request.explicit_retry_or_reopen
                 ));
             }
@@ -1020,7 +1021,7 @@ fn run_project_director_failed_action_inner(
             let work_item_id = task
                 .work_item_id
                 .as_deref()
-                .ok_or_else(|| "failed 重跑缺 work_item_id，无法复用现有派发机器。".to_string())?;
+                .ok_or_else(|| "四选一重跑缺 work_item_id，无法复用现有派发机器。".to_string())?;
             let new_session_id = if action == "change_session" {
                 let creator = session_creator.ok_or_else(|| {
                     "change_session 必须提供 C1 session_creator，不能绕过 create_and_bind_task_session。"
@@ -1044,7 +1045,7 @@ fn run_project_director_failed_action_inner(
             };
             if !reset_work_item_for_retry(path, &request.project_root, work_item_id) {
                 return Err(format!(
-                    "failed {action} 无法把 work_item {work_item_id} 复位到 ready_to_dispatch，已停手。"
+                    "四选一 {action} 无法把 work_item {work_item_id} 复位到 ready_to_dispatch，已停手。"
                 ));
             }
             reopen_failed_chain_node_for_action(
@@ -1052,6 +1053,7 @@ fn run_project_director_failed_action_inner(
                 &request.workflow_id,
                 &request.chain_run_id,
                 task,
+                &node_state,
                 action,
                 if action == "change_session" {
                     "主管显式选择 change_session：已复用 C1 新建并绑定任务会话，交回现有链驱动重跑单任务。"
@@ -1082,7 +1084,7 @@ fn run_project_director_failed_action_inner(
                 warnings: vec![],
                 stopped_reason: None,
                 message: format!(
-                    "failed 节点已由 {actor_id} 按 {action} 显式处置，并经现有链驱动单任务重跑。"
+                    "{node_state} 节点已由 {actor_id} 按 {action} 显式处置，并经现有链驱动单任务重跑。"
                 ),
             })
         }
@@ -1094,18 +1096,24 @@ fn run_project_director_failed_action_inner(
                 &request.planned_task_id,
                 "director_rework_attempts",
             );
-            if attempts_used >= DIRECTOR_FINAL_REWORK_BUDGET {
+            // 主管终标已把 needs_rework 的唯一预算用在「退回」本身；用户再次选 rework
+            // 只是明确保留该待重做态，不重复扣预算、不自动重跑。
+            let rework_already_requested = node_state == "needs_rework";
+            if !rework_already_requested && attempts_used >= DIRECTOR_FINAL_REWORK_BUDGET {
                 return Err(format!(
-                    "director_rework_budget_exhausted:{}/{}，failed 节点保持待主管选择其它处置。",
+                    "director_rework_budget_exhausted:{}/{}，节点保持待主管选择其它处置。",
                     attempts_used, DIRECTOR_FINAL_REWORK_BUDGET
                 ));
             }
             let work_item_id = task
                 .work_item_id
                 .as_deref()
-                .ok_or_else(|| "failed 退回缺 work_item_id，无法复用 C4a reset。".to_string())?;
-            let reset_ok =
-                reset_work_item_for_director_rework(path, &request.project_root, work_item_id);
+                .ok_or_else(|| "四选一退回缺 work_item_id，无法复用 C4a reset。".to_string())?;
+            let reset_ok = if rework_already_requested {
+                true
+            } else {
+                reset_work_item_for_director_rework(path, &request.project_root, work_item_id)
+            };
             let ts = unix_timestamp_string();
             let mut after = read_workflow_state_value(path)?;
             set_chain_node_state(
@@ -1121,7 +1129,11 @@ fn run_project_director_failed_action_inner(
                 &request.chain_run_id,
                 &request.planned_task_id,
                 "director_rework_attempts",
-                attempts_used + 1,
+                if rework_already_requested {
+                    attempts_used
+                } else {
+                    attempts_used + 1
+                },
             );
             set_chain_node_usize_field(
                 &mut after,
@@ -1141,7 +1153,7 @@ fn run_project_director_failed_action_inner(
                 &request.chain_run_id,
                 &request.workflow_id,
                 "workflow_chain_node_failed_action_rework",
-                "failed",
+                &node_state,
                 "needs_rework",
                 &ts,
                 if reset_ok {
@@ -1156,12 +1168,16 @@ fn run_project_director_failed_action_inner(
                 &request.chain_run_id,
                 &request.workflow_id,
                 "workflow_chain_run_stopped",
-                "failed",
+                &node_state,
                 "stopped",
                 &ts,
                 &format!(
-                    "failed 节点退回 needs_rework，已消耗返工预算 {}/{}。",
-                    attempts_used + 1,
+                    "{node_state} 节点退回 needs_rework，返工预算 {}/{}。",
+                    if rework_already_requested {
+                        attempts_used
+                    } else {
+                        attempts_used + 1
+                    },
                     DIRECTOR_FINAL_REWORK_BUDGET
                 ),
             )?;
@@ -1182,14 +1198,14 @@ fn run_project_director_failed_action_inner(
                 },
                 stopped_reason: Some("needs_rework:failed_action".to_string()),
                 message: format!(
-                    "failed 节点已由 {actor_id} 按 rework 退回，复用 C4a 返工预算。"
+                    "{node_state} 节点已由 {actor_id} 按 rework 退回，复用 C4a 返工预算。"
                 ),
             })
         }
         "archive" => {
             if !workflow_transition_allowed(&chain_state, "archived", false) {
                 return Err(format!(
-                    "failed 链结束被 transition_allowed 拒绝：{chain_state}->archived"
+                    "四选一链结束被 transition_allowed 拒绝：{chain_state}->archived"
                 ));
             }
             ensure_failed_node_transition(&node_state, "archived", &request.actor_role, false)?;
@@ -1201,7 +1217,7 @@ fn run_project_director_failed_action_inner(
                 &request.planned_task_id,
                 "archived",
                 None,
-                Some("主管显式选择 archive：按现成 failed->archived 结束。"),
+                Some("主管显式选择 archive：按现成节点归档转移结束。"),
             );
             update_node_state_for_id(
                 &mut after,
@@ -1214,10 +1230,10 @@ fn run_project_director_failed_action_inner(
                 &request.chain_run_id,
                 &request.workflow_id,
                 "workflow_chain_node_failed_action_archive",
-                "failed",
+                &node_state,
                 "archived",
                 &ts,
-                "主管显式选择 archive：复用现成 failed->archived 转移结束。",
+                "主管显式选择 archive：复用现成处置节点归档转移结束。",
             )?;
             finalize_chain_run(&mut after, &request.chain_run_id, "archived", &ts);
             write_validated_workflow_state(path, &after)?;
@@ -1232,11 +1248,11 @@ fn run_project_director_failed_action_inner(
                 chain_outcome: None,
                 warnings: vec![],
                 stopped_reason: Some("archived:failed_action".to_string()),
-                message: format!("failed 节点已由 {actor_id} 按 archive 结束。"),
+                message: format!("{node_state} 节点已由 {actor_id} 按 archive 结束。"),
             })
         }
         other => Err(format!(
-            "未知 failed 处置动作：{other}（允许 retry/rework/change_session/archive）"
+            "未知四选一处置动作：{other}（允许 retry/rework/change_session/archive）"
         )),
     }
 }
@@ -1271,12 +1287,24 @@ pub(crate) fn run_project_director_failed_action_with_session_creator(
 
 // 2.4：重试前把 work_item 走**现成合法跳转**复位到 ready_to_dispatch（首次失败推离了它）——用现成
 // update_work_item_state_at（限默认工作流），非默认工作流复位不成则返回 false（不重试·不硬闯状态机）。
-// 逐步 fire（running→failed→needs_changes→ready_to_dispatch·非法跳转各步自忽略），以末步是否到 ready_to_dispatch 为准。
+// 逐步 fire（running→failed→needs_changes→ready_to_dispatch·非法跳转各步自忽略）。已在
+// ready_to_dispatch 的终标退回任务直接成功，避免重复复位；其余以末步是否到位为准。
 fn reset_work_item_for_retry(
     path: &std::path::Path,
     project_root: &str,
     work_item_id: &str,
 ) -> bool {
+    let already_ready = read_workflow_state_value(path)
+        .ok()
+        .and_then(|value| {
+            find_work_item(&value, &default_workflow_id(project_root), work_item_id)
+                .and_then(|item| optional_string_from(item, "state"))
+        })
+        .as_deref()
+        == Some("ready_to_dispatch");
+    if already_ready {
+        return true;
+    }
     let step = |next_state: &str| {
         update_work_item_state_at(
             path,
@@ -3148,7 +3176,7 @@ async fn apply_project_director_failed_action(
         )
     })
     .await
-    .map_err(|error| format!("failed 节点处置线程异常：{error}"))?
+    .map_err(|error| format!("四选一节点处置线程异常：{error}"))?
 }
 
 // ===== P1·角色循环「授权后自动推进」编排命令（件 B + 件 C-1）=====
@@ -3176,6 +3204,9 @@ pub(crate) struct AutoAdvanceRoleLoopOutcome {
     pub(crate) message: String,
     pub(crate) chain_outcome: Option<DirectorChainOutcome>,
     pub(crate) stop_reason: Option<String>,
+    // 前端在链停后的用户处置要原样回传目标任务；只读回显，不参与派发或授权判断。
+    #[serde(default)]
+    pub(crate) planned_tasks: Vec<ProjectDirectorPlannedTask>,
     // fix3 2.1：非致命提示（如角色钳位「任务 X 角色 Y 不在授权名单，已按 codex-dev 执行」）。
     // 加法字段·前端可忽略；None 路（所批即所跑·approved 已在预拆钳过）不重复钳，此处为空。
     #[serde(default)]
@@ -3510,6 +3541,7 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                 message,
                 chain_outcome: None,
                 stop_reason: Some(stage.to_string()),
+                planned_tasks: prepared.plan.planned_tasks.clone(),
                 warnings: advance_warnings.clone(),
             });
         }
@@ -3576,6 +3608,7 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
             message,
             chain_outcome: Some(outcome),
             stop_reason,
+            planned_tasks: prepared.plan.planned_tasks.clone(),
             warnings: advance_warnings,
         })
     })();

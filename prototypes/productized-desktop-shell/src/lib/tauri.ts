@@ -20,6 +20,8 @@ import type {
   RunProjectConsultationRequest,
   AutoAdvanceAuthorizedRoleLoopRequest,
   AutoAdvanceRoleLoopOutcome,
+  ProjectDirectorFailedActionRequest,
+  ProjectDirectorFailedActionOutcome,
   ConfirmAndStartAuthorizedRunRequest,
   PreviewPendingProposalDirectorPlanRequest,
   PreviewPendingProposalDirectorPlanOutcome,
@@ -872,6 +874,14 @@ export function autoAdvanceAuthorizedRoleLoop(
 ): Promise<AutoAdvanceRoleLoopOutcome> {
   ensureTauriRuntime();
   return invoke<AutoAdvanceRoleLoopOutcome>("auto_advance_authorized_role_loop", { request });
+}
+
+// 主管四选一处置：前端只把用户已选择的动作和同一份任务带回，转移/授权/C1 均仍在后端校验。
+export function applyProjectDirectorFailedAction(
+  request: ProjectDirectorFailedActionRequest,
+): Promise<ProjectDirectorFailedActionOutcome> {
+  ensureTauriRuntime();
+  return invoke<ProjectDirectorFailedActionOutcome>("apply_project_director_failed_action", { request });
 }
 
 // 交办地基 2.2 合流命令（刀1 已注册）：用户点[允许并开始]那一下 → 后端一原子命令做完

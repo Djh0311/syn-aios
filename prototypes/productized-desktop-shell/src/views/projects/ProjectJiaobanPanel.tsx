@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/Badge";
 import { summarizeProjectConsultationProposalStore } from "../../lib/projectConsultationProposal";
 import {
+  applyProjectDirectorFailedAction,
   autoAdvanceAuthorizedRoleLoop,
   confirmAndStartAuthorizedRun,
   getProjectWorkflowChainStatus,
@@ -241,6 +242,7 @@ function ProjectJiaobanPanelBrowser({
   const [starting, setStarting] = useState(false);
   const [outcome, setOutcome] = useState<AutoAdvanceRoleLoopOutcome | null>(cached?.outcome ?? null);
   const [startError, setStartError] = useState<string | null>(cached?.startError ?? null);
+  const [needsReworkActionError, setNeedsReworkActionError] = useState<string | null>(null);
   // 合流命令拒「方案不是待用户确认」时置 true → 卡住脸给[接着跑,不用重批]。
   const [continueHint, setContinueHint] = useState<boolean>(cached?.continueHint ?? false);
   const [chainStatus, setChainStatus] = useState<ProjectWorkflowChainStatus | null>(null);
@@ -403,6 +405,7 @@ function ProjectJiaobanPanelBrowser({
           const status = await getProjectWorkflowChainStatus(projectRoot, projectWorkflow.workflow_id);
           const candidate = status?.started_at ?? null;
           if (candidate && (runStartedAtMs == null || Number(candidate) >= runStartedAtMs)) {
+            if (!cancelled) setChainStatus(status);
             startedAt = candidate;
           }
         } catch {
@@ -701,6 +704,61 @@ function ProjectJiaobanPanelBrowser({
     }
   }
 
+  async function applyNeedsReworkAction(action: "change_session" | "rework" | "archive") {
+    if (!projectWorkflow || !outcome?.chain_outcome || starting) return;
+    const plannedTaskId =
+      outcome.chain_outcome?.steps.find((step) => step.state === "needs_rework")?.planned_task_id ??
+      thisRoundChainStatus?.nodes.find((node) => node.state === "needs_rework")?.node_id;
+    const plannedTask = outcome.planned_tasks?.find((task) => task.planned_task_id === plannedTaskId);
+    if (!plannedTaskId || !plannedTask) {
+      setNeedsReworkActionError("这单的重做信息还没载入，暂时不能换会话、重拆或结束；可以先按原样接着跑。");
+      return;
+    }
+
+    setStarting(true);
+    setNeedsReworkActionError(null);
+    try {
+      const result = await applyProjectDirectorFailedAction({
+        project_root: projectWorkflow.project_root,
+        workflow_id: projectWorkflow.workflow_id,
+        chain_run_id: outcome.chain_outcome.chain_run_id,
+        planned_task_id: plannedTaskId,
+        action,
+        actor_role: "project_director",
+        actor_id: "user",
+        explicit_retry_or_reopen: action === "change_session",
+        planned_task: plannedTask,
+        max_nodes: 1,
+      });
+      const nextOutcome: AutoAdvanceRoleLoopOutcome = {
+        stage: "ran",
+        planned_task_count: outcome.planned_task_count,
+        prepared_count: outcome.prepared_count,
+        needs_binding_count: outcome.needs_binding_count,
+        blocked_count: outcome.blocked_count,
+        message: result.message,
+        chain_outcome:
+          action === "change_session" ? (result.chain_outcome ?? null) : action === "rework" ? outcome.chain_outcome : null,
+        stop_reason: result.stopped_reason ?? null,
+        planned_tasks: outcome.planned_tasks,
+        warnings: result.warnings,
+      };
+      setOutcome(nextOutcome);
+      setManualPhase("done");
+      writeJiaobanRunCache(projectRoot, { manualPhase: "done", outcome: nextOutcome, startError: null });
+      try {
+        const status = await getProjectWorkflowChainStatus(projectRoot, projectWorkflow.workflow_id);
+        if (status) setChainStatus(status);
+      } catch {
+        // 处置结果已返回；进度读模型暂缺不阻断主脸。
+      }
+    } catch (error) {
+      setNeedsReworkActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setStarting(false);
+    }
+  }
+
   async function stopRun() {
     if (!projectWorkflow) return;
     try {
@@ -822,6 +880,16 @@ function ProjectJiaobanPanelBrowser({
     [...projectSessions].sort(
       (a, b) => (b.updated_at_ms ?? 0) - (a.updated_at_ms ?? 0),
     )[0]?.thread_id ?? null;
+  const needsReworkStep = outcome?.chain_outcome?.steps.find((step) => step.state === "needs_rework") ?? null;
+  const needsReworkNode = thisRoundChainStatus?.nodes.find((node) => node.state === "needs_rework") ?? null;
+  const needsReworkTaskId = needsReworkStep?.planned_task_id ?? needsReworkNode?.node_id ?? null;
+  const needsRework = needsReworkTaskId
+    ? {
+        reason:
+          needsReworkNode?.message?.trim() || "主管认为这一步还需要重做，请从下面选择怎么处理。",
+        actionsReady: outcome?.planned_tasks?.some((task) => task.planned_task_id === needsReworkTaskId) ?? false,
+      }
+    : null;
 
   // Part①·历史拉取（挂载/交货翻脸/重拆各一次·不轮询）。失败静默：读不到就保留已有、不上错、不挡五态主区。
   async function loadHistory() {
@@ -949,6 +1017,11 @@ function ProjectJiaobanPanelBrowser({
             outcome={outcome}
             chainStatus={thisRoundChainStatus}
             onContinue={backToSay}
+            needsRework={needsRework}
+            needsReworkActionError={needsReworkActionError}
+            needsReworkActionStarting={starting}
+            onNeedsReworkContinue={() => void continueRun()}
+            onNeedsReworkAction={(action) => void applyNeedsReworkAction(action)}
             onRequestAction={onRequestAction}
             factCtx={{
               projectRoot: project.project_root,
@@ -2257,6 +2330,11 @@ function JiaobanDoneState({
   outcome,
   chainStatus,
   onContinue,
+  needsRework,
+  needsReworkActionError,
+  needsReworkActionStarting,
+  onNeedsReworkContinue,
+  onNeedsReworkAction,
   onRequestAction,
   factCtx,
   sessionChoice,
@@ -2270,6 +2348,11 @@ function JiaobanDoneState({
   outcome: AutoAdvanceRoleLoopOutcome | null;
   chainStatus: ProjectWorkflowChainStatus | null;
   onContinue: () => void;
+  needsRework: { reason: string; actionsReady: boolean } | null;
+  needsReworkActionError: string | null;
+  needsReworkActionStarting: boolean;
+  onNeedsReworkContinue: () => void;
+  onNeedsReworkAction: (action: "change_session" | "rework" | "archive") => void;
   onRequestAction: (action: PendingAction) => void;
   factCtx: FactMemoryContext | null;
   // 「看原始对话」桥：existing 单→看原始对话（就是干这单的那条）；哨兵单→latestSession 兜底看最近对话。
@@ -2311,9 +2394,11 @@ function JiaobanDoneState({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">交办</p>
-          <h3 className="jiaoban-done-title">{jiaobanDoneTitle(chain?.steps ?? [])}</h3>
+          <h3 className="jiaoban-done-title">
+            {needsRework ? "这一步需要重做" : jiaobanDoneTitle(chain?.steps ?? [])}
+          </h3>
         </div>
-        <Badge tone="candidate">已交货</Badge>
+        <Badge tone={needsRework ? "warning" : "candidate"}>{needsRework ? "待你决定" : "已交货"}</Badge>
       </div>
       <div className="role-loop-plain" aria-label="结果（人话）">
         <p className="role-loop-plain-lead">{resultLine}</p>
@@ -2333,6 +2418,16 @@ function JiaobanDoneState({
         latestSessionThreadId={latestSessionThreadId}
         onOpenAgentSession={onOpenAgentSession}
       />
+      {needsRework ? (
+        <JiaobanNeedsReworkDisposal
+          reason={needsRework.reason}
+          actionsReady={needsRework.actionsReady}
+          starting={needsReworkActionStarting}
+          error={needsReworkActionError}
+          onContinue={onNeedsReworkContinue}
+          onAction={onNeedsReworkAction}
+        />
+      ) : null}
       {/* B1：全局主管复核区——交货后 async 后填（loading/意见/不可用+重试），不挡上面交货内容。 */}
       <JiaobanSupervisorReviewSection
         loading={supervisorLoading}
@@ -2347,9 +2442,65 @@ function JiaobanDoneState({
           ))}
         </ul>
       ) : null}
+      {!needsRework ? (
+        <div className="workflow-state-actions">
+          <button className="primary-button" type="button" onClick={onContinue}>
+            继续弄别的
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// 主管已明确退回时，这里是主界面的用户处置入口；四个动作都要可见，绝不自动重跑。
+export function JiaobanNeedsReworkDisposal({
+  reason,
+  actionsReady,
+  starting,
+  error,
+  onContinue,
+  onAction,
+}: {
+  reason: string;
+  actionsReady: boolean;
+  starting: boolean;
+  error: string | null;
+  onContinue: () => void;
+  onAction: (action: "change_session" | "rework" | "archive") => void;
+}) {
+  return (
+    <div className="role-loop-plain" aria-label="主管退回处置">
+      <p className="role-loop-plain-lead">主管退回理由：{reason}</p>
+      {error ? <p className="jiaoban-consult-error" role="alert">{error}</p> : null}
+      {!actionsReady ? <p className="muted small-note">重做信息还在载入，三个处置按钮会稍后可用。</p> : null}
       <div className="workflow-state-actions">
-        <button className="primary-button" type="button" onClick={onContinue}>
-          继续弄别的
+        <button className="primary-button" type="button" disabled={starting} onClick={onContinue}>
+          接着跑（按原样重做）
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={starting || !actionsReady}
+          onClick={() => onAction("change_session")}
+        >
+          换个新会话重做
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={starting || !actionsReady}
+          onClick={() => onAction("rework")}
+        >
+          退回主管重拆
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={starting || !actionsReady}
+          onClick={() => onAction("archive")}
+        >
+          结束这单
         </button>
       </div>
     </div>

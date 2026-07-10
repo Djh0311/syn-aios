@@ -401,6 +401,36 @@ export type AutoAdvanceRoleLoopOutcome = {
   message: string;
   chain_outcome: DirectorChainOutcome | null;
   stop_reason: string | null;
+  // 链停后的用户处置需原样带回同一任务；后端只读回显，旧报文可缺省。
+  planned_tasks?: ProjectDirectorPlannedTask[];
+  warnings?: string[];
+};
+
+export type ProjectDirectorFailedActionRequest = {
+  project_root: string;
+  workflow_id: string;
+  chain_run_id: string;
+  planned_task_id: string;
+  action: "retry" | "rework" | "change_session" | "archive";
+  actor_role: string;
+  actor_id?: string;
+  explicit_retry_or_reopen?: boolean;
+  planned_task?: ProjectDirectorPlannedTask;
+  max_nodes?: number;
+};
+
+export type ProjectDirectorFailedActionOutcome = {
+  action: string;
+  chain_run_id: string;
+  planned_task_id: string;
+  transition_to: string;
+  chain_state: string;
+  node_state: string;
+  new_session_id?: string | null;
+  chain_outcome?: DirectorChainOutcome | null;
+  warnings: string[];
+  stopped_reason?: string | null;
+  message: string;
 };
 
 export type PreviewProjectDirectorTaskPlanInput = {
