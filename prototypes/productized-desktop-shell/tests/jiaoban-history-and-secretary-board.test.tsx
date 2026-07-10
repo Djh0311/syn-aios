@@ -105,6 +105,42 @@ function historyHtml(props: Partial<Parameters<typeof JiaobanHistoryColumn>[0]>)
   assert(!out.includes("needs_human_check") && !out.includes("mismatch") && !out.includes("time_window"), "词表：不露英文枚举");
 }
 
+// A·4b) 运行错误两层脸：失败单默认显人话摘要+族标、下钻原文；不灌裸错误到默认脸；成功单不显错误区。
+{
+  const failOut = renderToStaticMarkup(
+    <JiaobanHistoryDetail
+      entry={entry({
+        goal_text: "删一个怪",
+        state: "blocked",
+        state_note: "跑挂了（去工作流看详情）",
+        error: {
+          family: "codex_subsystem",
+          human: "codex 自身某个子系统报错（如记忆/索引），一般不影响本次任务结果。",
+          raw_snippet: "codex_memories_write::phase2::job: failed to claim job (no such table: jobs)",
+        },
+      })}
+      onBackToCurrent={noop}
+    />,
+  );
+  assert(failOut.includes("codex 子系统"), "族标人话化（不露 family 机器键）");
+  assert(!failOut.includes("codex_subsystem"), "不露 family 英文键");
+  assert(failOut.includes("一般不影响本次任务结果"), "默认脸显人话摘要");
+  assert(failOut.includes("查看原文"), "下钻入口在");
+  assert(failOut.includes("no such table: jobs"), "下钻 <details> 里带原文（藏在 details·非默认脸主体）");
+  // 默认脸主体（<details> 之前）不灌裸错误：出错行显人话，不是 stderr。
+  const beforeDetails = failOut.split("查看原文")[0] ?? "";
+  assert(!beforeDetails.includes("no such table"), "默认脸不灌裸 stderr");
+
+  // 成功单：无 error → 不渲染错误区。
+  const okOut = renderToStaticMarkup(
+    <JiaobanHistoryDetail
+      entry={entry({ state: "delivered", state_note: "做完了" })}
+      onBackToCurrent={noop}
+    />,
+  );
+  assert(!okOut.includes("出错") && !okOut.includes("查看原文"), "成功单不显错误区");
+}
+
 // 5) 看板四列 + 空列文案 + 去处按钮 + 卡片内容 + 页脚边界话。
 {
   const board: SecretaryPendingBoard = {
@@ -126,4 +162,4 @@ function historyHtml(props: Partial<Parameters<typeof JiaobanHistoryColumn>[0]>)
   assert(out.includes("秘书零写入"), "页脚边界话在");
 }
 
-console.log("history-and-board: 5 组离线 DOM 断言全过");
+console.log("history-and-board: 6 组离线 DOM 断言全过");

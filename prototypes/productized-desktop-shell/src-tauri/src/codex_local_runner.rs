@@ -382,38 +382,32 @@ pub(crate) fn readonly_codex_consult(
 }
 
 /// fix8·供给类失败分类：codex stderr 尾巴命中「额度/订阅/登录/供给不可用」特征→返回人话；否则 None。
-/// 保守表（大小写不敏感），拿不准不归类（宁可报原始错）。只影响报告与 retry 判据，不改成败判定。
+/// **A·收编（2026-07-09）**：判据搬到 `run_error_translation`（单一真源），本函数改薄委托——
+/// 调用点（:364/:373）+ resume 分类器（workflow_execution_entrypoints.rs:226）+ 既有测试全不动、
+/// `codex_provider_unavailable:` 前缀（director retry 承重标记）照旧产出。
 pub(crate) fn classify_codex_provider_failure(stderr_tail: &str) -> Option<String> {
-    let text = stderr_tail.trim();
-    if text.is_empty() {
-        return None;
-    }
-    let lower = text.to_lowercase();
-    let hit = lower.contains("subscription_not_found")
-        || lower.contains("usage limit")
-        || lower.contains("quota")
-        || lower.contains("unauthorized")
-        || lower.contains("403")
-        || lower.contains("401")
-        || (lower.contains("reconnecting") && lower.contains("5/5"));
-    if !hit {
-        return None;
-    }
-    let snippet: String = text.chars().take(200).collect();
-    Some(format!(
-        "codex 供给不可用（403 订阅/额度/登录类，非网络抽风）：{snippet}——请检查订阅/额度/登录，别空重试。"
-    ))
+    crate::run_error_translation::classify_provider_failure_human(stderr_tail)
 }
 
-/// 未命中供给类时，把 stderr 尾巴（截 200）附在原错误后，避免真相被吞。
+/// 未命中供给类时，把 stderr 尾巴附在原错误后——**A·收编**：改经 `classify_run_error` 翻人话，
+/// 原文经 `raw_snippet` 保留（不再「人话/原文二选一」）。承重前缀（`consult_last_message_read_failed:`）
+/// 由调用方保留在 base 打头、本函数不碰前缀，只把翻译后的人话+原文接上（director retry 照旧读到承重信号）。
 fn append_stderr_tail(base: String, stderr_tail: &str) -> String {
     let tail = stderr_tail.trim();
-    if tail.is_empty() {
-        base
+    let material = if tail.is_empty() {
+        base.clone()
     } else {
-        let snippet: String = tail.chars().take(200).collect();
-        format!("{base}｜stderr:{snippet}")
+        format!("{base} {tail}")
+    };
+    let translated = crate::run_error_translation::classify_run_error(&material);
+    if translated.family == "unknown" && tail.is_empty() {
+        // 没 stderr 又没识别出族 → 保底返回原 base（别用「未识别」把 base 已有语义盖掉）。
+        return base;
     }
+    format!(
+        "{base}｜{}｜原文:{}",
+        translated.human, translated.raw_snippet
+    )
 }
 
 pub(crate) fn inspect_codex_local_execution_guard(
@@ -1752,6 +1746,23 @@ mod tests {
         assert!(
             classify_codex_provider_failure("Reconnecting... 1/5").is_none(),
             "只重连 1/5（未到 5/5）不足以判供给类"
+        );
+    }
+
+    // A·§4：族④判据与现成 `phase_b_mentions_codex_state_error`/`classify_phase_b_stderr_for_codex_state_error`
+    // 对同一 state-db 只读样本判定一致（证 A 没造与现成探测器矛盾的判据）。
+    #[test]
+    fn a_sandbox_family_agrees_with_existing_state_error_detector() {
+        let sample = "attempt to write a readonly database (state db)";
+        // 现成探测器（:1320·签名 warnings/exit/status）：state-db 只读 + exit≠0 → true。
+        assert!(
+            classify_phase_b_stderr_for_codex_state_error(&[sample.to_string()], 1, "failed"),
+            "现成探测器应判 state-db 只读为 true"
+        );
+        // A 分类器：同样本归 sandbox_denied（一致·不造矛盾判据）。
+        assert_eq!(
+            crate::run_error_translation::classify_run_error(sample).family,
+            "sandbox_denied"
         );
     }
 

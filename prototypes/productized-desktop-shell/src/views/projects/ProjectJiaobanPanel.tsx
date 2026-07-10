@@ -1039,6 +1039,28 @@ function historyStateVisual(entry: RunHistoryEntry): HistoryVisual {
   }
 }
 
+// A·错误族 → 人话短标（前端映射·不露 family 机器键；未知族兜底「运行错误」）。
+function historyErrorFamilyLabel(family: string): string {
+  switch (family) {
+    case "provider_unavailable":
+      return "供给不可用";
+    case "network":
+      return "网络抽风";
+    case "timeout":
+      return "超时";
+    case "sandbox_denied":
+      return "权限/沙箱";
+    case "command_failed":
+      return "命令失败";
+    case "codex_subsystem":
+      return "codex 子系统";
+    case "readback_failed":
+      return "口供没读回";
+    default:
+      return "运行错误";
+  }
+}
+
 function matchesHistoryFilter(entry: RunHistoryEntry, filter: HistoryFilter): boolean {
   if (filter === "running") return entry.state === "running";
   if (filter === "mine")
@@ -1231,6 +1253,24 @@ export function JiaobanHistoryDetail({ entry, onBackToCurrent }: { entry: RunHis
         <span className="jiaoban-field-label">状态：</span>
         {entry.state_note}
       </p>
+      {/* A·运行错误两层脸：默认显人话摘要+族标；「查看原文」下钻原始 stderr。呈现不阻断（同黄牌哲学）。 */}
+      {entry.error ? (
+        <div className="jiaoban-run-error" aria-label="运行错误诊断">
+          <p className="jiaoban-field">
+            <span className="jiaoban-field-label">出错：</span>
+            <span className="jiaoban-run-error-family">
+              {historyErrorFamilyLabel(entry.error.family)}
+            </span>
+            <span className="jiaoban-run-error-human">{entry.error.human}</span>
+          </p>
+          {entry.error.raw_snippet.trim() ? (
+            <details className="jiaoban-run-error-raw">
+              <summary>查看原文</summary>
+              <pre>{entry.error.raw_snippet}</pre>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
       <p className="jiaoban-field">
         <span className="jiaoban-field-label">时间：</span>
         {formatProposalTime(entry.created_at_ms)}

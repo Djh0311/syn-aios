@@ -42,6 +42,9 @@ pub(crate) struct RunHistoryEntry {
     pub(crate) review_flags: RunHistoryReviewFlags,
     /// "exact"（纯方案字段推导·无近似）| "time_window"（涉及链时间窗归属·可能错配）。
     pub(crate) correlation: String,
+    /// A·运行错误人话（仅失败/中断态填·`{family, human, raw_snippet}`）：默认脸显 human、下钻看 raw_snippet。
+    /// **纯呈现·不驱动**：不改 state/state_note/成败判定，只补一个可选诊断字段（延续 fix8「只影响报告」）。
+    pub(crate) error: Option<crate::run_error_translation::RunErrorHuman>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -100,6 +103,9 @@ struct ChainLite {
     state: String, // running / completed / failed / stopped / superseded
     done_count: usize,
     total_count: usize,
+    /// A·失败/中断链的原始错误串（失败节点 message + 关联 dispatch failure_reason 合并·翻译前的原料）；
+    /// completed/running/无失败信息 → None。只读投影·不改任何写入路径。
+    failure_raw: Option<String>,
 }
 
 /// 首行 + 按 char 边界截断（防目标文本爆条目）。
@@ -193,6 +199,15 @@ fn assemble(
                 state_note = append_note(state_note, "归属按时间近似");
             }
 
+            // A·运行错误人话：仅 blocked（失败/中断）态、且链带原始错误串时翻译；否则 None（不呈现）。
+            let error = if state == "blocked" {
+                latest_chain
+                    .and_then(|chain| chain.failure_raw.as_deref())
+                    .map(crate::run_error_translation::classify_run_error)
+            } else {
+                None
+            };
+
             RunHistoryEntry {
                 proposal_id: proposal.proposal_id.clone(),
                 workflow_id: proposal.workflow_id.clone(),
@@ -211,6 +226,7 @@ fn assemble(
                     boundary_verdict,
                 },
                 correlation: correlation.to_string(),
+                error,
             }
         })
         .collect();
@@ -453,11 +469,63 @@ fn project_chains(
                         state: crate::optional_string_from(run, "state").unwrap_or_default(),
                         done_count,
                         total_count,
+                        failure_raw: chain_failure_raw(run, nodes, value),
                     })
                 })
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// A·抠一条失败/中断链的原始错误原料：失败节点 `message`（Err 路=原始错误）+ 关联 dispatch
+/// `failure_reason`（exit≠0 路更丰富·含压缩 stderr）合并。都没有 → None。**纯只读**（不改写入路径）。
+fn chain_failure_raw(
+    run: &serde_json::Value,
+    nodes: Option<&Vec<serde_json::Value>>,
+    value: &serde_json::Value,
+) -> Option<String> {
+    // 只对非正常结束的链抠错误（running/completed 不抠）。
+    let state = crate::optional_string_from(run, "state").unwrap_or_default();
+    if state == "running" || state == "completed" {
+        return None;
+    }
+    let nodes = nodes?;
+    // 首个非完成节点：取它的 message + 关联 dispatch 的 failure_reason。
+    let failed_node = nodes.iter().find(|node| {
+        !matches!(
+            crate::optional_string_from(node, "state").as_deref(),
+            Some("completed") | Some("pending") | Some("skipped")
+        )
+    })?;
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(message) = crate::optional_string_from(failed_node, "message") {
+        if !message.trim().is_empty() {
+            parts.push(message);
+        }
+    }
+    if let Some(dispatch_id) = crate::optional_string_from(failed_node, "dispatch_id") {
+        if let Some(dispatch) = value
+            .get("workflow_node_dispatches")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|dispatches| {
+                dispatches.iter().find(|dispatch| {
+                    crate::optional_string_from(dispatch, "dispatch_id").as_deref()
+                        == Some(dispatch_id.as_str())
+                })
+            })
+        {
+            if let Some(reason) = crate::optional_string_from(dispatch, "failure_reason") {
+                if !reason.trim().is_empty() && !parts.iter().any(|part| part == &reason) {
+                    parts.push(reason);
+                }
+            }
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" ｜ "))
+    }
 }
 
 /// 读 global_supervisor_review_store（软着陆）→ 两张挂接表。
@@ -548,6 +616,17 @@ mod tests {
     }
 
     fn chain(wf: &str, started: i64, state: &str, done: usize, total: usize) -> ChainLite {
+        chain_with_error(wf, started, state, done, total, None)
+    }
+
+    fn chain_with_error(
+        wf: &str,
+        started: i64,
+        state: &str,
+        done: usize,
+        total: usize,
+        failure_raw: Option<&str>,
+    ) -> ChainLite {
         ChainLite {
             workflow_id: wf.to_string(),
             started_at_str: started.to_string(),
@@ -555,6 +634,7 @@ mod tests {
             state: state.to_string(),
             done_count: done,
             total_count: total,
+            failure_raw: failure_raw.map(str::to_string),
         }
     }
 
@@ -729,6 +809,77 @@ mod tests {
         let clean = find(&entries, "p-clean");
         assert_eq!(clean.state_note, "做完了", "无复核不硬造");
         assert!(clean.review_flags.result_verdict.is_none());
+    }
+
+    // A·§4 接线：失败链 → entry.error 投影出 {人话/原文/族}；state/state_note 逐字节不变（呈现纯增·不驱动）。
+    #[test]
+    fn failed_run_projects_translated_error_without_touching_state() {
+        let proposals = vec![proposal("p-fail", "wf", ProposalStatusLite::Confirmed, false, 1_000)];
+        // 失败链带子系统原始错误（07-08 活证据形态）。
+        let chains = vec![chain_with_error(
+            "wf",
+            1_500,
+            "failed",
+            0,
+            1,
+            Some("codex_memories_write::phase2::job: failed to claim job (no such table: jobs)"),
+        )];
+        let (entries, _) = assemble(&proposals, &chains, &HashMap::new(), &HashMap::new(), NOW, 50);
+        let entry = find(&entries, "p-fail");
+        // 成败呈现字段不变（延续既有 blocked 语义·A 不驱动）。
+        assert_eq!(entry.state, "blocked");
+        assert!(entry.state_note.contains("跑挂了"), "state_note 不变：{}", entry.state_note);
+        // A 新增诊断字段：翻成人话 + 带原文 + 族。
+        let error = entry.error.as_ref().expect("失败单应有翻译错误");
+        assert_eq!(error.family, "codex_subsystem", "no such table → 子系统族");
+        assert!(error.human.contains("子系统"), "人话不是裸错误：{}", error.human);
+        assert!(!error.human.contains("no such table"), "默认脸不灌原文");
+        assert!(error.raw_snippet.contains("no such table"), "下钻原文保留");
+    }
+
+    // A·§4：完成/跑中的单 error=None（只失败态呈现·不误挂）。
+    #[test]
+    fn non_blocked_runs_have_no_error() {
+        let proposals = vec![
+            proposal("p-done", "wf", ProposalStatusLite::Confirmed, false, 1_000),
+            proposal("p-run", "wf2", ProposalStatusLite::Confirmed, false, 2_000),
+        ];
+        let chains = vec![
+            chain_with_error("wf", 1_500, "completed", 1, 1, None),
+            // 跑中链即便带 failure_raw（防御性），completed/running 也不抠——这里直接给 running。
+            chain_with_error("wf2", 2_500, "running", 0, 2, None),
+        ];
+        let (entries, _) = assemble(&proposals, &chains, &HashMap::new(), &HashMap::new(), NOW, 50);
+        assert!(find(&entries, "p-done").error.is_none(), "交货单无 error");
+        assert!(find(&entries, "p-run").error.is_none(), "跑中单无 error");
+    }
+
+    // A·§4：project_chains 只对失败/中断态抠 failure_raw（completed/running 不抠·纯只读投影正确）。
+    #[test]
+    fn project_chains_extracts_failure_raw_only_for_terminal_failures() {
+        let value = serde_json::json!({
+            "workflow_chain_runs": [
+                {
+                    "project_id": "proj", "workflow_id": "wf", "state": "failed", "started_at": "1500",
+                    "nodes": [{"node_id": "n1", "state": "failed", "dispatch_id": "d1",
+                               "message": "worker 派发未完成（state=failed）"}]
+                },
+                {
+                    "project_id": "proj", "workflow_id": "wf2", "state": "completed", "started_at": "2500",
+                    "nodes": [{"node_id": "n2", "state": "completed"}]
+                }
+            ],
+            "workflow_node_dispatches": [
+                {"dispatch_id": "d1", "failure_reason": "codex_resume_exit_nonzero, attempt to write a readonly database"}
+            ]
+        });
+        let chains = project_chains(&value, "proj", None);
+        let failed = chains.iter().find(|c| c.workflow_id == "wf").expect("failed 链在");
+        let raw = failed.failure_raw.as_deref().expect("失败链抠出原料");
+        assert!(raw.contains("worker 派发未完成"), "含节点 message");
+        assert!(raw.contains("readonly database"), "含 dispatch failure_reason（更丰富原文）");
+        let done = chains.iter().find(|c| c.workflow_id == "wf2").expect("完成链在");
+        assert!(done.failure_raw.is_none(), "completed 不抠 failure_raw");
     }
 
     // §4：边界意见按 proposal_id 精确挂（exact·与链无关）。

@@ -406,12 +406,10 @@ pub(crate) struct GlobalSupervisorReviewOutcome {
     pub(crate) warnings: Vec<String>,
 }
 
-/// 把 consult 错误翻成人话（fix8 供给类前缀直接取其人话；其余原样带出）。
+/// 把 consult 错误翻成人话——A·收编（2026-07-09）：改调单一真源 `run_error_translation`
+/// （原逐字节重复的 humanize 已删·供给前缀语义不变、非供给错误现也翻人话）。不动 director retry 读法。
 fn humanize_consult_error(raw: &str) -> String {
-    match raw.strip_prefix("codex_provider_unavailable:") {
-        Some(human) => human.trim().to_string(),
-        None => raw.to_string(),
-    }
+    crate::run_error_translation::humanize_error_for_display(raw)
 }
 
 /// 核心（同步·可注入 consult 供单测 stub 计次）。

@@ -20,6 +20,10 @@ mod secretary_agent;
 // 工作历史·后端读模型（纯只读·跨店按 workflow+时间窗拼单列表）；命令 list_project_run_history 进 generate_handler!。
 mod run_history_read_model;
 
+// A·运行错误人话翻译层（C6 观测补强·纯函数·无 tauri command）。供给类判据单一真源在此，
+// runner/run_history 委托到它。同 worker_report 借道挂载·保持 lib.rs 0-diff。
+mod run_error_translation;
+
 macro_rules! workbench_command_handler {
     () => {
         tauri::generate_handler![

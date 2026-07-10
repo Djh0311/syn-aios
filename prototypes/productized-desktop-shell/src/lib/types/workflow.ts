@@ -1965,6 +1965,13 @@ export type RunHistoryChain = {
   total_count: number;
 };
 
+// A·运行错误人话（后端 run_error_translation·family 稳定机器键·前端映射标签）。
+export type RunErrorHuman = {
+  family: string; // provider_unavailable|network|timeout|sandbox_denied|command_failed|codex_subsystem|readback_failed|unknown
+  human: string; // 默认脸显这个（人话摘要）
+  raw_snippet: string; // 下钻看原文
+};
+
 export type RunHistoryReviewFlags = {
   result_verdict?: string | null; // "pass"|"needs_rework"|"needs_human_check"（随链时间窗归单）
   boundary_verdict?: string | null; // "looks_ok"|"mismatch"|"caution"（按 proposal_id 精确挂）
@@ -1981,6 +1988,7 @@ export type RunHistoryEntry = {
   chain?: RunHistoryChain | null;
   review_flags: RunHistoryReviewFlags;
   correlation: "exact" | "time_window" | string; // 跨店关联如实标：exact / 时间窗近似
+  error?: RunErrorHuman | null; // A·仅失败/中断态填：默认人话 + 下钻原文 + 族
 };
 
 export type RunHistoryList = {
