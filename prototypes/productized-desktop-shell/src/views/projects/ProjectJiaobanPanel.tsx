@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Badge } from "../../components/Badge";
 import { summarizeProjectConsultationProposalStore } from "../../lib/projectConsultationProposal";
 import {
@@ -49,6 +49,18 @@ export type ProjectJiaobanPanelProps = {
   // fix8：出方案成功后刷新方案店（App 的 reloadCandidateStores 穿下来）→ latestProposal 更新 → 自动进批脸。
   // 可选：mock/gallery callsite 可不传（刷新走 noop，不崩）。
   onProposalStoreRefresh?: () => Promise<void>;
+  // M2：外壳提供的「完整工作流」跳转；交办内的五态与命令不碰。
+  onOpenWorkflow?: () => void;
+  // M2：只把已有历史/五态内容交给 Shell 排版，面板自身仍拥有数据、状态与命令。
+  renderLayout?: (content: ProjectJiaobanPanelLayout) => ReactNode;
+};
+
+export type JiaobanPhase = "say" | "authorize" | "binding" | "running" | "done" | "blocked";
+
+export type ProjectJiaobanPanelLayout = {
+  phase: JiaobanPhase;
+  history: ReactNode;
+  main: ReactNode;
 };
 
 // 交办面 = 项目默认页。同一容器随状态换脸（说 → 批 → 干 → 交货 / 卡住），不弹窗、永不冻。
@@ -66,7 +78,6 @@ export function ProjectJiaobanPanel(props: ProjectJiaobanPanelProps) {
 }
 
 // 交办进度（人话化用）。stage 与后端 outcome/链状态解耦——这里只管「说给用户听」。
-type JiaobanPhase = "say" | "authorize" | "binding" | "running" | "done" | "blocked";
 
 // 方案a fix：「开个新的」的显式哨兵值。此前用 null 一词两用（"还没定" 与 "用户选了新建"），
 // 重挂载/默认效果会把用户的显式选择无声改回「接现有」（真机踩到：明确选了新建却路由到旧对话）。
@@ -194,6 +205,8 @@ function ProjectJiaobanPanelBrowser({
   onRequestAction,
   onOpenAgentSession,
   onProposalStoreRefresh,
+  onOpenWorkflow,
+  renderLayout,
 }: ProjectJiaobanPanelProps) {
   const projectWorkflow =
     workflowState?.project_workflows.find((workflow) => workflow.project_root === project.project_root) ?? null;
@@ -1051,161 +1064,164 @@ function ProjectJiaobanPanelBrowser({
     ? history.find((entry) => entry.proposal_id === selectedHistoryId) ?? null
     : null;
 
+  const historyContent = (
+    <JiaobanHistoryColumn
+      entries={history}
+      total={historyTotal}
+      loading={historyLoading}
+      filter={historyFilter}
+      onFilterChange={setHistoryFilter}
+      selectedId={selectedHistoryId}
+      currentProposalId={currentProposalId}
+      latestBlockedId={latestBlockedId}
+      onSelectEntry={(entry) => setSelectedHistoryId(entry.proposal_id)}
+      onBackToCurrent={() => setSelectedHistoryId(null)}
+      onNewJiaoban={() => {
+        setSelectedHistoryId(null);
+        backToSay();
+      }}
+      onContinueRun={() => void continueRun()}
+    />
+  );
+  const mainContent = (
+    <div className="project-jiaoban-main">
+      {selectedHistoryEntry ? (
+        <JiaobanHistoryDetail entry={selectedHistoryEntry} onBackToCurrent={() => setSelectedHistoryId(null)} />
+      ) : (
+        <div className="project-jiaoban-col">
+          {phase === "say" ? (
+            <>
+              {memoryCount > 0 ? (
+                <p className="jiaoban-recall-hint" role="note" aria-label="记忆召回">
+                  出方案会带上 {memoryCount} 条项目记忆
+                </p>
+              ) : null}
+              <JiaobanSayState
+                goal={goal}
+                onGoalChange={setGoal}
+                onSubmit={() => submitGoal(goal)}
+                lastStopHint={sayHint}
+                loading={consultLoading}
+                error={consultError}
+                onEditAgain={() => setConsultError(null)}
+              />
+            </>
+          ) : null}
+
+          {phase === "authorize" && latestProposal ? (
+            <JiaobanAuthorizeState
+              proposal={latestProposal}
+              proposalTimeText={formatProposalTime(latestProposal.created_at_ms)}
+              proposalIsStale={proposalIsStale}
+              proposalAgeDays={proposalAge}
+              sessions={projectSessions}
+              sessionChoice={sessionChoice}
+              onSessionChoiceChange={setSessionChoice}
+              amendment={amendment}
+              onAmendmentChange={setAmendment}
+              onAmend={submitAmendment}
+              onAuthorizeAndStart={() => void authorizeAndStart()}
+              onRePlan={backToSay}
+              onDecline={backToSay}
+              starting={starting}
+              consultLoading={consultLoading}
+              consultError={consultError}
+              worksmapSwitchOn={workflowSwitchOn}
+              onToggleWorksmapSwitch={setWorkflowSwitchOn}
+              worksmapTasks={previewTasks}
+              worksmapWarnings={previewWarnings}
+              worksmapLoading={previewLoading}
+              worksmapError={previewError}
+              onRetryWorksmap={retryPreview}
+              boundaryLoading={boundaryLoadingForThisProposal}
+              boundaryOutcome={boundaryForThisProposal}
+              onBoundaryRetry={() => {
+                // [重试]：force 穿透幂等重跑本方案的边界意见。
+                if (latestProposal) void requestBoundaryReview(latestProposal.proposal_id, true);
+              }}
+              onOpenAgentSession={onOpenAgentSession}
+            />
+          ) : null}
+
+          {phase === "binding" ? (
+            <JiaobanTaskSessionBindingState
+              tasks={outcome?.planned_tasks ?? []}
+              sessions={projectSessions}
+              bindings={taskSessionBindings}
+              error={taskSessionBindingError}
+              starting={starting}
+              onBindingChange={updateTaskSessionBinding}
+              onStart={() => void startWithTaskSessionBindings()}
+              onReplan={backToSay}
+              onStop={stopBeforeTaskSessionBinding}
+            />
+          ) : null}
+
+          {phase === "running" ? (
+            <JiaobanRunningState
+              chainStatus={thisRoundChainStatus}
+              isNewSession={runIsNewSession}
+              onStop={() => void stopRun()}
+              sessionChoice={sessionChoice}
+              latestSessionThreadId={latestSessionThreadId}
+              onOpenAgentSession={onOpenAgentSession}
+            />
+          ) : null}
+
+          {phase === "done" ? (
+            <JiaobanDoneState
+              outcome={outcome}
+              chainStatus={thisRoundChainStatus}
+              onContinue={backToSay}
+              needsRework={needsRework}
+              needsReworkActionError={needsReworkActionError}
+              needsReworkActionStarting={starting}
+              onNeedsReworkContinue={() => void continueRun()}
+              onNeedsReworkAction={(action) => void applyNeedsReworkAction(action)}
+              onRequestAction={onRequestAction}
+              factCtx={{
+                projectRoot: project.project_root,
+                projectId: projectWorkflow?.project_id ?? null,
+                workflowId: projectWorkflow?.workflow_id ?? null,
+              }}
+              sessionChoice={sessionChoice}
+              latestSessionThreadId={latestSessionThreadId}
+              onOpenAgentSession={onOpenAgentSession}
+              supervisorLoading={supervisorLoading}
+              supervisorOutcome={supervisorReview?.outcome ?? null}
+              onSupervisorRetry={() => {
+                // [重试]/[重新复核]：force 穿透幂等重跑。键优先取已有结果的轮键，兜底本轮链 started_at。
+                const key = supervisorReview?.key ?? thisRoundChainStatus?.started_at ?? null;
+                if (key) void requestSupervisorReview(key, true);
+              }}
+              onSupervisorReplan={backToSay}
+            />
+          ) : null}
+
+          {phase === "blocked" ? (
+            <JiaobanBlockedState
+              outcome={outcome}
+              error={startError}
+              planIsConfirmed={planIsConfirmed}
+              sessions={projectSessions}
+              sessionChoice={sessionChoice}
+              onSessionChoiceChange={setSessionChoice}
+              onContinueRun={() => void continueRun()}
+              onRePlan={backToSay}
+              starting={starting}
+              onOpenWorkflow={onOpenWorkflow ?? null}
+              latestSessionThreadId={latestSessionThreadId}
+              onOpenAgentSession={onOpenAgentSession}
+            />
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <section className="project-jiaoban project-jiaoban--split" aria-label="交办">
-      <JiaobanHistoryColumn
-        entries={history}
-        total={historyTotal}
-        loading={historyLoading}
-        filter={historyFilter}
-        onFilterChange={setHistoryFilter}
-        selectedId={selectedHistoryId}
-        currentProposalId={currentProposalId}
-        latestBlockedId={latestBlockedId}
-        onSelectEntry={(entry) => setSelectedHistoryId(entry.proposal_id)}
-        onBackToCurrent={() => setSelectedHistoryId(null)}
-        onNewJiaoban={() => {
-          setSelectedHistoryId(null);
-          backToSay();
-        }}
-        onContinueRun={() => void continueRun()}
-      />
-      <div className="project-jiaoban-main">
-        {selectedHistoryEntry ? (
-          <JiaobanHistoryDetail entry={selectedHistoryEntry} onBackToCurrent={() => setSelectedHistoryId(null)} />
-        ) : (
-          <div className="project-jiaoban-col">
-        {phase === "say" ? (
-          <>
-            {memoryCount > 0 ? (
-              <p className="jiaoban-recall-hint" role="note" aria-label="记忆召回">
-                出方案会带上 {memoryCount} 条项目记忆
-              </p>
-            ) : null}
-            <JiaobanSayState
-              goal={goal}
-              onGoalChange={setGoal}
-              onSubmit={() => submitGoal(goal)}
-              lastStopHint={sayHint}
-              loading={consultLoading}
-              error={consultError}
-              onEditAgain={() => setConsultError(null)}
-            />
-          </>
-        ) : null}
-
-        {phase === "authorize" && latestProposal ? (
-          <JiaobanAuthorizeState
-            proposal={latestProposal}
-            proposalTimeText={formatProposalTime(latestProposal.created_at_ms)}
-            proposalIsStale={proposalIsStale}
-            proposalAgeDays={proposalAge}
-            sessions={projectSessions}
-            sessionChoice={sessionChoice}
-            onSessionChoiceChange={setSessionChoice}
-            amendment={amendment}
-            onAmendmentChange={setAmendment}
-            onAmend={submitAmendment}
-            onAuthorizeAndStart={() => void authorizeAndStart()}
-            onRePlan={backToSay}
-            onDecline={backToSay}
-            starting={starting}
-            consultLoading={consultLoading}
-            consultError={consultError}
-            worksmapSwitchOn={workflowSwitchOn}
-            onToggleWorksmapSwitch={setWorkflowSwitchOn}
-            worksmapTasks={previewTasks}
-            worksmapWarnings={previewWarnings}
-            worksmapLoading={previewLoading}
-            worksmapError={previewError}
-            onRetryWorksmap={retryPreview}
-            boundaryLoading={boundaryLoadingForThisProposal}
-            boundaryOutcome={boundaryForThisProposal}
-            onBoundaryRetry={() => {
-              // [重试]：force 穿透幂等重跑本方案的边界意见。
-              if (latestProposal) void requestBoundaryReview(latestProposal.proposal_id, true);
-            }}
-            onOpenAgentSession={onOpenAgentSession}
-          />
-        ) : null}
-
-        {phase === "binding" ? (
-          <JiaobanTaskSessionBindingState
-            tasks={outcome?.planned_tasks ?? []}
-            sessions={projectSessions}
-            bindings={taskSessionBindings}
-            error={taskSessionBindingError}
-            starting={starting}
-            onBindingChange={updateTaskSessionBinding}
-            onStart={() => void startWithTaskSessionBindings()}
-            onReplan={backToSay}
-            onStop={stopBeforeTaskSessionBinding}
-          />
-        ) : null}
-
-        {phase === "running" ? (
-          <JiaobanRunningState
-            chainStatus={thisRoundChainStatus}
-            isNewSession={runIsNewSession}
-            onStop={() => void stopRun()}
-            sessionChoice={sessionChoice}
-            latestSessionThreadId={latestSessionThreadId}
-            onOpenAgentSession={onOpenAgentSession}
-          />
-        ) : null}
-
-        {phase === "done" ? (
-          <JiaobanDoneState
-            outcome={outcome}
-            chainStatus={thisRoundChainStatus}
-            onContinue={backToSay}
-            needsRework={needsRework}
-            needsReworkActionError={needsReworkActionError}
-            needsReworkActionStarting={starting}
-            onNeedsReworkContinue={() => void continueRun()}
-            onNeedsReworkAction={(action) => void applyNeedsReworkAction(action)}
-            onRequestAction={onRequestAction}
-            factCtx={{
-              projectRoot: project.project_root,
-              projectId: projectWorkflow?.project_id ?? null,
-              workflowId: projectWorkflow?.workflow_id ?? null,
-            }}
-            sessionChoice={sessionChoice}
-            latestSessionThreadId={latestSessionThreadId}
-            onOpenAgentSession={onOpenAgentSession}
-            supervisorLoading={supervisorLoading}
-            supervisorOutcome={supervisorReview?.outcome ?? null}
-            onSupervisorRetry={() => {
-              // [重试]/[重新复核]：force 穿透幂等重跑。键优先取已有结果的轮键，兜底本轮链 started_at。
-              const key = supervisorReview?.key ?? thisRoundChainStatus?.started_at ?? null;
-              if (key) void requestSupervisorReview(key, true);
-            }}
-            onSupervisorReplan={backToSay}
-          />
-        ) : null}
-
-        {phase === "blocked" ? (
-          <JiaobanBlockedState
-            outcome={outcome}
-            error={startError}
-            planIsConfirmed={planIsConfirmed}
-            sessions={projectSessions}
-            sessionChoice={sessionChoice}
-            onSessionChoiceChange={setSessionChoice}
-            onContinueRun={() => void continueRun()}
-            onRePlan={backToSay}
-            starting={starting}
-            // 「去工作流看看」需切 tab（onSelectTool 在外壳），本包红线「不动外壳」→ 不在此接线；
-            // 保留入口能力（prop 已在），置 null 即不渲染该次按钮，主按钮永在（配对表兜底至少一个主按钮）。
-            onOpenWorkflow={null}
-            latestSessionThreadId={latestSessionThreadId}
-            onOpenAgentSession={onOpenAgentSession}
-          />
-        ) : null}
-
-          </div>
-        )}
-      </div>
+      {renderLayout ? renderLayout({ phase, history: historyContent, main: mainContent }) : <>{historyContent}{mainContent}</>}
     </section>
   );
 }

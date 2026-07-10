@@ -155,6 +155,8 @@ type ProjectWorkflowCanvasViewProps = {
   // 把画布编辑态上报给宿主（顶部「返回项目」据此切到「返回」）+ 暴露退出编辑入口供顶部按钮调用。
   onEditingChange?: (editing: boolean) => void;
   exitEditingRef?: RefObject<(() => void) | null>;
+  // M2 交办内嵌：复用只读画布，去掉编辑/运行 HUD 与详情抽屉；完整工作流页不受影响。
+  embedded?: boolean;
 };
 
 export function ProjectWorkflowCanvasView({
@@ -184,6 +186,7 @@ export function ProjectWorkflowCanvasView({
   renderSidePanel,
   onEditingChange,
   exitEditingRef,
+  embedded = false,
 }: ProjectWorkflowCanvasViewProps) {
   // P3 E · 多工作流底座（架构 §12）：项目存 N 个工作流，列表/选择器 + 新建/编辑。
   const [workflows, setWorkflows] = useState<ProjectWorkflowListItem[]>([]);
@@ -671,8 +674,11 @@ export function ProjectWorkflowCanvasView({
   }, [onInspectAutoDispatchAuthorization, projectWorkflow, selectedTask, selectedTaskPackage]);
 
   return (
-    <section className="workflow-canvas workflow-canvas-fullbleed" aria-label="项目级工作流画布">
-      {editing ? (
+    <section
+      className={`workflow-canvas workflow-canvas-fullbleed${embedded ? " workflow-canvas--embedded" : ""}`}
+      aria-label="项目级工作流画布"
+    >
+      {editing && !embedded ? (
         <>
           {/* P3 砍杂项：删 eyebrow + h3 + path 头部块。编辑动作（提交 / 返回）并入引擎底边动作条同一行
               （editActions 插槽，与 ▶运行选中节点 并排），不再单独浮一条顶边 HUD。
@@ -720,7 +726,8 @@ export function ProjectWorkflowCanvasView({
           }}
         />
 
-        <div className="canvas-hud canvas-hud-top" aria-label="工作流顶边操作 HUD">
+        {!embedded ? (
+          <div className="canvas-hud canvas-hud-top" aria-label="工作流顶边操作 HUD">
           {/* 用户细调：删底边「项目名标签」(topbar 已有) + 「项目规则状态条」(空态/运行性/0 nodes… 冗余·运行性在侧栏运行检查里)。 */}
           <div className="workflow-state-actions">
             {workflows.length > 0 ? (
@@ -816,11 +823,12 @@ export function ProjectWorkflowCanvasView({
               {detailDrawerOpen ? "收起工作流详情" : "工作流详情"}
             </button>
           </div>
-        </div>
+          </div>
+        ) : null}
 
         {/* P3 详情抽屉：过程内容（audit/dispatch/attention/读回 + 状态原因）默认隐，点顶边「详情」才出。
             可滚动浮层，pointer-events:auto；不占地方时画布右边完全空出。 */}
-        {detailDrawerOpen ? (
+        {!embedded && detailDrawerOpen ? (
         <div className="canvas-hud canvas-hud-side canvas-detail-drawer" aria-label="工作流详情抽屉（按需）">
         {renderSidePanel({
           canvasModel,

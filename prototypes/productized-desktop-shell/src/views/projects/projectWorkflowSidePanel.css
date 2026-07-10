@@ -1165,3 +1165,238 @@
   font-size: 12px;
   color: #6b6b6b;
 }
+
+/* M2：交办与项目画布同屏。交办面板仍拥有五态/命令；这里仅分配显示空间。 */
+.jiaoban-merged-layout {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.jiaoban-merged-layout.is-history-open {
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+}
+.jiaoban-history-rail {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--hair-2);
+  background: var(--panel-soft, rgba(28, 31, 36, 0.035));
+}
+.jiaoban-history-rail:not(.is-open) {
+  grid-template-columns: 32px 0;
+}
+.jiaoban-history-rail-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid var(--hair-2);
+  background: transparent;
+  color: var(--ink-mid);
+  cursor: pointer;
+}
+.jiaoban-history-rail-toggle:hover {
+  background: var(--panel-raised, rgba(255, 255, 255, 0.7));
+  color: var(--ink);
+}
+.jiaoban-history-rail-toggle:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.jiaoban-history-rail-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+.jiaoban-history-drawer {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.jiaoban-history-drawer[hidden] {
+  display: none;
+}
+.jiaoban-history-drawer .jiaoban-history {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  border-right: 0;
+}
+.jiaoban-merged-panels {
+  display: grid;
+  grid-template-rows: minmax(0, 7fr) minmax(144px, 3fr);
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding-left: 14px;
+}
+.jiaoban-merged-layout--running .jiaoban-merged-panels {
+  grid-template-rows: minmax(72px, 1fr) minmax(0, 9fr);
+}
+.jiaoban-merged-region {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+  background: var(--panel-raised, rgba(255, 255, 255, 0.72));
+}
+.jiaoban-merged-jiaoban-region {
+  display: flex;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.jiaoban-merged-jiaoban-region .project-jiaoban-main {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+.jiaoban-merged-jiaoban-region .project-jiaoban-col,
+.jiaoban-merged-jiaoban-region .jiaoban-history-detail {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  padding: 16px;
+}
+.jiaoban-merged-layout--running .jiaoban-merged-jiaoban-region .project-jiaoban-col {
+  max-width: none;
+  align-content: center;
+  gap: 0;
+  padding-block: 10px;
+}
+.jiaoban-merged-layout--running .jiaoban-running {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border-bottom: 0;
+}
+.jiaoban-merged-layout--running .jiaoban-running .panel-heading {
+  gap: 6px;
+}
+.jiaoban-merged-layout--running .jiaoban-running .eyebrow,
+.jiaoban-merged-layout--running .jiaoban-running .jiaoban-raw-session-link,
+.jiaoban-merged-layout--running .jiaoban-running > .muted.small-note {
+  display: none;
+}
+.jiaoban-merged-layout--running .jiaoban-running h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.jiaoban-merged-layout--running .jiaoban-running .role-loop-plain {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.jiaoban-merged-layout--running .jiaoban-running .role-loop-plain .small-note {
+  display: none;
+}
+.jiaoban-merged-layout--running .jiaoban-running .workflow-state-actions {
+  margin: 0;
+}
+.jiaoban-merged-canvas-region {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.jiaoban-merged-canvas-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hair-2);
+}
+.jiaoban-merged-canvas-head > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.jiaoban-merged-canvas-head strong {
+  font-size: 13px;
+}
+.jiaoban-merged-canvas-head span {
+  color: var(--ink-mid);
+  font-size: 12px;
+}
+.jiaoban-merged-canvas-head .secondary-button {
+  flex: none;
+  white-space: nowrap;
+}
+.jiaoban-merged-canvas-surface {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.workflow-canvas--embedded {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.workflow-canvas--embedded .project-canvas-fullbleed-stage {
+  position: absolute;
+  inset: 0;
+}
+.workflow-canvas--embedded .project-flow-stage.static {
+  padding: 46px 12px 12px;
+  overflow: auto;
+}
+.workflow-canvas--embedded .project-canvas-static-lanes {
+  grid-template-columns: repeat(5, minmax(100px, 1fr));
+}
+
+@media (max-width: 900px) {
+  .jiaoban-merged-layout {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    overflow: visible;
+  }
+  .jiaoban-merged-layout.is-history-open {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .jiaoban-history-rail,
+  .jiaoban-history-rail.is-open,
+  .jiaoban-history-rail:not(.is-open) {
+    grid-template-columns: 32px minmax(0, 1fr);
+    border-right: 0;
+    border-bottom: 1px solid var(--hair-2);
+  }
+  .jiaoban-history-rail:not(.is-open) .jiaoban-history-drawer {
+    display: none;
+  }
+  .jiaoban-history-drawer .jiaoban-history {
+    max-height: 180px;
+  }
+  .jiaoban-merged-panels,
+  .jiaoban-merged-layout--running .jiaoban-merged-panels {
+    grid-template-rows: minmax(180px, auto) minmax(260px, 42vh);
+    padding-left: 0;
+  }
+  .jiaoban-merged-canvas-head {
+    align-items: flex-start;
+  }
+  .jiaoban-merged-layout--running .jiaoban-running {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .jiaoban-merged-layout--running .jiaoban-running .panel-heading {
+    grid-column: 1 / -1;
+  }
+  .workflow-canvas--embedded .project-canvas-static-lanes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

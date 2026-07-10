@@ -238,41 +238,45 @@ function renderProjectDetailShell(props: ProjectDetailProps, editing: ProjectDet
     taskMemoryPacketPreview,
   } = props;
 
+  const renderWorkflowCanvas = (embedded = false) => (
+    <ProjectWorkflowCanvasView
+      project={project}
+      sessions={sessions}
+      workflowState={workflowState}
+      onReloadWorkflowState={props.onReloadWorkflowState}
+      blackboardCandidateStore={blackboardCandidateStore}
+      planAuthorizationStore={planAuthorizationStore}
+      projectConsultationProposalStore={projectConsultationProposalStore}
+      observationStore={observationStore}
+      memoryCandidateStore={memoryCandidateStore}
+      formalMemoryStore={formalMemoryStore}
+      memoryLintStore={memoryLintStore}
+      runtimeSessionAttention={runtimeSessionAttention}
+      realExecutionProductCommands={realExecutionProductCommands}
+      projectWorkflowAutomation={projectWorkflowAutomation}
+      k3B1Recovery={props.k3B1Recovery ?? null}
+      onRequestAction={onRequestAction}
+      onNotice={onNotice}
+      onOpenAgentSession={onOpenAgentSession}
+      onInspectWorkflowRunCheck={onInspectWorkflowRunCheck}
+      onInspectAutoDispatchAuthorization={onInspectAutoDispatchAuthorization}
+      onPreviewTaskMemoryPacket={onPreviewTaskMemoryPacket}
+      onPreviewProjectDirectorTaskPlan={onPreviewProjectDirectorTaskPlan}
+      initialTaskMemoryPacketPreview={taskMemoryPacketPreview}
+      renderSidePanel={(sidePanelProps) => <ProjectCanvasSidePanel {...sidePanelProps} />}
+      onEditingChange={embedded ? undefined : editing?.onEditingChange}
+      exitEditingRef={embedded ? undefined : editing?.exitEditingRef}
+      embedded={embedded}
+    />
+  );
+
   return (
     <ProjectWorkspaceShell
       {...props}
       canvasEditing={editing?.canvasEditing}
       onCanvasBack={editing?.onCanvasBack}
-      workflowPanel={
-        <ProjectWorkflowCanvasView
-          project={project}
-          sessions={sessions}
-          workflowState={workflowState}
-          onReloadWorkflowState={props.onReloadWorkflowState}
-          blackboardCandidateStore={blackboardCandidateStore}
-          planAuthorizationStore={planAuthorizationStore}
-          projectConsultationProposalStore={projectConsultationProposalStore}
-          observationStore={observationStore}
-          memoryCandidateStore={memoryCandidateStore}
-          formalMemoryStore={formalMemoryStore}
-          memoryLintStore={memoryLintStore}
-          runtimeSessionAttention={runtimeSessionAttention}
-          realExecutionProductCommands={realExecutionProductCommands}
-          projectWorkflowAutomation={projectWorkflowAutomation}
-          k3B1Recovery={props.k3B1Recovery ?? null}
-          onRequestAction={onRequestAction}
-          onNotice={onNotice}
-          onOpenAgentSession={onOpenAgentSession}
-          onInspectWorkflowRunCheck={onInspectWorkflowRunCheck}
-          onInspectAutoDispatchAuthorization={onInspectAutoDispatchAuthorization}
-          onPreviewTaskMemoryPacket={onPreviewTaskMemoryPacket}
-          onPreviewProjectDirectorTaskPlan={onPreviewProjectDirectorTaskPlan}
-          initialTaskMemoryPacketPreview={taskMemoryPacketPreview}
-          renderSidePanel={(sidePanelProps) => <ProjectCanvasSidePanel {...sidePanelProps} />}
-          onEditingChange={editing?.onEditingChange}
-          exitEditingRef={editing?.exitEditingRef}
-        />
-      }
+      workflowPanel={renderWorkflowCanvas()}
+      jiaobanWorkflowPanel={renderWorkflowCanvas(true)}
     />
   );
 }

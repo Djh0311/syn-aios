@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Badge } from "../../components/Badge";
 import { formatDate } from "../../lib/format";
 import type {
@@ -38,7 +38,10 @@ import {
 } from "./ProjectOverviewPanels";
 import { ProjectHandoffEvidencePanel, ProjectResourcesPanel } from "./ProjectReferencePanels";
 import { ProjectWorkflowDraftPanel, selectedTaskDraftFor } from "./ProjectTaskDraftPanels";
-import { ProjectJiaobanPanel } from "./ProjectJiaobanPanel";
+import {
+  ProjectJiaobanPanel,
+  type ProjectJiaobanPanelLayout,
+} from "./ProjectJiaobanPanel";
 
 export {
   TaskDispatchFieldCorrectionEditor,
@@ -65,7 +68,7 @@ export type ProjectToolKey =
 export const projectTools: Array<{ key: ProjectWorkspaceToolKey; label: string; shortLabel: string }> = [
   { key: "jiaoban", label: "交办", shortLabel: "交办" },
   { key: "overview", label: "项目总览", shortLabel: "总览" },
-  { key: "workflow", label: "项目工作流", shortLabel: "工作流" },
+  { key: "workflow", label: "项目工作流（完整视图）", shortLabel: "完整工作流" },
   { key: "handoff-evidence", label: "交接 / 证据", shortLabel: "交接" },
   { key: "resources", label: "资源", shortLabel: "资源" },
 ];
@@ -108,6 +111,7 @@ export type ProjectDetailProps = {
 
 export type ProjectWorkspaceShellProps = ProjectDetailProps & {
   workflowPanel?: ReactNode;
+  jiaobanWorkflowPanel?: ReactNode;
   // 画布编辑态（由 ProjectDetail 上提）：true 且在工作流 tab 时，顶部「返回项目」切成「返回」，点它退出编辑。
   canvasEditing?: boolean;
   onCanvasBack?: () => void;
@@ -130,6 +134,7 @@ export function ProjectWorkspaceShell({
   onRenderTaskPreview,
   onInspectDispatchReadiness,
   workflowPanel = null,
+  jiaobanWorkflowPanel = null,
   canvasEditing = false,
   onCanvasBack,
 }: ProjectWorkspaceShellProps) {
@@ -208,6 +213,14 @@ export function ProjectWorkspaceShell({
             onRequestAction={onRequestAction}
             onOpenAgentSession={onOpenAgentSession}
             onProposalStoreRefresh={onProposalStoreRefresh}
+            onOpenWorkflow={() => onSelectTool("workflow")}
+            renderLayout={(content) => (
+              <JiaobanMergedLayout
+                {...content}
+                workflowPanel={jiaobanWorkflowPanel}
+                onOpenWorkflow={() => onSelectTool("workflow")}
+              />
+            )}
           />
         ) : selectedTool === "overview" ? (
           <ProjectOverview
@@ -247,6 +260,78 @@ export function ProjectWorkspaceShell({
         )}
       </div>
     </section>
+  );
+}
+
+type JiaobanMergedLayoutProps = ProjectJiaobanPanelLayout & {
+  workflowPanel?: ReactNode;
+  onOpenWorkflow: () => void;
+  initialHistoryOpen?: boolean;
+};
+
+export function JiaobanMergedLayout({
+  phase,
+  history,
+  main,
+  workflowPanel = null,
+  onOpenWorkflow,
+  initialHistoryOpen = false,
+}: JiaobanMergedLayoutProps) {
+  const [historyOpen, setHistoryOpen] = useState(initialHistoryOpen);
+  const canvasPrimary = phase === "running";
+
+  return (
+    <div
+      className={`jiaoban-merged-layout jiaoban-merged-layout--${phase}${historyOpen ? " is-history-open" : ""}`}
+      data-phase={phase}
+      data-primary={canvasPrimary ? "canvas" : "jiaoban"}
+      style={{ minWidth: 0, minHeight: 0 }}
+    >
+      <aside className={`jiaoban-history-rail${historyOpen ? " is-open" : ""}`} aria-label="交办历史">
+        <button
+          className="jiaoban-history-rail-toggle"
+          type="button"
+          aria-controls="jiaoban-history-drawer"
+          aria-expanded={historyOpen}
+          onClick={() => setHistoryOpen((open) => !open)}
+          title={historyOpen ? "收起交办历史" : "展开交办历史"}
+        >
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16">
+            <path
+              d="M2.5 3.5h11M2.5 8h8M2.5 12.5h11"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeWidth="1.5"
+            />
+          </svg>
+          <span className="sr-only">{historyOpen ? "收起交办历史" : "展开交办历史"}</span>
+        </button>
+        <div className="jiaoban-history-drawer" hidden={!historyOpen} id="jiaoban-history-drawer">
+          {history}
+        </div>
+      </aside>
+
+      <div className="jiaoban-merged-panels">
+        <section className="jiaoban-merged-region jiaoban-merged-jiaoban-region" aria-label="交办主区">
+          {main}
+        </section>
+        <section className="jiaoban-merged-region jiaoban-merged-canvas-region" aria-label="工作流运行视图">
+          <header className="jiaoban-merged-canvas-head">
+            <div>
+              <strong>{canvasPrimary ? "正在执行" : "工作流进度"}</strong>
+              <span>只读运行视图</span>
+            </div>
+            <button className="secondary-button" type="button" onClick={onOpenWorkflow}>
+              在工作流页打开
+            </button>
+          </header>
+          <div className="jiaoban-merged-canvas-surface">
+            {workflowPanel ?? <p>工作流数据暂不可用。</p>}
+          </div>
+        </section>
+      </div>
+    </div>
   );
 }
 
