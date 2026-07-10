@@ -8015,6 +8015,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(10),
             approved_planned_tasks: None,
+            preview_session_bindings: vec![],
         };
         let paused = run_confirm_and_start_authorized_run_inner(
             &path,
@@ -8040,6 +8041,73 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 .unwrap_or(true),
             "顶层 existing 不得写全局 codex-dev 绑定"
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // M1：批前画布已逐项选好时，仍只点一次人闸；后端按稳定步骤 id 映射并复用原绑定确认路径。
+    #[test]
+    fn confirm_and_start_auto_confirms_preview_node_bindings() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let thread_id = "thread-jiaoban-preview";
+        let dir = test_temp_dir("confirm-preview-bindings");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            target_files: vec!["a.rs".to_string()],
+            ..Default::default()
+        }));
+        let c1 = map_consultation_to_c1_input(&proposal, test_root, "consultant").expect("map");
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &c1,
+            1_765_300_000_000,
+            "confirm-preview-bindings",
+        )
+        .expect("proposal");
+        let executor = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let preview_session_bindings = (1..=2)
+            .map(|step| ProjectDirectorPreviewNodeSessionBinding {
+                preview_node_id: format!("planned-task:{}:{step}", created.proposal.workflow_id),
+                session_choice: "existing".to_string(),
+                session_id: Some(thread_id.to_string()),
+            })
+            .collect();
+        let outcome = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &index_path,
+            &executor,
+            &StubDirector,
+            &PanicJiaobanSessionCreator,
+            &ConfirmAndStartAuthorizedRunRequest {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                session_choice: "new".to_string(),
+                session_id: None,
+                actor_id: Some("user-fixture".to_string()),
+                max_nodes: Some(10),
+                approved_planned_tasks: None,
+                preview_session_bindings,
+            },
+        )
+        .expect("预演节点映射齐全时应自动继续");
+        assert_eq!(outcome.stage, "ran", "不应再停在绑定面板：{outcome:?}");
+        assert!(
+            !outcome.task_session_binding_required,
+            "自动确认后不应残留绑定停点"
+        );
+        let state = read_json_file(&path);
+        let bindings = state["workflow_node_session_bindings"]
+            .as_array()
+            .expect("每项任务应落自己的绑定");
+        assert_eq!(bindings.len(), 2, "两项预演选择应分别写入任务绑定");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -8084,6 +8152,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 actor_id: Some("user-fixture".to_string()),
                 max_nodes: Some(10),
                 approved_planned_tasks: None,
+                preview_session_bindings: vec![],
             },
         )
         .expect("确认应给绑定面板");
@@ -8220,6 +8289,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 actor_id: Some("user-fixture".to_string()),
                 max_nodes: Some(10),
                 approved_planned_tasks: None,
+                preview_session_bindings: vec![],
             },
         )
         .expect("确认应给绑定面板");
@@ -8327,6 +8397,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(10),
             approved_planned_tasks: None,
+            preview_session_bindings: vec![],
         };
         assert!(
             run_confirm_and_start_authorized_run_inner(
@@ -8362,6 +8433,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(10),
             approved_planned_tasks: None,
+            preview_session_bindings: vec![],
         };
         let err = run_confirm_and_start_authorized_run_inner(
             &path,
@@ -8454,6 +8526,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(10),
             approved_planned_tasks: None,
+            preview_session_bindings: vec![],
         };
         let paused = run_confirm_and_start_authorized_run_inner(
             &path,
@@ -8581,6 +8654,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(10),
             approved_planned_tasks: None,
+            preview_session_bindings: vec![],
         };
         let paused = run_confirm_and_start_authorized_run_inner(
             &path,
@@ -8677,6 +8751,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(10),
             approved_planned_tasks: None,
+            preview_session_bindings: vec![],
         };
         let err = run_confirm_and_start_authorized_run_inner(
             &path,
@@ -8774,6 +8849,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(10),
             approved_planned_tasks: Some(vec![task]),
+            preview_session_bindings: vec![],
         };
         let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
@@ -9024,6 +9100,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(50),
             approved_planned_tasks: None,
+            preview_session_bindings: vec![],
         };
         let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
@@ -9712,6 +9789,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(50),
             approved_planned_tasks: Some(preview.planned_tasks.clone()),
+            preview_session_bindings: vec![],
         };
         let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
@@ -10027,6 +10105,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             actor_id: Some("user".to_string()),
             max_nodes: Some(10),
             approved_planned_tasks: None,
+            preview_session_bindings: vec![],
         };
         let result = run_confirm_and_start_authorized_run_inner(
             &path,

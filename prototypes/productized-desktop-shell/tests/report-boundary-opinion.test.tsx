@@ -170,7 +170,6 @@ function authorizeHtml(
   return renderToStaticMarkup(
     <JiaobanAuthorizeState
       proposal={proposalFixture(allowedWriteRoots)}
-      proposalTimeText="2026-07-07 16:53"
       proposalIsStale={false}
       proposalAgeDays={0}
       sessions={[]}
@@ -188,10 +187,8 @@ function authorizeHtml(
       worksmapSwitchOn={false}
       onToggleWorksmapSwitch={noop}
       worksmapTasks={null}
-      worksmapWarnings={[]}
       worksmapLoading={false}
       worksmapError={null}
-      onRetryWorksmap={noop}
       boundaryLoading={false}
       boundaryOutcome={boundaryOutcome}
       onBoundaryRetry={noop}

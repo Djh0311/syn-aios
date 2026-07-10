@@ -947,7 +947,7 @@
   color: var(--warning);
 }
 
-/* 刀2「批前看图」·工序图区。开关 + 迷你图（任务名 +「等：X」缩进箭头），不用重型图库。 */
+/* 刀2「批前看图」·授权卡只留预拆开关；图只在右侧预演画布。 */
 .jiaoban-worksmap {
   margin: 4px 0 2px;
   padding-top: 10px;
@@ -967,85 +967,6 @@
   color: var(--accent);
   font-size: 11.5px;
 }
-.jiaoban-worksmap-body {
-  margin-top: 10px;
-}
-.jiaoban-worksmap-error {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--ink-mid);
-}
-/* fix7：步骤框纵向流——一眼像流程图（框 + 向下箭头），替代原编号列表。 */
-.jiaoban-worksmap-graph {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  margin: 0 0 8px;
-}
-.jiaoban-worksmap-node-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.jiaoban-worksmap-arrow {
-  color: var(--ink-mid);
-  font-size: 13px;
-  line-height: 1;
-  margin: 3px 0;
-  opacity: 0.65;
-}
-.jiaoban-worksmap-node {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--line, rgba(0, 0, 0, 0.14));
-  border-radius: 8px;
-  background: var(--panel-raised, #ffffff);
-  font-size: 13px;
-}
-.jiaoban-worksmap-step {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--panel-soft, rgba(28, 31, 36, 0.05));
-  color: var(--ink-mid);
-  font-size: 11px;
-}
-.jiaoban-worksmap-task {
-  font-weight: 500;
-}
-.jiaoban-worksmap-dep {
-  flex: none;
-  margin-left: auto;
-  padding: 1px 7px;
-  border-radius: 8px;
-  background: var(--panel-soft, rgba(28, 31, 36, 0.05));
-  color: var(--ink-mid);
-  font-size: 11.5px;
-}
-/* fix7：图画好那一刻高亮一次（不循环）。graph 从 loading 切到 tasks = 新 mount → 动画自动跑一次。 */
-.jiaoban-worksmap-arrived {
-  animation: jiaoban-worksmap-pop 1.5s ease-out 1;
-}
-@keyframes jiaoban-worksmap-pop {
-  0% {
-    box-shadow: 0 0 0 0 rgba(42, 107, 94, 0);
-  }
-  25% {
-    box-shadow: 0 0 0 4px rgba(42, 107, 94, 0.32);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
-  }
-}
 /* fix7：按钮旁状态话——图好了的到场提示（用户视线所在）。 */
 .jiaoban-worksmap-cta {
   margin: 0 0 8px;
@@ -1055,17 +976,6 @@
 .jiaoban-worksmap-cta.ready {
   color: var(--ok);
   font-weight: 600;
-}
-.jiaoban-worksmap-warnings {
-  margin: 6px 0 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--warning-bg);
-  color: var(--warning);
-  font-size: 12px;
-  list-style: none;
-  display: grid;
-  gap: 2px;
 }
 
 /* fix3 后端附带 warnings（角色已按 codex-dev 执行 / 已接续上次中断的运行）：小字列出，不挡主路径。 */
@@ -1360,6 +1270,138 @@
   grid-template-columns: repeat(5, minmax(100px, 1fr));
 }
 
+/* M1：授权期画布不是运行态读模型。复用静态节点的任务卡观感，以「预演 / 尚未执行」清楚区分。 */
+.jiaoban-plan-preview,
+.jiaoban-plan-preview-state {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.jiaoban-plan-preview-state {
+  align-content: center;
+  justify-items: start;
+  color: var(--ink-mid);
+}
+.jiaoban-plan-preview-state strong {
+  color: var(--ink-deep);
+}
+.jiaoban-plan-preview-state span {
+  max-width: 48ch;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.jiaoban-plan-preview-state.is-error {
+  border-left: 3px solid var(--warning, #9b4a18);
+  background: rgba(155, 74, 24, 0.06);
+}
+.jiaoban-plan-preview-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.jiaoban-plan-preview-head > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.jiaoban-plan-preview-head strong {
+  color: var(--ink-deep);
+  font-size: 13px;
+}
+.jiaoban-plan-preview-head span,
+.jiaoban-plan-preview-head small {
+  color: var(--ink-mid);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.jiaoban-plan-preview-head small {
+  flex: none;
+  padding: 2px 6px;
+  border: 1px dashed var(--hair-2);
+}
+.jiaoban-plan-preview-graph {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+}
+.jiaoban-plan-preview-node-wrap {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+}
+.jiaoban-plan-preview-edge {
+  align-self: center;
+  color: var(--accent-strong, var(--accent));
+  font-size: 16px;
+  line-height: 1;
+  text-align: center;
+}
+.jiaoban-plan-preview-node {
+  min-width: 0;
+}
+.jiaoban-plan-preview-node > summary {
+  list-style: none;
+}
+.jiaoban-plan-preview-node > summary::-webkit-details-marker {
+  display: none;
+}
+.jiaoban-plan-preview-node .project-canvas-static-node {
+  min-height: 132px;
+  border-style: dashed;
+  border-color: rgba(35, 108, 104, 0.42);
+  background: rgba(35, 108, 104, 0.055);
+}
+.jiaoban-plan-preview-node .project-canvas-static-node small {
+  width: fit-content;
+  padding: 2px 5px;
+  border: 1px solid rgba(35, 108, 104, 0.28);
+  color: var(--accent-strong, var(--accent));
+}
+.jiaoban-plan-preview-node .project-canvas-static-node small.is-existing {
+  border-color: rgba(155, 74, 24, 0.34);
+  color: var(--warning, #9b4a18);
+}
+.jiaoban-plan-preview-node > summary:focus-visible {
+  outline: 2px solid var(--vermil);
+  outline-offset: 2px;
+}
+.jiaoban-plan-preview-node[open] .project-canvas-static-node {
+  border-color: var(--vermil);
+}
+.jiaoban-plan-preview-picker {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--hair-2);
+  border-top: 0;
+  background: rgba(255, 255, 255, 0.42);
+}
+.jiaoban-plan-preview-picker .small-note {
+  margin: 0;
+}
+.jiaoban-plan-preview-warnings {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--warning, #9b4a18);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 @media (max-width: 900px) {
   .jiaoban-merged-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -1398,5 +1440,8 @@
   }
   .workflow-canvas--embedded .project-canvas-static-lanes {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .jiaoban-plan-preview-graph {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

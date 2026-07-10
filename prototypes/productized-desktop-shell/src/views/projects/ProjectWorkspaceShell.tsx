@@ -112,7 +112,7 @@ export type ProjectDetailProps = {
 export type ProjectWorkspaceShellProps = ProjectDetailProps & {
   workflowPanel?: ReactNode;
   jiaobanWorkflowPanel?: ReactNode;
-  // 画布编辑态（由 ProjectDetail 上提）：true 且在工作流 tab 时，顶部「返回项目」切成「返回」，点它退出编辑。
+  // 画布编辑态（由 ProjectDetail 上提）：true 且在完整工作流页时，顶部「返回项目」切成「返回」，点它退出编辑。
   canvasEditing?: boolean;
   onCanvasBack?: () => void;
 };
@@ -273,12 +273,14 @@ export function JiaobanMergedLayout({
   phase,
   history,
   main,
+  previewCanvas = null,
   workflowPanel = null,
   onOpenWorkflow,
   initialHistoryOpen = false,
 }: JiaobanMergedLayoutProps) {
   const [historyOpen, setHistoryOpen] = useState(initialHistoryOpen);
   const canvasPrimary = phase === "running";
+  const showsPreviewCanvas = Boolean(previewCanvas);
 
   return (
     <div
@@ -316,18 +318,21 @@ export function JiaobanMergedLayout({
         <section className="jiaoban-merged-region jiaoban-merged-jiaoban-region" aria-label="交办主区">
           {main}
         </section>
-        <section className="jiaoban-merged-region jiaoban-merged-canvas-region" aria-label="工作流运行视图">
+        <section
+          className="jiaoban-merged-region jiaoban-merged-canvas-region"
+          aria-label={showsPreviewCanvas ? "方案预演工序图" : "工作流运行视图"}
+        >
           <header className="jiaoban-merged-canvas-head">
             <div>
-              <strong>{canvasPrimary ? "正在执行" : "工作流进度"}</strong>
-              <span>只读运行视图</span>
+              <strong>{showsPreviewCanvas ? "方案预演" : canvasPrimary ? "正在执行" : "工作流进度"}</strong>
+              <span>{showsPreviewCanvas ? "尚未执行，可逐节点选对话" : "只读运行视图"}</span>
             </div>
             <button className="secondary-button" type="button" onClick={onOpenWorkflow}>
               在工作流页打开
             </button>
           </header>
           <div className="jiaoban-merged-canvas-surface">
-            {workflowPanel ?? <p>工作流数据暂不可用。</p>}
+            {previewCanvas ?? workflowPanel ?? (phase === "say" ? <p>出方案后，这里会出现工序图预演。</p> : <p>工作流数据暂不可用。</p>)}
           </div>
         </section>
       </div>

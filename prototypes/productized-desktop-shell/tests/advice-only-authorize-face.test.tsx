@@ -20,7 +20,7 @@ function proposalFixture(allowedWriteRoots: string[]): ProjectConsultationPropos
     title: "方案",
     user_goal: "加回 1 个怪",
     goal_summary: "在游戏里加回 1 个怪物",
-    proposed_steps: [],
+    proposed_steps: ["目标文件：src/views/projects/ProjectJiaobanPanel.tsx"],
     scope_draft: {
       allowed_role_ids: [],
       allowed_agent_ids: [],
@@ -32,7 +32,7 @@ function proposalFixture(allowedWriteRoots: string[]): ProjectConsultationPropos
       stop_conditions: [],
     },
     risks: [],
-    acceptance_criteria: [],
+    acceptance_criteria: ["pnpm typecheck", "离线交互测试"],
     status: "pending_user_confirmation",
     created_by_role: "project_consultant",
     created_at_ms: Date.now(), // 今天生成（不触发旧方案黄条·隔离本测关注点）
@@ -47,7 +47,6 @@ function html(allowedWriteRoots: string[]): string {
   return renderToStaticMarkup(
     <JiaobanAuthorizeState
       proposal={proposalFixture(allowedWriteRoots)}
-      proposalTimeText="2026-07-07 16:48"
       proposalIsStale={false}
       proposalAgeDays={0}
       sessions={[]}
@@ -65,10 +64,8 @@ function html(allowedWriteRoots: string[]): string {
       worksmapSwitchOn={false}
       onToggleWorksmapSwitch={noop}
       worksmapTasks={null}
-      worksmapWarnings={[]}
       worksmapLoading={false}
       worksmapError={null}
-      onRetryWorksmap={noop}
       boundaryLoading={false}
       boundaryOutcome={null}
       onBoundaryRetry={noop}
@@ -95,6 +92,11 @@ function html(allowedWriteRoots: string[]): string {
   assert(!out.includes("重新出方案（要动手）"), "正常方案无改道按钮");
   assert(out.includes("允许并开始"), "正常方案主按钮原样");
   assert(out.includes("🔓"), "正常方案 🔓 许可行原样（willWrite=true）");
+  assert(out.includes("我来做：") && out.includes("会改的文件：") && out.includes("改完怎么验："), "授权卡应保留核心方案要点");
+  assert(out.includes("给第一个预演节点预填对话") && out.includes("需要你允许"), "授权卡应保留对话预填与人闸提示");
+  assert(out.includes("按工作流来（在右侧预演画布看工序图）"), "开关文案应明确图在画布侧");
+  assert(!out.includes("jiaoban-worksmap-graph"), "授权卡不应再渲染步骤流图");
+  assert(!out.includes("目标："), "授权卡应删去重复的目标");
 }
 
 const readonlyTask: ProjectDirectorPlannedTask = {

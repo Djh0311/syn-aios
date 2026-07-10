@@ -376,10 +376,18 @@ export type ConfirmAndStartAuthorizedRunRequest = {
   // 刀2「所批即所跑」：批前预拆过就把那份图原样带回 → 后端跳过重拆、照图执行（后端 director_agent.rs
   // ConfirmAndStartAuthorizedRunRequest.approved_planned_tasks 收；不传=现状：批后 LM 拆）。
   approved_planned_tasks?: ProjectDirectorPlannedTask[];
+  // M1：批前画布上每个预演步骤的会话选择。后端在用户授权后映射为真实任务绑定，校验失败才回落面板。
+  preview_session_bindings?: ProjectDirectorPreviewNodeSessionBinding[];
 };
 
 export type ProjectDirectorTaskSessionBinding = {
   planned_task_id: string;
+  session_choice: "new" | "existing";
+  session_id?: string;
+};
+
+export type ProjectDirectorPreviewNodeSessionBinding = {
+  preview_node_id: string;
   session_choice: "new" | "existing";
   session_id?: string;
 };
@@ -419,6 +427,9 @@ export type AutoAdvanceRoleLoopOutcome = {
   task_session_binding_required?: boolean;
   // 链停后的用户处置需原样带回同一任务；后端只读回显，旧报文可缺省。
   planned_tasks?: ProjectDirectorPlannedTask[];
+  // 自动绑定被现有校验拒绝时，回填用户原先在预演图的选择并回落既有面板。
+  task_session_bindings?: ProjectDirectorTaskSessionBinding[];
+  task_session_binding_error?: string | null;
   warnings?: string[];
 };
 

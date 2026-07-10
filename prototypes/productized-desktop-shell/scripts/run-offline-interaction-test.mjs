@@ -19,6 +19,8 @@ const testEntries = [
   "tests/jiaoban-needs-rework-disposal.test.tsx",
   "tests/jiaoban-task-session-binding.test.tsx",
   "tests/jiaoban-merged-layout.test.tsx",
+  "tests/jiaoban-plan-preview-canvas.test.tsx",
+  "tests/jiaoban-page-content-cleanup.test.tsx",
   "tests/r4-page-read-model-settings.test.tsx",
   "tests/r4-page-read-model-query-contract.test.ts",
   "tests/r4-page-read-model-runtime.test.ts",

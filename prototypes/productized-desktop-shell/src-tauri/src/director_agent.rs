@@ -825,6 +825,67 @@ pub(crate) struct ProjectDirectorTaskSessionBinding {
     pub(crate) session_id: Option<String>,
 }
 
+// 批前预演图上的选择。node id 在有预拆图时就是 planned_task_id；没有图的简单活则是前端虚拟步骤 id。
+// 主管拆完后再转换为真实 planned_task_id，不能把虚拟 id 直接交给既有绑定校验。
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
+pub(crate) struct ProjectDirectorPreviewNodeSessionBinding {
+    pub(crate) preview_node_id: String,
+    pub(crate) session_choice: String, // "new" | "existing"
+    #[serde(default)]
+    pub(crate) session_id: Option<String>,
+}
+
+fn new_task_session_binding(planned_task_id: String) -> ProjectDirectorTaskSessionBinding {
+    ProjectDirectorTaskSessionBinding {
+        planned_task_id,
+        session_choice: "new".to_string(),
+        session_id: None,
+    }
+}
+
+// 预演步骤到真实任务的保守映射：稳定 id 优先；id 变了才按同序号补；不能证明对应就新建。
+// 不做「找一条旧会话给剩余任务」的兜底，避免把 existing 静默扩散成共享会话。
+fn map_preview_node_session_bindings_to_planned_tasks(
+    planned_tasks: &[ProjectDirectorPlannedTask],
+    preview_bindings: &[ProjectDirectorPreviewNodeSessionBinding],
+) -> Vec<ProjectDirectorTaskSessionBinding> {
+    let mut stable_matches: Vec<Option<(usize, &ProjectDirectorPreviewNodeSessionBinding)>> =
+        vec![None; planned_tasks.len()];
+    let mut used_preview_indexes = std::collections::BTreeSet::new();
+
+    for (task_index, task) in planned_tasks.iter().enumerate() {
+        if let Some((preview_index, binding)) = preview_bindings
+            .iter()
+            .enumerate()
+            .find(|(_, binding)| binding.preview_node_id == task.planned_task_id)
+        {
+            stable_matches[task_index] = Some((preview_index, binding));
+            used_preview_indexes.insert(preview_index);
+        }
+    }
+
+    planned_tasks
+        .iter()
+        .enumerate()
+        .map(|(task_index, task)| {
+            let mapped = stable_matches[task_index]
+                .map(|(_, binding)| binding)
+                .or_else(|| {
+                    preview_bindings
+                        .get(task_index)
+                        .filter(|_| !used_preview_indexes.contains(&task_index))
+                });
+            mapped
+                .map(|binding| ProjectDirectorTaskSessionBinding {
+                    planned_task_id: task.planned_task_id.clone(),
+                    session_choice: binding.session_choice.clone(),
+                    session_id: binding.session_id.clone(),
+                })
+                .unwrap_or_else(|| new_task_session_binding(task.planned_task_id.clone()))
+        })
+        .collect()
+}
+
 #[derive(serde::Deserialize, Clone, Debug)]
 pub(crate) struct ProjectDirectorFailedActionRequest {
     pub(crate) project_root: String,
@@ -3392,6 +3453,11 @@ pub(crate) struct AutoAdvanceRoleLoopOutcome {
     // 前端在链停后的用户处置要原样回传目标任务；只读回显，不参与派发或授权判断。
     #[serde(default)]
     pub(crate) planned_tasks: Vec<ProjectDirectorPlannedTask>,
+    // 自动将预演节点选择转成真实任务绑定时的回显。只在校验拒绝、需要回落到既有绑定面板时使用。
+    #[serde(default)]
+    pub(crate) task_session_bindings: Vec<ProjectDirectorTaskSessionBinding>,
+    #[serde(default)]
+    pub(crate) task_session_binding_error: Option<String>,
     // fix3 2.1：非致命提示（如角色钳位「任务 X 角色 Y 不在授权名单，已按 codex-dev 执行」）。
     // 加法字段·前端可忽略；None 路（所批即所跑·approved 已在预拆钳过）不重复钳，此处为空。
     #[serde(default)]
@@ -3729,6 +3795,8 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                 stop_reason: Some("needs_binding".to_string()),
                 task_session_binding_required: true,
                 planned_tasks,
+                task_session_bindings: vec![],
+                task_session_binding_error: None,
                 warnings: advance_warnings,
             });
         }
@@ -3834,6 +3902,8 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                 stop_reason: Some(stage.to_string()),
                 task_session_binding_required: false,
                 planned_tasks: prepared.plan.planned_tasks.clone(),
+                task_session_bindings: vec![],
+                task_session_binding_error: None,
                 warnings: advance_warnings.clone(),
             });
         }
@@ -3917,6 +3987,8 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
             stop_reason,
             task_session_binding_required: false,
             planned_tasks: prepared.plan.planned_tasks.clone(),
+            task_session_bindings: vec![],
+            task_session_binding_error: None,
             warnings: advance_warnings,
         })
     })();
@@ -4146,6 +4218,9 @@ pub(crate) struct ConfirmAndStartAuthorizedRunRequest {
     // 2.2 所批即所跑：前端回传「用户批过的那份图」（预拆→审→回传）。Some=原样跑不重拆；None/缺=批后 LM 拆（现状）。
     #[serde(default)]
     pub(crate) approved_planned_tasks: Option<Vec<ProjectDirectorPlannedTask>>,
+    // M1：用户在批前画布为每个预演步骤选择的会话。确认后才把它映射为真实任务绑定。
+    #[serde(default)]
+    pub(crate) preview_session_bindings: Vec<ProjectDirectorPreviewNodeSessionBinding>,
 }
 
 // 绑定面板的「开始跑」不是第二道审批：它只接拆好的同一份任务和逐任务会话选择，复查既有 active 授权后继续。
@@ -4168,7 +4243,7 @@ fn run_confirm_and_start_authorized_run_inner(
     readback_db_path: &std::path::Path,
     runner: &dyn CodexResumeRunner,
     director: &dyn DirectorAgent,
-    _session_creator: &dyn JiaobanNewSessionCreator,
+    session_creator: &dyn JiaobanNewSessionCreator,
     request: &ConfirmAndStartAuthorizedRunRequest,
 ) -> Result<AutoAdvanceRoleLoopOutcome, String> {
     // 死线·圈固定测试项目（与 auto_advance 同款·非测试 root 提前拒）。
@@ -4295,8 +4370,9 @@ fn run_confirm_and_start_authorized_run_inner(
         );
     }
     post_confirm?;
-    // 5. 主管拆完即停在现成 needs_binding 面：面板确认映射前不 prepare、不建会话、不派发。
-    run_auto_advance_authorized_role_loop_until_task_session_binding(
+    // 5. 主管拆完即停在现成 needs_binding 面；M1 若用户已经在预演图逐项点好会话，
+    //    就在同一人闸之后自动复用既有确认函数。校验拒绝不吞掉：带回原面板给用户改。
+    let mut paused = run_auto_advance_authorized_role_loop_until_task_session_binding(
         path,
         index,
         readback_db_path,
@@ -4307,7 +4383,40 @@ fn run_confirm_and_start_authorized_run_inner(
         &actor_id,
         request.max_nodes.unwrap_or(50),
         request.approved_planned_tasks.as_deref(),
-    )
+    )?;
+    if !paused.task_session_binding_required || request.preview_session_bindings.is_empty() {
+        return Ok(paused);
+    }
+
+    let mapped_bindings = map_preview_node_session_bindings_to_planned_tasks(
+        &paused.planned_tasks,
+        &request.preview_session_bindings,
+    );
+    let binding_request = ConfirmProjectDirectorTaskSessionBindingsRequest {
+        project_root: request.project_root.clone(),
+        workflow_id: workflow_id.clone(),
+        planned_tasks: paused.planned_tasks.clone(),
+        task_session_bindings: mapped_bindings.clone(),
+        actor_id: Some(actor_id),
+        max_nodes: request.max_nodes,
+    };
+    match run_confirm_project_director_task_session_bindings_inner(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        director,
+        session_creator,
+        &binding_request,
+    ) {
+        Ok(outcome) => Ok(outcome),
+        Err(error) => {
+            // 现成校验（缺项、多项、不可用 existing 会话等）仍是唯一裁判；这里只把它留在原绑定面板上。
+            paused.task_session_bindings = mapped_bindings;
+            paused.task_session_binding_error = Some(error);
+            Ok(paused)
+        }
+    }
 }
 
 #[tauri::command]
@@ -4484,6 +4593,118 @@ async fn preview_pending_proposal_director_plan(
     .map_err(|error| format!("预拆执行线程异常：{error}"))?
 }
 
+// ===== M1·预演节点→真实任务绑定单测 =====
+#[cfg(test)]
+mod m1_plan_preview_binding_tests {
+    use super::*;
+
+    fn task(id: &str) -> ProjectDirectorPlannedTask {
+        ProjectDirectorPlannedTask {
+            planned_task_id: id.to_string(),
+            title: id.to_string(),
+            task_goal: id.to_string(),
+            scope: ProjectDirectorTaskScope {
+                project_id: "project-m1".to_string(),
+                workflow_id: "workflow-m1".to_string(),
+                target_role: "codex-dev".to_string(),
+                task_package_kind: "implementation".to_string(),
+                allowed_read_scope: vec![],
+                allowed_write_scope: vec![],
+                available_skills: vec![],
+                available_knowledge_refs: vec![],
+                callable_tool_capabilities: vec![],
+                required_checks: vec![],
+                stop_conditions: vec![],
+                timeout_policy: None,
+                failure_policy: None,
+                forbidden_actions: vec![],
+                model_id: None,
+            },
+            depends_on: vec![],
+            acceptance_criteria: vec![],
+            report_format: vec![],
+            status: "planned".to_string(),
+            guard_result: None,
+            work_item_id: None,
+            workflow_node_id: None,
+            task_package_id: None,
+            memory_packet_snapshot_id: None,
+            prepared_dispatch_id: None,
+            blocked_reasons: vec![],
+        }
+    }
+
+    fn existing(node_id: &str, session_id: &str) -> ProjectDirectorPreviewNodeSessionBinding {
+        ProjectDirectorPreviewNodeSessionBinding {
+            preview_node_id: node_id.to_string(),
+            session_choice: "existing".to_string(),
+            session_id: Some(session_id.to_string()),
+        }
+    }
+
+    #[test]
+    fn preview_session_mapping_prefers_id_then_sequence_and_defaults_mismatch_to_new() {
+        let stable = map_preview_node_session_bindings_to_planned_tasks(
+            &[task("task-a"), task("task-b")],
+            &[
+                existing("task-b", "thread-b"),
+                existing("task-a", "thread-a"),
+            ],
+        );
+        assert_eq!(
+            stable[0].session_id.as_deref(),
+            Some("thread-a"),
+            "稳定 id 必须优先于序号"
+        );
+        assert_eq!(
+            stable[1].session_id.as_deref(),
+            Some("thread-b"),
+            "稳定 id 必须逐项透传"
+        );
+
+        let by_sequence = map_preview_node_session_bindings_to_planned_tasks(
+            &[task("after-a"), task("after-b")],
+            &[
+                existing("before-a", "thread-a"),
+                ProjectDirectorPreviewNodeSessionBinding {
+                    preview_node_id: "before-b".to_string(),
+                    session_choice: "new".to_string(),
+                    session_id: None,
+                },
+            ],
+        );
+        assert_eq!(
+            by_sequence[0].session_id.as_deref(),
+            Some("thread-a"),
+            "无稳定 id 时才按序号映射"
+        );
+        assert_eq!(
+            by_sequence[1].session_choice,
+            "new",
+            "序号映射应保留显式新会话"
+        );
+
+        let mismatch = map_preview_node_session_bindings_to_planned_tasks(
+            &[task("after-a"), task("after-b")],
+            &[existing("before-a", "thread-a")],
+        );
+        assert_eq!(
+            mismatch[0].session_id.as_deref(),
+            Some("thread-a"),
+            "可证明的同序号仍可映射"
+        );
+        assert_eq!(
+            mismatch[1].session_choice,
+            "new",
+            "没有对应步骤时必须默认新会话"
+        );
+        assert!(
+            mismatch[1].session_id.is_none(),
+            "不允许把旧会话静默借给未对应任务"
+        );
+    }
+}
+
 // ===== fix9·开工口守卫单测（自包含·照 worker_report/B1 先例不依赖 lib.rs 测试 helper）=====
 // 复刻 2026-07-07 16:48/16:55 事故形态：tier-1 不交 execution_scope → 真分流产出写根空纯建议方案。
 #[cfg(test)]
@@ -4626,6 +4847,7 @@ mod fix9_tests {
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(10),
             approved_planned_tasks: None,
+            preview_session_bindings: vec![],
         };
         let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
@@ -4839,6 +5061,7 @@ mod fix9_tests {
             actor_id: Some("user-fixture".to_string()),
             max_nodes: Some(10),
             approved_planned_tasks: None,
+            preview_session_bindings: vec![],
         };
         let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
