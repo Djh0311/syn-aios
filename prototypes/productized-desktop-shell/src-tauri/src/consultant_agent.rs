@@ -584,7 +584,8 @@ pub(crate) fn map_consultation_to_c1_input(
         }
         // 纯咨询/只读：保持只读·空写范围——这是忠实映射"咨询判定不需要改东西"，**不是**默认兜底缺失的写范围。
         None => ProjectConsultationProposalScopeDraft {
-            allowed_role_ids: vec!["project_consultant".to_string()],
+            // 只读结论仍需交给 worker 执行；仅授权 codex-dev 角色，不授予任何写范围或写工具。
+            allowed_role_ids: vec!["project_consultant".to_string(), "codex-dev".to_string()],
             allowed_agent_ids: vec![],
             allowed_read_roots: vec![project_root.to_string()],
             allowed_write_roots: vec![],

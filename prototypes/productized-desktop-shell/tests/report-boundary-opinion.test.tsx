@@ -200,16 +200,15 @@ function authorizeHtml(
   );
 }
 
-// 7a) 纯建议（写根空·fix9 改道）+ mismatch 意见共存：主按钮仍是[重新出方案（要动手）]、[允许并开始]降次不删死。
+// 7a) 只读单（写根空）+ mismatch 意见共存：主按钮仍是[允许并开始]，保留重新出方案次按钮。
 {
   const mismatch = ready(record({ verdict: "mismatch", points: ["写根空·不改文件"], summary: "对不上" }));
   const out = authorizeHtml([], mismatch);
-  // fix9 改道原样（按钮区不受意见块影响）。
-  assert(out.includes("重新出方案（要动手）"), "fix9：主按钮改道原样");
-  assert(out.includes("仍要允许并开始（纯建议）"), "fix9：[允许并开始]降次不删死");
-  assert(out.includes("不会改任何文件"), "fix9：确定性警条仍在");
-  // 意见块与之共存（智能层与 fix9 警条互证）。
-  assert(out.includes("全局主管意见（批前边界）"), "意见块与 fix9 改道共存");
+  assert(out.includes("允许并开始（只读）"), "只读单：[允许并开始]仍是主按钮");
+  assert(out.includes("重新出方案（要动手）"), "只读单：保留重新出方案次按钮");
+  assert(out.includes("这单是只读的——AI 只看不改，交货是结论不是改动"), "只读单：确定性警条仍在");
+  // 意见块与之共存（智能层与只读警条互证）。
+  assert(out.includes("全局主管意见（批前边界）"), "意见块与只读单操作共存");
   assert(out.includes("好像对不上你的目标"), "意见块 mismatch 显示");
   assert(!out.includes("审批"), "词表无「审批」");
 }
@@ -220,7 +219,7 @@ function authorizeHtml(
   const out = authorizeHtml(["/Users/yoyi/codex-workflow-mario-test"], ok);
   assert(out.includes("允许并开始"), "正常：主按钮原样");
   assert(out.includes("按我说的改"), "正常：次按钮原样");
-  assert(!out.includes("不会改任何文件"), "正常：无纯建议警条");
+  assert(!out.includes("这单是只读的"), "正常：无只读警条");
   assert(out.includes("全局主管意见（批前边界）"), "意见块与正常按钮共存");
   assert(out.includes("范围和你的目标对得上"), "意见块 looks_ok 显示");
 }

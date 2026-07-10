@@ -2270,4 +2270,30 @@ mod tests {
             warnings: vec![],
         }
     }
+
+    #[test]
+    fn readonly_dispatch_argv_has_no_add_dir_when_task_package_allowed_write_is_missing() {
+        // 调用侧把缺失 allowed_write 保守折成空写根；冻结命令规划器只消费这些选项。
+        let mut request = safe_request();
+        request.sandbox = "read-only".to_string();
+        request.allowed_write_roots = vec![];
+
+        let plan = command_plan_for(&request);
+        let sandbox_index = plan
+            .argv
+            .iter()
+            .position(|argument| argument == "--sandbox")
+            .expect("argv 应含 sandbox 参数");
+        assert_eq!(
+            plan.argv.get(sandbox_index + 1).map(String::as_str),
+            Some("read-only"),
+            "只读任务包必须传入 read-only 沙箱"
+        );
+        assert!(
+            !plan.argv.iter().any(|argument| argument == "--add-dir"),
+            "缺 allowed_write 的只读任务包绝不可得到写目录：{:?}",
+            plan.argv
+        );
+        println!("[READONLY_DISPATCH_ARGV] {:?}", plan.argv);
+    }
 }

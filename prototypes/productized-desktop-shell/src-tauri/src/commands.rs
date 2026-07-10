@@ -2453,8 +2453,15 @@ fn execute_project_workflow_node_at(
             let empty_artifact = json!({});
             let artifact = find_task_package_artifact(&value, &request.work_item_id, work_item)
                 .unwrap_or(&empty_artifact);
-            let fields =
-                task_package_fields_from(work_item, artifact, &project, &workflow_id, &request.work_item_id);
+            let fields = task_package_fields_from(
+                work_item,
+                artifact,
+                &project,
+                &workflow_id,
+                &request.work_item_id,
+            );
+            // 原始任务包缺或空 allowed_write 都是只读：绝不采用渲染层的占位文案来扩大写权限。
+            let task_package_is_read_only = string_array(artifact, "allowed_write").is_empty();
             let objective = {
                 let joined = fields.goals.join("\n");
                 if joined.trim().is_empty() {
@@ -2471,7 +2478,11 @@ fn execute_project_workflow_node_at(
                     fields.task_name.clone()
                 },
                 objective,
-                "workspace-write".to_string(),
+                if task_package_is_read_only {
+                    "read-only".to_string()
+                } else {
+                    "workspace-write".to_string()
+                },
                 if fields.forbidden_actions.is_empty() {
                     std_forbidden()
                 } else {

@@ -1,9 +1,9 @@
-// fix9·批卡纯建议诚实脸·离线 DOM 断言（renderToStaticMarkup·同现有 harness 风格）。
-// §4：willWrite=false（写根空=纯建议）→ 警条在 + 主按钮=[重新出方案（要动手）] + [允许并开始]降次但**不删死**；
-// willWrite=true → 原样（无警条·主按钮=[允许并开始]）。
+// 写根空的只读单离线 DOM 断言（renderToStaticMarkup·同现有 harness 风格）。
+// willWrite=false → 只读警条 + 主按钮=[允许并开始（只读）] + 保留重新出方案次按钮；
+// willWrite=true → 原样（无只读警条·主按钮=[允许并开始]）。
 import { renderToStaticMarkup } from "react-dom/server.browser";
-import { JiaobanAuthorizeState } from "../src/views/projects/ProjectJiaobanPanel";
-import type { ProjectConsultationProposal } from "../src/lib/types";
+import { JiaobanAuthorizeState, JiaobanDoneState } from "../src/views/projects/ProjectJiaobanPanel";
+import type { AutoAdvanceRoleLoopOutcome, ProjectConsultationProposal, ProjectDirectorPlannedTask } from "../src/lib/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -77,25 +77,83 @@ function html(allowedWriteRoots: string[]): string {
   );
 }
 
-// 1) 纯建议（写根空）：警条在 + 主按钮改道 + [允许并开始]降次不删死。
+// 1) 只读单（写根空）：警条在 + [允许并开始]仍是主按钮 + 保留重新出方案。
 {
   const out = html([]);
-  assert(out.includes("不会改任何文件"), "警条应喊出「不会改任何文件」");
-  assert(out.includes("纯建议"), "警条应点名纯建议");
-  assert(out.includes("重新出方案（要动手）"), "主按钮应改道 [重新出方案（要动手）]");
-  assert(out.includes("仍要允许并开始（纯建议）"), "[允许并开始] 降为次按钮但不删死（按钮永远有路）");
-  // 主按钮位（primary-button）应是改道按钮而非允许并开始。
+  assert(out.includes("这单是只读的——AI 只看不改，交货是结论不是改动"), "警条应如实说明只读单");
+  assert(out.includes("重新出方案（要动手）"), "应保留 [重新出方案（要动手）] 次按钮");
+  assert(out.includes("允许并开始（只读）"), "[允许并开始] 应保留在只读单主按钮");
+  // 主按钮位（primary-button）必须是允许并开始。
   const primarySegment = out.slice(out.indexOf("primary-button"), out.indexOf("primary-button") + 300);
-  assert(primarySegment.includes("重新出方案（要动手）"), "primary 位应是改道按钮");
+  assert(primarySegment.includes("允许并开始（只读）"), "primary 位应是允许并开始");
 }
 
-// 2) 正常档位方案（写根非空）：零回退——无警条、主按钮=[允许并开始]、无改道按钮。
+// 2) 正常档位方案（写根非空）：零回退——无只读警条、主按钮=[允许并开始]、无改道按钮。
 {
   const out = html(["/Users/yoyi/codex-workflow-mario-test"]);
-  assert(!out.includes("不会改任何文件"), "正常方案不显纯建议警条");
+  assert(!out.includes("这单是只读的"), "正常方案不显只读警条");
   assert(!out.includes("重新出方案（要动手）"), "正常方案无改道按钮");
   assert(out.includes("允许并开始"), "正常方案主按钮原样");
   assert(out.includes("🔓"), "正常方案 🔓 许可行原样（willWrite=true）");
 }
 
-console.log("advice-only-authorize-face: 2 组离线 DOM 断言全过");
+const readonlyTask: ProjectDirectorPlannedTask = {
+  planned_task_id: "readonly-1",
+  title: "核验结论",
+  objective: "只读核验",
+  scope: {
+    project_id: "proj",
+    workflow_id: "wf-1",
+    target_role: "codex-dev",
+    task_package_kind: "task_package",
+    allowed_read_scope: ["/Users/yoyi/codex-workflow-mario-test"],
+    allowed_write_scope: [],
+    callable_tool_capabilities: [],
+    required_checks: [],
+    stop_conditions: [],
+  },
+  depends_on: [],
+  acceptance_criteria: ["返回核验结论"],
+  report_format: ["做了什么"],
+  status: "prepared",
+  blocked_reasons: [],
+};
+
+const readonlyOutcome: AutoAdvanceRoleLoopOutcome = {
+  stage: "ran",
+  planned_task_count: 1,
+  prepared_count: 1,
+  needs_binding_count: 0,
+  blocked_count: 0,
+  message: "做完了。",
+  chain_outcome: null,
+  stop_reason: null,
+  planned_tasks: [readonlyTask],
+};
+
+// 3) 只读链交货如实标出未改文件。
+{
+  const out = renderToStaticMarkup(
+    <JiaobanDoneState
+      outcome={readonlyOutcome}
+      chainStatus={null}
+      onContinue={noop}
+      needsRework={null}
+      needsReworkActionError={null}
+      needsReworkActionStarting={false}
+      onNeedsReworkContinue={noop}
+      onNeedsReworkAction={noop}
+      onRequestAction={noop}
+      factCtx={null}
+      sessionChoice={null}
+      latestSessionThreadId={null}
+      supervisorLoading={false}
+      supervisorOutcome={null}
+      onSupervisorRetry={noop}
+      onSupervisorReplan={noop}
+    />,
+  );
+  assert(out.includes("只读单·未改文件"), "只读链交货应标出未改文件");
+}
+
+console.log("advice-only-authorize-face: 3 组离线 DOM 断言全过");

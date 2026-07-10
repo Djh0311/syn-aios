@@ -1681,16 +1681,12 @@ export function JiaobanAuthorizeState({
         </div>
       ) : null}
 
-      {/* fix9·纯建议诚实脸：写根空（=咨询判定不改文件）→ 批前就喊出来，别等批完空转才发现
-          （2026-07-07 两撞：tier-1 偶发不交 execution_scope，用户批了两份空转方案）。 */}
+      {/* 写根空是可执行的只读单：仍走同一人闸，只是不授予写入。 */}
       {!willWrite ? (
-        <div className="jiaoban-advice-only-banner" role="note" aria-label="纯建议方案提醒">
+        <div className="jiaoban-advice-only-banner" role="note" aria-label="只读单提醒">
           <span aria-hidden="true">⚠</span>
-          {/* 正文必须是**单个** flex item：banner 家族是 display:flex，裸文本+<strong> 会被拆成
-              多个匿名 item 挤成竖柱（07-07 用户真机截图逮到）。包一层 span=正文内联流恢复。 */}
           <span className="jiaoban-banner-body">
-            这份方案<strong>不会改任何文件</strong>——它是纯建议。
-            你的目标若是要动手改东西，别批这份，点下面「重新出方案（要动手）」。
+            这单是只读的——AI 只看不改，交货是结论不是改动
           </span>
         </div>
       ) : null}
@@ -1783,24 +1779,23 @@ export function JiaobanAuthorizeState({
 
       <div className="workflow-state-actions">
         {!willWrite ? (
-          // fix9·纯建议方案：主按钮改道 [重新出方案（要动手）]；[允许并开始] 降为次按钮**不删死**
-          //（用户真想收下纯建议也有路；点了会被后端开工口守卫人话拒，现有失败上脸机制接得住）。
+          // 只读单的唯一开工门仍是 [允许并开始]；重新出方案保留为次操作。
           <>
             <button
               className="primary-button"
               type="button"
               disabled={starting || consultLoading}
-              onClick={onRePlan}
+              onClick={onAuthorizeAndStart}
             >
-              {consultLoading ? "正在出新方案…" : "重新出方案（要动手）"}
+              {starting ? "正在开始…" : "允许并开始（只读）"}
             </button>
             <button
               className="secondary-button"
               type="button"
               disabled={starting || consultLoading}
-              onClick={onAuthorizeAndStart}
+              onClick={onRePlan}
             >
-              {starting ? "正在开始…" : "仍要允许并开始（纯建议）"}
+              {consultLoading ? "正在出新方案…" : "重新出方案（要动手）"}
             </button>
           </>
         ) : proposalIsStale ? (
@@ -2554,7 +2549,7 @@ export function JiaobanSupervisorReviewSection({
 }
 
 // 4. 交货
-function JiaobanDoneState({
+export function JiaobanDoneState({
   outcome,
   chainStatus,
   onContinue,
@@ -2613,6 +2608,9 @@ function JiaobanDoneState({
   const resultLine = chain
     ? `完成 ${chain.completed} 步${chain.stopped_reason ? `；中途停了：${chain.stopped_reason}` : ""}。`
     : outcome?.message || "做完了。";
+  const isReadOnlyRun =
+    (outcome?.planned_tasks ?? []).length > 0 &&
+    (outcome?.planned_tasks ?? []).every((task) => task.scope.allowed_write_scope.length === 0);
   const proof = summarizeProof(chainStatus);
   // fix3 后端新 warnings（如「角色已按 codex-dev 执行」「已接续上次中断的运行」）→ 小字列出，不挡主路径。
   const warnings = chain?.warnings ?? [];
@@ -2631,6 +2629,7 @@ function JiaobanDoneState({
       <div className="role-loop-plain" aria-label="结果（人话）">
         <p className="role-loop-plain-lead">{resultLine}</p>
         {stepsDone > 0 ? <p className="role-loop-plain-note">这次做完 {stepsDone} 步。</p> : null}
+        {isReadOnlyRun ? <p className="role-loop-plain-note">只读单·未改文件</p> : null}
       </div>
       <JiaobanStepReportList
         steps={chain?.steps ?? []}

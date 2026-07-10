@@ -3927,6 +3927,41 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct RecordingOptionsRunner {
+        options: RefCell<Option<CodexResumeRequestOptions>>,
+    }
+    impl CodexResumeRunner for RecordingOptionsRunner {
+        fn resume_with_options(
+            &self,
+            _thread_id: &str,
+            _prompt: &str,
+            last_message_path: &Path,
+            options: &CodexResumeRequestOptions,
+        ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String> {
+            self.options.replace(Some(options.clone()));
+            if let Some(parent) = last_message_path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|error| format!("fixture output dir create failed: {error}"))?;
+            }
+            fs::write(last_message_path, "READONLY_DISPATCH_STUB_OK")
+                .map_err(|error| format!("fixture last message write failed: {error}"))?;
+            Ok((
+                CodexResumeRunResult {
+                    exit_code: 0,
+                    timed_out: false,
+                    stderr_summary: None,
+                },
+                WorkflowNodeDispatchExecutionOptions {
+                    readback_stats: Some(CodexDispatchReadbackStats {
+                        transcript_event_count: 1,
+                        transcript_target_hits: 1,
+                    }),
+                },
+            ))
+        }
+    }
+
     // P3 实验面真跑（A 映射）·机器闸：用 stub runner（不起真 codex）验证
     // execute_experiment_node_dispatch_at 在固定测试项目里自动建临时 work_item + 绑会话 +
     // 走通派发到 completed。真 codex 真跑由用户真机做（#[ignore] 见 real_run_full_dispatch_resume 同款）。
@@ -4914,7 +4949,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         );
     }
 
-    // 纯咨询（execution_scope=None）：map 保持只读·空写范围·project_consultant——证不默认写范围。
+    // 纯咨询（execution_scope=None）：map 保持只读·空写范围；codex-dev 只获准交付结论，不获写能力。
     #[test]
     fn consult_map_readonly_when_no_execution_scope() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
@@ -4931,8 +4966,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         );
         assert_eq!(
             input.scope_draft.allowed_role_ids,
-            vec!["project_consultant".to_string()],
-            "纯咨询·角色只读"
+            vec!["project_consultant".to_string(), "codex-dev".to_string()],
+            "纯咨询·允许只读 worker 交付结论"
         );
     }
 
@@ -10787,6 +10822,89 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 .expect("project node dispatch should complete");
         assert_eq!(result.dispatch.state, "completed");
         assert_eq!(result.dispatch.exit_code, Some(0));
+    }
+
+    // 只读单的案发式回归：任务包漏 allowed_write 时，H5 bridge 的 fail-open 不在这条主管派发链上；
+    // 本执行入口必须保守地把它喂为 read-only + 空写根。
+    #[test]
+    fn project_workflow_node_dispatch_keeps_missing_task_package_write_scope_readonly() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!(
+            "project-node-readonly-missing-write-{}",
+            unix_timestamp_string()
+        ));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, "thread-proj-readonly");
+        fs::create_dir_all(&dir).expect("fixture dir should exist");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root))
+            .expect("workflow should exist");
+        create_task_draft_at(
+            &path,
+            &fixture_task_draft_request(test_root, "只读任务包缺写范围"),
+        )
+        .expect("work item should exist");
+        let work_item_id =
+            optional_string_from(&read_json_file(&path)["work_items"][0], "work_item_id")
+                .expect("work item id should exist");
+        update_work_item_state_at(
+            &path,
+            &fixture_work_item_state_update_request(test_root, &work_item_id, "ready_to_dispatch"),
+        )
+        .expect("work item should be ready");
+        let state = read_json_file(&path);
+        let artifact = state["artifacts"]
+            .as_array()
+            .and_then(|artifacts| artifacts.first())
+            .expect("task package artifact should exist");
+        assert!(
+            artifact.get("allowed_write").is_none(),
+            "案发夹具必须复刻缺 allowed_write：{artifact:?}"
+        );
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        bind_workflow_node_codex_session_at(
+            &path,
+            &fixture_node_session_bind_request(
+                test_root,
+                &node_id,
+                Some(&work_item_id),
+                "thread-proj-readonly",
+            ),
+            &fixture_session("thread-proj-readonly", test_root, true),
+        )
+        .expect("binding should write");
+        let runner = RecordingOptionsRunner::default();
+        let result = execute_project_workflow_node_at(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &ProjectWorkflowNodeRunRequest {
+                project_root: test_root.to_string(),
+                node_id,
+                work_item_id,
+                workflow_id: None,
+            },
+        )
+        .expect("missing allowed_write should still dispatch as readonly");
+        assert_eq!(result.dispatch.state, "completed");
+        let options = runner
+            .options
+            .borrow()
+            .clone()
+            .expect("runner should receive execution options");
+        assert_eq!(options.sandbox_mode.as_deref(), Some("read-only"));
+        assert!(
+            options.allowed_write_roots.is_empty(),
+            "只读派发不可带写目录：{:?}",
+            options.allowed_write_roots
+        );
+        println!(
+            "[READONLY_DISPATCH_OPTIONS] sandbox={:?} write_roots={:?}",
+            options.sandbox_mode, options.allowed_write_roots
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     // C 映射语义：work_item 不是 ready_to_dispatch 时，派发自身清楚拒绝（不自动推进状态）。

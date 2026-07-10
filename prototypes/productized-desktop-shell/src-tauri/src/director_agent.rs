@@ -3635,25 +3635,18 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
     let auth_revision = store.revision;
     // 质量债·redo 幂等：授权时间窗起点（created_at 之后的口供/链审计都算「本单已完成」——多轮叠加全覆盖）。
     let auth_created_at_ms = active.created_at_ms;
-    // fix9·[接着跑]口同款守卫：空写根 active 授权（16:48/16:55 已有两份残留在盘）→ 人话停，
-    // 不进 LM 拆/prepare（存量空授权从「坑」变「哑」，零 store 手术）。started 审计之前拦=没开始就不记 started。
-    if active.scope.allowed_write_roots.is_empty() {
-        let message = "这单的授权没带可执行范围（多半是方案被判成了纯建议），接着跑也只会空转。请点[重新出方案]把要动手的内容说清楚——写范围由系统自动装配，不需要你手填。".to_string();
-        let _ = append_role_loop_auto_advance_audit(
-            path,
-            workflow_id,
-            actor_id,
-            "role_loop_auto_advance_stopped",
-            &format!("接着跑口拒空写根授权（未进拆任务/prepare）：{message}"),
-        );
-        return Err(message);
-    }
+    // 写根为空是合法只读授权：沿用同一人闸和授权记录，不授予写入范围。
+    let read_only_authorization = active.scope.allowed_write_roots.is_empty();
     append_role_loop_auto_advance_audit(
         path,
         workflow_id,
         actor_id,
         "role_loop_auto_advance_started",
-        "已查到 active 方案授权，开始授权范围内自动推进：拆任务 → prepare →（没绑/越界则停）→ 链跑。",
+        if read_only_authorization {
+            "已查到 active 只读授权，开始只读自动推进：拆任务 → prepare →（没绑/越界则停）→ 链跑。"
+        } else {
+            "已查到 active 方案授权，开始授权范围内自动推进：拆任务 → prepare →（没绑/越界则停）→ 链跑。"
+        },
     )?;
     // fix3 2.2：从这里（拆任务起）往后**任何失败**都先 append 一条 stopped 审计（阶段+人话·永久留档，
     // 别只活在前端内存/重开 app 就没）再返回 Err——用 IIFE 兜住所有 `?` 与早返回点，一处捕获、绝不漏。
@@ -3800,12 +3793,17 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
             };
             let (stage, message) = if blocked_count > 0 {
                 (
-                // fix9 改口：老话教用户「在方案里补上」写范围——档位时代写范围由系统装配、用户没处补（死胡同）。
-                "blocked",
-                format!(
-                    "有任务超出方案授权范围被阻断{reasons_text}——这单的授权没带可执行范围（多半是方案被判成了纯建议）。请点[重新出方案]把要动手的内容说清楚——写范围由系统自动装配，不需要你手填。"
-                ),
-            )
+                    "blocked",
+                    if read_only_authorization {
+                        format!(
+                            "有只读任务超出已确认的读取、角色或工具范围被阻断{reasons_text}——本单不授予写入；请按停因调整方案或等待你的决定。"
+                        )
+                    } else {
+                        format!(
+                            "有任务超出方案授权范围被阻断{reasons_text}——这单的授权没带可执行范围（多半是方案被判成了纯建议）。请点[重新出方案]把要动手的内容说清楚——写范围由系统自动装配，不需要你手填。"
+                        )
+                    },
+                )
             } else if needs_binding_count > 0 {
                 (
                     "needs_binding",
@@ -4195,22 +4193,8 @@ fn run_confirm_and_start_authorized_run_inner(
     }
     let workflow_id = proposal.workflow_id.clone();
     let proposal_store_revision = proposal_store.revision;
-    // fix9·开工口守卫（确定性·零 LM 依赖·2026-07-07 16:48/16:55 两撞）：tier-1 咨询偶发不交
-    // execution_scope → 分流忠实映射成纯建议只读方案（写根空）。这种方案点[允许并开始]只会建
-    // 空写根授权 → prepare 逐任务拦 → 空转。在人闸校验之后、**建授权之前**人话拒——不建授权、
-    // 不绑会话、不起链（16:48 那种空授权垃圾不再入库）。留档走现有 stopped 事件族（不新开）。
-    // 注：当前档位世界「写根空 ⇔ 纯建议」；将来若出现「只读但要跑检查」的新档位形态，本守卫须随分流一起升级。
-    if proposal.scope_draft.allowed_write_roots.is_empty() {
-        let message = "这份方案是纯建议（咨询判定不需要改文件），没有可执行范围，开工只会空转。想让 AI 动手：点[重新出方案]，把要改什么说清楚（带上文件名/功能名更稳）。".to_string();
-        let _ = append_role_loop_auto_advance_audit(
-            path,
-            &workflow_id,
-            &actor_id,
-            "role_loop_auto_advance_stopped",
-            &format!("开工口拒纯建议方案（写根空·未建授权未起链）：{message}"),
-        );
-        return Err(message);
-    }
+    // 写根空不再等同于空转：它是只读单，仍须经过同一确认与全局边界复核，授权中不授予写入范围。
+    let read_only_authorization = proposal.scope_draft.allowed_write_roots.is_empty();
     // 2. 记录用户确认（现成 record_decision·Confirm·actor=用户）→ 建授权。
     let confirmed = project_consultation_proposal_store::record_decision(
         path,
@@ -4219,7 +4203,11 @@ fn run_confirm_and_start_authorized_run_inner(
             proposal_id: request.proposal_id.clone(),
             actor_id: actor_id.clone(),
             decision: ProjectConsultationProposalDecisionKind::Confirm,
-            summary: "用户点[允许并开始]：确认方案。".to_string(),
+            summary: if read_only_authorization {
+                "用户点[允许并开始]：确认只读单（read_only；不授予写入范围）。".to_string()
+            } else {
+                "用户点[允许并开始]：确认方案。".to_string()
+            },
             expected_proposal_store_revision: Some(proposal_store_revision),
             expected_plan_authorization_store_revision: None,
         },
@@ -4250,8 +4238,12 @@ fn run_confirm_and_start_authorized_run_inner(
                 authorization_id: authorization.authorization_id.clone(),
                 actor_id: actor_id.clone(),
                 review_status: "approved".to_string(),
-                summary: "用户点[允许并开始]：同时作全局边界批准（Phase A·用户演全局主管）。"
-                    .to_string(),
+                summary: if read_only_authorization {
+                    "用户点[允许并开始]：同时作全局边界批准（只读单；无写权限）。".to_string()
+                } else {
+                    "用户点[允许并开始]：同时作全局边界批准（Phase A·用户演全局主管）。"
+                        .to_string()
+                },
                 checklist: GlobalBoundaryReviewChecklist {
                     architecture_boundary_checked: true,
                     cross_project_impact_checked: true,
@@ -4268,6 +4260,15 @@ fn run_confirm_and_start_authorized_run_inner(
             timestamp_ms + 1,
             &format!("confirm-and-start-boundary:{}", unix_timestamp_nanos()),
         )?;
+        if read_only_authorization {
+            append_role_loop_auto_advance_audit(
+                path,
+                &workflow_id,
+                &actor_id,
+                "role_loop_auto_advance_started",
+                "开工口放行只读单：授权写范围为空；任务将以 read-only 沙箱运行，不授予任何写入目录。",
+            )?;
+        }
         // 4. 顶层会话选择退为绑定面板的前端预填：不再把 existing 直接绑到 codex-dev 单节点。
         //    真正的每任务映射在主管拆完后由新确认命令处理；new 的 C1 路径仍原样留在该命令之后。
         match request.session_choice.as_str() {
@@ -4534,16 +4535,6 @@ mod fix9_tests {
             panic!("fix9 守卫应在 runner 之前拦住");
         }
     }
-    struct PanicDirector;
-    impl DirectorAgent for PanicDirector {
-        fn plan(
-            &self,
-            _ctx: &ProjectContext,
-            _proposal: &ProjectConsultationProposal,
-        ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
-            panic!("fix9 守卫应在主管 LM 拆任务之前拦住");
-        }
-    }
     struct PanicCreator;
     impl JiaobanNewSessionCreator for PanicCreator {
         fn create_initialized_session(
@@ -4552,6 +4543,33 @@ mod fix9_tests {
             _requested_by: &str,
         ) -> Result<String, String> {
             panic!("fix9 守卫应在新会话出生口之前拦住");
+        }
+    }
+
+    struct OneTaskDirector;
+    impl DirectorAgent for OneTaskDirector {
+        fn plan(
+            &self,
+            _ctx: &ProjectContext,
+            proposal: &ProjectConsultationProposal,
+        ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+            Ok(vec![ProjectDirectorPlannedTask {
+                planned_task_id: format!("planned-task:{}:1", proposal.workflow_id),
+                title: "核验 index.html".to_string(),
+                task_goal: "核验 index.html".to_string(),
+                scope: director_task_scope_from_proposal(proposal, "codex-dev"),
+                depends_on: vec![],
+                acceptance_criteria: vec!["返回核验结论".to_string()],
+                report_format: vec!["做了什么".to_string()],
+                status: "planned".to_string(),
+                guard_result: None,
+                work_item_id: None,
+                workflow_node_id: None,
+                task_package_id: None,
+                memory_packet_snapshot_id: None,
+                prepared_dispatch_id: None,
+                blocked_reasons: vec![],
+            }])
         }
     }
 
@@ -4591,23 +4609,9 @@ mod fix9_tests {
         serde_json::from_str(&fs::read_to_string(path).expect("read state")).expect("parse state")
     }
 
-    fn stopped_audit_reasons(state: &serde_json::Value) -> Vec<String> {
-        state["audit_events"]
-            .as_array()
-            .map(|events| {
-                events
-                    .iter()
-                    .filter(|event| event["event_type"] == "role_loop_auto_advance_stopped")
-                    .filter_map(|event| event["reason"].as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    // §4①：纯建议方案（写根空）→ 合流拒·人话对·授权店零新增·方案仍 Pending·stopped 留档·
-    // 三个 panic 桩全没炸（没建授权没绑会话没起链）。
+    // §4①：纯建议方案（写根空）→ 同一人闸建只读授权，并停在既有逐任务绑定面。
     #[test]
-    fn fix9_confirm_rejects_advice_only_proposal_before_authorization() {
+    fn advice_only_confirm_authorizes_readonly_and_waits_for_task_binding() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
         let dir = tmp_dir("confirm-guard");
         let path = dir.join("workflow-state.v0.json");
@@ -4623,55 +4627,62 @@ mod fix9_tests {
             max_nodes: Some(10),
             approved_planned_tasks: None,
         };
-        let err = run_confirm_and_start_authorized_run_inner(
+        let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
-            &serde_json::json!({"projects": []}),
+            &serde_json::json!({"projects": [{"project_root": test_root}]}),
             &dir.join("readback.sqlite"),
             &PanicRunner,
-            &PanicDirector,
+            &OneTaskDirector,
             &PanicCreator,
             &request,
         )
-        .expect_err("纯建议方案应被开工口拒");
+        .expect("只读单应建授权并进入逐任务绑定面");
         assert!(
-            err.contains("纯建议") && err.contains("重新出方案"),
-            "人话应点名纯建议并指对路：{err}"
+            outcome.task_session_binding_required && outcome.stage == "needs_binding",
+            "只读单应和普通单一样等待逐任务绑定：{outcome:?}"
         );
-        // 授权店零新增（16:48 那种空授权垃圾不再入库）。
         let auth_store =
             plan_authorization_store::load_store(&path, unix_timestamp_ms()).expect("auth store");
+        let active = auth_store
+            .authorizations
+            .iter()
+            .find(|authorization| authorization.status == PlanAuthorizationStatus::Active)
+            .expect("只读单应有 active 授权");
         assert!(
-            auth_store.authorizations.is_empty(),
-            "不许建授权：{:?}",
-            auth_store.authorizations.len()
+            active.scope.allowed_write_roots.is_empty(),
+            "只读授权绝不可授予写入范围：{:?}",
+            active.scope.allowed_write_roots
         );
-        // 方案仍 Pending（record_decision 没跑·人闸语义没动）。
-        let proposal_store =
-            project_consultation_proposal_store::load_store(&path, unix_timestamp_ms())
-                .expect("proposal store");
         assert!(
-            matches!(
-                proposal_store.proposals[0].status,
-                ProjectConsultationProposalStatus::PendingUserConfirmation
-            ),
-            "方案应仍是待确认（守卫在确认之前）"
+            active
+                .user_confirmation
+                .as_ref()
+                .is_some_and(|confirmation| confirmation.confirmation_summary.contains("read_only")),
+            "既有确认记录应明确只读语义：{active:?}"
         );
-        // 留档走现有 stopped 事件族。
         let state = read_state_json(&path);
-        let reasons = stopped_audit_reasons(&state);
+        let started_reasons: Vec<String> = state["audit_events"]
+            .as_array()
+            .map(|events| {
+                events
+                    .iter()
+                    .filter(|event| event["event_type"] == "role_loop_auto_advance_started")
+                    .filter_map(|event| event["reason"].as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
         assert!(
-            reasons
+            started_reasons
                 .iter()
-                .any(|reason| reason.contains("开工口拒纯建议")),
-            "应留 stopped 审计：{reasons:?}"
+                .any(|reason| reason.contains("开工口放行只读单")),
+            "应留既有 started 事件中的只读放行说明：{started_reasons:?}"
         );
         let _ = fs::remove_dir_all(dir);
     }
 
-    // §4②：空写根 active 授权（盘上残留形态·全程生产 API 造）+ [接着跑] → 人话停·不进拆任务/prepare
-    // （panic 桩没炸）·不记 started·记 stopped。
+    // §4②：空写根 active 授权（历史残留形态）+ [接着跑] → 合法只读推进，仍在绑定面停住。
     #[test]
-    fn fix9_auto_advance_rejects_empty_write_root_active_authorization() {
+    fn advice_only_active_authorization_advances_to_task_binding() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
         let dir = tmp_dir("advance-guard");
         let path = dir.join("workflow-state.v0.json");
@@ -4737,41 +4748,49 @@ mod fix9_tests {
             active.scope.allowed_write_roots.is_empty(),
             "前置：active 授权写根应为空（事故形态）"
         );
-        // [接着跑] → 守卫人话停。
-        let err = run_auto_advance_authorized_role_loop(
+        let outcome = run_auto_advance_authorized_role_loop(
             &path,
-            &serde_json::json!({"projects": []}),
+            &serde_json::json!({"projects": [{"project_root": test_root}]}),
             &dir.join("readback.sqlite"),
             &PanicRunner,
-            &PanicDirector,
+            &OneTaskDirector,
             test_root,
             &proposal.workflow_id,
             "user-fixture",
             10,
             None,
         )
-        .expect_err("空写根授权应被接着跑口拒");
+        .expect("空写根 active 授权应作为只读单推进");
         assert!(
-            err.contains("没带可执行范围") && err.contains("重新出方案"),
-            "人话应指对路：{err}"
+            outcome.stage == "needs_binding" && outcome.needs_binding_count == 1,
+            "只读任务应通过 prepare 并等待绑定：{outcome:?}"
         );
         let state = read_state_json(&path);
-        let reasons = stopped_audit_reasons(&state);
+        let task_package = state["artifacts"]
+            .as_array()
+            .and_then(|artifacts| {
+                artifacts.iter().find(|artifact| artifact["artifact_type"] == "task_package")
+            })
+            .expect("只读任务应物化任务包");
         assert!(
-            reasons
-                .iter()
-                .any(|reason| reason.contains("接着跑口拒空写根授权")),
-            "应留 stopped 审计：{reasons:?}"
+            task_package["allowed_write"]
+                .as_array()
+                .is_some_and(|allowed_write| allowed_write.is_empty()),
+            "只读任务包必须保留空 allowed_write：{task_package:?}"
         );
-        let started = state["audit_events"]
+        assert!(
+            state["audit_events"]
             .as_array()
             .map(|events| {
                 events
                     .iter()
-                    .any(|event| event["event_type"] == "role_loop_auto_advance_started")
+                    .filter(|event| event["event_type"] == "role_loop_auto_advance_started")
+                    .filter_map(|event| event["reason"].as_str())
+                    .any(|reason| reason.contains("只读自动推进"))
             })
-            .unwrap_or(false);
-        assert!(!started, "守卫在 started 之前拦=没开始就不记 started");
+            .unwrap_or(false),
+            "接着跑应记录只读 started 审计"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -4779,33 +4798,6 @@ mod fix9_tests {
     // 但必须停在新的逐任务绑定面板，不能因顶层旧会话直接绑定或派发。
     #[test]
     fn fix9_guard_does_not_touch_profile_backed_proposal() {
-        struct OneTaskDirector;
-        impl DirectorAgent for OneTaskDirector {
-            fn plan(
-                &self,
-                _ctx: &ProjectContext,
-                proposal: &ProjectConsultationProposal,
-            ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
-                Ok(vec![ProjectDirectorPlannedTask {
-                    planned_task_id: format!("planned-task:{}:1", proposal.workflow_id),
-                    title: "改 index.html".to_string(),
-                    task_goal: "改 index.html".to_string(),
-                    scope: director_task_scope_from_proposal(proposal, "codex-dev"),
-                    depends_on: vec![],
-                    acceptance_criteria: vec!["页面可打开".to_string()],
-                    report_format: vec!["做了什么".to_string()],
-                    status: "planned".to_string(),
-                    guard_result: None,
-                    work_item_id: None,
-                    workflow_node_id: None,
-                    task_package_id: None,
-                    memory_packet_snapshot_id: None,
-                    prepared_dispatch_id: None,
-                    blocked_reasons: vec![],
-                }])
-            }
-        }
-
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
         let dir = tmp_dir("no-false-positive");
         let path = dir.join("workflow-state.v0.json");

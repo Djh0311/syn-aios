@@ -1888,6 +1888,7 @@ fn annotate_project_director_planned_tasks(
     tasks: Vec<ProjectDirectorPlannedTask>,
     timestamp_ms: i64,
 ) -> Vec<ProjectDirectorPlannedTask> {
+    let authorization_is_read_only = context.authorization.scope.allowed_write_roots.is_empty();
     tasks
         .into_iter()
         .map(|mut task| {
@@ -1901,7 +1902,8 @@ fn annotate_project_director_planned_tasks(
             task.work_item_id = Some(work_item_id.clone());
             task.task_package_id = Some(artifact_id.clone());
             task.workflow_node_id = Some(node_id.clone());
-            task.blocked_reasons = c4_static_task_blocking_reasons(&task);
+            task.blocked_reasons =
+                c4_static_task_blocking_reasons(&task, authorization_is_read_only);
 
             let binding = active_binding_for_planned_task(index, value, &node_id, &work_item_id);
             let target_agent_id = binding
@@ -2132,7 +2134,10 @@ fn prepared_dispatch_read_models_from_plan(
         .collect()
 }
 
-fn c4_static_task_blocking_reasons(task: &ProjectDirectorPlannedTask) -> Vec<String> {
+fn c4_static_task_blocking_reasons(
+    task: &ProjectDirectorPlannedTask,
+    authorization_is_read_only: bool,
+) -> Vec<String> {
     let mut reasons = Vec::new();
     if task.title.trim().is_empty() {
         reasons.push("planned task 缺少标题。".to_string());
@@ -2143,7 +2148,7 @@ fn c4_static_task_blocking_reasons(task: &ProjectDirectorPlannedTask) -> Vec<Str
     if task.scope.allowed_read_scope.is_empty() {
         reasons.push("授权读取范围为空，不能生成可派发任务包。".to_string());
     }
-    if task.scope.allowed_write_scope.is_empty() {
+    if task.scope.allowed_write_scope.is_empty() && !authorization_is_read_only {
         reasons.push("授权写入范围为空，不能生成可派发任务包。".to_string());
     }
     if task.acceptance_criteria.is_empty() {
