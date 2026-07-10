@@ -127,6 +127,7 @@ macro_rules! workbench_command_handler {
             apply_project_director_failed_action,
             auto_advance_authorized_role_loop,
             confirm_and_start_authorized_run,
+            confirm_project_director_task_session_bindings,
             preview_pending_proposal_director_plan,
             run_project_consultation,
             global_supervisor_agent::run_global_supervisor_review,

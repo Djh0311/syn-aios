@@ -364,19 +364,33 @@ export type AutoAdvanceAuthorizedRoleLoopRequest = {
   actor_id?: string;
 };
 
-// 合流命令请求（刀1 已注册 confirm_and_start_authorized_run）：用户点[允许并开始]的一下 →
-// 后端一口气 确认方案→边界复核→授权生效→绑现有会话→自动推进。session_choice 本刀只支持 "existing"
-// （"new" 后端会清错拒·下一阶段接）。对已确认/旧方案后端会干净拒（方案不是待用户确认状态）。
+// 合流命令请求：用户点[允许并开始]的一下 → 确认方案、边界复核、授权生效、主管拆任务，随后停在逐任务会话面板。
+// 顶层 session_choice 只预填面板的第一项，绝不再把 existing 静默绑成全链共用会话。
 export type ConfirmAndStartAuthorizedRunRequest = {
   project_root: string;
   proposal_id: string;
   session_choice: "existing" | "new";
-  session_id?: string; // session_choice=existing 时要绑的现有 Codex 会话 thread_id
+  session_id?: string; // session_choice=existing 时仅用于面板第一项预填
   actor_id?: string;
   max_nodes?: number;
   // 刀2「所批即所跑」：批前预拆过就把那份图原样带回 → 后端跳过重拆、照图执行（后端 director_agent.rs
   // ConfirmAndStartAuthorizedRunRequest.approved_planned_tasks 收；不传=现状：批后 LM 拆）。
   approved_planned_tasks?: ProjectDirectorPlannedTask[];
+};
+
+export type ProjectDirectorTaskSessionBinding = {
+  planned_task_id: string;
+  session_choice: "new" | "existing";
+  session_id?: string;
+};
+
+export type ConfirmProjectDirectorTaskSessionBindingsRequest = {
+  project_root: string;
+  workflow_id: string;
+  planned_tasks: ProjectDirectorPlannedTask[];
+  task_session_bindings: ProjectDirectorTaskSessionBinding[];
+  actor_id?: string;
+  max_nodes?: number;
 };
 
 // 刀2「批前看图」：对 pending 方案只读预拆工序图（零写盘·1-7 分钟·偶发 flaky·后端已自动重试一次）。
@@ -401,6 +415,8 @@ export type AutoAdvanceRoleLoopOutcome = {
   message: string;
   chain_outcome: DirectorChainOutcome | null;
   stop_reason: string | null;
+  // true 时表示已拆任务、尚未 prepare/派发；复用 needs_binding 阶段展示逐任务会话面板。
+  task_session_binding_required?: boolean;
   // 链停后的用户处置需原样带回同一任务；后端只读回显，旧报文可缺省。
   planned_tasks?: ProjectDirectorPlannedTask[];
   warnings?: string[];

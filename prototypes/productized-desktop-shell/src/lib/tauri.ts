@@ -23,6 +23,7 @@ import type {
   ProjectDirectorFailedActionRequest,
   ProjectDirectorFailedActionOutcome,
   ConfirmAndStartAuthorizedRunRequest,
+  ConfirmProjectDirectorTaskSessionBindingsRequest,
   PreviewPendingProposalDirectorPlanRequest,
   PreviewPendingProposalDirectorPlanOutcome,
   RunGlobalSupervisorReviewRequest,
@@ -892,6 +893,14 @@ export function confirmAndStartAuthorizedRun(
 ): Promise<AutoAdvanceRoleLoopOutcome> {
   ensureTauriRuntime();
   return invoke<AutoAdvanceRoleLoopOutcome>("confirm_and_start_authorized_run", { request });
+}
+
+// 开工前逐任务会话映射确认：不是审批，后端仍复查 active 授权、任务集合与已有会话，再复用 prepare/C1 起链。
+export function confirmProjectDirectorTaskSessionBindings(
+  request: ConfirmProjectDirectorTaskSessionBindingsRequest,
+): Promise<AutoAdvanceRoleLoopOutcome> {
+  ensureTauriRuntime();
+  return invoke<AutoAdvanceRoleLoopOutcome>("confirm_project_director_task_session_bindings", { request });
 }
 
 // B1·全局主管复核（advisory·意见不是闸）：交货后自动触发，读盘复核本轮口供出意见；幂等防重烧

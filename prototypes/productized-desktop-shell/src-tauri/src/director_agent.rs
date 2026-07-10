@@ -815,6 +815,16 @@ pub(crate) struct DirectorChainOutcome {
     pub(crate) stopped_reason: Option<String>,
 }
 
+// 开工前绑定面板的逐任务选择。`existing` 必须在确认命令中绑到该任务自己的 node + work_item；
+// `new` 仍由 C1 在派发前先生后绑，绝不把一个旧会话默认为整链共用。
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
+pub(crate) struct ProjectDirectorTaskSessionBinding {
+    pub(crate) planned_task_id: String,
+    pub(crate) session_choice: String, // "new" | "existing"
+    #[serde(default)]
+    pub(crate) session_id: Option<String>,
+}
+
 #[derive(serde::Deserialize, Clone, Debug)]
 pub(crate) struct ProjectDirectorFailedActionRequest {
     pub(crate) project_root: String,
@@ -1915,6 +1925,7 @@ pub(crate) fn run_director_task_chain(
         tasks,
         max_tasks,
         None,
+        None,
         &final_marker,
         &summary_generator,
     )
@@ -1971,6 +1982,7 @@ pub(crate) fn run_director_task_chain_with_markers(
         tasks,
         max_tasks,
         None,
+        None,
         final_marker,
         summary_generator,
     )
@@ -2012,6 +2024,44 @@ pub(crate) fn run_director_task_chain_with_session_creator(
     )
 }
 
+// 开工前绑定面板确认后的混合路径：已有会话已在 prepare 后逐任务绑好，只有标为 new 的任务进入 C1。
+// C1 本体/runner/执行机不改；映射缺项在链内再次拒绝，绝不静默回落到共用旧会话。
+fn run_director_task_chain_with_task_session_bindings(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    project_root: &str,
+    workflow_id: &str,
+    tasks: &[ProjectDirectorPlannedTask],
+    max_tasks: usize,
+    session_creator: &dyn JiaobanNewSessionCreator,
+    task_session_bindings: &std::collections::BTreeMap<String, ProjectDirectorTaskSessionBinding>,
+) -> Result<DirectorChainOutcome, String> {
+    #[cfg(test)]
+    let final_marker = FixturePassDirectorFinalMarker;
+    #[cfg(not(test))]
+    let final_marker = CliDirectorAgent::default();
+    #[cfg(test)]
+    let summary_generator = FixtureDirectorSummaryGenerator;
+    #[cfg(not(test))]
+    let summary_generator = CliDirectorAgent::default();
+    run_director_task_chain_inner(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        project_root,
+        workflow_id,
+        tasks,
+        max_tasks,
+        Some(session_creator),
+        Some(task_session_bindings),
+        &final_marker,
+        &summary_generator,
+    )
+}
+
 pub(crate) fn run_director_task_chain_with_session_creator_and_final_marker(
     path: &std::path::Path,
     index: &Value,
@@ -2035,6 +2085,7 @@ pub(crate) fn run_director_task_chain_with_session_creator_and_final_marker(
         tasks,
         max_tasks,
         Some(session_creator),
+        None,
         final_marker,
         summary_generator,
     )
@@ -2050,6 +2101,7 @@ fn run_director_task_chain_inner(
     tasks: &[ProjectDirectorPlannedTask],
     max_tasks: usize,
     session_creator: Option<&dyn JiaobanNewSessionCreator>,
+    task_session_bindings: Option<&std::collections::BTreeMap<String, ProjectDirectorTaskSessionBinding>>,
     final_marker: &dyn DirectorFinalMarker,
     summary_generator: &dyn DirectorSummaryGenerator,
 ) -> Result<DirectorChainOutcome, String> {
@@ -2322,11 +2374,35 @@ fn run_director_task_chain_inner(
         write_validated_workflow_state(path, &current)?;
         dispatched += 1;
 
-        // C1·每任务独立会话（session_creator=Some=生产主路径）：派发前经现成先生后绑建一条**以任务命名**的
-        // 专属新会话 → 绑到本任务角色节点 → 该任务用新会话 resume（worker 只吃工作台发的任务包）。
-        // **失败=该任务失败即停**（人话含「新建会话失败」·供给类经 fix8 前缀），**绝不静默回落共用会话**
-        // （回落=拐杖复活·§7 禁）；链不崩。无 creator（手动挡/旧测试=None）跳过本块 → 沿用节点旧绑定 resume。
-        if let Some(creator) = session_creator {
+        // C1·每任务独立会话（session_creator=Some=生产主路径）：绑定面板映射时只有 `new` 任务会进
+        // C1；`existing` 已在起链前由现成绑定命令精确绑到本 task 的 node + work_item。映射缺项直接拒，
+        // 不得落回 role 节点的旧共用会话。没有映射的旧兼容路径仍维持原语义。
+        let create_new_session = match task_session_bindings {
+            Some(bindings) => match bindings.get(task_id) {
+                Some(binding) if binding.session_choice == "new" => true,
+                Some(binding) if binding.session_choice == "existing" => false,
+                Some(binding) => {
+                    return Err(format!(
+                        "任务「{}」会话映射非法（{}）；不能派发。",
+                        task.title, binding.session_choice
+                    ));
+                }
+                None => {
+                    return Err(format!(
+                        "任务「{}」缺少会话映射；不能回落到共用旧会话。",
+                        task.title
+                    ));
+                }
+            },
+            None => session_creator.is_some(),
+        };
+        if create_new_session {
+            let creator = session_creator.ok_or_else(|| {
+                format!(
+                    "任务「{}」选了新会话，但 C1 建会话入口不可用；不能派发。",
+                    task.title
+                )
+            })?;
             if let Err(session_error) = create_and_bind_task_session(
                 path,
                 index,
@@ -3109,6 +3185,111 @@ fn set_task_artifact_target_session_id(
     false
 }
 
+fn validate_task_session_bindings(
+    tasks: &[ProjectDirectorPlannedTask],
+    bindings: &[ProjectDirectorTaskSessionBinding],
+    index: &Value,
+) -> Result<std::collections::BTreeMap<String, ProjectDirectorTaskSessionBinding>, String> {
+    let expected: std::collections::BTreeSet<String> =
+        tasks.iter().map(|task| task.planned_task_id.clone()).collect();
+    if expected.len() != tasks.len() {
+        return Err("任务清单编号重复，不能确认会话映射。请重新出方案。".to_string());
+    }
+
+    let mut mapped = std::collections::BTreeMap::new();
+    for binding in bindings {
+        if mapped
+            .insert(binding.planned_task_id.clone(), binding.clone())
+            .is_some()
+        {
+            return Err("同一任务被重复选择会话，不能确认映射。".to_string());
+        }
+    }
+    let actual: std::collections::BTreeSet<String> = mapped.keys().cloned().collect();
+    if actual != expected {
+        return Err("任务会话映射和当前任务清单不一致（缺项或多项）；请重新出方案。".to_string());
+    }
+
+    for binding in mapped.values_mut() {
+        match binding.session_choice.as_str() {
+            "new" => {
+                if binding
+                    .session_id
+                    .as_deref()
+                    .is_some_and(|session_id| !session_id.trim().is_empty())
+                {
+                    return Err("新会话任务不应带入已有会话；请重新选择。".to_string());
+                }
+                binding.session_id = None;
+            }
+            "existing" => {
+                let session_id = binding
+                    .session_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|session_id| !session_id.is_empty())
+                    .ok_or_else(|| "有任务没有选好要沿用的对话。".to_string())?;
+                if find_index_thread_or_sqlite(index, session_id).is_none() {
+                    return Err("选中的已有对话已不可用；请重新选择。".to_string());
+                }
+                binding.session_id = Some(session_id.to_string());
+            }
+            _ => return Err("会话选择不认识；请重新选择新会话或已有对话。".to_string()),
+        }
+    }
+    Ok(mapped)
+}
+
+fn bind_existing_task_sessions(
+    path: &std::path::Path,
+    index: &Value,
+    project_root: &str,
+    tasks: &[ProjectDirectorPlannedTask],
+    task_session_bindings: &std::collections::BTreeMap<String, ProjectDirectorTaskSessionBinding>,
+) -> Result<(), String> {
+    for task in tasks {
+        if task.status != "prepared" {
+            continue;
+        }
+        let binding = task_session_bindings.get(&task.planned_task_id).ok_or_else(|| {
+            format!("任务「{}」缺少会话映射，不能继续。", task.title)
+        })?;
+        if binding.session_choice != "existing" {
+            continue;
+        }
+        let node_id = task.workflow_node_id.as_deref().ok_or_else(|| {
+            format!("任务「{}」缺少执行节点，不能绑定已有对话。", task.title)
+        })?;
+        let work_item_id = task.work_item_id.as_deref().ok_or_else(|| {
+            format!("任务「{}」缺少工作项，不能绑定已有对话。", task.title)
+        })?;
+        let session_id = binding.session_id.as_deref().ok_or_else(|| {
+            format!("任务「{}」没有可用的已有对话。", task.title)
+        })?;
+        bind_workflow_node_codex_session_for_index_at(
+            path,
+            index,
+            &WorkflowNodeSessionBindRequest {
+                project_root: project_root.to_string(),
+                node_id: node_id.to_string(),
+                work_item_id: Some(work_item_id.to_string()),
+                thread_id: session_id.to_string(),
+            },
+        )
+        .map_err(|error| format!("任务「{}」绑定已有对话失败：{error}", task.title))?;
+
+        let mut value = read_workflow_state_value(path)?;
+        if !set_task_artifact_target_session_id(&mut value, task, session_id) {
+            return Err(format!(
+                "任务「{}」已有对话已绑定，但任务包没有可回填的位置；已停下，未回落。",
+                task.title
+            ));
+        }
+        write_validated_workflow_state(path, &value)?;
+    }
+    Ok(())
+}
+
 // ===== C1·生产起链命令（app 内 async 起整条主管链；停/进度复用现成命令）=====
 // 收前端回传的「已审 planned_tasks」(preview→用户审→prepare 返回那份·含 depends_on) → spawn_blocking 调现成
 // run_director_task_chain（每节点过 S1 闸·入口 require_test_project_path_lock 圈测试项目）→ 返回 outcome。
@@ -3204,6 +3385,10 @@ pub(crate) struct AutoAdvanceRoleLoopOutcome {
     pub(crate) message: String,
     pub(crate) chain_outcome: Option<DirectorChainOutcome>,
     pub(crate) stop_reason: Option<String>,
+    // 开工前逐任务会话面板：复用 needs_binding 阶段，但只在「拆完、尚未 prepare」时为 true。
+    // serde 加法，旧前端可忽略；不参与授权或派发判定。
+    #[serde(default)]
+    pub(crate) task_session_binding_required: bool,
     // 前端在链停后的用户处置要原样回传目标任务；只读回显，不参与派发或授权判断。
     #[serde(default)]
     pub(crate) planned_tasks: Vec<ProjectDirectorPlannedTask>,
@@ -3292,6 +3477,8 @@ fn run_auto_advance_authorized_role_loop(
         approved_planned_tasks,
         1,
         None,
+        false,
+        None,
     )
 }
 
@@ -3324,6 +3511,72 @@ fn run_auto_advance_authorized_role_loop_with_session_creator(
         approved_planned_tasks,
         1,
         Some(session_creator),
+        false,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_auto_advance_authorized_role_loop_until_task_session_binding(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    director: &dyn DirectorAgent,
+    project_root: &str,
+    workflow_id: &str,
+    actor_id: &str,
+    max_nodes: usize,
+    approved_planned_tasks: Option<&[ProjectDirectorPlannedTask]>,
+) -> Result<AutoAdvanceRoleLoopOutcome, String> {
+    run_auto_advance_authorized_role_loop_with_timeout_budget(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        director,
+        project_root,
+        workflow_id,
+        actor_id,
+        max_nodes,
+        approved_planned_tasks,
+        1,
+        None,
+        true,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_auto_advance_authorized_role_loop_with_task_session_bindings(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    director: &dyn DirectorAgent,
+    project_root: &str,
+    workflow_id: &str,
+    actor_id: &str,
+    max_nodes: usize,
+    approved_planned_tasks: &[ProjectDirectorPlannedTask],
+    session_creator: &dyn JiaobanNewSessionCreator,
+    task_session_bindings: &std::collections::BTreeMap<String, ProjectDirectorTaskSessionBinding>,
+) -> Result<AutoAdvanceRoleLoopOutcome, String> {
+    run_auto_advance_authorized_role_loop_with_timeout_budget(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        director,
+        project_root,
+        workflow_id,
+        actor_id,
+        max_nodes,
+        Some(approved_planned_tasks),
+        1,
+        Some(session_creator),
+        false,
+        Some(task_session_bindings),
     )
 }
 
@@ -3346,6 +3599,10 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
     // None=拐杖（手动挡/existing/旧测试）→ 沿用节点预绑 resume。守卫（path-lock/授权/拒绝）在会话创建之前
     // 就拦，故 None/Some 都不误伤 PanicCreator 守卫。
     session_creator: Option<&dyn JiaobanNewSessionCreator>,
+    // 首次用户确认后，主管刚拆完任务即停在绑定面板；复用 needs_binding，不新造阶段。
+    pause_for_task_session_binding: bool,
+    // Some = 绑定面板确认的逐任务映射；None = 既有自动/重拆路径。
+    task_session_bindings: Option<&std::collections::BTreeMap<String, ProjectDirectorTaskSessionBinding>>,
 ) -> Result<AutoAdvanceRoleLoopOutcome, String> {
     // 死线·圈固定测试项目（决策 2026-06-27）：非测试 root 入口直接拒——在 LM 拆 / prepare 之前提前拦
     // （纵深防御，不只靠链入口的晚拦）。与现成命令同款 path-lock，闸 / 沙箱本体不动。
@@ -3457,6 +3714,31 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                 tasks
             }
         };
+        // 开工前绑定面板：主管已把任务拆清，但还没有进入 prepare/派发。沿用 `needs_binding` 阶段，
+        // 用加法标记让交办主界面显示逐任务映射；这里不写 binding、不建会话、不跑 worker。
+        if pause_for_task_session_binding {
+            let message = "任务已经拆好。请逐项确认要用的新会话或已有对话，再开始跑。".to_string();
+            append_role_loop_auto_advance_audit(
+                path,
+                workflow_id,
+                actor_id,
+                "role_loop_auto_advance_stopped",
+                &format!("自动推进停在 needs_binding：{message}"),
+            )?;
+            return Ok(AutoAdvanceRoleLoopOutcome {
+                stage: "needs_binding".to_string(),
+                planned_task_count: planned_tasks.len(),
+                prepared_count: 0,
+                needs_binding_count: planned_tasks.len(),
+                blocked_count: 0,
+                message,
+                chain_outcome: None,
+                stop_reason: Some("needs_binding".to_string()),
+                task_session_binding_required: true,
+                planned_tasks,
+                warnings: advance_warnings,
+            });
+        }
         // fix4 2.1：prepare **之前**接管本轮遗留工作项（re-plan 与 approved 两路都做·合法复位·离开 C4 保护状态）。
         advance_warnings.extend(reconcile_stale_work_items_for_plan(
             path,
@@ -3489,6 +3771,17 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
         let prepared_count = prepared.plan.prepared_dispatch_count;
         let needs_binding_count = prepared.plan.needs_binding_count;
         let blocked_count = prepared.plan.blocked_count;
+        // 绑定面板的已有会话在 prepare 物化每任务 work_item 后精确落到该任务 node + work_item；
+        // 新会话仍留给链内 C1。任何绑定失败都外抛停下，绝不回落到旧 role 节点绑定。
+        if let Some(bindings) = task_session_bindings {
+            bind_existing_task_sessions(
+                path,
+                index,
+                project_root,
+                &prepared.plan.planned_tasks,
+                bindings,
+            )?;
+        }
         // 4. 件 C-1 分流：没 prepared 就停（越界/没绑/无可派）——可见、等用户、不自动绑、不重试。
         if prepared_count == 0 {
             // 收集具体停因（方案缺了什么·给用户可操作反馈，别只笼统说"越界"）：汇被阻断任务的 blocked_reasons。
@@ -3541,6 +3834,7 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                 message,
                 chain_outcome: None,
                 stop_reason: Some(stage.to_string()),
+                task_session_binding_required: false,
                 planned_tasks: prepared.plan.planned_tasks.clone(),
                 warnings: advance_warnings.clone(),
             });
@@ -3559,8 +3853,20 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
         require_active_authorization(path, project_root, workflow_id)?;
         // C1·mode-aware：新对话/自动路（Some）→ 复用首轮 run_director_task_chain_with_session_creator 每任务先生后绑；
         // 拐杖路（None·手动挡/existing）→ 沿用节点预绑 resume。**别造第二套**·失败即停在 chain 里已立（不回落）。
-        let outcome = match session_creator {
-            Some(creator) => run_director_task_chain_with_session_creator(
+        let outcome = match (session_creator, task_session_bindings) {
+            (Some(creator), Some(bindings)) => run_director_task_chain_with_task_session_bindings(
+                path,
+                index,
+                readback_db_path,
+                runner,
+                project_root,
+                workflow_id,
+                &prepared.plan.planned_tasks,
+                max_nodes,
+                creator,
+                bindings,
+            )?,
+            (Some(creator), None) => run_director_task_chain_with_session_creator(
                 path,
                 index,
                 readback_db_path,
@@ -3571,7 +3877,7 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                 max_nodes,
                 creator,
             )?,
-            None => run_director_task_chain(
+            (None, None) => run_director_task_chain(
                 path,
                 index,
                 readback_db_path,
@@ -3581,6 +3887,9 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                 &prepared.plan.planned_tasks,
                 max_nodes,
             )?,
+            (None, Some(_)) => {
+                return Err("逐任务会话映射缺少 C1 建会话入口，不能派发。".to_string())
+            }
         };
         let stop_reason = outcome.stopped_reason.clone();
         let message = format!(
@@ -3608,6 +3917,7 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
             message,
             chain_outcome: Some(outcome),
             stop_reason,
+            task_session_binding_required: false,
             planned_tasks: prepared.plan.planned_tasks.clone(),
             warnings: advance_warnings,
         })
@@ -3655,6 +3965,8 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                             None, // 重拆 = re-plan 路（自然带上已完成事实 + 超时事实行）
                             timeout_auto_replan_budget - 1,
                             session_creator, // C1·重拆轮同 mode（Some 则每任务仍新会话·透传）
+                            false, // 重拆不再弹绑定面板。
+                            None,  // 新任务不继承上一轮任务→会话映射，一律由 C1 新建。
                         ) {
                             Ok(mut second) => {
                                 second.warnings.insert(
@@ -3826,9 +4138,9 @@ impl JiaobanNewSessionCreator for ManualRelayJiaobanNewSessionCreator {
 pub(crate) struct ConfirmAndStartAuthorizedRunRequest {
     pub(crate) project_root: String,
     pub(crate) proposal_id: String,
-    pub(crate) session_choice: String, // "existing" | "new"（new=方案a 先生后绑）
+    pub(crate) session_choice: String, // 仅预填绑定面板第一项（"existing" | "new"）
     #[serde(default)]
-    pub(crate) session_id: Option<String>, // session_choice=existing 时的现有 Codex 会话 thread_id
+    pub(crate) session_id: Option<String>, // 顶层选择的预填会话；不在此直接绑定
     #[serde(default)]
     pub(crate) actor_id: Option<String>,
     #[serde(default)]
@@ -3838,6 +4150,19 @@ pub(crate) struct ConfirmAndStartAuthorizedRunRequest {
     pub(crate) approved_planned_tasks: Option<Vec<ProjectDirectorPlannedTask>>,
 }
 
+// 绑定面板的「开始跑」不是第二道审批：它只接拆好的同一份任务和逐任务会话选择，复查既有 active 授权后继续。
+#[derive(serde::Deserialize)]
+pub(crate) struct ConfirmProjectDirectorTaskSessionBindingsRequest {
+    pub(crate) project_root: String,
+    pub(crate) workflow_id: String,
+    pub(crate) planned_tasks: Vec<ProjectDirectorPlannedTask>,
+    pub(crate) task_session_bindings: Vec<ProjectDirectorTaskSessionBinding>,
+    #[serde(default)]
+    pub(crate) actor_id: Option<String>,
+    #[serde(default)]
+    pub(crate) max_nodes: Option<usize>,
+}
+
 // 内层（同步·spawn_blocking 里调；可单测·stub 咨询/主管/链/新会话出生口）。
 fn run_confirm_and_start_authorized_run_inner(
     path: &std::path::Path,
@@ -3845,7 +4170,7 @@ fn run_confirm_and_start_authorized_run_inner(
     readback_db_path: &std::path::Path,
     runner: &dyn CodexResumeRunner,
     director: &dyn DirectorAgent,
-    session_creator: &dyn JiaobanNewSessionCreator,
+    _session_creator: &dyn JiaobanNewSessionCreator,
     request: &ConfirmAndStartAuthorizedRunRequest,
 ) -> Result<AutoAdvanceRoleLoopOutcome, String> {
     // 死线·圈固定测试项目（与 auto_advance 同款·非测试 root 提前拒）。
@@ -3903,7 +4228,7 @@ fn run_confirm_and_start_authorized_run_inner(
         &format!("confirm-and-start-auth:{}", unix_timestamp_nanos()),
         &format!("confirm-and-start-auth-user:{}", unix_timestamp_nanos()),
     )?;
-    // fix3 2.2：record_decision（确认）**成功之后**的任何失败（授权提取/边界复核/建会话/绑会话）→ 先 append
+    // fix3 2.2：record_decision（确认）**成功之后**的任何失败（授权提取/边界复核/拆任务）→ 先 append
     // stopped 审计（人话）再返回 Err（治「今晚审计只有 started、之后空白」）。step5 auto_advance 由它自己留档、
     // 不含在此（避免双记）；record_decision 本身失败=确认闸没过、按包不记（在此之前）。只 append、不改状态、不吞错。
     // C1 收官：原 new 分支的「S0 单条会话说明」已随退 S0 移除（每任务新会话说明由链侧机制给）。
@@ -3943,33 +4268,14 @@ fn run_confirm_and_start_authorized_run_inner(
             timestamp_ms + 1,
             &format!("confirm-and-start-boundary:{}", unix_timestamp_nanos()),
         )?;
-        // 4. 绑会话（2.3）：existing → 绑传入的现有 Codex 会话（绑失败即停·停因人话·不静默）；
-        //    new → 方案a「先生后绑」：先经现成 relay 单次路径真建一条会话（固定测试项目·初始化消息）→
-        //    回执取 thread_id → 走 existing **同一套绑定**；失败即停（外层留档），不静默回落 existing。
+        // 4. 顶层会话选择退为绑定面板的前端预填：不再把 existing 直接绑到 codex-dev 单节点。
+        //    真正的每任务映射在主管拆完后由新确认命令处理；new 的 C1 路径仍原样留在该命令之后。
         match request.session_choice.as_str() {
             "existing" => {
-                let session_id = request.session_id.as_deref().ok_or_else(|| {
-                    "session_choice=existing 需给 session_id（要绑的现有 Codex 会话）。".to_string()
-                })?;
-                let node_id = format!("{workflow_id}:node:codex-dev");
-                bind_workflow_node_codex_session_for_index_at(
-                    path,
-                    index,
-                    &WorkflowNodeSessionBindRequest {
-                        project_root: request.project_root.clone(),
-                        node_id,
-                        work_item_id: None,
-                        thread_id: session_id.to_string(),
-                    },
-                )
-                .map_err(|error| format!("绑定现有会话失败（会话没找到/不可用）：{error}"))?;
+                // 只保留前端预填值的兼容读取；这里绝不再写 node binding。
+                let _top_level_prefill_session_id = request.session_id.as_deref();
             }
-            "new" => {
-                // C1 架构收官（用户拍 A·2026-07-09·prepare C1-aware 后不死结）：**退掉「合流开头建单条 S0」用法**
-                // ——不再一次性建会话+绑 codex-dev 节点。每任务先生后绑改到下面推进段（session_choice=new →
-                // _with_session_creator·prepare 走 chain_binds_per_task=true 产 prepared·链每任务各开）。
-                // **先生后绑机制保留**·只是从「合流一次建 S0」改成「每任务各建」（三条路统一每任务）。
-            }
+            "new" => {}
             other => {
                 return Err(format!(
                     "未知 session_choice：{other}（只支持 existing | new）"
@@ -3988,39 +4294,19 @@ fn run_confirm_and_start_authorized_run_inner(
         );
     }
     post_confirm?;
-    // 5. 自动推进（现成 auto_advance 内层·resolve active 授权 →〔2.2 有已批图则跳过 LM 原样跑〕→ prepare →
-    //    起链前复查授权 → 链）。approved_planned_tasks=Some 时所批即所跑（预拆给用户看的那份=真跑的那份）。
-    // C1·mode 分流（canon 2026-07-09·收官）：new=新对话 → 每任务先生后绑（Some·复用[接着跑]已落的
-    // _with_session_creator·prepare 走 chain_binds_per_task=true）；existing=手动挡 → 跑手动绑的那条（None）。
-    // session_creator 在 new 路每任务被调（测试注入 stub·existing 路不碰它=PanicCreator 守卫零误伤）。
-    let outcome = match request.session_choice.as_str() {
-        "new" => run_auto_advance_authorized_role_loop_with_session_creator(
-            path,
-            index,
-            readback_db_path,
-            runner,
-            director,
-            &request.project_root,
-            &workflow_id,
-            &actor_id,
-            request.max_nodes.unwrap_or(50),
-            request.approved_planned_tasks.as_deref(),
-            session_creator,
-        )?,
-        _ => run_auto_advance_authorized_role_loop(
-            path,
-            index,
-            readback_db_path,
-            runner,
-            director,
-            &request.project_root,
-            &workflow_id,
-            &actor_id,
-            request.max_nodes.unwrap_or(50),
-            request.approved_planned_tasks.as_deref(),
-        )?,
-    };
-    Ok(outcome)
+    // 5. 主管拆完即停在现成 needs_binding 面：面板确认映射前不 prepare、不建会话、不派发。
+    run_auto_advance_authorized_role_loop_until_task_session_binding(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        director,
+        &request.project_root,
+        &workflow_id,
+        &actor_id,
+        request.max_nodes.unwrap_or(50),
+        request.approved_planned_tasks.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -4047,6 +4333,73 @@ async fn confirm_and_start_authorized_run(
     })
     .await
     .map_err(|error| format!("合流执行线程异常：{error}"))?
+}
+
+fn run_confirm_project_director_task_session_bindings_inner(
+    path: &std::path::Path,
+    index: &Value,
+    readback_db_path: &std::path::Path,
+    runner: &dyn CodexResumeRunner,
+    director: &dyn DirectorAgent,
+    session_creator: &dyn JiaobanNewSessionCreator,
+    request: &ConfirmProjectDirectorTaskSessionBindingsRequest,
+) -> Result<AutoAdvanceRoleLoopOutcome, String> {
+    require_test_project_path_lock(
+        &request.project_root,
+        "confirm_project_director_task_session_bindings",
+    )?;
+    let pid = project_id(&request.project_root);
+    validate_approved_planned_tasks(&request.planned_tasks, &request.workflow_id, &pid)?;
+    let bindings = validate_task_session_bindings(
+        &request.planned_tasks,
+        &request.task_session_bindings,
+        index,
+    )?;
+    // 面板不是新审批，但用户在选会话期间授权可能被撤/过期；起链前仍按既有口径拒绝。
+    require_active_authorization(path, &request.project_root, &request.workflow_id)?;
+    let actor_id = request
+        .actor_id
+        .clone()
+        .unwrap_or_else(|| "user".to_string());
+    run_auto_advance_authorized_role_loop_with_task_session_bindings(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        director,
+        &request.project_root,
+        &request.workflow_id,
+        &actor_id,
+        request.max_nodes.unwrap_or(50),
+        &request.planned_tasks,
+        session_creator,
+        &bindings,
+    )
+}
+
+#[tauri::command]
+async fn confirm_project_director_task_session_bindings(
+    request: ConfirmProjectDirectorTaskSessionBindingsRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<AutoAdvanceRoleLoopOutcome, String> {
+    let path = state.workflow_state_path.clone();
+    let index = read_index(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let readback_db_path = codex_db::default_state_db_path();
+        let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
+        let director = CliDirectorAgent::default();
+        run_confirm_project_director_task_session_bindings_inner(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &director,
+            &ManualRelayJiaobanNewSessionCreator,
+            &request,
+        )
+    })
+    .await
+    .map_err(|error| format!("任务会话绑定确认线程异常：{error}"))?
 }
 
 // ===== 交办·刀2 2.1·只读预拆命令：批前看图（pending 方案 → 主管 LM 拆图 → 原样返回·零写盘）=====
@@ -4422,10 +4775,37 @@ mod fix9_tests {
         let _ = fs::remove_dir_all(dir);
     }
 
-    // §4③：正常档位方案（execution_scope Some → 档位写根非空）不触守卫——走到人闸之后的正常路径
-    // （本测只验「守卫不误伤」：同请求打到绑会话步才因假会话失败，而非被纯建议拒）。
+    // §4③：正常档位方案（execution_scope Some → 档位写根非空）不触守卫——确认后主管可拆任务，
+    // 但必须停在新的逐任务绑定面板，不能因顶层旧会话直接绑定或派发。
     #[test]
     fn fix9_guard_does_not_touch_profile_backed_proposal() {
+        struct OneTaskDirector;
+        impl DirectorAgent for OneTaskDirector {
+            fn plan(
+                &self,
+                _ctx: &ProjectContext,
+                proposal: &ProjectConsultationProposal,
+            ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+                Ok(vec![ProjectDirectorPlannedTask {
+                    planned_task_id: format!("planned-task:{}:1", proposal.workflow_id),
+                    title: "改 index.html".to_string(),
+                    task_goal: "改 index.html".to_string(),
+                    scope: director_task_scope_from_proposal(proposal, "codex-dev"),
+                    depends_on: vec![],
+                    acceptance_criteria: vec!["页面可打开".to_string()],
+                    report_format: vec!["做了什么".to_string()],
+                    status: "planned".to_string(),
+                    guard_result: None,
+                    work_item_id: None,
+                    workflow_node_id: None,
+                    task_package_id: None,
+                    memory_packet_snapshot_id: None,
+                    prepared_dispatch_id: None,
+                    blocked_reasons: vec![],
+                }])
+            }
+        }
+
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
         let dir = tmp_dir("no-false-positive");
         let path = dir.join("workflow-state.v0.json");
@@ -4468,23 +4848,23 @@ mod fix9_tests {
             max_nodes: Some(10),
             approved_planned_tasks: None,
         };
-        let err = run_confirm_and_start_authorized_run_inner(
+        let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
             &serde_json::json!({"projects": [{"project_root": test_root}]}),
             &dir.join("readback.sqlite"),
             &PanicRunner,
-            &PanicDirector,
+            &OneTaskDirector,
             &PanicCreator,
             &request,
         )
-        .expect_err("会走到绑会话步并因假会话失败（证明没被纯建议守卫拦）");
+        .expect("正常档位方案应停在逐任务绑定面板");
         assert!(
-            !err.contains("纯建议"),
-            "正常档位方案不得被纯建议守卫误伤：{err}"
+            outcome.task_session_binding_required && outcome.stage == "needs_binding",
+            "正常档位方案不得被纯建议守卫误伤：{outcome:?}"
         );
-        assert!(
-            err.contains("绑定现有会话失败"),
-            "应死在绑会话步（守卫之后的正常路径）：{err}"
+        assert_eq!(
+            outcome.prepared_count, 0,
+            "绑定面板前不得因顶层旧会话 prepare 或派发"
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -4993,6 +5373,99 @@ mod quality_debt_tests {
         let replan_audits = audit_reasons(&path, "role_loop_timeout_auto_replan");
         assert_eq!(replan_audits.len(), 1, "自动重拆审计恰一条");
         assert!(replan_audits[0].contains("浏览器验收"), "审计点名超时任务");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn timeout_replan_does_not_inherit_prior_task_session_mapping() {
+        struct CountingCreator {
+            calls: Cell<usize>,
+        }
+        impl JiaobanNewSessionCreator for CountingCreator {
+            fn create_initialized_session(
+                &self,
+                _text: &str,
+                _by: &str,
+            ) -> Result<String, String> {
+                self.calls.set(self.calls.get() + 1);
+                Ok("thread-qdebt".to_string())
+            }
+        }
+
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("replan-no-binding-inherit");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_index(test_root, "thread-qdebt");
+        let workflow_id = seed_active_run(&path, &index, test_root);
+        let proposal_store =
+            project_consultation_proposal_store::load_store(&path, unix_timestamp_ms()).expect("proposal store");
+        let scope = director_task_scope_from_proposal(&proposal_store.proposals[0], "codex-dev");
+        let make_task = |id: usize, title: &str, depends_on: Vec<String>| ProjectDirectorPlannedTask {
+            planned_task_id: format!("planned-task:{workflow_id}:{id}"),
+            title: title.to_string(),
+            task_goal: title.to_string(),
+            scope: scope.clone(),
+            depends_on,
+            acceptance_criteria: vec!["ok".to_string()],
+            report_format: vec!["r".to_string()],
+            status: "planned".to_string(),
+            guard_result: None,
+            work_item_id: None,
+            workflow_node_id: None,
+            task_package_id: None,
+            memory_packet_snapshot_id: None,
+            prepared_dispatch_id: None,
+            blocked_reasons: vec![],
+        };
+        let approved = vec![
+            make_task(1, "删一个怪", vec![]),
+            make_task(2, "浏览器验收", vec!["删一个怪".to_string()]),
+        ];
+        let mappings = std::collections::BTreeMap::from([
+            (
+                approved[0].planned_task_id.clone(),
+                ProjectDirectorTaskSessionBinding {
+                    planned_task_id: approved[0].planned_task_id.clone(),
+                    session_choice: "existing".to_string(),
+                    session_id: Some("thread-qdebt".to_string()),
+                },
+            ),
+            (
+                approved[1].planned_task_id.clone(),
+                ProjectDirectorTaskSessionBinding {
+                    planned_task_id: approved[1].planned_task_id.clone(),
+                    session_choice: "new".to_string(),
+                    session_id: None,
+                },
+            ),
+        ]);
+        let creator = CountingCreator {
+            calls: Cell::new(0),
+        };
+        let runner = ScriptedRunner::new(vec!["ok", "timeout"]);
+        let director = RecordingDirector::new();
+        let outcome = run_auto_advance_authorized_role_loop_with_task_session_bindings(
+            &path,
+            &index,
+            &dir.join("readback.sqlite"),
+            &runner,
+            &director,
+            test_root,
+            &workflow_id,
+            "user-fixture",
+            10,
+            &approved,
+            &creator,
+            &mappings,
+        )
+        .expect("超时后应自动重拆一次");
+        assert_eq!(outcome.stage, "ran", "{outcome:?}");
+        assert_eq!(director.calls.get(), 1, "首轮用已批任务图；只有重拆才调用主管");
+        assert_eq!(
+            creator.calls.get(),
+            3,
+            "首轮只有一项选 new；重拆的两项必须都新建，不能继承旧映射"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

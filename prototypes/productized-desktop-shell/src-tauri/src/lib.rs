@@ -7933,7 +7933,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
-    // 2.2 + 2.3-existing：Pending 方案 + 点[允许并开始] + 绑现有会话 → 确认→复核→授权→绑→自动推进 一气跑完（stub）。
+    // 开工前绑定面板：顶层旧会话只作第一项预填。确认后必须停在 needs_binding，绝不把它直接绑成整链共用。
     #[test]
     fn confirm_and_start_runs_from_pending_with_existing_session() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
@@ -7981,7 +7981,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             max_nodes: Some(10),
             approved_planned_tasks: None,
         };
-        let outcome = run_confirm_and_start_authorized_run_inner(
+        let paused = run_confirm_and_start_authorized_run_inner(
             &path,
             &index,
             &index_path,
@@ -7991,18 +7991,273 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &PanicJiaobanSessionCreator,
             &request,
         )
-        .expect("合流应一气跑完");
+        .expect("确认后应停在逐任务绑定面板");
         assert_eq!(
-            outcome.stage, "ran",
-            "确认→复核→授权→绑→链 一气跑完：{outcome:?}"
+            paused.stage, "needs_binding",
+            "确认→复核→拆任务后应停在绑定面板：{paused:?}"
         );
+        assert!(paused.task_session_binding_required, "需要逐任务映射标记");
+        assert_eq!(paused.prepared_count, 0, "停点前不得 prepare/派发");
         assert!(
-            outcome
-                .chain_outcome
-                .map(|c| c.completed >= 1)
-                .unwrap_or(false),
-            "worker 链应跑出结果"
+            read_json_file(&path)["workflow_node_session_bindings"]
+                .as_array()
+                .map(|bindings| bindings.is_empty())
+                .unwrap_or(true),
+            "顶层 existing 不得写全局 codex-dev 绑定"
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn task_session_binding_rejects_missing_extra_and_unavailable_existing_session() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("task-session-binding-validation");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_dispatch_index(test_root, "thread-existing");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            target_files: vec!["a.rs".to_string()],
+            ..Default::default()
+        }));
+        let c1 = map_consultation_to_c1_input(&proposal, test_root, "consultant").expect("map");
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &c1,
+            1_765_300_000_000,
+            "task-session-binding-validation",
+        )
+        .expect("proposal");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 0,
+                transcript_target_hits: 0,
+            },
+        };
+        let paused = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            &PanicJiaobanSessionCreator,
+            &ConfirmAndStartAuthorizedRunRequest {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                session_choice: "new".to_string(),
+                session_id: None,
+                actor_id: Some("user-fixture".to_string()),
+                max_nodes: Some(10),
+                approved_planned_tasks: None,
+            },
+        )
+        .expect("确认应给绑定面板");
+        let make_request =
+            |task_session_bindings| ConfirmProjectDirectorTaskSessionBindingsRequest {
+                project_root: test_root.to_string(),
+                workflow_id: created.proposal.workflow_id.clone(),
+                planned_tasks: paused.planned_tasks.clone(),
+                task_session_bindings,
+                actor_id: Some("user-fixture".to_string()),
+                max_nodes: Some(10),
+            };
+
+        let missing = vec![ProjectDirectorTaskSessionBinding {
+            planned_task_id: paused.planned_tasks[0].planned_task_id.clone(),
+            session_choice: "new".to_string(),
+            session_id: None,
+        }];
+        let missing_error = run_confirm_project_director_task_session_bindings_inner(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            &PanicJiaobanSessionCreator,
+            &make_request(missing),
+        )
+        .expect_err("漏一项任务映射必须拒绝");
+        assert!(missing_error.contains("缺项或多项"), "{missing_error}");
+
+        let mut extra: Vec<ProjectDirectorTaskSessionBinding> = paused
+            .planned_tasks
+            .iter()
+            .map(|task| ProjectDirectorTaskSessionBinding {
+                planned_task_id: task.planned_task_id.clone(),
+                session_choice: "new".to_string(),
+                session_id: None,
+            })
+            .collect();
+        extra.push(ProjectDirectorTaskSessionBinding {
+            planned_task_id: "not-a-planned-task".to_string(),
+            session_choice: "new".to_string(),
+            session_id: None,
+        });
+        let extra_error = run_confirm_project_director_task_session_bindings_inner(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            &PanicJiaobanSessionCreator,
+            &make_request(extra),
+        )
+        .expect_err("多一项任务映射必须拒绝");
+        assert!(extra_error.contains("缺项或多项"), "{extra_error}");
+
+        let unavailable: Vec<ProjectDirectorTaskSessionBinding> = paused
+            .planned_tasks
+            .iter()
+            .enumerate()
+            .map(|(position, task)| ProjectDirectorTaskSessionBinding {
+                planned_task_id: task.planned_task_id.clone(),
+                session_choice: if position == 0 {
+                    "existing".to_string()
+                } else {
+                    "new".to_string()
+                },
+                session_id: if position == 0 {
+                    Some("thread-no-longer-available".to_string())
+                } else {
+                    None
+                },
+            })
+            .collect();
+        let unavailable_error = run_confirm_project_director_task_session_bindings_inner(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            &PanicJiaobanSessionCreator,
+            &make_request(unavailable),
+        )
+        .expect_err("已有会话不存在必须拒绝");
+        assert!(
+            unavailable_error.contains("已有对话已不可用"),
+            "{unavailable_error}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn task_session_binding_binds_existing_and_new_sessions_to_their_own_tasks() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = test_temp_dir("task-session-binding-per-task");
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let index = fixture_multi_thread_index(test_root, &["thread-existing", "thread-new"]);
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            target_files: vec!["a.rs".to_string()],
+            ..Default::default()
+        }));
+        let c1 = map_consultation_to_c1_input(&proposal, test_root, "consultant").expect("map");
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &c1,
+            1_765_300_000_000,
+            "task-session-binding-per-task",
+        )
+        .expect("proposal");
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 3,
+                transcript_target_hits: 1,
+            },
+        };
+        let creator = StubJiaobanSessionCreator {
+            thread_id: "thread-new",
+            received_texts: std::cell::RefCell::new(vec![]),
+        };
+        let paused = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            &creator,
+            &ConfirmAndStartAuthorizedRunRequest {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                session_choice: "existing".to_string(),
+                session_id: Some("thread-existing".to_string()),
+                actor_id: Some("user-fixture".to_string()),
+                max_nodes: Some(10),
+                approved_planned_tasks: None,
+            },
+        )
+        .expect("确认应给绑定面板");
+        assert_eq!(paused.planned_tasks.len(), 2, "fixture 需要两个任务");
+        let binding_request = ConfirmProjectDirectorTaskSessionBindingsRequest {
+            project_root: test_root.to_string(),
+            workflow_id: created.proposal.workflow_id.clone(),
+            task_session_bindings: paused
+                .planned_tasks
+                .iter()
+                .enumerate()
+                .map(|(position, task)| ProjectDirectorTaskSessionBinding {
+                    planned_task_id: task.planned_task_id.clone(),
+                    session_choice: if position == 0 {
+                        "existing".to_string()
+                    } else {
+                        "new".to_string()
+                    },
+                    session_id: if position == 0 {
+                        Some("thread-existing".to_string())
+                    } else {
+                        None
+                    },
+                })
+                .collect(),
+            planned_tasks: paused.planned_tasks,
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+        };
+        let outcome = run_confirm_project_director_task_session_bindings_inner(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            &creator,
+            &binding_request,
+        )
+        .expect("混合映射应跑通");
+        assert_eq!(outcome.stage, "ran", "{outcome:?}");
+        assert_eq!(
+            creator.received_texts.borrow().len(),
+            1,
+            "只有选 new 的任务应触发一次 C1"
+        );
+        let state = read_json_file(&path);
+        let bindings = state["workflow_node_session_bindings"]
+            .as_array()
+            .expect("绑定记录");
+        for (position, task) in outcome.planned_tasks.iter().enumerate() {
+            let work_item_id = task.work_item_id.as_deref().expect("prepared work item");
+            let node_id = task.workflow_node_id.as_deref().expect("prepared node");
+            let binding = bindings
+                .iter()
+                .find(|binding| {
+                    optional_string_from(binding, "work_item_id").as_deref() == Some(work_item_id)
+                })
+                .expect("每项任务都应有自己的绑定");
+            assert_eq!(
+                optional_string_from(binding, "node_id").as_deref(),
+                Some(node_id),
+                "绑定必须落到该任务自己的节点"
+            );
+            assert_eq!(
+                optional_string_from(binding, "native_thread_id").as_deref(),
+                Some(if position == 0 {
+                    "thread-existing"
+                } else {
+                    "thread-new"
+                }),
+                "每项任务应使用用户选择的会话"
+            );
+        }
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -8165,7 +8420,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             max_nodes: Some(10),
             approved_planned_tasks: None,
         };
-        let outcome = run_confirm_and_start_authorized_run_inner(
+        let paused = run_confirm_and_start_authorized_run_inner(
             &path,
             &index,
             &index_path,
@@ -8174,7 +8429,36 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &creator,
             &request,
         )
-        .expect("new 分支应一气跑完（每任务建→绑→推进）");
+        .expect("确认应先停在逐任务绑定面板");
+        assert_eq!(paused.stage, "needs_binding", "{paused:?}");
+        assert!(paused.task_session_binding_required, "{paused:?}");
+        let task_session_bindings = paused
+            .planned_tasks
+            .iter()
+            .map(|task| ProjectDirectorTaskSessionBinding {
+                planned_task_id: task.planned_task_id.clone(),
+                session_choice: "new".to_string(),
+                session_id: None,
+            })
+            .collect();
+        let binding_request = ConfirmProjectDirectorTaskSessionBindingsRequest {
+            project_root: test_root.to_string(),
+            workflow_id: created.proposal.workflow_id.clone(),
+            planned_tasks: paused.planned_tasks,
+            task_session_bindings,
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+        };
+        let outcome = run_confirm_project_director_task_session_bindings_inner(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            &creator,
+            &binding_request,
+        )
+        .expect("全新映射应逐任务建→绑→推进");
         assert_eq!(outcome.stage, "ran", "建→绑→链应全通：{outcome:?}");
         assert!(
             outcome
@@ -8263,7 +8547,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             max_nodes: Some(10),
             approved_planned_tasks: None,
         };
-        let outcome = run_confirm_and_start_authorized_run_inner(
+        let paused = run_confirm_and_start_authorized_run_inner(
             &path,
             &index,
             &index_path,
@@ -8271,6 +8555,33 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &StubDirector,
             &creator,
             &request,
+        )
+        .expect("确认应先停在逐任务绑定面板");
+        assert_eq!(paused.stage, "needs_binding", "{paused:?}");
+        let binding_request = ConfirmProjectDirectorTaskSessionBindingsRequest {
+            project_root: test_root.to_string(),
+            workflow_id: created.proposal.workflow_id.clone(),
+            task_session_bindings: paused
+                .planned_tasks
+                .iter()
+                .map(|task| ProjectDirectorTaskSessionBinding {
+                    planned_task_id: task.planned_task_id.clone(),
+                    session_choice: "new".to_string(),
+                    session_id: None,
+                })
+                .collect(),
+            planned_tasks: paused.planned_tasks,
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+        };
+        let outcome = run_confirm_project_director_task_session_bindings_inner(
+            &path,
+            &index,
+            &index_path,
+            &runner,
+            &StubDirector,
+            &creator,
+            &binding_request,
         )
         .expect("C1 链内建会话失败即停走 Ok（链自报 stopped）·不外抛 Err");
         // ① 确实走了出生口（不是悄悄改走别的路/回落）。

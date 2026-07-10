@@ -5,6 +5,7 @@ import {
   applyProjectDirectorFailedAction,
   autoAdvanceAuthorizedRoleLoop,
   confirmAndStartAuthorizedRun,
+  confirmProjectDirectorTaskSessionBindings,
   getProjectWorkflowChainStatus,
   listProjectRunHistory,
   loadFormalMemoryStore,
@@ -24,6 +25,7 @@ import type {
   PlanAuthorizationStoreV1,
   ProjectConsultationProposal,
   ProjectDirectorPlannedTask,
+  ProjectDirectorTaskSessionBinding,
   ProjectConsultationProposalStoreV1,
   ProjectRecord,
   ProjectWorkflowChainStatus,
@@ -64,12 +66,29 @@ export function ProjectJiaobanPanel(props: ProjectJiaobanPanelProps) {
 }
 
 // 交办进度（人话化用）。stage 与后端 outcome/链状态解耦——这里只管「说给用户听」。
-type JiaobanPhase = "say" | "authorize" | "running" | "done" | "blocked";
+type JiaobanPhase = "say" | "authorize" | "binding" | "running" | "done" | "blocked";
 
 // 方案a fix：「开个新的」的显式哨兵值。此前用 null 一词两用（"还没定" 与 "用户选了新建"），
 // 重挂载/默认效果会把用户的显式选择无声改回「接现有」（真机踩到：明确选了新建却路由到旧对话）。
 // export 供离线 DOM 断言测试对齐哨兵值（纯暴露·不改会话选择语义）。
 export const NEW_SESSION_CHOICE = "__new_session__";
+
+function defaultTaskSessionBindings(
+  tasks: ProjectDirectorPlannedTask[],
+  topLevelChoice: string | null,
+): ProjectDirectorTaskSessionBinding[] {
+  const firstExistingSession =
+    topLevelChoice && topLevelChoice !== NEW_SESSION_CHOICE ? topLevelChoice : null;
+  return tasks.map((task, index) =>
+    index === 0 && firstExistingSession
+      ? {
+          planned_task_id: task.planned_task_id,
+          session_choice: "existing",
+          session_id: firstExistingSession,
+        }
+      : { planned_task_id: task.planned_task_id, session_choice: "new" },
+  );
+}
 
 // 结果防丢：换 tab 会卸载本面板（ProjectWorkspaceShell 条件渲染），本地 state 全丢。
 // 故把「一轮开始的结果」按 project_root 缓存在模块级，重挂载时恢复——切走再回来结果还在。
@@ -89,6 +108,8 @@ type JiaobanRunCache = {
   runIsNewSession: boolean;
   // 方案a fix：会话选择跨重挂载保留（NEW_SESSION_CHOICE / thread_id / null=未定）。
   sessionChoice: string | null;
+  // 开工前任务→会话映射：拆任务后才有，切 tab 回来也仍留在绑定面板。
+  taskSessionBindings: ProjectDirectorTaskSessionBinding[];
   // B1：本轮全局主管复核结果（key=chain_started_at·结果态缓存；loading 是瞬态不缓存——
   // 重挂载后按幂等键补拉，后端幂等命中秒回不重烧）。
   supervisorReview: { key: string; outcome: GlobalSupervisorReviewOutcome } | null;
@@ -109,6 +130,7 @@ function writeJiaobanRunCache(projectRoot: string, patch: Partial<JiaobanRunCach
     runStartedAtMs: null,
     runIsNewSession: false,
     sessionChoice: null,
+    taskSessionBindings: [],
     supervisorReview: null,
   };
   jiaobanRunCacheByProject.set(projectRoot, { ...prev, ...patch });
@@ -242,6 +264,10 @@ function ProjectJiaobanPanelBrowser({
   const [starting, setStarting] = useState(false);
   const [outcome, setOutcome] = useState<AutoAdvanceRoleLoopOutcome | null>(cached?.outcome ?? null);
   const [startError, setStartError] = useState<string | null>(cached?.startError ?? null);
+  const [taskSessionBindings, setTaskSessionBindings] = useState<ProjectDirectorTaskSessionBinding[]>(
+    cached?.taskSessionBindings ?? [],
+  );
+  const [taskSessionBindingError, setTaskSessionBindingError] = useState<string | null>(null);
   const [needsReworkActionError, setNeedsReworkActionError] = useState<string | null>(null);
   // 合流命令拒「方案不是待用户确认」时置 true → 卡住脸给[接着跑,不用重批]。
   const [continueHint, setContinueHint] = useState<boolean>(cached?.continueHint ?? false);
@@ -300,6 +326,8 @@ function ProjectJiaobanPanelBrowser({
     setStartError(null);
     setContinueHint(false);
     setChainStatus(null);
+    setTaskSessionBindings([]);
+    setTaskSessionBindingError(null);
     setAmendment("");
     ranProposalIdRef.current = null;
     clearJiaobanRunCache(projectRoot);
@@ -593,14 +621,17 @@ function ProjectJiaobanPanelBrowser({
     runningRef.current = true;
     ranProposalIdRef.current = latestProposal.proposal_id;
     const runStartedAt = Date.now(); // fix6-v2：本轮起点，判「这轮的链」用
-    // 方案a fix：显式哨兵或真无会话（null）都算 new；现有 thread_id 才是 existing。
-    const isNewSession = sessionChoice === NEW_SESSION_CHOICE || sessionChoice === null;
+    // 顶层选择只决定绑定面板首项预填；此时还没有创建任何会话。
+    const topLevelUsesNew = sessionChoice === NEW_SESSION_CHOICE || sessionChoice === null;
+    const isNewSession = false;
     setRunStartedAtMs(runStartedAt);
     setRunIsNewSession(isNewSession);
     setStarting(true);
     setStartError(null);
     setOutcome(null);
     setChainStatus(null);
+    setTaskSessionBindings([]);
+    setTaskSessionBindingError(null);
     setSupervisorReview(null); // B1：新一轮开跑，上一轮复核意见随之清（防旧轮意见冒充本轮）。
     setManualPhase("running");
     writeJiaobanRunCache(projectRoot, {
@@ -613,22 +644,33 @@ function ProjectJiaobanPanelBrowser({
       supervisorReview: null,
     });
     try {
-      // 方案a：sessionChoice=null → 传 session_choice:"new" 不传 session_id（后端 014c254 先生后绑真建会话）；
-      // 有值 → existing 绑现有会话（原样不动）。
+      // 顶层选择只预填绑定面板第一项：此处确认方案并让主管拆任务，不再把 existing 直接绑成全链共用会话。
       const outcome = await confirmAndStartAuthorizedRun({
         project_root: projectRoot,
         proposal_id: latestProposal.proposal_id,
-        session_choice: isNewSession ? "new" : "existing",
-        session_id: isNewSession ? undefined : (sessionChoice ?? undefined),
+        session_choice: topLevelUsesNew ? "new" : "existing",
+        session_id: topLevelUsesNew ? undefined : (sessionChoice ?? undefined),
         actor_id: "user",
         // 刀2 所批即所跑：批前预拆成功过就把那份图原样带回 → 后端照图跑不重拆；简单活/预拆失败 previewTasks 空 → 不传。
         approved_planned_tasks: previewTasks ?? undefined,
       });
-      // fix6：命令返回 ran = 链已跑完（chain_outcome 在返回体里）→ 直接翻交货脸，不设 running 干等轮询。
-      const nextPhase: JiaobanPhase = outcome.stage === "ran" ? "done" : "blocked";
+      const bindings = outcome.task_session_binding_required
+        ? defaultTaskSessionBindings(outcome.planned_tasks ?? [], sessionChoice)
+        : [];
+      const nextPhase: JiaobanPhase = outcome.task_session_binding_required
+        ? "binding"
+        : outcome.stage === "ran"
+          ? "done"
+          : "blocked";
       setOutcome(outcome);
       setManualPhase(nextPhase);
-      writeJiaobanRunCache(projectRoot, { manualPhase: nextPhase, outcome, startError: null });
+      setTaskSessionBindings(bindings);
+      writeJiaobanRunCache(projectRoot, {
+        manualPhase: nextPhase,
+        outcome,
+        startError: null,
+        taskSessionBindings: bindings,
+      });
     } catch (e) {
       // 合流命令对「已确认」会干净拒（后端：方案不是待用户确认状态）。这不是坏了——授权本还活着，
       // 直接调 auto_advance 就能从拆任务接着跑。故这一类翻成「已经批过了，点接着跑」+ 卡住脸给[接着跑]。
@@ -649,11 +691,95 @@ function ProjectJiaobanPanelBrowser({
     }
   }
 
+  function updateTaskSessionBinding(plannedTaskId: string, sessionChoice: string | null) {
+    const nextChoice =
+      sessionChoice && sessionChoice !== NEW_SESSION_CHOICE
+        ? { planned_task_id: plannedTaskId, session_choice: "existing" as const, session_id: sessionChoice }
+        : { planned_task_id: plannedTaskId, session_choice: "new" as const };
+    setTaskSessionBindings((current) => {
+      const next = current.map((binding) =>
+        binding.planned_task_id === plannedTaskId ? nextChoice : binding,
+      );
+      writeJiaobanRunCache(projectRoot, { taskSessionBindings: next });
+      return next;
+    });
+  }
+
+  async function startWithTaskSessionBindings() {
+    if (!projectWorkflow || !outcome || starting || runningRef.current) return;
+    const plannedTasks = outcome.planned_tasks ?? [];
+    if (plannedTasks.length === 0) {
+      setTaskSessionBindingError("任务清单没有准备好，不能开始跑。请重新出方案或停下。 ");
+      return;
+    }
+    runningRef.current = true;
+    const runStartedAt = Date.now();
+    const hasNewSession = taskSessionBindings.some((binding) => binding.session_choice === "new");
+    setRunStartedAtMs(runStartedAt);
+    setRunIsNewSession(hasNewSession);
+    setStarting(true);
+    setTaskSessionBindingError(null);
+    setStartError(null);
+    setChainStatus(null);
+    setManualPhase("running");
+    writeJiaobanRunCache(projectRoot, {
+      manualPhase: "running",
+      startError: null,
+      runStartedAtMs: runStartedAt,
+      runIsNewSession: hasNewSession,
+      taskSessionBindings,
+    });
+    try {
+      const nextOutcome = await confirmProjectDirectorTaskSessionBindings({
+        project_root: projectWorkflow.project_root,
+        workflow_id: projectWorkflow.workflow_id,
+        planned_tasks: plannedTasks,
+        task_session_bindings: taskSessionBindings,
+        actor_id: "user",
+      });
+      const nextPhase: JiaobanPhase = nextOutcome.stage === "ran" ? "done" : "blocked";
+      setOutcome(nextOutcome);
+      setManualPhase(nextPhase);
+      writeJiaobanRunCache(projectRoot, {
+        manualPhase: nextPhase,
+        outcome: nextOutcome,
+        startError: null,
+        taskSessionBindings,
+      });
+    } catch (error) {
+      const humanized = error instanceof Error ? error.message : String(error);
+      setTaskSessionBindingError(humanized);
+      setManualPhase("binding");
+      writeJiaobanRunCache(projectRoot, {
+        manualPhase: "binding",
+        startError: null,
+        taskSessionBindings,
+      });
+    } finally {
+      setStarting(false);
+      runningRef.current = false;
+    }
+  }
+
+  function stopBeforeTaskSessionBinding() {
+    setSayHint("这单停在开工前，没有派发任务。 ");
+    setTaskSessionBindingError(null);
+    setTaskSessionBindings([]);
+    setOutcome(null);
+    setManualPhase("say");
+    clearJiaobanRunCache(projectRoot);
+  }
+
   // 接着跑，不用重批：方案已 user_confirmed（授权还活着）时的重试口——不走合流命令（会被「已确认」拒），
   // 直接调现成 autoAdvanceAuthorizedRoleLoop 从拆任务接着推进。防冻套路同 authorizeAndStart：
   // 先切「正在干」相位再 await、runningRef 防重入、缓存同步；返回走现有 outcome→脸 映射。
   async function continueRun() {
     if (!projectWorkflow || starting || runningRef.current) return;
+    if (outcome?.task_session_binding_required) {
+      setManualPhase("binding");
+      writeJiaobanRunCache(projectRoot, { manualPhase: "binding" });
+      return;
+    }
     runningRef.current = true;
     const runStartedAt = Date.now(); // fix6-v2：本轮起点
     setRunStartedAtMs(runStartedAt);
@@ -785,6 +911,8 @@ function ProjectJiaobanPanelBrowser({
     setStartError(null);
     setContinueHint(false);
     setChainStatus(null);
+    setTaskSessionBindings([]);
+    setTaskSessionBindingError(null);
     setAmendment("");
     ranProposalIdRef.current = null;
     clearJiaobanRunCache(projectRoot);
@@ -998,6 +1126,20 @@ function ProjectJiaobanPanelBrowser({
               if (latestProposal) void requestBoundaryReview(latestProposal.proposal_id, true);
             }}
             onOpenAgentSession={onOpenAgentSession}
+          />
+        ) : null}
+
+        {phase === "binding" ? (
+          <JiaobanTaskSessionBindingState
+            tasks={outcome?.planned_tasks ?? []}
+            sessions={projectSessions}
+            bindings={taskSessionBindings}
+            error={taskSessionBindingError}
+            starting={starting}
+            onBindingChange={updateTaskSessionBinding}
+            onStart={() => void startWithTaskSessionBindings()}
+            onReplan={backToSay}
+            onStop={stopBeforeTaskSessionBinding}
           />
         ) : null}
 
@@ -1603,7 +1745,9 @@ export function JiaobanAuthorizeState({
         sessionChoice={sessionChoice}
         onSessionChoiceChange={onSessionChoiceChange}
         onOpenAgentSession={onOpenAgentSession}
+        label="给第一项任务预填对话"
       />
+      <p className="muted small-note">开工前还会逐项确认；这里的选择只预填第一项。</p>
 
       {willWrite ? (
         <div className="jiaoban-grant" role="note">
@@ -1892,20 +2036,111 @@ export function JiaobanRawSessionLink({
   );
 }
 
+// 开工前逐任务绑定面板。每项默认新会话；旧会话只会精确绑定到其自己的 node + work item。
+// export 供离线 DOM 断言（无 hooks·映射校验仍由后端做最终裁决）。
+export function JiaobanTaskSessionBindingState({
+  tasks,
+  sessions,
+  bindings,
+  error,
+  starting,
+  onBindingChange,
+  onStart,
+  onReplan,
+  onStop,
+}: {
+  tasks: ProjectDirectorPlannedTask[];
+  sessions: SessionRecord[];
+  bindings: ProjectDirectorTaskSessionBinding[];
+  error: string | null;
+  starting: boolean;
+  onBindingChange: (plannedTaskId: string, sessionChoice: string | null) => void;
+  onStart: () => void;
+  onReplan: () => void;
+  onStop: () => void;
+}) {
+  const bindingsByTask = new Map(bindings.map((binding) => [binding.planned_task_id, binding]));
+  const canStart =
+    tasks.length > 0 &&
+    tasks.every((task) => bindingsByTask.has(task.planned_task_id)) &&
+    !error;
+
+  return (
+    <div className="project-canvas-detail-card" aria-label="任务会话绑定">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">交办</p>
+          <h3>先给每项任务选对话</h3>
+        </div>
+      </div>
+      <p className="role-loop-plain-lead">
+        每个任务默认用自己的新会话；想让某个任务接着某条旧对话，就给它单独选。
+      </p>
+
+      {tasks.length > 0 && !error ? (
+        <div className="role-loop-plain" aria-label="逐任务会话选择">
+          {tasks.map((task, index) => {
+            const binding = bindingsByTask.get(task.planned_task_id);
+            const sessionChoice =
+              binding?.session_choice === "existing" ? (binding.session_id ?? null) : NEW_SESSION_CHOICE;
+            return (
+              <div className="jiaoban-task-session-row" key={task.planned_task_id}>
+                <p className="jiaoban-field-label">{task.title}</p>
+                <JiaobanSessionPicker
+                  sessions={sessions}
+                  sessionChoice={sessionChoice}
+                  onSessionChoiceChange={(nextChoice) => onBindingChange(task.planned_task_id, nextChoice)}
+                  label="这项任务用哪个对话"
+                  inputName={`jiaoban-task-session-${index}`}
+                  newSessionText="开个新的（为这项任务新建一个对话）"
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="jiaoban-consult-error" role="alert">
+          {error ?? "任务清单没有准备好，不能开始跑。请重新出方案或停下。"}
+        </p>
+      )}
+
+      <div className="workflow-state-actions">
+        {canStart ? (
+          <button className="primary-button" type="button" disabled={starting} onClick={onStart}>
+            {starting ? "正在开始跑…" : "开始跑"}
+          </button>
+        ) : null}
+        <button className="secondary-button" type="button" disabled={starting} onClick={onReplan}>
+          重新出方案
+        </button>
+        <button className="secondary-button" type="button" disabled={starting} onClick={onStop}>
+          停下
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // 会话收纳：默认收起一行「用哪个对话干：接现有 · <最近一条标题> ▾」，点开才展开选择。
-// 展开后：最近 5 条直列 + 其余折叠/可搜；「开个新的」置灰标「下一阶段支持」（用户已拍方案 a 下阶段）。
+// 展开后：最近 5 条直列 + 其余折叠/可搜；新会话始终可选，逐任务绑定面板可用它直接开工。
 // export 供离线 DOM 断言（带 hooks → 测试只静态标记断言，不平铺调用）。
 export function JiaobanSessionPicker({
   sessions,
   sessionChoice,
   onSessionChoiceChange,
   onOpenAgentSession,
+  label = "用哪个对话干",
+  inputName = "jiaoban-session",
+  newSessionText = "开个新的（为这单活新建一个对话）",
 }: {
   sessions: SessionRecord[];
   sessionChoice: string | null;
   onSessionChoiceChange: (value: string | null) => void;
   // 「看原始对话」桥（可选）：批卡传、卡住脸不传（卡住脸自己有面级入口，防一脸双入口）。
   onOpenAgentSession?: (threadId: string) => void;
+  label?: string;
+  inputName?: string;
+  newSessionText?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -1917,25 +2152,12 @@ export function JiaobanSessionPicker({
     [sessions],
   );
   const selected = sorted.find((s) => s.thread_id === sessionChoice) ?? null;
+  const newSelected = sessionChoice === NEW_SESSION_CHOICE || sessionChoice === null;
   // 方案a fix：收起行必须说真话——选了新建就显「开个新的」，别拿最新旧会话标题冒充（真机踩到的帮凶）。
   const summaryTitle =
-    sessionChoice === NEW_SESSION_CHOICE
-      ? "开个新的（为这单活新建对话）"
+    newSelected
+      ? newSessionText
       : selected?.title || selected?.thread_id || `${sorted[0]?.title ?? "选一条对话"}（默认）`;
-
-  // 无可用会话：给人话提示，不给空壳单选。
-  if (sorted.length === 0) {
-    return (
-      <div className="jiaoban-session-pick jiaoban-session-empty" aria-label="用哪个对话干">
-        <p className="jiaoban-field-label" style={{ margin: 0 }}>
-          用哪个对话干
-        </p>
-        <p className="muted small-note" style={{ margin: 0 }}>
-          这个项目还没有可用的对话。先去「智能体」页开一条，再回来交办。
-        </p>
-      </div>
-    );
-  }
 
   const recent = sorted.slice(0, 5);
   const rest = sorted.slice(5);
@@ -1948,7 +2170,7 @@ export function JiaobanSessionPicker({
     : rest;
 
   return (
-    <div className="jiaoban-session-pick" aria-label="用哪个对话干">
+    <div className="jiaoban-session-pick" aria-label={label}>
       <div className="jiaoban-session-summary-row">
         <button
           type="button"
@@ -1956,9 +2178,9 @@ export function JiaobanSessionPicker({
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
         >
-          <span className="jiaoban-field-label">用哪个对话干：</span>
+          <span className="jiaoban-field-label">{label}：</span>
           <span className="jiaoban-session-summary-value">
-            {sessionChoice === NEW_SESSION_CHOICE ? summaryTitle : `接现有 · ${summaryTitle}`}
+            {newSelected ? summaryTitle : `接现有 · ${summaryTitle}`}
           </span>
           <span aria-hidden="true" className="jiaoban-session-caret">
             {open ? "▴" : "▾"}
@@ -1977,18 +2199,24 @@ export function JiaobanSessionPicker({
           <label className="jiaoban-radio">
             <input
               type="radio"
-              name="jiaoban-session"
-              checked={sessionChoice === NEW_SESSION_CHOICE}
+              name={inputName}
+              checked={newSelected}
               onChange={() => onSessionChoiceChange(NEW_SESSION_CHOICE)}
             />
-            开个新的（为这单活新建一个对话）
+            {newSessionText}
           </label>
+
+          {sorted.length === 0 ? (
+            <p className="muted small-note" style={{ margin: 0 }}>
+              还没有旧对话，也可以直接为这项任务开新的。
+            </p>
+          ) : null}
 
           {recent.map((session) => (
             <label className="jiaoban-radio" key={session.thread_id}>
               <input
                 type="radio"
-                name="jiaoban-session"
+                name={inputName}
                 checked={sessionChoice === session.thread_id}
                 onChange={() => onSessionChoiceChange(session.thread_id)}
               />
@@ -2019,7 +2247,7 @@ export function JiaobanSessionPicker({
                     <label className="jiaoban-radio" key={session.thread_id}>
                       <input
                         type="radio"
-                        name="jiaoban-session"
+                        name={inputName}
                         checked={sessionChoice === session.thread_id}
                         onChange={() => onSessionChoiceChange(session.thread_id)}
                       />
@@ -2073,7 +2301,7 @@ function JiaobanRunningState({
           <span className="jiaoban-spinner" aria-hidden="true" /> {progress}
         </p>
         {isNewSession ? (
-          <p className="muted small-note">正在为这单活新建会话（约 1 分钟）…</p>
+          <p className="muted small-note">正在为需要新会话的任务逐一新建会话（约 1 分钟）…</p>
         ) : null}
       </div>
       <JiaobanRawSessionLink
