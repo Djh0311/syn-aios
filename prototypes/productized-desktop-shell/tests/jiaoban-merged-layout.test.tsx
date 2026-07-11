@@ -1,6 +1,6 @@
-// M2·交办 + 只读项目画布合一布局：离线 DOM / CSS 断言。
+// M2·交办 + 只读项目画布合一布局：离线 DOM 断言。
 import { renderToStaticMarkup } from "react-dom/server.browser";
-import { JiaobanMergedLayout } from "../src/views/projects/ProjectWorkspaceShell";
+import { JiaobanHistoryOverlay, JiaobanMergedLayout } from "../src/views/projects/ProjectWorkspaceShell";
 import type { JiaobanPhase } from "../src/views/projects/ProjectJiaobanPanel";
 import { ProjectWorkflowCanvasView } from "../src/views/projects/ProjectWorkflowCanvasView";
 import type { ProjectRecord } from "../src/lib/types";
@@ -10,6 +10,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const noop = () => {};
+const removedLayoutHook = (...parts: string[]) => parts.join("");
 
 function embeddedCanvasHtml(): string {
   return renderToStaticMarkup(
@@ -55,32 +56,45 @@ function html(phase: JiaobanPhase, initialHistoryOpen = false): string {
   assert(out.includes("在工作流页打开"), "完整工作流跳转入口在");
 }
 
-// 2) 六态空间主次约定：执行期画布主导，其余交办主导。
+// 2) 六态只切内容，不再切布局主次；左栏与画布始终同宽度规则。
 for (const phase of ["say", "authorize", "binding", "running", "done", "blocked"] as const) {
   const out = html(phase);
-  const expectedPrimary = phase === "running" ? "canvas" : "jiaoban";
-  assert(out.includes(`data-phase="${phase}"`), `${phase} phase 标记在`);
-  assert(out.includes(`data-primary="${expectedPrimary}"`), `${phase} 主区分配正确`);
+  assert(out.includes('class="jiaoban-merged-layout"'), `${phase} 应使用同一左右布局壳`);
+  assert(!out.includes(removedLayoutHook("data-", "primary")), `${phase} 不应再驱动主区切换`);
+  assert(!out.includes(`jiaoban-merged-layout--${phase}`), `${phase} 不应再生成相位布局 class`);
 }
 
-// 3) 历史默认收合、可以显式展开，且主要人机门仍留在交办主区（在画布区之前）。
+// 3) 历史默认收合；展开为覆盖层，既不挤网格也能点外部收回。
 {
   const collapsed = html("authorize");
   assert(collapsed.includes('aria-expanded="false"'), "历史默认收合");
-  assert(collapsed.includes('hidden=""'), "收合时历史抽屉隐藏");
+  assert(!collapsed.includes("jiaoban-history-overlay"), "收合时不渲染历史覆盖层");
 
   const expanded = html("authorize", true);
   assert(expanded.includes('aria-expanded="true"'), "历史可展开");
-  assert(expanded.includes("is-history-open"), "展开时布局给历史抽屉让出宽度");
-  assert(!expanded.includes('id="jiaoban-history-drawer" hidden=""'), "展开时历史抽屉可见");
+  assert(expanded.includes("jiaoban-history-overlay"), "展开时历史应为悬浮覆盖层");
+  assert(!expanded.includes(removedLayoutHook("is-history-", "open")), "展开历史不得挤压主布局");
+  assert(expanded.includes('id="jiaoban-history-drawer"'), "展开时历史抽屉可见");
   assert(expanded.indexOf("允许并开始") < expanded.indexOf("工作流运行视图"), "允许并开始留在交办区域而非画布区");
+
+  const dismissed: string[] = [];
+  const overlay = JiaobanHistoryOverlay({ history: <div>历史</div>, onDismiss: () => dismissed.push("dismiss") });
+  const onClick = (overlay as unknown as { props: { onClick?: (event: unknown) => void } }).props.onClick;
+  const backdrop = {};
+  onClick?.({ target: backdrop, currentTarget: backdrop });
+  onClick?.({ target: {}, currentTarget: backdrop });
+  assert(dismissed.length === 1, "只点覆盖层空白处才收起历史");
 }
 
-// 4) 根布局在 DOM 上明确收住最小宽高与溢出；详细 7:3 / 1:9 比例由 CSS class 管理。
+// 4) 左右区域的 DOM 顺序固定：交办控制栏在左、画布在右，且不保留旧相位布局 class。
 {
   const out = html("running");
   assert(out.includes("min-width:0") && out.includes("min-height:0"), "根布局缩放契约在");
-  assert(out.includes("jiaoban-merged-layout--running"), "运行期布局 CSS class 在");
+  assert(
+    out.indexOf('aria-label="交办主区"') < out.indexOf('aria-label="工作流运行视图"'),
+    "交办控制栏应先于右侧画布",
+  );
+  assert(!out.includes(removedLayoutHook("jiaoban-merged-layout--", "running")), "旧运行相位比例 class 应删除");
 }
 
 // 5) 内嵌画布仍显示只读画布，但不带工作流页的编辑、运行与详情 HUD。
@@ -92,4 +106,4 @@ for (const phase of ["say", "authorize", "binding", "running", "done", "blocked"
   }
 }
 
-console.log("jiaoban-merged-layout: 5 组离线 DOM 断言全过");
+console.log("jiaoban-merged-layout: 5 组离线 DOM / 覆盖层 / 左右分栏断言全过");

@@ -112,7 +112,7 @@ function historyHtml(props: Partial<Parameters<typeof JiaobanHistoryColumn>[0]>)
       entry={entry({
         goal_text: "删一个怪",
         state: "blocked",
-        state_note: "跑挂了（去工作流看详情）",
+        state_note: "跑挂了（查看详情）",
         error: {
           family: "codex_subsystem",
           human: "codex 自身某个子系统报错（如记忆/索引），一般不影响本次任务结果。",

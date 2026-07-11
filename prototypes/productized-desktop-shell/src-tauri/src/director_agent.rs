@@ -3515,6 +3515,98 @@ fn require_active_authorization(
     }
 }
 
+// 合流命令在「用户确认」和「边界批准」之间撞瞬时锁时，会留下已确认 proposal +
+// pending_global_boundary_review 授权。用户随后点[接着跑]时，只补记这一次原本同语义的
+// 全局边界批准；没有用户确认、不是当前最新授权、已过期或状态不是 pending 一律不碰。
+fn restore_pending_global_boundary_review_after_confirm(
+    path: &std::path::Path,
+    project_root: &str,
+    workflow_id: &str,
+    actor_id: &str,
+) -> Result<(), String> {
+    let timestamp_ms = unix_timestamp_ms();
+    let project_id_value = project_id(project_root);
+    let store = plan_authorization_store::load_store(path, timestamp_ms)?;
+    let Some(latest) = store.authorizations.iter().rev().find(|authorization| {
+        authorization.project_id == project_id_value && authorization.workflow_id == workflow_id
+    }) else {
+        return Ok(());
+    };
+    if latest.status != PlanAuthorizationStatus::PendingGlobalBoundaryReview
+        || latest
+            .expires_at_ms
+            .is_some_and(|expires_at_ms| expires_at_ms <= timestamp_ms)
+    {
+        return Ok(());
+    }
+    let Some(proposal_id) = latest.source_proposal_id.clone() else {
+        return Ok(());
+    };
+    let authorization_id = latest.authorization_id.clone();
+    let expected_authorization_revision = store.revision;
+
+    let proposal_store = project_consultation_proposal_store::load_store(path, timestamp_ms)?;
+    let Some(proposal) = proposal_store
+        .proposals
+        .iter()
+        .find(|proposal| proposal.proposal_id == proposal_id)
+    else {
+        return Ok(());
+    };
+    if proposal.status != ProjectConsultationProposalStatus::UserConfirmed
+        || proposal.project_id != project_id_value
+        || proposal.workflow_id != workflow_id
+    {
+        return Ok(());
+    }
+
+    let recovery = plan_authorization_store::record_global_boundary_review_with_proposal(
+        path,
+        &RecordGlobalBoundaryReviewInput {
+            project_root: project_root.to_string(),
+            project_id: project_id_value.clone(),
+            workflow_id: workflow_id.to_string(),
+            proposal_id,
+            authorization_id,
+            actor_id: actor_id.to_string(),
+            review_status: "approved".to_string(),
+            summary: "用户点[接着跑]：补记此前确认后未完成的全局边界批准。".to_string(),
+            checklist: GlobalBoundaryReviewChecklist {
+                architecture_boundary_checked: true,
+                cross_project_impact_checked: true,
+                permission_scope_checked: true,
+                read_write_scope_checked: true,
+                tool_and_check_scope_checked: true,
+                memory_boundary_checked: true,
+                stop_conditions_checked: true,
+                acceptance_criteria_checked: true,
+            },
+            findings: vec![],
+            expected_authorization_revision: Some(expected_authorization_revision),
+        },
+        timestamp_ms,
+        &format!("auto-advance-recover-boundary:{}", unix_timestamp_nanos()),
+    );
+    if let Err(error) = recovery {
+        // 若另一条同样的续跑刚好已补记成功，重读后继续；其余错误原样交给用户，不吞失败。
+        let refreshed = plan_authorization_store::load_store(path, unix_timestamp_ms())?;
+        let became_active = refreshed.authorizations.iter().any(|authorization| {
+            authorization.project_id == project_id_value
+                && authorization.workflow_id == workflow_id
+                && authorization.status == PlanAuthorizationStatus::Active
+                && authorization
+                    .expires_at_ms
+                    .is_none_or(|expires_at_ms| expires_at_ms > unix_timestamp_ms())
+        });
+        if !became_active {
+            return Err(format!(
+                "用户已确认的方案仍待全局边界批准，补记失败：{error}"
+            ));
+        }
+    }
+    Ok(())
+}
+
 // 编排内层（同步·spawn_blocking 里调；可单测·stub runner）。
 fn run_auto_advance_authorized_role_loop(
     path: &std::path::Path,
@@ -3673,6 +3765,12 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
     // 死线·圈固定测试项目（决策 2026-06-27）：非测试 root 入口直接拒——在 LM 拆 / prepare 之前提前拦
     // （纵深防御，不只靠链入口的晚拦）。与现成命令同款 path-lock，闸 / 沙箱本体不动。
     require_test_project_path_lock(project_root, "auto_advance_authorized_role_loop")?;
+    restore_pending_global_boundary_review_after_confirm(
+        path,
+        project_root,
+        workflow_id,
+        actor_id,
+    )?;
     let timestamp_ms = unix_timestamp_ms();
     let pid = project_id(project_root);
     // 1. 查 active 方案授权（人闸不省·不创建不跳过；查不到即拒）。
@@ -5012,6 +5110,80 @@ mod fix9_tests {
             })
             .unwrap_or(false),
             "接着跑应记录只读 started 审计"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // 第四波事故回放：确认已经落库，但紧接的全局边界批准撞了瞬时锁。用户点[接着跑]只能补这一步，
+    // 仍须使用已确认 proposal + 当前 pending 授权，不能凭空创建或放宽任何授权。
+    #[test]
+    fn auto_advance_recovers_user_confirmed_pending_boundary_review() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("recover-pending-boundary");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project_record(test_root))
+            .expect("bootstrap");
+        let proposal = create_advice_only_pending_proposal(&path, test_root);
+        let confirmed = project_consultation_proposal_store::record_decision(
+            &path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: test_root.to_string(),
+                proposal_id: proposal.proposal_id.clone(),
+                actor_id: "user".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "事故回放：用户已确认。".to_string(),
+                expected_proposal_store_revision: None,
+                expected_plan_authorization_store_revision: None,
+            },
+            unix_timestamp_ms(),
+            &format!("recover-confirm:{}", unix_timestamp_nanos()),
+            &format!("recover-auth:{}", unix_timestamp_nanos()),
+            &format!("recover-user:{}", unix_timestamp_nanos()),
+        )
+        .expect("user confirmation should persist");
+        let authorization = confirmed.plan_authorization.expect("authorization");
+        let before = plan_authorization_store::load_store(&path, unix_timestamp_ms())
+            .expect("pending authorization store");
+        assert_eq!(
+            before
+                .authorizations
+                .iter()
+                .find(|item| item.authorization_id == authorization.authorization_id)
+                .expect("confirmed authorization")
+                .status,
+            PlanAuthorizationStatus::PendingGlobalBoundaryReview,
+            "前置：只完成用户确认，尚未边界批准"
+        );
+
+        let outcome = run_auto_advance_authorized_role_loop(
+            &path,
+            &serde_json::json!({"projects": [{"project_root": test_root}]}),
+            &dir.join("readback.sqlite"),
+            &PanicRunner,
+            &OneTaskDirector,
+            test_root,
+            &proposal.workflow_id,
+            "user",
+            10,
+            None,
+        )
+        .expect("continue should restore only the pending boundary approval");
+        assert_eq!(outcome.stage, "needs_binding", "恢复后仍走既有绑定面");
+
+        let after = plan_authorization_store::load_store(&path, unix_timestamp_ms())
+            .expect("active authorization store");
+        let restored = after
+            .authorizations
+            .iter()
+            .find(|item| item.authorization_id == authorization.authorization_id)
+            .expect("same authorization should be retained");
+        assert_eq!(restored.status, PlanAuthorizationStatus::Active);
+        assert!(
+            restored
+                .global_boundary_review
+                .as_ref()
+                .is_some_and(|review| review.status == "approved"),
+            "恢复只能补上 approved 全局边界记录"
         );
         let _ = fs::remove_dir_all(dir);
     }

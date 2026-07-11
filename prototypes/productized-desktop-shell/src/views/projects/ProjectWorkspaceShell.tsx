@@ -269,6 +269,27 @@ type JiaobanMergedLayoutProps = ProjectJiaobanPanelLayout & {
   initialHistoryOpen?: boolean;
 };
 
+export function JiaobanHistoryOverlay({
+  history,
+  onDismiss,
+}: {
+  history: ReactNode;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      className="jiaoban-history-overlay"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onDismiss();
+      }}
+    >
+      <aside className="jiaoban-history-drawer" id="jiaoban-history-drawer" aria-label="交办历史内容">
+        {history}
+      </aside>
+    </div>
+  );
+}
+
 export function JiaobanMergedLayout({
   phase,
   history,
@@ -279,17 +300,16 @@ export function JiaobanMergedLayout({
   initialHistoryOpen = false,
 }: JiaobanMergedLayoutProps) {
   const [historyOpen, setHistoryOpen] = useState(initialHistoryOpen);
-  const canvasPrimary = phase === "running";
   const showsPreviewCanvas = Boolean(previewCanvas);
+  const showsRuntimePlanGraph = showsPreviewCanvas && (phase === "running" || phase === "done" || phase === "blocked");
+  const dismissHistory = () => setHistoryOpen(false);
 
   return (
     <div
-      className={`jiaoban-merged-layout jiaoban-merged-layout--${phase}${historyOpen ? " is-history-open" : ""}`}
-      data-phase={phase}
-      data-primary={canvasPrimary ? "canvas" : "jiaoban"}
+      className="jiaoban-merged-layout"
       style={{ minWidth: 0, minHeight: 0 }}
     >
-      <aside className={`jiaoban-history-rail${historyOpen ? " is-open" : ""}`} aria-label="交办历史">
+      <aside className="jiaoban-history-rail" aria-label="交办历史">
         <button
           className="jiaoban-history-rail-toggle"
           type="button"
@@ -309,10 +329,8 @@ export function JiaobanMergedLayout({
           </svg>
           <span className="sr-only">{historyOpen ? "收起交办历史" : "展开交办历史"}</span>
         </button>
-        <div className="jiaoban-history-drawer" hidden={!historyOpen} id="jiaoban-history-drawer">
-          {history}
-        </div>
       </aside>
+      {historyOpen ? <JiaobanHistoryOverlay history={history} onDismiss={dismissHistory} /> : null}
 
       <div className="jiaoban-merged-panels">
         <section className="jiaoban-merged-region jiaoban-merged-jiaoban-region" aria-label="交办主区">
@@ -320,13 +338,15 @@ export function JiaobanMergedLayout({
         </section>
         <section
           className="jiaoban-merged-region jiaoban-merged-canvas-region"
-          aria-label={showsPreviewCanvas ? "方案预演工序图" : "工作流运行视图"}
+          aria-label={showsPreviewCanvas ? (showsRuntimePlanGraph ? "工作流运行工序图" : "方案预演工序图") : "工作流运行视图"}
         >
           <header className="jiaoban-merged-canvas-head">
-            <div>
-              <strong>{showsPreviewCanvas ? "方案预演" : canvasPrimary ? "正在执行" : "工作流进度"}</strong>
-              <span>{showsPreviewCanvas ? "尚未执行，可逐节点选对话" : "只读运行视图"}</span>
-            </div>
+            {!showsPreviewCanvas ? (
+              <div>
+                <strong>{phase === "running" ? "正在执行" : "工作流进度"}</strong>
+                <span>只读运行视图</span>
+              </div>
+            ) : null}
             <button className="secondary-button" type="button" onClick={onOpenWorkflow}>
               在工作流页打开
             </button>

@@ -14,11 +14,15 @@ use serde_json::Value;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::Duration;
 
 const STORE_SCHEMA_VERSION: &str = "plan_authorization_store.v1";
 const AUTHORIZATION_SCHEMA_VERSION: &str = "plan_authorization.v1";
 const SIDECAR_NAME: &str = "plan-authorizations.v1.json";
 const LOCK_NAME: &str = ".plan-authorizations.v1.lock";
+const LOCK_RETRY_COUNT: usize = 5;
+const LOCK_RETRY_DELAY: Duration = Duration::from_millis(100);
 
 pub(crate) fn sidecar_path(workflow_state_path: &Path) -> Result<PathBuf, String> {
     store_paths::sidecar_path(workflow_state_path, SIDECAR_NAME, "方案授权")
@@ -1050,33 +1054,119 @@ struct StoreLock {
 
 impl StoreLock {
     fn acquire(path: &Path, write_id: &str) -> Result<Self, String> {
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-        {
-            Ok(mut file) => {
-                file.write_all(write_id.as_bytes()).map_err(|error| {
-                    format!("写入方案授权 lock 失败 {}：{error}", path.display())
-                })?;
-                Ok(Self {
-                    path: path.to_path_buf(),
-                })
+        for retry in 0..=LOCK_RETRY_COUNT {
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+            {
+                Ok(mut file) => {
+                    file.write_all(write_id.as_bytes()).map_err(|error| {
+                        format!("写入方案授权 lock 失败 {}：{error}", path.display())
+                    })?;
+                    return Ok(Self {
+                        path: path.to_path_buf(),
+                    });
+                }
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::AlreadyExists
+                        && retry < LOCK_RETRY_COUNT =>
+                {
+                    thread::sleep(LOCK_RETRY_DELAY);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    return Err(format!(
+                        "plan_authorization_store_locked: {}；稍等几秒再点一次就好",
+                        path.display()
+                    ));
+                }
+                Err(error) => {
+                    return Err(format!(
+                        "创建方案授权 lock 失败 {}：{error}",
+                        path.display()
+                    ));
+                }
             }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Err(format!(
-                "plan_authorization_store_locked: {}",
-                path.display()
-            )),
-            Err(error) => Err(format!(
-                "创建方案授权 lock 失败 {}：{error}",
-                path.display()
-            )),
         }
+        unreachable!("有限重试循环会在最后一次返回")
     }
 }
 
 impl Drop for StoreLock {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);
+    }
+}
+
+#[cfg(test)]
+mod lock_retry_tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_lock_path(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "plan-authorization-lock-{label}-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("create temporary lock directory");
+        root.join(LOCK_NAME)
+    }
+
+    #[test]
+    fn store_lock_retries_until_concurrent_writer_releases() {
+        let lock_path = test_lock_path("concurrent-writer");
+        let holder = StoreLock::acquire(&lock_path, "first-writer").expect("first writer lock");
+        let releaser = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(120));
+            drop(holder);
+        });
+
+        let retried = StoreLock::acquire(&lock_path, "second-writer")
+            .expect("second writer should acquire after the transient lock clears");
+        drop(retried);
+        releaser.join().expect("lock holder should finish");
+        let _ = fs::remove_dir_all(lock_path.parent().expect("test lock parent"));
+    }
+
+    #[test]
+    fn store_lock_retries_when_incident_lock_file_is_removed_shortly_afterwards() {
+        let lock_path = test_lock_path("incident-replay");
+        fs::write(&lock_path, "incident lock").expect("create transient incident lock");
+        let release_path = lock_path.clone();
+        let releaser = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(120));
+            fs::remove_file(release_path).expect("release transient incident lock");
+        });
+
+        let retried = StoreLock::acquire(&lock_path, "incident-retry")
+            .expect("retry should acquire once the incident lock disappears");
+        drop(retried);
+        releaser
+            .join()
+            .expect("incident lock releaser should finish");
+        let _ = fs::remove_dir_all(lock_path.parent().expect("test lock parent"));
+    }
+
+    #[test]
+    fn store_lock_exhaustion_tells_user_to_retry_later() {
+        let lock_path = test_lock_path("retry-copy");
+        let holder = StoreLock::acquire(&lock_path, "holder").expect("hold lock");
+
+        let error = match StoreLock::acquire(&lock_path, "contender") {
+            Ok(lock) => {
+                drop(lock);
+                panic!("lock should remain held");
+            }
+            Err(error) => error,
+        };
+        assert!(error.contains("plan_authorization_store_locked"));
+        assert!(error.contains("稍等几秒再点一次就好"));
+
+        drop(holder);
+        let _ = fs::remove_dir_all(lock_path.parent().expect("test lock parent"));
     }
 }

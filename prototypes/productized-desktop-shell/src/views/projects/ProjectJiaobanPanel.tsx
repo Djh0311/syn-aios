@@ -62,7 +62,7 @@ export type ProjectJiaobanPanelLayout = {
   phase: JiaobanPhase;
   history: ReactNode;
   main: ReactNode;
-  // M1：批前/绑定阶段在 M2 的右侧画布区域展示所批预演图；运行阶段仍只展示既有运行画布。
+  // M1：批前、运行和终态都在 M2 的右侧画布区域展示同一张纵向工序图。
   previewCanvas?: ReactNode;
 };
 
@@ -104,11 +104,63 @@ function defaultTaskSessionBindings(
   );
 }
 
-type JiaobanPreviewCanvasNode = {
+export type JiaobanPreviewCanvasNode = {
   preview_node_id: string;
   title: string;
   depends_on: string[];
 };
+
+export type JiaobanRuntimeNodeState = "pending" | "running" | "completed" | "needs_rework" | "failed";
+
+const jiaobanRuntimeNodeLabel: Record<JiaobanRuntimeNodeState, string> = {
+  pending: "等待",
+  running: "正在执行",
+  completed: "已完成",
+  needs_rework: "需要重做",
+  failed: "失败",
+};
+
+function normalizeJiaobanRuntimeNodeState(value: string | null | undefined): JiaobanRuntimeNodeState {
+  switch (value?.trim().toLowerCase()) {
+    case "running":
+      return "running";
+    case "completed":
+    case "finished":
+    case "done":
+    case "succeeded":
+      return "completed";
+    case "needs_rework":
+    case "needs-rework":
+      return "needs_rework";
+    case "failed":
+    case "aborted":
+    case "stopped":
+      return "failed";
+    default:
+      return "pending";
+  }
+}
+
+// 运行读模型以实时链节点优先；终态若轮询来不及回写，再用本轮 outcome 的步骤兜底。
+// 只有单节点简单活才允许把唯一链节点映射给唯一预演节点，避免多节点时猜错归属。
+export function jiaobanRuntimeNodeStates(
+  nodes: JiaobanPreviewCanvasNode[],
+  chainStatus: ProjectWorkflowChainStatus | null,
+  chainSteps: DirectorChainStep[] = [],
+): Record<string, JiaobanRuntimeNodeState> {
+  return Object.fromEntries(
+    nodes.map((node) => {
+      const chainNode = chainStatus?.nodes.find((item) => item.node_id === node.preview_node_id);
+      const chainStep = chainSteps.find((item) => item.planned_task_id === node.preview_node_id);
+      const singleChainNode = nodes.length === 1 ? chainStatus?.nodes[0] : null;
+      const singleChainStep = nodes.length === 1 ? chainSteps[0] : null;
+      return [
+        node.preview_node_id,
+        normalizeJiaobanRuntimeNodeState(chainNode?.state ?? chainStep?.state ?? singleChainNode?.state ?? singleChainStep?.state),
+      ];
+    }),
+  );
+}
 
 function previewFallbackNode(proposal: ProjectConsultationProposal): JiaobanPreviewCanvasNode {
   return {
@@ -142,6 +194,29 @@ function previewNodeBinding(
     : { preview_node_id: previewNodeId, session_choice: "new" };
 }
 
+function runCanvasBindingsFor(
+  nodes: JiaobanPreviewCanvasNode[],
+  previewBindings: ProjectDirectorPreviewNodeSessionBinding[],
+  taskBindings: ProjectDirectorTaskSessionBinding[],
+): ProjectDirectorPreviewNodeSessionBinding[] {
+  return nodes.map((node) => {
+    const taskBinding = taskBindings.find((binding) => binding.planned_task_id === node.preview_node_id);
+    if (taskBinding) {
+      return taskBinding.session_choice === "existing"
+        ? {
+            preview_node_id: node.preview_node_id,
+            session_choice: "existing",
+            session_id: taskBinding.session_id,
+          }
+        : { preview_node_id: node.preview_node_id, session_choice: "new" };
+    }
+    return (
+      previewBindings.find((binding) => binding.preview_node_id === node.preview_node_id) ??
+      previewNodeBinding(node.preview_node_id, NEW_SESSION_CHOICE)
+    );
+  });
+}
+
 // 结果防丢：换 tab 会卸载本面板（ProjectWorkspaceShell 条件渲染），本地 state 全丢。
 // 故把「一轮开始的结果」按 project_root 缓存在模块级，重挂载时恢复——切走再回来结果还在。
 // 只缓存呈现所需的最小集：手动相位 + outcome + 报错 + 上次停因（供重出方案预填）+ 这一轮批的方案 id。
@@ -164,6 +239,9 @@ type JiaobanRunCache = {
   taskSessionBindings: ProjectDirectorTaskSessionBinding[];
   // M1：批前预演节点→会话选择。与任务绑定不同，它允许简单活使用虚拟步骤 id。
   previewSessionBindings: ProjectDirectorPreviewNodeSessionBinding[];
+  // 运行/终态继续使用本轮已批的图，不能随方案 store 刷新退回旧 ReactFlow 视图。
+  runCanvasNodes: JiaobanPreviewCanvasNode[];
+  runCanvasBindings: ProjectDirectorPreviewNodeSessionBinding[];
   // B1：本轮全局主管复核结果（key=chain_started_at·结果态缓存；loading 是瞬态不缓存——
   // 重挂载后按幂等键补拉，后端幂等命中秒回不重烧）。
   supervisorReview: { key: string; outcome: GlobalSupervisorReviewOutcome } | null;
@@ -186,6 +264,8 @@ function writeJiaobanRunCache(projectRoot: string, patch: Partial<JiaobanRunCach
     sessionChoice: null,
     taskSessionBindings: [],
     previewSessionBindings: [],
+    runCanvasNodes: [],
+    runCanvasBindings: [],
     supervisorReview: null,
   };
   jiaobanRunCacheByProject.set(projectRoot, { ...prev, ...patch });
@@ -315,6 +395,10 @@ function ProjectJiaobanPanelBrowser({
   const [previewSessionBindings, setPreviewSessionBindings] = useState<ProjectDirectorPreviewNodeSessionBinding[]>(
     cached?.previewSessionBindings ?? [],
   );
+  const [runCanvasNodes, setRunCanvasNodes] = useState<JiaobanPreviewCanvasNode[]>(cached?.runCanvasNodes ?? []);
+  const [runCanvasBindings, setRunCanvasBindings] = useState<ProjectDirectorPreviewNodeSessionBinding[]>(
+    cached?.runCanvasBindings ?? [],
+  );
   // 方案a fix：用户任何显式选择（新建/某条现有）都进缓存 → 重挂载不丢、默认效果不覆盖。
   function setSessionChoice(value: string | null) {
     setSessionChoiceState(value);
@@ -376,6 +460,15 @@ function ProjectJiaobanPanelBrowser({
       }),
     [previewCanvasNodes, previewSessionBindings, sessionChoice],
   );
+
+  function rememberRunCanvas(
+    nodes = previewCanvasNodes,
+    bindings = runCanvasBindingsFor(nodes, previewBindingsForCanvas, taskSessionBindings),
+  ) {
+    setRunCanvasNodes(nodes);
+    setRunCanvasBindings(bindings);
+    writeJiaobanRunCache(projectRoot, { runCanvasNodes: nodes, runCanvasBindings: bindings });
+  }
 
   function updatePreviewSessionBinding(previewNodeId: string, value: string | null) {
     const nextBinding = previewNodeBinding(previewNodeId, value);
@@ -687,9 +780,13 @@ function ProjectJiaobanPanelBrowser({
     setSessionChoiceState(NEW_SESSION_CHOICE);
     sessionDefaultedRef.current = true;
     setPreviewSessionBindings([]);
+    setRunCanvasNodes([]);
+    setRunCanvasBindings([]);
     writeJiaobanRunCache(projectRoot, {
       sessionChoice: NEW_SESSION_CHOICE,
       previewSessionBindings: [],
+      runCanvasNodes: [],
+      runCanvasBindings: [],
     });
     previewLoadingRef.current = false;
   }, [latestProposal?.proposal_id, projectRoot]);
@@ -738,6 +835,7 @@ function ProjectJiaobanPanelBrowser({
   // 允许并开始 = 方案授权人闸那一下。走刀1 合流命令 confirm_and_start_authorized_run（见 lib/tauri）。
   async function authorizeAndStart() {
     if (!projectWorkflow || !latestProposal || starting || runningRef.current) return;
+    rememberRunCanvas();
     // ★ 一进来立刻上「正在干」脸——不等 await 回来（await 可能几十秒~几分钟，中间不能无脸看着像冻死）。
     runningRef.current = true;
     ranProposalIdRef.current = latestProposal.proposal_id;
@@ -797,8 +895,15 @@ function ProjectJiaobanPanelBrowser({
         taskSessionBindings: bindings,
       });
     } catch (e) {
+      // record_decision 成功后的后续写（尤其边界批准）仍可能失败。先刷新方案店：否则 props 还停在
+      // pending，界面既不再待批、又不知道已确认而不给[接着跑]。刷新失败不覆盖原始错误。
+      try {
+        await onProposalStoreRefresh?.();
+      } catch {
+        // 刷新只是把已落库状态带回界面；合流的原始失败才是此刻应展示的主因。
+      }
       // 合流命令对「已确认」会干净拒（后端：方案不是待用户确认状态）。这不是坏了——授权本还活着，
-      // 直接调 auto_advance 就能从拆任务接着跑。故这一类翻成「已经批过了，点接着跑」+ 卡住脸给[接着跑]。
+      // 直接调 auto_advance 就能从拆任务接着跑。刷新后的 user_confirmed 也会由 planIsConfirmed 放行。
       const alreadyConfirmed = isAlreadyConfirmedRejection(e);
       const humanized = humanizeAuthorizeError(e);
       setStartError(humanized);
@@ -837,6 +942,10 @@ function ProjectJiaobanPanelBrowser({
       setTaskSessionBindingError("任务清单没有准备好，不能开始跑。请重新出方案或停下。 ");
       return;
     }
+    rememberRunCanvas(
+      previewCanvasNodes,
+      runCanvasBindingsFor(previewCanvasNodes, previewBindingsForCanvas, taskSessionBindings),
+    );
     runningRef.current = true;
     const runStartedAt = Date.now();
     const hasNewSession = taskSessionBindings.some((binding) => binding.session_choice === "new");
@@ -905,6 +1014,7 @@ function ProjectJiaobanPanelBrowser({
       writeJiaobanRunCache(projectRoot, { manualPhase: "binding" });
       return;
     }
+    if (runCanvasNodes.length === 0) rememberRunCanvas();
     runningRef.current = true;
     const runStartedAt = Date.now(); // fix6-v2：本轮起点
     setRunStartedAtMs(runStartedAt);
@@ -1063,7 +1173,6 @@ function ProjectJiaobanPanelBrowser({
         <div className="project-canvas-detail-card" aria-label="交办 · 这个项目暂不能自动干">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">交办</p>
               <h3>这个项目现在用智能体直连</h3>
             </div>
             <Badge tone="unknown">未开通自动干</Badge>
@@ -1099,7 +1208,6 @@ function ProjectJiaobanPanelBrowser({
         <div className="project-canvas-detail-card">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">交办</p>
               <h3>这个项目还没准备好交办</h3>
             </div>
             <Badge tone="warning">缺项目工作流</Badge>
@@ -1327,20 +1435,30 @@ function ProjectJiaobanPanelBrowser({
       )}
     </div>
   );
-  const previewCanvas =
-    (phase === "authorize" || phase === "binding") && latestProposal ? (
-      <JiaobanPlanPreviewCanvas
-        nodes={previewCanvasNodes}
-        bindings={previewBindingsForCanvas}
-        sessions={projectSessions}
-        waitingForPreview={workflowSwitchOn && previewTasks === null && !previewError}
-        previewError={previewError}
-        previewWarnings={previewWarnings}
-        onBindingChange={updatePreviewSessionBinding}
-        onRetryPreview={retryPreview}
-        onOpenAgentSession={onOpenAgentSession}
-      />
-    ) : null;
+  const runtimeCanvasPhase = phase === "running" || phase === "done" || phase === "blocked";
+  const canvasNodes = runtimeCanvasPhase && runCanvasNodes.length > 0 ? runCanvasNodes : previewCanvasNodes;
+  const canvasBindings = runtimeCanvasPhase && runCanvasBindings.length > 0 ? runCanvasBindings : previewBindingsForCanvas;
+  const runtimeNodeStates = runtimeCanvasPhase
+    ? jiaobanRuntimeNodeStates(canvasNodes, thisRoundChainStatus, outcome?.chain_outcome?.steps ?? [])
+    : null;
+  const showPlanCanvas =
+    ((phase === "authorize" || phase === "binding") && Boolean(latestProposal)) ||
+    (runtimeCanvasPhase && canvasNodes.length > 0);
+  const previewCanvas = showPlanCanvas ? (
+    <JiaobanPlanPreviewCanvas
+      nodes={canvasNodes}
+      bindings={canvasBindings}
+      sessions={projectSessions}
+      waitingForPreview={!runtimeCanvasPhase && workflowSwitchOn && previewTasks === null && !previewError}
+      previewError={runtimeCanvasPhase ? null : previewError}
+      previewWarnings={runtimeCanvasPhase ? [] : previewWarnings}
+      readOnly={runtimeCanvasPhase}
+      runtimeNodeStates={runtimeNodeStates}
+      onBindingChange={updatePreviewSessionBinding}
+      onRetryPreview={retryPreview}
+      onOpenAgentSession={onOpenAgentSession}
+    />
+  ) : null;
 
   return (
     <section className="project-jiaoban project-jiaoban--split" aria-label="交办">
@@ -1675,7 +1793,6 @@ export function JiaobanSayState({
     <div className="project-canvas-detail-card jiaoban-say" aria-label="想让 AI 干点啥">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">交办</p>
           <h3>想让 AI 干点啥？</h3>
         </div>
       </div>
@@ -1791,13 +1908,7 @@ export function JiaobanAuthorizeState({
           : null;
 
   return (
-    <div className="project-canvas-detail-card jiaoban-authorize" aria-label="AI 的方案">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">交办</p>
-          <h3>AI 的方案</h3>
-        </div>
-      </div>
+    <div className="project-canvas-detail-card jiaoban-authorize" aria-label="方案">
 
       {/* 旧方案不冒充当前：不是今天生成 → 顶部黄条 + 主按钮换「重新说目标」，防再批库存。 */}
       {proposalIsStale ? (
@@ -1866,12 +1977,10 @@ export function JiaobanAuthorizeState({
         </div>
       ) : null}
 
-      <p className="muted small-note">批了就自动跑完；碰到越界或拿不准会停下来问你。</p>
-
       <label className="proposal-decision-field jiaoban-amend">
-        <span>想改就直接说</span>
         <input
           type="text"
+          aria-label="修改方案"
           value={amendment}
           onChange={(event) => onAmendmentChange(event.target.value)}
           placeholder="例：改成暗色、分数存下来…"
@@ -1957,7 +2066,6 @@ export function JiaobanAuthorizeState({
           先不做
         </button>
       </div>
-      <p className="muted small-note">点「允许并开始」= 允许这段自动跑，后面不再逐步问你。</p>
     </div>
   );
 }
@@ -2028,8 +2136,7 @@ export function JiaobanBoundaryReviewSection({
   );
 }
 
-// M1·合一页右侧预演画布。这里不是运行态工作流：任务尚未 prepare/派发，节点明确标「预演」。
-// 点击节点展开现有 JiaobanSessionPicker；默认新会话，已有会话只绑定当前节点，绝不沿图扩散。
+// M1·合一页右侧纵向工序图。批前节点可选对话；运行/终态复用同一张图，只读显示真实链状态。
 export function JiaobanPlanPreviewCanvas({
   nodes,
   bindings,
@@ -2037,6 +2144,8 @@ export function JiaobanPlanPreviewCanvas({
   waitingForPreview,
   previewError,
   previewWarnings,
+  readOnly = false,
+  runtimeNodeStates = null,
   onBindingChange,
   onRetryPreview,
   onOpenAgentSession,
@@ -2047,6 +2156,8 @@ export function JiaobanPlanPreviewCanvas({
   waitingForPreview: boolean;
   previewError: string | null;
   previewWarnings: string[];
+  readOnly?: boolean;
+  runtimeNodeStates?: Record<string, JiaobanRuntimeNodeState> | null;
   onBindingChange: (previewNodeId: string, value: string | null) => void;
   onRetryPreview: () => void;
   onOpenAgentSession: (threadId: string) => void;
@@ -2071,15 +2182,8 @@ export function JiaobanPlanPreviewCanvas({
     );
   }
   return (
-    <section className="jiaoban-plan-preview" aria-label="方案预演工序图">
-      <header className="jiaoban-plan-preview-head">
-        <div>
-          <strong>预演工序图</strong>
-          <span>你批的就是这份图</span>
-        </div>
-        <small>尚未执行</small>
-      </header>
-      <div className="jiaoban-plan-preview-graph" role="list" aria-label="预演任务与依赖">
+    <section className="jiaoban-plan-preview" aria-label={readOnly ? "运行工序图" : "方案预演工序图"}>
+      <div className="jiaoban-plan-preview-graph" role="list" aria-label={readOnly ? "运行任务与依赖" : "预演任务与依赖"}>
         {nodes.map((node, index) => {
           const binding =
             bindings.find((item) => item.preview_node_id === node.preview_node_id) ??
@@ -2093,6 +2197,10 @@ export function JiaobanPlanPreviewCanvas({
               ? `接现有 · ${session?.title || binding.session_id || "已选对话"}`
               : "新会话";
           const dependencies = node.depends_on.filter(Boolean);
+          const runtimeState = readOnly
+            ? runtimeNodeStates?.[node.preview_node_id] ?? "pending"
+            : null;
+          const nodeLabel = runtimeState ? jiaobanRuntimeNodeLabel[runtimeState] : "预演";
           return (
             <div className="jiaoban-plan-preview-node-wrap" key={node.preview_node_id} role="listitem">
               {index > 0 ? (
@@ -2100,24 +2208,39 @@ export function JiaobanPlanPreviewCanvas({
                   ↓
                 </span>
               ) : null}
-              <details className="jiaoban-plan-preview-node">
+              <details
+                className={`jiaoban-plan-preview-node${runtimeState ? ` is-runtime-node is-${runtimeState}` : ""}`}
+              >
                 <summary className="project-canvas-static-node task preflight">
-                  <span>任务 · 预演</span>
+                  <span>任务 · {nodeLabel}</span>
                   <strong>{node.title}</strong>
                   {dependencies.length ? <em>依赖：{dependencies.join("、")}</em> : <em>可从这里开始</em>}
                   <small className={binding.session_choice === "existing" ? "is-existing" : ""}>{sessionLabel}</small>
                 </summary>
-                <div className="jiaoban-plan-preview-picker">
-                  <JiaobanSessionPicker
-                    sessions={sessions}
-                    sessionChoice={binding.session_choice === "existing" ? binding.session_id ?? null : NEW_SESSION_CHOICE}
-                    onSessionChoiceChange={(value) => onBindingChange(node.preview_node_id, value)}
-                    onOpenAgentSession={onOpenAgentSession}
-                    label={`给「${node.title}」选择对话`}
-                    inputName={`jiaoban-preview-session-${index}`}
-                  />
-                  <p className="muted small-note">只会用于这一步；其余节点默认各开新会话。</p>
-                </div>
+                {readOnly ? (
+                  <div className="jiaoban-plan-preview-picker jiaoban-plan-preview-picker--readonly">
+                    <p className="muted small-note">
+                      {binding.session_choice === "existing"
+                        ? `已绑定：${session?.title || binding.session_id || "现有对话"}`
+                        : "这一步使用新会话。"}
+                    </p>
+                    <JiaobanRawSessionLink
+                      sessionChoice={binding.session_choice === "existing" ? binding.session_id ?? null : NEW_SESSION_CHOICE}
+                      onOpenAgentSession={onOpenAgentSession}
+                    />
+                  </div>
+                ) : (
+                  <div className="jiaoban-plan-preview-picker">
+                    <JiaobanSessionPicker
+                      sessions={sessions}
+                      sessionChoice={binding.session_choice === "existing" ? binding.session_id ?? null : NEW_SESSION_CHOICE}
+                      onSessionChoiceChange={(value) => onBindingChange(node.preview_node_id, value)}
+                      onOpenAgentSession={onOpenAgentSession}
+                      label={`给「${node.title}」选择对话`}
+                      inputName={`jiaoban-preview-session-${index}`}
+                    />
+                  </div>
+                )}
               </details>
             </div>
           );
@@ -2219,7 +2342,6 @@ export function JiaobanTaskSessionBindingState({
     <div className="project-canvas-detail-card" aria-label="任务会话绑定">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">交办</p>
           <h3>先给每项任务选对话</h3>
         </div>
       </div>
@@ -2441,7 +2563,6 @@ export function JiaobanRunningState({
     <div className="project-canvas-detail-card jiaoban-running" aria-label="正在干">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">交办</p>
           <h3>正在干…</h3>
         </div>
         <Badge tone="candidate">进行中</Badge>
@@ -2772,7 +2893,6 @@ export function JiaobanDoneState({
     <div className="project-canvas-detail-card jiaoban-done" aria-label="做好了">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">交办</p>
           <h3 className="jiaoban-done-title">
             {needsRework ? "这一步需要重做" : jiaobanDoneTitle(chain?.steps ?? [])}
           </h3>
@@ -3036,7 +3156,6 @@ export function JiaobanBlockedState({
     <div className="project-canvas-detail-card jiaoban-blocked" aria-label="卡住了">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">交办</p>
           <h3 className="jiaoban-blocked-title">⚠ 卡住了</h3>
         </div>
         <Badge tone="warning">停下了</Badge>

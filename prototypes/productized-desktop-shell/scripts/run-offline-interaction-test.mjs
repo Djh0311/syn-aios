@@ -20,6 +20,7 @@ const testEntries = [
   "tests/jiaoban-task-session-binding.test.tsx",
   "tests/jiaoban-merged-layout.test.tsx",
   "tests/jiaoban-plan-preview-canvas.test.tsx",
+  "tests/jiaoban-running-graph.test.tsx",
   "tests/jiaoban-page-content-cleanup.test.tsx",
   "tests/r4-page-read-model-settings.test.tsx",
   "tests/r4-page-read-model-query-contract.test.ts",

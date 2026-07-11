@@ -7,6 +7,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const noop = () => {};
+const removedCopy = (...parts: string[]) => parts.join("");
 const previewNodes = [
   { preview_node_id: "preview-step-1", title: "搭好页面骨架", depends_on: [] },
   { preview_node_id: "preview-step-2", title: "补上验收", depends_on: ["搭好页面骨架"] },
@@ -30,8 +31,12 @@ const previewCanvas = (
 );
 
 const output = renderToStaticMarkup(previewCanvas);
-assert(output.includes("预演工序图") && output.includes("你批的就是这份图"), "画布应说清所批对象");
-assert(output.includes("任务 · 预演") && output.includes("尚未执行"), "节点必须与运行态明确区分");
+assert(output.includes('aria-label="方案预演工序图"'), "画布语义标签应保留");
+assert(
+  !output.includes(removedCopy("<strong>预演工序图", "</strong>")) && !output.includes(removedCopy("你批的就是", "这份图")),
+  "画布应删除教学性标题与副标",
+);
+assert(output.includes("任务 · 预演"), "节点必须与运行态明确区分");
 assert(output.includes("搭好页面骨架") && output.includes("补上验收"), "预演节点应展示任务标题");
 assert(output.includes("依赖：搭好页面骨架"), "依赖关系应在节点图中可见");
 assert(output.includes("新会话"), "每个节点默认新会话");
@@ -65,7 +70,10 @@ const merged = renderToStaticMarkup(
   />,
 );
 assert(merged.includes('aria-label="方案预演工序图"'), "授权期应把预演放进 M2 画布区域");
-assert(merged.includes("方案预演") && merged.includes("尚未执行，可逐节点选对话"), "合一页头部应标明预演状态");
+assert(
+  !merged.includes(removedCopy("<strong>方案预演", "</strong>")) && !merged.includes(removedCopy("尚未执行，可", "逐节点选对话")),
+  "合一页应删除预演教学性头部",
+);
 assert(!merged.includes("不应展示的运行态画布"), "授权期不能把运行态画布混进预演区");
 
 console.log("jiaoban-plan-preview-canvas: 预演节点、依赖、默认新会话和合一画布离线 DOM 断言全过");
