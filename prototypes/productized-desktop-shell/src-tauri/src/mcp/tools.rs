@@ -105,6 +105,9 @@ pub fn list_tools(role: McpRole) -> Value {
                 }),
             ),
         ],
+        // `supervisor_orchestrator` has a deliberately separate module and sidecar.
+        // This empty arm only keeps the legacy canvas role matcher exhaustive.
+        McpRole::SupervisorOrchestrator => vec![],
     };
     json!({ "tools": tools })
 }
@@ -133,6 +136,7 @@ pub fn call_tool(config: &McpServerConfig, params: Value) -> Result<Value, Strin
             "list_team" | "dispatch" | "read_outbox" | "recycle" | "stop" | "finish"
         ),
         McpRole::Subagent => matches!(name, "submit_outbox" | "report_blocked"),
+        McpRole::SupervisorOrchestrator => false,
     };
     if !allowed {
         return Err(format!("工具 {name} 不在 {:?} 的可用集合里", config.role));

@@ -38,6 +38,19 @@ MCP 宿主进程生命周期(app 启动/退出/崩溃时 server 与在跑单的�
 - mock 端到端:一个假主管会话走 派→读口供→终标意见落账,链不被拦;
 - 全量:cargo 计数不降(809 基线)/typecheck/offline/`cargo fmt --check` 既有三漂移外零新增/`git diff --check` 净。
 
+## 5.5 §1.0 勘察核复(总指导 2026-07-11·本节即核复原文,最终回交引用它)
+
+1. **边界批准**:「现成入口优先 + 四个窄适配(追问 / 读关键文件 / 终标 advisory / 报告用户)+ 读口供窄只读投影 + 独立配额 sidecar `supervisor-orchestrator.v1.json`,全程不改 legacy 命令 / runner 本体 / 人闸」——**批准**。勘察三处承重事实(`__mcp_server` 入口、读口供 legacy block、`-c` + `--ignore-user-config` 旗·codex 0.144.1)总指导已独立抽查属实;「七工具皆现成包装」系拆包前提错误,以勘察为准。
+2. **宿主与挂载批准**:工作台二进制 stdio 子进程、每主管会话一只、新增隔离 role `supervisor_orchestrator`(不复用 director/subagent 工具与存储)、生命周期随 stdin 关闭;`-c` 临时覆盖不落盘已验证——批准。`codex mcp add` / 全局 config 禁用维持。
+3. **附加条件(实现期死线)**:
+   - a. **追问适配三铁则**:同一授权段内、同 thread resume、argv 经现成 builder 构造(不自造);每次计入追问预算;全文摘要落账。不碰 manual_relay。
+   - b. **终标 advisory sidecar 不写 workflow chain state**——链态不因意见变(两分法)。
+   - c. **报告用户 = MCP 返回文本 + sidecar 审计**;不写 `record_user_result_decision` 或任何用户决定位。
+   - d. 配额 sidecar 的跨进程并发锁**复用 P1 StoreLock 模式**(5×100ms + 耗尽人话),不新造锁范式。
+   - e. 窄适配优先做成 mcp 模块内部函数直读 store/sidecar;**新增 Tauri 命令数非零须报数说明**。
+4. 记档:`--ignore-user-config` 对主管会话是好副作用(不加载用户 memories / 全局 MCP → 主管上下文更干净;模型等参数须显式传)——调用形状定稿归站 2 包。
+5. 站 1 交付仍 = mock 到位、试点不开(开关归站 2)。
+
 ## 5. 回交 + 不接受为
 
 回交:勘察核复引用+增量文件清单+验证输出+新端点报数。
