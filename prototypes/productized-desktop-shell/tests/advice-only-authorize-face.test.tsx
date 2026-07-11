@@ -122,7 +122,7 @@ const readonlyTask: ProjectDirectorPlannedTask = {
 };
 
 const readonlyOutcome: AutoAdvanceRoleLoopOutcome = {
-  stage: "ran",
+  stage: "completed",
   planned_task_count: 1,
   prepared_count: 1,
   needs_binding_count: 0,

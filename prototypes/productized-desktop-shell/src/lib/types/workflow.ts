@@ -414,7 +414,7 @@ export type PreviewPendingProposalDirectorPlanOutcome = {
 };
 
 export type AutoAdvanceRoleLoopOutcome = {
-  // "ran" | "needs_binding" | "blocked" | "no_dispatchable"
+  // 链后："completed" | "interrupted" | "failed" | "waiting_decision"；链前仍可能是 needs_binding / blocked / no_dispatchable。
   stage: string;
   planned_task_count: number;
   prepared_count: number;

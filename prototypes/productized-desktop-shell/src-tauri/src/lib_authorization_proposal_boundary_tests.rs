@@ -345,6 +345,93 @@ fn project_consultation_proposal_confirm_creates_user_confirmed_authorization_no
 }
 
 #[test]
+fn project_consultation_proposal_confirm_reuses_interrupted_pending_authorization() {
+    let timestamp_ms = 1_765_100_000_000;
+    let dir = test_temp_dir("project-consultation-proposal-recover-pending-authorization");
+    let path = dir.join("workflow-state.v0.json");
+    let project = fixture_project("/tmp/c2-project-consultation-recover-pending-authorization");
+    bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
+    let created = project_consultation_proposal_store::create_proposal(
+        &path,
+        &fixture_project_consultation_proposal_input(&project.project_root),
+        timestamp_ms,
+        "write-c2-proposal-recover-create",
+    )
+    .expect("proposal should create");
+
+    // 案发断点：授权已创建，但还没来得及写用户确认或更新 proposal。
+    let orphan = plan_authorization_store::create_authorization(
+        &path,
+        &CreatePlanAuthorizationInput {
+            project_root: project.project_root.clone(),
+            project_id: Some(created.proposal.project_id.clone()),
+            workflow_id: Some(created.proposal.workflow_id.clone()),
+            source_proposal_id: Some(created.proposal.proposal_id.clone()),
+            title: created.proposal.title.clone(),
+            goal_summary: created.proposal.goal_summary.clone(),
+            scope: fixture_plan_authorization_scope(&project.project_root),
+            actor_id: "project_consultation".to_string(),
+            actor_role: "project_consultant".to_string(),
+            expires_at_ms: None,
+            expected_store_revision: None,
+        },
+        timestamp_ms + 1,
+        "write-c2-proposal-recover-orphan",
+    )
+    .expect("interrupted create should leave one pending authorization");
+    assert_eq!(
+        orphan.authorization.status,
+        PlanAuthorizationStatus::PendingUserConfirmation
+    );
+
+    let recovered = project_consultation_proposal_store::record_decision(
+        &path,
+        &RecordProjectConsultationProposalDecisionInput {
+            project_root: project.project_root.clone(),
+            proposal_id: created.proposal.proposal_id.clone(),
+            actor_id: "user-fixture".to_string(),
+            decision: ProjectConsultationProposalDecisionKind::Confirm,
+            summary: "用户重入同一确认，补完未完成的用户确认。".to_string(),
+            expected_proposal_store_revision: Some(created.store_revision),
+            expected_plan_authorization_store_revision: Some(orphan.store_revision),
+        },
+        timestamp_ms + 2,
+        "write-c2-proposal-recover-confirm",
+        "write-c2-proposal-recover-auth",
+        "write-c2-proposal-recover-auth-user",
+    )
+    .expect("reentry should reuse the pending authorization and finish confirmation");
+    let recovered_authorization = recovered
+        .plan_authorization
+        .expect("reentry should return the reused authorization");
+    let authorization_store = plan_authorization_store::load_store(&path, timestamp_ms + 3)
+        .expect("authorization store should load");
+
+    assert_eq!(recovered_authorization.authorization_id, orphan.authorization.authorization_id);
+    assert_eq!(
+        recovered.proposal.plan_authorization_id.as_deref(),
+        Some(orphan.authorization.authorization_id.as_str())
+    );
+    assert_eq!(
+        recovered_authorization.status,
+        PlanAuthorizationStatus::PendingGlobalBoundaryReview
+    );
+    assert_eq!(authorization_store.authorizations.len(), 1, "不得再建第二份授权");
+    assert_eq!(
+        authorization_store.audit_events.len(),
+        2,
+        "只应保留创建和用户确认两条授权审计"
+    );
+    assert_eq!(
+        authorization_store.audit_events[1].reason,
+        "用户重入同一确认，补完未完成的用户确认。",
+        "复用路径仍记录用户本次确认的原话"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn project_consultation_proposal_request_changes_and_reject_do_not_create_authorization() {
     for (decision, suffix) in [
         (

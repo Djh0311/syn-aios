@@ -132,10 +132,18 @@ impl DirectorFinalScreen {
 // ===== v0 静态主管档案 =====
 const DIRECTOR_V0_PROFILE: &str = r#"你是「项目主管」。
 职责:把已授权的方案拆成可派发给 worker 的具体任务。每个任务定清:做什么(task_goal)、依赖顺序(depends_on)、验收标准(acceptance_criteria)、汇报格式(report_format)。
-铁律·自包含(最重要):**worker 在干净隔离上下文里执行,只看到这个任务的 task_goal 字符串——看不到这份方案、看不到别的任务、不能按需读文件。** 所以每个 task_goal 必须把执行所需的一切**写全进去**:目标文件的**完整路径**、**要写的具体内容**、依据的事实/数据**原样抄进来**。**绝不许写"按已注入方案/参见上文/见上一步/如方案所述"——worker 根本看不到那些。** 你已拿到方案,你的职责就是把它**翻译成 worker 只看 task_goal 就能独立干完的自包含指令**。
-铁律·落地:只依据已注入的方案正文和项目上下文拆,不假设未注入的内容存在。任务对得上方案目标,不加方案没授权的事。
+铁律·自包含(最重要):**worker 在干净隔离上下文里执行,只看到这个任务的 task_goal 字符串——看不到这份方案、看不到别的任务。** 所以每个 task_goal 必须把目标、目标文件完整路径、验收要求和已知关键事实写全。**绝不许写"按已注入方案/参见上文/见上一步/如方案所述"。**
+铁律·落地:注入材料是拆解参考,不是 worker 的唯一事实来源；worker 应在任务授权的只读/可写范围内实读项目文件核实。任务对得上方案目标,不加方案没授权的事。
 边界:只读、只规划、不执行、不自己派发。真派发由用户审过后走授权闸——你只产计划。
 风格:任务粒度适中、依赖清晰、可验收;不堆废话。"#;
+
+const DIRECTOR_WORKER_TOOLBOX_FACTS: &str = r#"
+===== worker 工具箱事实（任务文本必须遵守）=====
+- worker 是 Codex exec；当前执行工具只有 shell。
+- 读文件通过 shell 使用 cat / ls / sed 等命令，不存在名为 read_file 的独立工具。
+- 只读边界由沙箱和授权范围保证；任务文本不得禁止 shell，不得指定不存在的工具名。
+- 注入材料只是辅助；不得把 worker 限制为“仅限注入原文”或禁止它在授权范围内实读项目文件。
+"#;
 
 // 2.1：拆解 prompt 分「已授权」（auto_advance/合流·真派发前）与「待确认·仅预览」（批前预拆·别对 LM 说已授权）两措辞。
 fn director_build_prompt(ctx: &ProjectContext, proposal: &ProjectConsultationProposal) -> String {
@@ -183,12 +191,12 @@ fn director_build_prompt_variant(
         proposal.scope_draft.allowed_checks,
         proposal.scope_draft.stop_conditions
     ));
-    p.push_str("\n===== 项目上下文（已注入·只能依据这些）=====\n");
+    p.push_str("\n===== 项目上下文（已注入·用于拆解参考，worker 仍可在授权范围实读）=====\n");
     if !ctx.document_map.is_empty() {
         p.push_str(&format!("文档地图:\n{}\n", ctx.document_map.join("\n")));
     }
     if !ctx.injected_documents.is_empty() {
-        p.push_str("\n--- 项目文档正文（已注入·你读不到未注入文件）---\n");
+        p.push_str("\n--- 项目文档正文（已注入给主管参考，不代表 worker 只能使用这些正文）---\n");
         for (path, content) in &ctx.injected_documents {
             p.push_str(&format!("\n### 文件: {path}\n{content}\n"));
         }
@@ -208,10 +216,11 @@ fn director_build_prompt_variant(
             "\n--- 本单已完成（**别重复执行这些动作**·以下是已归档的 worker 自述）---\n{prior}\n重拆的新计划不得再包含与上面等价的动作；上轮超时/失败的任务可以拆细或简化后重排。\n"
         ));
     }
+    p.push_str(DIRECTOR_WORKER_TOOLBOX_FACTS);
     p.push_str(
         r#"
 ===== 怎么拆 =====
-把这份方案拆成有序的 worker 任务(通常 1-6 个)。只依据上面注入的方案+文档,不假设未注入内容。
+把这份方案拆成有序的 worker 任务(通常 1-6 个)。拆解时不臆造未核实内容；任务可要求 worker 在授权范围内实读项目文件核实。
 **每个 task_goal 必须自包含**:把目标文件的完整路径、要写的具体内容、依据的事实**原样写进 task_goal**——worker 只看这段、不看方案/不看别的任务也能独立干完。**绝不写"参见方案/见上文/如上所述/见上一步"。**
 report_format 写清 worker 该**结构化返回**什么(做了啥 / 产出在哪 / 成败),好让链/主管 parse 了往下走。
 在最后输出且仅输出一个 ```json 代码块,是一个任务数组,严格这个结构:
@@ -321,6 +330,69 @@ pub(crate) fn parse_director_plan(
         })
         .collect();
     Ok(planned)
+}
+
+fn planned_task_toolbox_lint_reason(task: &ProjectDirectorPlannedTask) -> Option<&'static str> {
+    let text = format!(
+        "{}\n{}\n{}\n{}",
+        task.title,
+        task.task_goal,
+        task.acceptance_criteria.join("\n"),
+        task.report_format.join("\n")
+    );
+    let lowered = text.to_lowercase();
+    let forbids_shell = [
+        "不得运行 shell",
+        "禁止运行 shell",
+        "不得使用 shell",
+        "禁止使用 shell",
+        "不能使用 shell",
+        "不许使用 shell",
+        "no shell",
+        "without shell",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle));
+    if forbids_shell {
+        return Some("任务文本禁止 worker 唯一可用的 shell 工具");
+    }
+    if [
+        "read_file",
+        "read-file",
+        "filesystem.readfile",
+        "filesystem.read_file",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle))
+    {
+        return Some("任务文本引用不存在的独立读文件工具");
+    }
+    if [
+        "仅限注入原文",
+        "只能依据注入原文",
+        "只能使用注入原文",
+        "不得读取项目文件",
+        "禁止读取项目文件",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle))
+    {
+        return Some("任务文本把注入材料误写成唯一事实来源");
+    }
+    None
+}
+
+fn lint_planned_tasks_worker_toolbox(tasks: &[ProjectDirectorPlannedTask]) -> Result<(), String> {
+    if let Some((task, reason)) = tasks
+        .iter()
+        .find_map(|task| planned_task_toolbox_lint_reason(task).map(|reason| (task, reason)))
+    {
+        return Err(format!(
+            "director_task_toolbox_lint_failed:任务「{}」{}；已打回主管重拆。",
+            task.title, reason
+        ));
+    }
+    Ok(())
 }
 
 // ===== CliDirectorAgent（tier-1 impl：复用咨询的只读 codex）=====
@@ -508,12 +580,8 @@ fn director_workflow_summary_prompt(ctx: &DirectorWorkflowSummaryContext) -> Str
                 "- {} [{}]: summary={} warning={} status={}",
                 step.title,
                 step.state,
-                step.report_summary
-                    .as_deref()
-                    .unwrap_or("无 worker 摘要"),
-                step.report_warning
-                    .as_deref()
-                    .unwrap_or("无 warning"),
+                step.report_summary.as_deref().unwrap_or("无 worker 摘要"),
+                step.report_warning.as_deref().unwrap_or("无 warning"),
                 step.report_status.as_deref().unwrap_or("unknown")
             )
         })
@@ -684,8 +752,7 @@ fn capture_director_summary_candidate(
             memory_type: "workflow_summary".to_string(),
             claim: summary.summary.clone(),
             body,
-            review_reason: "C4b 从链末主管总结生成候选；这不是正式记忆，需人工确认。"
-                .to_string(),
+            review_reason: "C4b 从链末主管总结生成候选；这不是正式记忆，需人工确认。".to_string(),
             requires_user_confirmation: true,
             actor_role: "project_director".to_string(),
         }),
@@ -744,11 +811,17 @@ fn director_final_screen(
     if status != "done" {
         yellow_reasons.push(format!(
             "report_status_not_done:{}",
-            if status.is_empty() { "missing" } else { &status }
+            if status.is_empty() {
+                "missing"
+            } else {
+                &status
+            }
         ));
     }
     if acceptance_status != "reported_completed" {
-        yellow_reasons.push(format!("acceptance_status_not_completed:{acceptance_status}"));
+        yellow_reasons.push(format!(
+            "acceptance_status_not_completed:{acceptance_status}"
+        ));
     }
     if report.evidence.is_empty() {
         yellow_reasons.push("evidence_missing".to_string());
@@ -813,6 +886,15 @@ pub(crate) struct DirectorChainOutcome {
     pub(crate) director_summary: Option<DirectorWorkflowSummary>,
     pub(crate) warnings: Vec<String>,
     pub(crate) stopped_reason: Option<String>,
+}
+
+fn chain_result_stage(outcome: &DirectorChainOutcome) -> &'static str {
+    match outcome.stopped_reason.as_deref() {
+        None => "completed",
+        Some(reason) if reason.starts_with("waiting_decision:") => "waiting_decision",
+        Some(reason) if reason.starts_with("fail_stop:") => "failed",
+        Some(_) => "interrupted",
+    }
 }
 
 // 开工前绑定面板的逐任务选择。`existing` 必须在确认命令中绑到该任务自己的 node + work_item；
@@ -957,8 +1039,7 @@ fn failed_action_current_states(
 ) -> Result<(String, String), String> {
     let run = chain_run_record(value, chain_run_id)
         .ok_or_else(|| format!("找不到四选一处置目标链运行记录：{chain_run_id}"))?;
-    let chain_state =
-        optional_string_from(run, "state").unwrap_or_else(|| "unknown".to_string());
+    let chain_state = optional_string_from(run, "state").unwrap_or_else(|| "unknown".to_string());
     let node_state = run
         .get("nodes")
         .and_then(Value::as_array)
@@ -1031,7 +1112,12 @@ fn reopen_failed_chain_node_for_action(
         None,
         Some(message),
     );
-    update_node_state_for_id(&mut value, &failed_action_task_node_id(task), "running", &ts)?;
+    update_node_state_for_id(
+        &mut value,
+        &failed_action_task_node_id(task),
+        "running",
+        &ts,
+    )?;
     append_chain_audit(
         &mut value,
         chain_run_id,
@@ -1060,9 +1146,12 @@ fn run_project_director_failed_action_inner(
     let value = read_workflow_state_value(path)?;
     let (chain_state, node_state) =
         failed_action_current_states(&value, &request.chain_run_id, &request.planned_task_id)?;
-    if !matches!(node_state.as_str(), "failed" | "needs_rework") {
+    if !matches!(
+        node_state.as_str(),
+        "failed" | "needs_rework" | "waiting_decision"
+    ) {
         return Err(format!(
-            "四选一只能处置 failed / needs_rework 节点，当前节点状态是 {node_state}"
+            "四选一只能处置 failed / needs_rework / waiting_decision 节点，当前节点状态是 {node_state}"
         ));
     }
 
@@ -1279,21 +1368,30 @@ fn run_project_director_failed_action_inner(
                     "四选一链结束被 transition_allowed 拒绝：{chain_state}->archived"
                 ));
             }
-            ensure_failed_node_transition(&node_state, "archived", &request.actor_role, false)?;
+            let node_target = if node_state == "waiting_decision" {
+                "cancelled"
+            } else {
+                "archived"
+            };
+            ensure_failed_node_transition(&node_state, node_target, &request.actor_role, false)?;
             let ts = unix_timestamp_string();
             let mut after = read_workflow_state_value(path)?;
             set_chain_node_state(
                 &mut after,
                 &request.chain_run_id,
                 &request.planned_task_id,
-                "archived",
+                node_target,
                 None,
-                Some("主管显式选择 archive：按现成节点归档转移结束。"),
+                Some(if node_state == "waiting_decision" {
+                    "主管显式选择 archive：待决定节点按合法 cancelled 转移结束。"
+                } else {
+                    "主管显式选择 archive：按现成节点归档转移结束。"
+                }),
             );
             update_node_state_for_id(
                 &mut after,
                 &failed_action_task_node_id(task),
-                "archived",
+                node_target,
                 &ts,
             )?;
             append_chain_audit(
@@ -1302,9 +1400,13 @@ fn run_project_director_failed_action_inner(
                 &request.workflow_id,
                 "workflow_chain_node_failed_action_archive",
                 &node_state,
-                "archived",
+                node_target,
                 &ts,
-                "主管显式选择 archive：复用现成处置节点归档转移结束。",
+                if node_state == "waiting_decision" {
+                    "主管显式选择 archive：待决定节点按合法 cancelled 转移结束，链归档。"
+                } else {
+                    "主管显式选择 archive：复用现成处置节点归档转移结束。"
+                },
             )?;
             finalize_chain_run(&mut after, &request.chain_run_id, "archived", &ts);
             write_validated_workflow_state(path, &after)?;
@@ -1312,13 +1414,13 @@ fn run_project_director_failed_action_inner(
                 action: action.to_string(),
                 chain_run_id: request.chain_run_id.clone(),
                 planned_task_id: request.planned_task_id.clone(),
-                transition_to: "archived".to_string(),
+                transition_to: node_target.to_string(),
                 chain_state: "archived".to_string(),
-                node_state: "archived".to_string(),
+                node_state: node_target.to_string(),
                 new_session_id: None,
                 chain_outcome: None,
                 warnings: vec![],
-                stopped_reason: Some("archived:failed_action".to_string()),
+                stopped_reason: Some(format!("archived:{node_state}_action")),
                 message: format!("{node_state} 节点已由 {actor_id} 按 archive 结束。"),
             })
         }
@@ -1412,12 +1514,7 @@ fn reset_work_item_for_director_rework(
     step("ready_to_dispatch")
 }
 
-fn chain_node_usize_field(
-    value: &Value,
-    chain_run_id: &str,
-    node_id: &str,
-    field: &str,
-) -> usize {
+fn chain_node_usize_field(value: &Value, chain_run_id: &str, node_id: &str, field: &str) -> usize {
     chain_run_record(value, chain_run_id)
         .and_then(|run| run.get("nodes"))
         .and_then(Value::as_array)
@@ -1506,17 +1603,22 @@ fn director_plan_with_retry(
     proposal: &ProjectConsultationProposal,
     preview: bool,
 ) -> Result<(Vec<ProjectDirectorPlannedTask>, bool), String> {
-    let run = |director: &dyn DirectorAgent| {
-        if preview {
+    let run = |director: &dyn DirectorAgent| -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+        let tasks = if preview {
             director.plan_preview(ctx, proposal)
         } else {
             director.plan(ctx, proposal)
-        }
+        }?;
+        lint_planned_tasks_worker_toolbox(&tasks)?;
+        Ok(tasks)
     };
     match run(director) {
         Ok(tasks) => Ok((tasks, false)),
-        Err(error) if is_director_plan_flaky_early_exit(&error) => {
-            // 偶发早退：原地重试一次（不循环）。
+        Err(error)
+            if is_director_plan_flaky_early_exit(&error)
+                || error.contains("director_task_toolbox_lint_failed") =>
+        {
+            // 偶发早退或工具箱事实冲突：原地重拆一次（不循环）。
             run(director).map(|tasks| (tasks, true))
         }
         Err(error) => Err(error),
@@ -1547,6 +1649,7 @@ fn validate_approved_planned_tasks(
             ));
         }
     }
+    lint_planned_tasks_worker_toolbox(tasks)?;
     Ok(())
 }
 
@@ -1802,7 +1905,10 @@ fn chain_timeout_fail_stop_task(stopped_reason: Option<&str>) -> Option<String> 
 fn worker_help_message(help: &worker_report::WorkerReportHelpSignal) -> String {
     let mut parts = vec![format!("worker 求助·待主管：{}", help.summary)];
     if !help.permission_requests.is_empty() {
-        parts.push(format!("权限/资料：{}", help.permission_requests.join("；")));
+        parts.push(format!(
+            "权限/资料：{}",
+            help.permission_requests.join("；")
+        ));
     }
     if !help.open_issues.is_empty() {
         parts.push(format!("卡点：{}", help.open_issues.join("；")));
@@ -2162,7 +2268,9 @@ fn run_director_task_chain_inner(
     tasks: &[ProjectDirectorPlannedTask],
     max_tasks: usize,
     session_creator: Option<&dyn JiaobanNewSessionCreator>,
-    task_session_bindings: Option<&std::collections::BTreeMap<String, ProjectDirectorTaskSessionBinding>>,
+    task_session_bindings: Option<
+        &std::collections::BTreeMap<String, ProjectDirectorTaskSessionBinding>,
+    >,
     final_marker: &dyn DirectorFinalMarker,
     summary_generator: &dyn DirectorSummaryGenerator,
 ) -> Result<DirectorChainOutcome, String> {
@@ -2635,9 +2743,17 @@ fn run_director_task_chain_inner(
                         "running",
                         "waiting_decision",
                         &ts_done,
-                        &format!("薄链驱动：任务「{}」worker 求助，待主管决策——{help_message}", task.title),
+                        &format!(
+                            "薄链驱动：任务「{}」worker 求助，待主管决策——{help_message}",
+                            task.title
+                        ),
                     )?;
-                    finalize_chain_run(&mut after_help, &chain_run_id, "waiting_decision", &ts_done);
+                    finalize_chain_run(
+                        &mut after_help,
+                        &chain_run_id,
+                        "waiting_decision",
+                        &ts_done,
+                    );
                     append_chain_audit(
                         &mut after_help,
                         &chain_run_id,
@@ -2646,7 +2762,10 @@ fn run_director_task_chain_inner(
                         "running",
                         "waiting_decision",
                         &ts_done,
-                        &format!("任务「{}」worker 求助，链已停在 waiting_decision。", task.title),
+                        &format!(
+                            "任务「{}」worker 求助，链已停在 waiting_decision。",
+                            task.title
+                        ),
                     )?;
                     write_validated_workflow_state(path, &after_help)?;
                     steps.push(DirectorChainStep {
@@ -2666,7 +2785,10 @@ fn run_director_task_chain_inner(
                         steps,
                         director_summary: None,
                         warnings,
-                        stopped_reason: Some(format!("waiting_decision:worker_help:{}", task.title)),
+                        stopped_reason: Some(format!(
+                            "waiting_decision:worker_help:{}",
+                            task.title
+                        )),
                     });
                 }
                 let parsed_report = worker_report::parse_worker_report(&last_message_full);
@@ -2689,8 +2811,7 @@ fn run_director_task_chain_inner(
                     task_id,
                     "director_rework_attempts",
                 );
-                let remaining_budget =
-                    DIRECTOR_FINAL_REWORK_BUDGET.saturating_sub(attempts_used);
+                let remaining_budget = DIRECTOR_FINAL_REWORK_BUDGET.saturating_sub(attempts_used);
                 let final_decision = if screen.is_green() {
                     Ok(DirectorFinalMark {
                         decision: DirectorFinalMarkDecision::Completed,
@@ -2824,7 +2945,12 @@ fn run_director_task_chain_inner(
                                     }
                                 ),
                             )?;
-                            finalize_chain_run(&mut after_rework, &chain_run_id, "stopped", &ts_done);
+                            finalize_chain_run(
+                                &mut after_rework,
+                                &chain_run_id,
+                                "stopped",
+                                &ts_done,
+                            );
                             append_chain_audit(
                                 &mut after_rework,
                                 &chain_run_id,
@@ -2865,10 +2991,8 @@ fn run_director_task_chain_inner(
                             });
                         }
                         let mut waiting = read_workflow_state_value(path)?;
-                        let wait_message = format!(
-                            "主管终标退回但返工预算已耗尽，待人工决策：{}",
-                            mark.reason
-                        );
+                        let wait_message =
+                            format!("主管终标退回但返工预算已耗尽，待人工决策：{}", mark.reason);
                         set_chain_node_state(
                             &mut waiting,
                             &chain_run_id,
@@ -2893,7 +3017,12 @@ fn run_director_task_chain_inner(
                             &ts_done,
                             &format!("任务「{}」主管退回预算耗尽：{wait_message}", task.title),
                         )?;
-                        finalize_chain_run(&mut waiting, &chain_run_id, "waiting_decision", &ts_done);
+                        finalize_chain_run(
+                            &mut waiting,
+                            &chain_run_id,
+                            "waiting_decision",
+                            &ts_done,
+                        );
                         append_chain_audit(
                             &mut waiting,
                             &chain_run_id,
@@ -2902,7 +3031,10 @@ fn run_director_task_chain_inner(
                             "running",
                             "waiting_decision",
                             &ts_done,
-                            &format!("任务「{}」返工预算耗尽，链已停在 waiting_decision。", task.title),
+                            &format!(
+                                "任务「{}」返工预算耗尽，链已停在 waiting_decision。",
+                                task.title
+                            ),
                         )?;
                         write_validated_workflow_state(path, &waiting)?;
                         steps.push(DirectorChainStep {
@@ -2930,8 +3062,7 @@ fn run_director_task_chain_inner(
                     }
                     Err(error) => {
                         let mut waiting = read_workflow_state_value(path)?;
-                        let wait_message =
-                            format!("主管终标 LM 不可用，保守待人工决策：{error}");
+                        let wait_message = format!("主管终标 LM 不可用，保守待人工决策：{error}");
                         set_chain_node_state(
                             &mut waiting,
                             &chain_run_id,
@@ -2956,7 +3087,12 @@ fn run_director_task_chain_inner(
                             &ts_done,
                             &format!("任务「{}」主管终标不可用：{wait_message}", task.title),
                         )?;
-                        finalize_chain_run(&mut waiting, &chain_run_id, "waiting_decision", &ts_done);
+                        finalize_chain_run(
+                            &mut waiting,
+                            &chain_run_id,
+                            "waiting_decision",
+                            &ts_done,
+                        );
                         append_chain_audit(
                             &mut waiting,
                             &chain_run_id,
@@ -2965,7 +3101,10 @@ fn run_director_task_chain_inner(
                             "running",
                             "waiting_decision",
                             &ts_done,
-                            &format!("任务「{}」主管终标 LM 断供，链已停在 waiting_decision。", task.title),
+                            &format!(
+                                "任务「{}」主管终标 LM 断供，链已停在 waiting_decision。",
+                                task.title
+                            ),
                         )?;
                         write_validated_workflow_state(path, &waiting)?;
                         steps.push(DirectorChainStep {
@@ -3251,8 +3390,10 @@ fn validate_task_session_bindings(
     bindings: &[ProjectDirectorTaskSessionBinding],
     index: &Value,
 ) -> Result<std::collections::BTreeMap<String, ProjectDirectorTaskSessionBinding>, String> {
-    let expected: std::collections::BTreeSet<String> =
-        tasks.iter().map(|task| task.planned_task_id.clone()).collect();
+    let expected: std::collections::BTreeSet<String> = tasks
+        .iter()
+        .map(|task| task.planned_task_id.clone())
+        .collect();
     if expected.len() != tasks.len() {
         return Err("任务清单编号重复，不能确认会话映射。请重新出方案。".to_string());
     }
@@ -3312,21 +3453,24 @@ fn bind_existing_task_sessions(
         if task.status != "prepared" {
             continue;
         }
-        let binding = task_session_bindings.get(&task.planned_task_id).ok_or_else(|| {
-            format!("任务「{}」缺少会话映射，不能继续。", task.title)
-        })?;
+        let binding = task_session_bindings
+            .get(&task.planned_task_id)
+            .ok_or_else(|| format!("任务「{}」缺少会话映射，不能继续。", task.title))?;
         if binding.session_choice != "existing" {
             continue;
         }
-        let node_id = task.workflow_node_id.as_deref().ok_or_else(|| {
-            format!("任务「{}」缺少执行节点，不能绑定已有对话。", task.title)
-        })?;
-        let work_item_id = task.work_item_id.as_deref().ok_or_else(|| {
-            format!("任务「{}」缺少工作项，不能绑定已有对话。", task.title)
-        })?;
-        let session_id = binding.session_id.as_deref().ok_or_else(|| {
-            format!("任务「{}」没有可用的已有对话。", task.title)
-        })?;
+        let node_id = task
+            .workflow_node_id
+            .as_deref()
+            .ok_or_else(|| format!("任务「{}」缺少执行节点，不能绑定已有对话。", task.title))?;
+        let work_item_id = task
+            .work_item_id
+            .as_deref()
+            .ok_or_else(|| format!("任务「{}」缺少工作项，不能绑定已有对话。", task.title))?;
+        let session_id = binding
+            .session_id
+            .as_deref()
+            .ok_or_else(|| format!("任务「{}」没有可用的已有对话。", task.title))?;
         bind_workflow_node_codex_session_for_index_at(
             path,
             index,
@@ -3437,7 +3581,8 @@ pub(crate) struct AutoAdvanceAuthorizedRoleLoopRequest {
 
 #[derive(Debug, serde::Serialize)]
 pub(crate) struct AutoAdvanceRoleLoopOutcome {
-    // "ran" | "needs_binding" | "blocked" | "no_dispatchable"
+    // 链后："completed" | "interrupted" | "failed" | "waiting_decision"；
+    // 链前仍可能是 "needs_binding" | "blocked" | "no_dispatchable"。
     pub(crate) stage: String,
     pub(crate) planned_task_count: usize,
     pub(crate) prepared_count: usize,
@@ -3515,49 +3660,90 @@ fn require_active_authorization(
     }
 }
 
-// 合流命令在「用户确认」和「边界批准」之间撞瞬时锁时，会留下已确认 proposal +
-// pending_global_boundary_review 授权。用户随后点[接着跑]时，只补记这一次原本同语义的
-// 全局边界批准；没有用户确认、不是当前最新授权、已过期或状态不是 pending 一律不碰。
-fn restore_pending_global_boundary_review_after_confirm(
-    path: &std::path::Path,
-    project_root: &str,
-    workflow_id: &str,
-    actor_id: &str,
-) -> Result<(), String> {
-    let timestamp_ms = unix_timestamp_ms();
-    let project_id_value = project_id(project_root);
-    let store = plan_authorization_store::load_store(path, timestamp_ms)?;
-    let Some(latest) = store.authorizations.iter().rev().find(|authorization| {
-        authorization.project_id == project_id_value && authorization.workflow_id == workflow_id
-    }) else {
-        return Ok(());
-    };
-    if latest.status != PlanAuthorizationStatus::PendingGlobalBoundaryReview
-        || latest
-            .expires_at_ms
-            .is_some_and(|expires_at_ms| expires_at_ms <= timestamp_ms)
-    {
-        return Ok(());
-    }
-    let Some(proposal_id) = latest.source_proposal_id.clone() else {
-        return Ok(());
-    };
-    let authorization_id = latest.authorization_id.clone();
-    let expected_authorization_revision = store.revision;
+const SAME_CLICK_BOUNDARY_RESTORE_SUMMARY: &str =
+    "同一次[允许并开始]内自动补记：用户已在本次点击确认方案并批准全局边界。";
+const CONTINUE_CLICK_BOUNDARY_RESTORE_SUMMARY: &str =
+    "[接着跑]内补记：用户在本次点击恢复已确认方案的全局边界批准。";
 
-    let proposal_store = project_consultation_proposal_store::load_store(path, timestamp_ms)?;
-    let Some(proposal) = proposal_store
-        .proposals
-        .iter()
-        .find(|proposal| proposal.proposal_id == proposal_id)
-    else {
-        return Ok(());
-    };
-    if proposal.status != ProjectConsultationProposalStatus::UserConfirmed
+fn is_transient_boundary_review_lock_error(error: &str) -> bool {
+    error.contains("plan_authorization_store_locked")
+}
+
+fn validate_same_click_boundary_restore_target(
+    authorization: &PlanAuthorization,
+    proposal: &ProjectConsultationProposal,
+    project_id_value: &str,
+    workflow_id: &str,
+    proposal_id: &str,
+    authorization_id: &str,
+    timestamp_ms: i64,
+) -> Result<bool, String> {
+    if authorization.authorization_id != authorization_id
+        || authorization.source_proposal_id.as_deref() != Some(proposal_id)
+        || authorization.project_id != project_id_value
+        || authorization.workflow_id != workflow_id
+        || proposal.proposal_id != proposal_id
         || proposal.project_id != project_id_value
         || proposal.workflow_id != workflow_id
     {
-        return Ok(());
+        return Err(
+            "同击补记拒绝：proposal / authorization / project / workflow 关联不一致。".to_string(),
+        );
+    }
+    if proposal.status != ProjectConsultationProposalStatus::UserConfirmed {
+        return Err("同击补记拒绝：方案尚未 user_confirmed。".to_string());
+    }
+    if authorization
+        .expires_at_ms
+        .is_some_and(|expires_at_ms| expires_at_ms <= timestamp_ms)
+    {
+        return Err("同击补记拒绝：授权已过期。".to_string());
+    }
+    match authorization.status {
+        PlanAuthorizationStatus::Active => Ok(false),
+        PlanAuthorizationStatus::PendingGlobalBoundaryReview => Ok(true),
+        _ => Err(format!(
+            "同击补记拒绝：授权状态不是 pending_global_boundary_review / active（当前 {:?}）。",
+            authorization.status
+        )),
+    }
+}
+
+// 只给用户点击入口持有的精确 proposal_id + authorization_id 使用；调用方不能让本函数按“最新授权”猜。
+// 返回 true=本次真补记，false=同一授权已 active（幂等跳过）。
+fn restore_same_click_global_boundary_review(
+    path: &std::path::Path,
+    project_root: &str,
+    workflow_id: &str,
+    proposal_id: &str,
+    authorization_id: &str,
+    actor_id: &str,
+    summary: &str,
+) -> Result<bool, String> {
+    let timestamp_ms = unix_timestamp_ms();
+    let project_id_value = project_id(project_root);
+    let store = plan_authorization_store::load_store(path, timestamp_ms)?;
+    let authorization = store
+        .authorizations
+        .iter()
+        .find(|authorization| authorization.authorization_id == authorization_id)
+        .ok_or_else(|| format!("同击补记找不到本次授权：{authorization_id}"))?;
+    let proposal_store = project_consultation_proposal_store::load_store(path, timestamp_ms)?;
+    let proposal = proposal_store
+        .proposals
+        .iter()
+        .find(|proposal| proposal.proposal_id == proposal_id)
+        .ok_or_else(|| format!("同击补记找不到本次方案：{proposal_id}"))?;
+    if !validate_same_click_boundary_restore_target(
+        authorization,
+        proposal,
+        &project_id_value,
+        workflow_id,
+        proposal_id,
+        authorization_id,
+        timestamp_ms,
+    )? {
+        return Ok(false);
     }
 
     let recovery = plan_authorization_store::record_global_boundary_review_with_proposal(
@@ -3566,11 +3752,11 @@ fn restore_pending_global_boundary_review_after_confirm(
             project_root: project_root.to_string(),
             project_id: project_id_value.clone(),
             workflow_id: workflow_id.to_string(),
-            proposal_id,
-            authorization_id,
+            proposal_id: proposal_id.to_string(),
+            authorization_id: authorization_id.to_string(),
             actor_id: actor_id.to_string(),
             review_status: "approved".to_string(),
-            summary: "用户点[接着跑]：补记此前确认后未完成的全局边界批准。".to_string(),
+            summary: summary.to_string(),
             checklist: GlobalBoundaryReviewChecklist {
                 architecture_boundary_checked: true,
                 cross_project_impact_checked: true,
@@ -3582,29 +3768,33 @@ fn restore_pending_global_boundary_review_after_confirm(
                 acceptance_criteria_checked: true,
             },
             findings: vec![],
-            expected_authorization_revision: Some(expected_authorization_revision),
+            expected_authorization_revision: Some(store.revision),
         },
         timestamp_ms,
-        &format!("auto-advance-recover-boundary:{}", unix_timestamp_nanos()),
+        &format!(
+            "confirm-and-start-same-click-boundary:{}",
+            unix_timestamp_nanos()
+        ),
     );
     if let Err(error) = recovery {
-        // 若另一条同样的续跑刚好已补记成功，重读后继续；其余错误原样交给用户，不吞失败。
+        // 并发同击若已把**同一个 authorization_id** 激活，视为幂等成功；其它错误一律上抛到卡住脸。
         let refreshed = plan_authorization_store::load_store(path, unix_timestamp_ms())?;
-        let became_active = refreshed.authorizations.iter().any(|authorization| {
-            authorization.project_id == project_id_value
+        let exact_became_active = refreshed.authorizations.iter().any(|authorization| {
+            authorization.authorization_id == authorization_id
+                && authorization.source_proposal_id.as_deref() == Some(proposal_id)
+                && authorization.project_id == project_id_value
                 && authorization.workflow_id == workflow_id
                 && authorization.status == PlanAuthorizationStatus::Active
                 && authorization
                     .expires_at_ms
                     .is_none_or(|expires_at_ms| expires_at_ms > unix_timestamp_ms())
         });
-        if !became_active {
-            return Err(format!(
-                "用户已确认的方案仍待全局边界批准，补记失败：{error}"
-            ));
+        if !exact_became_active {
+            return Err(format!("同击边界批准自动补记失败：{error}"));
         }
+        return Ok(false);
     }
-    Ok(())
+    Ok(true)
 }
 
 // 编排内层（同步·spawn_blocking 里调；可单测·stub runner）。
@@ -3760,21 +3950,65 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
     // 首次用户确认后，主管刚拆完任务即停在绑定面板；复用 needs_binding，不新造阶段。
     pause_for_task_session_binding: bool,
     // Some = 绑定面板确认的逐任务映射；None = 既有自动/重拆路径。
-    task_session_bindings: Option<&std::collections::BTreeMap<String, ProjectDirectorTaskSessionBinding>>,
+    task_session_bindings: Option<
+        &std::collections::BTreeMap<String, ProjectDirectorTaskSessionBinding>,
+    >,
 ) -> Result<AutoAdvanceRoleLoopOutcome, String> {
     // 死线·圈固定测试项目（决策 2026-06-27）：非测试 root 入口直接拒——在 LM 拆 / prepare 之前提前拦
     // （纵深防御，不只靠链入口的晚拦）。与现成命令同款 path-lock，闸 / 沙箱本体不动。
     require_test_project_path_lock(project_root, "auto_advance_authorized_role_loop")?;
-    restore_pending_global_boundary_review_after_confirm(
-        path,
-        project_root,
-        workflow_id,
-        actor_id,
-    )?;
     let timestamp_ms = unix_timestamp_ms();
     let pid = project_id(project_root);
-    // 1. 查 active 方案授权（人闸不省·不创建不跳过；查不到即拒）。
-    let store = plan_authorization_store::load_store(path, timestamp_ms)?;
+    // 1. 查 active 方案授权。仅用户点击[接着跑]时，若最新授权仍 pending 且其来源方案正是最新
+    // user_confirmed 方案，复用同击恢复器补记；后台/其它状态仍不创建、不跳过授权。
+    let mut store = plan_authorization_store::load_store(path, timestamp_ms)?;
+    let has_active = store.authorizations.iter().rev().any(|authorization| {
+        authorization.project_id == pid
+            && authorization.workflow_id == workflow_id
+            && authorization.status == PlanAuthorizationStatus::Active
+            && authorization
+                .expires_at_ms
+                .is_none_or(|expires_at_ms| expires_at_ms > timestamp_ms)
+    });
+    if !has_active && actor_id == "user" {
+        let pending_target = store
+            .authorizations
+            .iter()
+            .rev()
+            .find(|authorization| {
+                authorization.project_id == pid && authorization.workflow_id == workflow_id
+            })
+            .filter(|authorization| {
+                authorization.status == PlanAuthorizationStatus::PendingGlobalBoundaryReview
+            })
+            .and_then(|authorization| {
+                authorization.source_proposal_id.as_ref().map(|proposal_id| {
+                    (proposal_id.clone(), authorization.authorization_id.clone())
+                })
+            });
+        if let Some((proposal_id, authorization_id)) = pending_target {
+            let proposal_store =
+                project_consultation_proposal_store::load_store(path, timestamp_ms)?;
+            let latest_proposal = proposal_store.proposals.iter().rev().find(|proposal| {
+                proposal.project_id == pid && proposal.workflow_id == workflow_id
+            });
+            if latest_proposal.is_some_and(|proposal| {
+                proposal.proposal_id == proposal_id
+                    && proposal.status == ProjectConsultationProposalStatus::UserConfirmed
+            }) {
+                restore_same_click_global_boundary_review(
+                    path,
+                    project_root,
+                    workflow_id,
+                    &proposal_id,
+                    &authorization_id,
+                    "user",
+                    CONTINUE_CLICK_BOUNDARY_RESTORE_SUMMARY,
+                )?;
+                store = plan_authorization_store::load_store(path, unix_timestamp_ms())?;
+            }
+        }
+    }
     let active = store
         .authorizations
         .iter()
@@ -3860,7 +4094,7 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                         workflow_id,
                         actor_id,
                         "role_loop_director_plan_retried",
-                        "主管拆任务偶发早退（consult 无输出），已自动重试一次。",
+                        "主管拆任务偶发早退或产物违反 worker 工具箱事实，已自动重拆一次。",
                     )?;
                 }
                 // fix3 2.1：把 LM 编的界外角色归一到 codex-dev（只收不放）+ 出人话警告。
@@ -4057,25 +4291,41 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                 return Err("逐任务会话映射缺少 C1 建会话入口，不能派发。".to_string())
             }
         };
+        let stage = chain_result_stage(&outcome);
         let stop_reason = outcome.stopped_reason.clone();
-        let message = format!(
-            "授权后自动推进跑完 worker 链：completed {} / dispatched {}{}",
-            outcome.completed,
-            outcome.dispatched,
-            stop_reason
-                .as_deref()
-                .map(|reason| format!("；停因 {reason}"))
-                .unwrap_or_else(|| "；全跑完".to_string())
-        );
+        let message = match stage {
+            "completed" => format!(
+                "授权后自动推进已完整完成 worker 链：completed {} / dispatched {}。",
+                outcome.completed, outcome.dispatched
+            ),
+            "failed" => format!(
+                "worker 链失败并已停下：completed {} / dispatched {}；停因 {}",
+                outcome.completed,
+                outcome.dispatched,
+                stop_reason.as_deref().unwrap_or("unknown")
+            ),
+            "waiting_decision" => format!(
+                "worker 链停在待你决定：completed {} / dispatched {}；原因 {}",
+                outcome.completed,
+                outcome.dispatched,
+                stop_reason.as_deref().unwrap_or("unknown")
+            ),
+            _ => format!(
+                "worker 链已中断：completed {} / dispatched {}；停因 {}",
+                outcome.completed,
+                outcome.dispatched,
+                stop_reason.as_deref().unwrap_or("unknown")
+            ),
+        };
         append_role_loop_auto_advance_audit(
             path,
             workflow_id,
             actor_id,
-            "role_loop_auto_advance_ran",
+            &format!("role_loop_auto_advance_{stage}"),
             &message,
         )?;
         Ok(AutoAdvanceRoleLoopOutcome {
-            stage: "ran".to_string(),
+            stage: stage.to_string(),
             planned_task_count,
             prepared_count,
             needs_binding_count,
@@ -4133,8 +4383,8 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                             None, // 重拆 = re-plan 路（自然带上已完成事实 + 超时事实行）
                             timeout_auto_replan_budget - 1,
                             session_creator, // C1·重拆轮同 mode（Some 则每任务仍新会话·透传）
-                            false, // 重拆不再弹绑定面板。
-                            None,  // 新任务不继承上一轮任务→会话映射，一律由 C1 新建。
+                            false,           // 重拆不再弹绑定面板。
+                            None,            // 新任务不继承上一轮任务→会话映射，一律由 C1 新建。
                         ) {
                             Ok(mut second) => {
                                 second.warnings.insert(
@@ -4149,7 +4399,7 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                                     .as_ref()
                                     .and_then(|chain| chain.stopped_reason.as_ref())
                                     .is_some()
-                                    || second.stage != "ran"
+                                    || second.stage != "completed"
                                 {
                                     second.message =
                                         format!("已自动重拆过 1 次：{}", second.message);
@@ -4401,7 +4651,7 @@ fn run_confirm_and_start_authorized_run_inner(
             .plan_authorization_store_revision
             .ok_or_else(|| "确认方案未产出授权 revision".to_string())?;
         // 3. 记录全局边界复核（Phase A 用户演全局主管·actor=用户·approved）→ 授权生效。
-        plan_authorization_store::record_global_boundary_review_with_proposal(
+        let boundary_review = plan_authorization_store::record_global_boundary_review_with_proposal(
             path,
             &RecordGlobalBoundaryReviewInput {
                 project_root: request.project_root.clone(),
@@ -4414,8 +4664,7 @@ fn run_confirm_and_start_authorized_run_inner(
                 summary: if read_only_authorization {
                     "用户点[允许并开始]：同时作全局边界批准（只读单；无写权限）。".to_string()
                 } else {
-                    "用户点[允许并开始]：同时作全局边界批准（Phase A·用户演全局主管）。"
-                        .to_string()
+                    "用户点[允许并开始]：同时作全局边界批准（Phase A·用户演全局主管）。".to_string()
                 },
                 checklist: GlobalBoundaryReviewChecklist {
                     architecture_boundary_checked: true,
@@ -4432,7 +4681,21 @@ fn run_confirm_and_start_authorized_run_inner(
             },
             timestamp_ms + 1,
             &format!("confirm-and-start-boundary:{}", unix_timestamp_nanos()),
-        )?;
+        );
+        if let Err(error) = boundary_review {
+            if !is_transient_boundary_review_lock_error(&error) {
+                return Err(error);
+            }
+            restore_same_click_global_boundary_review(
+                path,
+                &request.project_root,
+                &workflow_id,
+                &confirmed.proposal.proposal_id,
+                &authorization.authorization_id,
+                &actor_id,
+                SAME_CLICK_BOUNDARY_RESTORE_SUMMARY,
+            )?;
+        }
         if read_only_authorization {
             append_role_loop_auto_advance_audit(
                 path,
@@ -4777,8 +5040,7 @@ mod m1_plan_preview_binding_tests {
             "无稳定 id 时才按序号映射"
         );
         assert_eq!(
-            by_sequence[1].session_choice,
-            "new",
+            by_sequence[1].session_choice, "new",
             "序号映射应保留显式新会话"
         );
 
@@ -4792,14 +5054,73 @@ mod m1_plan_preview_binding_tests {
             "可证明的同序号仍可映射"
         );
         assert_eq!(
-            mismatch[1].session_choice,
-            "new",
+            mismatch[1].session_choice, "new",
             "没有对应步骤时必须默认新会话"
         );
         assert!(
             mismatch[1].session_id.is_none(),
             "不允许把旧会话静默借给未对应任务"
         );
+    }
+
+    fn chain_with_stop(stopped_reason: Option<&str>) -> DirectorChainOutcome {
+        DirectorChainOutcome {
+            total: 1,
+            dispatched: 1,
+            completed: usize::from(stopped_reason.is_none()),
+            skipped: 0,
+            chain_run_id: "chain-result-stage".to_string(),
+            steps: vec![],
+            director_summary: None,
+            warnings: vec![],
+            stopped_reason: stopped_reason.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn chain_result_stage_completed_only_without_stop_reason() {
+        assert_eq!(chain_result_stage(&chain_with_stop(None)), "completed");
+    }
+
+    #[test]
+    fn chain_result_stage_interrupted_for_user_stop() {
+        assert_eq!(
+            chain_result_stage(&chain_with_stop(Some("user_stop_requested"))),
+            "interrupted"
+        );
+    }
+
+    #[test]
+    fn chain_result_stage_failed_for_fail_stop() {
+        assert_eq!(
+            chain_result_stage(&chain_with_stop(Some("fail_stop:node_error:task"))),
+            "failed"
+        );
+    }
+
+    #[test]
+    fn chain_result_stage_waiting_decision_for_worker_help() {
+        assert_eq!(
+            chain_result_stage(&chain_with_stop(Some("waiting_decision:worker_help:task"))),
+            "waiting_decision"
+        );
+    }
+
+    #[test]
+    fn toolbox_lint_rejects_incident_fake_read_file_and_shell_ban() {
+        let mut incident = task("incident-toolbox");
+        incident.task_goal =
+            "不得运行 shell；请使用 read_file 读取 /project/CURRENT.md。".to_string();
+        let error = lint_planned_tasks_worker_toolbox(&[incident]).expect_err("应拦实案约束");
+        assert!(error.contains("shell") || error.contains("读文件工具"));
+    }
+
+    #[test]
+    fn toolbox_lint_rejects_incident_injected_text_only_constraint() {
+        let mut incident = task("incident-injected-only");
+        incident.task_goal = "仅限注入原文，禁止读取项目文件。".to_string();
+        let error = lint_planned_tasks_worker_toolbox(&[incident]).expect_err("应拦禁读约束");
+        assert!(error.contains("唯一事实来源"));
     }
 }
 
@@ -4808,6 +5129,7 @@ mod m1_plan_preview_binding_tests {
 #[cfg(test)]
 mod fix9_tests {
     use super::*;
+    use std::cell::Cell;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -4928,6 +5250,289 @@ mod fix9_tests {
         serde_json::from_str(&fs::read_to_string(path).expect("read state")).expect("parse state")
     }
 
+    fn toolbox_task(
+        proposal: &ProjectConsultationProposal,
+        task_goal: &str,
+    ) -> ProjectDirectorPlannedTask {
+        ProjectDirectorPlannedTask {
+            planned_task_id: format!("planned-task:{}:toolbox", proposal.workflow_id),
+            title: "工具箱事实任务".to_string(),
+            task_goal: task_goal.to_string(),
+            scope: director_task_scope_from_proposal(proposal, "codex-dev"),
+            depends_on: vec![],
+            acceptance_criteria: vec!["返回证据".to_string()],
+            report_format: vec!["做了什么".to_string()],
+            status: "planned".to_string(),
+            guard_result: None,
+            work_item_id: None,
+            workflow_node_id: None,
+            task_package_id: None,
+            memory_packet_snapshot_id: None,
+            prepared_dispatch_id: None,
+            blocked_reasons: vec![],
+        }
+    }
+
+    struct ToolboxRetryDirector {
+        calls: Cell<usize>,
+    }
+
+    impl DirectorAgent for ToolboxRetryDirector {
+        fn plan(
+            &self,
+            _ctx: &ProjectContext,
+            proposal: &ProjectConsultationProposal,
+        ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+            let call = self.calls.get();
+            self.calls.set(call + 1);
+            Ok(vec![toolbox_task(
+                proposal,
+                if call == 0 {
+                    "不得运行 shell；使用 read_file 读取文件。"
+                } else {
+                    "用 shell 的 sed 只读核验 /project/CURRENT.md。"
+                },
+            )])
+        }
+    }
+
+    fn fixture_context(project_root: &str) -> ProjectContext {
+        ProjectContext {
+            project_root: project_root.to_string(),
+            project_name: "测试项目".to_string(),
+            entry_document: Some("CURRENT.md".to_string()),
+            document_map: vec!["CURRENT.md".to_string()],
+            injected_documents: vec![("CURRENT.md".to_string(), "当前事实".to_string())],
+            version_signal: "test".to_string(),
+            blackboard_summary: None,
+            memory_summary: None,
+            prior_completed_summary: None,
+        }
+    }
+
+    fn confirmed_pending_pair(
+        path: &std::path::Path,
+        project_root: &str,
+    ) -> (ProjectConsultationProposal, PlanAuthorization) {
+        bootstrap_project_workflow_at(path, &fixture_project_record(project_root))
+            .expect("bootstrap");
+        let proposal = create_advice_only_pending_proposal(path, project_root);
+        let confirmed = project_consultation_proposal_store::record_decision(
+            path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: project_root.to_string(),
+                proposal_id: proposal.proposal_id.clone(),
+                actor_id: "same-click-user".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "同击测试：用户确认方案。".to_string(),
+                expected_proposal_store_revision: None,
+                expected_plan_authorization_store_revision: None,
+            },
+            unix_timestamp_ms(),
+            &format!("same-click-confirm:{}", unix_timestamp_nanos()),
+            &format!("same-click-auth:{}", unix_timestamp_nanos()),
+            &format!("same-click-user:{}", unix_timestamp_nanos()),
+        )
+        .expect("confirm");
+        (
+            confirmed.proposal,
+            confirmed.plan_authorization.expect("pending authorization"),
+        )
+    }
+
+    #[test]
+    fn director_prompt_renders_worker_toolbox_facts_without_injected_only_contradiction() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("toolbox-prompt");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project_record(test_root))
+            .expect("bootstrap");
+        let proposal = create_advice_only_pending_proposal(&path, test_root);
+        let prompt = director_build_prompt(&fixture_context(test_root), &proposal);
+        assert!(prompt.contains("worker 是 Codex exec；当前执行工具只有 shell"));
+        assert!(prompt.contains("cat / ls / sed"));
+        assert!(prompt.contains("只读边界由沙箱和授权范围保证"));
+        assert!(!prompt.contains("只能依据这些"));
+        assert!(!prompt.contains("你读不到未注入文件"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn director_toolbox_lint_returns_bad_plan_for_one_bounded_replan() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("toolbox-replan");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project_record(test_root))
+            .expect("bootstrap");
+        let proposal = create_advice_only_pending_proposal(&path, test_root);
+        let director = ToolboxRetryDirector {
+            calls: Cell::new(0),
+        };
+        let (tasks, retried) =
+            director_plan_with_retry(&director, &fixture_context(test_root), &proposal, false)
+                .expect("第二次合法计划应通过");
+        assert!(retried, "坏计划应只触发一次有界重拆");
+        assert_eq!(director.calls.get(), 2);
+        assert!(tasks[0].task_goal.contains("shell 的 sed"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn same_click_restore_only_classifies_plan_authorization_lock_as_transient() {
+        assert!(is_transient_boundary_review_lock_error(
+            "plan_authorization_store_locked:busy"
+        ));
+        assert!(!is_transient_boundary_review_lock_error(
+            "proposal_store_locked:busy"
+        ));
+        assert!(!is_transient_boundary_review_lock_error(
+            "permission denied"
+        ));
+    }
+
+    #[test]
+    fn same_click_restore_requires_exact_current_proposal_and_authorization_ids() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("same-click-exact-ids");
+        let path = dir.join("workflow-state.v0.json");
+        let (proposal, authorization) = confirmed_pending_pair(&path, test_root);
+        let error = validate_same_click_boundary_restore_target(
+            &authorization,
+            &proposal,
+            &project_id(test_root),
+            &proposal.workflow_id,
+            "another-proposal",
+            &authorization.authorization_id,
+            unix_timestamp_ms(),
+        )
+        .expect_err("跨方案 id 必须拒绝");
+        assert!(error.contains("关联不一致"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn same_click_restore_requires_confirmed_unexpired_pending_boundary_review() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("same-click-eligible");
+        let path = dir.join("workflow-state.v0.json");
+        let (proposal, authorization) = confirmed_pending_pair(&path, test_root);
+        assert!(validate_same_click_boundary_restore_target(
+            &authorization,
+            &proposal,
+            &project_id(test_root),
+            &proposal.workflow_id,
+            &proposal.proposal_id,
+            &authorization.authorization_id,
+            unix_timestamp_ms(),
+        )
+        .expect("confirmed + unexpired + pending 应可补记"));
+
+        let mut expired = authorization.clone();
+        expired.expires_at_ms = Some(unix_timestamp_ms() - 1);
+        assert!(validate_same_click_boundary_restore_target(
+            &expired,
+            &proposal,
+            &project_id(test_root),
+            &proposal.workflow_id,
+            &proposal.proposal_id,
+            &expired.authorization_id,
+            unix_timestamp_ms(),
+        )
+        .expect_err("过期授权必须拒绝")
+        .contains("已过期"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn same_click_restore_is_idempotent_for_exact_active_authorization() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("same-click-idempotent");
+        let path = dir.join("workflow-state.v0.json");
+        let (proposal, mut authorization) = confirmed_pending_pair(&path, test_root);
+        authorization.status = PlanAuthorizationStatus::Active;
+        assert!(!validate_same_click_boundary_restore_target(
+            &authorization,
+            &proposal,
+            &project_id(test_root),
+            &proposal.workflow_id,
+            &proposal.proposal_id,
+            &authorization.authorization_id,
+            unix_timestamp_ms(),
+        )
+        .expect("同一 active 授权应幂等跳过"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn same_click_restore_failure_is_not_swallowed() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("same-click-lock-failure");
+        let path = dir.join("workflow-state.v0.json");
+        let (proposal, authorization) = confirmed_pending_pair(&path, test_root);
+        let sidecar = plan_authorization_store::sidecar_path(&path).expect("sidecar");
+        let lock = sidecar
+            .parent()
+            .expect("sidecar parent")
+            .join(".plan-authorizations.v1.lock");
+        fs::write(&lock, "held").expect("hold authorization lock");
+        let error = restore_same_click_global_boundary_review(
+            &path,
+            test_root,
+            &proposal.workflow_id,
+            &proposal.proposal_id,
+            &authorization.authorization_id,
+            "same-click-user",
+            SAME_CLICK_BOUNDARY_RESTORE_SUMMARY,
+        )
+        .expect_err("持续锁失败必须上抛，不能吞错或循环");
+        assert!(error.contains("同击边界批准自动补记失败"), "{error}");
+        fs::remove_file(&lock).expect("release authorization lock");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn same_click_restore_records_exact_summary_and_skips_second_write() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("same-click-summary");
+        let path = dir.join("workflow-state.v0.json");
+        let (proposal, authorization) = confirmed_pending_pair(&path, test_root);
+        assert!(restore_same_click_global_boundary_review(
+            &path,
+            test_root,
+            &proposal.workflow_id,
+            &proposal.proposal_id,
+            &authorization.authorization_id,
+            "same-click-user",
+            SAME_CLICK_BOUNDARY_RESTORE_SUMMARY,
+        )
+        .expect("首次应补记"));
+        assert!(!restore_same_click_global_boundary_review(
+            &path,
+            test_root,
+            &proposal.workflow_id,
+            &proposal.proposal_id,
+            &authorization.authorization_id,
+            "same-click-user",
+            SAME_CLICK_BOUNDARY_RESTORE_SUMMARY,
+        )
+        .expect("第二次应幂等跳过"));
+        let store =
+            plan_authorization_store::load_store(&path, unix_timestamp_ms()).expect("store");
+        let restored = store
+            .authorizations
+            .iter()
+            .find(|item| item.authorization_id == authorization.authorization_id)
+            .expect("exact authorization");
+        assert_eq!(
+            restored
+                .global_boundary_review
+                .as_ref()
+                .map(|review| review.summary.as_str()),
+            Some(SAME_CLICK_BOUNDARY_RESTORE_SUMMARY)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // §4①：纯建议方案（写根空）→ 同一人闸建只读授权，并停在既有逐任务绑定面。
     #[test]
     fn advice_only_confirm_authorizes_readonly_and_waits_for_task_binding() {
@@ -4977,7 +5582,9 @@ mod fix9_tests {
             active
                 .user_confirmation
                 .as_ref()
-                .is_some_and(|confirmation| confirmation.confirmation_summary.contains("read_only")),
+                .is_some_and(|confirmation| confirmation
+                    .confirmation_summary
+                    .contains("read_only")),
             "既有确认记录应明确只读语义：{active:?}"
         );
         let state = read_state_json(&path);
@@ -5089,7 +5696,9 @@ mod fix9_tests {
         let task_package = state["artifacts"]
             .as_array()
             .and_then(|artifacts| {
-                artifacts.iter().find(|artifact| artifact["artifact_type"] == "task_package")
+                artifacts
+                    .iter()
+                    .find(|artifact| artifact["artifact_type"] == "task_package")
             })
             .expect("只读任务应物化任务包");
         assert!(
@@ -5100,24 +5709,23 @@ mod fix9_tests {
         );
         assert!(
             state["audit_events"]
-            .as_array()
-            .map(|events| {
-                events
-                    .iter()
-                    .filter(|event| event["event_type"] == "role_loop_auto_advance_started")
-                    .filter_map(|event| event["reason"].as_str())
-                    .any(|reason| reason.contains("只读自动推进"))
-            })
-            .unwrap_or(false),
+                .as_array()
+                .map(|events| {
+                    events
+                        .iter()
+                        .filter(|event| event["event_type"] == "role_loop_auto_advance_started")
+                        .filter_map(|event| event["reason"].as_str())
+                        .any(|reason| reason.contains("只读自动推进"))
+                })
+                .unwrap_or(false),
             "接着跑应记录只读 started 审计"
         );
         let _ = fs::remove_dir_all(dir);
     }
 
-    // 第四波事故回放：确认已经落库，但紧接的全局边界批准撞了瞬时锁。用户点[接着跑]只能补这一步，
-    // 仍须使用已确认 proposal + 当前 pending 授权，不能凭空创建或放宽任何授权。
+    // P0.5 条款 6：[接着跑]仍是用户点击；pending 授权可在这次点击内补记 active 后推进。
     #[test]
-    fn auto_advance_recovers_user_confirmed_pending_boundary_review() {
+    fn auto_advance_restores_confirmed_pending_boundary_review_on_continue_click() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
         let dir = tmp_dir("recover-pending-boundary");
         let path = dir.join("workflow-state.v0.json");
@@ -5155,7 +5763,7 @@ mod fix9_tests {
             "前置：只完成用户确认，尚未边界批准"
         );
 
-        let outcome = run_auto_advance_authorized_role_loop(
+        let outcome = run_auto_advance_authorized_role_loop_until_task_session_binding(
             &path,
             &serde_json::json!({"projects": [{"project_root": test_root}]}),
             &dir.join("readback.sqlite"),
@@ -5167,8 +5775,8 @@ mod fix9_tests {
             10,
             None,
         )
-        .expect("continue should restore only the pending boundary approval");
-        assert_eq!(outcome.stage, "needs_binding", "恢复后仍走既有绑定面");
+        .expect("用户点击[接着跑]应补记 pending 授权并继续推进");
+        assert_eq!(outcome.stage, "needs_binding", "补记后应推进至绑定面板");
 
         let after = plan_authorization_store::load_store(&path, unix_timestamp_ms())
             .expect("active authorization store");
@@ -5178,13 +5786,51 @@ mod fix9_tests {
             .find(|item| item.authorization_id == authorization.authorization_id)
             .expect("same authorization should be retained");
         assert_eq!(restored.status, PlanAuthorizationStatus::Active);
-        assert!(
+        assert_eq!(
             restored
                 .global_boundary_review
                 .as_ref()
-                .is_some_and(|review| review.status == "approved"),
-            "恢复只能补上 approved 全局边界记录"
+                .map(|review| review.summary.as_str()),
+            Some(CONTINUE_CLICK_BOUNDARY_RESTORE_SUMMARY),
+            "[接着跑]补记必须留下专用摘要"
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn auto_advance_does_not_restore_pending_boundary_review_for_background_actor() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("background-pending-boundary");
+        let path = dir.join("workflow-state.v0.json");
+        let (proposal, authorization) = confirmed_pending_pair(&path, test_root);
+
+        let error = run_auto_advance_authorized_role_loop(
+            &path,
+            &serde_json::json!({"projects": [{"project_root": test_root}]}),
+            &dir.join("readback.sqlite"),
+            &PanicRunner,
+            &OneTaskDirector,
+            test_root,
+            &proposal.workflow_id,
+            "background",
+            10,
+            None,
+        )
+        .expect_err("非用户/后台入口不得补记 pending 授权");
+        assert!(error.contains("无 active 方案授权"), "应停在人闸：{error}");
+
+        let store = plan_authorization_store::load_store(&path, unix_timestamp_ms())
+            .expect("pending authorization store");
+        let retained = store
+            .authorizations
+            .iter()
+            .find(|item| item.authorization_id == authorization.authorization_id)
+            .expect("same authorization should be retained");
+        assert_eq!(
+            retained.status,
+            PlanAuthorizationStatus::PendingGlobalBoundaryReview
+        );
+        assert!(retained.global_boundary_review.is_none());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -5736,7 +6382,7 @@ mod quality_debt_tests {
             None,
         )
         .expect("超时应自动重拆后跑完");
-        assert_eq!(outcome.stage, "ran", "{outcome:?}");
+        assert_eq!(outcome.stage, "completed", "{outcome:?}");
         assert!(
             outcome
                 .warnings
@@ -5769,11 +6415,7 @@ mod quality_debt_tests {
             calls: Cell<usize>,
         }
         impl JiaobanNewSessionCreator for CountingCreator {
-            fn create_initialized_session(
-                &self,
-                _text: &str,
-                _by: &str,
-            ) -> Result<String, String> {
+            fn create_initialized_session(&self, _text: &str, _by: &str) -> Result<String, String> {
                 self.calls.set(self.calls.get() + 1);
                 Ok("thread-qdebt".to_string())
             }
@@ -5785,25 +6427,27 @@ mod quality_debt_tests {
         let index = fixture_index(test_root, "thread-qdebt");
         let workflow_id = seed_active_run(&path, &index, test_root);
         let proposal_store =
-            project_consultation_proposal_store::load_store(&path, unix_timestamp_ms()).expect("proposal store");
+            project_consultation_proposal_store::load_store(&path, unix_timestamp_ms())
+                .expect("proposal store");
         let scope = director_task_scope_from_proposal(&proposal_store.proposals[0], "codex-dev");
-        let make_task = |id: usize, title: &str, depends_on: Vec<String>| ProjectDirectorPlannedTask {
-            planned_task_id: format!("planned-task:{workflow_id}:{id}"),
-            title: title.to_string(),
-            task_goal: title.to_string(),
-            scope: scope.clone(),
-            depends_on,
-            acceptance_criteria: vec!["ok".to_string()],
-            report_format: vec!["r".to_string()],
-            status: "planned".to_string(),
-            guard_result: None,
-            work_item_id: None,
-            workflow_node_id: None,
-            task_package_id: None,
-            memory_packet_snapshot_id: None,
-            prepared_dispatch_id: None,
-            blocked_reasons: vec![],
-        };
+        let make_task =
+            |id: usize, title: &str, depends_on: Vec<String>| ProjectDirectorPlannedTask {
+                planned_task_id: format!("planned-task:{workflow_id}:{id}"),
+                title: title.to_string(),
+                task_goal: title.to_string(),
+                scope: scope.clone(),
+                depends_on,
+                acceptance_criteria: vec!["ok".to_string()],
+                report_format: vec!["r".to_string()],
+                status: "planned".to_string(),
+                guard_result: None,
+                work_item_id: None,
+                workflow_node_id: None,
+                task_package_id: None,
+                memory_packet_snapshot_id: None,
+                prepared_dispatch_id: None,
+                blocked_reasons: vec![],
+            };
         let approved = vec![
             make_task(1, "删一个怪", vec![]),
             make_task(2, "浏览器验收", vec!["删一个怪".to_string()]),
@@ -5846,8 +6490,12 @@ mod quality_debt_tests {
             &mappings,
         )
         .expect("超时后应自动重拆一次");
-        assert_eq!(outcome.stage, "ran", "{outcome:?}");
-        assert_eq!(director.calls.get(), 1, "首轮用已批任务图；只有重拆才调用主管");
+        assert_eq!(outcome.stage, "completed", "{outcome:?}");
+        assert_eq!(
+            director.calls.get(),
+            1,
+            "首轮用已批任务图；只有重拆才调用主管"
+        );
         assert_eq!(
             creator.calls.get(),
             3,
@@ -5989,7 +6637,7 @@ mod quality_debt_tests {
             Some(&approved),
         )
         .expect("approved 路照旧全通");
-        assert_eq!(outcome.stage, "ran");
+        assert_eq!(outcome.stage, "completed");
         assert!(audit_reasons(&path, "role_loop_timeout_auto_replan").is_empty());
         assert!(!outcome.warnings.iter().any(|w| w.contains("自动打回")));
         let _ = fs::remove_dir_all(dir);
@@ -6043,7 +6691,10 @@ mod quality_debt_tests {
             .as_str()
             .unwrap_or("")
             .contains("worker 求助"));
-        let task_node_id = format!("{workflow_id}:node:task:{}", stable_id(&format!("planned-task:{workflow_id}:1")));
+        let task_node_id = format!(
+            "{workflow_id}:node:task:{}",
+            stable_id(&format!("planned-task:{workflow_id}:1"))
+        );
         let task_node = state["nodes"]
             .as_array()
             .unwrap()
@@ -6583,7 +7234,7 @@ mod quality_debt_tests {
             &creator,
         )
         .expect("C1 自动路应跑通");
-        assert_eq!(outcome.stage, "ran", "应跑到链：{outcome:?}");
+        assert_eq!(outcome.stage, "completed", "应完整跑完链：{outcome:?}");
         // ① 每任务先生后绑一次。
         assert_eq!(creator.calls.get(), 3, "① 自动路每任务建新会话·3 次");
         // ② 各任务 dispatch 用各自新 thread 互异。

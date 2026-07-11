@@ -163,7 +163,7 @@ function authorizeHtml(proposalIsStale = false, proposalAgeDays = 0): string {
     ],
   };
   const outcome: AutoAdvanceRoleLoopOutcome = {
-    stage: "ran",
+    stage: "completed",
     planned_task_count: 2,
     prepared_count: 2,
     needs_binding_count: 0,

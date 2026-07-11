@@ -1438,6 +1438,7 @@ const WORKFLOW_ALLOWED_TRANSITIONS: &[(&str, &str)] = &[
     ("paused", "running"),
     ("running", "waiting_decision"),
     ("waiting_decision", "running"),
+    ("waiting_decision", "archived"),
     ("running", "completed"),
     ("running", "failed"),
     ("completed", "archived"),

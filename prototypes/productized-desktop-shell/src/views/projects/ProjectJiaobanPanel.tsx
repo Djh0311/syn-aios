@@ -18,6 +18,7 @@ import {
 import type {
   AutoAdvanceRoleLoopOutcome,
   CreateMemoryCandidateInput,
+  DirectorChainOutcome,
   DirectorChainStep,
   GlobalSupervisorBoundaryReviewOutcome,
   GlobalSupervisorReviewOutcome,
@@ -56,7 +57,29 @@ export type ProjectJiaobanPanelProps = {
   renderLayout?: (content: ProjectJiaobanPanelLayout) => ReactNode;
 };
 
-export type JiaobanPhase = "say" | "authorize" | "binding" | "running" | "done" | "blocked";
+export type JiaobanPhase =
+  | "say"
+  | "authorize"
+  | "binding"
+  | "running"
+  | "done"
+  | "waiting_decision"
+  | "blocked";
+
+export function jiaobanStageFromChainOutcome(chain: DirectorChainOutcome | null): string {
+  const reason = chain?.stopped_reason?.trim() ?? "";
+  if (!reason) return "completed";
+  if (reason.startsWith("waiting_decision:")) return "waiting_decision";
+  if (reason.startsWith("fail_stop:")) return "failed";
+  return "interrupted";
+}
+
+export function jiaobanPhaseForOutcome(outcome: AutoAdvanceRoleLoopOutcome): JiaobanPhase {
+  if (outcome.task_session_binding_required) return "binding";
+  if (outcome.stage === "completed") return "done";
+  if (outcome.stage === "waiting_decision") return "waiting_decision";
+  return "blocked";
+}
 
 export type ProjectJiaobanPanelLayout = {
   phase: JiaobanPhase;
@@ -110,35 +133,84 @@ export type JiaobanPreviewCanvasNode = {
   depends_on: string[];
 };
 
-export type JiaobanRuntimeNodeState = "pending" | "running" | "completed" | "needs_rework" | "failed";
+export type JiaobanRuntimeNodeState =
+  | "pending"
+  | "running"
+  | "completed"
+  | "waiting_decision"
+  | "needs_rework"
+  | "failed"
+  | "skipped"
+  | "archived"
+  | "unknown";
+
+export type JiaobanRuntimeNodeStateInfo = {
+  state: JiaobanRuntimeNodeState;
+  detail?: string;
+  rawState?: string;
+};
 
 const jiaobanRuntimeNodeLabel: Record<JiaobanRuntimeNodeState, string> = {
   pending: "等待",
   running: "正在执行",
   completed: "已完成",
+  waiting_decision: "待你决定",
   needs_rework: "需要重做",
   failed: "失败",
+  skipped: "没轮到/被跳过",
+  archived: "本单已结束",
+  unknown: "状态未知",
 };
 
-function normalizeJiaobanRuntimeNodeState(value: string | null | undefined): JiaobanRuntimeNodeState {
-  switch (value?.trim().toLowerCase()) {
+function normalizeJiaobanRuntimeNodeState(
+  value: string | null | undefined,
+  message: string | null | undefined,
+): JiaobanRuntimeNodeStateInfo {
+  const rawState = value?.trim() ?? "";
+  const detail = message?.trim() ?? "";
+  switch (rawState.toLowerCase()) {
+    case "pending":
+    case "waiting":
+      return { state: "pending" };
     case "running":
-      return "running";
+      return { state: "running" };
     case "completed":
     case "finished":
     case "done":
     case "succeeded":
-      return "completed";
+      return { state: "completed" };
     case "needs_rework":
     case "needs-rework":
-      return "needs_rework";
+      return { state: "needs_rework" };
+    case "waiting_decision":
+    case "waiting-decision":
+      return { state: "waiting_decision" };
     case "failed":
     case "aborted":
     case "stopped":
-      return "failed";
+      return { state: "failed" };
+    case "skipped":
+      return {
+        state: "skipped",
+        detail: detail || "skipped；详情看画布",
+      };
+    case "archived":
+      return { state: "archived", detail: detail || undefined };
     default:
-      return "pending";
+      return rawState
+        ? {
+            state: "unknown",
+            rawState,
+            detail: `状态未知（${rawState}）；详情看画布`,
+          }
+        : { state: "pending" };
   }
+}
+
+function jiaobanRuntimeNodeStateLabel(state: JiaobanRuntimeNodeStateInfo): string {
+  return state.state === "unknown" && state.rawState
+    ? `状态未知（${state.rawState}）`
+    : jiaobanRuntimeNodeLabel[state.state];
 }
 
 // 运行读模型以实时链节点优先；终态若轮询来不及回写，再用本轮 outcome 的步骤兜底。
@@ -147,7 +219,7 @@ export function jiaobanRuntimeNodeStates(
   nodes: JiaobanPreviewCanvasNode[],
   chainStatus: ProjectWorkflowChainStatus | null,
   chainSteps: DirectorChainStep[] = [],
-): Record<string, JiaobanRuntimeNodeState> {
+): Record<string, JiaobanRuntimeNodeStateInfo> {
   return Object.fromEntries(
     nodes.map((node) => {
       const chainNode = chainStatus?.nodes.find((item) => item.node_id === node.preview_node_id);
@@ -156,7 +228,10 @@ export function jiaobanRuntimeNodeStates(
       const singleChainStep = nodes.length === 1 ? chainSteps[0] : null;
       return [
         node.preview_node_id,
-        normalizeJiaobanRuntimeNodeState(chainNode?.state ?? chainStep?.state ?? singleChainNode?.state ?? singleChainStep?.state),
+        normalizeJiaobanRuntimeNodeState(
+          chainNode?.state ?? chainStep?.state ?? singleChainNode?.state ?? singleChainStep?.state,
+          chainNode?.message ?? singleChainNode?.message,
+        ),
       ];
     }),
   );
@@ -557,7 +632,7 @@ function ProjectJiaobanPanelBrowser({
 
   // 干活期间轮询进度（复用现成只读命令）。fix6：改成 phase==running 就轮——
   // 点允许/接着跑那刻（相位先行）即开轮，执行期步骤逐格亮；重挂载后 phase 从缓存恢复=running→照轮→371 兜底翻脸=自愈。
-  // （原守 outcome.stage==ran，但合流/接着跑是同步跑到底才返回、跑中 outcome 恒 null，重挂载新实例 outcome 也 null → 整个执行期一格不轮、卡「正在干」。）
+  // （旧实现守最终 outcome.stage，但合流/接着跑是同步跑到底才返回、跑中 outcome 恒 null，重挂载新实例 outcome 也 null → 整个执行期一格不轮、卡「正在干」。）
   useEffect(() => {
     // 用 manualPhase（phase 常量定义在本 effect 之后、直接用会 TDZ；running 只可能来自 manualPhase，二者等价）。
     if (manualPhase !== "running" || !projectWorkflow) return;
@@ -879,11 +954,7 @@ function ProjectJiaobanPanelBrowser({
           ? outcome.task_session_bindings
           : defaultTaskSessionBindings(outcome.planned_tasks ?? [], sessionChoice)
         : [];
-      const nextPhase: JiaobanPhase = outcome.task_session_binding_required
-        ? "binding"
-        : outcome.stage === "ran"
-          ? "done"
-          : "blocked";
+      const nextPhase = jiaobanPhaseForOutcome(outcome);
       setOutcome(outcome);
       setManualPhase(nextPhase);
       setTaskSessionBindings(bindings);
@@ -971,7 +1042,7 @@ function ProjectJiaobanPanelBrowser({
         task_session_bindings: taskSessionBindings,
         actor_id: "user",
       });
-      const nextPhase: JiaobanPhase = nextOutcome.stage === "ran" ? "done" : "blocked";
+      const nextPhase = jiaobanPhaseForOutcome(nextOutcome);
       setOutcome(nextOutcome);
       setManualPhase(nextPhase);
       writeJiaobanRunCache(projectRoot, {
@@ -1041,8 +1112,7 @@ function ProjectJiaobanPanelBrowser({
         workflow_id: projectWorkflow.workflow_id,
         actor_id: "user",
       });
-      // fix6：ran = 链已跑完 → 直接交货脸，不干等轮询。
-      const nextPhase: JiaobanPhase = nextOutcome.stage === "ran" ? "done" : "blocked";
+      const nextPhase = jiaobanPhaseForOutcome(nextOutcome);
       setOutcome(nextOutcome);
       setManualPhase(nextPhase);
       writeJiaobanRunCache(projectRoot, { manualPhase: nextPhase, outcome: nextOutcome, startError: null });
@@ -1065,14 +1135,16 @@ function ProjectJiaobanPanelBrowser({
     }
   }
 
-  async function applyNeedsReworkAction(action: "change_session" | "rework" | "archive") {
+  async function applyDecisionAction(action: "retry" | "change_session" | "rework" | "archive") {
     if (!projectWorkflow || !outcome?.chain_outcome || starting) return;
     const plannedTaskId =
-      outcome.chain_outcome?.steps.find((step) => step.state === "needs_rework")?.planned_task_id ??
+      outcome.chain_outcome.steps.find((step) => step.state === "waiting_decision")?.planned_task_id ??
+      outcome.chain_outcome.steps.find((step) => step.state === "needs_rework")?.planned_task_id ??
+      thisRoundChainStatus?.nodes.find((node) => node.state === "waiting_decision")?.node_id ??
       thisRoundChainStatus?.nodes.find((node) => node.state === "needs_rework")?.node_id;
     const plannedTask = outcome.planned_tasks?.find((task) => task.planned_task_id === plannedTaskId);
     if (!plannedTaskId || !plannedTask) {
-      setNeedsReworkActionError("这单的重做信息还没载入，暂时不能换会话、重拆或结束；可以先按原样接着跑。");
+      setNeedsReworkActionError("这单的处置信息还没载入，暂时不能执行该动作。");
       return;
     }
 
@@ -1087,26 +1159,35 @@ function ProjectJiaobanPanelBrowser({
         action,
         actor_role: "project_director",
         actor_id: "user",
-        explicit_retry_or_reopen: action === "change_session",
+        explicit_retry_or_reopen: action === "retry" || action === "change_session",
         planned_task: plannedTask,
         max_nodes: 1,
       });
+      const nextChainOutcome =
+        action === "retry" || action === "change_session"
+          ? (result.chain_outcome ?? null)
+          : action === "rework"
+            ? outcome.chain_outcome
+            : null;
       const nextOutcome: AutoAdvanceRoleLoopOutcome = {
-        stage: "ran",
+        stage:
+          action === "retry" || action === "change_session"
+            ? jiaobanStageFromChainOutcome(nextChainOutcome)
+            : "interrupted",
         planned_task_count: outcome.planned_task_count,
         prepared_count: outcome.prepared_count,
         needs_binding_count: outcome.needs_binding_count,
         blocked_count: outcome.blocked_count,
         message: result.message,
-        chain_outcome:
-          action === "change_session" ? (result.chain_outcome ?? null) : action === "rework" ? outcome.chain_outcome : null,
+        chain_outcome: nextChainOutcome,
         stop_reason: result.stopped_reason ?? null,
         planned_tasks: outcome.planned_tasks,
         warnings: result.warnings,
       };
+      const nextPhase = jiaobanPhaseForOutcome(nextOutcome);
       setOutcome(nextOutcome);
-      setManualPhase("done");
-      writeJiaobanRunCache(projectRoot, { manualPhase: "done", outcome: nextOutcome, startError: null });
+      setManualPhase(nextPhase);
+      writeJiaobanRunCache(projectRoot, { manualPhase: nextPhase, outcome: nextOutcome, startError: null });
       try {
         const status = await getProjectWorkflowChainStatus(projectRoot, projectWorkflow.workflow_id);
         if (status) setChainStatus(status);
@@ -1153,15 +1234,20 @@ function ProjectJiaobanPanelBrowser({
     clearJiaobanRunCache(projectRoot);
   }
 
-  // 干完了没有：链状态是否收尾（人话「做好了」）。
+  // 只按真实链终态翻脸：completed 才交货；失败/中断/待决定各去自己的脸。
   useEffect(() => {
     if (phase !== "running") return;
-    // fix6-v2：只认「这一轮」的链收尾才翻交货——防旧链的 completed 状态在拆任务期把新一轮提前翻脸。
-    if (thisRoundChainStatus && /(finished|completed|done|succeeded|aborted|stopped|failed)/i.test(thisRoundChainStatus.state)) {
-      // 链跑到头 → 交货（aborted/failed 也进交货并给下一步，永不冻；细节人话见结果行）。
-      setManualPhase("done");
-      writeJiaobanRunCache(projectRoot, { manualPhase: "done" });
-    }
+    const state = thisRoundChainStatus?.state.trim().toLowerCase();
+    const nextPhase: JiaobanPhase | null = ["finished", "completed", "done", "succeeded"].includes(state ?? "")
+      ? "done"
+      : state === "waiting_decision"
+        ? "waiting_decision"
+        : ["aborted", "stopped", "interrupted", "failed", "archived"].includes(state ?? "")
+          ? "blocked"
+          : null;
+    if (!nextPhase) return;
+    setManualPhase(nextPhase);
+    writeJiaobanRunCache(projectRoot, { manualPhase: nextPhase });
   }, [phase, thisRoundChainStatus, projectRoot]);
 
   // 非测试项目：老实标注 + 跳智能体直连，不装能跑。
@@ -1251,6 +1337,26 @@ function ProjectJiaobanPanelBrowser({
         actionsReady: outcome?.planned_tasks?.some((task) => task.planned_task_id === needsReworkTaskId) ?? false,
       }
     : null;
+  const waitingDecisionStep =
+    outcome?.chain_outcome?.steps.find((step) => step.state === "waiting_decision") ?? null;
+  const waitingDecisionNode =
+    thisRoundChainStatus?.nodes.find((node) => node.state === "waiting_decision") ?? null;
+  const waitingDecisionTaskId =
+    waitingDecisionStep?.planned_task_id ?? waitingDecisionNode?.node_id ?? null;
+  const waitingDecision = waitingDecisionTaskId
+    ? {
+        reason:
+          waitingDecisionNode?.message?.trim() ||
+          waitingDecisionStep?.report_summary?.trim() ||
+          outcome?.message?.trim() ||
+          "worker 停下来向你求助，请选择下一步。",
+        actionsReady:
+          outcome?.planned_tasks?.some((task) => task.planned_task_id === waitingDecisionTaskId) ?? false,
+      }
+    : {
+        reason: outcome?.message?.trim() || "worker 停下来向你求助，请选择下一步。",
+        actionsReady: false,
+      };
 
   // Part①·历史拉取（挂载/交货翻脸/重拆各一次·不轮询）。失败静默：读不到就保留已有、不上错、不挡五态主区。
   async function loadHistory() {
@@ -1394,7 +1500,7 @@ function ProjectJiaobanPanelBrowser({
               needsReworkActionError={needsReworkActionError}
               needsReworkActionStarting={starting}
               onNeedsReworkContinue={() => void continueRun()}
-              onNeedsReworkAction={(action) => void applyNeedsReworkAction(action)}
+              onNeedsReworkAction={(action) => void applyDecisionAction(action)}
               onRequestAction={onRequestAction}
               factCtx={{
                 projectRoot: project.project_root,
@@ -1412,6 +1518,19 @@ function ProjectJiaobanPanelBrowser({
                 if (key) void requestSupervisorReview(key, true);
               }}
               onSupervisorReplan={backToSay}
+            />
+          ) : null}
+
+          {phase === "waiting_decision" ? (
+            <JiaobanWaitingDecisionState
+              reason={waitingDecision.reason}
+              actionsReady={waitingDecision.actionsReady}
+              starting={starting}
+              error={needsReworkActionError}
+              onContinue={() => void applyDecisionAction("retry")}
+              onChangeSession={() => void applyDecisionAction("change_session")}
+              onRework={() => void continueRun()}
+              onArchive={() => void applyDecisionAction("archive")}
             />
           ) : null}
 
@@ -1435,7 +1554,8 @@ function ProjectJiaobanPanelBrowser({
       )}
     </div>
   );
-  const runtimeCanvasPhase = phase === "running" || phase === "done" || phase === "blocked";
+  const runtimeCanvasPhase =
+    phase === "running" || phase === "done" || phase === "waiting_decision" || phase === "blocked";
   const canvasNodes = runtimeCanvasPhase && runCanvasNodes.length > 0 ? runCanvasNodes : previewCanvasNodes;
   const canvasBindings = runtimeCanvasPhase && runCanvasBindings.length > 0 ? runCanvasBindings : previewBindingsForCanvas;
   const runtimeNodeStates = runtimeCanvasPhase
@@ -2157,7 +2277,7 @@ export function JiaobanPlanPreviewCanvas({
   previewError: string | null;
   previewWarnings: string[];
   readOnly?: boolean;
-  runtimeNodeStates?: Record<string, JiaobanRuntimeNodeState> | null;
+  runtimeNodeStates?: Record<string, JiaobanRuntimeNodeStateInfo> | null;
   onBindingChange: (previewNodeId: string, value: string | null) => void;
   onRetryPreview: () => void;
   onOpenAgentSession: (threadId: string) => void;
@@ -2197,10 +2317,10 @@ export function JiaobanPlanPreviewCanvas({
               ? `接现有 · ${session?.title || binding.session_id || "已选对话"}`
               : "新会话";
           const dependencies = node.depends_on.filter(Boolean);
-          const runtimeState = readOnly
-            ? runtimeNodeStates?.[node.preview_node_id] ?? "pending"
+          const runtimeNodeState = readOnly
+            ? runtimeNodeStates?.[node.preview_node_id] ?? { state: "pending" }
             : null;
-          const nodeLabel = runtimeState ? jiaobanRuntimeNodeLabel[runtimeState] : "预演";
+          const nodeLabel = runtimeNodeState ? jiaobanRuntimeNodeStateLabel(runtimeNodeState) : "预演";
           return (
             <div className="jiaoban-plan-preview-node-wrap" key={node.preview_node_id} role="listitem">
               {index > 0 ? (
@@ -2209,12 +2329,13 @@ export function JiaobanPlanPreviewCanvas({
                 </span>
               ) : null}
               <details
-                className={`jiaoban-plan-preview-node${runtimeState ? ` is-runtime-node is-${runtimeState}` : ""}`}
+                className={`jiaoban-plan-preview-node${runtimeNodeState ? ` is-runtime-node is-${runtimeNodeState.state}` : ""}`}
               >
                 <summary className="project-canvas-static-node task preflight">
                   <span>任务 · {nodeLabel}</span>
                   <strong>{node.title}</strong>
                   {dependencies.length ? <em>依赖：{dependencies.join("、")}</em> : <em>可从这里开始</em>}
+                  {runtimeNodeState?.detail ? <em>{runtimeNodeState.detail}</em> : null}
                   <small className={binding.session_choice === "existing" ? "is-existing" : ""}>{sessionLabel}</small>
                 </summary>
                 {readOnly ? (
@@ -2865,6 +2986,9 @@ export function JiaobanDoneState({
   onSupervisorReplan: () => void;
 }) {
   const chain = outcome?.chain_outcome ?? null;
+  const isCompleted =
+    outcome?.stage === "completed" ||
+    ["finished", "completed", "done", "succeeded"].includes(chainStatus?.state.trim().toLowerCase() ?? "");
   // 刀B·事实确认本地态（防重复点·经现成 create-memory-candidate PendingAction 走确认弹层）。
   const [confirmedTaskIds, setConfirmedTaskIds] = useState<ReadonlySet<string>>(() => new Set());
   const onConfirmFact = factCtx
@@ -2882,7 +3006,7 @@ export function JiaobanDoneState({
     : undefined;
   const resultLine = chain
     ? `完成 ${chain.completed} 步${chain.stopped_reason ? `；中途停了：${chain.stopped_reason}` : ""}。`
-    : outcome?.message || "做完了。";
+    : outcome?.message || (isCompleted ? "做完了。" : "这单没有完整交货。");
   const isReadOnlyRun =
     (outcome?.planned_tasks ?? []).length > 0 &&
     (outcome?.planned_tasks ?? []).every((task) => task.scope.allowed_write_scope.length === 0);
@@ -2890,14 +3014,18 @@ export function JiaobanDoneState({
   const warnings = chain?.warnings ?? [];
 
   return (
-    <div className="project-canvas-detail-card jiaoban-done" aria-label="做好了">
+    <div className="project-canvas-detail-card jiaoban-done" aria-label={isCompleted ? "做好了" : "未完整交货"}>
       <div className="panel-heading">
         <div>
           <h3 className="jiaoban-done-title">
-            {needsRework ? "这一步需要重做" : jiaobanDoneTitle(chain?.steps ?? [])}
+            {isCompleted
+              ? jiaobanDoneTitle(chain?.steps ?? [])
+              : needsRework
+                ? "这一步需要重做"
+                : "这单没有完整交货"}
           </h3>
         </div>
-        <Badge tone={needsRework ? "warning" : "candidate"}>{needsRework ? "待你决定" : "已交货"}</Badge>
+        <Badge tone={isCompleted ? "candidate" : "warning"}>{isCompleted ? "已交货" : "未交货"}</Badge>
       </div>
       <div className="role-loop-plain" aria-label="结果（人话）">
         <p className="role-loop-plain-lead">{resultLine}</p>
@@ -2944,6 +3072,56 @@ export function JiaobanDoneState({
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+export function JiaobanWaitingDecisionState({
+  reason,
+  actionsReady,
+  starting,
+  error,
+  onContinue,
+  onChangeSession,
+  onRework,
+  onArchive,
+}: {
+  reason: string;
+  actionsReady: boolean;
+  starting: boolean;
+  error: string | null;
+  onContinue: () => void;
+  onChangeSession: () => void;
+  onRework: () => void;
+  onArchive: () => void;
+}) {
+  return (
+    <div className="project-canvas-detail-card jiaoban-blocked" aria-label="待你决定">
+      <div className="panel-heading">
+        <div>
+          <h3 className="jiaoban-blocked-title">待你决定</h3>
+        </div>
+        <Badge tone="warning">未自动重跑</Badge>
+      </div>
+      <div className="role-loop-plain" aria-label="worker 求助原文">
+        <p className="role-loop-plain-lead">{reason}</p>
+        {error ? <p className="jiaoban-consult-error" role="alert">{error}</p> : null}
+        {!actionsReady ? <p className="muted small-note">求助已停住；任务信息载入后可继续或换会话。</p> : null}
+      </div>
+      <div className="workflow-state-actions">
+        <button className="primary-button" type="button" disabled={starting || !actionsReady} onClick={onContinue}>
+          让它继续（按现状态）
+        </button>
+        <button className="secondary-button" type="button" disabled={starting || !actionsReady} onClick={onChangeSession}>
+          换个新会话重做
+        </button>
+        <button className="secondary-button" type="button" disabled={starting} onClick={onRework}>
+          退回主管重拆
+        </button>
+        <button className="secondary-button" type="button" disabled={starting || !actionsReady} onClick={onArchive}>
+          结束这单
+        </button>
+      </div>
     </div>
   );
 }
@@ -3023,6 +3201,16 @@ export function classifyBlocked(
 ): BlockedPlan {
   const stage = outcome?.stage ?? "";
   const text = `${outcome?.stop_reason ?? ""} ${outcome?.message ?? ""} ${error ?? ""}`;
+
+  // 主动结束是终态，不再给「接着跑」造成可恢复错觉；只允许重新说目标另起一单。
+  if (outcome?.stop_reason?.startsWith("archived:")) {
+    return {
+      primary: "replan",
+      showReplanSecondary: false,
+      showContinueSecondary: false,
+      note: "这单已按你的选择结束；如需继续，请重新说目标另起一单。",
+    };
+  }
 
   // 1) needs_binding / 会话类 → 先选一条会话，选完回[接着跑]。
   const needsBinding =
@@ -3127,6 +3315,11 @@ export function JiaobanBlockedState({
 
   const plan = classifyBlocked(outcome, error, planIsConfirmed);
   const warnings = outcome?.chain_outcome?.warnings ?? [];
+  const archived = outcome?.stop_reason?.startsWith("archived:") ?? false;
+  const interrupted = outcome?.stage === "interrupted" && !archived;
+  const faceTitle = archived ? "这单已结束" : interrupted ? "已停下·可接着跑" : "⚠ 卡住了";
+  const faceLabel = archived ? "本单已结束" : interrupted ? "已停下可接着跑" : "卡住了";
+  const faceBadge = archived ? "已结束" : interrupted ? "可接着跑" : "停下了";
 
   // 主/次按钮拼装。continue 主按钮统一文案「接着跑（方案已批过，不用重批）」。
   const continueBtn = (isPrimary: boolean) => (
@@ -3153,12 +3346,12 @@ export function JiaobanBlockedState({
   );
 
   return (
-    <div className="project-canvas-detail-card jiaoban-blocked" aria-label="卡住了">
+    <div className="project-canvas-detail-card jiaoban-blocked" aria-label={faceLabel}>
       <div className="panel-heading">
         <div>
-          <h3 className="jiaoban-blocked-title">⚠ 卡住了</h3>
+          <h3 className="jiaoban-blocked-title">{faceTitle}</h3>
         </div>
-        <Badge tone="warning">停下了</Badge>
+        <Badge tone="warning">{faceBadge}</Badge>
       </div>
       <div className="role-loop-plain" aria-label="停下的原因（人话）">
         <p className="role-loop-plain-lead">{reason}</p>

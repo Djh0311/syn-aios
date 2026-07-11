@@ -2,7 +2,7 @@ use crate::utils::store_paths;
 use crate::{
     AuthorizedExecutionScope, CreatePlanAuthorizationInput, CreateProjectConsultationProposalInput,
     CreateProjectConsultationProposalOutput, PlanAuthorization, PlanAuthorizationAuditEvent,
-    PlanAuthorizationStopCondition, ProjectConsultationProposal,
+    PlanAuthorizationStatus, PlanAuthorizationStopCondition, ProjectConsultationProposal,
     ProjectConsultationProposalAuditEvent, ProjectConsultationProposalDecision,
     ProjectConsultationProposalDecisionKind, ProjectConsultationProposalMarkdown,
     ProjectConsultationProposalReadModel, ProjectConsultationProposalScopeDraft,
@@ -15,11 +15,15 @@ use serde_json::Value;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::Duration;
 
 const STORE_SCHEMA_VERSION: &str = "project_consultation_proposal_store.v1";
 const PROPOSAL_SCHEMA_VERSION: &str = "project_consultation_proposal.v1";
 const SIDECAR_NAME: &str = "project-proposals.v1.json";
 const LOCK_NAME: &str = ".project-proposals.v1.lock";
+const LOCK_RETRY_COUNT: usize = 5;
+const LOCK_RETRY_DELAY: Duration = Duration::from_millis(100);
 
 pub(crate) fn sidecar_path(workflow_state_path: &Path) -> Result<PathBuf, String> {
     store_paths::sidecar_path(workflow_state_path, SIDECAR_NAME, "项目咨询方案")
@@ -209,32 +213,59 @@ pub(crate) fn record_decision(
     let mut plan_authorization_id = proposal_before_update.plan_authorization_id.clone();
 
     if input.decision == ProjectConsultationProposalDecisionKind::Confirm {
-        let created = crate::plan_authorization_store::create_authorization(
-            workflow_state_path,
-            &CreatePlanAuthorizationInput {
-                project_root: input.project_root.clone(),
-                project_id: Some(proposal_before_update.project_id.clone()),
-                workflow_id: Some(proposal_before_update.workflow_id.clone()),
-                source_proposal_id: Some(proposal_before_update.proposal_id.clone()),
-                title: proposal_before_update.title.clone(),
-                goal_summary: proposal_before_update.goal_summary.clone(),
-                scope: proposal_scope_to_authorized_scope(&proposal_before_update),
-                actor_id: "project_consultation".to_string(),
-                actor_role: "project_consultant".to_string(),
-                expires_at_ms: None,
-                expected_store_revision: input.expected_plan_authorization_store_revision,
-            },
-            timestamp_ms,
-            authorization_write_id,
-        )?;
+        let existing_pending_authorization =
+            if before == ProjectConsultationProposalStatus::PendingUserConfirmation {
+                pending_authorization_for_proposal(
+                    workflow_state_path,
+                    &proposal_before_update,
+                    timestamp_ms,
+                )?
+            } else {
+                None
+            };
+        let (authorization_id, authorization_revision) = if let Some((authorization, revision)) =
+            existing_pending_authorization
+        {
+            if let Some(expected_revision) = input.expected_plan_authorization_store_revision {
+                if expected_revision != revision {
+                    return Err(format!(
+                        "plan_authorization_store_conflict: expected revision {expected_revision}, actual {revision}"
+                    ));
+                }
+            }
+            (authorization.authorization_id, revision)
+        } else {
+            let created = crate::plan_authorization_store::create_authorization(
+                workflow_state_path,
+                &CreatePlanAuthorizationInput {
+                    project_root: input.project_root.clone(),
+                    project_id: Some(proposal_before_update.project_id.clone()),
+                    workflow_id: Some(proposal_before_update.workflow_id.clone()),
+                    source_proposal_id: Some(proposal_before_update.proposal_id.clone()),
+                    title: proposal_before_update.title.clone(),
+                    goal_summary: proposal_before_update.goal_summary.clone(),
+                    scope: proposal_scope_to_authorized_scope(&proposal_before_update),
+                    actor_id: "project_consultation".to_string(),
+                    actor_role: "project_consultant".to_string(),
+                    expires_at_ms: None,
+                    expected_store_revision: input.expected_plan_authorization_store_revision,
+                },
+                timestamp_ms,
+                authorization_write_id,
+            )?;
+            (
+                created.authorization.authorization_id,
+                created.store_revision,
+            )
+        };
         let confirmed = crate::plan_authorization_store::record_user_confirmation(
             workflow_state_path,
             &RecordPlanAuthorizationUserConfirmationInput {
                 project_root: input.project_root.clone(),
-                authorization_id: created.authorization.authorization_id.clone(),
+                authorization_id,
                 actor_id: input.actor_id.trim().to_string(),
                 confirmation_summary: input.summary.trim().to_string(),
-                expected_store_revision: Some(created.store_revision),
+                expected_store_revision: Some(authorization_revision),
             },
             timestamp_ms + 1,
             authorization_confirm_write_id,
@@ -318,6 +349,31 @@ pub(crate) fn record_decision(
         store_revision: store.revision,
         warnings: store.warnings.clone(),
     })
+}
+
+fn pending_authorization_for_proposal(
+    workflow_state_path: &Path,
+    proposal: &ProjectConsultationProposal,
+    timestamp_ms: i64,
+) -> Result<Option<(PlanAuthorization, i64)>, String> {
+    let store = crate::plan_authorization_store::load_store(workflow_state_path, timestamp_ms)?;
+    let mut matching = store.authorizations.iter().filter(|authorization| {
+        authorization.project_id == proposal.project_id
+            && authorization.workflow_id == proposal.workflow_id
+            && authorization.source_proposal_id.as_deref() == Some(proposal.proposal_id.as_str())
+            && authorization.status == PlanAuthorizationStatus::PendingUserConfirmation
+            && authorization.user_confirmation.is_none()
+    });
+    let Some(authorization) = matching.next() else {
+        return Ok(None);
+    };
+    if matching.next().is_some() {
+        return Err(format!(
+            "同一待确认方案存在多个待用户确认授权，已拒绝新建授权：{}",
+            proposal.proposal_id
+        ));
+    }
+    Ok(Some((authorization.clone(), store.revision)))
 }
 
 pub(crate) fn summarize_store_for_workflow(
@@ -845,33 +901,119 @@ struct StoreLock {
 
 impl StoreLock {
     fn acquire(path: &Path, write_id: &str) -> Result<Self, String> {
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-        {
-            Ok(mut file) => {
-                file.write_all(write_id.as_bytes()).map_err(|error| {
-                    format!("写入项目咨询方案 lock 失败 {}：{error}", path.display())
-                })?;
-                Ok(Self {
-                    path: path.to_path_buf(),
-                })
+        for retry in 0..=LOCK_RETRY_COUNT {
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+            {
+                Ok(mut file) => {
+                    file.write_all(write_id.as_bytes()).map_err(|error| {
+                        format!("写入项目咨询方案 lock 失败 {}：{error}", path.display())
+                    })?;
+                    return Ok(Self {
+                        path: path.to_path_buf(),
+                    });
+                }
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::AlreadyExists
+                        && retry < LOCK_RETRY_COUNT =>
+                {
+                    thread::sleep(LOCK_RETRY_DELAY);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    return Err(format!(
+                        "project_consultation_proposal_store_locked: {}；稍等几秒再点一次就好",
+                        path.display()
+                    ));
+                }
+                Err(error) => {
+                    return Err(format!(
+                        "创建项目咨询方案 lock 失败 {}：{error}",
+                        path.display()
+                    ));
+                }
             }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Err(format!(
-                "project_consultation_proposal_store_locked: {}",
-                path.display()
-            )),
-            Err(error) => Err(format!(
-                "创建项目咨询方案 lock 失败 {}：{error}",
-                path.display()
-            )),
         }
+        unreachable!("有限重试循环会在最后一次返回")
     }
 }
 
 impl Drop for StoreLock {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);
+    }
+}
+
+#[cfg(test)]
+mod lock_retry_tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_lock_path(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "project-consultation-proposal-lock-{label}-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("create temporary lock directory");
+        root.join(LOCK_NAME)
+    }
+
+    #[test]
+    fn store_lock_retries_until_concurrent_writer_releases() {
+        let lock_path = test_lock_path("concurrent-writer");
+        let holder = StoreLock::acquire(&lock_path, "first-writer").expect("first writer lock");
+        let releaser = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(120));
+            drop(holder);
+        });
+
+        let retried = StoreLock::acquire(&lock_path, "second-writer")
+            .expect("second writer should acquire after the transient lock clears");
+        drop(retried);
+        releaser.join().expect("lock holder should finish");
+        let _ = fs::remove_dir_all(lock_path.parent().expect("test lock parent"));
+    }
+
+    #[test]
+    fn store_lock_retries_when_incident_lock_file_is_removed_shortly_afterwards() {
+        let lock_path = test_lock_path("incident-replay");
+        fs::write(&lock_path, "incident lock").expect("create transient incident lock");
+        let release_path = lock_path.clone();
+        let releaser = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(120));
+            fs::remove_file(release_path).expect("release transient incident lock");
+        });
+
+        let retried = StoreLock::acquire(&lock_path, "incident-retry")
+            .expect("retry should acquire once the incident lock disappears");
+        drop(retried);
+        releaser
+            .join()
+            .expect("incident lock releaser should finish");
+        let _ = fs::remove_dir_all(lock_path.parent().expect("test lock parent"));
+    }
+
+    #[test]
+    fn store_lock_exhaustion_tells_user_to_retry_later() {
+        let lock_path = test_lock_path("retry-copy");
+        let holder = StoreLock::acquire(&lock_path, "holder").expect("hold lock");
+
+        let error = match StoreLock::acquire(&lock_path, "contender") {
+            Ok(lock) => {
+                drop(lock);
+                panic!("lock should remain held");
+            }
+            Err(error) => error,
+        };
+        assert!(error.contains("project_consultation_proposal_store_locked"));
+        assert!(error.contains("稍等几秒再点一次就好"));
+
+        drop(holder);
+        let _ = fs::remove_dir_all(lock_path.parent().expect("test lock parent"));
     }
 }

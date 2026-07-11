@@ -6542,6 +6542,61 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "求助路停因应保持 C3 waiting_decision：{:?}",
             outcome.stopped_reason
         );
+        let retry_runner = c4a_report_runner("done", &["补齐权限后完成"], &[]);
+        let request =
+            c4c_failed_action_request("retry", &workflow_id, &outcome.chain_run_id, &tasks[0]);
+        let retried =
+            run_project_director_failed_action(&path, &index, &index_path, &retry_runner, &request)
+                .expect("waiting_decision 应接受主管显式 retry 并走合法 running 转移");
+        assert_eq!(retried.transition_to, "running");
+        assert_eq!(
+            retried.chain_outcome.expect("retry should run").completed,
+            1
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn waiting_decision_archive_cancels_node_and_archives_chain_without_delivery() {
+        let (dir, path, index, index_path, workflow_id, prepared) =
+            s3_director_prepared_chain("waiting-decision-archive");
+        let tasks = c4a_single_prepared_task(&prepared);
+        let help_runner = c4a_report_runner("blocked", &["缺权限"], &["方向可能错"]);
+        let waiting = run_director_task_chain_with_final_marker(
+            &path,
+            &index,
+            &index_path,
+            &help_runner,
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &workflow_id,
+            &tasks,
+            10,
+            &StubDirectorFinalMarker::completed("help must not final mark"),
+        )
+        .expect("worker help should wait");
+        assert_eq!(waiting.steps[0].state, "waiting_decision");
+
+        let request =
+            c4c_failed_action_request("archive", &workflow_id, &waiting.chain_run_id, &tasks[0]);
+        let archived = run_project_director_failed_action(
+            &path,
+            &index,
+            &index_path,
+            &c4a_report_runner("done", &["unused"], &[]),
+            &request,
+        )
+        .expect("waiting_decision 结束应走合法 cancelled / archived 转移");
+        assert_eq!(archived.transition_to, "cancelled");
+        assert_eq!(archived.node_state, "cancelled");
+        assert_eq!(archived.chain_state, "archived");
+        assert_eq!(
+            archived.stopped_reason.as_deref(),
+            Some("archived:waiting_decision_action")
+        );
+        assert!(
+            archived.chain_outcome.is_none(),
+            "结束这单不能伪造交货链结果"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -6707,7 +6762,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
     }
 
     #[test]
-    fn failed_action_rejects_states_other_than_failed_or_needs_rework() {
+    fn failed_action_rejects_states_other_than_failed_needs_rework_or_waiting_decision() {
         let (dir, path, index, index_path, workflow_id, task, chain_run_id) =
             c4c_failed_task_fixture("failed-action-other-state", None);
         let mut value = read_json_file(&path);
@@ -6725,7 +6780,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let err = run_project_director_failed_action(&path, &index, &index_path, &runner, &request)
             .expect_err("completed node must remain outside the four-action surface");
         assert!(
-            err.contains("failed / needs_rework"),
+            err.contains("failed / needs_rework / waiting_decision"),
             "error should name the exact accepted states: {err}"
         );
         let _ = fs::remove_dir_all(dir);
@@ -7577,7 +7632,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         (dir, index_path, index, workflow_id)
     }
 
-    // 全链 stub：active 授权 + 绑会话 → 编排 → StubDirector 拆 → prepare → 链跑 → stage=ran + 链 completed + 审计在。
+    // 全链 stub：active 授权 + 绑会话 → 编排 → StubDirector 拆 → prepare → 链跑 → stage=completed + 审计在。
     #[test]
     fn auto_advance_runs_chain_when_authorized_and_bound() {
         let (dir, index_path, index, workflow_id) = auto_advance_fixture("auto-advance-ran", true);
@@ -7601,8 +7656,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             None,
         )
         .expect("授权+绑会话应自动推进跑通");
-        assert_eq!(outcome.stage, "ran", "应跑到链：{outcome:?}");
-        let chain = outcome.chain_outcome.expect("ran 应带 chain_outcome");
+        assert_eq!(outcome.stage, "completed", "应完整跑完链：{outcome:?}");
+        let chain = outcome.chain_outcome.expect("completed 应带 chain_outcome");
         assert!(
             chain.completed >= 2,
             "应跑完 ≥2 worker：{}",
@@ -7613,8 +7668,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "应有编排起审计"
         );
         assert!(
-            audit_has(&path, "role_loop_auto_advance_ran"),
-            "应有链跑审计"
+            audit_has(&path, "role_loop_auto_advance_completed"),
+            "应有完整完成审计"
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -8098,7 +8153,10 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             },
         )
         .expect("预演节点映射齐全时应自动继续");
-        assert_eq!(outcome.stage, "ran", "不应再停在绑定面板：{outcome:?}");
+        assert_eq!(
+            outcome.stage, "completed",
+            "不应再停在绑定面板：{outcome:?}"
+        );
         assert!(
             !outcome.task_session_binding_required,
             "自动确认后不应残留绑定停点"
@@ -8329,7 +8387,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &binding_request,
         )
         .expect("混合映射应跑通");
-        assert_eq!(outcome.stage, "ran", "{outcome:?}");
+        assert_eq!(outcome.stage, "completed", "{outcome:?}");
         assert_eq!(
             creator.received_texts.borrow().len(),
             1,
@@ -8567,7 +8625,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &binding_request,
         )
         .expect("全新映射应逐任务建→绑→推进");
-        assert_eq!(outcome.stage, "ran", "建→绑→链应全通：{outcome:?}");
+        assert_eq!(outcome.stage, "completed", "建→绑→链应全通：{outcome:?}");
         assert!(
             outcome
                 .chain_outcome
@@ -8867,7 +8925,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             outcome.chain_outcome.as_ref().map(|chain| chain.completed),
             outcome.warnings
         );
-        assert_eq!(outcome.stage, "ran", "建→绑→链应全通：{outcome:?}");
+        assert_eq!(outcome.stage, "completed", "建→绑→链应全通：{outcome:?}");
         assert!(
             outcome
                 .chain_outcome
@@ -9033,8 +9091,11 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             outcome.chain_outcome.as_ref().map(|c| c.completed),
             outcome.stop_reason
         );
-        assert_eq!(outcome.stage, "ran", "应一路推进到链跑：{outcome:?}");
-        let chain = outcome.chain_outcome.expect("ran 应带 chain_outcome");
+        assert_eq!(
+            outcome.stage, "completed",
+            "应一路推进并完整跑完：{outcome:?}"
+        );
+        let chain = outcome.chain_outcome.expect("completed 应带 chain_outcome");
         assert!(
             chain.completed >= 1,
             "应 ≥1 worker 真跑完成：{}",
@@ -9120,7 +9181,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             outcome.stop_reason
         );
         assert_eq!(
-            outcome.stage, "ran",
+            outcome.stage, "completed",
             "点一下[允许并开始]→一气跑完：{outcome:?}"
         );
         let content = fs::read_to_string(&proof)
@@ -9636,8 +9697,11 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             Some(&approved),
         )
         .expect("所批即所跑应一路跑到链");
-        assert_eq!(outcome.stage, "ran", "带 approved 图应跑到链：{outcome:?}");
-        let chain = outcome.chain_outcome.expect("ran 带 chain");
+        assert_eq!(
+            outcome.stage, "completed",
+            "带 approved 图应完整跑完链：{outcome:?}"
+        );
+        let chain = outcome.chain_outcome.expect("completed 带 chain");
         let ran: std::collections::BTreeSet<String> =
             chain.steps.iter().map(|step| step.title.clone()).collect();
         let want: std::collections::BTreeSet<String> =
@@ -9807,7 +9871,10 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             outcome.prepared_count,
             outcome.chain_outcome.as_ref().map(|c| c.completed)
         );
-        assert_eq!(outcome.stage, "ran", "合流带图应跑到链：{outcome:?}");
+        assert_eq!(
+            outcome.stage, "completed",
+            "合流带图应完整跑完链：{outcome:?}"
+        );
         // 3) proof 实物
         let content = fs::read_to_string(&proof)
             .unwrap_or_else(|e| panic!("worker 应真建 proof {proof}：{e}"));
@@ -9977,8 +10044,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         )
         .expect("钳后应跑通");
         assert_eq!(
-            outcome.stage, "ran",
-            "界外角色钳成 codex-dev 后应 ran（而非 blocked）：{outcome:?}"
+            outcome.stage, "completed",
+            "界外角色钳成 codex-dev 后应 completed（而非 blocked）：{outcome:?}"
         );
         assert!(
             outcome
@@ -10385,8 +10452,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         )
         .expect("残料接管后 re-plan 应跑通");
         assert_eq!(
-            outcome.stage, "ran",
-            "残料被合法接管后 re-plan 应 ran（而非被 C4 卡死）：{outcome:?}"
+            outcome.stage, "completed",
+            "残料被合法接管后 re-plan 应 completed（而非被 C4 卡死）：{outcome:?}"
         );
         assert!(
             outcome.warnings.iter().any(|w| w.contains("已接管")),
@@ -10761,8 +10828,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         )
         .expect("标结墓碑后应跑通");
         assert_eq!(
-            outcome.stage, "ran",
-            "超龄墓碑标结后 re-plan 应 ran（不再 duplicate_blocked）：{outcome:?}"
+            outcome.stage, "completed",
+            "超龄墓碑标结后 re-plan 应 completed（不再 duplicate_blocked）：{outcome:?}"
         );
         assert!(
             outcome.warnings.iter().any(|w| w.contains("已标结")),
@@ -10832,8 +10899,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         )
         .expect("approved 标结墓碑后应跑通");
         assert_eq!(
-            outcome.stage, "ran",
-            "approved 路也应标结墓碑后 ran：{outcome:?}"
+            outcome.stage, "completed",
+            "approved 路也应标结墓碑后 completed：{outcome:?}"
         );
         assert_eq!(
             fix5_dispatch_state(&path, "d-approved-tombstone").as_deref(),

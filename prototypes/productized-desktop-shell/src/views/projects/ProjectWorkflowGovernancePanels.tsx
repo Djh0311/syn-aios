@@ -288,9 +288,9 @@ function AutoAdvanceRoleLoopButtonBrowser({
   const [error, setError] = useState<string | null>(null);
   const [chainStatus, setChainStatus] = useState<ProjectWorkflowChainStatus | null>(null);
 
-  // 链跑起来（stage==ran）后轮询进度，复用现成只读命令（与 C1 同种链记录）。
+  // 链完整完成后补读最终进度，复用现成只读命令（与 C1 同种链记录）。
   useEffect(() => {
-    if (outcome?.stage !== "ran") return;
+    if (outcome?.stage !== "completed") return;
     let active = true;
     const poll = async () => {
       try {
@@ -334,7 +334,7 @@ function AutoAdvanceRoleLoopButtonBrowser({
           <p className="eyebrow">一键自动推进</p>
           <h3>授权范围内自动跑：拆任务 → 准备 → 工作者链跑</h3>
         </div>
-        <Badge tone={outcome?.stage === "ran" ? "candidate" : outcome ? "warning" : "unknown"}>
+        <Badge tone={outcome?.stage === "completed" ? "candidate" : outcome ? "warning" : "unknown"}>
           {outcome ? autoAdvanceStageLabel(outcome.stage) : running ? "运行中" : "待运行"}
         </Badge>
       </div>
@@ -361,7 +361,7 @@ function AutoAdvanceRoleLoopButtonBrowser({
             <DetailLine label="待绑会话" value={String(outcome.needs_binding_count)} />
             <DetailLine label="越界阻断" value={String(outcome.blocked_count)} />
           </div>
-          <p className={outcome.stage === "ran" ? "muted small-note" : "state-warning"}>{outcome.message}</p>
+          <p className={outcome.stage === "completed" ? "muted small-note" : "state-warning"}>{outcome.message}</p>
           {outcome.stage === "needs_binding" ? (
             <p className="state-warning">
               差会话绑定：到下面「工作项执行 · 节点会话绑定」给 codex-dev 节点选一条已有 Codex 会话，再回来点一键自动推进。
@@ -413,7 +413,10 @@ function AutoAdvanceRoleLoopButtonBrowser({
 }
 
 function autoAdvanceStageLabel(stage: string) {
-  if (stage === "ran") return "已自动推进 / 链在跑";
+  if (stage === "completed") return "已完整完成";
+  if (stage === "interrupted") return "已停下·可接着跑";
+  if (stage === "failed") return "执行失败";
+  if (stage === "waiting_decision") return "待你决定";
   if (stage === "needs_binding") return "差会话绑定";
   if (stage === "blocked") return "越界阻断";
   if (stage === "no_dispatchable") return "无可派发";
