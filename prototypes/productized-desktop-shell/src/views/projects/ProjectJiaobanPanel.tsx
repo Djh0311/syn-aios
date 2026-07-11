@@ -660,6 +660,21 @@ function ProjectJiaobanPanelBrowser({
   // 防拆任务期（本轮链还没起、轮询却拿到旧链的绿状态）提前翻交货 / 显旧步骤。链没起 = null → 照显「主管正在拆任务」。
   const thisRoundChainStatus =
     chainStatus && runStartedAtMs != null && Number(chainStatus.started_at) >= runStartedAtMs ? chainStatus : null;
+  const isDirectorPlanning = isDirectorPlanningPhase(phase, thisRoundChainStatus);
+  const [directorPlanningElapsedMinutes, setDirectorPlanningElapsedMinutes] = useState(0);
+  useEffect(() => {
+    if (!isDirectorPlanning) {
+      setDirectorPlanningElapsedMinutes(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const refresh = () => {
+      setDirectorPlanningElapsedMinutes(Math.floor((Date.now() - startedAt) / 60_000));
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 1_000);
+    return () => window.clearInterval(timer);
+  }, [isDirectorPlanning]);
 
   // ===== B1·全局主管复核（advisory·意见不是闸）=====
   // 交货翻脸 → 自动起复核（fire-and-forget·async 不挡交货·定稿第 3 条）；幂等防重烧（后端同轮
@@ -1483,6 +1498,7 @@ function ProjectJiaobanPanelBrowser({
           {phase === "running" ? (
             <JiaobanRunningState
               chainStatus={thisRoundChainStatus}
+              directorPlanningElapsedMinutes={directorPlanningElapsedMinutes}
               isNewSession={runIsNewSession}
               onStop={() => void stopRun()}
               sessionChoice={sessionChoice}
@@ -2665,6 +2681,7 @@ export function JiaobanSessionPicker({
 // 3. 干（人话进度）
 export function JiaobanRunningState({
   chainStatus,
+  directorPlanningElapsedMinutes,
   isNewSession,
   onStop,
   sessionChoice,
@@ -2672,6 +2689,7 @@ export function JiaobanRunningState({
   onOpenAgentSession,
 }: {
   chainStatus: ProjectWorkflowChainStatus | null;
+  directorPlanningElapsedMinutes: number;
   isNewSession: boolean;
   onStop: () => void;
   // 「看原始对话」桥：existing 单跑中→看原始对话（能看实时进度）；哨兵单→latestSession 兜底看最近对话。
@@ -2679,7 +2697,8 @@ export function JiaobanRunningState({
   latestSessionThreadId: string | null;
   onOpenAgentSession?: (threadId: string) => void;
 }) {
-  const progress = humanizeChainProgress(chainStatus);
+  const isDirectorPlanning = !chainStatus || chainStatus.nodes.length === 0;
+  const progress = humanizeChainProgress(chainStatus, directorPlanningElapsedMinutes);
   return (
     <div className="project-canvas-detail-card jiaoban-running" aria-label="正在干">
       <div className="panel-heading">
@@ -2692,6 +2711,9 @@ export function JiaobanRunningState({
         <p className="role-loop-plain-lead">
           <span className="jiaoban-spinner" aria-hidden="true" /> {progress}
         </p>
+        {isDirectorPlanning && directorPlanningElapsedMinutes >= 2 ? (
+          <p className="muted small-note">模型在长考;若超时会自动停下重试,不用干等</p>
+        ) : null}
         {isNewSession ? (
           <p className="muted small-note">正在为需要新会话的任务逐一新建会话（约 1 分钟）…</p>
         ) : null}
@@ -3479,10 +3501,20 @@ function extractTargetFiles(proposedSteps: string[]): string | null {
   return files || null;
 }
 
-// 链状态 → 「正在…第 x/y 步」。链事件还没出现的阶段（拿不到节点）= 主管还在拆任务，据实说清可能很久。
-function humanizeChainProgress(chainStatus: ProjectWorkflowChainStatus | null): string {
+export function isDirectorPlanningPhase(
+  phase: JiaobanPhase,
+  chainStatus: ProjectWorkflowChainStatus | null,
+): boolean {
+  return phase === "running" && (!chainStatus || chainStatus.nodes.length === 0);
+}
+
+// 链状态 → 「正在…第 x/y 步」。链事件还没出现的阶段（拿不到节点）= 主管还在拆任务，据实说清。
+export function humanizeChainProgress(
+  chainStatus: ProjectWorkflowChainStatus | null,
+  directorPlanningElapsedMinutes: number,
+): string {
   if (!chainStatus || chainStatus.nodes.length === 0) {
-    return "主管正在拆任务…（最长可能十几分钟，偶尔自动重试）";
+    return `主管正在拆任务 · 已 ${Math.max(0, directorPlanningElapsedMinutes)} 分钟`;
   }
   const total = chainStatus.nodes.length;
   const done = countDoneNodes(chainStatus);

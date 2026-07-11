@@ -471,7 +471,7 @@ pub(crate) fn parse_consultation_proposal(raw: &str) -> Result<ConsultationPropo
 
 // ===== CliConsultantAgent（tier-1 impl：codex 自带 loop、自己只读读文档）=====
 pub(crate) struct CliConsultantAgent {
-    pub(crate) timeout_ms: Option<i64>,
+    pub(crate) timeout_ms: i64,
 }
 
 impl Default for CliConsultantAgent {
@@ -479,7 +479,7 @@ impl Default for CliConsultantAgent {
         Self {
             // 真咨询要 codex 只读交叉读多篇文档(红队/开发计划)+出结构化 JSON，180s 撞超时被 kill（取不回答案）。
             // 调到 420s 留足只读+推理+JSON 的余量；被咨询项目仍只读（confinement 不变）。
-            timeout_ms: Some(420_000),
+            timeout_ms: 420_000,
         }
     }
 }
@@ -495,7 +495,7 @@ impl ConsultantAgent for CliConsultantAgent {
         let raw = codex_local_runner::readonly_codex_consult(
             &ctx.project_root,
             &prompt,
-            self.timeout_ms,
+            Some(self.timeout_ms),
         )?;
         parse_consultation_proposal(&raw)
     }

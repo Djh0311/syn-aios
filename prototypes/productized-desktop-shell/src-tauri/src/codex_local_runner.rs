@@ -1145,6 +1145,8 @@ fn run_real_codex_process(
             );
         }
     };
+    let process_registration =
+        crate::exec_process_registry::register_spawned_process(request, command_plan, child.id());
     let prompt_sent;
     if let Some(mut stdin) = child.stdin.take() {
         match stdin.write_all(prompt_body.as_bytes()) {
@@ -1231,6 +1233,8 @@ fn run_real_codex_process(
             }
         }
     };
+
+    process_registration.unregister();
 
     let exit_code = status.code().unwrap_or(-1);
     let last_message = fs::read_to_string(last_message_path).unwrap_or_default();
@@ -1795,6 +1799,60 @@ mod tests {
         let (run, _opts) = result.expect("adapter real run should succeed");
         println!("[REAL_RUN] exit_code={} timed_out={}", run.exit_code, run.timed_out);
         assert_eq!(run.exit_code, 0, "codex exit code should be 0");
+    }
+
+    #[test]
+    fn real_process_timeout_kills_and_reaps_mock_child() {
+        let test_dir = std::env::temp_dir().join(format!(
+            "codex-local-runner-timeout-test-{}",
+            SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock after unix epoch")
+                .as_millis()
+        ));
+        fs::create_dir_all(&test_dir).expect("create timeout test directory");
+        let pid_path = test_dir.join("mock-child.pid");
+        let last_message_path = test_dir.join("last-message.txt");
+        let quoted_pid_path = pid_path.display().to_string().replace('\'', "'\\\"'\\\"'");
+        let command_plan = CodexLocalCommandPlan {
+            program: "/bin/sh".to_string(),
+            argv: vec![
+                "-c".to_string(),
+                format!("echo $$ > '{quoted_pid_path}'; exec /bin/sleep 10"),
+            ],
+            stdin_prompt_ref: "mock-timeout-prompt".to_string(),
+            stdin_prompt_sha256: "mock-timeout-hash".to_string(),
+            prompt_in_command: false,
+            shell_invocation: false,
+            redacted_preview: "mock timeout child".to_string(),
+            sensitive_omissions: vec![],
+            warnings: vec![],
+        };
+
+        let result = run_real_codex_process(
+            &safe_request(),
+            &command_plan,
+            "mock prompt",
+            &last_message_path,
+            Some(10),
+        );
+
+        assert!(result.timed_out, "mock child must reach timeout path");
+        let pid = fs::read_to_string(&pid_path)
+            .expect("mock child wrote its pid")
+            .trim()
+            .parse::<u32>()
+            .expect("mock child pid is numeric");
+        let still_running = Command::new("/bin/kill")
+            .arg("-0")
+            .arg(pid.to_string())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .expect("inspect mock child pid")
+            .success();
+        assert!(!still_running, "timed-out mock child must be reaped");
+        let _ = fs::remove_dir_all(&test_dir);
     }
     use crate::CodexLocalReadbackPlan;
 

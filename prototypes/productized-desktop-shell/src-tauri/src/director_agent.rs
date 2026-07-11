@@ -397,13 +397,13 @@ fn lint_planned_tasks_worker_toolbox(tasks: &[ProjectDirectorPlannedTask]) -> Re
 
 // ===== CliDirectorAgent（tier-1 impl：复用咨询的只读 codex）=====
 pub(crate) struct CliDirectorAgent {
-    pub(crate) timeout_ms: Option<i64>,
+    pub(crate) timeout_ms: i64,
 }
 
 impl Default for CliDirectorAgent {
     fn default() -> Self {
         Self {
-            timeout_ms: Some(420_000),
+            timeout_ms: 420_000,
         }
     }
 }
@@ -419,7 +419,7 @@ impl DirectorAgent for CliDirectorAgent {
         let raw = codex_local_runner::readonly_codex_consult(
             &ctx.project_root,
             &prompt,
-            self.timeout_ms,
+            Some(self.timeout_ms),
         )?;
         parse_director_plan(&raw, proposal)
     }
@@ -434,7 +434,7 @@ impl DirectorAgent for CliDirectorAgent {
         let raw = codex_local_runner::readonly_codex_consult(
             &ctx.project_root,
             &prompt,
-            self.timeout_ms,
+            Some(self.timeout_ms),
         )?;
         parse_director_plan(&raw, proposal)
     }
@@ -446,7 +446,7 @@ impl DirectorFinalMarker for CliDirectorAgent {
         let raw = codex_local_runner::readonly_codex_consult(
             &ctx.project_root,
             &prompt,
-            self.timeout_ms,
+            Some(self.timeout_ms),
         )?;
         parse_director_final_mark(&raw)
     }
@@ -461,7 +461,7 @@ impl DirectorSummaryGenerator for CliDirectorAgent {
         let raw = codex_local_runner::readonly_codex_consult(
             &ctx.project_root,
             &prompt,
-            self.timeout_ms,
+            Some(self.timeout_ms),
         )?;
         parse_director_workflow_summary(&raw)
     }

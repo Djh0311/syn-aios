@@ -581,8 +581,12 @@ fn run_open(_args: &[&str]) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let state = AppState::new();
+    if let Err(error) = crate::exec_process_registry::reap_registered_orphans(&state.workflow_state_path) {
+        eprintln!("执行进程遗留回收未完成：{error}");
+    }
     tauri::Builder::default()
-        .manage(AppState::new())
+        .manage(state)
         .manage(mcp::orchestrator::OrchestratorState::new())
         .invoke_handler(workbench_command_handler!())
         .setup(|app| {

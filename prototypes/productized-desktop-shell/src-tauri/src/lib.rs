@@ -10,6 +10,7 @@ pub mod codex_db;
 mod codex_local_runner;
 mod codex_transcript;
 mod control_core;
+mod exec_process_registry;
 mod formal_memory_lifecycle;
 mod formal_memory_store;
 mod h4_execution_boundary;

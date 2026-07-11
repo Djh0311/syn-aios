@@ -141,6 +141,7 @@ function authorizeHtml(proposalIsStale = false, proposalAgeDays = 0): string {
   const running = renderToStaticMarkup(
     <JiaobanRunningState
       chainStatus={null}
+      directorPlanningElapsedMinutes={0}
       isNewSession={false}
       onStop={noop}
       sessionChoice={null}
