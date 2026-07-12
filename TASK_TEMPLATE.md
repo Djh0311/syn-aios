@@ -81,6 +81,7 @@
 7. shape gate baseline / check 摘要
 8. start commit / end commit；如无 git，必须标记 `no_git_blocked_for_r2_r3`
 9. 是否新增 command、sidecar 或触碰棘轮文件
+10. **被闸拦过的事**：本包期间被哪道闸/守卫/断言拦过什么（勘察硬闸、argv 断言、path-lock、锁竞态……）；**无也必须写「无」一行**——这是 `docs/harness-catch-log.md` 的原始情报源
 
 ## 总指导回收动作
 

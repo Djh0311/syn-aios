@@ -1,0 +1,13 @@
+#!/bin/sh
+# 拦截记账机械层(AGENTS §三):每个 commit 信息必含 catch: 标记。
+# 写法:catch:none(本批零 catch)或 catch:N(已记账)——N 条已追加进 docs/harness-catch-log.md。
+# 紧急绕过:git commit --no-verify(慎用,事后必须补账)。
+msg_file="$1"
+if grep -qE 'catch:' "$msg_file"; then
+  exit 0
+fi
+echo "" >&2
+echo "commit-msg 拒绝:提交信息缺少 catch: 标记。" >&2
+echo "  写 catch:none(本批零 catch)或 catch:N(已记账,行在 docs/harness-catch-log.md)。" >&2
+echo "  紧急情况 git commit --no-verify,事后补账。" >&2
+exit 1
