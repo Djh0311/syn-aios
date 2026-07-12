@@ -1,0 +1,1 @@
+{"schema_version":"supervisor_action_proposal.v1","kind":"report_user","message":"本单已完成主管闭环：合法 worker 回程已完成并落账，证据显示 station3a-control-core-proof-v7.txt 已创建；回读验证内容精确为 station3a control core proof v7 passed!，共 39 bytes，末字节为 33，且无末尾换行。主管终标 pass 建议已记录。","reason":"终标建议已经落账，按状态推进约束现在应向用户报告完成事实与证据。","expected_result":"记录用户可见报告"}

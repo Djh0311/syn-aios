@@ -46,6 +46,22 @@ pub(crate) fn validate_value(
             warnings.push(format!("{key} 不是数组或缺失"));
         }
     }
+    if let Some(bindings) = value
+        .get("workflow_node_session_bindings")
+        .and_then(Value::as_array)
+    {
+        let mut seen = BTreeSet::new();
+        for binding in bindings {
+            let Some(binding_id) = optional_string_from(binding, "binding_id") else {
+                continue;
+            };
+            if !seen.insert(binding_id.clone()) {
+                warnings.push(format!(
+                    "workflow_node_session_bindings 存在重复 binding_id：{binding_id}"
+                ));
+            }
+        }
+    }
     warnings
 }
 

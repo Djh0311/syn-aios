@@ -36,7 +36,37 @@ pub(crate) struct WorkerReport {
 }
 
 /// 追加给 worker 的契约段（确定性文本·不经 LM·同 consultant/director 的 json 块成熟套路）。
-pub(crate) const WORKER_REPORT_CONTRACT_TEXT: &str = "回程契约（务必遵守）：干完后，最后输出**且仅输出**一个 ```json 代码块，严格形如 {\"did\":\"一句话说清做了什么\",\"outputs\":[\"产出文件的完整路径\"],\"status\":\"done|partial|failed\",\"evidence\":[\"怎么证明：命令输出/文件/测试名\"]}。outputs 写产出文件的完整路径；没有产出就写空数组 []。若被阻塞、需要更多权限或资料、或认为方向可能错，status 填 \"blocked\"，并在同一个 json 里填写求助字段：\"permission_requests\":[\"缺什么权限或资料\"],\"open_issues\":[\"卡在哪里\"],\"direction_risks\":[\"为什么方向可能不对\"],\"follow_up_suggestions\":[\"建议主管下一步怎么处理\"]。完成路仍只使用 done|partial|failed。不要在这个 json 块之后再写任何字。";
+pub(crate) const WORKER_REPORT_CONTRACT_TEXT: &str = r#"回程契约（务必遵守）：干完后，最后输出**且仅输出**一个 ```json 代码块。`did`、`outputs`、`status`、`evidence` 和全部求助字段都只能位于 JSON 顶层；不得嵌套在 `target` 或其他对象中。outputs 写产出文件的完整路径；没有产出就写空数组 []。完成路只使用 done|partial|failed；被阻塞、需要更多权限或资料、或认为方向可能错时，status 必须为 blocked。
+
+完成 done 的完整示例：
+```json
+{
+  "did": "创建目标文件并完成回读和字节验证",
+  "outputs": ["/绝对路径/目标文件.txt"],
+  "status": "done",
+  "evidence": ["回读输出与字节校验命令结果"],
+  "permission_requests": [],
+  "open_issues": [],
+  "direction_risks": [],
+  "follow_up_suggestions": []
+}
+```
+
+受阻 blocked 的完整示例：
+```json
+{
+  "did": "尝试创建目标文件但被授权边界阻止",
+  "outputs": [],
+  "status": "blocked",
+  "evidence": ["写入命令返回的拒绝信息"],
+  "permission_requests": ["需要目标目录的写入授权"],
+  "open_issues": ["当前 allowed_write 不含目标目录"],
+  "direction_risks": ["继续写入会越过已批准范围"],
+  "follow_up_suggestions": ["请主管请求用户决定是否扩展授权"]
+}
+```
+
+实际回程只能保留对应的一份 JSON 代码块，代码块之后不得再写任何字。"#;
 
 /// 物化时给任务包 artifact 的 goals 追加契约：objective 首位 + 主管拆的 report_format 各项 + 契约文本。
 /// 确定性拼接·不经 LM（安全死线：契约段不给 LM 发挥空间）。
@@ -443,13 +473,33 @@ mod tests {
             WORKER_REPORT_CONTRACT_TEXT,
             "契约段在最后"
         );
-        // 契约段含关键约束字段。
-        for key in ["json", "did", "outputs", "status", "evidence"] {
+        // done / blocked 的完整样例均显式列出顶层求助字段。
+        for key in [
+            "完成 done 的完整示例",
+            "受阻 blocked 的完整示例",
+            "json",
+            "did",
+            "outputs",
+            "status",
+            "evidence",
+            "permission_requests",
+            "open_issues",
+            "direction_risks",
+            "follow_up_suggestions",
+        ] {
             assert!(
                 WORKER_REPORT_CONTRACT_TEXT.contains(key),
                 "契约段应含 {key}"
             );
         }
+        assert!(
+            WORKER_REPORT_CONTRACT_TEXT.contains("\"status\": \"done\""),
+            "done 示例必须是完整 JSON"
+        );
+        assert!(
+            WORKER_REPORT_CONTRACT_TEXT.contains("\"status\": \"blocked\""),
+            "blocked 示例必须是完整 JSON"
+        );
     }
 
     use std::fs;

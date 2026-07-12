@@ -1,0 +1,22 @@
+before_reference_repair
+bindings=71
+unique_binding_ids=71
+dispatches=352
+dispatch_with_binding_id=350
+matching_dispatch_refs=0
+orphan_or_missing_dispatch_refs=352
+
+after_reference_repair
+bindings=71
+unique_binding_ids=71
+sha256_binding_ids=71
+dispatches=352
+dispatch_with_binding_id=352
+matching_dispatch_refs=352
+orphan_or_missing_dispatch_refs=0
+migrated_binding_count=0
+migrated_dispatch_count=352
+migrated_count=352
+backup_ref=/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state/backups/workflow-state.v0.1783854998571.json
+
+No supervisor or worker was launched. Station 3b was not started.

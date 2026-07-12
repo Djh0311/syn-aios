@@ -41,10 +41,11 @@ pub(crate) fn preview_h5_project_workflow_dispatch_at(
             "new_session".to_string()
         }
     });
+    // Fail closed: a missing or empty task-package write scope grants no write access.
+    // Never widen an absent `allowed_write` field to the whole project root.
     let allowed_write_roots = artifact
         .map(|artifact| crate::string_array(artifact, "allowed_write"))
-        .filter(|items| !items.is_empty())
-        .unwrap_or_else(|| vec![request.project_root.clone()]);
+        .unwrap_or_default();
     let runtime_log_refs = vec![CodexLocalRuntimeLogRef {
         ref_id: format!("runtime-log-preview:h5:{}", request.dispatch_id),
         category: "dispatch_attempt".to_string(),
@@ -474,6 +475,10 @@ mod tests {
             output.memory_packet.fingerprint.as_deref(),
             Some("memory-fingerprint-1")
         );
+        assert_eq!(
+            output.permission_envelope.allowed_write_roots,
+            vec![dir.display().to_string()]
+        );
         assert!(output.codex_local_request.is_some());
         assert!(output
             .codex_local_guard
@@ -487,6 +492,60 @@ mod tests {
             .unwrap()
             .open_issues
             .contains(&"worker_report_candidate_not_formal_fact".to_string()));
+    }
+
+    #[test]
+    fn h5_preview_missing_or_empty_allowed_write_fails_closed() {
+        for allowed_write in [None, Some(json!([]))] {
+            let (dir, path) = fixture_state(false, false);
+            let mut state: Value =
+                serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+            let artifact = state["artifacts"][0]
+                .as_object_mut()
+                .expect("task package artifact should be an object");
+            match allowed_write {
+                Some(value) => {
+                    artifact.insert("allowed_write".to_string(), value);
+                }
+                None => {
+                    artifact.remove("allowed_write");
+                }
+            }
+            fs::write(&path, serde_json::to_string_pretty(&state).unwrap()).unwrap();
+
+            let request = preview_request(dir.display().to_string(), "resume");
+            let output = preview_h5_project_workflow_dispatch_at(&path, &request).unwrap();
+            assert!(output.permission_envelope.allowed_write_roots.is_empty());
+            assert!(output
+                .codex_local_request
+                .as_ref()
+                .expect("preview should retain the guarded request")
+                .allowed_write_roots
+                .is_empty());
+            assert!(output
+                .blocked_reasons
+                .contains(&"h1_guard:allowed_write_roots_missing".to_string()));
+        }
+    }
+
+    #[test]
+    fn h5_preview_missing_allowed_write_stays_readonly_when_explicitly_readonly() {
+        let (dir, path) = fixture_state(false, false);
+        let mut state: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        state["artifacts"][0]
+            .as_object_mut()
+            .expect("task package artifact should be an object")
+            .remove("allowed_write");
+        fs::write(&path, serde_json::to_string_pretty(&state).unwrap()).unwrap();
+
+        let mut request = preview_request(dir.display().to_string(), "resume");
+        request.sandbox = Some("read-only".to_string());
+        let output = preview_h5_project_workflow_dispatch_at(&path, &request).unwrap();
+
+        assert!(output.permission_envelope.allowed_write_roots.is_empty());
+        assert!(!output
+            .blocked_reasons
+            .contains(&"h1_guard:allowed_write_roots_missing".to_string()));
     }
 
     #[test]

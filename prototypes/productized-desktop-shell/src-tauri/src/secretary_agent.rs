@@ -291,6 +291,9 @@ mod tests {
             reasoning: vec!["r".to_string()],
             risks: vec![],
             must_stop_points: vec![],
+            worker_acceptance_criteria: vec!["按方案完成执行步骤并返回证据".to_string()],
+            control_core_acceptance_criteria: vec!["校验授权范围并记录状态".to_string()],
+            supervisor_acceptance_criteria: vec!["检查回程证据后给出结论".to_string()],
             next_steps: vec!["改".to_string()],
             execution_scope: Some(crate::ConsultationExecutionScope {
                 write_roots: vec![],

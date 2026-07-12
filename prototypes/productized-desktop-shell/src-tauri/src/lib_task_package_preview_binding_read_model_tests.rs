@@ -133,6 +133,279 @@
     }
 
     #[test]
+    fn workflow_node_session_binding_ids_do_not_collide_on_long_work_item_prefixes() {
+        let shared_prefix = "work-item:workflow:users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-supervisor-pilot-";
+        let workflow_id = "workflow:users-yoyi-codex-workflow-mario-test:default";
+        let node_id = format!("{workflow_id}:node:project-director");
+        let first = workflow_node_session_binding_id(
+            workflow_id,
+            &node_id,
+            Some(&format!("{shared_prefix}first")),
+            "thread-first",
+        );
+        let second = workflow_node_session_binding_id(
+            workflow_id,
+            &node_id,
+            Some(&format!("{shared_prefix}second")),
+            "thread-second",
+        );
+
+        assert_ne!(first, second);
+        assert!(first.starts_with("binding:sha256:"));
+        assert_eq!(first.len(), "binding:sha256:".len() + 64);
+    }
+
+    #[test]
+    fn workflow_node_session_binding_migration_repairs_duplicate_legacy_ids() {
+        let shared_prefix = "work-item:workflow:users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-supervisor-pilot-";
+        let first_work_item = format!("{shared_prefix}first");
+        let second_work_item = format!("{shared_prefix}second");
+        let legacy_id = legacy_workflow_node_session_binding_id(
+            "workflow:long:default",
+            "workflow:long:default:node:project-director",
+            Some(&first_work_item),
+        );
+        let mut value = json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "projects": [],
+            "agent_adapters": [],
+            "workflows": [],
+            "nodes": [],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "audit_events": [],
+            "capabilities": [],
+            "harness_resources": [],
+            "workflow_node_session_bindings": [
+                {
+                    "binding_id": legacy_id,
+                    "workflow_id": "workflow:long:default",
+                    "node_id": "workflow:long:default:node:project-director",
+                    "work_item_id": first_work_item,
+                    "native_thread_id": "thread-first"
+                },
+                {
+                    "binding_id": legacy_id,
+                    "workflow_id": "workflow:long:default",
+                    "node_id": "workflow:long:default:node:project-director",
+                    "work_item_id": second_work_item,
+                    "native_thread_id": "thread-second"
+                }
+            ],
+            "workflow_node_dispatches": [
+                {
+                    "dispatch_id": "dispatch-first",
+                    "binding_id": legacy_id,
+                    "workflow_id": "workflow:long:default",
+                    "node_id": "workflow:long:default:node:project-director",
+                    "work_item_id": first_work_item,
+                    "native_thread_id": "thread-first"
+                },
+                {
+                    "dispatch_id": "dispatch-second",
+                    "binding_id": legacy_id,
+                    "workflow_id": "workflow:long:default",
+                    "node_id": "workflow:long:default:node:project-director",
+                    "work_item_id": second_work_item,
+                    "native_thread_id": "thread-second"
+                }
+            ]
+        });
+
+        assert!(validate_workflow_state(&value)
+            .iter()
+            .any(|warning| warning.contains("重复 binding_id")));
+        assert_eq!(
+            migrate_legacy_workflow_node_session_binding_ids(&mut value),
+            WorkflowBindingIdMigrationCounts {
+                bindings: 2,
+                dispatches: 2,
+                unresolved_dispatches: 0,
+            }
+        );
+        assert!(validate_workflow_state(&value).is_empty());
+        assert_ne!(
+            value["workflow_node_session_bindings"][0]["binding_id"],
+            value["workflow_node_session_bindings"][1]["binding_id"]
+        );
+        assert_eq!(
+            value["workflow_node_dispatches"][0]["binding_id"],
+            value["workflow_node_session_bindings"][0]["binding_id"]
+        );
+        assert_eq!(
+            value["workflow_node_dispatches"][1]["binding_id"],
+            value["workflow_node_session_bindings"][1]["binding_id"]
+        );
+
+        value["workflow_node_dispatches"][0]["binding_id"] = Value::String(legacy_id.clone());
+        value["workflow_node_dispatches"][1]
+            .as_object_mut()
+            .expect("dispatch object")
+            .remove("binding_id");
+        assert_eq!(
+            migrate_legacy_workflow_node_session_binding_ids(&mut value),
+            WorkflowBindingIdMigrationCounts {
+                bindings: 0,
+                dispatches: 2,
+                unresolved_dispatches: 0,
+            }
+        );
+        assert!(validate_workflow_state(&value).is_empty());
+        assert_eq!(
+            value["workflow_node_dispatches"][0]["binding_id"],
+            value["workflow_node_session_bindings"][0]["binding_id"]
+        );
+        assert_eq!(
+            value["workflow_node_dispatches"][1]["binding_id"],
+            value["workflow_node_session_bindings"][1]["binding_id"]
+        );
+
+        let retained_history_id =
+            "binding:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        value["workflow_node_dispatches"][0]["binding_id"] =
+            Value::String(retained_history_id.to_string());
+        assert_eq!(
+            migrate_legacy_workflow_node_session_binding_ids(&mut value),
+            WorkflowBindingIdMigrationCounts::default()
+        );
+        assert_eq!(
+            value["workflow_node_dispatches"][0]["binding_id"],
+            retained_history_id
+        );
+    }
+
+    #[test]
+    fn workflow_binding_migration_counts_unresolvable_legacy_dispatch_reference() {
+        let shared_prefix = "work-item:workflow:users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-supervisor-pilot-";
+        let first_work_item = format!("{shared_prefix}first");
+        let second_work_item = format!("{shared_prefix}second");
+        let missing_work_item = format!("{shared_prefix}missing");
+        let legacy_id = legacy_workflow_node_session_binding_id(
+            "workflow:long:default",
+            "node:long",
+            Some(&first_work_item),
+        );
+        let mut value = json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "projects": [],
+            "agent_adapters": [],
+            "workflows": [],
+            "nodes": [],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "audit_events": [],
+            "capabilities": [],
+            "harness_resources": [],
+            "workflow_node_session_bindings": [
+                {
+                    "binding_id": legacy_id,
+                    "workflow_id": "workflow:long:default",
+                    "node_id": "node:long",
+                    "work_item_id": first_work_item,
+                    "native_thread_id": "thread:first"
+                },
+                {
+                    "binding_id": legacy_id,
+                    "workflow_id": "workflow:long:default",
+                    "node_id": "node:long",
+                    "work_item_id": second_work_item,
+                    "native_thread_id": "thread:second"
+                }
+            ],
+            "workflow_node_dispatches": [{
+                "binding_id": legacy_id,
+                "workflow_id": "workflow:long:default",
+                "node_id": "node:long",
+                "work_item_id": missing_work_item
+            }]
+        });
+
+        assert_eq!(
+            migrate_legacy_workflow_node_session_binding_ids(&mut value),
+            WorkflowBindingIdMigrationCounts {
+                bindings: 2,
+                dispatches: 0,
+                unresolved_dispatches: 1,
+            }
+        );
+        let dir = std::env::temp_dir().join(format!(
+            "binding-migration-ambiguous-{}",
+            unix_timestamp_string()
+        ));
+        fs::create_dir_all(&dir).expect("create migration fixture dir");
+        let path = dir.join("workflow-state.v0.json");
+        let before = serde_json::to_vec_pretty(&value).expect("serialize ambiguous fixture");
+        fs::write(&path, &before).expect("write ambiguous fixture");
+
+        let error = migrate_legacy_workflow_node_session_binding_ids_at(&path)
+            .expect_err("ambiguous legacy dispatch must fail before write");
+        assert!(error.contains("1 条旧 dispatch 引用无法唯一映射"));
+        assert_eq!(fs::read(&path).expect("read rejected fixture"), before);
+        assert!(!dir.join("backups").exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn supervisor_fresh_session_binding_records_control_core_provenance() {
+        let dir = std::env::temp_dir().join(format!(
+            "supervisor-fresh-binding-{}",
+            unix_timestamp_string()
+        ));
+        let path = dir.join("workflow-state.v0.json");
+        let project = fixture_project("/tmp/indexed-project");
+        let draft = fixture_task_draft_request(&project.project_root, "主管新会话绑定");
+        bootstrap_project_workflow_at(&path, &project).expect("workflow");
+        create_task_draft_at(&path, &draft).expect("work item");
+        let value = read_json_file(&path);
+        let work_item_id = optional_string_from(&value["work_items"][0], "work_item_id")
+            .expect("work item id");
+        let workflow_id = default_workflow_id(&project.project_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let session = fixture_session("thread-supervisor-fresh", &project.project_root, true);
+        let request = fixture_node_session_bind_request(
+            &project.project_root,
+            &node_id,
+            Some(&work_item_id),
+            &session.thread_id,
+        );
+
+        bind_workflow_node_codex_session_with_provenance_at(
+            &path,
+            &request,
+            &session,
+            &WorkflowNodeSessionBindingProvenance::fresh_task_session(
+                "supervisor_orchestrator",
+            ),
+        )
+        .expect("fresh binding");
+
+        let state = read_json_file(&path);
+        let binding = &state["workflow_node_session_bindings"][0];
+        assert_eq!(binding["binding_mode"], "create_fresh_task_session");
+        assert_eq!(binding["binding_source"], "fresh_task_session_bound");
+        let event = state["audit_events"]
+            .as_array()
+            .expect("audit events")
+            .iter()
+            .rev()
+            .find(|event| event["event_type"] == "workflow_node_session_bound")
+            .expect("binding audit");
+        assert_eq!(event["actor_ref"], "supervisor_orchestrator");
+        assert_eq!(event["permission_level"], "authorized_supervisor_execution");
+        assert!(event["reason"]
+            .as_str()
+            .expect("reason")
+            .contains("全新 Codex 会话"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn workflow_node_session_binding_rejects_non_index_session_and_missing_node() {
         let dir =
             std::env::temp_dir().join(format!("node-session-reject-{}", unix_timestamp_string()));

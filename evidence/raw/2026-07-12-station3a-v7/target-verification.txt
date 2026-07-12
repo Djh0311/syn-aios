@@ -1,0 +1,9 @@
+source=/Users/yoyi/codex-workflow-mario-test/station3a-control-core-proof-v7.txt
+snapshot=evidence/raw/2026-07-12-station3a-v7/target-file.snapshot.txt
+exists=true
+bytes=39
+last_byte_decimal=33
+trailing_newline=false
+sha256=7777cfb8a53af75923f665191c80e5acf83c81436658c0b4cc61a25a420c18f3
+exact_content=station3a control core proof v7 passed!
+verified_at=2026-07-12

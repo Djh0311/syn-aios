@@ -582,6 +582,11 @@ fn run_open(_args: &[&str]) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = AppState::new();
+    if let Err(error) =
+        crate::migrate_legacy_workflow_node_session_binding_ids_at(&state.workflow_state_path)
+    {
+        eprintln!("工作流 binding_id 迁移未完成：{error}");
+    }
     if let Err(error) = crate::exec_process_registry::reap_registered_orphans(&state.workflow_state_path) {
         eprintln!("执行进程遗留回收未完成：{error}");
     }

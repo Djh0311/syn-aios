@@ -2207,10 +2207,21 @@ struct ProjectConsultationProposal {
     workflow_id: String,
     title: String,
     user_goal: String,
+    // 用户在工作台输入的原文快照；不由咨询模型改写，供任务包逐字继承。
+    #[serde(default)]
+    user_requirement_snapshot: String,
     goal_summary: String,
     proposed_steps: Vec<String>,
     scope_draft: ProjectConsultationProposalScopeDraft,
     risks: Vec<ProjectConsultationProposalRisk>,
+    // 三方验收必须由提案正本显式归属；旧统一字段只为历史兼容保留，不能再靠文案猜职责。
+    #[serde(default)]
+    worker_acceptance_criteria: Vec<String>,
+    #[serde(default)]
+    control_core_acceptance_criteria: Vec<String>,
+    #[serde(default)]
+    supervisor_acceptance_criteria: Vec<String>,
+    #[serde(default)]
     acceptance_criteria: Vec<String>,
     status: ProjectConsultationProposalStatus,
     plan_authorization_id: Option<String>,
@@ -2284,10 +2295,19 @@ struct CreateProjectConsultationProposalInput {
     workflow_id: Option<String>,
     title: String,
     user_goal: String,
+    #[serde(default)]
+    user_requirement_snapshot: String,
     goal_summary: String,
     proposed_steps: Vec<String>,
     scope_draft: ProjectConsultationProposalScopeDraft,
     risks: Vec<ProjectConsultationProposalRisk>,
+    #[serde(default)]
+    worker_acceptance_criteria: Vec<String>,
+    #[serde(default)]
+    control_core_acceptance_criteria: Vec<String>,
+    #[serde(default)]
+    supervisor_acceptance_criteria: Vec<String>,
+    #[serde(default)]
     acceptance_criteria: Vec<String>,
     created_by_role: ProjectConsultationProposalCreatorRole,
     // 交办·刀2 2.5：咨询判定的「建议按工作流」轻标记透传（缺省 false·老调用方/样本不受影响）。
@@ -2467,6 +2487,14 @@ struct ProjectDirectorPlannedTask {
     task_goal: String,
     scope: ProjectDirectorTaskScope,
     depends_on: Vec<String>,
+    // 任务包正本的原生职责归属。`acceptance_criteria` 留作旧任务包兼容字段。
+    #[serde(default)]
+    worker_acceptance_criteria: Vec<String>,
+    #[serde(default)]
+    control_core_acceptance_criteria: Vec<String>,
+    #[serde(default)]
+    supervisor_acceptance_criteria: Vec<String>,
+    #[serde(default)]
     acceptance_criteria: Vec<String>,
     report_format: Vec<String>,
     status: String,
@@ -2528,6 +2556,10 @@ struct PrepareAuthorizedAutoDispatchInput {
     // **只放宽「有无会话」就绪判定·授权/安全一条不松。**
     #[serde(default)]
     chain_binds_per_task: bool,
+    // 主管试点的任务不得回落复用 role/node 上既有会话。默认 false，保持 C1 与旧 prepare
+    // 调用在已有可用绑定时的既有行为；true 只允许链路在派发前新建并绑定该 work item 专属会话。
+    #[serde(default)]
+    force_fresh_task_session: bool,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]

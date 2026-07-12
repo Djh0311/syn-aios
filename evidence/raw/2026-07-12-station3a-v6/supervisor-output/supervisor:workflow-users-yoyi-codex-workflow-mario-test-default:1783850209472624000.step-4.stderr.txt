@@ -1,0 +1,8 @@
+Reading prompt from stdin...
+2026-07-12T10:02:38.221453Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when Client(HttpRequest(HttpRequest("http/request failed: error sending request for url (https://chatgpt.com/backend-api/ps/mcp)")))
+2026-07-12T10:02:38.837061Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:02:39.196253Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:02:39.766495Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:02:40.741080Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:02:42.663456Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:02:45.959800Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses

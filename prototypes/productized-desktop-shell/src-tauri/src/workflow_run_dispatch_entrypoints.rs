@@ -540,10 +540,64 @@ fn update_work_item_state_at(
     })
 }
 
+struct WorkflowNodeSessionBindingProvenance {
+    binding_source: &'static str,
+    binding_mode: &'static str,
+    actor_ref: String,
+    permission_level: &'static str,
+    reason: String,
+}
+
+impl WorkflowNodeSessionBindingProvenance {
+    fn user_selected_existing() -> Self {
+        Self {
+            binding_source: "workflow_bound",
+            binding_mode: "select_existing_session",
+            actor_ref: "user_confirmed_desktop_shell".to_string(),
+            permission_level: "user_confirmed_write",
+            reason: "用户确认把已有 Codex 会话绑定到工作流节点；没有启动 Codex、没有发送消息、没有读取 transcript 正文。".to_string(),
+        }
+    }
+
+    fn fresh_task_session(requested_by: &str) -> Self {
+        let supervisor = requested_by == "supervisor_orchestrator";
+        Self {
+            binding_source: "fresh_task_session_bound",
+            binding_mode: "create_fresh_task_session",
+            actor_ref: requested_by.to_string(),
+            permission_level: if supervisor {
+                "authorized_supervisor_execution"
+            } else {
+                "workflow_director_execution"
+            },
+            reason: if supervisor {
+                "Syn 控制核心为已授权主管任务创建全新 Codex 会话，并精确绑定到当前 work item。"
+                    .to_string()
+            } else {
+                "工作流主管为任务创建全新 Codex 会话，并精确绑定到当前 work item。".to_string()
+            },
+        }
+    }
+}
+
 fn bind_workflow_node_codex_session_at(
     path: &Path,
     request: &WorkflowNodeSessionBindRequest,
     session: &SessionRecord,
+) -> Result<WorkflowStateMutationResult, String> {
+    bind_workflow_node_codex_session_with_provenance_at(
+        path,
+        request,
+        session,
+        &WorkflowNodeSessionBindingProvenance::user_selected_existing(),
+    )
+}
+
+fn bind_workflow_node_codex_session_with_provenance_at(
+    path: &Path,
+    request: &WorkflowNodeSessionBindRequest,
+    session: &SessionRecord,
+    provenance: &WorkflowNodeSessionBindingProvenance,
 ) -> Result<WorkflowStateMutationResult, String> {
     if !path.exists() {
         return Err("工作流状态文件不存在；无法绑定节点会话".to_string());
@@ -551,6 +605,7 @@ fn bind_workflow_node_codex_session_at(
 
     let timestamp = unix_timestamp_string();
     let timestamp_ms = unix_timestamp_ms();
+    migrate_legacy_workflow_node_session_binding_ids_at(path)?;
     let mut value = read_workflow_state_value(path)?;
     ensure_workflow_node_session_bindings_array(&mut value)?;
     let validation_warnings = validate_workflow_state(&value);
@@ -611,22 +666,12 @@ fn bind_workflow_node_codex_session_at(
     } else {
         "workflow_node_session_bound"
     };
-    let binding_id = existing_active_index
-        .and_then(|index| {
-            value
-                .get("workflow_node_session_bindings")
-                .and_then(Value::as_array)
-                .and_then(|bindings| bindings.get(index))
-                .and_then(|binding| optional_string_from(binding, "binding_id"))
-        })
-        .unwrap_or_else(|| {
-            format!(
-                "binding:{}:{}:{}",
-                stable_id(&workflow_id),
-                stable_id(&request.node_id),
-                stable_id(request.work_item_id.as_deref().unwrap_or("node"))
-            )
-        });
+    let binding_id = workflow_node_session_binding_id(
+        &workflow_id,
+        &request.node_id,
+        request.work_item_id.as_deref(),
+        &session.thread_id,
+    );
     let mut warnings = Vec::new();
     if !session.rollout_exists {
         warnings.push("index_session_rollout_missing".to_string());
@@ -648,8 +693,8 @@ fn bind_workflow_node_codex_session_at(
       "session_updated_at_ms": session.updated_at_ms,
       "rollout_exists": session.rollout_exists,
       "project_binding_source": "index_inferred",
-      "binding_source": "workflow_bound",
-      "binding_mode": "select_existing_session",
+      "binding_source": provenance.binding_source,
+      "binding_mode": provenance.binding_mode,
       "lifecycle": "active",
       "created_at_ms": timestamp_ms,
       "updated_at_ms": timestamp_ms,
@@ -676,13 +721,13 @@ fn bind_workflow_node_codex_session_at(
       "event_id": audit_event_id,
       "event_type": event_type,
       "target_ref": request.node_id,
-      "actor_ref": "user_confirmed_desktop_shell",
+      "actor_ref": provenance.actor_ref,
       "source_kind": "workspace_state",
-      "permission_level": "user_confirmed_write",
+      "permission_level": provenance.permission_level,
       "before_state": before_state,
       "after_state": session.thread_id,
       "created_at": timestamp,
-      "reason": "用户确认把已有 Codex 会话绑定到工作流节点；没有启动 Codex、没有发送消息、没有读取 transcript 正文。"
+      "reason": provenance.reason
     }));
     value["updated_at"] = Value::String(timestamp);
 
@@ -707,6 +752,206 @@ fn bind_workflow_node_codex_session_at(
         first_initialize: false,
         snapshot,
     })
+}
+
+fn workflow_node_session_binding_id(
+    workflow_id: &str,
+    node_id: &str,
+    work_item_id: Option<&str>,
+    native_thread_id: &str,
+) -> String {
+    let material = serde_json::to_string(&(
+        workflow_id,
+        node_id,
+        work_item_id.unwrap_or("node"),
+        native_thread_id,
+    ))
+    .expect("workflow binding identity is serializable");
+    format!(
+        "binding:sha256:{}",
+        crate::utils::hash::sha256_hex(&material)
+    )
+}
+
+fn legacy_workflow_node_session_binding_id(
+    workflow_id: &str,
+    node_id: &str,
+    work_item_id: Option<&str>,
+) -> String {
+    format!(
+        "binding:{}:{}:{}",
+        stable_id(workflow_id),
+        stable_id(node_id),
+        stable_id(work_item_id.unwrap_or("node"))
+    )
+}
+
+#[derive(Debug)]
+struct WorkflowBindingIdMigrationCandidate {
+    legacy_id: String,
+    current_id: String,
+    workflow_id: String,
+    node_id: String,
+    work_item_id: Option<String>,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct WorkflowBindingIdMigrationCounts {
+    bindings: usize,
+    dispatches: usize,
+    unresolved_dispatches: usize,
+}
+
+impl WorkflowBindingIdMigrationCounts {
+    fn total(&self) -> usize {
+        self.bindings + self.dispatches
+    }
+}
+
+fn migrate_legacy_workflow_node_session_binding_ids(
+    value: &mut Value,
+) -> WorkflowBindingIdMigrationCounts {
+    let mut counts = WorkflowBindingIdMigrationCounts::default();
+    let mut candidates = Vec::new();
+    if let Some(bindings) = value
+        .get_mut("workflow_node_session_bindings")
+        .and_then(Value::as_array_mut)
+    {
+        for binding in bindings {
+            let Some(workflow_id) = optional_string_from(binding, "workflow_id") else {
+                continue;
+            };
+            let Some(node_id) = optional_string_from(binding, "node_id") else {
+                continue;
+            };
+            let Some(native_thread_id) = optional_string_from(binding, "native_thread_id") else {
+                continue;
+            };
+            let work_item_id = optional_string_from(binding, "work_item_id");
+            let current_id = workflow_node_session_binding_id(
+                &workflow_id,
+                &node_id,
+                work_item_id.as_deref(),
+                &native_thread_id,
+            );
+            candidates.push(WorkflowBindingIdMigrationCandidate {
+                legacy_id: legacy_workflow_node_session_binding_id(
+                    &workflow_id,
+                    &node_id,
+                    work_item_id.as_deref(),
+                ),
+                current_id: current_id.clone(),
+                workflow_id,
+                node_id,
+                work_item_id,
+            });
+            if optional_string_from(binding, "binding_id").as_deref()
+                != Some(current_id.as_str())
+            {
+                binding["binding_id"] = Value::String(current_id);
+                counts.bindings += 1;
+            }
+        }
+    }
+    if let Some(dispatches) = value
+        .get_mut("workflow_node_dispatches")
+        .and_then(Value::as_array_mut)
+    {
+        for dispatch in dispatches {
+            let existing_id = optional_string_from(dispatch, "binding_id");
+            if existing_id.as_ref().is_some_and(|binding_id| {
+                candidates
+                    .iter()
+                    .any(|candidate| candidate.current_id == *binding_id)
+            }) {
+                continue;
+            }
+            let workflow_id = optional_string_from(dispatch, "workflow_id");
+            let node_id = optional_string_from(dispatch, "node_id");
+            let work_item_id = optional_string_from(dispatch, "work_item_id");
+            let legacy_matches = candidates
+                .iter()
+                .filter(|candidate| {
+                    existing_id
+                        .as_ref()
+                        .is_some_and(|binding_id| candidate.legacy_id == *binding_id)
+                })
+                .collect::<Vec<_>>();
+            let mut matched = legacy_matches.clone();
+            if existing_id.is_some() && matched.len() > 1 {
+                matched = legacy_matches
+                    .iter()
+                    .copied()
+                    .filter(|candidate| {
+                        workflow_id.as_deref() == Some(candidate.workflow_id.as_str())
+                            && node_id.as_deref() == Some(candidate.node_id.as_str())
+                            && work_item_id == candidate.work_item_id
+                    })
+                    .collect::<Vec<_>>();
+            } else if existing_id.is_none() {
+                matched = candidates
+                    .iter()
+                    .filter(|candidate| {
+                        workflow_id.as_deref() == Some(candidate.workflow_id.as_str())
+                            && node_id.as_deref() == Some(candidate.node_id.as_str())
+                            && work_item_id == candidate.work_item_id
+                    })
+                    .collect::<Vec<_>>();
+            }
+            if let [candidate] = matched.as_slice() {
+                dispatch["binding_id"] = Value::String(candidate.current_id.clone());
+                counts.dispatches += 1;
+            } else if existing_id.is_some() && !legacy_matches.is_empty() {
+                counts.unresolved_dispatches += 1;
+            }
+        }
+    }
+    counts
+}
+
+fn migrate_legacy_workflow_node_session_binding_ids_at(path: &Path) -> Result<usize, String> {
+    if !path.exists() {
+        return Ok(0);
+    }
+    let mut value = read_workflow_state_value(path)?;
+    let migrated = migrate_legacy_workflow_node_session_binding_ids(&mut value);
+    if migrated.unresolved_dispatches > 0 {
+        return Err(format!(
+            "binding_id 迁移拒绝写入：{} 条旧 dispatch 引用无法唯一映射",
+            migrated.unresolved_dispatches
+        ));
+    }
+    if migrated.total() == 0 {
+        return Ok(0);
+    }
+    let validation_warnings = validate_workflow_state(&value);
+    if !validation_warnings.is_empty() {
+        return Err(format!(
+            "binding_id 迁移后 schema 校验失败：{}",
+            validation_warnings.join(", ")
+        ));
+    }
+    let timestamp = unix_timestamp_string();
+    let backup = backup_workflow_state_file(path, &timestamp)?;
+    array_mut(&mut value, "audit_events")?.push(json!({
+        "event_id": format!("audit:workflow-binding-id-migrated:{timestamp}"),
+        "event_type": "workflow_node_session_binding_ids_migrated",
+        "target_ref": path.display().to_string(),
+        "actor_ref": "syn_control_core_migration",
+        "source_kind": "workspace_state",
+        "permission_level": "local_schema_migration",
+        "before_state": "legacy_truncated_binding_ids",
+        "after_state": "sha256_binding_ids",
+        "migrated_count": migrated.total(),
+        "migrated_binding_count": migrated.bindings,
+        "migrated_dispatch_count": migrated.dispatches,
+        "backup_ref": backup.display().to_string(),
+        "created_at": timestamp.clone(),
+        "reason": "旧 binding_id 会因 96 字符截断碰撞；按完整 workflow/node/work-item/native-thread 身份同步迁移 binding 与 dispatch 引用为 SHA-256。"
+    }));
+    value["updated_at"] = Value::String(timestamp);
+    write_validated_workflow_state(path, &value)?;
+    Ok(migrated.total())
 }
 
 fn unbind_workflow_node_codex_session_at(
@@ -833,6 +1078,24 @@ fn execute_workflow_node_dispatch_at(
     runner: &dyn CodexResumeRunner,
     request: &WorkflowNodeDispatchExecuteRequest,
 ) -> Result<WorkflowNodeDispatchResult, String> {
+    execute_workflow_node_dispatch_with_authorization_at(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        request,
+        None,
+    )
+}
+
+fn execute_workflow_node_dispatch_with_authorization_at(
+    path: &Path,
+    index: &Value,
+    readback_db_path: &Path,
+    runner: &dyn CodexResumeRunner,
+    request: &WorkflowNodeDispatchExecuteRequest,
+    prepared_authorization: Option<&PreparedDispatchAuthorization>,
+) -> Result<WorkflowNodeDispatchResult, String> {
     let prepare_request = WorkflowNodeDispatchPrepareRequest {
         project_root: request.project_root.clone(),
         node_id: request.node_id.clone(),
@@ -840,7 +1103,14 @@ fn execute_workflow_node_dispatch_at(
         prompt_kind: request.prompt_kind.clone(),
         user_reviewed_instruction: request.user_reviewed_instruction.clone(),
     };
-    let context = workflow_node_dispatch_context(path, index, &prepare_request)?;
+    let mut context = workflow_node_dispatch_context(path, index, &prepare_request)?;
+    if let Some(prepared_authorization) = prepared_authorization {
+        context.plan_authorization_id = Some(prepared_authorization.authorization_id.clone());
+        context.authorization_check = Some(prepared_authorization.authorization_check.clone());
+        context
+            .warnings
+            .push("authorized_prepared_dispatch_inherited".to_string());
+    }
     control_core::validate_dispatch_start(&context.work_item_state)?;
     let _prepared = write_prepared_dispatch(path, context.clone())?;
     let dispatch = write_started_dispatch(path, &context)?;
@@ -927,6 +1197,12 @@ fn read_workflow_node_dispatch_result_at(
     }
     let stats = dispatch_readback_stats(Some(index), readback_db_path, &context)?;
     write_readback_dispatch(path, &request.dispatch_id, stats)
+}
+
+#[derive(Clone, Debug)]
+struct PreparedDispatchAuthorization {
+    authorization_id: String,
+    authorization_check: AutoDispatchGuardResult,
 }
 
 #[derive(Clone, Debug)]

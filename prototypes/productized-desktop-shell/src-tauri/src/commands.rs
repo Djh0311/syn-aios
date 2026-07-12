@@ -2030,13 +2030,27 @@ fn bind_workflow_node_codex_session_for_index_at(
     index: &Value,
     request: &WorkflowNodeSessionBindRequest,
 ) -> Result<WorkflowStateMutationResult, String> {
+    bind_workflow_node_codex_session_for_index_with_provenance_at(
+        path,
+        index,
+        request,
+        &WorkflowNodeSessionBindingProvenance::user_selected_existing(),
+    )
+}
+
+fn bind_workflow_node_codex_session_for_index_with_provenance_at(
+    path: &Path,
+    index: &Value,
+    request: &WorkflowNodeSessionBindRequest,
+    provenance: &WorkflowNodeSessionBindingProvenance,
+) -> Result<WorkflowStateMutationResult, String> {
     if find_index_project(index, &request.project_root).is_none() {
         return Err("项目不在当前索引内，已拒绝绑定节点会话".to_string());
     }
     // 路A：静态快照找不到 → 回退实时 sqlite（用户能绑近期/新会话，不被 5/31 快照卡）。
     let session = find_index_thread_or_sqlite(index, &request.thread_id)
         .ok_or_else(|| "会话不在当前索引内（含实时 sqlite），已拒绝绑定节点会话".to_string())?;
-    bind_workflow_node_codex_session_at(path, request, &session)
+    bind_workflow_node_codex_session_with_provenance_at(path, request, &session, provenance)
 }
 
 #[tauri::command]
@@ -2369,6 +2383,43 @@ fn execute_project_workflow_node_at(
     runner: &dyn CodexResumeRunner,
     request: &ProjectWorkflowNodeRunRequest,
 ) -> Result<WorkflowNodeDispatchResult, String> {
+    execute_project_workflow_node_with_authorization_at(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        request,
+        None,
+    )
+}
+
+fn execute_authorized_project_workflow_node_at(
+    path: &Path,
+    index: &Value,
+    readback_db_path: &Path,
+    runner: &dyn CodexResumeRunner,
+    request: &ProjectWorkflowNodeRunRequest,
+    authorization_id: &str,
+    allowed_write: &[String],
+) -> Result<WorkflowNodeDispatchResult, String> {
+    execute_project_workflow_node_with_authorization_at(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        request,
+        Some((authorization_id, allowed_write)),
+    )
+}
+
+fn execute_project_workflow_node_with_authorization_at(
+    path: &Path,
+    index: &Value,
+    readback_db_path: &Path,
+    runner: &dyn CodexResumeRunner,
+    request: &ProjectWorkflowNodeRunRequest,
+    supervisor_authorization: Option<(&str, &[String])>,
+) -> Result<WorkflowNodeDispatchResult, String> {
     let project = find_index_project(index, &request.project_root)
         .ok_or_else(|| "项目不在当前索引内，已拒绝运行项目节点".to_string())?;
     // 后置C defect#1：workflow_id 不写死 default——优先用请求传入的，否则从 node_id
@@ -2387,6 +2438,19 @@ fn execute_project_workflow_node_at(
                 .filter(|prefix| !prefix.is_empty())
         })
         .unwrap_or_else(|| default_workflow_id(&request.project_root));
+    let prepared_authorization = supervisor_authorization
+        .map(|(authorization_id, allowed_write)| {
+            authorized_prepared_dispatch_for_execution(
+                path,
+                &request.project_root,
+                &workflow_id,
+                &request.node_id,
+                &request.work_item_id,
+                authorization_id,
+                allowed_write,
+            )
+        })
+        .transpose()?;
     let mut value = read_workflow_state_value(path)?;
     if !workflow_exists(&value, &workflow_id) {
         return Err("当前项目下找不到该 workflow；无法运行项目节点".to_string());
@@ -2417,9 +2481,29 @@ fn execute_project_workflow_node_at(
         .cloned();
     let payload_data = node_payload.as_ref().and_then(|p| p.get("data")).cloned();
 
-    // 后置C#2 · 会话 thread：① 节点已有 active 绑定复用；② 否则画布载荷里 resume 的 thread_id；
-    // 都没有 → resume-only 报清错（new 不启用，见 P3 C 决策）。
-    let existing_thread = value
+    // 后置C#2 · 会话 thread：有明确 work item 时优先精确绑定；普通路径才允许回退 node 绑定或画布 resume。
+    // 主管授权派发禁止 node fallback，避免 guard 检查旧 thread、实际 dispatch 却使用任务新 thread。
+    let exact_work_item_thread = (!request.work_item_id.trim().is_empty())
+        .then(|| {
+            value
+                .get("workflow_node_session_bindings")
+                .and_then(Value::as_array)
+                .and_then(|bindings| {
+                    bindings.iter().find(|binding| {
+                        optional_string_from(binding, "workflow_id").as_deref()
+                            == Some(workflow_id.as_str())
+                            && optional_string_from(binding, "node_id").as_deref()
+                                == Some(request.node_id.as_str())
+                            && optional_string_from(binding, "work_item_id").as_deref()
+                                == Some(request.work_item_id.as_str())
+                            && optional_string_from(binding, "lifecycle").as_deref()
+                                == Some("active")
+                    })
+                })
+                .and_then(|binding| optional_string_from(binding, "native_thread_id"))
+        })
+        .flatten();
+    let node_thread = value
         .get("workflow_node_session_bindings")
         .and_then(Value::as_array)
         .and_then(|bindings| {
@@ -2436,9 +2520,19 @@ fn execute_project_workflow_node_at(
         .filter(|s| optional_string_from(s, "mode").as_deref() == Some("resume"))
         .and_then(|s| optional_string_from(s, "thread_id"))
         .filter(|t| !t.trim().is_empty());
-    let thread_id = existing_thread.or(payload_thread).ok_or_else(|| {
-        "该节点没有可用会话（无既有绑定、画布也没设 resume 会话）；resume-only：请先给节点绑一条已有 codex 会话".to_string()
-    })?;
+    let thread_id = if supervisor_authorization.is_some() {
+        exact_work_item_thread.ok_or_else(|| {
+            "主管授权派发缺少当前 work item 的精确 active 会话绑定；拒绝回退旧 node 会话"
+                .to_string()
+        })?
+    } else {
+        exact_work_item_thread
+            .or(node_thread)
+            .or(payload_thread)
+            .ok_or_else(|| {
+                "该节点没有可用会话（无既有绑定、画布也没设 resume 会话）；resume-only：请先给节点绑一条已有 codex 会话".to_string()
+            })?
+    };
 
     // 后置C#2 · work_item + 指令：① 请求给了且存在 → 用它（指令取任务包）；② 否则 → 自动建临时
     // work_item（§9「节点即 work_item」；指令取画布载荷 prompt/sandbox），让画布建的工作流也能真跑。
@@ -2682,7 +2776,94 @@ fn execute_project_workflow_node_at(
             prompt_preview: Some(objective),
         }),
     };
-    execute_workflow_node_dispatch_for_index_at(path, index, readback_db_path, runner, &exec_request)
+    if let Some(prepared_authorization) = prepared_authorization.as_ref() {
+        execute_workflow_node_dispatch_with_authorization_at(
+            path,
+            index,
+            readback_db_path,
+            runner,
+            &exec_request,
+            Some(prepared_authorization),
+        )
+    } else {
+        execute_workflow_node_dispatch_for_index_at(
+            path,
+            index,
+            readback_db_path,
+            runner,
+            &exec_request,
+        )
+    }
+}
+
+fn authorized_prepared_dispatch_for_execution(
+    path: &Path,
+    project_root: &str,
+    workflow_id: &str,
+    node_id: &str,
+    work_item_id: &str,
+    authorization_id: &str,
+    allowed_write: &[String],
+) -> Result<PreparedDispatchAuthorization, String> {
+    let value = read_workflow_state_value(path)?;
+    let work_item = find_work_item(&value, workflow_id, work_item_id)
+        .ok_or_else(|| "主管请求的 work item 不存在，已拒绝启动 worker".to_string())?;
+    let artifact = find_task_package_artifact(&value, work_item_id, work_item)
+        .ok_or_else(|| "主管请求的 work item 缺任务包，已拒绝启动 worker".to_string())?;
+    let package_write_roots = string_array(artifact, "allowed_write");
+    let requested_write_roots = allowed_write.iter().cloned().collect::<BTreeSet<_>>();
+    let package_write_roots_set = package_write_roots.iter().cloned().collect::<BTreeSet<_>>();
+    if requested_write_roots != package_write_roots_set
+        || requested_write_roots.len() != allowed_write.len()
+        || package_write_roots_set.len() != package_write_roots.len()
+    {
+        return Err(
+            "主管请求 allowed_write 与已批准任务包不一致，已拒绝启动 worker".to_string(),
+        );
+    }
+
+    let expected_project_id = project_id(project_root);
+    let dispatch = value
+        .get("workflow_node_dispatches")
+        .and_then(Value::as_array)
+        .and_then(|dispatches| {
+            dispatches.iter().rev().find(|dispatch| {
+                optional_string_from(dispatch, "state").as_deref() == Some("prepared")
+                    && optional_string_from(dispatch, "prompt_kind").as_deref()
+                        == Some("authorized_prepared_auto_dispatch")
+                    && optional_string_from(dispatch, "project_id").as_deref()
+                        == Some(expected_project_id.as_str())
+                    && optional_string_from(dispatch, "workflow_id").as_deref()
+                        == Some(workflow_id)
+                    && optional_string_from(dispatch, "node_id").as_deref() == Some(node_id)
+                    && optional_string_from(dispatch, "work_item_id").as_deref()
+                        == Some(work_item_id)
+                    && optional_string_from(dispatch, "plan_authorization_id").as_deref()
+                        == Some(authorization_id)
+            })
+        })
+        .ok_or_else(|| {
+            "找不到与主管请求完全匹配的已授权 prepared dispatch，已拒绝启动 worker"
+                .to_string()
+        })?;
+    let authorization_check: AutoDispatchGuardResult = serde_json::from_value(
+        dispatch
+            .get("authorization_check")
+            .cloned()
+            .ok_or_else(|| "已授权 prepared dispatch 缺授权检查，已拒绝启动 worker".to_string())?,
+    )
+    .map_err(|error| format!("已授权 prepared dispatch 的授权检查损坏，已拒绝启动 worker：{error}"))?;
+    if authorization_check.status != "authorized"
+        || authorization_check.authorization_id.as_deref() != Some(authorization_id)
+        || authorization_check.required_user_confirmation
+        || authorization_check.required_global_review
+    {
+        return Err("prepared dispatch 的授权检查未完整放行，已拒绝启动 worker".to_string());
+    }
+    Ok(PreparedDispatchAuthorization {
+        authorization_id: authorization_id.to_string(),
+        authorization_check,
+    })
 }
 
 // ===== S1 执行层合一：B 画布派发过 A 强闸的辅助件 =====

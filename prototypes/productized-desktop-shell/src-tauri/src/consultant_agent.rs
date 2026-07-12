@@ -32,6 +32,9 @@ pub(crate) struct ConsultationProposal {
     pub(crate) risks: Vec<ConsultationRisk>,
     pub(crate) must_stop_points: Vec<String>,
     pub(crate) next_steps: Vec<String>,
+    pub(crate) worker_acceptance_criteria: Vec<String>,
+    pub(crate) control_core_acceptance_criteria: Vec<String>,
+    pub(crate) supervisor_acceptance_criteria: Vec<String>,
     // None = 纯咨询/只读·不需要下游改任何东西；Some = 咨询判定要下游真改东西·带执行范围。
     pub(crate) execution_scope: Option<ConsultationExecutionScope>,
     // 交办·刀2 2.5：咨询判「这活是否值得拆成多步工作流」（复杂活 true·简单/纯咨询 false）。UI 用它决定图区出不出现。
@@ -342,6 +345,9 @@ fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
   "risks": [{"severity":"info|warning|blocker","summary":"风险/不确定","mitigation":"怎么缓解"}],
   "must_stop_points": ["必停点"],
   "next_steps": ["建议的下一步"],
+  "worker_acceptance_criteria": ["只由 worker 完成的可验证事实；文件名、精确内容、字节数和换行等用户文字约束必须逐字保留"],
+  "control_core_acceptance_criteria": ["只由控制核心完成的授权、工作项、唯一派发或账本事实"],
+  "supervisor_acceptance_criteria": ["只由主管完成的证据检查、终标或用户报告事实"],
   "execution_scope": {
     "target_files": ["预期改动的具体文件·相对项目根(尽量列出·可空)"],
     "checks": ["怎么验收,如 cargo test / npm test / 浏览器打开看效果"]
@@ -353,6 +359,7 @@ fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
 - 要改 → 给出 execution_scope 块,写清"会改哪些文件(target_files)+怎么验收(checks)"。这是你方案的一部分。
   (写范围/工具由系统按固定档位装配·你不用报;多报的字段会被忽略。)
 - 只是回答问题、不需要改任何东西 → execution_scope 给 **null**,并在 scope_note 注明"纯咨询/只读"。
+- 三类 acceptance criteria 必须按责任主体输出，不能把 worker、控制核心和主管职责混在同一数组；不要仅概括用户给出的文件名、精确内容、编码、字节数或末尾换行约束，必须逐字保留在 worker_acceptance_criteria。
 **判断这活值不值得拆成多步工作流(suggest_workflow)**:
 - 需要多步、有先后依赖、值得先看工序图再动手(复杂改造/多文件协作) → suggest_workflow=**true**。
 - 一两步就完、或纯咨询不改东西 → suggest_workflow=**false**(缺省)。"#,
@@ -398,6 +405,12 @@ struct ConsultProposalJson {
     must_stop_points: Vec<String>,
     #[serde(default)]
     next_steps: Vec<String>,
+    #[serde(default)]
+    worker_acceptance_criteria: Vec<String>,
+    #[serde(default)]
+    control_core_acceptance_criteria: Vec<String>,
+    #[serde(default)]
+    supervisor_acceptance_criteria: Vec<String>,
     // 向后兼容：旧样本没这块 → None；codex 给 null / 整块缺 / write_roots 全空 → 视作纯咨询(None)。
     #[serde(default)]
     execution_scope: Option<ConsultExecutionScopeJson>,
@@ -451,6 +464,9 @@ pub(crate) fn parse_consultation_proposal(raw: &str) -> Result<ConsultationPropo
             .collect(),
         must_stop_points: dto.must_stop_points,
         next_steps: dto.next_steps,
+        worker_acceptance_criteria: dto.worker_acceptance_criteria,
+        control_core_acceptance_criteria: dto.control_core_acceptance_criteria,
+        supervisor_acceptance_criteria: dto.supervisor_acceptance_criteria,
         // 执行范围·Some/None = 咨询是否给了 execution_scope 块（判定要下游改东西）：给了块 → Some；null / 缺 → None
         // （纯咨询/只读）。交办地基 2.1：写范围来源改为**档位**后，Some 不再取决于 write_roots——咨询报的
         // write_roots/tools 留作向后兼容但下游 map 忽略（用档位）；下游真正用的是 checks/target_files。
@@ -517,10 +533,25 @@ fn profile_edit_test_project_scope() -> (Vec<String>, Vec<String>, Vec<String>) 
 }
 
 // ===== 喂 C1（ConsultationProposal → create_project_consultation_proposal 输入）=====
+#[allow(dead_code)]
 pub(crate) fn map_consultation_to_c1_input(
     proposal: &ConsultationProposal,
     project_root: &str,
     actor_id: &str,
+) -> Result<CreateProjectConsultationProposalInput, String> {
+    map_consultation_to_c1_input_with_user_requirement_snapshot(
+        proposal,
+        project_root,
+        actor_id,
+        &proposal.user_goal,
+    )
+}
+
+fn map_consultation_to_c1_input_with_user_requirement_snapshot(
+    proposal: &ConsultationProposal,
+    project_root: &str,
+    actor_id: &str,
+    user_requirement_snapshot: &str,
 ) -> Result<CreateProjectConsultationProposalInput, String> {
     let head: String = proposal.goal_summary.trim().chars().take(40).collect();
     let title = if head.is_empty() {
@@ -603,10 +634,14 @@ pub(crate) fn map_consultation_to_c1_input(
         workflow_id: None,
         title,
         user_goal: proposal.user_goal.clone(),
+        user_requirement_snapshot: user_requirement_snapshot.to_string(),
         goal_summary: proposal.goal_summary.clone(),
         proposed_steps,
         scope_draft,
         risks,
+        worker_acceptance_criteria: proposal.worker_acceptance_criteria.clone(),
+        control_core_acceptance_criteria: proposal.control_core_acceptance_criteria.clone(),
+        supervisor_acceptance_criteria: proposal.supervisor_acceptance_criteria.clone(),
         acceptance_criteria,
         created_by_role: ProjectConsultationProposalCreatorRole::ProjectConsultant,
         // 2.5：透传咨询的「建议按工作流」判定（写范围/工具走档位·此标记只影响 UI 图区显隐·不碰授权）。
@@ -647,7 +682,12 @@ fn run_project_consultation_inner(
     // 2. 咨询 LM 出方案（结构性只读·readonly_codex_consult·不碰执行闸）。
     let proposal = consultant.consult(&ctx, goal)?;
     // 3. 映射进 C1 输入（含咨询提的执行范围；写范围越界/空值 → Err 早报）。
-    let input = map_consultation_to_c1_input(&proposal, project_root, actor_id)?;
+    let input = map_consultation_to_c1_input_with_user_requirement_snapshot(
+        &proposal,
+        project_root,
+        actor_id,
+        goal,
+    )?;
     // 4. 写进方案 store（status=PendingUserConfirmation·**不自动确认**·等用户走方案授权）。
     let write_id = format!("run-project-consultation:{}", unix_timestamp_nanos());
     let output = project_consultation_proposal_store::create_proposal(

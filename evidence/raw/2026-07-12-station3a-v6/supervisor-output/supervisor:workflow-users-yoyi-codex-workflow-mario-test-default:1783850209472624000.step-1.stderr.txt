@@ -1,0 +1,8 @@
+Reading prompt from stdin...
+2026-07-12T10:00:19.766150Z ERROR codex_models_manager::manager: failed to refresh available models: timeout waiting for child process to exit
+2026-07-12T10:00:31.852164Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:00:32.221033Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:00:32.750193Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:00:33.777009Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:00:35.694641Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:00:39.140849Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses

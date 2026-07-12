@@ -141,6 +141,11 @@ pub(crate) struct SupervisorPilotSessionLaunch {
     pub(crate) authorization_id: String,
     pub(crate) model_id: String,
     pub(crate) reasoning_effort: String,
+    pub(crate) workbench_executable_path: String,
+    pub(crate) workbench_build_id: String,
+    pub(crate) supervisor_contract_version: String,
+    pub(crate) supervisor_contract_sha256: String,
+    pub(crate) worker_report_contract_sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -179,24 +184,24 @@ pub(crate) struct SupervisorPilotReadModel {
 }
 
 #[derive(Debug, Clone)]
-struct DispatchInput {
-    project_root: String,
-    workflow_id: String,
-    authorization_id: String,
-    node_id: String,
-    work_item_id: String,
-    allowed_write: Vec<String>,
+pub(crate) struct DispatchInput {
+    pub(crate) project_root: String,
+    pub(crate) workflow_id: String,
+    pub(crate) authorization_id: String,
+    pub(crate) node_id: String,
+    pub(crate) work_item_id: String,
+    pub(crate) allowed_write: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]
-struct WorkerLaunch {
-    worker_id: String,
-    native_thread_id: String,
-    dispatch_id: String,
-    canonical_work_item_id: String,
-    state: String,
-    initial_report: Option<Value>,
-    result_summary: String,
+pub(crate) struct WorkerLaunch {
+    pub(crate) worker_id: String,
+    pub(crate) native_thread_id: String,
+    pub(crate) dispatch_id: String,
+    pub(crate) canonical_work_item_id: String,
+    pub(crate) state: String,
+    pub(crate) initial_report: Option<Value>,
+    pub(crate) result_summary: String,
 }
 
 trait WorkerInvoker {
@@ -230,46 +235,15 @@ impl WorkerInvoker for WorkbenchWorkerInvoker {
         let index = crate::read_index(&app_state)?;
         let runner = crate::codex_local_runner::RealWorkflowNodeCodexRunner;
         let workflow_state_path = workflow_state_path(config)?;
-        let canonical_work_item_id = canonical_prepared_work_item_id(&workflow_state_path, input)?;
-        if canonical_work_item_id != input.work_item_id {
-            append_audit(
-                config,
-                "dispatch_worker_work_item_canonicalized",
-                &format!(
-                    "requested_work_item_id={}; canonical_work_item_id={}",
-                    input.work_item_id, canonical_work_item_id
-                ),
-                "主管提供的 work item 文本有偏差；工作台按当前授权段唯一 prepared dispatch 恢复正本 ID。",
-                "warning",
-            )?;
-        }
-        let result = crate::execute_authorized_project_workflow_node_at(
-            workflow_state_path,
+        dispatch_workbench_worker_with(
+            config,
+            input,
             &index,
+            workflow_state_path,
             &crate::codex_db::default_state_db_path(),
             &runner,
-            &crate::ProjectWorkflowNodeRunRequest {
-                project_root: input.project_root.clone(),
-                node_id: input.node_id.clone(),
-                work_item_id: canonical_work_item_id.clone(),
-                workflow_id: Some(input.workflow_id.clone()),
-            },
-            &input.authorization_id,
-            &input.allowed_write,
-        )?;
-        if result.dispatch.plan_authorization_id.as_deref() != Some(input.authorization_id.as_str())
-        {
-            return Err("现成派发返回的授权段与主管请求不一致，已拒绝纳入主管账本".to_string());
-        }
-        Ok(WorkerLaunch {
-            worker_id: result.dispatch.dispatch_id.clone(),
-            native_thread_id: result.dispatch.native_thread_id,
-            dispatch_id: result.dispatch.dispatch_id,
-            canonical_work_item_id,
-            state: result.dispatch.state,
-            initial_report: None,
-            result_summary: result.message,
-        })
+            &crate::ManualRelayJiaobanNewSessionCreator,
+        )
     }
 
     fn follow_up(
@@ -345,6 +319,157 @@ impl WorkerInvoker for WorkbenchWorkerInvoker {
     }
 }
 
+pub(crate) fn dispatch_workbench_worker_with(
+    config: &McpServerConfig,
+    input: &DispatchInput,
+    index: &Value,
+    workflow_state_path: &Path,
+    readback_db_path: &Path,
+    runner: &dyn crate::CodexResumeRunner,
+    creator: &dyn crate::JiaobanNewSessionCreator,
+) -> Result<WorkerLaunch, String> {
+    let canonical_work_item_id = canonical_prepared_work_item_id(workflow_state_path, input)?;
+    if canonical_work_item_id != input.work_item_id {
+        append_audit(
+                config,
+                "dispatch_worker_work_item_canonicalized",
+                &format!(
+                    "requested_work_item_id={}; canonical_work_item_id={}",
+                    input.work_item_id, canonical_work_item_id
+                ),
+                "主管提供的 work item 文本有偏差；工作台按当前授权段唯一 prepared dispatch 恢复正本 ID。",
+                "warning",
+            )?;
+    }
+    let state_before_binding = crate::read_workflow_state_value(workflow_state_path)?;
+    let historical_thread_ids = historical_native_thread_ids(&state_before_binding);
+    let (task_title, task_package_id) =
+        supervisor_task_session_metadata(&state_before_binding, &canonical_work_item_id)?;
+    let fresh_thread_id = crate::create_and_bind_fresh_task_session(
+        workflow_state_path,
+        index,
+        &crate::FreshTaskSessionBindingRequest {
+            project_root: &input.project_root,
+            workflow_id: &input.workflow_id,
+            node_id: &input.node_id,
+            work_item_id: &canonical_work_item_id,
+            task_title: &task_title,
+            task_package_id: Some(task_package_id.as_str()),
+            requested_by: ACTOR,
+            forbidden_thread_ids: &historical_thread_ids,
+        },
+        creator,
+    )?;
+    let state_after_binding = crate::read_workflow_state_value(workflow_state_path)?;
+    let bound_thread_id = exact_work_item_native_thread_id(
+        &state_after_binding,
+        &input.workflow_id,
+        &input.node_id,
+        &canonical_work_item_id,
+    )
+    .ok_or_else(|| {
+        let reason = "新建任务会话后缺少该 work item 的精确绑定，拒绝派发 worker";
+        let _ = abandon_fresh_task_binding(
+            config,
+            workflow_state_path,
+            input,
+            &canonical_work_item_id,
+            &fresh_thread_id,
+            reason,
+        );
+        reason.to_string()
+    })?;
+    if bound_thread_id != fresh_thread_id {
+        let error = format!(
+                "新建任务会话绑定与预期 native_thread_id 不一致（expected {fresh_thread_id}, actual {bound_thread_id}），拒绝派发 worker"
+            );
+        abandon_fresh_task_binding(
+            config,
+            workflow_state_path,
+            input,
+            &canonical_work_item_id,
+            &fresh_thread_id,
+            &error,
+        )?;
+        return Err(error);
+    }
+    append_audit(
+        config,
+        "fresh_task_session_bound",
+        &format!("work_item_id={canonical_work_item_id}; native_thread_id={fresh_thread_id}"),
+        "已通过 C1 建会话并精确绑定本 work item；历史 native_thread_id 不会复用。",
+        "accepted",
+    )?;
+    let result = match crate::execute_authorized_project_workflow_node_at(
+        workflow_state_path,
+        index,
+        readback_db_path,
+        runner,
+        &crate::ProjectWorkflowNodeRunRequest {
+            project_root: input.project_root.clone(),
+            node_id: input.node_id.clone(),
+            work_item_id: canonical_work_item_id.clone(),
+            workflow_id: Some(input.workflow_id.clone()),
+        },
+        &input.authorization_id,
+        &input.allowed_write,
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            let cleanup = abandon_fresh_task_binding(
+                config,
+                workflow_state_path,
+                input,
+                &canonical_work_item_id,
+                &fresh_thread_id,
+                &format!("worker 派发失败：{error}"),
+            );
+            return Err(match cleanup {
+                Ok(()) => error,
+                Err(cleanup_error) => {
+                    format!("{error}；同时清理 active 绑定失败：{cleanup_error}")
+                }
+            });
+        }
+    };
+    if result.dispatch.plan_authorization_id.as_deref() != Some(input.authorization_id.as_str()) {
+        let error = "现成派发返回的授权段与主管请求不一致，已拒绝纳入主管账本";
+        abandon_fresh_task_binding(
+            config,
+            workflow_state_path,
+            input,
+            &canonical_work_item_id,
+            &fresh_thread_id,
+            error,
+        )?;
+        return Err(error.to_string());
+    }
+    if result.dispatch.native_thread_id != fresh_thread_id {
+        let error = format!(
+                "现成派发返回的 native_thread_id 与本任务新建绑定不一致（expected {fresh_thread_id}, actual {}），拒绝纳入主管账本",
+                result.dispatch.native_thread_id
+            );
+        abandon_fresh_task_binding(
+            config,
+            workflow_state_path,
+            input,
+            &canonical_work_item_id,
+            &fresh_thread_id,
+            &error,
+        )?;
+        return Err(error);
+    }
+    Ok(WorkerLaunch {
+        worker_id: result.dispatch.dispatch_id.clone(),
+        native_thread_id: result.dispatch.native_thread_id,
+        dispatch_id: result.dispatch.dispatch_id,
+        canonical_work_item_id,
+        state: result.dispatch.state,
+        initial_report: None,
+        result_summary: result.message,
+    })
+}
+
 fn canonical_prepared_work_item_id(
     workflow_state_path: &Path,
     input: &DispatchInput,
@@ -391,6 +516,150 @@ fn canonical_prepared_work_item_id_from_value(
         .into_iter()
         .next()
         .ok_or_else(|| "prepared work item 正本 ID 丢失，已拒绝启动 worker".to_string())
+}
+
+fn historical_native_thread_ids(value: &Value) -> BTreeSet<String> {
+    [
+        "workflow_node_dispatches",
+        "workflow_node_session_bindings",
+        "audit_events",
+    ]
+    .into_iter()
+    .flat_map(|key| {
+        value
+            .get(key)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+    })
+    .filter_map(|record| crate::optional_string_from(record, "native_thread_id"))
+    .filter(|thread_id| !thread_id.trim().is_empty())
+    .collect()
+}
+
+fn supervisor_task_session_metadata(
+    value: &Value,
+    work_item_id: &str,
+) -> Result<(String, String), String> {
+    let artifact = value
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .and_then(|artifacts| {
+            artifacts.iter().find(|artifact| {
+                crate::optional_string_from(artifact, "artifact_type").as_deref()
+                    == Some("task_package")
+                    && crate::optional_string_from(artifact, "source_ref").as_deref()
+                        == Some(work_item_id)
+            })
+        })
+        .ok_or_else(|| {
+            "prepared work item 缺 task package artifact，拒绝新建并绑定任务会话".to_string()
+        })?;
+    let task_title = crate::optional_string_from(artifact, "task_name")
+        .or_else(|| crate::optional_string_from(artifact, "title"))
+        .filter(|title| !title.trim().is_empty())
+        .ok_or_else(|| "task package 缺任务标题，拒绝新建并绑定任务会话".to_string())?;
+    let task_package_id = crate::optional_string_from(artifact, "artifact_id")
+        .ok_or_else(|| "task package 缺 artifact_id，拒绝新建并绑定任务会话".to_string())?;
+    Ok((task_title, task_package_id))
+}
+
+pub(crate) fn exact_work_item_native_thread_id(
+    value: &Value,
+    workflow_id: &str,
+    node_id: &str,
+    work_item_id: &str,
+) -> Option<String> {
+    value
+        .get("workflow_node_session_bindings")
+        .and_then(Value::as_array)
+        .and_then(|bindings| {
+            bindings.iter().find_map(|binding| {
+                (crate::optional_string_from(binding, "workflow_id").as_deref()
+                    == Some(workflow_id)
+                    && crate::optional_string_from(binding, "node_id").as_deref() == Some(node_id)
+                    && crate::optional_string_from(binding, "work_item_id").as_deref()
+                        == Some(work_item_id)
+                    && crate::optional_string_from(binding, "lifecycle").as_deref()
+                        == Some("active"))
+                .then(|| crate::optional_string_from(binding, "native_thread_id"))
+                .flatten()
+            })
+        })
+}
+
+pub(crate) fn abandon_fresh_task_binding(
+    config: &McpServerConfig,
+    workflow_state_path: &Path,
+    input: &DispatchInput,
+    canonical_work_item_id: &str,
+    native_thread_id: &str,
+    reason: &str,
+) -> Result<(), String> {
+    let mut value = crate::read_workflow_state_value(workflow_state_path)?;
+    let now_ms = now_ms();
+    let mut detached = false;
+    if let Some(binding) = value
+        .get_mut("workflow_node_session_bindings")
+        .and_then(Value::as_array_mut)
+        .and_then(|bindings| {
+            bindings.iter_mut().find(|binding| {
+                crate::optional_string_from(binding, "workflow_id").as_deref()
+                    == Some(input.workflow_id.as_str())
+                    && crate::optional_string_from(binding, "node_id").as_deref()
+                        == Some(input.node_id.as_str())
+                    && crate::optional_string_from(binding, "work_item_id").as_deref()
+                        == Some(canonical_work_item_id)
+                    && crate::optional_string_from(binding, "native_thread_id").as_deref()
+                        == Some(native_thread_id)
+                    && crate::optional_string_from(binding, "lifecycle").as_deref()
+                        == Some("active")
+            })
+        })
+    {
+        binding["lifecycle"] = Value::String("detached".to_string());
+        binding["updated_at_ms"] = Value::Number(now_ms.into());
+        detached = true;
+    }
+    if let Some(artifacts) = value.get_mut("artifacts").and_then(Value::as_array_mut) {
+        if let Some(artifact) = artifacts.iter_mut().find(|artifact| {
+            crate::optional_string_from(artifact, "source_ref").as_deref()
+                == Some(canonical_work_item_id)
+                && crate::optional_string_from(artifact, "target_session_id").as_deref()
+                    == Some(native_thread_id)
+        }) {
+            artifact["target_session_id"] = Value::Null;
+        }
+    }
+    let audit_events = value
+        .get_mut("audit_events")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| "workflow state 缺 audit_events，无法记录新会话失败收尾".to_string())?;
+    audit_events.push(json!({
+        "event_id": format!("audit:supervisor-task-session-abandoned:{}:{}", stable_fragment(native_thread_id), crate::unix_timestamp_nanos()),
+        "event_type": "supervisor_task_session_abandoned",
+        "target_ref": canonical_work_item_id,
+        "actor_ref": ACTOR,
+        "source_kind": "workspace_state",
+        "permission_level": "authorized_supervisor_execution",
+        "native_thread_id": native_thread_id,
+        "before_state": if detached { "active" } else { "created_or_unbound" },
+        "after_state": "detached_or_orphaned",
+        "created_at": crate::unix_timestamp_string(),
+        "created_at_ms": now_ms,
+        "reason": reason
+    }));
+    value["updated_at"] = Value::String(crate::unix_timestamp_string());
+    crate::write_validated_workflow_state(workflow_state_path, &value)?;
+    append_audit(
+        config,
+        "fresh_task_session_abandoned",
+        &format!(
+            "work_item_id={canonical_work_item_id}; native_thread_id={native_thread_id}; binding_detached={detached}"
+        ),
+        reason,
+        "warning",
+    )
 }
 
 pub fn list_tools() -> Value {
@@ -676,7 +945,7 @@ fn read_worker_report(config: &McpServerConfig, args: &Value) -> Result<Value, S
         return Ok(report);
     }
     let value = crate::read_workflow_state_value(workflow_state_path(config)?)?;
-    if let Some(event) = value
+    let report = if let Some(event) = value
         .get("audit_events")
         .and_then(Value::as_array)
         .and_then(|events| {
@@ -686,9 +955,8 @@ fn read_worker_report(config: &McpServerConfig, args: &Value) -> Result<Value, S
                     && crate::optional_string_from(event, "dispatch_id").as_deref()
                         == Some(worker.dispatch_id.as_str())
             })
-        })
-    {
-        return Ok(json!({
+        }) {
+        json!({
             "worker_id": worker.worker_id,
             "dispatch_id": worker.dispatch_id,
             "acceptance_status": event.get("acceptance_status").cloned().unwrap_or(Value::Null),
@@ -700,9 +968,20 @@ fn read_worker_report(config: &McpServerConfig, args: &Value) -> Result<Value, S
             "permission_requests": event.get("permission_requests").cloned().unwrap_or(Value::Null),
             "direction_risks": event.get("direction_risks").cloned().unwrap_or(Value::Null),
             "follow_up_suggestions": event.get("follow_up_suggestions").cloned().unwrap_or(Value::Null)
-        }));
-    }
-    normalized_raw_worker_report(&value, &worker)
+        })
+    } else {
+        normalized_raw_worker_report(&value, &worker)?
+    };
+    update_store(config, "persist-worker-report", |store| {
+        let worker = session_mut(store, &config.run_id)
+            .workers
+            .iter_mut()
+            .find(|candidate| candidate.worker_id == worker.worker_id)
+            .ok_or_else(|| "主管 worker 在回程持久化前丢失，拒绝伪造报告".to_string())?;
+        worker.last_report = Some(report.clone());
+        Ok(())
+    })?;
+    Ok(report)
 }
 
 fn normalized_raw_worker_report(value: &Value, worker: &SupervisorWorker) -> Result<Value, String> {
@@ -1106,8 +1385,15 @@ pub(crate) fn record_pilot_session_started(
             run_id: config.run_id.clone(),
             tool: "supervisor_session_launcher".to_string(),
             parameter_summary: format!(
-                "authorization_id={}; model_id={}; reasoning_effort={}",
-                launch.authorization_id, launch.model_id, launch.reasoning_effort
+                "authorization_id={}; model_id={}; reasoning_effort={}; workbench_executable_path={}; workbench_build_id={}; supervisor_contract_version={}; supervisor_contract_sha256={}; worker_report_contract_sha256={}",
+                launch.authorization_id,
+                launch.model_id,
+                launch.reasoning_effort,
+                launch.workbench_executable_path,
+                launch.workbench_build_id,
+                launch.supervisor_contract_version,
+                launch.supervisor_contract_sha256,
+                launch.worker_report_contract_sha256
             ),
             result_summary: "主管会话已启动；后续工具调用会落入同一账本。".to_string(),
             result_status: "accepted".to_string(),
@@ -1881,6 +2167,46 @@ mod tests {
     }
 
     #[test]
+    fn pilot_session_start_audits_actual_workbench_binary_and_build_id() {
+        let fixture = Fixture::new();
+        record_pilot_session_started(
+            &fixture.config,
+            &SupervisorPilotSessionLaunch {
+                project_root: PROJECT.to_string(),
+                workflow_id: WORKFLOW.to_string(),
+                authorization_id: AUTH.to_string(),
+                model_id: "account-default".to_string(),
+                reasoning_effort: "medium".to_string(),
+                workbench_executable_path: "/Applications/CodexGovernanceWorkbench.app/Contents/MacOS/CodexGovernanceWorkbench".to_string(),
+                workbench_build_id: "codex-governance-workbench@0.1.0:bytes=123:mtime=1784000000:sha256=binary-hash".to_string(),
+                supervisor_contract_version: "supervisor_action_proposal.v1".to_string(),
+                supervisor_contract_sha256: "supervisor-hash".to_string(),
+                worker_report_contract_sha256: "worker-hash".to_string(),
+            },
+        )
+        .expect("pilot launch audit");
+        let ledger = load_store(&fixture.config).expect("pilot ledger");
+        let start_event = ledger
+            .audit_events
+            .iter()
+            .find(|event| event.tool == "supervisor_session_launcher")
+            .expect("session start audit");
+        assert!(start_event.parameter_summary.contains("workbench_executable_path=/Applications/CodexGovernanceWorkbench.app/Contents/MacOS/CodexGovernanceWorkbench"));
+        assert!(start_event.parameter_summary.contains(
+            "workbench_build_id=codex-governance-workbench@0.1.0:bytes=123:mtime=1784000000:sha256=binary-hash"
+        ));
+        assert!(start_event
+            .parameter_summary
+            .contains("supervisor_contract_version=supervisor_action_proposal.v1"));
+        assert!(start_event
+            .parameter_summary
+            .contains("supervisor_contract_sha256=supervisor-hash"));
+        assert!(start_event
+            .parameter_summary
+            .contains("worker_report_contract_sha256=worker-hash"));
+    }
+
+    #[test]
     fn canonicalizes_model_work_item_typo_only_from_unique_authorized_prepared_dispatch() {
         let input = DispatchInput {
             project_root: PROJECT.to_string(),
@@ -1937,6 +2263,65 @@ mod tests {
     }
 
     #[test]
+    fn supervisor_dispatch_fresh_session_gate_uses_history_and_exact_work_item_binding() {
+        let value = json!({
+            "workflow_node_dispatches": [
+                {"native_thread_id": "thread-v3"},
+                {"native_thread_id": "thread-v4"},
+                {"native_thread_id": null}
+            ],
+            "workflow_node_session_bindings": [
+                {
+                    "workflow_id": WORKFLOW,
+                    "node_id": NODE,
+                    "work_item_id": "work-v5",
+                    "native_thread_id": "thread-v5-fresh",
+                    "lifecycle": "active"
+                },
+                {
+                    "workflow_id": WORKFLOW,
+                    "node_id": NODE,
+                    "work_item_id": null,
+                    "native_thread_id": "thread-v3",
+                    "lifecycle": "active"
+                }
+            ],
+            "audit_events": [{
+                "event_type": "supervisor_task_session_birth",
+                "native_thread_id": "thread-created-but-rejected"
+            }],
+            "artifacts": [{
+                "artifact_id": "artifact:work-v5",
+                "artifact_type": "task_package",
+                "source_ref": "work-v5",
+                "task_name": "Worker：创建 station3a-control-core-proof-v5.txt"
+            }]
+        });
+        let historical = historical_native_thread_ids(&value);
+        assert_eq!(
+            historical,
+            BTreeSet::from([
+                "thread-v3".to_string(),
+                "thread-v4".to_string(),
+                "thread-v5-fresh".to_string(),
+                "thread-created-but-rejected".to_string()
+            ])
+        );
+        assert_eq!(
+            exact_work_item_native_thread_id(&value, WORKFLOW, NODE, "work-v5"),
+            Some("thread-v5-fresh".to_string()),
+            "work item binding must win over old node-level binding"
+        );
+        assert_eq!(
+            supervisor_task_session_metadata(&value, "work-v5").expect("task package metadata"),
+            (
+                "Worker：创建 station3a-control-core-proof-v5.txt".to_string(),
+                "artifact:work-v5".to_string()
+            )
+        );
+    }
+
+    #[test]
     fn read_worker_report_denies_unknown_worker_and_audits_success() {
         let fixture = Fixture::new();
         assert!(fixture
@@ -1986,6 +2371,23 @@ mod tests {
             .expect("blocked report projection");
         assert_eq!(blocked["acceptance_status"], "blocked");
         assert_eq!(blocked["summary"], "无法继续");
+        assert_eq!(
+            load_store(&fixture.config)
+                .expect("stored blocked report")
+                .sessions[0]
+                .workers[0]
+                .last_report,
+            Some(blocked.clone())
+        );
+        update_store(
+            &fixture.config,
+            "clear-blocked-report-for-audit-projection",
+            |store| {
+                session_mut(store, &fixture.config.run_id).workers[0].last_report = None;
+                Ok(())
+            },
+        )
+        .expect("clear blocked report for next projection source");
 
         let mut state: Value =
             serde_json::from_slice(&fs::read(&fixture.state_path).expect("workflow state"))
@@ -2012,6 +2414,14 @@ mod tests {
             .expect("structured report projection");
         assert_eq!(projected["summary"], "文件已回读");
         assert_eq!(projected["evidence_refs"], json!(["readback:proof"]));
+        assert_eq!(
+            load_store(&fixture.config)
+                .expect("stored completed report")
+                .sessions[0]
+                .workers[0]
+                .last_report,
+            Some(projected)
+        );
     }
 
     #[test]

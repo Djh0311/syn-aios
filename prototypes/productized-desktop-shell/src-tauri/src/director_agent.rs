@@ -315,6 +315,9 @@ pub(crate) fn parse_director_plan(
                 task_goal: task.task_goal,
                 scope,
                 depends_on: task.depends_on,
+                worker_acceptance_criteria: proposal.worker_acceptance_criteria.clone(),
+                control_core_acceptance_criteria: proposal.control_core_acceptance_criteria.clone(),
+                supervisor_acceptance_criteria: proposal.supervisor_acceptance_criteria.clone(),
                 acceptance_criteria,
                 report_format: task.report_format,
                 status: "planned".to_string(),
@@ -3310,6 +3313,17 @@ fn run_director_task_chain_inner(
 // 失败返回人话（供给类经 create_initialized_session 已带 fix8 前缀）。成功后把 target_session_id 回填任务包
 // artifact（C0 差量 §5.1 的 C1 项·加法一处）。绑定审计走 bind_workflow_node_codex_session_for_index_at 自带的
 // 事件族（不新开）；cwd/沙箱写死固定测试项目（在 creator 内·不可参数化）。
+pub(crate) struct FreshTaskSessionBindingRequest<'a> {
+    pub(crate) project_root: &'a str,
+    pub(crate) workflow_id: &'a str,
+    pub(crate) node_id: &'a str,
+    pub(crate) work_item_id: &'a str,
+    pub(crate) task_title: &'a str,
+    pub(crate) task_package_id: Option<&'a str>,
+    pub(crate) requested_by: &'a str,
+    pub(crate) forbidden_thread_ids: &'a std::collections::BTreeSet<String>,
+}
+
 fn create_and_bind_task_session(
     path: &std::path::Path,
     index: &Value,
@@ -3320,24 +3334,80 @@ fn create_and_bind_task_session(
     task: &ProjectDirectorPlannedTask,
     creator: &dyn JiaobanNewSessionCreator,
 ) -> Result<String, String> {
+    let forbidden_thread_ids = std::collections::BTreeSet::new();
+    create_and_bind_fresh_task_session(
+        path,
+        index,
+        &FreshTaskSessionBindingRequest {
+            project_root,
+            workflow_id,
+            node_id,
+            work_item_id,
+            task_title: &task.title,
+            task_package_id: task.task_package_id.as_deref(),
+            requested_by: "director_chain",
+            forbidden_thread_ids: &forbidden_thread_ids,
+        },
+        creator,
+    )
+}
+
+// 主管试点复用 C1 的唯一出生→绑定机器；额外的历史 thread 拒绝集只在调用方明确要求任务专属新会话时启用。
+// 默认 C1 wrapper 传空集，因此既有链路不改变已有绑定/会话语义。
+pub(crate) fn create_and_bind_fresh_task_session(
+    path: &std::path::Path,
+    index: &Value,
+    request: &FreshTaskSessionBindingRequest<'_>,
+    creator: &dyn JiaobanNewSessionCreator,
+) -> Result<String, String> {
     // 会话初始化消息 = 以任务命名（截断安全·智能体页列表可辨），只叫它「就位」，别改文件（任务随后经任务包发）。
-    let clipped_title: String = task.title.chars().take(80).collect();
+    let clipped_title: String = request.task_title.chars().take(80).collect();
     let init_text = format!(
-        "交办任务专用会话：本会话只承接任务「{clipped_title}」（工作流 {workflow_id}）。现在先别改任何文件，回复「已就位」即可；任务详情随后经任务包发来。"
+        "交办任务专用会话：本会话只承接任务「{clipped_title}」（工作流 {}）。现在先别改任何文件，回复「已就位」即可；任务详情随后经任务包发来。",
+        request.workflow_id
     );
     let thread_id = creator
-        .create_initialized_session(&init_text, "director_chain")
+        .create_initialized_session(&init_text, request.requested_by)
         .map_err(|error| format!("新建会话失败：{error}"))?;
+    let supervisor_session = request.requested_by == "supervisor_orchestrator";
+    if supervisor_session {
+        record_supervisor_task_session_birth(
+            path,
+            request,
+            &thread_id,
+            "created",
+            "主管试点已创建任务专属会话；尚未派发 worker。",
+        )?;
+    }
+    if request.forbidden_thread_ids.contains(&thread_id) {
+        if supervisor_session {
+            record_supervisor_task_session_birth(
+                path,
+                request,
+                &thread_id,
+                "created_but_rejected",
+                "新建会话返回历史 native_thread_id；已拒绝绑定和派发。",
+            )?;
+        }
+        return Err(format!(
+            "新建任务会话返回已在历史派发或绑定中出现的 native_thread_id（{thread_id}），拒绝复用。"
+        ));
+    }
     // 绑到本任务角色节点（existing 同款机器）；只对「会话落 codex 自家 sqlite 晚一拍」的可见性时差重试。
     let bind_request = WorkflowNodeSessionBindRequest {
-        project_root: project_root.to_string(),
-        node_id: node_id.to_string(),
-        work_item_id: Some(work_item_id.to_string()),
+        project_root: request.project_root.to_string(),
+        node_id: request.node_id.to_string(),
+        work_item_id: Some(request.work_item_id.to_string()),
         thread_id: thread_id.clone(),
     };
     let bind_started = std::time::Instant::now();
     loop {
-        match bind_workflow_node_codex_session_for_index_at(path, index, &bind_request) {
+        match bind_workflow_node_codex_session_for_index_with_provenance_at(
+            path,
+            index,
+            &bind_request,
+            &WorkflowNodeSessionBindingProvenance::fresh_task_session(request.requested_by),
+        ) {
             Ok(_) => break,
             Err(error)
                 if error.contains("会话不在当前索引内")
@@ -3349,6 +3419,15 @@ fn create_and_bind_task_session(
                 ));
             }
             Err(error) => {
+                if supervisor_session {
+                    record_supervisor_task_session_birth(
+                        path,
+                        request,
+                        &thread_id,
+                        "created_but_binding_failed",
+                        &format!("新会话已创建，但绑定失败：{error}"),
+                    )?;
+                }
                 return Err(format!(
                     "新会话已建（thread {thread_id}）但绑定失败：{error}"
                 ));
@@ -3357,10 +3436,54 @@ fn create_and_bind_task_session(
     }
     // target_session_id 回填任务包 artifact（找不到即 no-op·防御式不崩链）。
     let mut value = read_workflow_state_value(path)?;
-    if set_task_artifact_target_session_id(&mut value, task, &thread_id) {
+    if set_task_artifact_target_session_id_for_artifact(
+        &mut value,
+        request.task_package_id,
+        &thread_id,
+    ) {
         write_validated_workflow_state(path, &value)?;
     }
     Ok(thread_id)
+}
+
+fn record_supervisor_task_session_birth(
+    path: &std::path::Path,
+    request: &FreshTaskSessionBindingRequest<'_>,
+    native_thread_id: &str,
+    state: &str,
+    reason: &str,
+) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut value = read_workflow_state_value(path)?;
+    let audit_events = value
+        .get_mut("audit_events")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| "workflow state 缺 audit_events，无法记录任务会话出生".to_string())?;
+    audit_events.push(json!({
+        "event_id": format!(
+            "audit:supervisor-task-session-birth:{}:{}",
+            stable_id(native_thread_id),
+            unix_timestamp_nanos()
+        ),
+        "event_type": "supervisor_task_session_birth",
+        "target_ref": request.work_item_id,
+        "actor_ref": request.requested_by,
+        "source_kind": "workspace_state",
+        "permission_level": "authorized_supervisor_execution",
+        "workflow_id": request.workflow_id,
+        "node_id": request.node_id,
+        "work_item_id": request.work_item_id,
+        "native_thread_id": native_thread_id,
+        "before_state": "absent",
+        "after_state": state,
+        "created_at": unix_timestamp_string(),
+        "created_at_ms": unix_timestamp_ms(),
+        "reason": reason
+    }));
+    value["updated_at"] = Value::String(unix_timestamp_string());
+    write_validated_workflow_state(path, &value)
 }
 
 // C1·把新会话 thread_id 回填任务包 artifact 的 target_session_id。找到并回填 → true；缺 artifact_id/artifact
@@ -3370,7 +3493,15 @@ fn set_task_artifact_target_session_id(
     task: &ProjectDirectorPlannedTask,
     thread_id: &str,
 ) -> bool {
-    let artifact_id = match task.task_package_id.as_deref() {
+    set_task_artifact_target_session_id_for_artifact(value, task.task_package_id.as_deref(), thread_id)
+}
+
+fn set_task_artifact_target_session_id_for_artifact(
+    value: &mut Value,
+    task_package_id: Option<&str>,
+    thread_id: &str,
+) -> bool {
+    let artifact_id = match task_package_id {
         Some(id) => id,
         None => return false,
     };
@@ -4158,6 +4289,7 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
             // C1·mode 信号（一处赋值·别造第二套判断）：Some(creator)=C1 自动路=链会每任务绑 →
             // prepare 产 prepared·thread 延迟；None=手动挡/旧壳=现状 needs_binding 判定不变。
             chain_binds_per_task: session_creator.is_some(),
+            force_fresh_task_session: false,
         };
         let prepared = prepare_authorized_auto_dispatch_for_index_at(path, index, &prepare_input)?;
         let planned_task_count = prepared.plan.planned_task_count;
@@ -4982,6 +5114,9 @@ mod m1_plan_preview_binding_tests {
                 model_id: None,
             },
             depends_on: vec![],
+            worker_acceptance_criteria: vec!["按方案完成执行步骤并返回证据".to_string()],
+            control_core_acceptance_criteria: vec!["校验授权范围并记录状态".to_string()],
+            supervisor_acceptance_criteria: vec!["检查回程证据后给出结论".to_string()],
             acceptance_criteria: vec![],
             report_format: vec![],
             status: "planned".to_string(),
@@ -5200,6 +5335,9 @@ mod fix9_tests {
                 task_goal: "核验 index.html".to_string(),
                 scope: director_task_scope_from_proposal(proposal, "codex-dev"),
                 depends_on: vec![],
+                worker_acceptance_criteria: vec![],
+                control_core_acceptance_criteria: vec![],
+                supervisor_acceptance_criteria: vec![],
                 acceptance_criteria: vec!["返回核验结论".to_string()],
                 report_format: vec!["做了什么".to_string()],
                 status: "planned".to_string(),
@@ -5227,6 +5365,9 @@ mod fix9_tests {
             reasoning: vec!["复刻 16:48 事故".to_string()],
             risks: vec![],
             must_stop_points: vec![],
+            worker_acceptance_criteria: vec!["按方案完成执行步骤并返回证据".to_string()],
+            control_core_acceptance_criteria: vec!["校验授权范围并记录状态".to_string()],
+            supervisor_acceptance_criteria: vec!["检查回程证据后给出结论".to_string()],
             next_steps: vec!["加怪".to_string()],
             execution_scope: None,
             suggest_workflow: false,
@@ -5260,6 +5401,9 @@ mod fix9_tests {
             task_goal: task_goal.to_string(),
             scope: director_task_scope_from_proposal(proposal, "codex-dev"),
             depends_on: vec![],
+            worker_acceptance_criteria: vec!["按方案完成执行步骤并返回证据".to_string()],
+            control_core_acceptance_criteria: vec!["校验授权范围并记录状态".to_string()],
+            supervisor_acceptance_criteria: vec!["检查回程证据后给出结论".to_string()],
             acceptance_criteria: vec!["返回证据".to_string()],
             report_format: vec!["做了什么".to_string()],
             status: "planned".to_string(),
@@ -5850,6 +5994,9 @@ mod fix9_tests {
             reasoning: vec!["r".to_string()],
             risks: vec![],
             must_stop_points: vec![],
+            worker_acceptance_criteria: vec!["按方案完成执行步骤并返回证据".to_string()],
+            control_core_acceptance_criteria: vec!["校验授权范围并记录状态".to_string()],
+            supervisor_acceptance_criteria: vec!["检查回程证据后给出结论".to_string()],
             next_steps: vec!["改 index.html".to_string()],
             execution_scope: Some(ConsultationExecutionScope {
                 write_roots: vec![],
@@ -5964,6 +6111,9 @@ mod quality_debt_tests {
             reasoning: vec!["r".to_string()],
             risks: vec![],
             must_stop_points: vec![],
+            worker_acceptance_criteria: vec!["按方案完成执行步骤并返回证据".to_string()],
+            control_core_acceptance_criteria: vec!["校验授权范围并记录状态".to_string()],
+            supervisor_acceptance_criteria: vec!["检查回程证据后给出结论".to_string()],
             next_steps: vec!["改 index.html".to_string()],
             execution_scope: Some(ConsultationExecutionScope {
                 write_roots: vec![],
@@ -6073,6 +6223,9 @@ mod quality_debt_tests {
                 task_goal: format!("自包含目标：{title}"),
                 scope: scope.clone(),
                 depends_on: deps,
+                worker_acceptance_criteria: vec![],
+                control_core_acceptance_criteria: vec![],
+                supervisor_acceptance_criteria: vec![],
                 acceptance_criteria: vec!["可验收".to_string()],
                 report_format: vec!["做了什么".to_string()],
                 status: "planned".to_string(),
@@ -6437,6 +6590,9 @@ mod quality_debt_tests {
                 task_goal: title.to_string(),
                 scope: scope.clone(),
                 depends_on,
+                worker_acceptance_criteria: vec![],
+                control_core_acceptance_criteria: vec![],
+                supervisor_acceptance_criteria: vec![],
                 acceptance_criteria: vec!["ok".to_string()],
                 report_format: vec!["r".to_string()],
                 status: "planned".to_string(),
@@ -6614,6 +6770,9 @@ mod quality_debt_tests {
             task_goal: "自包含".to_string(),
             scope,
             depends_on: vec![],
+            worker_acceptance_criteria: vec![],
+            control_core_acceptance_criteria: vec![],
+            supervisor_acceptance_criteria: vec![],
             acceptance_criteria: vec!["ok".to_string()],
             report_format: vec!["r".to_string()],
             status: "planned".to_string(),
@@ -6796,6 +6955,9 @@ mod quality_debt_tests {
             task_goal: "自包含".to_string(),
             scope,
             depends_on: vec![],
+            worker_acceptance_criteria: vec![],
+            control_core_acceptance_criteria: vec![],
+            supervisor_acceptance_criteria: vec![],
             acceptance_criteria: vec!["ok".to_string()],
             report_format: vec!["r".to_string()],
             status: "prepared".to_string(),
@@ -6863,6 +7025,42 @@ mod quality_debt_tests {
         .expect_err("建会话失败必须 fail-loud 返回 Err，不许静默回落共用会话");
         assert!(err.contains("新建会话失败"), "人话前缀：{err}");
         assert!(err.contains("额度用完"), "供给类人话透传：{err}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn c1_fresh_session_rejects_historical_native_thread_before_binding() {
+        struct ReusingCreator;
+        impl JiaobanNewSessionCreator for ReusingCreator {
+            fn create_initialized_session(&self, _text: &str, _by: &str) -> Result<String, String> {
+                Ok("thread-historical".to_string())
+            }
+        }
+        let dir = tmp_dir("c1-fresh-reuse-rejected");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_index(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "thread-historical");
+        let historical = std::collections::BTreeSet::from(["thread-historical".to_string()]);
+        let error = create_and_bind_fresh_task_session(
+            &path,
+            &index,
+            &FreshTaskSessionBindingRequest {
+                project_root: WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+                workflow_id: "workflow:fresh",
+                node_id: "workflow:fresh:node:codex-dev",
+                work_item_id: "work-item:fresh",
+                task_title: "fresh worker task",
+                task_package_id: None,
+                requested_by: "supervisor_orchestrator",
+                forbidden_thread_ids: &historical,
+            },
+            &ReusingCreator,
+        )
+        .expect_err("历史 native_thread_id 绝不能被新任务重新绑定");
+        assert!(error.contains("已在历史派发或绑定中出现"), "{error}");
+        assert!(
+            !path.exists(),
+            "撞历史 ID 必须在绑定或写状态前拒绝，不能产生 work item 绑定"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -6990,6 +7188,9 @@ mod quality_debt_tests {
             task_goal: format!("自包含：{title}"),
             scope: scope.clone(),
             depends_on: deps,
+            worker_acceptance_criteria: vec![],
+            control_core_acceptance_criteria: vec![],
+            supervisor_acceptance_criteria: vec![],
             acceptance_criteria: vec!["ok".to_string()],
             report_format: vec!["r".to_string()],
             status: "planned".to_string(),
@@ -7020,6 +7221,7 @@ mod quality_debt_tests {
                 expected_workflow_revision: None,
                 expected_authorization_revision: None,
                 chain_binds_per_task: false,
+                force_fresh_task_session: false,
             },
         )
         .expect("prepare");
@@ -7127,6 +7329,9 @@ mod quality_debt_tests {
                     task_goal: format!("自包含：{title}"),
                     scope: scope.clone(),
                     depends_on: deps,
+                    worker_acceptance_criteria: vec![],
+                    control_core_acceptance_criteria: vec![],
+                    supervisor_acceptance_criteria: vec![],
                     acceptance_criteria: vec!["ok".to_string()],
                     report_format: vec!["r".to_string()],
                     status: "planned".to_string(),

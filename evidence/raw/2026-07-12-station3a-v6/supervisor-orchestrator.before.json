@@ -1,0 +1,1273 @@
+{
+  "schema_version": "supervisor_orchestrator.v1",
+  "revision": 100,
+  "updated_at_ms": 1783846945913,
+  "sessions": [
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783779069946155000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-index-html-readme-index-html-readme-md-index-html:1783779069579",
+      "model_id": "gpt-5-codex",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "failed",
+      "started_at_ms": 1783779069956,
+      "ended_at_ms": 1783779083544,
+      "termination_reason": "主管 codex exec 退出码 1",
+      "workers": [],
+      "final_marks": []
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783782106897140000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-index-html-readme-index-html:1783782106525",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "exited",
+      "started_at_ms": 1783782106906,
+      "ended_at_ms": 1783782161816,
+      "termination_reason": "主管 codex exec 退出码 0",
+      "workers": [],
+      "final_marks": []
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783791352113684000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783791351740",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "exited",
+      "started_at_ms": 1783791352139,
+      "ended_at_ms": 1783791527659,
+      "termination_reason": "主管 codex exec 退出码 0",
+      "workers": [],
+      "final_marks": []
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783796318366323000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783796317982",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "exited",
+      "started_at_ms": 1783796318391,
+      "ended_at_ms": 1783796371548,
+      "termination_reason": "主管 codex exec 退出码 0",
+      "workers": [],
+      "final_marks": []
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797069819900000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797068139",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "exited",
+      "started_at_ms": 1783797069856,
+      "ended_at_ms": 1783797113157,
+      "termination_reason": "主管 codex exec 退出码 0",
+      "workers": [],
+      "final_marks": []
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797584839298000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797583619",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "exited",
+      "started_at_ms": 1783797584874,
+      "ended_at_ms": 1783797619320,
+      "termination_reason": "主管 codex exec 退出码 0",
+      "workers": [],
+      "final_marks": []
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797892897067000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797891869",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "exited",
+      "started_at_ms": 1783797892922,
+      "ended_at_ms": 1783798014157,
+      "termination_reason": "主管 codex exec 退出码 0",
+      "workers": [
+        {
+          "worker_id": "reservation:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379789289706:1783797935162228000",
+          "project_root": "/Users/yoyi/codex-workflow-mario-test",
+          "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+          "node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+          "work_item_id": "work-item:workflow:users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-supervisor-pilot-proposal-pro",
+          "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797891869",
+          "native_thread_id": "",
+          "dispatch_id": "",
+          "allowed_write": [
+            "/Users/yoyi/codex-workflow-mario-test"
+          ],
+          "state": "failed",
+          "started_at_ms": 1783797935162,
+          "follow_up_count": 0,
+          "last_report": null,
+          "last_result_summary": "现成派发返回的授权段与主管请求不一致，已拒绝纳入主管账本"
+        }
+      ],
+      "final_marks": [
+        {
+          "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797891869",
+          "project_root": "/Users/yoyi/codex-workflow-mario-test",
+          "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+          "verdict": "needs_rework",
+          "reason": "未完成：按正本原样派发 node/work item/allowed_write 时，工作台拒绝纳入主管账本，错误为“现成派发返回的授权段与主管请求不一致”。主管只读且不得绕过授权自行写入，因此没有 worker 口供或字节级验收证据，不能判定通过。需修正现成派发与本单 authorization_id 的绑定后重试。",
+          "created_at_ms": 1783797999837
+        }
+      ]
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783799661056081000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783799659837",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "exited",
+      "started_at_ms": 1783799661083,
+      "ended_at_ms": 1783799867096,
+      "termination_reason": "主管 codex exec 退出码 0",
+      "workers": [
+        {
+          "worker_id": "reservation:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379966105608:1783799824141482000",
+          "project_root": "/Users/yoyi/codex-workflow-mario-test",
+          "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+          "node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+          "work_item_id": "work-item:workflow-users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-supervisor-pilot-91edc808665b8e67cca7b68e",
+          "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783799659837",
+          "native_thread_id": "",
+          "dispatch_id": "",
+          "allowed_write": [
+            "/Users/yoyi/codex-workflow-mario-test"
+          ],
+          "state": "failed",
+          "started_at_ms": 1783799824141,
+          "follow_up_count": 0,
+          "last_report": null,
+          "last_result_summary": "主管请求的 work item 不存在，已拒绝启动 worker"
+        }
+      ],
+      "final_marks": [
+        {
+          "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783799659837",
+          "project_root": "/Users/yoyi/codex-workflow-mario-test",
+          "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+          "verdict": "needs_rework",
+          "reason": "STOP：按契约原样派发唯一指定 work item 时，编排器返回“主管请求的 work item 不存在，已拒绝启动 worker”。因此实际 worker 数量为 0，无法取得或读取 worker 报告，也无法完成站 3a 的条件写入与前后基线终验。未尝试替换 work item、未进行任何主管写入，不得标记 PASS。",
+          "created_at_ms": 1783799850314
+        }
+      ]
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783800180652330000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-3a-3a:1783800179436",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "exited",
+      "started_at_ms": 1783800180681,
+      "ended_at_ms": 1783800375162,
+      "termination_reason": "主管 codex exec 退出码 0",
+      "workers": [],
+      "final_marks": [
+        {
+          "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-3a-3a:1783800179436",
+          "project_root": "/Users/yoyi/codex-workflow-mario-test",
+          "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+          "verdict": "needs_rework",
+          "reason": "派发 worker 的请求被工作台风险审查拒绝：现有授权被判定为仅来自不可信对话材料。worker 未启动，因此没有 worker 报告，也无法核对执行前后基线或证明目标文件精确字节；按停止条件不得终标 PASS。需要用户在获知该风险后再次明确批准派发。",
+          "created_at_ms": 1783800364316
+        }
+      ]
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783824779026181000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783824778134",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "exited",
+      "started_at_ms": 1783824779053,
+      "ended_at_ms": 1783824931266,
+      "termination_reason": "主管 codex exec 退出码 0",
+      "workers": [],
+      "final_marks": []
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783830255342378000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-station3a-pass-station3a-pass-worker:1783830254444",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "exited",
+      "started_at_ms": 1783830255370,
+      "ended_at_ms": 1783830378235,
+      "termination_reason": "主管 codex exec 退出码 0",
+      "workers": [],
+      "final_marks": []
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-utf-8-38-station3a-contr-utf-8-38-station3a-control-core-proof-v2-txt-pass:1783838209584",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "waiting_user",
+      "started_at_ms": 1783838210515,
+      "ended_at_ms": 1783838691275,
+      "termination_reason": "主管连续两次输出格式错误，本单未执行",
+      "workers": [
+        {
+          "worker_id": "dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783838287567",
+          "project_root": "/Users/yoyi/codex-workflow-mario-test",
+          "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+          "node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+          "work_item_id": "work-item:workflow:users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-supervisor-pilot-c12d6b840a1980800a568bdc",
+          "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-utf-8-38-station3a-contr-utf-8-38-station3a-control-core-proof-v2-txt-pass:1783838209584",
+          "native_thread_id": "019e7738-5e29-74e0-a22f-5c2481b64c38",
+          "dispatch_id": "dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783838287567",
+          "allowed_write": [
+            "/Users/yoyi/codex-workflow-mario-test"
+          ],
+          "state": "completed",
+          "started_at_ms": 1783838286584,
+          "follow_up_count": 0,
+          "last_report": null,
+          "last_result_summary": "节点派发完成，工作项已进入待回收。"
+        }
+      ],
+      "final_marks": []
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783841815323700000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783841814357",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "exited",
+      "started_at_ms": 1783841815357,
+      "ended_at_ms": 1783841965213,
+      "termination_reason": "主管 codex exec 退出码 0",
+      "workers": [],
+      "final_marks": []
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783842259965530000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783842259017",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "waiting_user",
+      "started_at_ms": 1783842259991,
+      "ended_at_ms": 1783842528787,
+      "termination_reason": "worker 回程格式无效，等待用户决定：report_invalid: worker 最终消息不是符合回程契约的 JSON 代码块。",
+      "workers": [
+        {
+          "worker_id": "dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783842380892",
+          "project_root": "/Users/yoyi/codex-workflow-mario-test",
+          "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+          "node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+          "work_item_id": "work-item:workflow:users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-supervisor-pilot-ceed18ec677122b81b093a7a",
+          "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783842259017",
+          "native_thread_id": "019e7738-5e29-74e0-a22f-5c2481b64c38",
+          "dispatch_id": "dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783842380892",
+          "allowed_write": [
+            "/Users/yoyi/codex-workflow-mario-test"
+          ],
+          "state": "completed",
+          "started_at_ms": 1783842379843,
+          "follow_up_count": 0,
+          "last_report": null,
+          "last_result_summary": "节点派发完成，工作项已进入待回收。"
+        }
+      ],
+      "final_marks": []
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783844142991226000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783844140729",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "waiting_user",
+      "started_at_ms": 1783844143035,
+      "ended_at_ms": 1783844411227,
+      "termination_reason": "worker 回程格式无效，等待用户决定：report_invalid: worker 最终消息不是符合回程契约的 JSON 代码块。",
+      "workers": [
+        {
+          "worker_id": "dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783844265987",
+          "project_root": "/Users/yoyi/codex-workflow-mario-test",
+          "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+          "node_id": "workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev",
+          "work_item_id": "work-item:workflow:users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-supervisor-pilot-b7764e2036defb3e3dd59a9b",
+          "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783844140729",
+          "native_thread_id": "019e7738-5e29-74e0-a22f-5c2481b64c38",
+          "dispatch_id": "dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783844265987",
+          "allowed_write": [
+            "/Users/yoyi/codex-workflow-mario-test"
+          ],
+          "state": "completed",
+          "started_at_ms": 1783844264905,
+          "follow_up_count": 0,
+          "last_report": null,
+          "last_result_summary": "节点派发完成，工作项已进入待回收。"
+        }
+      ],
+      "final_marks": []
+    },
+    {
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783846840880458000",
+      "project_root": "/Users/yoyi/codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "authorization_id": "plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-v4-worker-ui-v4-worker-ui:1783846839895",
+      "model_id": "account_default",
+      "reasoning_effort": "medium",
+      "max_active_workers": 2,
+      "max_follow_ups_per_worker": 2,
+      "max_runtime_minutes": 30,
+      "launch_status": "exited",
+      "started_at_ms": 1783846840907,
+      "ended_at_ms": 1783846945912,
+      "termination_reason": "主管 codex exec 退出码 0（仅表示进程结束；业务状态以权威 worker 回程和验收账本为准）",
+      "workers": [],
+      "final_marks": []
+    }
+  ],
+  "audit_events": [
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178377906994615:session-started:1783779069957450000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783779069946155000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-index-html-readme-index-html-readme-md-index-html:1783779069579; model_id=gpt-5-codex; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783779069956
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178377906994615:session-finished:1783779083545943000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783779069946155000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 1",
+      "result_status": "failed",
+      "created_at_ms": 1783779083544
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178378210689714:session-started:1783782106907354000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783782106897140000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-index-html-readme-index-html:1783782106525; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783782106906
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178378210689714:session-finished:1783782161816857000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783782106897140000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 0",
+      "result_status": "exited",
+      "created_at_ms": 1783782161816
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379135211368:supervisor-temporary-codex-home:1783791352123472000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783791352113684000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783791352113684000-1783791352113828000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783791352122
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379135211368:session-started:1783791352139904000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783791352113684000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783791351740; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783791352139
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379135211368:supervisor-temporary-codex-home:1783791527642362000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783791352113684000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783791352113684000-1783791352113828000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783791527641
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379135211368:session-finished:1783791527660259000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783791352113684000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 0",
+      "result_status": "exited",
+      "created_at_ms": 1783791527659
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379631836632:supervisor-temporary-codex-home:1783796318374265000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783796318366323000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783796318366323000-1783796318366432000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783796318373
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379631836632:session-started:1783796318392087000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783796318366323000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783796317982; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783796318391
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379631836632:supervisor-temporary-codex-home:1783796371534046000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783796318366323000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783796318366323000-1783796318366432000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783796371533
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379631836632:session-finished:1783796371548924000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783796318366323000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 0",
+      "result_status": "exited",
+      "created_at_ms": 1783796371548
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379706981990:supervisor-temporary-codex-home:1783797069831376000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797069819900000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783797069819900000-1783797069820121000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783797069830
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379706981990:session-started:1783797069857006000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797069819900000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797068139; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783797069856
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379706981990:supervisor-temporary-codex-home:1783797113142802000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797069819900000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783797069819900000-1783797069820121000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783797113142
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379706981990:session-finished:1783797113159606000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797069819900000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 0",
+      "result_status": "exited",
+      "created_at_ms": 1783797113157
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379758483929:supervisor-temporary-codex-home:1783797584850222000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797584839298000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783797584839298000-1783797584839429000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783797584849
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379758483929:session-started:1783797584874430000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797584839298000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797583619; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783797584874
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379758483929:supervisor-temporary-codex-home:1783797619303040000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797584839298000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783797584839298000-1783797584839429000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783797619302
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379758483929:session-finished:1783797619320524000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797584839298000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 0",
+      "result_status": "exited",
+      "created_at_ms": 1783797619320
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379789289706:supervisor-temporary-codex-home:1783797892905864000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797892897067000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783797892897067000-1783797892897161000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783797892904
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379789289706:session-started:1783797892923168000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797892897067000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797891869; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783797892922
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379789289706:dispatch-worker:1783797987004024000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797892897067000",
+      "tool": "dispatch_worker",
+      "parameter_summary": "{\"allowed_write\":[\"/Users/yoyi/codex-workflow-mario-test\"],\"authorization_id\":\"plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797891869\",\"node_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev\",\"project_root\":\"/Users/yoyi/codex-workflow-mario-test\",\"work_item_id\":\"work-item:workflow:users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-supervisor-pilot-proposal-pro\",\"workflow_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default\"}",
+      "result_summary": "denied: 现成派发返回的授权段与主管请求不一致，已拒绝纳入主管账本",
+      "result_status": "denied",
+      "created_at_ms": 1783797987002
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379789289706:final-mark:1783797999847531000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797892897067000",
+      "tool": "final_mark",
+      "parameter_summary": "{\"authorization_id\":\"plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797891869\",\"project_root\":\"/Users/yoyi/codex-workflow-mario-test\",\"reason\":\"未完成：按正本原样派发 node/work item/allowed_write 时，工作台拒绝纳入主管账本，错误为“现成派发返回的授权段与主管请求不一致”。主管只读且不得绕过授权自行写入，因此没有 worker 口供或字节级验收证据，不能判定通过。需修正现成派发与本单 authorization_id 的绑定后重试。\",\"verdict\":\"needs_rework\",\"workflow_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default\"}",
+      "result_summary": "{\"advisory_only\":true,\"reason\":\"未完成：按正本原样派发 node/work item/allowed_write 时，工作台拒绝纳入主管账本，错误为“现成派发返回的授权段与主管请求不一致”。主管只读且不得绕过授权自行写入，因此没有 worker 口供或字节级验收证据，不能判定通过。需修正现成派发与本单 authorization_id 的绑定后重试。\",\"verdict\":\"needs_rework\",\"workflow_chain_state_written\":false}",
+      "result_status": "accepted",
+      "created_at_ms": 1783797999846
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379789289706:report-user:1783798007579860000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797892897067000",
+      "tool": "report_user",
+      "parameter_summary": "{\"authorization_id\":\"plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797891869\",\"message\":\"本单未能执行完成，已以“有异议/需返工”收单。按批准正本原样派发 node_id、work_item_id 和 allowed_write 时，工作台拒绝派发，原始错误为：现成派发返回的授权段与主管请求不一致，已拒绝纳入主管账本。由于主管自身只读且禁止绕过 worker 写入，本次没有合法写入，也没有 worker 口供可供字节级验收；因此不能报告 station3a-supervisor-write-proof.txt 已创建。请修正现成派发任务与 authorization_id plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797891869 的绑定后续办。\",\"project_root\":\"/Users/yoyi/codex-workflow-mario-test\",\"workflow_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default\"}",
+      "result_summary": "{\"message\":\"本单未能执行完成，已以“有异议/需返工”收单。按批准正本原样派发 node_id、work_item_id 和 allowed_write 时，工作台拒绝派发，原始错误为：现成派发返回的授权段与主管请求不一致，已拒绝纳入主管账本。由于主管自身只读且禁止绕过 worker 写入，本次没有合法写入，也没有 worker 口供可供字节级验收；因此不能报告 station3a-supervisor-write-proof.txt 已创建。请修正现成派发任务与 authorization_id plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797891869 的绑定后续办。\",\"user_decision_written\":false}",
+      "result_status": "accepted",
+      "created_at_ms": 1783798007579
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379789289706:supervisor-temporary-codex-home:1783798014143642000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797892897067000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783797892897067000-1783797892897161000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783798014143
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379789289706:session-finished:1783798014159422000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783797892897067000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 0",
+      "result_status": "exited",
+      "created_at_ms": 1783798014157
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379966105608:supervisor-temporary-codex-home:1783799661065769000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783799661056081000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783799661056081000-1783799661056190000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783799661064
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379966105608:session-started:1783799661084089000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783799661056081000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783799659837; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783799661083
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379966105608:dispatch-worker:1783799824224245000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783799661056081000",
+      "tool": "dispatch_worker",
+      "parameter_summary": "{\"allowed_write\":[\"/Users/yoyi/codex-workflow-mario-test\"],\"authorization_id\":\"plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783799659837\",\"node_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev\",\"project_root\":\"/Users/yoyi/codex-workflow-mario-test\",\"work_item_id\":\"work-item:workflow-users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-supervisor-pilot-91edc808665b8e67cca7b68e\",\"workflow_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default\"}",
+      "result_summary": "denied: 主管请求的 work item 不存在，已拒绝启动 worker",
+      "result_status": "denied",
+      "created_at_ms": 1783799824223
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379966105608:final-mark:1783799850323690000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783799661056081000",
+      "tool": "final_mark",
+      "parameter_summary": "{\"authorization_id\":\"plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783799659837\",\"project_root\":\"/Users/yoyi/codex-workflow-mario-test\",\"reason\":\"STOP：按契约原样派发唯一指定 work item 时，编排器返回“主管请求的 work item 不存在，已拒绝启动 worker”。因此实际 worker 数量为 0，无法取得或读取 worker 报告，也无法完成站 3a 的条件写入与前后基线终验。未尝试替换 work item、未进行任何主管写入，不得标记 PASS。\",\"verdict\":\"needs_rework\",\"workflow_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default\"}",
+      "result_summary": "{\"advisory_only\":true,\"reason\":\"STOP：按契约原样派发唯一指定 work item 时，编排器返回“主管请求的 work item 不存在，已拒绝启动 worker”。因此实际 worker 数量为 0，无法取得或读取 worker 报告，也无法完成站 3a 的条件写入与前后基线终验。未尝试替换 work item、未进行任何主管写入，不得标记 PASS。\",\"verdict\":\"needs_rework\",\"workflow_chain_state_written\":false}",
+      "result_status": "accepted",
+      "created_at_ms": 1783799850322
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379966105608:report-user:1783799854298855000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783799661056081000",
+      "tool": "report_user",
+      "parameter_summary": "{\"authorization_id\":\"plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783799659837\",\"message\":\"站 3a 已停止，未产生任何写入。已按批准正本原样使用指定 node_id、work_item_id 和 allowed_write 发起唯一一次派发，但编排器拒绝并明确返回：该 work item 不存在，worker 未启动。因而没有 worker 报告可读，无法满足“恰好一个 worker + 读取报告 + 基线终验”的 PASS 条件。我没有改派其他任务、没有绕过授权、也没有修改目标或其他项目文件。请先在工作台恢复或重新物化正本指定的 work item，再续办本单。\",\"project_root\":\"/Users/yoyi/codex-workflow-mario-test\",\"workflow_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default\"}",
+      "result_summary": "{\"message\":\"站 3a 已停止，未产生任何写入。已按批准正本原样使用指定 node_id、work_item_id 和 allowed_write 发起唯一一次派发，但编排器拒绝并明确返回：该 work item 不存在，worker 未启动。因而没有 worker 报告可读，无法满足“恰好一个 worker + 读取报告 + 基线终验”的 PASS 条件。我没有改派其他任务、没有绕过授权、也没有修改目标或其他项目文件。请先在工作台恢复或重新物化正本指定的 work item，再续办本单。\",\"user_decision_written\":false}",
+      "result_status": "accepted",
+      "created_at_ms": 1783799854297
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379966105608:supervisor-temporary-codex-home:1783799867080244000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783799661056081000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783799661056081000-1783799661056190000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783799867079
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178379966105608:session-finished:1783799867097498000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783799661056081000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 0",
+      "result_status": "exited",
+      "created_at_ms": 1783799867096
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178380018065233:supervisor-temporary-codex-home:1783800180661864000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783800180652330000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783800180652330000-1783800180652459000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783800180660
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178380018065233:session-started:1783800180682497000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783800180652330000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-3a-3a:1783800179436; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783800180681
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178380018065233:final-mark:1783800364327741000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783800180652330000",
+      "tool": "final_mark",
+      "parameter_summary": "{\"authorization_id\":\"plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-3a-3a:1783800179436\",\"project_root\":\"/Users/yoyi/codex-workflow-mario-test\",\"reason\":\"派发 worker 的请求被工作台风险审查拒绝：现有授权被判定为仅来自不可信对话材料。worker 未启动，因此没有 worker 报告，也无法核对执行前后基线或证明目标文件精确字节；按停止条件不得终标 PASS。需要用户在获知该风险后再次明确批准派发。\",\"verdict\":\"needs_rework\",\"workflow_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default\"}",
+      "result_summary": "{\"advisory_only\":true,\"reason\":\"派发 worker 的请求被工作台风险审查拒绝：现有授权被判定为仅来自不可信对话材料。worker 未启动，因此没有 worker 报告，也无法核对执行前后基线或证明目标文件精确字节；按停止条件不得终标 PASS。需要用户在获知该风险后再次明确批准派发。\",\"verdict\":\"needs_rework\",\"workflow_chain_state_written\":false}",
+      "result_status": "accepted",
+      "created_at_ms": 1783800364326
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178380018065233:report-user:1783800368415786000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783800180652330000",
+      "tool": "report_user",
+      "parameter_summary": "{\"authorization_id\":\"plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-3a-3a:1783800179436\",\"message\":\"本单未执行写入。工作台拒绝派发受控 worker，理由是当前授权仅来自对话材料，要求用户在知悉风险后再次明确批准。由于 worker 未启动、报告缺失且无法完成前后基线核对，本次终标为 needs_rework，未标 PASS，也未尝试任何绕过或由主管直接写入。若要继续，请明确回复：我知悉上述风险，批准按既定 node_id、work_item_id 和 allowed_write 派发 worker。\",\"project_root\":\"/Users/yoyi/codex-workflow-mario-test\",\"workflow_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default\"}",
+      "result_summary": "{\"message\":\"本单未执行写入。工作台拒绝派发受控 worker，理由是当前授权仅来自对话材料，要求用户在知悉风险后再次明确批准。由于 worker 未启动、报告缺失且无法完成前后基线核对，本次终标为 needs_rework，未标 PASS，也未尝试任何绕过或由主管直接写入。若要继续，请明确回复：我知悉上述风险，批准按既定 node_id、work_item_id 和 allowed_write 派发 worker。\",\"user_decision_written\":false}",
+      "result_status": "accepted",
+      "created_at_ms": 1783800368414
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178380018065233:supervisor-temporary-codex-home:1783800375149566000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783800180652330000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783800180652330000-1783800180652459000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783800375148
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178380018065233:session-finished:1783800375163477000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783800180652330000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 0",
+      "result_status": "exited",
+      "created_at_ms": 1783800375162
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178382477902618:supervisor-temporary-codex-home:1783824779036244000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783824779026181000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783824779026181000-1783824779026256000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783824779035
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178382477902618:session-started:1783824779054105000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783824779026181000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783824778134; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783824779053
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178382477902618:supervisor-temporary-codex-home:1783824931250287000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783824779026181000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783824779026181000-1783824779026256000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783824931249
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178382477902618:session-finished:1783824931268989000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783824779026181000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 0",
+      "result_status": "exited",
+      "created_at_ms": 1783824931266
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383025534237:supervisor-temporary-codex-home:1783830255352324000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783830255342378000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783830255342378000-1783830255342443000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783830255351
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383025534237:session-started:1783830255371175000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783830255342378000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-station3a-pass-station3a-pass-worker:1783830254444; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783830255370
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383025534237:supervisor-temporary-codex-home:1783830378191534000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783830255342378000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783830255342378000-1783830255342443000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783830378189
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383025534237:session-finished:1783830378236963000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783830255342378000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 0",
+      "result_status": "exited",
+      "created_at_ms": 1783830378235
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:supervisor-temporary-codex-home:1783838210494796000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783838210485214000-1783838210485478000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783838210493
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:session-started:1783838210516159000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-utf-8-38-station3a-contr-utf-8-38-station3a-control-core-proof-v2-txt-pass:1783838209584; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783838210515
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:supervisor-temporary-codex-home:1783838286485403000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783838210485214000-1783838210485478000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783838286484
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:control-core-dispatch-worker:1783838313816555000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "control_core_dispatch_worker",
+      "parameter_summary": "{\"allowed_write\":[\"/Users/yoyi/codex-workflow-mario-test\"],\"authorization_id\":\"plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-utf-8-38-station3a-contr-utf-8-38-station3a-control-core-proof-v2-txt-pass:1783838209584\",\"node_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev\",\"project_root\":\"/Users/yoyi/codex-workflow-mario-test\",\"work_item_id\":\"work-item:workflow:users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-supervisor-pilot-c12d6b840a1980800a568bdc\",\"workflow_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default\"}",
+      "result_summary": "{\"dispatch_id\":\"dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783838287567\",\"state\":\"completed\",\"worker_id\":\"dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783838287567\"}",
+      "result_status": "accepted",
+      "created_at_ms": 1783838313816
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:supervisor-temporary-codex-home:1783838313881428000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783838210485214000-1783838313872270000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783838313880
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:supervisor-temporary-codex-home:1783838450734935000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783838210485214000-1783838313872270000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783838450733
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:protocol-invalid:1783838450817800000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "supervisor_action_protocol",
+      "parameter_summary": "attempt=1",
+      "result_summary": "主管输出格式错误（第 1 次）：protocol_invalid: 动作包含不允许字段 target；系统已要求其按正确 JSON 格式纠正一次。",
+      "result_status": "protocol_invalid",
+      "created_at_ms": 1783838450817
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:supervisor-temporary-codex-home:1783838450835620000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783838210485214000-1783838450827160000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783838450835
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:supervisor-temporary-codex-home:1783838570592281000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783838210485214000-1783838450827160000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783838570591
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:supervisor-temporary-codex-home:1783838570627071000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783838210485214000-1783838570618399000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783838570625
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:supervisor-temporary-codex-home:1783838691183659000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783838210485214000-1783838570618399000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783838691181
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:protocol-invalid:1783838691275671000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "supervisor_action_protocol",
+      "parameter_summary": "attempt=2",
+      "result_summary": "主管连续两次输出格式错误，本单未执行。第二次错误：protocol_invalid: 动作包含不允许字段 target",
+      "result_status": "waiting_user",
+      "created_at_ms": 1783838691275
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178383821048521:session-finished:1783838691287679000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783838210485214000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管连续两次输出格式错误，本单未执行",
+      "result_status": "waiting_user",
+      "created_at_ms": 1783838691286
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384181532370:supervisor-temporary-codex-home:1783841815336349000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783841815323700000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783841815323700000-1783841815325922000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783841815334
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384181532370:session-started:1783841815358011000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783841815323700000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783841814357; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783841815357
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384181532370:supervisor-temporary-codex-home:1783841965187955000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783841815323700000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783841815323700000-1783841815325922000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783841965186
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384181532370:session-finished:1783841965217538000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783841815323700000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 0",
+      "result_status": "exited",
+      "created_at_ms": 1783841965213
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384225996553:supervisor-temporary-codex-home:1783842259973749000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783842259965530000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783842259965530000-1783842259965622000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783842259972
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384225996553:session-started:1783842259992392000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783842259965530000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783842259017; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783842259991
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384225996553:supervisor-temporary-codex-home:1783842379740231000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783842259965530000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783842259965530000-1783842259965622000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783842379738
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384225996553:control-core-dispatch-worker:1783842409549951000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783842259965530000",
+      "tool": "control_core_dispatch_worker",
+      "parameter_summary": "{\"allowed_write\":[\"/Users/yoyi/codex-workflow-mario-test\"],\"authorization_id\":\"plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783842259017\",\"node_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev\",\"project_root\":\"/Users/yoyi/codex-workflow-mario-test\",\"work_item_id\":\"work-item:workflow:users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-supervisor-pilot-ceed18ec677122b81b093a7a\",\"workflow_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default\"}",
+      "result_summary": "{\"dispatch_id\":\"dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783842380892\",\"state\":\"completed\",\"worker_id\":\"dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783842380892\"}",
+      "result_status": "accepted",
+      "created_at_ms": 1783842409549
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384225996553:supervisor-temporary-codex-home:1783842409616743000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783842259965530000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783842259965530000-1783842409608218000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783842409616
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384225996553:supervisor-temporary-codex-home:1783842528583689000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783842259965530000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783842259965530000-1783842409608218000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783842528582
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384225996553:control-core-inspect-worker:1783842528727604000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783842259965530000",
+      "tool": "control_core_inspect_worker",
+      "parameter_summary": "{\"worker_id\":\"dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783842380892\"}",
+      "result_summary": "denied: report_invalid: worker 最终消息不是符合回程契约的 JSON 代码块。",
+      "result_status": "denied",
+      "created_at_ms": 1783842528726
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384225996553:worker-return-waiting:1783842528788143000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783842259965530000",
+      "tool": "supervisor_worker_return",
+      "parameter_summary": "worker 回程未进入可验收状态。",
+      "result_summary": "worker 回程格式无效，等待用户决定：report_invalid: worker 最终消息不是符合回程契约的 JSON 代码块。",
+      "result_status": "waiting_user",
+      "created_at_ms": 1783842528787
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384225996553:session-finished:1783842528798722000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783842259965530000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "worker 回程格式无效，等待用户决定：report_invalid: worker 最终消息不是符合回程契约的 JSON 代码块。",
+      "result_status": "waiting_user",
+      "created_at_ms": 1783842528797
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384414299122:supervisor-temporary-codex-home:1783844143005702000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783844142991226000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783844142991226000-1783844142991938000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783844143003
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384414299122:session-started:1783844143037617000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783844142991226000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783844140729; model_id=account_default; reasoning_effort=medium",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783844143035
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384414299122:supervisor-temporary-codex-home:1783844264783068000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783844142991226000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783844142991226000-1783844142991938000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783844264781
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384414299122:control-core-dispatch-worker:1783844292896390000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783844142991226000",
+      "tool": "control_core_dispatch_worker",
+      "parameter_summary": "{\"allowed_write\":[\"/Users/yoyi/codex-workflow-mario-test\"],\"authorization_id\":\"plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783844140729\",\"node_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default:node:codex-dev\",\"project_root\":\"/Users/yoyi/codex-workflow-mario-test\",\"work_item_id\":\"work-item:workflow:users-yoyi-codex-workflow-mario-test:default:project-director:planned-task-supervisor-pilot-b7764e2036defb3e3dd59a9b\",\"workflow_id\":\"workflow:users-yoyi-codex-workflow-mario-test:default\"}",
+      "result_summary": "{\"dispatch_id\":\"dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783844265987\",\"state\":\"completed\",\"worker_id\":\"dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783844265987\"}",
+      "result_status": "accepted",
+      "created_at_ms": 1783844292893
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384414299122:supervisor-temporary-codex-home:1783844292967696000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783844142991226000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783844142991226000-1783844292958852000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783844292966
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384414299122:supervisor-temporary-codex-home:1783844411011454000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783844142991226000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783844142991226000-1783844292958852000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783844411010
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384414299122:control-core-inspect-worker:1783844411163651000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783844142991226000",
+      "tool": "control_core_inspect_worker",
+      "parameter_summary": "{\"worker_id\":\"dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783844265987\"}",
+      "result_summary": "denied: report_invalid: worker 最终消息不是符合回程契约的 JSON 代码块。",
+      "result_status": "denied",
+      "created_at_ms": 1783844411162
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384414299122:worker-return-waiting:1783844411228532000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783844142991226000",
+      "tool": "supervisor_worker_return",
+      "parameter_summary": "worker 回程未进入可验收状态。",
+      "result_summary": "worker 回程格式无效，等待用户决定：report_invalid: worker 最终消息不是符合回程契约的 JSON 代码块。",
+      "result_status": "waiting_user",
+      "created_at_ms": 1783844411227
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384414299122:session-finished:1783844411239546000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783844142991226000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "worker 回程格式无效，等待用户决定：report_invalid: worker 最终消息不是符合回程契约的 JSON 代码块。",
+      "result_status": "waiting_user",
+      "created_at_ms": 1783844411238
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384684088045:supervisor-temporary-codex-home:1783846840889461000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783846840880458000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=created; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783846840880458000-1783846840880600000-0",
+      "result_summary": "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+      "result_status": "accepted",
+      "created_at_ms": 1783846840888
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384684088045:session-started:1783846840908091000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783846840880458000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "authorization_id=plan-auth:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-v4-worker-ui-v4-worker-ui:1783846839895; model_id=account_default; reasoning_effort=medium; workbench_executable_path=/Users/yoyi/workspace/product-line/prototypes/productized-desktop-shell/src-tauri/target/debug/bundle/macos/CodexGovernanceWorkbench.app/Contents/MacOS/codex-governance-workbench; workbench_build_id=codex-governance-workbench@0.1.0:bytes=59859448:mtime=1783846622",
+      "result_summary": "主管会话已启动；后续工具调用会落入同一账本。",
+      "result_status": "accepted",
+      "created_at_ms": 1783846840907
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384684088045:supervisor-temporary-codex-home:1783846945829109000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783846840880458000",
+      "tool": "supervisor_temporary_codex_home",
+      "parameter_summary": "action=cleaned; trigger=process_wait; temporary_home=/private/tmp/codex-governance-workbench-supervisor-homes/run-supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-1783846840880458000-1783846840880600000-0",
+      "result_summary": "主管临时 CODEX_HOME 已清理。",
+      "result_status": "accepted",
+      "created_at_ms": 1783846945827
+    },
+    {
+      "event_id": "supervisor-orchestrator:supervisor-workflow-users-yoyi-codex-workflow-mario-test-default-178384684088045:session-finished:1783846945913470000",
+      "actor": "supervisor_orchestrator",
+      "run_id": "supervisor:workflow-users-yoyi-codex-workflow-mario-test-default:1783846840880458000",
+      "tool": "supervisor_session_launcher",
+      "parameter_summary": "等待主管 codex exec 收尾并注销进程登记。",
+      "result_summary": "主管 codex exec 退出码 0（仅表示进程结束；业务状态以权威 worker 回程和验收账本为准）",
+      "result_status": "exited",
+      "created_at_ms": 1783846945912
+    }
+  ]
+}

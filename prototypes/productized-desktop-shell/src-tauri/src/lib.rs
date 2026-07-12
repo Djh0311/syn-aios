@@ -2343,6 +2343,7 @@ mod tests {
             expected_workflow_revision: None,
             expected_authorization_revision: Some(authorization_revision),
             chain_binds_per_task: false,
+            force_fresh_task_session: false,
         }
     }
 
@@ -2654,6 +2655,7 @@ mod tests {
             workflow_id: Some(workflow_id_value),
             title: "C2 项目咨询方案测试草案".to_string(),
             user_goal: "让用户先确认项目自动推进方案范围。".to_string(),
+            user_requirement_snapshot: "让用户先确认项目自动推进方案范围。".to_string(),
             goal_summary: "建立项目咨询方案草案和用户确认入口。".to_string(),
             proposed_steps: vec![
                 "整理用户目标和项目上下文。".to_string(),
@@ -2677,6 +2679,13 @@ mod tests {
                 summary: "确认后仍不能自动派发。".to_string(),
                 mitigation: "等待 C3 全局边界复核。".to_string(),
             }],
+            worker_acceptance_criteria: vec!["worker 按任务包回交可验证结果。".to_string()],
+            control_core_acceptance_criteria: vec![
+                "Syn 校验授权、绑定、配额与幂等后才允许派发。".to_string()
+            ],
+            supervisor_acceptance_criteria: vec![
+                "主管只根据已绑定的 worker 证据提出终标建议。".to_string()
+            ],
             acceptance_criteria: vec!["确认后授权仍停在待全局复核。".to_string()],
             created_by_role: ProjectConsultationProposalCreatorRole::ProjectConsultant,
             suggest_workflow: false,
@@ -3901,6 +3910,18 @@ mod tests {
     struct PermissiveExperimentRunner {
         stats: CodexDispatchReadbackStats,
     }
+    struct FixedJiaobanNewSessionCreator {
+        thread_id: String,
+    }
+    impl JiaobanNewSessionCreator for FixedJiaobanNewSessionCreator {
+        fn create_initialized_session(
+            &self,
+            _initialization_text: &str,
+            _requested_by: &str,
+        ) -> Result<String, String> {
+            Ok(self.thread_id.clone())
+        }
+    }
     impl CodexResumeRunner for PermissiveExperimentRunner {
         fn resume_with_options(
             &self,
@@ -4555,6 +4576,9 @@ mod tests {
                     mitigation: "交叉核对".to_string(),
                 }],
                 must_stop_points: vec!["需用户确认范围".to_string()],
+                worker_acceptance_criteria: vec!["本次只读咨询不派发 worker".to_string()],
+                control_core_acceptance_criteria: vec!["保持只读且记录方案".to_string()],
+                supervisor_acceptance_criteria: vec!["检查咨询结论是否有依据".to_string()],
                 next_steps: vec!["进角色循环授权".to_string()],
                 execution_scope: None, // 只读咨询 stub·不需要下游改东西
                 suggest_workflow: false,
@@ -4689,11 +4713,13 @@ mod tests {
         let state_dir = test_temp_dir("p2-consult-state");
         let path = state_dir.join("workflow-state.v0.json");
         bootstrap_project_workflow_at(&path, &fixture_project(&project_root)).expect("workflow");
+        let user_original_requirement =
+            "创建 station3a-control-core-proof-v4.txt，精确内容：v4 literal bytes: [A=1]; 不加换行。";
         let proposal = run_project_consultation_inner(
             &path,
             &StubConsultant,
             &project_root,
-            "这个项目下一步该做什么?",
+            user_original_requirement,
             "tester",
         )
         .expect("咨询出方案应写进 store");
@@ -4708,6 +4734,16 @@ mod tests {
         );
         assert!(proposal.plan_authorization_id.is_none(), "不应自动建授权");
         assert!(!proposal.goal_summary.is_empty(), "方案应有目标");
+        assert_eq!(
+            proposal.user_requirement_snapshot, user_original_requirement,
+            "用户原文含文件名和精确内容必须作为 proposal 快照逐字保留"
+        );
+        let stored = project_consultation_proposal_store::load_store(&path, unix_timestamp_ms())
+            .expect("读取持久化 proposal");
+        assert_eq!(
+            stored.proposals[0].user_requirement_snapshot, user_original_requirement,
+            "持久化 proposal 也必须保留用户原文"
+        );
         assert!(
             !proposal.risks.is_empty() && !proposal.proposed_steps.is_empty(),
             "map 无损：风险/步骤应进方案"
@@ -4899,6 +4935,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             reasoning: vec!["因为".to_string()],
             risks: vec![],
             must_stop_points: vec![],
+            worker_acceptance_criteria: vec!["按方案完成执行步骤并返回证据".to_string()],
+            control_core_acceptance_criteria: vec!["校验授权范围并记录状态".to_string()],
+            supervisor_acceptance_criteria: vec!["检查回程证据后给出结论".to_string()],
             next_steps: vec!["下一步".to_string()],
             execution_scope,
             suggest_workflow: false,
@@ -5095,6 +5134,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                     task_goal: objective.to_string(),
                     scope: scope.clone(),
                     depends_on: deps,
+                    worker_acceptance_criteria: vec![],
+                    control_core_acceptance_criteria: vec![],
+                    supervisor_acceptance_criteria: vec![],
                     acceptance_criteria: vec!["可验收".to_string()],
                     report_format: vec!["做了什么".to_string()],
                     status: "planned".to_string(),
@@ -5280,6 +5322,19 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
     // 复用 S2-3 全链结构，把 prepare 的 vec![]兜底 换成 **director 的显式 planned_tasks**；闸/派发/沙箱 0-diff。
     #[test]
     fn s3_director_dispatch_integration_stub() {
+        struct MustNotRunOnAuthorizationMismatch;
+        impl CodexResumeRunner for MustNotRunOnAuthorizationMismatch {
+            fn resume_with_options(
+                &self,
+                _thread_id: &str,
+                _prompt: &str,
+                _last_message_path: &Path,
+                _options: &CodexResumeRequestOptions,
+            ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String>
+            {
+                panic!("主管授权不匹配时绝不能启动 worker runner");
+            }
+        }
         let timestamp_ms = 1_765_300_000_000;
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
         let thread_id = "thread-s3-dir-dispatch";
@@ -5327,6 +5382,51 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let prep_node = prep.workflow_node_id.clone().expect("prepared node");
         let prep_work_item = prep.work_item_id.clone().expect("prepared work_item");
         assert_eq!(prep_node, node_id, "director 任务(codex-dev)映射到已绑节点");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(
+                test_root,
+                &prep_node,
+                Some(&prep_work_item),
+                thread_id,
+            ),
+        )
+        .expect("authorized worker execution requires an exact work-item binding");
+        let run_request = ProjectWorkflowNodeRunRequest {
+            project_root: test_root.to_string(),
+            node_id: prep_node,
+            work_item_id: prep_work_item,
+            workflow_id: Some(workflow_id),
+        };
+        let prepared_state = read_workflow_state_value(&path).expect("prepared state");
+        let prepared_work_item = find_work_item(
+            &prepared_state,
+            run_request.workflow_id.as_deref().expect("workflow id"),
+            &run_request.work_item_id,
+        )
+        .expect("prepared work item");
+        let prepared_artifact = find_task_package_artifact(
+            &prepared_state,
+            &run_request.work_item_id,
+            prepared_work_item,
+        )
+        .expect("prepared task package");
+        let allowed_write = string_array(prepared_artifact, "allowed_write");
+        let mismatch = execute_authorized_project_workflow_node_at(
+            &path,
+            &index,
+            &index_path,
+            &MustNotRunOnAuthorizationMismatch,
+            &run_request,
+            "plan-auth:mismatch",
+            &allowed_write,
+        )
+        .expect_err("错误授权必须在启动 worker 前拒绝");
+        assert!(
+            mismatch.contains("找不到与主管请求完全匹配"),
+            "错误应明确指出 prepared dispatch 不匹配：{mismatch}"
+        );
         // execute 过 S1 闸（stub runner）→ worker 跑 LM 计划的任务
         let runner = PermissiveExperimentRunner {
             stats: CodexDispatchReadbackStats {
@@ -5334,23 +5434,390 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 transcript_target_hits: 1,
             },
         };
-        let run = execute_project_workflow_node_at(
+        let run = execute_authorized_project_workflow_node_at(
             &path,
             &index,
             &index_path,
             &runner,
-            &ProjectWorkflowNodeRunRequest {
-                project_root: test_root.to_string(),
-                node_id: prep_node,
-                work_item_id: prep_work_item,
-                workflow_id: Some(workflow_id),
-            },
+            &run_request,
+            &authorization.authorization_id,
+            &allowed_write,
         )
         .expect("worker 经 S1 闸应授权放行并 completed");
         assert_eq!(
             run.dispatch.state, "completed",
             "LM 主管计划真驱动的 worker 应 completed"
         );
+        assert_eq!(
+            run.dispatch.plan_authorization_id.as_deref(),
+            Some(authorization.authorization_id.as_str()),
+            "执行记录必须继承主管的 prepared authorization"
+        );
+        assert_eq!(
+            run.dispatch
+                .authorization_check
+                .as_ref()
+                .map(|check| check.status.as_str()),
+            Some("authorized"),
+            "执行记录必须保留已通过的授权检查"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn station3a_v5_materialized_worker_prompt_keeps_role_boundaries_and_blocked_contract() {
+        let timestamp_ms = 1_784_000_000_000;
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let old_thread_id = "thread-station3a-v5-old";
+        let fresh_thread_id = "thread-station3a-v5-fresh";
+        let file_name = "station3a-control-core-proof-v5.txt";
+        let file_content = "station3a control core proof v5 passed!";
+        let user_original = format!(
+            "文件名：{file_name}\n文件内容：{file_content}\n末尾换行：不允许\n编码：UTF-8\n预期字节数：39\n\n控制核心：新建 authorization；新建 work item；新建 supervisor run；证明唯一 worker；检查 UI 入口。\n主管：主管终标。"
+        );
+        let dir = test_temp_dir("station3a-v5-materialized");
+        let path = dir.join("workflow-state.v0.json");
+        let readback_db_path = dir.join("readback.sqlite");
+        let index = json!({
+            "projects": [{"project_root": test_root}],
+            "threads": [
+                {
+                    "thread_id": old_thread_id,
+                    "project_root": test_root,
+                    "title": "历史 role 会话",
+                    "rollout_exists": true,
+                    "rollout_path": "/tmp/station3a-v5-old.jsonl"
+                },
+                {
+                    "thread_id": fresh_thread_id,
+                    "project_root": test_root,
+                    "title": "本任务新会话",
+                    "rollout_exists": true,
+                    "rollout_path": "/tmp/station3a-v5-fresh.jsonl"
+                }
+            ]
+        });
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+
+        // 模拟 UI 写入的方案正本：三方验收各自落字段，旧统一字段故意混入全部职责作为回归陷阱。
+        let mut input = fixture_project_consultation_proposal_input(test_root);
+        input.title = "Station 3a v5 原文保真与回程契约证明".to_string();
+        input.user_goal = format!("创建 {file_name}，精确写入 {file_content}");
+        input.user_requirement_snapshot = user_original.clone();
+        input.goal_summary = "仅验证 worker 文件写入、回读、字节与换行证据。".to_string();
+        input.proposed_steps = vec!["物化一份 worker-only 任务包。".to_string()];
+        input.scope_draft.allowed_agent_ids = vec![old_thread_id.to_string()];
+        input.scope_draft.allowed_write_roots = vec![test_root.to_string()];
+        input.scope_draft.allowed_tools = vec![
+            "read_file".to_string(),
+            "write_file".to_string(),
+            "apply_patch".to_string(),
+        ];
+        input.worker_acceptance_criteria = vec![
+            format!("创建目标文件：{file_name}。"),
+            format!("精确写入 UTF-8 内容：{file_content}。"),
+            "回读目标文件。".to_string(),
+            "验证内容、39 bytes 和无末尾换行。".to_string(),
+            "返回执行证据。".to_string(),
+        ];
+        input.control_core_acceptance_criteria = vec![
+            "新建 authorization。".to_string(),
+            "新建 work item。".to_string(),
+            "新建 supervisor run。".to_string(),
+            "证明唯一 worker。".to_string(),
+            "检查 UI 入口。".to_string(),
+        ];
+        input.supervisor_acceptance_criteria = vec!["主管终标。".to_string()];
+        input.acceptance_criteria = input
+            .worker_acceptance_criteria
+            .iter()
+            .chain(input.control_core_acceptance_criteria.iter())
+            .chain(input.supervisor_acceptance_criteria.iter())
+            .cloned()
+            .collect();
+
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &input,
+            timestamp_ms,
+            "write-station3a-v5-ui-proposal",
+        )
+        .expect("UI proposal should persist");
+        assert_eq!(
+            created.proposal.user_requirement_snapshot, user_original,
+            "用户原文必须逐字进入 proposal"
+        );
+        let confirmed = project_consultation_proposal_store::record_decision(
+            &path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "用户确认 v5 固定测试方案。".to_string(),
+                expected_proposal_store_revision: Some(created.store_revision),
+                expected_plan_authorization_store_revision: None,
+            },
+            timestamp_ms + 1,
+            "write-station3a-v5-confirm",
+            "write-station3a-v5-authorization",
+            "write-station3a-v5-authorization-user",
+        )
+        .expect("authorization should create");
+        let authorization = confirmed
+            .plan_authorization
+            .as_ref()
+            .expect("confirmation should create authorization");
+        let activated = plan_authorization_store::record_global_boundary_review_with_proposal(
+            &path,
+            &fixture_global_boundary_review_input(
+                test_root,
+                &confirmed.proposal.proposal_id,
+                &authorization.authorization_id,
+                confirmed
+                    .plan_authorization_store_revision
+                    .expect("authorization revision"),
+            ),
+            timestamp_ms + 2,
+            "write-station3a-v5-boundary",
+        )
+        .expect("authorization should activate");
+
+        let workflow_id = default_workflow_id(test_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(test_root, &node_id, None, old_thread_id),
+        )
+        .expect("历史 role binding should exist before fresh-session gate");
+        let pilot_task =
+            supervisor_session_launcher::prepare_supervisor_pilot_write_task_for_index(
+                &path,
+                &index,
+                &supervisor_session_launcher::SupervisorPilotLaunchRequest {
+                    project_root: test_root.to_string(),
+                    workflow_id: workflow_id.clone(),
+                    authorization_id: activated.authorization.authorization_id.clone(),
+                    model_id: None,
+                    reasoning_effort: "medium".to_string(),
+                },
+                &confirmed.proposal,
+                &activated.authorization,
+                activated.store_revision,
+            )
+            .expect("supervisor path should materialize a worker-only task package");
+        let work_item_id = pilot_task.work_item_id.clone();
+        assert_eq!(pilot_task.node_id, node_id);
+        let artifact_state = read_workflow_state_value(&path).expect("materialized state");
+        let prepared_dispatch = artifact_state["workflow_node_dispatches"]
+            .as_array()
+            .and_then(|dispatches| {
+                dispatches.iter().find(|dispatch| {
+                    optional_string_from(dispatch, "work_item_id").as_deref()
+                        == Some(work_item_id.as_str())
+                })
+            })
+            .expect("supervisor path should create one prepared dispatch");
+        assert_eq!(prepared_dispatch["native_thread_id"], Value::Null);
+        assert_eq!(prepared_dispatch["thread_binding_deferred"], true);
+        let work_item = find_work_item(&artifact_state, &workflow_id, &work_item_id)
+            .expect("materialized work item");
+        let task_package = find_task_package_artifact(&artifact_state, &work_item_id, work_item)
+            .expect("materialized task package");
+        assert_eq!(
+            task_package["user_requirement_snapshot"],
+            json!(user_original),
+            "用户原文必须逐字进入实际物化 task package"
+        );
+        assert_eq!(
+            task_package["worker_acceptance_criteria"],
+            json!(confirmed.proposal.worker_acceptance_criteria),
+            "task package must retain native worker criteria"
+        );
+        assert_eq!(
+            task_package["control_core_acceptance_criteria"],
+            json!(confirmed.proposal.control_core_acceptance_criteria),
+            "task package must retain native control-core criteria"
+        );
+        assert_eq!(
+            task_package["supervisor_acceptance_criteria"],
+            json!(confirmed.proposal.supervisor_acceptance_criteria),
+            "task package must retain native supervisor criteria"
+        );
+        assert_eq!(
+            task_package["acceptance_criteria"],
+            json!(confirmed.proposal.worker_acceptance_criteria),
+            "legacy task-package criteria must not reintroduce whole-proposal requirements"
+        );
+        let materialized_goals = string_array(task_package, "goals");
+        assert_eq!(
+            task_package["harness_requirements"],
+            json!([]),
+            "authorization checks must not leak into worker prompt"
+        );
+        assert!(materialized_goals[0].contains(file_name));
+        assert!(materialized_goals[0].contains(file_content));
+        let materialized_worker_prompt = optional_string_from(prepared_dispatch, "prompt_preview")
+            .expect("prepared dispatch must persist the worker prompt");
+        for forbidden in [
+            "新建 authorization",
+            "新建 work item",
+            "新建 supervisor run",
+            "证明唯一 worker",
+            "主管终标",
+            "检查 UI 入口",
+        ] {
+            assert!(
+                !materialized_worker_prompt.contains(forbidden),
+                "materialized worker prompt must not contain non-worker condition: {forbidden}"
+            );
+        }
+
+        let runner = PermissiveExperimentRunner {
+            stats: CodexDispatchReadbackStats {
+                transcript_event_count: 1,
+                transcript_target_hits: 1,
+            },
+        };
+        let supervisor_config = mcp::McpServerConfig {
+            role: mcp::McpRole::SupervisorOrchestrator,
+            run_id: "supervisor:station3a:v5-production-path".to_string(),
+            node_id: None,
+            supervisor_workflow_state_path: Some(path.clone()),
+            supervisor_quota_limits: Some(mcp::SupervisorQuotaLimits {
+                max_active_workers: 2,
+                max_follow_ups_per_worker: 2,
+                max_runtime_minutes: 30,
+            }),
+        };
+        let dispatch_input = mcp::supervisor_orchestrator::DispatchInput {
+            project_root: test_root.to_string(),
+            workflow_id: workflow_id.clone(),
+            authorization_id: activated.authorization.authorization_id.clone(),
+            node_id: node_id.clone(),
+            work_item_id: work_item_id.clone(),
+            allowed_write: string_array(task_package, "allowed_write"),
+        };
+        let launch = mcp::supervisor_orchestrator::dispatch_workbench_worker_with(
+            &supervisor_config,
+            &dispatch_input,
+            &index,
+            &path,
+            &readback_db_path,
+            &runner,
+            &FixedJiaobanNewSessionCreator {
+                thread_id: fresh_thread_id.to_string(),
+            },
+        )
+        .expect("production worker invoker path should create, bind, and execute");
+        assert_eq!(launch.state, "completed");
+        assert_eq!(launch.native_thread_id, fresh_thread_id);
+        assert_eq!(launch.canonical_work_item_id, work_item_id);
+
+        let dispatched_state = read_workflow_state_value(&path).expect("dispatch state");
+        assert_eq!(
+            mcp::supervisor_orchestrator::exact_work_item_native_thread_id(
+                &dispatched_state,
+                &workflow_id,
+                &pilot_task.node_id,
+                &work_item_id,
+            ),
+            Some(fresh_thread_id.to_string()),
+            "production dispatch must create and retain the exact work-item binding"
+        );
+        let worker_prompt = dispatched_state["workflow_node_dispatches"]
+            .as_array()
+            .and_then(|dispatches| {
+                dispatches.iter().find_map(|dispatch| {
+                    (optional_string_from(dispatch, "state").as_deref() == Some("completed")
+                        && optional_string_from(dispatch, "work_item_id").as_deref()
+                            == Some(work_item_id.as_str()))
+                    .then(|| optional_string_from(dispatch, "worker_prompt"))
+                    .flatten()
+                })
+            })
+            .expect("actual final worker prompt must be persisted on dispatch ledger");
+        assert!(worker_prompt.contains(file_name));
+        assert!(worker_prompt.contains(file_content));
+        assert_eq!(worker_prompt.matches("回程契约（务必遵守）").count(), 1);
+        for forbidden in [
+            "新建 authorization",
+            "新建 work item",
+            "新建 supervisor run",
+            "证明唯一 worker",
+            "主管终标",
+            "检查 UI 入口",
+        ] {
+            assert!(
+                !worker_prompt.contains(forbidden),
+                "worker prompt must not contain control-core/supervisor condition: {forbidden}"
+            );
+        }
+        for required in [
+            "受阻 blocked 的完整示例",
+            "\"status\": \"blocked\"",
+            "\"permission_requests\"",
+            "\"open_issues\"",
+            "\"direction_risks\"",
+            "\"follow_up_suggestions\"",
+        ] {
+            assert!(
+                worker_prompt.contains(required),
+                "worker prompt must contain {required}"
+            );
+        }
+
+        let blocked = worker_report::parse_worker_report(
+            r#"```json
+{
+  "did": "尝试写入目标文件但被当前写入边界阻止",
+  "outputs": [],
+  "status": "blocked",
+  "evidence": ["write denied for station3a-control-core-proof-v5.txt"],
+  "permission_requests": ["需要目标目录写权限"],
+  "open_issues": ["当前 allowed_write 不含目标目录"],
+  "direction_risks": ["继续写入会越过已批准范围"],
+  "follow_up_suggestions": ["请主管请求用户决定是否扩展授权"]
+}
+```"#,
+        )
+        .expect("realistic blocked worker report must parse");
+        assert_eq!(blocked.status, "blocked");
+        assert_eq!(blocked.permission_requests, vec!["需要目标目录写权限"]);
+        assert_eq!(blocked.open_issues, vec!["当前 allowed_write 不含目标目录"]);
+
+        mcp::supervisor_orchestrator::abandon_fresh_task_binding(
+            &supervisor_config,
+            &path,
+            &dispatch_input,
+            &work_item_id,
+            fresh_thread_id,
+            "fixture transport failure after binding",
+        )
+        .expect("failure cleanup must detach the exact active binding");
+        let cleaned_state = read_workflow_state_value(&path).expect("cleaned dispatch state");
+        assert_eq!(
+            mcp::supervisor_orchestrator::exact_work_item_native_thread_id(
+                &cleaned_state,
+                &workflow_id,
+                &pilot_task.node_id,
+                &work_item_id,
+            ),
+            None,
+            "failed production dispatch cleanup must not leave an active binding"
+        );
+        assert!(cleaned_state["audit_events"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|event| {
+                optional_string_from(event, "event_type").as_deref()
+                    == Some("supervisor_task_session_abandoned")
+                    && optional_string_from(event, "native_thread_id").as_deref()
+                        == Some(fresh_thread_id)
+            }));
+
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -8888,6 +9355,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             ),
             scope,
             depends_on: vec![],
+            worker_acceptance_criteria: vec![],
+            control_core_acceptance_criteria: vec![],
+            supervisor_acceptance_criteria: vec![],
             acceptance_criteria: vec![format!("jiaoban-plan-a-proof.txt 存在且含 {proof_token}")],
             report_format: vec!["做了什么".to_string()],
             status: "planned".to_string(),
@@ -9227,6 +9697,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 model_id: None,
             },
             depends_on: deps,
+            worker_acceptance_criteria: vec![],
+            control_core_acceptance_criteria: vec![],
+            supervisor_acceptance_criteria: vec![],
             acceptance_criteria: vec!["ok".to_string()],
             report_format: vec!["done".to_string()],
             status: "planned".to_string(),
@@ -9933,6 +10406,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 task_goal: "自包含：审查一下".to_string(),
                 scope,
                 depends_on: vec![],
+                worker_acceptance_criteria: vec![],
+                control_core_acceptance_criteria: vec![],
+                supervisor_acceptance_criteria: vec![],
                 acceptance_criteria: vec!["ok".to_string()],
                 report_format: vec!["done".to_string()],
                 status: "planned".to_string(),

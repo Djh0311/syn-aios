@@ -898,7 +898,7 @@ function ProjectJiaobanPanelBrowser({
         project_root: projectRoot,
         project_id: projectWorkflow.project_id,
         workflow_id: projectWorkflow.workflow_id,
-        goal: goal.trim(),
+        goal,
         actor_id: "user",
       });
       await onProposalStoreRefresh?.(); // 刷方案店 → latestProposal 更新 → phase 推导自动进批脸
@@ -2190,6 +2190,11 @@ export function JiaobanAuthorizeState({
 }) {
   const targetFiles = extractTargetFiles(proposal.proposed_steps);
   const willWrite = proposal.scope_draft.allowed_write_roots.length > 0;
+  const workerAcceptance = proposal.worker_acceptance_criteria ?? [];
+  const controlCoreAcceptance = proposal.control_core_acceptance_criteria ?? [];
+  const supervisorAcceptance = proposal.supervisor_acceptance_criteria ?? [];
+  const hasRoleAcceptance =
+    workerAcceptance.length > 0 || controlCoreAcceptance.length > 0 || supervisorAcceptance.length > 0;
   // 按钮旁的状态话只说明右侧预演画布，不再暗示卡内另有一张图。
   const worksmapReady = !worksmapLoading && !worksmapError && !!(worksmapTasks && worksmapTasks.length);
   const worksmapNote =
@@ -2236,7 +2241,22 @@ export function JiaobanAuthorizeState({
             {targetFiles}
           </p>
         ) : null}
-        {proposal.acceptance_criteria.length ? (
+        {hasRoleAcceptance ? (
+          <>
+            <p className="jiaoban-field">
+              <span className="jiaoban-field-label">执行 Agent 要做到：</span>
+              {workerAcceptance.join("；") || "未提供"}
+            </p>
+            <p className="jiaoban-field">
+              <span className="jiaoban-field-label">Syn 要保证：</span>
+              {controlCoreAcceptance.join("；") || "未提供"}
+            </p>
+            <p className="jiaoban-field">
+              <span className="jiaoban-field-label">主管要判断：</span>
+              {supervisorAcceptance.join("；") || "未提供"}
+            </p>
+          </>
+        ) : proposal.acceptance_criteria.length ? (
           <p className="jiaoban-field">
             <span className="jiaoban-field-label">改完怎么验：</span>
             {proposal.acceptance_criteria.join("；")}

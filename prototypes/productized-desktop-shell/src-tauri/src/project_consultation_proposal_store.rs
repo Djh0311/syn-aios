@@ -97,10 +97,18 @@ pub(crate) fn create_proposal(
         workflow_id: workflow_id_value.clone(),
         title: input.title.trim().to_string(),
         user_goal: input.user_goal.trim().to_string(),
+        user_requirement_snapshot: if input.user_requirement_snapshot.is_empty() {
+            input.user_goal.clone()
+        } else {
+            input.user_requirement_snapshot.clone()
+        },
         goal_summary: input.goal_summary.trim().to_string(),
         proposed_steps: trim_non_empty(&input.proposed_steps),
         scope_draft: trim_scope_draft(&input.scope_draft),
         risks: input.risks.clone(),
+        worker_acceptance_criteria: trim_non_empty(&input.worker_acceptance_criteria),
+        control_core_acceptance_criteria: trim_non_empty(&input.control_core_acceptance_criteria),
+        supervisor_acceptance_criteria: trim_non_empty(&input.supervisor_acceptance_criteria),
         acceptance_criteria: trim_non_empty(&input.acceptance_criteria),
         status: ProjectConsultationProposalStatus::PendingUserConfirmation,
         plan_authorization_id: None,
@@ -486,6 +494,11 @@ fn validate_create_input(input: &CreateProjectConsultationProposalInput) -> Resu
         &input.proposed_steps,
         &input.scope_draft,
         &input.acceptance_criteria,
+    )?;
+    validate_role_acceptance_criteria(
+        &input.worker_acceptance_criteria,
+        &input.control_core_acceptance_criteria,
+        &input.supervisor_acceptance_criteria,
     )
 }
 
@@ -522,6 +535,29 @@ fn validate_proposal_fields(
         .any(|value| value.trim().is_empty())
     {
         return Err("项目咨询方案 allowed_role_ids 包含空值".to_string());
+    }
+    Ok(())
+}
+
+fn validate_role_acceptance_criteria(
+    worker_acceptance_criteria: &[String],
+    control_core_acceptance_criteria: &[String],
+    supervisor_acceptance_criteria: &[String],
+) -> Result<(), String> {
+    for (field, criteria) in [
+        ("worker_acceptance_criteria", worker_acceptance_criteria),
+        (
+            "control_core_acceptance_criteria",
+            control_core_acceptance_criteria,
+        ),
+        (
+            "supervisor_acceptance_criteria",
+            supervisor_acceptance_criteria,
+        ),
+    ] {
+        if criteria.is_empty() || criteria.iter().any(|criterion| criterion.trim().is_empty()) {
+            return Err(format!("项目咨询方案缺少有效 {field}"));
+        }
     }
     Ok(())
 }
@@ -586,6 +622,13 @@ fn render_proposal_markdown(proposal: &ProjectConsultationProposal) -> String {
         "## 用户目标".to_string(),
         proposal.user_goal.clone(),
         String::new(),
+        "## 用户原始需求快照（逐字保留）".to_string(),
+        if proposal.user_requirement_snapshot.is_empty() {
+            proposal.user_goal.clone()
+        } else {
+            proposal.user_requirement_snapshot.clone()
+        },
+        String::new(),
         "## 方案摘要".to_string(),
         proposal.goal_summary.clone(),
         String::new(),
@@ -630,7 +673,31 @@ fn render_proposal_markdown(proposal: &ProjectConsultationProposal) -> String {
             .map(|condition| format!("- {}", condition)),
     );
     lines.push(String::new());
-    lines.push("## 验收方式".to_string());
+    lines.push("## Worker 验收".to_string());
+    lines.extend(
+        proposal
+            .worker_acceptance_criteria
+            .iter()
+            .map(|criterion| format!("- {}", criterion)),
+    );
+    lines.push(String::new());
+    lines.push("## 控制核心验收".to_string());
+    lines.extend(
+        proposal
+            .control_core_acceptance_criteria
+            .iter()
+            .map(|criterion| format!("- {}", criterion)),
+    );
+    lines.push(String::new());
+    lines.push("## 主管验收".to_string());
+    lines.extend(
+        proposal
+            .supervisor_acceptance_criteria
+            .iter()
+            .map(|criterion| format!("- {}", criterion)),
+    );
+    lines.push(String::new());
+    lines.push("## 旧版统一验收（仅兼容历史方案）".to_string());
     lines.extend(
         proposal
             .acceptance_criteria

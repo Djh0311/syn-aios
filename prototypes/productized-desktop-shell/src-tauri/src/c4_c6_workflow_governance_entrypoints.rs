@@ -168,9 +168,12 @@ fn prepare_authorized_auto_dispatch_for_index_at(
         // C1·chain_binds_per_task（canon 2026-07-09·架构收官）：链会每任务 create_and_bind 真会话 → 无绑定/
         // rollout 缺时**不判 needs_binding**，改产 prepared·thread 延迟（下方 binding_id/native_thread_id 置 null +
         // thread_binding_deferred 标记 + 审计变体·透明不吞）。**只放宽「有无会话」就绪判定·授权/安全一条不松**
-        // （guard_result 授权检查照旧）。false 路（手动挡/existing/前端预 prepare）needs_binding 判定**逐字不变**。
+        // （guard_result 授权检查照旧）。`force_fresh_task_session` 只供主管试点使用：即使 role/node 留有
+        // 可用旧绑定，也必须延迟到派发前创建并绑定本 work item 的新会话，不能把历史上下文带进新任务。
+        // false 路（手动挡/existing/前端预 prepare）needs_binding 判定**逐字不变**。
         let thread_deferred = request.chain_binds_per_task
-            && binding.as_ref().map(|b| !b.rollout_exists).unwrap_or(true);
+            && (request.force_fresh_task_session
+                || binding.as_ref().map(|b| !b.rollout_exists).unwrap_or(true));
         if !thread_deferred {
             let Some(binding) = binding.as_ref() else {
                 task.status = "needs_binding".to_string();
@@ -1864,6 +1867,9 @@ fn deterministic_project_director_planned_tasks(
             model_id: None,
         },
         depends_on: vec![],
+        worker_acceptance_criteria: context.proposal.worker_acceptance_criteria.clone(),
+        control_core_acceptance_criteria: context.proposal.control_core_acceptance_criteria.clone(),
+        supervisor_acceptance_criteria: context.proposal.supervisor_acceptance_criteria.clone(),
         acceptance_criteria: if context.proposal.acceptance_criteria.is_empty() {
             vec!["按任务包完成工作，并以结构化汇报返回证据、风险和后续建议。".to_string()]
         } else {
@@ -2407,7 +2413,7 @@ fn ensure_project_director_task_package_artifact(
         .model_id
         .clone()
         .unwrap_or_else(|| "codex-local-prepared".to_string());
-    let artifact_value = json!({
+    let mut artifact_value = json!({
       "artifact_id": artifact_id,
       "artifact_type": "task_package",
       "project_id": task.scope.project_id,
@@ -2456,6 +2462,9 @@ fn ensure_project_director_task_package_artifact(
       "updated_at": timestamp,
       "warnings": ["prepared_dispatch_is_not_worker_execution"]
     });
+    artifact_value["worker_acceptance_criteria"] = json!(task.worker_acceptance_criteria);
+    artifact_value["control_core_acceptance_criteria"] = json!(task.control_core_acceptance_criteria);
+    artifact_value["supervisor_acceptance_criteria"] = json!(task.supervisor_acceptance_criteria);
     let artifacts = array_mut(value, "artifacts")?;
     match artifact_index {
         Some(index) => artifacts[index] = artifact_value,

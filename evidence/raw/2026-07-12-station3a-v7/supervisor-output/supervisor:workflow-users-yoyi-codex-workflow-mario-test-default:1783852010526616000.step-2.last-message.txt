@@ -1,0 +1,1 @@
+{"schema_version":"supervisor_action_proposal.v1","kind":"finalize","verdict":"pass","reason":"合法 worker 回程已完成并落账，evidence_present=true；证据表明目标文件已创建，且已完成内容回读与字节验证，满足主管验收。","expected_result":"记录 advisory 终标建议"}

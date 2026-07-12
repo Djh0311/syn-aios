@@ -11,7 +11,9 @@ use crate::supervisor_action_controller::{
     record_supervisor_transport_failure, supervisor_action_limit, SupervisorActionResultV1,
     SupervisorActionRuntime, WorkbenchSupervisorActionAdapter,
 };
-use crate::supervisor_action_protocol::{parse_supervisor_action_proposal, SupervisorActionKind};
+use crate::supervisor_action_protocol::{
+    parse_supervisor_action_proposal, SupervisorActionKind, SupervisorActionProposalV1,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -34,6 +36,7 @@ const SUPERVISOR_TEMP_HOME_ROOT: &str = "codex-governance-workbench-supervisor-h
 const SUPERVISOR_TEMP_HOME_METADATA: &str = "supervisor-home.v1.json";
 const SUPERVISOR_TEMP_HOME_CONFIG: &str = "config.toml";
 const SUPERVISOR_TEMP_HOME_AUTH: &str = "auth.json";
+const SUPERVISOR_CONTRACT_VERSION: &str = "supervisor_action_proposal.v1";
 
 static SUPERVISOR_TEMP_HOMES_REAPED: OnceLock<Result<(), String>> = OnceLock::new();
 
@@ -113,7 +116,9 @@ const SUPERVISOR_CONTRACT_TEMPLATE: &str = r#"你是这单的执行主管。用�
 
 不要输出或臆造 project_root、allowed_read、allowed_write、authorization_id、权限等级、沙箱、shell argv、可执行文件、环境变量、凭据、action_id、账本 revision、approved、bypass 或 full_access。不要调用 MCP 工具来派发、续发、终标或报告；工作台会把你唯一的动作提议绑定当前授权、任务包、配额和账本后执行，并把权威结果作为下一步输入。
 
-主管自身始终只读。面对证据不足、越权、范围变化、不可逆风险或关键方向问题，提议 `request_user_decision`；不要假装用户已经确认、决定或取消。`finalize: pass` 只在权威 worker 回交和证据充分时提议。"#;
+主管自身始终只读。面对证据不足、越权、范围变化、不可逆风险或关键方向问题，提议 `request_user_decision`；不要假装用户已经确认、决定或取消。`finalize: pass` 只在权威 worker 回交和证据充分时提议。
+
+状态推进规则：当上一步权威结果来自 `inspect_worker` 且 `status="completed"`、`evidence_present=true` 时，本次检查已经完成；不得对同一 worker 重复 `inspect_worker`。若证据满足主管验收，提议 `finalize`；若证据缺口可补，提议 `follow_up_worker`；若需扩权、范围变化或关键方向判断，提议 `request_user_decision`。"#;
 
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct SupervisorPilotLaunchRequest {
@@ -150,7 +155,11 @@ struct SupervisorLaunchContext {
     workflow_id: String,
     authorization_id: String,
     user_goal: String,
+    user_requirement_snapshot: String,
     approved_plan_summary: String,
+    worker_acceptance_criteria: Vec<String>,
+    control_core_acceptance_criteria: Vec<String>,
+    supervisor_acceptance_criteria: Vec<String>,
     allowed_read_roots: Vec<String>,
     allowed_write_roots: Vec<String>,
     allowed_tools: Vec<String>,
@@ -162,10 +171,10 @@ struct SupervisorLaunchContext {
 }
 
 #[derive(Clone, Debug)]
-struct SupervisorPilotTaskReference {
-    node_id: String,
-    work_item_id: String,
-    allowed_write: Vec<String>,
+pub(crate) struct SupervisorPilotTaskReference {
+    pub(crate) node_id: String,
+    pub(crate) work_item_id: String,
+    pub(crate) allowed_write: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -503,6 +512,10 @@ fn load_authorized_launch_context(
             .filter(|value| *value > 0)
             .unwrap_or(DEFAULT_MAX_RUNTIME_MINUTES),
     };
+    let user_requirement_snapshot = proposal_user_requirement_snapshot(proposal).to_string();
+    let worker_acceptance_criteria = proposal.worker_acceptance_criteria.clone();
+    let control_core_acceptance_criteria = proposal.control_core_acceptance_criteria.clone();
+    let supervisor_acceptance_criteria = proposal.supervisor_acceptance_criteria.clone();
     let pilot_task = if authorization.scope.allowed_write_roots.is_empty() {
         None
     } else {
@@ -519,7 +532,11 @@ fn load_authorized_launch_context(
         workflow_id: request.workflow_id.clone(),
         authorization_id: authorization.authorization_id.clone(),
         user_goal: proposal.user_goal.clone(),
+        user_requirement_snapshot,
         approved_plan_summary: proposal.goal_summary.clone(),
+        worker_acceptance_criteria,
+        control_core_acceptance_criteria,
+        supervisor_acceptance_criteria,
         allowed_read_roots: authorization.scope.allowed_read_roots.clone(),
         allowed_write_roots: authorization.scope.allowed_write_roots.clone(),
         allowed_tools: authorization.scope.allowed_tools.clone(),
@@ -558,15 +575,37 @@ fn prepare_supervisor_pilot_write_task(
 ) -> Result<SupervisorPilotTaskReference, String> {
     let app_state = crate::AppState::new();
     let index = crate::read_index(&app_state)?;
+    prepare_supervisor_pilot_write_task_for_index(
+        workflow_state_path,
+        &index,
+        request,
+        proposal,
+        authorization,
+        authorization_revision,
+    )
+}
+
+// 主管试点真实物化路径的可注入入口。生产调用仍从 AppState 读取 index；测试只替换索引，不能绕开
+// proposal → authorization → planned task → task package 的同一条路径。
+pub(crate) fn prepare_supervisor_pilot_write_task_for_index(
+    workflow_state_path: &Path,
+    index: &Value,
+    request: &SupervisorPilotLaunchRequest,
+    proposal: &crate::ProjectConsultationProposal,
+    authorization: &crate::PlanAuthorization,
+    authorization_revision: i64,
+) -> Result<SupervisorPilotTaskReference, String> {
     let planned_task_id = supervisor_pilot_planned_task_id(&authorization.authorization_id);
+    validate_supervisor_pilot_role_criteria(
+        &proposal.worker_acceptance_criteria,
+        &proposal.control_core_acceptance_criteria,
+        &proposal.supervisor_acceptance_criteria,
+    )?;
+    let worker_acceptance_criteria = proposal.worker_acceptance_criteria.clone();
     let task = crate::ProjectDirectorPlannedTask {
         planned_task_id: planned_task_id.clone(),
-        title: proposal.goal_summary.clone(),
-        task_goal: supervisor_pilot_worker_objective(
-            &proposal.user_goal,
-            &proposal.goal_summary,
-            &proposal.acceptance_criteria,
-        ),
+        title: supervisor_pilot_worker_task_title(&worker_acceptance_criteria),
+        task_goal: supervisor_pilot_worker_objective(&worker_acceptance_criteria),
         scope: crate::ProjectDirectorTaskScope {
             project_id: authorization.project_id.clone(),
             workflow_id: request.workflow_id.clone(),
@@ -577,7 +616,8 @@ fn prepare_supervisor_pilot_write_task(
             available_skills: vec![],
             available_knowledge_refs: vec![],
             callable_tool_capabilities: authorization.scope.allowed_tools.clone(),
-            required_checks: authorization.scope.allowed_checks.clone(),
+            // 授权段的 allowed_checks 可能含控制核心或主管的验收；它们不能作为 worker 任务包内容。
+            required_checks: vec![],
             stop_conditions: authorization
                 .scope
                 .stop_conditions
@@ -594,7 +634,10 @@ fn prepare_supervisor_pilot_write_task(
             model_id: None,
         },
         depends_on: vec![],
-        acceptance_criteria: proposal.acceptance_criteria.clone(),
+        worker_acceptance_criteria: worker_acceptance_criteria.clone(),
+        control_core_acceptance_criteria: proposal.control_core_acceptance_criteria.clone(),
+        supervisor_acceptance_criteria: proposal.supervisor_acceptance_criteria.clone(),
+        acceptance_criteria: worker_acceptance_criteria,
         report_format: vec![
             "status: done|partial|failed|blocked".to_string(),
             "changed_what: 实际改动文件".to_string(),
@@ -622,7 +665,8 @@ fn prepare_supervisor_pilot_write_task(
             planned_tasks: vec![task],
             expected_workflow_revision: None,
             expected_authorization_revision: Some(authorization_revision),
-            chain_binds_per_task: false,
+            chain_binds_per_task: true,
+            force_fresh_task_session: true,
         },
     )?;
     let task = prepared
@@ -638,6 +682,15 @@ fn prepare_supervisor_pilot_write_task(
             task.blocked_reasons.join("；")
         ));
     }
+    let task_package_id = task
+        .task_package_id
+        .as_deref()
+        .ok_or_else(|| "主管写单任务包物化后缺 task package id，已拒绝发射".to_string())?;
+    persist_supervisor_pilot_user_requirement_snapshot(
+        workflow_state_path,
+        task_package_id,
+        proposal_user_requirement_snapshot(proposal),
+    )?;
     Ok(SupervisorPilotTaskReference {
         node_id: task
             .workflow_node_id
@@ -649,22 +702,76 @@ fn prepare_supervisor_pilot_write_task(
     })
 }
 
-fn supervisor_pilot_worker_objective(
-    user_goal: &str,
-    goal_summary: &str,
-    acceptance_criteria: &[String],
-) -> String {
+fn validate_supervisor_pilot_role_criteria(
+    worker_acceptance_criteria: &[String],
+    control_core_acceptance_criteria: &[String],
+    supervisor_acceptance_criteria: &[String],
+) -> Result<(), String> {
+    for (field, criteria) in [
+        ("worker_acceptance_criteria", worker_acceptance_criteria),
+        (
+            "control_core_acceptance_criteria",
+            control_core_acceptance_criteria,
+        ),
+        (
+            "supervisor_acceptance_criteria",
+            supervisor_acceptance_criteria,
+        ),
+    ] {
+        if criteria.is_empty() || criteria.iter().any(|criterion| criterion.trim().is_empty()) {
+            return Err(format!(
+                "主管写单任务包缺有效 {field}；拒绝从旧版统一验收字段猜测职责"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn supervisor_pilot_worker_objective(acceptance_criteria: &[String]) -> String {
     let acceptance_criteria = acceptance_criteria
         .iter()
         .enumerate()
         .map(|(index, criterion)| format!("{}. {criterion}", index + 1))
         .collect::<Vec<_>>()
         .join("\n");
-    format!(
-        "用户目标：{}\n\n方案摘要：{}\n\n全部验收标准：\n{}",
-        user_goal, goal_summary, acceptance_criteria
-    )
+    format!("执行下列 worker 验收：\n{}", acceptance_criteria)
 }
+
+fn supervisor_pilot_worker_task_title(acceptance_criteria: &[String]) -> String {
+    acceptance_criteria
+        .first()
+        .map(|criterion| format!("Worker：{criterion}"))
+        .unwrap_or_else(|| "Worker 任务".to_string())
+}
+
+fn proposal_user_requirement_snapshot(proposal: &crate::ProjectConsultationProposal) -> &str {
+    if proposal.user_requirement_snapshot.is_empty() {
+        &proposal.user_goal
+    } else {
+        &proposal.user_requirement_snapshot
+    }
+}
+
+fn persist_supervisor_pilot_user_requirement_snapshot(
+    workflow_state_path: &Path,
+    task_package_id: &str,
+    user_requirement_snapshot: &str,
+) -> Result<(), String> {
+    let mut value = crate::read_workflow_state_value(workflow_state_path)?;
+    let artifact = value
+        .get_mut("artifacts")
+        .and_then(Value::as_array_mut)
+        .and_then(|artifacts| {
+            artifacts.iter_mut().find(|artifact| {
+                crate::optional_string_from(artifact, "artifact_id").as_deref()
+                    == Some(task_package_id)
+            })
+        })
+        .ok_or_else(|| "主管写单任务包物化后找不到 task package artifact，已拒绝发射".to_string())?;
+    artifact["user_requirement_snapshot"] = Value::String(user_requirement_snapshot.to_string());
+    crate::write_validated_workflow_state(workflow_state_path, &value)
+}
+
 
 fn supervisor_pilot_planned_task_id(authorization_id: &str) -> String {
     let authorization_hash = crate::utils::hash::sha256_hex(authorization_id);
@@ -734,10 +841,17 @@ fn assemble_opening_message(context: &SupervisorLaunchContext) -> String {
             )
         })
         .unwrap_or_else(|| "无（只读单可直接调查，也可按需派只读 worker）".to_string());
+    let worker_acceptance = supervisor_acceptance_list(&context.worker_acceptance_criteria);
+    let control_core_acceptance = supervisor_acceptance_list(&context.control_core_acceptance_criteria);
+    let supervisor_acceptance = supervisor_acceptance_list(&context.supervisor_acceptance_criteria);
     format!(
-        "{SUPERVISOR_CONTRACT_TEMPLATE}\n\n===== 本单上下文（已批准，来自工作台正本）=====\n契约正本：{CONTRACT_CANONICAL_SOURCE}\n用户目标：{}\n已批方案摘要：{}\n授权范围：\n- 授权段：{}\n- 项目根：{}\n- 可读根：{}\n- 可写根：{}\n- 可用工具：{}\n- 可用检查：{}\n- 停止条件：{}\n- 主管配额：并发 {}，每 worker 追问 {}，总时长 {} 分钟\n任务包现状：{}\n本单可派任务：{}\n\n现在只输出第一个 `SupervisorActionProposalV1` JSON。若要派 worker，必须使用上方完整嵌套 `target` 结构；Syn 会从正本派生 allowed_write，不能由你填写。\n",
+        "{SUPERVISOR_CONTRACT_TEMPLATE}\n\n===== 本单上下文（已批准，来自工作台正本）=====\n契约正本：{CONTRACT_CANONICAL_SOURCE}\n用户原始需求快照（逐字保留）：\n{}\n\n用户目标（方案提炼）：{}\n已批方案摘要：{}\nWorker 验收（只由 worker 完成）：\n{}\n控制核心验收（不得下放给 worker）：\n{}\n主管验收（不得下放给 worker）：\n{}\n授权范围：\n- 授权段：{}\n- 项目根：{}\n- 可读根：{}\n- 可写根：{}\n- 可用工具：{}\n- 可用检查：{}\n- 停止条件：{}\n- 主管配额：并发 {}，每 worker 追问 {}，总时长 {} 分钟\n任务包现状：{}\n本单可派任务：{}\n\n现在只输出第一个 `SupervisorActionProposalV1` JSON。若要派 worker，必须使用上方完整嵌套 `target` 结构；Syn 会从正本派生 allowed_write，不能由你填写。\n",
+        context.user_requirement_snapshot,
         context.user_goal,
         context.approved_plan_summary,
+        worker_acceptance,
+        control_core_acceptance,
+        supervisor_acceptance,
         context.authorization_id,
         context.project_root,
         join_or_none(&context.allowed_read_roots),
@@ -751,6 +865,17 @@ fn assemble_opening_message(context: &SupervisorLaunchContext) -> String {
         context.task_package_status,
         pilot_task,
     )
+}
+
+fn supervisor_acceptance_list(criteria: &[String]) -> String {
+    if criteria.is_empty() {
+        return "- 无".to_string();
+    }
+    criteria
+        .iter()
+        .map(|criterion| format!("- {criterion}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn proposal_example_for_kind(context: &SupervisorLaunchContext, kind: Option<&str>) -> String {
@@ -857,13 +982,33 @@ fn assemble_protocol_correction_message(
 
 fn assemble_next_step_message(
     context: &SupervisorLaunchContext,
+    previous_proposal: Option<&SupervisorActionProposalV1>,
     result: &SupervisorActionResultV1,
 ) -> String {
     let result_json = serde_json::to_string_pretty(result)
         .unwrap_or_else(|_| "{\"status\":\"transport_failed\"}".to_string());
+    let progress_instruction = match previous_proposal.map(|proposal| &proposal.action) {
+        Some(SupervisorActionKind::InspectWorker { worker_id })
+            if result.status == "completed" && result.evidence_present =>
+        {
+            format!(
+                "同一 worker `{worker_id}` 的 inspect_worker 已完成且证据已落账。禁止再次输出同一 inspect_worker；若证据满足主管验收，下一步提议 finalize；若证据缺口可补，提议 follow_up_worker；若需要扩权、范围变化或关键方向判断，提议 request_user_decision。"
+            )
+        }
+        Some(SupervisorActionKind::Finalize { .. }) if result.status == "completed" => {
+            "终标建议已经落账。禁止重复 finalize；下一步应提议 report_user。".to_string()
+        }
+        _ => "上一步动作已由 Syn 处理；不要把已完成动作当成未执行，请依据权威结果推进到新的动作。".to_string(),
+    };
     format!(
-        "{SUPERVISOR_CONTRACT_TEMPLATE}\n\n===== 当前本单绑定 =====\n用户目标：{}\n已批方案摘要：{}\n任务包现状：{}\n\n===== 上一步权威执行结果（由 Syn 写入，不能改写）=====\n{result_json}\n\n基于这条权威结果，只输出下一个 `SupervisorActionProposalV1` JSON。",
-        context.user_goal, context.approved_plan_summary, context.task_package_status
+        "{SUPERVISOR_CONTRACT_TEMPLATE}\n\n===== 当前本单绑定 =====\n用户原始需求快照（逐字保留）：\n{}\n\n用户目标（方案提炼）：{}\n已批方案摘要：{}\nWorker 验收（只由 worker 完成）：\n{}\n控制核心验收（不得下放给 worker）：\n{}\n主管验收（不得下放给 worker）：\n{}\n任务包现状：{}\n\n===== 上一步权威执行结果（由 Syn 写入，不能改写）=====\n{result_json}\n\n===== Syn 状态推进约束 =====\n{progress_instruction}\n\n基于这条权威结果，只输出下一个 `SupervisorActionProposalV1` JSON。",
+        context.user_requirement_snapshot,
+        context.user_goal,
+        context.approved_plan_summary,
+        supervisor_acceptance_list(&context.worker_acceptance_criteria),
+        supervisor_acceptance_list(&context.control_core_acceptance_criteria),
+        supervisor_acceptance_list(&context.supervisor_acceptance_criteria),
+        context.task_package_status
     )
 }
 
@@ -1370,6 +1515,13 @@ fn spawn_supervisor_session_with(
             .cloned()
             .unwrap_or_else(|| ACCOUNT_DEFAULT_MODEL_ID.to_string()),
         reasoning_effort: context_to_effort(&command_plan.argv).unwrap_or_default(),
+        workbench_executable_path: command_plan.supervisor_mcp_command.display().to_string(),
+        workbench_build_id: workbench_build_identifier(&command_plan.supervisor_mcp_command),
+        supervisor_contract_version: SUPERVISOR_CONTRACT_VERSION.to_string(),
+        supervisor_contract_sha256: crate::utils::hash::sha256_hex(SUPERVISOR_CONTRACT_TEMPLATE),
+        worker_report_contract_sha256: crate::utils::hash::sha256_hex(
+            crate::worker_report::WORKER_REPORT_CONTRACT_TEXT,
+        ),
     };
     if let Err(error) = supervisor_orchestrator::record_pilot_session_started(config, &launch) {
         process.terminate();
@@ -1389,6 +1541,24 @@ fn spawn_supervisor_session_with(
         process,
         registration,
     ))
+}
+
+fn workbench_build_identifier(executable: &Path) -> String {
+    let metadata = fs::metadata(executable).ok();
+    let byte_len = metadata.as_ref().map(|value| value.len()).unwrap_or_default();
+    let modified_seconds = metadata
+        .and_then(|value| value.modified().ok())
+        .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|value| value.as_secs())
+        .unwrap_or_default();
+    let sha256 = fs::read(executable)
+        .map(|bytes| crate::utils::hash::sha256_hex_bytes(&bytes))
+        .unwrap_or_else(|_| "unavailable".to_string());
+    format!(
+        "{}@{}:bytes={byte_len}:mtime={modified_seconds}:sha256={sha256}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    )
 }
 
 fn spawn_supervisor_step_with(
@@ -1555,7 +1725,7 @@ fn run_supervisor_action_loop(
         let next_opening_message = if may_correct_format_once {
             assemble_protocol_correction_message(&context, &result.summary, &last_message)
         } else {
-            assemble_next_step_message(&context, &result)
+            assemble_next_step_message(&context, parsed_proposal.as_ref().ok(), &result)
         };
         match spawn_supervisor_step_with(
             spawner,
@@ -1724,7 +1894,22 @@ mod tests {
             workflow_id: "workflow:station2:default".to_string(),
             authorization_id: "authorization:station2".to_string(),
             user_goal: "检查测试项目的只读状态".to_string(),
+            user_requirement_snapshot: "用户原文：检查测试项目的只读状态".to_string(),
             approved_plan_summary: "读取关键文件并报告结论".to_string(),
+            worker_acceptance_criteria: vec![
+                "创建目标文件。".to_string(),
+                "回读创建后的目标文件。".to_string(),
+                "验证目标文件字节与用户原始需求快照中的文件名和精确内容一致。".to_string(),
+            ],
+            control_core_acceptance_criteria: vec![
+                "本次运行使用新建的 active authorization。".to_string(),
+                "本次运行绑定新建的 work item。".to_string(),
+                "仅派发一个 worker；重放不得重复派发。".to_string(),
+            ],
+            supervisor_acceptance_criteria: vec![
+                "检查合法 worker 回程和证据。".to_string(),
+                "仅在证据充分时提出终标建议。".to_string(),
+            ],
             allowed_read_roots: vec![crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string()],
             allowed_write_roots: vec![],
             allowed_tools: vec!["read_file".to_string()],
@@ -1807,7 +1992,11 @@ mod tests {
     fn opening_message_snapshot_contains_approved_contract_and_order_context() {
         let opening_message = assemble_opening_message(&fixture_context());
         assert!(opening_message.contains("执行权仍属于工作台 Syn 控制核心"));
-        assert!(opening_message.contains("用户目标：检查测试项目的只读状态"));
+        assert!(opening_message.contains("用户原文：检查测试项目的只读状态"));
+        assert!(opening_message.contains("用户目标（方案提炼）：检查测试项目的只读状态"));
+        assert!(opening_message.contains("Worker 验收（只由 worker 完成）"));
+        assert!(opening_message.contains("控制核心验收（不得下放给 worker）"));
+        assert!(opening_message.contains("主管验收（不得下放给 worker）"));
         assert!(opening_message.contains("授权段：authorization:station2"));
         assert!(opening_message.contains("可写根：无"));
         assert!(opening_message.contains("任务包现状：已物化任务包 1 份"));
@@ -1832,20 +2021,127 @@ mod tests {
     }
 
     #[test]
-    fn station3a_v3_worker_objective_contains_all_user_inputs_deterministically() {
+    fn canonical_supervisor_contract_document_contains_runtime_template() {
+        const CANONICAL_DOCUMENT: &str =
+            include_str!("../../../../docs/plans/2026-07-11-supervisor-contract-v1-draft.md");
+        let normalize = |value: &str| {
+            value
+                .lines()
+                .filter(|line| !line.trim_start().starts_with("```"))
+                .flat_map(str::split_whitespace)
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        assert!(
+            normalize(CANONICAL_DOCUMENT).contains(&normalize(SUPERVISOR_CONTRACT_TEMPLATE)),
+            "主管契约文档与运行时模板发生漂移"
+        );
+    }
+
+    #[test]
+    fn station3a_completed_inspection_must_advance_instead_of_repeating() {
+        let previous = parse_supervisor_action_proposal(
+            r#"{"schema_version":"supervisor_action_proposal.v1","kind":"inspect_worker","worker_id":"worker-1","reason":"检查回程","expected_result":"获得证据"}"#,
+        )
+        .expect("parse inspect proposal");
+        let result = SupervisorActionResultV1 {
+            action_id: Some("action:inspect:1".to_string()),
+            status: "completed".to_string(),
+            summary: "合法 worker 回程已落账".to_string(),
+            worker_id: Some("worker-1".to_string()),
+            adapter_id: Some("codex-local-authorized-dispatch".to_string()),
+            evidence_present: true,
+        };
+
+        let message = assemble_next_step_message(&fixture_context(), Some(&previous), &result);
+        assert!(message.contains("同一 worker `worker-1` 的 inspect_worker 已完成"));
+        assert!(message.contains("禁止再次输出同一 inspect_worker"));
+        assert!(message.contains("下一步提议 finalize"));
+        assert!(message.contains("提议 follow_up_worker"));
+        assert!(message.contains("提议 request_user_decision"));
+    }
+
+    #[test]
+    fn station3a_requires_all_three_native_acceptance_roles() {
+        let worker = vec!["worker 验收".to_string()];
+        let control_core = vec!["控制核心验收".to_string()];
+        let supervisor = vec!["主管验收".to_string()];
+        validate_supervisor_pilot_role_criteria(&worker, &control_core, &supervisor)
+            .expect("三类职责非空时应通过");
+
+        for (missing, result) in [
+            (
+                "worker_acceptance_criteria",
+                validate_supervisor_pilot_role_criteria(&[], &control_core, &supervisor),
+            ),
+            (
+                "control_core_acceptance_criteria",
+                validate_supervisor_pilot_role_criteria(&worker, &[], &supervisor),
+            ),
+            (
+                "supervisor_acceptance_criteria",
+                validate_supervisor_pilot_role_criteria(&worker, &control_core, &[]),
+            ),
+        ] {
+            let error = result.expect_err("任一职责为空都必须拒绝物化");
+            assert!(error.contains(missing), "{error}");
+        }
+    }
+
+    #[test]
+    fn station3a_v5_worker_objective_uses_only_worker_acceptance() {
         let criteria = vec![
-            "文件路径正确".to_string(),
-            "内容逐字匹配".to_string(),
-            "检查命令通过".to_string(),
+            "创建 station3a-control-core-proof-v5.txt。".to_string(),
+            "精确写入 UTF-8 内容 station3a control core proof v5 passed!，不得添加末尾换行。".to_string(),
+            "回读目标文件。".to_string(),
+            "验证内容、39 bytes 与无末尾换行。".to_string(),
+            "返回执行证据。".to_string(),
         ];
-        let first = supervisor_pilot_worker_objective("创建 proof", "只改固定测试文件", &criteria);
-        let second = supervisor_pilot_worker_objective("创建 proof", "只改固定测试文件", &criteria);
+        let first = supervisor_pilot_worker_objective(&criteria);
+        let second = supervisor_pilot_worker_objective(&criteria);
         assert_eq!(first, second);
-        assert!(first.contains("用户目标：创建 proof"));
-        assert!(first.contains("方案摘要：只改固定测试文件"));
+        assert!(first.contains("station3a-control-core-proof-v5.txt"));
+        assert!(first.contains("station3a control core proof v5 passed!"));
+        assert!(first.contains("39 bytes"));
+        assert!(first.contains("执行下列 worker 验收"));
+        for forbidden in [
+            "新建 authorization",
+            "新建 work item",
+            "新建 supervisor run",
+            "唯一 worker",
+            "主管终标",
+            "检查 UI 入口",
+        ] {
+            assert!(!first.contains(forbidden), "worker objective leaked: {forbidden}");
+        }
         for criterion in criteria {
             assert!(first.contains(&criterion));
         }
+        assert!(
+            supervisor_pilot_worker_task_title(&[
+                "创建 station3a-control-core-proof-v5.txt。".to_string()
+            ])
+            .contains("station3a-control-core-proof-v5.txt"),
+            "worker task title may only derive from worker criteria"
+        );
+        let task_package_goals = crate::worker_report::build_goals_with_contract(&first, &[]);
+        assert_eq!(
+            task_package_goals.first(),
+            Some(&first),
+            "物化任务包必须把 worker objective 作为首个 goal"
+        );
+        assert!(
+            task_package_goals[0].contains("station3a-control-core-proof-v5.txt"),
+            "worker 的文件名和精确内容不得在任务包中丢失"
+        );
+        assert_eq!(
+            task_package_goals
+                .iter()
+                .filter(|goal| goal.contains("受阻 blocked 的完整示例"))
+                .count(),
+            1,
+            "worker prompt 只能包含一份当前 worker 回程契约"
+        );
     }
 
     #[test]

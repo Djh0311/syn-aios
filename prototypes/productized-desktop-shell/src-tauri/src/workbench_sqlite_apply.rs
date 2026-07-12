@@ -959,6 +959,111 @@ mod tests {
     }
 
     #[test]
+    fn sqlite_apply_importer_preserves_distinct_long_prefix_session_bindings() {
+        let fixture = std::env::temp_dir().join(format!(
+            "r3-a2-binding-conservation-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&fixture).expect("fixture dir");
+        let state = serde_json::json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "projects": [],
+            "agent_adapters": [],
+            "workflows": [],
+            "nodes": [],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "audit_events": [],
+            "capabilities": [],
+            "harness_resources": [],
+            "workflow_node_session_bindings": [
+                {
+                    "binding_id": "binding:sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                    "workflow_id": "workflow:long:default",
+                    "node_id": "workflow:long:default:node:project-director",
+                    "work_item_id": "work-item:shared-long-prefix:first",
+                    "lifecycle": "active",
+                    "native_thread_id": "thread-first"
+                },
+                {
+                    "binding_id": "binding:sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                    "workflow_id": "workflow:long:default",
+                    "node_id": "workflow:long:default:node:project-director",
+                    "work_item_id": "work-item:shared-long-prefix:second",
+                    "lifecycle": "active",
+                    "native_thread_id": "thread-second"
+                }
+            ],
+            "workflow_node_dispatches": [
+                {
+                    "dispatch_id": "dispatch-first",
+                    "binding_id": "binding:sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                    "workflow_id": "workflow:long:default",
+                    "node_id": "workflow:long:default:node:project-director",
+                    "work_item_id": "work-item:shared-long-prefix:first",
+                    "native_thread_id": "thread-first"
+                },
+                {
+                    "dispatch_id": "dispatch-second",
+                    "binding_id": "binding:sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                    "workflow_id": "workflow:long:default",
+                    "node_id": "workflow:long:default:node:project-director",
+                    "work_item_id": "work-item:shared-long-prefix:second",
+                    "native_thread_id": "thread-second"
+                }
+            ]
+        });
+        fs::write(
+            fixture.join(PRIMARY_WORKFLOW_STATE),
+            serde_json::to_vec_pretty(&state).expect("serialize fixture"),
+        )
+        .expect("write fixture");
+        let db_path = temp_db("binding-conservation");
+
+        apply_fixture_dir_to_temp_db(&fixture, &db_path, None).expect("apply bindings");
+
+        assert_eq!(
+            table_count(&db_path, "workflow_node_session_bindings").expect("bindings"),
+            2
+        );
+        assert_eq!(
+            table_count(&db_path, "workflow_node_dispatches").expect("dispatches"),
+            2
+        );
+        let connection = Connection::open(&db_path).expect("open conservation database");
+        let mut statement = connection
+            .prepare("SELECT record_json FROM workflow_node_dispatches ORDER BY dispatch_id")
+            .expect("prepare dispatch reference query");
+        let dispatch_binding_ids = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("query dispatch records")
+            .map(|row| {
+                let record: Value = serde_json::from_str(&row.expect("dispatch record json"))
+                    .expect("parse dispatch record json");
+                record["binding_id"]
+                    .as_str()
+                    .expect("dispatch binding_id")
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            dispatch_binding_ids,
+            vec![
+                "binding:sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "binding:sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            ]
+        );
+        let _ = fs::remove_dir_all(fixture);
+        let _ = fs::remove_file(db_path);
+    }
+
+    #[test]
     fn sqlite_apply_importer_rejects_conflicts_sensitive_and_corrupt_without_partial_rows() {
         for name in [
             "apply-conflict-rollback",

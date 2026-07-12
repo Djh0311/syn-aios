@@ -1,0 +1,8 @@
+Reading prompt from stdin...
+2026-07-12T10:00:54.232658Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:00:54.468125Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:00:54.962385Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:00:55.618438Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:00:56.691284Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:00:58.545329Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses
+2026-07-12T10:01:01.906273Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: Connection refused (os error 61), url: wss://chatgpt.com/backend-api/codex/responses

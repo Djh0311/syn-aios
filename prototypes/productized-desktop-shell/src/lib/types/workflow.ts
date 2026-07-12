@@ -821,6 +821,9 @@ export type ProjectConsultationProposal = {
   proposed_steps: string[];
   scope_draft: ProjectConsultationProposalScopeDraft;
   risks: ProjectConsultationProposalRisk[];
+  worker_acceptance_criteria?: string[];
+  control_core_acceptance_criteria?: string[];
+  supervisor_acceptance_criteria?: string[];
   acceptance_criteria: string[];
   status: ProjectConsultationProposalStatus;
   plan_authorization_id?: string | null;

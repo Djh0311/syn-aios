@@ -1,0 +1,1 @@
+{"schema_version":"supervisor_action_proposal.v1","kind":"inspect_worker","worker_id":"dispatch:workflow-users-yoyi-codex-workflow-mario-test-default:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-su:1783850350961","reason":"worker 已完成执行，但当前尚无合法结构化回程与证据；需先检查已登记 worker 的回程，才能判断是否满足验收。","expected_result":"获得合法结构化回程与证据"}
