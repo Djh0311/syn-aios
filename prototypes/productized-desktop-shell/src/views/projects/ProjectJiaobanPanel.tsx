@@ -7,9 +7,13 @@ import {
   confirmAndStartAuthorizedRun,
   confirmProjectDirectorTaskSessionBindings,
   getProjectWorkflowChainStatus,
+  launchSupervisorPilot,
   listProjectRunHistory,
   loadFormalMemoryStore,
+  loadSupervisorPilotReadModel,
   previewPendingProposalDirectorPlan,
+  recordGlobalBoundaryReview,
+  recordProjectConsultationProposalDecision,
   runGlobalSupervisorBoundaryReview,
   runGlobalSupervisorReview,
   runProjectConsultation,
@@ -34,11 +38,23 @@ import type {
   RunHistoryEntry,
   RunHistoryList,
   SessionRecord,
+  SupervisorPilotReadModel,
   WorkflowStateSnapshot,
 } from "../../lib/types";
 
 // 固定测试项目（自动干只在这真跑；非它则老实标注·跳智能体直连）。与 WorkflowCommandConsoleView 同一常量。
 const TEST_PROJECT_ROOT = "/Users/yoyi/codex-workflow-mario-test";
+const SUPERVISOR_PILOT_REASONING_EFFORT = "medium";
+
+export type JiaobanOrchestrationMode = "classic" | "supervisor_pilot";
+
+export function supervisorPilotUnavailableReason(projectRoot: string, allowedWriteRoots: string[]): string | null {
+  if (projectRoot !== TEST_PROJECT_ROOT) return "主管编排试点仅限固定测试项目。";
+  if (allowedWriteRoots.some((root) => root !== TEST_PROJECT_ROOT)) {
+    return "主管编排写入试点只允许固定测试项目根。";
+  }
+  return null;
+}
 
 export type ProjectJiaobanPanelProps = {
   project: ProjectRecord;
@@ -320,6 +336,8 @@ type JiaobanRunCache = {
   // B1：本轮全局主管复核结果（key=chain_started_at·结果态缓存；loading 是瞬态不缓存——
   // 重挂载后按幂等键补拉，后端幂等命中秒回不重烧）。
   supervisorReview: { key: string; outcome: GlobalSupervisorReviewOutcome } | null;
+  // Station 2：主管试点只保留 run-id；事件流始终重新从 sidecar 只读投影加载。
+  supervisorPilotRunId: string | null;
 };
 const jiaobanRunCacheByProject = new Map<string, JiaobanRunCache>();
 
@@ -342,6 +360,7 @@ function writeJiaobanRunCache(projectRoot: string, patch: Partial<JiaobanRunCach
     runCanvasNodes: [],
     runCanvasBindings: [],
     supervisorReview: null,
+    supervisorPilotRunId: null,
   };
   jiaobanRunCacheByProject.set(projectRoot, { ...prev, ...patch });
 }
@@ -491,6 +510,13 @@ function ProjectJiaobanPanelBrowser({
   // 合流命令拒「方案不是待用户确认」时置 true → 卡住脸给[接着跑,不用重批]。
   const [continueHint, setContinueHint] = useState<boolean>(cached?.continueHint ?? false);
   const [chainStatus, setChainStatus] = useState<ProjectWorkflowChainStatus | null>(null);
+  // 站 2：模式按单重置为经典；主管试点的过程只从 sidecar 审计读模型取，不投射为链态。
+  const [orchestrationMode, setOrchestrationMode] = useState<JiaobanOrchestrationMode>("classic");
+  const [supervisorPilotRunId, setSupervisorPilotRunId] = useState<string | null>(
+    cached?.supervisorPilotRunId ?? null,
+  );
+  const [supervisorPilotReadModel, setSupervisorPilotReadModel] = useState<SupervisorPilotReadModel | null>(null);
+  const [supervisorPilotLedgerError, setSupervisorPilotLedgerError] = useState<string | null>(null);
   const runningRef = useRef(false);
   // fix8：出方案（说/改要求）直调期间的 loading/失败态 + 防重入。失败人话上脸，绝不静默、目标不清空。
   const [consultLoading, setConsultLoading] = useState(false);
@@ -607,6 +633,9 @@ function ProjectJiaobanPanelBrowser({
     setStartError(null);
     setContinueHint(false);
     setChainStatus(null);
+    setSupervisorPilotRunId(null);
+    setSupervisorPilotReadModel(null);
+    setSupervisorPilotLedgerError(null);
     setTaskSessionBindings([]);
     setTaskSessionBindingError(null);
     setAmendment("");
@@ -614,6 +643,13 @@ function ProjectJiaobanPanelBrowser({
     clearJiaobanRunCache(projectRoot);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestProposal?.proposal_id, latestProposal?.status]);
+
+  const supervisorPilotDisabledReason = latestProposal
+    ? supervisorPilotUnavailableReason(projectRoot, latestProposal.scope_draft.allowed_write_roots)
+    : "请先生成方案。";
+  useEffect(() => {
+    if (supervisorPilotDisabledReason) setOrchestrationMode("classic");
+  }, [supervisorPilotDisabledReason]);
 
   // 默认选最近一条现有会话（会话到齐后补；用户手动选过就不覆盖）。无可用会话保持 null → UI 给人话提示。
   const sessionDefaultedRef = useRef(false);
@@ -653,6 +689,34 @@ function ProjectJiaobanPanelBrowser({
       clearInterval(id);
     };
   }, [manualPhase, projectWorkflow]);
+
+  // 主管试点进度来自它自己的 sidecar 账本。链读模型照旧可轮询，但不拿它猜主管状态。
+  useEffect(() => {
+    if (manualPhase !== "running" || !projectWorkflow || !supervisorPilotRunId) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const readModel = await loadSupervisorPilotReadModel({
+          project_root: projectWorkflow.project_root,
+          workflow_id: projectWorkflow.workflow_id,
+          run_id: supervisorPilotRunId,
+        });
+        if (!active) return;
+        setSupervisorPilotReadModel(readModel);
+        setSupervisorPilotLedgerError(null);
+      } catch (error) {
+        if (active) {
+          setSupervisorPilotLedgerError(error instanceof Error ? error.message : String(error));
+        }
+      }
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 2500);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [manualPhase, projectWorkflow, supervisorPilotRunId]);
 
   // 当前该显哪张脸：手动相位优先；否则由「有没有方案」决定说/批。
   const phase: JiaobanPhase = manualPhase ?? (latestProposal ? "authorize" : "say");
@@ -922,9 +986,69 @@ function ProjectJiaobanPanelBrowser({
     setPreviewNonce((nonce) => nonce + 1);
   }
 
-  // 允许并开始 = 方案授权人闸那一下。走刀1 合流命令 confirm_and_start_authorized_run（见 lib/tauri）。
+  // 主管试点只复用既有确认/边界激活两步；它刻意不进入经典链的拆任务、绑定或派发入口。
+  async function confirmAndLaunchSupervisorPilot() {
+    if (!latestProposal || !projectWorkflow) throw new Error("当前方案或工作流缺失，不能启动主管试点。");
+    const isReadOnly = latestProposal.scope_draft.allowed_write_roots.length === 0;
+    const confirmed = await recordProjectConsultationProposalDecision({
+      project_root: projectRoot,
+      proposal_id: latestProposal.proposal_id,
+      actor_id: "user",
+      decision: "confirm",
+      summary: isReadOnly
+        ? "用户点[允许并开始]：确认只读单，选择主管编排试点（不进入经典链）。"
+        : "用户点[允许并开始]：确认固定测试项目写单，选择主管编排试点（主管只读、worker 按写根执行）。",
+      expected_proposal_store_revision: projectConsultationProposalStore?.revision ?? null,
+      expected_plan_authorization_store_revision: null,
+    });
+    const authorization = confirmed.plan_authorization;
+    const authorizationRevision = confirmed.plan_authorization_store_revision;
+    if (!authorization || authorizationRevision == null) {
+      throw new Error("确认方案未产出可激活授权，不能启动主管试点。");
+    }
+    const activated = await recordGlobalBoundaryReview({
+      project_root: projectRoot,
+      project_id: confirmed.proposal.project_id,
+      workflow_id: confirmed.proposal.workflow_id,
+      proposal_id: confirmed.proposal.proposal_id,
+      authorization_id: authorization.authorization_id,
+      actor_id: "user",
+      review_status: "approved",
+      summary: isReadOnly
+        ? "用户点[允许并开始]：确认主管试点仅在固定测试项目的只读沙箱内运行。"
+        : "用户点[允许并开始]：确认主管自身只读；worker 仅在固定测试项目授权写根内运行。",
+      checklist: {
+        architecture_boundary_checked: true,
+        cross_project_impact_checked: true,
+        permission_scope_checked: true,
+        read_write_scope_checked: true,
+        tool_and_check_scope_checked: true,
+        memory_boundary_checked: true,
+        stop_conditions_checked: true,
+        acceptance_criteria_checked: true,
+      },
+      findings: [],
+      expected_authorization_revision: authorizationRevision,
+    });
+    if (activated.authorization.status !== "active") {
+      throw new Error("主管试点授权未激活，已拒绝发射。");
+    }
+    return launchSupervisorPilot({
+      project_root: projectRoot,
+      workflow_id: projectWorkflow.workflow_id,
+      authorization_id: activated.authorization.authorization_id,
+      reasoning_effort: SUPERVISOR_PILOT_REASONING_EFFORT,
+    });
+  }
+
+  // 允许并开始 = 方案授权人闸那一下。经典模式走刀1 合流命令 confirm_and_start_authorized_run（见 lib/tauri）。
   async function authorizeAndStart() {
     if (!projectWorkflow || !latestProposal || starting || runningRef.current) return;
+    const pilotSelected = orchestrationMode === "supervisor_pilot";
+    if (pilotSelected && supervisorPilotDisabledReason) {
+      setStartError(supervisorPilotDisabledReason);
+      return;
+    }
     rememberRunCanvas();
     // ★ 一进来立刻上「正在干」脸——不等 await 回来（await 可能几十秒~几分钟，中间不能无脸看着像冻死）。
     runningRef.current = true;
@@ -939,6 +1063,9 @@ function ProjectJiaobanPanelBrowser({
     setStartError(null);
     setOutcome(null);
     setChainStatus(null);
+    setSupervisorPilotRunId(null);
+    setSupervisorPilotReadModel(null);
+    setSupervisorPilotLedgerError(null);
     setTaskSessionBindings([]);
     setTaskSessionBindingError(null);
     setSupervisorReview(null); // B1：新一轮开跑，上一轮复核意见随之清（防旧轮意见冒充本轮）。
@@ -951,8 +1078,22 @@ function ProjectJiaobanPanelBrowser({
       runStartedAtMs: runStartedAt,
       runIsNewSession: isNewSession,
       supervisorReview: null,
+      supervisorPilotRunId: null,
     });
     try {
+      if (pilotSelected) {
+        const receipt = await confirmAndLaunchSupervisorPilot();
+        setSupervisorPilotRunId(receipt.run_id);
+        setManualPhase("running");
+        writeJiaobanRunCache(projectRoot, {
+          manualPhase: "running",
+          supervisorPilotRunId: receipt.run_id,
+        });
+        void onProposalStoreRefresh?.().catch(() => {
+          // 已发射的主管不能因刷新展示店失败被误报为启动失败。
+        });
+        return;
+      }
       // 用户只点一次人闸：把预演节点的逐项选择随同方案提交；后端拆完按 id/顺序保守映射，复用既有绑定校验。
       const outcome = await confirmAndStartAuthorizedRun({
         project_root: projectRoot,
@@ -1457,6 +1598,9 @@ function ProjectJiaobanPanelBrowser({
               sessions={projectSessions}
               sessionChoice={sessionChoice}
               onSessionChoiceChange={setSessionChoice}
+              orchestrationMode={orchestrationMode}
+              onOrchestrationModeChange={setOrchestrationMode}
+              supervisorPilotDisabledReason={supervisorPilotDisabledReason}
               amendment={amendment}
               onAmendmentChange={setAmendment}
               onAmend={submitAmendment}
@@ -1496,15 +1640,23 @@ function ProjectJiaobanPanelBrowser({
           ) : null}
 
           {phase === "running" ? (
-            <JiaobanRunningState
-              chainStatus={thisRoundChainStatus}
-              directorPlanningElapsedMinutes={directorPlanningElapsedMinutes}
-              isNewSession={runIsNewSession}
-              onStop={() => void stopRun()}
-              sessionChoice={sessionChoice}
-              latestSessionThreadId={latestSessionThreadId}
-              onOpenAgentSession={onOpenAgentSession}
-            />
+            supervisorPilotRunId ? (
+              <JiaobanSupervisorPilotRunningState
+                runId={supervisorPilotRunId}
+                readModel={supervisorPilotReadModel}
+                ledgerError={supervisorPilotLedgerError}
+              />
+            ) : (
+              <JiaobanRunningState
+                chainStatus={thisRoundChainStatus}
+                directorPlanningElapsedMinutes={directorPlanningElapsedMinutes}
+                isNewSession={runIsNewSession}
+                onStop={() => void stopRun()}
+                sessionChoice={sessionChoice}
+                latestSessionThreadId={latestSessionThreadId}
+                onOpenAgentSession={onOpenAgentSession}
+              />
+            )
           ) : null}
 
           {phase === "done" ? (
@@ -1983,6 +2135,9 @@ export function JiaobanAuthorizeState({
   sessions,
   sessionChoice,
   onSessionChoiceChange,
+  orchestrationMode = "classic",
+  onOrchestrationModeChange = () => {},
+  supervisorPilotDisabledReason = null,
   amendment,
   onAmendmentChange,
   onAmend,
@@ -2008,6 +2163,9 @@ export function JiaobanAuthorizeState({
   sessions: SessionRecord[];
   sessionChoice: string | null;
   onSessionChoiceChange: (value: string | null) => void;
+  orchestrationMode?: JiaobanOrchestrationMode;
+  onOrchestrationModeChange?: (mode: JiaobanOrchestrationMode) => void;
+  supervisorPilotDisabledReason?: string | null;
   amendment: string;
   onAmendmentChange: (value: string) => void;
   onAmend: () => void;
@@ -2097,6 +2255,13 @@ export function JiaobanAuthorizeState({
         suggestWorkflow={proposal.suggest_workflow === true}
         switchOn={worksmapSwitchOn}
         onToggleSwitch={onToggleWorksmapSwitch}
+      />
+
+      <JiaobanOrchestrationModePicker
+        mode={orchestrationMode}
+        disabledReason={supervisorPilotDisabledReason}
+        disabled={starting || consultLoading}
+        onChange={onOrchestrationModeChange}
       />
 
       <JiaobanSessionPicker
@@ -2203,6 +2368,47 @@ export function JiaobanAuthorizeState({
         </button>
       </div>
     </div>
+  );
+}
+
+// Station 2：按单选择入口。默认经典；试点不可用时仍展示原因，不能靠前端状态偷开。
+export function JiaobanOrchestrationModePicker({
+  mode,
+  disabledReason,
+  disabled,
+  onChange,
+}: {
+  mode: JiaobanOrchestrationMode;
+  disabledReason: string | null;
+  disabled: boolean;
+  onChange: (mode: JiaobanOrchestrationMode) => void;
+}) {
+  const pilotDisabled = disabled || disabledReason !== null;
+  return (
+    <fieldset className="proposal-decision-field" aria-label="执行模式">
+      <legend className="jiaoban-field-label">执行模式</legend>
+      <label>
+        <input
+          type="radio"
+          name="jiaoban-orchestration-mode"
+          checked={mode === "classic"}
+          disabled={disabled}
+          onChange={() => onChange("classic")}
+        />
+        经典状态机（默认）
+      </label>
+      <label className={pilotDisabled ? "muted" : undefined}>
+        <input
+          type="radio"
+          name="jiaoban-orchestration-mode"
+          checked={mode === "supervisor_pilot"}
+          disabled={pilotDisabled}
+          onChange={() => onChange("supervisor_pilot")}
+        />
+        主管编排（试点）
+      </label>
+      {disabledReason ? <p className="muted small-note">{disabledReason}</p> : null}
+    </fieldset>
   );
 }
 
@@ -2729,6 +2935,62 @@ export function JiaobanRunningState({
         </button>
       </div>
       <p className="muted small-note">想看每一步的过程，看右侧画布。</p>
+    </div>
+  );
+}
+
+// Station 2：主管试点只消费已存在的 sidecar 审计投影；不把任何事件写回链态。
+export function JiaobanSupervisorPilotRunningState({
+  runId,
+  readModel,
+  ledgerError,
+}: {
+  runId: string;
+  readModel: SupervisorPilotReadModel | null;
+  ledgerError: string | null;
+}) {
+  const status = readModel?.launch_status ?? "starting";
+  const isActive = status === "starting" || status === "running";
+  const waitingReason = readModel?.termination_reason.trim();
+  const statusText =
+    status === "running"
+      ? "主管正在编排"
+      : status === "waiting_user"
+        ? waitingReason || "主管等待用户决定"
+      : status === "exited"
+        ? "主管进程已结束，业务状态以权威回程和验收账本为准"
+        : status === "failed"
+          ? "主管会话异常结束"
+          : "主管正在启动";
+  return (
+    <div
+      className="project-canvas-detail-card jiaoban-running"
+      aria-label={isActive ? "主管进行中" : status === "waiting_user" ? "主管等待用户决定" : "主管已结束"}
+    >
+      <div className="panel-heading">
+        <div>
+          <h3>{isActive ? "主管进行中…" : status === "waiting_user" ? "主管等待用户决定" : "主管进程已结束"}</h3>
+        </div>
+        <Badge tone={status === "failed" || status === "waiting_user" ? "warning" : "candidate"}>{statusText}</Badge>
+      </div>
+      <div className="role-loop-plain" aria-label="主管账本事件流">
+        <p className="role-loop-plain-lead">
+          {isActive ? <span className="jiaoban-spinner" aria-hidden="true" /> : null} {statusText}
+        </p>
+        <p className="muted small-note">本单主管运行编号：{runId}</p>
+        {ledgerError ? <p className="state-warning">主管账本暂时不可读：{ledgerError}</p> : null}
+        {readModel?.audit_events.length ? (
+          <ul className="jiaoban-boundary-points" aria-label="主管账本事件">
+            {readModel.audit_events.map((event) => (
+              <li key={event.event_id}>
+                {event.tool}：{event.result_summary || event.result_status}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted small-note">账本事件正在到达…</p>
+        )}
+      </div>
     </div>
   );
 }

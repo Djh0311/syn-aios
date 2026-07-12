@@ -4,6 +4,7 @@ use super::{McpServerConfig, SupervisorQuotaLimits};
 use crate::CodexResumeRunner;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -35,6 +36,30 @@ struct SupervisorStore {
 struct SupervisorSession {
     #[serde(default)]
     run_id: String,
+    #[serde(default)]
+    project_root: String,
+    #[serde(default)]
+    workflow_id: String,
+    #[serde(default)]
+    authorization_id: String,
+    #[serde(default)]
+    model_id: String,
+    #[serde(default)]
+    reasoning_effort: String,
+    #[serde(default)]
+    max_active_workers: usize,
+    #[serde(default)]
+    max_follow_ups_per_worker: usize,
+    #[serde(default)]
+    max_runtime_minutes: i64,
+    #[serde(default)]
+    launch_status: String,
+    #[serde(default)]
+    started_at_ms: i64,
+    #[serde(default)]
+    ended_at_ms: Option<i64>,
+    #[serde(default)]
+    termination_reason: String,
     #[serde(default)]
     workers: Vec<SupervisorWorker>,
     #[serde(default)]
@@ -104,7 +129,53 @@ struct SupervisorAuditEvent {
     #[serde(default)]
     result_summary: String,
     #[serde(default)]
+    result_status: String,
+    #[serde(default)]
     created_at_ms: i64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SupervisorPilotSessionLaunch {
+    pub(crate) project_root: String,
+    pub(crate) workflow_id: String,
+    pub(crate) authorization_id: String,
+    pub(crate) model_id: String,
+    pub(crate) reasoning_effort: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SupervisorPilotAuditEventReadModel {
+    pub(crate) event_id: String,
+    pub(crate) tool: String,
+    pub(crate) result_summary: String,
+    pub(crate) result_status: String,
+    pub(crate) created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SupervisorPilotMetricsReadModel {
+    pub(crate) denied_tool_call_count: usize,
+    pub(crate) max_follow_ups_per_worker: usize,
+    pub(crate) follow_up_count: usize,
+    pub(crate) follow_up_budget_respected: bool,
+    pub(crate) max_runtime_minutes: i64,
+    pub(crate) session_timed_out: bool,
+    pub(crate) ledger_replay_event_count: usize,
+    pub(crate) ledger_replay_ready: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SupervisorPilotReadModel {
+    pub(crate) run_id: String,
+    pub(crate) launch_status: String,
+    pub(crate) project_root: String,
+    pub(crate) workflow_id: String,
+    pub(crate) authorization_id: String,
+    pub(crate) started_at_ms: i64,
+    pub(crate) ended_at_ms: Option<i64>,
+    pub(crate) termination_reason: String,
+    pub(crate) metrics: SupervisorPilotMetricsReadModel,
+    pub(crate) audit_events: Vec<SupervisorPilotAuditEventReadModel>,
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +193,7 @@ struct WorkerLaunch {
     worker_id: String,
     native_thread_id: String,
     dispatch_id: String,
+    canonical_work_item_id: String,
     state: String,
     initial_report: Option<Value>,
     result_summary: String,
@@ -157,17 +229,33 @@ impl WorkerInvoker for WorkbenchWorkerInvoker {
         let app_state = crate::AppState::new();
         let index = crate::read_index(&app_state)?;
         let runner = crate::codex_local_runner::RealWorkflowNodeCodexRunner;
-        let result = crate::execute_project_workflow_node_at(
-            workflow_state_path(config)?,
+        let workflow_state_path = workflow_state_path(config)?;
+        let canonical_work_item_id = canonical_prepared_work_item_id(&workflow_state_path, input)?;
+        if canonical_work_item_id != input.work_item_id {
+            append_audit(
+                config,
+                "dispatch_worker_work_item_canonicalized",
+                &format!(
+                    "requested_work_item_id={}; canonical_work_item_id={}",
+                    input.work_item_id, canonical_work_item_id
+                ),
+                "主管提供的 work item 文本有偏差；工作台按当前授权段唯一 prepared dispatch 恢复正本 ID。",
+                "warning",
+            )?;
+        }
+        let result = crate::execute_authorized_project_workflow_node_at(
+            workflow_state_path,
             &index,
             &crate::codex_db::default_state_db_path(),
             &runner,
             &crate::ProjectWorkflowNodeRunRequest {
                 project_root: input.project_root.clone(),
                 node_id: input.node_id.clone(),
-                work_item_id: input.work_item_id.clone(),
+                work_item_id: canonical_work_item_id.clone(),
                 workflow_id: Some(input.workflow_id.clone()),
             },
+            &input.authorization_id,
+            &input.allowed_write,
         )?;
         if result.dispatch.plan_authorization_id.as_deref() != Some(input.authorization_id.as_str())
         {
@@ -177,6 +265,7 @@ impl WorkerInvoker for WorkbenchWorkerInvoker {
             worker_id: result.dispatch.dispatch_id.clone(),
             native_thread_id: result.dispatch.native_thread_id,
             dispatch_id: result.dispatch.dispatch_id,
+            canonical_work_item_id,
             state: result.dispatch.state,
             initial_report: None,
             result_summary: result.message,
@@ -256,33 +345,65 @@ impl WorkerInvoker for WorkbenchWorkerInvoker {
     }
 }
 
+fn canonical_prepared_work_item_id(
+    workflow_state_path: &Path,
+    input: &DispatchInput,
+) -> Result<String, String> {
+    let value = crate::read_workflow_state_value(workflow_state_path)?;
+    canonical_prepared_work_item_id_from_value(&value, input)
+}
+
+fn canonical_prepared_work_item_id_from_value(
+    value: &Value,
+    input: &DispatchInput,
+) -> Result<String, String> {
+    let expected_project_id = crate::project_id(&input.project_root);
+    let candidates = value
+        .get("workflow_node_dispatches")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|dispatch| {
+            crate::optional_string_from(dispatch, "state").as_deref() == Some("prepared")
+                && crate::optional_string_from(dispatch, "prompt_kind").as_deref()
+                    == Some("authorized_prepared_auto_dispatch")
+                && crate::optional_string_from(dispatch, "project_id").as_deref()
+                    == Some(expected_project_id.as_str())
+                && crate::optional_string_from(dispatch, "workflow_id").as_deref()
+                    == Some(input.workflow_id.as_str())
+                && crate::optional_string_from(dispatch, "node_id").as_deref()
+                    == Some(input.node_id.as_str())
+                && crate::optional_string_from(dispatch, "plan_authorization_id").as_deref()
+                    == Some(input.authorization_id.as_str())
+        })
+        .filter_map(|dispatch| crate::optional_string_from(dispatch, "work_item_id"))
+        .collect::<BTreeSet<_>>();
+    if candidates.contains(&input.work_item_id) {
+        return Ok(input.work_item_id.clone());
+    }
+    if candidates.len() != 1 {
+        return Err(format!(
+            "当前授权段匹配到 {} 个 prepared work item，无法唯一恢复正本 ID，已拒绝启动 worker",
+            candidates.len()
+        ));
+    }
+    candidates
+        .into_iter()
+        .next()
+        .ok_or_else(|| "prepared work item 正本 ID 丢失，已拒绝启动 worker".to_string())
+}
+
 pub fn list_tools() -> Value {
     json!({
         "tools": [
-            tool_def("dispatch_worker", "在已授权、已绑定且 path-lock 通过后派发 worker", json!({
-                "type": "object", "properties": {
-                    "project_root": {"type": "string"}, "workflow_id": {"type": "string"},
-                    "authorization_id": {"type": "string"}, "node_id": {"type": "string"},
-                    "work_item_id": {"type": "string"}, "allowed_write": {"type": "array", "items": {"type": "string"}}
-                }, "required": ["project_root", "workflow_id", "authorization_id", "node_id", "work_item_id", "allowed_write"], "additionalProperties": false
-            })),
             tool_def("read_worker_report", "只读投影 worker 结构化口供", json!({
                 "type": "object", "properties": {"worker_id": {"type": "string"}}, "required": ["worker_id"], "additionalProperties": false
-            })),
-            tool_def("follow_up_worker", "在同授权段、同 thread、现成 runner 下追问 worker", json!({
-                "type": "object", "properties": {"worker_id": {"type": "string"}, "prompt": {"type": "string"}}, "required": ["worker_id", "prompt"], "additionalProperties": false
             })),
             tool_def("wait_for_worker", "读取 worker 当前状态，不管理或终止进程", json!({
                 "type": "object", "properties": {"worker_id": {"type": "string"}}, "required": ["worker_id"], "additionalProperties": false
             })),
             tool_def("read_key_file", "在授权允许读取根内读取关键文本文件", json!({
                 "type": "object", "properties": {"project_root": {"type": "string"}, "workflow_id": {"type": "string"}, "authorization_id": {"type": "string"}, "path": {"type": "string"}}, "required": ["project_root", "workflow_id", "authorization_id", "path"], "additionalProperties": false
-            })),
-            tool_def("final_mark", "写主管 advisory 终标意见，不改 workflow chain 状态", json!({
-                "type": "object", "properties": {"project_root": {"type": "string"}, "workflow_id": {"type": "string"}, "authorization_id": {"type": "string"}, "verdict": {"type": "string", "enum": ["pass", "needs_rework"]}, "reason": {"type": "string"}}, "required": ["project_root", "workflow_id", "authorization_id", "verdict", "reason"], "additionalProperties": false
-            })),
-            tool_def("report_user", "返回用户报告文本并写主管账本审计，不作用户决定", json!({
-                "type": "object", "properties": {"project_root": {"type": "string"}, "workflow_id": {"type": "string"}, "authorization_id": {"type": "string"}, "message": {"type": "string"}}, "required": ["project_root", "workflow_id", "authorization_id", "message"], "additionalProperties": false
             }))
         ]
     })
@@ -295,7 +416,7 @@ pub fn call_tool(config: &McpServerConfig, params: Value) -> Result<Value, Strin
 fn call_tool_with_invoker(
     config: &McpServerConfig,
     params: Value,
-    invoker: &dyn WorkerInvoker,
+    _invoker: &dyn WorkerInvoker,
 ) -> Result<Value, String> {
     let name = require_string(&params, "name")?;
     let arguments = params
@@ -303,13 +424,9 @@ fn call_tool_with_invoker(
         .cloned()
         .unwrap_or(Value::Object(Default::default()));
     let result = match name.as_str() {
-        "dispatch_worker" => dispatch_worker(config, &arguments, invoker),
         "read_worker_report" => read_worker_report(config, &arguments),
-        "follow_up_worker" => follow_up_worker(config, &arguments, invoker),
         "wait_for_worker" => wait_for_worker(config, &arguments),
         "read_key_file" => read_key_file(config, &arguments),
-        "final_mark" => final_mark(config, &arguments),
-        "report_user" => report_user(config, &arguments),
         _ => Err(format!("主管编排角色不认识工具：{name}")),
     };
     let result_summary = match &result {
@@ -319,15 +436,189 @@ fn call_tool_with_invoker(
             crate::run_error_translation::humanize_error_for_display(error)
         ),
     };
+    let result_status = if result.is_ok() { "accepted" } else { "denied" };
     append_audit(
         config,
         &name,
         &parameter_summary(&arguments),
         &result_summary,
+        result_status,
     )?;
     result
         .map(tool_result)
         .map_err(|error| crate::run_error_translation::humanize_error_for_display(&error))
+}
+
+// Side-effecting supervisor actions deliberately bypass the MCP tools/call surface.
+// They remain behind this host-only bridge so the controller can bind authority before
+// invoking the existing guarded worker entrypoints.
+pub(crate) fn ensure_control_core_run_active(config: &McpServerConfig) -> Result<(), String> {
+    let store = load_store(config)?;
+    let session = session(&store, &config.run_id)
+        .ok_or_else(|| "authorization_stale: 主管 run 尚未登记或已不存在。".to_string())?;
+    if session.launch_status != "running" {
+        return Err("authorization_stale: 主管 run 已结束，拒绝执行新动作。".to_string());
+    }
+    Ok(())
+}
+
+pub(crate) fn ensure_control_core_run_binding(
+    config: &McpServerConfig,
+    project_root: &str,
+    workflow_id: &str,
+    authorization_id: &str,
+) -> Result<(), String> {
+    ensure_control_core_run_active(config)?;
+    let store = load_store(config)?;
+    let session = session(&store, &config.run_id)
+        .ok_or_else(|| "authorization_stale: 主管 run 尚未登记或已不存在。".to_string())?;
+    if session.project_root != project_root
+        || session.workflow_id != workflow_id
+        || session.authorization_id != authorization_id
+    {
+        return Err(
+            "authorization_stale: 主管 run 与当前 project/workflow/authorization 绑定不一致。"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+pub(crate) fn control_core_dispatch_worker(
+    config: &McpServerConfig,
+    project_root: &str,
+    workflow_id: &str,
+    authorization_id: &str,
+    node_id: &str,
+    work_item_id: &str,
+) -> Result<Value, String> {
+    let authorization = active_authorization(config, project_root, workflow_id, authorization_id)?;
+    let arguments = json!({
+        "project_root": project_root,
+        "workflow_id": workflow_id,
+        "authorization_id": authorization_id,
+        "node_id": node_id,
+        "work_item_id": work_item_id,
+        "allowed_write": authorization.scope.allowed_write_roots,
+    });
+    control_core_call_with_invoker(
+        config,
+        "dispatch_worker",
+        &arguments,
+        &WorkbenchWorkerInvoker,
+    )
+}
+
+pub(crate) fn control_core_read_worker_report(
+    config: &McpServerConfig,
+    worker_id: &str,
+) -> Result<Value, String> {
+    control_core_call_with_invoker(
+        config,
+        "inspect_worker",
+        &json!({"worker_id": worker_id}),
+        &WorkbenchWorkerInvoker,
+    )
+}
+
+pub(crate) fn control_core_follow_up_worker(
+    config: &McpServerConfig,
+    worker_id: &str,
+    prompt: &str,
+) -> Result<Value, String> {
+    control_core_call_with_invoker(
+        config,
+        "follow_up_worker",
+        &json!({"worker_id": worker_id, "prompt": prompt}),
+        &WorkbenchWorkerInvoker,
+    )
+}
+
+pub(crate) fn control_core_wait_for_worker(
+    config: &McpServerConfig,
+    worker_id: &str,
+) -> Result<Value, String> {
+    control_core_call_with_invoker(
+        config,
+        "wait_worker",
+        &json!({"worker_id": worker_id}),
+        &WorkbenchWorkerInvoker,
+    )
+}
+
+pub(crate) fn control_core_finalize(
+    config: &McpServerConfig,
+    project_root: &str,
+    workflow_id: &str,
+    authorization_id: &str,
+    verdict: &str,
+    reason: &str,
+) -> Result<Value, String> {
+    control_core_call_with_invoker(
+        config,
+        "finalize",
+        &json!({
+            "project_root": project_root,
+            "workflow_id": workflow_id,
+            "authorization_id": authorization_id,
+            "verdict": verdict,
+            "reason": reason,
+        }),
+        &WorkbenchWorkerInvoker,
+    )
+}
+
+pub(crate) fn control_core_report_user(
+    config: &McpServerConfig,
+    project_root: &str,
+    workflow_id: &str,
+    authorization_id: &str,
+    message: &str,
+) -> Result<Value, String> {
+    control_core_call_with_invoker(
+        config,
+        "report_user",
+        &json!({
+            "project_root": project_root,
+            "workflow_id": workflow_id,
+            "authorization_id": authorization_id,
+            "message": message,
+        }),
+        &WorkbenchWorkerInvoker,
+    )
+}
+
+fn control_core_call_with_invoker(
+    config: &McpServerConfig,
+    action: &str,
+    arguments: &Value,
+    invoker: &dyn WorkerInvoker,
+) -> Result<Value, String> {
+    let result = match action {
+        "dispatch_worker" => dispatch_worker(config, arguments, invoker),
+        "inspect_worker" => read_worker_report(config, arguments),
+        "follow_up_worker" => follow_up_worker(config, arguments, invoker),
+        "wait_worker" => wait_for_worker(config, arguments),
+        "finalize" => final_mark(config, arguments),
+        "report_user" => report_user(config, arguments),
+        _ => return Err(format!("控制核心不认识主管动作：{action}")),
+    };
+    let result_summary = match &result {
+        Ok(value) => summary_of_value(value),
+        Err(error) => format!(
+            "denied: {}",
+            crate::run_error_translation::humanize_error_for_display(error)
+        ),
+    };
+    let result_status = if result.is_ok() { "accepted" } else { "denied" };
+    append_audit(
+        config,
+        &format!("control_core_{action}"),
+        &parameter_summary(arguments),
+        &result_summary,
+        result_status,
+    )?;
+    result
 }
 
 fn dispatch_worker(
@@ -385,7 +676,7 @@ fn read_worker_report(config: &McpServerConfig, args: &Value) -> Result<Value, S
         return Ok(report);
     }
     let value = crate::read_workflow_state_value(workflow_state_path(config)?)?;
-    let event = value
+    if let Some(event) = value
         .get("audit_events")
         .and_then(Value::as_array)
         .and_then(|events| {
@@ -396,16 +687,85 @@ fn read_worker_report(config: &McpServerConfig, args: &Value) -> Result<Value, S
                         == Some(worker.dispatch_id.as_str())
             })
         })
-        .ok_or_else(|| "尚无该 worker 的结构化口供；不会猜测或读取完整 transcript".to_string())?;
+    {
+        return Ok(json!({
+            "worker_id": worker.worker_id,
+            "dispatch_id": worker.dispatch_id,
+            "acceptance_status": event.get("acceptance_status").cloned().unwrap_or(Value::Null),
+            "executed_what": event.get("executed_what").cloned().unwrap_or(Value::Null),
+            "changed_what": event.get("changed_what").cloned().unwrap_or(Value::Null),
+            "summary": event.get("reason").cloned().unwrap_or(Value::Null),
+            "evidence_refs": event.get("evidence_refs").cloned().unwrap_or(Value::Null),
+            "open_issues": event.get("open_issues").cloned().unwrap_or(Value::Null),
+            "permission_requests": event.get("permission_requests").cloned().unwrap_or(Value::Null),
+            "direction_risks": event.get("direction_risks").cloned().unwrap_or(Value::Null),
+            "follow_up_suggestions": event.get("follow_up_suggestions").cloned().unwrap_or(Value::Null)
+        }));
+    }
+    normalized_raw_worker_report(&value, &worker)
+}
+
+fn normalized_raw_worker_report(value: &Value, worker: &SupervisorWorker) -> Result<Value, String> {
+    let last_message_path = value
+        .get("workflow_node_dispatches")
+        .and_then(Value::as_array)
+        .and_then(|dispatches| {
+            dispatches.iter().find(|dispatch| {
+                crate::optional_string_from(dispatch, "dispatch_id").as_deref()
+                    == Some(worker.dispatch_id.as_str())
+            })
+        })
+        .and_then(|dispatch| crate::optional_string_from(dispatch, "last_message_path"))
+        .ok_or_else(|| "report_invalid: 尚无该 worker 的结构化回程或最终消息路径。".to_string())?;
+    let raw = fs::read_to_string(&last_message_path).map_err(|error| {
+        format!(
+            "report_invalid: 无法读取 worker 最终消息 {}：{error}",
+            last_message_path
+        )
+    })?;
+    let report = crate::worker_report::parse_worker_report(&raw).ok_or_else(|| {
+        "report_invalid: worker 最终消息不是符合回程契约的 JSON 代码块。".to_string()
+    })?;
+    let status = report.status.trim().to_ascii_lowercase();
+    if !matches!(status.as_str(), "done" | "partial" | "failed" | "blocked") {
+        return Err(format!(
+            "report_invalid: worker 回程 status 不在冻结枚举内：{}。",
+            report.status
+        ));
+    }
+    if report.did.trim().is_empty() {
+        return Err("report_invalid: worker 回程 did 不能为空。".to_string());
+    }
+    let has_help_fields = !report.permission_requests.is_empty()
+        || !report.open_issues.is_empty()
+        || !report.direction_risks.is_empty()
+        || !report.follow_up_suggestions.is_empty();
+    let acceptance_status = if status == "blocked" || has_help_fields {
+        "blocked"
+    } else {
+        match status.as_str() {
+            "done" => "reported_completed",
+            "partial" => "needs_rework",
+            "failed" => "reported_not_completed",
+            _ => unreachable!("status is already frozen"),
+        }
+    };
     Ok(json!({
         "worker_id": worker.worker_id,
         "dispatch_id": worker.dispatch_id,
-        "acceptance_status": event.get("acceptance_status").cloned().unwrap_or(Value::Null),
-        "executed_what": event.get("executed_what").cloned().unwrap_or(Value::Null),
-        "changed_what": event.get("changed_what").cloned().unwrap_or(Value::Null),
-        "evidence": event.get("evidence").cloned().unwrap_or(Value::Null),
-        "direction_risks": event.get("direction_risks").cloned().unwrap_or(Value::Null),
-        "follow_up_suggestions": event.get("follow_up_suggestions").cloned().unwrap_or(Value::Null)
+        "acceptance_status": acceptance_status,
+        "executed_what": report.did,
+        "changed_what": if report.outputs.is_empty() {
+            "worker 未列出产出文件".to_string()
+        } else {
+            report.outputs.join("；")
+        },
+        "summary": report.did,
+        "evidence_refs": report.evidence,
+        "open_issues": report.open_issues,
+        "permission_requests": report.permission_requests,
+        "direction_risks": report.direction_risks,
+        "follow_up_suggestions": report.follow_up_suggestions
     }))
 }
 
@@ -490,8 +850,9 @@ fn final_mark(config: &McpServerConfig, args: &Value) -> Result<Value, String> {
     let authorization_id = require_string(args, "authorization_id")?;
     let verdict = require_string(args, "verdict")?;
     let reason = require_string(args, "reason")?;
-    if !matches!(verdict.as_str(), "pass" | "needs_rework") || reason.trim().is_empty() {
-        return Err("终标只允许 pass / needs_rework，且 reason 不能为空".to_string());
+    if !matches!(verdict.as_str(), "pass" | "needs_rework" | "blocked") || reason.trim().is_empty()
+    {
+        return Err("终标只允许 pass / needs_rework / blocked，且 reason 不能为空".to_string());
     }
     active_authorization(config, &project_root, &workflow_id, &authorization_id)?;
     let created_at_ms = now_ms();
@@ -713,6 +1074,323 @@ impl Drop for StoreLock {
     }
 }
 
+pub(crate) fn record_pilot_session_started(
+    config: &McpServerConfig,
+    launch: &SupervisorPilotSessionLaunch,
+) -> Result<(), String> {
+    let limits = quota_limits(config)?;
+    let started_at_ms = now_ms();
+    update_store(config, "record-pilot-session-started", |store| {
+        {
+            let session = session_mut(store, &config.run_id);
+            session.project_root = launch.project_root.clone();
+            session.workflow_id = launch.workflow_id.clone();
+            session.authorization_id = launch.authorization_id.clone();
+            session.model_id = launch.model_id.clone();
+            session.reasoning_effort = launch.reasoning_effort.clone();
+            session.max_active_workers = limits.max_active_workers;
+            session.max_follow_ups_per_worker = limits.max_follow_ups_per_worker;
+            session.max_runtime_minutes = limits.max_runtime_minutes;
+            session.launch_status = "running".to_string();
+            session.started_at_ms = started_at_ms;
+            session.ended_at_ms = None;
+            session.termination_reason.clear();
+        }
+        store.audit_events.push(SupervisorAuditEvent {
+            event_id: format!(
+                "supervisor-orchestrator:{}:session-started:{}",
+                stable_fragment(&config.run_id),
+                crate::unix_timestamp_nanos()
+            ),
+            actor: ACTOR.to_string(),
+            run_id: config.run_id.clone(),
+            tool: "supervisor_session_launcher".to_string(),
+            parameter_summary: format!(
+                "authorization_id={}; model_id={}; reasoning_effort={}",
+                launch.authorization_id, launch.model_id, launch.reasoning_effort
+            ),
+            result_summary: "主管会话已启动；后续工具调用会落入同一账本。".to_string(),
+            result_status: "accepted".to_string(),
+            created_at_ms: started_at_ms,
+        });
+        Ok(())
+    })
+}
+
+pub(crate) fn record_pilot_session_finished(
+    config: &McpServerConfig,
+    exit_code: Option<i32>,
+) -> Result<(), String> {
+    let ended_at_ms = now_ms();
+    let launch_status = if exit_code == Some(0) {
+        "exited"
+    } else {
+        "failed"
+    };
+    let termination_reason = match exit_code {
+        Some(code) => format!(
+            "主管 codex exec 退出码 {code}（仅表示进程结束；业务状态以权威 worker 回程和验收账本为准）"
+        ),
+        None => "主管 codex exec 被系统信号结束".to_string(),
+    };
+    update_store(config, "record-pilot-session-finished", |store| {
+        let (final_status, final_reason) = {
+            let session = session_mut(store, &config.run_id);
+            if session.launch_status == "waiting_user" {
+                session.ended_at_ms.get_or_insert(ended_at_ms);
+                (
+                    session.launch_status.clone(),
+                    session.termination_reason.clone(),
+                )
+            } else {
+                session.launch_status = launch_status.to_string();
+                session.ended_at_ms = Some(ended_at_ms);
+                session.termination_reason = termination_reason.clone();
+                (
+                    session.launch_status.clone(),
+                    session.termination_reason.clone(),
+                )
+            }
+        };
+        store.audit_events.push(SupervisorAuditEvent {
+            event_id: format!(
+                "supervisor-orchestrator:{}:session-finished:{}",
+                stable_fragment(&config.run_id),
+                crate::unix_timestamp_nanos()
+            ),
+            actor: ACTOR.to_string(),
+            run_id: config.run_id.clone(),
+            tool: "supervisor_session_launcher".to_string(),
+            parameter_summary: "等待主管 codex exec 收尾并注销进程登记。".to_string(),
+            result_summary: final_reason,
+            result_status: final_status,
+            created_at_ms: ended_at_ms,
+        });
+        Ok(())
+    })
+}
+
+pub(crate) fn record_pilot_protocol_invalid(
+    config: &McpServerConfig,
+    attempt: usize,
+    detail: &str,
+) -> Result<(), String> {
+    let created_at_ms = now_ms();
+    let waiting_user = attempt >= 2;
+    let result_summary = if waiting_user {
+        format!(
+            "主管连续两次输出格式错误，当前无效动作未执行。{}第二次错误：{detail}",
+            prior_worker_truth_prefix_for_store(config, "")?
+        )
+    } else {
+        format!(
+            "主管输出格式错误（第 {attempt} 次）：{detail}；当前无效动作未执行，系统已要求其按正确 JSON 格式纠正一次。"
+        )
+    };
+    update_store(config, "record-pilot-protocol-invalid", |store| {
+        if waiting_user {
+            let session = session_mut(store, &config.run_id);
+            session.launch_status = "waiting_user".to_string();
+            session.ended_at_ms = Some(created_at_ms);
+            session.termination_reason = format!(
+                "主管连续两次输出格式错误，当前无效动作未执行。{}",
+                prior_worker_truth(session)
+            );
+        }
+        store.audit_events.push(SupervisorAuditEvent {
+            event_id: format!(
+                "supervisor-orchestrator:{}:protocol-invalid:{}",
+                stable_fragment(&config.run_id),
+                crate::unix_timestamp_nanos()
+            ),
+            actor: ACTOR.to_string(),
+            run_id: config.run_id.clone(),
+            tool: "supervisor_action_protocol".to_string(),
+            parameter_summary: format!("attempt={attempt}"),
+            result_summary,
+            result_status: if waiting_user {
+                "waiting_user".to_string()
+            } else {
+                "protocol_invalid".to_string()
+            },
+            created_at_ms,
+        });
+        Ok(())
+    })
+}
+
+pub(crate) fn record_pilot_waiting_user(
+    config: &McpServerConfig,
+    reason: &str,
+) -> Result<(), String> {
+    let created_at_ms = now_ms();
+    update_store(config, "record-pilot-waiting-user", |store| {
+        let session = session_mut(store, &config.run_id);
+        session.launch_status = "waiting_user".to_string();
+        session.ended_at_ms = Some(created_at_ms);
+        session.termination_reason = reason.to_string();
+        store.audit_events.push(SupervisorAuditEvent {
+            event_id: format!(
+                "supervisor-orchestrator:{}:worker-return-waiting:{}",
+                stable_fragment(&config.run_id),
+                crate::unix_timestamp_nanos()
+            ),
+            actor: ACTOR.to_string(),
+            run_id: config.run_id.clone(),
+            tool: "supervisor_worker_return".to_string(),
+            parameter_summary: "worker 回程未进入可验收状态。".to_string(),
+            result_summary: reason.to_string(),
+            result_status: "waiting_user".to_string(),
+            created_at_ms,
+        });
+        Ok(())
+    })
+}
+
+fn prior_worker_truth_prefix_for_store(
+    config: &McpServerConfig,
+    fallback: &str,
+) -> Result<String, String> {
+    let store = load_store(config)?;
+    Ok(store
+        .sessions
+        .iter()
+        .find(|session| session.run_id == config.run_id)
+        .map(prior_worker_truth)
+        .unwrap_or_else(|| fallback.to_string()))
+}
+
+fn prior_worker_truth(session: &SupervisorSession) -> String {
+    let Some(worker) = session.workers.last() else {
+        return "本单未执行。".to_string();
+    };
+    let result = if worker.last_result_summary.trim().is_empty() {
+        "尚未获得结构化结果".to_string()
+    } else {
+        worker.last_result_summary.clone()
+    };
+    format!(
+        "本单此前已派发 {} 个 worker；最近 worker {} 当前状态 {}，结果：{}。",
+        session.workers.len(),
+        worker.worker_id,
+        worker.state,
+        result
+    )
+}
+
+pub(crate) fn record_pilot_temporary_home_created(
+    config: &McpServerConfig,
+    temporary_home: &Path,
+) -> Result<(), String> {
+    append_audit(
+        config,
+        "supervisor_temporary_codex_home",
+        &format!(
+            "action=created; temporary_home={}",
+            temporary_home.display()
+        ),
+        "主管临时 CODEX_HOME 已创建；auth.json 仅为到 ~/.codex/auth.json 的符号链接。",
+        "accepted",
+    )
+}
+
+pub(crate) fn record_pilot_temporary_home_cleaned(
+    config: &McpServerConfig,
+    temporary_home: &Path,
+    cleanup_trigger: &str,
+    token_was_refreshed: bool,
+    cleanup_succeeded: bool,
+) -> Result<(), String> {
+    let result_summary = if token_was_refreshed {
+        "主管会话期间 token 被刷新,如遇登录失效请重登 codex".to_string()
+    } else if cleanup_succeeded {
+        "主管临时 CODEX_HOME 已清理。".to_string()
+    } else {
+        "主管临时 CODEX_HOME 清理未完成；保留现场以避免静默遗留凭据。".to_string()
+    };
+    let result_status = if token_was_refreshed || !cleanup_succeeded {
+        "warning"
+    } else {
+        "accepted"
+    };
+    append_audit(
+        config,
+        "supervisor_temporary_codex_home",
+        &format!(
+            "action=cleaned; trigger={cleanup_trigger}; temporary_home={}",
+            temporary_home.display()
+        ),
+        &result_summary,
+        result_status,
+    )
+}
+
+pub(crate) fn load_pilot_read_model(
+    config: &McpServerConfig,
+) -> Result<SupervisorPilotReadModel, String> {
+    let store = load_store(config)?;
+    let session = session(&store, &config.run_id)
+        .cloned()
+        .ok_or_else(|| "主管试点账本中找不到该 run-id".to_string())?;
+    let audit_events = store
+        .audit_events
+        .iter()
+        .filter(|event| event.run_id == config.run_id)
+        .map(|event| SupervisorPilotAuditEventReadModel {
+            event_id: event.event_id.clone(),
+            tool: event.tool.clone(),
+            result_summary: event.result_summary.clone(),
+            result_status: if event.result_status.trim().is_empty() {
+                if event.result_summary.starts_with("denied:") {
+                    "denied".to_string()
+                } else {
+                    "legacy_unknown".to_string()
+                }
+            } else {
+                event.result_status.clone()
+            },
+            created_at_ms: event.created_at_ms,
+        })
+        .collect::<Vec<_>>();
+    let follow_up_count = session
+        .workers
+        .iter()
+        .map(|worker| worker.follow_up_count)
+        .sum::<usize>();
+    let follow_up_budget_respected = session
+        .workers
+        .iter()
+        .all(|worker| worker.follow_up_count <= session.max_follow_ups_per_worker);
+    let denied_tool_call_count = audit_events
+        .iter()
+        .filter(|event| event.result_status == "denied")
+        .count();
+    let session_timed_out = session.termination_reason.contains("timed out")
+        || session.termination_reason.contains("超时");
+    let metrics = SupervisorPilotMetricsReadModel {
+        denied_tool_call_count,
+        max_follow_ups_per_worker: session.max_follow_ups_per_worker,
+        follow_up_count,
+        follow_up_budget_respected,
+        max_runtime_minutes: session.max_runtime_minutes,
+        session_timed_out,
+        ledger_replay_event_count: audit_events.len(),
+        ledger_replay_ready: !audit_events.is_empty(),
+    };
+    Ok(SupervisorPilotReadModel {
+        run_id: session.run_id,
+        launch_status: session.launch_status,
+        project_root: session.project_root,
+        workflow_id: session.workflow_id,
+        authorization_id: session.authorization_id,
+        started_at_ms: session.started_at_ms,
+        ended_at_ms: session.ended_at_ms,
+        termination_reason: session.termination_reason,
+        metrics,
+        audit_events,
+    })
+}
+
 fn session_mut<'a>(store: &'a mut SupervisorStore, run_id: &str) -> &'a mut SupervisorSession {
     if let Some(index) = store
         .sessions
@@ -800,6 +1478,9 @@ fn complete_dispatch(
         worker.worker_id = launch.worker_id.clone();
         worker.native_thread_id = launch.native_thread_id.clone();
         worker.dispatch_id = launch.dispatch_id.clone();
+        if !launch.canonical_work_item_id.is_empty() {
+            worker.work_item_id = launch.canonical_work_item_id.clone();
+        }
         worker.state = launch.state.clone();
         worker.last_report = launch.initial_report.clone();
         worker.last_result_summary = launch.result_summary.clone();
@@ -958,6 +1639,7 @@ fn append_audit(
     tool: &str,
     parameter_summary: &str,
     result_summary: &str,
+    result_status: &str,
 ) -> Result<(), String> {
     let created_at_ms = now_ms();
     update_store(config, "append-tool-audit", |store| {
@@ -973,6 +1655,7 @@ fn append_audit(
             tool: tool.to_string(),
             parameter_summary: parameter_summary.to_string(),
             result_summary: result_summary.to_string(),
+            result_status: result_status.to_string(),
             created_at_ms,
         });
         Ok(())
@@ -1040,6 +1723,7 @@ mod tests {
                 worker_id: "worker-1".to_string(),
                 native_thread_id: "thread-1".to_string(),
                 dispatch_id: "dispatch-1".to_string(),
+                canonical_work_item_id: String::new(),
                 state: "completed".to_string(),
                 initial_report: Some(
                     json!({"worker_id": "worker-1", "acceptance_status": "reported_completed"}),
@@ -1167,8 +1851,12 @@ mod tests {
                 .count()
         }
 
+        fn control_core(&self, action: &str, arguments: Value) -> Result<Value, String> {
+            control_core_call_with_invoker(&self.config, action, &arguments, &FakeInvoker)
+        }
+
         fn dispatch(&self) -> Result<Value, String> {
-            self.call(
+            self.control_core(
                 "dispatch_worker",
                 json!({
                     "project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH,
@@ -1187,9 +1875,65 @@ mod tests {
     #[test]
     fn dispatch_worker_denies_bad_authorization_and_audits_success() {
         let fixture = Fixture::new();
-        assert!(fixture.call("dispatch_worker", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": "bad", "node_id": NODE, "work_item_id": "work-1", "allowed_write": [PROJECT]})).is_err());
+        assert!(fixture.control_core("dispatch_worker", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": "bad", "node_id": NODE, "work_item_id": "work-1", "allowed_write": [PROJECT]})).is_err());
         fixture.dispatch().expect("dispatch");
-        assert_eq!(fixture.audit_count("dispatch_worker"), 2);
+        assert_eq!(fixture.audit_count("control_core_dispatch_worker"), 2);
+    }
+
+    #[test]
+    fn canonicalizes_model_work_item_typo_only_from_unique_authorized_prepared_dispatch() {
+        let input = DispatchInput {
+            project_root: PROJECT.to_string(),
+            workflow_id: WORKFLOW.to_string(),
+            authorization_id: AUTH.to_string(),
+            node_id: NODE.to_string(),
+            work_item_id: "work-item:workflow-users-yoyi-codex-workflow-mario-test:default:wrong"
+                .to_string(),
+            allowed_write: vec![PROJECT.to_string()],
+        };
+        let canonical = "work-item:workflow:users-yoyi-codex-workflow-mario-test:default:prepared";
+        let value = json!({
+            "workflow_node_dispatches": [{
+                "state": "prepared",
+                "prompt_kind": "authorized_prepared_auto_dispatch",
+                "project_id": crate::project_id(PROJECT),
+                "workflow_id": WORKFLOW,
+                "node_id": NODE,
+                "plan_authorization_id": AUTH,
+                "work_item_id": canonical
+            }]
+        });
+        assert_eq!(
+            canonical_prepared_work_item_id_from_value(&value, &input).expect("canonical id"),
+            canonical
+        );
+    }
+
+    #[test]
+    fn refuses_to_guess_work_item_when_authorized_prepared_dispatch_is_ambiguous() {
+        let input = DispatchInput {
+            project_root: PROJECT.to_string(),
+            workflow_id: WORKFLOW.to_string(),
+            authorization_id: AUTH.to_string(),
+            node_id: NODE.to_string(),
+            work_item_id: "wrong".to_string(),
+            allowed_write: vec![PROJECT.to_string()],
+        };
+        let prepared = |work_item_id: &str| {
+            json!({
+                "state": "prepared",
+                "prompt_kind": "authorized_prepared_auto_dispatch",
+                "project_id": crate::project_id(PROJECT),
+                "workflow_id": WORKFLOW,
+                "node_id": NODE,
+                "plan_authorization_id": AUTH,
+                "work_item_id": work_item_id
+            })
+        };
+        let value = json!({"workflow_node_dispatches": [prepared("one"), prepared("two")]});
+        assert!(canonical_prepared_work_item_id_from_value(&value, &input)
+            .expect_err("ambiguous prepared dispatch must fail")
+            .contains("无法唯一恢复"));
     }
 
     #[test]
@@ -1206,22 +1950,107 @@ mod tests {
     }
 
     #[test]
+    fn station3a_v3_raw_worker_return_is_strict_and_preserves_blocked_signal() {
+        let fixture = Fixture::new();
+        fixture.dispatch().expect("dispatch");
+        let last_message_path = fixture.root.join("worker-last-message.txt");
+        let mut state: Value =
+            serde_json::from_slice(&fs::read(&fixture.state_path).expect("workflow state"))
+                .expect("workflow state json");
+        state["workflow_node_dispatches"] = json!([{
+            "dispatch_id": "dispatch-1",
+            "last_message_path": last_message_path
+        }]);
+        fs::write(
+            &fixture.state_path,
+            serde_json::to_vec(&state).expect("workflow state json"),
+        )
+        .expect("write workflow state");
+        update_store(&fixture.config, "clear-fake-initial-report", |store| {
+            session_mut(store, &fixture.config.run_id).workers[0].last_report = None;
+            Ok(())
+        })
+        .expect("clear fake report");
+
+        fs::write(&last_message_path, "not a JSON report").expect("bad worker return");
+        let invalid = read_worker_report(&fixture.config, &json!({"worker_id": "worker-1"}))
+            .expect_err("bad worker return must be report invalid");
+        assert!(invalid.contains("report_invalid"));
+
+        fs::write(
+            &last_message_path,
+            "```json\n{\"did\":\"无法继续\",\"outputs\":[],\"status\":\"blocked\",\"evidence\":[],\"open_issues\":[\"缺少确认\"]}\n```",
+        )
+        .expect("blocked worker return");
+        let blocked = read_worker_report(&fixture.config, &json!({"worker_id": "worker-1"}))
+            .expect("blocked report projection");
+        assert_eq!(blocked["acceptance_status"], "blocked");
+        assert_eq!(blocked["summary"], "无法继续");
+
+        let mut state: Value =
+            serde_json::from_slice(&fs::read(&fixture.state_path).expect("workflow state"))
+                .expect("workflow state json");
+        state["audit_events"] = json!([{
+            "event_type": "worker_structured_report_recorded",
+            "dispatch_id": "dispatch-1",
+            "acceptance_status": "reported_completed",
+            "executed_what": "写入 proof",
+            "changed_what": "station3a-control-core-proof-v3.txt",
+            "reason": "文件已回读",
+            "evidence_refs": ["readback:proof"],
+            "open_issues": [],
+            "permission_requests": [],
+            "direction_risks": [],
+            "follow_up_suggestions": []
+        }]);
+        fs::write(
+            &fixture.state_path,
+            serde_json::to_vec(&state).expect("workflow state json"),
+        )
+        .expect("write structured report audit");
+        let projected = read_worker_report(&fixture.config, &json!({"worker_id": "worker-1"}))
+            .expect("structured report projection");
+        assert_eq!(projected["summary"], "文件已回读");
+        assert_eq!(projected["evidence_refs"], json!(["readback:proof"]));
+    }
+
+    #[test]
+    fn station3a_v3_second_protocol_error_after_dispatch_keeps_prior_worker_truth() {
+        let fixture = Fixture::new();
+        fixture.dispatch().expect("dispatch");
+        record_pilot_protocol_invalid(&fixture.config, 1, "未知字段 target")
+            .expect("first protocol diagnostic");
+        record_pilot_protocol_invalid(&fixture.config, 2, "target.worker_id 不允许")
+            .expect("second protocol diagnostic");
+        let read_model = load_pilot_read_model(&fixture.config).expect("read model");
+        assert_eq!(read_model.launch_status, "waiting_user");
+        assert!(read_model
+            .termination_reason
+            .contains("此前已派发 1 个 worker"));
+        assert!(!read_model.termination_reason.contains("本单未执行"));
+        assert!(read_model
+            .audit_events
+            .iter()
+            .any(|event| event.result_summary.contains("当前无效动作未执行")));
+    }
+
+    #[test]
     fn follow_up_denies_unknown_worker_and_audits_success() {
         let fixture = Fixture::new();
         assert!(fixture
-            .call(
+            .control_core(
                 "follow_up_worker",
                 json!({"worker_id": "missing", "prompt": "what changed?"})
             )
             .is_err());
         fixture.dispatch().expect("dispatch");
         fixture
-            .call(
+            .control_core(
                 "follow_up_worker",
                 json!({"worker_id": "worker-1", "prompt": "what changed?"}),
             )
             .expect("follow up");
-        assert_eq!(fixture.audit_count("follow_up_worker"), 2);
+        assert_eq!(fixture.audit_count("control_core_follow_up_worker"), 2);
     }
 
     #[test]
@@ -1263,22 +2092,22 @@ mod tests {
     fn final_mark_denies_invalid_verdict_and_audits_success_without_chain_mutation() {
         let fixture = Fixture::new();
         let before = fs::read_to_string(&fixture.state_path).expect("before");
-        assert!(fixture.call("final_mark", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH, "verdict": "completed", "reason": "no"})).is_err());
-        fixture.call("final_mark", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH, "verdict": "needs_rework", "reason": "mock yellow"})).expect("mark");
+        assert!(fixture.control_core("finalize", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH, "verdict": "completed", "reason": "no"})).is_err());
+        fixture.control_core("finalize", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH, "verdict": "needs_rework", "reason": "mock yellow"})).expect("mark");
         assert_eq!(
             fs::read_to_string(&fixture.state_path).expect("after"),
             before,
             "advisory must not mutate chain state"
         );
-        assert_eq!(fixture.audit_count("final_mark"), 2);
+        assert_eq!(fixture.audit_count("control_core_finalize"), 2);
     }
 
     #[test]
     fn report_user_denies_empty_message_and_audits_success() {
         let fixture = Fixture::new();
-        assert!(fixture.call("report_user", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH, "message": ""})).is_err());
-        fixture.call("report_user", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH, "message": "mock report"})).expect("report user");
-        assert_eq!(fixture.audit_count("report_user"), 2);
+        assert!(fixture.control_core("report_user", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH, "message": ""})).is_err());
+        fixture.control_core("report_user", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH, "message": "mock report"})).expect("report user");
+        assert_eq!(fixture.audit_count("control_core_report_user"), 2);
     }
 
     #[test]
@@ -1288,11 +2117,37 @@ mod tests {
         fixture
             .call("read_worker_report", json!({"worker_id": "worker-1"}))
             .expect("report");
-        fixture.call("final_mark", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH, "verdict": "pass", "reason": "mock accepted"})).expect("final");
+        fixture.control_core("finalize", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH, "verdict": "pass", "reason": "mock accepted"})).expect("final");
         let state: Value =
             serde_json::from_str(&fs::read_to_string(&fixture.state_path).expect("state"))
                 .expect("json");
         assert_eq!(state["workflow_chain_runs"][0]["status"], "running");
+    }
+
+    #[test]
+    fn station3a_mcp_toolface_is_read_only_and_rejects_side_effect_names() {
+        let fixture = Fixture::new();
+        let toolface = list_tools();
+        let tools = toolface["tools"].as_array().expect("tools array");
+        let names = tools
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            names,
+            BTreeSet::from(["read_key_file", "read_worker_report", "wait_for_worker"])
+        );
+        for rejected in [
+            "dispatch_worker",
+            "follow_up_worker",
+            "final_mark",
+            "report_user",
+        ] {
+            assert!(
+                fixture.call(rejected, json!({})).is_err(),
+                "{rejected} must not be an MCP action"
+            );
+        }
     }
 
     #[test]

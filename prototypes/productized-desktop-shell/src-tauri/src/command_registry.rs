@@ -24,6 +24,11 @@ mod run_history_read_model;
 // runner/run_history 委托到它。同 worker_report 借道挂载·保持 lib.rs 0-diff。
 mod run_error_translation;
 
+// Station 2 supervisor pilot launcher and sidecar-only read model.
+mod supervisor_action_controller;
+mod supervisor_action_protocol;
+mod supervisor_session_launcher;
+
 macro_rules! workbench_command_handler {
     () => {
         tauri::generate_handler![
@@ -130,6 +135,8 @@ macro_rules! workbench_command_handler {
             confirm_project_director_task_session_bindings,
             preview_pending_proposal_director_plan,
             run_project_consultation,
+            supervisor_session_launcher::launch_supervisor_pilot,
+            supervisor_session_launcher::load_supervisor_pilot_read_model,
             global_supervisor_agent::run_global_supervisor_review,
             global_supervisor_agent::run_global_supervisor_boundary_review,
             global_supervisor_review_store::load_global_supervisor_review_store,

@@ -2098,3 +2098,61 @@ export type SecretaryExplainOutcome = {
   explanation?: string | null;
   reason?: string | null;
 };
+
+// ===== Station 2 · 主管编排试点（sidecar-only，绝不投射为工作流链态） =====
+
+export type SupervisorPilotLaunchRequest = {
+  project_root: string;
+  workflow_id: string;
+  authorization_id: string;
+  model_id?: string | null;
+  reasoning_effort: string;
+};
+
+export type SupervisorPilotLaunchReceipt = {
+  run_id: string;
+  pid: number;
+  opening_message: string;
+  argv: string[];
+  last_message_path: string;
+  stderr_path: string;
+  status: string;
+};
+
+export type SupervisorPilotReadModelRequest = {
+  project_root: string;
+  workflow_id: string;
+  run_id: string;
+};
+
+export type SupervisorPilotAuditEventReadModel = {
+  event_id: string;
+  tool: string;
+  result_summary: string;
+  result_status: string;
+  created_at_ms: number;
+};
+
+export type SupervisorPilotMetricsReadModel = {
+  denied_tool_call_count: number;
+  max_follow_ups_per_worker: number;
+  follow_up_count: number;
+  follow_up_budget_respected: boolean;
+  max_runtime_minutes: number;
+  session_timed_out: boolean;
+  ledger_replay_event_count: number;
+  ledger_replay_ready: boolean;
+};
+
+export type SupervisorPilotReadModel = {
+  run_id: string;
+  launch_status: string;
+  project_root: string;
+  workflow_id: string;
+  authorization_id: string;
+  started_at_ms: number;
+  ended_at_ms?: number | null;
+  termination_reason: string;
+  metrics: SupervisorPilotMetricsReadModel;
+  audit_events: SupervisorPilotAuditEventReadModel[];
+};

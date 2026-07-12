@@ -117,7 +117,30 @@ pub(crate) fn register_spawned_process(
     pid: u32,
 ) -> ProcessRegistration {
     let workflow_state_path = crate::default_workflow_state_path();
-    let operations = SystemProcessOperations;
+    register_spawned_process_for(
+        &workflow_state_path,
+        &format!("{}:{}", request.operation_id, request.prompt_ref),
+        pid,
+        &SystemProcessOperations,
+    )
+}
+
+/// 主管编排会话和 runner 子进程共用同一份登记/回收 sidecar；run-id 保持主管侧原值贯通。
+pub(crate) fn register_supervisor_spawned_process(
+    workflow_state_path: &Path,
+    run_id: &str,
+    pid: u32,
+) -> ProcessRegistration {
+    register_spawned_process_for(workflow_state_path, run_id, pid, &SystemProcessOperations)
+}
+
+fn register_spawned_process_for(
+    workflow_state_path: &Path,
+    run_id: &str,
+    pid: u32,
+    operations: &dyn ProcessOperations,
+) -> ProcessRegistration {
+    let workflow_state_path = workflow_state_path.to_path_buf();
     let observed = match operations.inspect(pid) {
         Ok(Some(observed)) if is_workbench_codex_exec(&observed.cmdline) => observed,
         _ => {
@@ -129,7 +152,7 @@ pub(crate) fn register_spawned_process(
     };
     let entry = RegisteredProcess {
         pid,
-        run_id: format!("{}:{}", request.operation_id, request.prompt_ref),
+        run_id: run_id.to_string(),
         started_at: observed.started_at,
         cmdline_summary: observed.cmdline,
     };

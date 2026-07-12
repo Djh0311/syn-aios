@@ -12,7 +12,7 @@ pub mod commands;
 pub mod orchestrator;
 mod protocol;
 pub mod storage;
-mod supervisor_orchestrator;
+pub(crate) mod supervisor_orchestrator;
 mod tools;
 
 use protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};

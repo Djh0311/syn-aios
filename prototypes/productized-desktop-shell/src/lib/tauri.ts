@@ -30,6 +30,10 @@ import type {
   GlobalSupervisorReviewOutcome,
   RunGlobalSupervisorBoundaryReviewRequest,
   GlobalSupervisorBoundaryReviewOutcome,
+  SupervisorPilotLaunchReceipt,
+  SupervisorPilotLaunchRequest,
+  SupervisorPilotReadModel,
+  SupervisorPilotReadModelRequest,
   ListProjectRunHistoryRequest,
   RunHistoryList,
   GlobalSupervisorReviewStoreV1,
@@ -901,6 +905,22 @@ export function confirmProjectDirectorTaskSessionBindings(
 ): Promise<AutoAdvanceRoleLoopOutcome> {
   ensureTauriRuntime();
   return invoke<AutoAdvanceRoleLoopOutcome>("confirm_project_director_task_session_bindings", { request });
+}
+
+// Station 2 · 主管编排试点：只发给后端新发射器；授权确认仍复用现有人闸命令。
+export function launchSupervisorPilot(
+  request: SupervisorPilotLaunchRequest,
+): Promise<SupervisorPilotLaunchReceipt> {
+  ensureTauriRuntime();
+  return invoke<SupervisorPilotLaunchReceipt>("launch_supervisor_pilot", { request });
+}
+
+// 主管账本只读投影：不读取、更不写工作流链状态。
+export function loadSupervisorPilotReadModel(
+  request: SupervisorPilotReadModelRequest,
+): Promise<SupervisorPilotReadModel> {
+  ensureTauriRuntime();
+  return invoke<SupervisorPilotReadModel>("load_supervisor_pilot_read_model", { request });
 }
 
 // B1·全局主管复核（advisory·意见不是闸）：交货后自动触发，读盘复核本轮口供出意见；幂等防重烧

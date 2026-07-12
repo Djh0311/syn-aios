@@ -24,6 +24,7 @@ const testEntries = [
   "tests/jiaoban-director-planning-progress.test.tsx",
   "tests/jiaoban-chain-result-semantics.test.tsx",
   "tests/jiaoban-page-content-cleanup.test.tsx",
+  "tests/jiaoban-supervisor-pilot-switch.test.tsx",
   "tests/r4-page-read-model-settings.test.tsx",
   "tests/r4-page-read-model-query-contract.test.ts",
   "tests/r4-page-read-model-runtime.test.ts",
