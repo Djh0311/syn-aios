@@ -18,3 +18,10 @@
 | 07-13 | 架构评审(六域映射) | 主 store 无锁无 CAS 并发丢写(P1)+launcher 裸 txt 污染 store 根与 R3 preflight 打架(P1) | 主管试点丢 binding/audit;R3 切换 preflight_blocked 未被发现 |
 | 07-13 | 架构评审自核 | 摸底把 Tauri 命令数报成 235,实测 137 | 治理覆盖率结论口径错 |
 | 07-13 | 核实物(抓评审自己) | 评审初判「h5 fail-open 债文档仍挂待修」,核实 CURRENT §二已正确标已还 | 差点把不存在的漂移当 catch 报给用户 |
+| 07-13 | 3b 固定项目真实发射 | 只读咨询把 `node --check game.js` 验收写进方案，却因 `execution_scope=null` 在映射时丢掉 allowed_checks | 用户批到的方案与实际授权不一致，主管只能在末端打回 |
+| 07-13 | 3b 进程侧车+现场采样 | Codex local runner 只杀 wrapper PID、同提示词复用 last-message 路径 | native codex 孤儿残留，或失败运行读取旧结果冒充新结果 |
+| 07-13 | 备份入口全仓反查 | 除中央 helper 外仍有 9 处手工 workflow-state `fs::copy` 绕过 pruning | 以为已有保留策略，真实备份仍无界膨胀 |
+| 07-13 | SQLite 当前源漂移对账 | 06-15 旧库仅 118 dispatch/356 audit，当前 JSON 已 360/1465，且四个新主管 sidecar 不在 importer 白名单 | 把旧演练库误当可翻闸真库，切换后丢主管与近期工作流状态 |
+| 07-13 | 3b 发射前构建溯源 | debug `.app` 内二进制旧于当前源码，bundle 与 target 不一致 | 用旧实现跑出结果后误报“当前代码已通过真实验证” |
+| 07-13 | 3b 真跑进程登记复核 | worker 请求旧字段为空时 durable registry `run_id` 退化成无身份信息的 `resume:` | 多次真实 worker 运行无法稳定区分，后续孤儿审计失去可追溯性 |
+| 07-13 | 用户澄清 | 总指导对「另一个对话」连猜两次对象(本机 codex→评审工作流),都猜错、还去查了本机进程/锁 | 没搞清对象就开干,浪费一轮工具+误导排查方向 |
