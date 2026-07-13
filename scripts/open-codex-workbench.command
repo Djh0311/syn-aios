@@ -4,8 +4,10 @@ set -euo pipefail
 APP_DIR="/Users/yoyi/workspace/product-line/prototypes/productized-desktop-shell"
 TAURI_CLI="../tauri-capability-probe/.tauri-cli/bin/cargo-tauri"
 
-export CARGO_HOME="/Users/yoyi/workspace/product-line/prototypes/tauri-capability-probe/.cargo-home"
-export CARGO_TARGET_DIR="/Users/yoyi/workspace/product-line/prototypes/tauri-capability-probe/.cargo-target"
+# 构建缓存合并（2026-07-13）：原先把 CARGO_HOME/CARGO_TARGET_DIR 重定向到
+# tauri-capability-probe 下，使主 App 的构建缓存存了两份（探针 .cargo-target ~26G +
+# shell 自己的 src-tauri/target ~32G）。改为用默认 ~/.cargo 与 shell 的 src-tauri/target，
+# 与命令行 `cargo` / `tauri:dev` 共用一份，省掉重复的 ~26G。仍用探针本地的 cargo-tauri CLI。
 
 if [[ ! -d "$APP_DIR" ]]; then
   echo "App directory not found: $APP_DIR"
