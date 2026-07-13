@@ -1540,12 +1540,17 @@ fn director_completion_gate(
             if package.available_memory_refs.is_empty() {
                 missing.push("memory_candidate_step_recorded".to_string());
             }
-            if package.harness_requirements.is_empty()
-                && !review_results
-                    .iter()
-                    .any(|result| result.result == "passed")
+            if !review_results
+                .iter()
+                .any(|result| result.result == "passed")
             {
-                missing.push("review_or_harness_passed_when_required".to_string());
+                if package.harness_requirements.is_empty() {
+                    missing.push("review_or_harness_passed_when_required".to_string());
+                } else {
+                    // 07-14 诚实化(L2 板4 小修):配置了 harness 要求≠harness 通过。结果机器
+                    // 未建前,配置且无通过评审=如实标「已配置·结果未验证」,不再静默视为满足。
+                    missing.push("harness_configured_result_unverified".to_string());
+                }
             }
         }
         None => missing.extend([

@@ -534,6 +534,22 @@
         let gate = director_completion_gate(Some(&package), &reviews, &[]);
         assert!(gate.can_complete);
 
+        // 07-14 诚实化案发:配置 harness 要求但无通过评审=「已配置·结果未验证」,不许静默视为满足
+        let mut harness_only_package = package.clone();
+        harness_only_package.harness_requirements = vec!["cargo test --lib".to_string()];
+        let unverified_gate = director_completion_gate(Some(&harness_only_package), &[], &[]);
+        assert!(!unverified_gate.can_complete);
+        assert!(unverified_gate
+            .missing
+            .iter()
+            .any(|item| item == "harness_configured_result_unverified"));
+        // 有通过评审时,配置 harness 与否均放行(语义不变)
+        let verified_gate = director_completion_gate(Some(&harness_only_package), &reviews, &[]);
+        assert!(!verified_gate
+            .missing
+            .iter()
+            .any(|item| item.contains("harness")));
+
         let ignored_dead_direction_exception = director_completion_gate(
             Some(&package),
             &reviews,
