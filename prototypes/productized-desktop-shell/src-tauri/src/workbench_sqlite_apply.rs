@@ -5,7 +5,7 @@ use crate::workbench_sqlite_importer::{
 use crate::workbench_sqlite_schema::{
     initialize_confirmed_workbench_sqlite_db, initialize_temp_workbench_sqlite_db,
 };
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -147,6 +147,10 @@ fn apply_source_root_to_db(
         )
         .map_err(|error| format!("insert import batch failed: {error}"))?;
 
+    // A source path is stable only within one root. Include the root snapshot hash so two
+    // independently imported roots never alias the same source row; workspace identity below
+    // stays tied to the root path so a refreshed snapshot replaces that root's old meta row.
+    let workspace_id = format!("workspace:{}", stable_hash(&dry_run.source_root_ref));
     let mut source_ids = BTreeMap::new();
     let mut sources_inserted = 0usize;
     for source in dry_run
@@ -154,7 +158,10 @@ fn apply_source_root_to_db(
         .iter()
         .filter(|source| source.classification == "accepted")
     {
-        let source_id = format!("source:{}:{}", source.source_kind, source.source_path_hash);
+        let source_id = format!(
+            "source:{}:{}:{}",
+            source.source_kind, dry_run.source_root_hash, source.source_path_hash
+        );
         let warnings_json = serde_json::to_string(&source.warnings)
             .map_err(|error| format!("serialize source warnings failed: {error}"))?;
         let inserted = transaction
@@ -199,7 +206,7 @@ fn apply_source_root_to_db(
             let record_json = serde_json::to_string(&record.value)
                 .map_err(|error| format!("serialize record failed: {error}"))?;
             let source_record_id = format!(
-                "source-record:{source_kind}:{}",
+                "source-record:{source_id}:{}",
                 stable_sqlite_key(&record.record_kind, &record.natural_key)
             );
             let source_record_inserted = transaction
@@ -222,6 +229,8 @@ fn apply_source_root_to_db(
                 &transaction,
                 source_kind,
                 &source_id,
+                &workspace_id,
+                &dry_run.source_root_hash,
                 &record.record_kind,
                 &record.natural_key,
                 &record.record_hash,
@@ -653,6 +662,8 @@ fn insert_domain_record(
     transaction: &rusqlite::Transaction<'_>,
     source_kind: &str,
     source_id: &str,
+    workspace_id: &str,
+    source_root_hash: &str,
     record_kind: &str,
     natural_key: &str,
     record_hash: &str,
@@ -661,19 +672,50 @@ fn insert_domain_record(
     let record_json = serde_json::to_string(value)
         .map_err(|error| format!("serialize domain record failed: {error}"))?;
     let inserted = match record_kind {
-        "workflow_state_meta" => transaction.execute(
-            "INSERT INTO workflow_state_meta (workspace_id, source_root_hash, schema_version, workflow_version, revision, source_id, meta_json)
-             VALUES ('fixture-workspace', ?1, ?2, ?3, ?4, ?5, ?6)
-             ON CONFLICT(workspace_id, source_root_hash) DO NOTHING",
-            params![
-                source_id,
-                value.get("schema_version").and_then(Value::as_str).unwrap_or("workflow_state_v0"),
-                value.get("workflow_version").and_then(Value::as_i64).unwrap_or(1),
-                value.get("revision").and_then(Value::as_i64),
-                source_id,
-                record_json,
-            ],
-        ),
+        "workflow_state_meta" => {
+            // A root refresh has a new source_root_hash. Retain one current meta row per stable
+            // root identity, otherwise a same-root re-import leaves stale revision rows behind.
+            let current_hash: Option<String> = transaction
+                .query_row(
+                    "SELECT source_root_hash FROM workflow_state_meta WHERE workspace_id = ?1",
+                    [workspace_id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|error| {
+                    format!("read prior workflow state meta {workspace_id} failed: {error}")
+                })?;
+            if current_hash.as_deref() == Some(source_root_hash) {
+                Ok(0)
+            } else {
+                transaction.execute(
+                    "DELETE FROM workflow_state_meta WHERE workspace_id = ?1",
+                    [workspace_id],
+                )
+                .map_err(|error| {
+                    format!("delete prior workflow state meta {workspace_id} failed: {error}")
+                })?;
+                transaction.execute(
+                    "INSERT INTO workflow_state_meta (workspace_id, source_root_hash, schema_version, workflow_version, revision, source_id, meta_json)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                     ON CONFLICT(workspace_id, source_root_hash) DO UPDATE SET
+                        schema_version = excluded.schema_version,
+                        workflow_version = excluded.workflow_version,
+                        revision = excluded.revision,
+                        source_id = excluded.source_id,
+                        meta_json = excluded.meta_json",
+                    params![
+                        workspace_id,
+                        source_root_hash,
+                        value.get("schema_version").and_then(Value::as_str).unwrap_or("workflow_state_v0"),
+                        value.get("workflow_version").and_then(Value::as_i64).unwrap_or(1),
+                        value.get("revision").and_then(Value::as_i64),
+                        source_id,
+                        record_json,
+                    ],
+                )
+            }
+        }
         "projects" => transaction.execute(
             "INSERT INTO projects (project_id, source_id, project_root, path_hash, record_hash, record_json)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(project_id) DO NOTHING",
@@ -1251,6 +1293,7 @@ pub(crate) fn table_count(db_path: &Path, table: &str) -> Result<i64, String> {
 #[cfg(test)]
 mod tests {
     use crate::utils::fs_ops::fixture_dir;
+    use crate::workbench_sqlite_exporter::export_temp_db_to_json_dry_run;
 
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1276,6 +1319,105 @@ mod tests {
             table_count(&db_path, "runtime_log_entries").expect("runtime entries"),
             1
         );
+    }
+
+    #[test]
+    fn sqlite_apply_export_uses_latest_batch_and_replaces_refreshed_root_meta() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        let root_a = std::env::temp_dir().join(format!("r3-a2-m4-root-a-{suffix}"));
+        let root_b = std::env::temp_dir().join(format!("r3-a2-m4-root-b-{suffix}"));
+        fs::create_dir_all(&root_a).expect("create root a");
+        fs::create_dir_all(&root_b).expect("create root b");
+        write_workflow_meta_fixture(&root_a, 3);
+        write_workflow_meta_fixture(&root_b, 9);
+        let db_path = temp_db("m4-latest-batch-and-refresh");
+
+        apply_fixture_dir_to_temp_db(&root_a, &db_path, None).expect("apply root a");
+        apply_fixture_dir_to_temp_db(&root_b, &db_path, None).expect("apply newer root b");
+        assert_eq!(
+            exported_workflow_revision(&db_path),
+            9,
+            "the newer import batch must win over lexical JSON ordering"
+        );
+        assert_eq!(
+            exported_file_revision(&db_path, "memory-candidates.v1.json"),
+            9,
+            "source_import_meta must use the same latest-batch ordering"
+        );
+
+        write_workflow_meta_fixture(&root_a, 12);
+        apply_fixture_dir_to_temp_db(&root_a, &db_path, None).expect("refresh root a");
+        assert_eq!(
+            exported_workflow_revision(&db_path),
+            12,
+            "a refreshed root must replace its prior meta and become the latest batch"
+        );
+        assert_eq!(
+            exported_file_revision(&db_path, "memory-candidates.v1.json"),
+            12,
+            "a refreshed root must update source-import metadata deterministically"
+        );
+        assert_eq!(
+            table_count(&db_path, "workflow_state_meta").expect("workflow state meta count"),
+            2,
+            "one current meta row per root remains after the same-root refresh"
+        );
+    }
+
+    fn write_workflow_meta_fixture(root: &Path, revision: i64) {
+        let state = serde_json::json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "revision": revision,
+            "projects": [],
+            "agent_adapters": [],
+            "workflows": [],
+            "nodes": [],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "audit_events": [],
+            "capabilities": [],
+            "harness_resources": [],
+            "workflow_node_session_bindings": [],
+            "workflow_node_dispatches": []
+        });
+        fs::write(
+            root.join(PRIMARY_WORKFLOW_STATE),
+            serde_json::to_vec_pretty(&state).expect("serialize workflow fixture"),
+        )
+        .expect("write workflow fixture");
+        let memory_candidates = serde_json::json!({
+            "store_version": "memory_candidate_store.v1",
+            "revision": revision,
+            "candidates": [{"candidate_key":"m4-candidate", "candidate_id":"m4-candidate-id"}],
+            "events": []
+        });
+        fs::write(
+            root.join("memory-candidates.v1.json"),
+            serde_json::to_vec_pretty(&memory_candidates).expect("serialize memory candidates"),
+        )
+        .expect("write memory candidates");
+    }
+
+    fn exported_workflow_revision(db_path: &Path) -> i64 {
+        exported_file_revision(db_path, PRIMARY_WORKFLOW_STATE)
+    }
+
+    fn exported_file_revision(db_path: &Path, path: &str) -> i64 {
+        let manifest = export_temp_db_to_json_dry_run(db_path, "m4-latest-batch-target")
+            .expect("export latest workflow state");
+        manifest
+            .projected_files
+            .iter()
+            .find(|file| file.path == path)
+            .and_then(|file| file.projection.get("revision"))
+            .and_then(Value::as_i64)
+            .expect("projected file revision")
     }
 
     #[test]
@@ -1732,6 +1874,8 @@ mod tests {
             &transaction,
             "some_source_kind",
             "source:x",
+            "workspace:test",
+            "source-root:test",
             "totally_unknown_record_kind",
             "nk-1",
             "hash-1",

@@ -154,6 +154,9 @@ pub(crate) const WORKBENCH_SQLITE_SCHEMA_DDL: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_workflow_execution_controls_workflow ON workflow_execution_controls(workflow_id, work_item_id)",
     "CREATE INDEX IF NOT EXISTS idx_workflow_chain_runs_workflow ON workflow_chain_runs(workflow_id)",
     "CREATE INDEX IF NOT EXISTS idx_supervisor_actions_run ON supervisor_actions(run_id)",
+    // M4 repository: live store inspection on 2026-07-13 found 30 nonempty keys with no
+    // duplicates. Null preserves historical/imported records that predate action identity.
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_supervisor_actions_idempotency_key ON supervisor_actions(idempotency_key) WHERE idempotency_key IS NOT NULL",
     "CREATE INDEX IF NOT EXISTS idx_supervisor_boundary_reviews_proposal ON supervisor_boundary_reviews(proposal_id)",
     "CREATE INDEX IF NOT EXISTS idx_supervisor_orchestrator_sessions_workflow ON supervisor_orchestrator_sessions(workflow_id)",
 ];

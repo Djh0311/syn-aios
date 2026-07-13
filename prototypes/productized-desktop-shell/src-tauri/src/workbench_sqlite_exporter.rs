@@ -210,8 +210,7 @@ fn projected_file(path: &str, canonical: bool, projection: Value) -> SqliteProje
 }
 
 fn workflow_state_projection(connection: &Connection) -> Result<Value, String> {
-    let meta = first_record_json(connection, "workflow_state_meta", "meta_json")?
-        .unwrap_or_else(|| json!({}));
+    let meta = latest_workflow_state_meta(connection)?.unwrap_or_else(|| json!({}));
     Ok(json!({
         "schema_version": meta.get("schema_version").and_then(Value::as_str).unwrap_or("workflow_state_v0"),
         "workflow_version": meta.get("workflow_version").and_then(Value::as_i64).unwrap_or(1),
@@ -290,7 +289,12 @@ fn source_import_meta(
 ) -> Result<(Value, Value), String> {
     let mut statement = connection
         .prepare(
-            "SELECT source_schema_version, detected_revision FROM import_sources WHERE source_kind = ?1 LIMIT 1",
+            "SELECT import_sources.source_schema_version, import_sources.detected_revision
+             FROM import_sources
+             JOIN import_batches ON import_batches.batch_id = import_sources.batch_id
+             WHERE import_sources.source_kind = ?1
+             ORDER BY import_batches.rowid DESC, import_sources.rowid DESC
+             LIMIT 1",
         )
         .map_err(|error| format!("prepare source meta {source_kind} failed: {error}"))?;
     let mut rows = statement
@@ -478,27 +482,29 @@ fn runtime_summary_json_array(connection: &Connection) -> Result<Vec<Value>, Str
         .collect::<Vec<_>>())
 }
 
-fn first_record_json(
-    connection: &Connection,
-    table: &str,
-    column: &str,
-) -> Result<Option<Value>, String> {
-    let sql = format!("SELECT {column} FROM {table} ORDER BY {column} LIMIT 1");
+fn latest_workflow_state_meta(connection: &Connection) -> Result<Option<Value>, String> {
     let mut statement = connection
-        .prepare(&sql)
-        .map_err(|error| format!("prepare first record {table} failed: {error}"))?;
+        .prepare(
+            "SELECT workflow_state_meta.meta_json
+             FROM workflow_state_meta
+             LEFT JOIN import_sources ON import_sources.source_id = workflow_state_meta.source_id
+             LEFT JOIN import_batches ON import_batches.batch_id = import_sources.batch_id
+             ORDER BY import_batches.rowid DESC, import_sources.rowid DESC, workflow_state_meta.rowid DESC
+             LIMIT 1",
+        )
+        .map_err(|error| format!("prepare latest workflow state meta failed: {error}"))?;
     let mut rows = statement
         .query([])
-        .map_err(|error| format!("query first record {table} failed: {error}"))?;
+        .map_err(|error| format!("query latest workflow state meta failed: {error}"))?;
     if let Some(row) = rows
         .next()
-        .map_err(|error| format!("read first record {table} failed: {error}"))?
+        .map_err(|error| format!("read latest workflow state meta failed: {error}"))?
     {
         let text: String = row
             .get(0)
-            .map_err(|error| format!("read first record text {table} failed: {error}"))?;
+            .map_err(|error| format!("read latest workflow state meta text failed: {error}"))?;
         let value = serde_json::from_str(&text)
-            .map_err(|error| format!("parse first record {table} failed: {error}"))?;
+            .map_err(|error| format!("parse latest workflow state meta failed: {error}"))?;
         Ok(Some(value))
     } else {
         Ok(None)

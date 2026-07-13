@@ -48,6 +48,7 @@ mod workbench_sqlite_observation_period;
 mod workbench_sqlite_preflight;
 mod workbench_sqlite_production_apply;
 mod workbench_sqlite_read_cut;
+mod workbench_sqlite_repository;
 mod workbench_sqlite_schema;
 mod workbench_sqlite_snapshot_apply;
 mod workbench_sqlite_stop_write;

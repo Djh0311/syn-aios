@@ -29,3 +29,4 @@
 | 07-13 | M3 翻闸前演练(首战果) | live 主 store 被 `contains_sensitive_value` 判 `rejected_sensitive`:`token` 子串误命中良性键 `estimated_tokens`/`max_estimated_tokens` | 真翻闸静默拒收整个主 store;红线#3 停下报·未擅改谓词 |
 | 07-13 | 执行线 cross-check(反抓总指导) | 总指导任务包 4 处坐标漂移:(a)丢点 apply.rs:195 非 :454·fixture=r3-a9 非 r3-a2·orchestrator 独立模块非内联·live revision=11 非 10 | 执行线按错坐标实现·验收口径错 |
 | 07-13 | fixture DB-path 硬闸 | M3 幂等步 temp DB 落点不合规被拦一次(已按闸改) | 演练 DB 写到闸外路径 |
+| 07-13 | 同根幂等回归测试(M4·R5) | 初版 R5 metadata 刷新破坏「同 root 重复导入零新增」被回归拦下→改为同 hash Ok(0)·刷新 root 才替换 | metadata 语义带病进 M5 对账 |
