@@ -666,6 +666,7 @@ fn run_manual_relay_once_with_process_mode(
                     child: Some(child),
                     completed_status: "completed_process".to_string(),
                     output_paths: None,
+                    process_registration: None,
                 },
             );
             consumed.insert(input.confirmation_id.clone(), attempt_id);
@@ -733,6 +734,7 @@ fn run_manual_relay_once_with_process_mode(
                 child: None,
                 completed_status: "completed_fixture".to_string(),
                 output_paths: None,
+                process_registration: None,
             },
         )?;
     } else {
@@ -756,13 +758,14 @@ pub(crate) fn stop_manual_relay_attempt(
     let Some(active) = registry.remove(&input.relay_attempt_id) else {
         return Err("manual_relay_attempt_not_running".to_string());
     };
+    let mut active = active;
     let mut receipt = active.receipt;
     if let Some(mut child) = active.child {
         if let Some(exit_status) = child
             .try_wait()
             .map_err(|error| format!("manual_relay_process_wait_failed:{error}"))?
         {
-            return Ok(finalize_running_codex_like_attempt(
+            let mut receipt = finalize_running_codex_like_attempt(
                 receipt,
                 timestamp,
                 Some(exit_status),
@@ -770,13 +773,16 @@ pub(crate) fn stop_manual_relay_attempt(
                 false,
                 &active.completed_status,
                 active.output_paths.as_ref(),
-            ));
+            );
+            unregister_manual_relay_process(active.process_registration.take(), &mut receipt);
+            return Ok(receipt);
         }
         let (exit_code, process_killed, mut stop_warnings) =
             stop_manual_relay_child_process(child)?;
         receipt.real_process_killed = process_killed;
         receipt.exit_code = exit_code;
         receipt.warnings.append(&mut stop_warnings);
+        unregister_manual_relay_process(active.process_registration.take(), &mut receipt);
     }
     refresh_running_receipt_from_output(&mut receipt, active.output_paths.as_ref());
     receipt.status = "stopped_by_user".to_string();
@@ -790,6 +796,43 @@ pub(crate) fn stop_manual_relay_attempt(
     receipt.warnings.sort();
     receipt.warnings.dedup();
     Ok(receipt)
+}
+
+/// App 正常退出时只清理本进程内登记的 relay 尝试；不扫描、不匹配、更不终止登记外 PID。
+/// 硬崩溃来不及走这里时，`process_registration` 留在 sidecar，交给下次启动的 orphan reaper。
+pub(crate) fn stop_all_active_manual_relay_attempts() -> Result<usize, String> {
+    let attempts = {
+        let mut registry = active_attempts()
+            .lock()
+            .map_err(|_| "manual_relay_registry_poisoned".to_string())?;
+        std::mem::take(&mut *registry)
+    };
+    let mut stopped = 0;
+    let mut errors = Vec::new();
+    for (attempt_id, mut active) in attempts {
+        if let Some(child) = active.child.take() {
+            match stop_manual_relay_child_process(child) {
+                Ok(_) => {
+                    stopped += 1;
+                    if let Some(registration) = active.process_registration.take() {
+                        if let Err(error) = registration.unregister() {
+                            errors.push(format!("{attempt_id}:登记注销失败:{error}"));
+                        }
+                    }
+                }
+                Err(error) => errors.push(format!("{attempt_id}:{error}")),
+            }
+        }
+        // active 在这里 drop：正常退出会注销持久进程登记；硬崩溃则不会执行本函数，sidecar 仍保留。
+    }
+    if errors.is_empty() {
+        Ok(stopped)
+    } else {
+        Err(format!(
+            "manual_relay_shutdown_cleanup_failed:{}",
+            errors.join(";")
+        ))
+    }
 }
 
 pub(crate) fn poll_manual_relay_attempt(
@@ -813,12 +856,37 @@ pub(crate) fn poll_manual_relay_attempt(
         .map_err(|error| format!("manual_relay_process_wait_failed:{error}"))?
     else {
         refresh_running_receipt_from_output(&mut active.receipt, active.output_paths.as_ref());
+        let transport_failed = active.receipt.thread_event_summary.turn_failed;
+        if transport_failed {
+            let mut active = registry
+                .remove(&input.relay_attempt_id)
+                .ok_or_else(|| "manual_relay_attempt_not_running".to_string())?;
+            drop(registry);
+            let mut receipt = active.receipt;
+            if let Some(child) = active.child.take() {
+                let (exit_code, process_killed, mut warnings) =
+                    stop_manual_relay_child_process(child)?;
+                receipt.exit_code = exit_code;
+                receipt.real_process_killed = process_killed;
+                receipt.warnings.append(&mut warnings);
+                unregister_manual_relay_process(active.process_registration.take(), &mut receipt);
+            }
+            refresh_running_receipt_from_output(&mut receipt, active.output_paths.as_ref());
+            receipt.status = "failed_process".to_string();
+            receipt.ended_at = Some(timestamp.to_string());
+            receipt
+                .warnings
+                .push("manual_relay_terminal_thread_failure_reaped".to_string());
+            receipt.warnings.sort();
+            receipt.warnings.dedup();
+            return Ok(receipt);
+        }
         return Ok(active.receipt.clone());
     };
-    let active = registry
+    let mut active = registry
         .remove(&input.relay_attempt_id)
         .ok_or_else(|| "manual_relay_attempt_not_running".to_string())?;
-    Ok(finalize_running_codex_like_attempt(
+    let mut receipt = finalize_running_codex_like_attempt(
         active.receipt,
         timestamp,
         Some(exit_status),
@@ -826,7 +894,22 @@ pub(crate) fn poll_manual_relay_attempt(
         false,
         &active.completed_status,
         active.output_paths.as_ref(),
-    ))
+    );
+    unregister_manual_relay_process(active.process_registration.take(), &mut receipt);
+    Ok(receipt)
+}
+
+fn unregister_manual_relay_process(
+    registration: Option<crate::exec_process_registry::DurableProcessRegistration>,
+    receipt: &mut ManualRelayReceipt,
+) {
+    if let Some(registration) = registration {
+        if let Err(error) = registration.unregister() {
+            receipt
+                .warnings
+                .push(format!("manual_relay_process_unregister_failed:{error}"));
+        }
+    }
 }
 
 fn configure_manual_relay_process_group(command: &mut Command) {
@@ -1065,10 +1148,13 @@ fn spawn_running_codex_like_process(
         .lock()
         .map_err(|_| "manual_relay_confirmation_registry_poisoned".to_string())?;
     reserve_confirmation_in_map(&mut consumed, confirmation_id)?;
-    let (child, output_paths) = spawn_codex_like_process_capture_to_files(
+    let (child, output_paths, process_registration) = spawn_codex_like_process_capture_to_files(
         &process_config.command_plan,
         envelope,
         Some(&envelope.payload.effective_prompt),
+        process_config
+            .real_codex_executed
+            .then_some(attempt_id.as_str()),
     )?;
     let process_id = Some(child.id());
     let mut receipt = fixture_receipt(
@@ -1106,6 +1192,7 @@ fn spawn_running_codex_like_process(
             child: Some(child),
             completed_status: process_config.completed_status,
             output_paths: Some(output_paths),
+            process_registration,
         },
     );
     consumed.insert(confirmation_id.to_string(), attempt_id);
@@ -1700,7 +1787,15 @@ fn spawn_codex_like_process_capture_to_files(
     command_plan: &ManualRelayCommandPlan,
     envelope: &ManualRelayEnvelope,
     stdin_prompt: Option<&str>,
-) -> Result<(Child, ManualRelayProcessOutputPaths), String> {
+    registration_run_id: Option<&str>,
+) -> Result<
+    (
+        Child,
+        ManualRelayProcessOutputPaths,
+        Option<crate::exec_process_registry::DurableProcessRegistration>,
+    ),
+    String,
+> {
     let last_message_path = PathBuf::from(&command_plan.last_message_path);
     let Some(output_dir) = last_message_path.parent() else {
         return Err("manual_relay_last_message_parent_missing".to_string());
@@ -1736,18 +1831,38 @@ fn spawn_codex_like_process_capture_to_files(
     let mut child = command
         .spawn()
         .map_err(|error| format!("manual_relay_process_spawn_failed:{error}"))?;
+    let mut process_registration = if let Some(run_id) = registration_run_id {
+        match crate::exec_process_registry::register_manual_relay_process_group(
+            &crate::default_workflow_state_path(),
+            run_id,
+            child.id(),
+        ) {
+            Ok(registration) => Some(registration),
+            Err(error) => {
+                let stop_error = stop_manual_relay_child_process(child).err();
+                return Err(format!(
+                    "manual_relay_process_registration_failed:{error};stop_error={stop_error:?}"
+                ));
+            }
+        }
+    } else {
+        None
+    };
     if let Some(prompt) = stdin_prompt {
         let mut stdin = child
             .stdin
             .take()
             .ok_or_else(|| "manual_relay_process_stdin_unavailable".to_string())?;
         if let Err(error) = stdin.write_all(prompt.as_bytes()) {
-            let _ = child.kill();
-            let _ = child.wait();
+            if stop_manual_relay_child_process(child).is_ok() {
+                if let Some(registration) = process_registration.take() {
+                    let _ = registration.unregister();
+                }
+            }
             return Err(format!("manual_relay_process_stdin_write_failed:{error}"));
         }
     }
-    Ok((child, output_paths))
+    Ok((child, output_paths, process_registration))
 }
 
 fn read_last_message_summary(path: &str) -> (String, Option<String>, Option<i64>) {
@@ -1777,6 +1892,7 @@ struct ActiveManualRelayAttempt {
     child: Option<Child>,
     completed_status: String,
     output_paths: Option<ManualRelayProcessOutputPaths>,
+    process_registration: Option<crate::exec_process_registry::DurableProcessRegistration>,
 }
 
 #[derive(Clone, Debug)]
@@ -3316,6 +3432,64 @@ sleep 30
     }
 
     #[test]
+    fn manual_relay_terminal_thread_failure_reaps_process_without_waiting_for_exit() {
+        let _guard = test_guard();
+        let script = mock_codex_script(
+            "gui-direct-terminal-failure",
+            r#"#!/bin/sh
+last=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    last="$1"
+  fi
+  shift || true
+done
+printf '%s\n' '{"type":"thread.started","thread_id":"thread-terminal-failure"}'
+printf '%s\n' '{"type":"turn.started"}'
+printf '%s\n' '{"type":"turn.failed","error":{"message":"fixture transport failed"}}'
+sleep 30
+"#,
+        );
+        let fixture = existing_fixture_preview_input("GUI direct terminal failure");
+        let input = ManualRelayGuiDirectRunInput {
+            original_user_text: fixture.original_user_text.clone(),
+            target_project_root: fixture.target_project_root.clone(),
+            target_cwd: fixture.target_cwd.clone(),
+            target_session_id: fixture
+                .target_session_id
+                .clone()
+                .expect("GUI direct send must bind an existing session"),
+            sandbox: fixture.sandbox.clone(),
+            allowed_write_roots: fixture.allowed_write_roots.clone(),
+            requested_by: "user".to_string(),
+        };
+        let running = run_manual_relay_gui_direct_once_for_test(
+            input,
+            "2026-06-18T09:20:00Z",
+            &format!("mock_codex_process_sleep:{}", script.display()),
+        )
+        .expect("terminal failure fixture should start");
+
+        let started = Instant::now();
+        let failed = poll_manual_relay_attempt_until_terminal_for_test(
+            &running.relay_attempt_id,
+            "2026-06-18T09:20:01Z",
+            5_000,
+        )
+        .expect("turn.failed should be reaped as a terminal result");
+
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert_eq!(failed.status, "failed_process");
+        assert!(failed.thread_event_summary.turn_failed);
+        assert!(failed.real_process_killed);
+        assert!(failed
+            .warnings
+            .contains(&"manual_relay_terminal_thread_failure_reaped".to_string()));
+        assert!(active_attempts().lock().unwrap().is_empty());
+    }
+
+    #[test]
     fn manual_relay_gui_direct_stop_kills_mock_process_group_children() {
         let _guard = test_guard();
         std::env::remove_var("MANUAL_RELAY_REAL_CODEX_CONFIRM");
@@ -3397,6 +3571,65 @@ wait
         assert!(
             !leaked_path.exists(),
             "Stop must kill child processes in the relay process group"
+        );
+    }
+
+    #[test]
+    fn manual_relay_app_shutdown_kills_active_process_group_children() {
+        let _guard = test_guard();
+        let marker_dir = std::env::temp_dir().join(format!(
+            "manual-relay-app-shutdown-{}",
+            short_hash("app-shutdown-process-group")
+        ));
+        std::fs::create_dir_all(&marker_dir).expect("marker dir should be created");
+        let ready_path = marker_dir.join("ready.txt");
+        let leaked_path = marker_dir.join("leaked.txt");
+        let _ = std::fs::remove_file(&ready_path);
+        let _ = std::fs::remove_file(&leaked_path);
+        let script = mock_codex_script(
+            "app-shutdown-process-group",
+            &format!(
+                r#"#!/bin/sh
+( sleep 1; printf 'leaked child survived shutdown\n' > "{leaked}" ) &
+printf 'child spawned\n' > "{ready}"
+cat >/dev/null
+wait
+"#,
+                leaked = leaked_path.display(),
+                ready = ready_path.display(),
+            ),
+        );
+        let fixture = existing_fixture_preview_input("GUI direct app shutdown");
+        let input = ManualRelayGuiDirectRunInput {
+            original_user_text: fixture.original_user_text.clone(),
+            target_project_root: fixture.target_project_root.clone(),
+            target_cwd: fixture.target_cwd.clone(),
+            target_session_id: fixture
+                .target_session_id
+                .clone()
+                .expect("GUI direct send must bind an existing session"),
+            sandbox: fixture.sandbox.clone(),
+            allowed_write_roots: fixture.allowed_write_roots.clone(),
+            requested_by: "user".to_string(),
+        };
+        run_manual_relay_gui_direct_once_for_test(
+            input,
+            "2026-06-18T09:22:00Z",
+            &format!("mock_codex_process_sleep:{}", script.display()),
+        )
+        .expect("app shutdown fixture should start");
+        let started = Instant::now();
+        while !ready_path.exists() && started.elapsed() < Duration::from_secs(3) {
+            thread::sleep(Duration::from_millis(25));
+        }
+        assert!(ready_path.exists());
+
+        assert_eq!(stop_all_active_manual_relay_attempts().unwrap(), 1);
+        assert!(active_attempts().lock().unwrap().is_empty());
+        thread::sleep(Duration::from_millis(1300));
+        assert!(
+            !leaked_path.exists(),
+            "app shutdown must kill children in the relay process group"
         );
     }
 

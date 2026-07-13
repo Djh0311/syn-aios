@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server.browser";
 import {
   JiaobanOrchestrationModePicker,
   JiaobanSupervisorPilotRunningState,
+  STATION_3B_READONLY_PROJECT_ROOT,
+  classicModeUnavailableReason,
   supervisorPilotUnavailableReason,
 } from "../src/views/projects/ProjectJiaobanPanel";
 
@@ -28,6 +30,49 @@ assert(
   supervisorPilotUnavailableReason(testProjectRoot, []) === null,
   "只读测试单应允许选择主管试点",
 );
+
+// ===== 站 3b（2026-07-12 拍板）：真实项目 mario test 只读入口 =====
+assert(STATION_3B_READONLY_PROJECT_ROOT === "/Users/yoyi/Documents/mario test", "3b 常量必须与拍板路径一致");
+assert(
+  supervisorPilotUnavailableReason(STATION_3B_READONLY_PROJECT_ROOT, []) === null,
+  "3b 项目只读单应允许选择主管试点",
+);
+assert(
+  supervisorPilotUnavailableReason(STATION_3B_READONLY_PROJECT_ROOT, [STATION_3B_READONLY_PROJECT_ROOT]) ===
+    "站 3b 项目仅限只读单（零写根）。",
+  "3b 项目带写根（即使写根就是它自己）必须拒绝主管试点",
+);
+assert(
+  supervisorPilotUnavailableReason(STATION_3B_READONLY_PROJECT_ROOT, [testProjectRoot]) ===
+    "站 3b 项目仅限只读单（零写根）。",
+  "3b 项目带测试根写根同样拒绝",
+);
+assert(
+  supervisorPilotUnavailableReason(`${STATION_3B_READONLY_PROJECT_ROOT}/subdir`, []) ===
+    "主管编排试点仅限固定测试项目。",
+  "3b 子目录不是 3b 项目（精确相等，无前缀魔法）",
+);
+assert(
+  classicModeUnavailableReason(STATION_3B_READONLY_PROJECT_ROOT) ===
+    "站 3b 项目只开通主管编排只读单；经典状态机仍锁固定测试项目。",
+  "3b 项目经典模式必须锁且给人话理由",
+);
+assert(classicModeUnavailableReason(testProjectRoot) === null, "测试项目经典模式不受 3b 影响");
+
+const station3bPickerMarkup = renderToStaticMarkup(
+  <JiaobanOrchestrationModePicker
+    mode="supervisor_pilot"
+    disabled={false}
+    disabledReason={null}
+    classicDisabledReason={classicModeUnavailableReason(STATION_3B_READONLY_PROJECT_ROOT)}
+    onChange={() => {}}
+  />,
+);
+assert(
+  station3bPickerMarkup.includes("站 3b 项目只开通主管编排只读单"),
+  "3b 经典锁理由应上脸",
+);
+assert(station3bPickerMarkup.includes("disabled=\"\""), "3b 下经典 radio 应灰显");
 
 const disabledMarkup = renderToStaticMarkup(
   <JiaobanOrchestrationModePicker

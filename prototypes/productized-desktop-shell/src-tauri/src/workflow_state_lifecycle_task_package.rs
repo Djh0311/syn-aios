@@ -49,18 +49,18 @@ fn initialize_workflow_state_at(path: &Path) -> Result<WorkflowStateMutationResu
         .map_err(|error| format!("创建状态目录失败 {}：{error}", parent.display()))?;
 
     let backup_path = if existed {
-        let backups_dir = parent.join("backups");
-        fs::create_dir_all(&backups_dir)
-            .map_err(|error| format!("创建备份目录失败 {}：{error}", backups_dir.display()))?;
-        let backup = backups_dir.join(format!("workflow-state.v0.{timestamp}.json"));
-        fs::copy(path, &backup)
-            .map_err(|error| format!("备份旧状态文件失败 {}：{error}", backup.display()))?;
-        Some(backup)
+        Some(crate::workflow_state_store::backup_file(path, &timestamp)?)
     } else {
         None
     };
 
-    let value = initial_workflow_state_json(&timestamp, &audit_event_id, existed, path);
+    let mut value = initial_workflow_state_json(&timestamp, &audit_event_id, existed, path);
+    if existed {
+        value["revision"] = read_workflow_state_value(path)?
+            .get("revision")
+            .cloned()
+            .unwrap_or_else(|| Value::from(0));
+    }
     let validation_warnings = validate_workflow_state(&value);
     if !validation_warnings.is_empty() {
         return Err(format!(
@@ -69,7 +69,7 @@ fn initialize_workflow_state_at(path: &Path) -> Result<WorkflowStateMutationResu
         ));
     }
 
-    atomic_write_json(path, &value)?;
+    write_validated_workflow_state(path, &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if !snapshot.exists
         || snapshot.schema_version.as_deref() != Some("workflow_state_v0")
@@ -109,13 +109,7 @@ fn bootstrap_project_workflow_at(
         .map_err(|error| format!("创建状态目录失败 {}：{error}", parent.display()))?;
 
     let backup_path = if existed {
-        let backups_dir = parent.join("backups");
-        fs::create_dir_all(&backups_dir)
-            .map_err(|error| format!("创建备份目录失败 {}：{error}", backups_dir.display()))?;
-        let backup = backups_dir.join(format!("workflow-state.v0.{timestamp}.json"));
-        fs::copy(path, &backup)
-            .map_err(|error| format!("备份旧状态文件失败 {}：{error}", backup.display()))?;
-        Some(backup)
+        Some(crate::workflow_state_store::backup_file(path, &timestamp)?)
     } else {
         None
     };
@@ -159,7 +153,7 @@ fn bootstrap_project_workflow_at(
         ));
     }
 
-    atomic_write_json(path, &value)?;
+    write_validated_workflow_state(path, &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if !snapshot.exists
         || snapshot.counts.workflows == 0
@@ -346,15 +340,7 @@ fn create_task_draft_at(
         });
     }
 
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("状态文件路径没有父目录：{}", path.display()))?;
-    let backups_dir = parent.join("backups");
-    fs::create_dir_all(&backups_dir)
-        .map_err(|error| format!("创建备份目录失败 {}：{error}", backups_dir.display()))?;
-    let backup = backups_dir.join(format!("workflow-state.v0.{timestamp}.json"));
-    fs::copy(path, &backup)
-        .map_err(|error| format!("备份旧状态文件失败 {}：{error}", backup.display()))?;
+    let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
 
     let assigned_role = request.assigned_role.as_deref().unwrap_or("codex-dev");
     let work_item_id = format!("work-item:{workflow_id}:{timestamp}");
@@ -438,7 +424,7 @@ fn create_task_draft_at(
         ));
     }
 
-    atomic_write_json(path, &value)?;
+    write_validated_workflow_state(path, &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if snapshot.counts.work_items == 0 || snapshot.counts.artifacts == 0 {
         return Err("登记任务包草稿后重新读取校验失败".to_string());
@@ -562,15 +548,7 @@ fn update_task_package_fields_at(
                 "当前 work item 找不到 task_package artifact；无法更新任务包字段".to_string()
             })?;
 
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("状态文件路径没有父目录：{}", path.display()))?;
-    let backups_dir = parent.join("backups");
-    fs::create_dir_all(&backups_dir)
-        .map_err(|error| format!("创建备份目录失败 {}：{error}", backups_dir.display()))?;
-    let backup = backups_dir.join(format!("workflow-state.v0.{timestamp}.json"));
-    fs::copy(path, &backup)
-        .map_err(|error| format!("备份旧状态文件失败 {}：{error}", backup.display()))?;
+    let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
 
     let task_name = cleaned_scalar(&request.fields.task_name);
     let assigned_line = cleaned_scalar(&request.fields.assigned_line);
@@ -661,7 +639,7 @@ fn update_task_package_fields_at(
         ));
     }
 
-    atomic_write_json(path, &value)?;
+    write_validated_workflow_state(path, &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if !snapshot.exists {
         return Err("更新任务包字段后重新读取校验失败".to_string());
@@ -761,15 +739,7 @@ fn generate_task_package_file_at(
         &markdown,
     )?;
 
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("状态文件路径没有父目录：{}", path.display()))?;
-    let backups_dir = parent.join("backups");
-    fs::create_dir_all(&backups_dir)
-        .map_err(|error| format!("创建备份目录失败 {}：{error}", backups_dir.display()))?;
-    let backup = backups_dir.join(format!("workflow-state.v0.{timestamp}.json"));
-    fs::copy(path, &backup)
-        .map_err(|error| format!("备份旧状态文件失败 {}：{error}", backup.display()))?;
+    let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
 
     if !file_already_matched {
         atomic_write_new_text_file(&file_path, &markdown)?;
@@ -841,7 +811,7 @@ fn generate_task_package_file_at(
         ));
     }
 
-    atomic_write_json(path, &value)?;
+    write_validated_workflow_state(path, &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     let updated = read_workflow_state_value(path)?;
     let updated_artifact = updated

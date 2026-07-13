@@ -5,6 +5,7 @@ use super::supervisor_action_protocol::{
 use crate::mcp::{McpRole, McpServerConfig, SupervisorQuotaLimits};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -183,6 +184,15 @@ impl SupervisorActionAdapter for WorkbenchSupervisorActionAdapter {
             SupervisorActionKind::InspectWorker { worker_id } => {
                 worker_report_outcome(&value, worker_id)?
             }
+            SupervisorActionKind::FollowUpWorker { .. } => (
+                "waiting_worker".to_string(),
+                format!(
+                    "worker 已返回追问结果；必须重新 inspect_worker 读取并验证新报告后才能终标。{}",
+                    compact_value_summary(&value)
+                ),
+                false,
+                None,
+            ),
             SupervisorActionKind::WaitWorker { .. } => match state {
                 "blocked" => (
                     "waiting_user".to_string(),
@@ -285,9 +295,24 @@ fn worker_report_outcome(
                         .to_string(),
                 );
             }
+            // 把 evidence 与 findings 的**实际内容**带给主管 LM，而非只给一个 evidence_present 布尔。
+            // 站 3b attempt-3/4 实证：控制核心桥只回 summary+evidence_present 时，主管看不到引用/行号/
+            // 逐条判定，无法抽核 → 只能 follow_up（撞授权闸、停 waiting_user）。评审证据必须上桥面。
+            let evidence_text = join_worker_report_strings(evidence_refs);
+            let findings_text = value
+                .get("findings")
+                .and_then(Value::as_array)
+                .map(|findings| join_worker_report_strings(findings))
+                .unwrap_or_default();
+            let mut detail = format!(
+                "合法 worker 回程：{summary}；执行：{executed_what}；改动：{changed_what}；证据：{evidence_text}"
+            );
+            if !findings_text.is_empty() {
+                detail.push_str(&format!("；结论逐条：{findings_text}"));
+            }
             Ok((
                 "completed".to_string(),
-                format!("合法 worker 回程：{summary}；执行：{executed_what}；改动：{changed_what}"),
+                detail,
                 true,
                 Some(format!("worker-report:{worker_id}")),
             ))
@@ -302,6 +327,18 @@ fn worker_report_outcome(
             "report_invalid: acceptance_status 不在冻结枚举内：{acceptance_status}。"
         )),
     }
+}
+
+/// 把 worker 回程数组（evidence_refs / findings）里的字符串条目拼成一段可读证据文本，
+/// 供主管 LM 逐条抽核。非字符串或空白条目跳过；用「｜」分隔保留条目边界。
+fn join_worker_report_strings(entries: &[Value]) -> String {
+    entries
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .collect::<Vec<_>>()
+        .join("｜")
 }
 
 fn required_worker_report_string<'a>(value: &'a Value, field: &str) -> Result<&'a str, String> {
@@ -358,7 +395,7 @@ pub(crate) fn execute_supervisor_action(
     proposal: SupervisorActionProposalV1,
     adapter: &dyn SupervisorActionAdapter,
 ) -> Result<SupervisorActionResultV1, String> {
-    let idempotency_key = action_idempotency_key(runtime, &proposal);
+    let idempotency_key = action_idempotency_key(runtime, &proposal)?;
     if let Some(result) = prior_or_recover_result(runtime, &idempotency_key)? {
         return Ok(result);
     }
@@ -441,7 +478,14 @@ pub(crate) fn execute_supervisor_action(
         Err(error) => SupervisorActionAdapterResult {
             status: classify_adapter_error(&error).to_string(),
             summary: crate::run_error_translation::humanize_error_for_display(&error),
-            worker_id: None,
+            worker_id: match &proposal.action {
+                SupervisorActionKind::InspectWorker { worker_id }
+                | SupervisorActionKind::WaitWorker { worker_id }
+                | SupervisorActionKind::FollowUpWorker { worker_id, .. } => {
+                    Some(worker_id.clone())
+                }
+                _ => None,
+            },
             adapter_id: "codex-local-authorized-dispatch".to_string(),
             evidence_present: false,
             dispatch_ref: None,
@@ -1049,30 +1093,57 @@ fn latest_workflow_revision(runtime: &SupervisorActionRuntime) -> Result<Option<
 
 fn has_prior_worker_evidence(runtime: &SupervisorActionRuntime) -> Result<bool, String> {
     let store = load_store(&runtime.workflow_state_path)?;
-    Ok(store.actions.iter().any(|record| {
-        record.run_id == runtime.run_id
-            && record.kind == "inspect_worker"
-            && record.execution_status == "completed"
-            && record.evidence_present
-    }))
+    let mut evidence_is_fresh = BTreeMap::<String, bool>::new();
+    for record in store
+        .actions
+        .iter()
+        .filter(|record| record.run_id == runtime.run_id)
+    {
+        let Some(worker_id) = record.worker_id.as_ref() else {
+            continue;
+        };
+        match record.kind.as_str() {
+            "dispatch_worker" if record.validation_result == "accepted" => {
+                evidence_is_fresh.insert(worker_id.clone(), false);
+            }
+            // 追问一旦交给 adapter，worker 会话就可能已经产生了新事实；无论回程最终成功、
+            // 失败还是只完成 reservation，旧 inspect 都不能继续支撑 PASS。
+            "follow_up_worker" if record.validation_result == "accepted" => {
+                evidence_is_fresh.insert(worker_id.clone(), false);
+            }
+            "inspect_worker"
+                if record.execution_status == "completed" && record.evidence_present =>
+            {
+                evidence_is_fresh.insert(worker_id.clone(), true);
+            }
+            _ => {}
+        }
+    }
+    Ok(!evidence_is_fresh.is_empty() && evidence_is_fresh.values().all(|fresh| *fresh))
 }
 
 fn action_idempotency_key(
     runtime: &SupervisorActionRuntime,
     proposal: &SupervisorActionProposalV1,
-) -> String {
+) -> Result<String, String> {
     let target = match &proposal.action {
         SupervisorActionKind::DispatchWorker { target } => json!({
             "node_id": target.node_id,
             "work_item_id": target.work_item_id,
         }),
-        SupervisorActionKind::InspectWorker { worker_id }
-        | SupervisorActionKind::WaitWorker { worker_id } => json!({"worker_id": worker_id}),
+        SupervisorActionKind::InspectWorker { worker_id } => json!({
+            "worker_id": worker_id,
+            "worker_generation": latest_worker_generation(runtime, worker_id)?,
+        }),
+        SupervisorActionKind::WaitWorker { worker_id } => json!({"worker_id": worker_id}),
         SupervisorActionKind::FollowUpWorker { worker_id, prompt } => json!({
             "worker_id": worker_id,
             "prompt_sha256": crate::utils::hash::sha256_hex(prompt),
         }),
-        SupervisorActionKind::Finalize { verdict } => json!({"verdict": verdict.as_str()}),
+        SupervisorActionKind::Finalize { verdict } => json!({
+            "verdict": verdict.as_str(),
+            "evidence_generation": latest_worker_evidence_generation(runtime)?,
+        }),
         SupervisorActionKind::ReportUser { message } => {
             json!({"message_sha256": crate::utils::hash::sha256_hex(message)})
         }
@@ -1089,10 +1160,45 @@ fn action_idempotency_key(
         "target": target,
     }))
     .expect("supervisor action idempotency identity is serializable");
-    format!(
+    Ok(format!(
         "supervisor-action:{}",
         crate::utils::hash::sha256_hex(&material)
-    )
+    ))
+}
+
+fn latest_worker_generation(
+    runtime: &SupervisorActionRuntime,
+    worker_id: &str,
+) -> Result<String, String> {
+    let store = load_store(&runtime.workflow_state_path)?;
+    Ok(store
+        .actions
+        .iter()
+        .rev()
+        .find(|record| {
+            record.run_id == runtime.run_id
+                && record.worker_id.as_deref() == Some(worker_id)
+                && record.validation_result == "accepted"
+                && matches!(record.kind.as_str(), "dispatch_worker" | "follow_up_worker")
+        })
+        .map(|record| record.action_id.clone())
+        .unwrap_or_else(|| "worker-generation:none".to_string()))
+}
+
+fn latest_worker_evidence_generation(runtime: &SupervisorActionRuntime) -> Result<String, String> {
+    let store = load_store(&runtime.workflow_state_path)?;
+    Ok(store
+        .actions
+        .iter()
+        .rev()
+        .find(|record| {
+            record.run_id == runtime.run_id
+                && record.kind == "inspect_worker"
+                && record.execution_status == "completed"
+                && record.evidence_present
+        })
+        .map(|record| record.action_id.clone())
+        .unwrap_or_else(|| "worker-evidence:none".to_string()))
 }
 
 fn reject_impersonated_user_decision(message: &str) -> Result<(), String> {
@@ -1371,6 +1477,7 @@ mod tests {
             let value = match kind {
                 "dispatch" => json!({"schema_version":"supervisor_action_proposal.v1","kind":"dispatch_worker","target":{"node_id":NODE,"work_item_id":WORK_ITEM},"reason":"准备完成","expected_result":"worker"}),
                 "inspect" => json!({"schema_version":"supervisor_action_proposal.v1","kind":"inspect_worker","worker_id":"worker-1","reason":"读取口供","expected_result":"evidence"}),
+                "follow_up" => json!({"schema_version":"supervisor_action_proposal.v1","kind":"follow_up_worker","worker_id":"worker-1","prompt":"补充证据","reason":"证据不足","expected_result":"fresh report"}),
                 "finalize" => json!({"schema_version":"supervisor_action_proposal.v1","kind":"finalize","verdict":"pass","reason":"证据充分","expected_result":"advisory"}),
                 "report" => json!({"schema_version":"supervisor_action_proposal.v1","kind":"report_user","message":"任务已完成，证据已回读。","reason":"收尾","expected_result":"用户报告"}),
                 _ => unreachable!(),
@@ -1492,6 +1599,44 @@ mod tests {
             .actions
             .iter()
             .all(|action| &action.task_package_fingerprint == task_fingerprint));
+    }
+
+    #[test]
+    fn station3b_follow_up_invalidates_old_inspect_until_new_report_is_inspected() {
+        let fixture = Fixture::new();
+        let adapter = FakeAdapter {
+            dispatches: Cell::new(0),
+        };
+        for kind in ["dispatch", "inspect", "follow_up"] {
+            execute_supervisor_action(&fixture.runtime, Fixture::proposal(kind), &adapter)
+                .expect("control action");
+        }
+        assert!(!has_prior_worker_evidence(&fixture.runtime).expect("freshness check"));
+
+        let rejected = execute_supervisor_action(
+            &fixture.runtime,
+            Fixture::proposal("finalize"),
+            &adapter,
+        )
+        .expect("old evidence must be rejected without adapter failure");
+        assert_eq!(rejected.status, "denied_scope");
+
+        let refreshed = execute_supervisor_action(
+            &fixture.runtime,
+            Fixture::proposal("inspect"),
+            &adapter,
+        )
+        .expect("new generation inspect");
+        assert!(refreshed.evidence_present);
+        assert!(has_prior_worker_evidence(&fixture.runtime).expect("freshness check"));
+
+        let finalized = execute_supervisor_action(
+            &fixture.runtime,
+            Fixture::proposal("finalize"),
+            &adapter,
+        )
+        .expect("finalize after fresh inspect");
+        assert_eq!(finalized.status, "completed");
     }
 
     #[test]
@@ -1717,6 +1862,61 @@ mod tests {
         };
         assert_eq!(invalid_result.status, "report_invalid");
         assert!(!invalid_result.should_continue());
+        assert_eq!(
+            classify_adapter_error("transport_timeout: 初始化超过 120 秒，进程组已回收"),
+            "transport_failed"
+        );
+    }
+
+    // 站 3b attempt-4 回归：reported_completed 的权威结果必须把 evidence 与 findings 的**实际内容**
+    // 带给主管（塞进 summary），而不是只回一个 evidence_present 布尔。否则主管看不到引用/行号/逐条判定、
+    // 无法抽核，只能 follow_up 撞授权闸、停 waiting_user。
+    #[test]
+    fn station3b_reported_completed_carries_evidence_and_findings_to_supervisor() {
+        let (status, summary, evidence_present, readback) = worker_report_outcome(
+            &json!({
+                "worker_id": "worker-1",
+                "acceptance_status": "reported_completed",
+                "summary": "只读盘点完成",
+                "executed_what": "对照 README 逐条核验",
+                "changed_what": "worker 未列出产出文件",
+                "evidence_refs": ["node --check game.js 退出码 0", "逐行回读 README.md 与源码"],
+                "findings": [
+                    "承诺移动已实现 README.md:11 原文，game.js:119 原文 const left = ...",
+                    "P0 game.js:137 未按 delta 缩放，原文 player.x += player.vx;"
+                ]
+            }),
+            "worker-1",
+        )
+        .expect("reported_completed with evidence+findings is valid");
+        assert_eq!(status, "completed");
+        assert!(evidence_present);
+        assert_eq!(readback.as_deref(), Some("worker-report:worker-1"));
+        // 证据内容进 summary（主管可抽核，不只是 present 布尔）。
+        assert!(summary.contains("node --check game.js 退出码 0"), "evidence 内容必须上桥面：{summary}");
+        // findings 逐条进 summary。
+        assert!(summary.contains("P0 game.js:137 未按 delta 缩放"), "findings 必须上桥面：{summary}");
+        assert!(summary.contains("game.js:119"), "逐条判定引用必须上桥面：{summary}");
+        assert!(summary.contains("结论逐条"), "findings 段必须带标签：{summary}");
+    }
+
+    // 写单（无 findings）：summary 带 evidence、不带「结论逐条」段——findings 空不留空标签。
+    #[test]
+    fn station3b_write_order_without_findings_omits_findings_segment() {
+        let (_status, summary, _present, _readback) = worker_report_outcome(
+            &json!({
+                "worker_id": "worker-1",
+                "acceptance_status": "reported_completed",
+                "summary": "创建文件完成",
+                "executed_what": "写入 proof.txt",
+                "changed_what": "/p/proof.txt",
+                "evidence_refs": ["回读字节校验通过"]
+            }),
+            "worker-1",
+        )
+        .expect("write-order reported_completed is valid");
+        assert!(summary.contains("回读字节校验通过"));
+        assert!(!summary.contains("结论逐条"), "无 findings 不应出现结论段：{summary}");
     }
 
     #[test]
@@ -1739,7 +1939,8 @@ mod tests {
         };
         let proposal = Fixture::proposal("dispatch");
         let guard = guard_action(&fixture.runtime, &proposal).expect("dispatch guard");
-        let idempotency_key = action_idempotency_key(&fixture.runtime, &proposal);
+        let idempotency_key =
+            action_idempotency_key(&fixture.runtime, &proposal).expect("idempotency key");
         let action_id = "supervisor-action:crash-window";
         reserve_action(
             &fixture.runtime,

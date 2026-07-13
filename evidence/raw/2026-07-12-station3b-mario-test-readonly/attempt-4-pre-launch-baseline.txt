@@ -1,0 +1,32 @@
+captured_at = 2026-07-13
+project_root = /Users/yoyi/Documents/mario test
+
+git status --porcelain=v1:
+?? .workbench/
+?? README.md
+?? game.js
+?? index.html
+?? styles.css
+
+content tree (excluding .git):
+./.workbench/h5-b2/real-dispatch-write-probe.md
+./.workbench/pcr9/real-product-command-write-probe.md
+./.workbench/stage-k/k2/resume-workspace-write-probe.md
+./README.md
+./game.js
+./index.html
+./styles.css
+
+SHA-256:
+b3eaf99c09a786ab459721872f63bd7fd78f6e8dcd6d34b5e2c761103c5b69ae  ./.workbench/h5-b2/real-dispatch-write-probe.md
+2dddea8eedf9cbbe56012742b0761b6b7d3290701512b33a3a58adff665386b2  ./.workbench/pcr9/real-product-command-write-probe.md
+49bff6c0a17e68b5abca2fadc60578527aedd886539741f24f04eb3ed167a8c0  ./.workbench/stage-k/k2/resume-workspace-write-probe.md
+02792d82ffd3b9cfc435da4389f0d064d2134a0b76a3f43056f0e23f0af573b5  ./README.md
+814d4fc9e6ab7585c48c55b702f290d899aba05444607fd8f8c38843f47bc8cd  ./game.js
+f08427fd9510ff2037742c4062052c0b38a3f05bff876d17b3228ff49ce6f7bf  ./index.html
+6864e759c7cf53698a6225c121d53b1e14dc06a4d70930efb546822fafe3ad1f  ./styles.css
+
+node --check game.js:
+exit_code = 0
+stdout = <empty>
+stderr = <empty>

@@ -13,7 +13,7 @@
 use serde::Deserialize;
 use std::path::Path;
 
-/// worker 回程契约结构：做了啥 / 产出在哪（路径列表）/ 成败 / 怎么证明。
+/// worker 回程契约结构：做了啥 / 产出在哪（路径列表）/ 成败 / 怎么证明 / 结论条目。
 /// 全 `#[serde(default)]`——缺字段不报错，配合软着陆语义。
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 pub(crate) struct WorkerReport {
@@ -25,6 +25,12 @@ pub(crate) struct WorkerReport {
     pub(crate) status: String,
     #[serde(default)]
     pub(crate) evidence: Vec<String>,
+    /// 只读/分析/审查/盘点类单的结论正文：每条一行，带 file:line + 原文引用。
+    /// 写单（改代码/文件）用 outputs/evidence 即可、findings 留空——它不是求助字段，
+    /// 不触发 blocked。加它是因为原 did/outputs/evidence 契约为写单设计、装不下只读单的
+    /// 报告正文（2026-07-12 站 3b 首单实证：worker 侦察清单被结构化回程丢弃、主管误判证据不足）。
+    #[serde(default)]
+    pub(crate) findings: Vec<String>,
     #[serde(default)]
     pub(crate) permission_requests: Vec<String>,
     #[serde(default)]
@@ -36,15 +42,37 @@ pub(crate) struct WorkerReport {
 }
 
 /// 追加给 worker 的契约段（确定性文本·不经 LM·同 consultant/director 的 json 块成熟套路）。
-pub(crate) const WORKER_REPORT_CONTRACT_TEXT: &str = r#"回程契约（务必遵守）：干完后，最后输出**且仅输出**一个 ```json 代码块。`did`、`outputs`、`status`、`evidence` 和全部求助字段都只能位于 JSON 顶层；不得嵌套在 `target` 或其他对象中。outputs 写产出文件的完整路径；没有产出就写空数组 []。完成路只使用 done|partial|failed；被阻塞、需要更多权限或资料、或认为方向可能错时，status 必须为 blocked。
+pub(crate) const WORKER_REPORT_CONTRACT_TEXT: &str = r#"回程契约（务必遵守）：干完后，最后输出**且仅输出**一个 ```json 代码块。`did`、`outputs`、`status`、`evidence`、`findings` 和全部求助字段都只能位于 JSON 顶层；不得嵌套在 `target` 或其他对象中。outputs 写产出文件的完整路径；没有产出就写空数组 []。完成路只使用 done|partial|failed；被阻塞、需要更多权限或资料、或认为方向可能错时，status 必须为 blocked。
 
-完成 done 的完整示例：
+**findings（结论正文）**：只读/分析/审查/盘点类任务的结论主体放这里——每条一行字符串，带准确的 file:line + 原文引用（例：`"game.js:137 移动按帧执行未按 delta 缩放，原文 \"player.x += player.vx;\""`）。逐条判定、问题清单、总评都作为 findings 的条目。改代码/写文件类任务用 outputs/evidence 即可、findings 留空。findings 不是求助字段，填了不会被判为受阻。**不要自造 promise_verdicts、top_5_issues 等顶层字段——它们会被丢弃；结论一律进 findings。**
+
+完成 done 的完整示例（改文件类）：
 ```json
 {
   "did": "创建目标文件并完成回读和字节验证",
   "outputs": ["/绝对路径/目标文件.txt"],
   "status": "done",
   "evidence": ["回读输出与字节校验命令结果"],
+  "findings": [],
+  "permission_requests": [],
+  "open_issues": [],
+  "direction_risks": [],
+  "follow_up_suggestions": []
+}
+```
+
+完成 done 的完整示例（只读/盘点类）：
+```json
+{
+  "did": "对照 README 逐条核验并按影响排序给出前 5 项问题；未写入任何文件",
+  "outputs": [],
+  "status": "done",
+  "evidence": ["`node --check game.js` 退出码 0"],
+  "findings": [
+    "承诺『A/D 左右移动』已实现，README.md:11 原文 \"`A`/`D` 或方向键左右：移动\"，源码 game.js:119 原文 \"const left = keys.has(\\\"ArrowLeft\\\") ...\"",
+    "P0 game.js:137 移动按帧执行未按 delta 缩放，原文 \"player.x += player.vx;\"，高刷会显著加快游戏",
+    "总评：核心玩法齐全，主要风险在帧率相关手感与碰撞状态机"
+  ],
   "permission_requests": [],
   "open_issues": [],
   "direction_risks": [],
@@ -415,6 +443,31 @@ mod tests {
         assert_eq!(report.status, "partial");
         assert!(report.outputs.is_empty());
         assert!(report.evidence.is_empty());
+        // findings 缺省也是空——写单不填不受影响。
+        assert!(report.findings.is_empty());
+    }
+
+    #[test]
+    fn parses_findings_for_readonly_report() {
+        let raw = "```json\n{\"did\":\"只读盘点\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"node --check 退出码 0\"],\"findings\":[\"P0 game.js:137 未按 delta 缩放，原文 \\\"player.x += player.vx;\\\"\",\"总评：核心玩法齐全\"]}\n```";
+        let report = parse_worker_report(raw).expect("带 findings 的只读报文应解析");
+        assert_eq!(report.status, "done");
+        assert_eq!(report.findings.len(), 2);
+        assert!(report.findings[0].contains("game.js:137"));
+        // findings 不是求助字段：填了不该让求助字段非空。
+        assert!(report.permission_requests.is_empty());
+        assert!(report.open_issues.is_empty());
+    }
+
+    #[test]
+    fn station3b_regression_self_invented_fields_dropped_findings_kept() {
+        // 站 3b 首单病根：worker 把结论塞进自造的 promise_verdicts/top_5_issues 顶层字段，
+        // serde 静默丢弃 → 主管只见摘要、误判证据不足。修法=结论进 findings，未知字段仍丢弃。
+        let raw = "```json\n{\"did\":\"盘点完成\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"只读检查\"],\"findings\":[\"README.md:11 承诺移动已实现，源码 game.js:119\"],\"promise_verdicts\":[{\"verdict\":\"已实现\"}],\"top_5_issues\":[{\"rank\":1}]}\n```";
+        let report = parse_worker_report(raw).expect("含未知顶层字段仍应解析");
+        // 自造字段被丢（struct 里没有它们，serde 忽略），但结论正文经 findings 保住。
+        assert_eq!(report.findings, vec!["README.md:11 承诺移动已实现，源码 game.js:119"]);
+        assert_eq!(report.did, "盘点完成");
     }
 
     #[test]

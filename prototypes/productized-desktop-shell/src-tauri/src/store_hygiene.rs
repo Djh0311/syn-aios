@@ -195,16 +195,7 @@ fn sweep_canvas_run_residue_at(
 
     let timestamp = crate::unix_timestamp_string();
 
-    // 写前备份（照 update_work_item_state_at：copy 到 backups/）。
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("状态文件路径没有父目录：{}", path.display()))?;
-    let backups_dir = parent.join("backups");
-    std::fs::create_dir_all(&backups_dir)
-        .map_err(|error| format!("创建备份目录失败 {}：{error}", backups_dir.display()))?;
-    let backup = backups_dir.join(format!("workflow-state.v0.{timestamp}.json"));
-    std::fs::copy(path, &backup)
-        .map_err(|error| format!("备份旧状态文件失败 {}：{error}", backup.display()))?;
+    let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
 
     // 逐条：合法闸校验 + 改 state + node 同步 + 标准 work_item_state_changed 审计。
     let mut result_items: Vec<CanvasRunResidueItem> = Vec::new();
@@ -278,7 +269,7 @@ fn sweep_canvas_run_residue_at(
     if !warnings.is_empty() {
         return Err(format!("写入前 schema 校验失败：{}", warnings.join(", ")));
     }
-    crate::atomic_write_json(path, &value)?;
+    crate::write_validated_workflow_state(path, &value)?;
 
     // 写后回读校验。
     let snapshot = crate::read_workflow_state_snapshot(path)?;

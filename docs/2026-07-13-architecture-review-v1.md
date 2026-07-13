@@ -1,7 +1,7 @@
-# 系统性架构评审 v1(2026-07-13)
+# 系统性架构评审 v1（2026-07-13，处置中）
 
-> 方法:六域并行映射(读遍 197 文件/137,777 行·全部成功)+ 总指导亲手核关键高危项。批评/对抗核实阶段因额度中断,故本报告严格区分**【已核】总指导亲验**与**【map声称】映射发现但未对抗核实**。评审只读,评审后 WIP 指纹核对无越界。
-> 底数纠正:Tauri 命令实测 **137**(非摸底所报 235);store 线上 236MB(其中 ~221MB 是备份)。
+> 方法：六域并行映射（读遍 197 文件/137,777 行·全部成功）+ 总指导亲手核关键高危项。初稿严格区分**【已核】总指导亲验**与**【map声称】映射发现但未对抗核实**；07-13 后续处置与实数复核见 §七。
+> 当前状态：`WIP_NOT_COMMITTED`。Tauri 命令实测 **137**（非摸底所报 235）；3b 真跑后主 JSON 已增至 **5,897,201 bytes**；主备份 45 份，`backups/` **233,520 KiB（约 228 MiB）**。
 
 ## 一、总评(诚实版)
 
@@ -22,13 +22,13 @@
 
 ## 三、两个 root pattern(比任何单条 smell 都重要)
 
-### A. 单 JSON 热状态文档 —— 辐射存储域一半 smell【已核】
-主 store `workflow-state.v0.json` 4.7MB 单文件全量读改写、**读无锁、写只锁 rename 瞬间、无 revision CAS**(workflow_state_store.rs:13/103-125,validate 无冲突检查),而 app 与主管 MCP 子进程双进程同写(supervisor_orchestrator.rs:611-666)。它同时是:
-- **并发丢写源(P1)**:后写者带旧快照整本覆盖,前一笔 binding/audit 无声丢失——主管试点(UI 操作与 supervisor 步循环并行)正是触发场景;
-- **UI 卡顿源**:每任务约 8 次 4.7MB parse/serialize,108 个命令全同步签名;
-- **备份爆炸源**:audit_events(1447条)+dispatches 内嵌热文档、只增不减,每写整本 copy,221MB/236MB 是备份,半年按曲线进 GB;
+### A. 单 JSON 热状态文档 —— 辐射存储域一半 smell【已核·部分处置中】
+主 store `workflow-state.v0.json` 已由初审时 4.7MB 增长到 5,897,201 bytes，仍是单文件全量读改写。初审确认它**读无锁、写只锁 rename 瞬间、无 revision CAS**；07-13 WIP 已在锁内增加 revision CAS，把静默覆盖改成明确 `workflow_state_revision_conflict`，但它仍同时是：
+- **并发冲突源（原 P1 静默丢写已止血）**：旧快照不再覆盖新快照，但调用方还没有业务级自动重放，真实并发会转成显式失败；
+- **UI 卡顿源**：每任务约 8 次约 5.5MiB parse/serialize，108 个命令全同步签名；
+- **备份爆炸源**：audit_events（现 1473 条）+ dispatches（现 363 条）内嵌热文档、只增不减；真实备份目录约 228MiB。07-13 WIP 已把剩余 9 个手工 `fs::copy` 入口归一到中央 helper，并给“最近 30 份 + 每日恢复点”增加最多 30 个每日点的上限；但只有份数上限，没有字节预算，按当前单份约 5.9MB 仍可能逼近 350MB；
 - **R3 迟切的税**:正确解法你库里有,主 store 却用最弱保护。
-- **修法方向**:主 store 回填 sidecar 已有的 revision CAS + 文件锁;audit/dispatch 正文外置进 artifacts 只留引用;这一条修了,存储域大半 smell 一起消。
+- **修法方向**：CAS 只解决并发静默覆盖；备份归一和限额只控制增长。全量 parse/serialize、UI 卡顿和正文膨胀仍需 audit/dispatch 正文外置或 SQLite 产品切换，不能把三件事说成“一次 CAS 一起解决”。
 
 ### B. 安全谓词/契约/常量靠人肉同步 —— 每处都是未来失守缝【部分已核】
 契约文本双正本(1条测试兜底)、3b 闸 4 处 copy-paste、审批绕过黑名单 2 份、根路径常量 ≥3 处写死、前后端类型 ~6800 行手工镜像、行为分支押在后端中文文案上。全靠"测试断言"或"人肉纪律"防漂移。**已吃过一次亏**:弱版 C3 授权入口(record_global_boundary_review 弱版仍注册为命令,map称是授权链旁路)"改严版忘弱版"发生过。
@@ -38,8 +38,11 @@
 
 | 严重度 | 发现 | 证据 | 爆炸半径 |
 |---|---|---|---|
-| **P1** | 主 store 无锁无 CAS 并发丢写 | workflow_state_store.rs:13,103-125 | 主管试点触发丢 binding/audit |
-| **P1** | launcher 裸 txt 污染 store 根,与 R3 preflight 拒非 json 打架 | supervisor_session_launcher.rs:1113→store 根;workbench_sqlite_preflight.rs:178,270 | 今天真跑 R3 切换 preflight_blocked;文件名带冒号不可移植 |
+| ~~P1~~ 处置中 | 主 store 无 CAS 并发丢写 | 初审证据 workflow_state_store.rs:13,103-125；07-13 WIP 增加锁内 revision CAS + stale snapshot 回归 | 静默覆盖已改成显式 conflict；业务级重放仍未建 |
+| ~~P1~~ 处置中 | launcher 裸 txt 污染 store 根,与 R3 preflight 拒非 json 打架 | 07-13 WIP 已将新主管运行材料搬到 `runtime-artifacts/` | 未来污染已止；历史 txt 尚未迁移，SQLite preflight 仍会被旧材料阻断 |
+| **P0** 未处置 | SQLite 迁移链完全漏掉当前主 store 五组真实数组 | 当前 `execution_attempts=148`、`permission_requests=1`、`workflow_chain_runs=37`、`workflow_execution_controls=148`、`workflow_machine_runs=10`；均不在 importer `WORKFLOW_ARRAYS`、apply `workflow_records`、schema、exporter | 当前快照重导会静默丢执行、权限与链路事实，禁止翻闸 |
+| **P0** 未处置 | importer/apply/exporter 合同不一致 | importer 白名单接受 memory-lint/entity/pattern/blackboard，apply 对部分来源返回空 records 或未知 record kind `Ok(0)`；真实根已有 `memory-lint.v1.json`；exporter 又不覆盖多数 sidecar | 文件可被“接受”却不落表，回导也无法恢复，迁移成功口径失真 |
+| **P0** 未处置 | 三个主管持久账本无 schema/import/export；exec registry 未分类 | `global-supervisor-reviews`、`supervisor-action-control`、`supervisor-orchestrator` 不在旧迁移合同；`exec-process-registry` 是 OS 进程租约，不能当历史事实导入 | 切库会丢主管审计，或错误复活已死亡进程租约 |
 | ~~catch~~ 撤回 | h5:44 fail-open 债**已还为 fail-closed** | h5_project_dispatch_bridge.rs:44 明文注释 | **无漂移**:CURRENT §二已正确标"站3a 前置修成 fail-closed"。评审初判"文档仍挂待修"基于摸底旧 FACTS,核实物纠正——记为「核实物抓评审自己假 catch」 |
 | **catch** | Tauri 命令实测 137 非 235 | rg #[tauri::command] 137(commands 108+mcp 10+agents 19) | 治理覆盖率结论按 137 修;摸底命令算错 |
 
@@ -47,7 +50,7 @@
 
 以下来自映射,总指导**未亲核**,涉 WIP 或需深读,列清单不下定论:
 
-- **【最该先验】follow_up_worker 追问结果读不回来**(主管编排P1,supervisor_orchestrator.rs:314-330,959-1013):map 称追问输出写进无人消费的 txt、read_worker_report 命中旧缓存、v7 零 follow-up 从未真跑证伪。**若成立,主管编排的核心卖点(追问)是坏的**——涉 WIP 文件,应作为**站 2 试点第一验**:专门跑"派工→追问→读回追问结果"一单。
+- **follow_up_worker 代际问题【代码已核并修，仍缺一次真实追问单】**：追问现在回读并持久化新报告，追问开始即使旧报告/旧 inspect 失效，失败不回退旧报告，inspect/终标幂等键绑定报告代际。站 3b PASS 单 `follow_up_count=0`，因此证明了普通 inspect 闭环，没有替代真实“派工→追问→读回新报告”验证。
 - 弱版 C3 授权入口平行旁路(治理P1,plan_authorization_store.rs:225-312)。
 - 一次派发横跨 3+ 无事务 JSON 账本,一致性靠调用顺序(主管编排P2)。
 - binding_id 截断碰撞是模式病、同类生成器仍在新代码用(主管编排P2,3a 已修一处但 stable_id 截断仍广泛用于 event_id/reservation_id)。
@@ -57,6 +60,84 @@
 
 ## 六、给主人的三句战略话
 
-1. **修 root pattern A 比修任何单条都值**:一次回填 CAS,消掉并发丢写+备份爆炸+一半卡顿,还给 R3 切换扫清 preflight 障碍。
-2. **站 2 试点第一件事,验 follow_up 读回**——别带着可能坏掉的核心卖点往 3b 走。
+1. **修 root pattern A 比修任何单条都值，但要分责**：CAS 防静默丢写；统一备份入口和保留上限控制磁盘增长；正文外置/SQLite 才处理整本改写与卡顿。三者不能互相冒领功劳。
+2. **SQLite 先冻结迁移完整性合同，再补 schema/import/apply/export**——现在最大的风险不是“切得慢”，而是旧工具会把丢数据说成成功。
 3. **god file 拆分不是洁癖,是护命根子**:director/Jiaoban 大到人核不动那天,"核实物"就名存实亡了;拆到可核尺寸,是给你自己的质量机制续命。
+
+## 七、07-13 实数复核与处置边界【已核】
+
+### 7.1 本轮已落 WIP（未 commit）
+
+- 主 store 写入在同一文件锁内重新读取当前 revision；旧快照被拒绝，首个 writer 的字段和 revision 保留。
+- 新主管运行材料改到 `runtime-artifacts/`；只解决未来新材料，未删除历史文件。
+- workflow-state 备份入口已从 9 处手工 copy 收回中央 `backup_file`；中央策略保持最近 30 份，并只再保留最近 30 个每日恢复点，总量上界 60。
+- 以上不等于“4.7MB 全量改写已解决”：3b 真跑后主 JSON 实测已经是 5,897,201 bytes，仍会整本 parse/serialize/rename。
+
+### 7.2 SQLite 现在不能直接切
+
+旧真库 `/r3-migration-work/b1-production-apply-20260615/workbench-state.v1.sqlite` 修改于 06-15；当前 JSON 修改于 07-13。两边实数：
+
+| 数据 | 旧 SQLite | 当前 JSON |
+|---|---:|---:|
+| projects | 5 | 5 |
+| workflows | 5 | 8 |
+| nodes | 35 | 65 |
+| edges | 32 | 50 |
+| dispatches | 118 | 363 |
+| audit events | 356 | 1473 |
+| artifacts | 1 | 26 |
+| work items | 12 | 57 |
+| bindings | 36 | 75 |
+
+当前新增的 `global-supervisor-reviews.v1.json`、`supervisor-action-control.v1.json`、`supervisor-orchestrator.v1.json`、`exec-process-registry.v1.json` 也不在 importer 白名单；unknown JSON 会被 importer/preflight 拒绝。真实根当前有 12 个 JSON、91 个历史主管 txt，preflight 会同时报 unknown JSON 与 non-JSON。更严重的是，当前主 JSON 的五组执行/权限数组完全不在旧 schema/import/apply/export 合同。因此本窗口只完成漂移审计与止血，不做 production apply、read-cut 或 stop-write，也不得声称 `ready for cutover`。
+
+### 7.3 仍挂账
+
+- CAS 冲突的业务级重放/重试策略。
+- stale lock 恢复；异常退出留下锁文件时当前会永久阻断。
+- 备份与最终 CAS 写入尚不是同一事务，备份未必严格对应本次成功提交的直接前态。
+- audit/dispatch 正文外置与真正消除全量改写。
+- SQLite 新 sidecar schema/importer、历史 txt 迁移、当前 JSON 全量重新导入与对账。
+
+## 八、SQLite 切换最小有序站点（当前建议）
+
+### M0 迁移完整性合同冻结
+
+- 把真实根 12 个 JSON、91 个 txt、主 JSON 全部顶层字段逐项归类为：持久事实 / 兼容投影 / runtime 临时件 / 历史归档。
+- 三个主管账本是持久事实；`exec-process-registry` 是 runtime 租约，不能把旧 entry 导入；历史 txt 只归档，不当领域事实。
+- 验收：103 个文件全部且仅分类一次；任何 accepted source 都必须有明确落表与导出策略；未知项 fail-closed。
+
+### M1 schema/import/apply/export 补全
+
+- 补五组主状态数组、三个主管持久账本和当前已接受 sidecar 的完整落表/导出。
+- 消灭 `records_for_source => Vec::new()` 与 `insert_domain_record => Ok(0)` 这种“接受但丢弃”。
+- 验收：当前快照 `JSON → SQLite → JSON` 顶层字段、数组计数、natural key、record hash 语义一致；二次导入零新增、零冲突。
+
+### M2 根目录治理与 preflight v2
+
+- 91 个 txt 搬到明确的 legacy runtime 目录，保留 hash 清单，不删除；preflight 只忽略明确 runtime 分类，不能泛化忽略。
+- 该步会改真实状态目录，执行前仍需单独维护窗口授权。
+- 验收：12 个 JSON hash 不变；91 个 txt 精确覆盖；preflight 0 unknown、0 non-json、0 sensitive rejected。
+
+### M3 当前快照全量重建演练
+
+- 不升级 06-15 旧库；从冻结快照新建 DB，在临时副本完成 import/export/rollback/失败注入。
+- 验收：按执行时最新实数逐项对账；source snapshot 字节不变；事务前崩溃无半成品，事务后报告失败能识别“已提交但报告失败”。
+
+### M4 产品级 repository 与行级事务
+
+- 建唯一产品存储入口、连接/WAL/busy 策略与有界重试；业务事实、审计、授权/主管动作进入同一事务。
+- 外部 Codex 副作用只能用稳定 operation/idempotency key 对齐，禁止通用盲重试。
+- 验收：普通工作项只改相关行，不再 serialize 5.9MB JSON；并发 mutation 不丢数据；failure injection 只能留下整笔旧状态或整笔新状态。
+
+### M5 有限真实切换
+
+- 独立维护窗口停 app、确认无 writer、最终快照、导入新 DB、逐表对账；先 DB 主写并保留 lag=0 JSON 投影，再做有限 read-cut。
+- 验收：flag on/off 读模型一致；proposal、authorization、单 worker dispatch、inspect/final 代表路径都落 DB；rollback drill 可恢复一致状态。
+
+### M6 观察与停写 JSON
+
+- 观察无漂移后再单独批准 stop-write；JSON 改成低频 checkpoint/export，SQLite 使用一致性备份并同时设置份数与字节预算。
+- 验收：多次业务操作只推进 DB 行与 revision，主 JSON mtime/hash 不变；从 SQLite 备份恢复后代表性工作流通过。
+
+只有 M6 验收后，才可声称“全量改写、备份膨胀、SQLite 产品切换”完成。当前 WIP 只完成 CAS 止血、备份入口归一与份数上限，距离真实切换仍是 M0-M6 的顺序工作。

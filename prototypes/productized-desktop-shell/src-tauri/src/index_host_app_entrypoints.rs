@@ -590,7 +590,7 @@ pub fn run() {
     if let Err(error) = crate::exec_process_registry::reap_registered_orphans(&state.workflow_state_path) {
         eprintln!("执行进程遗留回收未完成：{error}");
     }
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .manage(state)
         .manage(mcp::orchestrator::OrchestratorState::new())
         .invoke_handler(workbench_command_handler!())
@@ -604,6 +604,13 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+    app.run(|_, event| {
+        if matches!(event, tauri::RunEvent::Exit) {
+            if let Err(error) = crate::manual_relay::stop_all_active_manual_relay_attempts() {
+                eprintln!("手动中转进程退出清理未完成：{error}");
+            }
+        }
+    });
 }

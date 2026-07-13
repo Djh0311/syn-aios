@@ -4604,6 +4604,10 @@ pub(crate) trait JiaobanNewSessionCreator {
 
 // 初始化等待预算：与 worker 单任务预算（600s）同级封顶；正常初始化 ~15-60s（决策已认）。
 const JIAOBAN_NEW_SESSION_TIMEOUT_MS: u128 = 600_000;
+// 主管派发在这里还没有真正启动 worker。若出生口卡死，长时间保留 dispatch reservation 只会让 UI
+// 看起来一直“主管进行中”。真实 3b 已出现模型列表刷新失败后子进程不退出，因此主管出生口单独收紧；
+// 其它经典链仍保留原 600s 预算。
+const SUPERVISOR_NEW_SESSION_TIMEOUT_MS: u128 = 120_000;
 const JIAOBAN_NEW_SESSION_POLL_INTERVAL_MS: u64 = 1_000;
 // 出生→可绑的兜底等待预算：主因（exec 会话被列表显示过滤挡住）已在 find_thread_by_id 修掉；
 // 这里只兜「codex 进程退出后 thread 行落它自家 sqlite 晚一拍」的窗口——成功即 break、零成本。
@@ -4612,6 +4616,14 @@ const JIAOBAN_NEW_SESSION_BIND_VISIBILITY_BUDGET_MS: u128 = 30_000;
 // 真实现：调 relay 现成单次路径（spawn 返回 running 回执）→ 轮询到终态 → 回执取 thread_id。
 // relay 内部闸原样生效（guard 拒/查重拒 → 人话转述，不绕不伪造）；cwd **写死固定测试项目**（不可参数化）。
 pub(crate) struct ManualRelayJiaobanNewSessionCreator;
+
+fn jiaoban_new_session_timeout_ms(requested_by: &str) -> u128 {
+    if requested_by == "supervisor_orchestrator" {
+        SUPERVISOR_NEW_SESSION_TIMEOUT_MS
+    } else {
+        JIAOBAN_NEW_SESSION_TIMEOUT_MS
+    }
+}
 
 impl JiaobanNewSessionCreator for ManualRelayJiaobanNewSessionCreator {
     fn create_initialized_session(
@@ -4634,8 +4646,9 @@ impl JiaobanNewSessionCreator for ManualRelayJiaobanNewSessionCreator {
         .map_err(|error| format!("relay 拒了/起不来（{error}）"))?;
         let relay_attempt_id = receipt.relay_attempt_id.clone();
         let started = std::time::Instant::now();
+        let timeout_ms = jiaoban_new_session_timeout_ms(requested_by);
         while receipt.status == "running" {
-            if started.elapsed().as_millis() >= JIAOBAN_NEW_SESSION_TIMEOUT_MS {
+            if started.elapsed().as_millis() >= timeout_ms {
                 let stop_note = match manual_relay::stop_manual_relay_attempt(
                     manual_relay::ManualRelayStopInput {
                         relay_attempt_id: relay_attempt_id.clone(),
@@ -4647,8 +4660,8 @@ impl JiaobanNewSessionCreator for ManualRelayJiaobanNewSessionCreator {
                     Err(_) => "且停进程失败（可能残留，可到中转页手动停）",
                 };
                 return Err(format!(
-                    "初始化超时（超过 {} 秒还没跑完），{stop_note}",
-                    JIAOBAN_NEW_SESSION_TIMEOUT_MS / 1000
+                    "transport_timeout: 初始化超时（超过 {} 秒还没跑完），{stop_note}",
+                    timeout_ms / 1000
                 ));
             }
             std::thread::sleep(std::time::Duration::from_millis(
@@ -4671,7 +4684,7 @@ impl JiaobanNewSessionCreator for ManualRelayJiaobanNewSessionCreator {
                 .map(|s| format!("；stderr：{s}"))
                 .unwrap_or_default();
             return Err(format!(
-                "初始化没跑完（状态 {}，exit {:?}）{stderr_note}",
+                "transport_failed: 初始化没跑完（状态 {}，exit {:?}）{stderr_note}",
                 receipt.status, receipt.exit_code
             ));
         }
@@ -5999,6 +6012,7 @@ mod fix9_tests {
             supervisor_acceptance_criteria: vec!["检查回程证据后给出结论".to_string()],
             next_steps: vec!["改 index.html".to_string()],
             execution_scope: Some(ConsultationExecutionScope {
+                requires_write: true,
                 write_roots: vec![],
                 target_files: vec!["index.html".to_string()],
                 tools: vec![],
@@ -6116,6 +6130,7 @@ mod quality_debt_tests {
             supervisor_acceptance_criteria: vec!["检查回程证据后给出结论".to_string()],
             next_steps: vec!["改 index.html".to_string()],
             execution_scope: Some(ConsultationExecutionScope {
+                requires_write: true,
                 write_roots: vec![],
                 target_files: vec!["index.html".to_string()],
                 tools: vec![],
@@ -7308,6 +7323,18 @@ mod quality_debt_tests {
             "[C1_TIMING] N 任务链会话总开销 ≈ N × {elapsed_ms} ms（每任务一条·线性·知情代价）"
         );
         assert!(!thread_id.trim().is_empty(), "应拿到真 thread_id");
+    }
+
+    #[test]
+    fn supervisor_session_birth_uses_short_timeout_without_changing_classic_chain_budget() {
+        assert_eq!(
+            jiaoban_new_session_timeout_ms("supervisor_orchestrator"),
+            120_000
+        );
+        assert_eq!(
+            jiaoban_new_session_timeout_ms("director_chain"),
+            JIAOBAN_NEW_SESSION_TIMEOUT_MS
+        );
     }
 
     // §4·新断言：独立[接着跑]/自动免管路（run_auto_advance_authorized_role_loop_with_session_creator）

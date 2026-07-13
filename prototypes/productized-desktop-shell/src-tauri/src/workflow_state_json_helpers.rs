@@ -10,6 +10,7 @@ fn initial_workflow_state_json(
     json!({
       "schema_version": "workflow_state_v0",
       "workflow_version": 1,
+      "revision": 0,
       "workspace_id": workspace_id(),
       "created_at": timestamp,
       "updated_at": timestamp,
@@ -65,7 +66,7 @@ fn validate_workflow_state(value: &Value) -> Vec<String> {
 }
 
 fn write_validated_workflow_state(path: &Path, value: &Value) -> Result<(), String> {
-    workflow_state_store::write_validated(path, value, validate_workflow_state, atomic_write_json)
+    workflow_state_store::write_validated(path, value, validate_workflow_state)
 }
 
 fn backup_workflow_state_file(path: &Path, timestamp: &str) -> Result<PathBuf, String> {

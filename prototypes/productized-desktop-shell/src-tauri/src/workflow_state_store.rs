@@ -8,6 +8,7 @@ const LOCK_NAME: &str = ".workflow-state.v0.lock";
 const BACKUP_PREFIX: &str = "workflow-state.v0.";
 const BACKUP_SUFFIX: &str = ".json";
 const RETAIN_RECENT_BACKUPS: usize = 30;
+const RETAIN_DAILY_BACKUPS: usize = 30;
 const MILLIS_PER_DAY: u128 = 86_400_000;
 
 pub(crate) fn read_value(path: &Path) -> Result<Value, String> {
@@ -69,11 +70,7 @@ pub(crate) fn write_validated(
     path: &Path,
     value: &Value,
     validate_workflow_state: fn(&Value) -> Vec<String>,
-    atomic_write_json: fn(&Path, &Value) -> Result<(), String>,
 ) -> Result<(), String> {
-    if path.exists() {
-        read_value(path)?;
-    }
     let validation_warnings = validate_workflow_state(value);
     if !validation_warnings.is_empty() {
         return Err(format!(
@@ -81,7 +78,35 @@ pub(crate) fn write_validated(
             validation_warnings.join(", ")
         ));
     }
-    atomic_write_json(path, value)
+    let lock_path = workflow_state_lock_path(path)?;
+    let write_id = format!("validated-write:{}:{}", std::process::id(), write_nonce());
+    let _lock = StoreLock::acquire(&lock_path, &write_id)?;
+    let current = if path.exists() {
+        Some(read_value(path)?)
+    } else {
+        None
+    };
+    let expected_revision = state_revision(value)?;
+    let actual_revision = current
+        .as_ref()
+        .map(state_revision)
+        .transpose()?
+        .unwrap_or_default();
+    if expected_revision != actual_revision {
+        return Err(format!(
+            "workflow_state_revision_conflict: expected {expected_revision}, actual {actual_revision}"
+        ));
+    }
+    let mut next = value.clone();
+    let next_revision = actual_revision
+        .checked_add(1)
+        .ok_or_else(|| "workflow_state_revision_exhausted: revision 已到 i64 上限".to_string())?;
+    next["revision"] = Value::from(next_revision);
+    atomic_write_locked(
+        path,
+        &next,
+        &format!("validated-{}-{}", std::process::id(), write_nonce()),
+    )
 }
 
 pub(crate) fn backup_file(path: &Path, timestamp: &str) -> Result<PathBuf, String> {
@@ -100,15 +125,20 @@ pub(crate) fn backup_file(path: &Path, timestamp: &str) -> Result<PathBuf, Strin
     Ok(backup)
 }
 
+#[cfg(test)]
 pub(crate) fn atomic_write(path: &Path, value: &Value, timestamp: &str) -> Result<(), String> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("状态文件路径没有父目录：{}", path.display()))?;
     let lock_path = workflow_state_lock_path(path)?;
     let _lock = StoreLock::acquire(&lock_path, &format!("write:{timestamp}"))?;
     if path.exists() {
         read_value(path)?;
     }
+    atomic_write_locked(path, value, timestamp)
+}
+
+fn atomic_write_locked(path: &Path, value: &Value, timestamp: &str) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("状态文件路径没有父目录：{}", path.display()))?;
     let temp_path = parent.join(format!(".workflow-state.v0.{timestamp}.tmp"));
     let text = serde_json::to_string_pretty(value)
         .map_err(|error| format!("状态 JSON 序列化失败：{error}"))?;
@@ -122,6 +152,23 @@ pub(crate) fn atomic_write(path: &Path, value: &Value, timestamp: &str) -> Resul
     }
     fs::rename(&temp_path, path)
         .map_err(|error| format!("原子替换状态文件失败 {}：{error}", path.display()))
+}
+
+fn state_revision(value: &Value) -> Result<i64, String> {
+    match value.get("revision") {
+        None | Some(Value::Null) => Ok(0),
+        Some(revision) => revision
+            .as_i64()
+            .filter(|revision| *revision >= 0)
+            .ok_or_else(|| "workflow_state_revision_invalid: revision 必须是非负整数".to_string()),
+    }
+}
+
+fn write_nonce() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default()
 }
 
 fn workflow_state_lock_path(path: &Path) -> Result<PathBuf, String> {
@@ -228,7 +275,13 @@ fn prune_workflow_state_backups(backups_dir: &Path) -> Result<(), String> {
             .entry(entry.day_key.clone())
             .or_insert_with(|| entry.path.clone());
     }
-    keep_paths.extend(latest_daily.into_values());
+    keep_paths.extend(
+        latest_daily
+            .into_iter()
+            .rev()
+            .take(RETAIN_DAILY_BACKUPS)
+            .map(|(_, path)| path),
+    );
 
     for entry in entries {
         if !keep_paths.contains(&entry.path) {
@@ -323,10 +376,6 @@ mod tests {
         vec!["workflow revision 不匹配：expected 99, actual 1".to_string()]
     }
 
-    fn atomic_write_test(path: &Path, value: &Value) -> Result<(), String> {
-        atomic_write(path, value, "2026-06-10T00-00-testZ")
-    }
-
     #[test]
     fn workflow_state_atomic_write_refuses_lock_busy_without_overwrite() {
         let dir = temp_test_dir("workflow-state-lock-busy");
@@ -352,13 +401,8 @@ mod tests {
         let path = dir.join("workflow-state.v0.json");
         fs::write(&path, "{not-json").expect("corrupt state should be written");
 
-        let error = write_validated(
-            &path,
-            &valid_state("new"),
-            validate_test_state,
-            atomic_write_test,
-        )
-        .expect_err("corrupt existing state should block overwrite");
+        let error = write_validated(&path, &valid_state("new"), validate_test_state)
+            .expect_err("corrupt existing state should block overwrite");
 
         assert!(error.contains("工作流状态 JSON 解析失败"));
         assert_eq!(fs::read_to_string(&path).unwrap(), "{not-json");
@@ -373,16 +417,37 @@ mod tests {
             .expect("initial write should succeed");
         let original = fs::read_to_string(&path).expect("original state should exist");
 
-        let error = write_validated(
-            &path,
-            &valid_state("new"),
-            validate_revision_conflict,
-            atomic_write_test,
-        )
-        .expect_err("revision conflict should reject write");
+        let error = write_validated(&path, &valid_state("new"), validate_revision_conflict)
+            .expect_err("revision conflict should reject write");
 
         assert!(error.contains("workflow revision 不匹配"));
         assert_eq!(fs::read_to_string(&path).unwrap(), original);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn workflow_state_stale_snapshot_is_rejected_without_lost_update() {
+        let dir = temp_test_dir("workflow-state-stale-snapshot");
+        let path = dir.join("workflow-state.v0.json");
+        atomic_write(&path, &valid_state("initial"), "2026-06-10T00-00-00Z")
+            .expect("initial write should succeed");
+        let mut first_snapshot = read_value(&path).expect("first snapshot");
+        let mut stale_snapshot = first_snapshot.clone();
+        first_snapshot["updated_at"] = Value::from("first-writer");
+        stale_snapshot["updated_at"] = Value::from("stale-writer");
+
+        write_validated(&path, &first_snapshot, validate_test_state)
+            .expect("first snapshot should advance revision");
+        let after_first = fs::read_to_string(&path).expect("first update should persist");
+        let error = write_validated(&path, &stale_snapshot, validate_test_state)
+            .expect_err("stale snapshot must not overwrite first update");
+
+        assert!(error.contains("workflow_state_revision_conflict"));
+        assert!(error.contains("expected 0, actual 1"));
+        assert_eq!(fs::read_to_string(&path).unwrap(), after_first);
+        let persisted = read_value(&path).unwrap();
+        assert_eq!(persisted["revision"], 1);
+        assert_eq!(persisted["updated_at"], "first-writer");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -427,6 +492,37 @@ mod tests {
         assert!(remaining.contains(&"workflow-state.v0.2026-06-01T00-00-02.json".to_string()));
         assert!(!remaining.contains(&"workflow-state.v0.2026-06-10T00-00-00.json".to_string()));
         assert!(!remaining.contains(&"workflow-state.v0.2026-06-01T00-00-00.json".to_string()));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn workflow_state_backup_retention_caps_daily_history() {
+        let dir = temp_test_dir("workflow-state-backup-daily-cap");
+        let backups_dir = dir.join("backups");
+        fs::create_dir_all(&backups_dir).expect("backup dir should be created");
+
+        for day in 1..=45 {
+            let name = format!("workflow-state.v0.2026-05-{day:02}T00-00-00.json");
+            fs::write(backups_dir.join(name), "{}").expect("daily backup fixture");
+        }
+        for second in 1..=30 {
+            let name = format!("workflow-state.v0.2026-05-45T00-00-{second:02}.json");
+            fs::write(backups_dir.join(name), "{}").expect("recent backup fixture");
+        }
+
+        prune_workflow_state_backups(&backups_dir).expect("backup pruning should succeed");
+        let remaining = fs::read_dir(&backups_dir)
+            .expect("backup dir should be readable")
+            .count();
+
+        assert!(remaining <= RETAIN_RECENT_BACKUPS + RETAIN_DAILY_BACKUPS);
+        assert!(remaining > RETAIN_RECENT_BACKUPS);
+        assert!(backups_dir
+            .join("workflow-state.v0.2026-05-45T00-00-30.json")
+            .exists());
+        assert!(!backups_dir
+            .join("workflow-state.v0.2026-05-01T00-00-00.json")
+            .exists());
         let _ = fs::remove_dir_all(dir);
     }
 }

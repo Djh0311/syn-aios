@@ -732,6 +732,75 @@ mod command_rollout_fallback_tests {
         assert_eq!(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "/Users/yoyi/codex-workflow-mario-test");
     }
 
+    // 站 3b 小闸案发测试（2026-07-12 拍板）：只认「3b 项目根精确相等 ∧ 写根为空」。
+    #[test]
+    fn station3b_gate_only_unseals_exact_root_with_zero_write_roots() {
+        let root = STATION_3B_READONLY_PROJECT_ROOT;
+        assert_eq!(root, "/Users/yoyi/Documents/mario test");
+        // 合法：3b 根 + 零写根。
+        assert!(station3b_readonly_project_unsealed(root, &[]));
+        // 案发：任何写根都不解封——包括写根就是 3b 根自己。
+        assert!(!station3b_readonly_project_unsealed(root, &[root.to_string()]));
+        assert!(!station3b_readonly_project_unsealed(
+            root,
+            &[WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string()]
+        ));
+        // 案发：子目录 / 前缀 / 尾斜杠 / 其它项目一律拒（精确相等，无路径规范化魔法）。
+        assert!(!station3b_readonly_project_unsealed("/Users/yoyi/Documents/mario test/subdir", &[]));
+        assert!(!station3b_readonly_project_unsealed("/Users/yoyi/Documents/mario test/", &[]));
+        assert!(!station3b_readonly_project_unsealed("/Users/yoyi/Documents", &[]));
+        assert!(!station3b_readonly_project_unsealed("/Users/yoyi/gameai/crazytown", &[]));
+        assert!(!station3b_readonly_project_unsealed("", &[]));
+        // 固定测试项目不走 3b 小闸（它走 S1 原闸；两闸互不越界）。
+        assert!(!station3b_readonly_project_unsealed(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, &[]));
+    }
+
+    // 站 3b 首发实拦复盘（2026-07-12 真机）：S1 执行层合一闸原为 authorization_complete=仅 path-lock，
+    // 主管授权的 3b 只读派发被 blocked_waiting_authorization 安全拦下。修正后的判定必须保持这个刻度：
+    // 只多认「主管授权 ∧ 3b 项目 ∧ 零写根」这一种新真值，其余一律照旧拒。
+    #[test]
+    fn station3b_real_execution_authorization_complete_scoping() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let root = STATION_3B_READONLY_PROJECT_ROOT;
+        // 测试项目：path-lock 命中即真（与主管、写根无关——原语义零变化）。
+        assert!(real_execution_authorization_complete(test_root, &[], false));
+        assert!(real_execution_authorization_complete(
+            test_root,
+            &[test_root.to_string()],
+            true
+        ));
+        // 3b：仅「主管授权 + 零写根」为真。
+        assert!(real_execution_authorization_complete(root, &[], true));
+        // 经典线（无主管授权）喂 3b → 拒。
+        assert!(!real_execution_authorization_complete(root, &[], false));
+        // 主管授权但带写根 → 拒。
+        assert!(!real_execution_authorization_complete(root, &[root.to_string()], true));
+        // 其它真实项目：主管授权也不行。
+        assert!(!real_execution_authorization_complete(
+            "/Users/yoyi/gameai/crazytown",
+            &[],
+            true
+        ));
+    }
+
+    // 站 3b 不放宽 S1：同一个 mario test 目录喂 S1 原闸/legacy 封条仍然全拒——
+    // 尤其 j2_b_b1 旧桩写死的就是这个目录，3b 解封绝不能让它复活。
+    #[test]
+    fn station3b_does_not_widen_s1_gate_or_legacy_seals() {
+        assert!(!workflow_engine_test_project_unsealed(STATION_3B_READONLY_PROJECT_ROOT));
+        assert!(require_test_project_path_lock(STATION_3B_READONLY_PROJECT_ROOT, "x").is_err());
+        assert_eq!(
+            project_workflow_automation::J2_B_B1_PROJECT_ROOT,
+            STATION_3B_READONLY_PROJECT_ROOT,
+            "j2_b_b1 写死目录与 3b 项目是同一个——这条相等就是「必须并列小闸、不得改 S1 本体」的铁证"
+        );
+        assert!(require_test_project_path_lock(
+            project_workflow_automation::J2_B_B1_PROJECT_ROOT,
+            "run_project_workflow_automation_j2_b_b1"
+        )
+        .is_err());
+    }
+
     // ===== 修显示 bug：工作台绑定会话在智能体页可见（2026-07-09）=====
     // 建一个 codex sqlite（含 read_threads_page 用的 threads 表 + has_user_event 列）。
     fn create_codex_threads_db(path: &Path) {
@@ -2120,6 +2189,36 @@ fn require_test_project_path_lock(project_root: &str, command_name: &str) -> Res
     }
 }
 
+// 站 3b（2026-07-12 用户拍板；任务包 tasks/2026-07-12-orchestrator-station3b-readonly-real-project-
+// mario-test-v1.md）：唯一获批的「真实项目只读解封」，与 S1 闸**并列**——不放宽
+// workflow_engine_test_project_unsealed / require_test_project_path_lock 本体，legacy 封条（含写死同一
+// 目录的 j2_b_b1）继续 blocked。只挂主管编排链路（发射器 + 主管派发/追问适配器 + 前端开关），不挂经典
+// 管线、legacy 旧桩、自动连环。判定 = 项目根**精确相等** ∧ 写根为空；任何写根、任何其它项目 → 不解封。
+const STATION_3B_READONLY_PROJECT_ROOT: &str = "/Users/yoyi/Documents/mario test";
+
+// 根等值判定：仅用于「授权段写根不在手上」的次级闸（发射器命令面/argv 终验——入口闸已先按
+// 「根+零写根」全判过）。会拿到写根的地方一律用 station3b_readonly_project_unsealed 全判。
+fn station3b_readonly_project_root(project_root: &str) -> bool {
+    project_root == STATION_3B_READONLY_PROJECT_ROOT
+}
+
+fn station3b_readonly_project_unsealed(project_root: &str, allowed_write_roots: &[String]) -> bool {
+    station3b_readonly_project_root(project_root) && allowed_write_roots.is_empty()
+}
+
+// S1 执行层合一闸的 authorization_complete 判定（站 3b 扩展；判决体 decide_real_execution_command
+// 一字不动）：测试项目 path-lock 命中，或「主管授权派发（带已核 prepared dispatch/授权段）∧ 3b 项目
+// ∧ 零写根」。经典画布(B 线)喂 3b 项目时 supervisor_authorized=false → 此处照拒（其命令入口的
+// S1 闸也已先拦，双层兜底）。
+fn real_execution_authorization_complete(
+    project_root: &str,
+    write_roots: &[String],
+    supervisor_authorized: bool,
+) -> bool {
+    workflow_engine_test_project_unsealed(project_root)
+        || (supervisor_authorized && station3b_readonly_project_unsealed(project_root, write_roots))
+}
+
 #[tauri::command]
 fn execute_workflow_node_dispatch(
     request: WorkflowNodeDispatchExecuteRequest,
@@ -2713,7 +2812,13 @@ fn execute_project_workflow_node_with_authorization_at(
     //   readback_required = true（B 走 readback_db 回读）。
     // 沙箱 command_plan_for / 判决体 decide_real_execution_command / A 线路径 均一字未改。
     {
-        let path_lock_hit = workflow_engine_test_project_unsealed(&request.project_root);
+        // 站 3b：authorization_complete 认两种真授权——测试项目 path-lock，或主管授权的 3b 只读派发
+        // （supervisor_authorization 携带已核 prepared dispatch；write_roots 由 read-only 沙箱推出=空）。
+        let path_lock_hit = real_execution_authorization_complete(
+            &request.project_root,
+            &write_roots,
+            supervisor_authorization.is_some(),
+        );
         let gate_state = read_workflow_state_value(path)?;
         let duplicate_blocked = has_inflight_dispatch(&gate_state, &workflow_id, &request.node_id);
         let guard = codex_local_runner::inspect_codex_local_execution_guard(

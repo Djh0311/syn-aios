@@ -44,14 +44,30 @@ import type {
 
 // 固定测试项目（自动干只在这真跑；非它则老实标注·跳智能体直连）。与 WorkflowCommandConsoleView 同一常量。
 const TEST_PROJECT_ROOT = "/Users/yoyi/codex-workflow-mario-test";
+// 站 3b（2026-07-12 拍板）：唯一获批的真实项目只读入口——只开主管编排、零写根死线；
+// 经典状态机对它仍锁（后端 S1 闸原样）。与后端 STATION_3B_READONLY_PROJECT_ROOT 同值。
+export const STATION_3B_READONLY_PROJECT_ROOT = "/Users/yoyi/Documents/mario test";
 const SUPERVISOR_PILOT_REASONING_EFFORT = "medium";
 
 export type JiaobanOrchestrationMode = "classic" | "supervisor_pilot";
 
 export function supervisorPilotUnavailableReason(projectRoot: string, allowedWriteRoots: string[]): string | null {
+  if (projectRoot === STATION_3B_READONLY_PROJECT_ROOT) {
+    // 3b 只读死线：方案带任何写根都不给选主管模式（不看写根指向谁）。
+    if (allowedWriteRoots.length > 0) return "站 3b 项目仅限只读单（零写根）。";
+    return null;
+  }
   if (projectRoot !== TEST_PROJECT_ROOT) return "主管编排试点仅限固定测试项目。";
   if (allowedWriteRoots.some((root) => root !== TEST_PROJECT_ROOT)) {
     return "主管编排写入试点只允许固定测试项目根。";
+  }
+  return null;
+}
+
+// 站 3b 项目上经典状态机不可用的人话理由（测试项目与其它项目返回 null——其它项目根本进不了交办）。
+export function classicModeUnavailableReason(projectRoot: string): string | null {
+  if (projectRoot === STATION_3B_READONLY_PROJECT_ROOT) {
+    return "站 3b 项目只开通主管编排只读单；经典状态机仍锁固定测试项目。";
   }
   return null;
 }
@@ -444,6 +460,8 @@ function ProjectJiaobanPanelBrowser({
   const latestProposal = proposalSummary.latest_proposal;
 
   const isTestProject = project.project_root === TEST_PROJECT_ROOT;
+  // 站 3b：唯一获批的真实项目只读入口——进交办流，但只开主管编排（经典模式后端 S1 闸原样拒）。
+  const isStation3bProject = project.project_root === STATION_3B_READONLY_PROJECT_ROOT;
 
   // 「用哪个对话干」：本项目可读会话（现成会话列表数据源）。
   const projectSessions = useMemo(
@@ -511,7 +529,9 @@ function ProjectJiaobanPanelBrowser({
   const [continueHint, setContinueHint] = useState<boolean>(cached?.continueHint ?? false);
   const [chainStatus, setChainStatus] = useState<ProjectWorkflowChainStatus | null>(null);
   // 站 2：模式按单重置为经典；主管试点的过程只从 sidecar 审计读模型取，不投射为链态。
-  const [orchestrationMode, setOrchestrationMode] = useState<JiaobanOrchestrationMode>("classic");
+  const [orchestrationMode, setOrchestrationMode] = useState<JiaobanOrchestrationMode>(() =>
+    project.project_root === STATION_3B_READONLY_PROJECT_ROOT ? "supervisor_pilot" : "classic",
+  );
   const [supervisorPilotRunId, setSupervisorPilotRunId] = useState<string | null>(
     cached?.supervisorPilotRunId ?? null,
   );
@@ -648,8 +668,10 @@ function ProjectJiaobanPanelBrowser({
     ? supervisorPilotUnavailableReason(projectRoot, latestProposal.scope_draft.allowed_write_roots)
     : "请先生成方案。";
   useEffect(() => {
-    if (supervisorPilotDisabledReason) setOrchestrationMode("classic");
-  }, [supervisorPilotDisabledReason]);
+    // 3b 项目模式钉死主管编排：即使暂不可用（如方案带写根）也不回落经典——经典对 3b 后端必拒，
+    // 回落只会把用户引向一个假门；不可用原因由开始按钮/选择器上脸，fail-closed。
+    if (supervisorPilotDisabledReason && !isStation3bProject) setOrchestrationMode("classic");
+  }, [supervisorPilotDisabledReason, isStation3bProject]);
 
   // 默认选最近一条现有会话（会话到齐后补；用户手动选过就不覆盖）。无可用会话保持 null → UI 给人话提示。
   const sessionDefaultedRef = useRef(false);
@@ -1049,6 +1071,11 @@ function ProjectJiaobanPanelBrowser({
       setStartError(supervisorPilotDisabledReason);
       return;
     }
+    // 站 3b 皮带扣：任何路径滑到经典模式都在此拦住（后端 S1 闸同样会拒，这里给人话）。
+    if (isStation3bProject && !pilotSelected) {
+      setStartError("站 3b 项目只开通主管编排只读单。");
+      return;
+    }
     rememberRunCanvas();
     // ★ 一进来立刻上「正在干」脸——不等 await 回来（await 可能几十秒~几分钟，中间不能无脸看着像冻死）。
     runningRef.current = true;
@@ -1406,8 +1433,8 @@ function ProjectJiaobanPanelBrowser({
     writeJiaobanRunCache(projectRoot, { manualPhase: nextPhase });
   }, [phase, thisRoundChainStatus, projectRoot]);
 
-  // 非测试项目：老实标注 + 跳智能体直连，不装能跑。
-  if (!isTestProject) {
+  // 非测试项目：老实标注 + 跳智能体直连，不装能跑。（站 3b 项目例外：进交办流、只开主管只读。）
+  if (!isTestProject && !isStation3bProject) {
     const latestSession =
       projectSessions.sort((a, b) => (b.updated_at_ms ?? 0) - (a.updated_at_ms ?? 0))[0] ?? null;
     return (
@@ -1601,6 +1628,7 @@ function ProjectJiaobanPanelBrowser({
               orchestrationMode={orchestrationMode}
               onOrchestrationModeChange={setOrchestrationMode}
               supervisorPilotDisabledReason={supervisorPilotDisabledReason}
+              classicDisabledReason={classicModeUnavailableReason(projectRoot)}
               amendment={amendment}
               onAmendmentChange={setAmendment}
               onAmend={submitAmendment}
@@ -2138,6 +2166,7 @@ export function JiaobanAuthorizeState({
   orchestrationMode = "classic",
   onOrchestrationModeChange = () => {},
   supervisorPilotDisabledReason = null,
+  classicDisabledReason = null,
   amendment,
   onAmendmentChange,
   onAmend,
@@ -2166,6 +2195,7 @@ export function JiaobanAuthorizeState({
   orchestrationMode?: JiaobanOrchestrationMode;
   onOrchestrationModeChange?: (mode: JiaobanOrchestrationMode) => void;
   supervisorPilotDisabledReason?: string | null;
+  classicDisabledReason?: string | null;
   amendment: string;
   onAmendmentChange: (value: string) => void;
   onAmend: () => void;
@@ -2280,6 +2310,7 @@ export function JiaobanAuthorizeState({
       <JiaobanOrchestrationModePicker
         mode={orchestrationMode}
         disabledReason={supervisorPilotDisabledReason}
+        classicDisabledReason={classicDisabledReason}
         disabled={starting || consultLoading}
         onChange={onOrchestrationModeChange}
       />
@@ -2395,24 +2426,27 @@ export function JiaobanAuthorizeState({
 export function JiaobanOrchestrationModePicker({
   mode,
   disabledReason,
+  classicDisabledReason = null,
   disabled,
   onChange,
 }: {
   mode: JiaobanOrchestrationMode;
   disabledReason: string | null;
+  classicDisabledReason?: string | null;
   disabled: boolean;
   onChange: (mode: JiaobanOrchestrationMode) => void;
 }) {
   const pilotDisabled = disabled || disabledReason !== null;
+  const classicDisabled = disabled || classicDisabledReason !== null;
   return (
     <fieldset className="proposal-decision-field" aria-label="执行模式">
       <legend className="jiaoban-field-label">执行模式</legend>
-      <label>
+      <label className={classicDisabled ? "muted" : undefined}>
         <input
           type="radio"
           name="jiaoban-orchestration-mode"
           checked={mode === "classic"}
-          disabled={disabled}
+          disabled={classicDisabled}
           onChange={() => onChange("classic")}
         />
         经典状态机（默认）
@@ -2428,6 +2462,7 @@ export function JiaobanOrchestrationModePicker({
         主管编排（试点）
       </label>
       {disabledReason ? <p className="muted small-note">{disabledReason}</p> : null}
+      {classicDisabledReason ? <p className="muted small-note">{classicDisabledReason}</p> : null}
     </fieldset>
   );
 }

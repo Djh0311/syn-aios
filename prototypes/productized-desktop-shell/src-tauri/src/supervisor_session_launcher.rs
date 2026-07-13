@@ -299,8 +299,10 @@ impl SupervisorProcessSpawner for RealSupervisorProcessSpawner {
             .ok_or_else(|| "主管 stderr 路径缺父目录，拒绝发射".to_string())?;
         fs::create_dir_all(output_dir)
             .map_err(|error| format!("创建主管 stderr 目录失败：{error}"))?;
+        restrict_private_dir(output_dir)?;
         let stderr_file = fs::File::create(&plan.stderr_path)
             .map_err(|error| format!("创建主管 stderr 尸检文件失败：{error}"))?;
+        restrict_private_file(&plan.stderr_path)?;
         let child = Command::new(&plan.program)
             .args(&plan.argv)
             .current_dir(&plan.current_dir)
@@ -448,7 +450,11 @@ fn load_authorized_launch_context(
     workflow_state_path: &Path,
     request: &SupervisorPilotLaunchRequest,
 ) -> Result<SupervisorLaunchContext, String> {
-    if !crate::workflow_engine_test_project_unsealed(&request.project_root) {
+    // 站 3b（2026-07-12 拍板）：入口先按根等值放行到「读授权段」，零写根死线由下方
+    // ensure_supervisor_pilot_write_scope 拿到授权段后全判（3b 根 + 任何写根 → 拒）。
+    if !crate::workflow_engine_test_project_unsealed(&request.project_root)
+        && !crate::station3b_readonly_project_root(&request.project_root)
+    {
         return Err(crate::legacy_product_command_blocked_message(
             "launch_supervisor_pilot",
         ));
@@ -480,7 +486,10 @@ fn load_authorized_launch_context(
     {
         return Err("当前授权段已经过期，不能发射主管试点".to_string());
     }
-    ensure_supervisor_pilot_write_scope(&authorization.scope.allowed_write_roots)?;
+    ensure_supervisor_pilot_write_scope(
+        &request.project_root,
+        &authorization.scope.allowed_write_roots,
+    )?;
     let proposal_id = authorization
         .source_proposal_id
         .as_deref()
@@ -516,17 +525,17 @@ fn load_authorized_launch_context(
     let worker_acceptance_criteria = proposal.worker_acceptance_criteria.clone();
     let control_core_acceptance_criteria = proposal.control_core_acceptance_criteria.clone();
     let supervisor_acceptance_criteria = proposal.supervisor_acceptance_criteria.clone();
-    let pilot_task = if authorization.scope.allowed_write_roots.is_empty() {
-        None
-    } else {
-        Some(prepare_supervisor_pilot_write_task(
-            workflow_state_path,
-            request,
-            proposal,
-            authorization,
-            authorization_store.revision,
-        )?)
-    };
+    // 站 3b（2026-07-12）：只读单（零写根）也物化任务包+prepared dispatch——否则主管没有可派的
+    // work item，dispatch_worker 必然失败、只能独狼（站 2 只读单实测如此）。物化机器范围无关：
+    // allowed_write_scope 直抄授权段，空写根 → 任务包只读 → worker 沙箱 read-only（commands 侧
+    // 「缺或空 allowed_write 都是只读」既有纪律）。
+    let pilot_task = Some(prepare_supervisor_pilot_write_task(
+        workflow_state_path,
+        request,
+        proposal,
+        authorization,
+        authorization_store.revision,
+    )?);
     Ok(SupervisorLaunchContext {
         project_root: request.project_root.clone(),
         workflow_id: request.workflow_id.clone(),
@@ -556,10 +565,22 @@ fn load_authorized_launch_context(
     })
 }
 
-fn ensure_supervisor_pilot_write_scope(allowed_write_roots: &[String]) -> Result<(), String> {
-    if allowed_write_roots
-        .iter()
-        .all(|root| root == crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT)
+fn ensure_supervisor_pilot_write_scope(
+    project_root: &str,
+    allowed_write_roots: &[String],
+) -> Result<(), String> {
+    // 站 3b 项目：只读死线——授权段带任何写根都拒，不看写根指向谁。
+    if crate::station3b_readonly_project_root(project_root) {
+        if crate::station3b_readonly_project_unsealed(project_root, allowed_write_roots) {
+            return Ok(());
+        }
+        return Err("站 3b 项目仅限只读授权段（零写根）；当前授权段含写根，已拒绝发射".to_string());
+    }
+    // 函数自身 fail-closed（站 3b 收紧）：非测试非 3b 项目即使零写根也拒——不再只靠入口闸兜底。
+    if crate::workflow_engine_test_project_unsealed(project_root)
+        && allowed_write_roots
+            .iter()
+            .all(|root| root == crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT)
     {
         return Ok(());
     }
@@ -674,10 +695,10 @@ pub(crate) fn prepare_supervisor_pilot_write_task_for_index(
         .planned_tasks
         .into_iter()
         .find(|task| task.planned_task_id == planned_task_id)
-        .ok_or_else(|| "主管写单任务包物化后未返回对应任务，已拒绝发射".to_string())?;
+        .ok_or_else(|| "主管任务包物化后未返回对应任务，已拒绝发射".to_string())?;
     if task.status != "prepared" {
         return Err(format!(
-            "主管写单任务包尚不可派发（状态 {}）：{}",
+            "主管任务包尚不可派发（状态 {}）：{}",
             task.status,
             task.blocked_reasons.join("；")
         ));
@@ -685,7 +706,7 @@ pub(crate) fn prepare_supervisor_pilot_write_task_for_index(
     let task_package_id = task
         .task_package_id
         .as_deref()
-        .ok_or_else(|| "主管写单任务包物化后缺 task package id，已拒绝发射".to_string())?;
+        .ok_or_else(|| "主管任务包物化后缺 task package id，已拒绝发射".to_string())?;
     persist_supervisor_pilot_user_requirement_snapshot(
         workflow_state_path,
         task_package_id,
@@ -694,10 +715,10 @@ pub(crate) fn prepare_supervisor_pilot_write_task_for_index(
     Ok(SupervisorPilotTaskReference {
         node_id: task
             .workflow_node_id
-            .ok_or_else(|| "主管写单任务包缺 worker node，已拒绝发射".to_string())?,
+            .ok_or_else(|| "主管任务包缺 worker node，已拒绝发射".to_string())?,
         work_item_id: task
             .work_item_id
-            .ok_or_else(|| "主管写单任务包缺 work item，已拒绝发射".to_string())?,
+            .ok_or_else(|| "主管任务包缺 work item，已拒绝发射".to_string())?,
         allowed_write: authorization.scope.allowed_write_roots.clone(),
     })
 }
@@ -720,7 +741,7 @@ fn validate_supervisor_pilot_role_criteria(
     ] {
         if criteria.is_empty() || criteria.iter().any(|criterion| criterion.trim().is_empty()) {
             return Err(format!(
-                "主管写单任务包缺有效 {field}；拒绝从旧版统一验收字段猜测职责"
+                "主管任务包缺有效 {field}；拒绝从旧版统一验收字段猜测职责"
             ));
         }
     }
@@ -767,7 +788,7 @@ fn persist_supervisor_pilot_user_requirement_snapshot(
                     == Some(task_package_id)
             })
         })
-        .ok_or_else(|| "主管写单任务包物化后找不到 task package artifact，已拒绝发射".to_string())?;
+        .ok_or_else(|| "主管任务包物化后找不到 task package artifact，已拒绝发射".to_string())?;
     artifact["user_requirement_snapshot"] = Value::String(user_requirement_snapshot.to_string());
     crate::write_validated_workflow_state(workflow_state_path, &value)
 }
@@ -1019,7 +1040,11 @@ fn build_supervisor_command_plan(
     quota_limits: &SupervisorQuotaLimits,
     workbench_executable: &Path,
 ) -> Result<SupervisorCommandPlan, String> {
-    if !crate::workflow_engine_test_project_unsealed(&request.project_root) {
+    // 站 3b 按根等值放行（零写根死线已在 load_authorized_launch_context 全判）。主管会话 cwd
+    // 与 -C 仍死锁固定测试项目根：主管只读投影不进 3b 项目目录，进真实项目的只有受控 worker。
+    if !crate::workflow_engine_test_project_unsealed(&request.project_root)
+        && !crate::station3b_readonly_project_root(&request.project_root)
+    {
         return Err(crate::legacy_product_command_blocked_message(
             "launch_supervisor_pilot",
         ));
@@ -1084,26 +1109,28 @@ fn supervisor_output_paths(
     workflow_state_path: &Path,
     run_id: &str,
 ) -> Result<(PathBuf, PathBuf), String> {
-    let parent = workflow_state_path
-        .parent()
-        .ok_or_else(|| "工作流状态路径缺父目录，无法创建主管输出材料".to_string())?;
+    let parent = crate::utils::store_paths::runtime_artifact_dir(
+        workflow_state_path,
+        "supervisor",
+        run_id,
+    )?;
     Ok((
-        parent.join(format!("{run_id}.last-message.txt")),
-        parent.join(format!("{run_id}.stderr.txt")),
+        parent.join("step-0.last-message.txt"),
+        parent.join("step-0.stderr.txt"),
     ))
 }
 
 fn command_plan_for_next_step(
     previous: &SupervisorCommandPlan,
-    run_id: &str,
+    _run_id: &str,
     step: usize,
 ) -> Result<SupervisorCommandPlan, String> {
     let parent = previous
         .last_message_path
         .parent()
         .ok_or_else(|| "主管输出材料缺父目录".to_string())?;
-    let last_message_path = parent.join(format!("{run_id}.step-{step}.last-message.txt"));
-    let stderr_path = parent.join(format!("{run_id}.step-{step}.stderr.txt"));
+    let last_message_path = parent.join(format!("step-{step}.last-message.txt"));
+    let stderr_path = parent.join(format!("step-{step}.stderr.txt"));
     let mut plan = previous.clone();
     plan.last_message_path = last_message_path.clone();
     plan.stderr_path = stderr_path;
@@ -1118,9 +1145,13 @@ fn command_plan_for_next_step(
 
 fn validate_supervisor_argv(argv: &[String], project_root: &str) -> Result<(), String> {
     if !crate::workflow_engine_test_project_unsealed(project_root)
-        || !argv_contains_pair(argv, "-C", crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT)
+        && !crate::station3b_readonly_project_root(project_root)
     {
-        return Err("主管试点只能锁定固定测试项目".to_string());
+        return Err("主管试点只能锁定固定测试项目或站 3b 只读项目".to_string());
+    }
+    // 3b 也不例外：主管会话 cwd 恒为固定测试项目根，真实项目目录只对受控 worker 开放。
+    if !argv_contains_pair(argv, "-C", crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT) {
+        return Err("主管会话 -C 必须留在固定测试项目根，拒绝启动".to_string());
     }
     if !argv_contains_pair(argv, "--sandbox", "read-only") {
         return Err("主管试点必须使用 read-only 沙箱".to_string());
@@ -1840,6 +1871,10 @@ mod tests {
                 .expect("scripted last messages")
                 .pop_front()
                 .ok_or_else(|| "scripted supervisor has no next last_message".to_string())?;
+            if let Some(parent) = plan.last_message_path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|error| format!("create scripted output dir failed: {error}"))?;
+            }
             fs::write(&plan.last_message_path, last_message)
                 .map_err(|error| format!("write scripted last_message failed: {error}"))?;
             Ok(Box::new(FakeProcess {
@@ -2272,18 +2307,72 @@ mod tests {
 
     #[test]
     fn station3a_write_scope_accepts_only_exact_fixed_test_project_root() {
-        assert!(ensure_supervisor_pilot_write_scope(&[]).is_ok());
-        assert!(ensure_supervisor_pilot_write_scope(&[
-            crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string()
-        ])
-        .is_ok());
+        let test_root = crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        assert!(ensure_supervisor_pilot_write_scope(test_root, &[]).is_ok());
+        assert!(ensure_supervisor_pilot_write_scope(test_root, &[test_root.to_string()]).is_ok());
         for rejected in [
             "/tmp/not-the-test-project",
             "/Users/yoyi/codex-workflow-mario-test/subdir",
             "/Users/yoyi/codex-workflow-mario-test/../real-project",
         ] {
-            assert!(ensure_supervisor_pilot_write_scope(&[rejected.to_string()]).is_err());
+            assert!(
+                ensure_supervisor_pilot_write_scope(test_root, &[rejected.to_string()]).is_err()
+            );
         }
+    }
+
+    // 站 3b 案发测试：3b 项目零写根放行；带任何写根（含 3b 根自己/测试根）一律拒；
+    // 非测试非 3b 项目维持 blocked；argv 终验在 3b 下仍要求 -C 固定测试根 + read-only。
+    #[test]
+    fn station3b_write_scope_readonly_only_and_argv_stays_in_test_root() {
+        let station3b_root = crate::STATION_3B_READONLY_PROJECT_ROOT;
+        assert!(ensure_supervisor_pilot_write_scope(station3b_root, &[]).is_ok());
+        for write_root in [
+            station3b_root,
+            crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            "/tmp/anything",
+        ] {
+            assert!(
+                ensure_supervisor_pilot_write_scope(station3b_root, &[write_root.to_string()])
+                    .is_err(),
+                "3b 项目带写根 {write_root} 必须拒绝"
+            );
+        }
+        // 其它真实项目根：两闸都不认。
+        assert!(ensure_supervisor_pilot_write_scope("/Users/yoyi/gameai/crazytown", &[]).is_err());
+
+        // argv 终验：3b project_root 放行，但 -C 仍必须是固定测试项目根。
+        let argv_with = |cwd: &str, sandbox: &str| -> Vec<String> {
+            [
+                "exec",
+                "--ephemeral",
+                "-C",
+                cwd,
+                "--sandbox",
+                sandbox,
+                "--json",
+                "-c",
+                "features.multi_agent=false",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+        };
+        let good_argv = argv_with(crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "read-only");
+        assert!(validate_supervisor_argv(&good_argv, station3b_root).is_ok());
+        // -C 指向 3b 项目 → 拒（主管不进真实项目目录）。
+        assert!(
+            validate_supervisor_argv(&argv_with(station3b_root, "read-only"), station3b_root)
+                .is_err()
+        );
+        // workspace-write → 拒。
+        assert!(validate_supervisor_argv(
+            &argv_with(crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "workspace-write"),
+            station3b_root
+        )
+        .is_err());
+        // 其它真实项目 project_root → 拒。
+        assert!(validate_supervisor_argv(&good_argv, "/Users/yoyi/gameai/crazytown").is_err());
     }
 
     #[test]
@@ -2338,15 +2427,23 @@ mod tests {
             crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT
         ));
         assert!(!plan.argv.iter().any(|argument| argument == "--model"));
+        let expected_output_dir = Path::new("/tmp")
+            .join("runtime-artifacts")
+            .join("supervisor")
+            .join(crate::utils::hash::short_hash("supervisor:station2:1"));
         assert!(argv_contains_pair(
             &plan.argv,
             "--output-last-message",
-            "/tmp/supervisor:station2:1.last-message.txt"
+            expected_output_dir
+                .join("step-0.last-message.txt")
+                .to_string_lossy()
+                .as_ref()
         ));
         assert_eq!(
             plan.stderr_path,
-            Path::new("/tmp/supervisor:station2:1.stderr.txt")
+            expected_output_dir.join("step-0.stderr.txt")
         );
+        assert!(!plan.last_message_path.to_string_lossy().contains(':'));
         assert!(plan
             .argv
             .iter()

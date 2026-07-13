@@ -17,6 +17,8 @@ pub(crate) struct ConsultationRisk {
 // 可空：纯问答咨询不需要下游改任何东西 → None。**后端只忠实透传·绝不默认/兜底缺失的写范围（用户硬约束）。**
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub(crate) struct ConsultationExecutionScope {
+    // true = 下游需要改文件；false = 下游只读文件/运行只读检查。旧模型没报该字段时由解析层按 true 兼容。
+    pub(crate) requires_write: bool,
     pub(crate) write_roots: Vec<String>, // 写范围：下游执行可写的目录（须在被咨询项目根内）
     pub(crate) target_files: Vec<String>, // 目标文件：预期改动的具体文件·相对项目根（细粒度·可空）
     pub(crate) tools: Vec<String>, // 工具：下游 worker 需要的能力（要写就得含写能力，如 write_file/apply_patch）
@@ -349,17 +351,20 @@ fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
   "control_core_acceptance_criteria": ["只由控制核心完成的授权、工作项、唯一派发或账本事实"],
   "supervisor_acceptance_criteria": ["只由主管完成的证据检查、终标或用户报告事实"],
   "execution_scope": {
+    "requires_write": true,
     "target_files": ["预期改动的具体文件·相对项目根(尽量列出·可空)"],
     "checks": ["怎么验收,如 cargo test / npm test / 浏览器打开看效果"]
   },
   "suggest_workflow": true
 }
 **判断这个目标要不要下游真改代码/文件**:
-- **凡用户目标涉及创建/修改/删除任何文件或功能,必须输出 execution_scope**(target_files 按最合理猜测填,宁可猜也别省略);仅当目标是纯提问/纯分析时才给 null。漏给这个字段=用户批的方案会变成不能动手的空转单。
-- 要改 → 给出 execution_scope 块,写清"会改哪些文件(target_files)+怎么验收(checks)"。这是你方案的一部分。
+- **凡用户目标需要下游读取项目文件、运行检查或创建/修改/删除文件,都必须输出 execution_scope**；仅当目标是无需下游工作的纯问答时才给 null。漏给这个字段=用户批的方案会变成不能执行的空转单。
+- 要改 → requires_write=true，写清"会改哪些文件(target_files)+怎么验收(checks)"。这是你方案的一部分。
   (写范围/工具由系统按固定档位装配·你不用报;多报的字段会被忽略。)
-- 只是回答问题、不需要改任何东西 → execution_scope 给 **null**,并在 scope_note 注明"纯咨询/只读"。
+- 只读盘点/检查 → requires_write=false，target_files 写只读涉及的文件，checks 只列用户原文明确要求的只读命令；不得自行增加命令。
+- 无需读取项目文件或运行检查的纯回答 → execution_scope 给 **null**,并在 scope_note 注明"纯咨询"。
 - 三类 acceptance criteria 必须按责任主体输出，不能把 worker、控制核心和主管职责混在同一数组；不要仅概括用户给出的文件名、精确内容、编码、字节数或末尾换行约束，必须逐字保留在 worker_acceptance_criteria。
+- **纯咨询/只读/盘点类目标同样三类都不许为空**：worker 的可验证事实=口供本身的硬要求（如"问题清单每条带 file:line+原文引用""对照 README 逐条判定""不写任何文件"），控制核心=零写根/只读沙箱/唯一派发等账本事实，主管=核对口供引用与终标报告。没有文件改动 ≠ 没有 worker 验收。
 **判断这活值不值得拆成多步工作流(suggest_workflow)**:
 - 需要多步、有先后依赖、值得先看工序图再动手(复杂改造/多文件协作) → suggest_workflow=**true**。
 - 一两步就完、或纯咨询不改东西 → suggest_workflow=**false**(缺省)。"#,
@@ -379,6 +384,8 @@ struct ConsultRiskJson {
 
 #[derive(serde::Deserialize)]
 struct ConsultExecutionScopeJson {
+    #[serde(default)]
+    requires_write: Option<bool>,
     #[serde(default)]
     write_roots: Vec<String>,
     #[serde(default)]
@@ -471,6 +478,8 @@ pub(crate) fn parse_consultation_proposal(raw: &str) -> Result<ConsultationPropo
         // （纯咨询/只读）。交办地基 2.1：写范围来源改为**档位**后，Some 不再取决于 write_roots——咨询报的
         // write_roots/tools 留作向后兼容但下游 map 忽略（用档位）；下游真正用的是 checks/target_files。
         execution_scope: dto.execution_scope.map(|es| ConsultationExecutionScope {
+            // 向后兼容旧结构：此前只要有 execution_scope 就表示要改文件。
+            requires_write: es.requires_write.unwrap_or(true),
             write_roots: es
                 .write_roots
                 .into_iter()
@@ -593,7 +602,7 @@ fn map_consultation_to_c1_input_with_user_requirement_snapshot(
         // 有执行范围（交办地基 2.1）：write/tools/roles 从**写死的档位**填（不可参数化·防"预览任意项目"滑成
         // "改任意项目"）；checks 仍用咨询提的、target_files 仍进 proposed_steps。写范围来源换成档位后，原
         // "write_roots 越界拒"护栏对象消失（档位=测试项目根·恒合法），故移除。
-        Some(es) => {
+        Some(es) if es.requires_write => {
             // target_files 不丢：塞进 proposed_steps 最前（让方案卡/主管看到具体文件）。
             if !es.target_files.is_empty() {
                 proposed_steps.insert(0, format!("目标文件：{}", es.target_files.join("、")));
@@ -613,7 +622,35 @@ fn map_consultation_to_c1_input_with_user_requirement_snapshot(
                 max_runtime_minutes: None,
             }
         }
-        // 纯咨询/只读：保持只读·空写范围——这是忠实映射"咨询判定不需要改东西"，**不是**默认兜底缺失的写范围。
+        // 只读执行范围：允许读项目文件与运行用户明确要求的检查，但写根保持空。
+        Some(es) => {
+            if !es.target_files.is_empty() {
+                proposed_steps.insert(0, format!("只读文件：{}", es.target_files.join("、")));
+            }
+            for check in &es.checks {
+                if !user_requirement_snapshot.contains(check) {
+                    return Err(format!(
+                        "consultant_readonly_check_not_in_user_requirement:{check}"
+                    ));
+                }
+            }
+            ProjectConsultationProposalScopeDraft {
+                allowed_role_ids: vec![
+                    "project_consultant".to_string(),
+                    "codex-dev".to_string(),
+                ],
+                allowed_agent_ids: vec![],
+                allowed_read_roots: vec![project_root.to_string()],
+                allowed_write_roots: vec![],
+                allowed_tools: vec!["read_file".to_string()],
+                allowed_checks: es.checks.clone(),
+                allowed_task_package_kinds: vec!["task_package".to_string()],
+                stop_conditions,
+                max_worker_dispatches: None,
+                max_runtime_minutes: None,
+            }
+        }
+        // 纯咨询：保持只读·空写范围——这是忠实映射"咨询判定无需下游执行"，**不是**默认兜底缺失的写范围。
         None => ProjectConsultationProposalScopeDraft {
             // 只读结论仍需交给 worker 执行；仅授权 codex-dev 角色，不授予任何写范围或写工具。
             allowed_role_ids: vec!["project_consultant".to_string(), "codex-dev".to_string()],
@@ -897,5 +934,80 @@ mod consultant_recall_tests {
             "load_project_context 不填已完成事实——由 director 重拆分支用真实 path 填（防死锚回潜·同款）"
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn readonly_execution_scope_carries_user_literal_check_without_write_authority() {
+        let raw = r#"```json
+{
+  "user_goal": "只读盘点",
+  "goal_summary": "核对源码并检查语法",
+  "scope_note": "只读",
+  "reasoning": ["只读检查"],
+  "risks": [],
+  "must_stop_points": ["不得写文件"],
+  "next_steps": ["交给只读 worker"],
+  "worker_acceptance_criteria": ["运行 node --check game.js"],
+  "control_core_acceptance_criteria": ["零写根"],
+  "supervisor_acceptance_criteria": ["核对退出码"],
+  "execution_scope": {
+    "requires_write": false,
+    "target_files": ["README.md", "game.js"],
+    "checks": ["node --check game.js"]
+  },
+  "suggest_workflow": false
+}
+```"#;
+        let proposal = parse_consultation_proposal(raw).expect("parse readonly scope");
+        let input = map_consultation_to_c1_input_with_user_requirement_snapshot(
+            &proposal,
+            "/tmp/mario-test",
+            "user",
+            "只读读取 README.md 和 game.js；运行 node --check game.js；不写文件。",
+        )
+        .expect("literal user check should map");
+
+        assert!(input.scope_draft.allowed_write_roots.is_empty());
+        assert_eq!(input.scope_draft.allowed_tools, vec!["read_file"]);
+        assert_eq!(
+            input.scope_draft.allowed_checks,
+            vec!["node --check game.js"]
+        );
+        assert_eq!(
+            input.proposed_steps.first().map(String::as_str),
+            Some("只读文件：README.md、game.js")
+        );
+    }
+
+    #[test]
+    fn readonly_execution_scope_rejects_model_invented_check() {
+        let proposal = ConsultationProposal {
+            user_goal: "只读盘点".to_string(),
+            goal_summary: "核对源码".to_string(),
+            scope_note: "只读".to_string(),
+            reasoning: vec!["只读检查".to_string()],
+            risks: vec![],
+            must_stop_points: vec!["不得写文件".to_string()],
+            next_steps: vec!["交给只读 worker".to_string()],
+            worker_acceptance_criteria: vec!["运行 npm test".to_string()],
+            control_core_acceptance_criteria: vec!["零写根".to_string()],
+            supervisor_acceptance_criteria: vec!["核对退出码".to_string()],
+            execution_scope: Some(ConsultationExecutionScope {
+                requires_write: false,
+                write_roots: vec![],
+                target_files: vec!["game.js".to_string()],
+                tools: vec![],
+                checks: vec!["npm test".to_string()],
+            }),
+            suggest_workflow: false,
+        };
+        let error = map_consultation_to_c1_input_with_user_requirement_snapshot(
+            &proposal,
+            "/tmp/mario-test",
+            "user",
+            "只读盘点 game.js，不写文件。",
+        )
+        .expect_err("model must not invent readonly checks");
+        assert_eq!(error, "consultant_readonly_check_not_in_user_requirement:npm test");
     }
 }

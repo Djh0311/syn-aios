@@ -1,5 +1,5 @@
 use crate::utils::store_paths;
-use crate::{CodexLocalCommandPlan, CodexLocalExecutionRequest};
+use crate::CodexLocalExecutionRequest;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
@@ -20,6 +20,10 @@ struct RegisteredProcess {
     run_id: String,
     started_at: String,
     cmdline_summary: String,
+    #[serde(default)]
+    process_group: bool,
+    #[serde(default)]
+    process_group_id: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,11 +47,12 @@ struct ExecProcessRegistryStore {
 struct ObservedProcess {
     started_at: String,
     cmdline: String,
+    process_group_id: Option<u32>,
 }
 
 trait ProcessOperations {
     fn inspect(&self, pid: u32) -> Result<Option<ObservedProcess>, String>;
-    fn kill_and_wait(&self, pid: u32) -> Result<(), String>;
+    fn kill_and_wait(&self, pid: u32, process_group: bool) -> Result<(), String>;
 }
 
 struct SystemProcessOperations;
@@ -60,20 +65,28 @@ impl ProcessOperations for SystemProcessOperations {
         };
         let cmdline = ps_field(pid, "command")?
             .ok_or_else(|| format!("读取 PID {pid} 命令行失败：进程在两次核验之间退出"))?;
+        let process_group_id =
+            ps_field(pid, "pgid")?.and_then(|value| value.trim().parse::<u32>().ok());
         Ok(Some(ObservedProcess {
             started_at,
             cmdline,
+            process_group_id,
         }))
     }
 
-    fn kill_and_wait(&self, pid: u32) -> Result<(), String> {
+    fn kill_and_wait(&self, pid: u32, process_group: bool) -> Result<(), String> {
+        let target = if process_group {
+            format!("-{pid}")
+        } else {
+            pid.to_string()
+        };
         let status = Command::new("/bin/kill")
             .arg("-KILL")
-            .arg(pid.to_string())
+            .arg(&target)
             .status()
-            .map_err(|error| format!("回收 PID {pid} 时无法发送终止信号：{error}"))?;
+            .map_err(|error| format!("回收执行目标 {target} 时无法发送终止信号：{error}"))?;
         if !status.success() {
-            return Err(format!("回收 PID {pid} 时终止信号返回 {status}"));
+            return Err(format!("回收执行目标 {target} 时终止信号返回 {status}"));
         }
         for _ in 0..REAP_WAIT_ATTEMPTS {
             if self.inspect(pid)?.is_none() {
@@ -89,6 +102,21 @@ impl ProcessOperations for SystemProcessOperations {
 pub(crate) struct ProcessRegistration {
     workflow_state_path: PathBuf,
     entry: Option<RegisteredProcess>,
+}
+
+/// manual relay 的真进程登记必须显式注销；异常路径 drop 不会清登记，确保下次启动仍能补收。
+pub(crate) struct DurableProcessRegistration {
+    workflow_state_path: PathBuf,
+    entry: Option<RegisteredProcess>,
+}
+
+impl DurableProcessRegistration {
+    pub(crate) fn unregister(mut self) -> Result<(), String> {
+        let Some(entry) = self.entry.take() else {
+            return Ok(());
+        };
+        unregister_entry(&self.workflow_state_path, &entry)
+    }
 }
 
 impl ProcessRegistration {
@@ -110,34 +138,130 @@ impl Drop for ProcessRegistration {
     }
 }
 
-/// 只接受 runner 刚 spawn 的 PID；ps 身份读取或 sidecar 登记失败都只降级为“不登记”，不改变执行结果。
-pub(crate) fn register_spawned_process(
-    request: &CodexLocalExecutionRequest,
-    _command_plan: &CodexLocalCommandPlan,
-    pid: u32,
-) -> ProcessRegistration {
-    let workflow_state_path = crate::default_workflow_state_path();
-    register_spawned_process_for(
-        &workflow_state_path,
-        &format!("{}:{}", request.operation_id, request.prompt_ref),
-        pid,
-        &SystemProcessOperations,
-    )
-}
-
 /// 主管编排会话和 runner 子进程共用同一份登记/回收 sidecar；run-id 保持主管侧原值贯通。
 pub(crate) fn register_supervisor_spawned_process(
     workflow_state_path: &Path,
     run_id: &str,
     pid: u32,
 ) -> ProcessRegistration {
-    register_spawned_process_for(workflow_state_path, run_id, pid, &SystemProcessOperations)
+    register_spawned_process_for(
+        workflow_state_path,
+        run_id,
+        pid,
+        false,
+        &SystemProcessOperations,
+    )
+}
+
+/// manual relay 把子进程设为独立进程组组长；登记时保留这个事实，异常退出后的启动回收才能
+/// 同时终止外层 codex 包装进程与它派生的子进程。其它 runner 仍按单 PID 处理。
+pub(crate) fn register_manual_relay_process_group(
+    workflow_state_path: &Path,
+    run_id: &str,
+    pid: u32,
+) -> Result<DurableProcessRegistration, String> {
+    register_codex_process_group_with(
+        workflow_state_path,
+        run_id,
+        pid,
+        "manual relay",
+        &SystemProcessOperations,
+    )
+}
+
+/// local runner 与 manual relay 共用严格进程组登记：只有刚 spawn、身份可核验且
+/// `pgid == pid` 的 codex exec 才能进入 sidecar。登记失败时调用方必须在发 prompt 前止损。
+pub(crate) fn register_spawned_codex_process_group(
+    request: &CodexLocalExecutionRequest,
+    pid: u32,
+) -> Result<DurableProcessRegistration, String> {
+    let workflow_state_path = crate::default_workflow_state_path();
+    let run_id = codex_local_process_run_id(request);
+    #[cfg(test)]
+    {
+        let _ = (run_id, pid);
+        return Ok(DurableProcessRegistration {
+            workflow_state_path,
+            entry: None,
+        });
+    }
+    #[cfg(not(test))]
+    register_codex_process_group_with(
+        &workflow_state_path,
+        &run_id,
+        pid,
+        "codex local runner",
+        &SystemProcessOperations,
+    )
+}
+
+fn codex_local_process_run_id(request: &CodexLocalExecutionRequest) -> String {
+    durable_process_run_id(
+        &request.operation_id,
+        &[
+            request.prompt_ref.as_str(),
+            request.work_item_id.as_deref().unwrap_or_default(),
+            request.session_id.as_deref().unwrap_or_default(),
+            request.project_id.as_str(),
+            request.workflow_id.as_str(),
+            request.node_id.as_str(),
+            request.target_cwd.as_str(),
+        ],
+    )
+}
+
+fn durable_process_run_id(operation: &str, identity_parts: &[&str]) -> String {
+    let operation = operation.trim();
+    let operation = if operation.is_empty() {
+        "unknown"
+    } else {
+        operation
+    };
+    format!(
+        "codex-local:{operation}:{}",
+        crate::utils::hash::sha256_hex(&identity_parts.join("\0"))
+    )
+}
+
+fn register_codex_process_group_with(
+    workflow_state_path: &Path,
+    run_id: &str,
+    pid: u32,
+    owner: &str,
+    operations: &dyn ProcessOperations,
+) -> Result<DurableProcessRegistration, String> {
+    let observed = operations
+        .inspect(pid)?
+        .ok_or_else(|| format!("{owner} PID {pid} 在登记前已退出"))?;
+    if !is_workbench_codex_exec(&observed.cmdline) {
+        return Err(format!("{owner} PID {pid} 不是可识别的 codex exec"));
+    }
+    if observed.process_group_id != Some(pid) {
+        return Err(format!(
+            "{owner} PID {pid} 不是已核验的进程组组长（pgid={:?}）",
+            observed.process_group_id
+        ));
+    }
+    let entry = RegisteredProcess {
+        pid,
+        run_id: run_id.to_string(),
+        started_at: observed.started_at,
+        cmdline_summary: observed.cmdline,
+        process_group: true,
+        process_group_id: Some(pid),
+    };
+    register_entry(workflow_state_path, entry.clone())?;
+    Ok(DurableProcessRegistration {
+        workflow_state_path: workflow_state_path.to_path_buf(),
+        entry: Some(entry),
+    })
 }
 
 fn register_spawned_process_for(
     workflow_state_path: &Path,
     run_id: &str,
     pid: u32,
+    process_group: bool,
     operations: &dyn ProcessOperations,
 ) -> ProcessRegistration {
     let workflow_state_path = workflow_state_path.to_path_buf();
@@ -155,6 +279,8 @@ fn register_spawned_process_for(
         run_id: run_id.to_string(),
         started_at: observed.started_at,
         cmdline_summary: observed.cmdline,
+        process_group,
+        process_group_id: process_group.then_some(pid),
     };
     let registered = register_entry(&workflow_state_path, entry.clone()).is_ok();
     ProcessRegistration {
@@ -195,7 +321,7 @@ fn reap_registered_orphans_with(
                         "登记 PID 的启动时间或命令行已不符，已只注销登记，未终止任何进程。",
                     ));
                 }
-                Ok(Some(_)) => match operations.kill_and_wait(entry.pid) {
+                Ok(Some(_)) => match operations.kill_and_wait(entry.pid, entry.process_group) {
                     Ok(()) => {
                         reclaimed += 1;
                         store.audit_events.push(registry_audit(
@@ -352,14 +478,33 @@ fn ps_field(pid: u32, field: &str) -> Result<Option<String>, String> {
         .arg(format!("{field}="))
         .output()
         .map_err(|error| format!("读取 PID {pid} 的 {field} 失败：{error}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.contains("No such process") || stderr.contains("not found") {
+    classify_ps_field_output(
+        pid,
+        field,
+        output.status.success(),
+        &output.stdout,
+        &output.stderr,
+    )
+}
+
+fn classify_ps_field_output(
+    pid: u32,
+    field: &str,
+    success: bool,
+    stdout: &[u8],
+    stderr: &[u8],
+) -> Result<Option<String>, String> {
+    if !success {
+        let stderr = String::from_utf8_lossy(stderr);
+        if (stdout.is_empty() && stderr.trim().is_empty())
+            || stderr.contains("No such process")
+            || stderr.contains("not found")
+        {
             return Ok(None);
         }
         return Err(format!("读取 PID {pid} 的 {field} 失败：{}", stderr.trim()));
     }
-    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let value = String::from_utf8_lossy(stdout).trim().to_string();
     Ok((!value.is_empty()).then_some(value))
 }
 
@@ -368,7 +513,9 @@ fn is_workbench_codex_exec(cmdline: &str) -> bool {
 }
 
 fn same_process(entry: &RegisteredProcess, observed: &ObservedProcess) -> bool {
-    entry.started_at == observed.started_at && entry.cmdline_summary == observed.cmdline
+    entry.started_at == observed.started_at
+        && entry.cmdline_summary == observed.cmdline
+        && (!entry.process_group || entry.process_group_id == observed.process_group_id)
 }
 
 fn registry_audit(event_type: &str, entry: &RegisteredProcess, reason: &str) -> RegistryAuditEvent {
@@ -421,7 +568,7 @@ mod tests {
 
     struct FakeProcessOperations {
         processes: RefCell<BTreeMap<u32, ObservedProcess>>,
-        killed: RefCell<Vec<u32>>,
+        killed: RefCell<Vec<(u32, bool)>>,
     }
 
     impl FakeProcessOperations {
@@ -438,8 +585,8 @@ mod tests {
             Ok(self.processes.borrow().get(&pid).cloned())
         }
 
-        fn kill_and_wait(&self, pid: u32) -> Result<(), String> {
-            self.killed.borrow_mut().push(pid);
+        fn kill_and_wait(&self, pid: u32, process_group: bool) -> Result<(), String> {
+            self.killed.borrow_mut().push((pid, process_group));
             self.processes.borrow_mut().remove(&pid);
             Ok(())
         }
@@ -458,6 +605,8 @@ mod tests {
             run_id: "new_session:consult-readonly:abc".to_string(),
             started_at: "Fri Jul 10 21:49:12 2026".to_string(),
             cmdline_summary: "/tmp/codex exec -C /tmp/test --sandbox read-only".to_string(),
+            process_group: false,
+            process_group_id: None,
         }
     }
 
@@ -465,7 +614,29 @@ mod tests {
         ObservedProcess {
             started_at: entry.started_at.clone(),
             cmdline: entry.cmdline_summary.clone(),
+            process_group_id: entry.process_group_id,
         }
+    }
+
+    #[test]
+    fn durable_process_run_id_remains_traceable_when_prompt_ref_is_empty() {
+        let first = durable_process_run_id(
+            "resume",
+            &["", "work-item:3b", "thread:3b", "/tmp/mario test"],
+        );
+        let replay = durable_process_run_id(
+            "resume",
+            &["", "work-item:3b", "thread:3b", "/tmp/mario test"],
+        );
+        let other = durable_process_run_id(
+            "resume",
+            &["", "work-item:other", "thread:3b", "/tmp/mario test"],
+        );
+
+        assert!(first.starts_with("codex-local:resume:"));
+        assert_ne!(first, "resume:");
+        assert_eq!(first, replay);
+        assert_ne!(first, other);
     }
 
     #[test]
@@ -492,7 +663,7 @@ mod tests {
         let processes = FakeProcessOperations::with_process(42, observed_for(&registered));
 
         assert_eq!(reap_registered_orphans_with(&path, &processes).unwrap(), 1);
-        assert_eq!(*processes.killed.borrow(), vec![42]);
+        assert_eq!(*processes.killed.borrow(), vec![(42, false)]);
         let store = load_store(&sidecar_path(&path).unwrap()).unwrap();
         assert!(store.entries.is_empty());
         assert!(store.audit_events.iter().any(|event| {
@@ -500,6 +671,85 @@ mod tests {
                 && event.reason.contains("回收了上次遗留的执行进程")
         }));
         let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn strict_manual_relay_registration_requires_and_reaps_the_exact_process_group() {
+        let path = test_workflow_state_path("manual-relay-group");
+        let pid = 52;
+        let registered = RegisteredProcess {
+            process_group: true,
+            process_group_id: Some(pid),
+            ..entry(pid)
+        };
+        let processes = FakeProcessOperations::with_process(pid, observed_for(&registered));
+
+        let registration = register_codex_process_group_with(
+            &path,
+            "manual-relay-attempt:test",
+            pid,
+            "manual relay",
+            &processes,
+        )
+        .expect("matching process group must register strictly");
+        let sidecar = sidecar_path(&path).unwrap();
+        let store = load_store(&sidecar).unwrap();
+        assert_eq!(store.entries.len(), 1);
+        assert!(store.entries[0].process_group);
+        assert_eq!(store.entries[0].process_group_id, Some(pid));
+
+        drop(registration);
+        assert_eq!(
+            load_store(&sidecar).unwrap().entries.len(),
+            1,
+            "durable registration must survive an abnormal handle drop"
+        );
+        assert_eq!(reap_registered_orphans_with(&path, &processes).unwrap(), 1);
+        assert_eq!(*processes.killed.borrow(), vec![(pid, true)]);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn strict_manual_relay_registration_rejects_a_non_leader_pid() {
+        let path = test_workflow_state_path("manual-relay-not-leader");
+        let pid = 53;
+        let mut observed = observed_for(&entry(pid));
+        observed.process_group_id = Some(7);
+        let processes = FakeProcessOperations::with_process(pid, observed);
+
+        let error = register_codex_process_group_with(
+            &path,
+            "manual-relay-attempt:test",
+            pid,
+            "manual relay",
+            &processes,
+        )
+        .err()
+        .expect("non leader PID must be rejected");
+        assert!(error.contains("不是已核验的进程组组长"));
+        assert!(!sidecar_path(&path).unwrap().exists());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn legacy_registered_process_without_group_fields_stays_single_pid() {
+        let legacy: RegisteredProcess = serde_json::from_value(serde_json::json!({
+            "pid": 54,
+            "run_id": "legacy",
+            "started_at": "Fri Jul 10 21:49:12 2026",
+            "cmdline_summary": "/tmp/codex exec -C /tmp/test"
+        }))
+        .unwrap();
+        assert!(!legacy.process_group);
+        assert_eq!(legacy.process_group_id, None);
+    }
+
+    #[test]
+    fn missing_pid_with_empty_ps_output_is_not_an_inspection_error() {
+        assert_eq!(
+            classify_ps_field_output(999_999, "command", false, b"", b"").unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -522,6 +772,7 @@ mod tests {
             ObservedProcess {
                 started_at: "Sat Jul 11 09:54:09 2026".to_string(),
                 cmdline: registered.cmdline_summary.clone(),
+                process_group_id: None,
             },
         );
 

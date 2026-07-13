@@ -1,16 +1,23 @@
 use crate::utils::hash::{sha256_hex, short_hash};
 use crate::utils::normalization::normalize_slash_lowercase as normalize;
 use crate::{
-    CodexLocalActiveAttempt, CodexLocalAuditRef, CodexLocalCommandPlan, CodexLocalExecutionAttempt,
+    CodexLocalActiveAttempt, CodexLocalCommandPlan, CodexLocalExecutionAttempt,
     CodexLocalExecutionGuard, CodexLocalExecutionRequest, CodexLocalFailureReason,
     CodexLocalReadbackResult, CodexLocalRuntimeLogRef,
 };
+#[cfg(test)]
+use crate::CodexLocalAuditRef;
 use std::fs;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::{Component, Path};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime};
+
+static READONLY_CONSULT_ATTEMPT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) trait CodexLocalRunner {
     fn run_dry(
@@ -339,10 +346,7 @@ pub(crate) fn readonly_codex_consult(
         return Err(format!("consultant_readonly_blocked:{}", blocking.join(",")));
     }
     let command_plan = command_plan_for(&request);
-    let last_message_path = std::env::temp_dir().join(format!(
-        "consult-last-{}.txt",
-        crate::utils::hash::short_hash(prompt)
-    ));
+    let last_message_path = readonly_consult_last_message_path(prompt);
     let runner = RealCodexLocalPhaseBProcessRunner;
     let result = runner.run_phase_b(
         &request,
@@ -360,7 +364,7 @@ pub(crate) fn readonly_codex_consult(
         .find_map(|warning| warning.strip_prefix("stderr_summary:"))
         .unwrap_or("")
         .to_string();
-    if !result.real_codex_executed {
+    if !result.real_codex_executed || result.status != "succeeded" {
         if let Some(human) = classify_codex_provider_failure(&stderr_tail) {
             return Err(format!("codex_provider_unavailable:{human}"));
         }
@@ -379,6 +383,16 @@ pub(crate) fn readonly_codex_consult(
             )
         }
     })
+}
+
+fn readonly_consult_last_message_path(prompt: &str) -> std::path::PathBuf {
+    let sequence = READONLY_CONSULT_ATTEMPT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!(
+        "consult-last-{}-{}-{}-{sequence}.txt",
+        crate::utils::hash::short_hash(prompt),
+        std::process::id(),
+        crate::unix_timestamp_nanos()
+    ))
 }
 
 /// fix8·供给类失败分类：codex stderr 尾巴命中「额度/订阅/登录/供给不可用」特征→返回人话；否则 None。
@@ -1104,6 +1118,20 @@ fn run_real_codex_process(
             vec![],
         );
     }
+    match fs::remove_file(last_message_path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return phase_b_process_failure(
+                "phase_b_last_message_reset_failed",
+                &format!("failed to reset last message file: {error}"),
+                false,
+                false,
+                false,
+                vec![],
+            );
+        }
+    }
     let stderr_path = last_message_path.with_extension("stderr.txt");
     let stderr_file = match fs::File::create(&stderr_path) {
         Ok(file) => file,
@@ -1131,6 +1159,8 @@ fn run_real_codex_process(
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::from(stderr_file));
+    #[cfg(unix)]
+    command.process_group(0);
 
     let mut child = match command.spawn() {
         Ok(child) => child,
@@ -1146,7 +1176,23 @@ fn run_real_codex_process(
         }
     };
     let process_registration =
-        crate::exec_process_registry::register_spawned_process(request, command_plan, child.id());
+        match crate::exec_process_registry::register_spawned_codex_process_group(
+            request,
+            child.id(),
+        ) {
+            Ok(registration) => registration,
+            Err(error) => {
+                let _ = stop_codex_process_group(&mut child);
+                return phase_b_process_failure(
+                    "phase_b_process_registration_failed",
+                    &format!("failed to register isolated codex process group: {error}"),
+                    false,
+                    true,
+                    true,
+                    vec![stderr_summary_warning(&stderr_path)],
+                );
+            }
+        };
     let prompt_sent;
     if let Some(mut stdin) = child.stdin.take() {
         match stdin.write_all(prompt_body.as_bytes()) {
@@ -1154,8 +1200,9 @@ fn run_real_codex_process(
                 prompt_sent = true;
             }
             Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                if stop_codex_process_group(&mut child).is_ok() {
+                    let _ = process_registration.unregister();
+                }
                 return phase_b_process_failure(
                     "phase_b_stdin_write_failed",
                     &format!("failed to write prompt to codex stdin: {error}"),
@@ -1167,8 +1214,9 @@ fn run_real_codex_process(
             }
         }
     } else {
-        let _ = child.kill();
-        let _ = child.wait();
+        if stop_codex_process_group(&mut child).is_ok() {
+            let _ = process_registration.unregister();
+        }
         return phase_b_process_failure(
             "phase_b_stdin_unavailable",
             "codex stdin was unavailable",
@@ -1189,13 +1237,24 @@ fn run_real_codex_process(
                 Ok(None) => {
                     if started.elapsed().unwrap_or_default() >= timeout {
                         timed_out = true;
-                        let _ = child.kill();
+                        if let Err(error) = stop_codex_process_group(&mut child) {
+                            return phase_b_process_failure(
+                                "phase_b_timeout_wait_failed",
+                                &format!("failed to reap timed out codex process group: {error}"),
+                                prompt_sent,
+                                true,
+                                true,
+                                vec![stderr_summary_warning(&stderr_path)],
+                            );
+                        }
                         match child.wait() {
                             Ok(status) => break status,
                             Err(error) => {
                                 return phase_b_process_failure(
                                     "phase_b_timeout_wait_failed",
-                                    &format!("failed to wait for timed out codex process: {error}"),
+                                    &format!(
+                                        "failed to wait for reaped codex process group: {error}"
+                                    ),
                                     prompt_sent,
                                     true,
                                     true,
@@ -1207,6 +1266,9 @@ fn run_real_codex_process(
                     thread::sleep(Duration::from_millis(100));
                 }
                 Err(error) => {
+                    if stop_codex_process_group(&mut child).is_ok() {
+                        let _ = process_registration.unregister();
+                    }
                     return phase_b_process_failure(
                         "phase_b_wait_failed",
                         &format!("failed to wait for codex process: {error}"),
@@ -1222,6 +1284,9 @@ fn run_real_codex_process(
         match child.wait() {
             Ok(status) => status,
             Err(error) => {
+                if stop_codex_process_group(&mut child).is_ok() {
+                    let _ = process_registration.unregister();
+                }
                 return phase_b_process_failure(
                     "phase_b_wait_failed",
                     &format!("failed to wait for codex process: {error}"),
@@ -1234,7 +1299,8 @@ fn run_real_codex_process(
         }
     };
 
-    process_registration.unregister();
+    sweep_codex_process_group(child.id());
+    let _ = process_registration.unregister();
 
     let exit_code = status.code().unwrap_or(-1);
     let last_message = fs::read_to_string(last_message_path).unwrap_or_default();
@@ -1312,6 +1378,52 @@ fn run_real_codex_process(
         retryable: status != "succeeded" && !timed_out,
         user_action_required: status != "succeeded",
         warnings,
+    }
+}
+
+fn stop_codex_process_group(child: &mut Child) -> Result<(), String> {
+    let pid = child.id();
+    #[cfg(unix)]
+    {
+        let _ = Command::new("/bin/kill")
+            .arg("-TERM")
+            .arg(format!("-{pid}"))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        for _ in 0..32 {
+            if child
+                .try_wait()
+                .map_err(|error| format!("phase_b_process_group_wait_failed:{error}"))?
+                .is_some()
+            {
+                sweep_codex_process_group(pid);
+                return Ok(());
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        sweep_codex_process_group(pid);
+    }
+    let _ = child.kill();
+    child
+        .wait()
+        .map(|_| ())
+        .map_err(|error| format!("phase_b_process_group_wait_failed:{error}"))
+}
+
+fn sweep_codex_process_group(pid: u32) {
+    #[cfg(unix)]
+    {
+        let _ = Command::new("/bin/kill")
+            .arg("-KILL")
+            .arg(format!("-{pid}"))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
     }
 }
 
@@ -1716,6 +1828,13 @@ fn contains_sensitive_fragment(value: &str) -> bool {
 mod tests {
     use super::*;
 
+    #[test]
+    fn same_prompt_consultations_use_distinct_last_message_paths() {
+        let first = readonly_consult_last_message_path("same prompt");
+        let second = readonly_consult_last_message_path("same prompt");
+        assert_ne!(first, second);
+    }
+
     // fix8·供给类失败分类：403/订阅/额度/登录特征命中→人话 Some；空/普通错→None（保守·不误判）。
     #[test]
     fn fix8_classify_codex_provider_failure_hits_and_misses() {
@@ -1813,13 +1932,26 @@ mod tests {
         fs::create_dir_all(&test_dir).expect("create timeout test directory");
         let pid_path = test_dir.join("mock-child.pid");
         let last_message_path = test_dir.join("last-message.txt");
+        fs::write(&last_message_path, "stale result").expect("seed stale last message");
+        let mock_codex_path = test_dir.join("codex");
         let quoted_pid_path = pid_path.display().to_string().replace('\'', "'\\\"'\\\"'");
+        fs::write(
+            &mock_codex_path,
+            format!("#!/bin/sh\necho $$ > '{quoted_pid_path}'\n/bin/sleep 10\n"),
+        )
+        .expect("write mock codex script");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = fs::metadata(&mock_codex_path)
+                .expect("mock codex metadata")
+                .permissions();
+            permissions.set_mode(0o700);
+            fs::set_permissions(&mock_codex_path, permissions).expect("make mock codex executable");
+        }
         let command_plan = CodexLocalCommandPlan {
-            program: "/bin/sh".to_string(),
-            argv: vec![
-                "-c".to_string(),
-                format!("echo $$ > '{quoted_pid_path}'; exec /bin/sleep 10"),
-            ],
+            program: mock_codex_path.display().to_string(),
+            argv: vec!["exec".to_string()],
             stdin_prompt_ref: "mock-timeout-prompt".to_string(),
             stdin_prompt_sha256: "mock-timeout-hash".to_string(),
             prompt_in_command: false,
@@ -1834,10 +1966,18 @@ mod tests {
             &command_plan,
             "mock prompt",
             &last_message_path,
-            Some(10),
+            Some(2_000),
         );
 
-        assert!(result.timed_out, "mock child must reach timeout path");
+        assert!(
+            result.timed_out,
+            "mock child must reach timeout path: {result:?}"
+        );
+        assert_eq!(result.readback_result_count, None);
+        assert!(
+            !last_message_path.exists(),
+            "timed-out run must not retain or reuse the seeded last message"
+        );
         let pid = fs::read_to_string(&pid_path)
             .expect("mock child wrote its pid")
             .trim()

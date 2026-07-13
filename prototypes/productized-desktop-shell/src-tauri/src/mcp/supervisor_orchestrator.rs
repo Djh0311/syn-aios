@@ -204,6 +204,12 @@ pub(crate) struct WorkerLaunch {
     pub(crate) result_summary: String,
 }
 
+#[derive(Debug, Clone)]
+struct WorkerFollowUp {
+    summary: String,
+    report: Value,
+}
+
 trait WorkerInvoker {
     fn dispatch(
         &self,
@@ -215,7 +221,7 @@ trait WorkerInvoker {
         config: &McpServerConfig,
         worker: &SupervisorWorker,
         prompt: &str,
-    ) -> Result<String, String>;
+    ) -> Result<WorkerFollowUp, String>;
 }
 
 struct WorkbenchWorkerInvoker;
@@ -226,7 +232,13 @@ impl WorkerInvoker for WorkbenchWorkerInvoker {
         config: &McpServerConfig,
         input: &DispatchInput,
     ) -> Result<WorkerLaunch, String> {
-        if !crate::workflow_engine_test_project_unsealed(&input.project_root) {
+        // 站 3b（2026-07-12）：3b 项目仅当派发写范围为空（只读 worker）才放行；S1 原闸不动。
+        if !crate::workflow_engine_test_project_unsealed(&input.project_root)
+            && !crate::station3b_readonly_project_unsealed(
+                &input.project_root,
+                &input.allowed_write,
+            )
+        {
             return Err(crate::legacy_product_command_blocked_message(
                 "execute_project_workflow_node",
             ));
@@ -251,8 +263,14 @@ impl WorkerInvoker for WorkbenchWorkerInvoker {
         config: &McpServerConfig,
         worker: &SupervisorWorker,
         prompt: &str,
-    ) -> Result<String, String> {
-        if !crate::workflow_engine_test_project_unsealed(&worker.project_root) {
+    ) -> Result<WorkerFollowUp, String> {
+        // 站 3b：追问同派发口径——3b 项目仅限只读 worker（写范围空）。
+        if !crate::workflow_engine_test_project_unsealed(&worker.project_root)
+            && !crate::station3b_readonly_project_unsealed(
+                &worker.project_root,
+                &worker.allowed_write,
+            )
+        {
             return Err(crate::legacy_product_command_blocked_message(
                 "execute_project_workflow_node",
             ));
@@ -295,13 +313,16 @@ impl WorkerInvoker for WorkbenchWorkerInvoker {
         if context.native_thread_id != worker.native_thread_id {
             return Err("追问时绑定会话与初始 worker 不一致，拒绝跨 thread resume".to_string());
         }
-        let sidecar = sidecar_path(config)?;
-        let parent = sidecar
-            .parent()
-            .ok_or_else(|| "主管账本路径缺父目录，拒绝写追问回传".to_string())?;
+        let workflow_state_path = workflow_state_path(config)?;
+        let parent = crate::utils::store_paths::ensure_runtime_artifact_dir(
+            workflow_state_path,
+            "supervisor",
+            &config.run_id,
+        )?;
         let last_message_path = parent.join(format!(
-            "supervisor-follow-up-{}.txt",
-            stable_fragment(&worker.worker_id)
+            "follow-up-{}-{}.last-message.txt",
+            stable_fragment(&worker.worker_id),
+            crate::unix_timestamp_nanos()
         ));
         let runner = crate::codex_local_runner::RealWorkflowNodeCodexRunner;
         let (result, _) = runner.resume_with_options(
@@ -315,7 +336,20 @@ impl WorkerInvoker for WorkbenchWorkerInvoker {
                 .stderr_summary
                 .unwrap_or_else(|| format!("追问 worker 退出码 {}", result.exit_code)));
         }
-        Ok("已通过现成 runner 在原绑定会话续问；结果待口供工具读取。".to_string())
+        let raw = fs::read_to_string(&last_message_path).map_err(|error| {
+            format!(
+                "report_invalid: 无法读取 worker 追问最终消息 {}：{error}",
+                last_message_path.display()
+            )
+        })?;
+        let report = normalized_worker_report_from_raw(worker, &raw)?;
+        Ok(WorkerFollowUp {
+            summary: format!(
+                "已在原绑定会话续问并读回新报告：{}",
+                last_message_path.display()
+            ),
+            report,
+        })
     }
 }
 
@@ -903,7 +937,10 @@ fn dispatch_worker(
         work_item_id: require_string(args, "work_item_id")?,
         allowed_write: require_string_array(args, "allowed_write")?,
     };
-    if !crate::workflow_engine_test_project_unsealed(&input.project_root) {
+    // 站 3b（2026-07-12）：3b 项目仅当派发写范围为空（只读 worker）才放行；S1 原闸不动。
+    if !crate::workflow_engine_test_project_unsealed(&input.project_root)
+        && !crate::station3b_readonly_project_unsealed(&input.project_root, &input.allowed_write)
+    {
         return Err(crate::legacy_product_command_blocked_message(
             "execute_project_workflow_node",
         ));
@@ -941,6 +978,16 @@ fn read_worker_report(config: &McpServerConfig, args: &Value) -> Result<Value, S
         &worker.allowed_write,
         config,
     )?;
+    if worker.last_report.is_none()
+        && matches!(
+            worker.state.as_str(),
+            "waiting_follow_up" | "follow_up_failed"
+        )
+    {
+        return Err(
+            "report_invalid: worker 追问尚未产生可验证的新报告；旧报告已失效。".to_string(),
+        );
+    }
     if let Some(report) = worker.last_report {
         return Ok(report);
     }
@@ -1002,6 +1049,13 @@ fn normalized_raw_worker_report(value: &Value, worker: &SupervisorWorker) -> Res
             last_message_path
         )
     })?;
+    normalized_worker_report_from_raw(worker, &raw)
+}
+
+fn normalized_worker_report_from_raw(
+    worker: &SupervisorWorker,
+    raw: &str,
+) -> Result<Value, String> {
     let report = crate::worker_report::parse_worker_report(&raw).ok_or_else(|| {
         "report_invalid: worker 最终消息不是符合回程契约的 JSON 代码块。".to_string()
     })?;
@@ -1041,6 +1095,9 @@ fn normalized_raw_worker_report(value: &Value, worker: &SupervisorWorker) -> Res
         },
         "summary": report.did,
         "evidence_refs": report.evidence,
+        // 只读/分析类单的结论正文（逐条判定、问题清单、总评，带 file:line + 原文引用）。
+        // 站 3b 首单实证：不带出它，主管只见摘要、误判证据不足并试图越权 follow_up。
+        "findings": report.findings,
         "open_issues": report.open_issues,
         "permission_requests": report.permission_requests,
         "direction_risks": report.direction_risks,
@@ -1059,7 +1116,10 @@ fn follow_up_worker(
         return Err("追问内容不能为空".to_string());
     }
     let worker = find_worker(config, &worker_id)?;
-    if !crate::workflow_engine_test_project_unsealed(&worker.project_root) {
+    // 站 3b：追问同派发口径——3b 项目仅限只读 worker（写范围空）。
+    if !crate::workflow_engine_test_project_unsealed(&worker.project_root)
+        && !crate::station3b_readonly_project_unsealed(&worker.project_root, &worker.allowed_write)
+    {
         return Err(crate::legacy_product_command_blocked_message(
             "execute_project_workflow_node",
         ));
@@ -1073,9 +1133,20 @@ fn follow_up_worker(
         config,
     )?;
     reserve_follow_up(config, &worker_id)?;
-    let summary = invoker.follow_up(config, &worker, &prompt)?;
-    update_worker_result(config, &worker_id, "completed", &summary)?;
-    Ok(json!({"worker_id": worker_id, "state": "completed", "summary": summary}))
+    let follow_up = match invoker.follow_up(config, &worker, &prompt) {
+        Ok(follow_up) => follow_up,
+        Err(error) => {
+            fail_follow_up(config, &worker_id, &error)?;
+            return Err(error);
+        }
+    };
+    update_worker_follow_up_result(config, &worker_id, &follow_up)?;
+    Ok(json!({
+        "worker_id": worker_id,
+        "state": "completed",
+        "summary": follow_up.summary,
+        "report": follow_up.report
+    }))
 }
 
 fn wait_for_worker(config: &McpServerConfig, args: &Value) -> Result<Value, String> {
@@ -1809,24 +1880,44 @@ fn reserve_follow_up(config: &McpServerConfig, worker_id: &str) -> Result<(), St
             ));
         }
         worker.follow_up_count += 1;
+        // 追问已获准进入原会话后，旧报告立即失效。即使 resume 或新回程解析失败，inspect 也不能
+        // 回退到追问前的 last_report，避免主管拿旧事实终标。
+        worker.last_report = None;
+        worker.state = "waiting_follow_up".to_string();
+        worker.last_result_summary = "worker 追问已发起，等待新报告。".to_string();
         Ok(())
     })
 }
 
-fn update_worker_result(
-    config: &McpServerConfig,
-    worker_id: &str,
-    state: &str,
-    summary: &str,
-) -> Result<(), String> {
-    update_store(config, "update-worker-result", |store| {
+fn fail_follow_up(config: &McpServerConfig, worker_id: &str, error: &str) -> Result<(), String> {
+    update_store(config, "fail-follow-up", |store| {
         let worker = session_mut(store, &config.run_id)
             .workers
             .iter_mut()
             .find(|worker| worker.worker_id == worker_id)
-            .ok_or_else(|| "主管当前会话没有该 worker，拒绝写结果".to_string())?;
-        worker.state = state.to_string();
-        worker.last_result_summary = summary.to_string();
+            .ok_or_else(|| "主管当前会话没有该 worker，拒绝写追问失败结果".to_string())?;
+        worker.state = "follow_up_failed".to_string();
+        worker.last_report = None;
+        worker.last_result_summary =
+            crate::run_error_translation::humanize_error_for_display(error);
+        Ok(())
+    })
+}
+
+fn update_worker_follow_up_result(
+    config: &McpServerConfig,
+    worker_id: &str,
+    follow_up: &WorkerFollowUp,
+) -> Result<(), String> {
+    update_store(config, "update-worker-follow-up-result", |store| {
+        let worker = session_mut(store, &config.run_id)
+            .workers
+            .iter_mut()
+            .find(|worker| worker.worker_id == worker_id)
+            .ok_or_else(|| "主管当前会话没有该 worker，拒绝写追问结果".to_string())?;
+        worker.state = "completed".to_string();
+        worker.last_report = Some(follow_up.report.clone());
+        worker.last_result_summary = follow_up.summary.clone();
         Ok(())
     })
 }
@@ -2021,10 +2112,47 @@ mod tests {
         fn follow_up(
             &self,
             _config: &McpServerConfig,
-            _worker: &SupervisorWorker,
+            worker: &SupervisorWorker,
             prompt: &str,
-        ) -> Result<String, String> {
-            Ok(format!("mock follow-up: {prompt}"))
+        ) -> Result<WorkerFollowUp, String> {
+            Ok(WorkerFollowUp {
+                summary: format!("mock follow-up: {prompt}"),
+                report: json!({
+                    "worker_id": worker.worker_id,
+                    "dispatch_id": worker.dispatch_id,
+                    "acceptance_status": "reported_completed",
+                    "executed_what": "answered follow-up",
+                    "changed_what": "worker 未列出产出文件",
+                    "summary": "fresh follow-up report",
+                    "evidence_refs": ["follow-up:evidence"],
+                    "findings": ["fresh follow-up finding"],
+                    "open_issues": [],
+                    "permission_requests": [],
+                    "direction_risks": [],
+                    "follow_up_suggestions": []
+                }),
+            })
+        }
+    }
+
+    struct FailingFollowUpInvoker;
+
+    impl WorkerInvoker for FailingFollowUpInvoker {
+        fn dispatch(
+            &self,
+            _config: &McpServerConfig,
+            _input: &DispatchInput,
+        ) -> Result<WorkerLaunch, String> {
+            unreachable!("failure fixture only exercises follow-up")
+        }
+
+        fn follow_up(
+            &self,
+            _config: &McpServerConfig,
+            _worker: &SupervisorWorker,
+            _prompt: &str,
+        ) -> Result<WorkerFollowUp, String> {
+            Err("report_invalid: fresh follow-up report is malformed".to_string())
         }
     }
 
@@ -2424,6 +2552,54 @@ mod tests {
         );
     }
 
+    // 站 3b 首单缺口 end-to-end 回归：worker 只读侦察把结论写进 findings（并误塞自造的
+    // promise_verdicts/top_5_issues）→ 主管 read_worker_report 投影必须带出 findings，
+    // 且不因结论存在而误判 blocked。修此前主管只见摘要、误判证据不足并试图越权 follow_up。
+    #[test]
+    fn station3b_readonly_findings_reach_supervisor_projection() {
+        let fixture = Fixture::new();
+        fixture.dispatch().expect("dispatch");
+        let last_message_path = fixture.root.join("worker-last-message.txt");
+        let mut state: Value =
+            serde_json::from_slice(&fs::read(&fixture.state_path).expect("workflow state"))
+                .expect("workflow state json");
+        state["workflow_node_dispatches"] = json!([{
+            "dispatch_id": "dispatch-1",
+            "last_message_path": last_message_path
+        }]);
+        fs::write(
+            &fixture.state_path,
+            serde_json::to_vec(&state).expect("workflow state json"),
+        )
+        .expect("write workflow state");
+        update_store(&fixture.config, "clear-fake-initial-report", |store| {
+            session_mut(store, &fixture.config.run_id).workers[0].last_report = None;
+            Ok(())
+        })
+        .expect("clear fake report");
+
+        fs::write(
+            &last_message_path,
+            "```json\n{\"did\":\"只读盘点完成，未写入任何文件\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"node --check game.js 退出码 0\"],\"findings\":[\"P0 game.js:137 未按 delta 缩放，原文 \\\"player.x += player.vx;\\\"\",\"总评：核心玩法齐全\"],\"promise_verdicts\":[{\"verdict\":\"已实现\"}],\"top_5_issues\":[{\"rank\":1}]}\n```",
+        )
+        .expect("readonly worker return with findings");
+        let projected = read_worker_report(&fixture.config, &json!({"worker_id": "worker-1"}))
+            .expect("readonly report projection");
+        // 结论正文到达主管：findings 两条都在投影里。
+        assert_eq!(
+            projected["findings"],
+            json!([
+                "P0 game.js:137 未按 delta 缩放，原文 \"player.x += player.vx;\"",
+                "总评：核心玩法齐全"
+            ])
+        );
+        // findings 是正常产出、不是求助：仍判 reported_completed（不误判 blocked）。
+        assert_eq!(projected["acceptance_status"], "reported_completed");
+        // 自造顶层字段不出现在投影（struct 无此字段，serde 丢弃）。
+        assert!(projected.get("promise_verdicts").is_none());
+        assert!(projected.get("top_5_issues").is_none());
+    }
+
     #[test]
     fn station3a_v3_second_protocol_error_after_dispatch_keeps_prior_worker_truth() {
         let fixture = Fixture::new();
@@ -2454,13 +2630,41 @@ mod tests {
             )
             .is_err());
         fixture.dispatch().expect("dispatch");
-        fixture
+        let followed_up = fixture
             .control_core(
                 "follow_up_worker",
                 json!({"worker_id": "worker-1", "prompt": "what changed?"}),
             )
             .expect("follow up");
+        assert_eq!(followed_up["report"]["summary"], "fresh follow-up report");
+        let readback = fixture
+            .control_core("inspect_worker", json!({"worker_id": "worker-1"}))
+            .expect("read fresh follow-up report");
+        assert_eq!(readback["summary"], "fresh follow-up report");
+        assert_eq!(readback["findings"], json!(["fresh follow-up finding"]));
         assert_eq!(fixture.audit_count("control_core_follow_up_worker"), 2);
+    }
+
+    #[test]
+    fn failed_follow_up_invalidates_cached_report_and_inspect_refuses_stale_fallback() {
+        let fixture = Fixture::new();
+        fixture.dispatch().expect("dispatch");
+        assert!(read_worker_report(&fixture.config, &json!({"worker_id": "worker-1"})).is_ok());
+
+        let error = follow_up_worker(
+            &fixture.config,
+            &json!({"worker_id": "worker-1", "prompt": "补充证据"}),
+            &FailingFollowUpInvoker,
+        )
+        .expect_err("malformed follow-up must fail");
+        assert!(error.contains("report_invalid"));
+
+        let stale = read_worker_report(&fixture.config, &json!({"worker_id": "worker-1"}))
+            .expect_err("old report must stay invalid after failed follow-up");
+        assert!(stale.contains("旧报告已失效"));
+        let worker = find_worker(&fixture.config, "worker-1").expect("worker");
+        assert_eq!(worker.state, "follow_up_failed");
+        assert!(worker.last_report.is_none());
     }
 
     #[test]

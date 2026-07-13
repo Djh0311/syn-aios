@@ -1,0 +1,127 @@
+{
+  "did": "只读完成 README 承诺逐条核验、源码语法与本地资源链接检查，并按影响排序给出前 5 项问题；未写入任何文件。",
+  "changed_what": [],
+  "outputs": [],
+  "status": "done",
+  "evidence": [
+    "`node --check game.js` 退出码 0。",
+    "`test -f index.html && test -f styles.css && test -f game.js` 退出码 0。",
+    "实现判定均基于 README 原文与现有源码；未将源码核验表述为浏览器交互实测。"
+  ],
+  "promise_verdicts": [
+    {
+      "verdict": "已实现",
+      "readme_evidence": "README.md:3 原文：\"这是一个可直接打开的静态网页小游戏，不需要安装依赖或启动服务。\"",
+      "source_evidence": "index.html:1 原文：\"<!doctype html>\"；index.html:7 原文：\"<link rel=\\\"stylesheet\\\" href=\\\"styles.css\\\">\"；index.html:35 原文：\"<script src=\\\"game.js\\\"></script>\"。入口只引用同目录静态资源。"
+    },
+    {
+      "verdict": "已实现",
+      "readme_evidence": "README.md:7 原文：\"在浏览器中打开 `index.html`。\"",
+      "source_evidence": "index.html:10-35 含完整页面、canvas 与本地脚本入口；本地文件存在检查通过。"
+    },
+    {
+      "verdict": "已实现",
+      "readme_evidence": "README.md:11 原文：\"`A` / `D` 或方向键左右：移动\"",
+      "source_evidence": "game.js:119 原文：\"const left = keys.has(\\\"ArrowLeft\\\") || keys.has(\\\"a\\\");\"；game.js:124-130 原文：\"if (left) { player.vx = -player.speed; ... }\" 与 \"if (right) { player.vx = player.speed; ... }\"。"
+    },
+    {
+      "verdict": "已实现",
+      "readme_evidence": "README.md:12 原文：\"`W` / `↑` / 空格：跳跃\"",
+      "source_evidence": "game.js:121 原文：\"const jump = keys.has(\\\"ArrowUp\\\") || keys.has(\\\"w\\\") || keys.has(\\\" \\\");\"；game.js:132-135 原文：\"if (jump && player.grounded) { player.vy = -player.jump; ... }\"。"
+    },
+    {
+      "verdict": "已实现",
+      "readme_evidence": "README.md:13 原文：\"收集金币，躲避或踩掉敌人，到达右侧旗杆通关\"",
+      "source_evidence": "game.js:189-194 原文：\"coin.taken = true; coinsCollected += 1;\"；game.js:179-185 原文：\"if (player.vy > 0 ... ) { enemy.alive = false; ... } else { endGame(false); }\"；game.js:218-219 原文：\"if (rectsOverlap(player, flag)) { endGame(true); }\"。"
+    }
+  ],
+  "top_5_issues": [
+    {
+      "rank": 1,
+      "impact": "P0",
+      "category": "手感/稳定性",
+      "issue": "移动、重力和敌人移动均按帧执行，未按 delta 缩放；高刷新率会显著加快游戏，低帧率会显著变慢。",
+      "file_line": [
+        "game.js:137",
+        "game.js:147",
+        "game.js:172",
+        "game.js:324-328"
+      ],
+      "original_quote": [
+        "\"player.x += player.vx;\"",
+        "\"player.vy += gravity;\"",
+        "\"enemy.x += enemy.vx;\"",
+        "\"const delta = Math.min(timestamp - lastTime, 32);\" 与 \"update(delta);\""
+      ],
+      "why_it_matters": "delta 仅用于计时，核心物理未使用它；不同显示器刷新率直接改变难度、通关时长和碰撞结果。"
+    },
+    {
+      "rank": 2,
+      "impact": "P1",
+      "category": "bug/碰撞",
+      "issue": "平台侧面或角落碰撞在下落时可能被判为落到平台顶端，产生向上吸附或穿模式修正。",
+      "file_line": [
+        "game.js:140-145",
+        "game.js:151-161"
+      ],
+      "original_quote": [
+        "\"if (rectsOverlap(player, platform)) { if (player.vx > 0) player.x = platform.x - player.w; ... }\"",
+        "\"if (player.vy > 0) { player.y = platform.y - player.h; player.vy = 0; player.grounded = true; }\""
+      ],
+      "why_it_matters": "垂直修正只检查当前向下速度，不检查进入碰撞前的相对位置；侧面重叠后仍会被直接放到平台顶部。"
+    },
+    {
+      "rank": 3,
+      "impact": "P1",
+      "category": "bug/状态机",
+      "issue": "同一帧内失败不会中止后续判定，超时或敌人导致失败后仍可能继续执行旗杆判定并覆盖成通关。",
+      "file_line": [
+        "game.js:202-220"
+      ],
+      "original_quote": [
+        "\"if (timeLeft <= 0) { timeLeft = 0; endGame(false); }\"",
+        "\"updatePlayer(); updateEnemies(); updateCoins();\"",
+        "\"if (rectsOverlap(player, flag)) { endGame(true); }\""
+      ],
+      "why_it_matters": "update 只在函数开头检查 gameOver；endGame(false) 后没有 return，终局优先级不确定。"
+    },
+    {
+      "rank": 4,
+      "impact": "P2",
+      "category": "手感/输入",
+      "issue": "窗口失焦时未清空按键集合；按住方向键后切换窗口，若 keyup 未送达，回到游戏可能持续移动或跳跃。",
+      "file_line": [
+        "game.js:10",
+        "game.js:332-341"
+      ],
+      "original_quote": [
+        "\"const keys = new Set();\"",
+        "\"keys.add(event.key.length === 1 ? event.key.toLowerCase() : event.key);\"",
+        "\"keys.delete(event.key.length === 1 ? event.key.toLowerCase() : event.key);\""
+      ],
+      "why_it_matters": "源码只在 keyup 删除状态，没有 blur 或 visibilitychange 的兜底清理。"
+    },
+    {
+      "rank": 5,
+      "impact": "P2",
+      "category": "代码结构/可测试性",
+      "issue": "运行入口、全局可变状态与无限动画循环直接耦合，无法独立停止或注入游戏循环，后续为碰撞与终局问题补回归测试成本较高。",
+      "file_line": [
+        "game.js:18-24",
+        "game.js:324-330",
+        "game.js:345-346"
+      ],
+      "original_quote": [
+        "\"let cameraX = 0;\"、\"let gameOver = false;\"、\"let timeLeft = 90;\"",
+        "\"requestAnimationFrame(loop);\"",
+        "\"resetGame();\" 与 \"requestAnimationFrame(loop);\""
+      ],
+      "why_it_matters": "状态、更新、绘制和启动副作用均集中在同一全局脚本，不能在不启动 RAF 的条件下直接验证状态迁移。"
+    }
+  ],
+  "overall_50_chars": "功能闭环已具备，但帧率、碰撞与终局状态会明显损害稳定手感。",
+  "permission_requests": [],
+  "open_issues": [],
+  "direction_risks": [],
+  "follow_up_suggestions": []
+}

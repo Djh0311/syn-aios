@@ -1312,6 +1312,7 @@ fn default_workflow_node_dispatch_output_dir() -> PathBuf {
     PathBuf::from("/tmp/codex-workflow-node-dispatch-v1")
 }
 
+#[cfg(test)]
 fn atomic_write_json(path: &Path, value: &Value) -> Result<(), String> {
     workflow_state_store::atomic_write(path, value, &unix_timestamp_string())
 }
@@ -4950,6 +4951,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
     fn consult_map_assembles_profile_and_keeps_consult_checks() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
         let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            requires_write: true,
             write_roots: vec!["咨询乱报的/路径".to_string()], // 应被忽略（用档位）
             target_files: vec!["src/main.rs".to_string()],
             tools: vec!["咨询乱报的工具".to_string()], // 应被忽略（用档位）
@@ -5017,6 +5019,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
     fn consult_map_write_scope_hardcoded_ignores_consult_paths() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
         let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            requires_write: true,
             write_roots: vec!["/etc".to_string(), "../../escape".to_string()],
             ..Default::default()
         }));
@@ -8503,6 +8506,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
         // 造 Pending 方案（要改东西·execution_scope Some → map → 档位 写范围 + codex-dev）。
         let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            requires_write: true,
             write_roots: vec![],
             target_files: vec!["a.rs".to_string()],
             tools: vec![],
@@ -8578,6 +8582,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let index = fixture_dispatch_index(test_root, thread_id);
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
         let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            requires_write: true,
             target_files: vec!["a.rs".to_string()],
             ..Default::default()
         }));
@@ -8646,6 +8651,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let index = fixture_dispatch_index(test_root, "thread-existing");
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
         let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            requires_write: true,
             target_files: vec!["a.rs".to_string()],
             ..Default::default()
         }));
@@ -8779,6 +8785,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let index = fixture_multi_thread_index(test_root, &["thread-existing", "thread-new"]);
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
         let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            requires_write: true,
             target_files: vec!["a.rs".to_string()],
             ..Default::default()
         }));
@@ -8940,6 +8947,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         );
         // 未知 session_choice → 清错（非静默）。需一个 Pending 方案触到 session 分流前。
         let proposal2 = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            requires_write: true,
             target_files: vec!["a.rs".to_string()],
             ..Default::default()
         }));
@@ -9007,6 +9015,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         });
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
         let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            requires_write: true,
             write_roots: vec![],
             target_files: vec!["a.rs".to_string()],
             tools: vec![],
@@ -9151,6 +9160,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let index = fixture_dispatch_index(test_root, "thread-unused");
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
         let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            requires_write: true,
             target_files: vec!["a.rs".to_string()],
             ..Default::default()
         }));
@@ -9325,6 +9335,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let readback_db_path = codex_db::default_state_db_path();
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
         let mut cproposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            requires_write: true,
             target_files: vec!["jiaoban-plan-a-proof.txt".to_string()],
             ..Default::default()
         }));
@@ -9601,6 +9612,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
         // 造 Pending proof-goal 方案（execution_scope Some·要改→档位 写范围；goal 让主管 LM 拆出建 proof 的任务）。
         let mut cproposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            requires_write: true,
             target_files: vec!["jiaoban-proof.txt".to_string()],
             ..Default::default()
         }));
@@ -10280,6 +10292,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let readback_db_path = codex_db::default_state_db_path();
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
         let mut cproposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
+            requires_write: true,
             target_files: vec!["jiaoban-slice2-proof.txt".to_string()],
             ..Default::default()
         }));

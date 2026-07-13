@@ -296,6 +296,7 @@ mod tests {
             supervisor_acceptance_criteria: vec!["检查回程证据后给出结论".to_string()],
             next_steps: vec!["改".to_string()],
             execution_scope: Some(crate::ConsultationExecutionScope {
+                requires_write: true,
                 write_roots: vec![],
                 target_files: vec!["index.html".to_string()],
                 tools: vec![],

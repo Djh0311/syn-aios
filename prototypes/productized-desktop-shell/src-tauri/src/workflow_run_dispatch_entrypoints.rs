@@ -471,15 +471,7 @@ fn update_work_item_state_at(
     let next_state = request.next_state.trim();
     control_core::validate_work_item_state_transition(&before_state, next_state)?;
 
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("状态文件路径没有父目录：{}", path.display()))?;
-    let backups_dir = parent.join("backups");
-    fs::create_dir_all(&backups_dir)
-        .map_err(|error| format!("创建备份目录失败 {}：{error}", backups_dir.display()))?;
-    let backup = backups_dir.join(format!("workflow-state.v0.{timestamp}.json"));
-    fs::copy(path, &backup)
-        .map_err(|error| format!("备份旧状态文件失败 {}：{error}", backup.display()))?;
+    let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
 
     let current_node_id = workflow_node_for_work_item_state(&workflow_id, next_state);
     {
@@ -520,7 +512,7 @@ fn update_work_item_state_at(
         ));
     }
 
-    atomic_write_json(path, &value)?;
+    write_validated_workflow_state(path, &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if !snapshot.exists {
         return Err("推进工作项状态后重新读取校验失败".to_string());
@@ -636,15 +628,7 @@ fn bind_workflow_node_codex_session_with_provenance_at(
         }
     }
 
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("状态文件路径没有父目录：{}", path.display()))?;
-    let backups_dir = parent.join("backups");
-    fs::create_dir_all(&backups_dir)
-        .map_err(|error| format!("创建备份目录失败 {}：{error}", backups_dir.display()))?;
-    let backup = backups_dir.join(format!("workflow-state.v0.{timestamp}.json"));
-    fs::copy(path, &backup)
-        .map_err(|error| format!("备份旧状态文件失败 {}：{error}", backup.display()))?;
+    let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
 
     let existing_active_index = workflow_node_session_binding_index(
         &value,
@@ -738,7 +722,7 @@ fn bind_workflow_node_codex_session_with_provenance_at(
             validation_warnings.join(", ")
         ));
     }
-    atomic_write_json(path, &value)?;
+    write_validated_workflow_state(path, &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if !snapshot.exists {
         return Err("绑定节点会话后重新读取校验失败".to_string());
@@ -992,15 +976,7 @@ fn unbind_workflow_node_codex_session_at(
         })
         .ok_or_else(|| "当前 workflow 下找不到 active 节点会话绑定；无法解绑".to_string())?;
 
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("状态文件路径没有父目录：{}", path.display()))?;
-    let backups_dir = parent.join("backups");
-    fs::create_dir_all(&backups_dir)
-        .map_err(|error| format!("创建备份目录失败 {}：{error}", backups_dir.display()))?;
-    let backup = backups_dir.join(format!("workflow-state.v0.{timestamp}.json"));
-    fs::copy(path, &backup)
-        .map_err(|error| format!("备份旧状态文件失败 {}：{error}", backup.display()))?;
+    let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
 
     let before_thread_id = value
         .get("workflow_node_session_bindings")
@@ -1041,7 +1017,7 @@ fn unbind_workflow_node_codex_session_at(
             validation_warnings.join(", ")
         ));
     }
-    atomic_write_json(path, &value)?;
+    write_validated_workflow_state(path, &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if !snapshot.exists {
         return Err("解绑节点会话后重新读取校验失败".to_string());
