@@ -33,3 +33,4 @@
 | 07-13 | M3 演练×natural-key conflict 闸(第二战果) | 谓词误报清除后 live 主 store 暴露 audit_events 16 组重复 event_id(51 条·内容确不同·id 可见截断+同毫秒)＋总指导复核加抓 4 条 event_id=None——坐实评审§五 stable_id 截断病预言 | 带撞号/无号审计史静默进 SQLite·翻闸后对账假成功 |
 | 07-13 | 法证包纠总指导 | 「4 条无号」实为旧代 schema(audit_event_id/event_type)且 importer 已 fallback 兼容(importer.rs:41)——非阻断;总指导上轮定性偏差 | 把非问题当阻断项·误导修复范围 |
 | 07-13 | 总指导复数纠法证 | 法证 D 报 active audit_refs=141,实测 148(漏 formal-memories 2/memory-candidates 3/observations 2);撞号引用=0 结论不变 | 引用面清点不全(本次无决策影响·养成互核惯例) |
+| 07-13 | 共树纪律(抓总指导)+WINDOW_START_HASH 闸正面验证 | a 窗口收口时总指导目录级 `git add evidence/raw/...` 盲提交执行线并行草稿 `repair_audit_events.mjs`(同包双线并行·事后核清:未执行·输出件全无·apply 前 hash 断言通过=盘上仅总指导手术) | 未经查验文件混入 commit;若无 hash 闸,同包双写可互踩——evidence 目录也必须显式列文件 |
