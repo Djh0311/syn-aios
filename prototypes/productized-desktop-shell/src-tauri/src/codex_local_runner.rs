@@ -1828,6 +1828,71 @@ fn contains_sensitive_fragment(value: &str) -> bool {
 mod tests {
     use super::*;
 
+    struct UniqueTestTempDir {
+        path: std::path::PathBuf,
+    }
+
+    impl UniqueTestTempDir {
+        fn create(prefix: &str) -> Self {
+            static SEQUENCE: std::sync::atomic::AtomicU64 =
+                std::sync::atomic::AtomicU64::new(0);
+            const MAX_CREATE_ATTEMPTS: usize = 128;
+
+            for _ in 0..MAX_CREATE_ATTEMPTS {
+                let sequence = SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let timestamp_nanos = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .expect("system clock after unix epoch")
+                    .as_nanos();
+                let path = std::env::temp_dir().join(format!(
+                    "{prefix}-{}-{timestamp_nanos}-{sequence}",
+                    std::process::id()
+                ));
+                match fs::create_dir(&path) {
+                    Ok(()) => return Self { path },
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(error) => panic!("create unique test directory: {error}"),
+                }
+            }
+
+            panic!("create unique test directory exhausted {MAX_CREATE_ATTEMPTS} attempts");
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.path
+        }
+    }
+
+    impl Drop for UniqueTestTempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn wait_for_mock_child_to_exit(pid: u32) {
+        const POLL_INTERVAL: Duration = Duration::from_millis(25);
+        const REAP_BUDGET: Duration = Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + REAP_BUDGET;
+
+        loop {
+            let still_running = Command::new("/bin/kill")
+                .arg("-0")
+                .arg(pid.to_string())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .expect("inspect mock child pid")
+                .success();
+            if !still_running {
+                return;
+            }
+            if std::time::Instant::now() >= deadline {
+                panic!("timed-out mock child must be reaped within {REAP_BUDGET:?}");
+            }
+            std::thread::sleep(POLL_INTERVAL);
+        }
+    }
+
     #[test]
     fn same_prompt_consultations_use_distinct_last_message_paths() {
         let first = readonly_consult_last_message_path("same prompt");
@@ -1896,8 +1961,8 @@ mod tests {
     #[ignore = "spawns real codex in the fixed test project"]
     fn real_run_workflow_node_adapter() {
         let runner = RealWorkflowNodeCodexRunner;
-        let last_message_path =
-            std::env::temp_dir().join("workflow-node-real-run-last-message.txt");
+        let test_dir = UniqueTestTempDir::create("workflow-node-real-run");
+        let last_message_path = test_dir.path().join("last-message.txt");
         let test_root = "/Users/yoyi/codex-workflow-mario-test";
         let options = crate::CodexResumeRequestOptions {
             prompt_kind: "workflow_node_business".to_string(),
@@ -1922,18 +1987,11 @@ mod tests {
 
     #[test]
     fn real_process_timeout_kills_and_reaps_mock_child() {
-        let test_dir = std::env::temp_dir().join(format!(
-            "codex-local-runner-timeout-test-{}",
-            SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("system clock after unix epoch")
-                .as_millis()
-        ));
-        fs::create_dir_all(&test_dir).expect("create timeout test directory");
-        let pid_path = test_dir.join("mock-child.pid");
-        let last_message_path = test_dir.join("last-message.txt");
+        let test_dir = UniqueTestTempDir::create("codex-local-runner-timeout-test");
+        let pid_path = test_dir.path().join("mock-child.pid");
+        let last_message_path = test_dir.path().join("last-message.txt");
         fs::write(&last_message_path, "stale result").expect("seed stale last message");
-        let mock_codex_path = test_dir.join("codex");
+        let mock_codex_path = test_dir.path().join("codex");
         let quoted_pid_path = pid_path.display().to_string().replace('\'', "'\\\"'\\\"'");
         fs::write(
             &mock_codex_path,
@@ -1983,16 +2041,7 @@ mod tests {
             .trim()
             .parse::<u32>()
             .expect("mock child pid is numeric");
-        let still_running = Command::new("/bin/kill")
-            .arg("-0")
-            .arg(pid.to_string())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .expect("inspect mock child pid")
-            .success();
-        assert!(!still_running, "timed-out mock child must be reaped");
-        let _ = fs::remove_dir_all(&test_dir);
+        wait_for_mock_child_to_exit(pid);
     }
     use crate::CodexLocalReadbackPlan;
 
