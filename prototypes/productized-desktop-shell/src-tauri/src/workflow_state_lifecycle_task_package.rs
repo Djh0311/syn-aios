@@ -41,7 +41,11 @@ fn read_workflow_state_snapshot(path: &Path) -> Result<WorkflowStateSnapshot, St
 fn initialize_workflow_state_at(path: &Path) -> Result<WorkflowStateMutationResult, String> {
     let existed = path.exists();
     let timestamp = unix_timestamp_string();
-    let audit_event_id = format!("audit:init:{timestamp}");
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "init",
+        &path.display().to_string(),
+        &timestamp,
+    );
     let parent = path
         .parent()
         .ok_or_else(|| format!("状态文件路径没有父目录：{}", path.display()))?;
@@ -98,9 +102,10 @@ fn bootstrap_project_workflow_at(
 ) -> Result<WorkflowStateMutationResult, String> {
     let existed = path.exists();
     let timestamp = unix_timestamp_string();
-    let audit_event_id = format!(
-        "audit:bootstrap:{}:{timestamp}",
-        stable_id(&project.project_root)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "bootstrap",
+        &project.project_root,
+        &timestamp,
     );
     let parent = path
         .parent()
@@ -120,7 +125,16 @@ fn bootstrap_project_workflow_at(
         serde_json::from_str(&text)
             .map_err(|error| format!("工作流状态 JSON 解析失败 {}：{error}", path.display()))?
     } else {
-        initial_workflow_state_json(&timestamp, &format!("audit:init:{timestamp}"), false, path)
+        initial_workflow_state_json(
+            &timestamp,
+            &crate::workflow_audit::audit_event_identity(
+                "init",
+                &path.display().to_string(),
+                &timestamp,
+            ),
+            false,
+            path,
+        )
     };
 
     let validation_warnings = validate_workflow_state(&value);
@@ -345,9 +359,10 @@ fn create_task_draft_at(
     let assigned_role = request.assigned_role.as_deref().unwrap_or("codex-dev");
     let work_item_id = format!("work-item:{workflow_id}:{timestamp}");
     let artifact_id = format!("artifact:{workflow_id}:task-package:{timestamp}");
-    let audit_event_id = format!(
-        "audit:task-draft:{}:{timestamp}",
-        stable_id(normalized_title)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "task-draft",
+        normalized_title,
+        &timestamp,
     );
 
     array_mut(&mut value, "work_items")?.push(json!({
@@ -402,7 +417,7 @@ fn create_task_draft_at(
 
     if let Some(before_state) = task_node_before_state {
         array_mut(&mut value, "audit_events")?.push(json!({
-          "event_id": format!("audit:task-node-draft:{}:{timestamp}", stable_id(normalized_title)),
+          "event_id": crate::workflow_audit::audit_event_identity("task-node-draft", normalized_title, &timestamp),
           "event_type": "task_node_state_updated",
           "target_ref": format!("{workflow_id}:node:task"),
           "actor_ref": "user_confirmed_desktop_shell",
@@ -613,9 +628,10 @@ fn update_task_package_fields_at(
             "已保存任务包派发字段修正；没有生成真实任务包文件。",
         ),
     };
-    let audit_event_id = format!(
-        "audit:{audit_prefix}:{}:{timestamp}",
-        stable_id(&request.work_item_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        audit_prefix,
+        &request.work_item_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -752,9 +768,10 @@ fn generate_task_package_file_at(
     }
     validate_generated_task_package_markdown(&written)?;
 
-    let audit_event_id = format!(
-        "audit:task-file:{}:{timestamp}",
-        stable_id(&request.work_item_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "task-file",
+        &request.work_item_id,
+        &timestamp,
     );
     {
         let artifacts = array_mut(&mut value, "artifacts")?;
@@ -785,9 +802,10 @@ fn generate_task_package_file_at(
       "created_at": timestamp,
       "reason": format!("用户确认从选中任务草稿生成真实任务包文件：{}", file_path.display())
     }));
-    let memory_audit_event_id = format!(
-        "audit:task-memory-injection:{}:{timestamp}",
-        stable_id(&request.work_item_id)
+    let memory_audit_event_id = crate::workflow_audit::audit_event_identity(
+        "task-memory-injection",
+        &request.work_item_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": memory_audit_event_id,

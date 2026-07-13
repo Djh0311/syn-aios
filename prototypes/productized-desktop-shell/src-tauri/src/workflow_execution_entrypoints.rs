@@ -324,9 +324,10 @@ fn write_prepared_dispatch(
       "updated_at_ms": timestamp_ms
     });
     array_mut(&mut value, "workflow_node_dispatches")?.push(dispatch);
-    let audit_event_id = format!(
-        "audit:workflow-node-dispatch-prepared:{}:{timestamp}",
-        stable_id(&dispatch_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "workflow-node-dispatch-prepared",
+        &dispatch_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -415,7 +416,7 @@ fn write_started_dispatch(
     }
     update_node_state_for_id(&mut value, &context.node_id, "running", &timestamp)?;
     array_mut(&mut value, "audit_events")?.push(json!({
-      "event_id": format!("audit:workflow-node-dispatch-started:{}:{timestamp}", stable_id(&dispatch_id)),
+      "event_id": crate::workflow_audit::audit_event_identity("workflow-node-dispatch-started", &dispatch_id, &timestamp),
       "event_type": "workflow_node_dispatch_started",
       "target_ref": context.work_item_id,
       "actor_ref": "user_confirmed_desktop_shell",
@@ -524,9 +525,10 @@ fn write_completed_dispatch(
         "ready_for_review",
         &timestamp,
     )?;
-    let audit_event_id = format!(
-        "audit:workflow-node-dispatch-completed:{}:{timestamp}",
-        stable_id(dispatch_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "workflow-node-dispatch-completed",
+        dispatch_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -541,7 +543,7 @@ fn write_completed_dispatch(
       "reason": "Codex resume 完成；已写最终回复摘要和 transcript 统计，没有保存完整 transcript。"
     }));
     array_mut(&mut value, "audit_events")?.push(json!({
-      "event_id": format!("audit:workflow-node-dispatch-readback:{}:{timestamp}", stable_id(dispatch_id)),
+      "event_id": crate::workflow_audit::audit_event_identity("workflow-node-dispatch-readback", dispatch_id, &timestamp),
       "event_type": "workflow_node_dispatch_readback_completed",
       "target_ref": work_item_id,
       "actor_ref": "desktop_shell_native_transcript_parser",
@@ -744,9 +746,10 @@ fn write_failed_dispatch(
           "warnings": warnings.clone()
         }));
     }
-    let audit_event_id = format!(
-        "audit:workflow-node-dispatch-failed:{}:{timestamp}",
-        stable_id(dispatch_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "workflow-node-dispatch-failed",
+        dispatch_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -796,9 +799,10 @@ fn write_readback_dispatch(
         dispatch["transcript_target_hits"] = Value::Number(stats.transcript_target_hits.into());
         dispatch["updated_at_ms"] = Value::Number(timestamp_ms.into());
     }
-    let audit_event_id = format!(
-        "audit:workflow-node-dispatch-readback:{}:{timestamp}",
-        stable_id(dispatch_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "workflow-node-dispatch-readback",
+        dispatch_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -895,9 +899,10 @@ fn record_workflow_dispatch_director_review_at(
       "warnings": string_array(dispatch, "warnings")
     });
     array_mut(&mut value, "reviews")?.push(review);
-    let audit_event_id = format!(
-        "audit:workflow-dispatch-director-review:{}:{timestamp}",
-        stable_id(&request.work_item_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "workflow-dispatch-director-review",
+        &request.work_item_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -982,9 +987,10 @@ fn record_workflow_permission_decision_at(
         warnings.push("permission_decision_recorded_by_control_core".to_string());
         permission_request["warnings"] = string_vec_value(&dedupe_strings(warnings));
     }
-    let audit_event_id = format!(
-        "audit:workflow-permission-decision:{}:{timestamp}",
-        stable_id(&request.request_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "workflow-permission-decision",
+        &request.request_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(
         workflow_audit::workflow_permission_decision_recorded(
@@ -1134,9 +1140,10 @@ fn prepare_offline_role_dispatch_at(
       "created_at_ms": timestamp_ms,
       "updated_at_ms": timestamp_ms
     }));
-    let audit_event_id = format!(
-        "audit:offline-role-dispatch-prepared:{}:{timestamp}",
-        stable_id(&dispatch_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "offline-role-dispatch-prepared",
+        &dispatch_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -1255,9 +1262,10 @@ fn record_offline_role_result_handoff_at(
         "ready_for_review",
         &timestamp,
     )?;
-    let audit_event_id = format!(
-        "audit:offline-role-result-handoff:{}:{timestamp}",
-        stable_id(&request.dispatch_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "offline-role-result-handoff",
+        &request.dispatch_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -1353,9 +1361,10 @@ fn record_offline_director_review_at(
         ));
         work_item["updated_at"] = Value::String(timestamp.clone());
     }
-    let audit_event_id = format!(
-        "audit:offline-director-review:{}:{timestamp}",
-        stable_id(&request.work_item_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "offline-director-review",
+        &request.work_item_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,

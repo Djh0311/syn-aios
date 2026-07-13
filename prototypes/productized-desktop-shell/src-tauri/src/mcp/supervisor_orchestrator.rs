@@ -670,7 +670,11 @@ pub(crate) fn abandon_fresh_task_binding(
         .and_then(Value::as_array_mut)
         .ok_or_else(|| "workflow state 缺 audit_events，无法记录新会话失败收尾".to_string())?;
     audit_events.push(json!({
-        "event_id": format!("audit:supervisor-task-session-abandoned:{}:{}", stable_fragment(native_thread_id), crate::unix_timestamp_nanos()),
+        "event_id": crate::workflow_audit::audit_event_identity(
+            "supervisor-task-session-abandoned",
+            native_thread_id,
+            crate::unix_timestamp_nanos()
+        ),
         "event_type": "supervisor_task_session_abandoned",
         "target_ref": canonical_work_item_id,
         "actor_ref": ACTOR,

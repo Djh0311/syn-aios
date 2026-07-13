@@ -485,9 +485,10 @@ fn update_work_item_state_at(
     }
     update_node_state_for_id(&mut value, &current_node_id, next_state, &timestamp)?;
 
-    let audit_event_id = format!(
-        "audit:work-item-state:{}:{timestamp}",
-        stable_id(&request.work_item_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "work-item-state",
+        &request.work_item_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(workflow_audit::work_item_state_changed(
         workflow_audit::WorkItemStateChangedAudit {
@@ -697,9 +698,10 @@ fn bind_workflow_node_codex_session_with_provenance_at(
         array_mut(&mut value, "workflow_node_session_bindings")?.push(binding);
     }
 
-    let audit_event_id = format!(
-        "audit:workflow-node-session:{}:{timestamp}",
-        stable_id(&request.node_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "workflow-node-session",
+        &request.node_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -918,7 +920,11 @@ fn migrate_legacy_workflow_node_session_binding_ids_at(path: &Path) -> Result<us
     let timestamp = unix_timestamp_string();
     let backup = backup_workflow_state_file(path, &timestamp)?;
     array_mut(&mut value, "audit_events")?.push(json!({
-        "event_id": format!("audit:workflow-binding-id-migrated:{timestamp}"),
+        "event_id": crate::workflow_audit::audit_event_identity(
+            "workflow-binding-id-migrated",
+            &path.display().to_string(),
+            &timestamp
+        ),
         "event_type": "workflow_node_session_binding_ids_migrated",
         "target_ref": path.display().to_string(),
         "actor_ref": "syn_control_core_migration",
@@ -992,9 +998,10 @@ fn unbind_workflow_node_codex_session_at(
         binding["lifecycle"] = Value::String("detached".to_string());
         binding["updated_at_ms"] = Value::Number(timestamp_ms.into());
     }
-    let audit_event_id = format!(
-        "audit:workflow-node-session-unbind:{}:{timestamp}",
-        stable_id(&request.binding_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "workflow-node-session-unbind",
+        &request.binding_id,
+        &timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,

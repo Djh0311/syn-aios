@@ -218,9 +218,10 @@ fn sweep_canvas_run_residue_at(
         }
         crate::update_node_state_for_id(&mut value, &node_id, "paused", &timestamp)?;
 
-        let audit_event_id = format!(
-            "audit:work-item-state:canvas-run-residue:{}:{timestamp}",
-            slugify_project_root(work_item_id)
+        let audit_event_id = crate::workflow_audit::audit_event_identity(
+            "work-item-state-canvas-run-residue",
+            work_item_id,
+            &timestamp,
         );
         let audit = crate::workflow_audit::work_item_state_changed(
             crate::workflow_audit::WorkItemStateChangedAudit {
@@ -244,9 +245,13 @@ fn sweep_canvas_run_residue_at(
         });
     }
 
-    // 汇总审计 canvas_run_residue_swept（手构；不碰 workflow_audit.rs——它不在文件面）。
+    // 汇总审计 canvas_run_residue_swept，event_id 走 workflow_audit 单源 helper。
     let swept_count = result_items.len();
-    let summary_event_id = format!("audit:canvas-run-residue-swept:{timestamp}");
+    let summary_event_id = crate::workflow_audit::audit_event_identity(
+        "canvas-run-residue-swept",
+        "canvas-run-residue",
+        &timestamp,
+    );
     let summary_audit = json!({
         "event_id": summary_event_id,
         "event_type": "canvas_run_residue_swept",

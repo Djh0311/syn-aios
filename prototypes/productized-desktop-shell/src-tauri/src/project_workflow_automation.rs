@@ -1,4 +1,3 @@
-use crate::utils::hash::sha256_hex;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -8,7 +7,8 @@ use crate::{
     i64_value, memory_capture_bus, node_exists, optional_string_from, project_id,
     read_workflow_state_value, real_execution_command,
     record_project_director_process_fact_decision_at, record_worker_structured_report_at,
-    stable_id, validate_workflow_state, workflow_exists, write_validated_workflow_state,
+    stable_id, utils::hash::sha256_hex, validate_workflow_state,
+    workflow_audit::audit_event_identity, workflow_exists, write_validated_workflow_state,
     CaptureMemoryEventInput, CodexControlCommandInput, MemoryCaptureSourceRef, MemoryScope,
     ObservationSourceRef, PrepareRealExecutionProductCommandInput,
     PreviewRealExecutionProductCommandInput, ProcessFactCandidate,
@@ -1881,7 +1881,7 @@ fn ensure_k3_b_work_item(
       ]
     }));
     array_mut(value, "audit_events")?.push(json!({
-      "event_id": format!("audit:k3-b-work-item:{}:{timestamp}", stable_id(config.work_item_id)),
+      "event_id": audit_event_identity("k3-b-work-item", config.work_item_id, timestamp),
       "event_type": "project_workflow_automation_k3_b_work_item_created",
       "target_ref": config.work_item_id,
       "execution_point_id": config.execution_point_id,
@@ -1987,7 +1987,7 @@ fn ensure_work_item(
       "warnings": ["k3_level_a_task_package_summary_no_raw_prompt"]
     }));
     array_mut(value, "audit_events")?.push(json!({
-      "event_id": format!("audit:k3-work-item:{}:{timestamp}", stable_id(&work_item_id)),
+      "event_id": audit_event_identity("k3-work-item", &work_item_id, timestamp),
       "event_type": "project_workflow_automation_work_item_created",
       "target_ref": work_item_id,
       "project_id": project_id_value,
@@ -2925,13 +2925,13 @@ fn append_automation_audit_event(
 ) -> Result<String, String> {
     let mut value = read_workflow_state_value(workflow_state_path)?;
     let backup = backup_workflow_state_file(workflow_state_path, timestamp)?;
-    let audit_event_id = format!(
-        "audit:k3-project-workflow-automation:{}:{timestamp}",
-        stable_id(&plan.automation_id)
+    let audit_event_id = audit_event_identity(
+        "k3-project-workflow-automation",
+        &plan.automation_id,
+        timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
-      "event_id": audit_event_id,
-      "event_type": J2_EVENT_TYPE,
+      "event_id": audit_event_id, "event_type": J2_EVENT_TYPE,
       "target_ref": plan.automation_id,
       "project_id": plan.project_id,
       "workflow_id": plan.workflow_id,
@@ -2977,9 +2977,10 @@ fn append_j2_b_b1_audit_event(
         .run_units
         .iter()
         .find(|unit| unit.run_unit_kind == "developer_execution");
-    let audit_event_id = format!(
-        "audit:j2-b-b1-project-workflow-automation:{}:{timestamp}",
-        stable_id(&phase_b.product_command_id)
+    let audit_event_id = audit_event_identity(
+        "j2-b-b1-project-workflow-automation",
+        &phase_b.product_command_id,
+        timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -3036,9 +3037,10 @@ fn append_j2_b_b2_audit_event(
         .run_units
         .iter()
         .find(|unit| unit.run_unit_kind == "developer_execution");
-    let audit_event_id = format!(
-        "audit:j2-b-b2-project-workflow-automation:{}:{timestamp}",
-        stable_id(&phase_b.product_command_id)
+    let audit_event_id = audit_event_identity(
+        "j2-b-b2-project-workflow-automation",
+        &phase_b.product_command_id,
+        timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -3099,9 +3101,10 @@ fn append_k3_b_audit_event(
         .run_units
         .iter()
         .find(|unit| unit.run_unit_kind == "developer_execution");
-    let audit_event_id = format!(
-        "audit:k3-b-project-workflow-automation:{}:{timestamp}",
-        stable_id(&phase_b.product_command_id)
+    let audit_event_id = audit_event_identity(
+        "k3-b-project-workflow-automation",
+        &phase_b.product_command_id,
+        timestamp,
     );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,

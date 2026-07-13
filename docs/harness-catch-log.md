@@ -35,3 +35,4 @@
 | 07-13 | 总指导复数纠法证 | 法证 D 报 active audit_refs=141,实测 148(漏 formal-memories 2/memory-candidates 3/observations 2);撞号引用=0 结论不变 | 引用面清点不全(本次无决策影响·养成互核惯例) |
 | 07-13 | 共树纪律(抓总指导)+WINDOW_START_HASH 闸正面验证 | a 窗口收口时总指导目录级 `git add evidence/raw/...` 盲提交执行线并行草稿 `repair_audit_events.mjs`(同包双线并行·事后核清:未执行·输出件全无·apply 前 hash 断言通过=盘上仅总指导手术) | 未经查验文件混入 commit;若无 hash 闸,同包双写可互踩——evidence 目录也必须显式列文件 |
 | 07-13 | 执行线双修复器检测(硬停正确) | 执行线察觉 backup-before+第二份修复脚本并发出现→窗口前硬停·未写 live·请求仲裁;事后对账:其临时副本演练(51+4·M3 PASS)与总指导实产逐项一致=收敛双验 | 同包双线双写互踩;「止血已派」实为 a 包名字混淆·止血从未开工被此番对账揪出 |
+| 07-13 | shape gate(抓止血包)+回传第 7 项缺口 | 止血把 project_workflow_automation.rs 顶破水线 1 行(5060>5059),且回传漏报验收必填的 shape gate 数——总指导补跑抓获·代收尾纯整形至 5059(use 并群/rustfmt 定稿/宏内并行·零逻辑) | 棘轮静默增长;验收项漏报成惯例=gate 白设 |

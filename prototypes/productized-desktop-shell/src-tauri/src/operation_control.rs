@@ -349,10 +349,10 @@ pub(crate) fn record_operation_control_decision_at(
     reject_duplicate_audit(&value, &request.operation_id)?;
 
     let backup = crate::backup_workflow_state_file(workflow_state_path, timestamp)?;
-    let audit_event_id = format!(
-        "audit:l3-operation:{}:{}",
-        crate::stable_id(&request.operation_id),
-        timestamp
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "l3-operation",
+        &request.operation_id,
+        timestamp,
     );
     let mut audit_event = crate::workflow_audit::operation_decision_recorded(
         crate::workflow_audit::OperationDecisionRecordedAudit {

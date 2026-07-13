@@ -560,10 +560,10 @@ fn record_project_director_process_fact_decision_at(
         stable_id(&request.report_id),
         timestamp
     );
-    let audit_event_id = format!(
-        "audit:process-fact-decision:{}:{}",
-        stable_id(&request.report_id),
-        timestamp
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "process-fact-decision",
+        &request.report_id,
+        &timestamp,
     );
     let observation_ids = observations
         .iter()
@@ -693,11 +693,8 @@ fn record_global_final_result_review_at(
         stable_id(&request.decision),
         timestamp
     );
-    let audit_event_id = format!(
-        "audit:global-final-review:{}:{}",
-        stable_id(&review_id),
-        timestamp
-    );
+    let audit_event_id =
+        crate::workflow_audit::audit_event_identity("global-final-review", &review_id, &timestamp);
     array_mut(&mut value, "reviews")?.push(json!({
       "review_id": review_id,
       "project_id": request.project_id,
@@ -794,11 +791,8 @@ fn record_user_result_decision_at(
         stable_id(&request.decision),
         timestamp
     );
-    let audit_event_id = format!(
-        "audit:user-result-decision:{}:{}",
-        stable_id(&decision_id),
-        timestamp
-    );
+    let audit_event_id =
+        crate::workflow_audit::audit_event_identity("user-result-decision", &decision_id, &timestamp);
     array_mut(&mut value, "reviews")?.push(json!({
       "review_id": decision_id,
       "project_id": request.project_id,
@@ -875,10 +869,10 @@ fn generate_stage_c_acceptance_summary_at(
         stable_id(&request.workflow_id),
         timestamp
     );
-    let audit_event_id = format!(
-        "audit:stage-c-acceptance-summary:{}:{}",
-        stable_id(&request.workflow_id),
-        timestamp
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "stage-c-acceptance-summary",
+        &request.workflow_id,
+        &timestamp,
     );
     array_mut(&mut value, "artifacts")?.push(json!({
       "artifact_id": artifact_id,
@@ -2363,7 +2357,7 @@ fn ensure_project_director_work_item(
       "updated_at": timestamp
     }));
     array_mut(value, "audit_events")?.push(json!({
-      "event_id": format!("audit:project-director-task-plan-created:{}:{timestamp}", stable_id(work_item_id)),
+      "event_id": crate::workflow_audit::audit_event_identity("project-director-task-plan-created", work_item_id, timestamp),
       "event_type": "project_director_task_plan_created",
       "target_ref": work_item_id,
       "actor_ref": "project_director",
@@ -2602,9 +2596,10 @@ fn push_authorized_prepared_dispatch_created_audit(
     authorization_id: &str,
     timestamp: &str,
 ) -> Result<String, String> {
-    let audit_event_id = format!(
-        "audit:authorized-prepared-dispatch-created:{}:{timestamp}",
-        stable_id(dispatch_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "authorized-prepared-dispatch-created",
+        dispatch_id,
+        timestamp,
     );
     array_mut(value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -2632,9 +2627,10 @@ fn push_authorized_prepared_dispatch_thread_deferred_audit(
     authorization_id: &str,
     timestamp: &str,
 ) -> Result<String, String> {
-    let audit_event_id = format!(
-        "audit:authorized-prepared-dispatch-thread-deferred:{}:{timestamp}",
-        stable_id(dispatch_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "authorized-prepared-dispatch-thread-deferred",
+        dispatch_id,
+        timestamp,
     );
     array_mut(value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
@@ -2661,9 +2657,10 @@ fn push_authorized_prepared_dispatch_blocked_audit(
     event_type: &str,
     reason: &str,
 ) -> Result<String, String> {
-    let audit_event_id = format!(
-        "audit:{event_type}:{}:{timestamp}",
-        stable_id(&task.planned_task_id)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        event_type,
+        &task.planned_task_id,
+        timestamp,
     );
     array_mut(value, "audit_events")?.push(json!({
       "event_id": audit_event_id,

@@ -248,7 +248,7 @@ fn append_chain_audit(
     reason: &str,
 ) -> Result<(), String> {
     ensure_array_mut(value, "audit_events")?.push(json!({
-      "event_id": format!("audit:{event_type}:{}:{timestamp}", stable_id(chain_run_id)),
+      "event_id": crate::workflow_audit::audit_event_identity(event_type, chain_run_id, timestamp),
       "event_type": event_type,
       "target_ref": chain_run_id,
       "actor_ref": "user_confirmed_desktop_shell",

@@ -3462,9 +3462,9 @@ fn record_supervisor_task_session_birth(
         .and_then(Value::as_array_mut)
         .ok_or_else(|| "workflow state 缺 audit_events，无法记录任务会话出生".to_string())?;
     audit_events.push(json!({
-        "event_id": format!(
-            "audit:supervisor-task-session-birth:{}:{}",
-            stable_id(native_thread_id),
+        "event_id": crate::workflow_audit::audit_event_identity(
+            "supervisor-task-session-birth",
+            native_thread_id,
             unix_timestamp_nanos()
         ),
         "event_type": "supervisor_task_session_birth",

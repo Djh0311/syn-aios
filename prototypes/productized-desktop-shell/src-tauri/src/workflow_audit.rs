@@ -1,5 +1,30 @@
 use serde_json::{json, Value};
 
+pub(crate) fn audit_event_identity(
+    kind_slug: &str,
+    entity: &str,
+    timestamp_ms: impl std::fmt::Display,
+) -> String {
+    let entity_slug = audit_identity_slug(entity);
+    let entity_hash = crate::utils::hash::sha256_hex(entity);
+    format!(
+        "audit:{kind_slug}:{entity_slug}:{}:{timestamp_ms}",
+        &entity_hash[..12]
+    )
+}
+
+fn audit_identity_slug(entity: &str) -> String {
+    let mut slug = String::new();
+    for character in entity.chars() {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character.to_ascii_lowercase());
+        } else if !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    slug.trim_matches('-').to_string()
+}
+
 pub(crate) struct WorkItemStateChangedAudit<'a> {
     pub(crate) event_id: String,
     pub(crate) work_item_id: &'a str,
@@ -124,6 +149,57 @@ pub(crate) fn operation_decision_recorded(event: OperationDecisionRecordedAudit<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn audit_event_identity_keeps_same_millisecond_batch_unique() {
+        let timestamp_ms = 1_720_915_200_123_i64;
+        let ids = [
+            "dispatch:workflow:node:one",
+            "dispatch:workflow:node:two",
+            "dispatch:workflow:node:three",
+            "dispatch:workflow:node:four",
+        ]
+        .into_iter()
+        .map(|dispatch_id| {
+            audit_event_identity("workflow-node-dispatch-prepared", dispatch_id, timestamp_ms)
+        })
+        .collect::<BTreeSet<_>>();
+
+        assert_eq!(ids.len(), 4);
+    }
+
+    #[test]
+    fn audit_event_identity_distinguishes_slug_fold_collisions() {
+        let timestamp_ms = 1_720_915_200_123_i64;
+        let hyphenated = audit_event_identity("worker-report", "a-b", timestamp_ms);
+        let underscored = audit_event_identity("worker-report", "a_b", timestamp_ms);
+
+        assert_eq!(
+            hyphenated,
+            "audit:worker-report:a-b:d44362d67d92:1720915200123"
+        );
+        assert_eq!(
+            underscored,
+            "audit:worker-report:a-b:648fa9b31bc7:1720915200123"
+        );
+        assert_ne!(hyphenated, underscored);
+    }
+
+    #[test]
+    fn audit_event_identity_uses_full_slug_and_documented_format() {
+        let entity = format!("worker-{}", "x".repeat(100));
+        let timestamp_ms = 1_720_915_200_123_i64;
+        let expected = format!(
+            "audit:workflow-node-dispatch-prepared:{entity}:{}:{timestamp_ms}",
+            &crate::utils::hash::sha256_hex(&entity)[..12]
+        );
+
+        assert_eq!(
+            audit_event_identity("workflow-node-dispatch-prepared", &entity, timestamp_ms),
+            expected
+        );
+    }
 
     #[test]
     fn k3_b1_recovery_audit_event_records_choice_without_sensitive_payloads() {

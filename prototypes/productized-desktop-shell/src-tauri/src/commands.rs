@@ -3309,7 +3309,11 @@ fn submit_project_workflow_draft_at(
     }
 
     // 控制核心 / 审计：记审计事件；备份 + schema 校验后原子写。
-    let audit_event_id = format!("audit:workflow-submit:{}:{timestamp}", stable_id(&workflow_id));
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "workflow-submit",
+        &workflow_id,
+        &timestamp,
+    );
     ensure_array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
       "event_type": if is_new { "project_workflow_created_from_canvas" } else { "project_workflow_updated_from_canvas" },
