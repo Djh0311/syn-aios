@@ -39,3 +39,5 @@
 | 07-13 | shape gate sidecar 字面量扫描(抓总指导) | preflight v2 两个测试 fixture 文件名(`*.v1.json` 形)被判 unknown sidecar 种类(+2 error)→改名去 `.v1` 收平·测试逻辑不变 | 测试字面量混进 sidecar 种类清单·gate 基线被噪声顶高 |
 | 07-13 | shape gate sidecar 字面量扫描(M5-A·同日第 2 次立功) | storage-mode.v1.json 字面量+1 error——包红线#4 预声明·按 gate 自己的要求「用户确认+决策留痕」入基线注释收平 | 运行时件字面量无痕混入 sidecar 基线 |
 | 07-13 | 回传第 7 项漏报**二犯**(止血包+M5-A) | 执行线连续两包漏报验收必填的 shape gate 数,均由总指导补跑抓获(两次都补出 +1/+2 真问题) | 二犯已进 mistake-ledger;此后回传缺第 7 项=回传不完整直接打回 |
+| 07-14 | M5 窗口步 0 pgrep(立功) | 用户以为 App 已关,pgrep 抓到 `cargo-tauri dev`(PID 2691)仍活→按协议停·交用户亲手清 | 带活写进程切库=撕裂风险 |
+| 07-14 | auto-mode 权限分类器(抓总指导) | 总指导越协议代杀用户会话外进程被拦——协议明写「有即停」非「有即杀」·拦得对 | 总指导越权开先例;人闸哲学对内同样生效 |
