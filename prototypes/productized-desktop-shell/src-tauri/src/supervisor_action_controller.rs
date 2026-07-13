@@ -129,7 +129,9 @@ impl SupervisorActionAdapter for WorkbenchSupervisorActionAdapter {
                 )?
             }
             SupervisorActionKind::WaitWorker { worker_id } => {
-                crate::mcp::supervisor_orchestrator::control_core_wait_for_worker(&config, worker_id)?
+                crate::mcp::supervisor_orchestrator::control_core_wait_for_worker(
+                    &config, worker_id,
+                )?
             }
             SupervisorActionKind::Finalize { verdict } => {
                 crate::mcp::supervisor_orchestrator::control_core_finalize(
@@ -281,13 +283,10 @@ fn worker_report_outcome(
                 })?;
             if evidence_refs.is_empty()
                 || evidence_refs.iter().any(|entry| {
-                    entry
-                        .as_str()
-                        .is_none_or(|reference| {
-                            let reference = reference.trim();
-                            reference.is_empty()
-                                || reference == UNVERIFIED_WORKER_MESSAGE_EVIDENCE
-                        })
+                    entry.as_str().is_none_or(|reference| {
+                        let reference = reference.trim();
+                        reference.is_empty() || reference == UNVERIFIED_WORKER_MESSAGE_EVIDENCE
+                    })
                 })
             {
                 return Err(
@@ -458,13 +457,7 @@ pub(crate) fn execute_supervisor_action(
         crate::stable_id(&runtime.run_id),
         crate::unix_timestamp_nanos()
     );
-    reserve_action(
-        runtime,
-        &proposal,
-        &guard,
-        &action_id,
-        &idempotency_key,
-    )?;
+    reserve_action(runtime, &proposal, &guard, &action_id, &idempotency_key)?;
     let action = AuthorizedSupervisorAction {
         runtime: runtime.clone(),
         proposal: proposal.clone(),
@@ -481,9 +474,7 @@ pub(crate) fn execute_supervisor_action(
             worker_id: match &proposal.action {
                 SupervisorActionKind::InspectWorker { worker_id }
                 | SupervisorActionKind::WaitWorker { worker_id }
-                | SupervisorActionKind::FollowUpWorker { worker_id, .. } => {
-                    Some(worker_id.clone())
-                }
+                | SupervisorActionKind::FollowUpWorker { worker_id, .. } => Some(worker_id.clone()),
                 _ => None,
             },
             adapter_id: "codex-local-authorized-dispatch".to_string(),
@@ -526,36 +517,44 @@ pub(crate) fn record_supervisor_transport_failure(
         adapter_id: None,
         evidence_present: false,
     };
-    update_store(&runtime.workflow_state_path, "record-transport-failure", |store| {
-        store.actions.push(SupervisorActionRecordV1 {
-            action_id,
-            idempotency_key: format!("transport:{}:{}", runtime.run_id, crate::unix_timestamp_nanos()),
-            run_id: runtime.run_id.clone(),
-            project_id: crate::project_id(&runtime.project_root),
-            workflow_id: runtime.workflow_id.clone(),
-            authorization_id: runtime.authorization_id.clone(),
-            authorization_snapshot_hash: String::new(),
-            workflow_revision_before: revision,
-            workflow_revision_after: Some(revision),
-            task_package_fingerprint: String::new(),
-            kind: "system_transport".to_string(),
-            target_node_id: None,
-            target_work_item_id: None,
-            worker_id: None,
-            reason: "主管进程未返回可执行动作。".to_string(),
-            expected_result: "记录诚实失败状态。".to_string(),
-            received_at_ms: crate::unix_timestamp_ms(),
-            validation_result: "system_failure".to_string(),
-            execution_status: result.status.clone(),
-            adapter_id: None,
-            dispatch_ref: None,
-            readback_ref: None,
-            audit_ref: None,
-            summary: result.summary.clone(),
-            evidence_present: false,
-        });
-        Ok(())
-    })?;
+    update_store(
+        &runtime.workflow_state_path,
+        "record-transport-failure",
+        |store| {
+            store.actions.push(SupervisorActionRecordV1 {
+                action_id,
+                idempotency_key: format!(
+                    "transport:{}:{}",
+                    runtime.run_id,
+                    crate::unix_timestamp_nanos()
+                ),
+                run_id: runtime.run_id.clone(),
+                project_id: crate::project_id(&runtime.project_root),
+                workflow_id: runtime.workflow_id.clone(),
+                authorization_id: runtime.authorization_id.clone(),
+                authorization_snapshot_hash: String::new(),
+                workflow_revision_before: revision,
+                workflow_revision_after: Some(revision),
+                task_package_fingerprint: String::new(),
+                kind: "system_transport".to_string(),
+                target_node_id: None,
+                target_work_item_id: None,
+                worker_id: None,
+                reason: "主管进程未返回可执行动作。".to_string(),
+                expected_result: "记录诚实失败状态。".to_string(),
+                received_at_ms: crate::unix_timestamp_ms(),
+                validation_result: "system_failure".to_string(),
+                execution_status: result.status.clone(),
+                adapter_id: None,
+                dispatch_ref: None,
+                readback_ref: None,
+                audit_ref: None,
+                summary: result.summary.clone(),
+                evidence_present: false,
+            });
+            Ok(())
+        },
+    )?;
     Ok(result)
 }
 
@@ -598,41 +597,45 @@ fn record_supervisor_system_result(
         adapter_id: None,
         evidence_present: false,
     };
-    update_store(&runtime.workflow_state_path, "record-system-result", |store| {
-        store.actions.push(SupervisorActionRecordV1 {
-            action_id,
-            idempotency_key: format!(
-                "system:{}:{}:{}",
-                kind,
-                runtime.run_id,
-                crate::unix_timestamp_nanos()
-            ),
-            run_id: runtime.run_id.clone(),
-            project_id: crate::project_id(&runtime.project_root),
-            workflow_id: runtime.workflow_id.clone(),
-            authorization_id: runtime.authorization_id.clone(),
-            authorization_snapshot_hash: String::new(),
-            workflow_revision_before: revision,
-            workflow_revision_after: Some(revision),
-            task_package_fingerprint: String::new(),
-            kind: kind.to_string(),
-            target_node_id: None,
-            target_work_item_id: None,
-            worker_id: None,
-            reason: "控制核心停止主管动作循环。".to_string(),
-            expected_result: "记录诚实系统状态。".to_string(),
-            received_at_ms: crate::unix_timestamp_ms(),
-            validation_result: status.to_string(),
-            execution_status: status.to_string(),
-            adapter_id: None,
-            dispatch_ref: None,
-            readback_ref: None,
-            audit_ref: None,
-            summary: result.summary.clone(),
-            evidence_present: false,
-        });
-        Ok(())
-    })?;
+    update_store(
+        &runtime.workflow_state_path,
+        "record-system-result",
+        |store| {
+            store.actions.push(SupervisorActionRecordV1 {
+                action_id,
+                idempotency_key: format!(
+                    "system:{}:{}:{}",
+                    kind,
+                    runtime.run_id,
+                    crate::unix_timestamp_nanos()
+                ),
+                run_id: runtime.run_id.clone(),
+                project_id: crate::project_id(&runtime.project_root),
+                workflow_id: runtime.workflow_id.clone(),
+                authorization_id: runtime.authorization_id.clone(),
+                authorization_snapshot_hash: String::new(),
+                workflow_revision_before: revision,
+                workflow_revision_after: Some(revision),
+                task_package_fingerprint: String::new(),
+                kind: kind.to_string(),
+                target_node_id: None,
+                target_work_item_id: None,
+                worker_id: None,
+                reason: "控制核心停止主管动作循环。".to_string(),
+                expected_result: "记录诚实系统状态。".to_string(),
+                received_at_ms: crate::unix_timestamp_ms(),
+                validation_result: status.to_string(),
+                execution_status: status.to_string(),
+                adapter_id: None,
+                dispatch_ref: None,
+                readback_ref: None,
+                audit_ref: None,
+                summary: result.summary.clone(),
+                evidence_present: false,
+            });
+            Ok(())
+        },
+    )?;
     Ok(result)
 }
 
@@ -657,14 +660,15 @@ fn guard_action(
     )?;
     let now = crate::unix_timestamp_ms();
     if now.saturating_sub(runtime.started_at_ms)
-        > runtime.quota_limits.max_runtime_minutes.saturating_mul(60_000)
+        > runtime
+            .quota_limits
+            .max_runtime_minutes
+            .saturating_mul(60_000)
     {
         return Err("quota_exceeded: 主管总时长已耗尽，等待用户决定。".to_string());
     }
-    let authorization_store = crate::plan_authorization_store::load_store(
-        &runtime.workflow_state_path,
-        now,
-    )?;
+    let authorization_store =
+        crate::plan_authorization_store::load_store(&runtime.workflow_state_path, now)?;
     let project_id = crate::project_id(&runtime.project_root);
     let authorization = authorization_store
         .authorizations
@@ -677,12 +681,17 @@ fn guard_action(
         .ok_or_else(|| "authorization_stale: 当前 run 找不到原授权段。".to_string())?;
     if authorization.status != crate::PlanAuthorizationStatus::Active
         || authorization.user_confirmation.is_none()
-        || authorization.expires_at_ms.is_some_and(|expires_at_ms| expires_at_ms < now)
+        || authorization
+            .expires_at_ms
+            .is_some_and(|expires_at_ms| expires_at_ms < now)
     {
         return Err("authorization_stale: 授权段已撤销、过期或不再 active。".to_string());
     }
     let value = crate::read_workflow_state_value(&runtime.workflow_state_path)?;
-    let workflow_revision = value.get("revision").and_then(Value::as_i64).unwrap_or_default();
+    let workflow_revision = value
+        .get("revision")
+        .and_then(Value::as_i64)
+        .unwrap_or_default();
     if let Some(expected_revision) = latest_workflow_revision(runtime)? {
         if expected_revision != workflow_revision {
             return Err(format!(
@@ -700,7 +709,10 @@ fn guard_action(
                 &target.node_id,
                 &target.work_item_id,
             )?;
-            (Some(target.node_id.clone()), Some(target.work_item_id.clone()))
+            (
+                Some(target.node_id.clone()),
+                Some(target.work_item_id.clone()),
+            )
         }
         _ => (None, None),
     };
@@ -797,8 +809,7 @@ fn prior_run_identity(runtime: &SupervisorActionRuntime) -> Result<PriorRunIdent
         if identity.authorization_snapshot_hash.is_none()
             && !record.authorization_snapshot_hash.trim().is_empty()
         {
-            identity.authorization_snapshot_hash =
-                Some(record.authorization_snapshot_hash.clone());
+            identity.authorization_snapshot_hash = Some(record.authorization_snapshot_hash.clone());
         }
         if record.kind == "dispatch_worker"
             && identity.task_package_fingerprint.is_none()
@@ -817,10 +828,23 @@ fn reserve_action(
     action_id: &str,
     idempotency_key: &str,
 ) -> Result<(), String> {
+    if let Some(repository) = crate::workbench_sqlite_storage_mode::primary_repository_for_write(
+        &runtime.workflow_state_path,
+    )? {
+        return reserve_action_db_primary(
+            runtime,
+            proposal,
+            guard,
+            action_id,
+            idempotency_key,
+            &repository,
+        );
+    }
     let (target_node_id, target_work_item_id) = match &proposal.action {
-        SupervisorActionKind::DispatchWorker { target } => {
-            (Some(target.node_id.clone()), Some(target.work_item_id.clone()))
-        }
+        SupervisorActionKind::DispatchWorker { target } => (
+            Some(target.node_id.clone()),
+            Some(target.work_item_id.clone()),
+        ),
         _ => (None, None),
     };
     update_store(&runtime.workflow_state_path, "reserve-action", |store| {
@@ -871,11 +895,194 @@ fn reserve_action(
     })
 }
 
+fn reserve_action_db_primary(
+    runtime: &SupervisorActionRuntime,
+    proposal: &SupervisorActionProposalV1,
+    guard: &ActionGuard,
+    action_id: &str,
+    idempotency_key: &str,
+    repository: &crate::workbench_sqlite_repository::WorkbenchSqliteRepository,
+) -> Result<(), String> {
+    let (target_node_id, target_work_item_id) = match &proposal.action {
+        SupervisorActionKind::DispatchWorker { target } => (
+            Some(target.node_id.clone()),
+            Some(target.work_item_id.clone()),
+        ),
+        _ => (None, None),
+    };
+    let existing_store = load_store(&runtime.workflow_state_path)?;
+    if let (Some(node_id), Some(work_item_id)) =
+        (target_node_id.as_deref(), target_work_item_id.as_deref())
+    {
+        let duplicate = existing_store.actions.iter().any(|record| {
+            record.kind == "dispatch_worker"
+                && record.validation_result == "accepted"
+                && record.authorization_id == runtime.authorization_id
+                && record.target_node_id.as_deref() == Some(node_id)
+                && record.target_work_item_id.as_deref() == Some(work_item_id)
+        });
+        if duplicate {
+            return Err(format!(
+                "denied_scope: 同一 authorization + work item 已有派发 reservation 或结果，拒绝跨主管 run 重复启动 worker：{work_item_id}"
+            ));
+        }
+    }
+    let record = SupervisorActionRecordV1 {
+        action_id: action_id.to_string(),
+        idempotency_key: idempotency_key.to_string(),
+        run_id: runtime.run_id.clone(),
+        project_id: crate::project_id(&runtime.project_root),
+        workflow_id: runtime.workflow_id.clone(),
+        authorization_id: runtime.authorization_id.clone(),
+        authorization_snapshot_hash: guard.authorization_snapshot_hash.clone(),
+        workflow_revision_before: guard.workflow_revision,
+        workflow_revision_after: None,
+        task_package_fingerprint: guard.task_package_fingerprint.clone(),
+        kind: proposal.action.name().to_string(),
+        target_node_id,
+        target_work_item_id,
+        worker_id: None,
+        reason: proposal.reason.clone(),
+        expected_result: proposal.expected_result.clone(),
+        received_at_ms: crate::unix_timestamp_ms(),
+        validation_result: "accepted".to_string(),
+        execution_status: "reserved".to_string(),
+        adapter_id: None,
+        dispatch_ref: None,
+        readback_ref: None,
+        audit_ref: None,
+        summary: "控制核心已接受动作，等待受控 adapter 回传。".to_string(),
+        evidence_present: false,
+    };
+    let record_value = serde_json::to_value(&record)
+        .map_err(|error| format!("序列化主管动作 DB 主写记录失败：{error}"))?;
+    let audit_timestamp = crate::unix_timestamp_string();
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "supervisor-action-reserved",
+        action_id,
+        &audit_timestamp,
+    );
+    let audit_event = json!({
+        "event_id": audit_event_id.clone(),
+        "event_type": "supervisor_action_reserved",
+        "target_ref": action_id,
+        "actor_ref": "supervisor_action_controller",
+        "source_kind": "workspace_state",
+        "permission_level": "authorized_supervisor_execution",
+        "before_state": "none",
+        "after_state": "reserved",
+        "created_at": audit_timestamp,
+        "reason": "主管动作已由控制核心保留，尚未调用 adapter。"
+    });
+    let reservation = repository.reserve_supervisor_action_with_audit(
+        &record_value,
+        &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+            event_id: audit_event_id,
+            target_kind: "supervisor_action".to_string(),
+            target_id: action_id.to_string(),
+            payload: audit_event,
+        },
+        None,
+    )?;
+    if reservation.already_reserved {
+        crate::workbench_sqlite_storage_mode::block_db_primary_writes(
+            &runtime.workflow_state_path,
+            "supervisor_action_reservation",
+            format!("already_reserved:{}", reservation.action_id),
+        );
+        return Err(format!(
+            "db_primary_supervisor_action_already_reserved:{}: refusing adapter replay before startup reconciliation",
+            reservation.action_id
+        ));
+    }
+    crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
+        &runtime.workflow_state_path,
+        "supervisor_action_reservation",
+        || {
+            update_store(&runtime.workflow_state_path, "reserve-action", |store| {
+                if let (Some(node_id), Some(work_item_id)) = (
+                    record.target_node_id.as_deref(),
+                    record.target_work_item_id.as_deref(),
+                ) {
+                    let duplicate = store.actions.iter().any(|existing| {
+                        existing.kind == "dispatch_worker"
+                            && existing.validation_result == "accepted"
+                            && existing.authorization_id == runtime.authorization_id
+                            && existing.target_node_id.as_deref() == Some(node_id)
+                            && existing.target_work_item_id.as_deref() == Some(work_item_id)
+                    });
+                    if duplicate {
+                        return Err(format!(
+                            "denied_scope: 同一 authorization + work item 已有派发 reservation 或结果，拒绝跨主管 run 重复启动 worker：{work_item_id}"
+                        ));
+                    }
+                }
+                store.actions.push(record.clone());
+                Ok(())
+            })
+        },
+    )
+}
+
 fn complete_action(
     runtime: &SupervisorActionRuntime,
     action_id: &str,
     workflow_revision_after: i64,
     adapter_result: &SupervisorActionAdapterResult,
+) -> Result<SupervisorActionResultV1, String> {
+    if let Some(repository) = crate::workbench_sqlite_storage_mode::primary_repository_for_write(
+        &runtime.workflow_state_path,
+    )? {
+        return complete_action_db_primary(
+            runtime,
+            action_id,
+            workflow_revision_after,
+            adapter_result,
+            &repository,
+        );
+    }
+    let result = SupervisorActionResultV1 {
+        action_id: Some(action_id.to_string()),
+        status: adapter_result.status.clone(),
+        summary: adapter_result.summary.clone(),
+        worker_id: adapter_result.worker_id.clone(),
+        adapter_id: Some(adapter_result.adapter_id.clone()),
+        evidence_present: adapter_result.evidence_present,
+    };
+    crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
+        &runtime.workflow_state_path,
+        "supervisor_action_completion",
+        || {
+            update_store(&runtime.workflow_state_path, "complete-action", |store| {
+                let record = store
+                    .actions
+                    .iter_mut()
+                    .find(|record| record.action_id == action_id)
+                    .ok_or_else(|| {
+                        "主管动作 reservation 丢失，拒绝写回 adapter 结果。".to_string()
+                    })?;
+                record.workflow_revision_after = Some(workflow_revision_after);
+                record.execution_status = result.status.clone();
+                record.summary = result.summary.clone();
+                record.worker_id = result.worker_id.clone();
+                record.adapter_id = result.adapter_id.clone();
+                record.dispatch_ref = adapter_result.dispatch_ref.clone();
+                record.readback_ref = adapter_result.readback_ref.clone();
+                record.audit_ref = adapter_result.audit_ref.clone();
+                record.evidence_present = result.evidence_present;
+                Ok(())
+            })
+        },
+    )?;
+    Ok(result)
+}
+
+fn complete_action_db_primary(
+    runtime: &SupervisorActionRuntime,
+    action_id: &str,
+    workflow_revision_after: i64,
+    adapter_result: &SupervisorActionAdapterResult,
+    repository: &crate::workbench_sqlite_repository::WorkbenchSqliteRepository,
 ) -> Result<SupervisorActionResultV1, String> {
     let result = SupervisorActionResultV1 {
         action_id: Some(action_id.to_string()),
@@ -885,6 +1092,46 @@ fn complete_action(
         adapter_id: Some(adapter_result.adapter_id.clone()),
         evidence_present: adapter_result.evidence_present,
     };
+    let audit_timestamp = crate::unix_timestamp_string();
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "supervisor-action-completed",
+        action_id,
+        &audit_timestamp,
+    );
+    let audit_event = json!({
+        "event_id": audit_event_id.clone(),
+        "event_type": "supervisor_action_completed",
+        "target_ref": action_id,
+        "actor_ref": "supervisor_action_controller",
+        "source_kind": "workspace_state",
+        "permission_level": "authorized_supervisor_execution",
+        "before_state": "reserved",
+        "after_state": result.status,
+        "created_at": audit_timestamp,
+        "reason": result.summary
+    });
+    let db_result = json!({
+        "status": result.status,
+        "summary": result.summary,
+        "worker_id": result.worker_id,
+        "adapter_id": result.adapter_id,
+        "evidence_present": result.evidence_present,
+        "dispatch_ref": adapter_result.dispatch_ref,
+        "readback_ref": adapter_result.readback_ref,
+        "audit_ref": adapter_result.audit_ref,
+        "workflow_revision_after": workflow_revision_after,
+    });
+    repository.complete_supervisor_action_with_audit(
+        action_id,
+        &db_result,
+        &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+            event_id: audit_event_id,
+            target_kind: "supervisor_action".to_string(),
+            target_id: action_id.to_string(),
+            payload: audit_event,
+        },
+        None,
+    )?;
     update_store(&runtime.workflow_state_path, "complete-action", |store| {
         let record = store
             .actions
@@ -985,40 +1232,44 @@ fn record_guard_rejection(
         adapter_id: None,
         evidence_present: false,
     };
-    update_store(&runtime.workflow_state_path, "reject-guard-action", |store| {
-        store.actions.push(SupervisorActionRecordV1 {
-            action_id,
-            idempotency_key: format!(
-                "guard:{}:{}",
-                runtime.run_id,
-                crate::unix_timestamp_nanos()
-            ),
-            run_id: runtime.run_id.clone(),
-            project_id: crate::project_id(&runtime.project_root),
-            workflow_id: runtime.workflow_id.clone(),
-            authorization_id: runtime.authorization_id.clone(),
-            authorization_snapshot_hash: String::new(),
-            workflow_revision_before: revision,
-            workflow_revision_after: Some(revision),
-            task_package_fingerprint: String::new(),
-            kind: proposal.action.name().to_string(),
-            target_node_id: None,
-            target_work_item_id: None,
-            worker_id: None,
-            reason: proposal.reason.clone(),
-            expected_result: proposal.expected_result.clone(),
-            received_at_ms: crate::unix_timestamp_ms(),
-            validation_result: status.to_string(),
-            execution_status: status.to_string(),
-            adapter_id: None,
-            dispatch_ref: None,
-            readback_ref: None,
-            audit_ref: None,
-            summary: error.to_string(),
-            evidence_present: false,
-        });
-        Ok(())
-    })?;
+    update_store(
+        &runtime.workflow_state_path,
+        "reject-guard-action",
+        |store| {
+            store.actions.push(SupervisorActionRecordV1 {
+                action_id,
+                idempotency_key: format!(
+                    "guard:{}:{}",
+                    runtime.run_id,
+                    crate::unix_timestamp_nanos()
+                ),
+                run_id: runtime.run_id.clone(),
+                project_id: crate::project_id(&runtime.project_root),
+                workflow_id: runtime.workflow_id.clone(),
+                authorization_id: runtime.authorization_id.clone(),
+                authorization_snapshot_hash: String::new(),
+                workflow_revision_before: revision,
+                workflow_revision_after: Some(revision),
+                task_package_fingerprint: String::new(),
+                kind: proposal.action.name().to_string(),
+                target_node_id: None,
+                target_work_item_id: None,
+                worker_id: None,
+                reason: proposal.reason.clone(),
+                expected_result: proposal.expected_result.clone(),
+                received_at_ms: crate::unix_timestamp_ms(),
+                validation_result: status.to_string(),
+                execution_status: status.to_string(),
+                adapter_id: None,
+                dispatch_ref: None,
+                readback_ref: None,
+                audit_ref: None,
+                summary: error.to_string(),
+                evidence_present: false,
+            });
+            Ok(())
+        },
+    )?;
     Ok(result)
 }
 
@@ -1042,23 +1293,27 @@ fn prior_or_recover_result(
     // A prior process may have reached the external adapter before crashing. Never replay a
     // reservation whose completion was not durably recorded: the worker might already exist.
     let revision_after = workflow_revision(&runtime.workflow_state_path).ok();
-    let recovered = update_store(&runtime.workflow_state_path, "recover-inflight-action", |store| {
-        let record = store
-            .actions
-            .iter_mut()
-            .find(|record| {
-                record.run_id == runtime.run_id && record.idempotency_key == idempotency_key
-            })
-            .ok_or_else(|| "主管动作 reservation 在恢复前丢失，拒绝重放。".to_string())?;
-        if record.execution_status == "reserved" {
-            record.execution_status = "waiting_user".to_string();
-            record.summary = "检测到同一主管动作已 reservation 但未完成回写；为避免重复启动 worker，已停止自动重放，等待用户核对现有 worker。".to_string();
-            if record.workflow_revision_after.is_none() {
-                record.workflow_revision_after = revision_after;
+    let recovered = update_store(
+        &runtime.workflow_state_path,
+        "recover-inflight-action",
+        |store| {
+            let record = store
+                .actions
+                .iter_mut()
+                .find(|record| {
+                    record.run_id == runtime.run_id && record.idempotency_key == idempotency_key
+                })
+                .ok_or_else(|| "主管动作 reservation 在恢复前丢失，拒绝重放。".to_string())?;
+            if record.execution_status == "reserved" {
+                record.execution_status = "waiting_user".to_string();
+                record.summary = "检测到同一主管动作已 reservation 但未完成回写；为避免重复启动 worker，已停止自动重放，等待用户核对现有 worker。".to_string();
+                if record.workflow_revision_after.is_none() {
+                    record.workflow_revision_after = revision_after;
+                }
             }
-        }
-        Ok(record.clone())
-    })?;
+            Ok(record.clone())
+        },
+    )?;
     Ok(Some(result_from_record(&recovered)))
 }
 
@@ -1203,9 +1458,15 @@ fn latest_worker_evidence_generation(runtime: &SupervisorActionRuntime) -> Resul
 
 fn reject_impersonated_user_decision(message: &str) -> Result<(), String> {
     let lower = message.to_ascii_lowercase();
-    if ["用户已取消", "用户确认", "用户决定", "user cancelled", "user confirmed"]
-        .iter()
-        .any(|marker| lower.contains(&marker.to_ascii_lowercase()))
+    if [
+        "用户已取消",
+        "用户确认",
+        "用户决定",
+        "user cancelled",
+        "user confirmed",
+    ]
+    .iter()
+    .any(|marker| lower.contains(&marker.to_ascii_lowercase()))
     {
         return Err("protocol_invalid: report_user 不得冒充用户决定、确认或取消。".to_string());
     }
@@ -1215,7 +1476,10 @@ fn reject_impersonated_user_decision(message: &str) -> Result<(), String> {
 fn classify_adapter_error(error: &str) -> &'static str {
     if error.contains("report_invalid") {
         "report_invalid"
-    } else if error.contains("授权") || error.contains("authorization") || error.contains("revision") {
+    } else if error.contains("授权")
+        || error.contains("authorization")
+        || error.contains("revision")
+    {
         "authorization_stale"
     } else if error.contains("配额") || error.contains("quota") {
         "quota_exceeded"
@@ -1270,13 +1534,97 @@ fn load_store(workflow_state_path: &Path) -> Result<SupervisorActionStore, Strin
         });
     }
     let store: SupervisorActionStore = serde_json::from_slice(
-        &fs::read(&path).map_err(|error| format!("读取主管动作账本失败 {}：{error}", path.display()))?,
+        &fs::read(&path)
+            .map_err(|error| format!("读取主管动作账本失败 {}：{error}", path.display()))?,
     )
     .map_err(|error| format!("主管动作账本损坏，拒绝覆盖 {}：{error}", path.display()))?;
     if store.schema_version != STORE_SCHEMA_VERSION || store.revision < 0 {
         return Err("主管动作账本 schema 或 revision 非法，拒绝覆盖。".to_string());
     }
     Ok(store)
+}
+
+pub(crate) fn db_primary_projection_records(
+    workflow_state_path: &Path,
+) -> Result<Vec<Value>, String> {
+    load_store(workflow_state_path)?
+        .actions
+        .into_iter()
+        .map(|record| {
+            serde_json::to_value(record)
+                .map_err(|error| format!("主管动作账本投影序列化失败：{error}"))
+        })
+        .collect()
+}
+
+pub(crate) fn replay_db_primary_projection(
+    workflow_state_path: &Path,
+    actions: &[Value],
+    replace_db_primary_leading: bool,
+    write_id: &str,
+) -> Result<usize, String> {
+    if actions.is_empty() {
+        return Ok(0);
+    }
+    let path = sidecar_path(workflow_state_path)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| "主管动作账本缺父目录。".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("创建主管动作账本目录失败 {}：{error}", parent.display()))?;
+    let _lock = StoreLock::acquire(&parent.join(LOCK_NAME), write_id)?;
+    let mut store = load_store(workflow_state_path)?;
+    let mut changes = 0_i64;
+
+    for value in actions {
+        let action: SupervisorActionRecordV1 = serde_json::from_value(value.clone())
+            .map_err(|error| format!("DB 主管动作投影记录无法解析：{error}"))?;
+        if let Some(index) = store
+            .actions
+            .iter()
+            .position(|existing| existing.action_id == action.action_id)
+        {
+            if serde_json::to_value(&store.actions[index])
+                .map_err(|error| format!("主管动作账本投影序列化失败：{error}"))?
+                != value.clone()
+            {
+                if !replace_db_primary_leading {
+                    return Err(format!(
+                        "db_json_projection_hash_mismatch:supervisor_actions:{}",
+                        action.action_id
+                    ));
+                }
+                store.actions[index] = action;
+                changes += 1;
+            }
+        } else {
+            store.actions.push(action);
+            changes += 1;
+        }
+    }
+
+    if changes == 0 {
+        return Ok(0);
+    }
+    store.revision = store
+        .revision
+        .checked_add(changes)
+        .ok_or_else(|| "主管动作账本 revision 已到上限。".to_string())?;
+    store.updated_at_ms = crate::unix_timestamp_ms();
+    let temporary = parent.join(format!(
+        ".{SIDECAR_NAME}.{}.tmp",
+        crate::stable_id(write_id)
+    ));
+    let serialized = serde_json::to_vec_pretty(&store)
+        .map_err(|error| format!("序列化主管动作账本失败：{error}"))?;
+    let mut file = fs::File::create(&temporary)
+        .map_err(|error| format!("创建主管动作账本临时文件失败：{error}"))?;
+    file.write_all(&serialized)
+        .map_err(|error| format!("写入主管动作账本临时文件失败：{error}"))?;
+    file.sync_all()
+        .map_err(|error| format!("同步主管动作账本临时文件失败：{error}"))?;
+    fs::rename(&temporary, &path).map_err(|error| format!("原子替换主管动作账本失败：{error}"))?;
+    Ok(changes as usize)
 }
 
 fn update_store<R>(
@@ -1295,7 +1643,10 @@ fn update_store<R>(
     let result = update(&mut store)?;
     store.revision += 1;
     store.updated_at_ms = crate::unix_timestamp_ms();
-    let temporary = parent.join(format!(".{SIDECAR_NAME}.{}.tmp", crate::stable_id(write_id)));
+    let temporary = parent.join(format!(
+        ".{SIDECAR_NAME}.{}.tmp",
+        crate::stable_id(write_id)
+    ));
     let serialized = serde_json::to_vec_pretty(&store)
         .map_err(|error| format!("序列化主管动作账本失败：{error}"))?;
     let mut file = fs::File::create(&temporary)
@@ -1304,8 +1655,7 @@ fn update_store<R>(
         .map_err(|error| format!("写入主管动作账本临时文件失败：{error}"))?;
     file.sync_all()
         .map_err(|error| format!("同步主管动作账本临时文件失败：{error}"))?;
-    fs::rename(&temporary, &path)
-        .map_err(|error| format!("原子替换主管动作账本失败：{error}"))?;
+    fs::rename(&temporary, &path).map_err(|error| format!("原子替换主管动作账本失败：{error}"))?;
     Ok(result)
 }
 
@@ -1316,7 +1666,11 @@ struct StoreLock {
 impl StoreLock {
     fn acquire(path: &Path, write_id: &str) -> Result<Self, String> {
         for retry in 0..=LOCK_RETRY_COUNT {
-            match fs::OpenOptions::new().write(true).create_new(true).open(path) {
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+            {
                 Ok(mut file) => {
                     file.write_all(write_id.as_bytes())
                         .map_err(|error| format!("写入主管动作账本锁失败：{error}"))?;
@@ -1417,7 +1771,7 @@ mod tests {
                     max_runtime_minutes: Some(30),
                     stop_conditions: vec![],
                 },
-            user_confirmation: Some(crate::PlanAuthorizationUserConfirmation {
+                user_confirmation: Some(crate::PlanAuthorizationUserConfirmation {
                     confirmed_by: "user".to_string(),
                     confirmed_at_ms: crate::unix_timestamp_ms(),
                     confirmation_summary: "station3a fixture confirmation".to_string(),
@@ -1470,16 +1824,30 @@ mod tests {
                 },
             )
             .expect("record session");
-            Self { root, path, runtime }
+            Self {
+                root,
+                path,
+                runtime,
+            }
         }
 
         fn proposal(kind: &str) -> SupervisorActionProposalV1 {
             let value = match kind {
-                "dispatch" => json!({"schema_version":"supervisor_action_proposal.v1","kind":"dispatch_worker","target":{"node_id":NODE,"work_item_id":WORK_ITEM},"reason":"准备完成","expected_result":"worker"}),
-                "inspect" => json!({"schema_version":"supervisor_action_proposal.v1","kind":"inspect_worker","worker_id":"worker-1","reason":"读取口供","expected_result":"evidence"}),
-                "follow_up" => json!({"schema_version":"supervisor_action_proposal.v1","kind":"follow_up_worker","worker_id":"worker-1","prompt":"补充证据","reason":"证据不足","expected_result":"fresh report"}),
-                "finalize" => json!({"schema_version":"supervisor_action_proposal.v1","kind":"finalize","verdict":"pass","reason":"证据充分","expected_result":"advisory"}),
-                "report" => json!({"schema_version":"supervisor_action_proposal.v1","kind":"report_user","message":"任务已完成，证据已回读。","reason":"收尾","expected_result":"用户报告"}),
+                "dispatch" => {
+                    json!({"schema_version":"supervisor_action_proposal.v1","kind":"dispatch_worker","target":{"node_id":NODE,"work_item_id":WORK_ITEM},"reason":"准备完成","expected_result":"worker"})
+                }
+                "inspect" => {
+                    json!({"schema_version":"supervisor_action_proposal.v1","kind":"inspect_worker","worker_id":"worker-1","reason":"读取口供","expected_result":"evidence"})
+                }
+                "follow_up" => {
+                    json!({"schema_version":"supervisor_action_proposal.v1","kind":"follow_up_worker","worker_id":"worker-1","prompt":"补充证据","reason":"证据不足","expected_result":"fresh report"})
+                }
+                "finalize" => {
+                    json!({"schema_version":"supervisor_action_proposal.v1","kind":"finalize","verdict":"pass","reason":"证据充分","expected_result":"advisory"})
+                }
+                "report" => {
+                    json!({"schema_version":"supervisor_action_proposal.v1","kind":"report_user","message":"任务已完成，证据已回读。","reason":"收尾","expected_result":"用户报告"})
+                }
                 _ => unreachable!(),
             };
             parse_supervisor_action_proposal(&value.to_string()).expect("proposal")
@@ -1505,10 +1873,16 @@ mod tests {
             &self,
             action: &AuthorizedSupervisorAction,
         ) -> Result<SupervisorActionAdapterResult, String> {
-            if matches!(&action.proposal.action, SupervisorActionKind::DispatchWorker { .. }) {
+            if matches!(
+                &action.proposal.action,
+                SupervisorActionKind::DispatchWorker { .. }
+            ) {
                 self.dispatches.set(self.dispatches.get() + 1);
             }
-            let evidence_present = matches!(&action.proposal.action, SupervisorActionKind::InspectWorker { .. });
+            let evidence_present = matches!(
+                &action.proposal.action,
+                SupervisorActionKind::InspectWorker { .. }
+            );
             Ok(SupervisorActionAdapterResult {
                 status: "completed".to_string(),
                 summary: format!("fake {}", action.proposal.action.name()),
@@ -1584,9 +1958,18 @@ mod tests {
         assert_eq!(adapter.dispatches.get(), 1);
         let store = load_store(&fixture.path).expect("action store");
         assert_eq!(store.actions.len(), 4);
-        assert!(store.actions.iter().all(|action| action.validation_result == "accepted"));
-        assert!(store.actions.iter().all(|action| action.adapter_id.is_some()));
-        assert!(store.actions.iter().all(|action| action.audit_ref.is_some()));
+        assert!(store
+            .actions
+            .iter()
+            .all(|action| action.validation_result == "accepted"));
+        assert!(store
+            .actions
+            .iter()
+            .all(|action| action.adapter_id.is_some()));
+        assert!(store
+            .actions
+            .iter()
+            .all(|action| action.audit_ref.is_some()));
         let authorization_hash = &store.actions[0].authorization_snapshot_hash;
         let task_fingerprint = &store.actions[0].task_package_fingerprint;
         assert_eq!(authorization_hash.len(), 64);
@@ -1613,29 +1996,20 @@ mod tests {
         }
         assert!(!has_prior_worker_evidence(&fixture.runtime).expect("freshness check"));
 
-        let rejected = execute_supervisor_action(
-            &fixture.runtime,
-            Fixture::proposal("finalize"),
-            &adapter,
-        )
-        .expect("old evidence must be rejected without adapter failure");
+        let rejected =
+            execute_supervisor_action(&fixture.runtime, Fixture::proposal("finalize"), &adapter)
+                .expect("old evidence must be rejected without adapter failure");
         assert_eq!(rejected.status, "denied_scope");
 
-        let refreshed = execute_supervisor_action(
-            &fixture.runtime,
-            Fixture::proposal("inspect"),
-            &adapter,
-        )
-        .expect("new generation inspect");
+        let refreshed =
+            execute_supervisor_action(&fixture.runtime, Fixture::proposal("inspect"), &adapter)
+                .expect("new generation inspect");
         assert!(refreshed.evidence_present);
         assert!(has_prior_worker_evidence(&fixture.runtime).expect("freshness check"));
 
-        let finalized = execute_supervisor_action(
-            &fixture.runtime,
-            Fixture::proposal("finalize"),
-            &adapter,
-        )
-        .expect("finalize after fresh inspect");
+        let finalized =
+            execute_supervisor_action(&fixture.runtime, Fixture::proposal("finalize"), &adapter)
+                .expect("finalize after fresh inspect");
         assert_eq!(finalized.status, "completed");
     }
 
@@ -1645,19 +2019,13 @@ mod tests {
         let adapter = FakeAdapter {
             dispatches: Cell::new(0),
         };
-        execute_supervisor_action(
-            &fixture.runtime,
-            Fixture::proposal("dispatch"),
-            &adapter,
-        )
-        .expect("dispatch");
+        execute_supervisor_action(&fixture.runtime, Fixture::proposal("dispatch"), &adapter)
+            .expect("dispatch");
         let auth_path = crate::plan_authorization_store::sidecar_path(&fixture.path)
             .expect("authorization path");
-        let mut store = crate::plan_authorization_store::load_store(
-            &fixture.path,
-            crate::unix_timestamp_ms(),
-        )
-        .expect("authorization store");
+        let mut store =
+            crate::plan_authorization_store::load_store(&fixture.path, crate::unix_timestamp_ms())
+                .expect("authorization store");
         store.authorizations[0]
             .scope
             .allowed_checks
@@ -1669,12 +2037,9 @@ mod tests {
         )
         .expect("write changed authorization");
 
-        let result = execute_supervisor_action(
-            &fixture.runtime,
-            Fixture::proposal("inspect"),
-            &adapter,
-        )
-        .expect("drift is recorded as a controlled result");
+        let result =
+            execute_supervisor_action(&fixture.runtime, Fixture::proposal("inspect"), &adapter)
+                .expect("drift is recorded as a controlled result");
 
         assert_eq!(result.status, "authorization_stale");
         assert_eq!(adapter.dispatches.get(), 1);
@@ -1687,16 +2052,14 @@ mod tests {
             dispatches: Cell::new(0),
         };
         let proposal = Fixture::proposal("dispatch");
-        let first = execute_supervisor_action(&fixture.runtime, proposal.clone(), &adapter).expect("first");
-        let replay = execute_supervisor_action(&fixture.runtime, proposal, &adapter).expect("replay");
+        let first =
+            execute_supervisor_action(&fixture.runtime, proposal.clone(), &adapter).expect("first");
+        let replay =
+            execute_supervisor_action(&fixture.runtime, proposal, &adapter).expect("replay");
         assert_eq!(first.action_id, replay.action_id);
         assert_eq!(adapter.dispatches.get(), 1);
-        let invalid = execute_supervisor_last_message(
-            &fixture.runtime,
-            "not json",
-            &adapter,
-        )
-        .expect("invalid result");
+        let invalid = execute_supervisor_last_message(&fixture.runtime, "not json", &adapter)
+            .expect("invalid result");
         assert_eq!(invalid.status, "protocol_invalid");
         let store = load_store(&fixture.path).expect("store");
         assert_eq!(store.actions.len(), 2);
@@ -1710,12 +2073,8 @@ mod tests {
         let adapter = FakeAdapter {
             dispatches: Cell::new(0),
         };
-        execute_supervisor_action(
-            &fixture.runtime,
-            Fixture::proposal("dispatch"),
-            &adapter,
-        )
-        .expect("first supervisor run may dispatch");
+        execute_supervisor_action(&fixture.runtime, Fixture::proposal("dispatch"), &adapter)
+            .expect("first supervisor run may dispatch");
 
         let mut second_runtime = fixture.runtime.clone();
         second_runtime.run_id = "supervisor:station3a:second-run".to_string();
@@ -1735,12 +2094,9 @@ mod tests {
             },
         )
         .expect("record second supervisor run");
-        let error = execute_supervisor_action(
-            &second_runtime,
-            Fixture::proposal("dispatch"),
-            &adapter,
-        )
-        .expect_err("same authorization and work item must be single-flight across runs");
+        let error =
+            execute_supervisor_action(&second_runtime, Fixture::proposal("dispatch"), &adapter)
+                .expect_err("same authorization and work item must be single-flight across runs");
         assert!(error.contains("跨主管 run 重复启动 worker"), "{error}");
         assert_eq!(adapter.dispatches.get(), 1);
     }
@@ -1893,11 +2249,23 @@ mod tests {
         assert!(evidence_present);
         assert_eq!(readback.as_deref(), Some("worker-report:worker-1"));
         // 证据内容进 summary（主管可抽核，不只是 present 布尔）。
-        assert!(summary.contains("node --check game.js 退出码 0"), "evidence 内容必须上桥面：{summary}");
+        assert!(
+            summary.contains("node --check game.js 退出码 0"),
+            "evidence 内容必须上桥面：{summary}"
+        );
         // findings 逐条进 summary。
-        assert!(summary.contains("P0 game.js:137 未按 delta 缩放"), "findings 必须上桥面：{summary}");
-        assert!(summary.contains("game.js:119"), "逐条判定引用必须上桥面：{summary}");
-        assert!(summary.contains("结论逐条"), "findings 段必须带标签：{summary}");
+        assert!(
+            summary.contains("P0 game.js:137 未按 delta 缩放"),
+            "findings 必须上桥面：{summary}"
+        );
+        assert!(
+            summary.contains("game.js:119"),
+            "逐条判定引用必须上桥面：{summary}"
+        );
+        assert!(
+            summary.contains("结论逐条"),
+            "findings 段必须带标签：{summary}"
+        );
     }
 
     // 写单（无 findings）：summary 带 evidence、不带「结论逐条」段——findings 空不留空标签。
@@ -1916,7 +2284,10 @@ mod tests {
         )
         .expect("write-order reported_completed is valid");
         assert!(summary.contains("回读字节校验通过"));
-        assert!(!summary.contains("结论逐条"), "无 findings 不应出现结论段：{summary}");
+        assert!(
+            !summary.contains("结论逐条"),
+            "无 findings 不应出现结论段：{summary}"
+        );
     }
 
     #[test]
@@ -1925,8 +2296,9 @@ mod tests {
         let adapter = FakeAdapter {
             dispatches: Cell::new(0),
         };
-        let result = execute_supervisor_action(&fixture.runtime, Fixture::proposal("dispatch"), &adapter)
-            .expect("dispatch result");
+        let result =
+            execute_supervisor_action(&fixture.runtime, Fixture::proposal("dispatch"), &adapter)
+                .expect("dispatch result");
         assert_eq!(result.status, "completed");
         assert_eq!(adapter.dispatches.get(), 1);
     }
@@ -1975,6 +2347,155 @@ mod tests {
     }
 
     #[test]
+    fn m5a_db_primary_projects_supervisor_reservation_and_completion() {
+        let _serial = crate::workbench_sqlite_storage_mode::storage_mode_test_lock()
+            .lock()
+            .expect("storage mode test lock");
+        let root = std::env::temp_dir().join(format!(
+            "m5a-supervisor-action-{}-{}",
+            crate::unix_timestamp_nanos(),
+            FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&root).expect("fixture root");
+        let root = fs::canonicalize(&root).expect("canonical fixture root");
+        let state_path = root.join("workflow-state").join("workflow-state.v0.json");
+        fs::create_dir_all(state_path.parent().expect("state parent")).expect("state parent");
+        let timestamp = crate::unix_timestamp_string();
+        let bootstrap_event_id = crate::workflow_audit::audit_event_identity(
+            "m5a-supervisor-bootstrap",
+            &state_path.display().to_string(),
+            &timestamp,
+        );
+        let initial_state =
+            crate::initial_workflow_state_json(&timestamp, &bootstrap_event_id, false, &state_path);
+        crate::write_validated_workflow_state(&state_path, &initial_state)
+            .expect("write valid fixture state");
+        let state_path = fs::canonicalize(&state_path).expect("canonical state path");
+        let config_path = crate::workbench_sqlite_storage_mode::storage_mode_path(&state_path)
+            .expect("storage mode config path");
+        fs::create_dir_all(config_path.parent().expect("runtime artifacts parent"))
+            .expect("runtime artifacts parent");
+        let runtime_artifacts = fs::canonicalize(config_path.parent().expect("runtime artifacts"))
+            .expect("canonical runtime artifacts");
+        let config = crate::workbench_sqlite_storage_mode::DbPrimaryJsonProjectionConfig {
+            workflow_state_path: state_path.clone(),
+            confirmed_workflow_state_path: state_path.clone(),
+            db_path: runtime_artifacts.join("workbench.sqlite"),
+            confirmed_db_path: runtime_artifacts.join("workbench.sqlite"),
+            denied_path_markers: vec![],
+        };
+        fs::write(
+            &config_path,
+            serde_json::to_vec(&json!({
+                "schema_version": crate::workbench_sqlite_storage_mode::STORAGE_MODE_SCHEMA_VERSION,
+                "mode": "db_primary_json_projection",
+                "workflow_state_path": config.workflow_state_path,
+                "confirmed_workflow_state_path": config.confirmed_workflow_state_path,
+                "db_path": config.db_path,
+                "confirmed_db_path": config.confirmed_db_path,
+            }))
+            .expect("serialize DB primary config"),
+        )
+        .expect("write DB primary config");
+
+        let repository =
+            crate::workbench_sqlite_repository::WorkbenchSqliteRepository::open_confirmed(
+                &crate::workbench_sqlite_repository::ConfirmedWorkbenchSqliteRepositoryConfig {
+                    db_path: config.db_path.clone(),
+                    confirmed_db_path: config.confirmed_db_path.clone(),
+                    denied_path_markers: vec![],
+                },
+            )
+            .expect("initialize confirmed fixture DB");
+        let bootstrap_audit = initial_state["audit_events"][0].clone();
+        repository
+            .append_audit(
+                &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+                    event_id: bootstrap_event_id,
+                    target_kind: "workflow_state".to_string(),
+                    target_id: bootstrap_audit["target_ref"]
+                        .as_str()
+                        .expect("bootstrap target ref")
+                        .to_string(),
+                    payload: bootstrap_audit,
+                },
+                None,
+            )
+            .expect("seed bootstrap audit projection");
+        crate::workbench_sqlite_storage_mode::clear_storage_mode_cache_for_tests();
+        crate::workbench_sqlite_storage_mode::initialize_for_startup(&state_path)
+            .expect("DB primary startup reconciliation");
+
+        let runtime = SupervisorActionRuntime {
+            run_id: "supervisor:m5a:test".to_string(),
+            project_root: root.join("fixture-project").display().to_string(),
+            workflow_id: "workflow:m5a".to_string(),
+            authorization_id: "authorization:m5a".to_string(),
+            workflow_state_path: state_path.clone(),
+            quota_limits: SupervisorQuotaLimits {
+                max_active_workers: 1,
+                max_follow_ups_per_worker: 0,
+                max_runtime_minutes: 1,
+            },
+            started_at_ms: crate::unix_timestamp_ms(),
+        };
+        let proposal = parse_supervisor_action_proposal(
+            r#"{"schema_version":"supervisor_action_proposal.v1","kind":"dispatch_worker","target":{"node_id":"node:m5a","work_item_id":"work-item:m5a"},"reason":"fixture reserve","expected_result":"fixture worker"}"#,
+        )
+        .expect("dispatch proposal");
+        let guard = ActionGuard {
+            workflow_revision: 0,
+            authorization_snapshot_hash: "m5a-auth-snapshot".to_string(),
+            task_package_fingerprint: "m5a-task-package".to_string(),
+            allowed_read_roots: vec![],
+            allowed_write_roots: vec![],
+        };
+        reserve_action(
+            &runtime,
+            &proposal,
+            &guard,
+            "supervisor-action:m5a",
+            "idempotency:m5a",
+        )
+        .expect("DB-primary supervisor reservation");
+        let completed = complete_action(
+            &runtime,
+            "supervisor-action:m5a",
+            1,
+            &SupervisorActionAdapterResult {
+                status: "completed".to_string(),
+                summary: "fixture completed".to_string(),
+                worker_id: Some("worker:m5a".to_string()),
+                adapter_id: "m5a-fixture-adapter".to_string(),
+                evidence_present: true,
+                dispatch_ref: Some("dispatch:m5a".to_string()),
+                readback_ref: Some("readback:m5a".to_string()),
+                audit_ref: Some("audit:m5a".to_string()),
+            },
+        )
+        .expect("DB-primary supervisor completion");
+        assert_eq!(completed.status, "completed");
+        let store = load_store(&state_path).expect("supervisor action projection");
+        assert_eq!(store.actions.len(), 1);
+        assert_eq!(store.actions[0].execution_status, "completed");
+        let report = crate::workbench_sqlite_storage_mode::reconcile_db_vs_json(&config)
+            .expect("reconcile supervisor projection");
+        assert!(
+            report.is_green(),
+            "reconciliation must be green: {report:?}"
+        );
+        let supervisor_actions = report
+            .tables
+            .iter()
+            .find(|table| table.table_name == "supervisor_actions")
+            .expect("supervisor actions table");
+        assert_eq!(supervisor_actions.db_count, 1);
+        assert_eq!(supervisor_actions.matched_count, 1);
+        crate::workbench_sqlite_storage_mode::clear_storage_mode_cache_for_tests();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn station3a_revision_drift_is_recorded_before_adapter_execution() {
         let fixture = Fixture::new();
         let adapter = FakeAdapter {
@@ -1985,10 +2506,14 @@ mod tests {
         let mut workflow: Value =
             serde_json::from_slice(&fs::read(&fixture.path).expect("state")).expect("workflow");
         workflow["revision"] = json!(2);
-        fs::write(&fixture.path, serde_json::to_vec(&workflow).expect("workflow json"))
-            .expect("write drifted workflow");
-        let result = execute_supervisor_action(&fixture.runtime, Fixture::proposal("inspect"), &adapter)
-            .expect("rejection result");
+        fs::write(
+            &fixture.path,
+            serde_json::to_vec(&workflow).expect("workflow json"),
+        )
+        .expect("write drifted workflow");
+        let result =
+            execute_supervisor_action(&fixture.runtime, Fixture::proposal("inspect"), &adapter)
+                .expect("rejection result");
         assert_eq!(result.status, "authorization_stale");
         assert_eq!(adapter.dispatches.get(), 1);
         assert_eq!(

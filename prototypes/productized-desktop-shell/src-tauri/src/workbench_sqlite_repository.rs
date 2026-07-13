@@ -1,11 +1,14 @@
 use crate::utils::hash::sha256_hex;
-use crate::workbench_sqlite_schema::initialize_temp_workbench_sqlite_db;
+use crate::workbench_sqlite_schema::{
+    initialize_confirmed_workbench_sqlite_db, initialize_temp_workbench_sqlite_db,
+};
 use rusqlite::{
     params, Connection, Error as SqlError, ErrorCode, OptionalExtension, Transaction,
     TransactionBehavior,
 };
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 // M4 repository policy: wait 100ms for SQLite, then retry the whole DB-only transaction once.
@@ -15,10 +18,33 @@ pub(crate) const REPOSITORY_BUSY_TIMEOUT_MS: u64 = 100;
 const MAX_BUSY_RETRIES: usize = 1;
 const BUSY_RETRY_DELAY_MS: u64 = 100;
 const REPOSITORY_SOURCE_ID: &str = "workbench_sqlite_repository_rehearsal";
+pub(crate) const CONFIRMED_DB_DENIED_PATH_MARKERS: &[&str] = &[
+    "/users/yoyi/.codex",
+    ".codex",
+    ".env",
+    "token",
+    "secret",
+    "credential",
+    "keychain",
+    "oauth",
+    "provider_credential",
+    "provider credential",
+    "full_transcript",
+    "full transcript",
+    "rollout",
+    "prompt_body",
+];
 
 #[derive(Clone, Debug)]
 pub(crate) struct WorkbenchSqliteRepository {
     db_path: PathBuf,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ConfirmedWorkbenchSqliteRepositoryConfig {
+    pub(crate) db_path: PathBuf,
+    pub(crate) confirmed_db_path: PathBuf,
+    pub(crate) denied_path_markers: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,6 +108,20 @@ impl WorkbenchSqliteRepository {
         Ok(repository)
     }
 
+    // Product DB primary writes use the same WAL/busy/Immediate implementation as rehearsal,
+    // but only after the Level-B-style confirmed path gate has accepted the exact DB path.
+    pub(crate) fn open_confirmed(
+        config: &ConfirmedWorkbenchSqliteRepositoryConfig,
+    ) -> Result<Self, String> {
+        validate_confirmed_repository_path(config)?;
+        initialize_confirmed_workbench_sqlite_db(&config.db_path, &config.confirmed_db_path)?;
+        let repository = Self {
+            db_path: config.db_path.clone(),
+        };
+        repository.configured_connection()?;
+        Ok(repository)
+    }
+
     pub(crate) fn append_audit(
         &self,
         audit: &RepositoryAuditEntry,
@@ -134,6 +174,49 @@ impl WorkbenchSqliteRepository {
                     )
                     .map_err(RepositoryMutationError::Sqlite)?;
                 Ok(proposal_rows + append_audit_in_transaction(transaction, audit)?)
+            },
+        )?;
+        Ok(RepositoryReceipt {
+            rows_touched,
+            busy_retries,
+        })
+    }
+
+    pub(crate) fn record_dispatch_with_audit(
+        &self,
+        dispatch: &Value,
+        audit: &RepositoryAuditEntry,
+        failure: Option<RepositoryFailurePoint>,
+    ) -> Result<RepositoryReceipt, String> {
+        let dispatch_id = required_text(dispatch, "dispatch_id")
+            .map_err(|error| error.describe())?
+            .to_string();
+        let workflow_id = optional_text(dispatch, "workflow_id").map(ToString::to_string);
+        let node_id = optional_text(dispatch, "node_id").map(ToString::to_string);
+        let work_item_id = required_text(dispatch, "work_item_id")
+            .map_err(|error| error.describe())?
+            .to_string();
+        let (record_hash, record_json) = serialized_record(dispatch)?;
+        let (rows_touched, busy_retries) = self.with_immediate_transaction(
+            "record_dispatch_with_audit",
+            failure,
+            |transaction| {
+                let dispatch_rows = transaction
+                    .execute(
+                        "INSERT INTO workflow_node_dispatches (dispatch_id, workflow_id, node_id, work_item_id, source_id, record_hash, record_json)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        params![
+                            dispatch_id,
+                            workflow_id,
+                            node_id,
+                            work_item_id,
+                            REPOSITORY_SOURCE_ID,
+                            record_hash,
+                            record_json,
+                        ],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                Ok(dispatch_rows + append_audit_in_transaction(transaction, audit)?)
             },
         )?;
         Ok(RepositoryReceipt {
@@ -686,6 +769,84 @@ fn serialized_record(value: &Value) -> Result<(String, String), String> {
     Ok((sha256_hex(&record_json), record_json))
 }
 
+fn validate_confirmed_repository_path(
+    config: &ConfirmedWorkbenchSqliteRepositoryConfig,
+) -> Result<(), String> {
+    if config.db_path != config.confirmed_db_path {
+        return Err(format!(
+            "confirmed_db_path_mismatch: expected {} got {}",
+            config.confirmed_db_path.display(),
+            config.db_path.display()
+        ));
+    }
+    if !config.db_path.is_absolute() {
+        return Err(format!(
+            "confirmed_db_path_absolute_required:{}",
+            config.db_path.display()
+        ));
+    }
+    if config
+        .db_path
+        .components()
+        .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
+    {
+        return Err(format!(
+            "confirmed_db_path_must_be_clean:{}",
+            config.db_path.display()
+        ));
+    }
+    let canonical = canonicalize_existing_or_parent(&config.db_path)?;
+    if canonical != config.db_path {
+        return Err(format!(
+            "confirmed_db_path_must_be_canonical:expected={}:actual={}",
+            canonical.display(),
+            config.db_path.display()
+        ));
+    }
+    let mut denied = CONFIRMED_DB_DENIED_PATH_MARKERS
+        .iter()
+        .map(|marker| (*marker).to_string())
+        .collect::<Vec<_>>();
+    denied.extend(config.denied_path_markers.iter().cloned());
+    let normalized_path = config.db_path.to_string_lossy().to_ascii_lowercase();
+    if denied
+        .iter()
+        .map(|marker| marker.trim().to_ascii_lowercase())
+        .filter(|marker| !marker.is_empty())
+        .any(|marker| normalized_path.contains(&marker))
+    {
+        return Err(format!(
+            "confirmed_db_path_denied_marker:{}",
+            config.db_path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn canonicalize_existing_or_parent(path: &Path) -> Result<PathBuf, String> {
+    if path.exists() {
+        return fs::canonicalize(path).map_err(|error| {
+            format!(
+                "confirmed_db_path_canonicalize_failed:{}:{error}",
+                path.display()
+            )
+        });
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("confirmed_db_path_parent_required:{}", path.display()))?;
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| format!("confirmed_db_path_file_name_required:{}", path.display()))?;
+    let canonical_parent = fs::canonicalize(parent).map_err(|error| {
+        format!(
+            "confirmed_db_path_parent_canonicalize_failed:{}:{error}",
+            parent.display()
+        )
+    })?;
+    Ok(canonical_parent.join(file_name))
+}
+
 fn required_text<'a>(value: &'a Value, field: &str) -> RepositoryMutationResult<&'a str> {
     value
         .get(field)
@@ -736,6 +897,51 @@ mod tests {
         let err = WorkbenchSqliteRepository::open_rehearsal(Path::new("/var/m4-not-temp.sqlite"))
             .expect_err("repository must refuse a non-temp path");
         assert!(err.contains("temp_or_fixture_path_required"), "got: {err}");
+    }
+
+    #[test]
+    fn confirmed_repository_requires_exact_canonical_and_non_denied_path() {
+        let root = std::env::temp_dir().join(format!(
+            "m5a-confirmed-repository-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).expect("fixture root");
+        let root = fs::canonicalize(&root).expect("canonical fixture root");
+        let db_path = root.join("workbench.sqlite");
+        let config = ConfirmedWorkbenchSqliteRepositoryConfig {
+            db_path: db_path.clone(),
+            confirmed_db_path: db_path.clone(),
+            denied_path_markers: vec![],
+        };
+        WorkbenchSqliteRepository::open_confirmed(&config).expect("confirmed path opens");
+
+        let mismatch =
+            WorkbenchSqliteRepository::open_confirmed(&ConfirmedWorkbenchSqliteRepositoryConfig {
+                confirmed_db_path: root.join("other.sqlite"),
+                ..config.clone()
+            })
+            .expect_err("mismatched confirmation must reject");
+        assert!(
+            mismatch.contains("confirmed_db_path_mismatch"),
+            "got: {mismatch}"
+        );
+
+        let denied_path = root.join("denied.sqlite");
+        let denied =
+            WorkbenchSqliteRepository::open_confirmed(&ConfirmedWorkbenchSqliteRepositoryConfig {
+                db_path: denied_path.clone(),
+                confirmed_db_path: denied_path,
+                denied_path_markers: vec!["denied.sqlite".to_string()],
+            })
+            .expect_err("configured denied marker must reject");
+        assert!(
+            denied.contains("confirmed_db_path_denied_marker"),
+            "got: {denied}"
+        );
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -1053,26 +1259,36 @@ mod tests {
     }
 
     #[test]
-    fn repository_remains_dormant_with_no_product_entrypoint_or_command_reference() {
+    fn repository_has_no_tauri_command_and_db_primary_wiring_is_mode_guarded() {
         for (name, source) in [
             ("commands.rs", include_str!("commands.rs")),
             ("main.rs", include_str!("main.rs")),
-            (
-                "index_host_app_entrypoints.rs",
-                include_str!("index_host_app_entrypoints.rs"),
-            ),
         ] {
             assert!(
                 !source.contains("workbench_sqlite_repository"),
                 "repository must stay absent from {name}"
             );
         }
+        let index_host = include_str!("index_host_app_entrypoints.rs");
+        assert!(
+            index_host.contains("workbench_sqlite_storage_mode::initialize_for_startup"),
+            "startup may initialize only the storage-mode guard"
+        );
+        assert!(
+            !index_host.contains("workbench_sqlite_repository"),
+            "index host must not bypass the storage-mode guard"
+        );
+        assert!(
+            include_str!("workbench_sqlite_storage_mode.rs")
+                .contains("primary_repository_for_write"),
+            "product writers must obtain the repository through the mode guard"
+        );
         assert_eq!(
             include_str!("lib.rs")
                 .matches("mod workbench_sqlite_repository;")
                 .count(),
             1,
-            "lib may only declare the dormant module"
+            "lib may only declare the repository module once"
         );
         let tauri_command_attribute = ["#[tauri", "::command]"].concat();
         assert!(!include_str!("workbench_sqlite_repository.rs").contains(&tauri_command_attribute));

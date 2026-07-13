@@ -444,6 +444,11 @@ fn update_work_item_state_at(
     if !path.exists() {
         return Err("工作流状态文件不存在；无法推进工作项状态".to_string());
     }
+    if let Some(repository) =
+        crate::workbench_sqlite_storage_mode::primary_repository_for_write(path)?
+    {
+        return update_work_item_state_db_primary(path, request, &repository);
+    }
 
     let timestamp = unix_timestamp_string();
     let mut value = read_workflow_state_value(path)?;
@@ -531,6 +536,131 @@ fn update_work_item_state_at(
         first_initialize: false,
         snapshot,
     })
+}
+
+fn update_work_item_state_db_primary(
+    path: &Path,
+    request: &WorkItemStateUpdateRequest,
+    repository: &crate::workbench_sqlite_repository::WorkbenchSqliteRepository,
+) -> Result<WorkflowStateMutationResult, String> {
+    let timestamp = unix_timestamp_string();
+    let mut value = read_workflow_state_value(path)?;
+    let validation_warnings = validate_workflow_state(&value);
+    if !validation_warnings.is_empty() {
+        return Err(format!(
+            "当前状态文件未通过 schema 校验：{}",
+            validation_warnings.join(", ")
+        ));
+    }
+
+    let workflow_id = default_workflow_id(&request.project_root);
+    if !workflow_exists(&value, &workflow_id) {
+        return Err("当前项目还没有本地 workflow；无法推进工作项状态".to_string());
+    }
+
+    let work_item_index = find_work_item_index(&value, &workflow_id, &request.work_item_id)
+        .ok_or_else(|| "当前 workflow 下找不到该 work item；无法推进工作项状态".to_string())?;
+    let before_state = value
+        .get("work_items")
+        .and_then(Value::as_array)
+        .and_then(|items| items.get(work_item_index))
+        .and_then(|item| optional_string_from(item, "state"))
+        .unwrap_or_else(|| "draft".to_string());
+    let next_state = request.next_state.trim();
+    control_core::validate_work_item_state_transition(&before_state, next_state)?;
+
+    let current_node_id = workflow_node_for_work_item_state(&workflow_id, next_state);
+    {
+        let work_items = array_mut(&mut value, "work_items")?;
+        let work_item = work_items
+            .get_mut(work_item_index)
+            .ok_or_else(|| "当前 workflow 下找不到该 work item；无法推进工作项状态".to_string())?;
+        work_item["state"] = Value::String(next_state.to_string());
+        work_item["current_node_id"] = Value::String(current_node_id.clone());
+        work_item["updated_at"] = Value::String(timestamp.clone());
+    }
+    update_node_state_for_id(&mut value, &current_node_id, next_state, &timestamp)?;
+
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "work-item-state",
+        &request.work_item_id,
+        &timestamp,
+    );
+    let audit_event =
+        workflow_audit::work_item_state_changed(workflow_audit::WorkItemStateChangedAudit {
+            event_id: audit_event_id.clone(),
+            work_item_id: &request.work_item_id,
+            before_state: &before_state,
+            after_state: next_state,
+            created_at: &timestamp,
+            reason: format!(
+                "用户确认推进工作项状态到：{}",
+                work_item_state_label(next_state)
+            ),
+        });
+    array_mut(&mut value, "audit_events")?.push(audit_event.clone());
+
+    value["updated_at"] = Value::String(timestamp.clone());
+    let validation_warnings = validate_workflow_state(&value);
+    if !validation_warnings.is_empty() {
+        return Err(format!(
+            "写入前 schema 校验失败：{}",
+            validation_warnings.join(", ")
+        ));
+    }
+    let work_item_after = value
+        .get("work_items")
+        .and_then(Value::as_array)
+        .and_then(|items| items.get(work_item_index))
+        .cloned()
+        .ok_or_else(|| "DB 主写找不到更新后的 work item".to_string())?;
+    let node_after = value
+        .get("nodes")
+        .and_then(Value::as_array)
+        .and_then(|nodes| {
+            nodes.iter().find(|node| {
+                optional_string_from(node, "node_id").as_deref() == Some(current_node_id.as_str())
+            })
+        })
+        .cloned()
+        .ok_or_else(|| "DB 主写找不到更新后的 workflow node".to_string())?;
+    repository.transition_work_item_with_audit(
+        &work_item_after,
+        &node_after,
+        &before_state,
+        &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+            event_id: audit_event_id.clone(),
+            target_kind: "workflow_state".to_string(),
+            target_id: request.work_item_id.clone(),
+            payload: audit_event,
+        },
+        None,
+    )?;
+    crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
+        path,
+        "work_item_state_transition",
+        || {
+            let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
+            write_validated_workflow_state(path, &value)?;
+            let snapshot = read_workflow_state_snapshot(path)?;
+            if !snapshot.exists {
+                return Err("推进工作项状态后重新读取校验失败".to_string());
+            }
+
+            Ok(WorkflowStateMutationResult {
+                message: format!(
+                    "已推进工作项状态：{} -> {}",
+                    work_item_state_label(&before_state),
+                    work_item_state_label(next_state)
+                ),
+                path: path.display().to_string(),
+                backup_path: Some(backup.display().to_string()),
+                audit_event_id,
+                first_initialize: false,
+                snapshot,
+            })
+        },
+    )
 }
 
 struct WorkflowNodeSessionBindingProvenance {
@@ -831,9 +961,7 @@ fn migrate_legacy_workflow_node_session_binding_ids(
                 node_id,
                 work_item_id,
             });
-            if optional_string_from(binding, "binding_id").as_deref()
-                != Some(current_id.as_str())
-            {
+            if optional_string_from(binding, "binding_id").as_deref() != Some(current_id.as_str()) {
                 binding["binding_id"] = Value::String(current_id);
                 counts.bindings += 1;
             }

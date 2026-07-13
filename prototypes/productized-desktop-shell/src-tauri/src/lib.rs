@@ -52,6 +52,7 @@ mod workbench_sqlite_repository;
 mod workbench_sqlite_schema;
 mod workbench_sqlite_snapshot_apply;
 mod workbench_sqlite_stop_write;
+mod workbench_sqlite_storage_mode;
 mod workbench_sqlite_transaction_acceptance;
 mod worker_protocol;
 mod workflow_audit;

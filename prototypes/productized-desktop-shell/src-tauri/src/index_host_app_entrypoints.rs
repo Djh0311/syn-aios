@@ -590,6 +590,11 @@ pub fn run() {
     if let Err(error) = crate::exec_process_registry::reap_registered_orphans(&state.workflow_state_path) {
         eprintln!("执行进程遗留回收未完成：{error}");
     }
+    if let Err(error) = crate::workbench_sqlite_storage_mode::initialize_for_startup(
+        &state.workflow_state_path,
+    ) {
+        eprintln!("DB 主写模式启动对账未通过：{error}");
+    }
     let app = tauri::Builder::default()
         .manage(state)
         .manage(mcp::orchestrator::OrchestratorState::new())

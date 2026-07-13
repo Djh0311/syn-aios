@@ -124,7 +124,46 @@ pub(crate) fn create_authorization(
     store.updated_at_ms = timestamp_ms;
     store.authorizations.push(authorization.clone());
     store.audit_events.push(audit_event.clone());
-    write_store_atomic(&sidecar, &store, timestamp_ms, write_id)?;
+    if let Some(repository) =
+        crate::workbench_sqlite_storage_mode::primary_repository_for_write(workflow_state_path)?
+    {
+        // M4 keeps authorization CAS on the individual authorization record. This creation is
+        // therefore 0 -> 1, independent from the sidecar-wide revision counter.
+        let mut authorization_value = serde_json::to_value(&authorization)
+            .map_err(|error| format!("序列化方案授权 DB 主写记录失败：{error}"))?;
+        let authorization_object = authorization_value
+            .as_object_mut()
+            .ok_or_else(|| "方案授权 DB 主写记录必须是对象".to_string())?;
+        authorization_object.insert(
+            "proposal_id".to_string(),
+            authorization
+                .source_proposal_id
+                .clone()
+                .map(Value::String)
+                .unwrap_or(Value::Null),
+        );
+        authorization_object.insert("revision".to_string(), Value::from(1_i64));
+        let audit_value = serde_json::to_value(&audit_event)
+            .map_err(|error| format!("序列化方案授权审计 DB 主写记录失败：{error}"))?;
+        repository.save_authorization_with_audit(
+            &authorization_value,
+            0,
+            &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+                event_id: audit_event.audit_event_id.clone(),
+                target_kind: "plan_authorization".to_string(),
+                target_id: authorization.authorization_id.clone(),
+                payload: audit_value,
+            },
+            None,
+        )?;
+        crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
+            workflow_state_path,
+            "plan_authorization",
+            || write_store_atomic(&sidecar, &store, timestamp_ms, write_id),
+        )?;
+    } else {
+        write_store_atomic(&sidecar, &store, timestamp_ms, write_id)?;
+    }
     drop(lock);
     authorization.audit_refs = vec![audit_event_id];
 
@@ -140,6 +179,97 @@ pub(crate) fn create_authorization(
         store_revision: store.revision,
         warnings: store.warnings.clone(),
     })
+}
+
+pub(crate) fn replay_db_primary_projection(
+    workflow_state_path: &Path,
+    authorizations: &[Value],
+    audit_events: &[Value],
+    replace_db_primary_leading: bool,
+    timestamp_ms: i64,
+    write_id: &str,
+) -> Result<usize, String> {
+    if authorizations.is_empty() && audit_events.is_empty() {
+        return Ok(0);
+    }
+    let sidecar = sidecar_path(workflow_state_path)?;
+    ensure_sidecar_parent(&sidecar)?;
+    let _lock = StoreLock::acquire(&lock_path_for(&sidecar)?, write_id)?;
+    let mut store = load_store(workflow_state_path, timestamp_ms)?;
+    let mut authorization_writes = 0_i64;
+    let mut total_writes = 0;
+
+    for value in authorizations {
+        let authorization: PlanAuthorization = serde_json::from_value(value.clone())
+            .map_err(|error| format!("DB 方案授权投影记录无法解析：{error}"))?;
+        if let Some(existing) = store
+            .authorizations
+            .iter()
+            .find(|existing| existing.authorization_id == authorization.authorization_id)
+        {
+            if existing != &authorization {
+                if !replace_db_primary_leading {
+                    return Err(format!(
+                        "db_json_projection_hash_mismatch:plan_authorizations:{}",
+                        authorization.authorization_id
+                    ));
+                }
+                let index = store
+                    .authorizations
+                    .iter()
+                    .position(|existing| {
+                        existing.authorization_id == authorization.authorization_id
+                    })
+                    .expect("existing authorization index");
+                store.authorizations[index] = authorization;
+                total_writes += 1;
+            }
+        } else {
+            store.authorizations.push(authorization);
+            authorization_writes += 1;
+            total_writes += 1;
+        }
+    }
+
+    for value in audit_events {
+        let audit_event: PlanAuthorizationAuditEvent = serde_json::from_value(value.clone())
+            .map_err(|error| format!("DB 方案授权审计投影记录无法解析：{error}"))?;
+        if let Some(existing) = store
+            .audit_events
+            .iter()
+            .find(|existing| existing.audit_event_id == audit_event.audit_event_id)
+        {
+            if existing != &audit_event {
+                if !replace_db_primary_leading {
+                    return Err(format!(
+                        "db_json_projection_hash_mismatch:plan_authorization_audit:{}",
+                        audit_event.audit_event_id
+                    ));
+                }
+                let index = store
+                    .audit_events
+                    .iter()
+                    .position(|existing| existing.audit_event_id == audit_event.audit_event_id)
+                    .expect("existing authorization audit index");
+                store.audit_events[index] = audit_event;
+                total_writes += 1;
+            }
+        } else {
+            store.audit_events.push(audit_event);
+            total_writes += 1;
+        }
+    }
+
+    if total_writes > 0 {
+        store.revision = store
+            .revision
+            .checked_add(authorization_writes)
+            .ok_or_else(|| "方案授权 sidecar revision 已到上限".to_string())?;
+        store.updated_at_ms = timestamp_ms;
+        validate_store(&store)?;
+        write_store_atomic(&sidecar, &store, timestamp_ms, write_id)?;
+    }
+    Ok(total_writes)
 }
 
 pub(crate) fn record_user_confirmation(

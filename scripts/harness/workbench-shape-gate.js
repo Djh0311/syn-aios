@@ -63,7 +63,11 @@ const ALLOWED_SIDECAR_JSON = new Set([
   'real-execution-product-commands.v1.json',
   'runtime-log.v1.json',
   'runtime-logs.v1.json',
-  'session-continuations.v1.json'
+  'session-continuations.v1.json',
+  // M5-A(2026-07-13·用户授权·任务包红线#4 预声明):存储模式开关配置。严格说是
+  // runtime-artifacts 运行时件而非 workflow-state sidecar,但本扫描按字面量匹配,故入
+  // 基线留痕。缺失/坏/路径不符一律 json_only(fail-closed),见 workbench_sqlite_storage_mode.rs。
+  'storage-mode.v1.json'
 ]);
 
 // U-Gate dedup check (HG-3, additive; warning-only, never blocks).

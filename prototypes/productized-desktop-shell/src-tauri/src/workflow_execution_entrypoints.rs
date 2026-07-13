@@ -289,6 +289,11 @@ fn write_prepared_dispatch(
     path: &Path,
     context: WorkflowNodeDispatchContext,
 ) -> Result<WorkflowNodeDispatchResult, String> {
+    if let Some(repository) =
+        crate::workbench_sqlite_storage_mode::primary_repository_for_write(path)?
+    {
+        return write_prepared_dispatch_db_primary(path, context, &repository);
+    }
     let timestamp = unix_timestamp_string();
     let timestamp_ms = unix_timestamp_ms();
     let mut value = read_workflow_state_value(path)?;
@@ -352,10 +357,100 @@ fn write_prepared_dispatch(
     )
 }
 
+fn write_prepared_dispatch_db_primary(
+    path: &Path,
+    context: WorkflowNodeDispatchContext,
+    repository: &crate::workbench_sqlite_repository::WorkbenchSqliteRepository,
+) -> Result<WorkflowNodeDispatchResult, String> {
+    let timestamp = unix_timestamp_string();
+    let timestamp_ms = unix_timestamp_ms();
+    let mut value = read_workflow_state_value(path)?;
+    ensure_workflow_node_dispatches_array(&mut value)?;
+    let dispatch_id = next_workflow_node_dispatch_id(&context, &timestamp);
+    let dispatch = json!({
+      "dispatch_id": dispatch_id,
+      "project_id": context.project_id,
+      "workflow_id": context.workflow_id,
+      "node_id": context.node_id,
+      "work_item_id": context.work_item_id,
+      "binding_id": context.binding_id,
+      "native_thread_id": context.native_thread_id,
+      "prompt_preview": context.prompt_preview,
+      "worker_prompt": context.prompt_preview,
+      "prompt_kind": context.prompt_kind,
+      "memory_packet_snapshot_id": context.memory_packet_snapshot_id,
+      "memory_packet_fingerprint": context.memory_packet_fingerprint,
+      "plan_authorization_id": context.plan_authorization_id,
+      "authorization_check": context.authorization_check.as_ref().map(|check| serde_json::to_value(check).unwrap_or(Value::Null)).unwrap_or(Value::Null),
+      "user_reviewed_instruction": context.user_reviewed_instruction.as_ref().map(user_reviewed_instruction_value).unwrap_or(Value::Null),
+      "state": "prepared",
+      "started_at_ms": Value::Null,
+      "ended_at_ms": Value::Null,
+      "exit_code": Value::Null,
+      "last_message_path": Value::Null,
+      "last_message_summary": Value::Null,
+      "transcript_event_count": Value::Null,
+      "transcript_target_hits": Value::Null,
+      "warnings": context.warnings,
+      "created_at_ms": timestamp_ms,
+      "updated_at_ms": timestamp_ms
+    });
+    array_mut(&mut value, "workflow_node_dispatches")?.push(dispatch.clone());
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "workflow-node-dispatch-prepared",
+        &dispatch_id,
+        &timestamp,
+    );
+    let audit_event = json!({
+      "event_id": audit_event_id.clone(),
+      "event_type": "workflow_node_dispatch_prepared",
+      "target_ref": dispatch["work_item_id"].clone(),
+      "actor_ref": "user_confirmed_desktop_shell",
+      "source_kind": "workspace_state",
+      "permission_level": "user_confirmed_write",
+      "before_state": context.work_item_state,
+      "after_state": "prepared",
+      "created_at": timestamp.clone(),
+      "reason": if dispatch["prompt_kind"] == "safe_probe" { "用户确认准备工作流节点 Codex safe probe 派发；只写工作台状态，不发送消息。" } else { "用户确认准备工作流节点用户审核业务派发；只写工作台状态，不发送消息。" }
+    });
+    array_mut(&mut value, "audit_events")?.push(audit_event.clone());
+    value["updated_at"] = Value::String(timestamp.clone());
+    repository.record_dispatch_with_audit(
+        &dispatch,
+        &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+            event_id: audit_event_id.clone(),
+            target_kind: "workflow_state".to_string(),
+            target_id: dispatch_id.clone(),
+            payload: audit_event,
+        },
+        None,
+    )?;
+    crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
+        path,
+        "workflow_node_dispatch_prepared",
+        || {
+            let backup = backup_workflow_state_file(path, &timestamp)?;
+            write_validated_workflow_state(path, &value)?;
+            dispatch_result_from_state(
+                path,
+                Some(backup),
+                &audit_event_id,
+                &dispatch_id,
+                "已准备节点派发。",
+            )
+        },
+    )
+}
+
 fn write_started_dispatch(
     path: &Path,
     context: &WorkflowNodeDispatchContext,
 ) -> Result<WorkflowNodeDispatchRecord, String> {
+    if let Some(repository) =
+        crate::workbench_sqlite_storage_mode::primary_repository_for_write(path)?
+    {
+        return write_started_dispatch_db_primary(path, context, &repository);
+    }
     let timestamp = unix_timestamp_string();
     let timestamp_ms = unix_timestamp_ms();
     let mut value = read_workflow_state_value(path)?;
@@ -433,6 +528,132 @@ fn write_started_dispatch(
     parse_workflow_node_dispatch_record(
         find_workflow_node_dispatch(&updated, &dispatch_id)
             .ok_or_else(|| "写入 running 派发记录后校验失败".to_string())?,
+    )
+}
+
+fn write_started_dispatch_db_primary(
+    path: &Path,
+    context: &WorkflowNodeDispatchContext,
+    repository: &crate::workbench_sqlite_repository::WorkbenchSqliteRepository,
+) -> Result<WorkflowNodeDispatchRecord, String> {
+    let timestamp = unix_timestamp_string();
+    let timestamp_ms = unix_timestamp_ms();
+    let mut value = read_workflow_state_value(path)?;
+    ensure_workflow_node_dispatches_array(&mut value)?;
+    let work_item_index = find_work_item_index(&value, &context.workflow_id, &context.work_item_id)
+        .ok_or_else(|| "当前 workflow 下找不到该 work item；无法执行节点派发".to_string())?;
+    let before_state = optional_string_from(&value["work_items"][work_item_index], "state")
+        .unwrap_or_else(|| "unknown".to_string());
+    control_core::validate_dispatch_start(&before_state)?;
+    let dispatch_id = next_workflow_node_dispatch_id(context, &timestamp);
+    let output_dir = default_workflow_node_dispatch_output_dir();
+    let output_nonce = unix_timestamp_nanos();
+    let last_message_path = output_dir.join(format!(
+        "{}-{}-{}-{}-last-message.txt",
+        stable_id(&dispatch_id),
+        timestamp_ms,
+        std::process::id(),
+        output_nonce
+    ));
+    let dispatch = json!({
+      "dispatch_id": dispatch_id,
+      "project_id": context.project_id,
+      "workflow_id": context.workflow_id,
+      "node_id": context.node_id,
+      "work_item_id": context.work_item_id,
+      "binding_id": context.binding_id,
+      "native_thread_id": context.native_thread_id,
+      "prompt_preview": context.prompt_preview,
+      "worker_prompt": context.prompt_preview,
+      "prompt_kind": context.prompt_kind,
+      "memory_packet_snapshot_id": context.memory_packet_snapshot_id,
+      "memory_packet_fingerprint": context.memory_packet_fingerprint,
+      "plan_authorization_id": context.plan_authorization_id,
+      "authorization_check": context.authorization_check.as_ref().map(|check| serde_json::to_value(check).unwrap_or(Value::Null)).unwrap_or(Value::Null),
+      "user_reviewed_instruction": context.user_reviewed_instruction.as_ref().map(user_reviewed_instruction_value).unwrap_or(Value::Null),
+      "state": "running",
+      "started_at_ms": timestamp_ms,
+      "ended_at_ms": Value::Null,
+      "exit_code": Value::Null,
+      "last_message_path": last_message_path.display().to_string(),
+      "last_message_summary": Value::Null,
+      "transcript_event_count": Value::Null,
+      "transcript_target_hits": Value::Null,
+      "warnings": context.warnings,
+      "created_at_ms": timestamp_ms,
+      "updated_at_ms": timestamp_ms
+    });
+    array_mut(&mut value, "workflow_node_dispatches")?.push(dispatch.clone());
+    {
+        let work_items = array_mut(&mut value, "work_items")?;
+        let work_item = work_items
+            .get_mut(work_item_index)
+            .ok_or_else(|| "当前 workflow 下找不到该 work item；无法执行节点派发".to_string())?;
+        work_item["state"] = Value::String("running".to_string());
+        work_item["current_node_id"] = Value::String(context.node_id.clone());
+        work_item["updated_at"] = Value::String(timestamp.clone());
+    }
+    update_node_state_for_id(&mut value, &context.node_id, "running", &timestamp)?;
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "workflow-node-dispatch-started",
+        &dispatch_id,
+        &timestamp,
+    );
+    let audit_event = json!({
+      "event_id": audit_event_id.clone(),
+      "event_type": "workflow_node_dispatch_started",
+      "target_ref": context.work_item_id,
+      "actor_ref": "user_confirmed_desktop_shell",
+      "source_kind": "workspace_state_and_codex_resume",
+      "permission_level": "user_confirmed_write",
+      "before_state": before_state.clone(),
+      "after_state": "running",
+      "created_at": timestamp.clone(),
+      "reason": if context.prompt_kind == "safe_probe" { "用户确认向绑定 Codex 会话发送 safe probe；会写 /Users/yoyi/.codex 和工作台 workflow state。" } else { "用户确认向绑定 Codex 会话发送用户审核业务指令；会写 /Users/yoyi/.codex、工作台 workflow state 和用户允许的业务路径。" }
+    });
+    array_mut(&mut value, "audit_events")?.push(audit_event.clone());
+    value["updated_at"] = Value::String(timestamp.clone());
+    let work_item_after = value
+        .get("work_items")
+        .and_then(Value::as_array)
+        .and_then(|items| items.get(work_item_index))
+        .cloned()
+        .ok_or_else(|| "DB 主写找不到更新后的 work item".to_string())?;
+    let node_after = value
+        .get("nodes")
+        .and_then(Value::as_array)
+        .and_then(|nodes| {
+            nodes.iter().find(|node| {
+                optional_string_from(node, "node_id").as_deref() == Some(context.node_id.as_str())
+            })
+        })
+        .cloned()
+        .ok_or_else(|| "DB 主写找不到更新后的 workflow node".to_string())?;
+    repository.reserve_dispatch_with_audit(
+        &dispatch,
+        &work_item_after,
+        &node_after,
+        &before_state,
+        &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+            event_id: audit_event_id,
+            target_kind: "workflow_state".to_string(),
+            target_id: dispatch_id.clone(),
+            payload: audit_event,
+        },
+        None,
+    )?;
+    crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
+        path,
+        "workflow_node_dispatch_started",
+        || {
+            let _backup = backup_workflow_state_file(path, &timestamp)?;
+            write_validated_workflow_state(path, &value)?;
+            let updated = read_workflow_state_value(path)?;
+            parse_workflow_node_dispatch_record(
+                find_workflow_node_dispatch(&updated, &dispatch_id)
+                    .ok_or_else(|| "写入 running 派发记录后校验失败".to_string())?,
+            )
+        },
     )
 }
 
