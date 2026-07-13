@@ -1,0 +1,371 @@
+{
+  "fidelity_mode": "indent2",
+  "renames": [
+    {
+      "index": 626,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783010517930",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783010517930:1783010517930",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 628,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783010517930",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783010517930:1783010517930",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 631,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783010517930",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-4-1783010517930:1783010517930",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 656,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783190207289",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783190207289:1783190207289",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 657,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783190207289",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783190207289:1783190207289",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 659,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783190207289",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-3-1783190207289:1783190207289",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 668,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783190776457",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783190776457:1783190776457",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 669,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783190776457",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783190776457:1783190776457",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 670,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783190776457",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-3-1783190776457:1783190776457",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 775,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783242927888",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783242927888:1783242927888",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 776,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783242927888",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783242927888:1783242927888",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 777,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783242927888",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-3-1783242927888:1783242927888",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 778,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783242927888",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-4-1783242927888:1783242927888",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 838,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783298153847",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783298153847:1783298153847",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 839,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783298153847",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783298153847:1783298153847",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 840,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783298153847",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-3-1783298153847:1783298153847",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 841,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783298153847",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-4-1783298153847:1783298153847",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 878,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783301788405",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783301788405:1783301788405",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 879,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783301788405",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783301788405:1783301788405",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 880,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783301788405",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-3-1783301788405:1783301788405",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 904,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783310366637",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783310366637:1783310366637",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 905,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783310366637",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783310366637:1783310366637",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 931,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783324215280",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783324215280:1783324215280",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 932,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783324215280",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783324215280:1783324215280",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 933,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783324215280",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-3-1783324215280:1783324215280",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1009,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783417639402",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783417639402:1783417639402",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1010,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783417639402",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783417639402:1783417639402",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1034,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783431636435",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783431636435:1783431636435",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1035,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783431636435",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783431636435:1783431636435",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1036,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783431636435",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-3-1783431636435:1783431636435",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1071,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783587367314",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783587367314:1783587367314",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1072,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783587367314",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783587367314:1783587367314",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1073,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783587367314",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-3-1783587367314:1783587367314",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1074,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783587367314",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-4-1783587367314:1783587367314",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1117,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783670670512",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783670670512:1783670670512",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1118,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783670670512",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783670670512:1783670670512",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1169,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783728667103",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783728667103:1783728667103",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1170,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783728667103",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783728667103:1783728667103",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1171,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783728667103",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-3-1783728667103:1783728667103",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1172,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783728667103",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-4-1783728667103:1783728667103",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1197,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783730823621",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1-1783730823621:1783730823621",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1198,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783730823621",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2-1783730823621:1783730823621",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1199,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783730823621",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-3-1783730823621:1783730823621",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1200,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783730823621",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-4-1783730823621:1783730823621",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1202,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783730823621",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-5-1783730823621:1783730823621",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1204,
+      "old_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-:1783730823621",
+      "new_id": "audit:authorized-prepared-dispatch-created:authorized-prepared-dispatch-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-6-1783730823621:1783730823621",
+      "kind": "authorized-prepared-dispatch-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 625,
+      "old_id": "audit:project-director-task-plan-created:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-wo:1783010517930",
+      "new_id": "audit:project-director-task-plan-created:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-1:1783010517930",
+      "kind": "project-director-task-plan-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 627,
+      "old_id": "audit:project-director-task-plan-created:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-wo:1783010517930",
+      "new_id": "audit:project-director-task-plan-created:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-2:1783010517930",
+      "kind": "project-director-task-plan-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 630,
+      "old_id": "audit:project-director-task-plan-created:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-wo:1783010517930",
+      "new_id": "audit:project-director-task-plan-created:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-4:1783010517930",
+      "kind": "project-director-task-plan-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1201,
+      "old_id": "audit:project-director-task-plan-created:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-wo:1783730823621",
+      "new_id": "audit:project-director-task-plan-created:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-5:1783730823621",
+      "kind": "project-director-task-plan-created",
+      "method": "detrunc/nocollapse"
+    },
+    {
+      "index": 1203,
+      "old_id": "audit:project-director-task-plan-created:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-wo:1783730823621",
+      "new_id": "audit:project-director-task-plan-created:work-item-workflow-users-yoyi-codex-workflow-mario-test-default-project-director-planned-task-workflow-users-yoyi-codex-workflow-mario-test-default-6:1783730823621",
+      "kind": "project-director-task-plan-created",
+      "method": "detrunc/nocollapse"
+    }
+  ],
+  "old_schema_added_event_id": [
+    296,
+    297,
+    298,
+    355
+  ],
+  "methods": {
+    "detrunc/nocollapse": 51
+  }
+}
