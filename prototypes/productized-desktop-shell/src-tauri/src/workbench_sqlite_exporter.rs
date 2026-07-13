@@ -107,6 +107,58 @@ fn export_db_to_json_dry_run(
         ));
     }
 
+    // --- M1 completeness (2026-07-13): layer (b) — sources apply already lands but exporter dropped ---
+    for (path, projection) in [
+        (
+            "memory-candidates.v1.json",
+            memory_candidate_projection(&connection)?,
+        ),
+        (
+            "memory-capture-events.v1.json",
+            memory_capture_projection(&connection)?,
+        ),
+        ("observations.v1.json", observation_projection(&connection)?),
+        (
+            "plan-authorizations.v1.json",
+            plan_authorization_projection(&connection)?,
+        ),
+        (
+            "project-proposals.v1.json",
+            project_proposal_projection(&connection)?,
+        ),
+        // --- layer (a) — sidecars apply now lands (tables pre-existed) ---
+        ("memory-lint.v1.json", memory_lint_projection(&connection)?),
+        (
+            "memory-entity-relations.v1.json",
+            memory_entity_relation_projection(&connection)?,
+        ),
+        (
+            "memory-patterns.v1.json",
+            mature_pattern_projection(&connection)?,
+        ),
+        (
+            "blackboard-candidates.v1.json",
+            blackboard_candidate_projection(&connection)?,
+        ),
+        // --- three supervisor ledgers ---
+        (
+            "global-supervisor-reviews.v1.json",
+            supervisor_review_projection(&connection)?,
+        ),
+        (
+            "supervisor-action-control.v1.json",
+            supervisor_action_projection(&connection)?,
+        ),
+        (
+            "supervisor-orchestrator.v1.json",
+            supervisor_orchestrator_projection(&connection)?,
+        ),
+    ] {
+        if projection_record_count(&projection) > 0 {
+            projected_files.push(projected_file(path, true, projection));
+        }
+    }
+
     let redaction_manifest = vec![
         "prompt_body:omitted".to_string(),
         "full_transcript:omitted".to_string(),
@@ -163,7 +215,10 @@ fn workflow_state_projection(connection: &Connection) -> Result<Value, String> {
     Ok(json!({
         "schema_version": meta.get("schema_version").and_then(Value::as_str).unwrap_or("workflow_state_v0"),
         "workflow_version": meta.get("workflow_version").and_then(Value::as_i64).unwrap_or(1),
-        "revision": meta.get("revision").and_then(Value::as_i64).unwrap_or(1),
+        // M1 completeness (2026-07-13): preserve the real revision faithfully. A missing
+        // workflow_state_meta row now yields null (fail-loud) instead of a fabricated 1 that
+        // produced false round-trip reconciliation (e.g. live revision=11 silently downgraded).
+        "revision": meta.get("revision").cloned().unwrap_or(Value::Null),
         "projects": record_json_array(connection, "projects")?,
         "agent_adapters": record_json_array(connection, "agent_adapters")?,
         "workflows": record_json_array(connection, "workflows")?,
@@ -176,7 +231,13 @@ fn workflow_state_projection(connection: &Connection) -> Result<Value, String> {
         "capabilities": record_json_array(connection, "capabilities")?,
         "harness_resources": record_json_array(connection, "harness_resources")?,
         "workflow_node_session_bindings": record_json_array(connection, "workflow_node_session_bindings")?,
-        "workflow_node_dispatches": record_json_array(connection, "workflow_node_dispatches")?
+        "workflow_node_dispatches": record_json_array(connection, "workflow_node_dispatches")?,
+        // M1 completeness (2026-07-13): five main-store top-level arrays (layer c) now round-trip.
+        "execution_attempts": record_json_array(connection, "execution_attempts")?,
+        "permission_requests": record_json_array(connection, "permission_requests")?,
+        "workflow_chain_runs": record_json_array(connection, "workflow_chain_runs")?,
+        "workflow_execution_controls": record_json_array(connection, "workflow_execution_controls")?,
+        "workflow_machine_runs": record_json_array(connection, "workflow_machine_runs")?
     }))
 }
 
@@ -217,6 +278,160 @@ fn session_continuation_projection(connection: &Connection) -> Result<Value, Str
         "continuations": record_json_array(connection, "session_continuations")?,
         "attempts": record_json_array(connection, "session_continuation_attempts")?,
         "audit_events": record_json_array(connection, "session_continuation_audit_events")?
+    }))
+}
+
+// M1 completeness (2026-07-13): faithful schema_version + revision from the import_sources row
+// (importer captured them from the source's own fields). Honors M0 §seven R4 — new projections
+// preserve the real revision rather than hardcoding 1. Null when the importer captured nothing.
+fn source_import_meta(
+    connection: &Connection,
+    source_kind: &str,
+) -> Result<(Value, Value), String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT source_schema_version, detected_revision FROM import_sources WHERE source_kind = ?1 LIMIT 1",
+        )
+        .map_err(|error| format!("prepare source meta {source_kind} failed: {error}"))?;
+    let mut rows = statement
+        .query([source_kind])
+        .map_err(|error| format!("query source meta {source_kind} failed: {error}"))?;
+    if let Some(row) = rows
+        .next()
+        .map_err(|error| format!("read source meta {source_kind} failed: {error}"))?
+    {
+        let schema_version: Option<String> = row
+            .get(0)
+            .map_err(|error| format!("read schema_version {source_kind} failed: {error}"))?;
+        let revision: Option<i64> = row
+            .get(1)
+            .map_err(|error| format!("read revision {source_kind} failed: {error}"))?;
+        Ok((
+            schema_version.map(Value::from).unwrap_or(Value::Null),
+            revision.map(Value::from).unwrap_or(Value::Null),
+        ))
+    } else {
+        Ok((Value::Null, Value::Null))
+    }
+}
+
+fn memory_candidate_projection(connection: &Connection) -> Result<Value, String> {
+    let (schema_version, revision) = source_import_meta(connection, "memory_candidate")?;
+    Ok(json!({
+        "schema_version": schema_version,
+        "revision": revision,
+        "candidates": record_json_array(connection, "memory_candidates")?,
+        "events": record_json_array(connection, "memory_candidate_events")?
+    }))
+}
+
+fn memory_capture_projection(connection: &Connection) -> Result<Value, String> {
+    let (schema_version, revision) = source_import_meta(connection, "memory_capture")?;
+    Ok(json!({
+        "schema_version": schema_version,
+        "revision": revision,
+        "events": record_json_array(connection, "memory_capture_events")?
+    }))
+}
+
+fn observation_projection(connection: &Connection) -> Result<Value, String> {
+    let (schema_version, revision) = source_import_meta(connection, "observation")?;
+    Ok(json!({
+        "schema_version": schema_version,
+        "revision": revision,
+        "observations": record_json_array(connection, "observations")?,
+        "events": record_json_array(connection, "observation_events")?
+    }))
+}
+
+fn plan_authorization_projection(connection: &Connection) -> Result<Value, String> {
+    let (schema_version, revision) = source_import_meta(connection, "plan_authorization")?;
+    Ok(json!({
+        "schema_version": schema_version,
+        "revision": revision,
+        "authorizations": record_json_array(connection, "plan_authorizations")?,
+        "audit_events": record_json_array(connection, "plan_authorization_audit_events")?
+    }))
+}
+
+fn project_proposal_projection(connection: &Connection) -> Result<Value, String> {
+    let (schema_version, revision) = source_import_meta(connection, "project_proposal")?;
+    Ok(json!({
+        "schema_version": schema_version,
+        "revision": revision,
+        "proposals": record_json_array(connection, "project_proposals")?,
+        "decisions": record_json_array(connection, "project_proposal_decisions")?,
+        "audit_events": record_json_array(connection, "project_proposal_audit_events")?
+    }))
+}
+
+fn memory_lint_projection(connection: &Connection) -> Result<Value, String> {
+    let (schema_version, revision) = source_import_meta(connection, "memory_lint")?;
+    Ok(json!({
+        "schema_version": schema_version,
+        "revision": revision,
+        "runs": record_json_array(connection, "memory_lint_runs")?,
+        "findings": record_json_array(connection, "memory_lint_findings")?
+    }))
+}
+
+fn memory_entity_relation_projection(connection: &Connection) -> Result<Value, String> {
+    let (schema_version, revision) = source_import_meta(connection, "memory_entity_relation")?;
+    Ok(json!({
+        "schema_version": schema_version,
+        "revision": revision,
+        "relations": record_json_array(connection, "memory_entity_relations")?
+    }))
+}
+
+fn mature_pattern_projection(connection: &Connection) -> Result<Value, String> {
+    let (schema_version, revision) = source_import_meta(connection, "memory_pattern")?;
+    Ok(json!({
+        "schema_version": schema_version,
+        "revision": revision,
+        "candidates": record_json_array(connection, "mature_pattern_candidates")?,
+        "audit_events": record_json_array(connection, "mature_pattern_audit_events")?
+    }))
+}
+
+fn blackboard_candidate_projection(connection: &Connection) -> Result<Value, String> {
+    let (schema_version, revision) = source_import_meta(connection, "blackboard_candidate")?;
+    Ok(json!({
+        "schema_version": schema_version,
+        "revision": revision,
+        "candidates": record_json_array(connection, "blackboard_candidates")?,
+        "audit_events": record_json_array(connection, "blackboard_candidate_audit_events")?
+    }))
+}
+
+fn supervisor_review_projection(connection: &Connection) -> Result<Value, String> {
+    let (schema_version, revision) = source_import_meta(connection, "global_supervisor_review")?;
+    Ok(json!({
+        "schema_version": schema_version,
+        "revision": revision,
+        "reviews": record_json_array(connection, "supervisor_reviews")?,
+        "audit_events": record_json_array(connection, "supervisor_review_audit_events")?,
+        "boundary_reviews": record_json_array(connection, "supervisor_boundary_reviews")?,
+        "boundary_audit_events": record_json_array(connection, "supervisor_boundary_audit_events")?
+    }))
+}
+
+fn supervisor_action_projection(connection: &Connection) -> Result<Value, String> {
+    let (schema_version, revision) = source_import_meta(connection, "supervisor_action_control")?;
+    Ok(json!({
+        "schema_version": schema_version,
+        "revision": revision,
+        "actions": record_json_array(connection, "supervisor_actions")?
+    }))
+}
+
+fn supervisor_orchestrator_projection(connection: &Connection) -> Result<Value, String> {
+    let (schema_version, revision) = source_import_meta(connection, "supervisor_orchestrator")?;
+    Ok(json!({
+        "schema_version": schema_version,
+        "revision": revision,
+        "sessions": record_json_array(connection, "supervisor_orchestrator_sessions")?,
+        "audit_events": record_json_array(connection, "supervisor_orchestrator_audit_events")?
     }))
 }
 

@@ -122,6 +122,21 @@ pub(crate) const WORKBENCH_SQLITE_SCHEMA_DDL: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS runtime_log_summaries (summary_id TEXT PRIMARY KEY, batch_id TEXT, category TEXT, status TEXT, severity TEXT, summary_hash TEXT, source_id TEXT, record_json TEXT NOT NULL)",
     "CREATE TABLE IF NOT EXISTS runtime_source_refs (runtime_source_ref_id TEXT PRIMARY KEY, entry_id TEXT, source_kind TEXT, source_ref_id TEXT, ref_json TEXT NOT NULL)",
     "CREATE TABLE IF NOT EXISTS readback_results (readback_id TEXT PRIMARY KEY, attempt_id TEXT, source_kind TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
+    // --- M1 completeness (2026-07-13): five main-store top-level arrays (layer c) ---
+    "CREATE TABLE IF NOT EXISTS execution_attempts (attempt_id TEXT PRIMARY KEY, workflow_id TEXT, work_item_id TEXT, dispatch_id TEXT, project_id TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS permission_requests (request_id TEXT PRIMARY KEY, workflow_id TEXT, work_item_id TEXT, dispatch_id TEXT, project_id TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS workflow_chain_runs (chain_run_id TEXT PRIMARY KEY, workflow_id TEXT, project_id TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS workflow_execution_controls (control_id TEXT PRIMARY KEY, workflow_id TEXT, work_item_id TEXT, project_id TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
+    // workflow_machine_runs: archived / unknown-provenance (dead writer, 10 orphan records on disk); landed for round-trip preservation, NOT wired to a live array. See M0 contract §three R1.
+    "CREATE TABLE IF NOT EXISTS workflow_machine_runs (run_id TEXT PRIMARY KEY, workflow_id TEXT, work_item_id TEXT, project_id TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
+    // --- M1 completeness (2026-07-13): three supervisor ledgers ---
+    "CREATE TABLE IF NOT EXISTS supervisor_reviews (review_id TEXT PRIMARY KEY, project_id TEXT, workflow_id TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS supervisor_review_audit_events (event_id TEXT PRIMARY KEY, workflow_id TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS supervisor_boundary_reviews (review_id TEXT PRIMARY KEY, project_id TEXT, proposal_id TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS supervisor_boundary_audit_events (event_id TEXT PRIMARY KEY, proposal_id TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS supervisor_actions (action_id TEXT PRIMARY KEY, idempotency_key TEXT, run_id TEXT, project_id TEXT, workflow_id TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS supervisor_orchestrator_sessions (run_id TEXT PRIMARY KEY, project_root TEXT, workflow_id TEXT, authorization_id TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS supervisor_orchestrator_audit_events (event_id TEXT PRIMARY KEY, run_id TEXT, source_id TEXT, record_hash TEXT NOT NULL, record_json TEXT NOT NULL)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_import_batches_source_mode ON import_batches(source_root_hash, importer_version, mode)",
     "CREATE INDEX IF NOT EXISTS idx_import_sources_batch_kind ON import_sources(batch_id, source_kind)",
     "CREATE INDEX IF NOT EXISTS idx_source_records_kind_natural ON source_records(record_kind, natural_key)",
@@ -134,6 +149,13 @@ pub(crate) const WORKBENCH_SQLITE_SCHEMA_DDL: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_product_command_attempts_command ON product_command_attempts(product_command_id)",
     "CREATE INDEX IF NOT EXISTS idx_session_continuation_attempts_continuation ON session_continuation_attempts(continuation_id)",
     "CREATE INDEX IF NOT EXISTS idx_runtime_log_summaries_status ON runtime_log_summaries(category, status, severity)",
+    // --- M1 completeness (2026-07-13): indexes for the new main-store-array + ledger tables ---
+    "CREATE INDEX IF NOT EXISTS idx_execution_attempts_workflow ON execution_attempts(workflow_id, work_item_id)",
+    "CREATE INDEX IF NOT EXISTS idx_workflow_execution_controls_workflow ON workflow_execution_controls(workflow_id, work_item_id)",
+    "CREATE INDEX IF NOT EXISTS idx_workflow_chain_runs_workflow ON workflow_chain_runs(workflow_id)",
+    "CREATE INDEX IF NOT EXISTS idx_supervisor_actions_run ON supervisor_actions(run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_supervisor_boundary_reviews_proposal ON supervisor_boundary_reviews(proposal_id)",
+    "CREATE INDEX IF NOT EXISTS idx_supervisor_orchestrator_sessions_workflow ON supervisor_orchestrator_sessions(workflow_id)",
 ];
 
 pub(crate) fn initialize_temp_workbench_sqlite_db(path: &Path) -> Result<(), String> {

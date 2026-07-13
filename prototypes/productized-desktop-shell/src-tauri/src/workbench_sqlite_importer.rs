@@ -21,6 +21,10 @@ pub(crate) const OPTIONAL_SIDECARS: &[&str] = &[
     "plan-authorizations.v1.json",
     "project-proposals.v1.json",
     "real-execution-product-commands.v1.json",
+    // M1 completeness (2026-07-13): three supervisor ledgers (previously rejected_unknown).
+    "global-supervisor-reviews.v1.json",
+    "supervisor-action-control.v1.json",
+    "supervisor-orchestrator.v1.json",
     LEGACY_RUNTIME_LOG_ALIAS,
     CANONICAL_RUNTIME_LOG,
     "session-continuations.v1.json",
@@ -42,6 +46,18 @@ const WORKFLOW_ARRAYS: &[(&str, &[&str])] = &[
         &["binding_id", "session_id", "id"],
     ),
     ("workflow_node_dispatches", &["dispatch_id", "id"]),
+];
+// M1 completeness (2026-07-13): main-store top-level arrays that were never collected (layer c).
+// Collected when present but NOT required — an empty/new workflow legitimately has none, so they
+// are intentionally excluded from validate_primary_workflow to avoid spurious "missing" warnings.
+// workflow_machine_runs is dead-in-code / unknown-provenance (M0 §three R1) — collected for
+// round-trip preservation only, never re-armed to a live writer.
+const WORKFLOW_OPTIONAL_ARRAYS: &[(&str, &[&str])] = &[
+    ("execution_attempts", &["attempt_id", "id"]),
+    ("permission_requests", &["request_id", "id"]),
+    ("workflow_chain_runs", &["chain_run_id", "id"]),
+    ("workflow_execution_controls", &["control_id", "id"]),
+    ("workflow_machine_runs", &["run_id", "id"]),
 ];
 const SENSITIVE_KEY_PARTS: &[&str] = &[
     "prompt_body",
@@ -398,7 +414,10 @@ fn collect_workflow_records(
     source_kind: &str,
     value: &Value,
 ) {
-    for (array, key_candidates) in WORKFLOW_ARRAYS {
+    for (array, key_candidates) in WORKFLOW_ARRAYS
+        .iter()
+        .chain(WORKFLOW_OPTIONAL_ARRAYS.iter())
+    {
         if let Some(items) = value.get(*array).and_then(Value::as_array) {
             collect_array_records(
                 records,
@@ -722,6 +741,75 @@ fn collect_sidecar_records(
                 ],
             );
         }
+        "global-supervisor-reviews.v1.json" => {
+            collect_named_arrays(
+                records,
+                conflicts,
+                warnings,
+                previous_records,
+                source_kind,
+                value,
+                &[
+                    (
+                        "reviews",
+                        &["review_id", "id"][..],
+                        Some("supervisor_review"),
+                    ),
+                    (
+                        "audit_events",
+                        &["event_id", "audit_event_id", "id"][..],
+                        Some("supervisor_review_audit_event"),
+                    ),
+                    (
+                        "boundary_reviews",
+                        &["review_id", "id"][..],
+                        Some("supervisor_boundary_review"),
+                    ),
+                    (
+                        "boundary_audit_events",
+                        &["event_id", "audit_event_id", "id"][..],
+                        Some("supervisor_boundary_audit_event"),
+                    ),
+                ],
+            );
+        }
+        "supervisor-action-control.v1.json" => {
+            collect_named_arrays(
+                records,
+                conflicts,
+                warnings,
+                previous_records,
+                source_kind,
+                value,
+                &[(
+                    "actions",
+                    &["action_id", "id"][..],
+                    Some("supervisor_action"),
+                )],
+            );
+        }
+        "supervisor-orchestrator.v1.json" => {
+            collect_named_arrays(
+                records,
+                conflicts,
+                warnings,
+                previous_records,
+                source_kind,
+                value,
+                &[
+                    (
+                        "sessions",
+                        &["run_id", "id"][..],
+                        Some("supervisor_orchestrator_session"),
+                    ),
+                    (
+                        "audit_events",
+                        &["event_id", "audit_event_id", "id"][..],
+                        Some("supervisor_orchestrator_audit_event"),
+                    ),
+                ],
+            );
+        }
         _ => collect_fallback_sidecar_record(
             records,
             conflicts,
@@ -1040,6 +1128,9 @@ fn source_kind_for_name(name: &str) -> &'static str {
         "plan-authorizations.v1.json" => "plan_authorization",
         "project-proposals.v1.json" => "project_proposal",
         "real-execution-product-commands.v1.json" => "product_command",
+        "global-supervisor-reviews.v1.json" => "global_supervisor_review",
+        "supervisor-action-control.v1.json" => "supervisor_action_control",
+        "supervisor-orchestrator.v1.json" => "supervisor_orchestrator",
         CANONICAL_RUNTIME_LOG => "runtime_log",
         LEGACY_RUNTIME_LOG_ALIAS => "runtime_log_legacy_alias",
         "session-continuations.v1.json" => "session_continuation",

@@ -26,3 +26,6 @@
 | 07-13 | 3b 真跑进程登记复核 | worker 请求旧字段为空时 durable registry `run_id` 退化成无身份信息的 `resume:` | 多次真实 worker 运行无法稳定区分，后续孤儿审计失去可追溯性 |
 | 07-13 | 用户澄清 | 总指导对「另一个对话」连猜两次对象(本机 codex→评审工作流),都猜错、还去查了本机进程/锁 | 没搞清对象就开干,浪费一轮工具+误导排查方向 |
 | 07-13 | 干净会话核实物(会话「工具污染」复核) | 漂移会话(ccd local_e60d492b)假报 `cargo test` 876/0/43(实测 893)＋把 confabulation 误定性为「工具管道被污染」 | 据不可信移交单误判 3b 产物已毁/重做,或把 confab 当 harness bug 报错排查方向 |
+| 07-13 | M3 翻闸前演练(首战果) | live 主 store 被 `contains_sensitive_value` 判 `rejected_sensitive`:`token` 子串误命中良性键 `estimated_tokens`/`max_estimated_tokens` | 真翻闸静默拒收整个主 store;红线#3 停下报·未擅改谓词 |
+| 07-13 | 执行线 cross-check(反抓总指导) | 总指导任务包 4 处坐标漂移:(a)丢点 apply.rs:195 非 :454·fixture=r3-a9 非 r3-a2·orchestrator 独立模块非内联·live revision=11 非 10 | 执行线按错坐标实现·验收口径错 |
+| 07-13 | fixture DB-path 硬闸 | M3 幂等步 temp DB 落点不合规被拦一次(已按闸改) | 演练 DB 写到闸外路径 |

@@ -451,6 +451,97 @@ fn records_for_source(source_name: &str, value: &Value) -> Vec<FixtureRecord> {
                 ),
             ],
         ),
+        // M1 completeness (2026-07-13): layer (a) sidecars — mirror importer::collect_sidecar_records.
+        "memory-lint.v1.json" => sidecar_records(
+            value,
+            &[
+                (
+                    "runs",
+                    "memory_lint_run",
+                    &["lint_run_id", "run_id", "id"][..],
+                ),
+                ("findings", "memory_lint_finding", &["finding_id", "id"][..]),
+            ],
+        ),
+        "memory-entity-relations.v1.json" => sidecar_records(
+            value,
+            &[(
+                "relations",
+                "memory_entity_relation",
+                &["relation_id", "id"][..],
+            )],
+        ),
+        "memory-patterns.v1.json" => sidecar_records(
+            value,
+            &[
+                (
+                    "candidates",
+                    "mature_pattern_candidate",
+                    &["candidate_id", "id"][..],
+                ),
+                (
+                    "audit_events",
+                    "mature_pattern_audit_event",
+                    &["audit_event_id", "event_id", "id"][..],
+                ),
+            ],
+        ),
+        "blackboard-candidates.v1.json" => sidecar_records(
+            value,
+            &[
+                (
+                    "candidates",
+                    "blackboard_candidate",
+                    &["candidate_key", "id"][..],
+                ),
+                (
+                    "audit_events",
+                    "blackboard_candidate_audit_event",
+                    &["audit_event_id", "event_id", "id"][..],
+                ),
+            ],
+        ),
+        // M1 completeness (2026-07-13): three supervisor ledgers.
+        "global-supervisor-reviews.v1.json" => sidecar_records(
+            value,
+            &[
+                ("reviews", "supervisor_review", &["review_id", "id"][..]),
+                (
+                    "audit_events",
+                    "supervisor_review_audit_event",
+                    &["event_id", "audit_event_id", "id"][..],
+                ),
+                (
+                    "boundary_reviews",
+                    "supervisor_boundary_review",
+                    &["review_id", "id"][..],
+                ),
+                (
+                    "boundary_audit_events",
+                    "supervisor_boundary_audit_event",
+                    &["event_id", "audit_event_id", "id"][..],
+                ),
+            ],
+        ),
+        "supervisor-action-control.v1.json" => sidecar_records(
+            value,
+            &[("actions", "supervisor_action", &["action_id", "id"][..])],
+        ),
+        "supervisor-orchestrator.v1.json" => sidecar_records(
+            value,
+            &[
+                (
+                    "sessions",
+                    "supervisor_orchestrator_session",
+                    &["run_id", "id"][..],
+                ),
+                (
+                    "audit_events",
+                    "supervisor_orchestrator_audit_event",
+                    &["event_id", "audit_event_id", "id"][..],
+                ),
+            ],
+        ),
         _ => Vec::new(),
     }
 }
@@ -485,6 +576,33 @@ fn workflow_records(value: &Value) -> Vec<FixtureRecord> {
             "workflow_node_dispatches",
             "workflow_node_dispatches",
             &["dispatch_id", "id"],
+        ),
+        // M1 completeness (2026-07-13): five main-store top-level arrays (layer c).
+        (
+            "execution_attempts",
+            "execution_attempts",
+            &["attempt_id", "id"],
+        ),
+        (
+            "permission_requests",
+            "permission_requests",
+            &["request_id", "id"],
+        ),
+        (
+            "workflow_chain_runs",
+            "workflow_chain_runs",
+            &["chain_run_id", "id"],
+        ),
+        (
+            "workflow_execution_controls",
+            "workflow_execution_controls",
+            &["control_id", "id"],
+        ),
+        // workflow_machine_runs: archived/unknown-provenance (M0 §three R1) — landed for round-trip only.
+        (
+            "workflow_machine_runs",
+            "workflow_machine_runs",
+            &["run_id", "id"],
         ),
     ];
     let mut records = sidecar_records(value, specs);
@@ -869,7 +987,199 @@ fn insert_domain_record(
                 record_json,
             ],
         ),
-        _ => Ok(0),
+        // --- M1 completeness (2026-07-13): five main-store top-level arrays (layer c) ---
+        "execution_attempts" => transaction.execute(
+            "INSERT INTO execution_attempts (attempt_id, workflow_id, work_item_id, dispatch_id, project_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(attempt_id) DO NOTHING",
+            params![
+                natural_key,
+                value.get("workflow_id").and_then(Value::as_str),
+                value.get("work_item_id").and_then(Value::as_str),
+                value.get("dispatch_id").and_then(Value::as_str),
+                value.get("project_id").and_then(Value::as_str),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        "permission_requests" => transaction.execute(
+            "INSERT INTO permission_requests (request_id, workflow_id, work_item_id, dispatch_id, project_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(request_id) DO NOTHING",
+            params![
+                natural_key,
+                value.get("workflow_id").and_then(Value::as_str),
+                value.get("work_item_id").and_then(Value::as_str),
+                value.get("dispatch_id").and_then(Value::as_str),
+                value.get("project_id").and_then(Value::as_str),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        "workflow_chain_runs" => transaction.execute(
+            "INSERT INTO workflow_chain_runs (chain_run_id, workflow_id, project_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(chain_run_id) DO NOTHING",
+            params![
+                natural_key,
+                value.get("workflow_id").and_then(Value::as_str),
+                value.get("project_id").and_then(Value::as_str),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        "workflow_execution_controls" => transaction.execute(
+            "INSERT INTO workflow_execution_controls (control_id, workflow_id, work_item_id, project_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(control_id) DO NOTHING",
+            params![
+                natural_key,
+                value.get("workflow_id").and_then(Value::as_str),
+                value.get("work_item_id").and_then(Value::as_str),
+                value.get("project_id").and_then(Value::as_str),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        "workflow_machine_runs" => transaction.execute(
+            "INSERT INTO workflow_machine_runs (run_id, workflow_id, work_item_id, project_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(run_id) DO NOTHING",
+            params![
+                natural_key,
+                value.get("workflow_id").and_then(Value::as_str),
+                value.get("work_item_id").and_then(Value::as_str),
+                value.get("project_id").and_then(Value::as_str),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        // --- M1 completeness (2026-07-13): layer (a) sidecars (tables already existed) ---
+        "memory_lint_run" => insert_simple(
+            transaction,
+            "memory_lint_runs",
+            "lint_run_id",
+            natural_key,
+            source_id,
+            record_hash,
+            &record_json,
+        ),
+        "memory_lint_finding" => transaction.execute(
+            "INSERT INTO memory_lint_findings (finding_id, lint_run_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(finding_id) DO NOTHING",
+            params![natural_key, value.get("lint_run_id").and_then(Value::as_str), source_id, record_hash, record_json],
+        ),
+        "memory_entity_relation" => insert_simple(
+            transaction,
+            "memory_entity_relations",
+            "relation_id",
+            natural_key,
+            source_id,
+            record_hash,
+            &record_json,
+        ),
+        "mature_pattern_candidate" => insert_simple(
+            transaction,
+            "mature_pattern_candidates",
+            "candidate_id",
+            natural_key,
+            source_id,
+            record_hash,
+            &record_json,
+        ),
+        "mature_pattern_audit_event" => transaction.execute(
+            "INSERT INTO mature_pattern_audit_events (audit_event_id, candidate_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(audit_event_id) DO NOTHING",
+            params![natural_key, value.get("candidate_id").and_then(Value::as_str), source_id, record_hash, record_json],
+        ),
+        "blackboard_candidate" => insert_simple(
+            transaction,
+            "blackboard_candidates",
+            "candidate_key",
+            natural_key,
+            source_id,
+            record_hash,
+            &record_json,
+        ),
+        "blackboard_candidate_audit_event" => transaction.execute(
+            "INSERT INTO blackboard_candidate_audit_events (audit_event_id, candidate_key, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(audit_event_id) DO NOTHING",
+            params![natural_key, value.get("candidate_key").and_then(Value::as_str), source_id, record_hash, record_json],
+        ),
+        // --- M1 completeness (2026-07-13): three supervisor ledgers ---
+        "supervisor_review" => transaction.execute(
+            "INSERT INTO supervisor_reviews (review_id, project_id, workflow_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(review_id) DO NOTHING",
+            params![
+                natural_key,
+                value.get("project_id").and_then(Value::as_str),
+                value.get("workflow_id").and_then(Value::as_str),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        "supervisor_review_audit_event" => transaction.execute(
+            "INSERT INTO supervisor_review_audit_events (event_id, workflow_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(event_id) DO NOTHING",
+            params![natural_key, value.get("workflow_id").and_then(Value::as_str), source_id, record_hash, record_json],
+        ),
+        "supervisor_boundary_review" => transaction.execute(
+            "INSERT INTO supervisor_boundary_reviews (review_id, project_id, proposal_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(review_id) DO NOTHING",
+            params![
+                natural_key,
+                value.get("project_id").and_then(Value::as_str),
+                value.get("proposal_id").and_then(Value::as_str),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        "supervisor_boundary_audit_event" => transaction.execute(
+            "INSERT INTO supervisor_boundary_audit_events (event_id, proposal_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(event_id) DO NOTHING",
+            params![natural_key, value.get("proposal_id").and_then(Value::as_str), source_id, record_hash, record_json],
+        ),
+        "supervisor_action" => transaction.execute(
+            "INSERT INTO supervisor_actions (action_id, idempotency_key, run_id, project_id, workflow_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(action_id) DO NOTHING",
+            params![
+                natural_key,
+                value.get("idempotency_key").and_then(Value::as_str),
+                value.get("run_id").and_then(Value::as_str),
+                value.get("project_id").and_then(Value::as_str),
+                value.get("workflow_id").and_then(Value::as_str),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        "supervisor_orchestrator_session" => transaction.execute(
+            "INSERT INTO supervisor_orchestrator_sessions (run_id, project_root, workflow_id, authorization_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(run_id) DO NOTHING",
+            params![
+                natural_key,
+                value.get("project_root").and_then(Value::as_str),
+                value.get("workflow_id").and_then(Value::as_str),
+                value.get("authorization_id").and_then(Value::as_str),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        "supervisor_orchestrator_audit_event" => transaction.execute(
+            "INSERT INTO supervisor_orchestrator_audit_events (event_id, run_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(event_id) DO NOTHING",
+            params![natural_key, value.get("run_id").and_then(Value::as_str), source_id, record_hash, record_json],
+        ),
+        // M1 completeness (2026-07-13): fail-closed. Unknown record_kind = importer/apply/schema drift,
+        // NOT a legitimate duplicate (known kinds return Ok(0) via their own ON CONFLICT DO NOTHING).
+        _ => {
+            return Err(format!(
+                "unknown_record_kind:{record_kind}:{natural_key} (no insert arm — importer/apply/schema/exporter drifted)"
+            ))
+        }
     }
     .map_err(|error| format!("insert domain record {record_kind}:{natural_key} failed: {error}"))?;
     let _ = source_kind;
@@ -902,6 +1212,16 @@ fn source_kind_for_file(name: &str) -> &'static str {
         "project-proposals.v1.json" => "project_proposal",
         "real-execution-product-commands.v1.json" => "product_command",
         "session-continuations.v1.json" => "session_continuation",
+        // M1 completeness (2026-07-13): layer (a) sidecars — MUST match importer::source_kind_for_name,
+        // otherwise source_ids.get(kind) misses and the source is dropped at apply loop `else { continue }`.
+        "blackboard-candidates.v1.json" => "blackboard_candidate",
+        "memory-entity-relations.v1.json" => "memory_entity_relation",
+        "memory-lint.v1.json" => "memory_lint",
+        "memory-patterns.v1.json" => "memory_pattern",
+        // M1 completeness (2026-07-13): three supervisor ledgers.
+        "global-supervisor-reviews.v1.json" => "global_supervisor_review",
+        "supervisor-action-control.v1.json" => "supervisor_action_control",
+        "supervisor-orchestrator.v1.json" => "supervisor_orchestrator",
         CANONICAL_RUNTIME_LOG => "runtime_log",
         LEGACY_RUNTIME_LOG_ALIAS => "runtime_log_legacy_alias",
         _ => "unknown_sidecar",
@@ -1159,6 +1479,266 @@ mod tests {
         )
         .expect_err("non-temp db should reject");
         assert!(err.contains("temp_or_fixture_path_required"));
+    }
+
+    #[test]
+    fn sqlite_apply_export_m1_completeness_round_trips_new_sources() {
+        use crate::workbench_sqlite_exporter::export_temp_db_to_json_dry_run;
+        let root = std::env::temp_dir().join(format!(
+            "r3-a2-m1-completeness-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).expect("root dir");
+
+        // Primary: 13 core arrays empty + the 5 previously-dropped main-store arrays (layer c) + revision 7.
+        let state = serde_json::json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "revision": 7,
+            "projects": [], "agent_adapters": [], "workflows": [], "nodes": [], "edges": [],
+            "work_items": [], "artifacts": [], "reviews": [], "audit_events": [],
+            "capabilities": [], "harness_resources": [],
+            "workflow_node_session_bindings": [], "workflow_node_dispatches": [],
+            "execution_attempts": [
+                {"attempt_id": "attempt-1", "workflow_id": "wf-1", "work_item_id": "wi-1", "state": "running"},
+                {"attempt_id": "attempt-2", "workflow_id": "wf-1", "work_item_id": "wi-2", "state": "succeeded"}
+            ],
+            "permission_requests": [
+                {"request_id": "req-1", "workflow_id": "wf-1", "status": "pending"}
+            ],
+            "workflow_chain_runs": [
+                {"chain_run_id": "chain-1", "workflow_id": "wf-1", "state": "running", "nodes": [{"node_id": "n1"}]}
+            ],
+            "workflow_execution_controls": [
+                {"control_id": "ctrl-1", "workflow_id": "wf-1", "control_state": "active"},
+                {"control_id": "ctrl-2", "workflow_id": "wf-1", "control_state": "paused"}
+            ],
+            "workflow_machine_runs": [
+                {"run_id": "machine-1", "workflow_id": "wf-1", "state": "ended"}
+            ]
+        });
+        fs::write(
+            root.join(PRIMARY_WORKFLOW_STATE),
+            serde_json::to_vec_pretty(&state).expect("serialize primary"),
+        )
+        .expect("write primary");
+
+        // layer (a): memory-lint (schema tables pre-existed; apply/export were missing).
+        let lint = serde_json::json!({
+            "store_version": "memory_lint_store.v1", "revision": 3,
+            "runs": [{"run_id": "lint-run-1", "status": "ok"}],
+            "findings": [{"finding_id": "finding-1", "lint_run_id": "lint-run-1", "severity": "warn"}]
+        });
+        fs::write(
+            root.join("memory-lint.v1.json"),
+            serde_json::to_vec_pretty(&lint).expect("serialize lint"),
+        )
+        .expect("write lint");
+
+        // layer (b): memory-candidates (apply already landed pre-M1; exporter now projects it back).
+        let candidates = serde_json::json!({
+            "store_version": "memory_candidate_store.v1", "revision": 4,
+            "candidates": [{"candidate_key": "cand-1", "candidate_id": "cid-1"}],
+            "events": [{"audit_ref_id": "evt-1", "candidate_key": "cand-1"}]
+        });
+        fs::write(
+            root.join("memory-candidates.v1.json"),
+            serde_json::to_vec_pretty(&candidates).expect("serialize candidates"),
+        )
+        .expect("write candidates");
+
+        // three supervisor ledgers (all six surfaces were absent pre-M1).
+        let reviews = serde_json::json!({
+            "schema_version": "global_supervisor_reviews.v1", "revision": 5,
+            "reviews": [{"review_id": "rev-1", "workflow_id": "wf-1", "status": "reviewed"}],
+            "audit_events": [{"event_id": "rev-audit-1", "workflow_id": "wf-1"}],
+            "boundary_reviews": [
+                {"review_id": "brev-1", "proposal_id": "prop-1", "verdict": "ok"},
+                {"review_id": "brev-2", "proposal_id": "prop-2", "verdict": "block"}
+            ],
+            "boundary_audit_events": [{"event_id": "brev-audit-1", "proposal_id": "prop-1"}]
+        });
+        fs::write(
+            root.join("global-supervisor-reviews.v1.json"),
+            serde_json::to_vec_pretty(&reviews).expect("serialize reviews"),
+        )
+        .expect("write reviews");
+        let actions = serde_json::json!({
+            "schema_version": "supervisor_action_control.v1", "revision": 6,
+            "actions": [
+                {"action_id": "act-1", "run_id": "run-1", "kind": "dispatch"},
+                {"action_id": "act-2", "run_id": "run-1", "kind": "finalize"}
+            ]
+        });
+        fs::write(
+            root.join("supervisor-action-control.v1.json"),
+            serde_json::to_vec_pretty(&actions).expect("serialize actions"),
+        )
+        .expect("write actions");
+        let orchestrator = serde_json::json!({
+            "schema_version": "supervisor_orchestrator.v1", "revision": 8,
+            "sessions": [{"run_id": "orun-1", "workflow_id": "wf-1", "workers": [{"worker_id": "w1"}]}],
+            "audit_events": [
+                {"event_id": "oevt-1", "run_id": "orun-1"},
+                {"event_id": "oevt-2", "run_id": "orun-1"}
+            ]
+        });
+        fs::write(
+            root.join("supervisor-orchestrator.v1.json"),
+            serde_json::to_vec_pretty(&orchestrator).expect("serialize orchestrator"),
+        )
+        .expect("write orchestrator");
+
+        let db_path = temp_db("m1-completeness");
+        apply_fixture_dir_to_temp_db(&root, &db_path, None).expect("apply m1 sources");
+
+        // layer (c): the five main-store arrays now land.
+        assert_eq!(
+            table_count(&db_path, "execution_attempts").expect("attempts"),
+            2
+        );
+        assert_eq!(
+            table_count(&db_path, "permission_requests").expect("perms"),
+            1
+        );
+        assert_eq!(
+            table_count(&db_path, "workflow_chain_runs").expect("chains"),
+            1
+        );
+        assert_eq!(
+            table_count(&db_path, "workflow_execution_controls").expect("controls"),
+            2
+        );
+        assert_eq!(
+            table_count(&db_path, "workflow_machine_runs").expect("machine"),
+            1
+        );
+        // layer (a): memory-lint now lands.
+        assert_eq!(
+            table_count(&db_path, "memory_lint_runs").expect("lint runs"),
+            1
+        );
+        assert_eq!(
+            table_count(&db_path, "memory_lint_findings").expect("lint findings"),
+            1
+        );
+        // layer (b): memory-candidates lands (pre-M1) — asserted to guard the arm.
+        assert_eq!(
+            table_count(&db_path, "memory_candidates").expect("candidates"),
+            1
+        );
+        assert_eq!(
+            table_count(&db_path, "memory_candidate_events").expect("cand events"),
+            1
+        );
+        // ledgers now land.
+        assert_eq!(
+            table_count(&db_path, "supervisor_reviews").expect("reviews"),
+            1
+        );
+        assert_eq!(
+            table_count(&db_path, "supervisor_review_audit_events").expect("rev audit"),
+            1
+        );
+        assert_eq!(
+            table_count(&db_path, "supervisor_boundary_reviews").expect("boundary"),
+            2
+        );
+        assert_eq!(
+            table_count(&db_path, "supervisor_boundary_audit_events").expect("b audit"),
+            1
+        );
+        assert_eq!(
+            table_count(&db_path, "supervisor_actions").expect("actions"),
+            2
+        );
+        assert_eq!(
+            table_count(&db_path, "supervisor_orchestrator_sessions").expect("sessions"),
+            1
+        );
+        assert_eq!(
+            table_count(&db_path, "supervisor_orchestrator_audit_events").expect("o audit"),
+            2
+        );
+
+        // Export round-trips the main-store arrays + preserves revision (not defaulted to 1) + projects new files.
+        let manifest = export_temp_db_to_json_dry_run(&db_path, "m1-target").expect("export");
+        let workflow_file = manifest
+            .projected_files
+            .iter()
+            .find(|file| file.path == "workflow-state.v0.json")
+            .expect("workflow projection");
+        let proj = &workflow_file.projection;
+        assert_eq!(
+            proj.get("revision").and_then(Value::as_i64),
+            Some(7),
+            "revision must round-trip faithfully, not default to 1"
+        );
+        for (array, expected) in [
+            ("execution_attempts", 2usize),
+            ("permission_requests", 1),
+            ("workflow_chain_runs", 1),
+            ("workflow_execution_controls", 2),
+            ("workflow_machine_runs", 1),
+        ] {
+            assert_eq!(
+                proj.get(array).and_then(Value::as_array).map(Vec::len),
+                Some(expected),
+                "projected {array} count"
+            );
+        }
+        for path in [
+            "memory-lint.v1.json",
+            "memory-candidates.v1.json",
+            "global-supervisor-reviews.v1.json",
+            "supervisor-action-control.v1.json",
+            "supervisor-orchestrator.v1.json",
+        ] {
+            assert!(
+                manifest
+                    .projected_files
+                    .iter()
+                    .any(|file| file.path == path),
+                "missing projection {path}"
+            );
+        }
+
+        // Idempotent re-apply: no domain-row growth.
+        apply_fixture_dir_to_temp_db(&root, &db_path, None).expect("second apply");
+        assert_eq!(
+            table_count(&db_path, "execution_attempts").expect("attempts 2"),
+            2
+        );
+        assert_eq!(
+            table_count(&db_path, "supervisor_actions").expect("actions 2"),
+            2
+        );
+        assert_eq!(
+            table_count(&db_path, "supervisor_boundary_reviews").expect("boundary 2"),
+            2
+        );
+    }
+
+    #[test]
+    fn sqlite_insert_domain_record_unknown_kind_fails_closed() {
+        let db_path = temp_db("fail-closed-unknown-kind");
+        initialize_temp_workbench_sqlite_db(&db_path).expect("init db");
+        let mut connection = Connection::open(&db_path).expect("open db");
+        let transaction = connection.transaction().expect("begin txn");
+        let err = insert_domain_record(
+            &transaction,
+            "some_source_kind",
+            "source:x",
+            "totally_unknown_record_kind",
+            "nk-1",
+            "hash-1",
+            &serde_json::json!({"id": "nk-1"}),
+        )
+        .expect_err("unknown record_kind must fail closed instead of silently returning Ok(0)");
+        assert!(err.contains("unknown_record_kind"), "got: {err}");
     }
 
     fn temp_db(name: &str) -> std::path::PathBuf {
