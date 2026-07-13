@@ -60,6 +60,8 @@ If Chrome DevTools MCP is unavailable, use the best available browser harness an
 
 ## Agentmemory Policy
 
+> **⚠️ 已退役(2026-06-14 用户拍板·agentmem 簇 9 脚本退役,设计点已吸收进 `memory-layer-design-v1.md` §3.5)**——本节保留仅作历史;下述命令别再用。(2026-07-14 账面梳理补注)
+
 Agentmemory is optional storage and retrieval, not project authority.
 
 Default use:

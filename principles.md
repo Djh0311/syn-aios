@@ -4,7 +4,7 @@
 
 ## 1. 不用旧文件反推当前方向
 
-当前方向以 `CURRENT.md` 和 `tasks/README.md` 为准。`STAGE_PLAN.md` 是阶段说明，只有在它和 `CURRENT.md` 一致时才作为阶段计划使用。
+当前方向以 `CURRENT.md`（唯一活正本）与其指向的当前排布正本（`docs/plans/` 内）为准。（2026-07-14 修:原引 `tasks/README.md` 已自我降级为目录说明、原引 `STAGE_PLAN.md` 不存在——悬空引用清除。）
 
 旧任务包、旧 evidence、旧 handoff 只提供历史依据，不提供当前行动顺序。归档文件先查 `archive/README.md`，当前状态先看 `CURRENT.md` 和最新 review。
 
@@ -68,7 +68,7 @@ LM 可以理解目标、拆任务、生成建议、写回收意见。
 - Skill 自动安装和仓库化。
 - Harness 自动运行。
 
-判断依据：`CURRENT.md`、`tasks/README.md` 和最终蓝图；`STAGE_PLAN.md` 只作为同步后的阶段说明。
+判断依据：`CURRENT.md`、当前排布正本与最终蓝图。（2026-07-14 同上修正。）
 
 ## 6. 安全边界先于便利性
 

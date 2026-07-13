@@ -125,3 +125,10 @@
 
 - 接线/退役状态变化时，更新对应行的`状态`列，并在统计行同步计数。
 - 真要删脚本前：先确认它在本表是 `退役`，且无其他脚本 `require` 它（查 `lib/` 表的"被谁调"）。
+
+## 补录(2026-07-14 L2 盘点)
+
+| 脚本 | 功能 | 状态 |
+|---|---|---|
+| `scripts/harness/stage-k-cgevent-click.swift` | K 阶段真机点击探针(CGEvent) | 遗留探针·零消费·未接 |
+| `scripts/harness/stage-k-screencapturekit-window-capture.swift` | K 阶段窗口截图探针(ScreenCaptureKit) | 遗留探针·零消费·未接 |
