@@ -970,9 +970,14 @@ fn contains_sensitive_value(value: &Value) -> bool {
     match value {
         Value::Object(map) => map.iter().any(|(key, value)| {
             let key_lower = key.to_ascii_lowercase().replace('-', "_");
-            SENSITIVE_KEY_PARTS
-                .iter()
-                .any(|part| key_lower.contains(part))
+            let allowed_numeric_token_count = matches!(
+                key_lower.as_str(),
+                "estimated_tokens" | "max_estimated_tokens"
+            ) && matches!(value, Value::Number(_));
+            (!allowed_numeric_token_count
+                && SENSITIVE_KEY_PARTS
+                    .iter()
+                    .any(|part| key_lower.contains(part)))
                 || contains_sensitive_value(value)
         }),
         Value::Array(items) => items.iter().any(contains_sensitive_value),
@@ -1247,6 +1252,52 @@ mod tests {
             .source_inventory
             .iter()
             .any(|source| source.classification == "rejected_sensitive"));
+    }
+
+    #[test]
+    fn sqlite_importer_sensitive_predicate_only_allows_numeric_token_count_keys() {
+        for (key, key_part) in [
+            ("prompt_body", "prompt_body"),
+            ("secret_x", "secret"),
+            ("auth_token", "token"),
+            ("user_credential", "credential"),
+            ("keychain_ref", "keychain"),
+            ("oauth_x", "oauth"),
+            ("provider_credential", "provider_credential"),
+            ("full_transcript", "full_transcript"),
+            ("transcript_body", "transcript_body"),
+            ("rollout_body", "rollout_body"),
+        ] {
+            assert!(
+                contains_sensitive_value(&serde_json::json!({(key): 1})),
+                "sensitive key part must remain rejected: {key_part} via {key}"
+            );
+        }
+        assert!(contains_sensitive_value(
+            &serde_json::json!({"api-token": 1})
+        ));
+        assert!(contains_sensitive_value(
+            &serde_json::json!({"estimated_tokens": "字符串"})
+        ));
+        assert!(contains_sensitive_value(&serde_json::json!({"tokens": 1})));
+        assert!(contains_sensitive_value(
+            &serde_json::json!({"nested": {"secret_x": true}})
+        ));
+        assert!(contains_sensitive_value(
+            &serde_json::json!([{"safe": 1}, {"oauth_x": false}])
+        ));
+
+        for value in [
+            serde_json::json!({"estimated_tokens": 123}),
+            serde_json::json!({"max_estimated_tokens": 456}),
+            serde_json::json!({"estimated-tokens": 123}),
+            serde_json::json!({"max-estimated-tokens": 456}),
+        ] {
+            assert!(
+                !contains_sensitive_value(&value),
+                "numeric token-count key should be accepted: {value}"
+            );
+        }
     }
 
     #[test]

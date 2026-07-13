@@ -2164,36 +2164,7 @@ mod tests {
             dry.batch_status, dry.counts.conflicts
         );
 
-        if dry.batch_status == "rejected_sensitive" {
-            // FINDING (2026-07-13): the live snapshot is blocked by the importer's sensitive-content
-            // predicate `contains_sensitive_value` (importer.rs:965), which substring-matches the
-            // SENSITIVE_KEY_PARTS entry "token" against the BENIGN keys estimated_tokens /
-            // max_estimated_tokens (LLM token-COUNT metadata, not credentials). This is a pre-existing
-            // safety-predicate false-positive, orthogonal to M1's six-point completion — it would have
-            // silently rejected the entire main store on a real cutover. Per red-line #3 (do not modify
-            // safety predicates) this test STOPS and documents rather than routing around the gate.
-            let primary_raw = fs::read_to_string(copy_root.join(PRIMARY_WORKFLOW_STATE)).unwrap();
-            let offending: Vec<&str> = ["estimated_tokens", "max_estimated_tokens"]
-                .into_iter()
-                .filter(|k| primary_raw.contains(k))
-                .collect();
-            eprintln!("[M3][FINDING] live snapshot rejected_sensitive; offending benign token-count keys present: {offending:?}");
-            eprintln!("[M3][FINDING] genuinely-sensitive key markers (secret/credential/prompt_body/...) are NOT present as keys — this is a substring false-positive in a SAFETY predicate; NOT modified (red-line #3). Round-trip mechanism is proven by sqlite_apply_export_m1_completeness_round_trips_new_sources and sqlite_m3_synthetic_live_scale_level_b_round_trip.");
-            assert!(
-                !offending.is_empty(),
-                "expected the benign token-count keys to be the sensitive-gate trigger"
-            );
-            // Even on the blocked path, prove the live root is byte-for-byte untouched.
-            let live_hash_after = hash_dir_tree(&live_root);
-            assert_eq!(
-                live_hash_before, live_hash_after,
-                "LIVE ROOT WAS MODIFIED — red-line breach"
-            );
-            eprintln!("[M3] live root hash unchanged (blocked path): {live_hash_after}");
-            return;
-        }
-
-        // If a future snapshot is NOT gate-blocked, run the full Level-B round-trip reconciliation.
+        // The staged snapshot must pass the importer gate before the full Level-B reconciliation.
         assert!(
             dry.batch_status == "accepted" || dry.batch_status == "accepted_with_rejections",
             "pruned live copy not applyable: {}",
