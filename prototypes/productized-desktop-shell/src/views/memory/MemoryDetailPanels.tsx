@@ -90,7 +90,19 @@ export function FormalMemoryDetail({
   );
 }
 
-export function CandidateMemoryDetail({ item }: { item: MemoryCandidateListItem }) {
+export function CandidateMemoryDetail({
+  item,
+  canConfirm = false,
+  canAdopt = false,
+  onConfirm,
+  onAdopt,
+}: {
+  item: MemoryCandidateListItem;
+  canConfirm?: boolean;
+  canAdopt?: boolean;
+  onConfirm?: () => void;
+  onAdopt?: () => void;
+}) {
   return (
     <div className="memory-detail-section">
       <h4>候选详情</h4>
@@ -101,6 +113,17 @@ export function CandidateMemoryDetail({ item }: { item: MemoryCandidateListItem 
         <DetailLine label="任务包位置" value={`${item.task_position.label}：${item.task_position.reason}`} />
         <DetailLine label="候选边界" value={item.formal_memory_boundary} />
       </div>
+      <div className="knowledge-action-row">
+        {canConfirm ? (
+          <button className="secondary-button" type="button" onClick={onConfirm} disabled={!onConfirm}>
+            确认候选属实
+          </button>
+        ) : null}
+        <button className="secondary-button" type="button" onClick={onAdopt} disabled={!canAdopt || !onAdopt}>
+          采纳为正式记忆
+        </button>
+      </div>
+      {!canAdopt ? <p className="muted small-note">候选需先确认，且未被采纳时才可转为正式记忆。</p> : null}
     </div>
   );
 }

@@ -57,6 +57,26 @@ export function DailyMemoryCandidateInbox({
               <strong>{item.claim}</strong>
               <span>{item.status_label} · {item.risk_label}</span>
               <em>来源：{item.source_label}；候选不是正式记忆，采纳前必须确认。</em>
+              {item.can_confirm ? (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={!onRequestAction}
+                  onClick={() =>
+                    onRequestAction?.(
+                      buildDailyMemoryCandidateDecisionAction({
+                        candidate: item.candidate,
+                        projectRoot,
+                        requestedStatus: "candidate_confirmed",
+                        reason: `日常记忆候选收件箱确认候选属实：${item.claim}；仍不写正式记忆。`,
+                        candidateStoreRevision,
+                      }),
+                    )
+                  }
+                >
+                  确认候选属实
+                </button>
+              ) : null}
               <button
                 className="secondary-button"
                 type="button"

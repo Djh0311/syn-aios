@@ -48,6 +48,10 @@
 - §18.1 **双层**：SQLite = 权威结构化状态/权限/版本/关系/审计；Markdown 展示页 = 人可读视图、共享同一 `memory_id`，**不是知识库笔记**，不能在状态机外被编辑成正式变更。
 - §18.4 向量库 = **可重建缓存**，不进权威表、不能当唯一源。
 
+### 4.1 当前实施注记（2026-07-14）
+
+SQLite 内的记忆表是 2026-07-13/14 的历史导入快照，不是实时镜像；当前 memory stores 仍由 JSON sidecar 主写。是否把记忆 store 纳入 `db_primary` 另开任务决定，本切片不切换读写路径。
+
 ## 5. 实现状态：M1–M13（`accepted_with_deferred_items`）
 
 正本：`CURRENT.md`（M1–M13/M12.1 逐条口径）+ 终验冻结 `evidence/2026-06-05-memory-layer-m13-final-authoritative-acceptance-and-conclusion-freeze-v1.md`。摘要：
@@ -88,6 +92,10 @@
 
 GraphRAG、向量数据库、图数据库、完整理解图谱、auto-skillification（自动技能化）、原生 Obsidian 同步、vault 自动扫描、真实 worker / 真实 Codex 自动执行——均 deferred，各需另开任务包 + 用户批准。
 
+### 7.1 Syn 记忆注入面边界（2026-07-14）
+
+Syn 记忆进入 worker 的唯一合法面是任务包的冻结 prompt block。本切片不读写 `~/.codex/memories`，不修改 worker prompt 注入实现，不触 capture/source_type 词表或双召回结构。
+
 ## 8. 文档地图（谁拥有什么）
 
 | 主题 | 正本 |
@@ -100,4 +108,4 @@ GraphRAG、向量数据库、图数据库、完整理解图谱、auto-skillifica
 | 研究 / 冲突报告 / 谱系 | `docs/research/memory-layer-research-and-conflict-digest-v1.md`（姊妹篇） |
 | 工程 agent 记忆治理（非产品） | `docs/agent-memory-governance.md` |
 
-> 待办（建议另议）：本文若要成为被默认发现的 canon 入口，应在 `CURRENT.md` 或 `AUTHORITY.md` 加一句指针；否则 §6 两条决策仍可能被绕过。
+> 入口已落实：`AUTHORITY.md` 的“长期参考”已指向本文；本文继续只做记忆层正本索引。

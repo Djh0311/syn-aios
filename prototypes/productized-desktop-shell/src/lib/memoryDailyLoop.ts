@@ -14,6 +14,7 @@ export type DailyMemoryCandidateInboxItem = {
   status_label: string;
   risk_label: string;
   source_label: string;
+  can_confirm: boolean;
   can_adopt: boolean;
   can_defer: boolean;
   can_reject: boolean;
@@ -44,6 +45,7 @@ export function deriveDailyMemoryCandidateInbox({
     status_label: candidateStatusLabel(candidate.status),
     risk_label: `风险 ${candidate.risk_level} / 敏感 ${candidate.sensitive_level}`,
     source_label: candidate.source_refs[0]?.source_title ?? candidate.source_refs[0]?.source_type ?? "来源待补充",
+    can_confirm: candidate.status === "candidate_needs_review",
     can_adopt: candidate.status === "candidate_confirmed",
     can_defer: canDeferCandidate(candidate.status),
     can_reject: candidate.status === "candidate_needs_review",
@@ -117,13 +119,18 @@ export function buildDailyMemoryCandidateDecisionAction({
 }: {
   candidate: MemoryCandidate;
   projectRoot: string;
-  requestedStatus: Extract<MemoryLifecycleStatus, "candidate_discarded" | "candidate_rejected">;
+  requestedStatus: Extract<MemoryLifecycleStatus, "candidate_confirmed" | "candidate_discarded" | "candidate_rejected">;
   reason: string;
   candidateStoreRevision?: number | null;
 }): PendingAction {
   return {
     kind: "record-memory-candidate-decision",
-    label: requestedStatus === "candidate_rejected" ? `拒绝候选：${candidate.claim}` : `暂不处理：${candidate.claim}`,
+    label:
+      requestedStatus === "candidate_confirmed"
+        ? `确认候选属实：${candidate.claim}`
+        : requestedStatus === "candidate_rejected"
+          ? `拒绝候选：${candidate.claim}`
+          : `暂不处理：${candidate.claim}`,
     path: projectRoot,
     source: "Tauri 应用数据目录",
     boundary:

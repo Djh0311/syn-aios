@@ -169,9 +169,7 @@ pub(crate) fn create_record(
         version,
         audit_event,
         store_revision: store.revision,
-        warnings: vec![
-            "formal_memory_store_m1_no_candidate_adoption_or_task_injection".to_string(),
-        ],
+        warnings: vec![],
     })
 }
 
@@ -194,7 +192,7 @@ pub(crate) fn summarize_store(store: &FormalMemoryStoreV1) -> FormalMemoryStoreS
         recent_audit_event,
         warnings: store.warnings.clone(),
         display_text: format!(
-            "受控正式记忆：record {} / active {} / version {} / audit {}；创建时写入 version 和 audit；M1 不包含候选采纳和任务包注入",
+            "受控正式记忆：record {} / active {} / version {} / audit {}；创建时写入 version 和 audit；候选采纳经 M2、任务包注入经 M6，均不自动发生",
             store.records.len(),
             active_count,
             store.versions.len(),

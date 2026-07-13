@@ -500,7 +500,32 @@ fn expand_goal_token(token: &str) -> Vec<String> {
 }
 
 fn estimate_tokens(claim: &str, body: &str) -> usize {
-    ((claim.chars().count() + body.chars().count()) / 4).max(1) + 16
+    let (non_ascii_chars, ascii_chars) = claim.chars().chain(body.chars()).fold(
+        (0_usize, 0_usize),
+        |(non_ascii_chars, ascii_chars), character| {
+            if character.is_ascii() {
+                (non_ascii_chars, ascii_chars + 1)
+            } else {
+                (non_ascii_chars + 1, ascii_chars)
+            }
+        },
+    );
+    (non_ascii_chars + ascii_chars / 4).max(1) + 16
+}
+
+#[cfg(test)]
+mod tests {
+    use super::estimate_tokens;
+
+    #[test]
+    fn task_memory_packet_estimates_mixed_cjk_and_ascii_in_separate_buckets() {
+        let claim = "中文记忆候选转正";
+        let body = "abcdEFGH";
+        let previous_estimate = ((claim.chars().count() + body.chars().count()) / 4).max(1) + 16;
+
+        assert_eq!(previous_estimate, 20);
+        assert_eq!(estimate_tokens(claim, body), 26);
+    }
 }
 
 fn alias_key(value: &str) -> String {

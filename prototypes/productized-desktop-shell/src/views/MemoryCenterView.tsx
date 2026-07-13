@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react";
 import { Badge } from "../components/Badge";
+import { DailyMemoryCandidateInbox } from "../components/DailyMemoryCandidateInbox";
 import { deriveMemoryManagementSummary, type FormalMemoryListItem } from "../lib/memoryCenter";
+import {
+  buildAdoptMemoryCandidateAction,
+  buildDailyMemoryCandidateDecisionAction,
+  deriveDailyMemoryCandidateInbox,
+} from "../lib/memoryDailyLoop";
 import { deriveMemoryCenterPageReadModelFromParts } from "../lib/pageSelectors";
 import type {
   FormalMemoryLifecycleInput,
@@ -127,10 +133,40 @@ export function MemoryCenterView({
   );
   const primaryFormalMemory = summary.formal_memories[0] ?? null;
   const primaryCandidate = summary.candidate_memories[0] ?? null;
+  const primaryCandidateRecord = primaryCandidate
+    ? memoryCandidateStore?.candidates.find((candidate) => candidate.candidate_key === primaryCandidate.candidate_key) ?? null
+    : null;
+  const dailyMemoryInbox = deriveDailyMemoryCandidateInbox({ memoryCandidateStore });
+  const dailyProjectRoot = primaryProjectRoot(projects) ?? "workbench://memory-center";
   const pageReadModel = useMemo(
     () => deriveMemoryCenterPageReadModelFromParts({ summary, hasRealSnapshot }),
     [summary, hasRealSnapshot],
   );
+
+  function requestCandidateConfirmation() {
+    if (!primaryCandidateRecord || !onRequestAction) return;
+    onRequestAction(
+      buildDailyMemoryCandidateDecisionAction({
+        candidate: primaryCandidateRecord,
+        projectRoot: dailyProjectRoot,
+        requestedStatus: "candidate_confirmed",
+        reason: `记忆中心确认候选属实：${primaryCandidateRecord.claim}；仍不写正式记忆。`,
+        candidateStoreRevision: memoryCandidateStore?.revision ?? null,
+      }),
+    );
+  }
+
+  function requestCandidateAdoption() {
+    if (!primaryCandidateRecord || !onRequestAction) return;
+    onRequestAction(
+      buildAdoptMemoryCandidateAction({
+        candidate: primaryCandidateRecord,
+        projectRoot: dailyProjectRoot,
+        candidateStoreRevision: memoryCandidateStore?.revision ?? null,
+        formalStoreRevision: formalMemoryStore?.revision ?? null,
+      }),
+    );
+  }
 
   async function requestLifecycleAction(item: FormalMemoryListItem, operationKind: FormalMemoryLifecycleOperationKind) {
     if (!onRequestAction || !onPreviewFormalMemoryLifecycle) {
@@ -394,6 +430,13 @@ export function MemoryCenterView({
             </div>
             <Badge tone={summary.candidate_memories.length ? "warning" : "unknown"}>{summary.candidate_memories.length}</Badge>
           </div>
+          <DailyMemoryCandidateInbox
+            inbox={dailyMemoryInbox}
+            projectRoot={dailyProjectRoot}
+            candidateStoreRevision={memoryCandidateStore?.revision ?? null}
+            formalStoreRevision={formalMemoryStore?.revision ?? null}
+            onRequestAction={onRequestAction}
+          />
           <div className="workflow-compact-list">
             {summary.candidate_memories.map((item) => (
               <CandidateMemoryItem item={item} key={item.candidate_key} />
@@ -418,7 +461,15 @@ export function MemoryCenterView({
               onLifecycleAction={(operationKind) => void requestLifecycleAction(primaryFormalMemory, operationKind)}
             />
           ) : null}
-          {primaryCandidate ? <CandidateMemoryDetail item={primaryCandidate} /> : null}
+          {primaryCandidate ? (
+            <CandidateMemoryDetail
+              item={primaryCandidate}
+              canConfirm={primaryCandidateRecord?.status === "candidate_needs_review"}
+              canAdopt={primaryCandidateRecord?.status === "candidate_confirmed" && !primaryCandidateRecord.adoption}
+              onConfirm={onRequestAction ? requestCandidateConfirmation : undefined}
+              onAdopt={onRequestAction ? requestCandidateAdoption : undefined}
+            />
+          ) : null}
           {!primaryFormalMemory && !primaryCandidate ? <p className="muted small-note">暂无可展示详情。</p> : null}
         </section>
 

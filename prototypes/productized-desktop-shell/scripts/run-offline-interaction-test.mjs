@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 const tempDir = await mkdtemp(join(tmpdir(), "codex-workbench-offline-test-"));
 const testEntries = [
   "tests/offline-permission-dialog.test.tsx",
+  "tests/memory-center-daily-inbox.test.tsx",
   "tests/report-on-face-yellow-flag.test.tsx",
   "tests/report-fact-confirm-recall.test.tsx",
   "tests/report-boundary-opinion.test.tsx",
