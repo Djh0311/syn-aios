@@ -327,5 +327,6 @@ Status: Open
 - **错误**:执行线回传漏报验收必填的 shape gate baseline/check 结果。第一次:止血包(07-13,漏报期间 gate 实际+1 error=project_workflow_automation 顶破水线);第二次:M5-A 接线包(07-13,漏报期间 gate 实际+1 error=storage-mode 字面量)。两次均由总指导补跑抓获——即两次漏报**都掩着真问题**,不是空跑。
 - **为什么要紧**:shape gate 是形状债唯一机械闸;回传漏报=总指导对形状面的核实物退化成盲信。连续两包漏报说明"验收清单逐项打钩"未成机制。
 - **预防(即刻生效)**:① 回传第 7 项缺失=回传不完整,总指导**直接打回不核收**;② 执行线回传前对照包内「必须回传 10 项」逐项自查,缺项标「无」也必须占位;③ 总指导核收 checklist 第一步=数回传项数。
+- **三犯(07-14·降级补丁包)**:第 7 项答非所问——以 `git diff --name-only/--check` 冒充 shape gate,三数未跑。**预防加硬(即刻生效)**:④ 第 7 项必须原样含 `workbench-shape-gate.js --mode check` 的 Status+Errors/Warnings/Info 三数;缺失或以其它检查冒充=**机械打回**,不进入核收;kickoff 模板自此附 gate 原命令一行。
 
 Status: Open

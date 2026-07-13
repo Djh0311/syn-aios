@@ -77,6 +77,13 @@ fn health_cache() -> &'static Mutex<BTreeMap<PathBuf, DbPrimaryHealth>> {
     CACHE.get_or_init(|| Mutex::new(BTreeMap::new()))
 }
 
+// A blocked DB primary writer falls back to the established JSON path. Record that transition
+// once for the process so repeated product writes do not flood the workflow audit or stderr.
+fn degradation_audit_recorded() -> &'static Mutex<bool> {
+    static RECORDED: OnceLock<Mutex<bool>> = OnceLock::new();
+    RECORDED.get_or_init(|| Mutex::new(false))
+}
+
 pub(crate) fn storage_mode_path(workflow_state_path: &Path) -> Result<PathBuf, String> {
     let state_parent = workflow_state_path.parent().ok_or_else(|| {
         format!(
@@ -116,21 +123,39 @@ pub(crate) fn primary_repository_for_write(
         StorageMode::DbPrimaryJsonProjection(config) => {
             let key = workflow_state_path.to_path_buf();
             let health = health_cache().lock().expect("storage mode health lock");
-            match health.get(&key) {
-                Some(DbPrimaryHealth::Ready) => {}
-                Some(DbPrimaryHealth::Blocked(reason)) => {
-                    return Err(format!("db_primary_projection_blocked:{reason}"));
-                }
+            let blocked_reason = match health.get(&key) {
+                Some(DbPrimaryHealth::Ready) => None,
+                Some(DbPrimaryHealth::Blocked(reason)) => Some(reason.clone()),
                 None => {
                     return Err(
                         "db_primary_startup_reconciliation_required: refusing DB primary write before startup reconciliation"
                             .to_string(),
                     );
                 }
-            }
+            };
             drop(health);
+            if let Some(reason) = blocked_reason {
+                record_blocked_json_only_degradation(&config, &reason);
+                return Ok(None);
+            }
             WorkbenchSqliteRepository::open_confirmed(&config.repository_config()).map(Some)
         }
+    }
+}
+
+fn record_blocked_json_only_degradation(config: &DbPrimaryJsonProjectionConfig, reason: &str) {
+    let mut recorded = degradation_audit_recorded()
+        .lock()
+        .expect("storage mode degradation audit lock");
+    if *recorded {
+        return;
+    }
+    *recorded = true;
+    eprintln!(
+        "storage mode=db_primary_json_projection blocked; 已降级 json_only，数据无损，需重 seed 恢复 DB 主写；reason={reason}"
+    );
+    if let Err(error) = append_blocked_json_only_degradation_audit(config, reason) {
+        eprintln!("storage mode=json_only degradation audit failed:{error}");
     }
 }
 
@@ -209,6 +234,9 @@ pub(crate) fn initialize_for_startup(workflow_state_path: &Path) -> Result<(), S
                     health.insert(
                         workflow_state_path.to_path_buf(),
                         DbPrimaryHealth::Blocked(error.clone()),
+                    );
+                    eprintln!(
+                        "storage mode=db_primary_json_projection blocked; 已降级 json_only，数据无损，需重 seed 恢复 DB 主写；reason={error}"
                     );
                     Err(format!("db_primary_projection_blocked:{error}"))
                 }
@@ -525,6 +553,41 @@ fn append_startup_mode_audit(
     };
     WorkbenchSqliteRepository::open_confirmed(&config.repository_config())?
         .append_audit(&audit, None)?;
+    let audits = value
+        .get_mut("audit_events")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| "storage_mode_workflow_audit_array_required".to_string())?;
+    audits.push(event);
+    value["updated_at"] = Value::String(timestamp.clone());
+    crate::backup_workflow_state_file(&config.workflow_state_path, &timestamp)?;
+    crate::write_validated_workflow_state(&config.workflow_state_path, &value)
+}
+
+fn append_blocked_json_only_degradation_audit(
+    config: &DbPrimaryJsonProjectionConfig,
+    blocked_reason: &str,
+) -> Result<(), String> {
+    let timestamp = crate::unix_timestamp_string();
+    let mut value = crate::read_workflow_state_value(&config.workflow_state_path)?;
+    let event_id = crate::workflow_audit::audit_event_identity(
+        "storage-mode-degraded-json-only",
+        &config.db_path_hash(),
+        &timestamp,
+    );
+    let event = json!({
+        "event_id": event_id,
+        "event_type": "storage_mode_degraded_json_only",
+        "target_ref": config.db_path_hash(),
+        "actor_ref": "workbench_storage_mode",
+        "source_kind": "workspace_state",
+        "permission_level": "system_runtime",
+        "before_state": "db_primary_json_projection_blocked",
+        "after_state": "json_only",
+        "created_at": timestamp.clone(),
+        "reason": format!(
+            "DB 主写已冻结：{blocked_reason}；本进程已降级 json_only，数据无损；需重新 seed 恢复 DB 主写。"
+        )
+    });
     let audits = value
         .get_mut("audit_events")
         .and_then(Value::as_array_mut)
@@ -1135,6 +1198,9 @@ pub(crate) fn clear_storage_mode_cache_for_tests() {
         .lock()
         .expect("storage mode health lock")
         .clear();
+    *degradation_audit_recorded()
+        .lock()
+        .expect("storage mode degradation audit lock") = false;
 }
 
 #[cfg(test)]
@@ -1148,6 +1214,7 @@ mod tests {
     use super::*;
     use rusqlite::params;
     use serde_json::{json, Value};
+    use std::cell::Cell;
     use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
@@ -1171,6 +1238,41 @@ mod tests {
     impl Drop for DbPrimaryFixture {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    struct JsonFallbackSupervisorAdapter {
+        executions: Cell<usize>,
+    }
+
+    impl crate::supervisor_action_controller::SupervisorActionAdapter
+        for JsonFallbackSupervisorAdapter
+    {
+        fn supports(
+            &self,
+            _action: &crate::supervisor_action_protocol::SupervisorActionKind,
+        ) -> bool {
+            true
+        }
+
+        fn execute(
+            &self,
+            _action: &crate::supervisor_action_controller::AuthorizedSupervisorAction,
+        ) -> Result<crate::supervisor_action_controller::SupervisorActionAdapterResult, String>
+        {
+            self.executions.set(self.executions.get() + 1);
+            Ok(
+                crate::supervisor_action_controller::SupervisorActionAdapterResult {
+                    status: "waiting_worker".to_string(),
+                    summary: "M5-A blocked JSON fallback supervisor action".to_string(),
+                    worker_id: Some("worker:m5a:blocked-json-fallback".to_string()),
+                    adapter_id: "m5a-json-fallback-adapter".to_string(),
+                    evidence_present: false,
+                    dispatch_ref: Some("dispatch:m5a:blocked-json-fallback".to_string()),
+                    readback_ref: None,
+                    audit_ref: Some("audit:m5a:blocked-json-fallback".to_string()),
+                },
+            )
         }
     }
 
@@ -1515,6 +1617,113 @@ mod tests {
         }
     }
 
+    fn prepare_active_supervisor_run(
+        fixture: &DbPrimaryFixture,
+    ) -> crate::supervisor_action_controller::SupervisorActionRuntime {
+        let proposal = crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &proposal_input(fixture),
+            1_700_000_000_400,
+            "m5a-blocked-supervisor-setup-proposal",
+        )
+        .expect("create supervisor setup proposal");
+        let authorization = crate::plan_authorization_store::create_authorization(
+            &fixture.state_path,
+            &authorization_input(fixture, &proposal.proposal.proposal_id),
+            1_700_000_000_401,
+            "m5a-blocked-supervisor-setup-authorization",
+        )
+        .expect("create supervisor setup authorization");
+        let authorization_id = authorization.authorization.authorization_id;
+        crate::plan_authorization_store::record_user_confirmation(
+            &fixture.state_path,
+            &crate::RecordPlanAuthorizationUserConfirmationInput {
+                project_root: fixture.project_root.clone(),
+                authorization_id: authorization_id.clone(),
+                actor_id: "m5a-test".to_string(),
+                confirmation_summary: "M5-A blocked fallback fixture confirmation".to_string(),
+                expected_store_revision: None,
+            },
+            1_700_000_000_402,
+            "m5a-blocked-supervisor-setup-user-confirmation",
+        )
+        .expect("confirm supervisor setup authorization");
+        crate::plan_authorization_store::record_global_boundary_review(
+            &fixture.state_path,
+            &crate::RecordPlanAuthorizationGlobalBoundaryReviewInput {
+                project_root: fixture.project_root.clone(),
+                authorization_id: authorization_id.clone(),
+                actor_id: "m5a-test".to_string(),
+                review_status: "approved".to_string(),
+                summary: "M5-A blocked fallback fixture review".to_string(),
+                source_proposal_id: Some(proposal.proposal.proposal_id),
+                checklist: None,
+                findings: vec![],
+                reviewed_scope_fingerprint: None,
+                expected_store_revision: None,
+            },
+            1_700_000_000_403,
+            "m5a-blocked-supervisor-setup-boundary-review",
+        )
+        .expect("activate supervisor setup authorization");
+
+        let supervisor_node_id = format!("{}:node:codex-dev", fixture.workflow_id);
+        let mut state = crate::read_workflow_state_value(&fixture.state_path)
+            .expect("read supervisor setup workflow state");
+        state["workflow_node_dispatches"]
+            .as_array_mut()
+            .expect("workflow dispatch array")
+            .push(json!({
+                "state": "prepared",
+                "prompt_kind": "authorized_prepared_auto_dispatch",
+                "project_id": fixture.project_id,
+                "workflow_id": fixture.workflow_id,
+                "plan_authorization_id": authorization_id,
+                "node_id": supervisor_node_id,
+                "work_item_id": fixture.work_item_id,
+            }));
+        crate::write_validated_workflow_state(&fixture.state_path, &state)
+            .expect("write supervisor setup prepared dispatch");
+
+        let runtime = crate::supervisor_action_controller::SupervisorActionRuntime {
+            run_id: "supervisor:m5a:blocked-json-fallback".to_string(),
+            project_root: fixture.project_root.clone(),
+            workflow_id: fixture.workflow_id.clone(),
+            authorization_id,
+            workflow_state_path: fixture.state_path.clone(),
+            quota_limits: crate::mcp::SupervisorQuotaLimits {
+                max_active_workers: 1,
+                max_follow_ups_per_worker: 0,
+                max_runtime_minutes: 1,
+            },
+            started_at_ms: crate::unix_timestamp_ms(),
+        };
+        let config = crate::mcp::McpServerConfig {
+            role: crate::mcp::McpRole::SupervisorOrchestrator,
+            run_id: runtime.run_id.clone(),
+            node_id: None,
+            supervisor_workflow_state_path: Some(runtime.workflow_state_path.clone()),
+            supervisor_quota_limits: Some(runtime.quota_limits),
+        };
+        crate::mcp::supervisor_orchestrator::record_pilot_session_started(
+            &config,
+            &crate::mcp::supervisor_orchestrator::SupervisorPilotSessionLaunch {
+                project_root: runtime.project_root.clone(),
+                workflow_id: runtime.workflow_id.clone(),
+                authorization_id: runtime.authorization_id.clone(),
+                model_id: "m5a-test".to_string(),
+                reasoning_effort: "medium".to_string(),
+                workbench_executable_path: "/tmp/m5a-test-workbench".to_string(),
+                workbench_build_id: "m5a-test-build".to_string(),
+                supervisor_contract_version: "supervisor_action_proposal.v1".to_string(),
+                supervisor_contract_sha256: "m5a-test-supervisor-contract".to_string(),
+                worker_report_contract_sha256: "m5a-test-worker-report-contract".to_string(),
+            },
+        )
+        .expect("record supervisor setup run");
+        runtime
+    }
+
     fn dispatch_context(fixture: &DbPrimaryFixture) -> crate::WorkflowNodeDispatchContext {
         crate::WorkflowNodeDispatchContext {
             project_id: fixture.project_id.clone(),
@@ -1533,6 +1742,56 @@ mod tests {
             user_reviewed_instruction: None,
             warnings: vec![],
         }
+    }
+
+    fn db_primary_row_counts(config: &DbPrimaryJsonProjectionConfig) -> Vec<(&'static str, i64)> {
+        let connection =
+            Connection::open_with_flags(&config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open fixture DB read only");
+        [
+            "project_proposals",
+            "project_proposal_audit_events",
+            "plan_authorizations",
+            "plan_authorization_audit_events",
+            "workflow_node_dispatches",
+            "work_items",
+            "workflow_nodes",
+            "supervisor_actions",
+            "workflow_audit_events",
+        ]
+        .into_iter()
+        .map(|table| {
+            let count = connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .expect("count fixture DB table");
+            (table, count)
+        })
+        .collect()
+    }
+
+    fn degradation_audits(state_path: &Path) -> Vec<Value> {
+        crate::read_workflow_state_value(state_path)
+            .expect("read workflow state for degradation audit")
+            .get("audit_events")
+            .and_then(Value::as_array)
+            .expect("workflow audit array")
+            .iter()
+            .filter(|event| {
+                event.get("event_type").and_then(Value::as_str)
+                    == Some("storage_mode_degraded_json_only")
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn assert_db_primary_health_blocked(state_path: &Path, expected_reason: &str) {
+        let health = health_cache().lock().expect("storage mode health lock");
+        let Some(DbPrimaryHealth::Blocked(reason)) = health.get(state_path) else {
+            panic!("DB primary health must remain blocked");
+        };
+        assert!(reason.contains(expected_reason), "{reason}");
     }
 
     #[test]
@@ -1812,7 +2071,7 @@ mod tests {
     }
 
     #[test]
-    fn m5a_db_ahead_replays_on_restart_and_json_ahead_blocks_writes() {
+    fn m5a_db_ahead_replays_on_restart_and_json_ahead_degrades_to_json() {
         let _serial = test_lock().lock().expect("storage mode test lock");
         let fixture = db_primary_fixture("replay-and-block");
         let created = crate::project_consultation_proposal_store::create_proposal(
@@ -1887,16 +2146,32 @@ mod tests {
             startup_error.contains("db_primary_projection_blocked"),
             "{startup_error}"
         );
-        let write_error = primary_repository_for_write(&fixture.state_path)
-            .expect_err("blocked primary mode must refuse writes");
+        let db_before_fallback = db_primary_row_counts(&fixture.config);
+        assert!(primary_repository_for_write(&fixture.state_path)
+            .expect("blocked primary mode must degrade to JSON")
+            .is_none());
+        crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &proposal_input(&fixture),
+            1_700_000_000_203,
+            "m5a-json-ahead-json-fallback",
+        )
+        .expect("blocked product write must succeed through JSON fallback");
+        let audits = degradation_audits(&fixture.state_path);
+        assert_eq!(audits.len(), 1);
         assert!(
-            write_error.contains("db_primary_projection_blocked"),
-            "{write_error}"
+            audits[0]["reason"]
+                .as_str()
+                .is_some_and(|reason| reason.contains("db_json_reconciliation_not_green")),
+            "{:?}",
+            audits[0]
         );
+        assert_eq!(db_primary_row_counts(&fixture.config), db_before_fallback);
+        assert_db_primary_health_blocked(&fixture.state_path, "db_json_reconciliation_not_green");
     }
 
     #[test]
-    fn m5a_projection_failure_blocks_further_writes_until_restart() {
+    fn m5a_projection_failure_blocks_db_writes_and_degrades_to_json() {
         let _serial = test_lock().lock().expect("storage mode test lock");
         let fixture = db_primary_fixture("projection-failure-block");
         let error = complete_db_primary_json_projection(
@@ -1909,14 +2184,109 @@ mod tests {
             error.contains("injected JSON projection failure"),
             "{error}"
         );
-        let blocked = primary_repository_for_write(&fixture.state_path)
-            .expect_err("subsequent DB-primary writes must remain blocked until restart");
+        let db_before_fallback = db_primary_row_counts(&fixture.config);
+        assert!(primary_repository_for_write(&fixture.state_path)
+            .expect("subsequent DB-primary writes must degrade to JSON")
+            .is_none());
+        crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &proposal_input(&fixture),
+            1_700_000_000_301,
+            "m5a-projection-failure-json-fallback",
+        )
+        .expect("blocked product write must succeed through JSON fallback");
+        let audits = degradation_audits(&fixture.state_path);
+        assert_eq!(audits.len(), 1);
         assert!(
-            blocked.contains("db_primary_projection_blocked")
-                && blocked.contains("injected_projection_failure")
-                && blocked.contains("injected JSON projection failure"),
-            "{blocked}"
+            audits[0]["reason"].as_str().is_some_and(|reason| {
+                reason.contains("injected_projection_failure")
+                    && reason.contains("injected JSON projection failure")
+            }),
+            "{:?}",
+            audits[0]
         );
+        assert_eq!(db_primary_row_counts(&fixture.config), db_before_fallback);
+        assert_db_primary_health_blocked(&fixture.state_path, "injected_projection_failure");
+        clear_storage_mode_cache_for_tests();
+    }
+
+    #[test]
+    fn m5a_blocked_mode_degrades_all_six_product_flows_to_json_once_without_db_writes() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("blocked-six-flow-json-fallback");
+        let supervisor_runtime = prepare_active_supervisor_run(&fixture);
+        let db_before_fallback = db_primary_row_counts(&fixture.config);
+        block_db_primary_writes(
+            &fixture.state_path,
+            "m5a_blocked_six_flow_fixture",
+            "injected blocked fixture reason",
+        );
+
+        let proposal = crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &proposal_input(&fixture),
+            1_700_000_000_500,
+            "m5a-blocked-six-flow-proposal",
+        )
+        .expect("proposal flow must fall back to JSON");
+        let authorization = crate::plan_authorization_store::create_authorization(
+            &fixture.state_path,
+            &authorization_input(&fixture, &proposal.proposal.proposal_id),
+            1_700_000_000_501,
+            "m5a-blocked-six-flow-authorization",
+        )
+        .expect("authorization flow must fall back to JSON");
+        let mut context = dispatch_context(&fixture);
+        context.binding_id = "binding:m5a:blocked-six-flow".to_string();
+        context.native_thread_id = "thread:m5a:blocked-six-flow".to_string();
+        context.plan_authorization_id = Some(authorization.authorization.authorization_id.clone());
+        crate::write_prepared_dispatch(&fixture.state_path, context.clone())
+            .expect("prepared dispatch flow must fall back to JSON");
+        crate::write_started_dispatch(&fixture.state_path, &context)
+            .expect("started dispatch flow must fall back to JSON");
+        crate::update_work_item_state_at(
+            &fixture.state_path,
+            &crate::WorkItemStateUpdateRequest {
+                project_root: fixture.project_root.clone(),
+                work_item_id: fixture.work_item_id.clone(),
+                next_state: "ready_for_review".to_string(),
+            },
+        )
+        .expect("work item flow must fall back to JSON");
+        let adapter = JsonFallbackSupervisorAdapter {
+            executions: Cell::new(0),
+        };
+        let supervisor_result =
+            crate::supervisor_action_controller::execute_supervisor_last_message(
+                &supervisor_runtime,
+                &json!({
+                    "schema_version": "supervisor_action_proposal.v1",
+                    "kind": "dispatch_worker",
+                    "target": {
+                        "node_id": format!("{}:node:codex-dev", fixture.workflow_id),
+                        "work_item_id": fixture.work_item_id,
+                    },
+                    "reason": "exercise blocked JSON fallback",
+                    "expected_result": "one JSON-only supervisor action"
+                })
+                .to_string(),
+                &adapter,
+            )
+            .expect("supervisor action flow must fall back to JSON");
+
+        assert_eq!(supervisor_result.status, "waiting_worker");
+        assert_eq!(adapter.executions.get(), 1);
+        let audits = degradation_audits(&fixture.state_path);
+        assert_eq!(audits.len(), 1);
+        assert!(
+            audits[0]["reason"]
+                .as_str()
+                .is_some_and(|reason| reason.contains("m5a_blocked_six_flow_fixture")),
+            "{:?}",
+            audits[0]
+        );
+        assert_eq!(db_primary_row_counts(&fixture.config), db_before_fallback);
+        assert_db_primary_health_blocked(&fixture.state_path, "m5a_blocked_six_flow_fixture");
         clear_storage_mode_cache_for_tests();
     }
 
