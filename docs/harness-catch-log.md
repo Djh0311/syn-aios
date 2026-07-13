@@ -31,3 +31,5 @@
 | 07-13 | fixture DB-path 硬闸 | M3 幂等步 temp DB 落点不合规被拦一次(已按闸改) | 演练 DB 写到闸外路径 |
 | 07-13 | 同根幂等回归测试(M4·R5) | 初版 R5 metadata 刷新破坏「同 root 重复导入零新增」被回归拦下→改为同 hash Ok(0)·刷新 root 才替换 | metadata 语义带病进 M5 对账 |
 | 07-13 | M3 演练×natural-key conflict 闸(第二战果) | 谓词误报清除后 live 主 store 暴露 audit_events 16 组重复 event_id(51 条·内容确不同·id 可见截断+同毫秒)＋总指导复核加抓 4 条 event_id=None——坐实评审§五 stable_id 截断病预言 | 带撞号/无号审计史静默进 SQLite·翻闸后对账假成功 |
+| 07-13 | 法证包纠总指导 | 「4 条无号」实为旧代 schema(audit_event_id/event_type)且 importer 已 fallback 兼容(importer.rs:41)——非阻断;总指导上轮定性偏差 | 把非问题当阻断项·误导修复范围 |
+| 07-13 | 总指导复数纠法证 | 法证 D 报 active audit_refs=141,实测 148(漏 formal-memories 2/memory-candidates 3/observations 2);撞号引用=0 结论不变 | 引用面清点不全(本次无决策影响·养成互核惯例) |
