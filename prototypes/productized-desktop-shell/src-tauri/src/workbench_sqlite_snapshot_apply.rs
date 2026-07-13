@@ -348,6 +348,7 @@ fn preflight_config(
         primary_workflow_state: PRIMARY_WORKFLOW_STATE.to_string(),
         allowed_sidecars: config.allowed_sidecars.clone(),
         denied_path_markers: denied_path_markers.to_vec(),
+        ..SqliteProductionPreflightConfig::default()
     }
 }
 

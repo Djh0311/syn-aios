@@ -25,11 +25,18 @@ const DENIED_PATH_MARKERS: &[&str] = &[
     "rollout",
 ];
 
+// preflight v2(2026-07-13·用户授权总指导直接做):点名制运行时件忽略——只认精确文件名,禁通配。
+// exec-process-registry 是 OS 进程租约(M0 合同判 runtime-transient·不导入),App 按根路径读取
+// 不能搬;v1 词汇只有「白名单/拒绝」,会把它判 unknown_json_file 拦死整个迁移。点名忽略仍被
+// denied 标记闸压制(先 denied 后忽略),名单外一切照旧 fail-closed。
+const RUNTIME_TRANSIENT_IGNORED: &[&str] = &["exec-process-registry.v1.json"];
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SqliteProductionPreflightConfig {
     pub(crate) primary_workflow_state: String,
     pub(crate) allowed_sidecars: BTreeSet<String>,
     pub(crate) denied_path_markers: Vec<String>,
+    pub(crate) runtime_transient_ignored: BTreeSet<String>,
 }
 
 impl Default for SqliteProductionPreflightConfig {
@@ -43,6 +50,10 @@ impl Default for SqliteProductionPreflightConfig {
             denied_path_markers: DENIED_PATH_MARKERS
                 .iter()
                 .map(|marker| (*marker).to_string())
+                .collect(),
+            runtime_transient_ignored: RUNTIME_TRANSIENT_IGNORED
+                .iter()
+                .map(|name| (*name).to_string())
                 .collect(),
         }
     }
@@ -160,12 +171,16 @@ pub(crate) fn scan_workbench_state_root_preflight_with_config(
             continue;
         }
         if path.is_dir() {
-            if name != "backups" {
+            if name != "backups" && name != "runtime-artifacts" {
                 warnings.push(format!("directory_ignored:{name}"));
             }
             continue;
         }
         if is_ignored_support_file(&name) {
+            continue;
+        }
+        if config.runtime_transient_ignored.contains(&name) {
+            file_reports.push(runtime_transient_ignored_report(source_root, &path)?);
             continue;
         }
         let report = scan_file(
@@ -577,10 +592,140 @@ fn rejected_path_report(
     Ok(rejected_file(path_ref, size_bytes, reason))
 }
 
+fn runtime_transient_ignored_report(
+    source_root: &Path,
+    path: &Path,
+) -> Result<SqlitePreflightFileReport, String> {
+    let path_ref = path_ref(source_root, path)?;
+    let size_bytes = fs::metadata(path)
+        .map_err(|error| format!("preflight_path_metadata_failed:{}:{error}", path.display()))?
+        .len();
+    Ok(SqlitePreflightFileReport {
+        path_hash: sha256_hex(path_ref.as_bytes()),
+        path_ref,
+        file_hash: None,
+        size_bytes,
+        schema_version: None,
+        revision: None,
+        top_level_keys: Vec::new(),
+        record_count_estimate: 0,
+        redaction_status: "metadata_only_runtime_transient_not_imported".to_string(),
+        classification: "runtime_transient_ignored".to_string(),
+        warnings: Vec::new(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn sqlite_preflight_v2_runtime_transient_registry_ignored_not_blocking() {
+        let root = temp_test_dir("v2-runtime-ignored");
+        write_json(
+            &root.join(PRIMARY_WORKFLOW_STATE),
+            &json!({"schema_version": "workflow_state_v0", "revision": 1, "projects": []}),
+        );
+        write_json(
+            &root.join("exec-process-registry.v1.json"),
+            &json!({"schema_version": "exec_process_registry.v1", "revision": 3, "entries": [], "audit_events": []}),
+        );
+        fs::create_dir_all(root.join("runtime-artifacts/legacy-supervisor-transcripts"))
+            .expect("runtime dir");
+
+        let report =
+            scan_workbench_state_root_preflight(&root, None).expect("preflight should scan");
+
+        assert_eq!(report.status, "preflight_ready");
+        assert!(report.blocked_reasons.is_empty());
+        let entry = report
+            .files
+            .iter()
+            .find(|file| file.path_ref == "exec-process-registry.v1.json")
+            .expect("registry entry recorded");
+        assert_eq!(entry.classification, "runtime_transient_ignored");
+        assert_eq!(entry.file_hash, None);
+        assert!(!report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("directory_ignored:runtime-artifacts")));
+    }
+
+    #[test]
+    fn sqlite_preflight_v2_unknown_json_still_fails_closed() {
+        let root = temp_test_dir("v2-unknown-still-blocks");
+        write_json(
+            &root.join(PRIMARY_WORKFLOW_STATE),
+            &json!({"schema_version": "workflow_state_v0", "revision": 1}),
+        );
+        write_json(
+            &root.join("mystery-runtime.json"),
+            &json!({"anything": true}),
+        );
+
+        let report =
+            scan_workbench_state_root_preflight(&root, None).expect("preflight should scan");
+
+        assert_eq!(report.status, "preflight_blocked");
+        let entry = report
+            .files
+            .iter()
+            .find(|file| file.path_ref == "mystery-runtime.json")
+            .expect("unknown entry recorded");
+        assert_eq!(entry.classification, "rejected");
+        assert!(entry
+            .warnings
+            .iter()
+            .any(|warning| warning == "unknown_json_file"));
+    }
+
+    #[test]
+    fn sqlite_preflight_v2_denied_name_precedence_over_runtime_ignore() {
+        let root = temp_test_dir("v2-denied-precedence");
+        write_json(
+            &root.join(PRIMARY_WORKFLOW_STATE),
+            &json!({"schema_version": "workflow_state_v0", "revision": 1}),
+        );
+        write_json(&root.join("token-cache.json"), &json!({"x": 1}));
+        let mut config = SqliteProductionPreflightConfig::default();
+        config
+            .runtime_transient_ignored
+            .insert("token-cache.json".to_string());
+
+        let report = scan_workbench_state_root_preflight_with_config(&root, None, &config)
+            .expect("preflight should scan");
+
+        let entry = report
+            .files
+            .iter()
+            .find(|file| file.path_ref == "token-cache.json")
+            .expect("denied entry recorded");
+        assert_eq!(entry.classification, "rejected");
+        assert_eq!(report.status, "preflight_blocked");
+    }
+
+    #[test]
+    #[ignore]
+    fn sqlite_preflight_v2_live_root_readonly_scan() {
+        let root = std::env::var("WORKBENCH_PREFLIGHT_LIVE_ROOT")
+            .expect("set WORKBENCH_PREFLIGHT_LIVE_ROOT to a read-only copy of the live root");
+        let report = scan_workbench_state_root_preflight(Path::new(&root), None)
+            .expect("preflight should scan");
+        eprintln!(
+            "[preflight-v2] status={} blocked={:?} runtime_ignored={} accepted={}",
+            report.status,
+            report.blocked_reasons,
+            report
+                .files
+                .iter()
+                .filter(|file| file.classification == "runtime_transient_ignored")
+                .count(),
+            report.counts.files_accepted
+        );
+        assert_eq!(report.status, "preflight_ready");
+        assert!(report.blocked_reasons.is_empty());
+    }
 
     #[test]
     fn sqlite_preflight_scans_valid_root_without_writing_production_flags() {
