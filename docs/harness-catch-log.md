@@ -54,3 +54,13 @@
 | 07-14 | M5 案发测试×shape gate(复核实证包内·执行线自报两拦) | ①初版证据闸 scope 收得过宽,把 M5 预期从 waiting_worker 偏成 denied_scope——案发测试拦下,缩窄到 byte-evidence 场景复验 1/0;②新模块 3 个文件超限被 shape 拦,拆分恢复 14/5/5 | 证据闸误伤既有派发路;超限文件无痕入库 |
 | 07-14 | 总指导核收 stash 对照实验(抓 M5-C 真回归·打回) | manual_relay gui_direct poll 两测试确定性挂(0.16s 速败·非沙箱同挂·stash M5-C 即绿)——continuation 桥令 relay 测试首次摸到 live db_primary 配置+测试进程无启动对账→fail-safe Err→mock 进程 failed_process;**执行线误判为既有 flaky 家族放行**(「复跑全绿」与确定性失败矛盾) | 真回归穿 flaky 口径入库;「挂了=flaky」惯性让家族口径变藏污口——处置口径补:solo 挂必 stash 对照定性,不许直接归家族 |
 | 07-14 | 用户真机复发「改了看不到」×总指导查窝(确诊老悬案) | 启动脚本清缓存**清错窝**:只清进程名 `Caches/codex-governance-workbench`,而 WKWebView 真缓存跟 bundle id `local.codex.governance.workbench` 走+`~/Library/WebKit/` 两窝完全没清——「Tauri dev 前端旧」老毛病(记忆有前科)就此确诊;脚本已修四窝全清(仓+桌面同步) | 每次改前端都赌缓存运气;批1-5 逐批真机验收全被此雷卡 |
+| 07-15 | 施工兵核旧断言(抓「待复核」恒空 bug) | 右栏「待复核」待办按 raw "ready_for_review" 子串筛,而 meta 早是 displayStatus 人话→恒为空;改按人话筛,夹具 todos 3→4 | 「待复核」类待办永不上右栏,治理待办脸长期缺角 |
+| 07-15 | 施工兵报死码(权限 scenario harness) | offline-permission-dialog 的 `const scenarios=[]` HEAD/工作树均空→循环零次·127 行 helper 零覆盖假信心;并纠总指导转述错前提(「不收窄会炸 30 scenario」——30 个不存在) | 假覆盖当真覆盖;按不存在的回归面错估改动风险 |
+| 07-15 | 施工中抓三颗 indexOf(-1) 哑弹断言 | 删 class 后 indexOf 返 -1,断言炸但报错谎称「排序错了」;已换正向断言 | 未来断言炸时报错指错方向,排查进死胡同 |
+| 07-15 | confirmActionLabel 双份漂移(死码连坐) | helper 与源码对 adopt-memory-candidate 标签已不一致,因 scenario 死循环没红=哑弹 | 双真源无声漂移;scenarios 一复活即假红 |
+| 07-15 | 施工兵按宪法删假指针(总指导核后追认) | 包字面要求「机器信息注见审计账本」,但 confidence_kind 等字段不在账本聚合源里=假指针;按 DESIGN §三·五禁令2+§四宪法优先删注、保留字段移除 | 用户按假指针找不到信息,「见XX」沦为敷衍话术 |
+| 07-15 | 前端包「缺口上报别自拍」条款(6 次开火) | 总包前提「定稿照施工零决策」在 6/7 页与磁盘现实有出入(多为后端面缺失)——施工兵逐一停下问板而非自拍,含 ⑦ 知识库整页跳过(fs 面不存在=高危新写面) | 施工兵替用户拍产品板;假按钮/架空面糊进「定稿」 |
+| 07-15 | shape gate 3000 行上限(真拦·执行线当场改设计) | 健康访问器直加 `workbench_sqlite_storage_mode.rs` 顶 2989→3004 破限(Errors 13→14)→照 m5c 先例拆 read_model 子模块,父文件回 2996 | 贴线核心存储文件被顶穿,此后每个碰它的包必踩雷 |
+| 07-15 | 执行线基线自查(拦住照搬包内过期数) | 包写 gate 14/5/5,实测基线 13/5/5(前端拆巨石已 14→13,总指导拟包用了过期数)——若照搬 14,执行线自己那 +1 净增会被「符合包」掩盖 | 总指导包内过期数字成掩护;带病「零净增」进账 |
+| 07-15 | C·勘察条款+红线意识(拦住越线薄包装) | 包假定「有现成 follow-up 通道」;核实=DirectorChainOutcome 无 worker_id·链停时 worker 已死·真机器在主管试点路径且自带多步人闸——伪造主管提案/压人闸/造新执行路径三条路全出界,执行线停手报裁决 | 「薄包装」名义下造出破 canon 的捷径;多步人闸被压成一键 |
+| 07-15 | 总指导核收读原文破乌龙(exit 码家族三犯) | flaky 复跑 6 连 EXIT=101 判「必挂真回归」——实为 Bash 工作目录跨调用漂移致 `could not find Cargo.toml`,cargo 根本没跑;读 log 原文才破;真实观测=登记家族 solo 2/5 挂复跑绿 | 差点把登记 flaky 错定成必挂回归、开无谓排查包;exit 码当结论三犯坐实→ledger 立案 M-2026-07-15 |

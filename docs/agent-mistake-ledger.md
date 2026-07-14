@@ -341,3 +341,13 @@ Status: Open
 - **预防(即刻生效)**:① `git add` **一律显式列文件,目录参数禁用**——包括且尤其是 `evidence/raw/**`(备份类目录默认含大件/敏感件);② 收口前 `git diff --cached --stat` 尾行核插入量,**插入行数与预期不符(>2 倍)即中止提交**;③ 备份工具产出的目录(apply-backup/pre-cutover/pre-reseed)默认整目录进 `.gitignore`,只显式豁免 manifest/report 级小 json。
 
 Status: Open
+
+---
+
+## M-2026-07-15:exit 码当结论·测试正文没读(三犯立案)
+
+- **错误**:shell exit 码(或管道后的 exit 0)被直接当测试结论,正文没读。第一次:07-13 主导线真跑测试,管道 exit 0 盖过正文 `test result: FAILED`(当时只进了记忆,仓内未立案);第二次:07-15 执行线取基线用 `cargo test | tail`,exit 0 差点错报「基线全绿」(自查抓回,handoff §10);第三次:07-15 总指导 flaky 复跑 6 连 EXIT=101 判「必挂真回归」——实为 Bash 工作目录跨调用漂移致 `could not find Cargo.toml`,cargo 根本没跑,读 log 原文才破。
+- **为什么要紧**:测试结论是收口的唯一地基。exit 码在三个方向都会骗人:管道吞码=假绿;环境错误(cwd 漂移/编译锁)=假红;没跑装跑。三案分别差点造成假绿入账、假基线、假回归排查包。
+- **预防(即刻生效)**:① cargo/npm 测试一律 `> 文件 2>&1` 落盘后**直取 `$?`**,不经管道;② 任何「挂/绿」结论前必看正文 `test result:` 行,exit 码只作旁证;③ cargo 命令一律同调用内显式 `cd` 绝对路径(Bash 工作目录跨调用会漂,并行批次尤甚);④ 报「必挂」前先确认测试真的跑了(0 秒完成/无 result 行=没跑)。
+
+Status: Open
