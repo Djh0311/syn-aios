@@ -303,8 +303,11 @@ export function AgentSessionList({
                 //      「缺回放记录」的会话——换过去会让读不了的会话变成可点 = 假按钮(宪法 §四.3)。
                 // 基座缺口(ListRow 无 disabled)已列进交付报告，扩基座会牵动另外 4 个消费方，不在本包动。
                 //
-                // 状态徽章是一个簇：圆点 + (非 ok 时)人话状态 + (工作台建的)任务徽标——它们都是「这条会话
-                // 处于什么状态」的限定语，合起来算第一个元素，不破坏三元素读法。
+                // 徽章簇=纯色点(07-15 用户拍·真机走查第一单)：180px 栏里「状态词+工作台任务文字章」
+                // 把标题挤到 0px(实测)。改法——工作台任务章缩成第二颗色点(var(--run) 蓝·悬停出全称)；
+                // 异常状态词(缺回放记录等)不再单独占位，改为彩色前缀**并进标题一起截断**。
+                // 配套：默认栏宽 180→240(AgentConversationShell 同改)、.session-card-list 轨道锁 minmax(0,1fr)
+                // (缺这个则 sc-title 的省略号永不触发、时间被顶出栏外硬裁——本次「不太好」的机械根因)。
                 return (
                   <button
                     key={session.thread_id}
@@ -316,14 +319,21 @@ export function AgentSessionList({
                   >
                     <span className="sc-badge">
                       <span className={`sc-dot ${status.tone}`} aria-hidden="true" />
-                      {status.tone !== "ok" ? (
-                        <span className={`sc-status ${status.tone}`}>{status.label}</span>
-                      ) : null}
                       {session.workbench_bound ? (
-                        <span className="sc-workbench-badge" title="工作台绑定的任务会话（codex exec 建·经工作流节点绑定）">工作台任务</span>
+                        <span
+                          className="sc-dot workbench"
+                          role="img"
+                          aria-label="工作台任务"
+                          title="工作台绑定的任务会话（codex exec 建·经工作流节点绑定）"
+                        />
                       ) : null}
                     </span>
-                    <span className="sc-title">{session.title || "未命名会话"}</span>
+                    <span className="sc-title">
+                      {status.tone !== "ok" ? (
+                        <span className={`sc-status ${status.tone}`}>{status.label} · </span>
+                      ) : null}
+                      {session.title || "未命名会话"}
+                    </span>
                     <span className="sc-time">{relativeTime(session.updated_at_ms)}</span>
                   </button>
                 );

@@ -257,9 +257,10 @@ export function AgentSessionCenter({
   const [developerOpen, setDeveloperOpen] = useState(false);
   const [sendMode, setSendMode] = useState<AgentConversationSendMode>("existing_session");
   const [sessionListWidth, setSessionListWidth] = useState<number>(() => {
-    if (typeof window === "undefined") return 180;
+    // 默认 240(07-15 拍：单行三元素 180px 塞不下·与 styles.css 的 .agent-session-shell 同数)；用户拖过的宽度照旧生效。
+    if (typeof window === "undefined") return 240;
     const saved = Number(window.localStorage?.getItem("agent-session-list-width"));
-    return Number.isFinite(saved) && saved >= 120 && saved <= 520 ? saved : 180;
+    return Number.isFinite(saved) && saved >= 120 && saved <= 520 ? saved : 240;
   });
   const startSessionListResize = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
