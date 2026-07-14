@@ -45,3 +45,5 @@
 | 07-14 | 总指导复核(自我纠错·撤虚高) | 昨判「竞态测试已修」被更长采样推翻——solo 五连发 1 挂=残余第二竞态;改判部分修复(temp 撞车半根除);执行线「隔离仍失败」属实还其清白 | 「已修」结论的采样量要配得上 flaky 概率;二刀候选挂账 |
 | 07-14 | 层级开工盘点制(两连发战果) | 记忆层与 harness 层**钉板均落后代码**——生命周期九操作/协议字段+运行检查+完成闸,全都已建且真用过,钉板仍写「待建/没建」;盘点先行两次拦住按旧钉板重造 | 重造已存在的机器(四角色学费第二遍);Phase D 排期口径全错 |
 | 07-14 | m5a 案发测试×C 面扩表(M5-B 批2·执行线自查) | 全量首跑检出 M5A supervisor fixture 只 seed audit、漏 seed agent_adapters→改复用完整 generic delta seed;总指导核收复跑 m5 族 15/15 证实 | fixture 半 seed 假绿·20 表扩面对账带病过闸 |
+| 07-14 | 启动对账×Blocked 留痕降级(首次真实开火·立功) | 用户真机验收重启:对账抓 workflow_audit_events JSON 领先 2 条(00:51:45 M5-B 上线前的 `auto_dispatch_scope_checked` 未接线写)→按设计降级 json_only·审计人话留痕·数据无损 | 未接线写静默漂移进观察期·M6 前对不上账才炸 |
+| 07-14 | 降级根因追查(抓 M5-B 勘察漏) | 勘察「62+9 全写面」漏两族 sidecar 写:`inspect_auto_dispatch_authorization`(plan_auth:677·正是降级肇事写点)+`supervisor_orchestrator::update_store` 家族 13+ 点(worker-report/final-mark/pilot/dispatch/follow-up)——反向 grep 只盯 `write_validated_workflow_state` 抓不到 `write_store_atomic`/`update_store`;CURRENT「全走显式桥」措辞按勘察口径限定·补遗包挂账 | 重 seed 恢复后一走批准流/真派发即再降级;DB 侧主管账本静默 stale 到 M6 才暴雷 |
