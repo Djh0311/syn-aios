@@ -28,3 +28,4 @@ prototypes/tauri-capability-probe/.tauri-cli/
 
 # Local harness runtime cache
 .harness/
+evidence/raw/2026-07-14-reseed/apply-backup/source-files/
