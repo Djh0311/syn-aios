@@ -24,6 +24,9 @@ const SIDECAR_NAME: &str = "global-supervisor-reviews.v1.json";
 const BACKUP_PREFIX: &str = "global-supervisor-reviews.v1.";
 const MAX_BACKUPS: usize = 10;
 
+#[path = "global_supervisor_review_store_db_primary.rs"]
+pub(crate) mod db_primary;
+
 /// 每任务点评（LM 输出投影·serde 全 default 软着陆）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct GlobalSupervisorTaskVerdict {
@@ -249,6 +252,7 @@ pub(crate) fn upsert_review(
     }
     let sidecar = sidecar_path(workflow_state_path)?;
     let (mut store, _warnings) = load_store_soft(workflow_state_path, timestamp_ms);
+    let before_store = store.clone();
     let existing = store.reviews.iter().position(|review| {
         review.workflow_id == record.workflow_id
             && review.chain_started_at == record.chain_started_at
@@ -281,7 +285,13 @@ pub(crate) fn upsert_review(
         actor_ref: actor_ref.to_string(),
         created_at_ms: timestamp_ms,
     });
-    write_store_atomic(&sidecar, &store, timestamp_ms)?;
+    db_primary::write_store_with_db_primary(
+        workflow_state_path,
+        &sidecar,
+        &before_store,
+        &store,
+        timestamp_ms,
+    )?;
     Ok(store)
 }
 
@@ -309,6 +319,7 @@ pub(crate) fn upsert_boundary_review(
     }
     let sidecar = sidecar_path(workflow_state_path)?;
     let (mut store, _warnings) = load_store_soft(workflow_state_path, timestamp_ms);
+    let before_store = store.clone();
     let existing = store
         .boundary_reviews
         .iter()
@@ -342,7 +353,13 @@ pub(crate) fn upsert_boundary_review(
             actor_ref: actor_ref.to_string(),
             created_at_ms: timestamp_ms,
         });
-    write_store_atomic(&sidecar, &store, timestamp_ms)?;
+    db_primary::write_store_with_db_primary(
+        workflow_state_path,
+        &sidecar,
+        &before_store,
+        &store,
+        timestamp_ms,
+    )?;
     Ok(store)
 }
 

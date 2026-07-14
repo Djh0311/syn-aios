@@ -29,6 +29,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[path = "real_execution_command_db_primary.rs"]
+pub(crate) mod db_primary;
+
 const PRODUCT_COMMAND_STORE_SCHEMA_VERSION: &str = "real_execution_product_commands.v1";
 const PRODUCT_COMMAND_SIDECAR_NAME: &str = "real-execution-product-commands.v1.json";
 const K2_R1_EXECUTION_POINT_ID: &str = "stage-k-k2-r1-mario-test-resume-read-only";
@@ -933,6 +936,7 @@ pub(crate) fn prepare_real_execution_product_command_at(
     let sidecar = real_execution_product_command_sidecar_path(workflow_state_path)?;
     let (mut store, _, sidecar_path) =
         load_real_execution_product_command_store(workflow_state_path, &generated_at)?;
+    let before_store = store.clone();
 
     if !preview.blocked_reasons.is_empty() {
         let blocked_reasons = preview.blocked_reasons.clone();
@@ -990,7 +994,7 @@ pub(crate) fn prepare_real_execution_product_command_at(
         .push("pcr2_prepare_wrote_command_and_preview_only".to_string());
     store.warnings = crate::dedupe_strings(store.warnings);
     validate_real_execution_product_command_store(&store)?;
-    write_real_execution_product_command_store_atomic(&sidecar, &store, &generated_at)?;
+    db_primary::write(workflow_state_path, &before_store, &store, &generated_at)?;
     let read_model =
         load_real_execution_product_command_read_model(workflow_state_path, &generated_at);
 
@@ -1034,6 +1038,7 @@ pub(crate) fn record_real_execution_product_command_decision_at(
 
     let (mut store, store_available, sidecar_path) =
         load_real_execution_product_command_store(workflow_state_path, &confirmed_at)?;
+    let before_store = store.clone();
     let sidecar_path_for_read_model = Some(sidecar_path.clone());
 
     if let Some(expected) = input.expected_store_revision {
@@ -1219,7 +1224,7 @@ pub(crate) fn record_real_execution_product_command_decision_at(
         .push("pcr3_decision_recorded_no_runner_no_attempt".to_string());
     store.warnings = crate::dedupe_strings(store.warnings);
     validate_real_execution_product_command_store(&store)?;
-    write_real_execution_product_command_store_atomic(&sidecar_path, &store, &confirmed_at)?;
+    db_primary::write(workflow_state_path, &before_store, &store, &confirmed_at)?;
     let read_model =
         load_real_execution_product_command_read_model(workflow_state_path, &confirmed_at);
 
@@ -1295,6 +1300,7 @@ pub(crate) fn run_real_execution_product_command_phase_a_at(
 
     let (mut store, store_available, sidecar_path) =
         load_real_execution_product_command_store(workflow_state_path, &requested_at)?;
+    let before_store = store.clone();
     let sidecar_path_for_read_model = Some(sidecar_path.clone());
     let read_model_for_block = |store: &RealExecutionProductCommandStore, warnings: Vec<String>| {
         read_model_from_store(
@@ -1478,7 +1484,7 @@ pub(crate) fn run_real_execution_product_command_phase_a_at(
             .push("pcr4_phase_a_new_session_noop_attempt_recorded_no_real_codex".to_string());
         store.warnings = crate::dedupe_strings(store.warnings);
         validate_real_execution_product_command_store(&store)?;
-        write_real_execution_product_command_store_atomic(&sidecar_path, &store, timestamp)?;
+        db_primary::write(workflow_state_path, &before_store, &store, timestamp)?;
         let read_model =
             load_real_execution_product_command_read_model(workflow_state_path, timestamp);
 
@@ -1577,7 +1583,7 @@ pub(crate) fn run_real_execution_product_command_phase_a_at(
         .push("pcr4_phase_a_noop_attempt_recorded_no_real_codex".to_string());
     store.warnings = crate::dedupe_strings(store.warnings);
     validate_real_execution_product_command_store(&store)?;
-    write_real_execution_product_command_store_atomic(&sidecar_path, &store, timestamp)?;
+    db_primary::write(workflow_state_path, &before_store, &store, timestamp)?;
     let read_model = load_real_execution_product_command_read_model(workflow_state_path, timestamp);
 
     Ok(real_execution_product_command_phase_a_output(
@@ -1686,6 +1692,7 @@ pub(crate) fn run_real_execution_product_command_phase_b_with_runner<
 
     let (mut store, store_available, sidecar_path) =
         load_real_execution_product_command_store(workflow_state_path, &requested_at)?;
+    let before_store = store.clone();
     let sidecar_path_for_read_model = Some(sidecar_path.clone());
     let read_model_for_block = |store: &RealExecutionProductCommandStore, warnings: Vec<String>| {
         read_model_from_store(
@@ -1945,7 +1952,7 @@ pub(crate) fn run_real_execution_product_command_phase_b_with_runner<
         .push("pcr9a_phase_b_attempt_recorded_from_product_command_bridge".to_string());
     store.warnings = crate::dedupe_strings(store.warnings);
     validate_real_execution_product_command_store(&store)?;
-    write_real_execution_product_command_store_atomic(&sidecar_path, &store, timestamp)?;
+    db_primary::write(workflow_state_path, &before_store, &store, timestamp)?;
     let read_model = load_real_execution_product_command_read_model(workflow_state_path, timestamp);
 
     Ok(real_execution_product_command_phase_b_output(
@@ -2023,6 +2030,7 @@ pub(crate) fn run_real_execution_product_command_new_session_phase_b_with_runner
 
     let (mut store, store_available, sidecar_path) =
         load_real_execution_product_command_store(workflow_state_path, &requested_at)?;
+    let before_store = store.clone();
     let sidecar_path_for_read_model = Some(sidecar_path.clone());
     let read_model_for_block = |store: &RealExecutionProductCommandStore, warnings: Vec<String>| {
         read_model_from_store(
@@ -2282,7 +2290,7 @@ pub(crate) fn run_real_execution_product_command_new_session_phase_b_with_runner
     );
     store.warnings = crate::dedupe_strings(store.warnings);
     validate_real_execution_product_command_store(&store)?;
-    write_real_execution_product_command_store_atomic(&sidecar_path, &store, timestamp)?;
+    db_primary::write(workflow_state_path, &before_store, &store, timestamp)?;
     let read_model = load_real_execution_product_command_read_model(workflow_state_path, timestamp);
 
     Ok(real_execution_product_command_phase_b_output(

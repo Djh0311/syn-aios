@@ -12,6 +12,14 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
+#[path = "workbench_sqlite_repository_m5c.rs"]
+mod m5c;
+pub(crate) use m5c::{
+    appended_json_records_by_field, changed_json_records_by_field,
+    changed_json_records_by_key_allow_removed, removed_json_record_keys_by_key,
+    runtime_log_summary_id,
+};
+
 // M4 repository policy: wait 100ms for SQLite, then retry the whole DB-only transaction once.
 // External Codex work never runs inside this wrapper; a reserved supervisor action is recovered
 // as waiting_user instead of being replayed.

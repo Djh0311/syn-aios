@@ -14,6 +14,9 @@ const STORAGE_KIND: &str = "sidecar_json_v0";
 const SIDECAR_NAME: &str = "runtime-logs.v1.json";
 const LOCK_NAME: &str = ".runtime-logs.v1.lock";
 
+#[path = "runtime_log_store_db_primary.rs"]
+pub(crate) mod db_primary;
+
 pub(crate) fn sidecar_path(workflow_state_path: &Path) -> Result<PathBuf, String> {
     store_paths::sidecar_path(workflow_state_path, SIDECAR_NAME, "runtime log")
 }
@@ -107,6 +110,7 @@ pub(crate) fn append_session_continuation_attempt(
         }
     };
 
+    let before_store = store.clone();
     let entries = vec![
         workflow_run_entry(continuation),
         dispatch_attempt_entry(attempt, Some(continuation)),
@@ -143,7 +147,14 @@ pub(crate) fn append_session_continuation_attempt(
             "audit_event_does_not_replace_runtime_log".to_string(),
         ],
     );
-    write_store_atomic(&sidecar, &store, timestamp, write_id)?;
+    db_primary::write_store_with_db_primary(
+        workflow_state_path,
+        &sidecar,
+        &before_store,
+        &store,
+        timestamp,
+        write_id,
+    )?;
     drop(lock);
     Ok(store)
 }

@@ -52,3 +52,4 @@
 | 07-14 | 用户真机二撞「不能开始」(抓总指导拟包漏) | 站4 包只点名 Rust 六文件,**前端 `supervisorPilotUnavailableReason` 镜像判定没进包**——方案写根已对仍两模式无按钮;总指导代收尾补 gating+文案+4 断言(typecheck+离线 24 套件零失败) | 后端解封前端仍锁=站4 白做;「镜像判定」自此列拟包检查项(改闸必查前端复刻面) |
 | 07-14 | 总指导字节级核实物(否决主管终标·立功) | 站4 首单 worker 写出 9 字节带 LF,复核线漏执行方案 checks 白纸黑字的「8 字节且末尾无换行」,主管终标误判 pass——总指导 xxd 亲验否决;方案 risks 恰预言该风险 | LM 复核+终标双层漏检直接过账;「一致确认内容为 12345678」这类字符串级口供顶替字节级证据 |
 | 07-14 | M5 案发测试×shape gate(复核实证包内·执行线自报两拦) | ①初版证据闸 scope 收得过宽,把 M5 预期从 waiting_worker 偏成 denied_scope——案发测试拦下,缩窄到 byte-evidence 场景复验 1/0;②新模块 3 个文件超限被 shape 拦,拆分恢复 14/5/5 | 证据闸误伤既有派发路;超限文件无痕入库 |
+| 07-14 | 总指导核收 stash 对照实验(抓 M5-C 真回归·打回) | manual_relay gui_direct poll 两测试确定性挂(0.16s 速败·非沙箱同挂·stash M5-C 即绿)——continuation 桥令 relay 测试首次摸到 live db_primary 配置+测试进程无启动对账→fail-safe Err→mock 进程 failed_process;**执行线误判为既有 flaky 家族放行**(「复跑全绿」与确定性失败矛盾) | 真回归穿 flaky 口径入库;「挂了=flaky」惯性让家族口径变藏污口——处置口径补:solo 挂必 stash 对照定性,不许直接归家族 |

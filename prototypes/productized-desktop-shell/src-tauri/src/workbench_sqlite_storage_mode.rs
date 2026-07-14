@@ -11,6 +11,9 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
+#[path = "workbench_sqlite_storage_mode_m5c.rs"]
+mod m5c;
+
 pub(crate) const STORAGE_MODE_SCHEMA_VERSION: &str = "storage-mode.v1";
 pub(crate) const STORAGE_MODE_FILE_NAME: &str = "storage-mode.v1.json";
 const JSON_ONLY: &str = "json_only";
@@ -340,6 +343,7 @@ struct DbProjectionData {
     supervisor_actions: Vec<DbRecord>,
     supervisor_orchestrator_sessions: Vec<DbRecord>,
     supervisor_orchestrator_audit_events: Vec<DbRecord>,
+    m5c: m5c::M5cDbProjectionData,
     audits: Vec<DbAuditRecord>,
 }
 
@@ -457,7 +461,7 @@ pub(crate) fn reconcile_db_vs_json(
         .collect::<Vec<_>>();
     let db_unprojected_audits = database.audits.len().saturating_sub(audit_db_records.len());
 
-    let tables = vec![
+    let mut tables = vec![
         reconcile_table("project_proposals", database.proposals, proposal_records),
         reconcile_table(
             "plan_authorizations",
@@ -534,6 +538,10 @@ pub(crate) fn reconcile_db_vs_json(
             db_unprojected_audits,
         ),
     ];
+    tables.extend(m5c::reconcile_tables(
+        &database.m5c,
+        &config.workflow_state_path,
+    )?);
     let status = if tables.iter().all(|table| {
         table.db_leading.is_empty()
             && table.json_leading.is_empty()
@@ -641,6 +649,13 @@ fn replay_db_primary_projection(config: &DbPrimaryJsonProjectionConfig) -> Resul
             .map(|record| record.value.clone())
             .collect::<Vec<_>>(),
         replace_db_primary_leading,
+        &write_id,
+    )?;
+    m5c::replay_db_primary_projection(
+        &config.workflow_state_path,
+        &database.m5c,
+        replace_db_primary_leading,
+        timestamp_ms,
         &write_id,
     )?;
     Ok(())
@@ -820,6 +835,7 @@ fn load_db_projection_data(
             &connection,
             "SELECT event_id, record_hash, record_json FROM supervisor_orchestrator_audit_events",
         )?,
+        m5c: m5c::load_db_projection_data(&connection)?,
         audits: query_audit_records(&connection)?,
     })
 }
@@ -1110,6 +1126,10 @@ fn record_order(value: &Value) -> Option<String> {
         "created_at_ms",
         "updated_at",
         "created_at",
+        "completed_at",
+        "finished_at",
+        "confirmed_at",
+        "started_at",
     ] {
         if let Some(number) = value.get(key).and_then(Value::as_i64) {
             return Some(format!("n:{number:020}"));
@@ -1117,6 +1137,18 @@ fn record_order(value: &Value) -> Option<String> {
         if let Some(text) = value.get(key).and_then(Value::as_str) {
             if !text.trim().is_empty() {
                 return Some(format!("s:{text}"));
+            }
+        }
+    }
+    if let Some(request) = value.get("request") {
+        for key in ["created_at", "updated_at"] {
+            if let Some(number) = request.get(key).and_then(Value::as_i64) {
+                return Some(format!("n:{number:020}"));
+            }
+            if let Some(text) = request.get(key).and_then(Value::as_str) {
+                if !text.trim().is_empty() {
+                    return Some(format!("s:{text}"));
+                }
             }
         }
     }
@@ -1512,6 +1544,18 @@ pub(crate) fn clear_storage_mode_cache_for_tests() {
 }
 
 #[cfg(test)]
+pub(crate) fn clear_storage_mode_cache_for_path_for_tests(workflow_state_path: &Path) {
+    mode_cache()
+        .lock()
+        .expect("storage mode cache lock")
+        .remove(workflow_state_path);
+    health_cache()
+        .lock()
+        .expect("storage mode health lock")
+        .remove(workflow_state_path);
+}
+
+#[cfg(test)]
 pub(crate) fn storage_mode_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -1805,6 +1849,8 @@ mod tests {
                 .record_supervisor_orchestrator_delta(None, std::slice::from_ref(audit), None)
                 .expect("seed supervisor orchestrator audit");
         }
+        m5c::seed_db_from_json(&repository, &config.workflow_state_path)
+            .expect("seed M5-C sidecar projection face");
         repository
             .record_workflow_state_delta_with_audit(
                 &empty_workflow_state_for_db_seed(),
@@ -1838,7 +1884,7 @@ mod tests {
             bootstrap_json_state(&root, &project_root);
         let config = write_db_primary_config(&state_path);
         seed_db_from_json(&config);
-        clear_storage_mode_cache_for_tests();
+        clear_storage_mode_cache_for_path_for_tests(&state_path);
         initialize_for_startup(&state_path).expect("DB primary startup reconciliation");
         DbPrimaryFixture {
             root,
@@ -2327,6 +2373,19 @@ mod tests {
                 "supervisor_orchestrator_sessions",
                 "supervisor_orchestrator_audit_events",
                 "workflow_audit_events",
+                "supervisor_reviews",
+                "supervisor_review_audit_events",
+                "supervisor_boundary_reviews",
+                "supervisor_boundary_audit_events",
+                "session_continuations",
+                "session_continuation_attempts",
+                "session_continuation_audit_events",
+                "runtime_log_entries",
+                "runtime_log_summaries",
+                "product_commands",
+                "product_command_previews",
+                "product_command_decisions",
+                "product_command_attempts",
             ]
         );
         for table in &report.tables {
@@ -2352,6 +2411,7 @@ mod tests {
         assert_eq!(agent_adapters.json_count, 1, "{agent_adapters:?}");
     }
     include!("workbench_sqlite_storage_mode_m5b_tests.rs");
+    include!("workbench_sqlite_storage_mode_m5c_tests.rs");
 
     #[test]
     fn m5b_batch2_bridge_commits_workflow_audit_before_json_projection() {

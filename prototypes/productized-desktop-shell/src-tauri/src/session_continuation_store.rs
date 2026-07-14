@@ -31,6 +31,9 @@ const STORAGE_KIND: &str = "sidecar_json_v0";
 const SIDECAR_NAME: &str = "session-continuations.v1.json";
 const LOCK_NAME: &str = ".session-continuations.v1.lock";
 
+#[path = "session_continuation_store_db_primary.rs"]
+pub(crate) mod db_primary;
+
 pub(crate) fn sidecar_path(workflow_state_path: &Path) -> Result<PathBuf, String> {
     store_paths::sidecar_path(workflow_state_path, SIDECAR_NAME, "continuation")
 }
@@ -94,6 +97,7 @@ pub(crate) fn confirm_continuation(
     let lock_path = parent.join(LOCK_NAME);
     let lock = StoreLock::acquire(&lock_path, write_id)?;
     let mut store = load_store(workflow_state_path, timestamp)?;
+    let before_store = store.clone();
     if let Some(expected) = input.expected_store_revision {
         if expected != store.revision {
             drop(lock);
@@ -166,7 +170,7 @@ pub(crate) fn confirm_continuation(
     store.last_write_id = Some(write_id.to_string());
     store.updated_at = timestamp.to_string();
     remember_project_root(&mut store, &continuation.project_root);
-    write_store_atomic(&sidecar, &store, timestamp, write_id)?;
+    db_primary::write(workflow_state_path, &before_store, &store)?;
     drop(lock);
 
     Ok(ConfirmControlledSessionContinuationOutput {
@@ -197,6 +201,7 @@ pub(crate) fn run_stub(
     let lock_path = parent.join(LOCK_NAME);
     let lock = StoreLock::acquire(&lock_path, write_id)?;
     let mut store = load_store(workflow_state_path, timestamp)?;
+    let before_store = store.clone();
     if let Some(expected) = input.expected_store_revision {
         if expected != store.revision {
             drop(lock);
@@ -344,7 +349,7 @@ pub(crate) fn run_stub(
     store.last_write_id = Some(write_id.to_string());
     store.updated_at = timestamp.to_string();
     remember_project_root(&mut store, &continuation.project_root);
-    write_store_atomic(&sidecar, &store, timestamp, write_id)?;
+    db_primary::write(workflow_state_path, &before_store, &store)?;
     drop(lock);
 
     Ok(RunControlledSessionContinuationStubOutput {
@@ -376,6 +381,7 @@ pub(crate) fn inspect_real_resume_authorization(
     let lock_path = parent.join(LOCK_NAME);
     let lock = StoreLock::acquire(&lock_path, write_id)?;
     let mut store = load_store(workflow_state_path, timestamp)?;
+    let before_store = store.clone();
     if let Some(expected) = input.expected_store_revision {
         if expected != store.revision {
             drop(lock);
@@ -546,7 +552,7 @@ pub(crate) fn inspect_real_resume_authorization(
     store.last_write_id = Some(write_id.to_string());
     store.updated_at = timestamp.to_string();
     remember_project_root(&mut store, &continuation.project_root);
-    write_store_atomic(&sidecar, &store, timestamp, write_id)?;
+    db_primary::write(workflow_state_path, &before_store, &store)?;
     drop(lock);
 
     Ok(InspectControlledSessionContinuationRealResumeOutput {
@@ -636,6 +642,7 @@ fn run_real_resume_phase_a_with_runner<R: codex_local_runner::CodexLocalPhaseAPr
     let lock = StoreLock::acquire(&lock_path, write_id)?;
     runtime_log_store::ensure_appendable(workflow_state_path)?;
     let mut store = load_store(workflow_state_path, timestamp)?;
+    let before_store = store.clone();
     if let Some(expected) = input.expected_store_revision {
         if expected != store.revision {
             drop(lock);
@@ -865,7 +872,7 @@ fn run_real_resume_phase_a_with_runner<R: codex_local_runner::CodexLocalPhaseAPr
     store.last_write_id = Some(write_id.to_string());
     store.updated_at = timestamp.to_string();
     remember_project_root(&mut store, &continuation.project_root);
-    write_store_atomic(&sidecar, &store, timestamp, write_id)?;
+    db_primary::write(workflow_state_path, &before_store, &store)?;
     runtime_log_store::append_session_continuation_attempt(
         workflow_state_path,
         &store,
@@ -915,6 +922,7 @@ pub(crate) fn run_real_resume_phase_b_with_runner<
     let lock = StoreLock::acquire(&lock_path, write_id)?;
     runtime_log_store::ensure_appendable(workflow_state_path)?;
     let mut store = load_store(workflow_state_path, timestamp)?;
+    let before_store = store.clone();
     if let Some(expected) = input.expected_store_revision {
         if expected != store.revision {
             drop(lock);
@@ -1184,7 +1192,7 @@ pub(crate) fn run_real_resume_phase_b_with_runner<
     store.last_write_id = Some(write_id.to_string());
     store.updated_at = timestamp.to_string();
     remember_project_root(&mut store, &continuation.project_root);
-    write_store_atomic(&sidecar, &store, timestamp, write_id)?;
+    db_primary::write(workflow_state_path, &before_store, &store)?;
     runtime_log_store::append_session_continuation_attempt(
         workflow_state_path,
         &store,
@@ -1234,6 +1242,7 @@ pub(crate) fn run_real_new_session_h3_b_with_runner<
     let lock = StoreLock::acquire(&lock_path, write_id)?;
     runtime_log_store::ensure_appendable(workflow_state_path)?;
     let mut store = load_store(workflow_state_path, timestamp)?;
+    let before_store = store.clone();
     if let Some(expected) = input.expected_store_revision {
         if expected != store.revision {
             drop(lock);
@@ -1500,7 +1509,7 @@ pub(crate) fn run_real_new_session_h3_b_with_runner<
     store.last_write_id = Some(write_id.to_string());
     store.updated_at = timestamp.to_string();
     remember_project_root(&mut store, &continuation.project_root);
-    write_store_atomic(&sidecar, &store, timestamp, write_id)?;
+    db_primary::write(workflow_state_path, &before_store, &store)?;
     runtime_log_store::append_session_continuation_attempt(
         workflow_state_path,
         &store,
@@ -1555,6 +1564,7 @@ pub(crate) fn cleanup_stale_attempt(
     let lock = StoreLock::acquire(&lock_path, write_id)?;
     runtime_log_store::ensure_appendable(workflow_state_path)?;
     let mut store = load_store(workflow_state_path, timestamp)?;
+    let before_store = store.clone();
     if expected_revision != store.revision {
         drop(lock);
         return Err(format!(
@@ -1642,7 +1652,7 @@ pub(crate) fn cleanup_stale_attempt(
     store.revision += 1;
     store.last_write_id = Some(write_id.to_string());
     store.updated_at = timestamp.to_string();
-    write_store_atomic(&sidecar, &store, timestamp, write_id)?;
+    db_primary::write(workflow_state_path, &before_store, &store)?;
     runtime_log_store::append_session_continuation_attempt(
         workflow_state_path,
         &store,

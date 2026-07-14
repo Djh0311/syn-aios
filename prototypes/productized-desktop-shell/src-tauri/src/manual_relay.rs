@@ -2547,6 +2547,7 @@ fn clean_path(path: &Path) -> PathBuf {
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Mutex, OnceLock};
     use std::thread;
     use std::time::{Duration, Instant};
@@ -2728,7 +2729,7 @@ mod tests {
         let mut preview_input = fixture_preview_input("strict paths");
         let missing_root = std::env::temp_dir().join(format!(
             "manual-relay-missing-{}",
-            short_hash("strict paths")
+            test_temp_suffix("strict paths")
         ));
         preview_input.target_project_root = missing_root.display().to_string();
         preview_input.target_cwd = missing_root.display().to_string();
@@ -3198,8 +3199,7 @@ if [ -z "$last" ]; then
   exit 42
 fi
 mkdir -p "$(dirname "$last")"
-prompt="$(cat)"
-printf 'running json event mock last message: %s\n' "$prompt" > "$last"
+printf 'running json event mock last message\n' > "$last"
 sleep 0.2
 printf '%s\n' '{"type":"thread.started","thread_id":"thread-running-json-fixture"}'
 printf '%s\n' '{"type":"turn.started"}'
@@ -3291,8 +3291,7 @@ if [ -z "$last" ]; then
   exit 42
 fi
 mkdir -p "$(dirname "$last")"
-prompt="$(cat)"
-printf 'running live event mock last message: %s\n' "$prompt" > "$last"
+printf 'running live event mock last message\n' > "$last"
 printf '%s\n' '{"type":"thread.started","thread_id":"thread-live-json-fixture"}'
 printf '%s\n' '{"type":"turn.started"}'
 printf '%s\n' '{"type":"item.started","item":{"id":"item-live-reply","type":"agent_message","text":"LIVE_PARTIAL"}}'
@@ -3325,7 +3324,7 @@ exit 0
         assert_eq!(running.status, "running");
 
         let mut live = None;
-        for _ in 0..20 {
+        for _ in 0..100 {
             let receipt = poll_manual_relay_attempt(
                 ManualRelayPollInput {
                     relay_attempt_id: running.relay_attempt_id.clone(),
@@ -3495,7 +3494,7 @@ sleep 30
         std::env::remove_var("MANUAL_RELAY_REAL_CODEX_CONFIRM");
         let marker_dir = std::env::temp_dir().join(format!(
             "manual-relay-process-group-stop-{}",
-            short_hash("gui-direct-process-group-children")
+            test_temp_suffix("gui-direct-process-group-children")
         ));
         std::fs::create_dir_all(&marker_dir).expect("marker dir should be created");
         let ready_path = marker_dir.join("ready.txt");
@@ -3579,7 +3578,7 @@ wait
         let _guard = test_guard();
         let marker_dir = std::env::temp_dir().join(format!(
             "manual-relay-app-shutdown-{}",
-            short_hash("app-shutdown-process-group")
+            test_temp_suffix("app-shutdown-process-group")
         ));
         std::fs::create_dir_all(&marker_dir).expect("marker dir should be created");
         let ready_path = marker_dir.join("ready.txt");
@@ -3957,7 +3956,7 @@ sleep 30
     }
 
     fn fixture_preview_input(prompt: &str) -> ManualRelayPreviewInput {
-        let suffix = short_hash(prompt);
+        let suffix = test_temp_suffix(prompt);
         let project_root = std::env::temp_dir().join(format!("manual-relay-project-{suffix}"));
         let session_id = format!("session:manual-relay-fixture:{suffix}");
         ManualRelayPreviewInput {
@@ -3973,7 +3972,7 @@ sleep 30
     }
 
     fn existing_fixture_preview_input(prompt: &str) -> ManualRelayPreviewInput {
-        let suffix = short_hash(prompt);
+        let suffix = test_temp_suffix(prompt);
         let project_root = std::env::temp_dir().join(format!("manual-relay-existing-{suffix}"));
         std::fs::create_dir_all(&project_root).expect("fixture project root should be created");
         let session_id = format!("session:manual-relay-fixture:{suffix}");
@@ -3990,7 +3989,7 @@ sleep 30
     }
 
     fn new_session_fixture_preview_input(prompt: &str) -> ManualRelayPreviewInput {
-        let suffix = short_hash(prompt);
+        let suffix = test_temp_suffix(prompt);
         let project_root = std::env::temp_dir().join(format!("manual-relay-new-session-{suffix}"));
         std::fs::create_dir_all(&project_root).expect("fixture project root should be created");
         ManualRelayPreviewInput {
@@ -4008,7 +4007,7 @@ sleep 30
     fn mock_codex_script(name: &str, body: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
             "manual-relay-mock-codex-{}",
-            short_hash(&format!("{name}:{body}"))
+            test_temp_suffix(&format!("{name}:{body}"))
         ));
         std::fs::create_dir_all(&dir).expect("mock codex dir should be created");
         let script = dir.join("mock-codex.sh");
@@ -4025,7 +4024,7 @@ sleep 30
     fn b1_real_relay_fixture_preview_input(label: &str) -> Result<ManualRelayPreviewInput, String> {
         let project_root = std::env::temp_dir().join(format!(
             "manual-relay-b1-real-fixture-{}",
-            short_hash(label)
+            test_temp_suffix(label)
         ));
         std::fs::create_dir_all(&project_root)
             .map_err(|error| format!("b1_fixture_dir_create_failed:{error}"))?;
@@ -4220,10 +4219,20 @@ sleep 30
         }
     }
 
+    fn test_temp_suffix(label: &str) -> String {
+        static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+        format!(
+            "{}-{}-{}",
+            std::process::id(),
+            SEQUENCE.fetch_add(1, Ordering::Relaxed),
+            short_hash(label)
+        )
+    }
+
     // 2026-07-08 根治「12-failed 级联」(四次现身·重跑即绿):任一测试**持锁期间 panic** → 三把
     // Mutex 中毒 → 之后 23 个测试全在这里的 expect 上炸=一个真抽风带崩一片。修法:**中毒恢复**
-    // (into_inner)——串行锁不带数据,中毒仅意味着"前一个测试挂了",串行语义分毫不损;两张登记表
-    // 恢复后照旧 clear() = 反而回到已知空态。真正的首发抽风从此不再被级联淹没,下次现身即可定位。
+    // (into_inner)——串行锁不带数据,中毒仅意味着"前一个测试挂了",串行语义分毫不损。还要回收
+    // 遗留 mock 子进程，不能只 clear 登记表后把它们留在下一个测试夹具之外。
     // (只动测试 mod 的调用侧;active_attempts/consumed_confirmations 生产本体 0-diff。)
     fn test_guard() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -4231,10 +4240,16 @@ sleep 30
             .get_or_init(|| Mutex::new(()))
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        active_attempts()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clear();
+        let stale_attempts = std::mem::take(
+            &mut *active_attempts()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+        );
+        for (_, mut attempt) in stale_attempts {
+            if let Some(child) = attempt.child.take() {
+                let _ = stop_manual_relay_child_process(child);
+            }
+        }
         consumed_confirmations()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
