@@ -7,7 +7,7 @@ use rusqlite::{
     TransactionBehavior,
 };
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
@@ -736,6 +736,121 @@ impl WorkbenchSqliteRepository {
                     )
                     .map_err(RepositoryMutationError::Sqlite)?;
                 Ok(action_rows + append_audit_in_transaction(transaction, audit)?)
+            },
+        )?;
+        Ok(RepositoryReceipt {
+            rows_touched,
+            busy_retries,
+        })
+    }
+
+    // The supervisor-orchestrator sidecar owns its own session and audit ledgers. A single
+    // sidecar mutation may update one session and append one or more immutable audit events;
+    // keep those rows in one Immediate transaction before the JSON projection is attempted.
+    pub(crate) fn record_supervisor_orchestrator_delta(
+        &self,
+        session: Option<&Value>,
+        audit_events: &[Value],
+        failure: Option<RepositoryFailurePoint>,
+    ) -> Result<RepositoryReceipt, String> {
+        if session.is_none() && audit_events.is_empty() {
+            return Err("supervisor_orchestrator_delta_required".to_string());
+        }
+        let session_record = session
+            .map(|value| -> Result<_, String> {
+                Ok((
+                    required_text(value, "run_id")
+                        .map_err(|error| error.describe())?
+                        .to_string(),
+                    optional_text(value, "project_root")
+                        .unwrap_or_default()
+                        .to_string(),
+                    optional_text(value, "workflow_id")
+                        .unwrap_or_default()
+                        .to_string(),
+                    optional_text(value, "authorization_id")
+                        .unwrap_or_default()
+                        .to_string(),
+                    serialized_record(value)?,
+                ))
+            })
+            .transpose()?;
+        let mut audit_event_ids = BTreeSet::new();
+        let audit_records = audit_events
+            .iter()
+            .map(|value| {
+                let event_id = required_text(value, "event_id")
+                    .map_err(|error| error.describe())?
+                    .to_string();
+                if !audit_event_ids.insert(event_id.clone()) {
+                    return Err("supervisor_orchestrator_duplicate_audit_event".to_string());
+                }
+                Ok((
+                    event_id,
+                    required_text(value, "run_id")
+                        .map_err(|error| error.describe())?
+                        .to_string(),
+                    serialized_record(value)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        let (rows_touched, busy_retries) = self.with_immediate_transaction(
+            "record_supervisor_orchestrator_delta",
+            failure,
+            |transaction| {
+                let mut rows_touched = 0;
+                if let Some((
+                    run_id,
+                    project_root,
+                    workflow_id,
+                    authorization_id,
+                    (record_hash, record_json),
+                )) = &session_record
+                {
+                    rows_touched += transaction
+                        .execute(
+                            "INSERT INTO supervisor_orchestrator_sessions (run_id, project_root, workflow_id, authorization_id, source_id, record_hash, record_json)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                             ON CONFLICT(run_id) DO UPDATE SET
+                                project_root = excluded.project_root,
+                                workflow_id = excluded.workflow_id,
+                                authorization_id = excluded.authorization_id,
+                                source_id = excluded.source_id,
+                                record_hash = excluded.record_hash,
+                                record_json = excluded.record_json",
+                            params![
+                                run_id,
+                                project_root,
+                                workflow_id,
+                                authorization_id,
+                                REPOSITORY_SOURCE_ID,
+                                record_hash,
+                                record_json,
+                            ],
+                        )
+                        .map_err(RepositoryMutationError::Sqlite)?;
+                }
+                for (event_id, run_id, (record_hash, record_json)) in &audit_records {
+                    rows_touched += transaction
+                        .execute(
+                            "INSERT INTO supervisor_orchestrator_audit_events (event_id, run_id, source_id, record_hash, record_json)
+                             VALUES (?1, ?2, ?3, ?4, ?5)
+                             ON CONFLICT(event_id) DO UPDATE SET
+                                run_id = excluded.run_id,
+                                source_id = excluded.source_id,
+                                record_hash = excluded.record_hash,
+                                record_json = excluded.record_json",
+                            params![
+                                event_id,
+                                run_id,
+                                REPOSITORY_SOURCE_ID,
+                                record_hash,
+                                record_json,
+                            ],
+                        )
+                        .map_err(RepositoryMutationError::Sqlite)?;
+                }
+                Ok(rows_touched)
             },
         )?;
         Ok(RepositoryReceipt {

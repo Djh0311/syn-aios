@@ -673,8 +673,32 @@ pub(crate) fn inspect_auto_dispatch_authorization(
     };
     store.revision += 1;
     store.updated_at_ms = timestamp_ms;
-    store.audit_events.push(audit_event);
-    write_store_atomic(&sidecar, &store, timestamp_ms, write_id)?;
+    store.audit_events.push(audit_event.clone());
+    if let Some(repository) =
+        crate::workbench_sqlite_storage_mode::primary_repository_for_write(workflow_state_path)?
+    {
+        let audit_value = serde_json::to_value(&audit_event)
+            .map_err(|error| format!("序列化自动派发授权检查审计失败：{error}"))?;
+        repository.append_audit(
+            &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+                event_id: audit_event.audit_event_id.clone(),
+                target_kind: "plan_authorization".to_string(),
+                target_id: result
+                    .authorization_id
+                    .clone()
+                    .unwrap_or_else(|| input.work_item_id.clone()),
+                payload: audit_value,
+            },
+            None,
+        )?;
+        crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
+            workflow_state_path,
+            "plan_authorization_auto_dispatch_scope_checked",
+            || write_store_atomic(&sidecar, &store, timestamp_ms, write_id),
+        )?;
+    } else {
+        write_store_atomic(&sidecar, &store, timestamp_ms, write_id)?;
+    }
     drop(lock);
     Ok(result)
 }

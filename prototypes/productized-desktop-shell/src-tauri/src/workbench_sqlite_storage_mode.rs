@@ -338,6 +338,8 @@ struct DbProjectionData {
     capabilities: Vec<DbRecord>,
     harness_resources: Vec<DbRecord>,
     supervisor_actions: Vec<DbRecord>,
+    supervisor_orchestrator_sessions: Vec<DbRecord>,
+    supervisor_orchestrator_audit_events: Vec<DbRecord>,
     audits: Vec<DbAuditRecord>,
 }
 
@@ -357,6 +359,10 @@ pub(crate) fn reconcile_db_vs_json(
     let supervisor_actions = crate::supervisor_action_controller::db_primary_projection_records(
         &config.workflow_state_path,
     )?;
+    let (supervisor_orchestrator_sessions, supervisor_orchestrator_audit_events) =
+        crate::mcp::supervisor_orchestrator::db_primary_projection_records(
+            &config.workflow_state_path,
+        )?;
 
     let proposal_records = values_to_records(
         proposal_store
@@ -418,6 +424,10 @@ pub(crate) fn reconcile_db_vs_json(
         array_records(&workflow_state, "harness_resources", "resource_id")?;
     let workflow_audits = array_records(&workflow_state, "audit_events", "event_id")?;
     let supervisor_records = values_to_records(supervisor_actions, "action_id")?;
+    let supervisor_orchestrator_session_records =
+        values_to_records(supervisor_orchestrator_sessions, "run_id")?;
+    let supervisor_orchestrator_audit_records =
+        values_to_records(supervisor_orchestrator_audit_events, "event_id")?;
 
     let proposal_db_audits = merge_records(
         "project_proposal_audit_events",
@@ -506,6 +516,16 @@ pub(crate) fn reconcile_db_vs_json(
             "supervisor_actions",
             normalize_supervisor_actions(database.supervisor_actions)?,
             supervisor_records,
+        ),
+        reconcile_table(
+            "supervisor_orchestrator_sessions",
+            database.supervisor_orchestrator_sessions,
+            supervisor_orchestrator_session_records,
+        ),
+        reconcile_table(
+            "supervisor_orchestrator_audit_events",
+            database.supervisor_orchestrator_audit_events,
+            supervisor_orchestrator_audit_records,
         ),
         reconcile_table_with_unprojected(
             "workflow_audit_events",
@@ -604,6 +624,21 @@ fn replay_db_primary_projection(config: &DbPrimaryJsonProjectionConfig) -> Resul
         &normalize_supervisor_actions(database.supervisor_actions)?
             .into_iter()
             .map(|record| record.value)
+            .collect::<Vec<_>>(),
+        replace_db_primary_leading,
+        &write_id,
+    )?;
+    crate::mcp::supervisor_orchestrator::replay_db_primary_projection(
+        &config.workflow_state_path,
+        &database
+            .supervisor_orchestrator_sessions
+            .iter()
+            .map(|record| record.value.clone())
+            .collect::<Vec<_>>(),
+        &database
+            .supervisor_orchestrator_audit_events
+            .iter()
+            .map(|record| record.value.clone())
             .collect::<Vec<_>>(),
         replace_db_primary_leading,
         &write_id,
@@ -776,6 +811,14 @@ fn load_db_projection_data(
         supervisor_actions: query_records(
             &connection,
             "SELECT action_id, record_hash, record_json FROM supervisor_actions",
+        )?,
+        supervisor_orchestrator_sessions: query_records(
+            &connection,
+            "SELECT run_id, record_hash, record_json FROM supervisor_orchestrator_sessions",
+        )?,
+        supervisor_orchestrator_audit_events: query_records(
+            &connection,
+            "SELECT event_id, record_hash, record_json FROM supervisor_orchestrator_audit_events",
         )?,
         audits: query_audit_records(&connection)?,
     })
@@ -1747,6 +1790,21 @@ mod tests {
                 )
                 .expect("seed authorization audit");
         }
+        let (supervisor_orchestrator_sessions, supervisor_orchestrator_audits) =
+            crate::mcp::supervisor_orchestrator::db_primary_projection_records(
+                &config.workflow_state_path,
+            )
+            .expect("read supervisor orchestrator sidecar");
+        for session in &supervisor_orchestrator_sessions {
+            repository
+                .record_supervisor_orchestrator_delta(Some(session), &[], None)
+                .expect("seed supervisor orchestrator session");
+        }
+        for audit in &supervisor_orchestrator_audits {
+            repository
+                .record_supervisor_orchestrator_delta(None, std::slice::from_ref(audit), None)
+                .expect("seed supervisor orchestrator audit");
+        }
         repository
             .record_workflow_state_delta_with_audit(
                 &empty_workflow_state_for_db_seed(),
@@ -2009,6 +2067,8 @@ mod tests {
             "work_items",
             "workflow_nodes",
             "supervisor_actions",
+            "supervisor_orchestrator_sessions",
+            "supervisor_orchestrator_audit_events",
             "workflow_audit_events",
         ]
         .into_iter()
@@ -2264,6 +2324,8 @@ mod tests {
                 "capabilities",
                 "harness_resources",
                 "supervisor_actions",
+                "supervisor_orchestrator_sessions",
+                "supervisor_orchestrator_audit_events",
                 "workflow_audit_events",
             ]
         );
@@ -2289,6 +2351,7 @@ mod tests {
         assert_eq!(agent_adapters.db_count, 1, "{agent_adapters:?}");
         assert_eq!(agent_adapters.json_count, 1, "{agent_adapters:?}");
     }
+    include!("workbench_sqlite_storage_mode_m5b_tests.rs");
 
     #[test]
     fn m5b_batch2_bridge_commits_workflow_audit_before_json_projection() {

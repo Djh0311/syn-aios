@@ -4,7 +4,7 @@ use super::{McpServerConfig, SupervisorQuotaLimits};
 use crate::CodexResumeRunner;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -56,6 +56,8 @@ struct SupervisorSession {
     launch_status: String,
     #[serde(default)]
     started_at_ms: i64,
+    #[serde(default, skip_serializing_if = "is_zero_i64")]
+    updated_at_ms: i64,
     #[serde(default)]
     ended_at_ms: Option<i64>,
     #[serde(default)]
@@ -1297,7 +1299,11 @@ fn quota_limits(config: &McpServerConfig) -> Result<SupervisorQuotaLimits, Strin
 }
 
 fn sidecar_path(config: &McpServerConfig) -> Result<PathBuf, String> {
-    crate::utils::store_paths::sidecar_path(workflow_state_path(config)?, SIDECAR_NAME, "主管编排")
+    sidecar_path_for_workflow_state_path(workflow_state_path(config)?)
+}
+
+fn sidecar_path_for_workflow_state_path(workflow_state_path: &Path) -> Result<PathBuf, String> {
+    crate::utils::store_paths::sidecar_path(workflow_state_path, SIDECAR_NAME, "主管编排")
 }
 
 fn empty_store(timestamp_ms: i64) -> SupervisorStore {
@@ -1311,7 +1317,10 @@ fn empty_store(timestamp_ms: i64) -> SupervisorStore {
 }
 
 fn load_store(config: &McpServerConfig) -> Result<SupervisorStore, String> {
-    let path = sidecar_path(config)?;
+    load_store_at(&sidecar_path(config)?)
+}
+
+fn load_store_at(path: &Path) -> Result<SupervisorStore, String> {
     if !path.exists() {
         return Ok(empty_store(now_ms()));
     }
@@ -1329,11 +1338,24 @@ fn load_store(config: &McpServerConfig) -> Result<SupervisorStore, String> {
     Ok(store)
 }
 
+fn is_zero_i64(value: &i64) -> bool {
+    *value == 0
+}
+
+include!("supervisor_orchestrator_db_primary.rs");
+
 fn update_store<R>(
     config: &McpServerConfig,
     write_id: &str,
     update: impl FnOnce(&mut SupervisorStore) -> Result<R, String>,
 ) -> Result<R, String> {
+    let workflow_state_path = workflow_state_path(config)?;
+    if let Some(repository) =
+        crate::workbench_sqlite_storage_mode::primary_repository_for_write(workflow_state_path)?
+    {
+        return update_store_db_primary(config, write_id, repository, update);
+    }
+
     let sidecar = sidecar_path(config)?;
     let parent = sidecar
         .parent()
@@ -2784,4 +2806,6 @@ mod tests {
         ])
         .is_err());
     }
+
+    include!("supervisor_orchestrator_m5b_tests.rs");
 }
