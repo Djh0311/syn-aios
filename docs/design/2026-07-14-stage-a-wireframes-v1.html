@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Syn 线框(灰盒) · 五类页面+回顾面三案</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"PingFang SC",-apple-system,sans-serif; background:#f2f1ef; padding:28px 20px 80px; color:#333; }
+  .intro { max-width:760px; margin:0 auto 36px; }
+  .intro h1 { font-size:21px; font-weight:600; margin-bottom:8px; }
+  .intro p { font-size:13.5px; line-height:1.8; color:#555; }
+  .hint { margin-top:10px; padding:10px 14px; background:#fff; border-radius:8px; font-size:12.5px; }
+  .wf { max-width:980px; margin:0 auto 46px; }
+  .wf h2 { font-size:16px; font-weight:600; margin-bottom:4px; }
+  .wf .note { font-size:12.5px; color:#666; margin-bottom:10px; line-height:1.7; max-width:860px; }
+  .frame { width:940px; height:470px; background:#fff; border:2px solid #bbb; border-radius:10px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,.08); }
+  .topbar { height:40px; background:#e8e6e2; border-bottom:1px solid #ccc; display:flex; align-items:center; gap:10px; padding:0 12px; font-size:11.5px; color:#777; flex-shrink:0; }
+  .body { flex:1; display:flex; min-height:0; }
+  .sidenav { width:96px; background:#eceae6; border-right:1px solid #ccc; padding:8px 6px; font-size:11px; color:#888; flex-shrink:0; }
+  .sidenav div { padding:5px 6px; margin-bottom:2px; background:#e0ded9; border-radius:5px; }
+  .main { flex:1; display:flex; min-height:0; }
+  .box { background:#f0efec; border:1.5px dashed #aaa; border-radius:6px; padding:8px; font-size:11.5px; color:#777; }
+  .scroll { position:relative; overflow:hidden; }
+  .scroll::after { content:"↕ 容器内滚动"; position:absolute; top:6px; right:8px; font-size:10px; color:#4a8a7a; background:#e2f0ec; padding:1px 7px; border-radius:99px; }
+  .fixed-tag { font-size:10px; color:#996; background:#f4efd8; padding:1px 7px; border-radius:99px; }
+  .blk { background:#dedcd7; border-radius:4px; margin:6px 0; }
+  .row { height:30px; background:#e4e2dd; border-radius:4px; margin:6px 0; display:flex; align-items:center; padding:0 8px; gap:8px; font-size:10.5px; color:#888; }
+  .row .dot { width:8px; height:8px; border-radius:99px; background:#b7b3aa; }
+  .row.sel { outline:2px solid #7aa89a; background:#e8efeb; }
+  .lbl { font-size:11px; color:#999; margin:8px 0 2px; letter-spacing:.5px; }
+  .btnrow { display:flex; gap:6px; margin-top:8px; }
+  .btn { height:24px; padding:0 12px; background:#d5d2cc; border-radius:5px; font-size:11px; display:flex; align-items:center; color:#666; }
+  .btn.pri { background:#9dbfb2; color:#2a4a40; }
+  .pillrow { display:flex; gap:6px; margin:6px 0; }
+  .pill { height:18px; padding:0 9px; background:#e6e4df; border-radius:99px; font-size:10px; display:flex; align-items:center; color:#888; }
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <h1>Syn 灰盒线框 · 五类页面 + 回顾面三案</h1>
+  <p>只看<b>结构</b>(什么放哪/哪块内滚/主次关系),不看颜色字体——灰是故意的。总纲:<b>壳固定,页面永不整体滚动,滚动只发生在标了绿标的容器里</b>;密度=紧凑一档。</p>
+  <div class="hint"><b>反馈方式</b>:①每张图说「结构顺/不顺,哪块该挪」 ②回顾面 B1/B2/B3 选一个(或混搭) ③首页区块想加/删哪块。</div>
+</div>
+
+<!-- A 五态工单面 -->
+<div class="wf">
+  <h2>A · 五态工单面(交办页)</h2>
+  <p class="note">沿已拍布局:左窄栏(工作历史+当前单五态卡)+右画布大区。变化只有两点:①整页不滚,左右两栏各自内滚;②当前单卡按批1骨架(pill 行→内容→动作行)。</p>
+  <div class="frame">
+    <div class="topbar">顶栏(保留现状:首页/项目切换/搜索/待审计数/健康点) <span class="fixed-tag">壳·固定</span></div>
+    <div class="body">
+      <div class="sidenav">主导航<div>项目</div><div>智能体</div><div>记忆层</div><div>技能</div><div>harness</div></div>
+      <div class="main">
+        <div style="width:296px;border-right:1px solid #ccc;display:flex;flex-direction:column;padding:10px;min-height:0">
+          <div class="lbl">当前单 · 五态卡(说/批/干/交货/卡住 变形不搬家) <span class="fixed-tag">固定</span></div>
+          <div class="box" style="height:190px">
+            <div class="pillrow"><span class="pill">已交货</span><span class="pill">完成 3 步</span><span class="pill">⚠ 1 项要看</span></div>
+            <div class="blk" style="height:18px;width:70%"></div>
+            <div class="lbl">干了什么 / 复核体检单(✓✗ 行)</div>
+            <div class="blk" style="height:60px"></div>
+            <div class="btnrow"><span class="btn pri">继续弄别的</span><span class="btn">查看原始口供</span></div>
+          </div>
+          <div class="lbl" style="margin-top:10px">工作历史(筛选 chips + 列表)</div>
+          <div class="box scroll" style="flex:1;min-height:0">
+            <div class="row"><span class="dot"></span>单 · 状态 · 时间</div>
+            <div class="row"><span class="dot"></span>单 · 状态 · 时间</div>
+            <div class="row"><span class="dot"></span>单 · 状态 · 时间</div>
+            <div class="row"><span class="dot"></span>…</div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;padding:10px;min-height:0">
+          <div class="lbl">右画布大区(预演/运行工序图) <span class="fixed-tag">固定框</span></div>
+          <div class="box scroll" style="flex:1;min-height:0">
+            <div class="blk" style="height:52px;width:60%;margin:12px auto"></div>
+            <div class="blk" style="height:52px;width:60%;margin:12px auto"></div>
+            <div class="blk" style="height:52px;width:60%;margin:12px auto"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- B1 -->
+<div class="wf">
+  <h2>B1 · 回顾列表面 · 案一:右侧固定详情栏</h2>
+  <p class="note">左列表右详情,点哪条右边换哪条(与交办页左右结构同构,全 App 最一致)。工具条(搜索+过滤+计数)常驻列表顶。适用:记忆中心/技能/知识库/历史/会话五页统一。</p>
+  <div class="frame">
+    <div class="topbar">顶栏 <span class="fixed-tag">壳·固定</span></div>
+    <div class="body">
+      <div class="sidenav">主导航<div>…</div></div>
+      <div class="main">
+        <div style="width:400px;border-right:1px solid #ccc;display:flex;flex-direction:column;padding:10px;min-height:0">
+          <div class="box" style="height:34px;display:flex;align-items:center;gap:8px">🔍 搜索… <span class="pill">全部 128</span><span class="pill">待确认 5</span></div>
+          <div class="lbl">列表(紧凑行) </div>
+          <div class="box scroll" style="flex:1;min-height:0">
+            <div class="row sel"><span class="dot"></span>条目·徽章·一句摘要</div>
+            <div class="row"><span class="dot"></span>条目·徽章·一句摘要</div>
+            <div class="row"><span class="dot"></span>条目·徽章·一句摘要</div>
+            <div class="row"><span class="dot"></span>…全量,不截断</div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;padding:10px;min-height:0">
+          <div class="lbl">详情(跟随选中) </div>
+          <div class="box scroll" style="flex:1;min-height:0">
+            <div class="blk" style="height:22px;width:55%"></div>
+            <div class="blk" style="height:80px"></div>
+            <div class="lbl">操作按钮行(编辑/冻结/采纳…)</div>
+            <div class="btnrow"><span class="btn pri">主操作</span><span class="btn">次操作</span></div>
+            <div class="lbl">开发者详情(折叠)</div>
+            <div class="blk" style="height:16px;width:40%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- B2 -->
+<div class="wf">
+  <h2>B2 · 回顾列表面 · 案二:原地展开</h2>
+  <p class="note">单列全宽列表,点一条原地拉开详情(再点收起)。省一栏、每行更宽;代价:展开后下面的条目被推走,连续对比两条要来回点。</p>
+  <div class="frame">
+    <div class="topbar">顶栏 <span class="fixed-tag">壳·固定</span></div>
+    <div class="body">
+      <div class="sidenav">主导航<div>…</div></div>
+      <div class="main">
+        <div style="flex:1;display:flex;flex-direction:column;padding:10px;min-height:0">
+          <div class="box" style="height:34px;display:flex;align-items:center;gap:8px">🔍 搜索… <span class="pill">全部 128</span></div>
+          <div class="box scroll" style="flex:1;min-height:0;margin-top:8px">
+            <div class="row"><span class="dot"></span>条目 A</div>
+            <div class="row sel" style="height:auto;flex-direction:column;align-items:stretch;padding:8px">
+              <div style="display:flex;gap:8px;align-items:center"><span class="dot"></span>条目 B(已展开)</div>
+              <div class="blk" style="height:70px"></div>
+              <div class="btnrow"><span class="btn pri">主操作</span><span class="btn">次操作</span></div>
+            </div>
+            <div class="row"><span class="dot"></span>条目 C(被推下)</div>
+            <div class="row"><span class="dot"></span>…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- B3 -->
+<div class="wf">
+  <h2>B3 · 回顾列表面 · 案三:滑出抽屉</h2>
+  <p class="note">列表全宽,点一条从右侧滑出覆盖式抽屉,看完关掉。列表最宽、详情最大;代价:抽屉盖住列表,对照着看要开开关关。</p>
+  <div class="frame">
+    <div class="topbar">顶栏 <span class="fixed-tag">壳·固定</span></div>
+    <div class="body">
+      <div class="sidenav">主导航<div>…</div></div>
+      <div class="main" style="position:relative">
+        <div style="flex:1;display:flex;flex-direction:column;padding:10px;min-height:0">
+          <div class="box" style="height:34px">🔍 搜索…</div>
+          <div class="box scroll" style="flex:1;min-height:0;margin-top:8px">
+            <div class="row"><span class="dot"></span>条目(全宽行,信息更多)</div>
+            <div class="row sel"><span class="dot"></span>条目(选中)</div>
+            <div class="row"><span class="dot"></span>条目</div>
+          </div>
+        </div>
+        <div style="position:absolute;top:0;right:0;bottom:0;width:340px;background:#fbfaf8;border-left:2px solid #999;box-shadow:-8px 0 20px rgba(0,0,0,.12);padding:10px;display:flex;flex-direction:column">
+          <div class="lbl">滑出抽屉(覆盖) ✕</div>
+          <div class="box scroll" style="flex:1;min-height:0">
+            <div class="blk" style="height:22px;width:60%"></div>
+            <div class="blk" style="height:90px"></div>
+            <div class="btnrow"><span class="btn pri">主操作</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- C 首页 -->
+<div class="wf">
+  <h2>C · 中心看板面(首页=系统总览)</h2>
+  <p class="note">你拍的「系统总览」:顶部统计行一眼全局,下方固定网格四区块,各自内滚——整页不滚。「等我的事」是区块之一(不是主角),点任何条目跳对应页。</p>
+  <div class="frame">
+    <div class="topbar">顶栏 <span class="fixed-tag">壳·固定</span></div>
+    <div class="body">
+      <div class="sidenav">主导航<div>…</div></div>
+      <div class="main">
+        <div style="flex:1;display:flex;flex-direction:column;padding:10px;min-height:0">
+          <div style="display:flex;gap:8px">
+            <div class="box" style="flex:1;height:52px">项目 5</div>
+            <div class="box" style="flex:1;height:52px">跑着 1</div>
+            <div class="box" style="flex:1;height:52px">等我 2</div>
+            <div class="box" style="flex:1;height:52px">系统 ●正常(存储/闸/进程)</div>
+          </div>
+          <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px;margin-top:8px;min-height:0">
+            <div class="box scroll"><div class="lbl">等我的事(待批/卡住/刚交货)</div><div class="row"><span class="dot"></span>…</div><div class="row"><span class="dot"></span>…</div></div>
+            <div class="box scroll"><div class="lbl">最近项目(点入)</div><div class="row"><span class="dot"></span>…</div><div class="row"><span class="dot"></span>…</div></div>
+            <div class="box scroll"><div class="lbl">记忆动态(新候选/新采纳)</div><div class="row"><span class="dot"></span>…</div></div>
+            <div class="box scroll"><div class="lbl">系统状态明细(存储模式/观察期/最近拦截)</div><div class="row"><span class="dot"></span>…</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- D 右栏 -->
+<div class="wf">
+  <h2>D · 右栏与抽屉(通知/待办/运行中/秘书)</h2>
+  <p class="note">右侧窄 rail 常驻(图标+计数角标=常显级),点开固定宽抽屉(非覆盖,挤压主区),抽屉内滚。每条摘要点击必须带上下文直达那一条(治体检抓的「点哪都跳同一页」)。</p>
+  <div class="frame">
+    <div class="topbar">顶栏 <span class="fixed-tag">壳·固定</span></div>
+    <div class="body">
+      <div class="sidenav">主导航<div>…</div></div>
+      <div class="main">
+        <div style="flex:1;padding:10px;display:flex;min-height:0"><div class="box" style="flex:1">主区(被抽屉挤压,不被覆盖)</div></div>
+        <div style="width:300px;border-left:1px solid #ccc;display:flex;flex-direction:column;padding:10px;min-height:0">
+          <div class="lbl">抽屉:运行中 <span class="fixed-tag">固定宽</span></div>
+          <div class="box scroll" style="flex:1;min-height:0">
+            <div class="row"><span class="dot"></span>某单·真实阶段(派发 17:20)</div>
+            <div class="row"><span class="dot"></span>点击→直达该单</div>
+          </div>
+        </div>
+        <div style="width:44px;background:#eceae6;border-left:1px solid #ccc;padding:6px 4px;font-size:10px;color:#888;text-align:center">
+          <div style="margin-bottom:8px">秘<br>—</div><div style="margin-bottom:8px">知<br>③</div><div style="margin-bottom:8px">待<br>②</div><div>行<br>①</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- E 弹层 -->
+<div class="wf">
+  <h2>E · 弹层与确认(授权/权限/危险操作)</h2>
+  <p class="note">全 App 唯一允许打断的形态(宪法打断级:卡住决策+高危授权)。结构固定三段:①它要动什么(写根/工具/边界三要素,永远可见)②意见区(advisory,不是闸)③动作行(允许/先不做,永不零按钮)。</p>
+  <div class="frame">
+    <div class="topbar">顶栏 <span class="fixed-tag">壳·固定</span></div>
+    <div class="body" style="position:relative;background:#e9e7e3">
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center">
+        <div style="width:430px;background:#fff;border-radius:10px;padding:14px;box-shadow:0 16px 48px rgba(0,0,0,.25)">
+          <div class="lbl">要动什么(三要素·固定第一屏)</div>
+          <div class="box" style="height:64px">写根:/…/mario test<br>工具:read/write/patch · 边界:仅此目录</div>
+          <div class="lbl">主管意见(advisory·可缺席不挡)</div>
+          <div class="blk" style="height:34px"></div>
+          <div class="btnrow"><span class="btn pri">允许并开始</span><span class="btn">按我说的改</span><span class="btn">先不做</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

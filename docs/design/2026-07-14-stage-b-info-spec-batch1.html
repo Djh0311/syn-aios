@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Syn 信息设计稿 · 第一批(交货卡/方案卡/记忆列表行)</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"PingFang SC",-apple-system,sans-serif; background:#eceae5; padding:28px 20px 90px; color:#22241f; }
+  .intro { max-width:860px; margin:0 auto 30px; }
+  .intro h1 { font-size:21px; font-weight:600; margin-bottom:8px; }
+  .intro p { font-size:13.5px; line-height:1.8; color:#4a4c42; }
+  .legend { display:flex; gap:14px; margin-top:10px; font-size:12px; flex-wrap:wrap; }
+  .legend span { display:flex; align-items:center; gap:5px; }
+  .tag { font-size:10px; padding:1px 7px; border-radius:99px; font-weight:500; flex-shrink:0; }
+  .t-del { background:#f7d9d9; color:#8a2828; }
+  .t-fold { background:#f7ecd2; color:#7a5210; }
+  .t-say { background:#dde9f5; color:#1a5c8a; }
+  .t-up { background:#dfeee8; color:#1b4f45; }
+  .t-keep { background:#e6e4df; color:#777; }
+  .sec { max-width:1040px; margin:0 auto 52px; }
+  .sec h2 { font-size:17px; font-weight:600; margin-bottom:4px; }
+  .sec .q { font-size:12.5px; color:#666; margin-bottom:12px; }
+  .pair { display:flex; gap:16px; align-items:flex-start; }
+  .col { flex:1; min-width:0; }
+  .col h3 { font-size:13px; font-weight:600; margin-bottom:8px; color:#666; }
+  .card { background:#fbf9f3; border:1px solid #ddd5c4; border-radius:12px; padding:16px 18px; font-size:13px; line-height:1.7; }
+  .card.old { background:#f6f4ef; }
+  .fr { display:flex; gap:8px; align-items:baseline; margin:5px 0; }
+  .fr .txt { flex:1; min-width:0; }
+  .machine { font-family:ui-monospace,monospace; font-size:11.5px; color:#5a5c55; background:#efede6; border-radius:5px; padding:6px 9px; margin:4px 0; word-break:break-all; }
+  .pillrow { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; }
+  .pill { font-size:11.5px; padding:2px 10px; border-radius:99px; background:#ece7da; color:#6d6650; }
+  .pill.ok { background:#dfeee8; color:#1b4f45; }
+  .pill.warn { background:#f7e8d8; color:#7a3c10; }
+  .h { font-size:14.5px; font-weight:600; margin:10px 0 4px; }
+  .fact { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #eae4d6; font-variant-numeric:tabular-nums; }
+  .fact .k { color:#6d6650; }
+  .btnrow { display:flex; gap:8px; margin-top:12px; }
+  .btn { font-size:12.5px; padding:6px 14px; border-radius:8px; background:#2a6b5e; color:#f4f1e8; }
+  .btn.ghost { background:transparent; color:#2a6b5e; border:1px solid #2a6b5e55; }
+  details.dev { margin-top:8px; font-size:12px; color:#888; }
+  details.dev summary { cursor:pointer; }
+  .listrow { border:1px solid #ddd5c4; border-radius:8px; padding:8px 12px; margin:6px 0; background:#fbf9f3; }
+  .listrow.old { background:#f6f4ef; }
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <h1>信息设计稿 · 第一批</h1>
+  <p>左=<b>现状</b>(你今天真看到的原文复刻)· 右=<b>新版</b>(信息重新设计)。每行字段带处置标签——逐字段拍:「这个不要/换个说法/提上来/进折叠」怎么说都行。</p>
+  <div class="legend">
+    <span><span class="tag t-del">删</span>重复或无信息量</span>
+    <span><span class="tag t-fold">折叠</span>过程/机器信息,进「开发者详情/查看原文」</span>
+    <span><span class="tag t-say">改口</span>保留但换人话</span>
+    <span><span class="tag t-up">提升</span>关键事实,此前埋没或缺席</span>
+    <span><span class="tag t-keep">留</span>原样</span>
+  </div>
+</div>
+
+<!-- ============ 面1 交货卡 ============ -->
+<div class="sec">
+  <h2>面 1 · 交货卡(唯一问题:能信吗·证据呢)</h2>
+  <p class="q">素材=你今天 test.txt 那单的真实数据。现状是你等了 10 分钟后看到的东西。</p>
+  <div class="pair">
+    <div class="col">
+      <h3>现状(实录复刻)</h3>
+      <div class="card old">
+        <div class="fr"><span class="tag t-say">改口</span><div class="txt"><b>主管进程已结束</b></div></div>
+        <div class="fr"><span class="tag t-del">删</span><div class="txt">主管 codex exec 退出码 0(仅表示进程结束;业务状态以权威回程和验收账本为准)</div></div>
+        <div class="fr"><span class="tag t-fold">折叠</span><div class="txt">本单主管运行编号:supervisor:workflow-users-yoyi-documents-mario-test-default:17840206…</div></div>
+        <div class="fr"><span class="tag t-fold">折叠</span><div class="txt machine">control_core_dispatch_worker:accepted {"dispatch_id":"dispatch:workflow-users-yoyi-…"}</div></div>
+        <div class="fr"><span class="tag t-del">删</span><div class="txt machine">supervisor_temporary_codex_home:主管临时 CODEX_HOME 已创建;auth.json 仅为符号链接。</div></div>
+        <div class="fr"><span class="tag t-fold">折叠</span><div class="txt machine">control_core_inspect_worker:accepted {"acceptance_status":"reported_completed","changed_what":"/Users/yoyi/…/test.txt"…</div></div>
+        <div class="fr"><span class="tag t-fold">折叠</span><div class="txt machine">control_core_finalize:accepted {"advisory_only":true,"reason":"权威回程已确认执行前目标文件不存在,执行与独立只读复核均指向项目根目录下同一份 test.txt,并一致确认内容为 12345678…"}</div></div>
+        <div class="fr"><span class="tag t-up">缺席!</span><div class="txt" style="color:#8a2828">「文件其实是 9 字节带换行、不合标准」——这个最关键的事实,现状任何位置都看不到</div></div>
+      </div>
+    </div>
+    <div class="col">
+      <h3>新版</h3>
+      <div class="card">
+        <div class="h">创建 test.txt 并写入 12345678</div>
+        <div class="pillrow"><span class="pill ok">已交货</span><span class="pill warn">⚠ 1 项与验收标准不符</span><span class="pill">全程 11 分钟</span></div>
+        <div class="h" style="font-size:13px">干了什么</div>
+        <div class="fact"><span class="k">新建文件</span><span>…/mario test/test.txt</span></div>
+        <div class="fact"><span class="k">其它文件</span><span>4 个既有文件零改动(哈希一致)</span></div>
+        <div class="h" style="font-size:13px">复核体检单(独立只读复核)</div>
+        <div class="fact"><span class="k">内容</span><span>12345678 ✓</span></div>
+        <div class="fact"><span class="k">字节数</span><span style="color:#8a2828">9 字节(标准:8)✗</span></div>
+        <div class="fact"><span class="k">末尾换行</span><span style="color:#8a2828">有(标准:无)✗</span></div>
+        <div class="fr" style="margin-top:8px"><span class="tag t-say">改口</span><div class="txt">主管认为可以通过——但体检单有 2 项不符,<b>要不要算过,你说了算</b></div></div>
+        <div class="btnrow"><span class="btn">继续弄别的</span><span class="btn ghost">打回重跑</span><span class="btn ghost">查看原始口供</span></div>
+        <div class="fr" style="margin-top:8px"><span class="tag t-del">删</span><div class="txt" style="color:#888">「属实,沉淀」不做卡级主按钮——沉淀是逐步、可选的小动作(只在某步真值得记时点那一步的行内小按钮);不是所有工作都值得沉淀(记忆层设计已定)。</div></div>
+        <div class="fr"><span class="tag t-del">删</span><div class="txt" style="color:#888">「开发者详情」入口整个废除——运行编号/账本事件流/finalize 原文归审计账本页(记账级·常驻可查),交货卡零入口。</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 面2 方案卡 ============ -->
+<div class="sec">
+  <h2>面 2 · 方案卡(唯一问题:它理解对了吗)</h2>
+  <p class="q">素材=你今天 17:01 那份真实方案。现状=「一大坨」的原文。</p>
+  <div class="pair">
+    <div class="col">
+      <h3>现状(实录复刻)</h3>
+      <div class="card old">
+        <div class="fr"><span class="tag t-say">改口</span><div class="txt"><b>我来做:</b>以当前项目根为唯一写入边界,完成一个文件写入任务及其独立复核汇报。</div></div>
+        <div class="fr"><span class="tag t-keep">留</span><div class="txt"><b>会改的文件:</b>test.txt</div></div>
+        <div class="fr"><span class="tag t-say">拆列表</span><div class="txt"><b>执行 Agent 要做到:</b>仅在当前项目根目录 /Users/yoyi/Documents/mario test 创建 test.txt。;不得在 /Users/yoyi/codex-workflow-mario-test 创建或写入 test.txt。;test.txt 的精确内容为 12345678。;test.txt 为 8 字节,且末尾无换行。;执行线不修改 README.md、index.html、styles.css、game.js 或其他现有项目文件。;执行线提交实际写入的绝对路径、文件存在性、字节数和内容核验结果。</div></div>
+        <div class="fr"><span class="tag t-fold">折叠</span><div class="txt"><b>Syn 要保证:</b>控制核心登记唯一的当前项目根写入边界为…;控制核心只派发一个可写执行工作项…;控制核心仅在执行线完成并提交证据后…;控制核心将执行线与复核线的…(四条拼一段)</div></div>
+        <div class="fr"><span class="tag t-fold">折叠</span><div class="txt"><b>主管要判断:</b>主管核对执行线提供的实际路径属于…;主管核对复核线独立确认…;主管确认复核线已向总指导报告…;主管仅在创建、独立复核和总指导汇报均完成时…(四条拼一段)</div></div>
+      </div>
+    </div>
+    <div class="col">
+      <h3>新版</h3>
+      <div class="card">
+        <div class="h">在 mario test 创建 test.txt,写入 12345678</div>
+        <div class="fr"><span class="tag t-up">提升</span><div class="txt"><b>会动什么</b></div></div>
+        <div class="fact"><span class="k">新建</span><span>test.txt(仅此一个文件)</span></div>
+        <div class="fact"><span class="k">写入范围</span><span>/Users/yoyi/Documents/mario test</span></div>
+        <div class="fact"><span class="k">不碰</span><span>你的 4 个现有文件</span></div>
+        <div class="fr" style="margin-top:8px"><span class="tag t-up">提升</span><div class="txt"><b>怎么算做好</b>(逐条,不再拼一段)</div></div>
+        <div style="font-size:12.5px;line-height:1.9">① 内容精确 = 12345678<br>② 8 字节,末尾无换行<br>③ 干完有独立复核线逐字节核验</div>
+        <div class="fr" style="margin-top:8px"><span class="tag t-say">改口</span><div class="txt"><b>风险一句</b>:没写明换行规则时容易多写一个换行——已按「无换行」锁定。</div></div>
+        <details class="dev"><summary>完整验收标准(执行 6 条 / Syn 4 条 / 主管 4 条)与工序步骤</summary></details>
+        <div class="btnrow"><span class="btn">允许并开始</span><span class="btn ghost">按我说的改</span><span class="btn ghost">先不做</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 面3 记忆列表行 ============ -->
+<div class="sec">
+  <h2>面 3 · 回顾列表行(唯一问题:我要找的那条多快找到)</h2>
+  <p class="q">素材=你库里唯一一条真实候选记忆。列表行只为「扫得快」服务,细节全归右侧详情栏(B1 结构)。</p>
+  <div class="pair">
+    <div class="col">
+      <h3>现状(一行 8 层全上脸)</h3>
+      <div class="listrow old">
+        <div class="fr"><span class="tag t-keep">留</span><div class="txt"><b>工作流摘要 / 已确认</b> <span class="pill warn">候选</span></div></div>
+        <div class="fr"><span class="tag t-keep">留</span><div class="txt">mario test RU 发现默认 GUI 真机路径会读 Codex state,记忆闭环需要 confirmed-path 入口。</div></div>
+        <div class="fr"><span class="tag t-del">删</span><div class="txt" style="color:#888">候选不等于正式记忆;采纳前必须确认。(边界声明,每行都重复)</div></div>
+        <div class="fr"><span class="tag t-fold">折叠→详情</span><div class="txt" style="color:#888">风险:low / 敏感:project / 导出:local_only</div></div>
+        <div class="fr"><span class="tag t-fold">折叠→详情</span><div class="txt" style="color:#888">确认:已确认属实(2026-06-14) / 采纳:未采纳</div></div>
+        <div class="fr"><span class="tag t-fold">折叠→详情</span><div class="txt" style="color:#888">来源:observation:obs:v1:1781630651485:3313fafbc3954aa5</div></div>
+        <div class="fr"><span class="tag t-fold">折叠→详情</span><div class="txt" style="color:#888">检查:无阻断发现 / scope:project / 版本 v1</div></div>
+      </div>
+    </div>
+    <div class="col">
+      <h3>新版(行=3 元素,细节在右栏详情)</h3>
+      <div class="listrow">
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="pill warn">候选·已确认</span>
+          <div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">mario test 真机路径会读 Codex state,记忆闭环需要 confirmed-path 入口</div>
+          <span style="font-size:11px;color:#93876d">06-14</span>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#666;line-height:1.8;margin-top:8px">
+        行上只留:<b>状态徽章 + 一句 claim + 时间</b>。<br>
+        风险/来源/确认史/采纳史/检查 → 右侧详情栏(点行即看);<br>
+        「候选不等于正式记忆」这类边界声明 → 详情里说一次,列表不重复;<br>
+        机器 id(observation:obs:v1:…)→ 详情内「开发者详情」折叠。
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
