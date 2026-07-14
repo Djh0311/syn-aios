@@ -10438,3 +10438,8 @@ textarea {
   flex-wrap: wrap;
   margin: 2px 0 10px;
 }
+
+/* 批2·记忆中心列表卡选中态(点哪条详情看哪条)。 */
+.workflow-compact-item.is-selectable { cursor: pointer; }
+.workflow-compact-item.is-selectable:hover { border-color: var(--accent); }
+.workflow-compact-item.is-selected { border-color: var(--accent); background: var(--accent-bg); }

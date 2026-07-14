@@ -11,9 +11,24 @@ import type {
 } from "../../lib/types";
 import { sourceText } from "./MemoryDetailPanels";
 
-export function FormalMemoryItem({ item }: { item: FormalMemoryListItem }) {
+// 批2·P0修复:列表卡可选中(点哪条详情看哪条——此前详情死绑数组第一项,其余记录永久点不开)。
+// onSelect 可选:不传=纯展示(旧调用点零破坏);键盘导航按宪法§八显式不做。
+export function FormalMemoryItem({
+  item,
+  selected = false,
+  onSelect,
+}: {
+  item: FormalMemoryListItem;
+  selected?: boolean;
+  onSelect?: () => void;
+}) {
   return (
-    <div className="workflow-compact-item formal-memory-item">
+    <div
+      className={`workflow-compact-item formal-memory-item${selected ? " is-selected" : ""}${onSelect ? " is-selectable" : ""}`}
+      onClick={onSelect}
+      aria-pressed={onSelect ? selected : undefined}
+      role={onSelect ? "button" : undefined}
+    >
       <div className="memory-item-topline">
         <strong>{item.kind_label} / {item.status_label}</strong>
         <Badge tone={item.task_eligibility.badge_tone}>{item.task_eligibility.label}</Badge>
@@ -29,9 +44,22 @@ export function FormalMemoryItem({ item }: { item: FormalMemoryListItem }) {
   );
 }
 
-export function CandidateMemoryItem({ item }: { item: MemoryCandidateListItem }) {
+export function CandidateMemoryItem({
+  item,
+  selected = false,
+  onSelect,
+}: {
+  item: MemoryCandidateListItem;
+  selected?: boolean;
+  onSelect?: () => void;
+}) {
   return (
-    <div className="workflow-compact-item candidate-memory-item">
+    <div
+      className={`workflow-compact-item candidate-memory-item${selected ? " is-selected" : ""}${onSelect ? " is-selectable" : ""}`}
+      onClick={onSelect}
+      aria-pressed={onSelect ? selected : undefined}
+      role={onSelect ? "button" : undefined}
+    >
       <div className="memory-item-topline">
         <strong>{item.kind_label} / {item.status_label}</strong>
         <Badge tone={item.task_position.badge_tone}>{item.task_position.label}</Badge>
@@ -220,9 +248,9 @@ export function AcceptanceSummaryItem({ acceptanceSummary }: { acceptanceSummary
   if (!acceptanceSummary) {
     return (
       <div className="workflow-compact-item memory-acceptance-summary-item">
-        <strong>M1-M12 门禁摘要</strong>
-        <span>尚未生成 M12 预览；不能声称完整验收摘要已刷新。</span>
-        <em>M12 只覆盖 M1-M12 记忆系统集成摘要，最终权威验收仍在后续阶段。</em>
+        <strong>验收门禁摘要</strong>
+        <span>尚未生成集成验收预览；不能声称完整验收摘要已刷新。</span>
+        <em>本摘要只覆盖记忆系统集成验收，最终权威验收仍在后续阶段。</em>
       </div>
     );
   }
@@ -230,7 +258,7 @@ export function AcceptanceSummaryItem({ acceptanceSummary }: { acceptanceSummary
   return (
     <div className="workflow-compact-item memory-acceptance-summary-item">
       <div className="memory-item-topline">
-        <strong>M1-M12 门禁摘要</strong>
+        <strong>验收门禁摘要</strong>
         <Badge tone={acceptanceSummary.blocked_count ? "warning" : "candidate"}>
           {acceptanceSummary.passed_count}/{acceptanceSummary.gate_count}
         </Badge>
@@ -242,7 +270,7 @@ export function AcceptanceSummaryItem({ acceptanceSummary }: { acceptanceSummary
           {gate.label}：{gate.status} / {gate.evidence}
         </em>
       ))}
-      <em>M12 摘要不替代后续最终权威验收。</em>
+      <em>集成验收摘要不替代后续最终权威验收。</em>
     </div>
   );
 }

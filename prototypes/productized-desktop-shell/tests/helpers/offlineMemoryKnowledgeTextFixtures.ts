@@ -113,8 +113,8 @@ export const memoryKnowledgeTextFixtures = {
     "要求补来源",
     "跨项目主题报告",
     "报告可下钻来源，但不是正式事实",
-    "M1-M12 门禁摘要",
-    "尚未生成 M12 预览",
+    "验收门禁摘要",
+    "尚未生成集成验收预览",
     "最终权威验收仍在后续阶段",
   ],
   memoryCenterForbiddenTexts: [

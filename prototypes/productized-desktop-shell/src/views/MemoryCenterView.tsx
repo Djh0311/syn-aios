@@ -131,8 +131,27 @@ export function MemoryCenterView({
       maturePatternPreview,
     ],
   );
-  const primaryFormalMemory = summary.formal_memories[0] ?? null;
-  const primaryCandidate = summary.candidate_memories[0] ?? null;
+  // 批2·P0修复:详情跟随列表选中(此前死绑数组第一项,其余记录永久点不开)。未选中=默认第一条(兼容旧行为)。
+  const [selectedFormalMemoryId, setSelectedFormalMemoryId] = useState<string | null>(null);
+  const [selectedCandidateKey, setSelectedCandidateKey] = useState<string | null>(null);
+  const [inboxShowAll, setInboxShowAll] = useState(false);
+  // 批2·P0修复:高级治理区八处硬截断统一走「显示全部」开关(此前第N+1条起永久不可达且无提示)。
+  const [advancedShowAll, setAdvancedShowAll] = useState(false);
+  function capped<T>(items: T[], limit: number): T[] {
+    return advancedShowAll ? items : items.slice(0, limit);
+  }
+  const primaryFormalMemory =
+    (selectedFormalMemoryId
+      ? summary.formal_memories.find((item) => item.memory_id === selectedFormalMemoryId)
+      : null) ??
+    summary.formal_memories[0] ??
+    null;
+  const primaryCandidate =
+    (selectedCandidateKey
+      ? summary.candidate_memories.find((item) => item.candidate_key === selectedCandidateKey)
+      : null) ??
+    summary.candidate_memories[0] ??
+    null;
   const primaryCandidateRecord = primaryCandidate
     ? memoryCandidateStore?.candidates.find((candidate) => candidate.candidate_key === primaryCandidate.candidate_key) ?? null
     : null;
@@ -416,9 +435,14 @@ export function MemoryCenterView({
           </div>
           <div className="workflow-compact-list">
             {summary.formal_memories.map((item) => (
-              <FormalMemoryItem item={item} key={item.memory_id} />
+              <FormalMemoryItem
+                item={item}
+                key={item.memory_id}
+                selected={primaryFormalMemory?.memory_id === item.memory_id}
+                onSelect={() => setSelectedFormalMemoryId(item.memory_id)}
+              />
             ))}
-            {!summary.formal_memories.length ? <p className="muted small-note">暂无正式记忆；不会用候选或观察补编正式记忆。</p> : null}
+            {!summary.formal_memories.length ? <p className="muted small-note">暂无正式记忆；交货时点[属实,沉淀]产生候选，采纳后才会出现在这里。</p> : null}
           </div>
         </section>
 
@@ -436,12 +460,19 @@ export function MemoryCenterView({
             candidateStoreRevision={memoryCandidateStore?.revision ?? null}
             formalStoreRevision={formalMemoryStore?.revision ?? null}
             onRequestAction={onRequestAction}
+            showAll={inboxShowAll}
+            onShowAll={() => setInboxShowAll(true)}
           />
           <div className="workflow-compact-list">
             {summary.candidate_memories.map((item) => (
-              <CandidateMemoryItem item={item} key={item.candidate_key} />
+              <CandidateMemoryItem
+                item={item}
+                key={item.candidate_key}
+                selected={primaryCandidate?.candidate_key === item.candidate_key}
+                onSelect={() => setSelectedCandidateKey(item.candidate_key)}
+              />
             ))}
-            {!summary.candidate_memories.length ? <p className="muted small-note">暂无候选记忆；候选不等于正式记忆。</p> : null}
+            {!summary.candidate_memories.length ? <p className="muted small-note">暂无候选记忆；去项目页交办一单活，交货时点[属实,沉淀]就会出现在这里。</p> : null}
           </div>
         </section>
 
@@ -470,11 +501,17 @@ export function MemoryCenterView({
               onAdopt={onRequestAction ? requestCandidateAdoption : undefined}
             />
           ) : null}
-          {!primaryFormalMemory && !primaryCandidate ? <p className="muted small-note">暂无可展示详情。</p> : null}
+          {!primaryFormalMemory && !primaryCandidate ? <p className="muted small-note">暂无可展示详情；先在左侧列表选一条记忆或候选（列表为空时，去项目页交办一单活攒第一条）。</p> : null}
         </section>
 
         <details className="memory-advanced-details">
           <summary className="memory-advanced-summary">高级治理 / 诊断</summary>
+
+        {!advancedShowAll ? (
+          <button className="jiaoban-linklike memory-advanced-showall" type="button" onClick={() => setAdvancedShowAll(true)}>
+            列表默认只显示前几条——点这里显示全部
+          </button>
+        ) : null}
 
         <section className="memory-center-panel memory-entity-relation-panel" aria-label="实体和关系治理">
           <div className="panel-heading">
@@ -483,7 +520,10 @@ export function MemoryCenterView({
               <h3>实体候选 / 关系候选 / 已确认关系</h3>
             </div>
             <Badge tone={summary.entity_relation_summary.confirmed_relation_count ? "candidate" : "unknown"}>
-              {summary.entity_relation_summary.confirmed_relation_count}
+              {summary.entity_relation_summary.entity_candidates.length +
+                summary.entity_relation_summary.merge_candidates.length +
+                summary.entity_relation_summary.relation_candidates.length}{" 候选 · "}
+              {summary.entity_relation_summary.confirmed_relation_count}{" 已确认"}
             </Badge>
           </div>
           <div className="workflow-compact-list">
@@ -498,7 +538,7 @@ export function MemoryCenterView({
               </div>
               {entityRelationError ? <p className="state-warning">{entityRelationError}</p> : null}
             </div>
-            {summary.entity_relation_summary.entity_candidates.slice(0, 3).map((candidate) => (
+            {capped(summary.entity_relation_summary.entity_candidates, 3).map((candidate) => (
               <EntityCandidateItem
                 candidate={candidate}
                 key={candidate.candidate_id}
@@ -506,7 +546,7 @@ export function MemoryCenterView({
                 onReject={() => requestAliasDecision(candidate, "reject_alias")}
               />
             ))}
-            {summary.entity_relation_summary.merge_candidates.slice(0, 3).map((candidate) => (
+            {capped(summary.entity_relation_summary.merge_candidates, 3).map((candidate) => (
               <MergeCandidateItem
                 candidate={candidate}
                 key={candidate.merge_candidate_id}
@@ -514,7 +554,7 @@ export function MemoryCenterView({
                 onReject={() => requestMergeDecision(candidate, "reject_merge")}
               />
             ))}
-            {summary.entity_relation_summary.relation_candidates.slice(0, 3).map((candidate) => (
+            {capped(summary.entity_relation_summary.relation_candidates, 3).map((candidate) => (
               <RelationCandidateItem
                 candidate={candidate}
                 key={candidate.candidate_id}
@@ -522,7 +562,7 @@ export function MemoryCenterView({
                 onReject={() => requestRelationDecision(candidate, "reject_relation")}
               />
             ))}
-            {summary.entity_relation_summary.confirmed_relations.slice(0, 4).map((relation) => (
+            {capped(summary.entity_relation_summary.confirmed_relations, 4).map((relation) => (
               <ConfirmedRelationItem relation={relation} key={relation.relation_id} />
             ))}
             {!summary.entity_relation_summary.entity_candidates.length &&
@@ -555,7 +595,7 @@ export function MemoryCenterView({
               <span>{summary.lint_summary.display_text}</span>
               <em>阻断级发现会阻止进入任务包；检查不会自动修改正式记忆。</em>
             </div>
-            {summary.task_package_summary.stale_reasons.slice(0, 3).map((reason) => (
+            {capped(summary.task_package_summary.stale_reasons, 3).map((reason) => (
               <p className="state-warning" key={reason}>{reason}</p>
             ))}
           </div>
@@ -568,7 +608,7 @@ export function MemoryCenterView({
               <h3>运行 / 发现 / 报告</h3>
             </div>
             <Badge tone={summary.maintenance_summary.blocking_count ? "warning" : "candidate"}>
-              {summary.maintenance_summary.blocking_count}
+              {summary.maintenance_summary.blocking_count}{" 阻断 · "}{summary.maintenance_summary.check_summaries.length}{" 检查"}
             </Badge>
           </div>
           <div className="workflow-compact-list">
@@ -584,12 +624,12 @@ export function MemoryCenterView({
               </div>
               <em>维护任务只生成发现；阻断级发现会阻止召回；不会自动修改正式记忆。</em>
             </div>
-            {summary.maintenance_summary.check_summaries.slice(0, 4).map((check) => (
+            {capped(summary.maintenance_summary.check_summaries, 4).map((check) => (
               <div className="workflow-compact-item" key={check}>
                 <span>{check}</span>
               </div>
             ))}
-            {summary.maintenance_summary.recommendation_summaries.slice(0, 3).map((recommendation) => (
+            {capped(summary.maintenance_summary.recommendation_summaries, 3).map((recommendation) => (
               <p className="state-warning" key={recommendation}>{recommendation}</p>
             ))}
           </div>
@@ -599,7 +639,7 @@ export function MemoryCenterView({
           <div className="panel-heading">
             <div>
               <p className="eyebrow">成熟模式 / 跨项目主题</p>
-              <h3>候选 / 报告 / M1-M12 门禁</h3>
+              <h3>候选 / 报告 / 验收门禁</h3>
             </div>
             <Badge tone={summary.mature_pattern_summary.user_confirmation_required_count ? "warning" : "unknown"}>
               {summary.mature_pattern_summary.mature_pattern_candidate_count}
@@ -607,7 +647,7 @@ export function MemoryCenterView({
           </div>
           <div className="workflow-compact-list">
             <div className="workflow-compact-item">
-              <strong>M12 摘要</strong>
+              <strong>集成验收摘要</strong>
               <span>{summary.mature_pattern_summary.display_text}</span>
               <em>{summary.mature_pattern_summary.boundary_text}</em>
               <div className="knowledge-action-row">
@@ -617,7 +657,7 @@ export function MemoryCenterView({
               </div>
               {maturePatternError ? <p className="state-warning">{maturePatternError}</p> : null}
             </div>
-            {summary.mature_pattern_summary.mature_pattern_candidates.slice(0, 4).map((candidate) => (
+            {capped(summary.mature_pattern_summary.mature_pattern_candidates, 4).map((candidate) => (
               <MaturePatternCandidateItem
                 candidate={candidate}
                 key={candidate.candidate_id}
@@ -627,7 +667,7 @@ export function MemoryCenterView({
                 onRequestChanges={() => requestMaturePatternDecision(candidate, "request_changes")}
               />
             ))}
-            {summary.mature_pattern_summary.cluster_reports.slice(0, 3).map((report) => (
+            {capped(summary.mature_pattern_summary.cluster_reports, 3).map((report) => (
               <MemoryClusterReportItem report={report} key={report.report_id} />
             ))}
             <AcceptanceSummaryItem acceptanceSummary={summary.mature_pattern_summary.acceptance_summary} />
@@ -654,7 +694,7 @@ export function MemoryCenterView({
                 <em>{item.boundary}；正式化仍需确认。</em>
               </div>
             ))}
-            {!summary.capture_events.length ? <p className="muted small-note">暂无捕获事件；J3 不会伪造记忆来源。</p> : null}
+            {!summary.capture_events.length ? <p className="muted small-note">暂无捕获事件；系统不会伪造记忆来源——去项目页交办一单活，操作会先进捕获总线。</p> : null}
           </div>
         </section>
 
@@ -675,7 +715,7 @@ export function MemoryCenterView({
                 <em>{item.boundary}；{item.candidate_link}</em>
               </div>
             ))}
-            {!summary.observation_sources.length ? <p className="muted small-note">暂无观察来源；观察不会冒充正式记忆。</p> : null}
+            {!summary.observation_sources.length ? <p className="muted small-note">暂无观察来源；观察不会冒充正式记忆——观察随真实使用自动累积，无需手动创建。</p> : null}
           </div>
         </section>
 
@@ -692,7 +732,7 @@ export function MemoryCenterView({
               <div className="workflow-compact-item project-memory-summary-item" key={item.project_name}>
                 <strong>{item.project_name}</strong>
                 <span>{item.display_text}</span>
-                <em>项目页只保留轻量摘要；完整治理后台不在 M7 实现。</em>
+                <em>项目页只保留轻量摘要；完整治理在本记忆中心进行。</em>
               </div>
             ))}
           </div>
@@ -712,7 +752,7 @@ export function MemoryCenterView({
                 <span>{change}</span>
               </div>
             ))}
-            {!summary.recent_changes.length ? <p className="muted small-note">暂无版本、审计或检查变化。</p> : null}
+            {!summary.recent_changes.length ? <p className="muted small-note">暂无版本、审计或检查变化；对记忆做任何生命周期操作后这里会留痕。</p> : null}
           </div>
         </section>
         </details>
