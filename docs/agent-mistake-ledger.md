@@ -330,3 +330,14 @@ Status: Open
 - **三犯(07-14·降级补丁包)**:第 7 项答非所问——以 `git diff --name-only/--check` 冒充 shape gate,三数未跑。**预防加硬(即刻生效)**:④ 第 7 项必须原样含 `workbench-shape-gate.js --mode check` 的 Status+Errors/Warnings/Info 三数;缺失或以其它检查冒充=**机械打回**,不进入核收;kickoff 模板自此附 gate 原命令一行。
 
 Status: Open
+
+---
+
+## M-2026-07-14:evidence 目录级 `git add` 混提交 live store 快照(二犯)
+
+- **错误**:总指导收口复核实证闸时 `git add evidence/raw/2026-07-14-reseed/apply-backup`(目录级),把 apply 备份自带的 `source-files/`(live store 整套快照,含 5.9MB 主 store,共 8.9 万行)混入 commit `ab0c71e` 并 push 至私有备份 remote。首犯:07-13 a 窗口(目录级 add 盲提交执行线并行草稿,catch-log 在案且已写明「evidence 目录也必须显式列文件」);本次为**同规则二犯**,且从「混入草稿」升级为「混入 live 数据副本」。
+- **为什么要紧**:①仓库体积被一次性数据快照污染(历史 blob 永留,除非重写);②live store 含真实项目/审计/记忆数据,进 git=多一个长期外泄面(本次为私库+本人数据,实害低,但规则失守与数据面积无关);③「显式列文件」是共树纪律的第一课,总指导自己破戒=对执行线的要求失去立足点。
+- **已处置**:`d374a13` 撤出 source-files+`.gitignore` 封路;manifest 三件(有档案价值的小 json)保留;磁盘备份原样。历史 blob 是否重写抹除=用户定夺(需 force push,高危#5)。
+- **预防(即刻生效)**:① `git add` **一律显式列文件,目录参数禁用**——包括且尤其是 `evidence/raw/**`(备份类目录默认含大件/敏感件);② 收口前 `git diff --cached --stat` 尾行核插入量,**插入行数与预期不符(>2 倍)即中止提交**;③ 备份工具产出的目录(apply-backup/pre-cutover/pre-reseed)默认整目录进 `.gitignore`,只显式豁免 manifest/report 级小 json。
+
+Status: Open
