@@ -53,9 +53,13 @@ export type JiaobanOrchestrationMode = "classic" | "supervisor_pilot";
 
 export function supervisorPilotUnavailableReason(projectRoot: string, allowedWriteRoots: string[]): string | null {
   if (projectRoot === STATION_3B_READONLY_PROJECT_ROOT) {
-    // 3b 只读死线：方案带任何写根都不给选主管模式（不看写根指向谁）。
-    if (allowedWriteRoots.length > 0) return "站 3b 项目仅限只读单（零写根）。";
-    return null;
+    // 3b 只读单照旧；站 4（2026-07-14）：唯一同根写根的写单放行，其余写根形状一律拒
+    // ——与后端 station4_write_project_unsealed 同判（根精确 ∧ 恰一条写根 ∧ 写根精确同根）。
+    if (allowedWriteRoots.length === 0) return null;
+    if (allowedWriteRoots.length === 1 && allowedWriteRoots[0] === STATION_3B_READONLY_PROJECT_ROOT) {
+      return null;
+    }
+    return "该项目写单仅允许唯一同根写根（站 4）。";
   }
   if (projectRoot !== TEST_PROJECT_ROOT) return "主管编排试点仅限固定测试项目。";
   if (allowedWriteRoots.some((root) => root !== TEST_PROJECT_ROOT)) {
@@ -1019,7 +1023,7 @@ function ProjectJiaobanPanelBrowser({
       decision: "confirm",
       summary: isReadOnly
         ? "用户点[允许并开始]：确认只读单，选择主管编排试点（不进入经典链）。"
-        : "用户点[允许并开始]：确认固定测试项目写单，选择主管编排试点（主管只读、worker 按写根执行）。",
+        : "用户点[允许并开始]：确认授权写根内的写单，选择主管编排试点（主管只读、worker 按写根执行）。",
       expected_proposal_store_revision: projectConsultationProposalStore?.revision ?? null,
       expected_plan_authorization_store_revision: null,
     });
@@ -1037,8 +1041,8 @@ function ProjectJiaobanPanelBrowser({
       actor_id: "user",
       review_status: "approved",
       summary: isReadOnly
-        ? "用户点[允许并开始]：确认主管试点仅在固定测试项目的只读沙箱内运行。"
-        : "用户点[允许并开始]：确认主管自身只读；worker 仅在固定测试项目授权写根内运行。",
+        ? "用户点[允许并开始]：确认主管试点仅在只读沙箱内运行。"
+        : "用户点[允许并开始]：确认主管自身只读；worker 仅在方案授权写根内运行。",
       checklist: {
         architecture_boundary_checked: true,
         cross_project_impact_checked: true,

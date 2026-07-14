@@ -37,15 +37,29 @@ assert(
   supervisorPilotUnavailableReason(STATION_3B_READONLY_PROJECT_ROOT, []) === null,
   "3b 项目只读单应允许选择主管试点",
 );
+// ===== 站 4（2026-07-14 拍板）：mario test 唯一同根写单放行，其余写根形状一律拒 =====
 assert(
   supervisorPilotUnavailableReason(STATION_3B_READONLY_PROJECT_ROOT, [STATION_3B_READONLY_PROJECT_ROOT]) ===
-    "站 3b 项目仅限只读单（零写根）。",
-  "3b 项目带写根（即使写根就是它自己）必须拒绝主管试点",
+    null,
+  "站 4：mario 项目唯一同根写单应允许选择主管试点",
 );
 assert(
   supervisorPilotUnavailableReason(STATION_3B_READONLY_PROJECT_ROOT, [testProjectRoot]) ===
-    "站 3b 项目仅限只读单（零写根）。",
-  "3b 项目带测试根写根同样拒绝",
+    "该项目写单仅允许唯一同根写根（站 4）。",
+  "mario 项目带测试根写根必须拒绝",
+);
+assert(
+  supervisorPilotUnavailableReason(STATION_3B_READONLY_PROJECT_ROOT, [
+    STATION_3B_READONLY_PROJECT_ROOT,
+    STATION_3B_READONLY_PROJECT_ROOT,
+  ]) === "该项目写单仅允许唯一同根写根（站 4）。",
+  "mario 项目多写根（即使都是同根）必须拒绝",
+);
+assert(
+  supervisorPilotUnavailableReason(STATION_3B_READONLY_PROJECT_ROOT, [
+    `${STATION_3B_READONLY_PROJECT_ROOT}/subdir`,
+  ]) === "该项目写单仅允许唯一同根写根（站 4）。",
+  "mario 项目子目录写根必须拒绝",
 );
 assert(
   supervisorPilotUnavailableReason(`${STATION_3B_READONLY_PROJECT_ROOT}/subdir`, []) ===
