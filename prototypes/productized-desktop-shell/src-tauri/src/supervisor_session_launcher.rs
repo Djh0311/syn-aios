@@ -450,8 +450,8 @@ fn load_authorized_launch_context(
     workflow_state_path: &Path,
     request: &SupervisorPilotLaunchRequest,
 ) -> Result<SupervisorLaunchContext, String> {
-    // 站 3b（2026-07-12 拍板）：入口先按根等值放行到「读授权段」，零写根死线由下方
-    // ensure_supervisor_pilot_write_scope 拿到授权段后全判（3b 根 + 任何写根 → 拒）。
+    // 站 3b/4（2026-07-12/14 拍板）：入口先按 mario 根等值放行到「读授权段」，具体是 3b 零写根
+    // 还是 4 单一同根写根，必须由下方 ensure_supervisor_pilot_write_scope 拿到授权段后全判。
     if !crate::workflow_engine_test_project_unsealed(&request.project_root)
         && !crate::station3b_readonly_project_root(&request.project_root)
     {
@@ -525,10 +525,8 @@ fn load_authorized_launch_context(
     let worker_acceptance_criteria = proposal.worker_acceptance_criteria.clone();
     let control_core_acceptance_criteria = proposal.control_core_acceptance_criteria.clone();
     let supervisor_acceptance_criteria = proposal.supervisor_acceptance_criteria.clone();
-    // 站 3b（2026-07-12）：只读单（零写根）也物化任务包+prepared dispatch——否则主管没有可派的
-    // work item，dispatch_worker 必然失败、只能独狼（站 2 只读单实测如此）。物化机器范围无关：
-    // allowed_write_scope 直抄授权段，空写根 → 任务包只读 → worker 沙箱 read-only（commands 侧
-    // 「缺或空 allowed_write 都是只读」既有纪律）。
+    // 站 3b/4：授权段写根原样进入任务包+prepared dispatch。3b 空写根 → worker read-only；4 的唯一
+    // mario 根 → worker workspace-write。主管自身仍只读，真实项目目录只对受控 worker 开放。
     let pilot_task = Some(prepare_supervisor_pilot_write_task(
         workflow_state_path,
         request,
@@ -569,14 +567,19 @@ fn ensure_supervisor_pilot_write_scope(
     project_root: &str,
     allowed_write_roots: &[String],
 ) -> Result<(), String> {
-    // 站 3b 项目：只读死线——授权段带任何写根都拒，不看写根指向谁。
+    // mario 项目：只允许 3b 的零写根或 4 的唯一精确同根写根；同一目录但两种语义都必须完整判形。
     if crate::station3b_readonly_project_root(project_root) {
-        if crate::station3b_readonly_project_unsealed(project_root, allowed_write_roots) {
+        if crate::station3b_readonly_project_unsealed(project_root, allowed_write_roots)
+            || crate::station4_write_project_unsealed(project_root, allowed_write_roots)
+        {
             return Ok(());
         }
-        return Err("站 3b 项目仅限只读授权段（零写根）；当前授权段含写根，已拒绝发射".to_string());
+        return Err(
+            "mario test 项目只允许站 3b 的零写根或站 4 的唯一精确写根；当前授权段写根形态不匹配，已拒绝发射"
+                .to_string(),
+        );
     }
-    // 函数自身 fail-closed（站 3b 收紧）：非测试非 3b 项目即使零写根也拒——不再只靠入口闸兜底。
+    // 函数自身 fail-closed：非测试非 mario 项目即使零写根也拒——不再只靠入口闸兜底。
     if crate::workflow_engine_test_project_unsealed(project_root)
         && allowed_write_roots
             .iter()
@@ -1061,8 +1064,8 @@ fn build_supervisor_command_plan(
     quota_limits: &SupervisorQuotaLimits,
     workbench_executable: &Path,
 ) -> Result<SupervisorCommandPlan, String> {
-    // 站 3b 按根等值放行（零写根死线已在 load_authorized_launch_context 全判）。主管会话 cwd
-    // 与 -C 仍死锁固定测试项目根：主管只读投影不进 3b 项目目录，进真实项目的只有受控 worker。
+    // 站 3b/4 按 mario 根等值放行（写根形状已在 load_authorized_launch_context 全判）。主管会话 cwd
+    // 与 -C 仍死锁固定测试项目根：主管只读投影不进 mario 项目目录，进真实项目的只有受控 worker。
     if !crate::workflow_engine_test_project_unsealed(&request.project_root)
         && !crate::station3b_readonly_project_root(&request.project_root)
     {
@@ -1168,9 +1171,9 @@ fn validate_supervisor_argv(argv: &[String], project_root: &str) -> Result<(), S
     if !crate::workflow_engine_test_project_unsealed(project_root)
         && !crate::station3b_readonly_project_root(project_root)
     {
-        return Err("主管试点只能锁定固定测试项目或站 3b 只读项目".to_string());
+        return Err("主管试点只能锁定固定测试项目或 mario test 项目".to_string());
     }
-    // 3b 也不例外：主管会话 cwd 恒为固定测试项目根，真实项目目录只对受控 worker 开放。
+    // 3b/4 都不例外：主管会话 cwd 恒为固定测试项目根，真实项目目录只对受控 worker 开放。
     if !argv_contains_pair(argv, "-C", crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT) {
         return Err("主管会话 -C 必须留在固定测试项目根，拒绝启动".to_string());
     }
@@ -2342,27 +2345,34 @@ mod tests {
         }
     }
 
-    // 站 3b 案发测试：3b 项目零写根放行；带任何写根（含 3b 根自己/测试根）一律拒；
-    // 非测试非 3b 项目维持 blocked；argv 终验在 3b 下仍要求 -C 固定测试根 + read-only。
+    // 站 3b/4 案发测试：同一 mario 根只认 3b 零写根或 4 唯一同根写根；其它形状一律拒。
+    // 非测试非 mario 项目维持 blocked；主管 argv 在两站下都仍固定测试根 + read-only + 零 --add-dir。
     #[test]
-    fn station3b_write_scope_readonly_only_and_argv_stays_in_test_root() {
+    fn station3b_and_station4_write_scope_are_exact_and_supervisor_stays_readonly() {
         let station3b_root = crate::STATION_3B_READONLY_PROJECT_ROOT;
+        let station4_root = crate::STATION_4_WRITE_PROJECT_ROOT;
+        assert_eq!(station3b_root, station4_root, "同根但不是同一授权语义");
         assert!(ensure_supervisor_pilot_write_scope(station3b_root, &[]).is_ok());
+        assert!(ensure_supervisor_pilot_write_scope(station4_root, &[station4_root.to_string()]).is_ok());
         for write_root in [
-            station3b_root,
             crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
             "/tmp/anything",
         ] {
             assert!(
                 ensure_supervisor_pilot_write_scope(station3b_root, &[write_root.to_string()])
                     .is_err(),
-                "3b 项目带写根 {write_root} 必须拒绝"
+                "mario 项目异形写根 {write_root} 必须拒绝"
             );
         }
+        assert!(ensure_supervisor_pilot_write_scope(
+            station4_root,
+            &[station4_root.to_string(), station4_root.to_string()]
+        )
+        .is_err());
         // 其它真实项目根：两闸都不认。
         assert!(ensure_supervisor_pilot_write_scope("/Users/yoyi/gameai/crazytown", &[]).is_err());
 
-        // argv 终验：3b project_root 放行，但 -C 仍必须是固定测试项目根。
+        // argv 终验：mario project_root 放行，但主管 -C 仍必须是固定测试项目根。
         let argv_with = |cwd: &str, sandbox: &str| -> Vec<String> {
             [
                 "exec",
@@ -2381,7 +2391,11 @@ mod tests {
         };
         let good_argv = argv_with(crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "read-only");
         assert!(validate_supervisor_argv(&good_argv, station3b_root).is_ok());
-        // -C 指向 3b 项目 → 拒（主管不进真实项目目录）。
+        assert!(
+            !good_argv.iter().any(|argument| argument == "--add-dir"),
+            "主管只读 argv 不应有写目录：{good_argv:?}"
+        );
+        // -C 指向 mario 项目 → 拒（主管不进真实项目目录）。
         assert!(
             validate_supervisor_argv(&argv_with(station3b_root, "read-only"), station3b_root)
                 .is_err()
@@ -2394,6 +2408,27 @@ mod tests {
         .is_err());
         // 其它真实项目 project_root → 拒。
         assert!(validate_supervisor_argv(&good_argv, "/Users/yoyi/gameai/crazytown").is_err());
+
+        let station4_plan = build_supervisor_command_plan(
+            &SupervisorPilotLaunchRequest {
+                project_root: station4_root.to_string(),
+                ..fixture_request()
+            },
+            Path::new("/tmp/station4-supervisor-workflow-state.json"),
+            "supervisor:station4:argv",
+            &fixture_context().quota_limits,
+            Path::new("/tmp/workbench"),
+        )
+        .expect("站 4 主管计划仍应可组装为只读计划");
+        assert!(argv_contains_pair(&station4_plan.argv, "--sandbox", "read-only"));
+        assert!(
+            !station4_plan
+                .argv
+                .iter()
+                .any(|argument| argument == "--add-dir"),
+            "站 4 只允许 worker 获写根，主管 argv 不得有 --add-dir：{:?}",
+            station4_plan.argv
+        );
     }
 
     #[test]

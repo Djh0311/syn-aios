@@ -755,13 +755,70 @@ mod command_rollout_fallback_tests {
         assert!(!station3b_readonly_project_unsealed(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, &[]));
     }
 
-    // 站 3b 首发实拦复盘（2026-07-12 真机）：S1 执行层合一闸原为 authorization_complete=仅 path-lock，
-    // 主管授权的 3b 只读派发被 blocked_waiting_authorization 安全拦下。修正后的判定必须保持这个刻度：
-    // 只多认「主管授权 ∧ 3b 项目 ∧ 零写根」这一种新真值，其余一律照旧拒。
+    // 站 4 案发测试（2026-07-14）：只认「mario 根精确相等 ∧ 写根恰一条且也精确等于 mario 根」。
     #[test]
-    fn station3b_real_execution_authorization_complete_scoping() {
+    fn station4_write_gate_only_unseals_exact_root_with_single_matching_write_root() {
+        let root = STATION_4_WRITE_PROJECT_ROOT;
+        assert_eq!(root, "/Users/yoyi/Documents/mario test");
+        assert!(station4_write_project_unsealed(root, &[root.to_string()]));
+
+        // 空写根、写根不等于项目根、写根子目录/尾斜杠、多写根都不构成站 4 写授权。
+        assert!(!station4_write_project_unsealed(root, &[]));
+        assert!(!station4_write_project_unsealed(
+            root,
+            &[WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string()]
+        ));
+        assert!(!station4_write_project_unsealed(
+            root,
+            &[format!("{root}/subdir")]
+        ));
+        assert!(!station4_write_project_unsealed(root, &[format!("{root}/")]));
+        assert!(!station4_write_project_unsealed(
+            root,
+            &[root.to_string(), root.to_string()]
+        ));
+
+        // 项目根本身也必须精确：子目录、尾斜杠、其它项目一律拒。
+        assert!(!station4_write_project_unsealed(
+            "/Users/yoyi/Documents/mario test/subdir",
+            &[root.to_string()]
+        ));
+        assert!(!station4_write_project_unsealed(
+            "/Users/yoyi/Documents/mario test/",
+            &[root.to_string()]
+        ));
+        assert!(!station4_write_project_unsealed(
+            "/Users/yoyi/gameai/crazytown",
+            &[root.to_string()]
+        ));
+    }
+
+    #[test]
+    fn station4_supervisor_authorization_shape_guard_keeps_3b_and_rejects_malformed_write_scope() {
+        let root = STATION_4_WRITE_PROJECT_ROOT;
+        assert!(require_supervisor_mario_authorization_write_shape(root, &[]).is_ok());
+        assert!(require_supervisor_mario_authorization_write_shape(root, &[root.to_string()]).is_ok());
+        for malformed in [
+            vec![format!("{root}/subdir")],
+            vec![format!("{root}/")],
+            vec![root.to_string(), root.to_string()],
+            vec![WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string()],
+        ] {
+            let error = require_supervisor_mario_authorization_write_shape(root, &malformed)
+                .expect_err("mario 异形授权段必须在派发前拒绝");
+            assert!(error.contains("当前写根形态不匹配"), "{error}");
+        }
+    }
+
+    // 站 3b 首发实拦复盘（2026-07-12 真机）与站 4（2026-07-14）并列：S1 执行层合一闸原为
+    // authorization_complete=仅 path-lock，后来补 3b 的「主管授权 ∧ mario 根 ∧ 零写根」，本次只再补
+    // 4 的「主管授权 ∧ mario 根 ∧ 单一同根写根」；其余一律照旧拒。
+    #[test]
+    fn station3b_and_station4_real_execution_authorization_complete_scoping() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
-        let root = STATION_3B_READONLY_PROJECT_ROOT;
+        let station3b_root = STATION_3B_READONLY_PROJECT_ROOT;
+        let station4_root = STATION_4_WRITE_PROJECT_ROOT;
+        assert_eq!(station3b_root, station4_root, "两站根字面相同但语义独立");
         // 测试项目：path-lock 命中即真（与主管、写根无关——原语义零变化）。
         assert!(real_execution_authorization_complete(test_root, &[], false));
         assert!(real_execution_authorization_complete(
@@ -770,11 +827,26 @@ mod command_rollout_fallback_tests {
             true
         ));
         // 3b：仅「主管授权 + 零写根」为真。
-        assert!(real_execution_authorization_complete(root, &[], true));
+        assert!(real_execution_authorization_complete(station3b_root, &[], true));
         // 经典线（无主管授权）喂 3b → 拒。
-        assert!(!real_execution_authorization_complete(root, &[], false));
-        // 主管授权但带写根 → 拒。
-        assert!(!real_execution_authorization_complete(root, &[root.to_string()], true));
+        assert!(!real_execution_authorization_complete(station3b_root, &[], false));
+        // 4：仅「主管授权 + 单一同根写根」为真；经典线、空写根、多写根仍拒。
+        assert!(real_execution_authorization_complete(
+            station4_root,
+            &[station4_root.to_string()],
+            true
+        ));
+        assert!(!real_execution_authorization_complete(
+            station4_root,
+            &[station4_root.to_string()],
+            false
+        ));
+        assert!(!real_execution_authorization_complete(station4_root, &[], false));
+        assert!(!real_execution_authorization_complete(
+            station4_root,
+            &[station4_root.to_string(), station4_root.to_string()],
+            true
+        ));
         // 其它真实项目：主管授权也不行。
         assert!(!real_execution_authorization_complete(
             "/Users/yoyi/gameai/crazytown",
@@ -783,12 +855,13 @@ mod command_rollout_fallback_tests {
         ));
     }
 
-    // 站 3b 不放宽 S1：同一个 mario test 目录喂 S1 原闸/legacy 封条仍然全拒——
-    // 尤其 j2_b_b1 旧桩写死的就是这个目录，3b 解封绝不能让它复活。
+    // 站 3b/4 都不放宽 S1：同一个 mario test 目录喂 S1 原闸/legacy 封条仍然全拒——
+    // 尤其 j2_b_b1 旧桩写死的就是这个目录，并列小闸都不能让它复活。
     #[test]
-    fn station3b_does_not_widen_s1_gate_or_legacy_seals() {
-        assert!(!workflow_engine_test_project_unsealed(STATION_3B_READONLY_PROJECT_ROOT));
-        assert!(require_test_project_path_lock(STATION_3B_READONLY_PROJECT_ROOT, "x").is_err());
+    fn station3b_and_station4_do_not_widen_s1_gate_or_legacy_seals() {
+        assert_eq!(STATION_3B_READONLY_PROJECT_ROOT, STATION_4_WRITE_PROJECT_ROOT);
+        assert!(!workflow_engine_test_project_unsealed(STATION_4_WRITE_PROJECT_ROOT));
+        assert!(require_test_project_path_lock(STATION_4_WRITE_PROJECT_ROOT, "x").is_err());
         assert_eq!(
             project_workflow_automation::J2_B_B1_PROJECT_ROOT,
             STATION_3B_READONLY_PROJECT_ROOT,
@@ -2196,6 +2269,11 @@ fn require_test_project_path_lock(project_root: &str, command_name: &str) -> Res
 // 管线、legacy 旧桩、自动连环。判定 = 项目根**精确相等** ∧ 写根为空；任何写根、任何其它项目 → 不解封。
 const STATION_3B_READONLY_PROJECT_ROOT: &str = "/Users/yoyi/Documents/mario test";
 
+// 站 4（2026-07-14 用户拍板；tasks/2026-07-14-station4-mario-test-write-unseal-package-v1.md）：
+// 与 3b 同一目录、但写授权语义独立。绝不能复用 3b 常量或把根等值偷换成写解封；只接受唯一精确的
+// mario test 写根，且只挂主管编排链路。
+const STATION_4_WRITE_PROJECT_ROOT: &str = "/Users/yoyi/Documents/mario test";
+
 // 根等值判定：仅用于「授权段写根不在手上」的次级闸（发射器命令面/argv 终验——入口闸已先按
 // 「根+零写根」全判过）。会拿到写根的地方一律用 station3b_readonly_project_unsealed 全判。
 fn station3b_readonly_project_root(project_root: &str) -> bool {
@@ -2206,10 +2284,17 @@ fn station3b_readonly_project_unsealed(project_root: &str, allowed_write_roots: 
     station3b_readonly_project_root(project_root) && allowed_write_roots.is_empty()
 }
 
-// S1 执行层合一闸的 authorization_complete 判定（站 3b 扩展；判决体 decide_real_execution_command
-// 一字不动）：测试项目 path-lock 命中，或「主管授权派发（带已核 prepared dispatch/授权段）∧ 3b 项目
-// ∧ 零写根」。经典画布(B 线)喂 3b 项目时 supervisor_authorized=false → 此处照拒（其命令入口的
-// S1 闸也已先拦，双层兜底）。
+fn station4_write_project_unsealed(project_root: &str, allowed_write_roots: &[String]) -> bool {
+    project_root == STATION_4_WRITE_PROJECT_ROOT
+        && allowed_write_roots.len() == 1
+        && allowed_write_roots[0] == STATION_4_WRITE_PROJECT_ROOT
+}
+
+// S1 执行层合一闸的 authorization_complete 判定（站 3b/4 并列扩展；判决体
+// decide_real_execution_command 一字不动）：测试项目 path-lock 命中，或「主管授权派发（带已核
+// prepared dispatch/授权段）∧ 3b 项目 ∧ 零写根」，或「主管授权派发 ∧ 4 项目 ∧ 单一同根写根」。
+// 经典画布(B 线)喂 mario 项目时 supervisor_authorized=false → 此处照拒（其命令入口的 S1 闸也已先拦，
+// 双层兜底）。
 fn real_execution_authorization_complete(
     project_root: &str,
     write_roots: &[String],
@@ -2217,6 +2302,25 @@ fn real_execution_authorization_complete(
 ) -> bool {
     workflow_engine_test_project_unsealed(project_root)
         || (supervisor_authorized && station3b_readonly_project_unsealed(project_root, write_roots))
+        || (supervisor_authorized && station4_write_project_unsealed(project_root, write_roots))
+}
+
+// 站 4 C 面冗余守卫：MCP 派发入口已在 reserve 前全判，执行面仍在任何状态/任务包动作前复核一次。
+// mario 项目只能是 3b 的零写根，或 4 的唯一精确写根；不可让私有调用绕过授权段形状检查。
+fn require_supervisor_mario_authorization_write_shape(
+    project_root: &str,
+    allowed_write_roots: &[String],
+) -> Result<(), String> {
+    if station3b_readonly_project_root(project_root)
+        && !station3b_readonly_project_unsealed(project_root, allowed_write_roots)
+        && !station4_write_project_unsealed(project_root, allowed_write_roots)
+    {
+        return Err(
+            "mario test 主管授权段只允许站 3b 的零写根或站 4 的唯一精确写根；当前写根形态不匹配，已拒绝派发"
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -2537,6 +2641,9 @@ fn execute_project_workflow_node_with_authorization_at(
                 .filter(|prefix| !prefix.is_empty())
         })
         .unwrap_or_else(|| default_workflow_id(&request.project_root));
+    if let Some((_, allowed_write)) = supervisor_authorization {
+        require_supervisor_mario_authorization_write_shape(&request.project_root, allowed_write)?;
+    }
     let prepared_authorization = supervisor_authorization
         .map(|(authorization_id, allowed_write)| {
             authorized_prepared_dispatch_for_execution(
@@ -2812,8 +2919,9 @@ fn execute_project_workflow_node_with_authorization_at(
     //   readback_required = true（B 走 readback_db 回读）。
     // 沙箱 command_plan_for / 判决体 decide_real_execution_command / A 线路径 均一字未改。
     {
-        // 站 3b：authorization_complete 认两种真授权——测试项目 path-lock，或主管授权的 3b 只读派发
-        // （supervisor_authorization 携带已核 prepared dispatch；write_roots 由 read-only 沙箱推出=空）。
+        // 站 3b/4：authorization_complete 认三种真授权——测试项目 path-lock，或主管授权的 3b 只读派发
+        // （write_roots=空），或主管授权的 4 单根写派发（write_roots=[mario test]）。授权段形状已在
+        // 上方 C 面守卫和 prepared dispatch 双重核验，写根仍只由任务包推导。
         let path_lock_hit = real_execution_authorization_complete(
             &request.project_root,
             &write_roots,

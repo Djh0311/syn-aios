@@ -234,17 +234,7 @@ impl WorkerInvoker for WorkbenchWorkerInvoker {
         config: &McpServerConfig,
         input: &DispatchInput,
     ) -> Result<WorkerLaunch, String> {
-        // 站 3b（2026-07-12）：3b 项目仅当派发写范围为空（只读 worker）才放行；S1 原闸不动。
-        if !crate::workflow_engine_test_project_unsealed(&input.project_root)
-            && !crate::station3b_readonly_project_unsealed(
-                &input.project_root,
-                &input.allowed_write,
-            )
-        {
-            return Err(crate::legacy_product_command_blocked_message(
-                "execute_project_workflow_node",
-            ));
-        }
+        ensure_supervisor_worker_execution_scope(&input.project_root, &input.allowed_write)?;
         let app_state = crate::AppState::new();
         let index = crate::read_index(&app_state)?;
         let runner = crate::codex_local_runner::RealWorkflowNodeCodexRunner;
@@ -266,17 +256,7 @@ impl WorkerInvoker for WorkbenchWorkerInvoker {
         worker: &SupervisorWorker,
         prompt: &str,
     ) -> Result<WorkerFollowUp, String> {
-        // 站 3b：追问同派发口径——3b 项目仅限只读 worker（写范围空）。
-        if !crate::workflow_engine_test_project_unsealed(&worker.project_root)
-            && !crate::station3b_readonly_project_unsealed(
-                &worker.project_root,
-                &worker.allowed_write,
-            )
-        {
-            return Err(crate::legacy_product_command_blocked_message(
-                "execute_project_workflow_node",
-            ));
-        }
+        ensure_supervisor_worker_execution_scope(&worker.project_root, &worker.allowed_write)?;
         let value = crate::read_workflow_state_value(workflow_state_path(config)?)?;
         let dispatch = crate::find_workflow_node_dispatch(&value, &worker.dispatch_id)
             .ok_or_else(|| "主管账本对应的节点派发记录不存在，拒绝追问".to_string())?;
@@ -353,6 +333,29 @@ impl WorkerInvoker for WorkbenchWorkerInvoker {
             report,
         })
     }
+}
+
+// 主管编排 worker 的并列小闸：S1 固定测试项目原语义不动；mario 项目只认 3b 零写根或 4 唯一
+// 精确同根写根。此守卫同时用于 MCP request 与实际 Workbench invoker，确保 reserve/新建会话前即拒绝异形。
+fn ensure_supervisor_worker_execution_scope(
+    project_root: &str,
+    allowed_write: &[String],
+) -> Result<(), String> {
+    if crate::workflow_engine_test_project_unsealed(project_root)
+        || crate::station3b_readonly_project_unsealed(project_root, allowed_write)
+        || crate::station4_write_project_unsealed(project_root, allowed_write)
+    {
+        return Ok(());
+    }
+    if crate::station3b_readonly_project_root(project_root) {
+        return Err(
+            "mario test 项目只允许站 3b 的零写根或站 4 的唯一精确写根；当前授权段写根形态不匹配，已拒绝派发"
+                .to_string(),
+        );
+    }
+    Err(crate::legacy_product_command_blocked_message(
+        "execute_project_workflow_node",
+    ))
 }
 
 pub(crate) fn dispatch_workbench_worker_with(
@@ -947,14 +950,8 @@ fn dispatch_worker(
         work_item_id: require_string(args, "work_item_id")?,
         allowed_write: require_string_array(args, "allowed_write")?,
     };
-    // 站 3b（2026-07-12）：3b 项目仅当派发写范围为空（只读 worker）才放行；S1 原闸不动。
-    if !crate::workflow_engine_test_project_unsealed(&input.project_root)
-        && !crate::station3b_readonly_project_unsealed(&input.project_root, &input.allowed_write)
-    {
-        return Err(crate::legacy_product_command_blocked_message(
-            "execute_project_workflow_node",
-        ));
-    }
+    // reserve 前复核小闸：mario 项目只有 3b 零写根或 4 精确单写根，异形授权段不占配额、不建会话。
+    ensure_supervisor_worker_execution_scope(&input.project_root, &input.allowed_write)?;
     check_authorization(
         &input.project_root,
         &input.workflow_id,
@@ -1126,14 +1123,8 @@ fn follow_up_worker(
         return Err("追问内容不能为空".to_string());
     }
     let worker = find_worker(config, &worker_id)?;
-    // 站 3b：追问同派发口径——3b 项目仅限只读 worker（写范围空）。
-    if !crate::workflow_engine_test_project_unsealed(&worker.project_root)
-        && !crate::station3b_readonly_project_unsealed(&worker.project_root, &worker.allowed_write)
-    {
-        return Err(crate::legacy_product_command_blocked_message(
-            "execute_project_workflow_node",
-        ));
-    }
+    // 追问复用同一小闸，不能让已获准的站 4 worker 被旧 3b 条件误拦，也不能放过异形写根。
+    ensure_supervisor_worker_execution_scope(&worker.project_root, &worker.allowed_write)?;
     check_authorization(
         &worker.project_root,
         &worker.workflow_id,
@@ -2322,6 +2313,26 @@ mod tests {
         assert!(fixture.control_core("dispatch_worker", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": "bad", "node_id": NODE, "work_item_id": "work-1", "allowed_write": [PROJECT]})).is_err());
         fixture.dispatch().expect("dispatch");
         assert_eq!(fixture.audit_count("control_core_dispatch_worker"), 2);
+    }
+
+    #[test]
+    fn station4_worker_scope_accepts_only_3b_or_exact_station4_write_shape() {
+        let root = crate::STATION_4_WRITE_PROJECT_ROOT;
+        assert!(ensure_supervisor_worker_execution_scope(root, &[]).is_ok());
+        assert!(ensure_supervisor_worker_execution_scope(root, &[root.to_string()]).is_ok());
+        for malformed in [
+            vec![format!("{root}/subdir")],
+            vec![format!("{root}/")],
+            vec![root.to_string(), root.to_string()],
+            vec![crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string()],
+        ] {
+            let error = ensure_supervisor_worker_execution_scope(root, &malformed)
+                .expect_err("mario 异形写根必须在 reserve 前被 MCP 小闸拒绝");
+            assert!(error.contains("当前授权段写根形态不匹配"), "{error}");
+        }
+        assert!(
+            ensure_supervisor_worker_execution_scope("/Users/yoyi/gameai/crazytown", &[]).is_err()
+        );
     }
 
     #[test]

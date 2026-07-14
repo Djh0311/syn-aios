@@ -1,12 +1,12 @@
 use crate::utils::hash::{sha256_hex, short_hash};
 use crate::utils::normalization::normalize_slash_lowercase as normalize;
+#[cfg(test)]
+use crate::CodexLocalAuditRef;
 use crate::{
     CodexLocalActiveAttempt, CodexLocalCommandPlan, CodexLocalExecutionAttempt,
     CodexLocalExecutionGuard, CodexLocalExecutionRequest, CodexLocalFailureReason,
     CodexLocalReadbackResult, CodexLocalRuntimeLogRef,
 };
-#[cfg(test)]
-use crate::CodexLocalAuditRef;
 use std::fs;
 use std::io::Write;
 #[cfg(unix)]
@@ -2542,5 +2542,31 @@ mod tests {
             plan.argv
         );
         println!("[READONLY_DISPATCH_ARGV] {:?}", plan.argv);
+    }
+
+    #[test]
+    fn station4_workspace_write_dispatch_argv_has_exact_single_mario_add_dir() {
+        let root = crate::STATION_4_WRITE_PROJECT_ROOT;
+        let mut request = safe_request();
+        request.project_root = root.to_string();
+        request.target_cwd = root.to_string();
+        request.sandbox = "workspace-write".to_string();
+        request.allowed_write_roots = vec![root.to_string()];
+
+        let plan = command_plan_for(&request);
+        assert!(plan
+            .argv
+            .windows(2)
+            .any(|pair| pair[0] == "-C" && pair[1] == root));
+        assert!(plan
+            .argv
+            .windows(2)
+            .any(|pair| pair[0] == "--sandbox" && pair[1] == "workspace-write"));
+        let add_dirs = plan
+            .argv
+            .windows(2)
+            .filter_map(|pair| (pair[0] == "--add-dir").then(|| pair[1].as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(add_dirs, vec![root], "站 4 只可传入唯一 mario 写根");
     }
 }

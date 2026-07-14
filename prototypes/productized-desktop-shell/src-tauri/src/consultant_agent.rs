@@ -526,19 +526,31 @@ impl ConsultantAgent for CliConsultantAgent {
     }
 }
 
-// 交办地基 2.1·档位（PROFILE_EDIT_TEST_PROJECT）：编辑类目标的执行范围**写死**——写范围=固定测试项目根、
-// 工具=读+写能力、角色=codex-dev+project_director。**不可由请求参数改写**（防"能预览任意项目"滑成"能改任意
-// 项目"）。真执行仍 path-lock + 沙箱 + 四护栏兜底。返回 (write_roots, tools, role_ids)。
-fn profile_edit_test_project_scope() -> (Vec<String>, Vec<String>, Vec<String>) {
-    (
-        vec![WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string()],
-        vec![
-            "read_file".to_string(),
-            "write_file".to_string(),
-            "apply_patch".to_string(),
-        ],
-        vec!["codex-dev".to_string(), "project_director".to_string()],
-    )
+// 编辑类方案的唯一写授权白名单（站 4）：常量单点、不可配置、不可由咨询请求改写。
+// 白名单内才给当前项目根这一条写根；其余项目必须降为纯建议只读，防止“能预览任意项目”滑成“能改任意项目”。
+const PROFILE_EDIT_WRITE_PROJECT_ROOTS: [&str; 2] = [
+    WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+    STATION_4_WRITE_PROJECT_ROOT,
+];
+
+// 返回 (write_roots, tools, role_ids)。None 表示该项目没有编辑写授权，调用方必须构造纯建议只读单。
+fn profile_edit_test_project_scope(
+    project_root: &str,
+) -> Option<(Vec<String>, Vec<String>, Vec<String>)> {
+    PROFILE_EDIT_WRITE_PROJECT_ROOTS
+        .iter()
+        .any(|root| *root == project_root)
+        .then(|| {
+            (
+                vec![project_root.to_string()],
+                vec![
+                    "read_file".to_string(),
+                    "write_file".to_string(),
+                    "apply_patch".to_string(),
+                ],
+                vec!["codex-dev".to_string(), "project_director".to_string()],
+            )
+        })
 }
 
 // ===== 喂 C1（ConsultationProposal → create_project_consultation_proposal 输入）=====
@@ -597,29 +609,50 @@ fn map_consultation_to_c1_input_with_user_requirement_snapshot(
     } else {
         proposal.must_stop_points.clone()
     };
-    // 按 execution_scope 分流：要改东西 → **档位装配**（write/tools/roles 写死·固定测试项目），或纯咨询只读。
+    // 按 execution_scope 分流：要改东西只在白名单项目装配写档位；白名单外降为纯建议只读。
     let scope_draft = match &proposal.execution_scope {
-        // 有执行范围（交办地基 2.1）：write/tools/roles 从**写死的档位**填（不可参数化·防"预览任意项目"滑成
-        // "改任意项目"）；checks 仍用咨询提的、target_files 仍进 proposed_steps。写范围来源换成档位后，原
-        // "write_roots 越界拒"护栏对象消失（档位=测试项目根·恒合法），故移除。
+        // 有执行范围：写档位只认固定测试根和 mario test 两个精确根；咨询提供的 write_roots/tools 仍无权
+        // 改写档位。白名单外不能带着 checks 伪装成可执行只读单，复用纯建议只读机制。
         Some(es) if es.requires_write => {
-            // target_files 不丢：塞进 proposed_steps 最前（让方案卡/主管看到具体文件）。
-            if !es.target_files.is_empty() {
-                proposed_steps.insert(0, format!("目标文件：{}", es.target_files.join("、")));
-            }
-            let (profile_write_roots, profile_tools, profile_roles) =
-                profile_edit_test_project_scope();
-            ProjectConsultationProposalScopeDraft {
-                allowed_role_ids: profile_roles, // ← 档位：codex-dev + project_director
-                allowed_agent_ids: vec![],
-                allowed_read_roots: vec![project_root.to_string()],
-                allowed_write_roots: profile_write_roots, // ← 档位：固定测试项目根（写死）
-                allowed_tools: profile_tools,             // ← 档位：读+写能力（写死）
-                allowed_checks: es.checks.clone(),        // ← 仍用咨询提的
-                allowed_task_package_kinds: vec!["task_package".to_string()],
-                stop_conditions,
-                max_worker_dispatches: None,
-                max_runtime_minutes: None,
+            if let Some((profile_write_roots, profile_tools, profile_roles)) =
+                profile_edit_test_project_scope(project_root)
+            {
+                // target_files 不丢：塞进 proposed_steps 最前（让方案卡/主管看到具体文件）。
+                if !es.target_files.is_empty() {
+                    proposed_steps.insert(0, format!("目标文件：{}", es.target_files.join("、")));
+                }
+                ProjectConsultationProposalScopeDraft {
+                    allowed_role_ids: profile_roles,
+                    allowed_agent_ids: vec![],
+                    allowed_read_roots: vec![project_root.to_string()],
+                    allowed_write_roots: profile_write_roots,
+                    allowed_tools: profile_tools,
+                    allowed_checks: es.checks.clone(),
+                    allowed_task_package_kinds: vec!["task_package".to_string()],
+                    stop_conditions,
+                    max_worker_dispatches: None,
+                    max_runtime_minutes: None,
+                }
+            } else {
+                proposed_steps.insert(0, "该项目未获写授权,已降为只读方案".to_string());
+                if !es.target_files.is_empty() {
+                    proposed_steps.insert(1, format!("目标文件：{}", es.target_files.join("、")));
+                }
+                ProjectConsultationProposalScopeDraft {
+                    allowed_role_ids: vec![
+                        "project_consultant".to_string(),
+                        "codex-dev".to_string(),
+                    ],
+                    allowed_agent_ids: vec![],
+                    allowed_read_roots: vec![project_root.to_string()],
+                    allowed_write_roots: vec![],
+                    allowed_tools: vec!["read_file".to_string()],
+                    allowed_checks: vec![],
+                    allowed_task_package_kinds: vec!["task_package".to_string()],
+                    stop_conditions,
+                    max_worker_dispatches: None,
+                    max_runtime_minutes: None,
+                }
             }
         }
         // 只读执行范围：允许读项目文件与运行用户明确要求的检查，但写根保持空。
@@ -934,6 +967,73 @@ mod consultant_recall_tests {
             "load_project_context 不填已完成事实——由 director 重拆分支用真实 path 填（防死锚回潜·同款）"
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn edit_scope_whitelist_keeps_only_two_exact_roots_and_downgrades_all_others() {
+        let proposal = ConsultationProposal {
+            user_goal: "创建单个文件".to_string(),
+            goal_summary: "需要写入一个目标文件".to_string(),
+            scope_note: "编辑方案".to_string(),
+            reasoning: vec!["先核对范围".to_string()],
+            risks: vec![],
+            must_stop_points: vec![],
+            next_steps: vec!["执行已批准方案".to_string()],
+            worker_acceptance_criteria: vec!["返回写入证据".to_string()],
+            control_core_acceptance_criteria: vec!["核对授权范围".to_string()],
+            supervisor_acceptance_criteria: vec!["复核结果".to_string()],
+            execution_scope: Some(ConsultationExecutionScope {
+                requires_write: true,
+                write_roots: vec!["/etc".to_string()],
+                target_files: vec!["test.txt".to_string()],
+                tools: vec!["shell".to_string()],
+                checks: vec!["cargo test --lib".to_string()],
+            }),
+            suggest_workflow: false,
+        };
+
+        for project_root in [
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            STATION_4_WRITE_PROJECT_ROOT,
+        ] {
+            let input = map_consultation_to_c1_input(&proposal, project_root, "tester")
+                .expect("白名单项目应保留编辑档位");
+            assert_eq!(
+                input.scope_draft.allowed_write_roots,
+                vec![project_root.to_string()]
+            );
+            assert_eq!(
+                input.scope_draft.allowed_tools,
+                vec![
+                    "read_file".to_string(),
+                    "write_file".to_string(),
+                    "apply_patch".to_string(),
+                ]
+            );
+            assert_eq!(
+                input.scope_draft.allowed_checks,
+                vec!["cargo test --lib".to_string()]
+            );
+        }
+
+        for project_root in [
+            "/Users/yoyi/gameai/crazytown".to_string(),
+            format!("{STATION_4_WRITE_PROJECT_ROOT}/"),
+            format!("{STATION_4_WRITE_PROJECT_ROOT}/subdir"),
+        ] {
+            let input = map_consultation_to_c1_input(&proposal, &project_root, "tester")
+                .expect("白名单外编辑意图应降为纯建议只读单");
+            assert!(input.scope_draft.allowed_write_roots.is_empty());
+            assert_eq!(
+                input.scope_draft.allowed_tools,
+                vec!["read_file".to_string()]
+            );
+            assert!(input.scope_draft.allowed_checks.is_empty());
+            assert_eq!(
+                input.proposed_steps.first().map(String::as_str),
+                Some("该项目未获写授权,已降为只读方案")
+            );
+        }
     }
 
     #[test]

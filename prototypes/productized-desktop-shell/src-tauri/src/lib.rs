@@ -11463,6 +11463,185 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         assert_eq!(result.dispatch.exit_code, Some(0));
     }
 
+    // 站 4 temp 贯通：咨询方案的精确 mario 写根经用户确认、全局复核、主管 prepared dispatch 后，
+    // 只喂 stub runner 验证 worker options；不启动 codex，也不写真实 mario 目录。
+    #[test]
+    fn station4_temp_proposal_authorization_and_prepared_dispatch_keep_exact_mario_write_root() {
+        let project_root = STATION_4_WRITE_PROJECT_ROOT;
+        let thread_id = "thread-station4-write";
+        let timestamp_ms = 1_784_400_000_000;
+        let dir = test_temp_dir("station4-mario-write-e2e");
+        let path = dir.join("workflow-state.v0.json");
+        let readback_db_path = dir.join("readback.sqlite");
+        let index = fixture_dispatch_index(project_root, thread_id);
+        bootstrap_project_workflow_at(&path, &fixture_project(project_root))
+            .expect("temp workflow should exist");
+
+        let mut input = fixture_project_consultation_proposal_input(project_root);
+        input.title = "Station 4 mario test 单文件写入".to_string();
+        input.user_goal = "创建 test.txt 并精确写入 12345678".to_string();
+        input.user_requirement_snapshot = input.user_goal.clone();
+        input.scope_draft.allowed_agent_ids = vec![thread_id.to_string()];
+        input.scope_draft.allowed_read_roots = vec![project_root.to_string()];
+        input.scope_draft.allowed_write_roots = vec![project_root.to_string()];
+        input.scope_draft.allowed_tools = vec![
+            "read_file".to_string(),
+            "write_file".to_string(),
+            "apply_patch".to_string(),
+        ];
+        input.scope_draft.allowed_checks = vec![];
+        assert_eq!(
+            input.scope_draft.allowed_write_roots,
+            vec![project_root.to_string()],
+            "方案只可提出唯一精确 mario 写根"
+        );
+
+        let created = project_consultation_proposal_store::create_proposal(
+            &path,
+            &input,
+            timestamp_ms,
+            "write-station4-temp-proposal",
+        )
+        .expect("proposal should persist in temp state");
+        let confirmed = project_consultation_proposal_store::record_decision(
+            &path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: project_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "用户确认 station4 temp 写方案。".to_string(),
+                expected_proposal_store_revision: Some(created.store_revision),
+                expected_plan_authorization_store_revision: None,
+            },
+            timestamp_ms + 1,
+            "write-station4-temp-confirm",
+            "write-station4-temp-authorization",
+            "write-station4-temp-authorization-user",
+        )
+        .expect("confirmation should create authorization");
+        let authorization = confirmed
+            .plan_authorization
+            .as_ref()
+            .expect("confirmation should return authorization");
+        let activated = plan_authorization_store::record_global_boundary_review_with_proposal(
+            &path,
+            &fixture_global_boundary_review_input(
+                project_root,
+                &confirmed.proposal.proposal_id,
+                &authorization.authorization_id,
+                confirmed
+                    .plan_authorization_store_revision
+                    .expect("authorization revision"),
+            ),
+            timestamp_ms + 2,
+            "write-station4-temp-boundary",
+        )
+        .expect("global review should activate authorization");
+        assert_eq!(
+            activated.authorization.scope.allowed_write_roots,
+            vec![project_root.to_string()],
+            "确认后的授权段必须保留唯一 mario 写根"
+        );
+
+        let workflow_id = default_workflow_id(project_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(project_root, &node_id, None, thread_id),
+        )
+        .expect("worker role should have an existing temp session binding");
+        let pilot_task =
+            supervisor_session_launcher::prepare_supervisor_pilot_write_task_for_index(
+                &path,
+                &index,
+                &supervisor_session_launcher::SupervisorPilotLaunchRequest {
+                    project_root: project_root.to_string(),
+                    workflow_id: workflow_id.clone(),
+                    authorization_id: activated.authorization.authorization_id.clone(),
+                    model_id: None,
+                    reasoning_effort: "medium".to_string(),
+                },
+                &confirmed.proposal,
+                &activated.authorization,
+                activated.store_revision,
+            )
+            .expect("supervisor should materialize the prepared worker task");
+        assert_eq!(
+            pilot_task.allowed_write,
+            vec![project_root.to_string()],
+            "prepared task reference must retain the authorization write root"
+        );
+
+        let state = read_workflow_state_value(&path).expect("read materialized temp state");
+        let work_item = find_work_item(&state, &workflow_id, &pilot_task.work_item_id)
+            .expect("prepared task should have a work item");
+        let task_package = find_task_package_artifact(&state, &pilot_task.work_item_id, work_item)
+            .expect("prepared task should have a task package");
+        assert_eq!(
+            string_array(task_package, "allowed_write"),
+            vec![project_root.to_string()],
+            "task package write root must match authorization exactly"
+        );
+        assert!(
+            state["workflow_node_dispatches"]
+                .as_array()
+                .is_some_and(|dispatches| dispatches.iter().any(|dispatch| {
+                    optional_string_from(dispatch, "work_item_id").as_deref()
+                        == Some(pilot_task.work_item_id.as_str())
+                        && optional_string_from(dispatch, "state").as_deref() == Some("prepared")
+                        && optional_string_from(dispatch, "plan_authorization_id").as_deref()
+                            == Some(activated.authorization.authorization_id.as_str())
+                })),
+            "必须存在同一授权段生成的 prepared dispatch"
+        );
+
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &fixture_node_session_bind_request(
+                project_root,
+                &pilot_task.node_id,
+                Some(&pilot_task.work_item_id),
+                thread_id,
+            ),
+        )
+        .expect("temp E2E should bind the exact work item without real codex");
+        let runner = RecordingOptionsRunner::default();
+        let result = execute_authorized_project_workflow_node_at(
+            &path,
+            &index,
+            &readback_db_path,
+            &runner,
+            &ProjectWorkflowNodeRunRequest {
+                project_root: project_root.to_string(),
+                node_id: pilot_task.node_id.clone(),
+                work_item_id: pilot_task.work_item_id.clone(),
+                workflow_id: Some(workflow_id),
+            },
+            &activated.authorization.authorization_id,
+            &pilot_task.allowed_write,
+        )
+        .expect("station4 temp supervisor path should reach the stub runner");
+        assert_eq!(result.dispatch.state, "completed");
+        let options = runner
+            .options
+            .borrow()
+            .clone()
+            .expect("stub runner should capture worker execution options");
+        assert_eq!(
+            options.execution_cwd.as_deref(),
+            Some(Path::new(project_root))
+        );
+        assert_eq!(options.sandbox_mode.as_deref(), Some("workspace-write"));
+        assert_eq!(
+            options.allowed_write_roots,
+            vec![PathBuf::from(project_root)]
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // 只读单的案发式回归：任务包漏 allowed_write 时，H5 bridge 的 fail-open 不在这条主管派发链上；
     // 本执行入口必须保守地把它喂为 read-only + 空写根。
     #[test]
