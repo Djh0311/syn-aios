@@ -1,11 +1,12 @@
+// ⑥ H 定稿(hifi `H · 智能体页(会话中心·回顾面 B1 同构)`)：左会话列表(搜索+项目分组+三元素行)+
+// 右 transcript；composer 上一行常显沙箱与写根。**开发者 11 面板全部退场**(定稿原话：「→审计账本页」)。
+//
+// 退场 = 本页不再渲染，组件本体保留在 `agent/AgentDeveloperPanels.tsx`(见该文件顶注)——
+// 归位到审计账本页是**另一个包**的事(本包禁止改 AuditLedgerView)，删了会让那次搬迁无处可搬。
+// ⚠️ 因此当前这些开发者信息**在 App 里暂时没有落脚点**，见交付报告 forks。
 import { useEffect, useMemo, useState } from "react";
 import { deriveAgentAdapterDescriptors } from "../lib/adapterCapabilities";
-import {
-  deriveH2RealResumeAuthorizationReadiness,
-  deriveH2RealResumeExecutionDecisionSurface,
-} from "../lib/h2RealResumeAuthorization";
 import { deriveProviderAvailabilitySummaries } from "../lib/providerAvailability";
-import { deriveSessionContinuationPreviews } from "../lib/sessionContinuation";
 import { deriveSessionOperationDescriptors } from "../lib/sessionOperations";
 import type {
   AgentAdapterDescriptor,
@@ -27,7 +28,6 @@ import type {
   WorkerProtocolReadModel,
   WorkflowStateSnapshot,
 } from "../lib/types";
-import { AgentDeveloperPanels } from "./agent/AgentDeveloperPanels";
 import { AgentSessionCenter, softwareKeyOf, softwareLabelOf } from "./agent/AgentConversationShell";
 import { AgentSoftwareFilterBar } from "./agent/AgentSoftwareFilterBar";
 import { useAgentSessionPage } from "./agent/useAgentSessionPage";
@@ -139,44 +139,14 @@ export function AgentView({
         : deriveProviderAvailabilitySummaries(adapterDescriptors, sessionOperationDescriptors),
     [backendProviderAvailabilitySummaries, adapterDescriptors, sessionOperationDescriptors],
   );
-  const sessionContinuationPreviews = useMemo(
-    () =>
-      backendSessionContinuationPreviews.length
-        ? backendSessionContinuationPreviews
-        : deriveSessionContinuationPreviews({
-            adapterDescriptors,
-            sessionOperationDescriptors,
-            providerAvailabilitySummaries,
-            workflowState,
-          }),
-    [
-      backendSessionContinuationPreviews,
-      adapterDescriptors,
-      sessionOperationDescriptors,
-      providerAvailabilitySummaries,
-      workflowState,
-    ],
-  );
-  const h2RealResumeAuthorizationReadiness = useMemo(
-    () =>
-      deriveH2RealResumeAuthorizationReadiness({
-        previews: sessionContinuationPreviews,
-        store: sessionContinuationStore,
-      }),
-    [sessionContinuationPreviews, sessionContinuationStore],
-  );
-  const h2RealResumeExecutionDecisionSurface = useMemo(
-    () =>
-      deriveH2RealResumeExecutionDecisionSurface({
-        previews: sessionContinuationPreviews,
-        store: sessionContinuationStore,
-      }),
-    [sessionContinuationPreviews, sessionContinuationStore],
-  );
-  const projectDispatchCount =
-    workflowState?.project_workflows.reduce((count, workflow) => count + workflow.node_dispatches.length, 0) ?? 0;
-  const projectAttemptCount =
-    workflowState?.project_workflows.reduce((count, workflow) => count + workflow.execution_attempts.length, 0) ?? 0;
+  // 11 面板退场后随之无消费者的 derive，逐个核过才删：
+  //   - sessionContinuationPreviews / h2RealResumeAuthorizationReadiness /
+  //     h2RealResumeExecutionDecisionSurface / projectDispatchCount / projectAttemptCount
+  //     → 全部只喂 AgentDeveloperPanels，已删。
+  // 保留的 adapterDescriptors / sessionOperationDescriptors / providerAvailabilitySummaries
+  // **不能删**：它们经 AgentSessionCenter → deriveAgentsPageReadModelFromParts 喂 composer 的项目选择器
+  // (AgentConversationShell.tsx:289-300)，删了会打断真实发送链路。
+  // 它们的 derive 逻辑(lib/adapterCapabilities.ts 等)也照旧保留，只是不再经 11 面板上脸。
 
   function openSession(session: SessionRecord) {
     if (session.thread_id === selectedThreadId) {
@@ -223,41 +193,12 @@ export function AgentView({
         adapterDescriptors={adapterDescriptors}
         sessionOperationDescriptors={sessionOperationDescriptors}
         providerAvailabilitySummaries={providerAvailabilitySummaries}
-        sessionContinuationPreviews={sessionContinuationPreviews}
-        sessionContinuationStore={sessionContinuationStore}
-        runtimeSessionAttention={runtimeSessionAttention}
-        sessionRunStatusSummaries={sessionRunStatusSummaries}
-        realExecutionProductCommands={realExecutionProductCommands}
-        projectWorkflowAutomation={projectWorkflowAutomation}
-        workerProtocol={workerProtocol}
         workflowState={workflowState}
         sessionPageStatus={sessionPage.sessionPageStatus}
         sessionPageSource={sessionPage.sessionPageSource}
         sessionPageWarnings={sessionPage.sessionPageWarnings}
         sessionHasMore={sessionPage.sessionPageHasMore}
         loadingMoreSessions={sessionPage.loadingMoreSessions}
-        developerDetails={
-          <AgentDeveloperPanels
-            sessions={shellSessions}
-            projects={projects}
-            selectedSession={selectedSession}
-            realExecutionProductCommands={realExecutionProductCommands}
-            workflowState={workflowState}
-            h2RealResumeExecutionDecisionSurface={h2RealResumeExecutionDecisionSurface}
-            sessionContinuationStore={sessionContinuationStore}
-            runtimeSessionAttention={runtimeSessionAttention}
-            sessionRunStatusSummaries={sessionRunStatusSummaries}
-            projectWorkflowAutomation={projectWorkflowAutomation}
-            projectDispatchCount={projectDispatchCount}
-            projectAttemptCount={projectAttemptCount}
-            adapterDescriptors={adapterDescriptors}
-            providerAvailabilitySummaries={providerAvailabilitySummaries}
-            sessionContinuationPreviews={sessionContinuationPreviews}
-            h2RealResumeAuthorizationReadiness={h2RealResumeAuthorizationReadiness}
-            workerProtocol={workerProtocol}
-            sessionOperationDescriptors={sessionOperationDescriptors}
-          />
-        }
         eyebrow=""
         title="智能体"
         description="新对话、搜索和会话分组在左栏；当前对话在中间继续。"

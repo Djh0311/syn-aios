@@ -1613,6 +1613,15 @@ button:disabled {
   max-width: 44%;
 }
 
+/* ⑥ H 定稿：发送前写根/沙箱一行常显(治体检 P1「批态可见性缺席」)。零换皮：只引既有 token。 */
+.agent-composer-boundary {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .agent-composer-statusline strong {
   flex: none;
   color: var(--ink-deep);
@@ -1934,9 +1943,12 @@ button:disabled {
   display: grid;
   gap: 2px;
 }
+/* ⑥ H 定稿：会话行 = 三元素**单行**(状态徽章 / claim / 时间)，原来是两行堆叠(grid + sc-line-1/2)。
+   只改布局，颜色一律沿用既有 token(零换皮)。 */
 .session-card {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   padding: 8px 9px;
   border: 1px solid transparent;
@@ -1959,11 +1971,12 @@ button:disabled {
   opacity: 0.5;
   cursor: default;
 }
-.session-card .sc-line-1 {
+/* 状态徽章簇(圆点 + 非 ok 状态词 + 工作台任务徽标)= 三元素里的第一元素。 */
+.session-card .sc-badge {
   display: flex;
+  flex: none;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  gap: 6px;
 }
 .session-card .sc-dot {
   flex: none;
@@ -2014,25 +2027,22 @@ button:disabled {
   line-height: 1.5;
   white-space: nowrap;
 }
-.session-card .sc-line-2 {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding-left: 14px;
-  color: var(--ink-light);
+/* 时间 = 三元素里的第三元素。原来它靠 .sc-line-2 带字号/字体，单行化后自己带。 */
+.session-card .sc-time {
+  flex: none;
+  color: var(--ink-mid);
   font-family: -apple-system, "PingFang SC", sans-serif;
   font-size: 11px;
-}
-.session-card .sc-time {
-  color: var(--ink-mid);
 }
 .session-card .sc-sep {
   color: var(--ink-mist);
 }
+/* 单行化后状态词跟在圆点旁(原来在 sc-line-2 里靠 margin-left:auto 顶到最右)。 */
 .session-card .sc-status {
-  margin-left: auto;
   flex: none;
   color: var(--ink-light);
+  font-family: -apple-system, "PingFang SC", sans-serif;
+  font-size: 11px;
 }
 .session-card .sc-status.warn {
   color: var(--terra);
@@ -8341,6 +8351,18 @@ textarea {
   overflow: hidden;
   display: flex;
 }
+/* 交办 tab（修宪三栏·壳固定）：主区不整页滚，滚动只在三栏各自的 .spec-scroll 内。
+   压过上面 :not(--canvas) 那条的 overflow:auto；顶部仍留 HUD 高度。 */
+.project-detail-content--fullwindow .project-layout--jiaoban {
+  display: flex;
+  overflow: hidden;
+  padding: 96px 12px 12px;
+}
+.project-detail-content--fullwindow .project-layout--jiaoban > .project-jiaoban {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
 
 .project-workspace-title {
   display: grid;
@@ -10469,7 +10491,115 @@ textarea {
 .spec-fill { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .spec-scroll { overflow-y: auto; min-height: 0; }
 
+/* ⑤ C 定稿·首页(系统总览):统计行 + 四区块 2×2。
+   壳固定(布局总纲):本层 overflow:hidden，整页不滚；滚动只在各区块的 .spec-scroll 内。
+   零换皮:颜色一律引既有 token，本段不新增色值。 */
+.home-overview-stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.home-stat-row { display: flex; gap: var(--space-2); flex-shrink: 0; }
+.home-stat {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+}
+.home-stat-n {
+  font-size: var(--text-2xl);
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-stat-n.is-small { font-size: var(--text-base); padding-top: var(--space-1); }
+.home-stat-warn { color: var(--warning); }
+.home-stat-ok { color: var(--accent-strong); }
+.home-stat-idle { color: var(--muted); }
+.home-stat-t {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-overview-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: var(--space-2);
+}
+.home-overview-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+}
+.home-overview-label {
+  flex-shrink: 0;
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted);
+}
+.home-overview-body { flex: 1; }
+
+/* 三元素行的状态点(定稿 C 的 dot)。d-gray 无对应 token → 用既有 --muted，不引新色值。 */
+.home-dot { display: block; width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; }
+.home-dot-ok { background: var(--ok); }
+.home-dot-warn { background: var(--warning); }
+.home-dot-err { background: var(--danger); }
+.home-dot-run { background: var(--run); }
+.home-dot-idle { background: var(--muted); }
+
 /* B1 定稿·记忆中心双栏(左列表+右详情;列表容器内滚)。 */
 .memory-b1-grid { display: grid; grid-template-columns: minmax(320px, 2fr) 3fr; gap: 12px; align-items: start; }
 .memory-b1-toolbar { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
 .memory-b1-list { max-height: 420px; border-top: 1px solid var(--bg-subtle); }
+
+/* ④ 审计账本页(B1 同构:复用 .memory-b1-* 双栏 + .spec-* 定式,只补本页两处)。 */
+.audit-ledger-list { max-height: 460px; }
+.audit-ledger-claim { margin: 0 0 8px; font-size: var(--text-sm); line-height: 1.6; }
+
+/* ④ 右栏 rail 计数角标(常显级·宪法 §三.2)+抽屉行时间(定稿 D「真实阶段+时间」)。 */
+.rail-icon-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--panel);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* 抽屉行时间:落在既有内容列里(不动 .feed-item 的两列栅格,免得没时间的行跟着位移)。 */
+.feed-item .feed-item-time { color: var(--ink-mist); font-variant-numeric: tabular-nums; }
+
+/* ===== K 定稿·设置(轻页)首卡 + 想法箱空态(2026-07-15)。
+   只新增页面级 class,不改既有 token 值、不改 spec-* 基座块(零换皮)。 ===== */
+.settings-plain-card { margin-bottom: 14px; }
+.settings-plain-actions { display: flex; gap: 8px; margin-top: 10px; }
+.idea-inbox-empty { margin-bottom: 14px; }
+.idea-inbox-empty .workflow-state-actions { margin-top: 8px; }

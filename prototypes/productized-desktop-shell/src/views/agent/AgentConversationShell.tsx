@@ -34,7 +34,7 @@ import type {
   WorkerProtocolReadModel,
   WorkflowStateSnapshot,
 } from "../../lib/types";
-import { AgentChatComposer, type AgentConversationSendMode } from "./AgentChatComposer";
+import { AgentChatComposer, MANUAL_RELAY_SANDBOX, type AgentConversationSendMode } from "./AgentChatComposer";
 import { manualRelayReasonLabel } from "./agentLabels";
 import {
   AgentSessionList,
@@ -190,7 +190,6 @@ export type AgentSessionCenterProps = {
   onSearchQueryChange?: (query: string) => void;
   onNewSessionThreadStarted?: (threadId: string) => void | Promise<void>;
   onRequestAction: (action: PendingAction) => void;
-  developerDetails?: React.ReactNode;
   initialReadFilter?: SessionReadFilter;
 };
 
@@ -237,7 +236,6 @@ export function AgentSessionCenter({
   onSearchQueryChange,
   onNewSessionThreadStarted,
   onRequestAction,
-  developerDetails,
   initialReadFilter = "readable",
 }: AgentSessionCenterProps) {
   const effectiveGroupBy: "project" | "software" = "project";
@@ -527,7 +525,8 @@ export function AgentSessionCenter({
           original_user_text: prompt,
           target_project_root: newSessionTargetProjectRoot,
           target_cwd: newSessionTargetProjectRoot,
-          sandbox: "workspace-write",
+          // composer 上「将以 X 写入 Y」引的是同一个常量，防脸上写的和真发的漂移。
+          sandbox: MANUAL_RELAY_SANDBOX,
           allowed_write_roots: [newSessionTargetProjectRoot],
           requested_by: "user",
         });
@@ -567,7 +566,8 @@ export function AgentSessionCenter({
         target_project_root: relayTargetProjectRoot,
         target_cwd: relayTargetProjectRoot,
         target_session_id: selectedSession.thread_id,
-        sandbox: "workspace-write",
+        // 同上：与 composer 的写根/沙箱行同源。
+        sandbox: MANUAL_RELAY_SANDBOX,
         allowed_write_roots: [relayTargetProjectRoot],
         requested_by: "user",
       });
@@ -822,7 +822,13 @@ export function AgentSessionCenter({
           </div>
         </div>
       </div>
-      {developerDetails || manualRelayPreview || manualRelayReceipt || manualRelayError ? (
+      {/* ⑥ H：开发者 11 面板(developerDetails)退场 → 条件里去掉 `developerDetails ||`。
+          ⚠️ 这个 <details> 本身**必须留**：它承载 AgentManualRelayDeveloperDetails —— guard 阻断时
+          composer 的人话提示(AgentChatComposer.tsx:184-192 / agentLabels.ts userFacingAgentError)
+          配的「查看开发者详情」按钮就指向这里(onOpenDeveloperDetails → setDeveloperOpen(true))。
+          宪法 §四.3：不可用必须给人话原因 + 可达的诊断入口。删了它 = 阻断时用户只剩一句人话、无处下钻。
+          它只在真有 relay 预览/回执/错误时出现，不是常驻的机器信息入口，与「废除开发者详情折叠」不冲突。 */}
+      {manualRelayPreview || manualRelayReceipt || manualRelayError ? (
         <details
           className="agent-boundary-details"
           open={developerOpen}
@@ -834,7 +840,6 @@ export function AgentSessionCenter({
             manualRelayPreview={manualRelayPreview}
             manualRelayReceipt={manualRelayReceipt}
           />
-          {developerDetails}
         </details>
       ) : null}
     </section>

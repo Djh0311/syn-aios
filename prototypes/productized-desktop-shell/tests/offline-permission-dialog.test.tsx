@@ -138,6 +138,22 @@ import {
 import { ProjectHandoffEvidencePanel, ProjectResourcesPanel } from "../src/views/projects/ProjectReferencePanels";
 import { SkillsBoardView } from "../src/views/SkillsBoardView";
 import { HarnessBoardView } from "../src/views/HarnessBoardView";
+// ⑥ H：开发者 11 面板已从智能体页退场，但组件停着等归位审计账本页 → 断言直接测组件，覆盖不丢。
+// (它们现在只有测试这一个 import 者 —— 不是死码，别删，见 AgentDeveloperPanels.tsx 顶注。)
+import { AgentDeveloperPanels } from "../src/views/agent/AgentDeveloperPanels";
+import {
+  AgentAdapterCapabilityPanel,
+  ProviderAvailabilityPanel,
+  SessionOperationBoundaryPanel,
+} from "../src/views/agent/AgentAdapterBoundaryPanels";
+import {
+  AdapterSdkCliDiagnosticsPanel,
+  ControlledSessionContinuationPanel,
+  H2RealResumeAuthorizationPanel,
+  H2RealResumeExecutionDecisionPanel,
+  RuntimeSessionAttentionPanel,
+  SessionContinuationPreviewPanel,
+} from "../src/views/agent/AgentContinuationBoundaryPanels";
 import { RightDetailPanel, workspaceRailItems } from "../src/App";
 import { devNavItems, primaryNavItems } from "../src/lib/workbenchNavigation";
 import {
@@ -298,24 +314,75 @@ function runRealExecutionProductCommandBoundaryScenario() {
   assert(agentMarkup.includes("agent-new-chat-button"), "J5 Agent 普通区左栏应有新对话入口");
   assert(agentMarkup.includes("agent-chat-composer"), "J5 Agent 普通区应有任务输入框");
   assert(!agentMarkup.includes("agent-conversation-bar"), "J5 Agent 普通区不应保留旧项目 / 对话选择条");
-  assert(
-    agentMarkup.indexOf("agent-session-shell") < agentMarkup.indexOf("agent-boundary-details"),
-    "J5 Agent 普通对话区必须排在开发者详情前面",
+  // ⑥ H 定稿：开发者 11 面板从智能体页退场。原来这里是 indexOf 排序断言(哑弹，见 fixture 注释)，改正向断言。
+  for (const retiredMarker of executionRunQueueTextFixtures.agentRetiredDeveloperPanelMarkers) {
+    assert(!agentMarkup.includes(retiredMarker), `⑥ H：开发者 11 面板应已从智能体页退场，但仍渲染了 ${retiredMarker}`);
+  }
+
+  // 11 面板吃的读模型语义(统一执行链路 / 自动编排 / Codex 控制入口 / 失败边界 / 「读回未知不能显示成 0」)
+  // **一条断言都没删**：面板只是从智能体页退场，组件本体停在 AgentDeveloperPanels 等归位审计账本页
+  // (见该文件顶注 + ⑥ 交付报告 forks)，所以断言跟着**组件**走，不再经智能体页。
+  // 这些 derive 原先在 AgentView 里算(已随面板一起删)，这里照原样重建，喂给同一个组件。
+  const developerPanelAdapterDescriptors = snapshot.agent_adapters;
+  const developerPanelSessionOperations = deriveSessionOperationDescriptors(developerPanelAdapterDescriptors);
+  const developerPanelProviders = deriveProviderAvailabilitySummaries(
+    developerPanelAdapterDescriptors,
+    developerPanelSessionOperations,
+  );
+  const developerPanelPreviews = deriveSessionContinuationPreviews({
+    adapterDescriptors: developerPanelAdapterDescriptors,
+    sessionOperationDescriptors: developerPanelSessionOperations,
+    providerAvailabilitySummaries: developerPanelProviders,
+    workflowState: workflowStateWithProjectWorkflow,
+  });
+  const developerPanelsText = visibleText(
+    <AgentDeveloperPanels
+      sessions={[session]}
+      projects={[project]}
+      selectedSession={session}
+      realExecutionProductCommands={activeReadModel}
+      workflowState={workflowStateWithProjectWorkflow}
+      h2RealResumeExecutionDecisionSurface={deriveH2RealResumeExecutionDecisionSurface({
+        previews: developerPanelPreviews,
+        store: null,
+      })}
+      sessionContinuationStore={null}
+      runtimeSessionAttention={[]}
+      sessionRunStatusSummaries={[]}
+      projectWorkflowAutomation={activeAutomation}
+      projectDispatchCount={workflowStateWithProjectWorkflow.project_workflows.reduce(
+        (count, workflow) => count + workflow.node_dispatches.length,
+        0,
+      )}
+      projectAttemptCount={workflowStateWithProjectWorkflow.project_workflows.reduce(
+        (count, workflow) => count + workflow.execution_attempts.length,
+        0,
+      )}
+      adapterDescriptors={developerPanelAdapterDescriptors}
+      providerAvailabilitySummaries={developerPanelProviders}
+      sessionContinuationPreviews={developerPanelPreviews}
+      h2RealResumeAuthorizationReadiness={deriveH2RealResumeAuthorizationReadiness({
+        previews: developerPanelPreviews,
+        store: null,
+      })}
+      workerProtocol={null}
+      sessionOperationDescriptors={developerPanelSessionOperations}
+    />,
   );
   for (const expectedText of executionRunQueueTextFixtures.agentUnifiedExecutionExpectedTexts) {
-    assert(agentText.includes(expectedText), `PCR6 Agent 统一执行链路缺少 ${expectedText}`);
+    assert(developerPanelsText.includes(expectedText), `PCR6 开发者面板统一执行链路缺少 ${expectedText}`);
   }
   for (const expectedText of executionRunQueueTextFixtures.agentAutomationExpectedTexts) {
-    assert(agentText.includes(expectedText), `K3 Agent 自动编排摘要缺少 ${expectedText}`);
+    assert(developerPanelsText.includes(expectedText), `K3 开发者面板自动编排摘要缺少 ${expectedText}`);
   }
   for (const expectedText of executionRunQueueTextFixtures.agentCodexControlExpectedTexts) {
-    assert(agentText.includes(expectedText), `J1-A Agent Codex 控制入口缺少 ${expectedText}`);
+    assert(developerPanelsText.includes(expectedText), `J1-A 开发者面板 Codex 控制入口缺少 ${expectedText}`);
   }
   for (const expectedText of executionRunQueueTextFixtures.agentFailureBoundaryExpectedTexts) {
-    assert(agentText.includes(expectedText), `PCR7 Agent 统一执行链路缺少 ${expectedText}`);
+    assert(developerPanelsText.includes(expectedText), `PCR7 开发者面板统一执行链路缺少 ${expectedText}`);
   }
-  assert(agentText.includes("结果数：未知/不可用"), "PCR7 Agent readback null 应显示未知 / 不可用");
-  assert(!agentText.includes("H6 真实执行状态"), "PCR6 Agent 普通 UI 不应继续显示 H6 阶段标题");
+  assert(developerPanelsText.includes("结果数：未知/不可用"), "PCR7 readback null 应显示未知 / 不可用");
+  assert(!developerPanelsText.includes("H6 真实执行状态"), "PCR6 普通 UI 不应继续显示 H6 阶段标题");
 
   const runningText = visibleText(
     <RunningWorkflowsView
@@ -868,16 +935,9 @@ function runSessionOperationBoundaryScenario() {
     "planned adapter 不应伪造会话事实源",
   );
 
-  const agentView = (
-    <AgentView
-      sessions={[session]}
-      projects={[project]}
-      adapterDescriptors={backendAgentAdapterDescriptors}
-      sessionOperationDescriptors={operations}
-      workflowState={workflowStateWithProjectWorkflow}
-      onRequestAction={captureAction}
-    />
-  );
+  // ⑥ H：开发者 11 面板已从智能体页退场(定稿：→审计账本页)，但组件停着等归位 —— 本场景锁的是**这个面板**
+  // 的边界语义，不是「它在智能体页上」。故改渲染面板组件本体：断言原样保留，覆盖不丢，且不再被智能体页布局误伤。
+  const agentView = <SessionOperationBoundaryPanel operations={operations} />;
   const agentViewText = visibleText(agentView);
   for (const expectedText of agentBoundaryTextFixtures.sessionOperationExpectedTexts) {
     assert(agentViewText.includes(expectedText), `会话操作边界 UI 缺少 ${expectedText}`);
@@ -959,17 +1019,9 @@ function runProviderAvailabilityBoundaryScenario() {
     assert(!serializedSummaries.toLowerCase().includes(forbiddenFragment), `E3 摘要不应包含 ${forbiddenFragment}`);
   }
 
-  const agentView = (
-    <AgentView
-      sessions={[session]}
-      projects={[project]}
-      adapterDescriptors={descriptors}
-      sessionOperationDescriptors={operations}
-      providerAvailabilitySummaries={summaries}
-      workflowState={workflowStateWithProjectWorkflow}
-      onRequestAction={captureAction}
-    />
-  );
+  // ⑥ H：开发者 11 面板已从智能体页退场(定稿：→审计账本页)，但组件停着等归位 —— 本场景锁的是**这个面板**
+  // 的边界语义，不是「它在智能体页上」。故改渲染面板组件本体：断言原样保留，覆盖不丢，且不再被智能体页布局误伤。
+  const agentView = <ProviderAvailabilityPanel summaries={summaries} />;
   const agentViewText = visibleText(agentView);
   for (const expectedText of agentBoundaryTextFixtures.providerExpectedTexts) {
     assert(agentViewText.includes(expectedText), `Provider availability UI 缺少 ${expectedText}`);
@@ -1063,17 +1115,9 @@ function runAdapterSdkCliDiagnosticsBoundaryScenario() {
     "data location descriptor 不能允许读取 secret",
   );
 
-  const agentView = (
-    <AgentView
-      sessions={[session]}
-      projects={[project]}
-      adapterDescriptors={descriptors}
-      sessionOperationDescriptors={operations}
-      workerProtocol={workerProtocol}
-      workflowState={workflowStateWithProjectWorkflow}
-      onRequestAction={captureAction}
-    />
-  );
+  // ⑥ H：开发者 11 面板已从智能体页退场(定稿：→审计账本页)，但组件停着等归位 —— 本场景锁的是**这个面板**
+  // 的边界语义，不是「它在智能体页上」。故改渲染面板组件本体：断言原样保留，覆盖不丢，且不再被智能体页布局误伤。
+  const agentView = <AdapterSdkCliDiagnosticsPanel workerProtocol={workerProtocol} />;
   const agentViewText = visibleText(agentView);
   for (const expectedText of agentBoundaryTextFixtures.adapterDiagnosticsExpectedTexts) {
     assert(agentViewText.includes(expectedText), `I5 Adapter SDK / CLI diagnostics UI 缺少 ${expectedText}`);
@@ -1238,18 +1282,9 @@ function runSessionContinuationPreviewScenario() {
     "new_session 缺 work item 应有明确 reason",
   );
 
-  const agentView = (
-    <AgentView
-      sessions={[session]}
-      projects={[project]}
-      adapterDescriptors={descriptors}
-      sessionOperationDescriptors={operations}
-      providerAvailabilitySummaries={summaries}
-      sessionContinuationPreviews={previews}
-      workflowState={workflowStateWithProjectWorkflow}
-      onRequestAction={captureAction}
-    />
-  );
+  // ⑥ H：开发者 11 面板已从智能体页退场(定稿：→审计账本页)，但组件停着等归位 —— 本场景锁的是**这个面板**
+  // 的边界语义，不是「它在智能体页上」。故改渲染面板组件本体：断言原样保留，覆盖不丢，且不再被智能体页布局误伤。
+  const agentView = <SessionContinuationPreviewPanel previews={previews} />;
   const agentViewText = visibleText(agentView);
   for (const expectedText of agentBoundaryTextFixtures.sessionContinuationExpectedTexts) {
     assert(agentViewText.includes(expectedText), `会话继续预览 UI 缺少 ${expectedText}`);
@@ -1311,19 +1346,9 @@ function runControlledSessionContinuationLevelAScenario() {
     sessionThreadId: session.thread_id,
   });
 
-  const agentView = (
-    <AgentView
-      sessions={[session]}
-      projects={[project]}
-      adapterDescriptors={descriptors}
-      sessionOperationDescriptors={operations}
-      providerAvailabilitySummaries={summaries}
-      sessionContinuationPreviews={previews}
-      sessionContinuationStore={store}
-      workflowState={workflowStateWithProjectWorkflow}
-      onRequestAction={captureAction}
-    />
-  );
+  // ⑥ H：开发者 11 面板已从智能体页退场(定稿：→审计账本页)，但组件停着等归位 —— 本场景锁的是**这个面板**
+  // 的边界语义，不是「它在智能体页上」。故改渲染面板组件本体：断言原样保留，覆盖不丢，且不再被智能体页布局误伤。
+  const agentView = <ControlledSessionContinuationPanel store={store} previews={previews} />;
   const agentViewText = visibleText(agentView);
   for (const expectedText of agentBoundaryTextFixtures.controlledContinuationLevelAExpectedTexts) {
     assert(agentViewText.includes(expectedText), `E5 Level A UI 缺少 ${expectedText}`);
@@ -1435,18 +1460,13 @@ function runH2RealResumeAuthorizationReadinessScenario() {
     );
   }
 
+  // ⑥ H：开发者 11 面板已从智能体页退场(定稿：→审计账本页)，但组件停着等归位 —— 本场景锁的是**这个面板**
+  // 的边界语义，不是「它在智能体页上」。故改渲染面板组件本体：断言原样保留，覆盖不丢，且不再被智能体页布局误伤。
   const agentView = (
-    <AgentView
-      sessions={[session]}
-      projects={[project]}
-      adapterDescriptors={descriptors}
-      sessionOperationDescriptors={operations}
-      providerAvailabilitySummaries={summaries}
-      sessionContinuationPreviews={previews}
-      sessionContinuationStore={snapshot.session_continuation_store}
-      workflowState={workflowStateWithProjectWorkflow}
-      onRequestAction={captureAction}
-    />
+    <>
+      <H2RealResumeAuthorizationPanel readiness={readiness} />
+      <H2RealResumeExecutionDecisionPanel surface={decisionSurface} />
+    </>
   );
   const agentViewText = visibleText(agentView);
   for (const expectedText of agentBoundaryTextFixtures.h2ReadinessExpectedTexts) {
@@ -1520,21 +1540,9 @@ function runRuntimeSessionAttentionScenario() {
     runtime_session_attention: attention,
     session_run_status_summaries: summaries,
   };
-  const agentView = (
-    <AgentView
-      sessions={[session]}
-      projects={[project]}
-      adapterDescriptors={backendAgentAdapterDescriptors}
-      sessionOperationDescriptors={backendSessionOperationDescriptors}
-      providerAvailabilitySummaries={backendProviderAvailabilitySummaries}
-      sessionContinuationPreviews={[]}
-      sessionContinuationStore={snapshot.session_continuation_store}
-      runtimeSessionAttention={attention}
-      sessionRunStatusSummaries={summaries}
-      workflowState={workflowStateWithProjectWorkflow}
-      onRequestAction={captureAction}
-    />
-  );
+  // ⑥ H：开发者 11 面板已从智能体页退场(定稿：→审计账本页)，但组件停着等归位 —— 本场景锁的是**这个面板**
+  // 的边界语义，不是「它在智能体页上」。故改渲染面板组件本体：断言原样保留，覆盖不丢，且不再被智能体页布局误伤。
+  const agentView = <RuntimeSessionAttentionPanel attention={attention} summaries={summaries} />;
   const agentText = visibleText(agentView);
   for (const expectedText of agentBoundaryTextFixtures.runtimeAttentionExpectedTexts) {
     assert(agentText.includes(expectedText), `E6 runtime attention UI 缺少 ${expectedText}`);
@@ -2541,19 +2549,24 @@ function runShellScenario() {
   assert(agentViewMarkup.includes("agent-new-chat-button"), "AgentView 新方向左栏应有新对话入口");
   assert(agentViewMarkup.includes("agent-chat-composer"), "AgentView 新方向应有任务输入框");
   assert(!agentViewMarkup.includes("agent-conversation-bar"), "AgentView 新方向不应保留旧项目 / 对话选择条");
+  // ⑥ H：同上，原 indexOf 排序断言是哑弹(面板消失 → indexOf=-1 → 报错谎称「排序错了」)，改正向退场断言。
+  for (const retiredMarker of executionRunQueueTextFixtures.agentRetiredDeveloperPanelMarkers) {
+    assert(!agentViewMarkup.includes(retiredMarker), `⑥ H：开发者 11 面板应已从智能体页退场，但仍渲染了 ${retiredMarker}`);
+  }
+  // 前端 fallback 断言：原来靠「面板 #3(适配器能力)把 warning 渲染上脸」间接验，面板退场后那条路没了。
+  // 改直接测纯函数 deriveAgentAdapterDescriptors —— 它才是 fallback 语义的**本体**(adapterCapabilities.ts:130/177)，
+  // 而且 AgentView 仍在用它(喂 composer 的项目选择器)。不经 UI，覆盖反而更准、更不易被 UI 改动误伤。
+  const fallbackAdapterDescriptors = deriveAgentAdapterDescriptors({
+    sessions: [session],
+    projects: [project],
+    workflowState: workflowStateWithProjectWorkflow,
+  });
   assert(
-    agentViewMarkup.indexOf("agent-session-shell") < agentViewMarkup.indexOf("agent-boundary-details"),
-    "AgentView 新方向应先展示对话界面，再展示开发者详情",
+    fallbackAdapterDescriptors.some((descriptor) =>
+      descriptor.warnings.includes("adapter_descriptor_frontend_fallback_used"),
+    ),
+    "AgentView 没有后端 descriptor 时应保留前端 fallback",
   );
-  const fallbackAgentViewText = visibleText(
-    <AgentView
-      sessions={[session]}
-      projects={[project]}
-      workflowState={workflowStateWithProjectWorkflow}
-      onRequestAction={captureAction}
-    />,
-  );
-  assert(fallbackAgentViewText.includes("adapter_descriptor_frontend_fallback_used"), "AgentView 没有后端 descriptor 时应保留前端 fallback");
   for (const forbiddenText of shellTexts.agentViewForbiddenTexts) {
     assert(!agentViewText.includes(forbiddenText), `AgentView 新方向不应出现 ${forbiddenText}`);
   }
@@ -2573,11 +2586,15 @@ function runShellScenario() {
   const projectResourcesText = visibleText(<ProjectResourcesPanel project={project} />);
   assert(projectResourcesText.includes("展开资源详情"), "项目资源页应把资源详情收进 disclosure");
 
+  // ⑥ G 定稿：总览页只剩项目事实卡 + 第二卡位留白，会话入口整个归智能体页(H)。
+  // 原断言测的是 selectedTool="overview"，锁的是**旧的「智能体入口」卡**；那张卡按定稿已退场。
+  // 改测 selectedTool="agent-sessions" 的 ProjectAgentMovedPanel —— 同名按钮、同一动作(onOpenAgentSession)，
+  // 且语义更贴定稿(会话入口本来就该在这儿)。断言没删、没弱化：项目侧仍必须存在通往智能体会话的入口。
   const projectAgentButton = findButtonByText(
-    <ProjectDetail project={project} sessions={[session]} selectedTool="overview" onRequestAction={captureAction} />,
+    <ProjectDetail project={project} sessions={[session]} selectedTool="agent-sessions" onRequestAction={captureAction} />,
     "在智能体中打开",
   );
-  assert(projectAgentButton, "项目总览缺少智能体会话入口");
+  assert(projectAgentButton, "项目页缺少智能体会话入口");
   const filteredProjectSessions = filterProjectSessionsForProject([session, otherProjectSession], project);
   assertDeepEqual(filteredProjectSessions, [session], "项目 Agent 会话应只保留 project_root 等于当前项目的会话");
 
@@ -3493,12 +3510,15 @@ function runShellScenario() {
 
   const skillText = visibleText(<SkillsBoardView skills={[skill]} plugins={[plugin]} projects={[project]} />);
   for (const expectedText of shellTexts.skillExpectedTexts) {
-    assert(skillText.includes(expectedText), `Skill 看板缺少 ${expectedText}`);
+    assert(skillText.includes(expectedText), `Skill B1 页缺少 ${expectedText}`);
+  }
+  for (const forbiddenText of shellTexts.skillForbiddenTexts) {
+    assert(!skillText.includes(forbiddenText), `Skill B1 页不应出现无数据源的 ${forbiddenText}`);
   }
 
   const harnessText = visibleText(<HarnessBoardView projects={[project]} />);
   for (const expectedText of shellTexts.harnessExpectedTexts) {
-    assert(harnessText.includes(expectedText), `Harness 看板缺少 ${expectedText}`);
+    assert(harnessText.includes(expectedText), `Harness B1 页缺少 ${expectedText}`);
   }
 }
 

@@ -1,15 +1,26 @@
 import { SecretaryBrief } from "./SecretaryBrief";
-import { deriveRunQueueReadModel } from "../lib/runQueue";
+import { displayStatus, listRowTimeLabel, runtimeLogCategoryLabel } from "../lib/format";
+import { deriveRunQueueReadModel, type RunQueueReadModel } from "../lib/runQueue";
 import type { SecretaryContext } from "../lib/secretaryReadModel";
 import type { MemoryCandidateStoreV1, MemoryCaptureStoreV1, WorkbenchSnapshot, WorkflowStateSnapshot } from "../lib/types";
-import type { RightPanelKey, ViewKey } from "../lib/workbenchNavigation";
+import type { NavigateHandler, NavigationFocus, RightPanelKey, ViewKey } from "../lib/workbenchNavigation";
 
 type RightFeedTone = "ok" | "warn" | "err" | "run";
+
+// ④ 治「点哪都跳同一页」：目标不再由 activePanel 一刀切决定，而是每一条自己带。
+// 缺省（没有 target）= 回落到面板级目标页（旧行为），不造死链。
+type RightFeedTarget = {
+  view: ViewKey;
+  focus?: NavigationFocus;
+};
 
 type RightFeedItem = {
   title: string;
   meta: string;
   tone: RightFeedTone;
+  target?: RightFeedTarget;
+  // 真实时间（定稿 D「每行=真实阶段+时间」）。事实层给不出就留空，不编。
+  time?: string | null;
 };
 
 type RightProjectGroupItem = RightFeedItem & {
@@ -48,7 +59,7 @@ export function RightDetailPanel({
   memoryCandidateStore?: MemoryCandidateStoreV1 | null;
   secretaryContext: SecretaryContext;
   onClose: () => void;
-  onNavigate: (view: ViewKey) => void;
+  onNavigate: NavigateHandler;
   onReloadWorkflowState: () => void;
 }) {
   if (activePanel === "secretary") {
@@ -70,136 +81,20 @@ export function RightDetailPanel({
     );
   }
 
-  const auditItems: RightFeedItem[] =
-    workflowState?.project_workflows.flatMap((workflow) =>
-      workflow.task_drafts.flatMap((task) =>
-        task.recent_audit_events.map((event) => ({
-          title: event.event_type,
-          meta: `${task.title} · ${displayStatus(event.after_state || event.before_state || "state 未登记")}`,
-          tone: event.after_state === "failed" ? "err" : "ok",
-        })),
-      ),
-    ) ?? [];
-  const permissionRequests = workflowState?.project_workflows.flatMap((workflow) => workflow.permission_requests) ?? [];
-  const runningTasks: RightFeedItem[] =
-    workflowState?.project_workflows.flatMap((workflow) =>
-      workflow.task_drafts
-        .filter((task) => ["running", "waiting_for_permission", "retry_pending", "ready_to_dispatch", "ready_for_review"].includes(task.state))
-        .map((task) => ({
-          title: task.title,
-          meta: `${displayStatus(task.state)} · ${workflow.title}`,
-          tone: task.state === "waiting_for_permission" ? "warn" : task.state === "running" ? "run" : "ok",
-        })),
-    ) ?? [];
-  const runtimeAttentionItems: RightFeedItem[] = snapshot.runtime_session_attention.map((item) => ({
-    title: item.title,
-    meta: `${displayStatus(item.status)} · 读回 ${displayStatus(item.readback_boundary.status)} · ${item.readback_boundary.reason}`,
-    tone: item.blocks_continuation ? "err" : item.requires_user_action ? "warn" : "run",
-  }));
-  const runtimeTodoItems: RightFeedItem[] = snapshot.runtime_session_attention
-    .filter((item) => item.requires_user_action || item.blocks_continuation)
-    .map((item) => ({
-      title: item.title,
-      meta: item.recommended_next_step,
-      tone: item.blocks_continuation ? "err" : "warn",
-    }));
-  const runtimeRunningItems: RightFeedItem[] = snapshot.session_run_status_summaries.map((summary) => ({
-    title: summary.session_id,
-    meta: `${summary.current_status_label} · 关注 ${summary.attention_count} · 读回 ${displayStatus(summary.readback_status)}`,
-    tone: summary.blocking_count ? "err" : summary.needs_user_count ? "warn" : "run",
-  }));
-  const productCommandReadModel = snapshot.real_execution_product_commands;
-  const failureStopRetry = productCommandReadModel?.failure_stop_retry_summary ?? null;
-  const failureStopRetryItems = failureStopRetry?.items ?? [];
-  const runQueue = deriveRunQueueReadModel({ snapshot, workflowState, memoryCaptureStore, memoryCandidateStore });
-  const projectGroups = buildRightProjectGroups(workflowState);
-  const projectTodoGroups = projectGroups.filter((group) => group.todoItems.length);
-  const projectRunningGroups = projectGroups.filter((group) => group.runningItems.length);
-  const queueRunningItems: RightFeedItem[] = runQueue.run_queue_items.slice(0, 6).map((item) => ({
-    title: item.user_visible_summary,
-    meta: `${displayStatus(item.status)} · 下一步：${item.next_step_label} · 结果数 ${productCommandResultCountLabel(item.readback_result_count)}`,
-    tone: item.status === "failed" || item.status === "blocked_by_guard" || item.status === "duplicate_blocked" ? "err" : item.requires_user_action ? "warn" : "run",
-  }));
-  const queueTodoItems: RightFeedItem[] = runQueue.user_confirmation_queue.slice(0, 8).map((item) => ({
-    title: confirmationKindLabel(item.kind),
-    meta: `${item.title} · ${item.summary}`,
-    tone: item.risk_level === "high" ? "err" : "warn",
-  }));
-  const queueFailureItems: RightFeedItem[] = runQueue.failure_control_summaries.slice(0, 6).map((item) => ({
-    title: failureClassificationLabel(item.classification),
-    meta: `${displayStatus(item.status)} · ${item.recommended_next_step} · 结果数 ${productCommandResultCountLabel(item.readback_result_count)}`,
-    tone: item.status === "readback_unavailable" ? "warn" : "err",
-  }));
-  const runtimeLogItems: RightFeedItem[] = snapshot.runtime_log_store.entries
-    .filter((entry) => entry.user_visible)
-    .slice(0, 8)
-    .map((entry) => ({
-      title: `${runtimeLogCategoryLabel(entry.category)} · ${displayStatus(entry.status)}`,
-      meta: `${entry.summary} · 审计引用 ${entry.audit_refs.length}`,
-      tone: entry.severity === "error" ? "err" : entry.severity === "warning" ? "warn" : "ok",
-    }));
-  const diagnosticItems: RightFeedItem[] = snapshot.diagnostic_summary.degraded_states.slice(0, 6).map((state) => ({
-    title: state.title,
-    meta: `${displayStatus(state.kind)} · ${state.summary}`,
-    tone: state.blocks_real_execution ? "err" : state.severity === "warning" ? "warn" : "ok",
-  }));
-  const notificationItems: RightFeedItem[] = [
-    { title: error ? "当前读取存在问题" : "读取状态", meta: notice, tone: error ? "err" : "ok" },
-    ...runtimeAttentionItems.filter((item) => item.tone !== "run").slice(0, 4),
-    ...diagnosticItems.slice(0, 3),
-    ...snapshot.projects.flatMap((project) =>
-      [...project.context_warnings, ...project.warnings].slice(0, 2).map((warning) => ({
-        title: project.name,
-        meta: warning,
-        tone: "warn" as const,
-      })),
-    ),
-    ...snapshot.diagnostics.notes.slice(0, 3).map((note) => ({ title: "诊断", meta: note, tone: "warn" as const })),
-  ];
-  const todoItems: RightFeedItem[] = [
-    ...snapshot.tasks.slice(0, 6).map((task) => ({
-      title: task.title,
-      meta: displayStatus(task.status),
-      tone: task.status.includes("done") ? "ok" as const : "warn" as const,
-    })),
-    ...permissionRequests.slice(0, 6).map((request) => ({
-      title: request.reason || request.request_id,
-      meta: `${displayStatus(request.status)} · ${displayStatus(request.permission_kind)}`,
-      tone: request.status === "approved" ? "ok" as const : "warn" as const,
-    })),
-    ...queueTodoItems,
-    ...runtimeTodoItems.slice(0, 6),
-    ...runningTasks.filter((item) => item.meta.includes("ready_for_review")).slice(0, 4),
-  ];
-  const ideaItems: RightFeedItem[] = [
-    ...snapshot.tasks.slice(0, 8).map((task) => ({
-      title: task.title,
-      meta: `来自待办索引 · ${displayStatus(task.status)}`,
-      tone: task.status.includes("done") ? "ok" as const : "warn" as const,
-    })),
-    ...secretaryContext.suggestions.slice(0, 6).map((suggestion) => ({
-      title: suggestion.title,
-      meta: `秘书建议 · ${suggestion.summary}`,
-      tone: suggestion.priority === "high" ? "warn" as const : "ok" as const,
-    })),
-    ...snapshot.projects.flatMap((project) =>
-      [...project.context_warnings, ...project.warnings].slice(0, 2).map((warning) => ({
-        title: project.name,
-        meta: `项目线索 · ${warning}`,
-        tone: "warn" as const,
-      })),
-    ),
-  ];
-  const list =
-    activePanel === "notifications"
-      ? notificationItems
-      : activePanel === "todos"
-        ? todoItems
-        : activePanel === "ideas"
-          ? ideaItems
-          : activePanel === "audit"
-            ? [...diagnosticItems, ...runtimeLogItems, ...auditItems]
-            : [...queueFailureItems, ...queueRunningItems, ...runtimeRunningItems, ...runningTasks];
+  const derived = deriveRightPanelData({
+    snapshot,
+    workflowState,
+    notice,
+    error,
+    memoryCaptureStore,
+    memoryCandidateStore,
+    secretaryContext,
+  });
+  const { feeds, runQueue, productCommandReadModel, failureStopRetry, failureStopRetryItems } = derived;
+  const projectTodoGroups = derived.projectGroups.filter((group) => group.todoItems.length);
+  const projectRunningGroups = derived.projectGroups.filter((group) => group.runningItems.length);
+  const ideaItems = feeds.ideas;
+  const list = feeds[activePanel];
 
   return (
     <div className="right-detail">
@@ -309,28 +204,8 @@ export function RightDetailPanel({
           ) : (
             <p className="muted small-note">统一执行链路当前没有失败、停止或重试相关产品状态。</p>
           )}
-          <details className="project-dev-details">
-            <summary>开发者详情：统一命令读模型</summary>
-            <div className="audit-summary-list">
-              <div className="audit-summary-item">
-                <strong>存储版本</strong>
-                <span>{productCommandReadModel?.store_revision ?? 0}</span>
-                <em>边车路径：{productCommandReadModel?.sidecar_path ?? "未生成"}</em>
-              </div>
-              <div className="audit-summary-item">
-                <strong>运行器入口</strong>
-                <span>{productEntryStatusLabel(productCommandReadModel?.runner_entry_status)}</span>
-                <em>旧入口：{productEntryStatusLabel(productCommandReadModel?.legacy_entry_status)}</em>
-              </div>
-              {failureStopRetryItems.map((item) => (
-                <div className="audit-summary-item" key={item.kind}>
-                  <strong>{item.kind}</strong>
-                  <span>{item.source_refs.join(" / ") || "无 refs"}</span>
-                  <em>{item.warnings.join(" / ") || "无 warnings"}</em>
-                </div>
-              ))}
-            </div>
-          </details>
+          {/* 「开发者详情」折叠已废除（DESIGN.md §三·五）：存储版本 / 边车路径 / 入口封口状态
+              等机器信息归审计账本，卡片上零入口。 */}
         </section>
       ) : null}
       {activePanel === "audit" ? (
@@ -407,11 +282,23 @@ export function RightDetailPanel({
         <div className="ink-feed">
           {list.length ? (
             list.slice(0, 10).map((item, index) => (
-              <button className="feed-item" type="button" key={`${item.title}-${item.meta}-${index}`} onClick={() => onNavigate(rightPanelTargetView(activePanel))}>
+              <button
+                className="feed-item"
+                type="button"
+                key={`${item.title}-${item.meta}-${index}`}
+                // ④ 点击带上下文直达：这一条自己知道该跳哪、落在哪；
+                // 没带 target 的条目仍回落到面板级目标页（旧行为，不造死链）。
+                onClick={() =>
+                  item.target
+                    ? onNavigate(item.target.view, item.target.focus)
+                    : onNavigate(rightPanelTargetView(activePanel))
+                }
+              >
                 <i className={item.tone} />
                 <span>
                   <b>{item.title}</b>
                   <small>{item.meta}</small>
+                  {item.time ? <small className="feed-item-time">{item.time}</small> : null}
                 </span>
               </button>
             ))
@@ -462,6 +349,235 @@ export function RightDetailPanel({
   );
 }
 
+type RightPanelFeeds = Record<Exclude<RightPanelKey, "secretary">, RightFeedItem[]>;
+
+type RightPanelDerivedData = {
+  feeds: RightPanelFeeds;
+  runQueue: RunQueueReadModel;
+  projectGroups: RightProjectGroup[];
+  productCommandReadModel: WorkbenchSnapshot["real_execution_product_commands"];
+  failureStopRetry: NonNullable<WorkbenchSnapshot["real_execution_product_commands"]>["failure_stop_retry_summary"] | null;
+  failureStopRetryItems: NonNullable<
+    NonNullable<WorkbenchSnapshot["real_execution_product_commands"]>["failure_stop_retry_summary"]
+  >["items"];
+};
+
+type RightPanelDerivedInput = {
+  snapshot: WorkbenchSnapshot;
+  workflowState: WorkflowStateSnapshot | null;
+  notice: string;
+  error: boolean;
+  memoryCaptureStore?: MemoryCaptureStoreV1 | null;
+  memoryCandidateStore?: MemoryCandidateStoreV1 | null;
+  secretaryContext: SecretaryContext;
+};
+
+// 抽屉列表与 rail 角标同一处派生——角标数就是抽屉里真数得出来的条数，
+// 两边各算一次迟早对不上（角标说 3、点开只有 1 = 骗人）。
+export function deriveRightPanelFeedCounts(input: RightPanelDerivedInput): Record<Exclude<RightPanelKey, "secretary">, number> {
+  const { feeds } = deriveRightPanelData(input);
+  return {
+    notifications: feeds.notifications.length,
+    todos: feeds.todos.length,
+    ideas: feeds.ideas.length,
+    audit: feeds.audit.length,
+    running: feeds.running.length,
+  };
+}
+
+function deriveRightPanelData({
+  snapshot,
+  workflowState,
+  notice,
+  error,
+  memoryCaptureStore,
+  memoryCandidateStore,
+  secretaryContext,
+}: RightPanelDerivedInput): RightPanelDerivedData {
+  const auditItems: RightFeedItem[] =
+    workflowState?.project_workflows.flatMap((workflow) =>
+      workflow.task_drafts.flatMap((task) =>
+        task.recent_audit_events.map((event) => ({
+          // 旧行为把 event_type（机器术语）当标题摆上脸，违宪 §四.3；改成工单名 + 人话原因/状态变化。
+          title: task.title,
+          meta: event.reason || `${displayStatus(event.before_state)} → ${displayStatus(event.after_state)}`,
+          tone: (event.after_state === "failed" ? "err" : "ok") as RightFeedTone,
+          time: listRowTimeLabel(event.created_at),
+          target: {
+            view: "audit-ledger" as const,
+            focus: { kind: "audit-event", id: `audit-event:${event.event_id}` },
+          },
+        })),
+      ),
+    ) ?? [];
+  const permissionRequests = workflowState?.project_workflows.flatMap((workflow) => workflow.permission_requests) ?? [];
+  const runningTasks: RightFeedItem[] =
+    workflowState?.project_workflows.flatMap((workflow) =>
+      workflow.task_drafts
+        .filter((task) => RIGHT_PROJECT_RUNNING_TASK_STATES.has(task.state))
+        .map((task) => ({
+          title: task.title,
+          // 定稿 D：每行=真实阶段+时间。阶段=工作项状态机真状态（人话），时间=该工单最近一条账本时间。
+          meta: `${displayStatus(task.state)} · ${workflow.title}`,
+          tone: (task.state === "waiting_for_permission" ? "warn" : task.state === "running" ? "run" : "ok") as RightFeedTone,
+          time: latestAuditTimeLabel(task.recent_audit_events),
+          target: {
+            view: "projects" as const,
+            focus: { kind: "work-item", id: task.work_item_id },
+          },
+        })),
+    ) ?? [];
+  const runtimeAttentionItems: RightFeedItem[] = snapshot.runtime_session_attention.map((item) => ({
+    title: item.title,
+    meta: `${displayStatus(item.status)} · 读回 ${displayStatus(item.readback_boundary.status)} · ${item.readback_boundary.reason}`,
+    tone: (item.blocks_continuation ? "err" : item.requires_user_action ? "warn" : "run") as RightFeedTone,
+    target: sessionFocusTarget(item.session_id),
+  }));
+  const runtimeTodoItems: RightFeedItem[] = snapshot.runtime_session_attention
+    .filter((item) => item.requires_user_action || item.blocks_continuation)
+    .map((item) => ({
+      title: item.title,
+      meta: item.recommended_next_step,
+      tone: (item.blocks_continuation ? "err" : "warn") as RightFeedTone,
+      target: sessionFocusTarget(item.session_id),
+    }));
+  const runtimeRunningItems: RightFeedItem[] = snapshot.session_run_status_summaries.map((summary) => ({
+    title: summary.session_id,
+    meta: `${summary.current_status_label} · 关注 ${summary.attention_count} · 读回 ${displayStatus(summary.readback_status)}`,
+    tone: (summary.blocking_count ? "err" : summary.needs_user_count ? "warn" : "run") as RightFeedTone,
+    target: { view: "agents" as const, focus: { kind: "session", id: summary.session_id } },
+  }));
+  const productCommandReadModel = snapshot.real_execution_product_commands;
+  const failureStopRetry = productCommandReadModel?.failure_stop_retry_summary ?? null;
+  const failureStopRetryItems = failureStopRetry?.items ?? [];
+  const runQueue = deriveRunQueueReadModel({ snapshot, workflowState, memoryCaptureStore, memoryCandidateStore });
+  const projectGroups = buildRightProjectGroups(workflowState);
+  const queueRunningItems: RightFeedItem[] = runQueue.run_queue_items.slice(0, 6).map((item) => ({
+    title: item.user_visible_summary,
+    meta: `${displayStatus(item.status)} · 下一步：${item.next_step_label} · 结果数 ${productCommandResultCountLabel(item.readback_result_count)}`,
+    tone: (item.status === "failed" || item.status === "blocked_by_guard" || item.status === "duplicate_blocked"
+      ? "err"
+      : item.requires_user_action
+        ? "warn"
+        : "run") as RightFeedTone,
+  }));
+  const queueTodoItems: RightFeedItem[] = runQueue.user_confirmation_queue.slice(0, 8).map((item) => ({
+    title: confirmationKindLabel(item.kind),
+    meta: `${item.title} · ${item.summary}`,
+    tone: (item.risk_level === "high" ? "err" : "warn") as RightFeedTone,
+  }));
+  const queueFailureItems: RightFeedItem[] = runQueue.failure_control_summaries.slice(0, 6).map((item) => ({
+    title: failureClassificationLabel(item.classification),
+    meta: `${displayStatus(item.status)} · ${item.recommended_next_step} · 结果数 ${productCommandResultCountLabel(item.readback_result_count)}`,
+    tone: (item.status === "readback_unavailable" ? "warn" : "err") as RightFeedTone,
+  }));
+  const runtimeLogItems: RightFeedItem[] = snapshot.runtime_log_store.entries
+    .filter((entry) => entry.user_visible)
+    .slice(0, 8)
+    .map((entry) => ({
+      title: `${runtimeLogCategoryLabel(entry.category)} · ${displayStatus(entry.status)}`,
+      meta: `${entry.summary} · 审计引用 ${entry.audit_refs.length}`,
+      tone: (entry.severity === "error" ? "err" : entry.severity === "warning" ? "warn" : "ok") as RightFeedTone,
+      time: listRowTimeLabel(entry.started_at ?? entry.finished_at),
+      target: {
+        view: "audit-ledger" as const,
+        focus: { kind: "runtime-log", id: `runtime-log:${entry.entry_id}` },
+      },
+    }));
+  const diagnosticItems: RightFeedItem[] = snapshot.diagnostic_summary.degraded_states.slice(0, 6).map((state) => ({
+    title: state.title,
+    meta: `${displayStatus(state.kind)} · ${state.summary}`,
+    tone: (state.blocks_real_execution ? "err" : state.severity === "warning" ? "warn" : "ok") as RightFeedTone,
+    target: {
+      view: "audit-ledger" as const,
+      focus: { kind: "degraded-state", id: `degraded-state:${state.state_id}` },
+    },
+  }));
+  const notificationItems: RightFeedItem[] = [
+    { title: error ? "当前读取存在问题" : "读取状态", meta: notice, tone: error ? "err" : "ok" },
+    ...runtimeAttentionItems.filter((item) => item.tone !== "run").slice(0, 4),
+    ...diagnosticItems.slice(0, 3),
+    ...snapshot.projects.flatMap((project) =>
+      [...project.context_warnings, ...project.warnings].slice(0, 2).map((warning) => ({
+        title: project.name,
+        meta: warning,
+        tone: "warn" as const,
+      })),
+    ),
+    ...snapshot.diagnostics.notes.slice(0, 3).map((note) => ({ title: "诊断", meta: note, tone: "warn" as const })),
+  ];
+  const todoItems: RightFeedItem[] = [
+    ...snapshot.tasks.slice(0, 6).map((task) => ({
+      title: task.title,
+      meta: displayStatus(task.status),
+      tone: task.status.includes("done") ? ("ok" as const) : ("warn" as const),
+    })),
+    ...permissionRequests.slice(0, 6).map((request) => ({
+      title: request.reason || request.request_id,
+      meta: `${displayStatus(request.status)} · ${displayStatus(request.permission_kind)}`,
+      tone: request.status === "approved" ? ("ok" as const) : ("warn" as const),
+      target: {
+        view: "projects" as const,
+        focus: { kind: "permission-request", id: request.request_id },
+      },
+    })),
+    ...queueTodoItems,
+    ...runtimeTodoItems.slice(0, 6),
+    // 旧写法按 meta 里的 raw "ready_for_review" 子串筛——meta 早已是人话，这里恒为空。
+    // 改成按真状态筛（这才是「待复核」该出现在待办里的那批）。
+    ...runningTasks.filter((item) => item.meta.includes(displayStatus("ready_for_review"))).slice(0, 4),
+  ];
+  const ideaItems: RightFeedItem[] = [
+    ...snapshot.tasks.slice(0, 8).map((task) => ({
+      title: task.title,
+      meta: `来自待办索引 · ${displayStatus(task.status)}`,
+      tone: task.status.includes("done") ? ("ok" as const) : ("warn" as const),
+    })),
+    ...secretaryContext.suggestions.slice(0, 6).map((suggestion) => ({
+      title: suggestion.title,
+      meta: `秘书建议 · ${suggestion.summary}`,
+      tone: suggestion.priority === "high" ? ("warn" as const) : ("ok" as const),
+    })),
+    ...snapshot.projects.flatMap((project) =>
+      [...project.context_warnings, ...project.warnings].slice(0, 2).map((warning) => ({
+        title: project.name,
+        meta: `项目线索 · ${warning}`,
+        tone: "warn" as const,
+      })),
+    ),
+  ];
+
+  return {
+    feeds: {
+      notifications: notificationItems,
+      todos: todoItems,
+      ideas: ideaItems,
+      audit: [...diagnosticItems, ...runtimeLogItems, ...auditItems],
+      running: [...queueFailureItems, ...queueRunningItems, ...runtimeRunningItems, ...runningTasks],
+    },
+    runQueue,
+    projectGroups,
+    productCommandReadModel,
+    failureStopRetry,
+    failureStopRetryItems,
+  };
+}
+
+// 会话焦点：runtime attention 的 session_id 是可空的（事实层不保证有）。
+// 没有 session_id 就不给 target——跳过去也定位不到那一条，宁可回落面板级目标页。
+function sessionFocusTarget(sessionId?: string | null): RightFeedTarget {
+  return sessionId ? { view: "agents", focus: { kind: "session", id: sessionId } } : { view: "agents" };
+}
+
+// 工单最近一条账本时间（定稿 D 行尾时间）。事实层没给 created_at 就返回 null，不编时间。
+function latestAuditTimeLabel(events: { created_at?: string | null }[]): string | null {
+  const stamps = events
+    .map((event) => event.created_at)
+    .filter((value): value is string => Boolean(value))
+    .sort();
+  return listRowTimeLabel(stamps.at(-1) ?? null);
+}
+
 function ProjectGroupedSummary({
   groups,
   mode,
@@ -469,7 +585,7 @@ function ProjectGroupedSummary({
 }: {
   groups: RightProjectGroup[];
   mode: "todos" | "running";
-  onNavigate: (view: ViewKey) => void;
+  onNavigate: NavigateHandler;
 }) {
   const itemCount = groups.reduce((count, group) => count + projectGroupItemsForMode(group, mode).length, 0);
 
@@ -650,16 +766,6 @@ function rightPanelTargetView(panel: RightPanelKey): ViewKey {
   return "home";
 }
 
-function runtimeLogCategoryLabel(category: string) {
-  if (category === "app_session") return "应用会话";
-  if (category === "workflow_run") return "工作流运行";
-  if (category === "dispatch_attempt") return "派发尝试";
-  if (category === "readback") return "读回";
-  if (category === "permission_wait") return "权限等待";
-  if (category === "diagnostic_event") return "诊断事件";
-  return category;
-}
-
 function productCommandStatusLabel(readModel: WorkbenchSnapshot["real_execution_product_commands"] | null | undefined) {
   if (!readModel) return "未知 / 不可用";
   if (readModel.command_count === 0) return "无统一执行命令";
@@ -683,56 +789,4 @@ function productAttemptStatusLabel(status?: string | null) {
 
 function productCommandResultCountLabel(value?: number | null) {
   return value === null || value === undefined ? "未知 / 不可用" : String(value);
-}
-
-function productEntryStatusLabel(status?: string | null) {
-  if (!status) return "未知 / 不可用";
-  const labels: Record<string, string> = {
-    readiness_only_pcr1_no_execute: "只读准备态",
-    legacy_sealed_blocked_not_product_command: "legacy 已封口",
-    internal_runner_blocked_until_unified_execute_and_level_b: "等待统一执行与 Level B",
-  };
-  return labels[status] ?? status;
-}
-
-function displayStatus(value: string | null | undefined) {
-  if (!value) return "未记录";
-  const labels: Record<string, string> = {
-    active: "活跃",
-    approved: "已批准",
-    archived: "已归档",
-    blocked: "阻断",
-    completed: "已完成",
-    degraded: "降级",
-    degraded_readonly: "只读降级",
-    done: "已完成",
-    err: "错误",
-    error: "错误",
-    failed: "失败",
-    healthy: "健康",
-    info: "信息",
-    missing: "缺失",
-    neutral: "中性",
-    ok: "正常",
-    open: "打开",
-    pending: "待处理",
-    ready_for_review: "待复核",
-    ready_to_dispatch: "待派发",
-    retry_pending: "待重试",
-    run: "运行",
-    running: "运行中",
-    state_未登记: "状态未登记",
-    succeeded: "成功",
-    timed_out: "超时",
-    unknown: "未知",
-    waiting_for_permission: "等待权限",
-    warning: "警告",
-    readback_unavailable: "读回不可用",
-    readback_failed: "读回失败",
-    blocked_by_guard: "被边界阻断",
-    needs_user: "需要用户处理",
-    needs_user_confirmation: "需要用户确认",
-    needs_review: "需要复核",
-  };
-  return labels[value] ?? value;
 }

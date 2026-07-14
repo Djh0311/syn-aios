@@ -421,23 +421,8 @@ export function RunningWorkflowsView({
             <p className="muted small-note">
               统一执行命令、项目工作流和智能体运行关注是三个不同事实源；读回不可用 / 失败 / 超时不能显示成 0 条结果。
             </p>
-            <details className="project-dev-details">
-              <summary>开发者详情：统一命令读模型</summary>
-              <div className="running-summary-grid compact">
-                <SummaryTile label="存储版本" value={`${productCommandReadModel?.store_revision ?? 0}`} hint="边车修订" />
-                <SummaryTile label="边车路径" value={productCommandReadModel?.sidecar_path ? pathTail(productCommandReadModel.sidecar_path) : "未生成"} hint="完整路径不铺普通首屏" />
-                <SummaryTile label="旧入口" value={productEntryStatusLabel(productCommandReadModel?.legacy_entry_status)} hint="旧入口封口状态" />
-                <SummaryTile label="运行器入口" value={productEntryStatusLabel(productCommandReadModel?.runner_entry_status)} hint="运行器边界状态" />
-                {failureStopRetryItems.map((item) => (
-                  <SummaryTile
-                    label={item.kind}
-                    value={`${item.source_refs.length} refs`}
-                    hint={item.warnings.join(" / ") || "无 warnings"}
-                    key={item.kind}
-                  />
-                ))}
-              </div>
-            </details>
+            {/* 「开发者详情」折叠已废除（DESIGN.md §三·五）：存储版本 / 边车路径 / 入口封口状态
+                等机器信息归审计账本，卡片上零入口。 */}
           </section>
 
           <section className="panel running-section">
@@ -1166,16 +1151,6 @@ function automationUnitStatusLabel(status: string) {
   if (status === "blocked_by_guard") return "已阻断";
   if (status === "readback_unavailable") return "读回不可用";
   return runtimeStatusLabel(status);
-}
-
-function productEntryStatusLabel(status?: string | null) {
-  if (!status) return "未知 / 不可用";
-  const labels: Record<string, string> = {
-    readiness_only_pcr1_no_execute: "只读准备态",
-    legacy_sealed_blocked_not_product_command: "legacy 已封口",
-    internal_runner_blocked_until_unified_execute_and_level_b: "等待统一执行与 Level B",
-  };
-  return labels[status] ?? status;
 }
 
 function isWorkflowInFocus(workflow: ProjectWorkflowSummary) {

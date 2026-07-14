@@ -93,10 +93,7 @@ export function EntityCandidateItem({
       <span>{candidate.display_name}</span>
       <em>{candidate.reason}</em>
       <em>来源 {sourceKindLabel(candidate.source_kind)}</em>
-      <details className="agent-boundary-details">
-        <summary className="agent-boundary-summary">开发者详情</summary>
-        <em>置信度档位（raw）：{candidate.confidence_kind}</em>
-      </details>
+      {/* 「开发者详情」折叠已废除（DESIGN.md §三·五 禁令2）：机器字段卡片上零入口。 */}
       <div className="knowledge-action-row">
         <button type="button" className="secondary-button" onClick={onConfirm}>登记实体 / 别名</button>
         <button type="button" className="secondary-button" onClick={onReject}>拒绝候选</button>
@@ -170,10 +167,7 @@ export function ConfirmedRelationItem({ relation }: { relation: MemoryRelation }
       <span>{relation.subject_label} {"->"} {relation.object_label}</span>
       <em>{relation.confirmation_reason}</em>
       <em>已确认关系用于解释召回原因。</em>
-      <details className="agent-boundary-details">
-        <summary className="agent-boundary-summary">开发者详情</summary>
-        <em>确认角色（raw）：{relation.confirmation_role}</em>
-      </details>
+      {/* 「开发者详情」折叠已废除（DESIGN.md §三·五 禁令2）：机器字段卡片上零入口。 */}
     </div>
   );
 }
@@ -202,11 +196,7 @@ export function MaturePatternCandidateItem({
       <em>{candidate.claim}</em>
       <em>{candidate.requires_user_confirmation ? "需要用户确认" : "仍需显式决定"}；候选未确认，不会进入任务包入选列表。</em>
       <em>{candidate.review_summary}</em>
-      <details className="agent-boundary-details">
-        <summary className="agent-boundary-summary">开发者详情</summary>
-        <em>模式类型（raw）：{candidate.pattern_kind}</em>
-        <em>来源 {candidate.source_refs.length} / 关联成员 {candidate.member_refs.length} / 识别信号 {candidate.signal_refs.length}</em>
-      </details>
+      {/* 「开发者详情」折叠已废除（DESIGN.md §三·五 禁令2）：机器字段卡片上零入口。 */}
       <div className="knowledge-action-row">
         <button type="button" className="secondary-button" onClick={onConfirm} disabled={!actionable}>
           用户确认为正式记忆
@@ -235,11 +225,7 @@ export function MemoryClusterReportItem({ report }: { report: MemoryClusterRepor
       <span>{report.title}</span>
       <em>{report.display_text}</em>
       <em>报告可下钻来源，但不是正式事实，也不会进入任务包入选清单。</em>
-      <details className="agent-boundary-details">
-        <summary className="agent-boundary-summary">开发者详情</summary>
-        <em>报告类型（raw）：{report.report_kind}</em>
-        <em>项目 {report.project_ids.length} / 成员引用 {report.member_refs.length} / 来源 {report.source_refs.length}</em>
-      </details>
+      {/* 「开发者详情」折叠已废除（DESIGN.md §三·五 禁令2）：机器字段卡片上零入口。 */}
     </div>
   );
 }

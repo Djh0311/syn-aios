@@ -1,5 +1,14 @@
+// ⑥ I 定稿(hifi `I · 技能 / harness(回顾面 B1 同构·全量不截断)`)：与记忆中心完全同构 ——
+// 工具条(真实总数 + 过滤 chip)+ 三元素行全量列表 + 右详情。样板 = MemoryCenterView 的 B1 双栏。
+//
+// 治体检 P0：旧四列看板把 90 条技能 `.slice(0, 6)` 砍到 6 条**且无展开入口**——84 条永久不可达。
+// 本次删掉全部硬截断，列表全量可滚(宪法 §六 回顾面：找一条已知存在的记录不许超 3 步/10 秒)。
+//
+// hooks 约定：本组件只经 `visibleText`(真 SSR)消费(见 tests/offline-permission-dialog.test.tsx:3498)，
+// 不被 renderComposite 裸调 → 可以用 hooks。(对比 ProjectOverview 必须零 hooks。)
+import { useMemo, useState } from "react";
 import { Badge } from "../components/Badge";
-import { SummaryTile } from "../components/WorkbenchPrimitives";
+import { EmptyState, FactRow, ListRow, SegTitle } from "../components/SpecPrimitives";
 import type { PluginRecord, ProjectRecord, SkillRecord } from "../lib/types";
 
 type SkillsBoardViewProps = {
@@ -8,152 +17,124 @@ type SkillsBoardViewProps = {
   projects: ProjectRecord[];
 };
 
-export function SkillsBoardView({ skills, plugins, projects }: SkillsBoardViewProps) {
-  const bySource = groupSkillsBySource(skills);
-  const pluginSkills = skills.filter((skill) => skill.source_type === "plugin").slice(0, 8);
-  const reusableSkills = skills.slice(0, 6);
-  const projectCount = projects.length;
+type SkillFilter = "all" | "plugin";
+
+export function SkillsBoardView({ skills, plugins }: SkillsBoardViewProps) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<SkillFilter>("all");
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
+
+  const pluginSkillCount = useMemo(() => skills.filter((skill) => skill.source_type === "plugin").length, [skills]);
+
+  const rows = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return skills
+      .filter((skill) => (filter === "plugin" ? skill.source_type === "plugin" : true))
+      .filter((skill) => {
+        if (!normalized) return true;
+        return [skill.title, skill.description, skill.path, skill.plugin_name, sourceLabel(skill.source_type)]
+          .some((value) => (value ?? "").toLowerCase().includes(normalized));
+      });
+  }, [skills, filter, query]);
+
+  const selectedSkill = rows.find((skill) => skill.skill_id === selectedSkillId) ?? rows[0] ?? null;
 
   return (
-    <section className="view-stack">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">技能</p>
-          <h2>技能能力库</h2>
-        </div>
-        <p className="muted">查看可复用能力、适用场景和当前可用性；这里不加载、不编辑、不自动推荐。</p>
+    <section className="view-stack skills-board" aria-label="技能">
+      <div className="sr-only">
+        <p>技能</p>
+        <h1>技能</h1>
+        <p>查看可见技能的来源和适用场景；这里不加载、不编辑、不自动推荐。</p>
       </div>
 
-      <div className="object-summary-grid">
-        <SummaryTile label="可复用能力" value={`${skills.length} 个`} hint="来自当前工作台可见技能" />
-        <SummaryTile label="适用场景" value={`${Object.keys(bySource).length} 类`} hint="按系统、本地和插件来源粗分" />
-        <SummaryTile label="最近使用" value="未接入" hint="暂无使用事件，不伪造热度" />
-        <SummaryTile label="当前可用性" value={skills.length ? "可查看" : "待配置"} hint="仅代表可见，不代表已加载到智能体" />
-      </div>
+      <div className="memory-b1-grid">
+        <section className="memory-center-panel" aria-label="技能列表">
+          <div className="memory-b1-toolbar">
+            <input
+              type="text"
+              className="jiaoban-session-search"
+              placeholder="搜技能…"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              aria-label="搜索技能"
+            />
+          </div>
+          <div className="memory-b1-toolbar" role="group" aria-label="技能过滤">
+            {/* 计数取实数(skills.length / 插件来源技能数)，不写死。 */}
+            <button className={`jiaoban-chip ${filter === "all" ? "on" : ""}`} type="button" onClick={() => setFilter("all")}>
+              全部 {skills.length}
+            </button>
+            <button className={`jiaoban-chip ${filter === "plugin" ? "on" : ""}`} type="button" onClick={() => setFilter("plugin")}>
+              插件 {pluginSkillCount}
+            </button>
+          </div>
+          <div className="spec-scroll memory-b1-list" aria-label="技能条目">
+            {rows.map((skill) => (
+              <ListRow
+                key={skill.skill_id}
+                badge={<Badge tone={skill.source_type === "plugin" ? "candidate" : "neutral"}>{sourceLabel(skill.source_type)}</Badge>}
+                claim={skill.description ? `${skill.title} — ${skill.description}` : skill.title}
+                time={skill.plugin_name ?? undefined}
+                selected={selectedSkill?.skill_id === skill.skill_id}
+                onSelect={() => setSelectedSkillId(skill.skill_id)}
+              />
+            ))}
+            {!rows.length ? (
+              <EmptyState
+                what={query.trim() || filter === "plugin" ? "没有匹配的技能" : "当前工作台还没有可见技能"}
+                next={query.trim() || filter === "plugin" ? "换个词或切回「全部」" : "到设置的开发者区查看技能来源和接入边界"}
+              />
+            ) : null}
+          </div>
+          {/* 全量零截断(治体检 P0)：这一行是实数对账，不是「还有更多」的省略号。 */}
+          <p className="muted small-note">
+            共 {skills.length} 条技能，全量可滚，零截断{rows.length === skills.length ? "" : `；当前筛出 ${rows.length} 条`}。
+          </p>
+        </section>
 
-      <div className="board-grid skill-object-grid">
-        <ObjectColumn title="可复用能力" tone="candidate">
-          {reusableSkills.length ? (
-            reusableSkills.map((skill) => (
-              <SkillObjectCard skill={skill} key={skill.skill_id} />
-            ))
-          ) : (
-            <div className="board-card muted-card">
-              <strong>暂无技能</strong>
-              <span>当前工作台还没有可见技能；可到设置的开发者区查看来源和接入边界。</span>
-            </div>
+        <section className="memory-center-panel memory-detail-panel" aria-label="技能详情">
+          {selectedSkill ? <SkillDetail skill={selectedSkill} plugins={plugins} /> : (
+            <EmptyState what="暂无可展示详情" next="先在左侧列表选一条技能(列表为空时，到设置的开发者区查看技能来源)" />
           )}
-        </ObjectColumn>
-
-        <ObjectColumn title="适用场景" tone="candidate">
-          {Object.entries(bySource).length ? (
-            Object.entries(bySource).map(([source, items]) => (
-              <div className="board-card" key={source}>
-                <strong>{sourceLabel(source)}</strong>
-                <span>{scenarioLabel(source)}</span>
-                <div className="badge-row">
-                  <Badge tone="neutral">{items.length} 个技能</Badge>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="board-card muted-card">
-              <strong>场景待补充</strong>
-              <span>没有可见技能时不推断适用场景。</span>
-            </div>
-          )}
-        </ObjectColumn>
-
-        <ObjectColumn title="最近使用" tone="unknown">
-          <div className="board-card muted-card">
-            <strong>暂无使用事件</strong>
-            <span>当前只知道哪些技能可见；不知道最近由谁、在哪个项目里使用过。</span>
-          </div>
-          {pluginSkills.slice(0, 3).map((skill) => (
-            <div className="board-card" key={skill.skill_id}>
-              <strong>{skill.title}</strong>
-              <span>插件技能，可作为后续使用记录的候选对象。</span>
-              <div className="badge-row">
-                <Badge tone="unknown">未见最近使用</Badge>
-              </div>
-            </div>
-          ))}
-        </ObjectColumn>
-
-        <ObjectColumn title="当前可用性" tone="unknown">
-          <div className="board-card">
-            <strong>{skills.length ? "可查看，未声明已加载" : "待配置"}</strong>
-            <span>这里不把可见技能等同于已加载、已推荐或已绑定项目。</span>
-            <div className="badge-row">
-              <Badge tone="candidate">项目 {projectCount}</Badge>
-              <Badge tone="unknown">使用关系待补</Badge>
-            </div>
-          </div>
-          <div className="board-card muted-card">
-            <strong>设置 &gt; 开发者</strong>
-            <span>来源路径、插件清单和内部字段缺口收纳到详情或开发者区。</span>
-          </div>
-        </ObjectColumn>
+        </section>
       </div>
-
-      <details className="object-detail-panel">
-        <summary>开发者详情：来源和字段缺口</summary>
-        <article className="panel">
-          <div className="panel-heading">
-            <h3>来源和缺字段</h3>
-            <Badge tone="unknown">设置 &gt; 开发者</Badge>
-          </div>
-          <div className="gap-grid">
-            <GapLine label="已用字段" value="技能编号、标题、描述、路径、来源类型、插件名、插件版本、插件清单元数据。" />
-            <GapLine label="缺少字段" value="被哪个智能体使用、能在哪个智能体使用、被哪些项目使用、推荐关系、加载状态。" />
-            <GapLine label="插件信息" value={`当前只读插件元数据；索引内插件候选 ${plugins.length} 条。`} />
-          </div>
-        </article>
-      </details>
     </section>
   );
 }
 
-function ObjectColumn({ title, tone, children }: { title: string; tone: "candidate" | "unknown"; children: React.ReactNode }) {
+function SkillDetail({ skill, plugins }: { skill: SkillRecord; plugins: PluginRecord[] }) {
+  const plugin = skill.plugin_name ? plugins.find((item) => item.plugin_name === skill.plugin_name) ?? null : null;
   return (
-    <article className="board-column">
-      <div className="panel-heading">
-        <h3>{title}</h3>
-        <Badge tone={tone}>{tone === "candidate" ? "可查看" : "待补充"}</Badge>
+    <article>
+      <SegTitle>{skill.title}</SegTitle>
+      <div>
+        {/* 来源 / 适用 = 索引真有的字段(path / plugin_name / description)。 */}
+        <FactRow k="来源">{skill.plugin_name ? `${pathTail(skill.path)} · ${skill.plugin_name}` : pathTail(skill.path)}</FactRow>
+        <FactRow k="适用">{skill.description || "索引没有能力描述"}</FactRow>
+        {/* 定稿这里有一行「状态：候选(未登记)——登记前不注入任务包」+ 动作行[登记为正式技能][查看 SKILL.md]。
+            SkillRecord(workbenchCoreTypes.ts:174-183)**没有 registration/status 字段**，全仓也没有
+            register_skill / skill_registration 命令；`src/lib/tauri.ts` 只有 reveal_indexed_rollout 和
+            open_indexed_project(后者按索引项目根白名单校验，SKILL.md 路径会被拒)。
+            → 状态行留位「接线中」，两个按钮**不做**(宪法 §四.3：没有后端命令的按钮就别做)。 */}
+        <FactRow k="状态">接线中——索引还没有技能登记状态</FactRow>
+        <FactRow k="类型">{sourceLabel(skill.source_type)}</FactRow>
+        {plugin ? <FactRow k="插件版本">{plugin.plugin_version}</FactRow> : null}
+        <FactRow k="路径">{skill.path}</FactRow>
+        {skill.warnings.length ? (
+          <FactRow k="警告" bad>
+            {skill.warnings.join(" / ")}
+          </FactRow>
+        ) : null}
       </div>
-      <div className="list-stack">{children}</div>
+      <p className="muted small-note">
+        这里只显示索引看到的技能；可见不等于已加载、已推荐或已绑定项目。登记和打开 SKILL.md 都还没有后端命令，所以先不放按钮。
+      </p>
     </article>
   );
 }
 
-function SkillObjectCard({ skill }: { skill: SkillRecord }) {
-  return (
-    <div className="board-card">
-      <strong>{skill.title}</strong>
-      <span>{skill.description || "暂无能力描述"}</span>
-      <div className="badge-row">
-        <Badge tone="neutral">{sourceLabel(skill.source_type)}</Badge>
-        {skill.plugin_name ? <Badge tone="candidate">{skill.plugin_name}</Badge> : null}
-      </div>
-    </div>
-  );
-}
-
-function GapLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="gap-line">
-      <strong>{label}</strong>
-      <span>{value}</span>
-    </div>
-  );
-}
-
-function groupSkillsBySource(skills: SkillRecord[]) {
-  return skills.reduce<Record<string, SkillRecord[]>>((groups, skill) => {
-    const key = skill.source_type || "unknown";
-    groups[key] = [...(groups[key] ?? []), skill];
-    return groups;
-  }, {});
+function pathTail(path: string) {
+  return path.split("/").filter(Boolean).at(-1) || path || "未知";
 }
 
 function sourceLabel(sourceType: string) {
@@ -161,11 +142,4 @@ function sourceLabel(sourceType: string) {
   if (sourceType === "system") return "系统技能";
   if (sourceType === "user") return "本地技能";
   return "来源未知";
-}
-
-function scenarioLabel(sourceType: string) {
-  if (sourceType === "plugin") return "适合插件提供的专项能力，使用前仍需确认项目语境。";
-  if (sourceType === "system") return "适合基础工作台能力；不代表自动注入当前任务。";
-  if (sourceType === "user") return "适合本地自定义工作流；是否使用由项目任务决定。";
-  return "当前没有足够信息判断适用场景。";
 }

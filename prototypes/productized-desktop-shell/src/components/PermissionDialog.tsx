@@ -1,4 +1,5 @@
 import type { PendingAction } from "../lib/types";
+import { SegTitle } from "./SpecPrimitives";
 import { summarizeProjectDirectorTaskPlan } from "../lib/projectDirectorTaskPlan";
 
 type PermissionDialogProps = {
@@ -17,6 +18,13 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
       : null;
   const memoryCandidateCreationSource =
     action.kind === "create-memory-candidate" ? action.memoryCandidateCreation?.source_refs[0] ?? null : null;
+  // E 定稿的三段对齐(标题「允许它动这些吗?」+「要动什么」)**只对高危授权 kind 生效**(用户 07-15 拍)。
+  // 高危集合 = { execute-node-dispatch, run-workflow-machine } —— 判据不是我拍的,是源码自己已经分好的组:
+  // 只有这两个 kind 会得到 realCodexBoundary(「会触发真实 Codex 恢复」/「会写 /Users/yoyi/.codex」),
+  // 也只有这两个把取消键从「取消」升级成「拒绝」,确认键说「真实派发」/「启动多轮真实执行」。
+  // 对齐 AGENTS.md 高危清单 #1(真实项目真执行)/#2(写 .codex)/#4(自动连环)。
+  // 其余约 40 种通用确认 kind(确认复制/记录决定/创建候选…)一律走原形态——给它们套「允许它动这些吗?」是错的。
+  const isHighRiskAuthorization = action.kind === "execute-node-dispatch" || action.kind === "run-workflow-machine";
   const realCodexBoundary =
     action.kind === "execute-node-dispatch" || action.kind === "run-workflow-machine"
       ? {
@@ -72,14 +80,21 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
         aria-labelledby="permission-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        {/* Zone 1: What + Why */}
+        {/* Zone 1: What + Why。高危授权 = 定稿 E 的问句上脸(唯一问题:允许它动这些吗),
+            具体动作降为 eyebrow 交代上下文;其余 kind 维持原形态不动。 */}
         <div className="dialog-zone-what">
-          <p className="eyebrow">本机动作确认</p>
-          <h2 id="permission-title">{action.label}</h2>
+          <p className="eyebrow">{isHighRiskAuthorization ? action.label : "本机动作确认"}</p>
+          <h2 id="permission-title">{isHighRiskAuthorization ? "允许它动这些吗？" : action.label}</h2>
         </div>
 
         {/* Zone 2: Detail rows */}
         <div className="dialog-zone-details">
+        {/* 定稿 E 第二段「要动什么」(第一屏永远可见)。下面这些行本来就是「要动什么」的事实,
+            这里只把段落名给它们——不重排、不复制一份新行(复制=同一事实两处漂移)。
+            定稿的「新建」「工具」两行**无源**故不做:`PendingAction` 没有「新建」字段;
+            `allowed_tools` 只挂在 projectConsultationProposalCreation.scope_draft /
+            globalBoundaryReviewPreview.toolsAndChecks 上,不在 nodeDispatch —— 编不得。 */}
+        {isHighRiskAuthorization ? <SegTitle>要动什么</SegTitle> : null}
         <div className="permission-detail">
           <span>目标路径</span>
           <strong>{action.path}</strong>

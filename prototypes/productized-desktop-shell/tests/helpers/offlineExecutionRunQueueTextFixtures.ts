@@ -1,5 +1,24 @@
 export const executionRunQueueTextFixtures = {
   agentConversationExpectedTexts: ["新对话", "搜索会话", "给 Codex", "发送"],
+  // ⑥ H 定稿：开发者 11 面板从智能体页**退场**(定稿原话：「开发者 11 面板全部退场→审计账本页」)。
+  // 这 11 个根 class 是它们的机械指纹——一个都不许再出现在智能体页 markup 里。
+  //
+  // ⚠️ 这条替换的是原来两处 `indexOf(a) < indexOf(b)` 的**排序断言**(「普通对话区必须排在开发者详情前面」)。
+  // 那种写法在面板消失后是**哑弹**：indexOf 返回 -1 → `正数 < -1` 为 false → 断言照炸，但报错说「排序错了」，
+  // 会把人往「顺序问题」的死胡同带。改成正向断言：面板就是不该在。
+  agentRetiredDeveloperPanelMarkers: [
+    "codex-control-panel",
+    "unified-execution-panel",
+    "adapter-capability-panel",
+    "provider-availability-panel",
+    "session-continuation-panel",
+    "controlled-continuation-panel",
+    "h2-resume-authorization-panel",
+    "h2-execution-decision-panel",
+    "runtime-attention-panel",
+    "adapter-sdk-diagnostics-panel",
+    "session-operation-panel",
+  ],
   agentUnifiedExecutionExpectedTexts: [
     "统一执行链路",
     "2 条统一命令",

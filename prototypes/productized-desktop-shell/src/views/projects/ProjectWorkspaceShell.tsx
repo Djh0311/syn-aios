@@ -202,7 +202,11 @@ export function ProjectWorkspaceShell({
         </nav>
       </div>
 
-      <div className={`project-layout${selectedTool === "workflow" ? " project-layout--canvas" : ""}`}>
+      <div
+        className={`project-layout${selectedTool === "workflow" ? " project-layout--canvas" : ""}${
+          selectedTool === "jiaoban" ? " project-layout--jiaoban" : ""
+        }`}
+      >
         {selectedTool === "jiaoban" ? (
           <ProjectJiaobanPanel
             project={project}
@@ -225,11 +229,8 @@ export function ProjectWorkspaceShell({
         ) : selectedTool === "overview" ? (
           <ProjectOverview
             project={project}
-            sessions={sessions}
             workflowState={workflowState}
-            blackboardCandidateStore={blackboardCandidateStore}
-            memoryCandidateStore={memoryCandidateStore}
-            onOpenAgentSession={onOpenAgentSession}
+            planAuthorizationStore={planAuthorizationStore}
             onSelectTool={onSelectTool}
           />
         ) : selectedTool === "workflow" ? (
@@ -269,27 +270,10 @@ type JiaobanMergedLayoutProps = ProjectJiaobanPanelLayout & {
   initialHistoryOpen?: boolean;
 };
 
-export function JiaobanHistoryOverlay({
-  history,
-  onDismiss,
-}: {
-  history: ReactNode;
-  onDismiss: () => void;
-}) {
-  return (
-    <div
-      className="jiaoban-history-overlay"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onDismiss();
-      }}
-    >
-      <aside className="jiaoban-history-drawer" id="jiaoban-history-drawer" aria-label="交办历史内容">
-        {history}
-      </aside>
-    </div>
-  );
-}
-
+// 修宪(2026-07-14 深夜·用户拍·交互正本 §四.2)：交办页 = 左工作历史**独立栏**(可一键收起成窄条)
+// + 中交办主卡 + 右画布**动态宽**。取代旧的「32px rail + 历史悬浮覆盖层 + 两栏 panels」。
+// 画布宽窄判据 = 有没有工序图可画(用户 2026-07-15 拍「有图才宽」)：说态还没方案 → 收窄成提示条；
+// 方案一到(批态)就有预演图、要在节点上选会话(M1·07-11 收口) → 变宽。运行/交货态同理为宽。
 export function JiaobanMergedLayout({
   phase,
   history,
@@ -297,65 +281,74 @@ export function JiaobanMergedLayout({
   previewCanvas = null,
   workflowPanel = null,
   onOpenWorkflow,
-  initialHistoryOpen = false,
+  initialHistoryOpen = true,
 }: JiaobanMergedLayoutProps) {
   const [historyOpen, setHistoryOpen] = useState(initialHistoryOpen);
   const showsPreviewCanvas = Boolean(previewCanvas);
   const showsRuntimePlanGraph = showsPreviewCanvas && (phase === "running" || phase === "done" || phase === "blocked");
-  const dismissHistory = () => setHistoryOpen(false);
+  // 说态还没方案 = 没图可画 → 收窄成提示条；方案一到就有预演图(批态要在节点上选会话) → 变宽。
+  const canvasWide = phase !== "say";
 
   return (
     <div
-      className="jiaoban-merged-layout"
+      className={[
+        "jiaoban-merged-layout",
+        historyOpen ? "" : "is-history-collapsed",
+        canvasWide ? "is-canvas-wide" : "is-canvas-hint",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       style={{ minWidth: 0, minHeight: 0 }}
     >
-      <aside className="jiaoban-history-rail" aria-label="交办历史">
-        <button
-          className="jiaoban-history-rail-toggle"
-          type="button"
-          aria-controls="jiaoban-history-drawer"
-          aria-expanded={historyOpen}
-          onClick={() => setHistoryOpen((open) => !open)}
-          title={historyOpen ? "收起交办历史" : "展开交办历史"}
-        >
-          <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16">
-            <path
-              d="M2.5 3.5h11M2.5 8h8M2.5 12.5h11"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeWidth="1.5"
-            />
-          </svg>
-          <span className="sr-only">{historyOpen ? "收起交办历史" : "展开交办历史"}</span>
-        </button>
-      </aside>
-      {historyOpen ? <JiaobanHistoryOverlay history={history} onDismiss={dismissHistory} /> : null}
-
-      <div className="jiaoban-merged-panels">
-        <section className="jiaoban-merged-region jiaoban-merged-jiaoban-region" aria-label="交办主区">
-          {main}
-        </section>
-        <section
-          className="jiaoban-merged-region jiaoban-merged-canvas-region"
-          aria-label={showsPreviewCanvas ? (showsRuntimePlanGraph ? "工作流运行工序图" : "方案预演工序图") : "工作流运行视图"}
-        >
-          <header className="jiaoban-merged-canvas-head">
-            {!showsPreviewCanvas ? (
-              <div>
-                <strong>{phase === "running" ? "正在执行" : "工作流进度"}</strong>
-                <span>只读运行视图</span>
-              </div>
-            ) : null}
-            <button className="secondary-button" type="button" onClick={onOpenWorkflow}>
-              在工作流页打开
-            </button>
-          </header>
-          <div className="jiaoban-merged-canvas-surface">
-            {previewCanvas ?? workflowPanel ?? (phase === "say" ? <p>出方案后，这里会出现工序图预演。</p> : <p>工作流数据暂不可用。</p>)}
+      <aside className="jiaoban-history-column" aria-label="工作历史">
+        <div className="jiaoban-history-column-bar">
+          <button
+            className="jiaoban-history-column-toggle"
+            type="button"
+            aria-controls="jiaoban-history-drawer"
+            aria-expanded={historyOpen}
+            onClick={() => setHistoryOpen((open) => !open)}
+            title={historyOpen ? "收起工作历史" : "展开工作历史"}
+          >
+            <span aria-hidden="true">{historyOpen ? "◀" : "▶"}</span>
+            <span className={historyOpen ? "jiaoban-history-column-toggle-text" : "sr-only"}>
+              {historyOpen ? "收起" : "展开工作历史"}
+            </span>
+          </button>
+        </div>
+        {historyOpen ? (
+          <div className="jiaoban-history-column-body spec-scroll" id="jiaoban-history-drawer">
+            {history}
           </div>
-        </section>
-      </div>
+        ) : null}
+      </aside>
+
+      <section className="jiaoban-merged-region jiaoban-merged-jiaoban-region spec-scroll" aria-label="交办主区">
+        {main}
+      </section>
+      <section
+        className="jiaoban-merged-region jiaoban-merged-canvas-region"
+        aria-label={showsPreviewCanvas ? (showsRuntimePlanGraph ? "工作流运行工序图" : "方案预演工序图") : "工作流运行视图"}
+      >
+        <header className="jiaoban-merged-canvas-head">
+          {!showsPreviewCanvas ? (
+            <div>
+              <strong>{phase === "running" ? "正在执行" : "工作流进度"}</strong>
+              <span>只读运行视图</span>
+            </div>
+          ) : null}
+          <button className="secondary-button" type="button" onClick={onOpenWorkflow}>
+            在工作流页打开
+          </button>
+        </header>
+        <div className="jiaoban-merged-canvas-surface spec-scroll">
+          {canvasWide ? (
+            previewCanvas ?? workflowPanel ?? <p>工作流数据暂不可用。</p>
+          ) : (
+            <p>出方案后，这里会出现工序图预演。</p>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

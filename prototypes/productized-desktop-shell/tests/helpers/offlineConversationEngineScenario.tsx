@@ -532,7 +532,19 @@ export function runConversationEngineScenario({
   );
   const directComposerMarkup = renderToStaticMarkup(directComposer);
   assert(!directComposerMarkup.includes("继续对话"), "信息收口后独立 composer 不应常驻显示普通对话目标");
-  assert(!directComposerMarkup.includes(selectedProjectTail), "信息收口后 composer 不应常驻显示项目名");
+  // ⑥ H 定稿(2026-07-14 hifi `H · 智能体页`)**定向反转**了这一条：
+  //   原断言 = `!includes(selectedProjectTail)`「信息收口后 composer 不应常驻显示项目名」。
+  //   定稿 H 段原话：「manual relay 发送框在底部——发送前写根/沙箱一行可见(治体检 P1「批态可见性缺席」)」。
+  //   即：当初的「信息收口」把**写根**一起收掉了，而写根恰恰是宪法 §一 批态 D5 点名必须可见的东西
+  //   (「用户能在批面看到写根/工具/边界」的可见性承诺不变)——用户正要往一个真实项目里发写指令时，
+  //   看不见会写到哪 = 违宪。故项目名(=写根)从「禁止常驻」改为「必须常驻」。
+  // ⚠️ 只反转「项目名」这一项。同组其余收口断言(完整路径 / session id / 会话ID / relay 原始字段 / 边界折叠)
+  //   定稿没动，**原样留着**，下面逐条仍在。
+  assert(
+    directComposerMarkup.includes(selectedProjectTail),
+    "⑥ H：composer 必须常驻显示写根项目名(批态可见性·治体检 P1)",
+  );
+  assert(directComposerMarkup.includes("workspace-write"), "⑥ H：composer 必须常驻显示本次发送的沙箱模式");
   assert(!directComposerMarkup.includes(session.project_root ?? ""), "信息收口后 composer 不应常驻显示完整项目路径");
   assert(!directComposerMarkup.includes(session.thread_id), "信息收口后 composer 不应常驻显示 session id");
   assert(!directComposerMarkup.includes("会话ID"), "信息收口后 composer 不应常驻显示 session id 字段");

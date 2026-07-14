@@ -1,6 +1,27 @@
 export const shellScenarioTextFixtures = {
-  homeExpectedTexts: ["项目", "智能体", "技能", "运行器", "运行中工作流", "不是真实使用事件"],
-  homeForbiddenTexts: ["系统", "Skills 1", "Plugins 1"],
+  // ⑤ C 定稿(hifi `C · 首页(系统总览)`)重做首页后同步：首页 = 统计行(项目/跑着的单/等我的事/
+  // 系统健康) + 四区块(等我的事/最近项目/记忆动态/系统状态)。
+  // 删掉的 "技能"/"运行器"/"运行中工作流" 锁的是旧首页形态(技能/运行器计数入口块 +「运行中」面板)，
+  // 定稿 C 段没有这三块；三者在左导航的覆盖由下面 primaryNavLabels 断言独立保住，未失守。
+  // "不是真实使用事件" 保留：最近项目的时间取自索引 latest_updated_at_ms(近似口径)，这句诚实声明仍成立。
+  homeExpectedTexts: [
+    "项目",
+    "智能体",
+    "跑着的单",
+    "等我的事",
+    "最近项目",
+    "记忆动态",
+    "系统状态",
+    // 「系统健康」是统计格的名字，不是定稿要求上脸的串(hifi C 段那格渲染的是「● 正常」+ 小字明细)，
+    // 故不断言它——否则读模型接线后那串消失，断言会假摔。
+    // 系统状态读模型(后端包 §A)未接线 → 必须留位 + 人话「接线中」，不许编数据。
+    "接线中",
+    "不是真实使用事件",
+  ],
+  // 原断言 message = 「首页不应显示数量」，锁的是旧首页把原始计数块摆上脸(Skills 1 / Plugins 1 /
+  // 「系统」计数块)。裸串 "系统" 与定稿 C 段强制的「系统状态」「系统健康」直接撞车 → 换成旧计数块
+  // 自己的标签文案(可复用能力 / 运行器资源)，反向意图(不摆原始计数块)不弱化。
+  homeForbiddenTexts: ["Skills 1", "Plugins 1", "可复用能力", "运行器资源"],
   primaryNavLabels: ["项目", "智能体", "想法箱", "知识库", "记忆层", "技能", "运行器", "实验画布"],
   primaryNavGlyphs: [
     ["projects", "▤"],
@@ -67,43 +88,59 @@ export const shellScenarioTextFixtures = {
   runningWorkflowsEmptyExpectedTexts: ["CANVAS · 工作流画布", "当前没有运行中的工作流。", "打开项目工作流"],
   runningWorkflowsEmptyForbiddenTexts: ["自动执行已启用", "已成功", "0 条成功结果", "结果数：0"],
   agentSessionExpectedTexts: ["新对话", "搜索会话", "Offline interaction fixture", "重新读取", "打开记录文件"],
+  // ⑥ H 定稿(hifi `H · 智能体页(会话中心·回顾面 B1 同构)`)重做后同步：智能体页 =
+  // 左会话列表(搜索+项目分组+三元素行)+ 右 transcript + 底部 composer(写根/沙箱一行常显)。
+  //
+  // 删掉的 25 条("适配器能力"/"codex-local"/"会话索引读取"/…/"does_not_change_codex_execution_semantics")
+  // 全部来自**开发者 11 面板**，定稿明令它们从本页退场(→审计账本页)。这些断言**一条没删**，只是跟着组件走：
+  // 改测 AgentDeveloperPanels 组件本体(见 offline-permission-dialog.test.tsx 的 developerPanelsText 段)，
+  // 读模型语义覆盖不丢；「面板不该出现在智能体页」另由 agentRetiredDeveloperPanelMarkers 正向断言锁死。
+  //
+  // 留下的是定稿 H 段真正要求上脸的东西(已用真实渲染核过，非猜)。
   agentViewExpectedTexts: [
     "新对话",
     "搜索会话",
+    // 三元素会话行：claim + 时间；项目分组头
+    "Offline interaction fixture",
+    "codex-workbench",
+    // 右 transcript 区
+    "重新读取",
+    "打开记录文件",
+    "offline-model",
+    // composer + ⑥ H 新增：发送前写根/沙箱常显(治体检 P1「批态可见性缺席」)。
+    // 这行是本包最要紧的正向锁：它必须与真实发送的 sandbox/allowed_write_roots 同源(MANUAL_RELAY_SANDBOX)。
+    "将以 workspace-write 写入 codex-workbench",
     "给 Codex",
     "发送",
-    "Offline interaction fixture",
-    "offline-model",
-    "codex-workbench",
-    "开发者详情",
-    "适配器能力",
-    "Codex",
-    "codex-local",
-    "会话索引读取",
-    "会话正文只读",
-    "工作流节点绑定",
-    "安全测试派发",
-    "用户审核业务派发",
-    "四角色工作流机器",
-    "权限结论记录",
-    "运行器资源索引",
-    "未实现适配器清单",
-    "openclaw",
-    "claude-code",
-    "OpenCode-like",
-    "计划中",
-    "当前不可执行",
-    "凭据：未配置",
-    "模型：未验证",
-    "已实现动作：无",
-    "planned_adapter_not_connected",
-    "no_execution_button",
-    "backend_read_model",
-    "adapter_descriptor_is_backend_read_model_only",
-    "does_not_change_codex_execution_semantics",
   ],
   agentViewForbiddenTexts: ["请进入对应项目查看具体会话与正文", "选 择 智 能 体", "启动 OpenClaw", "绑定 Claude", "凭据已配置"],
-  projectOverviewExpectedTexts: ["总览", "工作流", "交接", "资源", "设置", "项目概览", "智能体入口", "会话列表和对话界面已放到智能体页", "缺少项目默认 workflow"],
+  // ⑥ G 定稿(hifi `G · 项目页·总览`)重做总览后同步：总览 = 项目事实卡**单卡** + 第二卡位留白。
+  // 删掉的 "项目概览"/"智能体入口"/"会话列表和对话界面已放到智能体页" 锁的是**旧四块形态**(项目概览卡 +
+  // 智能体入口卡)；定稿 G 段把会话入口整个挪去智能体页(H)，这两张卡不再存在。会话入口未失守：
+  // 「在智能体中打开」按钮的断言仍在(见 offline-permission-dialog.test.tsx，改测 selectedTool="agent-sessions"
+  // 的 ProjectAgentMovedPanel —— 定稿口径下会话入口本来就该在那儿)。
+  // "缺少项目默认 workflow" 保留：无 workflow 时「工单」事实行仍如实这么说(且按 D7 补了下一步)。
+  projectOverviewExpectedTexts: [
+    "总览",
+    "工作流",
+    "交接",
+    "资源",
+    "设置",
+    // 定稿 G 段事实卡的段标题 + 五个字段名
+    "项目事实",
+    "路径",
+    "最近交货",
+    "工单",
+    "写授权",
+    "文件",
+    "缺少项目默认 workflow",
+    // 最近交货 / 文件两行无源(见 ProjectOverviewPanels.tsx 注释)→ 必须留位 + 人话「接线中」，不许编数据。
+    "接线中",
+    // 定稿 G 段：第二卡位留白 + 动作行
+    "第二卡位留白",
+    "去交办",
+    "看工作流",
+  ],
   projectOverviewForbiddenTexts: ["任务包", "Codex 角色编排", "任务包 Markdown 预览"],
   projectAgentSessionExpectedTexts: ["项目内 Agent 会话", "Offline interaction fixture", "codex-workbench", "重新读取"],
   projectAgentSessionForbiddenTexts: ["发送消息", "新建会话", "codex resume", "删除会话", "移动会话"],
@@ -222,19 +259,48 @@ export const shellScenarioTextFixtures = {
   saveFieldsDialogExpectedTexts: ["保存任务包字段", "更新对象", "work-item:offline:002", "字段编辑任务", "不生成真实任务文件、不派发真实 Codex 会话"],
   statePanelExpectedTexts: ["本地事实层 v0", "存在状态", "不存在", "结构版本", "工作流版本", "工作流", "节点", "连线", "复核", "审计事件", "状态文件不存在；不会自动创建。"],
   initDialogExpectedTexts: ["写入边界", "workflow-state.v0.json", "备份", "不写 .codex", "追加审计事件", "原子替换"],
-  skillExpectedTexts: ["技能能力库", "可复用能力", "适用场景", "最近使用", "当前可用性", "开发者详情：来源和字段缺口"],
+  // ⑥ I 定稿(hifi `I · 技能 / harness(回顾面 B1 同构·全量不截断)`)重做后同步。
+  // 删掉的 "技能能力库"/"可复用能力"/"适用场景"/"最近使用"/"当前可用性"/"开发者详情：来源和字段缺口"
+  // 锁的是**旧四列看板形态**(四个 SummaryTile 列名 + 底部 <details>)；定稿 I 段是 B1 双栏(工具条+三元素行+右详情)，
+  // 这六个串随旧形态一起消失。反向意图没弱化：
+  //   - 「不摆假事实」由下面 "接线中" + skillForbiddenTexts 接手(旧的「最近使用=未接入，不伪造热度」同义)；
+  //   - 「可见≠已加载」这句边界声明仍在(见 SkillsBoardView 详情页脚注)，断言保留。
+  // 新增 "全量可滚，零截断" = 治体检 P0 的正向锁：旧版 skills.slice(0, 6) 把 90 条砍到 6 条且无展开入口，
+  // 这条断言防它复发。
+  skillExpectedTexts: [
+    // B1 工具条(真实总数 + 过滤 chip)。搜索框走 placeholder/aria-label，不是可见文本
+    // (visibleText 会剥掉标签属性)，故这里只断 chip；与记忆中心 B1 同构，同样不断搜索框。
+    "全部",
+    "插件",
+    // 三元素行 + 右详情事实行(定稿 I 段字段：来源 / 适用)
+    "来源",
+    "适用",
+    "路径",
+    // 状态/登记无源 → 留位「接线中」，按钮不做(见 SkillsBoardView.tsx 注释)
+    "接线中",
+    // 全量零截断(治体检 P0)
+    "全量可滚，零截断",
+    // 边界声明(旧「当前可用性」列的真实内容，B1 化后归详情脚注)
+    "可见不等于已加载、已推荐或已绑定项目",
+  ],
+  // 定稿把「状态：候选(未登记)」和[登记为正式技能][查看 SKILL.md]画了出来，但 SkillRecord 没有 registration 字段、
+  // 全仓也没有对应后端命令 → 硬编码状态 = 装饰不是事实；无命令的按钮 = 假按钮(宪法 §四.3)。两者都不许出现。
+  skillForbiddenTexts: ["候选(未登记)", "登记为正式技能", "查看 SKILL.md"],
+  // harness 页同理(定稿：「harness 页同款，不再单画」)。
+  // 词表(2026-07-14 拍板)：产品域 UI 名 = harness，不译；「运行器」译名已废止 → 本页新写文案改用 harness，
+  // 故删掉 "运行器能力库"/"运行器能力"/"可运行范围"/"最近运行"/"等待配置 / 不可用原因"(旧四列列名)
+  // 和 "运行器类型"→"harness 类型"、"不自动运行运行器"→"不自动运行 harness"。
+  // ⚠️ 左导航 label 仍是「运行器」(workbenchNavigation.ts:42，别的范围)——由 primaryNavLabels 独立断言保住，未失守。
+  // 「资源=文件夹级 / 候选=文件级」这个必须保留的区分：B1 化后靠过滤 chip + 详情脚注保住，断言保留。
   harnessExpectedTexts: [
-    "运行器能力库",
-    "运行器能力",
-    "可运行范围",
-    "最近运行",
-    "等待配置 / 不可用原因",
-    "开发者详情：资源字段和候选入口",
-    "文件夹级运行器资源",
-    "文件级运行器候选",
+    // 搜索框同上：placeholder 不是可见文本，不断。
+    "全部",
+    "文件夹级 harness 资源",
+    "文件级 harness 候选",
+    // 详情事实行(旧「开发者详情」里的资源字段，B1 化后直接上脸，不再藏折叠)
     "显示名",
     "根路径",
-    "运行器类型",
+    "harness 类型",
     "智能体类型",
     "适配器编号",
     "来源类型",
@@ -249,8 +315,10 @@ export const shellScenarioTextFixtures = {
     "缺说明",
     "缺入口",
     "缺版本",
+    "全量可滚，零截断",
+    // 边界声明原样保留(不新增运行按钮 / 不自动运行 / 不代表可运行或已验证)
     "不新增运行按钮",
-    "不自动运行运行器",
+    "不自动运行 harness",
     "不代表可运行或已验证",
   ],
 } as const;

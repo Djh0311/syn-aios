@@ -5,6 +5,11 @@ import { userFacingAgentError } from "./agentLabels";
 
 export type AgentConversationSendMode = "existing_session" | "new_session";
 
+// ⑥ H：manual relay 的两条真实发送路径(新会话 / 既有会话，AgentConversationShell.tsx:528 / 568)
+// 都硬编码这个沙箱模式，写根都是 `[目标项目根]`。composer 上那行「将以 X 写入 Y」必须引**同一个常量**，
+// 否则脸上写的和真发的会各改各的、悄悄漂移(脸上写 read-only、实际 workspace-write = 最坏的那种假事实)。
+export const MANUAL_RELAY_SANDBOX = "workspace-write";
+
 export function AgentChatComposer({
   sendMode = "existing_session",
   projectOptions = [],
@@ -91,7 +96,11 @@ export function AgentChatComposer({
       : null;
   const relayErrorInfo = manualRelayError ? userFacingAgentError(manualRelayError) : null;
   const blockedRunSummary = !relayDirectSendEnabled && relayDirectSendBlockedReason ? relayDirectSendBlockedReason : null;
-  const showStatusline = isNewSessionMode || !!runSummary || !!blockedRunSummary;
+  // ⑥ H 定稿：写根/沙箱一行**常显**(治体检 P1「批态可见性缺席」；宪法 §一 批态 D5：
+  // 「用户能在批面看到写根/工具/边界」的可见性承诺不变)。
+  // 旧口径 `isNewSessionMode || !!runSummary || !!blockedRunSummary` 会在**既有会话 + 没在跑**时整条藏掉 ——
+  // 那正是用户要往一个真实项目里发写指令的时刻，恰恰最需要看见写根。故改常显。
+  const writeTargetLabel = selectedProjectRoot ? pathTail(selectedProjectRoot) : null;
   return (
     <form
       className="agent-chat-composer"
@@ -102,7 +111,6 @@ export function AgentChatComposer({
         if (canDirectSend) onSubmitDraft();
       })()}
     >
-      {showStatusline ? (
       <div className={`agent-composer-statusline ${relayDirectSendEnabled ? "armed" : "blocked"} ${relayIsRunning ? "running" : ""}`}>
         {isNewSessionMode ? (
         <div className="agent-composer-target">
@@ -124,12 +132,26 @@ export function AgentChatComposer({
           </label>
         </div>
         ) : null}
+        {/* 「将以 …」= 将来时 = **本次发送的意图**，与两条发送路径的硬编码常量同源(MANUAL_RELAY_SANDBOX +
+            allowed_write_roots:[目标项目根])，口径一致，不是既成事实的谎报。
+            没选到项目根时不许编写根：如实说还不知道会写到哪(此时发送按钮本来就是 disabled)。 */}
+        <div className="agent-composer-boundary">
+          {writeTargetLabel ? (
+            // 只显项目名(pathTail)，不显完整路径 —— 定稿 H 段画的就是「写入 mario test」。
+            // 「composer 不常驻显示完整项目路径」是既有拍板(offlineConversationEngineScenario.tsx:536)，
+            // 定稿只反转了「项目名」这一项(批态可见性)，没要求把整条路径摆上脸 → 那条断言原样留着，别顺手放宽。
+            <span>
+              将以 {MANUAL_RELAY_SANDBOX} 写入 {writeTargetLabel}
+            </span>
+          ) : (
+            <span>还没选项目——选了才知道会写到哪，也才能发送</span>
+          )}
+        </div>
         <div className="agent-composer-runstate" aria-live="polite">
           {runSummary ? <em>{runSummary}</em> : null}
           {blockedRunSummary ? <em>{blockedRunSummary}</em> : null}
         </div>
       </div>
-      ) : null}
       <label>
         <span className="agent-composer-label">给 Codex</span>
         <textarea

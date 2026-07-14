@@ -205,6 +205,13 @@ export function classifyBlocked(
 
 // 5. 卡住（永不冻）：按停因死配对给「能点的正确按钮」。绝不零按钮终态。
 // export 供离线 DOM 断言测试直接挂载验各分支按钮（行为中性，不改运行时）。
+//
+// 乙型「出问题了」（定稿 F·2026-07-14）：停因 + 「直接回它一句」回话框 + [发送并继续]。
+// ⚠️ follow-up 回话通道**后端未就绪**（核实物 2026-07-15：`follow_up_suggestions` 是 worker 回程里给主管的
+// 建议字段，不是「用户回话给 worker」的通道；tauri.ts 零 follow 命令；后端包
+// `tasks/2026-07-15-backend-ui-support-readmodels-package-v1.md` §C 正在勘察补缺）。
+// 故按包规：UI 先立形态 + disabled + 人话「通道接线中」，零假按钮（宪法 §四.3 禁死按钮）。
+// 通道就绪后：把 followUpReady 改真、接 onSendFollowUp 即可，形态不动。
 export function JiaobanBlockedState({
   outcome,
   error,
@@ -218,6 +225,10 @@ export function JiaobanBlockedState({
   onOpenWorkflow,
   latestSessionThreadId,
   onOpenAgentSession,
+  replyDraft = "",
+  onReplyDraftChange,
+  followUpReady = false,
+  onSendFollowUp,
 }: {
   outcome: AutoAdvanceRoleLoopOutcome | null;
   error: string | null;
@@ -233,6 +244,11 @@ export function JiaobanBlockedState({
   // 哨兵单→latestSession 兜底看最近对话；皆无→不显。
   latestSessionThreadId: string | null;
   onOpenAgentSession?: (threadId: string) => void;
+  // 乙型回话框：状态提升到 ProjectJiaobanPanel（本组件被离线测试平铺裸调，不能有 hooks）。
+  replyDraft?: string;
+  onReplyDraftChange?: (value: string) => void;
+  followUpReady?: boolean;
+  onSendFollowUp?: () => void;
 }) {
   // 停因人话：直接用后端 message / stop_reason（已带具体原因，不包糊话盖住）；再兜底一句 error。
   const reason =
@@ -248,6 +264,11 @@ export function JiaobanBlockedState({
   const faceTitle = archived ? "这单已结束" : interrupted ? "已停下·可接着跑" : "⚠ 卡住了";
   const faceLabel = archived ? "本单已结束" : interrupted ? "已停下可接着跑" : "卡住了";
   const faceBadge = archived ? "已结束" : interrupted ? "可接着跑" : "停下了";
+  // 乙型 =「真出问题」那一支（已结束/已停下两支不是出问题，不给回话框）。
+  const isTypeB = !archived && !interrupted;
+  // 通道没通时不抢主按钮：死配对的[接着跑]/[重新说目标]仍是能点的主路径（宪法「永不冻」）。
+  // 通道通了→[发送并继续]升主、死配对降次（定稿 F 乙型的按钮次序）。
+  const typeBPrimary = isTypeB && followUpReady;
 
   // 主/次按钮拼装。continue 主按钮统一文案「接着跑（方案已批过，不用重批）」。
   const continueBtn = (isPrimary: boolean) => (
@@ -295,9 +316,37 @@ export function JiaobanBlockedState({
         />
       ) : null}
 
+      {/* 乙型（真出问题·非「已结束」/「已停下」）：直接回它一句。通道未接通时整块 disabled + 人话原因。 */}
+      {isTypeB ? (
+        <div className="jiaoban-blocked-reply" aria-label="直接回它一句">
+          <textarea
+            className="jiaoban-blocked-reply-input"
+            rows={2}
+            value={replyDraft}
+            placeholder="直接回它：例「放在右上角 .hud 容器里，新建一个 span」——发送后按你说的继续"
+            disabled={!followUpReady}
+            onChange={(event) => onReplyDraftChange?.(event.target.value)}
+            aria-label="回话内容"
+          />
+          {!followUpReady ? (
+            <p className="muted small-note">回话通道还在接线，先用下面的按钮；接通后这里就能直接回它一句。</p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="workflow-state-actions">
-        {plan.primary === "continue" ? continueBtn(true) : null}
-        {plan.primary === "replan" ? replanBtn(true) : null}
+        {isTypeB ? (
+          <button
+            className={typeBPrimary ? "primary-button" : "secondary-button"}
+            type="button"
+            disabled={!followUpReady || starting || !replyDraft.trim()}
+            onClick={onSendFollowUp}
+          >
+            发送并继续
+          </button>
+        ) : null}
+        {plan.primary === "continue" ? continueBtn(!typeBPrimary) : null}
+        {plan.primary === "replan" ? replanBtn(!typeBPrimary) : null}
         {plan.primary === "session" ? (
           // 会话类主路径 = 上面选一条；这里的主按钮是选完[接着跑]（方案已确认时可点，否则引导重新说目标）。
           planIsConfirmed ? (

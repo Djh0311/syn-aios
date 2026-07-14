@@ -323,6 +323,10 @@ export function JiaobanSupervisorReviewSection({
           建议你亲验：{review.human_note.trim() || "亲自核验这轮结果。"}
         </p>
       ) : null}
+      {/* 批1·核对齐定稿 A「主管意见一句(带「你说了算」)」:意见=advisory,不是闸(宪法 §三 记账级)。
+          措辞对齐授权面既有脚注 `JiaobanAuthorizeStates.tsx:450`「这只是提醒，批不批还是你说了算。」——
+          同一句式两处一致,不另造词表。 */}
+      <p className="muted small-note jiaoban-supervisor-foot">这只是意见，算不算过还是你说了算。</p>
       <button className="jiaoban-linklike jiaoban-supervisor-rerun" type="button" onClick={onRetry}>
         重新复核
       </button>

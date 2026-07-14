@@ -343,6 +343,8 @@ function ProjectJiaobanPanelBrowser({
   // 挂载时从模块缓存恢复（换 tab 回来结果不丢）——首帧就带上上一轮的脸/结果。
   const cached = readJiaobanRunCache(projectRoot);
   const [manualPhase, setManualPhase] = useState<JiaobanPhase | null>(cached?.manualPhase ?? null);
+  // 卡住态乙型「直接回它一句」的草稿：状态提升到本组件——JiaobanBlockedState 被离线测试平铺裸调，不能有 hooks。
+  const [blockedReply, setBlockedReply] = useState("");
   const [goal, setGoal] = useState("");
   // 刀B·记忆召回计数：说脸预告「出方案会带上 N 条项目记忆」（同后端召回口径：本项目 project_id + 活跃态）。
   // 只读 formal store·失败静默 0（召回是增益不是闸）。
@@ -1613,6 +1615,11 @@ function ProjectJiaobanPanelBrowser({
               onOpenWorkflow={onOpenWorkflow ?? null}
               latestSessionThreadId={latestSessionThreadId}
               onOpenAgentSession={onOpenAgentSession}
+              replyDraft={blockedReply}
+              onReplyDraftChange={setBlockedReply}
+              // follow-up 回话通道后端未就绪（后端包 §C 勘察补缺中）→ 形态立住、按钮 disabled 带人话。
+              // 通道落地后：这里改成真判据 + 传 onSendFollowUp，卡片形态零改。
+              followUpReady={false}
             />
           ) : null}
         </div>

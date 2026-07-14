@@ -165,4 +165,29 @@ const waitingCanvas = renderToStaticMarkup(
 );
 assert(waitingCanvas.includes("任务 · 待你决定"), "画布 waiting_decision 必须显示待你决定标签");
 
-console.log("jiaoban-chain-result-semantics: 四分、四脸、待决定四按钮和 archived 真终态断言全过");
+// ③ 卡住态乙型（定稿 F·2026-07-14）：真出问题那一支给「直接回它一句」回话框。
+// follow-up 后端通道未就绪 → 形态立住但整块 disabled + 人话原因（宪法 §四.3 禁死按钮：不可用必给原因）。
+{
+  const typeB = renderToStaticMarkup(
+    JiaobanBlockedState({ ...blockedBase, outcome: outcome("failed", "fail_stop:styles.css 里没找到计分板挂载点") }),
+  );
+  assert(typeB.includes("⚠ 卡住了"), "乙型=真出问题那一支");
+  assert(typeB.includes('aria-label="直接回它一句"'), "乙型应有回话框");
+  assert(typeB.includes("发送并继续"), "乙型应有[发送并继续]");
+  assert(typeB.includes("回话通道还在接线"), "通道未接通必须给人话原因，不许静默死按钮");
+  assert(/<textarea[^>]*disabled/.test(typeB), "通道未接通时回话框应 disabled");
+  assert(
+    /<button[^>]*disabled[^>]*>发送并继续<\/button>/.test(typeB),
+    "通道未接通时[发送并继续]应 disabled，零假按钮",
+  );
+  assert(typeB.includes("接着跑（方案已批过"), "通道没通时仍有能点的主路径——永不冻");
+
+  // 已结束/已停下两支不是「出问题」，不该出现回话框。
+  const archivedTypeA = renderToStaticMarkup(
+    JiaobanBlockedState({ ...blockedBase, outcome: outcome("interrupted", "archived:waiting_decision_action") }),
+  );
+  assert(!archivedTypeA.includes('aria-label="直接回它一句"'), "已结束态不给回话框");
+  assert(!archivedTypeA.includes("发送并继续"), "已结束态不给[发送并继续]");
+}
+
+console.log("jiaoban-chain-result-semantics: 四分、四脸、待决定四按钮、archived 真终态和卡住乙型回话框断言全过");

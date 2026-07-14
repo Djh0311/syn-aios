@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export function SourceStylePlaceholder({
   title,
   kicker,
@@ -8,6 +10,7 @@ export function SourceStylePlaceholder({
   secondaryStat,
   sections,
   boundary,
+  lede = null,
 }: {
   title: string;
   kicker: string;
@@ -16,6 +19,8 @@ export function SourceStylePlaceholder({
   summary: string;
   primaryStat: string;
   secondaryStat: string;
+  // 可选首屏引导位(K 定稿·想法箱空态用)。不传=旧调用点零变化。
+  lede?: ReactNode;
   sections: {
     title: string;
     eyebrow: string;
@@ -48,6 +53,8 @@ export function SourceStylePlaceholder({
           <SourceEntryStat label="后置能力" value={secondaryStat} />
         </div>
       </div>
+
+      {lede}
 
       <div className="source-entry-grid">
         {sections.map((section) => (

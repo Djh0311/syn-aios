@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { renderActiveWorkbenchView } from "./components/ActiveWorkbenchView";
 import { RightDetailPanel } from "./components/RightDetailPanel";
 import { WorkbenchShell } from "./components/WorkbenchShell";
@@ -77,7 +77,7 @@ import { deriveSecretaryContext } from "./lib/secretaryReadModel";
 import { setTauriWindowTitle } from "./lib/tauriWindow";
 import type { BlackboardCandidateStoreV1, FormalMemoryStoreV1, GlobalSupervisorReviewStoreV1, MemoryCaptureStoreV1, MemoryCandidateStoreV1, MemoryEntityRelationStoreV1, MemoryLintStoreV1, MemoryPatternStoreV1, ObservationStoreV1, PendingAction, PlanAuthorizationStoreV1, ProjectConsultationProposalStoreV1, WorkbenchSnapshot, WorkflowStateSnapshot } from "./lib/types";
 import { devNavItems, homeNavItem, primaryNavItems, settingsNavItem, workspaceRailItems } from "./lib/workbenchNavigation";
-import type { RightPanelKey, ViewKey } from "./lib/workbenchNavigation";
+import type { NavigateHandler, NavigationFocus, RightPanelKey, ViewKey } from "./lib/workbenchNavigation";
 
 export { RightDetailPanel, workspaceRailItems };
 
@@ -100,6 +100,13 @@ function stageKInitialView(): ViewKey {
 export function App() {
   const [snapshot, setSnapshot] = useState<WorkbenchSnapshot | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>(() => stageKInitialView());
+  // ④「点击带上下文直达」:导航焦点与 activeView 同一次更新落地——跳哪一页 + 落在哪一条。
+  // 不带 focus 的导航把它清空,免得旧焦点粘在下一页上。
+  const [navigationFocus, setNavigationFocus] = useState<NavigationFocus | null>(null);
+  const navigate = useCallback<NavigateHandler>((view, focus) => {
+    setActiveView(view);
+    setNavigationFocus(focus ?? null);
+  }, []);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState(false);
@@ -662,7 +669,7 @@ export function App() {
       workflowStateError={workflowStateError}
       workflowStateLoading={workflowStateLoading}
       onActiveRightPanelChange={setActiveRightPanel}
-      onActiveViewChange={setActiveView}
+      onActiveViewChange={navigate}
       onCancelAction={() => setPendingAction(null)}
       onConfirmAction={confirmAction}
       onQueryChange={setQuery}
@@ -673,7 +680,8 @@ export function App() {
           view: activeView,
           snapshot: displaySnapshot,
           onRequestAction: setPendingAction,
-          onNavigate: setActiveView,
+          onNavigate: navigate,
+          navigationFocus,
           secretaryContext,
           workflowState,
           workflowStateLoading,
@@ -684,7 +692,8 @@ export function App() {
           hasRealSnapshot: Boolean(filteredSnapshot),
           onOpenAgentSession: (threadId) => {
             setFocusedAgentThreadId(threadId);
-            setActiveView("agents");
+            // 走 navigate 而不是裸 setActiveView：顺带清掉上一页的焦点，免得旧 focus 粘过来。
+            navigate("agents");
           },
           browserPreviewData: browserPreviewEnabled
             ? {

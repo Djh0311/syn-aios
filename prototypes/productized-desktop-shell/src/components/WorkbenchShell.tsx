@@ -1,6 +1,6 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { PermissionDialog } from "./PermissionDialog";
-import { RightDetailPanel } from "./RightDetailPanel";
+import { RightDetailPanel, deriveRightPanelFeedCounts } from "./RightDetailPanel";
 import type { SecretaryContext } from "../lib/secretaryReadModel";
 import type {
   MemoryCandidateStoreV1,
@@ -14,6 +14,7 @@ import {
   primaryNavItems,
   settingsNavItem,
   workspaceRailItems,
+  type NavigateHandler,
   type RightPanelKey,
   type ViewKey,
 } from "../lib/workbenchNavigation";
@@ -69,7 +70,7 @@ export function WorkbenchShell({
   workflowStateError: string | null;
   workflowStateLoading: boolean;
   onActiveRightPanelChange: Dispatch<SetStateAction<RightPanelKey | null>>;
-  onActiveViewChange: (view: ViewKey) => void;
+  onActiveViewChange: NavigateHandler;
   onCancelAction: () => void;
   onConfirmAction: () => void | Promise<void>;
   onQueryChange: (value: string) => void;
@@ -165,7 +166,7 @@ function WorkbenchTopbar({
   query: string;
   topbarReviewCount: number;
   onActiveRightPanelChange: Dispatch<SetStateAction<RightPanelKey | null>>;
-  onActiveViewChange: (view: ViewKey) => void;
+  onActiveViewChange: NavigateHandler;
   onQueryChange: (value: string) => void;
   onReload: () => void | Promise<void>;
 }) {
@@ -213,7 +214,7 @@ function WorkbenchSidebar({
 }: {
   activeView: ViewKey;
   isDeveloperView: boolean;
-  onActiveViewChange: (view: ViewKey) => void;
+  onActiveViewChange: NavigateHandler;
 }) {
   return (
     <aside className="sidebar ink-shell">
@@ -285,27 +286,44 @@ function WorkbenchStatusRail({
   workflowStateError: string | null;
   workflowStateLoading: boolean;
   onActiveRightPanelChange: Dispatch<SetStateAction<RightPanelKey | null>>;
-  onActiveViewChange: (view: ViewKey) => void;
+  onActiveViewChange: NavigateHandler;
   onReloadWorkflowState: () => void;
 }) {
+  // 角标数 = 抽屉里真数得出来的条数（同一处派生，见 deriveRightPanelFeedCounts）。
+  const feedCounts = deriveRightPanelFeedCounts({
+    snapshot: displaySnapshot,
+    workflowState,
+    notice,
+    error: error || Boolean(workflowStateError),
+    memoryCaptureStore,
+    memoryCandidateStore,
+    secretaryContext,
+  });
+
   return (
     <aside className="status-rail ink-shell" aria-label="工作台入口">
       <div className="right-icon-strip">
         {/* 秘书入口（07-09 定）：右侧栏图标 = 开侧边栏摘要（浮层）；dock「打开秘书」chip = 开看板；
             浮钮（.secretary-float）已撤开看板行为、留作将来「桌面宠物」角色位。 */}
-        {workspaceRailItems.map((item) => (
-          <button
-            className={`rail-icon-button ${activeRightPanel === item.key ? "active" : ""}`}
-            key={item.key}
-            type="button"
-            title={item.key === "secretary" ? "秘书摘要" : item.label}
-            aria-label={item.key === "secretary" ? "打开侧边栏摘要" : item.label}
-            aria-expanded={activeRightPanel === item.key}
-            onClick={() => onActiveRightPanelChange((current) => (current === item.key ? null : item.key))}
-          >
-            <span aria-hidden="true">{item.glyph}</span>
-          </button>
-        ))}
+        {workspaceRailItems.map((item) => {
+          const badgeCount = railBadgeCount(item.key, feedCounts);
+          const label = item.key === "secretary" ? "秘书摘要" : item.label;
+          const labelWithCount = badgeCount > 0 ? `${label} ${badgeCount}` : label;
+          return (
+            <button
+              className={`rail-icon-button ${activeRightPanel === item.key ? "active" : ""}`}
+              key={item.key}
+              type="button"
+              title={labelWithCount}
+              aria-label={item.key === "secretary" ? "打开侧边栏摘要" : labelWithCount}
+              aria-expanded={activeRightPanel === item.key}
+              onClick={() => onActiveRightPanelChange((current) => (current === item.key ? null : item.key))}
+            >
+              <span aria-hidden="true">{item.glyph}</span>
+              {badgeCount > 0 ? <i className="rail-icon-badge" aria-hidden="true">{badgeCount}</i> : null}
+            </button>
+          );
+        })}
         <div className="rail-mini-stats" aria-label="工作台状态摘要">
           {rightStats.map((stat) => (
             <span key={stat.label} title={`${stat.label} ${stat.value}`}>
@@ -339,12 +357,26 @@ function WorkbenchStatusRail({
   );
 }
 
+// 计数角标只挂宪法 §三.2「常显级」明列的那几类（干态进度 / 待批队列计数 / 系统健康异常），
+// 正好=定稿 D rail 上画了角标的 知 / 待 / 行 三项。
+// 「管」= 记账级（§三.3 默认沉默、可查）→ 不挂角标，定稿 D 也没画；
+// 「秘」「想」无常显级依据 → 同样不挂。数为 0 时不渲染角标（没事就别占注意力）。
+function railBadgeCount(
+  key: RightPanelKey,
+  counts: Record<Exclude<RightPanelKey, "secretary">, number>,
+): number {
+  if (key === "notifications") return counts.notifications;
+  if (key === "todos") return counts.todos;
+  if (key === "running") return counts.running;
+  return 0;
+}
+
 function WorkbenchDock({
   onActiveRightPanelChange,
   onActiveViewChange,
 }: {
   onActiveRightPanelChange: Dispatch<SetStateAction<RightPanelKey | null>>;
-  onActiveViewChange: (view: ViewKey) => void;
+  onActiveViewChange: NavigateHandler;
 }) {
   return (
     <footer className="dock ink-shell" aria-label="秘书对话框">

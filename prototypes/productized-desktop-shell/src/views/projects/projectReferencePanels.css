@@ -20,6 +20,29 @@
   grid-column: span 1;
 }
 
+/* ⑥ G 定稿：第二卡位留白(用户 07-15 拍：不硬塞，等真实需求出现再定)。
+   虚线框只引既有 token，不新增色值(零换皮)。 */
+.project-overview-reserved {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 160px;
+  padding: 14px;
+  border: 1.5px dashed var(--hair-2);
+  border-radius: 10px;
+  color: var(--ink-mid);
+  font-size: 12px;
+  text-align: center;
+}
+
+.project-overview-reserved span {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
 .project-disclosure {
   display: grid;
   gap: 12px;

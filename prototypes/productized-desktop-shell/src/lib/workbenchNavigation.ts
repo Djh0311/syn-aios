@@ -14,7 +14,22 @@ export type ViewKey =
   | "models"
   | "settings"
   // Part②·秘书看板视图（经铃 / 右栏「打开看板」可达；不进左导航——红线）。
-  | "secretary_board";
+  | "secretary_board"
+  // ④·审计账本页（宪法 §二「审计/账本：任何态都不是主角；常驻"可查"位」→ 不进左导航；
+  //   可达路径 = 右栏 rail「管」抽屉点行直达）。
+  | "audit-ledger";
+
+// 通用导航焦点（「点击带上下文直达」）：调用方给出「跳哪一页 + 落在哪一条」，
+// 目标页据 focus 选中那一条。刻意不绑右栏——首页「每条可点直达」等任何列表调用点同样复用。
+// kind 由调用方与目标页约定（如 audit-event / runtime-log / degraded-state），不在此枚举，
+// 免得每加一种可点行就要改本文件。
+export type NavigationFocus = {
+  kind: string;
+  id: string;
+};
+
+// 导航句柄统一签名：focus 可省 = 只切页不选行（既有调用点零破坏）。
+export type NavigateHandler = (view: ViewKey, focus?: NavigationFocus) => void;
 
 export type RightPanelKey = "notifications" | "todos" | "audit" | "running" | "ideas" | "secretary";
 

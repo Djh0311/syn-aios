@@ -29,9 +29,10 @@ import type {
   WorkbenchSnapshot,
   WorkflowStateSnapshot,
 } from "../lib/types";
-import { devNavItems, type ViewKey } from "../lib/workbenchNavigation";
+import { devNavItems, type NavigateHandler, type NavigationFocus, type ViewKey } from "../lib/workbenchNavigation";
 import type { SecretaryContext } from "../lib/secretaryReadModel";
 import { AgentView } from "../views/AgentView";
+import { AuditLedgerView } from "../views/AuditLedgerView";
 import { CanvasViewWithProvider } from "../views/CanvasView";
 import { WorkflowCommandConsoleView } from "../views/WorkflowCommandConsoleView";
 import { HarnessBoardView } from "../views/HarnessBoardView";
@@ -69,7 +70,10 @@ export type ActiveWorkbenchViewProps = {
   memoryPatternStore?: MemoryPatternStoreV1 | null;
   browserPreviewData?: BrowserPreviewData;
   onRequestAction: (action: PendingAction) => void;
-  onNavigate: (view: ViewKey) => void;
+  onNavigate: NavigateHandler;
+  // ④「点击带上下文直达」：导航第二参带来的焦点（跳哪一页 + 落在哪一条）。
+  // 可选=只切页不选行，既有调用点零破坏。
+  navigationFocus?: NavigationFocus | null;
   // App 一定传（secretaryContext 派生·672 穿参）；设可选让现有离线测试的其它 view 调用不必补它。
   secretaryContext?: SecretaryContext;
   onReloadWorkflowState: () => void;
@@ -88,6 +92,7 @@ export function renderActiveWorkbenchView({
   snapshot,
   onRequestAction,
   onNavigate,
+  navigationFocus,
   secretaryContext,
   workflowState,
   workflowStateLoading,
@@ -118,6 +123,21 @@ export function renderActiveWorkbenchView({
     return secretaryContext ? (
       <SecretaryBoardView context={secretaryContext} onNavigate={onNavigate} />
     ) : null;
+  }
+
+  // ④ 审计账本：不进左导航（宪法 §二 审计不是主角），只经右栏「管」抽屉点行直达。
+  if (view === "audit-ledger") {
+    // key 带 focus：已经停在本页时再从抽屉点另一行，靠重挂载让新 focus 压过旧的手点选中，
+    // 免得「点了没反应」（选中态是组件内 state，不 remount 不会跟着 focus 走）。
+    return (
+      <AuditLedgerView
+        key={navigationFocus ? `${navigationFocus.kind}:${navigationFocus.id}` : "audit-ledger:no-focus"}
+        snapshot={snapshot}
+        workflowState={workflowState}
+        workflowStateError={workflowStateError}
+        focus={navigationFocus}
+      />
+    );
   }
   if (view === "agents") {
     return (
@@ -243,6 +263,23 @@ export function renderActiveWorkbenchView({
         summary="收纳跨项目任务线索和上下文提醒；当前只读展示已有索引，转任务需要单独确认。"
         primaryStat={`${taskItems.length} 条线索`}
         secondaryStat="转任务后置"
+        /* K 定稿·想法箱空态。想法本身恒为空——`src/lib/tauri.ts` 没有任何想法写入命令,后端三件包也没覆盖,
+           所以「记一条想法」= disabled + 人话原因(宪法 §四.3 零假按钮:不可用则给人话原因,绝不做死按钮)。
+           这句直接写、不走 `EmptyState`:基座用「；」拼 what/next,和定稿这句的「。」「；」混排逐字对不上,
+           而改基座会波及 MemoryCenterView 六处空态——不改基座。 */
+        lede={
+          <section className="panel source-entry-section idea-inbox-empty" aria-label="想法箱空态">
+            <p className="spec-empty muted small-note">
+              还没有想法。随手记一条，以后能转成交办的活；转任务会先弹确认，不会自己动项目。
+            </p>
+            <div className="workflow-state-actions">
+              <button className="primary-button" type="button" disabled>
+                记一条想法
+              </button>
+            </div>
+            <p className="muted small-note">记想法还没接上，现在存不下来。</p>
+          </section>
+        }
         sections={[
           {
             title: "任务线索",
@@ -434,7 +471,14 @@ export function renderActiveWorkbenchView({
     );
   }
 
-  return <HomeView snapshot={snapshot} workflowState={workflowState} onNavigate={onNavigate} />;
+  return (
+    <HomeView
+      snapshot={snapshot}
+      workflowState={workflowState}
+      memoryCandidateStore={memoryCandidateStore}
+      onNavigate={onNavigate}
+    />
+  );
 }
 
 type CanvasRunResidueItem = {

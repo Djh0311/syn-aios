@@ -212,10 +212,7 @@ export function OfflineRoleOrchestrationPanel({
           <span>账本锚点</span>
           <strong>{selectedWorkItem.title}</strong>
           <em>{selectedWorkItem.state}</em>
-          <details className="agent-boundary-details">
-            <summary className="agent-boundary-summary">开发者详情</summary>
-            <em>{selectedWorkItem.work_item_id}</em>
-          </details>
+          {/* 「开发者详情」折叠已废除（DESIGN.md §三·五）：工作项编号等机器信息归审计账本。 */}
         </div>
       ) : (
         <p className="state-warning">当前没有可编排工作项；离线编排只能预览，不能写入工作台事实层。</p>

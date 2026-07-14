@@ -1,7 +1,18 @@
+// K · 设置(轻页)——设计定稿 `docs/design/2026-07-14-stage-b-hifi-fullapp-v1.html` 的 K 段。
+// 首卡=人话四行(通知/数据/知识库/高级);开发者入口与内部边界摘要留在下方(=「高级」的第二跳)。
+//
+// ⚠️ 零 hooks:本文件被 `tests/r4-page-read-model-settings.test.tsx` 与
+// `tests/offline-permission-dialog.test.tsx:2400` 以 `visibleText(<SettingsView …/>)` 走真 SSR 消费,
+// 当前不在 renderComposite 裸调路径上。仍不引 hooks——四行全是纯投影,不需要。
 import { Badge } from "../components/Badge";
+import { FactRow } from "../components/SpecPrimitives";
 import { deriveSettingsPageReadModelFromParts } from "../lib/pageSelectors";
+import type { HomeSystemStatusReadModel } from "./HomeView";
 import type { WorkbenchSnapshot, WorkflowStateSnapshot } from "../lib/types";
 import type { ViewKey, WorkbenchNavItem } from "../lib/workbenchNavigation";
+
+// 未接线口径与 ⑤ 首页统一一句人话(宪法 §四.3 禁机器术语上脸)。
+const NOT_WIRED = "接线中";
 
 type SettingsViewProps = {
   snapshot: WorkbenchSnapshot;
@@ -10,6 +21,9 @@ type SettingsViewProps = {
   hasRealSnapshot: boolean;
   developerItems: WorkbenchNavItem[];
   onNavigate: (view: ViewKey) => void;
+  // 后端「系统状态读模型」(`tasks/2026-07-15-backend-ui-support-readmodels-package-v1.md` §A)未落地前恒为 null
+  // →「数据」行显示「接线中」。契约类型复用 ⑤ 首页已立的同款,不另造。
+  systemStatus?: HomeSystemStatusReadModel | null;
 };
 
 const developerDescriptions: Partial<Record<ViewKey, string>> = {
@@ -26,6 +40,7 @@ export function SettingsView({
   hasRealSnapshot,
   developerItems,
   onNavigate,
+  systemStatus = null,
 }: SettingsViewProps) {
   const adapterCount = snapshot.agent_adapters.length;
   const providerCount = snapshot.provider_availability.length;
@@ -52,6 +67,28 @@ export function SettingsView({
         <h1>工作台设置</h1>
         <p>{pageReadModel.snapshot_status_label}；{pageReadModel.boundary_text}</p>
       </div>
+
+      {/* K 定稿首卡·人话四行。拿不到的值一律「接线中」+ 一句人话原因,不立假控件(宪法 §四.3 零假按钮)。 */}
+      <section className="panel settings-section settings-plain-card">
+        <div className="panel-h">
+          设置
+          <Badge tone="unknown">还没接上开关</Badge>
+        </div>
+        <FactRow k="通知">{NOT_WIRED}</FactRow>
+        <FactRow k="数据">{storageLine(systemStatus)}</FactRow>
+        <FactRow k="知识库">还没连知识库文件夹</FactRow>
+        <FactRow k="高级">给开发用的内部页面（不用管）</FactRow>
+        <p className="muted small-note">
+          「通知」还没接上系统通知，暂时开不了关；
+          {systemStatus ? null : "「数据」要等存储状态接上才说得准；"}
+          「知识库」还没登记文件夹位置。「高级」= 下面这些开发者入口，平时不用管。
+        </p>
+        <div className="settings-plain-actions">
+          <button className="secondary-button" type="button" onClick={() => onNavigate("knowledge")}>
+            去知识库看看
+          </button>
+        </div>
+      </section>
 
       <div className="settings-grid">
         <section className="panel settings-section">
@@ -158,6 +195,20 @@ export function SettingsView({
       </section>
     </section>
   );
+}
+
+// 「数据」行:定稿写「存得很稳(新引擎试运行中,一切正常)」,真源=后端 §A 的 storage_mode/storage_healthy/
+// observation_day。读模型缺席 =「接线中」,不冒充「存得很稳」,也不拿 diagnostic_summary.degraded_states
+// 顶替(那是通用降级诊断、不是存储健康,混用=编数据源)。
+function storageLine(status: HomeSystemStatusReadModel | null): string {
+  if (!status) return NOT_WIRED;
+  if (!status.storage_healthy) {
+    const reason = status.last_degradation?.reason_human?.trim();
+    return reason ? `存得不太稳：${reason}` : "存得不太稳（原因还没读到）";
+  }
+  return status.storage_mode === "db_primary"
+    ? `存得很稳（新引擎试运行中，第 ${status.observation_day} 天，一切正常）`
+    : "存得很稳";
 }
 
 function SettingFact({ label, value }: { label: string; value: string }) {
