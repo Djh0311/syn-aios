@@ -2773,7 +2773,7 @@ fn execute_project_workflow_node_with_authorization_at(
           "warnings": []
         }));
         backup_workflow_state_file(path, &timestamp)?;
-        write_validated_workflow_state(path, &value)?;
+        write_m5b_batch1_workflow_state(path, "canvas_run_work_item_created", &value)?;
     }
 
     // 绑定：若该 (node, work_item) 还没 active 绑定，用解析到的会话现绑（bind 已 workflow 感知）。
@@ -3326,7 +3326,7 @@ fn submit_project_workflow_draft_at(
     }));
 
     let backup = backup_workflow_state_file(path, &timestamp)?;
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "project_workflow_draft_submitted", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     Ok(WorkflowStateMutationResult {
         message: format!(

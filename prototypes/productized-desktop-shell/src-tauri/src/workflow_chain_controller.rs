@@ -381,7 +381,7 @@ fn run_project_workflow_chain_at(
         &timestamp,
         "用户授权启动工作流自动连环（圈固定测试项目，决策 2026-06-23）：按拓扑序逐节点自动派发，失败即停、可中断、有 runaway 上限。",
     )?;
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "workflow_chain_run_started", &value)?;
 
     // 5) 拓扑序逐节点连跑
     let mut dispatched = chain_run_dispatched_count(&value, &chain_run_id);
@@ -421,7 +421,7 @@ fn run_project_workflow_chain_at(
             &ts_start,
             &format!("自动连环：派发节点 {node_id}"),
         )?;
-        write_validated_workflow_state(path, &current)?;
+        write_m5b_batch1_workflow_state(path, "workflow_chain_node_started", &current)?;
 
         // 真派发（复用 gated 的 _at：resume 会话、自动临时 work_item、双闸 + 沙箱）
         let node_request = ProjectWorkflowNodeRunRequest {
@@ -460,7 +460,7 @@ fn run_project_workflow_chain_at(
                 &ts_done,
                 &format!("自动连环：节点 {node_id} 真派发成功（dispatch {dispatch_id}）"),
             )?;
-            write_validated_workflow_state(path, &after)?;
+            write_m5b_batch1_workflow_state(path, "workflow_chain_node_completed", &after)?;
             dispatched += 1;
         } else {
             // 失败即停（不自动重试 / 不跳过，防在老失败节点上打转）
@@ -502,7 +502,7 @@ fn run_project_workflow_chain_at(
                 &ts_done,
                 &stop_message,
             )?;
-            write_validated_workflow_state(path, &after)?;
+            write_m5b_batch1_workflow_state(path, "workflow_chain_node_failed", &after)?;
             return Ok(chain_run_result(
                 &after,
                 &chain_run_id,
@@ -533,7 +533,7 @@ fn run_project_workflow_chain_at(
         &ts_close,
         &closing_message,
     )?;
-    write_validated_workflow_state(path, &closing)?;
+    write_m5b_batch1_workflow_state(path, "workflow_chain_run_finalized", &closing)?;
     Ok(chain_run_result(
         &closing,
         &chain_run_id,
@@ -589,7 +589,7 @@ fn stop_project_workflow_chain_at(
         &timestamp,
         "用户请求停链；将在下个节点边界停下，已完成节点保留、可断点续。",
     )?;
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "workflow_chain_stop_requested", &value)?;
     let max_nodes = chain_run_max_nodes(&value, &chain_run_id);
     Ok(chain_run_result(
         &value,

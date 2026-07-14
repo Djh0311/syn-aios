@@ -453,7 +453,34 @@ pub(crate) fn record_decision(
     store.updated_at_ms = timestamp_ms;
     store.decisions.push(decision.clone());
     store.audit_events.push(audit_event.clone());
-    write_store_atomic(&sidecar, &store, timestamp_ms, proposal_write_id)?;
+    if let Some(repository) =
+        crate::workbench_sqlite_storage_mode::primary_repository_for_write(workflow_state_path)?
+    {
+        let proposal_value = serde_json::to_value(&proposal)
+            .map_err(|error| format!("序列化项目咨询方案决定 DB 主写记录失败：{error}"))?;
+        let decision_value = serde_json::to_value(&decision)
+            .map_err(|error| format!("序列化项目咨询决定 DB 主写记录失败：{error}"))?;
+        let audit_value = serde_json::to_value(&audit_event)
+            .map_err(|error| format!("序列化项目咨询方案决定审计 DB 主写记录失败：{error}"))?;
+        repository.record_proposal_decision_with_audit(
+            &proposal_value,
+            &decision_value,
+            &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+                event_id: audit_event.audit_event_id.clone(),
+                target_kind: "project_consultation_proposal".to_string(),
+                target_id: proposal.proposal_id.clone(),
+                payload: audit_value,
+            },
+            None,
+        )?;
+        crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
+            workflow_state_path,
+            "project_consultation_proposal_decision",
+            || write_store_atomic(&sidecar, &store, timestamp_ms, proposal_write_id),
+        )?;
+    } else {
+        write_store_atomic(&sidecar, &store, timestamp_ms, proposal_write_id)?;
+    }
     drop(lock);
 
     Ok(RecordProjectConsultationProposalDecisionOutput {

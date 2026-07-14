@@ -330,7 +330,7 @@ fn prepare_authorized_auto_dispatch_for_index_at(
 
     if backup_path.is_some() {
         value["updated_at"] = Value::String(timestamp.clone());
-        write_validated_workflow_state(path, &value)?;
+        write_m5b_batch1_workflow_state(path, "authorized_prepared_auto_dispatch", &value)?;
     }
 
     let updated_value = read_workflow_state_value(path)?;
@@ -468,7 +468,7 @@ fn record_worker_structured_report_at(
       ]
     }));
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "worker_structured_report_recorded", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     Ok(WorkflowStateMutationResult {
         message: "worker 结构化汇报已记录；仍不是正式事实或正式记忆。".to_string(),
@@ -619,7 +619,7 @@ fn record_project_director_process_fact_decision_at(
       "reason": request.summary.trim()
     }));
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "project_director_process_fact_review", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     let message = match request.decision.as_str() {
         "confirm_process_fact" => {
@@ -736,7 +736,7 @@ fn record_global_final_result_review_at(
       "reason": request.summary.trim()
     }));
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "global_final_result_review", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     Ok(WorkflowStateMutationResult {
         message: "全局主管已完成最终复核；这不代表用户已接受，也不写正式记忆。".to_string(),
@@ -828,7 +828,7 @@ fn record_user_result_decision_at(
       "reason": request.summary.trim()
     }));
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "user_result_decision", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     Ok(WorkflowStateMutationResult {
         message: "用户已查看结果并作出决定；只适用于本次结果，不写正式记忆。".to_string(),
@@ -905,7 +905,7 @@ fn generate_stage_c_acceptance_summary_at(
       "reason": "生成阶段 C 验收 gate 摘要；不执行真实 worker，不写正式记忆。"
     }));
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch2_workflow_state(path, "stage_c_acceptance_summary_generated", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     Ok(WorkflowStateMutationResult {
         message: if snapshot

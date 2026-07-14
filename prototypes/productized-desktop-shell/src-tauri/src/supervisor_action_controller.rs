@@ -517,7 +517,7 @@ pub(crate) fn record_supervisor_transport_failure(
         adapter_id: None,
         evidence_present: false,
     };
-    update_store(
+    update_store_db_primary(
         &runtime.workflow_state_path,
         "record-transport-failure",
         |store| {
@@ -597,7 +597,7 @@ fn record_supervisor_system_result(
         adapter_id: None,
         evidence_present: false,
     };
-    update_store(
+    update_store_db_primary(
         &runtime.workflow_state_path,
         "record-system-result",
         |store| {
@@ -1173,7 +1173,7 @@ fn record_rejected_action(
         adapter_id: None,
         evidence_present: false,
     };
-    update_store(&runtime.workflow_state_path, "reject-action", |store| {
+    update_store_db_primary(&runtime.workflow_state_path, "reject-action", |store| {
         store.actions.push(SupervisorActionRecordV1 {
             action_id,
             idempotency_key,
@@ -1232,7 +1232,7 @@ fn record_guard_rejection(
         adapter_id: None,
         evidence_present: false,
     };
-    update_store(
+    update_store_db_primary(
         &runtime.workflow_state_path,
         "reject-guard-action",
         |store| {
@@ -1293,7 +1293,7 @@ fn prior_or_recover_result(
     // A prior process may have reached the external adapter before crashing. Never replay a
     // reservation whose completion was not durably recorded: the worker might already exist.
     let revision_after = workflow_revision(&runtime.workflow_state_path).ok();
-    let recovered = update_store(
+    let recovered = update_store_db_primary(
         &runtime.workflow_state_path,
         "recover-inflight-action",
         |store| {
@@ -1657,6 +1657,133 @@ fn update_store<R>(
         .map_err(|error| format!("同步主管动作账本临时文件失败：{error}"))?;
     fs::rename(&temporary, &path).map_err(|error| format!("原子替换主管动作账本失败：{error}"))?;
     Ok(result)
+}
+
+// M5-B sidecar follow-up states use this separate writer so the existing M5-A reservation and
+// completion paths keep their established single DB transaction. Each A mutation must touch one
+// action record; anything broader fails closed instead of silently widening the write surface.
+fn update_store_db_primary<R>(
+    workflow_state_path: &Path,
+    write_id: &str,
+    update: impl FnOnce(&mut SupervisorActionStore) -> Result<R, String>,
+) -> Result<R, String> {
+    let path = sidecar_path(workflow_state_path)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| "主管动作账本缺父目录。".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("创建主管动作账本目录失败 {}：{error}", parent.display()))?;
+    let _lock = StoreLock::acquire(&parent.join(LOCK_NAME), write_id)?;
+    let mut store = load_store(workflow_state_path)?;
+    let before = store.clone();
+    let result = update(&mut store)?;
+    store.revision += 1;
+    store.updated_at_ms = crate::unix_timestamp_ms();
+    let changed = exactly_one_changed_supervisor_action(&before, &store)?;
+
+    if let Some(repository) =
+        crate::workbench_sqlite_storage_mode::primary_repository_for_write(workflow_state_path)?
+    {
+        let action_value = serde_json::to_value(&changed)
+            .map_err(|error| format!("序列化主管动作 DB 主写记录失败：{error}"))?;
+        let audit_event_id = format!(
+            "audit:supervisor-action-control:{}:{}:{}",
+            crate::stable_id(&changed.action_id),
+            changed.execution_status,
+            store.revision
+        );
+        let audit_value = json!({
+          "event_id": audit_event_id,
+          "event_type": "supervisor_action_control_recorded",
+          "target_ref": changed.action_id,
+          "actor_ref": "supervisor_action_controller",
+          "source_kind": "workspace_state",
+          "permission_level": "user_confirmed_write",
+          "before_state": before.actions.iter().find(|action| action.action_id == changed.action_id).map(|action| action.execution_status.clone()).unwrap_or_else(|| "absent".to_string()),
+          "after_state": changed.execution_status,
+          "created_at_ms": store.updated_at_ms,
+          "reason": changed.summary
+        });
+        repository.upsert_supervisor_action_with_audit(
+            &action_value,
+            &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+                event_id: audit_event_id,
+                target_kind: "supervisor_action".to_string(),
+                target_id: changed.action_id.clone(),
+                payload: audit_value,
+            },
+            None,
+        )?;
+        crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
+            workflow_state_path,
+            "supervisor_action_control_follow_up",
+            || write_supervisor_action_store_atomic(&path, parent, &store, write_id),
+        )?;
+    } else {
+        write_supervisor_action_store_atomic(&path, parent, &store, write_id)?;
+    }
+    Ok(result)
+}
+
+fn exactly_one_changed_supervisor_action(
+    before: &SupervisorActionStore,
+    after: &SupervisorActionStore,
+) -> Result<SupervisorActionRecordV1, String> {
+    let before_by_id = before
+        .actions
+        .iter()
+        .map(|action| (action.action_id.as_str(), action))
+        .collect::<BTreeMap<_, _>>();
+    let after_by_id = after
+        .actions
+        .iter()
+        .map(|action| (action.action_id.as_str(), action))
+        .collect::<BTreeMap<_, _>>();
+    if before_by_id
+        .keys()
+        .any(|action_id| !after_by_id.contains_key(action_id))
+    {
+        return Err("supervisor_action_db_primary_deletion_unsupported".to_string());
+    }
+    let changed = after
+        .actions
+        .iter()
+        .filter(|after_action| {
+            before_by_id
+                .get(after_action.action_id.as_str())
+                .is_none_or(|before_action| {
+                    serde_json::to_value(before_action).ok()
+                        != serde_json::to_value(after_action).ok()
+                })
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    match changed.as_slice() {
+        [action] => Ok(action.clone()),
+        [] => Err("supervisor_action_db_primary_changed_action_required".to_string()),
+        _ => Err("supervisor_action_db_primary_single_action_required".to_string()),
+    }
+}
+
+fn write_supervisor_action_store_atomic(
+    path: &Path,
+    parent: &Path,
+    store: &SupervisorActionStore,
+    write_id: &str,
+) -> Result<(), String> {
+    let temporary = parent.join(format!(
+        ".{SIDECAR_NAME}.{}.tmp",
+        crate::stable_id(write_id)
+    ));
+    let serialized = serde_json::to_vec_pretty(store)
+        .map_err(|error| format!("序列化主管动作账本失败：{error}"))?;
+    let mut file = fs::File::create(&temporary)
+        .map_err(|error| format!("创建主管动作账本临时文件失败：{error}"))?;
+    file.write_all(&serialized)
+        .map_err(|error| format!("写入主管动作账本临时文件失败：{error}"))?;
+    file.sync_all()
+        .map_err(|error| format!("同步主管动作账本临时文件失败：{error}"))?;
+    fs::rename(&temporary, path).map_err(|error| format!("原子替换主管动作账本失败：{error}"))
 }
 
 struct StoreLock {
@@ -2407,21 +2534,9 @@ mod tests {
                 },
             )
             .expect("initialize confirmed fixture DB");
-        let bootstrap_audit = initial_state["audit_events"][0].clone();
         repository
-            .append_audit(
-                &crate::workbench_sqlite_repository::RepositoryAuditEntry {
-                    event_id: bootstrap_event_id,
-                    target_kind: "workflow_state".to_string(),
-                    target_id: bootstrap_audit["target_ref"]
-                        .as_str()
-                        .expect("bootstrap target ref")
-                        .to_string(),
-                    payload: bootstrap_audit,
-                },
-                None,
-            )
-            .expect("seed bootstrap audit projection");
+            .record_workflow_state_delta_with_audit(&json!({}), &initial_state, None)
+            .expect("seed full workflow-state projection");
         crate::workbench_sqlite_storage_mode::clear_storage_mode_cache_for_tests();
         crate::workbench_sqlite_storage_mode::initialize_for_startup(&state_path)
             .expect("DB primary startup reconciliation");

@@ -371,7 +371,11 @@ pub(crate) fn record_operation_control_decision_at(
 
     crate::array_mut(&mut value, "audit_events")?.push(audit_event);
     value["updated_at"] = Value::String(timestamp.to_string());
-    crate::write_validated_workflow_state(workflow_state_path, &value)?;
+    crate::write_m5b_batch2_workflow_state(
+        workflow_state_path,
+        "operation_decision_recorded",
+        &value,
+    )?;
     let snapshot = crate::read_workflow_state_snapshot(workflow_state_path)?;
 
     Ok(crate::WorkflowStateMutationResult {

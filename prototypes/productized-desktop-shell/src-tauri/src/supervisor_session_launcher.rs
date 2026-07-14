@@ -778,6 +778,7 @@ fn persist_supervisor_pilot_user_requirement_snapshot(
     task_package_id: &str,
     user_requirement_snapshot: &str,
 ) -> Result<(), String> {
+    let timestamp = crate::unix_timestamp_string();
     let mut value = crate::read_workflow_state_value(workflow_state_path)?;
     let artifact = value
         .get_mut("artifacts")
@@ -790,7 +791,27 @@ fn persist_supervisor_pilot_user_requirement_snapshot(
         })
         .ok_or_else(|| "主管任务包物化后找不到 task package artifact，已拒绝发射".to_string())?;
     artifact["user_requirement_snapshot"] = Value::String(user_requirement_snapshot.to_string());
-    crate::write_validated_workflow_state(workflow_state_path, &value)
+    let audit_event_id = crate::workflow_audit::audit_event_identity(
+        "supervisor-pilot-user-requirement-snapshot",
+        task_package_id,
+        &timestamp,
+    );
+    crate::array_mut(&mut value, "audit_events")?.push(json!({
+        "event_id": audit_event_id,
+        "event_type": "supervisor_pilot_user_requirement_snapshot_recorded",
+        "target_ref": task_package_id,
+        "actor_ref": "supervisor_orchestrator",
+        "source_kind": "workspace_state",
+        "permission_level": "authorized_supervisor_execution",
+        "created_at": timestamp.clone(),
+        "reason": "主管试点已将用户原始需求快照回填任务包 artifact；审计不记录需求正文。"
+    }));
+    value["updated_at"] = Value::String(timestamp);
+    crate::write_m5b_batch2_workflow_state(
+        workflow_state_path,
+        "supervisor_pilot_user_requirement_snapshot_recorded",
+        &value,
+    )
 }
 
 

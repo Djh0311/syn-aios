@@ -321,9 +321,22 @@ struct DbProjectionData {
     proposal_audits: Vec<DbRecord>,
     authorizations: Vec<DbRecord>,
     authorization_audits: Vec<DbRecord>,
-    dispatches: Vec<DbRecord>,
-    work_items: Vec<DbRecord>,
+    projects: Vec<DbRecord>,
+    agent_adapters: Vec<DbRecord>,
+    workflows: Vec<DbRecord>,
     nodes: Vec<DbRecord>,
+    edges: Vec<DbRecord>,
+    work_items: Vec<DbRecord>,
+    artifacts: Vec<DbRecord>,
+    reviews: Vec<DbRecord>,
+    bindings: Vec<DbRecord>,
+    dispatches: Vec<DbRecord>,
+    execution_attempts: Vec<DbRecord>,
+    chain_runs: Vec<DbRecord>,
+    execution_controls: Vec<DbRecord>,
+    permission_requests: Vec<DbRecord>,
+    capabilities: Vec<DbRecord>,
+    harness_resources: Vec<DbRecord>,
     supervisor_actions: Vec<DbRecord>,
     audits: Vec<DbAuditRecord>,
 }
@@ -377,10 +390,32 @@ pub(crate) fn reconcile_db_vs_json(
             .collect::<Result<Vec<_>, _>>()?,
         "audit_event_id",
     )?;
+    let workflow_projects = array_records(&workflow_state, "projects", "project_id")?;
+    let workflow_agent_adapters = array_records(&workflow_state, "agent_adapters", "adapter_id")?;
+    let workflow_workflows = array_records(&workflow_state, "workflows", "workflow_id")?;
+    let workflow_nodes = array_records(&workflow_state, "nodes", "node_id")?;
+    let workflow_edges = array_records(&workflow_state, "edges", "edge_id")?;
+    let workflow_work_items = array_records(&workflow_state, "work_items", "work_item_id")?;
+    let workflow_artifacts = array_records(&workflow_state, "artifacts", "artifact_id")?;
+    let workflow_reviews = array_records(&workflow_state, "reviews", "review_id")?;
+    let workflow_bindings = array_records(
+        &workflow_state,
+        "workflow_node_session_bindings",
+        "binding_id",
+    )?;
     let workflow_dispatches =
         array_records(&workflow_state, "workflow_node_dispatches", "dispatch_id")?;
-    let workflow_work_items = array_records(&workflow_state, "work_items", "work_item_id")?;
-    let workflow_nodes = array_records(&workflow_state, "nodes", "node_id")?;
+    let workflow_execution_attempts =
+        optional_array_records(&workflow_state, "execution_attempts", "attempt_id")?;
+    let workflow_chain_runs =
+        optional_array_records(&workflow_state, "workflow_chain_runs", "chain_run_id")?;
+    let workflow_execution_controls =
+        optional_array_records(&workflow_state, "workflow_execution_controls", "control_id")?;
+    let workflow_permission_requests =
+        optional_array_records(&workflow_state, "permission_requests", "request_id")?;
+    let workflow_capabilities = array_records(&workflow_state, "capabilities", "capability_id")?;
+    let workflow_harness_resources =
+        array_records(&workflow_state, "harness_resources", "resource_id")?;
     let workflow_audits = array_records(&workflow_state, "audit_events", "event_id")?;
     let supervisor_records = values_to_records(supervisor_actions, "action_id")?;
 
@@ -419,13 +454,54 @@ pub(crate) fn reconcile_db_vs_json(
             normalize_authorizations(database.authorizations)?,
             authorization_records,
         ),
+        reconcile_table("projects", database.projects, workflow_projects),
+        reconcile_table(
+            "agent_adapters",
+            database.agent_adapters,
+            workflow_agent_adapters,
+        ),
+        reconcile_table("workflows", database.workflows, workflow_workflows),
+        reconcile_table("workflow_nodes", database.nodes, workflow_nodes),
+        reconcile_table("workflow_edges", database.edges, workflow_edges),
+        reconcile_table("work_items", database.work_items, workflow_work_items),
+        reconcile_table("workflow_artifacts", database.artifacts, workflow_artifacts),
+        reconcile_table("workflow_reviews", database.reviews, workflow_reviews),
+        reconcile_table(
+            "workflow_node_session_bindings",
+            database.bindings,
+            workflow_bindings,
+        ),
         reconcile_table(
             "workflow_node_dispatches",
             database.dispatches,
             workflow_dispatches,
         ),
-        reconcile_table("work_items", database.work_items, workflow_work_items),
-        reconcile_table("workflow_nodes", database.nodes, workflow_nodes),
+        reconcile_table(
+            "execution_attempts",
+            database.execution_attempts,
+            workflow_execution_attempts,
+        ),
+        reconcile_table(
+            "workflow_chain_runs",
+            database.chain_runs,
+            workflow_chain_runs,
+        ),
+        reconcile_table(
+            "workflow_execution_controls",
+            database.execution_controls,
+            workflow_execution_controls,
+        ),
+        reconcile_table(
+            "permission_requests",
+            database.permission_requests,
+            workflow_permission_requests,
+        ),
+        reconcile_table("capabilities", database.capabilities, workflow_capabilities),
+        reconcile_table(
+            "harness_resources",
+            database.harness_resources,
+            workflow_harness_resources,
+        ),
         reconcile_table(
             "supervisor_actions",
             normalize_supervisor_actions(database.supervisor_actions)?,
@@ -504,9 +580,22 @@ fn replay_db_primary_projection(config: &DbPrimaryJsonProjectionConfig) -> Resul
     )?;
     replay_workflow_state_projection(
         &config.workflow_state_path,
-        &database.dispatches,
-        &database.work_items,
+        &database.projects,
+        &database.agent_adapters,
+        &database.workflows,
         &database.nodes,
+        &database.edges,
+        &database.work_items,
+        &database.artifacts,
+        &database.reviews,
+        &database.bindings,
+        &database.dispatches,
+        &database.execution_attempts,
+        &database.chain_runs,
+        &database.execution_controls,
+        &database.permission_requests,
+        &database.capabilities,
+        &database.harness_resources,
         &audit_records_for(&database.audits, "workflow_state"),
         replace_db_primary_leading,
     )?;
@@ -620,17 +709,69 @@ fn load_db_projection_data(
             &connection,
             "SELECT audit_event_id, record_hash, record_json FROM plan_authorization_audit_events",
         )?,
-        dispatches: query_records(
+        projects: query_records(
             &connection,
-            "SELECT dispatch_id, record_hash, record_json FROM workflow_node_dispatches",
+            "SELECT project_id, record_hash, record_json FROM projects",
+        )?,
+        agent_adapters: query_records(
+            &connection,
+            "SELECT adapter_id, record_hash, record_json FROM agent_adapters",
+        )?,
+        workflows: query_records(
+            &connection,
+            "SELECT workflow_id, record_hash, record_json FROM workflows",
+        )?,
+        nodes: query_records(
+            &connection,
+            "SELECT node_id, record_hash, record_json FROM workflow_nodes",
+        )?,
+        edges: query_records(
+            &connection,
+            "SELECT edge_id, record_hash, record_json FROM workflow_edges",
         )?,
         work_items: query_records(
             &connection,
             "SELECT work_item_id, record_hash, record_json FROM work_items",
         )?,
-        nodes: query_records(
+        artifacts: query_records(
             &connection,
-            "SELECT node_id, record_hash, record_json FROM workflow_nodes",
+            "SELECT artifact_id, record_hash, record_json FROM workflow_artifacts",
+        )?,
+        reviews: query_records(
+            &connection,
+            "SELECT review_id, record_hash, record_json FROM workflow_reviews",
+        )?,
+        bindings: query_records(
+            &connection,
+            "SELECT binding_id, record_hash, record_json FROM workflow_node_session_bindings",
+        )?,
+        dispatches: query_records(
+            &connection,
+            "SELECT dispatch_id, record_hash, record_json FROM workflow_node_dispatches",
+        )?,
+        execution_attempts: query_records(
+            &connection,
+            "SELECT attempt_id, record_hash, record_json FROM execution_attempts",
+        )?,
+        chain_runs: query_records(
+            &connection,
+            "SELECT chain_run_id, record_hash, record_json FROM workflow_chain_runs",
+        )?,
+        execution_controls: query_records(
+            &connection,
+            "SELECT control_id, record_hash, record_json FROM workflow_execution_controls",
+        )?,
+        permission_requests: query_records(
+            &connection,
+            "SELECT request_id, record_hash, record_json FROM permission_requests",
+        )?,
+        capabilities: query_records(
+            &connection,
+            "SELECT capability_id, record_hash, record_json FROM capabilities",
+        )?,
+        harness_resources: query_records(
+            &connection,
+            "SELECT resource_id, record_hash, record_json FROM harness_resources",
         )?,
         supervisor_actions: query_records(
             &connection,
@@ -748,6 +889,21 @@ fn array_records(root: &Value, array_name: &str, key_field: &str) -> Result<Vec<
         .ok_or_else(|| format!("db_json_reconcile_array_required:{array_name}"))?
         .clone();
     values_to_records(values, key_field)
+}
+
+// These four arrays were introduced after the original v0 fixture shape. Missing means an
+// unmaterialized empty collection, not a divergent record; replay materializes it only when DB
+// has a row to project.
+fn optional_array_records(
+    root: &Value,
+    array_name: &str,
+    key_field: &str,
+) -> Result<Vec<DbRecord>, String> {
+    match root.get(array_name) {
+        None => Ok(vec![]),
+        Some(Value::Array(values)) => values_to_records(values.clone(), key_field),
+        Some(_) => Err(format!("db_json_reconcile_array_required:{array_name}")),
+    }
 }
 
 fn audit_records_for(audits: &[DbAuditRecord], target_kind: &str) -> Vec<DbRecord> {
@@ -897,6 +1053,8 @@ fn compare_record_freshness(db: &Value, json: &Value) -> Option<std::cmp::Orderi
         (None, Some(_)) => return Some(std::cmp::Ordering::Less),
         _ => {}
     }
+    // Edges and some legacy artifacts carry no temporal sequence. Do not invent one: a
+    // divergent hash without an explicit order remains a fail-closed hash_mismatch.
     let db_order = record_order(db)?;
     let json_order = record_order(json)?;
     Some(db_order.cmp(&json_order))
@@ -924,9 +1082,22 @@ fn record_order(value: &Value) -> Option<String> {
 
 fn replay_workflow_state_projection(
     workflow_state_path: &Path,
-    dispatches: &[DbRecord],
-    work_items: &[DbRecord],
+    projects: &[DbRecord],
+    agent_adapters: &[DbRecord],
+    workflows: &[DbRecord],
     nodes: &[DbRecord],
+    edges: &[DbRecord],
+    work_items: &[DbRecord],
+    artifacts: &[DbRecord],
+    reviews: &[DbRecord],
+    bindings: &[DbRecord],
+    dispatches: &[DbRecord],
+    execution_attempts: &[DbRecord],
+    chain_runs: &[DbRecord],
+    execution_controls: &[DbRecord],
+    permission_requests: &[DbRecord],
+    capabilities: &[DbRecord],
+    harness_resources: &[DbRecord],
     audits: &[DbRecord],
     replace_db_primary_leading: bool,
 ) -> Result<usize, String> {
@@ -934,9 +1105,37 @@ fn replay_workflow_state_projection(
     let mut changes = 0;
     changes += replay_array_records(
         &mut state,
-        "workflow_node_dispatches",
-        "dispatch_id",
-        dispatches,
+        "projects",
+        "project_id",
+        projects,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "agent_adapters",
+        "adapter_id",
+        agent_adapters,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "workflows",
+        "workflow_id",
+        workflows,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "nodes",
+        "node_id",
+        nodes,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "edges",
+        "edge_id",
+        edges,
         replace_db_primary_leading,
     )?;
     changes += replay_array_records(
@@ -948,9 +1147,72 @@ fn replay_workflow_state_projection(
     )?;
     changes += replay_array_records(
         &mut state,
-        "nodes",
-        "node_id",
-        nodes,
+        "artifacts",
+        "artifact_id",
+        artifacts,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "reviews",
+        "review_id",
+        reviews,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "workflow_node_session_bindings",
+        "binding_id",
+        bindings,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "workflow_node_dispatches",
+        "dispatch_id",
+        dispatches,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "execution_attempts",
+        "attempt_id",
+        execution_attempts,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "workflow_chain_runs",
+        "chain_run_id",
+        chain_runs,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "workflow_execution_controls",
+        "control_id",
+        execution_controls,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "permission_requests",
+        "request_id",
+        permission_requests,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "capabilities",
+        "capability_id",
+        capabilities,
+        replace_db_primary_leading,
+    )?;
+    changes += replay_array_records(
+        &mut state,
+        "harness_resources",
+        "resource_id",
+        harness_resources,
         replace_db_primary_leading,
     )?;
     changes += replay_array_records(
@@ -976,6 +1238,9 @@ fn replay_array_records(
     records: &[DbRecord],
     replace_db_primary_leading: bool,
 ) -> Result<usize, String> {
+    if state.get(array_name).is_none() {
+        state[array_name] = Value::Array(vec![]);
+    }
     let array = state
         .get_mut(array_name)
         .and_then(Value::as_array_mut)
@@ -1343,6 +1608,20 @@ mod tests {
         )
     }
 
+    fn empty_workflow_state_for_db_seed() -> Value {
+        json!({
+            "workflows": [],
+            "nodes": [],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "workflow_node_session_bindings": [],
+            "workflow_node_dispatches": [],
+            "audit_events": []
+        })
+    }
+
     fn db_primary_config(state_path: &Path) -> DbPrimaryJsonProjectionConfig {
         let config_path = storage_mode_path(state_path).expect("storage mode path");
         let runtime_artifacts = config_path.parent().expect("runtime artifacts parent");
@@ -1384,7 +1663,7 @@ mod tests {
     }
 
     fn seed_db_from_json(config: &DbPrimaryJsonProjectionConfig) {
-        WorkbenchSqliteRepository::open_confirmed(&config.repository_config())
+        let repository = WorkbenchSqliteRepository::open_confirmed(&config.repository_config())
             .expect("initialize confirmed fixture DB");
         let state = crate::read_workflow_state_value(&config.workflow_state_path)
             .expect("read seed workflow state");
@@ -1468,57 +1747,30 @@ mod tests {
                 )
                 .expect("seed authorization audit");
         }
-        for node in state["nodes"].as_array().expect("nodes array") {
-            let record_json = serde_json::to_string(node).expect("node json");
-            connection
-                .execute(
-                    "INSERT INTO workflow_nodes (node_id, workflow_id, source_id, record_hash, record_json)
-                     VALUES (?1, ?2, ?3, ?4, ?5)",
-                    params![
-                        node["node_id"].as_str().expect("node id"),
-                        node["workflow_id"].as_str(),
-                        "m5a-test-seed",
-                        crate::workbench_sqlite_importer::canonical_json_hash(node),
-                        record_json,
-                    ],
-                )
-                .expect("seed node");
+        repository
+            .record_workflow_state_delta_with_audit(
+                &empty_workflow_state_for_db_seed(),
+                &state,
+                None,
+            )
+            .expect("seed complete workflow-state projection face");
+    }
+
+    fn append_workflow_state_row(state: &mut Value, array_name: &str, row: Value) {
+        if state.get(array_name).is_none() {
+            state[array_name] = Value::Array(vec![]);
         }
-        for work_item in state["work_items"].as_array().expect("work item array") {
-            let record_json = serde_json::to_string(work_item).expect("work item json");
-            connection
-                .execute(
-                    "INSERT INTO work_items (work_item_id, workflow_id, node_id, source_id, record_hash, record_json)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    params![
-                        work_item["work_item_id"].as_str().expect("work item id"),
-                        work_item["workflow_id"].as_str(),
-                        work_item["node_id"].as_str(),
-                        "m5a-test-seed",
-                        crate::workbench_sqlite_importer::canonical_json_hash(work_item),
-                        record_json,
-                    ],
-                )
-                .expect("seed work item");
-        }
-        for audit in state["audit_events"].as_array().expect("audit array") {
-            let record_json = serde_json::to_string(audit).expect("audit json");
-            let event_id = audit["event_id"].as_str().expect("audit event id");
-            connection
-                .execute(
-                    "INSERT INTO workflow_audit_events (event_id, target_kind, target_id, source_id, record_hash, record_json)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    params![
-                        event_id,
-                        Option::<String>::None,
-                        Option::<String>::None,
-                        "m5a-test-seed",
-                        crate::workbench_sqlite_importer::canonical_json_hash(audit),
-                        record_json,
-                    ],
-                )
-                .expect("seed audit");
-        }
+        state
+            .get_mut(array_name)
+            .and_then(Value::as_array_mut)
+            .expect("workflow-state projection array")
+            .push(row);
+    }
+
+    fn projection_row(key_field: &str, key: &str) -> Value {
+        let mut row = serde_json::Map::new();
+        row.insert(key_field.to_string(), Value::String(key.to_string()));
+        Value::Object(row)
     }
 
     fn db_primary_fixture(label: &str) -> DbPrimaryFixture {
@@ -1978,6 +2230,257 @@ mod tests {
             .expect("audit reconciliation table");
         assert_eq!(audit_table.db_count, audit_table.json_count);
         assert_eq!(audit_table.matched_count, audit_table.db_count);
+    }
+
+    #[test]
+    fn m5b_full_workflow_projection_face_is_seeded_and_reconciles() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m5b-full-workflow-projection-face");
+        let report = reconcile_db_vs_json(&fixture.config).expect("reconcile full projection face");
+        let table_names = report
+            .tables
+            .iter()
+            .map(|table| table.table_name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            table_names,
+            vec![
+                "project_proposals",
+                "plan_authorizations",
+                "projects",
+                "agent_adapters",
+                "workflows",
+                "workflow_nodes",
+                "workflow_edges",
+                "work_items",
+                "workflow_artifacts",
+                "workflow_reviews",
+                "workflow_node_session_bindings",
+                "workflow_node_dispatches",
+                "execution_attempts",
+                "workflow_chain_runs",
+                "workflow_execution_controls",
+                "permission_requests",
+                "capabilities",
+                "harness_resources",
+                "supervisor_actions",
+                "workflow_audit_events",
+            ]
+        );
+        for table in &report.tables {
+            assert_eq!(table.db_count, table.json_count, "{table:?}");
+            assert_eq!(table.matched_count, table.db_count, "{table:?}");
+            assert!(table.db_leading.is_empty(), "{table:?}");
+            assert!(table.json_leading.is_empty(), "{table:?}");
+            assert!(table.hash_mismatches.is_empty(), "{table:?}");
+        }
+        let projects = report
+            .tables
+            .iter()
+            .find(|table| table.table_name == "projects")
+            .expect("project reconciliation table");
+        assert_eq!(projects.db_count, 1, "{projects:?}");
+        assert_eq!(projects.json_count, 1, "{projects:?}");
+        let agent_adapters = report
+            .tables
+            .iter()
+            .find(|table| table.table_name == "agent_adapters")
+            .expect("agent adapter reconciliation table");
+        assert_eq!(agent_adapters.db_count, 1, "{agent_adapters:?}");
+        assert_eq!(agent_adapters.json_count, 1, "{agent_adapters:?}");
+    }
+
+    #[test]
+    fn m5b_batch2_bridge_commits_workflow_audit_before_json_projection() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m5b-batch2-bridge");
+        let mut next = crate::read_workflow_state_value(&fixture.state_path)
+            .expect("read DB-primary workflow state");
+        append_workflow_state_row(
+            &mut next,
+            "audit_events",
+            json!({
+                "event_id": "audit:m5b:batch2-bridge",
+                "event_type": "m5b_batch2_bridge_test",
+                "target_ref": "m5b-batch2-bridge",
+                "actor_ref": "m5b-test",
+                "source_kind": "workspace_state",
+                "permission_level": "user_confirmed_write",
+                "created_at": "1700000000600",
+                "reason": "exercise explicit Batch 2 DB-primary bridge"
+            }),
+        );
+        crate::write_m5b_batch2_workflow_state(
+            &fixture.state_path,
+            "m5b_batch2_bridge_test",
+            &next,
+        )
+        .expect("Batch 2 bridge writes DB then JSON projection");
+        let report = reconcile_db_vs_json(&fixture.config).expect("reconcile Batch 2 bridge");
+        assert!(report.is_green(), "{report:?}");
+        let audit_table = report
+            .tables
+            .iter()
+            .find(|table| table.table_name == "workflow_audit_events")
+            .expect("workflow audit table");
+        assert!(
+            audit_table.db_count.gt(&0),
+            "Batch 2 bridge must write a workflow audit row"
+        );
+    }
+
+    #[test]
+    fn m5b_batch2_bootstraps_second_project_through_db_primary_and_reconciles() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m5b-batch2-bootstrap");
+        // Keep the differing project segment inside stable_id's historic 96-character identity.
+        let second_project_root = "/tmp/m5b-batch2-second-project";
+        crate::bootstrap_project_workflow_at(
+            &fixture.state_path,
+            &project_record(second_project_root),
+        )
+        .expect("DB-primary bootstrap for a second project");
+
+        let report = reconcile_db_vs_json(&fixture.config)
+            .expect("reconcile DB-primary second-project bootstrap");
+        assert!(report.is_green(), "{report:?}");
+        let workflows = report
+            .tables
+            .iter()
+            .find(|table| table.table_name == "workflows")
+            .expect("workflow reconciliation table");
+        assert_eq!(workflows.db_count, 2, "{workflows:?}");
+        assert_eq!(workflows.json_count, 2, "{workflows:?}");
+        assert_eq!(workflows.matched_count, 2, "{workflows:?}");
+        let projects = report
+            .tables
+            .iter()
+            .find(|table| table.table_name == "projects")
+            .expect("project reconciliation table");
+        assert_eq!(projects.db_count, 2, "{projects:?}");
+        assert_eq!(projects.json_count, 2, "{projects:?}");
+        assert_eq!(projects.matched_count, 2, "{projects:?}");
+    }
+
+    #[test]
+    fn m5b_db_ahead_replays_full_workflow_projection_face() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m5b-full-workflow-replay");
+        let before = crate::read_workflow_state_value(&fixture.state_path)
+            .expect("read sparse workflow state");
+        let mut after = before.clone();
+        let rows = [
+            ("projects", "project_id", "project:m5b:db-ahead"),
+            ("agent_adapters", "adapter_id", "adapter:m5b:db-ahead"),
+            ("workflows", "workflow_id", "workflow:m5b:db-ahead"),
+            ("nodes", "node_id", "node:m5b:db-ahead"),
+            ("edges", "edge_id", "edge:m5b:db-ahead"),
+            ("work_items", "work_item_id", "work-item:m5b:db-ahead"),
+            ("artifacts", "artifact_id", "artifact:m5b:db-ahead"),
+            ("reviews", "review_id", "review:m5b:db-ahead"),
+            (
+                "workflow_node_session_bindings",
+                "binding_id",
+                "binding:m5b:db-ahead",
+            ),
+            (
+                "workflow_node_dispatches",
+                "dispatch_id",
+                "dispatch:m5b:db-ahead",
+            ),
+            ("execution_attempts", "attempt_id", "attempt:m5b:db-ahead"),
+            ("workflow_chain_runs", "chain_run_id", "chain:m5b:db-ahead"),
+            (
+                "workflow_execution_controls",
+                "control_id",
+                "control:m5b:db-ahead",
+            ),
+            (
+                "permission_requests",
+                "request_id",
+                "permission:m5b:db-ahead",
+            ),
+            ("capabilities", "capability_id", "capability:m5b:db-ahead"),
+            ("harness_resources", "resource_id", "harness:m5b:db-ahead"),
+        ];
+        for (array_name, key_field, key) in rows {
+            append_workflow_state_row(&mut after, array_name, projection_row(key_field, key));
+        }
+        append_workflow_state_row(
+            &mut after,
+            "audit_events",
+            json!({
+                "event_id": "audit:m5b:db-ahead",
+                "event_type": "m5b_db_ahead_replay",
+                "target_ref": "m5b-full-workflow-replay",
+                "actor_ref": "m5b-test",
+                "source_kind": "workspace_state",
+                "permission_level": "user_confirmed_write",
+                "created_at": "1700000000601",
+                "reason": "simulate DB commit before JSON projection"
+            }),
+        );
+        primary_repository_for_write(&fixture.state_path)
+            .expect("DB-primary repository gate")
+            .expect("DB-primary repository")
+            .record_workflow_state_delta_with_audit(&before, &after, None)
+            .expect("commit full DB-leading workflow projection face");
+
+        clear_storage_mode_cache_for_tests();
+        initialize_for_startup(&fixture.state_path)
+            .expect("restart replays every DB-leading workflow table");
+        let replayed = crate::read_workflow_state_value(&fixture.state_path)
+            .expect("read replayed workflow state");
+        for (array_name, key_field, key) in rows {
+            assert!(
+                replayed[array_name]
+                    .as_array()
+                    .is_some_and(|records| records.iter().any(|record| {
+                        record.get(key_field).and_then(Value::as_str) == Some(key)
+                    })),
+                "replay missing {array_name}:{key}"
+            );
+        }
+        assert!(
+            replayed["audit_events"]
+                .as_array()
+                .is_some_and(|records| records
+                    .iter()
+                    .any(|record| record["event_id"] == "audit:m5b:db-ahead")),
+            "replay missing DB-leading workflow audit"
+        );
+        assert!(reconcile_db_vs_json(&fixture.config)
+            .expect("reconcile replayed full workflow projection face")
+            .is_green());
+    }
+
+    #[test]
+    fn m5b_unordered_edge_and_artifact_divergence_fail_closed_as_hash_mismatch() {
+        for (table_name, key_field) in [
+            ("workflow_edges", "edge_id"),
+            ("workflow_artifacts", "artifact_id"),
+        ] {
+            let key = format!("{table_name}:m5b:unordered");
+            let db_value = projection_row(key_field, &key);
+            let mut json_value = projection_row(key_field, &key);
+            json_value["different"] = Value::Bool(true);
+            let table = reconcile_table(
+                table_name,
+                vec![DbRecord {
+                    natural_key: key.clone(),
+                    record_hash: record_hash(&db_value).expect("DB record hash"),
+                    value: db_value,
+                }],
+                vec![DbRecord {
+                    natural_key: key.clone(),
+                    record_hash: record_hash(&json_value).expect("JSON record hash"),
+                    value: json_value,
+                }],
+            );
+            assert_eq!(table.hash_mismatches, vec![key], "{table:?}");
+            assert!(table.db_leading.is_empty(), "{table:?}");
+            assert!(table.json_leading.is_empty(), "{table:?}");
+        }
     }
 
     #[test]

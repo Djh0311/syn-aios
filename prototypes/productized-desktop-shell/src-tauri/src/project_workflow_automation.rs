@@ -8,7 +8,7 @@ use crate::{
     read_workflow_state_value, real_execution_command,
     record_project_director_process_fact_decision_at, record_worker_structured_report_at,
     stable_id, utils::hash::sha256_hex, validate_workflow_state,
-    workflow_audit::audit_event_identity, workflow_exists, write_validated_workflow_state,
+    workflow_audit::audit_event_identity, workflow_exists, write_m5b_batch1_workflow_state,
     CaptureMemoryEventInput, CodexControlCommandInput, MemoryCaptureSourceRef, MemoryScope,
     ObservationSourceRef, PrepareRealExecutionProductCommandInput,
     PreviewRealExecutionProductCommandInput, ProcessFactCandidate,
@@ -1897,7 +1897,7 @@ fn ensure_k3_b_work_item(
       "backup_ref": backup.display().to_string()
     }));
     value["updated_at"] = Value::String(timestamp.to_string());
-    write_validated_workflow_state(workflow_state_path, value)?;
+    write_m5b_batch1_workflow_state(workflow_state_path, "automation_k3b_work_item", value)?;
     let mut refreshed = read_workflow_state_value(workflow_state_path)?;
     std::mem::swap(value, &mut refreshed);
     Ok(())
@@ -2000,7 +2000,7 @@ fn ensure_work_item(
       "reason": "K3 Level A 为用户目标生成项目自动编排工作项；不代表真实 Codex 已执行。"
     }));
     value["updated_at"] = Value::String(timestamp.to_string());
-    write_validated_workflow_state(workflow_state_path, value)?;
+    write_m5b_batch1_workflow_state(workflow_state_path, "automation_work_item", value)?;
     let mut refreshed = read_workflow_state_value(workflow_state_path)?;
     std::mem::swap(value, &mut refreshed);
     let _ = backup;
@@ -2960,7 +2960,7 @@ fn append_automation_audit_event(
       "backup_ref": backup.display().to_string()
     }));
     value["updated_at"] = Value::String(timestamp.to_string());
-    write_validated_workflow_state(workflow_state_path, &value)?;
+    write_m5b_batch1_workflow_state(workflow_state_path, "automation_audit", &value)?;
     Ok(audit_event_id)
 }
 
@@ -3020,7 +3020,7 @@ fn append_j2_b_b1_audit_event(
       "backup_ref": backup.display().to_string()
     }));
     value["updated_at"] = Value::String(timestamp.to_string());
-    write_validated_workflow_state(workflow_state_path, &value)?;
+    write_m5b_batch1_workflow_state(workflow_state_path, "automation_j2b_b1_audit", &value)?;
     Ok(audit_event_id)
 }
 
@@ -3083,7 +3083,7 @@ fn append_j2_b_b2_audit_event(
       "backup_ref": backup.display().to_string()
     }));
     value["updated_at"] = Value::String(timestamp.to_string());
-    write_validated_workflow_state(workflow_state_path, &value)?;
+    write_m5b_batch1_workflow_state(workflow_state_path, "automation_j2b_b2_audit", &value)?;
     Ok(audit_event_id)
 }
 
@@ -3153,7 +3153,7 @@ fn append_k3_b_audit_event(
       "backup_ref": backup.display().to_string()
     }));
     value["updated_at"] = Value::String(timestamp.to_string());
-    write_validated_workflow_state(workflow_state_path, &value)?;
+    write_m5b_batch1_workflow_state(workflow_state_path, "automation_k3b_audit", &value)?;
     Ok(audit_event_id)
 }
 

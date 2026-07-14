@@ -274,7 +274,7 @@ fn sweep_canvas_run_residue_at(
     if !warnings.is_empty() {
         return Err(format!("写入前 schema 校验失败：{}", warnings.join(", ")));
     }
-    crate::write_validated_workflow_state(path, &value)?;
+    crate::write_m5b_batch2_workflow_state(path, "canvas_run_residue_swept", &value)?;
 
     // 写后回读校验。
     let snapshot = crate::read_workflow_state_snapshot(path)?;

@@ -895,6 +895,7 @@ fn render_user_reviewed_instruction_preview(
 }
 
 include!("workflow_state_json_helpers.rs");
+include!("workflow_db_primary_wiring.rs");
 
 // Memory command bridge, observation bridge, task memory preview, and context guard helpers live in a crate-root include for the conservative no-behavior split.
 include!("memory_context_entrypoints.rs");

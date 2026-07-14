@@ -336,7 +336,16 @@ pub(crate) fn record_user_confirmation(
     store.revision += 1;
     store.updated_at_ms = timestamp_ms;
     store.audit_events.push(audit_event.clone());
-    write_store_atomic(&sidecar, &store, timestamp_ms, write_id)?;
+    write_authorization_update_db_primary(
+        workflow_state_path,
+        &sidecar,
+        &store,
+        &authorization,
+        &audit_event,
+        timestamp_ms,
+        write_id,
+        "plan_authorization_user_confirmation",
+    )?;
     drop(lock);
     Ok(RecordPlanAuthorizationOutput {
         authorization,
@@ -425,7 +434,16 @@ pub(crate) fn record_global_boundary_review(
     store.revision += 1;
     store.updated_at_ms = timestamp_ms;
     store.audit_events.push(audit_event.clone());
-    write_store_atomic(&sidecar, &store, timestamp_ms, write_id)?;
+    write_authorization_update_db_primary(
+        workflow_state_path,
+        &sidecar,
+        &store,
+        &authorization,
+        &audit_event,
+        timestamp_ms,
+        write_id,
+        "plan_authorization_global_boundary_review",
+    )?;
     drop(lock);
     Ok(RecordPlanAuthorizationOutput {
         authorization,
@@ -595,7 +613,16 @@ pub(crate) fn revoke_authorization(
     store.revision += 1;
     store.updated_at_ms = timestamp_ms;
     store.audit_events.push(audit_event.clone());
-    write_store_atomic(&sidecar, &store, timestamp_ms, write_id)?;
+    write_authorization_update_db_primary(
+        workflow_state_path,
+        &sidecar,
+        &store,
+        &authorization,
+        &audit_event,
+        timestamp_ms,
+        write_id,
+        "plan_authorization_revoke",
+    )?;
     drop(lock);
     Ok(RecordPlanAuthorizationOutput {
         authorization,
@@ -1030,6 +1057,42 @@ fn ensure_workflow_identity(
         ));
     }
     Ok(())
+}
+
+fn write_authorization_update_db_primary(
+    workflow_state_path: &Path,
+    sidecar: &Path,
+    store: &PlanAuthorizationStoreV1,
+    authorization: &PlanAuthorization,
+    audit_event: &PlanAuthorizationAuditEvent,
+    timestamp_ms: i64,
+    write_id: &str,
+    phase: &str,
+) -> Result<(), String> {
+    let Some(repository) =
+        crate::workbench_sqlite_storage_mode::primary_repository_for_write(workflow_state_path)?
+    else {
+        return write_store_atomic(sidecar, store, timestamp_ms, write_id);
+    };
+    let authorization_value = serde_json::to_value(authorization)
+        .map_err(|error| format!("序列化方案授权 DB 主写记录失败：{error}"))?;
+    let audit_value = serde_json::to_value(audit_event)
+        .map_err(|error| format!("序列化方案授权审计 DB 主写记录失败：{error}"))?;
+    repository.upsert_plan_authorization_with_audit(
+        &authorization_value,
+        &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+            event_id: audit_event.audit_event_id.clone(),
+            target_kind: "plan_authorization".to_string(),
+            target_id: authorization.authorization_id.clone(),
+            payload: audit_value,
+        },
+        None,
+    )?;
+    crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
+        workflow_state_path,
+        phase,
+        || write_store_atomic(sidecar, store, timestamp_ms, write_id),
+    )
 }
 
 fn write_store_atomic(

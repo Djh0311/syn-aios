@@ -1131,7 +1131,7 @@ fn reopen_failed_chain_node_for_action(
         &ts,
         message,
     )?;
-    write_validated_workflow_state(path, &value)
+    write_m5b_batch1_workflow_state(path, "director_failed_action_reopened", &value)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1344,7 +1344,7 @@ fn run_project_director_failed_action_inner(
                     DIRECTOR_FINAL_REWORK_BUDGET
                 ),
             )?;
-            write_validated_workflow_state(path, &after)?;
+            write_m5b_batch1_workflow_state(path, "director_failed_action_needs_rework", &after)?;
             Ok(ProjectDirectorFailedActionOutcome {
                 action: action.to_string(),
                 chain_run_id: request.chain_run_id.clone(),
@@ -1412,7 +1412,7 @@ fn run_project_director_failed_action_inner(
                 },
             )?;
             finalize_chain_run(&mut after, &request.chain_run_id, "archived", &ts);
-            write_validated_workflow_state(path, &after)?;
+            write_m5b_batch1_workflow_state(path, "director_failed_action_archived", &after)?;
             Ok(ProjectDirectorFailedActionOutcome {
                 action: action.to_string(),
                 chain_run_id: request.chain_run_id.clone(),
@@ -1781,7 +1781,7 @@ fn finalize_stale_chain_for_replan(
         &ts,
         "上一轮未收尾的链记录被新一轮重拆取代，已正式标结（本轮从头重跑）。",
     )?;
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "director_stale_chain_superseded", &value)?;
     Ok(Some(
         "上一轮未收尾的运行已标结，本轮从头重跑（不再接续）。".to_string(),
     ))
@@ -2053,7 +2053,9 @@ fn reconcile_stale_running_dispatches(
             }));
         }
     }
-    if write_validated_workflow_state(path, &value).is_ok() {
+    if write_m5b_batch1_workflow_state(path, "director_stale_running_dispatches_reconciled", &value)
+        .is_ok()
+    {
         warnings.insert(
             0,
             format!(
@@ -2373,7 +2375,7 @@ fn run_director_task_chain_inner(
         &start_ts,
         "主管→worker 薄链驱动起链（圈固定测试项目，决策 2026-06-23）：按 depends_on 拓扑序逐任务过 S1 闸真跑、失败即停、可中断、有 runaway 上限。",
     )?;
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "director_chain_started", &value)?;
 
     let mut dispatched = 0usize;
     let mut completed = 0usize;
@@ -2405,7 +2407,7 @@ fn run_director_task_chain_inner(
                 &ts,
                 "收到停链请求，已在任务边界停下（已完成任务保留，可断点续）。",
             )?;
-            write_validated_workflow_state(path, &current)?;
+            write_m5b_batch1_workflow_state(path, "director_chain_stopped", &current)?;
             return Ok(DirectorChainOutcome {
                 total,
                 dispatched,
@@ -2448,7 +2450,11 @@ fn run_director_task_chain_inner(
                     task.title, task.status
                 ),
             )?;
-            write_validated_workflow_state(path, &current)?;
+            write_m5b_batch1_workflow_state(
+                path,
+                "director_chain_node_skipped_unprepared",
+                &current,
+            )?;
             skipped += 1;
             steps.push(DirectorChainStep {
                 planned_task_id: task_id.clone(),
@@ -2487,7 +2493,11 @@ fn run_director_task_chain_inner(
                             task.title
                         ),
                     )?;
-                    write_validated_workflow_state(path, &current)?;
+                    write_m5b_batch1_workflow_state(
+                        path,
+                        "director_chain_node_skipped_missing_binding",
+                        &current,
+                    )?;
                     skipped += 1;
                     steps.push(DirectorChainStep {
                         planned_task_id: task_id.clone(),
@@ -2514,7 +2524,7 @@ fn run_director_task_chain_inner(
                 &ts,
                 &format!("达到 runaway 上限（{max_nodes} 个任务），已停链。"),
             )?;
-            write_validated_workflow_state(path, &current)?;
+            write_m5b_batch1_workflow_state(path, "director_chain_runaway_stopped", &current)?;
             return Ok(DirectorChainOutcome {
                 total,
                 dispatched,
@@ -2543,7 +2553,7 @@ fn run_director_task_chain_inner(
                 task.title
             ),
         )?;
-        write_validated_workflow_state(path, &current)?;
+        write_m5b_batch1_workflow_state(path, "director_chain_node_started", &current)?;
         dispatched += 1;
 
         // C1·每任务独立会话（session_creator=Some=生产主路径）：绑定面板映射时只有 `new` 任务会进
@@ -2628,7 +2638,11 @@ fn run_director_task_chain_inner(
                         task.title
                     ),
                 )?;
-                write_validated_workflow_state(path, &failing)?;
+                write_m5b_batch1_workflow_state(
+                    path,
+                    "director_chain_session_create_failed",
+                    &failing,
+                )?;
                 steps.push(DirectorChainStep {
                     planned_task_id: task_id.clone(),
                     title: task.title.clone(),
@@ -2770,7 +2784,11 @@ fn run_director_task_chain_inner(
                             task.title
                         ),
                     )?;
-                    write_validated_workflow_state(path, &after_help)?;
+                    write_m5b_batch1_workflow_state(
+                        path,
+                        "director_chain_waiting_decision_worker_help",
+                        &after_help,
+                    )?;
                     steps.push(DirectorChainStep {
                         planned_task_id: task_id.clone(),
                         title: task.title.clone(),
@@ -2882,7 +2900,11 @@ fn run_director_task_chain_inner(
                                 task.title
                             ),
                         )?;
-                        write_validated_workflow_state(path, &after_mark)?;
+                        write_m5b_batch1_workflow_state(
+                            path,
+                            "director_chain_node_completed",
+                            &after_mark,
+                        )?;
                         completed += 1;
                         steps.push(DirectorChainStep {
                             planned_task_id: task_id.clone(),
@@ -2969,7 +2991,11 @@ fn run_director_task_chain_inner(
                                     DIRECTOR_FINAL_REWORK_BUDGET
                                 ),
                             )?;
-                            write_validated_workflow_state(path, &after_rework)?;
+                            write_m5b_batch1_workflow_state(
+                                path,
+                                "director_chain_needs_rework",
+                                &after_rework,
+                            )?;
                             steps.push(DirectorChainStep {
                                 planned_task_id: task_id.clone(),
                                 title: task.title.clone(),
@@ -3039,7 +3065,11 @@ fn run_director_task_chain_inner(
                                 task.title
                             ),
                         )?;
-                        write_validated_workflow_state(path, &waiting)?;
+                        write_m5b_batch1_workflow_state(
+                            path,
+                            "director_chain_waiting_decision_budget_exhausted",
+                            &waiting,
+                        )?;
                         steps.push(DirectorChainStep {
                             planned_task_id: task_id.clone(),
                             title: task.title.clone(),
@@ -3109,7 +3139,11 @@ fn run_director_task_chain_inner(
                                 task.title
                             ),
                         )?;
-                        write_validated_workflow_state(path, &waiting)?;
+                        write_m5b_batch1_workflow_state(
+                            path,
+                            "director_chain_waiting_decision_final_marker_unavailable",
+                            &waiting,
+                        )?;
                         steps.push(DirectorChainStep {
                             planned_task_id: task_id.clone(),
                             title: task.title.clone(),
@@ -3192,7 +3226,7 @@ fn run_director_task_chain_inner(
                         task.title
                     ),
                 )?;
-                write_validated_workflow_state(path, &after)?;
+                write_m5b_batch1_workflow_state(path, "director_chain_node_failed", &after)?;
                 steps.push(DirectorChainStep {
                     planned_task_id: task_id.clone(),
                     title: task.title.clone(),
@@ -3230,7 +3264,7 @@ fn run_director_task_chain_inner(
         &ts_close,
         "主管→worker 薄链驱动完成：所有 prepared 任务按 depends_on 序真派发成功。",
     )?;
-    write_validated_workflow_state(path, &closing)?;
+    write_m5b_batch1_workflow_state(path, "director_chain_completed", &closing)?;
     let summary_context = DirectorWorkflowSummaryContext {
         project_root: project_root.to_string(),
         workflow_id: workflow_id.to_string(),
@@ -3278,7 +3312,11 @@ fn run_director_task_chain_inner(
                     &ts_close,
                     &format!("主管链末总结已生成：{}；{candidate_note}", summary.summary),
                 )?;
-                write_validated_workflow_state(path, &summary_state)
+                write_m5b_batch1_workflow_state(
+                    path,
+                    "director_chain_summary_audit",
+                    &summary_state,
+                )
             }) {
                 Ok(_) => {}
                 Err(error) => push_unique(
@@ -3436,12 +3474,31 @@ pub(crate) fn create_and_bind_fresh_task_session(
     }
     // target_session_id 回填任务包 artifact（找不到即 no-op·防御式不崩链）。
     let mut value = read_workflow_state_value(path)?;
+    let before_target_session_id =
+        task_artifact_target_session_id(&value, request.task_package_id);
     if set_task_artifact_target_session_id_for_artifact(
         &mut value,
         request.task_package_id,
         &thread_id,
     ) {
-        write_validated_workflow_state(path, &value)?;
+        if let Some(task_package_id) = request.task_package_id {
+            append_task_artifact_target_session_audit(
+                &mut value,
+                task_package_id,
+                request.workflow_id,
+                request.node_id,
+                request.work_item_id,
+                before_target_session_id.as_deref(),
+                &thread_id,
+                request.requested_by,
+                "新建任务专属会话后，已回填任务包 artifact 的 target_session_id。",
+            )?;
+        }
+        write_m5b_batch1_workflow_state(
+            path,
+            "director_task_artifact_target_session_updated",
+            &value,
+        )?;
     }
     Ok(thread_id)
 }
@@ -3483,7 +3540,7 @@ fn record_supervisor_task_session_birth(
         "reason": reason
     }));
     value["updated_at"] = Value::String(unix_timestamp_string());
-    write_validated_workflow_state(path, &value)
+    write_m5b_batch2_workflow_state(path, "supervisor_task_session_birth", &value)
 }
 
 // C1·把新会话 thread_id 回填任务包 artifact 的 target_session_id。找到并回填 → true；缺 artifact_id/artifact
@@ -3514,6 +3571,60 @@ fn set_task_artifact_target_session_id_for_artifact(
         }
     }
     false
+}
+
+fn task_artifact_target_session_id(
+    value: &Value,
+    task_package_id: Option<&str>,
+) -> Option<String> {
+    let artifact_id = task_package_id?;
+    value
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .and_then(|artifacts| {
+            artifacts.iter().find(|artifact| {
+                optional_string_from(artifact, "artifact_id").as_deref() == Some(artifact_id)
+            })
+        })
+        .and_then(|artifact| optional_string_from(artifact, "target_session_id"))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_task_artifact_target_session_audit(
+    value: &mut Value,
+    artifact_id: &str,
+    workflow_id: &str,
+    node_id: &str,
+    work_item_id: &str,
+    before_target_session_id: Option<&str>,
+    native_thread_id: &str,
+    actor_ref: &str,
+    reason: &str,
+) -> Result<(), String> {
+    let timestamp = unix_timestamp_string();
+    array_mut(value, "audit_events")?.push(json!({
+        "event_id": crate::workflow_audit::audit_event_identity(
+            "task-artifact-target-session-updated",
+            artifact_id,
+            unix_timestamp_nanos()
+        ),
+        "event_type": "task_artifact_target_session_updated",
+        "target_ref": artifact_id,
+        "actor_ref": actor_ref,
+        "source_kind": "director_task_session_binding",
+        "permission_level": "workflow_event_record",
+        "workflow_id": workflow_id,
+        "node_id": node_id,
+        "work_item_id": work_item_id,
+        "artifact_id": artifact_id,
+        "before_state": before_target_session_id.unwrap_or("unbound"),
+        "after_state": native_thread_id,
+        "native_thread_id": native_thread_id,
+        "created_at": timestamp,
+        "created_at_ms": unix_timestamp_ms(),
+        "reason": reason
+    }));
+    Ok(())
 }
 
 fn validate_task_session_bindings(
@@ -3615,13 +3726,32 @@ fn bind_existing_task_sessions(
         .map_err(|error| format!("任务「{}」绑定已有对话失败：{error}", task.title))?;
 
         let mut value = read_workflow_state_value(path)?;
+        let before_target_session_id =
+            task_artifact_target_session_id(&value, task.task_package_id.as_deref());
         if !set_task_artifact_target_session_id(&mut value, task, session_id) {
             return Err(format!(
                 "任务「{}」已有对话已绑定，但任务包没有可回填的位置；已停下，未回落。",
                 task.title
             ));
         }
-        write_validated_workflow_state(path, &value)?;
+        if let Some(task_package_id) = task.task_package_id.as_deref() {
+            append_task_artifact_target_session_audit(
+                &mut value,
+                task_package_id,
+                &task.scope.workflow_id,
+                node_id,
+                work_item_id,
+                before_target_session_id.as_deref(),
+                session_id,
+                "director_chain",
+                "沿用已有任务会话后，已回填任务包 artifact 的 target_session_id。",
+            )?;
+        }
+        write_m5b_batch1_workflow_state(
+            path,
+            "director_existing_task_artifact_target_session_updated",
+            &value,
+        )?;
     }
     Ok(())
 }
@@ -3760,7 +3890,7 @@ fn append_role_loop_auto_advance_audit(
         "created_at": ts,
         "reason": reason,
     }));
-    write_validated_workflow_state(path, &value)
+    write_m5b_batch2_workflow_state(path, "role_loop_auto_advance_audit", &value)
 }
 
 // 2.5 起链前复查方案授权仍 active（批与跑之间可能被撤/过期）；无 active → 拒。复用 active 授权解析口径。

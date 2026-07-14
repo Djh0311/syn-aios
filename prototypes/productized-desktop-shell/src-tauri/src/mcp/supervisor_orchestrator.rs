@@ -688,7 +688,11 @@ pub(crate) fn abandon_fresh_task_binding(
         "reason": reason
     }));
     value["updated_at"] = Value::String(crate::unix_timestamp_string());
-    crate::write_validated_workflow_state(workflow_state_path, &value)?;
+    crate::write_m5b_batch2_workflow_state(
+        workflow_state_path,
+        "supervisor_task_session_abandoned",
+        &value,
+    )?;
     append_audit(
         config,
         "fresh_task_session_abandoned",

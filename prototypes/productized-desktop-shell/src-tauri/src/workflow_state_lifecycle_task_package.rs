@@ -73,7 +73,7 @@ fn initialize_workflow_state_at(path: &Path) -> Result<WorkflowStateMutationResu
         ));
     }
 
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch2_workflow_state(path, "workflow_state_initialized", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if !snapshot.exists
         || snapshot.schema_version.as_deref() != Some("workflow_state_v0")
@@ -167,7 +167,7 @@ fn bootstrap_project_workflow_at(
         ));
     }
 
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch2_workflow_state(path, "project_workflow_bootstrapped", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if !snapshot.exists
         || snapshot.counts.workflows == 0
@@ -439,7 +439,7 @@ fn create_task_draft_at(
         ));
     }
 
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "task_draft_created", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if snapshot.counts.work_items == 0 || snapshot.counts.artifacts == 0 {
         return Err("登记任务包草稿后重新读取校验失败".to_string());
@@ -655,7 +655,7 @@ fn update_task_package_fields_at(
         ));
     }
 
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "task_draft_fields_updated", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if !snapshot.exists {
         return Err("更新任务包字段后重新读取校验失败".to_string());
@@ -829,7 +829,7 @@ fn generate_task_package_file_at(
         ));
     }
 
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "task_package_file_generated", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     let updated = read_workflow_state_value(path)?;
     let updated_artifact = updated

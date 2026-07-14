@@ -826,7 +826,7 @@ fn write_completed_dispatch(
         }));
     }
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "workflow_node_dispatch_completed", &value)?;
     dispatch_result_from_state(
         path,
         Some(backup),
@@ -985,7 +985,7 @@ fn write_failed_dispatch(
       "reason": format!("Codex resume 未成功完成，exit_code={exit_code}。")
     }));
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "workflow_node_dispatch_failed", &value)?;
     dispatch_result_from_state(
         path,
         Some(backup),
@@ -1038,7 +1038,7 @@ fn write_readback_dispatch(
       "reason": format!("native transcript parser 只回填统计：events={} hits={}", stats.transcript_event_count, stats.transcript_target_hits)
     }));
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "workflow_node_dispatch_readback", &value)?;
     dispatch_result_from_state(
         path,
         Some(backup),
@@ -1138,7 +1138,7 @@ fn record_workflow_dispatch_director_review_at(
       "reason": "用户确认记录总指导对已完成派发结果的回收意见；没有发送 Codex 消息。"
     }));
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "workflow_dispatch_director_review", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     Ok(WorkflowStateMutationResult {
         message: "已记录总指导回收意见；没有发送 Codex 消息。".to_string(),
@@ -1225,7 +1225,7 @@ fn record_workflow_permission_decision_at(
         ),
     );
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch2_workflow_state(path, "workflow_permission_decision_recorded", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     Ok(WorkflowStateMutationResult {
         message: format!("已记录权限结论：{}", permission_decision_label(decision)),
@@ -1380,7 +1380,7 @@ fn prepare_offline_role_dispatch_at(
     }));
     update_node_state_for_id(&mut value, &node_id, "ready_to_dispatch", &timestamp)?;
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch2_workflow_state(path, "offline_role_dispatch_prepared", &value)?;
     dispatch_result_from_state(
         path,
         Some(backup),
@@ -1501,7 +1501,7 @@ fn record_offline_role_result_handoff_at(
       "reason": "记录离线角色桩结果并回传总指导；没有发送 Codex 消息。"
     }));
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch2_workflow_state(path, "offline_role_result_handoff_recorded", &value)?;
     dispatch_result_from_state(
         path,
         Some(backup),
@@ -1600,7 +1600,7 @@ fn record_offline_director_review_at(
       "reason": "记录离线总指导回收并推进工作项状态；没有发送 Codex 消息。"
     }));
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch2_workflow_state(path, "offline_director_review_recorded", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     Ok(WorkflowStateMutationResult {
         message: "已记录离线总指导回收，工作项状态已推进。".to_string(),

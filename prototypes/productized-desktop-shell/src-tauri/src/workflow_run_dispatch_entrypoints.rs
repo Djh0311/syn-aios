@@ -854,7 +854,7 @@ fn bind_workflow_node_codex_session_with_provenance_at(
             validation_warnings.join(", ")
         ));
     }
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "workflow_node_session_binding", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if !snapshot.exists {
         return Err("绑定节点会话后重新读取校验失败".to_string());
@@ -1068,7 +1068,7 @@ fn migrate_legacy_workflow_node_session_binding_ids_at(path: &Path) -> Result<us
         "reason": "旧 binding_id 会因 96 字符截断碰撞；按完整 workflow/node/work-item/native-thread 身份同步迁移 binding 与 dispatch 引用为 SHA-256。"
     }));
     value["updated_at"] = Value::String(timestamp);
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "workflow_node_session_binding_migration", &value)?;
     Ok(migrated.total())
 }
 
@@ -1152,7 +1152,7 @@ fn unbind_workflow_node_codex_session_at(
             validation_warnings.join(", ")
         ));
     }
-    write_validated_workflow_state(path, &value)?;
+    write_m5b_batch1_workflow_state(path, "workflow_node_session_unbinding", &value)?;
     let snapshot = read_workflow_state_snapshot(path)?;
     if !snapshot.exists {
         return Err("解绑节点会话后重新读取校验失败".to_string());

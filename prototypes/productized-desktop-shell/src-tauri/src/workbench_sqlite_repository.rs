@@ -7,6 +7,7 @@ use rusqlite::{
     TransactionBehavior,
 };
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
@@ -81,6 +82,38 @@ pub(crate) struct SupervisorActionIdentity<'a> {
     pub(crate) authorization_id: &'a str,
     pub(crate) kind: &'a str,
     pub(crate) target: &'a Value,
+}
+
+#[derive(Clone, Copy)]
+enum WorkflowStateTable {
+    Project,
+    AgentAdapter,
+    Workflow,
+    Node,
+    Edge,
+    WorkItem,
+    Artifact,
+    Review,
+    SessionBinding,
+    Dispatch,
+    ExecutionAttempt,
+    ChainRun,
+    ExecutionControl,
+    PermissionRequest,
+    Capability,
+    HarnessResource,
+    Audit,
+}
+
+struct WorkflowStateRowMutation {
+    table: WorkflowStateTable,
+    key: String,
+    operation: WorkflowStateRowOperation,
+}
+
+enum WorkflowStateRowOperation {
+    Upsert(Value),
+    Delete,
 }
 
 pub(crate) fn supervisor_action_idempotency_key(identity: SupervisorActionIdentity<'_>) -> String {
@@ -174,6 +207,84 @@ impl WorkbenchSqliteRepository {
                     )
                     .map_err(RepositoryMutationError::Sqlite)?;
                 Ok(proposal_rows + append_audit_in_transaction(transaction, audit)?)
+            },
+        )?;
+        Ok(RepositoryReceipt {
+            rows_touched,
+            busy_retries,
+        })
+    }
+
+    pub(crate) fn record_proposal_decision_with_audit(
+        &self,
+        proposal: &Value,
+        decision: &Value,
+        audit: &RepositoryAuditEntry,
+        failure: Option<RepositoryFailurePoint>,
+    ) -> Result<RepositoryReceipt, String> {
+        let proposal_id = required_text(proposal, "proposal_id")
+            .map_err(|error| error.describe())?
+            .to_string();
+        let decision_id = required_text(decision, "decision_id")
+            .map_err(|error| error.describe())?
+            .to_string();
+        let decision_proposal_id = required_text(decision, "proposal_id")
+            .map_err(|error| error.describe())?
+            .to_string();
+        if decision_proposal_id != proposal_id {
+            return Err(format!(
+                "proposal_decision_proposal_mismatch: proposal={proposal_id} decision={decision_proposal_id}"
+            ));
+        }
+        let project_id = optional_text(proposal, "project_id").map(ToString::to_string);
+        let workflow_id = optional_text(proposal, "workflow_id").map(ToString::to_string);
+        let (proposal_hash, proposal_json) = serialized_record(proposal)?;
+        let (decision_hash, decision_json) = serialized_record(decision)?;
+        let (rows_touched, busy_retries) = self.with_immediate_transaction(
+            "record_proposal_decision_with_audit",
+            failure,
+            |transaction| {
+                let proposal_rows = transaction
+                    .execute(
+                        "INSERT INTO project_proposals (proposal_id, project_id, workflow_id, source_id, record_hash, record_json)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                         ON CONFLICT(proposal_id) DO UPDATE SET
+                            project_id = excluded.project_id,
+                            workflow_id = excluded.workflow_id,
+                            source_id = excluded.source_id,
+                            record_hash = excluded.record_hash,
+                            record_json = excluded.record_json",
+                        params![
+                            proposal_id,
+                            project_id,
+                            workflow_id,
+                            REPOSITORY_SOURCE_ID,
+                            proposal_hash,
+                            proposal_json,
+                        ],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                let decision_rows = transaction
+                    .execute(
+                        "INSERT INTO project_proposal_decisions (decision_id, proposal_id, source_id, record_hash, record_json)
+                         VALUES (?1, ?2, ?3, ?4, ?5)
+                         ON CONFLICT(decision_id) DO UPDATE SET
+                            proposal_id = excluded.proposal_id,
+                            source_id = excluded.source_id,
+                            record_hash = excluded.record_hash,
+                            record_json = excluded.record_json",
+                        params![
+                            decision_id,
+                            decision_proposal_id,
+                            REPOSITORY_SOURCE_ID,
+                            decision_hash,
+                            decision_json,
+                        ],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                Ok(proposal_rows
+                    + decision_rows
+                    + append_audit_in_transaction(transaction, audit)?)
             },
         )?;
         Ok(RepositoryReceipt {
@@ -301,6 +412,49 @@ impl WorkbenchSqliteRepository {
         })
     }
 
+    pub(crate) fn upsert_plan_authorization_with_audit(
+        &self,
+        authorization: &Value,
+        audit: &RepositoryAuditEntry,
+        failure: Option<RepositoryFailurePoint>,
+    ) -> Result<RepositoryReceipt, String> {
+        let authorization_id = required_text(authorization, "authorization_id")
+            .map_err(|error| error.describe())?
+            .to_string();
+        let source_proposal_id =
+            optional_text(authorization, "source_proposal_id").map(ToString::to_string);
+        let (record_hash, record_json) = serialized_record(authorization)?;
+        let (rows_touched, busy_retries) = self.with_immediate_transaction(
+            "upsert_plan_authorization_with_audit",
+            failure,
+            |transaction| {
+                let authorization_rows = transaction
+                    .execute(
+                        "INSERT INTO plan_authorizations (authorization_id, source_proposal_id, source_id, record_hash, record_json)
+                         VALUES (?1, ?2, ?3, ?4, ?5)
+                         ON CONFLICT(authorization_id) DO UPDATE SET
+                            source_proposal_id = excluded.source_proposal_id,
+                            source_id = excluded.source_id,
+                            record_hash = excluded.record_hash,
+                            record_json = excluded.record_json",
+                        params![
+                            authorization_id,
+                            source_proposal_id,
+                            REPOSITORY_SOURCE_ID,
+                            record_hash,
+                            record_json,
+                        ],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                Ok(authorization_rows + append_audit_in_transaction(transaction, audit)?)
+            },
+        )?;
+        Ok(RepositoryReceipt {
+            rows_touched,
+            busy_retries,
+        })
+    }
+
     pub(crate) fn reserve_dispatch_with_audit(
         &self,
         dispatch: &Value,
@@ -371,6 +525,51 @@ impl WorkbenchSqliteRepository {
                     node_after,
                     before_state,
                 )? + append_audit_in_transaction(transaction, audit)?)
+            },
+        )?;
+        Ok(RepositoryReceipt {
+            rows_touched,
+            busy_retries,
+        })
+    }
+
+    // M5-B only calls this from explicit DB-primary siblings. It compares the persisted JSON
+    // projection with the proposed next state and writes just the changed records, rather than
+    // treating the whole workflow document as one opaque database row.
+    pub(crate) fn record_workflow_state_delta_with_audit(
+        &self,
+        before: &Value,
+        after: &Value,
+        failure: Option<RepositoryFailurePoint>,
+    ) -> Result<RepositoryReceipt, String> {
+        let mutations = collect_workflow_state_row_mutations(before, after).map_err(|error| {
+            format!(
+                "record_workflow_state_delta_with_audit:{}",
+                error.describe()
+            )
+        })?;
+        if mutations.is_empty() {
+            return Ok(RepositoryReceipt {
+                rows_touched: 0,
+                busy_retries: 0,
+            });
+        }
+        let (rows_touched, busy_retries) = self.with_immediate_transaction(
+            "record_workflow_state_delta_with_audit",
+            failure,
+            |transaction| {
+                let mut rows_touched = 0;
+                for mutation in &mutations {
+                    rows_touched += match &mutation.operation {
+                        WorkflowStateRowOperation::Upsert(value) => {
+                            upsert_workflow_state_row_in_transaction(transaction, mutation, value)?
+                        }
+                        WorkflowStateRowOperation::Delete => {
+                            delete_workflow_state_row_in_transaction(transaction, mutation)?
+                        }
+                    };
+                }
+                Ok(rows_touched)
             },
         )?;
         Ok(RepositoryReceipt {
@@ -490,6 +689,59 @@ impl WorkbenchSqliteRepository {
             audit,
             failure,
         )
+    }
+
+    pub(crate) fn upsert_supervisor_action_with_audit(
+        &self,
+        action: &Value,
+        audit: &RepositoryAuditEntry,
+        failure: Option<RepositoryFailurePoint>,
+    ) -> Result<RepositoryReceipt, String> {
+        let action_id = required_text(action, "action_id")
+            .map_err(|error| error.describe())?
+            .to_string();
+        let idempotency_key = required_text(action, "idempotency_key")
+            .map_err(|error| error.describe())?
+            .to_string();
+        let run_id = optional_text(action, "run_id").map(ToString::to_string);
+        let project_id = optional_text(action, "project_id").map(ToString::to_string);
+        let workflow_id = optional_text(action, "workflow_id").map(ToString::to_string);
+        let (record_hash, record_json) = serialized_record(action)?;
+        let (rows_touched, busy_retries) = self.with_immediate_transaction(
+            "upsert_supervisor_action_with_audit",
+            failure,
+            |transaction| {
+                let action_rows = transaction
+                    .execute(
+                        "INSERT INTO supervisor_actions (action_id, idempotency_key, run_id, project_id, workflow_id, source_id, record_hash, record_json)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                         ON CONFLICT(action_id) DO UPDATE SET
+                            idempotency_key = excluded.idempotency_key,
+                            run_id = excluded.run_id,
+                            project_id = excluded.project_id,
+                            workflow_id = excluded.workflow_id,
+                            source_id = excluded.source_id,
+                            record_hash = excluded.record_hash,
+                            record_json = excluded.record_json",
+                        params![
+                            action_id,
+                            idempotency_key,
+                            run_id,
+                            project_id,
+                            workflow_id,
+                            REPOSITORY_SOURCE_ID,
+                            record_hash,
+                            record_json,
+                        ],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                Ok(action_rows + append_audit_in_transaction(transaction, audit)?)
+            },
+        )?;
+        Ok(RepositoryReceipt {
+            rows_touched,
+            busy_retries,
+        })
     }
 
     fn set_supervisor_action_terminal_state(
@@ -761,6 +1013,501 @@ fn update_work_item_and_node_state_in_transaction(
         )
         .map_err(RepositoryMutationError::Sqlite)?;
     Ok(work_item_rows + node_rows)
+}
+
+fn collect_workflow_state_row_mutations(
+    before: &Value,
+    after: &Value,
+) -> RepositoryMutationResult<Vec<WorkflowStateRowMutation>> {
+    let specs = [
+        (WorkflowStateTable::Project, "projects", "project_id"),
+        (
+            WorkflowStateTable::AgentAdapter,
+            "agent_adapters",
+            "adapter_id",
+        ),
+        (WorkflowStateTable::Workflow, "workflows", "workflow_id"),
+        (WorkflowStateTable::Node, "nodes", "node_id"),
+        (WorkflowStateTable::Edge, "edges", "edge_id"),
+        (WorkflowStateTable::WorkItem, "work_items", "work_item_id"),
+        (WorkflowStateTable::Artifact, "artifacts", "artifact_id"),
+        (WorkflowStateTable::Review, "reviews", "review_id"),
+        (
+            WorkflowStateTable::SessionBinding,
+            "workflow_node_session_bindings",
+            "binding_id",
+        ),
+        (
+            WorkflowStateTable::Dispatch,
+            "workflow_node_dispatches",
+            "dispatch_id",
+        ),
+        (
+            WorkflowStateTable::ExecutionAttempt,
+            "execution_attempts",
+            "attempt_id",
+        ),
+        (
+            WorkflowStateTable::ChainRun,
+            "workflow_chain_runs",
+            "chain_run_id",
+        ),
+        (
+            WorkflowStateTable::ExecutionControl,
+            "workflow_execution_controls",
+            "control_id",
+        ),
+        (
+            WorkflowStateTable::PermissionRequest,
+            "permission_requests",
+            "request_id",
+        ),
+        (
+            WorkflowStateTable::Capability,
+            "capabilities",
+            "capability_id",
+        ),
+        (
+            WorkflowStateTable::HarnessResource,
+            "harness_resources",
+            "resource_id",
+        ),
+        (WorkflowStateTable::Audit, "audit_events", "event_id"),
+    ];
+    let mut mutations = Vec::new();
+    for (table, array_name, key_field) in specs {
+        let before_rows = workflow_state_rows(before, array_name)?;
+        let after_rows = workflow_state_rows(after, array_name)?;
+        let empty_rows: &[Value] = &[];
+        let (before_rows, after_rows) = match (before_rows, after_rows) {
+            (None, None) => continue,
+            (None, Some(after_rows)) => (empty_rows, after_rows),
+            (Some(_), None) => {
+                return Err(RepositoryMutationError::Message(format!(
+                    "workflow_state_array_removed:{array_name}"
+                )));
+            }
+            (Some(before_rows), Some(after_rows)) => (before_rows, after_rows),
+        };
+        let mut before_by_key = BTreeMap::new();
+        for row in before_rows {
+            let key = workflow_state_row_key(row, array_name, key_field)?;
+            if before_by_key.insert(key.clone(), row).is_some() {
+                return Err(RepositoryMutationError::Message(format!(
+                    "workflow_state_duplicate_key:{array_name}:{key}"
+                )));
+            }
+        }
+        let mut after_by_key = BTreeMap::new();
+        for row in after_rows {
+            let key = workflow_state_row_key(row, array_name, key_field)?;
+            if after_by_key.insert(key.clone(), row).is_some() {
+                return Err(RepositoryMutationError::Message(format!(
+                    "workflow_state_duplicate_key:{array_name}:{key}"
+                )));
+            }
+        }
+        for (key, after_row) in &after_by_key {
+            if before_by_key
+                .get(key)
+                .is_none_or(|before_row| *before_row != *after_row)
+            {
+                mutations.push(WorkflowStateRowMutation {
+                    table,
+                    key: key.clone(),
+                    operation: WorkflowStateRowOperation::Upsert((*after_row).clone()),
+                });
+            }
+        }
+        for key in before_by_key.keys() {
+            if !after_by_key.contains_key(key) {
+                mutations.push(WorkflowStateRowMutation {
+                    table,
+                    key: key.clone(),
+                    operation: WorkflowStateRowOperation::Delete,
+                });
+            }
+        }
+    }
+    Ok(mutations)
+}
+
+fn workflow_state_rows<'a>(
+    value: &'a Value,
+    array_name: &str,
+) -> RepositoryMutationResult<Option<&'a [Value]>> {
+    match value.get(array_name) {
+        None => Ok(None),
+        Some(Value::Array(rows)) => Ok(Some(rows)),
+        Some(_) => Err(RepositoryMutationError::Message(format!(
+            "workflow_state_array_required:{array_name}"
+        ))),
+    }
+}
+
+fn workflow_state_row_key(
+    row: &Value,
+    array_name: &str,
+    key_field: &str,
+) -> RepositoryMutationResult<String> {
+    required_text(row, key_field)
+        .map(ToString::to_string)
+        .map_err(|_| {
+            RepositoryMutationError::Message(format!(
+                "workflow_state_key_required:{array_name}:{key_field}"
+            ))
+        })
+}
+
+fn upsert_workflow_state_row_in_transaction(
+    transaction: &Transaction<'_>,
+    mutation: &WorkflowStateRowMutation,
+    value: &Value,
+) -> RepositoryMutationResult<usize> {
+    let (record_hash, record_json) =
+        serialized_record(value).map_err(RepositoryMutationError::Message)?;
+    let source_id = REPOSITORY_SOURCE_ID;
+    match mutation.table {
+        WorkflowStateTable::Project => {
+            let project_root = optional_text(value, "root_path")
+                .or_else(|| optional_text(value, "project_root"));
+            let path_hash = project_root.map(sha256_hex);
+            transaction.execute(
+                "INSERT INTO projects (project_id, source_id, project_root, path_hash, record_hash, record_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(project_id) DO UPDATE SET
+                    source_id = excluded.source_id,
+                    project_root = excluded.project_root,
+                    path_hash = excluded.path_hash,
+                    record_hash = excluded.record_hash,
+                    record_json = excluded.record_json",
+                params![
+                    mutation.key,
+                    source_id,
+                    project_root,
+                    path_hash,
+                    record_hash,
+                    record_json,
+                ],
+            )
+        }
+        WorkflowStateTable::AgentAdapter => transaction.execute(
+            "INSERT INTO agent_adapters (adapter_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(adapter_id) DO UPDATE SET
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![mutation.key, source_id, record_hash, record_json],
+        ),
+        WorkflowStateTable::Workflow => transaction.execute(
+            "INSERT INTO workflows (workflow_id, project_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(workflow_id) DO UPDATE SET
+                project_id = excluded.project_id,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                optional_text(value, "project_id"),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        WorkflowStateTable::Node => transaction.execute(
+            "INSERT INTO workflow_nodes (node_id, workflow_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(node_id) DO UPDATE SET
+                workflow_id = excluded.workflow_id,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                optional_text(value, "workflow_id"),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        WorkflowStateTable::Edge => transaction.execute(
+            "INSERT INTO workflow_edges (edge_id, workflow_id, source_node_id, target_node_id, edge_type, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(edge_id) DO UPDATE SET
+                workflow_id = excluded.workflow_id,
+                source_node_id = excluded.source_node_id,
+                target_node_id = excluded.target_node_id,
+                edge_type = excluded.edge_type,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                optional_text(value, "workflow_id"),
+                optional_text(value, "source_node_id")
+                    .or_else(|| optional_text(value, "from_node_id")),
+                optional_text(value, "target_node_id")
+                    .or_else(|| optional_text(value, "to_node_id")),
+                optional_text(value, "edge_type"),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        WorkflowStateTable::WorkItem => transaction.execute(
+            "INSERT INTO work_items (work_item_id, workflow_id, node_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(work_item_id) DO UPDATE SET
+                workflow_id = excluded.workflow_id,
+                node_id = excluded.node_id,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                optional_text(value, "workflow_id"),
+                optional_text(value, "node_id")
+                    .or_else(|| optional_text(value, "current_node_id")),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        WorkflowStateTable::Artifact => transaction.execute(
+            "INSERT INTO workflow_artifacts (artifact_id, work_item_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(artifact_id) DO UPDATE SET
+                work_item_id = excluded.work_item_id,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                optional_text(value, "work_item_id"),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        WorkflowStateTable::Review => transaction.execute(
+            "INSERT INTO workflow_reviews (review_id, workflow_id, work_item_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(review_id) DO UPDATE SET
+                workflow_id = excluded.workflow_id,
+                work_item_id = excluded.work_item_id,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                optional_text(value, "workflow_id"),
+                optional_text(value, "work_item_id"),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        WorkflowStateTable::SessionBinding => transaction.execute(
+            "INSERT INTO workflow_node_session_bindings (binding_id, workflow_id, node_id, work_item_id, lifecycle, session_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(binding_id) DO UPDATE SET
+                workflow_id = excluded.workflow_id,
+                node_id = excluded.node_id,
+                work_item_id = excluded.work_item_id,
+                lifecycle = excluded.lifecycle,
+                session_id = excluded.session_id,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                optional_text(value, "workflow_id"),
+                optional_text(value, "node_id"),
+                optional_text(value, "work_item_id"),
+                optional_text(value, "lifecycle")
+                    .or_else(|| optional_text(value, "state")),
+                optional_text(value, "session_id")
+                    .or_else(|| optional_text(value, "native_thread_id")),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        WorkflowStateTable::Dispatch => transaction.execute(
+            "INSERT INTO workflow_node_dispatches (dispatch_id, workflow_id, node_id, work_item_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(dispatch_id) DO UPDATE SET
+                workflow_id = excluded.workflow_id,
+                node_id = excluded.node_id,
+                work_item_id = excluded.work_item_id,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                optional_text(value, "workflow_id"),
+                optional_text(value, "node_id"),
+                optional_text(value, "work_item_id"),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        WorkflowStateTable::ExecutionAttempt => transaction.execute(
+            "INSERT INTO execution_attempts (attempt_id, workflow_id, work_item_id, dispatch_id, project_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(attempt_id) DO UPDATE SET
+                workflow_id = excluded.workflow_id,
+                work_item_id = excluded.work_item_id,
+                dispatch_id = excluded.dispatch_id,
+                project_id = excluded.project_id,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                optional_text(value, "workflow_id"),
+                optional_text(value, "work_item_id"),
+                optional_text(value, "dispatch_id"),
+                optional_text(value, "project_id"),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        WorkflowStateTable::ChainRun => transaction.execute(
+            "INSERT INTO workflow_chain_runs (chain_run_id, workflow_id, project_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(chain_run_id) DO UPDATE SET
+                workflow_id = excluded.workflow_id,
+                project_id = excluded.project_id,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                optional_text(value, "workflow_id"),
+                optional_text(value, "project_id"),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        WorkflowStateTable::ExecutionControl => transaction.execute(
+            "INSERT INTO workflow_execution_controls (control_id, workflow_id, work_item_id, project_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(control_id) DO UPDATE SET
+                workflow_id = excluded.workflow_id,
+                work_item_id = excluded.work_item_id,
+                project_id = excluded.project_id,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                optional_text(value, "workflow_id"),
+                optional_text(value, "work_item_id"),
+                optional_text(value, "project_id"),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        WorkflowStateTable::PermissionRequest => transaction.execute(
+            "INSERT INTO permission_requests (request_id, workflow_id, work_item_id, dispatch_id, project_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(request_id) DO UPDATE SET
+                workflow_id = excluded.workflow_id,
+                work_item_id = excluded.work_item_id,
+                dispatch_id = excluded.dispatch_id,
+                project_id = excluded.project_id,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                optional_text(value, "workflow_id"),
+                optional_text(value, "work_item_id"),
+                optional_text(value, "dispatch_id"),
+                optional_text(value, "project_id"),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+        WorkflowStateTable::Capability => transaction.execute(
+            "INSERT INTO capabilities (capability_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(capability_id) DO UPDATE SET
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![mutation.key, source_id, record_hash, record_json],
+        ),
+        WorkflowStateTable::HarnessResource => transaction.execute(
+            "INSERT INTO harness_resources (resource_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(resource_id) DO UPDATE SET
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![mutation.key, source_id, record_hash, record_json],
+        ),
+        WorkflowStateTable::Audit => transaction.execute(
+            "INSERT INTO workflow_audit_events (event_id, target_kind, target_id, source_id, record_hash, record_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(event_id) DO UPDATE SET
+                target_kind = excluded.target_kind,
+                target_id = excluded.target_id,
+                source_id = excluded.source_id,
+                record_hash = excluded.record_hash,
+                record_json = excluded.record_json",
+            params![
+                mutation.key,
+                "workflow_state",
+                optional_text(value, "target_id")
+                    .or_else(|| optional_text(value, "target_ref"))
+                    .unwrap_or(mutation.key.as_str()),
+                source_id,
+                record_hash,
+                record_json,
+            ],
+        ),
+    }
+    .map_err(RepositoryMutationError::Sqlite)
+}
+
+fn delete_workflow_state_row_in_transaction(
+    transaction: &Transaction<'_>,
+    mutation: &WorkflowStateRowMutation,
+) -> RepositoryMutationResult<usize> {
+    let (table, key_column) = match mutation.table {
+        WorkflowStateTable::Project => ("projects", "project_id"),
+        WorkflowStateTable::AgentAdapter => ("agent_adapters", "adapter_id"),
+        WorkflowStateTable::Workflow => ("workflows", "workflow_id"),
+        WorkflowStateTable::Node => ("workflow_nodes", "node_id"),
+        WorkflowStateTable::Edge => ("workflow_edges", "edge_id"),
+        WorkflowStateTable::WorkItem => ("work_items", "work_item_id"),
+        WorkflowStateTable::Artifact => ("workflow_artifacts", "artifact_id"),
+        WorkflowStateTable::Review => ("workflow_reviews", "review_id"),
+        WorkflowStateTable::SessionBinding => ("workflow_node_session_bindings", "binding_id"),
+        WorkflowStateTable::Dispatch => ("workflow_node_dispatches", "dispatch_id"),
+        WorkflowStateTable::ExecutionAttempt => ("execution_attempts", "attempt_id"),
+        WorkflowStateTable::ChainRun => ("workflow_chain_runs", "chain_run_id"),
+        WorkflowStateTable::ExecutionControl => ("workflow_execution_controls", "control_id"),
+        WorkflowStateTable::PermissionRequest => ("permission_requests", "request_id"),
+        WorkflowStateTable::Capability => ("capabilities", "capability_id"),
+        WorkflowStateTable::HarnessResource => ("harness_resources", "resource_id"),
+        WorkflowStateTable::Audit => ("workflow_audit_events", "event_id"),
+    };
+    transaction
+        .execute(
+            &format!("DELETE FROM {table} WHERE {key_column} = ?1"),
+            [&mutation.key],
+        )
+        .map_err(RepositoryMutationError::Sqlite)
 }
 
 fn serialized_record(value: &Value) -> Result<(String, String), String> {
@@ -1039,6 +1786,190 @@ mod tests {
             )
             .expect("complete action");
         assert_constant_rows(&completion, 2);
+    }
+
+    #[test]
+    fn workflow_state_delta_upserts_all_batch1_tables_and_deletes_removed_rows() {
+        let (repository, _) = test_repository("batch1-state-delta");
+        let before = empty_batch1_workflow_state();
+        let after = batch1_workflow_state();
+
+        let receipt = repository
+            .record_workflow_state_delta_with_audit(&before, &after, None)
+            .expect("record Batch 1 row delta");
+        assert_eq!(receipt.rows_touched, 13);
+        for table in batch1_workflow_state_tables() {
+            assert_eq!(table_count(&repository, table), 1, "missing row in {table}");
+        }
+        assert_eq!(
+            workbench_record(
+                &repository,
+                "workflow_node_dispatches",
+                "dispatch_id",
+                "dispatch-batch1"
+            )["state"],
+            "completed"
+        );
+        assert_eq!(
+            workbench_record(
+                &repository,
+                "workflow_artifacts",
+                "artifact_id",
+                "artifact-batch1"
+            )["target_session_id"],
+            "thread-batch1"
+        );
+        let connection = repository
+            .configured_connection()
+            .expect("read Batch 1 audit target kind");
+        let audit_target_kind: String = connection
+            .query_row(
+                "SELECT target_kind FROM workflow_audit_events WHERE event_id = ?1",
+                ["audit-batch1"],
+                |row| row.get(0),
+            )
+            .expect("workflow audit target kind");
+        assert_eq!(audit_target_kind, "workflow_state");
+
+        let mut after_delete = after.clone();
+        after_delete["workflow_node_dispatches"] = json!([]);
+        let delete_receipt = repository
+            .record_workflow_state_delta_with_audit(&after, &after_delete, None)
+            .expect("delete removed dispatch row");
+        assert_eq!(delete_receipt.rows_touched, 1);
+        assert_eq!(table_count(&repository, "workflow_node_dispatches"), 0);
+        assert_eq!(table_count(&repository, "work_items"), 1);
+        assert_eq!(table_count(&repository, "workflow_audit_events"), 1);
+    }
+
+    #[test]
+    fn workflow_state_delta_materializes_missing_optional_arrays() {
+        let (repository, _) = test_repository("batch1-state-delta-optional-arrays");
+        let mut before = empty_batch1_workflow_state();
+        for array_name in [
+            "execution_attempts",
+            "workflow_chain_runs",
+            "workflow_execution_controls",
+            "permission_requests",
+        ] {
+            before
+                .as_object_mut()
+                .expect("workflow state object")
+                .remove(array_name);
+        }
+        let mut after = before.clone();
+        let complete = batch1_workflow_state();
+        for array_name in [
+            "execution_attempts",
+            "workflow_chain_runs",
+            "workflow_execution_controls",
+            "permission_requests",
+        ] {
+            after[array_name] = complete[array_name].clone();
+        }
+
+        let receipt = repository
+            .record_workflow_state_delta_with_audit(&before, &after, None)
+            .expect("first optional-array materialization must reach the DB");
+        assert_eq!(receipt.rows_touched, 4);
+        for table in [
+            "execution_attempts",
+            "workflow_chain_runs",
+            "workflow_execution_controls",
+            "permission_requests",
+        ] {
+            assert_eq!(table_count(&repository, table), 1, "missing row in {table}");
+        }
+    }
+
+    #[test]
+    fn workflow_state_delta_rejects_removed_known_array() {
+        let (repository, _) = test_repository("batch1-state-delta-array-removal");
+        let before = batch1_workflow_state();
+        let mut after = before.clone();
+        after
+            .as_object_mut()
+            .expect("workflow state object")
+            .remove("execution_attempts");
+
+        let error = repository
+            .record_workflow_state_delta_with_audit(&before, &after, None)
+            .expect_err("removing a known array must fail closed");
+        assert!(
+            error.contains("workflow_state_array_removed:execution_attempts"),
+            "got: {error}"
+        );
+        for table in batch1_workflow_state_tables() {
+            assert_eq!(table_count(&repository, table), 0, "partial row in {table}");
+        }
+    }
+
+    #[test]
+    fn workflow_state_delta_before_commit_has_no_partial_rows() {
+        let (repository, _) = test_repository("batch1-state-delta-rollback");
+        let error = repository
+            .record_workflow_state_delta_with_audit(
+                &empty_batch1_workflow_state(),
+                &batch1_workflow_state(),
+                Some(RepositoryFailurePoint::BeforeCommit),
+            )
+            .expect_err("injected failure must surface");
+        assert!(
+            error.contains("injected_failure_before_commit"),
+            "got: {error}"
+        );
+        for table in batch1_workflow_state_tables() {
+            assert_eq!(table_count(&repository, table), 0, "partial row in {table}");
+        }
+    }
+
+    #[test]
+    fn subsequent_sidecar_state_apis_write_record_and_audit_together() {
+        let (repository, _) = test_repository("batch1-sidecar-subsequent-state");
+        let proposal = json!({
+            "proposal_id": "proposal-batch1",
+            "project_id": "project-batch1",
+            "workflow_id": "workflow-batch1"
+        });
+        let decision = json!({
+            "decision_id": "proposal-decision-batch1",
+            "proposal_id": "proposal-batch1",
+            "state": "accepted"
+        });
+        let proposal_receipt = repository
+            .record_proposal_decision_with_audit(
+                &proposal,
+                &decision,
+                &audit("proposal-decision"),
+                None,
+            )
+            .expect("proposal decision mutation");
+        assert_eq!(proposal_receipt.rows_touched, 3);
+        assert_eq!(table_count(&repository, "project_proposals"), 1);
+        assert_eq!(table_count(&repository, "project_proposal_decisions"), 1);
+
+        let authorization = json!({
+            "authorization_id": "authorization-batch1",
+            "source_proposal_id": "proposal-batch1",
+            "state": "revoked"
+        });
+        let authorization_receipt = repository
+            .upsert_plan_authorization_with_audit(
+                &authorization,
+                &audit("authorization-subsequent"),
+                None,
+            )
+            .expect("authorization subsequent-state mutation");
+        assert_eq!(authorization_receipt.rows_touched, 2);
+        assert_eq!(table_count(&repository, "plan_authorizations"), 1);
+
+        let action = reserved_action("action-batch1", "idempotency-batch1");
+        let action_receipt = repository
+            .upsert_supervisor_action_with_audit(&action, &audit("action-subsequent"), None)
+            .expect("supervisor action subsequent-state mutation");
+        assert_eq!(action_receipt.rows_touched, 2);
+        assert_eq!(table_count(&repository, "supervisor_actions"), 1);
+        assert_eq!(table_count(&repository, "workflow_audit_events"), 3);
     }
 
     #[test]
@@ -1337,6 +2268,121 @@ mod tests {
             "workflow_id":"workflow-1",
             "execution_status":"reserved"
         })
+    }
+
+    fn empty_batch1_workflow_state() -> Value {
+        json!({
+            "workflows": [],
+            "nodes": [],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "workflow_node_session_bindings": [],
+            "workflow_node_dispatches": [],
+            "execution_attempts": [],
+            "workflow_chain_runs": [],
+            "workflow_execution_controls": [],
+            "permission_requests": [],
+            "audit_events": []
+        })
+    }
+
+    fn batch1_workflow_state() -> Value {
+        json!({
+            "workflows": [{"workflow_id":"workflow-batch1", "project_id":"project-batch1"}],
+            "nodes": [{"node_id":"node-batch1", "workflow_id":"workflow-batch1", "state":"completed"}],
+            "edges": [{
+                "edge_id":"edge-batch1",
+                "workflow_id":"workflow-batch1",
+                "source_node_id":"node-batch1",
+                "target_node_id":"node-batch1",
+                "edge_type":"depends_on"
+            }],
+            "work_items": [{
+                "work_item_id":"work-item-batch1",
+                "workflow_id":"workflow-batch1",
+                "node_id":"node-batch1",
+                "state":"completed"
+            }],
+            "artifacts": [{
+                "artifact_id":"artifact-batch1",
+                "work_item_id":"work-item-batch1",
+                "target_session_id":"thread-batch1"
+            }],
+            "reviews": [{
+                "review_id":"review-batch1",
+                "workflow_id":"workflow-batch1",
+                "work_item_id":"work-item-batch1",
+                "decision":"accepted"
+            }],
+            "workflow_node_session_bindings": [{
+                "binding_id":"binding-batch1",
+                "workflow_id":"workflow-batch1",
+                "node_id":"node-batch1",
+                "work_item_id":"work-item-batch1",
+                "lifecycle":"active",
+                "session_id":"thread-batch1"
+            }],
+            "workflow_node_dispatches": [{
+                "dispatch_id":"dispatch-batch1",
+                "workflow_id":"workflow-batch1",
+                "node_id":"node-batch1",
+                "work_item_id":"work-item-batch1",
+                "state":"completed"
+            }],
+            "execution_attempts": [{
+                "attempt_id":"attempt-batch1",
+                "workflow_id":"workflow-batch1",
+                "work_item_id":"work-item-batch1",
+                "dispatch_id":"dispatch-batch1",
+                "project_id":"project-batch1"
+            }],
+            "workflow_chain_runs": [{
+                "chain_run_id":"chain-batch1",
+                "workflow_id":"workflow-batch1",
+                "project_id":"project-batch1",
+                "state":"completed"
+            }],
+            "workflow_execution_controls": [{
+                "control_id":"control-batch1",
+                "workflow_id":"workflow-batch1",
+                "work_item_id":"work-item-batch1",
+                "project_id":"project-batch1",
+                "state":"completed"
+            }],
+            "permission_requests": [{
+                "request_id":"permission-batch1",
+                "workflow_id":"workflow-batch1",
+                "work_item_id":"work-item-batch1",
+                "dispatch_id":"dispatch-batch1",
+                "project_id":"project-batch1",
+                "state":"approved"
+            }],
+            "audit_events": [{
+                "event_id":"audit-batch1",
+                "event_type":"workflow_chain_node_completed",
+                "target_ref":"node-batch1"
+            }]
+        })
+    }
+
+    fn batch1_workflow_state_tables() -> [&'static str; 13] {
+        [
+            "workflows",
+            "workflow_nodes",
+            "workflow_edges",
+            "work_items",
+            "workflow_artifacts",
+            "workflow_reviews",
+            "workflow_node_session_bindings",
+            "workflow_node_dispatches",
+            "execution_attempts",
+            "workflow_chain_runs",
+            "workflow_execution_controls",
+            "permission_requests",
+            "workflow_audit_events",
+        ]
     }
 
     fn seed_work_item(repository: &WorkbenchSqliteRepository, work_item_id: &str, state: &str) {
