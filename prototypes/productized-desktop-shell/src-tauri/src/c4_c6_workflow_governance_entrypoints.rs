@@ -1888,7 +1888,6 @@ fn annotate_project_director_planned_tasks(
     tasks: Vec<ProjectDirectorPlannedTask>,
     timestamp_ms: i64,
 ) -> Vec<ProjectDirectorPlannedTask> {
-    let authorization_is_read_only = context.authorization.scope.allowed_write_roots.is_empty();
     tasks
         .into_iter()
         .map(|mut task| {
@@ -1902,8 +1901,11 @@ fn annotate_project_director_planned_tasks(
             task.work_item_id = Some(work_item_id.clone());
             task.task_package_id = Some(artifact_id.clone());
             task.workflow_node_id = Some(node_id.clone());
-            task.blocked_reasons =
-                c4_static_task_blocking_reasons(&task, authorization_is_read_only);
+            task.blocked_reasons = c4_static_task_blocking_reasons(
+                &task,
+                &context.authorization,
+                &context.project.project_root,
+            );
 
             let binding = active_binding_for_planned_task(index, value, &node_id, &work_item_id);
             let target_agent_id = binding
@@ -2136,7 +2138,8 @@ fn prepared_dispatch_read_models_from_plan(
 
 fn c4_static_task_blocking_reasons(
     task: &ProjectDirectorPlannedTask,
-    authorization_is_read_only: bool,
+    authorization: &PlanAuthorization,
+    project_root_value: &str,
 ) -> Vec<String> {
     let mut reasons = Vec::new();
     if task.title.trim().is_empty() {
@@ -2148,7 +2151,14 @@ fn c4_static_task_blocking_reasons(
     if task.scope.allowed_read_scope.is_empty() {
         reasons.push("授权读取范围为空，不能生成可派发任务包。".to_string());
     }
-    if task.scope.allowed_write_scope.is_empty() && !authorization_is_read_only {
+    if task.scope.allowed_write_scope.is_empty()
+        && !authorization.scope.allowed_write_roots.is_empty()
+        && !c4_station4_byte_review_is_narrow_readonly_exception(
+            task,
+            authorization,
+            project_root_value,
+        )
+    {
         reasons.push("授权写入范围为空，不能生成可派发任务包。".to_string());
     }
     if task.acceptance_criteria.is_empty() {
@@ -2167,6 +2177,73 @@ fn c4_static_task_blocking_reasons(
         reasons.push("读写范围包含 /Users/yoyi/.codex，C4 已阻断。".to_string());
     }
     reasons
+}
+
+// 站 4 字节实证复核是唯一可在写授权段中降权为零写根的任务。此处不相信单个 title/前缀：必须同时
+// 对齐当前 active authorization 的精确派生 task id、station4 根形状、角色、scope、checks、依赖和 marker。
+// 任一字段偏离，仍走原 C4「写授权下空写根」阻断；不形成通用只读旁路。
+fn c4_station4_byte_review_is_narrow_readonly_exception(
+    task: &ProjectDirectorPlannedTask,
+    authorization: &PlanAuthorization,
+    project_root_value: &str,
+) -> bool {
+    if !crate::station4_write_project_unsealed(
+        project_root_value,
+        &authorization.scope.allowed_write_roots,
+    ) || task.planned_task_id
+        != crate::supervisor_session_launcher::supervisor_pilot_readonly_reviewer_task_id(
+            &authorization.authorization_id,
+        )
+    {
+        return false;
+    }
+    let required_checks = crate::supervisor_session_launcher::supervisor_pilot_byte_family_checks(
+        &authorization.scope.allowed_checks,
+    );
+    !required_checks.is_empty()
+        && task.scope.project_id == authorization.project_id
+        && task.scope.workflow_id == authorization.workflow_id
+        && task.scope.target_role == "codex-dev"
+        && task.scope.task_package_kind == "task_package"
+        && task.scope.allowed_read_scope == authorization.scope.allowed_read_roots
+        && task.scope.allowed_write_scope.is_empty()
+        && task.scope.available_skills.is_empty()
+        && task.scope.available_knowledge_refs.is_empty()
+        && task.scope.callable_tool_capabilities == authorization.scope.allowed_tools
+        && task.scope.required_checks == required_checks
+        && task.scope.stop_conditions
+            == authorization
+                .scope
+                .stop_conditions
+                .iter()
+                .map(|condition| condition.summary.clone())
+                .collect::<Vec<_>>()
+        && task.scope.timeout_policy.is_none()
+        && task.scope.failure_policy.as_deref()
+            == Some(crate::supervisor_session_launcher::SUPERVISOR_PILOT_FAILURE_POLICY)
+        && task.scope.forbidden_actions
+            == vec![
+                "不读写 /Users/yoyi/.codex。".to_string(),
+                "只读复核不得创建、修改、删除或重命名任何文件。".to_string(),
+                crate::supervisor_session_launcher::SUPERVISOR_PILOT_READONLY_BYTE_REVIEW_MARKER
+                    .to_string(),
+            ]
+        && task.scope.model_id.is_none()
+        && task.title == "只读复核：站4字节级实证"
+        && task.task_goal.contains(
+            crate::supervisor_session_launcher::SUPERVISOR_PILOT_READONLY_BYTE_REVIEW_MARKER,
+        )
+        && task.depends_on
+            == vec![crate::supervisor_session_launcher::supervisor_pilot_planned_task_id(
+                &authorization.authorization_id,
+            )]
+        && task
+            .report_format
+            .iter()
+            .any(|format| {
+                format
+                    == crate::supervisor_session_launcher::SUPERVISOR_PILOT_READONLY_BYTE_REVIEW_REPORT_FORMAT
+            })
 }
 
 fn ensure_c4_backup(
@@ -2746,4 +2823,158 @@ fn push_unique(values: &mut Vec<String>, value: &str) {
 
 fn normalize_c4_symbol(value: &str) -> String {
     value.trim().to_ascii_lowercase().replace('-', "_")
+}
+
+#[cfg(test)]
+mod review_evidence_c4_tests {
+    use super::*;
+
+    fn station4_byte_authorization() -> PlanAuthorization {
+        let project_root = crate::STATION_4_WRITE_PROJECT_ROOT;
+        PlanAuthorization {
+            authorization_id: "authorization:station4:c4-byte-review".to_string(),
+            schema_version: "plan_authorization.v1".to_string(),
+            project_id: project_id(project_root),
+            workflow_id: "workflow:station4:c4-byte-review".to_string(),
+            source_proposal_id: Some("proposal:station4:c4-byte-review".to_string()),
+            title: "station4 c4 byte review".to_string(),
+            goal_summary: "独立只读复核".to_string(),
+            status: PlanAuthorizationStatus::Active,
+            scope: AuthorizedExecutionScope {
+                project_id: project_id(project_root),
+                workflow_id: "workflow:station4:c4-byte-review".to_string(),
+                allowed_role_ids: vec!["codex-dev".to_string()],
+                allowed_agent_ids: vec!["thread:station4:c4-byte-review".to_string()],
+                allowed_read_roots: vec![project_root.to_string()],
+                allowed_write_roots: vec![project_root.to_string()],
+                allowed_tools: vec!["read_file".to_string(), "apply_patch".to_string()],
+                allowed_checks: vec!["核对文件大小为 8 字节且末尾无换行".to_string()],
+                allowed_task_package_kinds: vec!["task_package".to_string()],
+                max_worker_dispatches: Some(2),
+                max_runtime_minutes: Some(30),
+                stop_conditions: vec![],
+            },
+            user_confirmation: None,
+            global_boundary_review: None,
+            audit_refs: vec![],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+            expires_at_ms: None,
+        }
+    }
+
+    fn exact_readonly_reviewer_task(
+        authorization: &PlanAuthorization,
+    ) -> ProjectDirectorPlannedTask {
+        let reviewer_task_id =
+            crate::supervisor_session_launcher::supervisor_pilot_readonly_reviewer_task_id(
+                &authorization.authorization_id,
+            );
+        ProjectDirectorPlannedTask {
+            planned_task_id: reviewer_task_id,
+            title: "只读复核：站4字节级实证".to_string(),
+            task_goal: format!(
+                "只读复核；任务标识：{}",
+                crate::supervisor_session_launcher::SUPERVISOR_PILOT_READONLY_BYTE_REVIEW_MARKER
+            ),
+            scope: ProjectDirectorTaskScope {
+                project_id: authorization.project_id.clone(),
+                workflow_id: authorization.workflow_id.clone(),
+                target_role: "codex-dev".to_string(),
+                task_package_kind: "task_package".to_string(),
+                allowed_read_scope: authorization.scope.allowed_read_roots.clone(),
+                allowed_write_scope: vec![],
+                available_skills: vec![],
+                available_knowledge_refs: vec![],
+                callable_tool_capabilities: authorization.scope.allowed_tools.clone(),
+                required_checks:
+                    crate::supervisor_session_launcher::supervisor_pilot_byte_family_checks(
+                        &authorization.scope.allowed_checks,
+                    ),
+                stop_conditions: vec![],
+                timeout_policy: None,
+                failure_policy: Some(
+                    crate::supervisor_session_launcher::SUPERVISOR_PILOT_FAILURE_POLICY
+                        .to_string(),
+                ),
+                forbidden_actions: vec![
+                    "不读写 /Users/yoyi/.codex。".to_string(),
+                    "只读复核不得创建、修改、删除或重命名任何文件。".to_string(),
+                    crate::supervisor_session_launcher::SUPERVISOR_PILOT_READONLY_BYTE_REVIEW_MARKER
+                        .to_string(),
+                ],
+                model_id: None,
+            },
+            depends_on: vec![
+                crate::supervisor_session_launcher::supervisor_pilot_planned_task_id(
+                    &authorization.authorization_id,
+                ),
+            ],
+            worker_acceptance_criteria: vec!["提交字节级实证。".to_string()],
+            control_core_acceptance_criteria: vec!["授权仍有效。".to_string()],
+            supervisor_acceptance_criteria: vec!["只采复核实证。".to_string()],
+            acceptance_criteria: vec!["提交字节级实证。".to_string()],
+            report_format: vec![
+                "status: done|partial|failed|blocked".to_string(),
+                crate::supervisor_session_launcher::SUPERVISOR_PILOT_READONLY_BYTE_REVIEW_REPORT_FORMAT
+                    .to_string(),
+            ],
+            status: "planned".to_string(),
+            guard_result: None,
+            work_item_id: None,
+            workflow_node_id: None,
+            task_package_id: None,
+            memory_packet_snapshot_id: None,
+            prepared_dispatch_id: None,
+            blocked_reasons: vec![],
+        }
+    }
+
+    #[test]
+    fn c4_only_allows_the_exact_station4_byte_review_empty_write_shape() {
+        let authorization = station4_byte_authorization();
+        let task = exact_readonly_reviewer_task(&authorization);
+        let reasons = c4_static_task_blocking_reasons(
+            &task,
+            &authorization,
+            crate::STATION_4_WRITE_PROJECT_ROOT,
+        );
+        assert!(
+            !reasons
+                .iter()
+                .any(|reason| reason.contains("授权写入范围为空")),
+            "exact reviewer must be the sole empty-write exception: {reasons:?}"
+        );
+
+        let mut near_miss = task.clone();
+        near_miss
+            .scope
+            .forbidden_actions
+            .push("smuggled_extra_capability".to_string());
+        let reasons = c4_static_task_blocking_reasons(
+            &near_miss,
+            &authorization,
+            crate::STATION_4_WRITE_PROJECT_ROOT,
+        );
+        assert!(
+            reasons
+                .iter()
+                .any(|reason| reason.contains("授权写入范围为空")),
+            "extra capability marker must not inherit the exception: {reasons:?}"
+        );
+
+        let mut wrong_id = task;
+        wrong_id.planned_task_id.push_str(":near-miss");
+        let reasons = c4_static_task_blocking_reasons(
+            &wrong_id,
+            &authorization,
+            crate::STATION_4_WRITE_PROJECT_ROOT,
+        );
+        assert!(
+            reasons
+                .iter()
+                .any(|reason| reason.contains("授权写入范围为空")),
+            "non-derived task id must not inherit the exception: {reasons:?}"
+        );
+    }
 }

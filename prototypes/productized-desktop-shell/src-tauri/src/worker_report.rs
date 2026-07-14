@@ -10,8 +10,27 @@
 // 安全属性（安全死线）：完成汇报仍只归档不驱动；求助只暴露强信号，由链调用方停在
 // waiting_decision。落库走现成 `record_worker_structured_report_at`（自带校验），best-effort。
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+/// 只读复核 worker 为字节级验收交回的机器可核实证。
+///
+/// 保持为独立数组字段：旧的 `evidence` 仍承载自然语言/命令摘要，不能被终标机械闸当作
+/// 字节、换行或哈希事实。字段缺失保持软着陆；是否足以终标由 supervisor 的授权 check
+/// 覆盖闸判定。
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct WorkerReviewEvidence {
+    #[serde(default)]
+    pub(crate) path: String,
+    #[serde(default)]
+    pub(crate) byte_count: Option<u64>,
+    #[serde(default)]
+    pub(crate) sha256: String,
+    #[serde(default)]
+    pub(crate) trailing_newline: Option<bool>,
+    #[serde(default)]
+    pub(crate) read_method: String,
+}
 
 /// worker 回程契约结构：做了啥 / 产出在哪（路径列表）/ 成败 / 怎么证明 / 结论条目。
 /// 全 `#[serde(default)]`——缺字段不报错，配合软着陆语义。
@@ -25,6 +44,10 @@ pub(crate) struct WorkerReport {
     pub(crate) status: String,
     #[serde(default)]
     pub(crate) evidence: Vec<String>,
+    /// 只读复核 worker 的结构化文件实证。固定为数组（即使只核一个文件也用一项数组），
+    /// 不接受自然语言代替；由 supervisor 根据授权的字节/大小/换行/哈希 checks 机械核覆盖。
+    #[serde(default)]
+    pub(crate) review_evidence: Vec<WorkerReviewEvidence>,
     /// 只读/分析/审查/盘点类单的结论正文：每条一行，带 file:line + 原文引用。
     /// 写单（改代码/文件）用 outputs/evidence 即可、findings 留空——它不是求助字段，
     /// 不触发 blocked。加它是因为原 did/outputs/evidence 契约为写单设计、装不下只读单的
@@ -42,9 +65,11 @@ pub(crate) struct WorkerReport {
 }
 
 /// 追加给 worker 的契约段（确定性文本·不经 LM·同 consultant/director 的 json 块成熟套路）。
-pub(crate) const WORKER_REPORT_CONTRACT_TEXT: &str = r#"回程契约（务必遵守）：干完后，最后输出**且仅输出**一个 ```json 代码块。`did`、`outputs`、`status`、`evidence`、`findings` 和全部求助字段都只能位于 JSON 顶层；不得嵌套在 `target` 或其他对象中。outputs 写产出文件的完整路径；没有产出就写空数组 []。完成路只使用 done|partial|failed；被阻塞、需要更多权限或资料、或认为方向可能错时，status 必须为 blocked。
+pub(crate) const WORKER_REPORT_CONTRACT_TEXT: &str = r#"回程契约（务必遵守）：干完后，最后输出**且仅输出**一个 ```json 代码块。`did`、`outputs`、`status`、`evidence`、`review_evidence`、`findings` 和全部求助字段都只能位于 JSON 顶层；不得嵌套在 `target` 或其他对象中。outputs 写产出文件的完整路径；没有产出就写空数组 []。完成路只使用 done|partial|failed；被阻塞、需要更多权限或资料、或认为方向可能错时，status 必须为 blocked。
 
 **findings（结论正文）**：只读/分析/审查/盘点类任务的结论主体放这里——每条一行字符串，带准确的 file:line + 原文引用（例：`"game.js:137 移动按帧执行未按 delta 缩放，原文 \"player.x += player.vx;\""`）。逐条判定、问题清单、总评都作为 findings 的条目。改代码/写文件类任务用 outputs/evidence 即可、findings 留空。findings 不是求助字段，填了不会被判为受阻。**不要自造 promise_verdicts、top_5_issues 等顶层字段——它们会被丢弃；结论一律进 findings。**
+
+**review_evidence（仅主管明确派发的只读复核单填写）**：这是数组，不是自然语言。每个被核文件交一项 `{"path":"绝对路径","byte_count":8,"sha256":"64 位十六进制 SHA-256","trailing_newline":false,"read_method":"实际使用的只读核验方法"}`。即使只核一个文件也必须写数组；没有该复核要求时写空数组 `[]`。不要把它塞进 evidence 字符串，也不要拿执行 worker 的口供替代只读复核实证。
 
 完成 done 的完整示例（改文件类）：
 ```json
@@ -53,6 +78,7 @@ pub(crate) const WORKER_REPORT_CONTRACT_TEXT: &str = r#"回程契约（务必遵
   "outputs": ["/绝对路径/目标文件.txt"],
   "status": "done",
   "evidence": ["回读输出与字节校验命令结果"],
+  "review_evidence": [],
   "findings": [],
   "permission_requests": [],
   "open_issues": [],
@@ -68,6 +94,7 @@ pub(crate) const WORKER_REPORT_CONTRACT_TEXT: &str = r#"回程契约（务必遵
   "outputs": [],
   "status": "done",
   "evidence": ["`node --check game.js` 退出码 0"],
+  "review_evidence": [],
   "findings": [
     "承诺『A/D 左右移动』已实现，README.md:11 原文 \"`A`/`D` 或方向键左右：移动\"，源码 game.js:119 原文 \"const left = keys.has(\\\"ArrowLeft\\\") ...\"",
     "P0 game.js:137 移动按帧执行未按 delta 缩放，原文 \"player.x += player.vx;\"，高刷会显著加快游戏",
@@ -87,6 +114,7 @@ pub(crate) const WORKER_REPORT_CONTRACT_TEXT: &str = r#"回程契约（务必遵
   "outputs": [],
   "status": "blocked",
   "evidence": ["写入命令返回的拒绝信息"],
+  "review_evidence": [],
   "permission_requests": ["需要目标目录的写入授权"],
   "open_issues": ["当前 allowed_write 不含目标目录"],
   "direction_risks": ["继续写入会越过已批准范围"],
@@ -432,6 +460,23 @@ mod tests {
         assert_eq!(report.outputs, vec!["/p/login.tsx"]);
         assert_eq!(report.status, "done");
         assert_eq!(report.evidence, vec!["cargo test 绿"]);
+        assert!(report.review_evidence.is_empty());
+    }
+
+    #[test]
+    fn parses_machine_review_evidence_array() {
+        let raw = "```json\n{\"did\":\"只读复核完成\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"wc 与 sha256\"],\"review_evidence\":[{\"path\":\"/p/output.txt\",\"byte_count\":9,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"trailing_newline\":true,\"read_method\":\"wc -c + sha256sum + tail\"}]}\n```";
+        let report = parse_worker_report(raw).expect("数组形态的复核实证应解析");
+        assert_eq!(report.review_evidence.len(), 1);
+        let evidence = &report.review_evidence[0];
+        assert_eq!(evidence.path, "/p/output.txt");
+        assert_eq!(evidence.byte_count, Some(9));
+        assert_eq!(
+            evidence.sha256,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        );
+        assert_eq!(evidence.trailing_newline, Some(true));
+        assert_eq!(evidence.read_method, "wc -c + sha256sum + tail");
     }
 
     #[test]
@@ -443,6 +488,7 @@ mod tests {
         assert_eq!(report.status, "partial");
         assert!(report.outputs.is_empty());
         assert!(report.evidence.is_empty());
+        assert!(report.review_evidence.is_empty());
         // findings 缺省也是空——写单不填不受影响。
         assert!(report.findings.is_empty());
     }
@@ -466,7 +512,10 @@ mod tests {
         let raw = "```json\n{\"did\":\"盘点完成\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"只读检查\"],\"findings\":[\"README.md:11 承诺移动已实现，源码 game.js:119\"],\"promise_verdicts\":[{\"verdict\":\"已实现\"}],\"top_5_issues\":[{\"rank\":1}]}\n```";
         let report = parse_worker_report(raw).expect("含未知顶层字段仍应解析");
         // 自造字段被丢（struct 里没有它们，serde 忽略），但结论正文经 findings 保住。
-        assert_eq!(report.findings, vec!["README.md:11 承诺移动已实现，源码 game.js:119"]);
+        assert_eq!(
+            report.findings,
+            vec!["README.md:11 承诺移动已实现，源码 game.js:119"]
+        );
         assert_eq!(report.did, "盘点完成");
     }
 
@@ -535,6 +584,7 @@ mod tests {
             "outputs",
             "status",
             "evidence",
+            "review_evidence",
             "permission_requests",
             "open_issues",
             "direction_risks",
@@ -757,8 +807,14 @@ mod tests {
         let help = outcome.help_signal.expect("疑似求助坏 json 应升级");
         assert_eq!(help.status, "suspected_blocked");
         assert!(help.summary.contains("疑似求助"));
-        assert!(help.open_issues.iter().any(|item| item.contains("我卡住了")));
-        assert!(outcome.report_warning.is_none(), "疑似求助不能降成普通 warning");
+        assert!(help
+            .open_issues
+            .iter()
+            .any(|item| item.contains("我卡住了")));
+        assert!(
+            outcome.report_warning.is_none(),
+            "疑似求助不能降成普通 warning"
+        );
         assert_eq!(fs::read(&path).unwrap(), before, "坏 json 不写 store");
         let _ = fs::remove_dir_all(dir);
     }

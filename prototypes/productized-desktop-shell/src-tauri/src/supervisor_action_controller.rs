@@ -5,7 +5,7 @@ use super::supervisor_action_protocol::{
 use crate::mcp::{McpRole, McpServerConfig, SupervisorQuotaLimits};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -116,6 +116,7 @@ impl SupervisorActionAdapter for WorkbenchSupervisorActionAdapter {
                     &action.runtime.authorization_id,
                     &target.node_id,
                     &target.work_item_id,
+                    &action.allowed_write_roots,
                 )?
             }
             SupervisorActionKind::InspectWorker { worker_id } => {
@@ -429,6 +430,9 @@ pub(crate) fn execute_supervisor_action(
                 verdict: SupervisorFinalizeVerdict::Pass
             }
         )
+        // 字节级验收的 pass 由 control core 的结构化复核实证闸给出缺项人话；
+        // 此处的旧泛化 readback 闸若抢先拒绝，会掩盖该机械闸的精确诊断。
+        && !guard.requires_structured_review_evidence
         && !has_prior_worker_evidence(runtime)?
     {
         return record_rejected_action(
@@ -645,6 +649,7 @@ struct ActionGuard {
     task_package_fingerprint: String,
     allowed_read_roots: Vec<String>,
     allowed_write_roots: Vec<String>,
+    requires_structured_review_evidence: bool,
 }
 
 fn guard_action(
@@ -687,6 +692,10 @@ fn guard_action(
     {
         return Err("authorization_stale: 授权段已撤销、过期或不再 active。".to_string());
     }
+    let requires_structured_review_evidence = !authorization.scope.allowed_write_roots.is_empty()
+        && crate::mcp::supervisor_orchestrator::authorization_requires_review_evidence(
+            &authorization.scope.allowed_checks,
+        );
     let value = crate::read_workflow_state_value(&runtime.workflow_state_path)?;
     let workflow_revision = value
         .get("revision")
@@ -699,7 +708,8 @@ fn guard_action(
             ));
         }
     }
-    let (target_node_id, target_work_item_id) = match &proposal.action {
+    let (target_node_id, target_work_item_id, dispatch_allowed_write_roots) = match &proposal.action
+    {
         SupervisorActionKind::DispatchWorker { target } => {
             ensure_unique_prepared_dispatch(
                 &value,
@@ -712,9 +722,21 @@ fn guard_action(
             (
                 Some(target.node_id.clone()),
                 Some(target.work_item_id.clone()),
+                if requires_structured_review_evidence {
+                    task_allowed_write_roots(
+                        &value,
+                        &runtime.workflow_id,
+                        &target.work_item_id,
+                        &authorization.scope.allowed_write_roots,
+                    )?
+                } else {
+                    // 非字节实证闸的既有授权流维持原语义：控制器不把草稿/旧包的
+                    // 缺字段升级为派发前置，仍由原授权写根和既有防线决定可否执行。
+                    authorization.scope.allowed_write_roots.clone()
+                },
             )
         }
-        _ => (None, None),
+        _ => (None, None, vec![]),
     };
     let authorization_material = serde_json::to_string(authorization)
         .map_err(|error| format!("authorization_stale: 授权快照无法序列化：{error}"))?;
@@ -727,10 +749,24 @@ fn guard_action(
             );
         }
     }
-    let task_package_fingerprint = if let Some(work_item_id) = target_work_item_id.as_deref() {
-        task_package_fingerprint(&value, &runtime.workflow_id, work_item_id)?
-    } else {
-        prior_identity.task_package_fingerprint.unwrap_or_default()
+    let task_package_fingerprint = match &proposal.action {
+        SupervisorActionKind::DispatchWorker { .. } => {
+            let work_item_id = target_work_item_id
+                .as_deref()
+                .expect("dispatch target must include a work item");
+            task_package_fingerprint(&value, &runtime.workflow_id, work_item_id)?
+        }
+        SupervisorActionKind::InspectWorker { worker_id }
+        | SupervisorActionKind::FollowUpWorker { worker_id, .. }
+        | SupervisorActionKind::WaitWorker { worker_id } => {
+            worker_task_package_fingerprint(runtime, worker_id)?
+                .unwrap_or_else(|| prior_identity.task_package_fingerprint())
+        }
+        SupervisorActionKind::Finalize { .. }
+        | SupervisorActionKind::ReportUser { .. }
+        | SupervisorActionKind::RequestUserDecision { .. } => {
+            prior_identity.task_package_fingerprint()
+        }
     };
     let _ = target_node_id;
     Ok(ActionGuard {
@@ -738,8 +774,52 @@ fn guard_action(
         authorization_snapshot_hash,
         task_package_fingerprint,
         allowed_read_roots: authorization.scope.allowed_read_roots.clone(),
-        allowed_write_roots: authorization.scope.allowed_write_roots.clone(),
+        // 只有本包的字节实证闸启用时，dispatch 才收紧到 task package 精确写根；
+        // 非该闸的存量流保持授权根。control_core 仍做授权子集校验，闸内实际 worker
+        // 派发还会经过 commands.rs 的 task package exact-match 防线。
+        allowed_write_roots: dispatch_allowed_write_roots,
+        requires_structured_review_evidence,
     })
+}
+
+fn task_allowed_write_roots(
+    value: &Value,
+    workflow_id: &str,
+    work_item_id: &str,
+    authorization_allowed_write_roots: &[String],
+) -> Result<Vec<String>, String> {
+    crate::find_work_item(value, workflow_id, work_item_id).ok_or_else(|| {
+        "denied_scope: 目标 work item 不存在，无法读取任务包精确写入范围。".to_string()
+    })?;
+    let artifact =
+        crate::find_task_package_artifact_by_id(value, work_item_id).ok_or_else(|| {
+            "denied_scope: 目标 work item 缺少 task package，拒绝以授权全写根替代。".to_string()
+        })?;
+    let allowed_write = artifact
+        .get("allowed_write")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "denied_scope: task package 缺少 allowed_write 数组。".to_string())?;
+    allowed_write
+        .iter()
+        .map(|root| {
+            let root = root
+                .as_str()
+                .map(str::trim)
+                .filter(|root| !root.is_empty())
+                .ok_or_else(|| {
+                    "denied_scope: task package 的 allowed_write 含非字符串或空写根。".to_string()
+                })?;
+            if !authorization_allowed_write_roots
+                .iter()
+                .any(|authorized_root| authorized_root == root)
+            {
+                return Err(
+                    "denied_scope: task package 的 allowed_write 超出当前授权写根。".to_string(),
+                );
+            }
+            Ok(root.to_string())
+        })
+        .collect()
 }
 
 fn ensure_unique_prepared_dispatch(
@@ -795,7 +875,29 @@ fn task_package_fingerprint(
 #[derive(Default)]
 struct PriorRunIdentity {
     authorization_snapshot_hash: Option<String>,
-    task_package_fingerprint: Option<String>,
+    task_package_fingerprints: BTreeSet<String>,
+}
+
+impl PriorRunIdentity {
+    fn task_package_fingerprint(&self) -> String {
+        match self.task_package_fingerprints.len() {
+            0 => String::new(),
+            1 => self
+                .task_package_fingerprints
+                .iter()
+                .next()
+                .cloned()
+                .unwrap_or_default(),
+            _ => {
+                let material = serde_json::to_string(&json!({
+                    "schema_version": "supervisor_action_task_package_aggregate.v1",
+                    "task_package_fingerprints": self.task_package_fingerprints,
+                }))
+                .expect("aggregate task package provenance is serializable");
+                crate::utils::hash::sha256_hex(&material)
+            }
+        }
+    }
 }
 
 fn prior_run_identity(runtime: &SupervisorActionRuntime) -> Result<PriorRunIdentity, String> {
@@ -811,14 +913,32 @@ fn prior_run_identity(runtime: &SupervisorActionRuntime) -> Result<PriorRunIdent
         {
             identity.authorization_snapshot_hash = Some(record.authorization_snapshot_hash.clone());
         }
-        if record.kind == "dispatch_worker"
-            && identity.task_package_fingerprint.is_none()
-            && !record.task_package_fingerprint.trim().is_empty()
-        {
-            identity.task_package_fingerprint = Some(record.task_package_fingerprint.clone());
+        if record.kind == "dispatch_worker" && !record.task_package_fingerprint.trim().is_empty() {
+            identity
+                .task_package_fingerprints
+                .insert(record.task_package_fingerprint.clone());
         }
     }
     Ok(identity)
+}
+
+fn worker_task_package_fingerprint(
+    runtime: &SupervisorActionRuntime,
+    worker_id: &str,
+) -> Result<Option<String>, String> {
+    Ok(load_store(&runtime.workflow_state_path)?
+        .actions
+        .iter()
+        .rev()
+        .find(|record| {
+            record.run_id == runtime.run_id
+                && record.authorization_id == runtime.authorization_id
+                && record.kind == "dispatch_worker"
+                && record.validation_result == "accepted"
+                && record.worker_id.as_deref() == Some(worker_id)
+                && !record.task_package_fingerprint.trim().is_empty()
+        })
+        .map(|record| record.task_package_fingerprint.clone()))
 }
 
 fn reserve_action(
@@ -1831,7 +1951,7 @@ impl Drop for StoreLock {
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     const PROJECT: &str = "/Users/yoyi/codex-workflow-mario-test";
@@ -1839,6 +1959,7 @@ mod tests {
     const AUTH: &str = "authorization:station3a";
     const NODE: &str = "workflow:station3a:node:worker";
     const WORK_ITEM: &str = "work-item:station3a";
+    const REVIEW_WORK_ITEM: &str = "work-item:station3a:review";
     static FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
     struct Fixture {
@@ -1866,7 +1987,11 @@ mod tests {
                         "plan_authorization_id": AUTH, "node_id": NODE, "work_item_id": WORK_ITEM
                     }],
                     "work_items": [{"workflow_id": WORKFLOW, "work_item_id": WORK_ITEM}],
-                    "artifacts": []
+                    "artifacts": [{
+                        "artifact_type": "task_package",
+                        "source_ref": WORK_ITEM,
+                        "allowed_write": [PROJECT]
+                    }]
                 })
                 .to_string(),
             )
@@ -1958,14 +2083,106 @@ mod tests {
             }
         }
 
+        fn add_read_only_review_task(&self) {
+            let mut state: Value =
+                serde_json::from_slice(&fs::read(&self.path).expect("read workflow state"))
+                    .expect("workflow json");
+            state["workflow_node_dispatches"]
+                .as_array_mut()
+                .expect("prepared dispatches")
+                .push(json!({
+                    "state":"prepared", "prompt_kind":"authorized_prepared_auto_dispatch",
+                    "project_id": crate::project_id(PROJECT), "workflow_id": WORKFLOW,
+                    "plan_authorization_id": AUTH, "node_id": NODE, "work_item_id": REVIEW_WORK_ITEM
+                }));
+            state["work_items"]
+                .as_array_mut()
+                .expect("work items")
+                .push(json!({"workflow_id": WORKFLOW, "work_item_id": REVIEW_WORK_ITEM}));
+            state["artifacts"]
+                .as_array_mut()
+                .expect("task packages")
+                .push(json!({
+                    "artifact_type": "task_package",
+                    "source_ref": REVIEW_WORK_ITEM,
+                    "allowed_write": []
+                }));
+            fs::write(
+                &self.path,
+                serde_json::to_vec(&state).expect("serialize workflow state"),
+            )
+            .expect("write workflow state");
+        }
+
+        fn set_allowed_checks(&self, allowed_checks: Vec<String>) {
+            let mut store =
+                crate::plan_authorization_store::load_store(&self.path, crate::unix_timestamp_ms())
+                    .expect("authorization store");
+            store.authorizations[0].scope.allowed_checks = allowed_checks;
+            store.revision += 1;
+            fs::write(
+                crate::plan_authorization_store::sidecar_path(&self.path)
+                    .expect("authorization path"),
+                serde_json::to_vec(&store).expect("serialize authorization store"),
+            )
+            .expect("write authorization store");
+        }
+
+        fn remove_writer_task_allowed_write(&self) {
+            let mut state: Value =
+                serde_json::from_slice(&fs::read(&self.path).expect("read workflow state"))
+                    .expect("workflow json");
+            let artifact = state["artifacts"]
+                .as_array_mut()
+                .expect("task packages")
+                .iter_mut()
+                .find(|artifact| {
+                    artifact.get("source_ref").and_then(Value::as_str) == Some(WORK_ITEM)
+                })
+                .expect("writer task package");
+            artifact
+                .as_object_mut()
+                .expect("writer task package object")
+                .remove("allowed_write");
+            fs::write(
+                &self.path,
+                serde_json::to_vec(&state).expect("serialize workflow state"),
+            )
+            .expect("write workflow state");
+        }
+
+        fn dispatch_proposal(work_item_id: &str) -> SupervisorActionProposalV1 {
+            parse_supervisor_action_proposal(
+                &json!({
+                    "schema_version":"supervisor_action_proposal.v1",
+                    "kind":"dispatch_worker",
+                    "target":{"node_id":NODE,"work_item_id":work_item_id},
+                    "reason":"准备完成",
+                    "expected_result":"worker"
+                })
+                .to_string(),
+            )
+            .expect("dispatch proposal")
+        }
+
+        fn inspect_proposal(worker_id: &str) -> SupervisorActionProposalV1 {
+            parse_supervisor_action_proposal(
+                &json!({
+                    "schema_version":"supervisor_action_proposal.v1",
+                    "kind":"inspect_worker",
+                    "worker_id":worker_id,
+                    "reason":"读取口供",
+                    "expected_result":"evidence"
+                })
+                .to_string(),
+            )
+            .expect("inspect proposal")
+        }
+
         fn proposal(kind: &str) -> SupervisorActionProposalV1 {
             let value = match kind {
-                "dispatch" => {
-                    json!({"schema_version":"supervisor_action_proposal.v1","kind":"dispatch_worker","target":{"node_id":NODE,"work_item_id":WORK_ITEM},"reason":"准备完成","expected_result":"worker"})
-                }
-                "inspect" => {
-                    json!({"schema_version":"supervisor_action_proposal.v1","kind":"inspect_worker","worker_id":"worker-1","reason":"读取口供","expected_result":"evidence"})
-                }
+                "dispatch" => return Self::dispatch_proposal(WORK_ITEM),
+                "inspect" => return Self::inspect_proposal("worker-1"),
                 "follow_up" => {
                     json!({"schema_version":"supervisor_action_proposal.v1","kind":"follow_up_worker","worker_id":"worker-1","prompt":"补充证据","reason":"证据不足","expected_result":"fresh report"})
                 }
@@ -2025,6 +2242,49 @@ mod tests {
 
     struct RevisionAdvancingAdapter {
         dispatches: Cell<usize>,
+    }
+
+    #[derive(Default)]
+    struct TaskScopedAdapter {
+        dispatch_scopes: RefCell<Vec<(String, Vec<String>)>>,
+    }
+
+    impl SupervisorActionAdapter for TaskScopedAdapter {
+        fn supports(&self, _action: &SupervisorActionKind) -> bool {
+            true
+        }
+
+        fn execute(
+            &self,
+            action: &AuthorizedSupervisorAction,
+        ) -> Result<SupervisorActionAdapterResult, String> {
+            let (worker_id, evidence_present) = match &action.proposal.action {
+                SupervisorActionKind::DispatchWorker { target } => {
+                    self.dispatch_scopes.borrow_mut().push((
+                        target.work_item_id.clone(),
+                        action.allowed_write_roots.clone(),
+                    ));
+                    let worker_id = if target.work_item_id == REVIEW_WORK_ITEM {
+                        "worker-review"
+                    } else {
+                        "worker-writer"
+                    };
+                    (worker_id.to_string(), false)
+                }
+                SupervisorActionKind::InspectWorker { worker_id } => (worker_id.clone(), true),
+                _ => ("supervisor".to_string(), false),
+            };
+            Ok(SupervisorActionAdapterResult {
+                status: "completed".to_string(),
+                summary: format!("task scoped {}", action.proposal.action.name()),
+                worker_id: Some(worker_id),
+                adapter_id: "task-scoped-adapter".to_string(),
+                evidence_present,
+                dispatch_ref: Some("dispatch:task-scoped".to_string()),
+                readback_ref: evidence_present.then(|| "readback:task-scoped".to_string()),
+                audit_ref: Some("audit:task-scoped".to_string()),
+            })
+        }
     }
 
     impl SupervisorActionAdapter for RevisionAdvancingAdapter {
@@ -2110,6 +2370,8 @@ mod tests {
             .iter()
             .all(|action| &action.task_package_fingerprint == task_fingerprint));
     }
+
+    include!("supervisor_action_controller_review_evidence_tests.rs");
 
     #[test]
     fn station3b_follow_up_invalidates_old_inspect_until_new_report_is_inspected() {
@@ -2564,6 +2826,7 @@ mod tests {
             task_package_fingerprint: "m5a-task-package".to_string(),
             allowed_read_roots: vec![],
             allowed_write_roots: vec![],
+            requires_structured_review_evidence: false,
         };
         reserve_action(
             &runtime,

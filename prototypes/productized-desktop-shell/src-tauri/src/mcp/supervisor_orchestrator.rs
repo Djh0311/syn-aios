@@ -11,6 +11,9 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[path = "supervisor_review_evidence.rs"]
+mod supervisor_review_evidence;
+
 const STORE_SCHEMA_VERSION: &str = "supervisor_orchestrator.v1";
 const SIDECAR_NAME: &str = "supervisor-orchestrator.v1.json";
 const LOCK_NAME: &str = ".supervisor-orchestrator.v1.lock";
@@ -807,15 +810,25 @@ pub(crate) fn control_core_dispatch_worker(
     authorization_id: &str,
     node_id: &str,
     work_item_id: &str,
+    allowed_write: &[String],
 ) -> Result<Value, String> {
     let authorization = active_authorization(config, project_root, workflow_id, authorization_id)?;
+    if !allowed_write.iter().all(|path| {
+        authorization
+            .scope
+            .allowed_write_roots
+            .iter()
+            .any(|root| root == path)
+    }) {
+        return Err("请求 allowed_write 超出授权段允许写根，已拒绝".to_string());
+    }
     let arguments = json!({
         "project_root": project_root,
         "workflow_id": workflow_id,
         "authorization_id": authorization_id,
         "node_id": node_id,
         "work_item_id": work_item_id,
-        "allowed_write": authorization.scope.allowed_write_roots,
+        "allowed_write": allowed_write,
     });
     control_core_call_with_invoker(
         config,
@@ -1010,7 +1023,7 @@ fn read_worker_report(config: &McpServerConfig, args: &Value) -> Result<Value, S
                         == Some(worker.dispatch_id.as_str())
             })
         }) {
-        json!({
+        let mut report = json!({
             "worker_id": worker.worker_id,
             "dispatch_id": worker.dispatch_id,
             "acceptance_status": event.get("acceptance_status").cloned().unwrap_or(Value::Null),
@@ -1022,7 +1035,14 @@ fn read_worker_report(config: &McpServerConfig, args: &Value) -> Result<Value, S
             "permission_requests": event.get("permission_requests").cloned().unwrap_or(Value::Null),
             "direction_risks": event.get("direction_risks").cloned().unwrap_or(Value::Null),
             "follow_up_suggestions": event.get("follow_up_suggestions").cloned().unwrap_or(Value::Null)
-        })
+        });
+        // 现成 structured-report 审计只存旧的文本 evidence_refs；字节级复核实证不扩展
+        // 那条链账本，而从同一 worker 的原始回程 best-effort 投影进既有 last_report。
+        // 原文不可读/不合契约时保留旧投影，让终标机械闸按“无实证”拒绝 pass。
+        if let Some(review_evidence) = review_evidence_from_raw_worker_return(&value, &worker) {
+            report["review_evidence"] = review_evidence;
+        }
+        report
     } else {
         normalized_raw_worker_report(&value, &worker)?
     };
@@ -1057,6 +1077,31 @@ fn normalized_raw_worker_report(value: &Value, worker: &SupervisorWorker) -> Res
         )
     })?;
     normalized_worker_report_from_raw(worker, &raw)
+}
+
+/// 旧审计事件优先时，补取同一 dispatch 的原始回程中新增的结构化复核实证。
+///
+/// 这不是新 sidecar，也不写 workflow/L1；只把已在 worker 最后消息中的 JSON 投影回现有
+/// supervisor `last_report`。读取失败故意软着陆，后续 pass 闸会明确要求补复核而非伪造事实。
+fn review_evidence_from_raw_worker_return(
+    value: &Value,
+    worker: &SupervisorWorker,
+) -> Option<Value> {
+    let last_message_path = value
+        .get("workflow_node_dispatches")
+        .and_then(Value::as_array)
+        .and_then(|dispatches| {
+            dispatches.iter().find(|dispatch| {
+                crate::optional_string_from(dispatch, "dispatch_id").as_deref()
+                    == Some(worker.dispatch_id.as_str())
+            })
+        })
+        .and_then(|dispatch| crate::optional_string_from(dispatch, "last_message_path"))?;
+    let raw = fs::read_to_string(last_message_path).ok()?;
+    let report = crate::worker_report::parse_worker_report(&raw)?;
+    (!report.review_evidence.is_empty())
+        .then(|| serde_json::to_value(report.review_evidence).ok())
+        .flatten()
 }
 
 fn normalized_worker_report_from_raw(
@@ -1102,6 +1147,7 @@ fn normalized_worker_report_from_raw(
         },
         "summary": report.did,
         "evidence_refs": report.evidence,
+        "review_evidence": report.review_evidence,
         // 只读/分析类单的结论正文（逐条判定、问题清单、总评，带 file:line + 原文引用）。
         // 站 3b 首单实证：不带出它，主管只见摘要、误判证据不足并试图越权 follow_up。
         "findings": report.findings,
@@ -1195,6 +1241,10 @@ fn read_key_file(config: &McpServerConfig, args: &Value) -> Result<Value, String
     Ok(json!({"path": canonical_path, "content": text}))
 }
 
+pub(crate) fn authorization_requires_review_evidence(allowed_checks: &[String]) -> bool {
+    supervisor_review_evidence::authorization_requires_review_evidence(allowed_checks)
+}
+
 fn final_mark(config: &McpServerConfig, args: &Value) -> Result<Value, String> {
     let project_root = require_string(args, "project_root")?;
     let workflow_id = require_string(args, "workflow_id")?;
@@ -1205,7 +1255,19 @@ fn final_mark(config: &McpServerConfig, args: &Value) -> Result<Value, String> {
     {
         return Err("终标只允许 pass / needs_rework / blocked，且 reason 不能为空".to_string());
     }
-    active_authorization(config, &project_root, &workflow_id, &authorization_id)?;
+    let authorization =
+        active_authorization(config, &project_root, &workflow_id, &authorization_id)?;
+    let review_evidence_gate = if verdict == "pass" {
+        supervisor_review_evidence::review_evidence_gate_for_pass(
+            config,
+            &project_root,
+            &workflow_id,
+            &authorization_id,
+            &authorization,
+        )?
+    } else {
+        None
+    };
     let created_at_ms = now_ms();
     update_store(config, "final-mark", |store| {
         session_mut(store, &config.run_id)
@@ -1220,12 +1282,26 @@ fn final_mark(config: &McpServerConfig, args: &Value) -> Result<Value, String> {
             });
         Ok(())
     })?;
-    Ok(json!({
+    let mut result = json!({
         "verdict": verdict,
         "reason": reason,
         "advisory_only": true,
         "workflow_chain_state_written": false
-    }))
+    });
+    if let Some(review_evidence_gate) = review_evidence_gate {
+        result["review_evidence"] = json!({
+            "required_fields": review_evidence_gate
+                .required_fields
+                .iter()
+                .map(|field| field.key())
+                .collect::<Vec<_>>(),
+            "readonly_reviewer_worker_ids": review_evidence_gate.readonly_reviewer_worker_ids,
+        });
+        // 内容冲突是 advisory：实证存在且覆盖即可让主管决定 pass/needs_rework；绝不能把
+        // byte_count=9、trailing_newline=true 这类事故事实吞成“内容一致”的口供。
+        result["review_evidence_advisories"] = json!(review_evidence_gate.advisories);
+    }
+    Ok(result)
 }
 
 fn report_user(config: &McpServerConfig, args: &Value) -> Result<Value, String> {
@@ -2291,11 +2367,15 @@ mod tests {
         }
 
         fn dispatch(&self) -> Result<Value, String> {
+            self.dispatch_with_allowed_write(&[PROJECT])
+        }
+
+        fn dispatch_with_allowed_write(&self, allowed_write: &[&str]) -> Result<Value, String> {
             self.control_core(
                 "dispatch_worker",
                 json!({
                     "project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH,
-                    "node_id": NODE, "work_item_id": "work-1", "allowed_write": [PROJECT]
+                    "node_id": NODE, "work_item_id": "work-1", "allowed_write": allowed_write
                 }),
             )
         }
@@ -2758,6 +2838,81 @@ mod tests {
     }
 
     #[test]
+    fn raw_readonly_review_evidence_reaches_existing_supervisor_projection() {
+        let worker = SupervisorWorker {
+            worker_id: "readonly-reviewer".to_string(),
+            dispatch_id: "dispatch-review".to_string(),
+            allowed_write: vec![],
+            ..SupervisorWorker::default()
+        };
+        let raw = "```json\n{\"did\":\"只读复核\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"wc -c\"],\"review_evidence\":[{\"path\":\"/p/output.txt\",\"byte_count\":9,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"trailing_newline\":true,\"read_method\":\"wc -c + sha256sum + tail\"}]}\n```";
+        let projected = normalized_worker_report_from_raw(&worker, raw)
+            .expect("readonly review report should project");
+        assert_eq!(projected["review_evidence"][0]["path"], "/p/output.txt");
+        assert_eq!(projected["review_evidence"][0]["byte_count"], 9);
+        assert_eq!(projected["review_evidence"][0]["trailing_newline"], true);
+    }
+
+    #[test]
+    fn audit_projection_keeps_raw_readonly_review_evidence_in_existing_last_report() {
+        let fixture = Fixture::new();
+        fixture
+            .dispatch_with_allowed_write(&[])
+            .expect("readonly reviewer dispatch");
+        let last_message_path = fixture.root.join("readonly-review-last-message.txt");
+        let mut state: Value =
+            serde_json::from_slice(&fs::read(&fixture.state_path).expect("workflow state"))
+                .expect("workflow state json");
+        state["workflow_node_dispatches"] = json!([{
+            "dispatch_id": "dispatch-1",
+            "last_message_path": last_message_path
+        }]);
+        state["audit_events"] = json!([{
+            "event_type": "worker_structured_report_recorded",
+            "dispatch_id": "dispatch-1",
+            "acceptance_status": "reported_completed",
+            "executed_what": "只读复核完成",
+            "changed_what": "worker 未列出产出文件",
+            "reason": "旧审计投影",
+            "evidence_refs": ["wc -c"],
+            "open_issues": [],
+            "permission_requests": [],
+            "direction_risks": [],
+            "follow_up_suggestions": []
+        }]);
+        fs::write(
+            &fixture.state_path,
+            serde_json::to_vec(&state).expect("workflow state json"),
+        )
+        .expect("write workflow state");
+        fs::write(
+            &last_message_path,
+            "```json\n{\"did\":\"只读复核完成\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"wc -c\"],\"review_evidence\":[{\"path\":\"/p/output.txt\",\"byte_count\":9,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"trailing_newline\":true,\"read_method\":\"wc -c + sha256sum + tail\"}]}\n```",
+        )
+        .expect("write readonly review return");
+        update_store(&fixture.config, "clear-fake-review-report", |store| {
+            session_mut(store, &fixture.config.run_id).workers[0].last_report = None;
+            Ok(())
+        })
+        .expect("clear fake review report");
+
+        let projected = fixture
+            .control_core("inspect_worker", json!({"worker_id": "worker-1"}))
+            .expect("audit projection should retain raw review evidence");
+        assert_eq!(projected["review_evidence"][0]["byte_count"], 9);
+        assert_eq!(projected["review_evidence"][0]["trailing_newline"], true);
+        assert_eq!(
+            load_store(&fixture.config)
+                .expect("supervisor store")
+                .sessions[0]
+                .workers[0]
+                .last_report,
+            Some(projected),
+            "review evidence must live in the existing last_report cache"
+        );
+    }
+
+    #[test]
     fn report_user_denies_empty_message_and_audits_success() {
         let fixture = Fixture::new();
         assert!(fixture.control_core("report_user", json!({"project_root": PROJECT, "workflow_id": WORKFLOW, "authorization_id": AUTH, "message": ""})).is_err());
@@ -2818,5 +2973,6 @@ mod tests {
         .is_err());
     }
 
+    include!("supervisor_review_evidence_e2e_tests.rs");
     include!("supervisor_orchestrator_m5b_tests.rs");
 }
