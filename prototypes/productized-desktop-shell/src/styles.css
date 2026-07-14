@@ -10430,3 +10430,11 @@ textarea {
 .project-side-dev-detail-toggle input {
   cursor: pointer;
 }
+
+/* 批1·交货卡 pill 行(骨架:状态行=现有事实小徽章;复用 jiaoban-step-badge 徽章样式)。 */
+.jiaoban-done-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 2px 0 10px;
+}

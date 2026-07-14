@@ -329,19 +329,25 @@ export function JiaobanDoneState({
         </div>
         <Badge tone={isCompleted ? "candidate" : "warning"}>{isCompleted ? "已交货" : "未交货"}</Badge>
       </div>
+      {/* 批1·骨架化(DESIGN.md §二):状态 pill 行=现有事实上脸,不造数据;只读单注升为 pill。 */}
+      {isCompleted ? (
+        <div className="jiaoban-done-pills" aria-label="这单概览">
+          {chain ? <span className="jiaoban-step-badge tone-green">完成 {chain.completed} 步</span> : null}
+          {countYellowFlags(chain?.steps ?? []) > 0 ? (
+            <span className="jiaoban-step-badge tone-yellow">⚠ {countYellowFlags(chain?.steps ?? [])} 项要看一眼</span>
+          ) : null}
+          {isReadOnlyRun ? <span className="jiaoban-step-badge tone-gray">只读单·未改文件</span> : null}
+        </div>
+      ) : null}
       <div className="role-loop-plain" aria-label="结果（人话）">
         <p className="role-loop-plain-lead">{resultLine}</p>
-        {isReadOnlyRun ? <p className="role-loop-plain-note">只读单·未改文件</p> : null}
+        {!isCompleted && isReadOnlyRun ? <p className="role-loop-plain-note">只读单·未改文件</p> : null}
       </div>
+      {(chain?.steps ?? []).length > 0 ? <p className="jiaoban-field-label">干了什么</p> : null}
       <JiaobanStepReportList
         steps={chain?.steps ?? []}
         onConfirmFact={onConfirmFact}
         confirmedTaskIds={confirmedTaskIds}
-      />
-      <JiaobanRawSessionLink
-        sessionChoice={sessionChoice}
-        latestSessionThreadId={latestSessionThreadId}
-        onOpenAgentSession={onOpenAgentSession}
       />
       {needsRework ? (
         <JiaobanNeedsReworkDisposal
@@ -372,8 +378,20 @@ export function JiaobanDoneState({
           <button className="primary-button" type="button" onClick={onContinue}>
             继续弄别的
           </button>
+          {/* 批1·「查看原始口供」下钻挪进动作行(骨架动作位;原独立行删,防双入口)。 */}
+          <JiaobanRawSessionLink
+            sessionChoice={sessionChoice}
+            latestSessionThreadId={latestSessionThreadId}
+            onOpenAgentSession={onOpenAgentSession}
+          />
         </div>
-      ) : null}
+      ) : (
+        <JiaobanRawSessionLink
+          sessionChoice={sessionChoice}
+          latestSessionThreadId={latestSessionThreadId}
+          onOpenAgentSession={onOpenAgentSession}
+        />
+      )}
     </div>
   );
 }

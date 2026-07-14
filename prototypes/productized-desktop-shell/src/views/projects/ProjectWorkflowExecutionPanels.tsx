@@ -631,7 +631,56 @@ function WorkflowResultSummaryPanel({
       ) : (
         <p className="muted small-note">用户结果决定尚未记录；全局最终复核不能自动代表用户接受。</p>
       )}
-      {/* 砍：阶段门禁摘要卡 + 未决项(openItems) + 后置项(deferredItems) 明细列表。 */}
+      {/* 批1·恢复被砍证据渲染(体检 P0:「支撑判断的证据 UI 根本不存在」)——门禁逐项 ✓✗ + 未决/后置明细。
+          宪法交货态:唯一问题=能信吗·证据呢;evidence_refs 等机器细节仍留开发者下钻,不上主脸(DESIGN.md 禁令②)。 */}
+      {stageSummary ? (
+        <div className="dispatch-result-card" aria-label="验收门禁逐项">
+          <strong>验收门禁</strong>
+          <ul className="jiaoban-step-report" aria-label="每道门禁的结论">
+            {stageSummary.gates.map((gate) => {
+              const tone =
+                gate.status === "passed" ? "green" : gate.status === "blocked" ? "red" : gate.status === "deferred" ? "gray" : "yellow";
+              const word =
+                gate.status === "passed"
+                  ? "✓ 过"
+                  : gate.status === "blocked"
+                    ? "✗ 卡住"
+                    : gate.status === "needs_changes"
+                      ? "⚠ 要改"
+                      : gate.status === "deferred"
+                        ? "后置"
+                        : "⚠ 缺证据";
+              return (
+                <li key={gate.gate_id} className={`jiaoban-step-row tone-${tone}`}>
+                  <span className="jiaoban-step-title">{gate.label}</span>
+                  {gate.reason ? <span className="jiaoban-step-say">{gate.reason}</span> : null}
+                  <span className={`jiaoban-step-badge tone-${tone}`}>{word}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+      {openItems.length ? (
+        <div className="dispatch-result-card" aria-label="未决项">
+          <strong>还没解决的（{openItems.length}）</strong>
+          <ul className="jiaoban-warnings" aria-label="未决项明细">
+            {openItems.map((item, index) => (
+              <li key={index}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {deferredItems.length ? (
+        <div className="dispatch-result-card" aria-label="后置项">
+          <strong>说好以后做的（{deferredItems.length}）</strong>
+          <ul className="jiaoban-warnings" aria-label="后置项明细">
+            {deferredItems.map((item, index) => (
+              <li key={index}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="workflow-state-actions" aria-label="C6 结果复核动作">
         {(["accepted", "needs_changes", "blocked"] as const).map((decision) => (
           <button
