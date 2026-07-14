@@ -183,6 +183,53 @@ export function loadWorkbenchSnapshot(): Promise<WorkbenchSnapshot> {
   return invoke<WorkbenchSnapshot>("load_workbench_snapshot");
 }
 
+export type SystemStatusReadModel = {
+  storage_mode: "db_primary" | "json_only";
+  storage_healthy: boolean;
+  observation_day: number;
+  last_degradation: { at_ms: number; reason_human: string } | null;
+  recent_catches: Array<{ at_ms: number; summary: string }>;
+  gate_summary: string | null;
+  warnings: string[];
+};
+
+export function loadSystemStatusReadModel(): Promise<SystemStatusReadModel> {
+  ensureTauriRuntime();
+  return invoke<SystemStatusReadModel>("load_system_status_read_model");
+}
+
+export type AuditLedgerReadModelRequest = {
+  page: number;
+  page_size?: number;
+  kind_filter?: string;
+};
+
+export type AuditLedgerReadModelItem = {
+  at_ms: number;
+  source: string;
+  event_type: string;
+  human_summary: string;
+  target_ref: string | null;
+  raw_json: unknown;
+};
+
+export type AuditLedgerReadModel = {
+  total: number;
+  items: AuditLedgerReadModelItem[];
+  page: number;
+  page_size: number;
+  storage_mode: "db_primary" | "json_only";
+  kinds: string[];
+  warnings: string[];
+};
+
+export function queryAuditLedgerReadModel(
+  request: AuditLedgerReadModelRequest,
+): Promise<AuditLedgerReadModel> {
+  ensureTauriRuntime();
+  return invoke<AuditLedgerReadModel>("query_audit_ledger_read_model", { request });
+}
+
 export function queryWorkbenchPageReadModel(
   request: PageReadModelQueryInput,
 ): Promise<PageReadModelQueryResult> {

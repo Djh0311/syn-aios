@@ -54,7 +54,7 @@ export const primaryNavItems: WorkbenchNavItem[] = [
   { key: "knowledge", label: "知识库", glyph: "▢" },
   { key: "memory", label: "记忆层", glyph: "◐" },
   { key: "skills", label: "技能", glyph: "✦" },
-  { key: "harness", label: "运行器", glyph: "⬡" },
+  { key: "harness", label: "harness", glyph: "⬡" },
   { key: "workflow", label: "实验画布", glyph: "⊹" },
 ];
 
@@ -73,7 +73,6 @@ export const primaryNavGroups: WorkbenchNavGroup[] = [
     items: [
       { key: "ideas", label: "想法箱", glyph: "✎" },
       { key: "workflow", label: "实验画布", glyph: "⊹" },
-      { key: "command-console", label: "发令台", glyph: "►" },
     ],
   },
   {
@@ -89,7 +88,7 @@ export const primaryNavGroups: WorkbenchNavGroup[] = [
     label: "中枢",
     items: [
       { key: "skills", label: "技能", glyph: "✦" },
-      { key: "harness", label: "运行器", glyph: "⬡" },
+      { key: "harness", label: "harness", glyph: "⬡" },
     ],
   },
 ];

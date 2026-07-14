@@ -9,6 +9,7 @@ import type {
   WorkbenchSnapshot,
   WorkflowStateSnapshot,
 } from "../lib/types";
+import type { SystemStatusReadModel } from "../lib/tauri";
 import {
   primaryNavGroups,
   primaryNavItems,
@@ -39,6 +40,7 @@ export function WorkbenchShell({
   query,
   rightStats,
   secretaryContext,
+  systemStatus,
   topbarReviewCount,
   workflowState,
   workflowStateError,
@@ -65,6 +67,7 @@ export function WorkbenchShell({
   query: string;
   rightStats: WorkbenchShellStat[];
   secretaryContext: SecretaryContext;
+  systemStatus: SystemStatusReadModel | null;
   topbarReviewCount: number;
   workflowState: WorkflowStateSnapshot | null;
   workflowStateError: string | null;
@@ -84,6 +87,7 @@ export function WorkbenchShell({
         displaySnapshot={displaySnapshot}
         error={error}
         query={query}
+        systemStatus={systemStatus}
         topbarReviewCount={topbarReviewCount}
         onActiveRightPanelChange={onActiveRightPanelChange}
         onActiveViewChange={onActiveViewChange}
@@ -155,6 +159,7 @@ function WorkbenchTopbar({
   displaySnapshot,
   error,
   query,
+  systemStatus,
   topbarReviewCount,
   onActiveRightPanelChange,
   onActiveViewChange,
@@ -164,6 +169,7 @@ function WorkbenchTopbar({
   displaySnapshot: WorkbenchSnapshot;
   error: boolean;
   query: string;
+  systemStatus: SystemStatusReadModel | null;
   topbarReviewCount: number;
   onActiveRightPanelChange: Dispatch<SetStateAction<RightPanelKey | null>>;
   onActiveViewChange: NavigateHandler;
@@ -201,7 +207,11 @@ function WorkbenchTopbar({
         <button className="secondary-button icon-button" type="button" onClick={() => void onReload()} aria-label="重新读取">
           ↺
         </button>
-        <span className={`top-health-dot ${error ? "error" : ""}`} title={error ? "需处理" : "可用"} aria-label={error ? "需处理" : "可用"} />
+        <span
+          className={`top-health-dot ${error || systemStatus?.storage_healthy === false ? "error" : ""}`}
+          title={error || systemStatus?.storage_healthy === false ? "需处理" : "可用"}
+          aria-label={error || systemStatus?.storage_healthy === false ? "需处理" : "可用"}
+        />
       </div>
     </header>
   );

@@ -10,6 +10,7 @@ import {
   previewMaturePatterns,
   renderTaskPackagePreview,
 } from "../lib/tauri";
+import type { SystemStatusReadModel } from "../lib/tauri";
 import type {
   BlackboardCandidateStoreV1,
   FormalMemoryStoreV1,
@@ -53,6 +54,7 @@ type BrowserPreviewData = {
 export type ActiveWorkbenchViewProps = {
   view: ViewKey;
   snapshot: WorkbenchSnapshot;
+  systemStatus?: SystemStatusReadModel | null;
   workflowState: WorkflowStateSnapshot | null;
   workflowStateLoading: boolean;
   workflowStateError: string | null;
@@ -90,6 +92,7 @@ export type ActiveWorkbenchViewProps = {
 export function renderActiveWorkbenchView({
   view,
   snapshot,
+  systemStatus = null,
   onRequestAction,
   onNavigate,
   navigationFocus,
@@ -133,8 +136,6 @@ export function renderActiveWorkbenchView({
       <AuditLedgerView
         key={navigationFocus ? `${navigationFocus.kind}:${navigationFocus.id}` : "audit-ledger:no-focus"}
         snapshot={snapshot}
-        workflowState={workflowState}
-        workflowStateError={workflowStateError}
         focus={navigationFocus}
       />
     );
@@ -476,6 +477,7 @@ export function renderActiveWorkbenchView({
       snapshot={snapshot}
       workflowState={workflowState}
       memoryCandidateStore={memoryCandidateStore}
+      systemStatus={systemStatus}
       onNavigate={onNavigate}
     />
   );

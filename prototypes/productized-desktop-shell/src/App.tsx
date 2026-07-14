@@ -28,6 +28,7 @@ import {
   loadObservationStore,
   loadPlanAuthorizationStore,
   loadProjectConsultationProposalStore,
+  loadSystemStatusReadModel,
   loadWorkflowStateSnapshot,
   prepareAuthorizedAutoDispatch,
   prepareOfflineRoleDispatch,
@@ -61,6 +62,7 @@ import {
   updateWorkItemState,
   unbindWorkflowNodeCodexSession,
 } from "./lib/tauri";
+import type { SystemStatusReadModel } from "./lib/tauri";
 import {
   browserPreviewSessionPage,
   browserPreviewSnapshot,
@@ -115,6 +117,7 @@ export function App() {
   const [workflowState, setWorkflowState] = useState<WorkflowStateSnapshot | null>(null);
   const [workflowStateLoading, setWorkflowStateLoading] = useState(false);
   const [workflowStateError, setWorkflowStateError] = useState<string | null>(null);
+  const [systemStatus, setSystemStatus] = useState<SystemStatusReadModel | null>(null);
   const [blackboardCandidateStore, setBlackboardCandidateStore] = useState<BlackboardCandidateStoreV1 | null>(null);
   const [planAuthorizationStore, setPlanAuthorizationStore] = useState<PlanAuthorizationStoreV1 | null>(null);
   const [projectConsultationProposalStore, setProjectConsultationProposalStore] =
@@ -151,6 +154,7 @@ export function App() {
   async function reload() {
     setNotice("正在读取索引。");
     setError(false);
+    setSystemStatus(null);
     if (browserPreviewEnabled) {
       setSnapshot(browserPreviewSnapshot);
       setWorkflowState(browserPreviewWorkflowState);
@@ -163,11 +167,22 @@ export function App() {
       const { snapshot: nextSnapshot } = await loadWorkbenchSnapshotFromPageQueries(queryWorkbenchPageReadModel);
       setSnapshot(nextSnapshot);
       setNotice("");
+      void reloadSystemStatus();
       void reloadWorkflowState();
     } catch (loadError) {
       setSnapshot(null);
       setError(true);
       setNotice(`读取失败：${messageOf(loadError)}`);
+    }
+  }
+
+  async function reloadSystemStatus() {
+    if (browserPreviewEnabled) return;
+    try {
+      setSystemStatus(await loadSystemStatusReadModel());
+    } catch {
+      // 系统状态读模型是首页/顶栏的补充读面，读失败不能打断已有索引。
+      setSystemStatus(null);
     }
   }
 
@@ -664,6 +679,7 @@ export function App() {
       query={query}
       rightStats={rightStats}
       secretaryContext={secretaryContext}
+      systemStatus={systemStatus}
       topbarReviewCount={topbarReviewCount}
       workflowState={workflowState}
       workflowStateError={workflowStateError}
@@ -679,6 +695,7 @@ export function App() {
         {renderActiveWorkbenchView({
           view: activeView,
           snapshot: displaySnapshot,
+          systemStatus,
           onRequestAction: setPendingAction,
           onNavigate: navigate,
           navigationFocus,

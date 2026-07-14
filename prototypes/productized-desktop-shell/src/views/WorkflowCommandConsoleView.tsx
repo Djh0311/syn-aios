@@ -7,6 +7,7 @@ import {
 } from "../lib/tauri";
 import type { ProjectWorkflowChainStatus, ProjectWorkflowListItem } from "../lib/types";
 
+// 已拍下线·待退役：从左导航摘除，保留本视图与路由直到死码处置另案。
 // P2 发令台：对工作流「发令」起链——一句话/打字启动，朝乙的「主管对话开干」铺第一步。
 // 边界（principles §4）：对话只能「启动 / 停」，真跑仍走已 gated 的链控制器（圈固定测试项目、
 // 经 path-lock + 沙箱、失败即停/可中断/审计/回滚）；这里不改 workflow-state、不绕状态机。

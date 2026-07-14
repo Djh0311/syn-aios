@@ -1,7 +1,7 @@
 export const shellScenarioTextFixtures = {
   // ⑤ C 定稿(hifi `C · 首页(系统总览)`)重做首页后同步：首页 = 统计行(项目/跑着的单/等我的事/
   // 系统健康) + 四区块(等我的事/最近项目/记忆动态/系统状态)。
-  // 删掉的 "技能"/"运行器"/"运行中工作流" 锁的是旧首页形态(技能/运行器计数入口块 +「运行中」面板)，
+  // 删掉的 "技能"/"harness"/"运行中工作流" 锁的是旧首页形态(技能/harness 计数入口块 +「运行中」面板)，
   // 定稿 C 段没有这三块；三者在左导航的覆盖由下面 primaryNavLabels 断言独立保住，未失守。
   // "不是真实使用事件" 保留：最近项目的时间取自索引 latest_updated_at_ms(近似口径)，这句诚实声明仍成立。
   homeExpectedTexts: [
@@ -22,7 +22,7 @@ export const shellScenarioTextFixtures = {
   // 「系统」计数块)。裸串 "系统" 与定稿 C 段强制的「系统状态」「系统健康」直接撞车 → 换成旧计数块
   // 自己的标签文案(可复用能力 / 运行器资源)，反向意图(不摆原始计数块)不弱化。
   homeForbiddenTexts: ["Skills 1", "Plugins 1", "可复用能力", "运行器资源"],
-  primaryNavLabels: ["项目", "智能体", "想法箱", "知识库", "记忆层", "技能", "运行器", "实验画布"],
+  primaryNavLabels: ["项目", "智能体", "想法箱", "知识库", "记忆层", "技能", "harness", "实验画布"],
   primaryNavGlyphs: [
     ["projects", "▤"],
     ["agents", "◍"],
@@ -290,7 +290,7 @@ export const shellScenarioTextFixtures = {
   // 词表(2026-07-14 拍板)：产品域 UI 名 = harness，不译；「运行器」译名已废止 → 本页新写文案改用 harness，
   // 故删掉 "运行器能力库"/"运行器能力"/"可运行范围"/"最近运行"/"等待配置 / 不可用原因"(旧四列列名)
   // 和 "运行器类型"→"harness 类型"、"不自动运行运行器"→"不自动运行 harness"。
-  // ⚠️ 左导航 label 仍是「运行器」(workbenchNavigation.ts:42，别的范围)——由 primaryNavLabels 独立断言保住，未失守。
+  // 左导航 label 已同步为「harness」；由 primaryNavLabels 独立断言保住，未失守。
   // 「资源=文件夹级 / 候选=文件级」这个必须保留的区分：B1 化后靠过滤 chip + 详情脚注保住，断言保留。
   harnessExpectedTexts: [
     // 搜索框同上：placeholder 不是可见文本，不断。

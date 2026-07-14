@@ -1,8 +1,13 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "../components/Badge";
 import { EmptyState, FactRow, ListRow, SegTitle } from "../components/SpecPrimitives";
-import { displayStatus, listRowTimeLabel, runtimeLogCategoryLabel } from "../lib/format";
-import type { WorkbenchSnapshot, WorkflowStateSnapshot } from "../lib/types";
+import { displayStatus, formatDate, listRowTimeLabel, runtimeLogCategoryLabel } from "../lib/format";
+import {
+  queryAuditLedgerReadModel,
+  type AuditLedgerReadModel,
+  type AuditLedgerReadModelItem,
+} from "../lib/tauri";
+import type { WorkbenchSnapshot } from "../lib/types";
 import type { NavigationFocus } from "../lib/workbenchNavigation";
 
 // ④ 审计账本页（2026-07-15 施工）。
@@ -11,11 +16,15 @@ import type { NavigationFocus } from "../lib/workbenchNavigation";
 // 宪法 §六 回顾面：唯一问题=「我要找的那件事多快找到」→ B1 同构（工具条+过滤+列表+详情），
 //   永不打断、纯拉式。
 // DESIGN.md §三·五：「开发者详情」折叠废除后，运行编号/账本事件流等机器信息一律归本页——
-//   所以机器字段在本页的**详情栏**里是正主，不是违宪。
+//   所以机器字段在本页的详情栏里是正主，不是违宪。
 //
-// 数据边界（诚实声明）：后端审计账本读模型仍在接线（backend-ui-support-readmodels 包 §B）。
-// 本页只渲染现在真能拿到的三个来源，拿不到的字段留白写「未登记」，不编。
-type AuditLedgerFilter = "all" | "workitem" | "runtime" | "health";
+// 数据边界：B 是唯一的分页主流；运行日志和健康诊断保留为本地完整并列区，
+// 不与 B 混页、不把当前页搜索伪装成全局搜索。
+
+const LEDGER_PAGE_SIZE = 50;
+export const AUDIT_EVENT_NOT_IN_CURRENT_PAGE_MESSAGE = "目标事件不在最新一页(账本按时间倒序分页),可翻页查找";
+
+type ParallelAuditFilter = "all" | "runtime" | "health";
 
 type AuditLedgerFact = {
   k: string;
@@ -23,52 +32,99 @@ type AuditLedgerFact = {
   bad?: boolean;
 };
 
-type AuditLedgerRow = {
+export type AuditLedgerMainRow = {
   key: string;
-  kind: Exclude<AuditLedgerFilter, "all">;
+  item: AuditLedgerReadModelItem;
+};
+
+type ParallelAuditRow = {
+  key: string;
+  kind: Exclude<ParallelAuditFilter, "all">;
   badgeLabel: string;
   badgeTone: "neutral" | "candidate" | "warning" | "unknown";
   claim: string;
   timeLabel: string | null;
-  // 详情栏：事实行（左键右值）。
   facts: AuditLedgerFact[];
   boundary: string;
 };
 
 export function AuditLedgerView({
   snapshot,
-  workflowState,
-  workflowStateError,
   focus,
 }: {
   snapshot: WorkbenchSnapshot;
-  workflowState: WorkflowStateSnapshot | null;
-  workflowStateError?: string | null;
   // 「点击带上下文直达」：右栏抽屉点某一行 → 本页开在那一条上。
   focus?: NavigationFocus | null;
 }) {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<AuditLedgerFilter>("all");
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [kindFilter, setKindFilter] = useState("");
+  const [ledger, setLedger] = useState<AuditLedgerReadModel | null>(null);
+  const [ledgerLoading, setLedgerLoading] = useState(true);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const [selectedLedgerKey, setSelectedLedgerKey] = useState<string | null>(null);
+  const [parallelQuery, setParallelQuery] = useState("");
+  const [parallelFilter, setParallelFilter] = useState<ParallelAuditFilter>("all");
+  const [selectedParallelKey, setSelectedParallelKey] = useState<string | null>(null);
 
-  const allRows = buildAuditLedgerRows(snapshot, workflowState);
-  const rows = allRows
-    .filter((row) => (filter === "all" ? true : row.kind === filter))
-    .filter((row) => (query.trim() ? matchesQuery(row, query) : true));
+  useEffect(() => {
+    let active = true;
 
-  // 选中优先级：用户手点 > 导航带来的 focus > 列表第一条（B1 样板同款回落）。
-  const selected =
-    (selectedKey ? rows.find((row) => row.key === selectedKey) : null) ??
-    (focus ? rows.find((row) => row.key === focus.id) : null) ??
-    rows[0] ??
+    setLedger(null);
+    setLedgerLoading(true);
+    setLedgerError(null);
+    setSelectedLedgerKey(null);
+    void queryAuditLedgerReadModel({
+      page,
+      page_size: LEDGER_PAGE_SIZE,
+      kind_filter: kindFilter || undefined,
+    })
+      .then((nextLedger) => {
+        if (!active) return;
+        setLedger(nextLedger);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setLedgerError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (active) setLedgerLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [kindFilter, page, snapshot]);
+
+  const mainRows = useMemo(() => buildAuditLedgerMainRows(ledger?.items ?? []), [ledger?.items]);
+  const parallelRows = useMemo(() => buildParallelAuditRows(snapshot), [snapshot]);
+  const visibleParallelRows = useMemo(
+    () => filterParallelAuditRows(parallelRows, parallelFilter, parallelQuery),
+    [parallelFilter, parallelQuery, parallelRows],
+  );
+  const missingAuditEventFocus = isMissingAuditEventFocus(focus, mainRows, Boolean(ledger));
+  const focusedLedgerRow = focus?.kind === "audit-event" ? mainRows.find((row) => row.key === focus.id) ?? null : null;
+  const selectedLedger =
+    (selectedLedgerKey ? mainRows.find((row) => row.key === selectedLedgerKey) : null) ??
+    focusedLedgerRow ??
+    (missingAuditEventFocus ? null : mainRows[0] ?? null);
+  const selectedParallel =
+    (selectedParallelKey ? visibleParallelRows.find((row) => row.key === selectedParallelKey) : null) ??
+    (focus ? visibleParallelRows.find((row) => row.key === focus.id) : null) ??
+    visibleParallelRows[0] ??
     null;
+  const pageCount = ledger ? Math.max(1, Math.ceil(ledger.total / ledger.page_size)) : 1;
+  const canMoveForward = Boolean(ledger && (ledger.page + 1) * ledger.page_size < ledger.total);
 
-  const counts = {
-    all: allRows.length,
-    workitem: allRows.filter((row) => row.kind === "workitem").length,
-    runtime: allRows.filter((row) => row.kind === "runtime").length,
-    health: allRows.filter((row) => row.kind === "health").length,
-  };
+  function changeKindFilter(nextFilter: string) {
+    setKindFilter(nextFilter);
+    setPage(0);
+    setSelectedLedgerKey(null);
+  }
+
+  function changePage(nextPage: number) {
+    setPage(nextPage);
+    setSelectedLedgerKey(null);
+  }
 
   return (
     <section className="stage-pad audit-ledger" aria-label="审计账本">
@@ -77,127 +133,227 @@ export function AuditLedgerView({
         <h1>审计账本</h1>
       </div>
 
-      <div className="memory-b1-grid">
-        <section className="memory-center-panel" aria-label="审计流">
+      <div className="view-stack">
+        <div className="memory-b1-grid">
+          <section className="memory-center-panel" aria-label="账本主流">
+          <SegTitle>账本主流</SegTitle>
+          <div className="memory-b1-toolbar">
+            <label className="sr-only" htmlFor="audit-ledger-kind-filter">
+              账本类型过滤
+            </label>
+            <select
+              id="audit-ledger-kind-filter"
+              value={kindFilter}
+              onChange={(event) => changeKindFilter(event.target.value)}
+              aria-label="账本类型过滤"
+            >
+              <option value="">全部类型</option>
+              {(ledger?.kinds ?? []).map((kind) => (
+                <option key={kind} value={kind}>
+                  {kind}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="memory-b1-toolbar" aria-label="账本分页">
+            <button type="button" className="jiaoban-chip" disabled={!ledger || ledger.page === 0} onClick={() => changePage(page - 1)}>
+              上一页
+            </button>
+            <span className="muted small-note">{ledger ? "第 " + (ledger.page + 1) + " / " + pageCount + " 页" : "正在读取…"}</span>
+            <button type="button" className="jiaoban-chip" disabled={!canMoveForward} onClick={() => changePage(page + 1)}>
+              下一页
+            </button>
+          </div>
+          <div className="spec-scroll memory-b1-list audit-ledger-list" aria-label="账本主流列表">
+            {mainRows.map((row) => (
+              <ListRow
+                key={row.key}
+                badge={<Badge tone={row.item.event_type === "unknown" ? "warning" : "neutral"}>账本</Badge>}
+                claim={row.item.human_summary}
+                time={formatDate(row.item.at_ms)}
+                selected={selectedLedger?.key === row.key}
+                onSelect={() => setSelectedLedgerKey(row.key)}
+              />
+            ))}
+            {!ledgerLoading && !ledgerError && !mainRows.length ? <MainLedgerEmpty hasKindFilter={Boolean(kindFilter)} /> : null}
+          </div>
+          {ledger ? (
+            <p className="muted small-note">
+              过滤后共 {ledger.total} 条；按时间倒序，每页 {ledger.page_size} 条。
+            </p>
+          ) : null}
+          {ledger?.warnings.map((warning, index) => (
+            <p className="muted small-note" key={index + ":" + warning}>
+              账本读取提示：{warning}
+            </p>
+          ))}
+          {missingAuditEventFocus ? (
+            <p className="rail-error">{AUDIT_EVENT_NOT_IN_CURRENT_PAGE_MESSAGE}</p>
+          ) : null}
+          </section>
+
+          <section className="memory-center-panel memory-detail-panel" aria-label="账本主流详情">
+            {selectedLedger ? (
+              <MainLedgerDetail row={selectedLedger} />
+            ) : (
+              <EmptyState
+                what={ledgerLoading ? "账本正在读取" : "暂无可展示详情"}
+                next={missingAuditEventFocus ? "按时间倒序翻页查找目标事件" : "先在左侧账本主流选一条记录"}
+              />
+            )}
+          </section>
+        </div>
+
+        <div className="memory-b1-grid">
+          <section className="memory-center-panel" aria-label="并列运行与健康记录">
+          <SegTitle>运行日志与健康诊断</SegTitle>
           <div className="memory-b1-toolbar">
             <input
               type="text"
               className="jiaoban-session-search"
-              placeholder="搜账本…"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              aria-label="搜索审计账本"
+              placeholder="搜运行日志与健康诊断…"
+              value={parallelQuery}
+              onChange={(event) => setParallelQuery(event.target.value)}
+              aria-label="搜索运行日志与健康诊断"
             />
           </div>
-          <div className="memory-b1-toolbar" role="group" aria-label="账本过滤">
-            <button className={`jiaoban-chip ${filter === "all" ? "on" : ""}`} type="button" onClick={() => setFilter("all")}>
-              全部 {counts.all}
+          <div className="memory-b1-toolbar" role="group" aria-label="并列记录过滤">
+            <button
+              className={"jiaoban-chip " + (parallelFilter === "all" ? "on" : "")}
+              type="button"
+              onClick={() => setParallelFilter("all")}
+            >
+              全部 {parallelRows.length}
             </button>
-            <button className={`jiaoban-chip ${filter === "workitem" ? "on" : ""}`} type="button" onClick={() => setFilter("workitem")}>
-              工单账本 {counts.workitem}
+            <button
+              className={"jiaoban-chip " + (parallelFilter === "runtime" ? "on" : "")}
+              type="button"
+              onClick={() => setParallelFilter("runtime")}
+            >
+              运行日志 {parallelRows.filter((row) => row.kind === "runtime").length}
             </button>
-            <button className={`jiaoban-chip ${filter === "runtime" ? "on" : ""}`} type="button" onClick={() => setFilter("runtime")}>
-              运行日志 {counts.runtime}
-            </button>
-            <button className={`jiaoban-chip ${filter === "health" ? "on" : ""}`} type="button" onClick={() => setFilter("health")}>
-              健康诊断 {counts.health}
+            <button
+              className={"jiaoban-chip " + (parallelFilter === "health" ? "on" : "")}
+              type="button"
+              onClick={() => setParallelFilter("health")}
+            >
+              健康诊断 {parallelRows.filter((row) => row.kind === "health").length}
             </button>
           </div>
-          <div className="spec-scroll memory-b1-list audit-ledger-list" aria-label="审计流列表">
-            {rows.map((row) => (
+          <div className="spec-scroll memory-b1-list audit-ledger-list" aria-label="并列记录列表">
+            {visibleParallelRows.map((row) => (
               <ListRow
                 key={row.key}
                 badge={<Badge tone={row.badgeTone}>{row.badgeLabel}</Badge>}
                 claim={row.claim}
                 time={row.timeLabel ?? "时间未登记"}
-                selected={selected?.key === row.key}
-                onSelect={() => setSelectedKey(row.key)}
+                selected={selectedParallel?.key === row.key}
+                onSelect={() => setSelectedParallelKey(row.key)}
               />
             ))}
-            {!rows.length ? <AuditLedgerEmpty hasAnyRow={allRows.length > 0} querying={Boolean(query.trim())} /> : null}
+            {!visibleParallelRows.length ? <ParallelLedgerEmpty hasAnyRow={parallelRows.length > 0} querying={Boolean(parallelQuery.trim())} /> : null}
           </div>
-        </section>
+          <p className="muted small-note">共 {parallelRows.length} 条，本地完整展示，不参与账本主流分页。</p>
+          </section>
 
-        <section className="memory-center-panel memory-detail-panel" aria-label="账本详情">
-          {selected ? (
-            <>
-              <SegTitle>{selected.badgeLabel}</SegTitle>
-              <p className="audit-ledger-claim">{selected.claim}</p>
-              {selected.facts.map((fact) => (
-                <FactRow k={fact.k} key={fact.k} bad={fact.bad}>
-                  {fact.v}
-                </FactRow>
-              ))}
-              <p className="muted small-note">{selected.boundary}</p>
-            </>
-          ) : (
-            <EmptyState what="暂无可展示详情" next="先在左侧选一条账本记录；列表为空时，去项目页交办一单活，跑起来就会记账" />
-          )}
-        </section>
+          <section className="memory-center-panel memory-detail-panel" aria-label="并列记录详情">
+            {selectedParallel ? (
+              <ParallelLedgerDetail row={selectedParallel} />
+            ) : (
+              <EmptyState what="暂无可展示详情" next="先在左侧运行日志与健康诊断中选一条记录" />
+            )}
+          </section>
+        </div>
       </div>
 
-      {workflowStateError ? <p className="rail-error">工单账本读取失败：{workflowStateError}</p> : null}
+      {ledgerError ? <p className="rail-error">账本主流读取失败：{ledgerError}</p> : null}
       <p className="muted small-note">
-        账本只记账、不改事实：这里不重跑、不批准、不修状态。完整账本读模型还在接线，当前只显示工单状态变化、运行日志和健康诊断三个已能读到的来源。
+        账本只记账、不改事实：这里不重跑、不批准、不修状态。账本主流只读 B 聚合流；运行日志和健康诊断保持独立并列，不混入其分页或总数。
       </p>
     </section>
   );
 }
 
-// 空态（宪法 D7：必答「下一步做什么」，不许只说"这里没有东西"）。
-function AuditLedgerEmpty({ hasAnyRow, querying }: { hasAnyRow: boolean; querying: boolean }) {
-  if (querying) return <EmptyState what="没有匹配的账本记录" next="换个词试试，或把过滤切回「全部」" />;
-  if (hasAnyRow) return <EmptyState what="这一类暂无记录" next="把过滤切回「全部」看其它类别" />;
-  return <EmptyState what="账本还没有记录" next="去项目页交办一单活；派发、运行和复核都会自动记账到这里" />;
-}
+function MainLedgerDetail({ row }: { row: AuditLedgerMainRow }) {
+  const { item } = row;
 
-function matchesQuery(row: AuditLedgerRow, query: string): boolean {
-  const needle = query.trim().toLowerCase();
-  if (row.claim.toLowerCase().includes(needle)) return true;
-  if (row.badgeLabel.toLowerCase().includes(needle)) return true;
-  return row.facts.some((fact) => fact.v.toLowerCase().includes(needle));
-}
-
-// 三个现成可得来源。后端账本读模型就绪后，这里换成读那一个读模型即可（行形状不变）。
-function buildAuditLedgerRows(
-  snapshot: WorkbenchSnapshot,
-  workflowState: WorkflowStateSnapshot | null,
-): AuditLedgerRow[] {
-  const workItemRows: AuditLedgerRow[] = (workflowState?.project_workflows ?? []).flatMap((workflow) =>
-    workflow.task_drafts.flatMap((task) =>
-      task.recent_audit_events.map((event) => {
-        const transition = `${displayStatus(event.before_state)} → ${displayStatus(event.after_state)}`;
-        const failed = event.after_state === "failed";
-        return {
-          key: `audit-event:${event.event_id}`,
-          kind: "workitem" as const,
-          badgeLabel: "工单账本",
-          badgeTone: failed ? ("warning" as const) : ("candidate" as const),
-          // 一句人话：优先账本自带的 reason；没有就退成状态变化，不把 event_type 摆上脸。
-          claim: `${task.title}：${event.reason || transition}`,
-          timeLabel: listRowTimeLabel(event.created_at),
-          facts: [
-            { k: "工单", v: task.title },
-            { k: "变化", v: transition, bad: failed },
-            { k: "原因", v: event.reason || "未登记" },
-            { k: "工作流", v: workflow.title || "未登记" },
-            { k: "项目", v: workflow.project_root || "未登记" },
-            { k: "时间", v: event.created_at || "未登记" },
-            // 机器字段：本页就是它们的归处（DESIGN.md §三·五），故上脸不违宪。
-            { k: "事件类型", v: event.event_type },
-            { k: "事件编号", v: event.event_id },
-            { k: "工作项编号", v: task.work_item_id },
-          ],
-          boundary: "账本只记录已经发生的状态变化；在这里看不改任何事实，重跑或复核仍回项目页。",
-        };
-      }),
-    ),
+  return (
+    <article>
+      <SegTitle>账本记录</SegTitle>
+      <p className="audit-ledger-claim">{item.human_summary}</p>
+      <FactRow k="时间">{formatDate(item.at_ms)}</FactRow>
+      <FactRow k="来源">{item.source}</FactRow>
+      <FactRow k="事件类型">{item.event_type}</FactRow>
+      <FactRow k="归属对象">{item.target_ref || "未登记"}</FactRow>
+      <details className="agent-boundary-details">
+        <summary>查看原始记录</summary>
+        <pre className="task-preview-code">{rawJsonText(item.raw_json)}</pre>
+      </details>
+      <p className="muted small-note">本页只展示已发生的账本事实；原始机器字段只在此处下钻，不参与卡面主显示。</p>
+    </article>
   );
+}
 
-  const runtimeRows: AuditLedgerRow[] = snapshot.runtime_log_store.entries
+function ParallelLedgerDetail({ row }: { row: ParallelAuditRow }) {
+  return (
+    <article>
+      <SegTitle>{row.badgeLabel}</SegTitle>
+      <p className="audit-ledger-claim">{row.claim}</p>
+      {row.facts.map((fact) => (
+        <FactRow k={fact.k} key={fact.k} bad={fact.bad}>
+          {fact.v}
+        </FactRow>
+      ))}
+      <p className="muted small-note">{row.boundary}</p>
+    </article>
+  );
+}
+
+function MainLedgerEmpty({ hasKindFilter }: { hasKindFilter: boolean }) {
+  return (
+    <EmptyState
+      what={hasKindFilter ? "这个类型暂无账本记录" : "账本还没有记录"}
+      next={hasKindFilter ? "换一个类型或切回「全部类型」" : "去项目页交办一单活；派发、运行和复核都会自动记账到这里"}
+    />
+  );
+}
+
+function ParallelLedgerEmpty({ hasAnyRow, querying }: { hasAnyRow: boolean; querying: boolean }) {
+  if (querying) return <EmptyState what="没有匹配的并列记录" next="换个词试试，或清空搜索" />;
+  if (hasAnyRow) return <EmptyState what="这一类暂无记录" next="把过滤切回「全部」看其它类别" />;
+  return <EmptyState what="暂无运行日志或健康诊断" next="运行状态变化后会在这里留下独立记录" />;
+}
+
+export function buildAuditLedgerMainRows(items: AuditLedgerReadModelItem[]): AuditLedgerMainRow[] {
+  return items.map((item, index) => ({
+    key: auditLedgerItemKey(item, index),
+    item,
+  }));
+}
+
+export function isMissingAuditEventFocus(
+  focus: NavigationFocus | null | undefined,
+  rows: AuditLedgerMainRow[],
+  loaded: boolean,
+): boolean {
+  return Boolean(loaded && focus?.kind === "audit-event" && !rows.some((row) => row.key === focus.id));
+}
+
+function auditLedgerItemKey(item: AuditLedgerReadModelItem, index: number): string {
+  // 右栏旧工单事件来自 workflow_state.audit_events，B 的同源项才能按 event_id 精确命中。
+  // target_ref 是工单/工作流/运行对象，绝不能拿它猜事件编号。
+  const eventId =
+    item.source === "workflow_state" ? rawJsonString(item.raw_json, "event_id") ?? rawJsonString(item.raw_json, "audit_event_id") : null;
+  return eventId
+    ? "audit-event:" + eventId
+    : "audit-ledger:" + item.source + ":" + item.event_type + ":" + item.at_ms + ":" + index;
+}
+
+function buildParallelAuditRows(snapshot: WorkbenchSnapshot): ParallelAuditRow[] {
+  const runtimeRows: ParallelAuditRow[] = snapshot.runtime_log_store.entries
     .filter((entry) => entry.user_visible)
     .map((entry) => ({
-      key: `runtime-log:${entry.entry_id}`,
+      key: "runtime-log:" + entry.entry_id,
       kind: "runtime" as const,
       badgeLabel: runtimeLogCategoryLabel(entry.category),
       badgeTone: entry.severity === "error" ? ("warning" as const) : entry.severity === "warning" ? ("warning" as const) : ("neutral" as const),
@@ -210,21 +366,21 @@ function buildAuditLedgerRows(
         { k: "详情", v: entry.detail || "未登记" },
         { k: "开始", v: entry.started_at || "未登记" },
         { k: "结束", v: entry.finished_at || "未登记" },
-        { k: "耗时", v: entry.duration_ms === null || entry.duration_ms === undefined ? "未登记" : `${entry.duration_ms} 毫秒` },
+        { k: "耗时", v: entry.duration_ms === null || entry.duration_ms === undefined ? "未登记" : String(entry.duration_ms) + " 毫秒" },
         { k: "脱敏", v: entry.redaction_status === "redacted_safe_summary" ? "已脱敏摘要" : displayStatus(entry.redaction_status) },
-        { k: "省略的敏感内容", v: entry.sensitive_omissions.length ? `${entry.sensitive_omissions.length} 处` : "无" },
+        { k: "省略的敏感内容", v: entry.sensitive_omissions.length ? String(entry.sensitive_omissions.length) + " 处" : "无" },
         { k: "审计引用", v: entry.audit_refs.length ? entry.audit_refs.join(" / ") : "无" },
         { k: "条目编号", v: entry.entry_id },
       ],
       boundary: snapshot.runtime_log_store.boundary.separation_rule,
     }));
 
-  const healthRows: AuditLedgerRow[] = snapshot.diagnostic_summary.degraded_states.map((state) => ({
-    key: `degraded-state:${state.state_id}`,
+  const healthRows: ParallelAuditRow[] = snapshot.diagnostic_summary.degraded_states.map((state) => ({
+    key: "degraded-state:" + state.state_id,
     kind: "health" as const,
     badgeLabel: "健康诊断",
     badgeTone: state.blocks_real_execution ? ("warning" as const) : ("unknown" as const),
-    claim: `${state.title}：${state.summary}`,
+    claim: state.title + "：" + state.summary,
     // ServiceDegradedState 没有时间字段（后端未提供）→ 留白，不编。
     timeLabel: null,
     facts: [
@@ -239,5 +395,33 @@ function buildAuditLedgerRows(
     boundary: "健康诊断只解释问题，不自动修复、不自动重试、不调用供应方。",
   }));
 
-  return [...workItemRows, ...runtimeRows, ...healthRows];
+  return [...runtimeRows, ...healthRows];
+}
+
+function filterParallelAuditRows(rows: ParallelAuditRow[], filter: ParallelAuditFilter, query: string): ParallelAuditRow[] {
+  const needle = query.trim().toLowerCase();
+  return rows
+    .filter((row) => (filter === "all" ? true : row.kind === filter))
+    .filter((row) => {
+      if (!needle) return true;
+      return (
+        row.claim.toLowerCase().includes(needle) ||
+        row.badgeLabel.toLowerCase().includes(needle) ||
+        row.facts.some((fact) => fact.v.toLowerCase().includes(needle))
+      );
+    });
+}
+
+function rawJsonString(rawJson: unknown, key: string): string | null {
+  if (!rawJson || typeof rawJson !== "object" || Array.isArray(rawJson)) return null;
+  const value = (rawJson as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function rawJsonText(rawJson: unknown): string {
+  try {
+    return JSON.stringify(rawJson, null, 2) ?? String(rawJson);
+  } catch {
+    return String(rawJson);
+  }
 }

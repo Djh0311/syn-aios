@@ -23,6 +23,7 @@ export type HomeSystemStatusReadModel = {
   last_degradation?: { at_ms: number; reason_human: string } | null;
   recent_catches: { at_ms: number; summary: string }[];
   gate_summary?: string | null;
+  warnings: string[];
 };
 
 type HomeViewProps = {
@@ -213,8 +214,15 @@ export function HomeView({
 
         <HomeBlock label="系统状态">
           <FactRow k="存储">{systemStatus ? storageModeLabel(systemStatus.storage_mode) : NOT_WIRED}</FactRow>
+          <FactRow k="观察期">{systemStatus ? observationDayLabel(systemStatus.observation_day) : NOT_WIRED}</FactRow>
+          {systemStatus?.last_degradation ? <FactRow k="上次降级">{systemStatus.last_degradation.reason_human}</FactRow> : null}
           <FactRow k="安全闸">{systemStatus?.gate_summary || (systemStatus ? "没有额外解封，按默认闸走" : NOT_WIRED)}</FactRow>
           <FactRow k="最近拦截">{recentCatchLabel(systemStatus)}</FactRow>
+          {systemStatus?.warnings.map((warning, index) => (
+            <p className="muted small-note" key={`${warning}:${index}`}>
+              {warning}
+            </p>
+          ))}
           {systemStatus ? null : (
             <EmptyState what="系统状态读模型还没接上" next="后端读模型接上后这里显示存储、安全闸和最近拦截" />
           )}
@@ -271,9 +279,13 @@ function storageHealthLabel(status: HomeSystemStatusReadModel) {
 }
 
 function systemHealthDetail(status: HomeSystemStatusReadModel) {
-  const parts = [`存储 ${storageModeLabel(status.storage_mode)}`, `观察期第 ${status.observation_day} 天`];
+  const parts = [`存储 ${storageModeLabel(status.storage_mode)}`, observationDayLabel(status.observation_day)];
   if (status.last_degradation) parts.push(`上次降级：${status.last_degradation.reason_human}`);
   return parts.join(" · ");
+}
+
+function observationDayLabel(day: number) {
+  return day === 0 ? "未进入观察期" : `观察期第 ${day} 天`;
 }
 
 // 「最近拦截」后端注明「可先空实现留形状」→ 这里留形状 + 空态:
