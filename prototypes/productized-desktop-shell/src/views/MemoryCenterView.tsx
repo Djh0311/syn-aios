@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Badge } from "../components/Badge";
+import { EmptyState, ListRow } from "../components/SpecPrimitives";
 import { DailyMemoryCandidateInbox } from "../components/DailyMemoryCandidateInbox";
 import { deriveMemoryManagementSummary, type FormalMemoryListItem } from "../lib/memoryCenter";
 import {
@@ -44,10 +45,8 @@ import {
 import { CandidateMemoryDetail, FormalMemoryDetail, operationLabel } from "./memory/MemoryDetailPanels";
 import {
   AcceptanceSummaryItem,
-  CandidateMemoryItem,
   ConfirmedRelationItem,
   EntityCandidateItem,
-  FormalMemoryItem,
   MaturePatternCandidateItem,
   MemoryClusterReportItem,
   MergeCandidateItem,
@@ -135,6 +134,9 @@ export function MemoryCenterView({
   const [selectedFormalMemoryId, setSelectedFormalMemoryId] = useState<string | null>(null);
   const [selectedCandidateKey, setSelectedCandidateKey] = useState<string | null>(null);
   const [inboxShowAll, setInboxShowAll] = useState(false);
+  // B1 定稿(2026-07-15 施工):左列表统一搜索+过滤(回顾面「多快找到」)。
+  const [memoryQuery, setMemoryQuery] = useState("");
+  const [memoryFilter, setMemoryFilter] = useState<"all" | "candidate" | "formal">("all");
   // 批2·P0修复:高级治理区八处硬截断统一走「显示全部」开关(此前第N+1条起永久不可达且无提示)。
   const [advancedShowAll, setAdvancedShowAll] = useState(false);
   function capped<T>(items: T[], limit: number): T[] {
@@ -155,6 +157,27 @@ export function MemoryCenterView({
   const primaryCandidateRecord = primaryCandidate
     ? memoryCandidateStore?.candidates.find((candidate) => candidate.candidate_key === primaryCandidate.candidate_key) ?? null
     : null;
+  // B1 定稿:正式+候选合并为一列(徽章区分),搜索按 claim 过滤。
+  const memoryRows = [
+    ...summary.candidate_memories.map((item) => ({
+      key: `c:${item.candidate_key}`,
+      kind: "candidate" as const,
+      claim: item.claim,
+      badgeLabel: item.status_label,
+      selected: primaryCandidate?.candidate_key === item.candidate_key,
+      onSelect: () => setSelectedCandidateKey(item.candidate_key),
+    })),
+    ...summary.formal_memories.map((item) => ({
+      key: `f:${item.memory_id}`,
+      kind: "formal" as const,
+      claim: item.claim,
+      badgeLabel: item.status_label,
+      selected: primaryFormalMemory?.memory_id === item.memory_id,
+      onSelect: () => setSelectedFormalMemoryId(item.memory_id),
+    })),
+  ]
+    .filter((row) => (memoryFilter === "all" ? true : row.kind === memoryFilter))
+    .filter((row) => (memoryQuery.trim() ? row.claim.toLowerCase().includes(memoryQuery.trim().toLowerCase()) : true));
   const dailyMemoryInbox = deriveDailyMemoryCandidateInbox({ memoryCandidateStore });
   const dailyProjectRoot = primaryProjectRoot(projects) ?? "workbench://memory-center";
   const pageReadModel = useMemo(
@@ -425,84 +448,80 @@ export function MemoryCenterView({
       <div className="memory-center-grid">
         <MemoryWorkbenchSummary pageReadModel={pageReadModel} summary={summary} />
 
-        <section className="memory-center-panel formal-memory-panel" aria-label="正式记忆列表">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">正式记忆</p>
-              <h3>来源 / 版本 / 审计</h3>
-            </div>
-            <Badge tone="candidate">{summary.formal_memories.length}</Badge>
-          </div>
-          <div className="workflow-compact-list">
-            {summary.formal_memories.map((item) => (
-              <FormalMemoryItem
-                item={item}
-                key={item.memory_id}
-                selected={primaryFormalMemory?.memory_id === item.memory_id}
-                onSelect={() => setSelectedFormalMemoryId(item.memory_id)}
+        <div className="memory-b1-grid">
+          <section className="memory-center-panel" aria-label="记忆列表">
+            <div className="memory-b1-toolbar">
+              <input
+                type="text"
+                className="jiaoban-session-search"
+                placeholder="搜记忆…"
+                value={memoryQuery}
+                onChange={(event) => setMemoryQuery(event.target.value)}
+                aria-label="搜索记忆"
               />
-            ))}
-            {!summary.formal_memories.length ? <p className="muted small-note">暂无正式记忆；交货时点[属实,沉淀]产生候选，采纳后才会出现在这里。</p> : null}
-          </div>
-        </section>
-
-        <section className="memory-center-panel candidate-memory-panel" aria-label="候选记忆列表">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">候选记忆</p>
-              <h3>风险 / 确认 / 采纳回链</h3>
             </div>
-            <Badge tone={summary.candidate_memories.length ? "warning" : "unknown"}>{summary.candidate_memories.length}</Badge>
-          </div>
-          <DailyMemoryCandidateInbox
-            inbox={dailyMemoryInbox}
-            projectRoot={dailyProjectRoot}
-            candidateStoreRevision={memoryCandidateStore?.revision ?? null}
-            formalStoreRevision={formalMemoryStore?.revision ?? null}
-            onRequestAction={onRequestAction}
-            showAll={inboxShowAll}
-            onShowAll={() => setInboxShowAll(true)}
-          />
-          <div className="workflow-compact-list">
-            {summary.candidate_memories.map((item) => (
-              <CandidateMemoryItem
-                item={item}
-                key={item.candidate_key}
-                selected={primaryCandidate?.candidate_key === item.candidate_key}
-                onSelect={() => setSelectedCandidateKey(item.candidate_key)}
+            <div className="memory-b1-toolbar" role="group" aria-label="记忆过滤">
+              <button className={`jiaoban-chip ${memoryFilter === "all" ? "on" : ""}`} type="button" onClick={() => setMemoryFilter("all")}>
+                全部 {summary.candidate_memories.length + summary.formal_memories.length}
+              </button>
+              <button className={`jiaoban-chip ${memoryFilter === "candidate" ? "on" : ""}`} type="button" onClick={() => setMemoryFilter("candidate")}>
+                候选 {summary.candidate_memories.length}
+              </button>
+              <button className={`jiaoban-chip ${memoryFilter === "formal" ? "on" : ""}`} type="button" onClick={() => setMemoryFilter("formal")}>
+                正式 {summary.formal_memories.length}
+              </button>
+            </div>
+            <DailyMemoryCandidateInbox
+              inbox={dailyMemoryInbox}
+              projectRoot={dailyProjectRoot}
+              candidateStoreRevision={memoryCandidateStore?.revision ?? null}
+              formalStoreRevision={formalMemoryStore?.revision ?? null}
+              onRequestAction={onRequestAction}
+              showAll={inboxShowAll}
+              onShowAll={() => setInboxShowAll(true)}
+            />
+            <div className="spec-scroll memory-b1-list" aria-label="记忆条目(候选+正式)">
+              {memoryRows.map((row) => (
+                <ListRow
+                  key={row.key}
+                  badge={<Badge tone={row.kind === "candidate" ? "warning" : "candidate"}>{row.kind === "candidate" ? `候选·${row.badgeLabel}` : row.badgeLabel}</Badge>}
+                  claim={row.claim}
+                  selected={row.selected}
+                  onSelect={row.onSelect}
+                />
+              ))}
+              {!memoryRows.length ? (
+                <EmptyState
+                  what={memoryQuery.trim() ? "没有匹配的记忆" : "暂无记忆"}
+                  next={memoryQuery.trim() ? "换个词试试" : "去项目页交办一单活,交货时点[属实,沉淀]攒第一条"}
+                />
+              ) : null}
+            </div>
+          </section>
+
+          <section className="memory-center-panel memory-detail-panel" aria-label="记忆详情">
+            {primaryFormalMemory ? (
+              <FormalMemoryDetail
+                item={primaryFormalMemory}
+                busyKind={previewingKind}
+                error={lifecycleError}
+                onLifecycleAction={(operationKind) => void requestLifecycleAction(primaryFormalMemory, operationKind)}
               />
-            ))}
-            {!summary.candidate_memories.length ? <p className="muted small-note">暂无候选记忆；去项目页交办一单活，交货时点[属实,沉淀]就会出现在这里。</p> : null}
-          </div>
-        </section>
-
-        <section className="memory-center-panel memory-detail-panel" aria-label="记忆详情">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">详情</p>
-              <h3>入包资格 / 冲突 / 边界</h3>
-            </div>
-            <Badge tone="neutral">受控</Badge>
-          </div>
-          {primaryFormalMemory ? (
-            <FormalMemoryDetail
-              item={primaryFormalMemory}
-              busyKind={previewingKind}
-              error={lifecycleError}
-              onLifecycleAction={(operationKind) => void requestLifecycleAction(primaryFormalMemory, operationKind)}
-            />
-          ) : null}
-          {primaryCandidate ? (
-            <CandidateMemoryDetail
-              item={primaryCandidate}
-              canConfirm={primaryCandidateRecord?.status === "candidate_needs_review"}
-              canAdopt={primaryCandidateRecord?.status === "candidate_confirmed" && !primaryCandidateRecord.adoption}
-              onConfirm={onRequestAction ? requestCandidateConfirmation : undefined}
-              onAdopt={onRequestAction ? requestCandidateAdoption : undefined}
-            />
-          ) : null}
-          {!primaryFormalMemory && !primaryCandidate ? <p className="muted small-note">暂无可展示详情；先在左侧列表选一条记忆或候选（列表为空时，去项目页交办一单活攒第一条）。</p> : null}
-        </section>
+            ) : null}
+            {primaryCandidate ? (
+              <CandidateMemoryDetail
+                item={primaryCandidate}
+                canConfirm={primaryCandidateRecord?.status === "candidate_needs_review"}
+                canAdopt={primaryCandidateRecord?.status === "candidate_confirmed" && !primaryCandidateRecord.adoption}
+                onConfirm={onRequestAction ? requestCandidateConfirmation : undefined}
+                onAdopt={onRequestAction ? requestCandidateAdoption : undefined}
+              />
+            ) : null}
+            {!primaryFormalMemory && !primaryCandidate ? (
+              <EmptyState what="暂无可展示详情" next="先在左侧列表选一条记忆或候选(列表为空时,去项目页交办一单活)" />
+            ) : null}
+          </section>
+        </div>
 
         <details className="memory-advanced-details">
           <summary className="memory-advanced-summary">高级治理 / 诊断</summary>

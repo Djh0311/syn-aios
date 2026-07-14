@@ -10443,3 +10443,33 @@ textarea {
 .workflow-compact-item.is-selectable { cursor: pointer; }
 .workflow-compact-item.is-selectable:hover { border-color: var(--accent); }
 .workflow-compact-item.is-selected { border-color: var(--accent); background: var(--accent-bg); }
+
+/* ===== 设计系统基座(2026-07-15·定式组件 SpecPrimitives 配套;正本=DESIGN.md 信息规范) ===== */
+.spec-fact-row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--bg-subtle); font-variant-numeric: tabular-nums; font-size: var(--text-sm); }
+.spec-fact-k { color: var(--muted); flex-shrink: 0; }
+.spec-fact-v { text-align: right; min-width: 0; word-break: break-all; }
+.spec-bad { color: var(--danger); }
+.spec-seg-title { font-size: var(--text-sm); font-weight: 600; color: var(--ink-mid); margin: 8px 0 3px; }
+.spec-pill-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 8px; }
+.spec-pill { font-size: var(--text-xs); padding: 2px 9px; border-radius: 999px; background: var(--panel-soft); color: var(--muted); }
+.spec-pill-ok { background: var(--accent-bg); color: var(--accent-strong); }
+.spec-pill-warn { background: var(--warning-bg); color: var(--warning); }
+.spec-pill-run { background: var(--run-bg); color: var(--run); }
+.spec-list-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--bg-subtle); font-size: var(--text-sm); }
+.spec-list-row.is-selectable { cursor: pointer; }
+.spec-list-row.is-selectable:hover { background: var(--panel-soft); }
+.spec-list-row.is-selected { background: var(--accent-bg); outline: 1.5px solid var(--accent); border-radius: 6px; }
+.spec-list-badge { flex-shrink: 0; }
+.spec-list-claim { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spec-list-time { font-size: var(--text-xs); color: var(--muted); flex-shrink: 0; }
+.spec-empty { line-height: 1.7; }
+.spec-expand { margin: 6px 0 0; }
+
+/* 壳固定布局基座:页面永不整体滚,滚动只在 .spec-scroll 容器内(布局总纲·用户拍)。 */
+.spec-fill { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.spec-scroll { overflow-y: auto; min-height: 0; }
+
+/* B1 定稿·记忆中心双栏(左列表+右详情;列表容器内滚)。 */
+.memory-b1-grid { display: grid; grid-template-columns: minmax(320px, 2fr) 3fr; gap: 12px; align-items: start; }
+.memory-b1-toolbar { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+.memory-b1-list { max-height: 420px; border-top: 1px solid var(--bg-subtle); }
