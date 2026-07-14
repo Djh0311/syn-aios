@@ -1574,6 +1574,7 @@ function ProjectJiaobanPanelBrowser({
               sessionChoice={sessionChoice}
               latestSessionThreadId={latestSessionThreadId}
               onOpenAgentSession={onOpenAgentSession}
+              derivedWorkflow={projectWorkflow?.derived_workflow ?? null}
               supervisorLoading={supervisorLoading}
               supervisorOutcome={supervisorReview?.outcome ?? null}
               onSupervisorRetry={() => {

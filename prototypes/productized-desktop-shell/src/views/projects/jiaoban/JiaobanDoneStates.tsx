@@ -9,9 +9,92 @@ import type {
   GlobalSupervisorReviewOutcome,
   PendingAction,
   ProjectWorkflowChainStatus,
+  Workflow,
+  WorkflowStateSnapshot,
 } from "../../../lib/types";
+import { dedupeUiStrings } from "../ProjectWorkflowExecutionHelpers";
 import { JiaobanNeedsReworkDisposal } from "./JiaobanBlockedStates";
 import { JiaobanRawSessionLink } from "./jiaobanSessionParts";
+
+// 批1尾件·证据单一真源(用户 07-14 拍「交货证据该在交办页」):交办交货卡渲染主份,
+// 工作流页 C6 卡引同一组件(批5 退役它时删引用即可)。数据全空=零渲染,不占屏。
+export type JiaobanDerivedWorkflow =
+  | NonNullable<WorkflowStateSnapshot["project_workflows"][number]["derived_workflow"]>
+  | Workflow
+  | null;
+
+export function deriveAcceptanceEvidence(derivedWorkflow: JiaobanDerivedWorkflow) {
+  const resultSummary = derivedWorkflow?.result_summary ?? null;
+  const stageSummary = resultSummary?.stage_c_acceptance ?? null;
+  const c5Issues = [
+    ...(derivedWorkflow?.subagent_reports ?? []).flatMap((report) => report.open_issues),
+    ...(derivedWorkflow?.subagent_reports ?? []).flatMap((report) => report.direction_risks),
+  ].filter(Boolean);
+  const openItems = dedupeUiStrings([
+    ...(resultSummary?.open_issues ?? []),
+    ...(stageSummary?.open_blockers ?? []),
+    ...c5Issues,
+  ]);
+  const deferredItems = dedupeUiStrings(resultSummary?.deferred_items ?? stageSummary?.deferred_items ?? []);
+  return { resultSummary, stageSummary, openItems, deferredItems };
+}
+
+export function JiaobanAcceptanceEvidence({ derivedWorkflow }: { derivedWorkflow: JiaobanDerivedWorkflow }) {
+  const { stageSummary, openItems, deferredItems } = deriveAcceptanceEvidence(derivedWorkflow);
+  if (!stageSummary && !openItems.length && !deferredItems.length) return null;
+  return (
+    <>
+      {stageSummary ? (
+        <div className="dispatch-result-card" aria-label="验收门禁逐项">
+          <strong>验收门禁</strong>
+          <ul className="jiaoban-step-report" aria-label="每道门禁的结论">
+            {stageSummary.gates.map((gate) => {
+              const tone =
+                gate.status === "passed" ? "green" : gate.status === "blocked" ? "red" : gate.status === "deferred" ? "gray" : "yellow";
+              const word =
+                gate.status === "passed"
+                  ? "✓ 过"
+                  : gate.status === "blocked"
+                    ? "✗ 卡住"
+                    : gate.status === "needs_changes"
+                      ? "⚠ 要改"
+                      : gate.status === "deferred"
+                        ? "后置"
+                        : "⚠ 缺证据";
+              return (
+                <li key={gate.gate_id} className={`jiaoban-step-row tone-${tone}`}>
+                  <span className="jiaoban-step-title">{gate.label}</span>
+                  {gate.reason ? <span className="jiaoban-step-say">{gate.reason}</span> : null}
+                  <span className={`jiaoban-step-badge tone-${tone}`}>{word}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+      {openItems.length ? (
+        <div className="dispatch-result-card" aria-label="未决项">
+          <strong>还没解决的（{openItems.length}）</strong>
+          <ul className="jiaoban-warnings" aria-label="未决项明细">
+            {openItems.map((item, index) => (
+              <li key={index}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {deferredItems.length ? (
+        <div className="dispatch-result-card" aria-label="后置项">
+          <strong>说好以后做的（{deferredItems.length}）</strong>
+          <ul className="jiaoban-warnings" aria-label="后置项明细">
+            {deferredItems.map((item, index) => (
+              <li key={index}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
+  );
+}
 
 // 刀A·口供上脸：单步徽章判定。执行态(failed/skipped)优先于自述；completed 才看 worker 口供。
 export type StepReportFlag = {
@@ -266,6 +349,7 @@ export function JiaobanDoneState({
   supervisorOutcome,
   onSupervisorRetry,
   onSupervisorReplan,
+  derivedWorkflow = null,
 }: {
   outcome: AutoAdvanceRoleLoopOutcome | null;
   chainStatus: ProjectWorkflowChainStatus | null;
@@ -286,6 +370,8 @@ export function JiaobanDoneState({
   supervisorOutcome: GlobalSupervisorReviewOutcome | null;
   onSupervisorRetry: () => void;
   onSupervisorReplan: () => void;
+  // 批1尾件·验收证据主份(门禁✓✗/未决/后置)——数据空=零渲染;可不传(mock/旧调用点安全)。
+  derivedWorkflow?: JiaobanDerivedWorkflow;
 }) {
   const chain = outcome?.chain_outcome ?? null;
   const isCompleted =
@@ -359,6 +445,8 @@ export function JiaobanDoneState({
           onAction={onNeedsReworkAction}
         />
       ) : null}
+      {/* 批1尾件·验收证据主份:门禁逐项✓✗+未决+后置(交办交货卡=唯一主脸;数据空=零渲染)。 */}
+      <JiaobanAcceptanceEvidence derivedWorkflow={derivedWorkflow} />
       {/* B1：全局主管复核区——交货后 async 后填（loading/意见/不可用+重试），不挡上面交货内容。 */}
       <JiaobanSupervisorReviewSection
         loading={supervisorLoading}
