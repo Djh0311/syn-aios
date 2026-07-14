@@ -14,6 +14,13 @@ use std::sync::{Mutex, OnceLock};
 #[path = "workbench_sqlite_storage_mode_m5c.rs"]
 mod m5c;
 
+// A·只读访问器（系统状态读模型用）。单独成文件而非挂在本文件里：本文件已贴着 shape gate 的
+// 3000 行上限（加 16 行就破线·gate 当场抓到），故照 m5c 先例拆子模块。
+#[path = "workbench_sqlite_storage_mode_read_model.rs"]
+mod read_model;
+
+pub(crate) use read_model::db_primary_health_snapshot;
+
 pub(crate) const STORAGE_MODE_SCHEMA_VERSION: &str = "storage-mode.v1";
 pub(crate) const STORAGE_MODE_FILE_NAME: &str = "storage-mode.v1.json";
 const JSON_ONLY: &str = "json_only";

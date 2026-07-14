@@ -20,6 +20,14 @@ mod secretary_agent;
 // 工作历史·后端读模型（纯只读·跨店按 workflow+时间窗拼单列表）；命令 list_project_run_history 进 generate_handler!。
 mod run_history_read_model;
 
+// A·系统状态读模型（首页系统状态区块 + 顶栏健康点·纯只读·零写点）；
+// 命令 load_system_status_read_model 进 generate_handler!。同上借道挂载·保持 lib.rs 0-diff。
+mod system_status_read_model;
+
+// B·审计账本读模型（审计账本页·主 store + 各 sidecar 审计的只读聚合流·分页+按类过滤）；
+// 命令 query_audit_ledger_read_model 进 generate_handler!。
+mod audit_ledger_read_model;
+
 // A·运行错误人话翻译层（C6 观测补强·纯函数·无 tauri command）。供给类判据单一真源在此，
 // runner/run_history 委托到它。同 worker_report 借道挂载·保持 lib.rs 0-diff。
 mod run_error_translation;
@@ -142,6 +150,8 @@ macro_rules! workbench_command_handler {
             global_supervisor_review_store::load_global_supervisor_review_store,
             secretary_agent::run_secretary_explain,
             run_history_read_model::list_project_run_history,
+            system_status_read_model::load_system_status_read_model,
+            audit_ledger_read_model::query_audit_ledger_read_model,
             list_project_workflows,
             submit_project_workflow_draft,
             get_project_workflow_nodes,
