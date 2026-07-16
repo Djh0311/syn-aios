@@ -21,14 +21,18 @@
   align-items: start;
 }
 
+/* 七律扫除 S2/S4/S5(2026-07-16)·B1 承载卡纸上放卡:①白面退场→透明底纸上勾线(桌面皮 styles.css:9743
+   白底+9744 浮起投影一并压掉·本文件后加载,同特异度胜出);③统一网格 pad20/组距14/radius12。
+   一条扫齐四张 B1 页(记忆中心/技能/harness/审计账本)。box-shadow:none 专杀桌面皮浮起投影。 */
 .memory-center-panel {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
-  padding: 14px;
-  border: 1px solid var(--hair);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
+  padding: 20px;
+  border: 1px solid var(--hair-2);
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
 }
 
 .memory-detail-panel,
@@ -52,9 +56,10 @@
   gap: 4px;
   min-width: 0;
   padding: 10px;
-  border: 1px solid var(--hair);
+  border: 1px solid var(--hair-2);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.68);
+  /* 七律①白面退场:小度量瓦片转透明纸底。 */
+  background: transparent;
 }
 
 .memory-mini-metric span {
@@ -181,10 +186,11 @@
   font-weight: 500;
 }
 
+/* 七律⑦一代化(2026-07-16):秘书折叠触发器=建议入口(非 danger 语义)→ 朱红交互态收敛到石绿。 */
 .memory-secretary-chip {
-  border: 1px solid rgba(161, 66, 66, 0.36);
-  background: rgba(161, 66, 66, 0.08);
-  color: var(--vermil);
+  border: 1px solid var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
 }
 
 .memory-more-button {
@@ -211,4 +217,41 @@
 .memory-lifecycle-menu-body .secondary-button {
   justify-content: flex-start;
   width: 100%;
+}
+
+/* ============================================================
+   七律扫除 S2(2026-07-16)·记忆中心私有(scoped .memory-center,不波及技能/harness/审计)。
+   本文件后加载于 styles.css,同特异度覆盖桌面皮白面/框中框。
+   ============================================================ */
+/* 律1 框中框:治理条目/收件箱/详情行的白盒退场,直排在纸上(分组靠留白+Badge,不套框)。 */
+.memory-center .workflow-compact-item {
+  padding: 6px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.memory-center .daily-memory-candidate-inbox {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.memory-center .memory-detail-panel .detail-line {
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+/* 律2 虚线只占位:动作行是实心按钮行、非占位 → 去 dashed 框。 */
+.memory-center .knowledge-action-row {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+/* 律1 框中框:高级治理 details 容器退框(桌面皮 styles.css:9764-9771 给它套了白框)。 */
+.memory-center .memory-advanced-details {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }

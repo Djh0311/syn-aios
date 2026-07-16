@@ -20,6 +20,14 @@
   grid-column: span 1;
 }
 
+/* 七律 S7(2026-07-16)·①纸上放卡:总览事实卡=完整纸上勾线盒(对齐样板 .project-jiaoban-col + 定稿 G,
+   与右侧留白虚线盒平衡);③卡内边距 20。只提总览卡,不动 evidence/resources 姊妹面(交接/资源 tab 非本包)。 */
+.project-overview-card {
+  padding: 20px;
+  border: 1px solid var(--hair-2);
+  border-radius: 12px;
+}
+
 /* ⑥ G 定稿：第二卡位留白(用户 07-15 拍：不硬塞，等真实需求出现再定)。
    虚线框只引既有 token，不新增色值(零换皮)。 */
 .project-overview-reserved {
@@ -66,10 +74,11 @@
   display: none;
 }
 
+/* 七律⑦一代化(2026-07-16):折叠触发器 hover/focus 交互态从朱红收敛到石绿。 */
 .project-disclosure > summary:hover,
 .project-disclosure > summary:focus-visible {
-  border-color: rgba(161, 66, 66, 0.28);
-  color: var(--vermil);
+  border-color: var(--accent);
+  color: var(--accent);
   outline: none;
 }
 

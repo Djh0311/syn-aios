@@ -5,15 +5,16 @@
   gap: 16px;
 }
 
+/* 七律扫除 S6(2026-07-16)·①纸上放卡:hero=承载区→透明退框(框中框:内含 stat 瓦片各自勾线);③网格 pad20/组距14。 */
 .source-entry-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
-  gap: 18px;
+  gap: 14px;
   align-items: stretch;
-  padding: 18px;
-  border: 1px solid var(--hair);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .source-entry-hero h2 {
@@ -42,9 +43,10 @@
   gap: 4px;
   min-width: 0;
   padding: 10px;
-  border: 1px solid var(--hair);
+  border: 1px solid var(--hair-2);
   border-radius: 8px;
-  background: rgba(248, 246, 239, 0.82);
+  /* 七律①白面退场:近白瓦片转透明纸底。 */
+  background: transparent;
 }
 
 .source-entry-stat span,
@@ -83,10 +85,11 @@
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--hair);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.7);
+  padding: 8px 0;
+  /* 七律①白面退场 + 框中框:section 已是纸底勾线卡,内部行直排(无嵌套框);边界卡 danger 底色另留。 */
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .source-entry-row strong,
@@ -107,7 +110,7 @@
 }
 
 .source-entry-boundary {
-  border-left: 3px solid var(--verm);
+  border-left: 3px solid var(--vermil); /* 07-16 修:--verm 未定义·静默回落 currentColor(施工兵审计报回) */
 }
 
 .source-entry-boundary-card {
@@ -131,4 +134,15 @@
   .source-entry-stats {
     grid-template-columns: 1fr;
   }
+}
+
+/* 七律扫除 S6(2026-07-16)·想法箱 section 卡:.panel 被桌面皮(styles.css:9740)白化+浮起
+   → scoped 压回透明纸底勾线卡(纸上放卡);sourceStylePlaceholder.css 后加载于 styles.css,0,2,0 胜出。
+   内部行已改直排(无框中框)。 */
+.source-placeholder .panel {
+  padding: 20px;
+  border: 1px solid var(--hair-2);
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
 }

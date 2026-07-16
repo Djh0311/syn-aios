@@ -173,7 +173,7 @@
 
 .object-detail-panel > summary:hover,
 .object-detail-panel > summary:focus-visible {
-  color: var(--vermil);
+  color: var(--accent);
   outline: none;
 }
 
@@ -190,12 +190,12 @@
 }
 
 .brand-home-button:focus-visible {
-  outline: 2px solid rgba(161, 66, 66, 0.45);
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 
 .brand-home-button.active .brand-mark {
-  box-shadow: 0 0 0 1px rgba(161, 66, 66, 0.55), 0 0 0 5px rgba(161, 66, 66, 0.08);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 0 5px var(--accent-bg);
 }
 
 .topbar-seal-button {
@@ -211,11 +211,11 @@
 
 .topbar-seal-button:hover .brand-mark,
 .topbar-seal-button:focus-visible .brand-mark {
-  box-shadow: 0 0 0 1px rgba(161, 66, 66, 0.55), 0 0 0 5px rgba(161, 66, 66, 0.08);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 0 5px var(--accent-bg);
 }
 
 .topbar-seal-button:focus-visible {
-  outline: 2px solid rgba(161, 66, 66, 0.45);
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 
@@ -363,11 +363,11 @@
 
 /* 执行中：红实线（暖色锚点） */
 .running-stage-segment.active .running-stage-segment-bar {
-  background: var(--vermil);
+  background: var(--accent);
 }
 
 .running-stage-segment.active .running-stage-segment-state {
-  color: var(--vermil);
+  color: var(--accent);
 }
 
 /* 待处理 / 阻断：暖色 */
@@ -504,8 +504,8 @@
 }
 
 .running-mode-button.active {
-  background: rgba(161, 66, 66, 0.08);
-  color: var(--vermil);
+  background: var(--accent-bg);
+  color: var(--accent);
 }
 
 .running-canvas-actions {
@@ -645,9 +645,9 @@
 .settings-link-card:focus-visible,
 .running-attention-card:hover,
 .running-attention-card:focus-visible {
-  border-left-color: var(--vermil);
+  border-left-color: var(--accent);
   outline: none;
-  background: rgba(161, 66, 66, 0.045);
+  background: var(--accent-bg);
 }
 
 .settings-link-glyph {
@@ -1515,9 +1515,9 @@ button:disabled {
 
 .agent-new-chat-button:hover,
 .agent-new-chat-button.active {
-  border-color: rgba(161, 66, 66, 0.26);
-  background: rgba(161, 66, 66, 0.07);
-  color: var(--vermil);
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
 }
 
 .agent-transcript-panel {
@@ -1836,12 +1836,12 @@ button:disabled {
   color: var(--ink-deep);
 }
 .filter-chip.active {
-  border-color: var(--vermil);
-  background: rgba(161, 66, 66, 0.06);
+  border-color: var(--accent);
+  background: var(--accent-bg);
   color: var(--ink-deep);
 }
 .filter-chip.active em {
-  color: var(--vermil);
+  color: var(--accent);
 }
 
 .session-list-controls {
@@ -1877,7 +1877,7 @@ button:disabled {
 .filter-chip:focus-visible,
 .chat-expand:focus-visible,
 .chat-code-block button:focus-visible {
-  outline: 2px solid rgba(161, 66, 66, 0.45);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -1915,7 +1915,7 @@ button:disabled {
   cursor: pointer;
 }
 .session-group-head:hover .sg-name {
-  color: var(--vermil);
+  color: var(--accent);
 }
 .session-group-head .sg-caret {
   flex: none;
@@ -1968,8 +1968,8 @@ button:disabled {
 }
 .session-card.active {
   border-color: transparent;
-  border-left-color: var(--vermil);
-  background: rgba(161, 66, 66, 0.075);
+  border-left-color: var(--accent);
+  background: var(--accent-bg);
 }
 .session-card.disabled {
   opacity: 0.5;
@@ -2421,7 +2421,7 @@ button:disabled {
 .project-tool-tabs button:focus-visible,
 .project-tool-tabs button.active {
   border-color: var(--hair-2);
-  background: rgba(161, 66, 66, 0.045);
+  background: var(--accent-bg);
   color: var(--ink-deep);
   outline: none;
 }
@@ -4025,13 +4025,13 @@ textarea {
   padding: 0;
   place-items: center;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--ink-mid);
 }
 
 .secondary-button.icon-button:hover {
-  color: var(--vermil);
+  color: var(--accent);
 }
 
 .sidebar {
@@ -4097,7 +4097,7 @@ textarea {
   justify-content: center;
   padding: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--ink-light);
   text-align: center;
@@ -4120,7 +4120,7 @@ textarea {
   left: -8px;
   width: 3px;
   border-radius: 2px;
-  background: var(--vermil);
+  background: var(--accent);
 }
 
 .nav-glyph {
@@ -4518,7 +4518,7 @@ textarea {
 }
 
 .feed-item:hover b {
-  color: var(--vermil);
+  color: var(--accent);
 }
 
 .feed-item i {
@@ -4575,7 +4575,7 @@ textarea {
 }
 
 .right-project-group:hover .right-project-group-head b {
-  color: var(--vermil);
+  color: var(--accent);
 }
 
 .right-project-group-head,
@@ -4699,7 +4699,7 @@ textarea {
 }
 
 .dock-input-wrap:focus-within {
-  border-color: var(--vermil);
+  border-color: var(--accent);
 }
 
 .dock-input {
@@ -4730,7 +4730,7 @@ textarea {
 }
 
 .chip:hover {
-  color: var(--vermil);
+  color: var(--accent);
 }
 
 .chip.send {
@@ -4741,7 +4741,7 @@ textarea {
 }
 
 .chip.send:hover {
-  background: var(--vermil);
+  background: var(--accent);
   color: var(--rice);
 }
 
@@ -5238,8 +5238,8 @@ textarea {
 .entry-card:focus-visible,
 .project-list-item.active,
 .session-card.active {
-  border-color: rgba(161, 66, 66, 0.48);
-  background: rgba(161, 66, 66, 0.045);
+  border-color: var(--accent);
+  background: var(--accent-bg);
 }
 
 /* 二代按钮覆盖(墨方钮·朱红 hover)已退役——07-15 手艺七律⑦用户拍 A:全 App 按钮收敛回
@@ -5899,7 +5899,7 @@ textarea {
   border-left: 2px solid var(--hair-2);
 }
 .soft-card.lit {
-  border-left-color: var(--vermil);
+  border-left-color: var(--accent);
 }
 .soft-card.empty-agent {
   opacity: 0.62;
@@ -5914,15 +5914,15 @@ textarea {
 .agent-choice-card:hover,
 .agent-choice-card:focus-visible,
 .agent-choice-card.selected {
-  border-left-color: var(--vermil);
-  background: rgba(161, 66, 66, 0.045);
+  border-left-color: var(--accent);
+  background: var(--accent-bg);
   outline: none;
 }
 
 .agent-choice-card.selected .sc-name::before {
   content: "·";
   margin-right: 6px;
-  color: var(--vermil);
+  color: var(--accent);
 }
 
 .agent-session-center.embedded .pg-head {
@@ -7373,7 +7373,7 @@ textarea {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--vermil);
+  color: var(--accent);
   font: inherit;
   cursor: pointer;
 }
@@ -7397,7 +7397,7 @@ textarea {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--vermil);
+  color: var(--accent);
   font-family: -apple-system, "PingFang SC", sans-serif;
   font-size: 11px;
   cursor: pointer;
@@ -7490,7 +7490,7 @@ textarea {
   border-left: 2px solid var(--hair-2);
 }
 .card.lit {
-  border-left-color: var(--vermil);
+  border-left-color: var(--accent);
 }
 .card .c-head {
   display: flex;
@@ -7601,7 +7601,7 @@ textarea {
   bottom: 12px;
   width: 3px;
   border-radius: 2px;
-  background: var(--vermil);
+  background: var(--accent);
 }
 
 .right-detail {
@@ -7757,7 +7757,7 @@ textarea {
 }
 
 .pane-close:hover {
-  color: var(--vermil);
+  color: var(--accent);
 }
 
 .pane-action {
@@ -8054,14 +8054,14 @@ textarea {
 
 .project-tile:hover,
 .project-tile:focus-visible {
-  border-color: rgba(161, 66, 66, 0.48);
-  border-left-color: var(--vermil);
+  border-color: var(--accent);
+  border-left-color: var(--accent);
   outline: none;
   transform: translateY(-1px);
 }
 
 .project-tile.active {
-  border-left-color: var(--vermil);
+  border-left-color: var(--accent);
 }
 
 .project-tile-seal {
@@ -8148,13 +8148,13 @@ textarea {
 
 .project-list-item.active {
   background: transparent;
-  color: var(--vermil);
+  color: var(--accent);
 }
 
 .project-list-item.active strong::before {
   content: "·";
   margin-right: 6px;
-  color: var(--vermil);
+  color: var(--accent);
 }
 
 .project-detail-shell {
@@ -8311,8 +8311,8 @@ textarea {
 .project-detail-content--fullwindow .project-tool-tabs button:hover,
 .project-detail-content--fullwindow .project-tool-tabs button:focus-visible,
 .project-detail-content--fullwindow .project-tool-tabs button.active {
-  border-color: var(--vermil);
-  background: rgba(161, 66, 66, 0.06);
+  border-color: var(--accent);
+  background: var(--accent-bg);
   color: var(--ink-deep);
 }
 
@@ -8474,14 +8474,14 @@ textarea {
   padding: 8px 16px;
   border: 0;
   border-bottom: 2px solid transparent;
-  border-radius: 0;
+  border-radius: var(--r-sm);
   letter-spacing: 0.18em;
 }
 
 .project-tool-tabs button:hover,
 .project-tool-tabs button:focus-visible,
 .project-tool-tabs button.active {
-  border-color: var(--vermil);
+  border-color: var(--accent);
   background: transparent;
   color: var(--ink-deep);
 }
@@ -9970,7 +9970,7 @@ textarea {
     gap: 0;
     padding: 0;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--r-sm);
     background: transparent;
     color: var(--ink-light);
     text-align: center;
@@ -9993,7 +9993,7 @@ textarea {
     left: -8px;
     width: 3px;
     border-radius: 2px;
-    background: var(--vermil);
+    background: var(--accent);
   }
 
   .nav-glyph {
@@ -10094,7 +10094,7 @@ textarea {
     gap: 0;
     padding: 0;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--r-sm);
     background: transparent;
     color: var(--ink-light);
     transform: none;
@@ -10119,7 +10119,7 @@ textarea {
     bottom: 12px;
     width: 3px;
     border-radius: 2px;
-    background: var(--vermil);
+    background: var(--accent);
   }
 
   .rail-mini-stats {
@@ -10221,7 +10221,7 @@ textarea {
   .home-node-action:focus-visible,
   .node-feed .row:focus-visible,
   .home-node-more:focus-visible {
-    outline: 1px solid rgba(161, 66, 66, 0.55);
+    outline: 1px solid var(--accent);
     outline-offset: 4px;
   }
 
@@ -10238,7 +10238,7 @@ textarea {
   }
 
   .home-node-more:hover {
-    color: var(--vermil);
+    color: var(--accent);
   }
 }
 
@@ -10454,7 +10454,8 @@ textarea {
 .workflow-compact-item.is-selected { border-color: var(--accent); background: var(--accent-bg); }
 
 /* ===== 设计系统基座(2026-07-15·定式组件 SpecPrimitives 配套;正本=DESIGN.md 信息规范) ===== */
-.spec-fact-row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--bg-subtle); font-variant-numeric: tabular-nums; font-size: var(--text-sm); }
+/* 七律⑤事实行定式(2026-07-16 对齐样板 .jiaoban-fact):标签灰左·值右·细虚线分隔。共享基座,全 App 事实行同式。 */
+.spec-fact-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 5px 0; border-bottom: 1px dashed var(--hair); font-variant-numeric: tabular-nums; font-size: var(--text-sm); }
 .spec-fact-k { color: var(--muted); flex-shrink: 0; }
 .spec-fact-v { text-align: right; min-width: 0; word-break: break-all; }
 .spec-bad { color: var(--danger); }
@@ -10489,14 +10490,15 @@ textarea {
   min-height: 0;
   overflow: hidden;
 }
-.home-stat-row { display: flex; gap: var(--space-2); flex-shrink: 0; }
+/* 七律扫除 S1(2026-07-16):①纸上放卡=白面退场,承载卡转透明底纸上勾线;③统一网格=组间距 14px。 */
+.home-stat-row { display: flex; gap: 14px; flex-shrink: 0; }
 .home-stat {
   flex: 1;
   min-width: 0;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--line);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--hair);
   border-radius: var(--r-md);
-  background: var(--panel);
+  background: transparent;
 }
 .home-stat-n {
   font-size: var(--text-2xl);
@@ -10526,22 +10528,24 @@ textarea {
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
-  gap: var(--space-2);
+  gap: 14px;
 }
 .home-overview-card {
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--line);
+  /* 七律③:卡内边距;①白面退场→透明底纸上勾线(hairline)。 */
+  padding: var(--space-4);
+  border: 1px solid var(--hair);
   border-radius: var(--r-md);
-  background: var(--panel);
+  background: transparent;
 }
 .home-overview-label {
   flex-shrink: 0;
-  margin: 0 0 var(--space-1);
-  font-size: var(--text-xs);
+  /* 七律③:小灰标 11.5px·600·muted;组内节拍。 */
+  margin: 0 0 var(--space-2);
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--muted);
 }
