@@ -170,6 +170,17 @@ export function classifyBlocked(
     };
   }
 
+  // 2b) 主管拆不出任务(空任务列表·07-16 真单实案):方案带着没答的问题或说得太笼统——
+  //     [接着跑]=原样重拆必然再空的死循环,正路=补充说明出新方案。必须先于「拆任务|失败」的临时类判定。
+  if (/空任务列表|拆不出.{0,4}任务/.test(text)) {
+    return {
+      primary: "replan",
+      showReplanSecondary: false,
+      showContinueSecondary: planIsConfirmed, // 万一重拆能出,留个次口
+      note: "主管拆不出可执行的任务——方案里还有没答的问题，或者活说得太笼统。把问题答上、活说得更具体，再出一版方案。",
+    };
+  }
+
   // 3) startError / 拆任务失败 / 超时 / flaky → [接着跑]（注明「上一步失败了，接着跑会从拆任务重来」）。
   const transientFailure =
     /拆任务|超时|timeout|timed out|失败|重试|中断|flaky|临时|偶发|网络|连接/i.test(text) ||

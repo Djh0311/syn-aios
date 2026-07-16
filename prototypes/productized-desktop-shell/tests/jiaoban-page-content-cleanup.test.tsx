@@ -274,3 +274,75 @@ function authorizeHtml(proposalIsStale = false, proposalAgeDays = 0): string {
 }
 
 console.log("jiaoban-page-content-cleanup: 七项交办内容清理离线 DOM 断言全过");
+
+// 07-16 真单实案:方案开放问题(「用户确认/补充…」步骤)必须上批卡,且主按钮降级为答问题出新方案。
+{
+  const { extractOpenQuestions } = await import("../src/views/projects/jiaoban/JiaobanAuthorizeStates");
+  const qs = extractOpenQuestions([
+    "目标文件：index.agent-copy.html",
+    "用户确认副本名是否采用 index.agent-copy.html。",
+    "用户补充唯一 worker 在副本上需要完成的具体改动。",
+    "控制核心建立一个且仅一个工作项。",
+  ]);
+  assert(qs.length === 2, "启发式应提取出两个开放问题");
+
+  const withQuestions = renderToStaticMarkup(
+    <JiaobanAuthorizeState
+      proposal={{
+        ...proposalFixture(),
+        proposed_steps: [
+          "目标文件：index.agent-copy.html",
+          "用户确认副本名是否采用 index.agent-copy.html。",
+          "用户补充唯一 worker 在副本上需要完成的具体改动。",
+        ],
+      }}
+      proposalIsStale={false}
+      proposalAgeDays={0}
+      amendment=""
+      onAmendmentChange={noop}
+      onAmend={noop}
+      onAuthorizeAndStart={noop}
+      onRePlan={noop}
+      onDecline={noop}
+      starting={false}
+      consultLoading={false}
+      consultError={null}
+      howRunSummary="经典状态机 · 开个新对话 · 预演图关"
+      onShowGovernance={noop}
+      onShowHowRun={noop}
+      boundaryLoading={false}
+      boundaryOutcome={null}
+      onBoundaryRetry={noop}
+    />,
+  );
+  assert(withQuestions.includes("方案在等你答"), "开放问题块应上脸");
+  assert(withQuestions.includes("用户确认副本名是否采用"), "问题逐条显示");
+  assert(withQuestions.includes("答完问题出新方案"), "主按钮降级为答问题出新方案");
+  assert(withQuestions.includes("仍要允许并开始（2 问未答）"), "硬批降为次按钮且标注未答数");
+
+  const noQuestions = authorizeHtml();
+  assert(!noQuestions.includes("方案在等你答"), "零问题方案不出问题块");
+  assert(!noQuestions.includes("仍要允许并开始（"), "零问题方案按钮原样");
+}
+
+// 07-16:空任务列表卡住脸=方案内容类死配对(主按钮重新说目标+人话原因),不许配成「接着跑」死循环。
+{
+  const { classifyBlocked } = await import("../src/views/projects/jiaoban/JiaobanBlockedStates");
+  const plan = classifyBlocked(
+    {
+      stage: "failed",
+      planned_task_count: 0,
+      prepared_count: 0,
+      needs_binding_count: 0,
+      blocked_count: 0,
+      message: "自动推进失败（已留档）：主管产出空任务列表",
+      chain_outcome: null,
+      stop_reason: null,
+      planned_tasks: [],
+    },
+    null,
+    true,
+  );
+  assert(plan.primary === "replan", "空任务列表:主按钮=重新说目标(非接着跑)");
+  assert(!!plan.note && plan.note.includes("拆不出可执行的任务"), "空任务列表:人话原因在");
+}

@@ -1632,3 +1632,21 @@
   display: inline;
   padding: 0 0 0 6px;
 }
+
+/* 07-16 真单实案:方案里「等你答的问题」上批卡(不答=主管拆不出任务)。暖底提醒级,非告警。 */
+.jiaoban-open-questions {
+  background: var(--warning-bg, #fff0e0);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.jiaoban-open-questions .jiaoban-plan-seg {
+  color: var(--warning, #8a4010);
+}
+.jiaoban-open-questions ol {
+  margin: 4px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 3px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}

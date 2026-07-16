@@ -129,6 +129,10 @@ export function JiaobanAuthorizeState({
   const supervisorAcceptance = proposal.supervisor_acceptance_criteria ?? [];
   const governanceCount = controlCoreAcceptance.length + supervisorAcceptance.length;
   const userChecks = workerAcceptance.length ? workerAcceptance : proposal.acceptance_criteria;
+  // 07-16 真单实案:咨询把「等用户答的问题」写在方案步骤里,批卡不上脸→用户批了带问号的方案→
+  // 主管拆任务空单卡住。开放问题=批不批的关键信息,必须上脸;有问题未答时主按钮降级(同旧方案套路)。
+  const openQuestions = extractOpenQuestions(proposal.proposed_steps);
+  const hasOpenQuestions = openQuestions.length > 0;
 
   return (
     <div className="project-canvas-detail-card jiaoban-authorize" aria-label="方案">
@@ -159,6 +163,16 @@ export function JiaobanAuthorizeState({
       {/* 定式卡素面(07-15 三波):旧「人话区」绿框记号退场——整卡已是人话,色块反成噪音。 */}
       <div className="jiaoban-plan-body" aria-label="方案要点（人话）">
         <h3 className="jiaoban-plan-title">{proposal.goal_summary || proposal.user_goal}</h3>
+        {hasOpenQuestions ? (
+          <div className="jiaoban-open-questions" role="note" aria-label="方案在等你答">
+            <p className="jiaoban-plan-seg">方案在等你答（不答，主管可能拆不出任务）</p>
+            <ol>
+              {openQuestions.map((question, index) => (
+                <li key={index}>{question}</li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
         {targetFiles || willWrite ? (
           <div className="jiaoban-plan-facts" aria-label="会动什么">
             <p className="jiaoban-plan-seg">会动什么</p>
@@ -220,7 +234,7 @@ export function JiaobanAuthorizeState({
             aria-label="修改方案"
             value={amendment}
             onChange={(event) => onAmendmentChange(event.target.value)}
-            placeholder="例：改成暗色、分数存下来…"
+            placeholder={hasOpenQuestions ? "回答上面的问题，例：副本名用 X；子 agent 只建隔离副本" : "例：改成暗色、分数存下来…"}
             disabled={consultLoading}
           />
         </label>
@@ -274,6 +288,26 @@ export function JiaobanAuthorizeState({
               onClick={onAuthorizeAndStart}
             >
               {starting ? "正在开始…" : "仍要允许并开始（旧方案）"}
+            </button>
+          </>
+        ) : hasOpenQuestions ? (
+          // 方案有未答问题:主按钮=按我说的改(答完问题出新方案),硬批降为次按钮(同旧方案降级套路)。
+          <>
+            <button
+              className="primary-button"
+              type="button"
+              disabled={starting || consultLoading || !amendment.trim()}
+              onClick={onAmend}
+            >
+              {consultLoading ? "正在出新方案…" : "答完问题出新方案"}
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={starting || consultLoading}
+              onClick={onAuthorizeAndStart}
+            >
+              {starting ? "正在开始…" : `仍要允许并开始（${openQuestions.length} 问未答）`}
             </button>
           </>
         ) : (
@@ -446,6 +480,12 @@ function JiaobanWorksmap({
       </label>
     </div>
   );
+}
+
+// 方案里「等用户答」的开放问题:咨询按惯例写成「用户确认/补充…」步骤(结构化字段暂无·前端启发式提取)。
+// export 供离线断言。
+export function extractOpenQuestions(proposedSteps: string[]): string[] {
+  return proposedSteps.filter((step) => /^用户(确认|补充|指定|提供|选择|说明|决定)/.test(step.trim()));
 }
 
 function extractTargetFiles(proposedSteps: string[]): string | null {
