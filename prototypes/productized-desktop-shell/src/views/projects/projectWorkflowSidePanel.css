@@ -508,14 +508,19 @@
   gap: 10px;
   justify-items: start;
 }
+/* 历史行=单行三元素(状态点+标题+时间·07-15 走查#2 对齐定稿);state_note 进悬停与详情卡。
+   旧 r1/meta/note/quick 两行结构退役([接着跑]行内快捷违 canon §四.2 已拆)。 */
 .jiaoban-run {
   width: 100%;
   text-align: left;
   border: 1px solid transparent;
   background: none;
   border-radius: 8px;
-  padding: 8px 10px;
-  display: block;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
   cursor: pointer;
 }
 .jiaoban-run:hover {
@@ -524,11 +529,6 @@
 .jiaoban-run.on {
   border-color: var(--accent);
   background: var(--accent-bg, #eaf4f1);
-}
-.jiaoban-run-r1 {
-  display: flex;
-  gap: 7px;
-  align-items: baseline;
 }
 .jiaoban-run-dot {
   font-size: 13px;
@@ -540,31 +540,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13.5px;
+  font-size: 13px;
 }
-.jiaoban-run-meta {
-  padding-left: 20px;
-  margin-top: 2px;
-  font-size: 11.5px;
-  color: var(--ink-light, #9a8f80);
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.jiaoban-run-note {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-.jiaoban-run-quick {
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-  margin-left: auto;
+.jiaoban-run-time {
   flex: none;
+  font-size: 11px;
+  color: var(--ink-light, #9a8f80);
 }
 /* 九态状态点配色（词表死线映射 historyStateVisual）。 */
 .run-dot-running {
@@ -1110,7 +1091,7 @@
   flex: 1 1 auto;
   display: grid;
   grid-template-columns: 218px minmax(0, 1fr) 180px;
-  gap: 6px;
+  gap: 14px; /* 七律③:列距统一 14 */
   position: relative;
   width: 100%;
   min-width: 0;
@@ -1122,12 +1103,13 @@
   grid-template-columns: 36px minmax(0, 1fr) 180px;
 }
 .jiaoban-merged-layout.is-canvas-wide {
-  grid-template-columns: 218px 330px minmax(0, 1fr);
+  grid-template-columns: 218px 500px minmax(0, 1fr); /* 二审稿:批/开工中栏 500(330 读不动方案) */
 }
 .jiaoban-merged-layout.is-history-collapsed.is-canvas-wide {
-  grid-template-columns: 36px 330px minmax(0, 1fr);
+  grid-template-columns: 36px 500px minmax(0, 1fr);
 }
 .jiaoban-history-column {
+  position: relative; /* 收起钮叠放进「工作历史」标题行(定稿同行·07-15 走查对齐) */
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -1140,6 +1122,16 @@
   display: flex;
   justify-content: flex-end;
   flex: none;
+}
+/* 展开态:收起钮浮到标题行右端,不再独占一行(标题行给它留出右侧空位,见 .jiaoban-history-head)。 */
+.jiaoban-merged-layout:not(.is-history-collapsed) .jiaoban-history-column .jiaoban-history-column-bar {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  z-index: 2;
+}
+.jiaoban-history-column .jiaoban-history-head {
+  padding-right: 56px;
 }
 .is-history-collapsed .jiaoban-history-column-bar {
   justify-content: center;
@@ -1174,13 +1166,13 @@
   max-width: none;
   border-right: 0;
 }
+/* 七律①纸上放卡:承载区一律透明——白卡是内容自己的形(中卡/治理卡/节点卡),不许整栏刷白。 */
 .jiaoban-merged-region {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--hair-2);
-  border-radius: 10px;
-  background: var(--panel-raised, rgba(255, 255, 255, 0.72));
+  border: 0;
+  background: transparent;
 }
 .jiaoban-merged-jiaoban-region {
   display: flex;
@@ -1190,18 +1182,39 @@
 .jiaoban-merged-jiaoban-region .project-jiaoban-main {
   width: 100%;
   min-width: 0;
+  height: 100%;
   overflow-x: hidden;
+  overflow-y: auto; /* 滚动只在这一层 */
+  align-items: flex-start; /* flex 默认 stretch 会把白卡拉成整栏(真机「中间还是白色」的真凶) */
+  padding: 2px 2px 12px; /* 07-16 再贴紧 */
+}
+/* 未开工(窄提示条)态:主卡变宽但**有限宽居中**(定稿「交办主卡变宽居中」)——1fr 全铺在宽窗下空旷失焦;
+   且白卡=主卡自身(定稿卡形),承载区退成透明,免得整栏刷白。 */
+.jiaoban-merged-layout.is-canvas-hint .jiaoban-merged-jiaoban-region .project-jiaoban-col,
+.jiaoban-merged-layout.is-canvas-hint .jiaoban-merged-jiaoban-region .jiaoban-history-detail {
+  max-width: 720px;
+  margin: 10px auto 0;
+}
+/* 窄条提示句给内边距,别顶边。 */
+.jiaoban-merged-layout.is-canvas-hint .jiaoban-merged-canvas-surface > p {
+  margin: 0;
+  padding: 12px;
 }
 .jiaoban-merged-jiaoban-region .project-jiaoban-col,
 .jiaoban-merged-jiaoban-region .jiaoban-history-detail {
   width: 100%;
   max-width: none;
   margin: 0;
-  padding: 16px;
+  height: fit-content;
+  border: 1px solid var(--hair-2);
+  border-radius: 12px;
+  background: transparent; /* 07-16 用户拍:白底退场,纸上勾线 */
+  padding: 20px; /* 七律③:卡内边距 20 */
 }
 .jiaoban-merged-canvas-region {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  padding-top: 2px; /* 与中栏卡顶对齐 */
 }
 .jiaoban-merged-canvas-head {
   display: flex;
@@ -1209,8 +1222,7 @@
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
-  padding: 5px 8px;
-  border-bottom: 1px solid var(--hair-2);
+  padding: 0 2px 6px;
 }
 .jiaoban-merged-canvas-head > div {
   display: grid;
@@ -1233,7 +1245,9 @@
   position: relative;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  /* overflow:hidden 会压过 JSX 上的 spec-scroll,治理/怎么跑视图整块被裁(真机「右侧只改了工序图」真凶)。 */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .workflow-canvas--embedded {
   width: 100%;
@@ -1411,4 +1425,210 @@
   .jiaoban-plan-preview-graph {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* 批态卡定式(hi-fi F·07-15 走查#2):标题一句 / 「会动什么」事实行(标签左·值右·虚线分隔) /
+   「怎么算做好」逐条编号——治「分号拼长句一坨上脸」。 */
+.jiaoban-plan-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink, #1a1c1a);
+}
+.jiaoban-plan-seg {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted, #6b7068);
+}
+.jiaoban-plan-facts {
+  display: grid;
+  gap: 0;
+}
+.jiaoban-fact {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--hair, #d6d2c8);
+  font-size: 12.5px;
+}
+.jiaoban-fact-label {
+  flex: none;
+  color: var(--muted, #6b7068);
+}
+.jiaoban-fact-value {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.jiaoban-plan-checks ol {
+  margin: 2px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* 07-15 走查#2 第三波:330px 真宽下的容器收纳(原生件统一进设计语言·纯样式零逻辑)。 */
+.jiaoban-plan-body {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.jiaoban-authorize input[type="checkbox"],
+.jiaoban-authorize input[type="radio"] {
+  accent-color: var(--accent, #236c68);
+  width: 13px;
+  height: 13px;
+}
+.jiaoban-authorize fieldset.proposal-decision-field {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.jiaoban-authorize fieldset.proposal-decision-field legend {
+  padding: 0;
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted, #6b7068);
+}
+.jiaoban-authorize fieldset.proposal-decision-field label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+/* 330px 中栏:主按钮整行,次按钮并排均分——治换行参差。 */
+.jiaoban-authorize .workflow-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.jiaoban-authorize .workflow-state-actions .primary-button {
+  flex: 1 1 100%;
+}
+.jiaoban-authorize .workflow-state-actions .secondary-button {
+  flex: 1 1 auto;
+}
+/* 历史头 [+]:secondary-button 的 min-height 会把 26px 方钮顶成大块(真机撞过),钉死最小盒。 */
+.jiaoban-history-new {
+  min-width: 26px;
+  min-height: 26px;
+  max-width: 26px;
+  max-height: 26px;
+}
+
+/* 07-15 二审稿:右区=信息展开面 + 批卡视图入口行。 */
+.jiaoban-plan-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  font-size: 12px;
+  color: var(--muted, #6b7068);
+  cursor: pointer;
+}
+.jiaoban-plan-link:hover {
+  color: var(--ink, #1a1c1a);
+}
+.jiaoban-plan-link--howrun {
+  border-top: 1px dashed var(--hair, #d6d2c8);
+  padding-top: 6px;
+}
+/* 批卡整体节拍收紧(07-16 用户:间距还不够小)。 */
+.project-canvas-detail-card.jiaoban-authorize {
+  gap: 8px;
+}
+.jiaoban-authorize .jiaoban-plan-body {
+  gap: 8px;
+}
+/* 选择器带父级:压过 .jiaoban-merged-canvas-head > div 的 grid(否则 chips 被排成一列)。 */
+.jiaoban-merged-canvas-head > .jiaoban-canvas-view-tabs,
+.jiaoban-canvas-view-tabs {
+  display: flex;
+  grid-auto-flow: column;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.jiaoban-canvas-view {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+}
+.jiaoban-canvas-view-subtitle {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted, #6b7068);
+}
+.jiaoban-governance-view {
+  display: grid;
+  gap: 6px;
+  max-width: 640px;
+  background: transparent;
+  border: 1px solid var(--hair-2, #d6d2c8);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.jiaoban-governance-view ol {
+  margin: 0 0 4px;
+  padding-left: 20px;
+  display: grid;
+  gap: 5px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.jiaoban-howrun-view {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+  background: transparent;
+  border: 1px solid var(--hair-2, #d6d2c8);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+/* 07-16:预演 loading 占位骨架(七律②:虚线=「这里将来有东西」)——loading 期右区不再大片空白。 */
+.jiaoban-preview-ghosts {
+  margin-top: 12px;
+  display: grid;
+  gap: 4px;
+  max-width: 280px;
+}
+.jiaoban-preview-ghost {
+  border: 1px dashed var(--hair-2, #d6d2c8);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: var(--ink-light, #8a8a85);
+  font-size: 11.5px;
+}
+.jiaoban-preview-ghost-arrow {
+  margin: 0;
+  text-align: center;
+  color: var(--ink-mist, #b6b3a8);
+  font-size: 12px;
+}
+
+
+
+/* 意见未到的常显一行(07-16 用户终裁:留):不套意见块的框,行内链接同行。 */
+.jiaoban-boundary--pending {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin-top: 0;
+}
+.jiaoban-boundary--pending .jiaoban-plan-link {
+  display: inline;
+  padding: 0 0 0 6px;
 }

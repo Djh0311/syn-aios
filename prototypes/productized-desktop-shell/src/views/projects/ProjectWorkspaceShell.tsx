@@ -180,11 +180,8 @@ export function ProjectWorkspaceShell({
         </header>
 
         <ProjectWorkspaceStatusStrip
-          hasWorkflow={Boolean(projectWorkflow)}
-          stage={derivedWorkflow?.current_stage || projectWorkflow?.state || "未登记"}
           harnessRequirements={selectedTaskPackage?.harness_requirements ?? []}
           skillNames={selectedTaskPackage?.available_skills ?? []}
-          hasTaskPackage={Boolean(selectedTaskPackage)}
         />
 
         <nav className="project-tool-tabs" aria-label="项目详情列表">
@@ -279,6 +276,9 @@ export function JiaobanMergedLayout({
   history,
   main,
   previewCanvas = null,
+  canvasViews,
+  activeCanvasView,
+  onCanvasViewChange,
   workflowPanel = null,
   onOpenWorkflow,
   initialHistoryOpen = true,
@@ -286,6 +286,9 @@ export function JiaobanMergedLayout({
   const [historyOpen, setHistoryOpen] = useState(initialHistoryOpen);
   const showsPreviewCanvas = Boolean(previewCanvas);
   const showsRuntimePlanGraph = showsPreviewCanvas && (phase === "running" || phase === "done" || phase === "blocked");
+  // 右区=信息展开面(07-15 二审稿):多视图时顶部出切换 chips,想看什么切什么;单视图/缺席=旧行为。
+  const views = canvasViews && canvasViews.length ? canvasViews : null;
+  const activeView = views ? (views.find((view) => view.key === activeCanvasView) ?? views[0]) : null;
   // 说态还没方案 = 没图可画 → 收窄成提示条；方案一到就有预演图(批态要在节点上选会话) → 变宽。
   const canvasWide = phase !== "say";
 
@@ -330,20 +333,59 @@ export function JiaobanMergedLayout({
         className="jiaoban-merged-region jiaoban-merged-canvas-region"
         aria-label={showsPreviewCanvas ? (showsRuntimePlanGraph ? "工作流运行工序图" : "方案预演工序图") : "工作流运行视图"}
       >
-        <header className="jiaoban-merged-canvas-head">
-          {!showsPreviewCanvas ? (
-            <div>
-              <strong>{phase === "running" ? "正在执行" : "工作流进度"}</strong>
-              <span>只读运行视图</span>
-            </div>
-          ) : null}
-          <button className="secondary-button" type="button" onClick={onOpenWorkflow}>
-            在工作流页打开
-          </button>
-        </header>
+        {/* 定稿(hi-fi A/F·07-15 真机走查):窄提示条=纯一句话,无标题无跳转——header 只在画布宽态渲染。
+            180px 窄条塞 header 会竖排成一字一行(真机实测「工作/流进/度」),按钮还顶爆栏宽。 */}
+        {canvasWide ? (
+          <header className="jiaoban-merged-canvas-head">
+            {views ? (
+              // 多视图:chips 切换(工序图/治理保证/怎么跑…)取代固定标题。
+              <div className="jiaoban-canvas-view-tabs" role="tablist" aria-label="右区视图切换">
+                {views.map((view) => (
+                  <button
+                    key={view.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeView?.key === view.key}
+                    className={`jiaoban-chip ${activeView?.key === view.key ? "on" : ""}`}
+                    onClick={() => onCanvasViewChange?.(view.key)}
+                  >
+                    {view.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              /* 单视图宽态恒有小标(07-15 走查#2:此前有预演图时 header 只剩孤按钮悬着·大片空白)——
+                 文案取 canon 语汇:预演=「批准后照这个跑」(所批即所跑)·运行=「跑到哪亮到哪」。 */
+              <div>
+                <strong>
+                  {showsPreviewCanvas
+                    ? showsRuntimePlanGraph
+                      ? "运行工序图"
+                      : "方案预演工序图"
+                    : phase === "running"
+                      ? "正在执行"
+                      : "工作流进度"}
+                </strong>
+                <span>
+                  {showsPreviewCanvas ? (showsRuntimePlanGraph ? "跑到哪亮到哪" : "批准后照这个跑") : "只读运行视图"}
+                </span>
+              </div>
+            )}
+            <button className="secondary-button" type="button" onClick={onOpenWorkflow}>
+              在工作流页打开
+            </button>
+          </header>
+        ) : null}
         <div className="jiaoban-merged-canvas-surface spec-scroll">
           {canvasWide ? (
-            previewCanvas ?? workflowPanel ?? <p>工作流数据暂不可用。</p>
+            views && activeView ? (
+              <div className="jiaoban-canvas-view">
+                {activeView.subtitle ? <p className="jiaoban-canvas-view-subtitle">{activeView.subtitle}</p> : null}
+                {activeView.content}
+              </div>
+            ) : (
+              previewCanvas ?? workflowPanel ?? <p>工作流数据暂不可用。</p>
+            )
           ) : (
             <p>出方案后，这里会出现工序图预演。</p>
           )}
@@ -353,39 +395,25 @@ export function JiaobanMergedLayout({
   );
 }
 
+// 信息规范四问执行(07-15 真机走查·交办页):「阶段」格=机器词(draft 等)且主卡 pill 已有人话进度→删;
+// 「未要求 / 未声明」空值格帮不了任何决定→空值整条不渲染;「派生字段」类开发者注脚→删;
+// 词表拍板(07-14):运行器→harness。有真值(批态任务包声明了 harness/技能)才上脸——那时它真帮判断。
 function ProjectWorkspaceStatusStrip({
-  hasWorkflow,
-  stage,
   harnessRequirements,
   skillNames,
-  hasTaskPackage,
 }: {
-  hasWorkflow: boolean;
-  stage: string;
   harnessRequirements: string[];
   skillNames: string[];
-  hasTaskPackage: boolean;
 }) {
+  if (!harnessRequirements.length && !skillNames.length) return null;
   return (
     <section className="project-status-strip project-status-strip--pills" aria-label="项目状态条">
-      <ProjectWorkspaceStatusCell
-        label="阶段"
-        value={stage || "未登记"}
-        note={hasWorkflow ? "来自工作流读模型" : "暂无本地工作流"}
-        tone={hasWorkflow ? "candidate" : "unknown"}
-      />
-      <ProjectWorkspaceStatusCell
-        label="运行器"
-        value={compactListText(harnessRequirements, "未要求运行器")}
-        note={hasTaskPackage ? "派生字段" : "未生成派生字段"}
-        tone={harnessRequirements.length ? "candidate" : "unknown"}
-      />
-      <ProjectWorkspaceStatusCell
-        label="技能"
-        value={compactListText(skillNames, "未声明技能")}
-        note={hasTaskPackage ? "派生字段" : "未生成派生字段"}
-        tone={skillNames.length ? "candidate" : "unknown"}
-      />
+      {harnessRequirements.length ? (
+        <ProjectWorkspaceStatusCell label="harness" value={compactListText(harnessRequirements, "")} tone="candidate" />
+      ) : null}
+      {skillNames.length ? (
+        <ProjectWorkspaceStatusCell label="技能" value={compactListText(skillNames, "")} tone="candidate" />
+      ) : null}
     </section>
   );
 }
@@ -398,14 +426,14 @@ function ProjectWorkspaceStatusCell({
 }: {
   label: string;
   value: string;
-  note: string;
+  note?: string;
   tone: "candidate" | "unknown";
 }) {
   return (
     <div className={`project-status-cell ${tone}`}>
       <span>{label}</span>
       <strong>{value}</strong>
-      <em>{note}</em>
+      {note ? <em>{note}</em> : null}
     </div>
   );
 }

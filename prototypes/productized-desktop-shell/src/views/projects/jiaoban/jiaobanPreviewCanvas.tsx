@@ -206,6 +206,12 @@ export function JiaobanPlanPreviewCanvas({
       <div className="jiaoban-plan-preview-state" role="status" aria-label="预演工序图绘制中">
         <strong>正在绘制预演工序图…</strong>
         <span>大约 1–7 分钟；你可以照常允许并开始，未完成时会按现场拆分。</span>
+        {/* 07-16:虚线占位骨架(七律②:虚线=「这里将来有东西」)——loading 期右区不再大片空白。 */}
+        <div className="jiaoban-preview-ghosts" aria-hidden="true">
+          <div className="jiaoban-preview-ghost">任务 · 生成中…</div>
+          <p className="jiaoban-preview-ghost-arrow">↓</p>
+          <div className="jiaoban-preview-ghost">复核 · 独立只读核验</div>
+        </div>
       </div>
     );
   }

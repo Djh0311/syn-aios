@@ -56,7 +56,13 @@ function html(phase: JiaobanPhase, initialHistoryOpen = true, previewCanvas: Rea
   assert(out.includes("jiaoban-history-column"), "工作历史独立栏在");
   assert(out.includes('aria-label="交办主区"'), "交办主区在");
   assert(out.includes('aria-label="工作流运行视图"'), "只读画布区在");
-  assert(out.includes("在工作流页打开"), "完整工作流跳转入口在");
+  // 07-15 走查修·原断言锁旧形态:定稿窄条=纯一句话——header/跳转钮只在画布宽态渲染
+  // (180px 窄条塞 header 真机竖排成「工作/流进/度」一字一行,按钮顶爆栏宽)。
+  assert(!out.includes("在工作流页打开"), "窄条态不渲染工作流跳转钮");
+  assert(!out.includes("工作流进度"), "窄条态不渲染画布标题");
+  const wide = html("running");
+  assert(wide.includes("在工作流页打开"), "画布宽态才给完整工作流跳转入口");
+  assert(wide.includes("正在执行"), "宽态无预演图时保留运行标题");
 }
 
 // 2) 六态只切内容，不再切布局主次：同一个三栏壳，且宽度只由「有没有工序图」驱动，不由相位直接驱动。
@@ -117,4 +123,86 @@ for (const phase of ["say", "authorize", "binding", "running", "done", "blocked"
   }
 }
 
-console.log("jiaoban-merged-layout: 6 组离线 DOM / 独立历史栏 / 画布动态宽 / 三栏顺序断言全过");
+// 7b) 右区=信息展开面(07-15 二审稿用户拍):多视图渲切换 chips,只渲激活视图;单视图/缺席=旧行为。
+{
+  const views = [
+    { key: "graph", label: "工序图", subtitle: "批准后照这个跑", content: <div>图内容</div> },
+    { key: "governance", label: "治理保证", content: <div>治理全文</div> },
+  ];
+  const out = renderToStaticMarkup(
+    <JiaobanMergedLayout
+      phase="authorize"
+      history={<div>历史</div>}
+      main={<div>批卡</div>}
+      previewCanvas={null}
+      workflowPanel={null}
+      onOpenWorkflow={noop}
+      canvasViews={views}
+      activeCanvasView="governance"
+      onCanvasViewChange={noop}
+    />,
+  );
+  assert(out.includes("jiaoban-canvas-view-tabs"), "多视图应渲染切换 chips");
+  assert(out.includes("治理全文") && !out.includes("图内容"), "右区只渲染激活视图的内容");
+  assert(out.includes('aria-selected="true"'), "激活 chip 应有选中态");
+  assert(out.includes("在工作流页打开"), "宽态完整工作流跳转钮仍在");
+}
+
+// 7) 07-15 真机走查·交办页 chrome 与说态卡对齐定稿。
+{
+  const { ProjectWorkspaceShell } = await import("../src/views/projects/ProjectWorkspaceShell");
+  const shellOut = renderToStaticMarkup(
+    <ProjectWorkspaceShell
+      project={{
+        project_root: "/tmp/chrome-align-test",
+        name: "chrome 对齐",
+        active_hint: false,
+        thread_count: 0,
+        latest_updated_at_ms: null,
+        context_warnings: [],
+        warnings: [],
+      } as unknown as ProjectRecord}
+      sessions={[]}
+      workflowState={null}
+      onRequestAction={noop}
+      onProposalStoreRefresh={(async () => {}) as never}
+      onRenderTaskPreview={(async () => ({})) as never}
+      onInspectDispatchReadiness={(async () => ({})) as never}
+    />,
+  );
+  // 信息规范四问:空值状态条整条不上脸;「阶段」机器词格删除;词表:运行器→harness。
+  assert(!shellOut.includes("项目状态条"), "无 harness/技能声明时状态条整条不渲染");
+  assert(!shellOut.includes("未要求运行器") && !shellOut.includes("未声明技能"), "空值格不再上脸");
+  assert(!shellOut.includes("运行器"), "「运行器」词表废止(状态条面)");
+  assert(!shellOut.includes(">阶段<"), "「阶段」机器词格删除(进度人话在主卡 pill)");
+
+  const { JiaobanSayState } = await import("../src/views/projects/jiaoban/JiaobanAuthorizeStates");
+  const sayOut = renderToStaticMarkup(
+    <JiaobanSayState goal="" onGoalChange={noop} onSubmit={noop} lastStopHint={null} loading={false} error={null} onEditAgain={noop} />,
+  );
+  assert(!sayOut.includes("说一句话，AI 会读你的项目"), "说态卡教育句不上脸(定稿=标题+占位+出方案)");
+  assert(sayOut.includes("sr-only"), "textarea 的可及标签保留(读屏)");
+  assert(sayOut.includes("出方案"), "主动作在");
+
+  const { JiaobanHistoryColumn } = await import("../src/views/projects/jiaoban/JiaobanHistory");
+  const historyOut = renderToStaticMarkup(
+    <JiaobanHistoryColumn
+      entries={[]}
+      total={0}
+      loading={false}
+      filter="all"
+      onFilterChange={noop}
+      selectedId={null}
+      currentProposalId={null}
+      latestBlockedId={null}
+      onSelectEntry={noop}
+      onBackToCurrent={noop}
+      onNewJiaoban={noop}
+      onContinueRun={noop}
+    />,
+  );
+  assert(historyOut.includes('class="secondary-button jiaoban-history-new"'), "历史头 [+] 降为次级小钮");
+  assert(historyOut.includes("+ 新交办"), "空态保留主动作 [+新交办](D7 空态答下一步)");
+}
+
+console.log("jiaoban-merged-layout: 6 组离线 DOM / 独立历史栏 / 画布动态宽 / 三栏顺序 / chrome·说态卡对齐断言全过");

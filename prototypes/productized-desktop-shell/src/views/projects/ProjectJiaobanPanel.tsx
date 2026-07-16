@@ -16,6 +16,8 @@ import {
 } from "./jiaoban/JiaobanDoneStates";
 import {
   JiaobanAuthorizeState,
+  JiaobanGovernanceView,
+  JiaobanHowRunView,
   JiaobanSayState,
 } from "./jiaoban/JiaobanAuthorizeStates";
 import {
@@ -151,12 +153,24 @@ export function jiaobanPhaseForOutcome(outcome: AutoAdvanceRoleLoopOutcome): Jia
   return "blocked";
 }
 
+// 右区信息展开面的一个视图(07-15 二审稿用户拍:右区不再是工序图专座,想看什么切什么)。
+export type JiaobanCanvasViewSpec = {
+  key: string;
+  label: string;
+  subtitle?: string;
+  content: ReactNode;
+};
+
 export type ProjectJiaobanPanelLayout = {
   phase: JiaobanPhase;
   history: ReactNode;
   main: ReactNode;
   // M1：批前、运行和终态都在 M2 的右侧画布区域展示同一张纵向工序图。
   previewCanvas?: ReactNode;
+  // 右区=信息展开面:多视图时右区顶部出切换 chips(工序图/治理保证/怎么跑…);单视图/缺席=旧行为。
+  canvasViews?: JiaobanCanvasViewSpec[];
+  activeCanvasView?: string;
+  onCanvasViewChange?: (key: string) => void;
 };
 
 // 交办面 = 项目默认页。同一容器随状态换脸（说 → 批 → 干 → 交货 / 卡住），不弹窗、永不冻。
@@ -431,6 +445,12 @@ function ProjectJiaobanPanelBrowser({
   // 结果按 proposal_id 缓存（切 tab 回来不重拆·下面 effect 命中即恢复）；loading/error 是瞬态。
   // 批时 previewTasks 原样回传后端 = 所见即所跑；简单活/预拆失败则 previewTasks 为空 → 不传 → 后端照旧拆。
   const [workflowSwitchOn, setWorkflowSwitchOn] = useState(latestProposal?.suggest_workflow === true);
+  // 右区信息展开面当前视图(07-15 二审稿):批态三视图,默认工序图(M1 图上选会话不丢);相位一换回默认。
+  const [canvasViewKey, setCanvasViewKey] = useState("graph");
+  // 批卡「怎么跑」入口一行的摘要(真值随右区视图里的控件走)。
+  const howRunSummary = `${orchestrationMode === "supervisor_pilot" ? "主管编排(试点)" : "经典状态机"} · ${
+    sessionChoice && sessionChoice !== NEW_SESSION_CHOICE ? "接现有对话" : "开个新对话"
+  } · 预演图${workflowSwitchOn ? "开" : "关"}`;
   const [previewTasks, setPreviewTasks] = useState<ProjectDirectorPlannedTask[] | null>(null);
   const [previewWarnings, setPreviewWarnings] = useState<string[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -612,6 +632,10 @@ function ProjectJiaobanPanelBrowser({
 
   // 当前该显哪张脸：手动相位优先；否则由「有没有方案」决定说/批。
   const phase: JiaobanPhase = manualPhase ?? (latestProposal ? "authorize" : "say");
+  // 相位一换,右区回默认视图(工序图)——防上一态停在「怎么跑」把新态的图挡住。
+  useEffect(() => {
+    setCanvasViewKey("graph");
+  }, [phase]);
   // fix6-v2：只认「这一轮」的链——started_at（后端 ms）>= 本轮点击时刻。旧链时间戳更早、天然排除，
   // 防拆任务期（本轮链还没起、轮询却拿到旧链的绿状态）提前翻交货 / 显旧步骤。链没起 = null → 照显「主管正在拆任务」。
   const thisRoundChainStatus =
@@ -1492,13 +1516,6 @@ function ProjectJiaobanPanelBrowser({
               proposal={latestProposal}
               proposalIsStale={proposalIsStale}
               proposalAgeDays={proposalAge}
-              sessions={projectSessions}
-              sessionChoice={sessionChoice}
-              onSessionChoiceChange={setSessionChoice}
-              orchestrationMode={orchestrationMode}
-              onOrchestrationModeChange={setOrchestrationMode}
-              supervisorPilotDisabledReason={supervisorPilotDisabledReason}
-              classicDisabledReason={classicModeUnavailableReason(projectRoot)}
               amendment={amendment}
               onAmendmentChange={setAmendment}
               onAmend={submitAmendment}
@@ -1508,18 +1525,15 @@ function ProjectJiaobanPanelBrowser({
               starting={starting}
               consultLoading={consultLoading}
               consultError={consultError}
-              worksmapSwitchOn={workflowSwitchOn}
-              onToggleWorksmapSwitch={setWorkflowSwitchOn}
-              worksmapTasks={previewTasks}
-              worksmapLoading={previewLoading}
-              worksmapError={previewError}
+              howRunSummary={howRunSummary}
+              onShowGovernance={() => setCanvasViewKey("governance")}
+              onShowHowRun={() => setCanvasViewKey("howrun")}
               boundaryLoading={boundaryLoadingForThisProposal}
               boundaryOutcome={boundaryForThisProposal}
               onBoundaryRetry={() => {
                 // [重试]：force 穿透幂等重跑本方案的边界意见。
                 if (latestProposal) void requestBoundaryReview(latestProposal.proposal_id, true);
               }}
-              onOpenAgentSession={onOpenAgentSession}
             />
           ) : null}
 
@@ -1652,9 +1666,67 @@ function ProjectJiaobanPanelBrowser({
     />
   ) : null;
 
+  // 右区信息展开面(07-15 二审稿):批态三视图——工序图(默认·M1 选会话)/治理保证全文/怎么跑配置。
+  const jiaobanCanvasViews: JiaobanCanvasViewSpec[] | undefined =
+    phase === "authorize" && latestProposal
+      ? [
+          {
+            key: "graph",
+            label: "工序图",
+            subtitle: "批准后照这个跑",
+            content:
+              previewCanvas ?? (
+                <p className="muted small-note">预演图关着——到「怎么跑」打开;也可以直接批,先批就按现场拆。</p>
+              ),
+          },
+          {
+            key: "governance",
+            label: "治理保证",
+            subtitle: "这一单里 Syn 和主管对自己的约束",
+            content: <JiaobanGovernanceView proposal={latestProposal} />,
+          },
+          {
+            key: "howrun",
+            label: "怎么跑",
+            subtitle: "预演 · 执行模式 · 预填对话",
+            content: (
+              <JiaobanHowRunView
+                suggestWorkflow={latestProposal.suggest_workflow === true}
+                worksmapSwitchOn={workflowSwitchOn}
+                onToggleWorksmapSwitch={setWorkflowSwitchOn}
+                orchestrationMode={orchestrationMode}
+                onOrchestrationModeChange={setOrchestrationMode}
+                supervisorPilotDisabledReason={supervisorPilotDisabledReason}
+                classicDisabledReason={classicModeUnavailableReason(projectRoot)}
+                disabled={starting || consultLoading}
+                sessions={projectSessions}
+                sessionChoice={sessionChoice}
+                onSessionChoiceChange={setSessionChoice}
+                onOpenAgentSession={onOpenAgentSession}
+              />
+            ),
+          },
+        ]
+      : undefined;
+
   return (
     <section className="project-jiaoban project-jiaoban--split" aria-label="交办">
-      {renderLayout ? renderLayout({ phase, history: historyContent, main: mainContent, previewCanvas }) : <>{historyContent}{mainContent}</>}
+      {renderLayout ? (
+        renderLayout({
+          phase,
+          history: historyContent,
+          main: mainContent,
+          previewCanvas,
+          canvasViews: jiaobanCanvasViews,
+          activeCanvasView: canvasViewKey,
+          onCanvasViewChange: setCanvasViewKey,
+        })
+      ) : (
+        <>
+          {historyContent}
+          {mainContent}
+        </>
+      )}
     </section>
   );
 }

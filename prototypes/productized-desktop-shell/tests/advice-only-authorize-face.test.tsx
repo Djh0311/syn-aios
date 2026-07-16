@@ -3,6 +3,7 @@
 // willWrite=true → 原样（无只读警条·主按钮=[允许并开始]）。
 import { renderToStaticMarkup } from "react-dom/server.browser";
 import { JiaobanAuthorizeState, JiaobanDoneState } from "../src/views/projects/ProjectJiaobanPanel";
+import { JiaobanHowRunView } from "../src/views/projects/jiaoban/JiaobanAuthorizeStates";
 import type { AutoAdvanceRoleLoopOutcome, ProjectConsultationProposal, ProjectDirectorPlannedTask } from "../src/lib/types";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -49,9 +50,6 @@ function html(allowedWriteRoots: string[]): string {
       proposal={proposalFixture(allowedWriteRoots)}
       proposalIsStale={false}
       proposalAgeDays={0}
-      sessions={[]}
-      sessionChoice={null}
-      onSessionChoiceChange={noop}
       amendment=""
       onAmendmentChange={noop}
       onAmend={noop}
@@ -61,15 +59,12 @@ function html(allowedWriteRoots: string[]): string {
       starting={false}
       consultLoading={false}
       consultError={null}
-      worksmapSwitchOn={false}
-      onToggleWorksmapSwitch={noop}
-      worksmapTasks={null}
-      worksmapLoading={false}
-      worksmapError={null}
+      howRunSummary="经典状态机 · 开个新对话 · 预演图关"
+      onShowGovernance={noop}
+      onShowHowRun={noop}
       boundaryLoading={false}
       boundaryOutcome={null}
       onBoundaryRetry={noop}
-      onOpenAgentSession={noop}
     />,
   );
 }
@@ -91,12 +86,42 @@ function html(allowedWriteRoots: string[]): string {
   assert(!out.includes("这单是只读的"), "正常方案不显只读警条");
   assert(!out.includes("重新出方案（要动手）"), "正常方案无改道按钮");
   assert(out.includes("允许并开始"), "正常方案主按钮原样");
-  assert(out.includes("🔓"), "正常方案 🔓 许可行原样（willWrite=true）");
-  assert(out.includes("我来做：") && out.includes("会改的文件：") && out.includes("改完怎么验："), "授权卡应保留核心方案要点");
-  assert(out.includes("给第一个预演节点预填对话") && out.includes("需要你允许"), "授权卡应保留对话预填与人闸提示");
-  assert(out.includes("按工作流来（在右侧预演画布看工序图）"), "开关文案应明确图在画布侧");
+  // 07-15 二审稿:🔓 许可横幅已删(写入范围在「会动什么」事实行·批准按钮本身就是人闸——信息四问·重复即删)。
+  assert(!out.includes("🔓"), "许可横幅应已删除");
+  // 07-15 走查#2·批态卡定式:一句标题(jiaoban-plan-title)+「会动什么」事实行+「怎么算做好」逐条编号,
+  // 取代「我来做:/会改的文件:/改完怎么验:」分号长句字段行。
+  assert(out.includes("jiaoban-plan-title"), "授权卡应有一句话标题");
+  assert(out.includes("会动什么") && out.includes("会改的文件"), "「会动什么」事实组在");
+  assert(out.includes("怎么算做好") && out.includes("<ol"), "「怎么算做好」应逐条编号非分号长句");
+  assert(!out.includes("我来做："), "「我来做:」字段行退役(标题已顶位)");
+  // 配置件(预填对话/预演开关/执行模式)移右区「怎么跑」视图;卡上只留摘要入口一行。
+  assert(!out.includes("给第一个预演节点预填对话"), "预填对话应已移出批卡(归右区怎么跑视图)");
+  assert(out.includes("jiaoban-plan-link--howrun") && out.includes("怎么跑"), "「怎么跑」摘要入口应在卡上");
   assert(!out.includes("jiaoban-worksmap-graph"), "授权卡不应再渲染步骤流图");
   assert(!out.includes("目标："), "授权卡应删去重复的目标");
+}
+
+// 2b) 右区「怎么跑」视图承载配置件(07-15 二审稿:预填对话/预演开关/执行模式从批卡移来)。
+{
+  const out = renderToStaticMarkup(
+    <JiaobanHowRunView
+      suggestWorkflow={false}
+      worksmapSwitchOn={false}
+      onToggleWorksmapSwitch={noop}
+      orchestrationMode="classic"
+      onOrchestrationModeChange={noop}
+      supervisorPilotDisabledReason={null}
+      classicDisabledReason={null}
+      disabled={false}
+      sessions={[]}
+      sessionChoice={null}
+      onSessionChoiceChange={noop}
+      onOpenAgentSession={noop}
+    />,
+  );
+  assert(out.includes("给第一个预演节点预填对话"), "怎么跑视图应承载预填对话");
+  assert(out.includes("按工作流来（在右侧预演画布看工序图）"), "怎么跑视图应承载预演开关");
+  assert(out.includes("执行模式"), "怎么跑视图应承载执行模式单选");
 }
 
 const readonlyTask: ProjectDirectorPlannedTask = {

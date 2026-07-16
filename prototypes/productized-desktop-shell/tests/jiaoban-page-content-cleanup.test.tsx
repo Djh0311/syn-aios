@@ -60,9 +60,6 @@ function authorizeHtml(proposalIsStale = false, proposalAgeDays = 0): string {
       proposal={proposalFixture()}
       proposalIsStale={proposalIsStale}
       proposalAgeDays={proposalAgeDays}
-      sessions={[]}
-      sessionChoice={null}
-      onSessionChoiceChange={noop}
       amendment=""
       onAmendmentChange={noop}
       onAmend={noop}
@@ -72,15 +69,12 @@ function authorizeHtml(proposalIsStale = false, proposalAgeDays = 0): string {
       starting={false}
       consultLoading={false}
       consultError={null}
-      worksmapSwitchOn={false}
-      onToggleWorksmapSwitch={noop}
-      worksmapTasks={null}
-      worksmapLoading={false}
-      worksmapError={null}
+      howRunSummary="经典状态机 · 开个新对话 · 预演图关"
+      onShowGovernance={noop}
+      onShowHowRun={noop}
       boundaryLoading={false}
       boundaryOutcome={null}
       onBoundaryRetry={noop}
-      onOpenAgentSession={noop}
     />,
   );
 }
@@ -88,7 +82,9 @@ function authorizeHtml(proposalIsStale = false, proposalAgeDays = 0): string {
 // 1、4、5、6：所有交办内引导回到右侧画布；会话预填与人闸仍在，旧方案黄条不再重复时间和建议。
 {
   const authorize = authorizeHtml();
-  assert(authorize.includes("给第一个预演节点预填对话"), "预填对话标签应保留");
+  // 07-15 二审稿:预填对话移右区「怎么跑」视图(覆盖在 advice-only-authorize-face 2b);卡上=摘要入口一行。
+  assert(!authorize.includes("给第一个预演节点预填对话"), "预填对话应已移出批卡");
+  assert(authorize.includes("jiaoban-plan-link--howrun"), "批卡应有「怎么跑」摘要入口");
   assert(!authorize.includes(removedCopy("批了就自动跑完；碰到越界或拿不准会", "停下来问你。")), "授权教学提示应删除");
   assert(!authorize.includes(removedCopy("AI 的", "方案")), "授权卡标题应删除");
   assert(!authorize.includes(removedCopy("想改就", "直接说")), "改方案输入的教学标签应删除");
@@ -117,7 +113,9 @@ function authorizeHtml(proposalIsStale = false, proposalAgeDays = 0): string {
     />,
   );
   assert(!say.includes(removedCopy("这期间界面不会卡，也可以", "先去忙别的")), "说相底部重复时长说明应删除");
-  assert(say.includes("说一句话，AI 会读你的项目、想个方案给你审。"), "说相输入提示应保留");
+  // 07-15 走查修·对齐定稿(hi-fi F 说态):教育句不上脸(标题+占位例句已说明白),label 收进 sr-only 保读屏。
+  assert(!say.includes("说一句话，AI 会读你的项目、想个方案给你审。"), "说相教育句不再上脸");
+  assert(say.includes("sr-only"), "说相输入框可及标签保留");
   assert(!say.includes(removedCopy('class="eyebrow">交', "办")), "说相 eyebrow 应删除");
 }
 
@@ -270,7 +268,8 @@ function authorizeHtml(proposalIsStale = false, proposalAgeDays = 0): string {
     />,
   );
   assert(layout.includes("出方案后，这里会出现工序图预演。"), "说相右侧应显示预演空态");
-  assert(layout.includes("在工作流页打开"), "完整工作流入口应保留");
+  // 07-15 走查修:窄条=纯提示句,跳转钮随画布宽态走(见 jiaoban-merged-layout 测试)。
+  assert(!layout.includes("在工作流页打开"), "说相窄条不再渲染跳转钮");
   assert(!layout.includes("工作流数据暂不可用"), "说相不应显示笼统无数据占位");
 }
 

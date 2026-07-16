@@ -65,14 +65,18 @@ function historyHtml(props: Partial<Parameters<typeof JiaobanHistoryColumn>[0]>)
   assert(!out.includes("needs_human_check") && !out.includes("delivered") && !out.includes("advice_only"), "词表：不露英文枚举");
 }
 
-// 2) 最新卡住单才有[接着跑]（两个 blocked，只 latestBlockedId 那单给行内快捷）。
+// 2) 历史栏零[接着跑]——canon §四.2:「[接着跑]在卡住脸不在历史栏」。行内快捷是修宪(07-14)前遗留,
+//    07-15 走查#2 拆除;本组原断言「只最新卡住单有行内快捷」锁的正是违宪物,按宪法优先翻案。
 {
   const entries: RunHistoryEntry[] = [
     entry({ proposal_id: "b2", state: "blocked", state_note: "卡住 2" }),
     entry({ proposal_id: "b1", state: "blocked", state_note: "卡住 1" }),
   ];
   const out = historyHtml({ entries, total: 2, latestBlockedId: "b2" });
-  assert((out.match(/接着跑/g) || []).length === 1, "只最新卡住单有[接着跑]");
+  assert((out.match(/接着跑/g) || []).length === 0, "历史栏不得再有行内[接着跑](属卡住脸)");
+  assert(!out.includes("jiaoban-run-meta"), "历史行=单行三元素,两行 meta 结构退役");
+  assert(out.includes("jiaoban-run-time"), "时间元素在行内");
+  assert(out.includes('title="卡住 2'), "state_note 人话进悬停");
 }
 
 // 3) 空历史 → 人话 + [+ 新交办]。

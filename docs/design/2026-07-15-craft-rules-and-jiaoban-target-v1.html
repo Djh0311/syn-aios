@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>手艺七律(已拍) · 批态目标稿二审</title>
+<style>
+:root{--bg:#f3f0ea;--panel:#faf8f4;--panel-raised:#ffffff;--ink:#1a1c1a;--ink-mid:#3d4039;--muted:#6b7068;--hair:#d6d2c8;--line:#dbd7cf;--accent:#2a6b5e;--accent-strong:#1b4f45;--accent-bg:#eaf4f1;--warning:#8a4010;--warning-bg:#fff0e0;--run:#1a5c8a;}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--ink);font:13px/1.6 -apple-system,"PingFang SC",sans-serif;padding:26px 30px 60px}
+h1{font:600 17px/1.4 "Songti SC","Noto Serif SC",serif;margin-bottom:4px}
+.sub{color:var(--muted);font-size:12px;margin-bottom:22px}
+h2{font:600 14px/1.4 "Songti SC","Noto Serif SC",serif;margin:26px 0 10px}
+/* ── 七律 ── */
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;max-width:1060px}
+.rule{background:var(--panel);border:1px solid var(--hair);border-radius:10px;padding:12px 14px}
+.rule b{display:block;font-size:12.5px;margin-bottom:3px}
+.rule span{color:var(--ink-mid);font-size:12px}
+/* ── 目标稿画布 ── */
+.stage{background:var(--bg);border:1px solid var(--hair);border-radius:12px;padding:18px;max-width:1120px}
+.tri{display:grid;grid-template-columns:218px 500px minmax(0,1fr);gap:14px;align-items:start}
+/* 历史栏:透明底,无框 */
+.hist h3{font-size:13px;font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;color:var(--ink)}
+.hist h3 em{font-style:normal;font-size:11px;color:var(--muted);font-weight:400}
+.chips{display:flex;gap:6px;margin-bottom:10px}
+.chip{font-size:11px;padding:2px 9px;border:1px solid var(--hair);border-radius:999px;color:var(--ink-mid);background:transparent}
+.chip.on{border-color:var(--ink);color:var(--ink);font-weight:500}
+.hrow{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:6px;font-size:12.5px}
+.hrow.on{background:var(--accent-bg)}
+.hrow .d{flex:none;font-size:12px}
+.hrow .g{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hrow .t{flex:none;font-size:11px;color:var(--muted)}
+/* 方案卡:唯一的「框」 */
+.card{background:var(--panel);border:1px solid var(--hair);border-radius:12px;padding:20px;display:grid;gap:14px}
+.stale{display:flex;gap:8px;align-items:baseline;background:var(--warning-bg);border-radius:8px;padding:8px 12px;font-size:12.5px;color:var(--warning)}
+.title{font:600 16px/1.5 "Songti SC","Noto Serif SC",serif}
+.seg{font-size:11.5px;font-weight:600;color:var(--muted);letter-spacing:.02em;margin-bottom:2px}
+.fact{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px dashed var(--hair);font-size:12.5px}
+.fact span{color:var(--muted);flex:none}
+.fact b{font-weight:500;text-align:right;overflow-wrap:anywhere}
+ol.checks{padding-left:20px;display:grid;gap:4px;font-size:12.5px}
+.fold{font-size:12px;color:var(--muted);padding:6px 0 0;cursor:pointer}
+.fold:hover{color:var(--ink)}
+.sup{font-size:12.5px;color:var(--accent-strong)}
+.howrun{font-size:12px;color:var(--muted);border-top:1px dashed var(--hair);padding-top:10px;cursor:pointer}
+.howrun:hover{color:var(--ink)}
+.acts{display:flex;gap:8px;padding-top:2px}
+.acts .p{flex:1 1 100%;}
+button{font:12.5px -apple-system,"PingFang SC",sans-serif;cursor:pointer;padding:8px 14px;border-radius:8px}
+.bp{border:1px solid var(--accent);background:var(--accent);color:#fff}
+.bp:hover{background:var(--accent-strong)}
+.bs{border:1px solid var(--line);background:var(--panel-raised);color:var(--ink-mid)}
+.acts2{display:flex;gap:8px}
+.acts2 .bs{flex:1}
+/* 图区:窄而精 */
+.cv h4{font-size:12px;font-weight:600;margin-bottom:2px}
+.cv .cvsub{font-size:11px;color:var(--muted);margin-bottom:12px}
+.node{background:var(--panel-raised);border:1px solid var(--hair);border-radius:10px;padding:12px 14px;box-shadow:0 1px 3px rgba(26,28,26,.05);max-width:260px}
+.node .eyebrow{font-size:10.5px;color:var(--muted);letter-spacing:.04em;margin-bottom:3px}
+.node .nt{font-size:12.5px;font-weight:600;line-height:1.5;margin-bottom:6px}
+.node .pick{display:inline-block;font-size:11px;color:var(--accent-strong);background:var(--accent-bg);border-radius:999px;padding:2px 9px}
+.arrow{color:var(--muted);text-align:center;max-width:260px;font-size:12px;padding:2px 0}
+.ghost{border:1px dashed var(--hair);border-radius:10px;padding:12px 14px;max-width:260px;color:var(--muted);font-size:11.5px}
+.vtabs{display:flex;gap:6px;margin-bottom:10px}
+.vtab{font-size:11px;padding:2px 10px;border:1px solid var(--hair);border-radius:999px;color:var(--muted);cursor:pointer}
+.vtab.on{border-color:var(--accent);color:var(--accent-strong);background:var(--accent-bg);font-weight:500}
+.gov{background:var(--panel-raised);border:1px solid var(--hair);border-radius:10px;padding:16px 18px}
+.gov .gseg{font-size:11.5px;font-weight:600;color:var(--muted);margin:10px 0 4px}
+.gov .gseg:first-child{margin-top:0}
+.gov ol{padding-left:20px;display:grid;gap:5px;font-size:12.5px}
+.linkrow{font-size:12px;color:var(--muted);cursor:pointer;padding-top:2px}
+.linkrow:hover{color:var(--ink)}
+.linkrow b{color:var(--ink-mid);font-weight:500}
+.snap{font:600 12px -apple-system,sans-serif;color:var(--muted);margin:18px 0 8px}
+/* A/B */
+.ab{display:flex;gap:26px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.ab .opt{display:grid;gap:6px;justify-items:start}
+.ab .lbl{font-size:11.5px;color:var(--muted)}
+.bblack{border:1px solid #232323;background:#232323;color:#f7f4ec;border-radius:0;padding:8px 16px;font-size:12.5px}
+.note{font-size:11.5px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+<h1>批态目标稿·二审(右区=信息展开面)</h1>
+<p class="sub">七律已拍入宪(⑦=A·石绿圆角)。按你的方向改稿:<b>右区不再是工序图专座,而是信息展开面</b>——中卡只留决策本体,治理保证/怎么跑/工序图都是右区可切换的视图,想看什么切什么。下面两个快照=同一页面切不同视图。</p>
+
+<h2>手艺七律</h2>
+<div class="rules">
+  <div class="rule"><b>① 纸上放卡</b><span>一栏至多一个「框」(卡本身)。分组靠留白+小灰标,不靠框套框。</span></div>
+  <div class="rule"><b>② 虚线只做占位</b><span>虚线=「这里将来有东西」(空态/占位),绝不做容器边框;分隔用细虚线一根。</span></div>
+  <div class="rule"><b>③ 统一网格</b><span>卡内边距 20px;组间距 14px;行内节拍 4/8/12px;左缘一条线拉到底。</span></div>
+  <div class="rule"><b>④ 小签唯一定式</b><span>pill/徽标只有一种:11px·2px 9px·全圆角,色取语义 token;不再各造各的。</span></div>
+  <div class="rule"><b>⑤ 事实行定式</b><span>标签灰左·值右对齐·细虚线分隔(已落地),全 App 事实类信息同式。</span></div>
+  <div class="rule"><b>⑥ 长单分层</b><span>人读的条目直排;机器/治理细则收一行「N 条 ▸」展开——展开≠截断,全量仍在。</span></div>
+  <div class="rule"><b>⑦ 一代视觉(已拍=A)</b><span>全 App 按钮/选中/hover 收敛到石绿+圆角;二代墨方朱红覆盖层随手艺扫除退役。</span></div>
+</div>
+
+<h2>批态目标稿·二审(比例 218 / 500 / 余;右区=信息展开面)</h2>
+<p class="snap">快照 A · 右区停在「工序图」(批态默认——图上选会话不丢)</p>
+<div class="stage">
+  <div class="tri">
+    <div class="hist">
+      <h3>工作历史 <em>＋ &nbsp;◀ 收起</em></h3>
+      <div class="chips"><span class="chip on">全部</span><span class="chip">等我的 24</span><span class="chip">跑着</span></div>
+      <div class="hrow on"><span class="d">○</span><span class="g">在仅限项目根目录内,创…</span><span class="t">07-12</span></div>
+      <div class="hrow"><span class="d">●</span><span class="g">完成 Station 3a v6 固定…</span><span class="t">07-12</span></div>
+      <div class="hrow"><span class="d">⚠</span><span class="g">仅验收并按条件创建…</span><span class="t">07-12</span></div>
+      <div class="hrow"><span class="d">✓</span><span class="g">整理 README 结构</span><span class="t">07-08</span></div>
+    </div>
+      <div class="card">
+        <div class="stale">⚠ <span>这是 3 天前的旧方案,项目可能已变——建议重新说一遍。</span></div>
+        <div class="title">受控地生成一个无末尾换行、内容和字节级完全匹配的 proof 文件,并保留完整可审计回程。</div>
+        <div>
+          <p class="seg">会动什么</p>
+          <p class="fact"><span>会改的文件</span><b>station3a-control-core-proof-v7.txt</b></p>
+          <p class="fact"><span>写入范围</span><b>…/Documents/mario test</b></p>
+          <p class="fact"><span>不碰</span><b>写入范围以外的文件(沙箱锁死)</b></p>
+        </div>
+        <div>
+          <p class="seg">怎么算做好</p>
+          <ol class="checks">
+            <li>创建 station3a-control-core-proof-v7.txt</li>
+            <li>精确写入 UTF-8/ASCII 内容 station3a control core proof v7 passed!</li>
+            <li>不添加末尾换行</li>
+            <li>回读并验证完整内容、39 bytes、末字节 33</li>
+            <li>返回结构化执行证据</li>
+          </ol>
+          <p class="linkrow">治理保证 <b>Syn 9 条 / 主管 1 条</b> · 点右侧「治理保证」看全文 →</p>
+        </div>
+        <p class="sup">✓ 主管看过:范围和你的目标对得上。(仅提醒,批不批你定)</p>
+        <p class="linkrow">怎么跑 <b>经典状态机 · 给节点开新对话</b> · 右侧「怎么跑」可调 →</p>
+        <div class="acts"><button class="bp p">重新说目标出新方案</button></div>
+        <div class="acts2"><button class="bs">仍要允许并开始(旧方案)</button><button class="bs">先不做</button></div>
+      </div>
+    <div class="cv">
+      <div class="vtabs"><span class="vtab on">工序图</span><span class="vtab">治理保证</span><span class="vtab">怎么跑</span></div>
+      <p class="cvsub">批准后照这个跑 · 在工作流页打开</p>
+      <div class="node">
+        <p class="eyebrow">任务 · 预演</p>
+        <p class="nt">创建并字节级验证 Station3A proof 文件</p>
+        <span class="pick">对话:开个新的 ▾</span>
+      </div>
+      <p class="arrow">↓</p>
+      <div class="ghost">复核 · 独立只读核验(批准后生成)</div>
+    </div>
+  </div>
+</div>
+
+<p class="snap">快照 B · 点了「治理保证」——同一页,右区切视图,中卡不动</p>
+<div class="stage">
+  <div class="tri">
+    <div class="hist">
+      <h3>工作历史 <em>＋ &nbsp;◀ 收起</em></h3>
+      <div class="chips"><span class="chip on">全部</span><span class="chip">等我的 24</span><span class="chip">跑着</span></div>
+      <div class="hrow on"><span class="d">○</span><span class="g">在仅限项目根目录内,创…</span><span class="t">07-12</span></div>
+      <div class="hrow"><span class="d">●</span><span class="g">完成 Station 3a v6 固定…</span><span class="t">07-12</span></div>
+      <div class="hrow"><span class="d">⚠</span><span class="g">仅验收并按条件创建…</span><span class="t">07-12</span></div>
+      <div class="hrow"><span class="d">✓</span><span class="g">整理 README 结构</span><span class="t">07-08</span></div>
+    </div>
+      <div class="card">
+        <div class="stale">⚠ <span>这是 3 天前的旧方案,项目可能已变——建议重新说一遍。</span></div>
+        <div class="title">受控地生成一个无末尾换行、内容和字节级完全匹配的 proof 文件,并保留完整可审计回程。</div>
+        <div>
+          <p class="seg">会动什么</p>
+          <p class="fact"><span>会改的文件</span><b>station3a-control-core-proof-v7.txt</b></p>
+          <p class="fact"><span>写入范围</span><b>…/Documents/mario test</b></p>
+          <p class="fact"><span>不碰</span><b>写入范围以外的文件(沙箱锁死)</b></p>
+        </div>
+        <div>
+          <p class="seg">怎么算做好</p>
+          <ol class="checks">
+            <li>创建 station3a-control-core-proof-v7.txt</li>
+            <li>精确写入 UTF-8/ASCII 内容 station3a control core proof v7 passed!</li>
+            <li>不添加末尾换行</li>
+            <li>回读并验证完整内容、39 bytes、末字节 33</li>
+            <li>返回结构化执行证据</li>
+          </ol>
+          <p class="linkrow">治理保证 <b>Syn 9 条 / 主管 1 条</b> · 点右侧「治理保证」看全文 →</p>
+        </div>
+        <p class="sup">✓ 主管看过:范围和你的目标对得上。(仅提醒,批不批你定)</p>
+        <p class="linkrow">怎么跑 <b>经典状态机 · 给节点开新对话</b> · 右侧「怎么跑」可调 →</p>
+        <div class="acts"><button class="bp p">重新说目标出新方案</button></div>
+        <div class="acts2"><button class="bs">仍要允许并开始(旧方案)</button><button class="bs">先不做</button></div>
+      </div>
+    <div class="cv">
+      <div class="vtabs"><span class="vtab">工序图</span><span class="vtab on">治理保证</span><span class="vtab">怎么跑</span></div>
+      <p class="cvsub">这一单里 Syn 和主管对自己的约束——审计级全文,宽敞读</p>
+      <div class="gov">
+        <p class="gseg">Syn 要保证(9 条)</p>
+        <ol>
+          <li>仅通过本次 UI 新建全新的 authorization、work item 和 supervisor run</li>
+          <li>不复用 v3、v4、已中止的 v5 或未闭环的 v6 实体与 native thread</li>
+          <li>只派发一个 worker,不追问、不重试</li>
+          <li>保存 proposal、任务包、实际 worker prompt、回程与控制账本</li>
+          <li>对已完成的相同动作执行幂等保护;主管不得用重复 inspect 消耗动作配额</li>
+          <li>失败即安全停下,不扩权、不改其他文件</li>
+          <li>检查合法 worker 回程及真实证据</li>
+          <li>inspect_worker 已完成且 evidence_present=true 后,不得重复检查同一 worker</li>
+          <li>证据充分才提出 finalize pass;finalize 后再 report_user</li>
+        </ol>
+        <p class="gseg">主管要判断(1 条)</p>
+        <ol><li>对字节级结果独立复核后才终标</li></ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>第⑦条已拍:A·石绿圆角(存档对照)</h2>
+<div class="ab">
+  <div class="opt"><span class="lbl">A · 定稿气质:石绿 + 圆角(上面目标稿用的这个)</span><button class="bp">允许并开始</button></div>
+  <div class="opt"><span class="lbl">B · 现二代:墨方 + 朱红 hover(今天真身的黑棒)</span><button class="bblack">允许并开始</button></div>
+</div>
+<p class="note">已拍 A;二代墨方朱红覆盖层(styles.css :5243 起)随手艺扫除退役。</p>
+</body>
+</html>

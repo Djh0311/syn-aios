@@ -353,7 +353,8 @@ export function shellDerivedWorkflowExpectedTexts(projectRoot: string): readonly
     "下一步",
     "节点详情",
     "权限请求",
-    "模型",
+    // 「模型」已删(07-15):此前靠状态条开发者注脚「来自工作流读模型」**凑数命中**=哑弹——
+    // 本 fixture 的节点根本没带模型字段;注脚随信息规范清理退场后现出原形。
     "允许读取",
     projectRoot,
     "允许写入",

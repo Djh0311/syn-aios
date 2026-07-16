@@ -3787,8 +3787,10 @@ td {
   --ink: var(--ink-deep);
   --muted: var(--ink-light);
   --line: var(--hair-2);
-  --accent: var(--ink-deep);
-  --accent-strong: var(--vermil);
+  /* 07-15 手艺七律⑦用户拍 A:主动作色回一代石绿(主钮/选中/hover 全局一代化)。
+     Inkwash 壳的米纸底/宋体/朱红 danger 保留——那是拍过的「现状」氛围;黑与朱红退出「主动作/选中」语义。 */
+  --accent: #2a6b5e;
+  --accent-strong: #1b4f45;
   --warning: var(--terra);
   --warning-bg: rgba(184, 115, 65, 0.09);
   --candidate: #546845;
@@ -5240,25 +5242,8 @@ textarea {
   background: rgba(161, 66, 66, 0.045);
 }
 
-.primary-button {
-  border-color: var(--ink-deep);
-  border-radius: 0;
-  background: var(--ink-deep);
-  color: var(--rice);
-}
-
-.secondary-button {
-  border-color: var(--hair-2);
-  border-radius: 0;
-  background: var(--rice);
-  color: var(--ink-mid);
-}
-
-.primary-button:hover,
-.secondary-button:hover {
-  border-color: rgba(161, 66, 66, 0.45);
-  color: var(--vermil);
-}
+/* 二代按钮覆盖(墨方钮·朱红 hover)已退役——07-15 手艺七律⑦用户拍 A:全 App 按钮收敛回
+   一代石绿圆角(基座 :1113 原样生效)。选中/hover 的其余朱红残留随手艺扫除包逐面收敛。 */
 
 ::-webkit-scrollbar {
   width: 6px;
@@ -8215,7 +8200,7 @@ textarea {
 .project-detail-content--fullwindow .project-hud-top {
   position: absolute;
   z-index: 18;
-  top: 10px;
+  top: 6px; /* 07-16:贴顶(用户「能缩多小缩多小」) */
   left: 14px;
   right: 14px;
   display: flex;
@@ -8352,7 +8337,12 @@ textarea {
 .project-detail-content--fullwindow .project-layout--jiaoban {
   display: flex;
   overflow: hidden;
-  padding: 96px 12px 12px;
+  padding: 48px 12px 8px; /* 07-16 极限贴:HUD 实高 ~40+顶 6+呼吸 2(窄窗回 96 见媒体query) */
+}
+@media (max-width: 1080px) {
+  .project-detail-content--fullwindow .project-layout--jiaoban {
+    padding-top: 96px; /* HUD 折行时留足 */
+  }
 }
 .project-detail-content--fullwindow .project-layout--jiaoban > .project-jiaoban {
   flex: 1;

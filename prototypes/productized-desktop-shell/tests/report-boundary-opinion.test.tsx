@@ -104,10 +104,12 @@ function sectionHtml(
   assert(!out.includes("审批"), "unavailable：词表无「审批」");
 }
 
-// 5) null 且不 loading → 零渲染（意见缺席不挡批·区块不占位）。
+// 5) null 且不 loading → 一行「还没到(不拦批)」+[要意见](07-16 用户终裁:主管意见=批卡常显位,
+//    意见没到也示明;非状态回声)。
 {
   const out = sectionHtml(false, null);
-  assert(out === "" || out === "<!---->", `null：应零渲染，实得「${out}」`);
+  assert(out.includes("全局主管意见还没到（不拦批）"), "null:常显位一行在");
+  assert(out.includes("要意见"), "null:给[要意见]出路");
 }
 
 // 6) 触发判据：今天 pending → 触发；stale（3 天前）→ 不触发（省额度）；非 pending → 不触发；null → 不触发。
@@ -172,9 +174,6 @@ function authorizeHtml(
       proposal={proposalFixture(allowedWriteRoots)}
       proposalIsStale={false}
       proposalAgeDays={0}
-      sessions={[]}
-      sessionChoice={null}
-      onSessionChoiceChange={noop}
       amendment=""
       onAmendmentChange={noop}
       onAmend={noop}
@@ -184,15 +183,12 @@ function authorizeHtml(
       starting={false}
       consultLoading={false}
       consultError={null}
-      worksmapSwitchOn={false}
-      onToggleWorksmapSwitch={noop}
-      worksmapTasks={null}
-      worksmapLoading={false}
-      worksmapError={null}
+      howRunSummary="经典状态机 · 开个新对话 · 预演图关"
+      onShowGovernance={noop}
+      onShowHowRun={noop}
       boundaryLoading={false}
       boundaryOutcome={boundaryOutcome}
       onBoundaryRetry={noop}
-      onOpenAgentSession={noop}
     />,
   );
 }
@@ -221,11 +217,11 @@ function authorizeHtml(
   assert(out.includes("范围和你的目标对得上"), "意见块 looks_ok 显示");
 }
 
-// 7c) 意见缺席（boundaryOutcome=null·async 没到）→ 按钮区照常、意见块零渲染（缺席不挡批）。
+// 7c) 意见缺席（boundaryOutcome=null·async 没到）→ 按钮区照常 + 常显位一行(07-16 用户终裁)。
 {
   const out = authorizeHtml(["/Users/yoyi/codex-workflow-mario-test"], null);
   assert(out.includes("允许并开始"), "意见缺席：按钮区照常可批");
-  assert(!out.includes("全局主管意见（批前边界）"), "意见缺席：意见块零渲染");
+  assert(out.includes("全局主管意见还没到（不拦批）"), "意见缺席：常显位一行在");
 }
 
 console.log("[boundary-opinion] all assertions passed");

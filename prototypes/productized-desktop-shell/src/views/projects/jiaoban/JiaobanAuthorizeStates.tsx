@@ -45,8 +45,9 @@ export function JiaobanSayState({
           <span aria-hidden="true">⚠</span> {error}
         </div>
       ) : null}
+      {/* 定稿(hi-fi F 说态·07-15 走查对齐):卡面=标题+占位例句+[出方案],教育句不上脸;label 文案留给读屏。 */}
       <label className="proposal-decision-field">
-        <span>说一句话，AI 会读你的项目、想个方案给你审。</span>
+        <span className="sr-only">想让 AI 干点啥</span>
         <textarea
           value={goal}
           onChange={(event) => onGoalChange(event.target.value)}
@@ -78,17 +79,12 @@ export function JiaobanSayState({
 
 // 2. 批（授权卡·定稿字段）
 // export 供离线 DOM 断言（fix9 诚实脸两态；renderToStaticMarkup 渲染·不平铺调用）。
+// 批态卡=决策本体(07-15 二审稿用户拍):标题/会动什么/怎么算做好(人读条)/主管一句/三键。
+// 治理保证与「怎么跑」配置移出卡面,成为右区信息展开面的视图——卡上只留两行入口(点了右区切换)。
 export function JiaobanAuthorizeState({
   proposal,
   proposalIsStale,
   proposalAgeDays,
-  sessions,
-  sessionChoice,
-  onSessionChoiceChange,
-  orchestrationMode = "classic",
-  onOrchestrationModeChange = () => {},
-  supervisorPilotDisabledReason = null,
-  classicDisabledReason = null,
   amendment,
   onAmendmentChange,
   onAmend,
@@ -98,26 +94,16 @@ export function JiaobanAuthorizeState({
   starting,
   consultLoading,
   consultError,
-  worksmapSwitchOn,
-  onToggleWorksmapSwitch,
-  worksmapTasks,
-  worksmapLoading,
-  worksmapError,
+  howRunSummary,
+  onShowGovernance,
+  onShowHowRun,
   boundaryLoading,
   boundaryOutcome,
   onBoundaryRetry,
-  onOpenAgentSession,
 }: {
   proposal: ProjectConsultationProposal;
   proposalIsStale: boolean;
   proposalAgeDays: number;
-  sessions: SessionRecord[];
-  sessionChoice: string | null;
-  onSessionChoiceChange: (value: string | null) => void;
-  orchestrationMode?: JiaobanOrchestrationMode;
-  onOrchestrationModeChange?: (mode: JiaobanOrchestrationMode) => void;
-  supervisorPilotDisabledReason?: string | null;
-  classicDisabledReason?: string | null;
   amendment: string;
   onAmendmentChange: (value: string) => void;
   onAmend: () => void;
@@ -127,36 +113,22 @@ export function JiaobanAuthorizeState({
   starting: boolean;
   consultLoading: boolean;
   consultError: string | null;
-  worksmapSwitchOn: boolean;
-  onToggleWorksmapSwitch: (value: boolean) => void;
-  worksmapTasks: ProjectDirectorPlannedTask[] | null;
-  worksmapLoading: boolean;
-  worksmapError: string | null;
+  // 右区视图入口:摘要与切换回调(必填——上游忘喂直接 tsc 报错,防入口静默不显)。
+  howRunSummary: string;
+  onShowGovernance: () => void;
+  onShowHowRun: () => void;
   // B2·全局主管批前边界意见（advisory·意见不是闸·async·缺席不挡批）。
   boundaryLoading: boolean;
   boundaryOutcome: GlobalSupervisorBoundaryReviewOutcome | null;
   onBoundaryRetry: () => void;
-  // 「看原始对话」桥：批卡收纳行入口（**必填**·透传给 picker）。批卡是任务点名的主入口，
-  // 设必填让上游漏传直接 tsc 报错——防「组件接了、上游忘喂、入口静默不显」的假绿（审查线逮到过）。
-  onOpenAgentSession: (threadId: string) => void;
 }) {
   const targetFiles = extractTargetFiles(proposal.proposed_steps);
   const willWrite = proposal.scope_draft.allowed_write_roots.length > 0;
   const workerAcceptance = proposal.worker_acceptance_criteria ?? [];
   const controlCoreAcceptance = proposal.control_core_acceptance_criteria ?? [];
   const supervisorAcceptance = proposal.supervisor_acceptance_criteria ?? [];
-  const hasRoleAcceptance =
-    workerAcceptance.length > 0 || controlCoreAcceptance.length > 0 || supervisorAcceptance.length > 0;
-  // 按钮旁的状态话只说明右侧预演画布，不再暗示卡内另有一张图。
-  const worksmapReady = !worksmapLoading && !worksmapError && !!(worksmapTasks && worksmapTasks.length);
-  const worksmapNote =
-    !worksmapSwitchOn || worksmapError
-      ? null
-      : worksmapLoading
-        ? "右侧预演画布正在绘制工序图…（可先批，先批就按现场拆）"
-        : worksmapReady
-          ? "✓ 工序图已在右侧预演画布显示"
-          : null;
+  const governanceCount = controlCoreAcceptance.length + supervisorAcceptance.length;
+  const userChecks = workerAcceptance.length ? workerAcceptance : proposal.acceptance_criteria;
 
   return (
     <div className="project-canvas-detail-card jiaoban-authorize" aria-label="方案">
@@ -182,37 +154,48 @@ export function JiaobanAuthorizeState({
         </div>
       ) : null}
 
-      <div className="role-loop-plain jiaoban-plan-body" aria-label="方案要点（人话）">
-        <p className="jiaoban-field">
-          <span className="jiaoban-field-label">我来做：</span>
-          {proposal.goal_summary || proposal.user_goal}
-        </p>
-        {targetFiles ? (
-          <p className="jiaoban-field">
-            <span className="jiaoban-field-label">会改的文件：</span>
-            {targetFiles}
-          </p>
+      {/* 批态卡定式(hi-fi F·07-15 走查#2 捞回总包漏项):标题=一句目标;「会动什么」=事实行(标签左值右);
+          「怎么算做好」=全部验收逐条编号(执行→Syn→主管顺排·一条一行)——治「分号拼长句一坨上脸」。 */}
+      {/* 定式卡素面(07-15 三波):旧「人话区」绿框记号退场——整卡已是人话,色块反成噪音。 */}
+      <div className="jiaoban-plan-body" aria-label="方案要点（人话）">
+        <h3 className="jiaoban-plan-title">{proposal.goal_summary || proposal.user_goal}</h3>
+        {targetFiles || willWrite ? (
+          <div className="jiaoban-plan-facts" aria-label="会动什么">
+            <p className="jiaoban-plan-seg">会动什么</p>
+            {targetFiles ? (
+              <p className="jiaoban-fact">
+                <span className="jiaoban-fact-label">会改的文件</span>
+                <span className="jiaoban-fact-value">{targetFiles}</span>
+              </p>
+            ) : null}
+            {willWrite ? (
+              <>
+                <p className="jiaoban-fact">
+                  <span className="jiaoban-fact-label">写入范围</span>
+                  <span className="jiaoban-fact-value">{proposal.scope_draft.allowed_write_roots.join("、")}</span>
+                </p>
+                <p className="jiaoban-fact">
+                  <span className="jiaoban-fact-label">不碰</span>
+                  <span className="jiaoban-fact-value">写入范围以外的文件（沙箱锁死）</span>
+                </p>
+              </>
+            ) : null}
+          </div>
         ) : null}
-        {hasRoleAcceptance ? (
-          <>
-            <p className="jiaoban-field">
-              <span className="jiaoban-field-label">执行 Agent 要做到：</span>
-              {workerAcceptance.join("；") || "未提供"}
-            </p>
-            <p className="jiaoban-field">
-              <span className="jiaoban-field-label">Syn 要保证：</span>
-              {controlCoreAcceptance.join("；") || "未提供"}
-            </p>
-            <p className="jiaoban-field">
-              <span className="jiaoban-field-label">主管要判断：</span>
-              {supervisorAcceptance.join("；") || "未提供"}
-            </p>
-          </>
-        ) : proposal.acceptance_criteria.length ? (
-          <p className="jiaoban-field">
-            <span className="jiaoban-field-label">改完怎么验：</span>
-            {proposal.acceptance_criteria.join("；")}
-          </p>
+        {userChecks.length ? (
+          <div className="jiaoban-plan-checks" aria-label="怎么算做好">
+            <p className="jiaoban-plan-seg">怎么算做好</p>
+            <ol>
+              {userChecks.map((item, index) => (
+                <li key={index}>{item}</li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+        {governanceCount ? (
+          <button type="button" className="jiaoban-plan-link" onClick={onShowGovernance}>
+            治理保证 · Syn {controlCoreAcceptance.length} 条 / 主管 {supervisorAcceptance.length} 条 · 右侧看全文 →
+          </button>
         ) : null}
       </div>
 
@@ -223,44 +206,25 @@ export function JiaobanAuthorizeState({
         onRetry={onBoundaryRetry}
       />
 
-      <JiaobanWorksmap
-        suggestWorkflow={proposal.suggest_workflow === true}
-        switchOn={worksmapSwitchOn}
-        onToggleSwitch={onToggleWorksmapSwitch}
-      />
+      {/* 「怎么跑」配置(预演开关/执行模式/预填对话)已移右区视图;卡上一行摘要入口。
+          🔓 许可横幅已删——写入范围在「会动什么」事实行里说过,批准按钮本身就是人闸(信息四问·重复即删)。 */}
+      <button type="button" className="jiaoban-plan-link jiaoban-plan-link--howrun" onClick={onShowHowRun}>
+        怎么跑 · {howRunSummary} · 右侧可调 →
+      </button>
 
-      <JiaobanOrchestrationModePicker
-        mode={orchestrationMode}
-        disabledReason={supervisorPilotDisabledReason}
-        classicDisabledReason={classicDisabledReason}
-        disabled={starting || consultLoading}
-        onChange={onOrchestrationModeChange}
-      />
-
-      <JiaobanSessionPicker
-        sessions={sessions}
-        sessionChoice={sessionChoice}
-        onSessionChoiceChange={onSessionChoiceChange}
-        onOpenAgentSession={onOpenAgentSession}
-        label="给第一个预演节点预填对话"
-      />
-
-      {willWrite ? (
-        <div className="jiaoban-grant" role="note">
-          <span aria-hidden="true">🔓</span> 需要你允许：改这个测试项目
-        </div>
+      {/* 修改框只在非旧方案态显示——旧方案没有[按我说的改]按钮,裸输入框=没消费者的杂讯(07-15 五波)。 */}
+      {!proposalIsStale ? (
+        <label className="proposal-decision-field jiaoban-amend">
+          <input
+            type="text"
+            aria-label="修改方案"
+            value={amendment}
+            onChange={(event) => onAmendmentChange(event.target.value)}
+            placeholder="例：改成暗色、分数存下来…"
+            disabled={consultLoading}
+          />
+        </label>
       ) : null}
-
-      <label className="proposal-decision-field jiaoban-amend">
-        <input
-          type="text"
-          aria-label="修改方案"
-          value={amendment}
-          onChange={(event) => onAmendmentChange(event.target.value)}
-          placeholder="例：改成暗色、分数存下来…"
-          disabled={consultLoading}
-        />
-      </label>
 
       {/* fix8：改要求出新方案期间/失败也上脸——loading 提示 + 失败人话，绝不静默。 */}
       {consultLoading ? (
@@ -269,10 +233,6 @@ export function JiaobanAuthorizeState({
         <div className="jiaoban-consult-error" role="alert" aria-label="出方案没成">
           <span aria-hidden="true">⚠</span> {consultError}
         </div>
-      ) : null}
-
-      {worksmapNote ? (
-        <p className={`jiaoban-worksmap-cta ${worksmapReady ? "ready" : ""}`}>{worksmapNote}</p>
       ) : null}
 
       <div className="workflow-state-actions">
@@ -412,7 +372,19 @@ export function JiaobanBoundaryReviewSection({
       </div>
     );
   }
-  if (!outcome) return null;
+  if (!outcome) {
+    // 07-16 用户终裁:意见没到也保留一行示明(主管意见=批卡常显位,非状态回声)+[要意见]出路。
+    return (
+      <div className="jiaoban-boundary jiaoban-boundary--pending" aria-label="全局主管意见">
+        <p className="muted small-note">
+          全局主管意见还没到（不拦批）。
+          <button className="jiaoban-plan-link" type="button" onClick={onRetry}>
+            要意见 →
+          </button>
+        </p>
+      </div>
+    );
+  }
   const review = outcome.status === "ready" ? (outcome.review ?? null) : null;
   if (!review) {
     // 不可用：人话原因 + [重试]（force）——意见缺席不挡批，但绝不零出路。
@@ -481,4 +453,92 @@ function extractTargetFiles(proposedSteps: string[]): string | null {
   if (!line) return null;
   const files = line.replace(/^目标文件：/, "").trim();
   return files || null;
+}
+
+// ── 右区信息展开面·批态视图(07-15 二审稿用户拍:想看什么切什么) ──────────
+
+// 治理保证全文:Syn/主管对这一单的自我约束——审计级信息,右区宽敞读,不再挤批卡。
+export function JiaobanGovernanceView({ proposal }: { proposal: ProjectConsultationProposal }) {
+  const controlCore = proposal.control_core_acceptance_criteria ?? [];
+  const supervisor = proposal.supervisor_acceptance_criteria ?? [];
+  if (!controlCore.length && !supervisor.length) {
+    return <p className="muted small-note">这一单没有额外的治理条款。</p>;
+  }
+  return (
+    <div className="jiaoban-governance-view" aria-label="治理保证全文">
+      {controlCore.length ? (
+        <>
+          <p className="jiaoban-plan-seg">Syn 要保证（{controlCore.length} 条）</p>
+          <ol>
+            {controlCore.map((item, index) => (
+              <li key={index}>{item}</li>
+            ))}
+          </ol>
+        </>
+      ) : null}
+      {supervisor.length ? (
+        <>
+          <p className="jiaoban-plan-seg">主管要判断（{supervisor.length} 条）</p>
+          <ol>
+            {supervisor.map((item, index) => (
+              <li key={index}>{item}</li>
+            ))}
+          </ol>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+// 「怎么跑」配置视图:预演开关/执行模式/预填对话——从批卡移来,读方案→批的流不再被配置打断。
+export function JiaobanHowRunView({
+  suggestWorkflow,
+  worksmapSwitchOn,
+  onToggleWorksmapSwitch,
+  orchestrationMode,
+  onOrchestrationModeChange,
+  supervisorPilotDisabledReason,
+  classicDisabledReason,
+  disabled,
+  sessions,
+  sessionChoice,
+  onSessionChoiceChange,
+  onOpenAgentSession,
+}: {
+  suggestWorkflow: boolean;
+  worksmapSwitchOn: boolean;
+  onToggleWorksmapSwitch: (value: boolean) => void;
+  orchestrationMode: JiaobanOrchestrationMode;
+  onOrchestrationModeChange: (mode: JiaobanOrchestrationMode) => void;
+  supervisorPilotDisabledReason: string | null;
+  classicDisabledReason: string | null;
+  disabled: boolean;
+  sessions: SessionRecord[];
+  sessionChoice: string | null;
+  onSessionChoiceChange: (value: string | null) => void;
+  onOpenAgentSession: (threadId: string) => void;
+}) {
+  return (
+    <div className="jiaoban-howrun-view jiaoban-authorize" aria-label="怎么跑">
+      <JiaobanWorksmap
+        suggestWorkflow={suggestWorkflow}
+        switchOn={worksmapSwitchOn}
+        onToggleSwitch={onToggleWorksmapSwitch}
+      />
+      <JiaobanOrchestrationModePicker
+        mode={orchestrationMode}
+        disabledReason={supervisorPilotDisabledReason}
+        classicDisabledReason={classicDisabledReason}
+        disabled={disabled}
+        onChange={onOrchestrationModeChange}
+      />
+      <JiaobanSessionPicker
+        sessions={sessions}
+        sessionChoice={sessionChoice}
+        onSessionChoiceChange={onSessionChoiceChange}
+        onOpenAgentSession={onOpenAgentSession}
+        label="给第一个预演节点预填对话"
+      />
+    </div>
+  );
 }

@@ -139,8 +139,9 @@ export function JiaobanHistoryColumn({
     <aside className="jiaoban-history" aria-label="工作历史">
       <div className="jiaoban-history-head">
         <strong>工作历史</strong>
+        {/* 07-15 走查:头部入口降为次级小钮——空态里的 [+新交办] 才是主动作,俩黑色主钮叠着打架。 */}
         <button
-          className="primary-button jiaoban-history-new"
+          className="secondary-button jiaoban-history-new"
           type="button"
           onClick={onNewJiaoban}
           aria-label="新交办"
@@ -177,44 +178,21 @@ export function JiaobanHistoryColumn({
             const visual = historyStateVisual(entry);
             const isCurrent = currentProposalId != null && entry.proposal_id === currentProposalId;
             const isSelected = selectedId === entry.proposal_id || (selectedId === null && isCurrent);
-            const showContinue = entry.state === "blocked" && entry.proposal_id === latestBlockedId;
+            // 07-15 走查#2·对齐定稿+宪法:行=单行三元素(状态点+标题+时间);state_note 人话进悬停与详情卡;
+            // 行内[接着跑]快捷钮拆除——canon §四.2 明写「[接着跑]在卡住脸不在历史栏」,旧快捷是修宪前遗留。
             return (
               <button
                 key={entry.proposal_id}
                 className={`jiaoban-run ${isSelected ? "on" : ""}`}
                 type="button"
+                title={`${entry.state_note} · ${entry.goal_text || "（没写目标）"}`}
                 onClick={() => (isCurrent ? onBackToCurrent() : onSelectEntry(entry))}
               >
-                <span className="jiaoban-run-r1">
-                  <span className={`jiaoban-run-dot ${visual.toneClass}`} aria-hidden="true">
-                    {visual.dot}
-                  </span>
-                  <span className="jiaoban-run-goal">{entry.goal_text || "（没写目标）"}</span>
+                <span className={`jiaoban-run-dot ${visual.toneClass}`} aria-hidden="true">
+                  {visual.dot}
                 </span>
-                <span className="jiaoban-run-meta">
-                  <span>{formatHistoryTime(entry.created_at_ms)}</span>
-                  <span aria-hidden="true">·</span>
-                  <span className="jiaoban-run-note">{entry.state_note}</span>
-                  {showContinue ? (
-                    <span
-                      className="jiaoban-run-quick"
-                      role="button"
-                      tabIndex={0}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onContinueRun();
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.stopPropagation();
-                          onContinueRun();
-                        }
-                      }}
-                    >
-                      接着跑
-                    </span>
-                  ) : null}
-                </span>
+                <span className="jiaoban-run-goal">{entry.goal_text || "（没写目标）"}</span>
+                <span className="jiaoban-run-time">{formatHistoryTime(entry.created_at_ms)}</span>
               </button>
             );
           })
