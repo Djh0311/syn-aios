@@ -65,6 +65,17 @@ struct SupervisorSession {
     ended_at_ms: Option<i64>,
     #[serde(default)]
     termination_reason: String,
+    // P1-A resident project-supervisor identity. These fields deliberately live on the
+    // existing supervisor session record so DB-primary and JSON projection continue to
+    // move together through update_store; do not create a second session sidecar.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    resident_project_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    resident_thread_id: String,
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    resident_host_pid: u32,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    resident_generation: u64,
     #[serde(default)]
     workers: Vec<SupervisorWorker>,
     #[serde(default)]
@@ -129,6 +140,8 @@ struct SupervisorAuditEvent {
     run_id: String,
     #[serde(default)]
     tool: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    event_type: String,
     #[serde(default)]
     parameter_summary: String,
     #[serde(default)]
@@ -1552,6 +1565,7 @@ pub(crate) fn record_pilot_session_started(
             actor: ACTOR.to_string(),
             run_id: config.run_id.clone(),
             tool: "supervisor_session_launcher".to_string(),
+            event_type: "supervisor_pilot_session_started".to_string(),
             parameter_summary: format!(
                 "authorization_id={}; model_id={}; reasoning_effort={}; workbench_executable_path={}; workbench_build_id={}; supervisor_contract_version={}; supervisor_contract_sha256={}; worker_report_contract_sha256={}",
                 launch.authorization_id,
@@ -1615,6 +1629,7 @@ pub(crate) fn record_pilot_session_finished(
             actor: ACTOR.to_string(),
             run_id: config.run_id.clone(),
             tool: "supervisor_session_launcher".to_string(),
+            event_type: "supervisor_pilot_session_finished".to_string(),
             parameter_summary: "等待主管 codex exec 收尾并注销进程登记。".to_string(),
             result_summary: final_reason,
             result_status: final_status,
@@ -1660,6 +1675,7 @@ pub(crate) fn record_pilot_protocol_invalid(
             actor: ACTOR.to_string(),
             run_id: config.run_id.clone(),
             tool: "supervisor_action_protocol".to_string(),
+            event_type: "supervisor_pilot_protocol_invalid".to_string(),
             parameter_summary: format!("attempt={attempt}"),
             result_summary,
             result_status: if waiting_user {
@@ -1692,6 +1708,7 @@ pub(crate) fn record_pilot_waiting_user(
             actor: ACTOR.to_string(),
             run_id: config.run_id.clone(),
             tool: "supervisor_worker_return".to_string(),
+            event_type: "supervisor_pilot_waiting_user".to_string(),
             parameter_summary: "worker 回程未进入可验收状态。".to_string(),
             result_summary: reason.to_string(),
             result_status: "waiting_user".to_string(),
@@ -1778,6 +1795,8 @@ pub(crate) fn record_pilot_temporary_home_cleaned(
         result_status,
     )
 }
+
+include!("supervisor_orchestrator_resident_session.rs");
 
 pub(crate) fn load_pilot_read_model(
     config: &McpServerConfig,
@@ -2127,6 +2146,7 @@ fn append_audit(
             actor: ACTOR.to_string(),
             run_id: config.run_id.clone(),
             tool: tool.to_string(),
+            event_type: "supervisor_tool_call".to_string(),
             parameter_summary: parameter_summary.to_string(),
             result_summary: result_summary.to_string(),
             result_status: result_status.to_string(),

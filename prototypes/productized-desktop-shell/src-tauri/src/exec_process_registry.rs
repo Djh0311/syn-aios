@@ -153,6 +153,23 @@ pub(crate) fn register_supervisor_spawned_process(
     )
 }
 
+/// P1-A's resident MCP host must not continue unregistered: otherwise an app
+/// restart cannot safely reap it. The existing pilot keeps its historical
+/// best-effort wrapper above; this new path is deliberately fail-closed.
+pub(crate) fn register_supervisor_resident_process(
+    workflow_state_path: &Path,
+    run_id: &str,
+    pid: u32,
+) -> Result<ProcessRegistration, String> {
+    register_spawned_process_for_checked(
+        workflow_state_path,
+        run_id,
+        pid,
+        false,
+        &SystemProcessOperations,
+    )
+}
+
 /// manual relay 把子进程设为独立进程组组长；登记时保留这个事实，异常退出后的启动回收才能
 /// 同时终止外层 codex 包装进程与它派生的子进程。其它 runner 仍按单 PID 处理。
 pub(crate) fn register_manual_relay_process_group(
@@ -264,16 +281,29 @@ fn register_spawned_process_for(
     process_group: bool,
     operations: &dyn ProcessOperations,
 ) -> ProcessRegistration {
+    register_spawned_process_for_checked(workflow_state_path, run_id, pid, process_group, operations)
+        .unwrap_or_else(|_| ProcessRegistration {
+            workflow_state_path: workflow_state_path.to_path_buf(),
+            entry: None,
+        })
+}
+
+fn register_spawned_process_for_checked(
+    workflow_state_path: &Path,
+    run_id: &str,
+    pid: u32,
+    process_group: bool,
+    operations: &dyn ProcessOperations,
+) -> Result<ProcessRegistration, String> {
     let workflow_state_path = workflow_state_path.to_path_buf();
-    let observed = match operations.inspect(pid) {
-        Ok(Some(observed)) if is_workbench_codex_exec(&observed.cmdline) => observed,
-        _ => {
-            return ProcessRegistration {
-                workflow_state_path,
-                entry: None,
-            };
-        }
-    };
+    let observed = operations
+        .inspect(pid)?
+        .ok_or_else(|| format!("supervisor resident PID {pid} 在登记前已退出"))?;
+    if !is_workbench_supervisor_process(&observed.cmdline) {
+        return Err(format!(
+            "supervisor resident PID {pid} 不是可识别的 codex exec 或 codex mcp-server"
+        ));
+    }
     let entry = RegisteredProcess {
         pid,
         run_id: run_id.to_string(),
@@ -282,11 +312,11 @@ fn register_spawned_process_for(
         process_group,
         process_group_id: process_group.then_some(pid),
     };
-    let registered = register_entry(&workflow_state_path, entry.clone()).is_ok();
-    ProcessRegistration {
+    register_entry(&workflow_state_path, entry.clone())?;
+    Ok(ProcessRegistration {
         workflow_state_path,
-        entry: registered.then_some(entry),
-    }
+        entry: Some(entry),
+    })
 }
 
 /// App 启动时只检查本 sidecar 已登记的进程。登记外 PID 不枚举、不匹配、更不会终止。
@@ -512,6 +542,14 @@ fn is_workbench_codex_exec(cmdline: &str) -> bool {
     cmdline.contains("codex exec")
 }
 
+// The generic supervisor registration is intentionally broader than manual relay:
+// P1-A's resident host is `codex mcp-server`, while manual relay remains a strict
+// codex-exec process-group path above. Keep this exact two-command allowlist so a
+// registry entry can never turn into a general process killer.
+fn is_workbench_supervisor_process(cmdline: &str) -> bool {
+    is_workbench_codex_exec(cmdline) || cmdline.contains("codex mcp-server")
+}
+
 fn same_process(entry: &RegisteredProcess, observed: &ObservedProcess) -> bool {
     entry.started_at == observed.started_at
         && entry.cmdline_summary == observed.cmdline
@@ -652,6 +690,53 @@ mod tests {
 
         unregister_entry(&path, &registered).expect("unregister");
         assert!(load_store(&sidecar).unwrap().entries.is_empty());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn resident_mcp_server_registration_is_fail_closed_and_reapable() {
+        let path = test_workflow_state_path("resident-mcp-server");
+        let pid = 43;
+        let observed = ObservedProcess {
+            started_at: "Fri Jul 17 10:00:00 2026".to_string(),
+            cmdline: "/tmp/codex mcp-server".to_string(),
+            process_group_id: Some(pid),
+        };
+        let processes = FakeProcessOperations::with_process(pid, observed);
+        let registration = register_spawned_process_for_checked(
+            &path,
+            "supervisor-resident:test",
+            pid,
+            false,
+            &processes,
+        )
+        .expect("resident mcp-server must be durably registered");
+        let sidecar = sidecar_path(&path).expect("sidecar");
+        let stored = load_store(&sidecar).expect("stored registration");
+        assert_eq!(stored.entries.len(), 1);
+        assert!(stored.entries[0].cmdline_summary.contains("codex mcp-server"));
+        registration.unregister();
+        assert!(load_store(&sidecar).expect("unregistered store").entries.is_empty());
+
+        let arbitrary = FakeProcessOperations::with_process(
+            44,
+            ObservedProcess {
+                started_at: "Fri Jul 17 10:00:01 2026".to_string(),
+                cmdline: "/tmp/not-codex resident-helper".to_string(),
+                process_group_id: Some(44),
+            },
+        );
+        let error = match register_spawned_process_for_checked(
+            &path,
+            "supervisor-resident:bad",
+            44,
+            false,
+            &arbitrary,
+        ) {
+            Ok(_) => panic!("arbitrary process must not receive a reaper entry"),
+            Err(error) => error,
+        };
+        assert!(error.contains("不是可识别的 codex exec 或 codex mcp-server"));
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 

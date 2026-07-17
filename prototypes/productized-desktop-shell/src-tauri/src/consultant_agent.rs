@@ -517,10 +517,49 @@ impl ConsultantAgent for CliConsultantAgent {
     ) -> Result<ConsultationProposal, String> {
         let prompt = consultant_build_prompt(ctx, question);
         // 结构性只读：readonly_codex_consult 写死 read-only 沙箱·写盘根空·不走执行闸（codex_local_runner）。
+        // P1-E 退役候选：P1-A 固定测试项目已改走项目主管常驻会话；非测试项目暂保留原有只读塞纸条。
         let raw = codex_local_runner::readonly_codex_consult(
             &ctx.project_root,
             &prompt,
             Some(self.timeout_ms),
+        )?;
+        parse_consultation_proposal(&raw)
+    }
+}
+
+// P1-A only changes the fixed test project's project-supervisor conversation.
+// Keeping the legacy agent as the non-test fallback avoids widening Codex's real
+// execution surface in this light package.
+struct ResidentConsultantAgent {
+    workflow_state_path: std::path::PathBuf,
+    workflow_id: String,
+}
+
+impl ResidentConsultantAgent {
+    fn new(workflow_state_path: std::path::PathBuf, workflow_id: String) -> Self {
+        Self {
+            workflow_state_path,
+            workflow_id,
+        }
+    }
+}
+
+impl ConsultantAgent for ResidentConsultantAgent {
+    fn consult(
+        &self,
+        ctx: &ProjectContext,
+        question: &str,
+    ) -> Result<ConsultationProposal, String> {
+        if ctx.project_root != WORKFLOW_ENGINE_TEST_PROJECT_ROOT {
+            return CliConsultantAgent::default().consult(ctx, question);
+        }
+        let prompt = consultant_build_prompt(ctx, question);
+        let raw = supervisor_session_launcher::consult_supervisor_resident(
+            &self.workflow_state_path,
+            &ctx.project_root,
+            &self.workflow_id,
+            &prompt,
+            "project_consult",
         )?;
         parse_consultation_proposal(&raw)
     }
@@ -777,7 +816,10 @@ async fn run_project_consultation(
     // path 在 await 前从 state 取（State 不能跨进 'static 闭包）；咨询真 codex 长耗时 → spawn_blocking 不冻 UI。
     let path = state.workflow_state_path.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let consultant = CliConsultantAgent::default();
+        let consultant = ResidentConsultantAgent::new(
+            path.clone(),
+            request.workflow_id.clone().unwrap_or_default(),
+        );
         let actor_id = request
             .actor_id
             .clone()

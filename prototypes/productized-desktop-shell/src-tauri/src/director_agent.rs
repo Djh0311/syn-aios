@@ -419,6 +419,7 @@ impl DirectorAgent for CliDirectorAgent {
     ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
         let prompt = director_build_prompt(ctx, proposal);
         // 复用咨询的只读 confinement：readonly_codex_consult（read-only 沙箱·写盘根空·项目只读·不走执行闸）。
+        // P1-E 退役候选：P1-A 固定测试项目已改走项目主管常驻会话；非测试项目暂保留原有只读塞纸条。
         let raw = codex_local_runner::readonly_codex_consult(
             &ctx.project_root,
             &prompt,
@@ -434,10 +435,66 @@ impl DirectorAgent for CliDirectorAgent {
         proposal: &ProjectConsultationProposal,
     ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
         let prompt = director_build_prompt_variant(ctx, proposal, true);
+        // P1-E 退役候选：固定测试项目预拆已接入常驻主管；此处仍是非测试项目 fallback。
         let raw = codex_local_runner::readonly_codex_consult(
             &ctx.project_root,
             &prompt,
             Some(self.timeout_ms),
+        )?;
+        parse_director_plan(&raw, proposal)
+    }
+}
+
+// P1-A's thin route adapter: it reuses the existing prompt builders and task
+// parser, but gives the fixed test project a resident supervisor thread. Other
+// projects retain their historical read-only consultation behavior.
+struct ResidentProjectDirectorAgent {
+    workflow_state_path: std::path::PathBuf,
+}
+
+impl ResidentProjectDirectorAgent {
+    fn new(workflow_state_path: std::path::PathBuf) -> Self {
+        Self {
+            workflow_state_path,
+        }
+    }
+}
+
+impl DirectorAgent for ResidentProjectDirectorAgent {
+    fn plan(
+        &self,
+        ctx: &ProjectContext,
+        proposal: &ProjectConsultationProposal,
+    ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+        if ctx.project_root != WORKFLOW_ENGINE_TEST_PROJECT_ROOT {
+            return CliDirectorAgent::default().plan(ctx, proposal);
+        }
+        let prompt = director_build_prompt(ctx, proposal);
+        let raw = supervisor_session_launcher::consult_supervisor_resident(
+            &self.workflow_state_path,
+            &ctx.project_root,
+            &proposal.workflow_id,
+            &prompt,
+            "director_plan",
+        )?;
+        parse_director_plan(&raw, proposal)
+    }
+
+    fn plan_preview(
+        &self,
+        ctx: &ProjectContext,
+        proposal: &ProjectConsultationProposal,
+    ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+        if ctx.project_root != WORKFLOW_ENGINE_TEST_PROJECT_ROOT {
+            return CliDirectorAgent::default().plan_preview(ctx, proposal);
+        }
+        let prompt = director_build_prompt_variant(ctx, proposal, true);
+        let raw = supervisor_session_launcher::consult_supervisor_resident(
+            &self.workflow_state_path,
+            &ctx.project_root,
+            &proposal.workflow_id,
+            &prompt,
+            "director_plan_preview",
         )?;
         parse_director_plan(&raw, proposal)
     }
@@ -4689,7 +4746,7 @@ async fn auto_advance_authorized_role_loop(
     tauri::async_runtime::spawn_blocking(move || {
         let readback_db_path = codex_db::default_state_db_path();
         let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
-        let director = CliDirectorAgent::default();
+        let director = ResidentProjectDirectorAgent::new(path.clone());
         let actor_id = request
             .actor_id
             .clone()
@@ -5066,7 +5123,7 @@ async fn confirm_and_start_authorized_run(
     tauri::async_runtime::spawn_blocking(move || {
         let readback_db_path = codex_db::default_state_db_path();
         let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
-        let director = CliDirectorAgent::default();
+        let director = ResidentProjectDirectorAgent::new(path.clone());
         run_confirm_and_start_authorized_run_inner(
             &path,
             &index,
@@ -5133,7 +5190,7 @@ async fn confirm_project_director_task_session_bindings(
     tauri::async_runtime::spawn_blocking(move || {
         let readback_db_path = codex_db::default_state_db_path();
         let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
-        let director = CliDirectorAgent::default();
+        let director = ResidentProjectDirectorAgent::new(path.clone());
         run_confirm_project_director_task_session_bindings_inner(
             &path,
             &index,
@@ -5222,7 +5279,7 @@ async fn preview_pending_proposal_director_plan(
     // 真 LM 只读 420s 级 → spawn_blocking 不冻 UI（同范本）。
     let path = state.workflow_state_path.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let director = CliDirectorAgent::default();
+        let director = ResidentProjectDirectorAgent::new(path.clone());
         run_preview_pending_proposal_director_plan_inner(&path, &director, &request)
     })
     .await
