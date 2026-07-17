@@ -355,6 +355,33 @@ export type RunProjectConsultationRequest = {
   workflow_id?: string;
 };
 
+// P1-B resident问答后端契约。P1-C 再负责将 read model 中的消息渲染为交互；本包不触碰组件。
+export type SupervisorResidentQuestion = {
+  question_id: string;
+  project_id: string;
+  workflow_id: string;
+  round: number;
+  question: string;
+};
+
+export type SubmitSupervisorResidentAnswerRequest = {
+  project_id: string;
+  workflow_id: string;
+  question_id: string;
+  answer_text: string;
+};
+
+export type SupervisorResidentAnswerOutcome = {
+  status: "proposal_created" | "question_asked" | "already_answered" | string;
+  question_id: string;
+  reply_injected: boolean;
+  thread_id?: string | null;
+  supervisor_reply?: string | null;
+  proposal?: ProjectConsultationProposal | null;
+  question?: SupervisorResidentQuestion | null;
+  message: string;
+};
+
 // 件 B · 授权后自动推进。逐字对 Rust director_agent.rs 的 AutoAdvanceAuthorizedRoleLoopRequest / AutoAdvanceRoleLoopOutcome。
 // 前提 = 该工作流已有 active 授权（方案授权 + 边界复核都过）；前端只造请求 + 发，闸在后端 path-lock。
 export type AutoAdvanceAuthorizedRoleLoopRequest = {
@@ -1011,7 +1038,8 @@ export type BlackboardEntryKind =
   | "permission_request"
   | "tool_summary"
   | "memory_candidate"
-  | "knowledge_ref";
+  | "knowledge_ref"
+  | "supervisor_message";
 
 export type BlackboardSourceRef = {
   source_kind: string;

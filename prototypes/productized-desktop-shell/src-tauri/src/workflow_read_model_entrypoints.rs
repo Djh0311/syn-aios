@@ -345,6 +345,59 @@ fn project_blackboard_from_workflow(summary: &ProjectWorkflowSummary) -> Project
             ));
         }
 
+        let answered_question_refs = workflow
+            .ledger_entries
+            .iter()
+            .filter(|entry| entry.entry_type == "user_reply")
+            .flat_map(|entry| entry.source_refs.iter().cloned())
+            .collect::<std::collections::BTreeSet<_>>();
+        for ledger_entry in workflow.ledger_entries.iter().filter(|entry| {
+            matches!(
+                entry.entry_type.as_str(),
+                "supervisor_question" | "user_reply"
+            )
+        }) {
+            let is_question = ledger_entry.entry_type == "supervisor_question";
+            let status = if is_question
+                && !ledger_entry
+                    .source_refs
+                    .iter()
+                    .any(|source_ref| answered_question_refs.contains(source_ref))
+            {
+                "waiting_user"
+            } else {
+                "answered"
+            };
+            let title = if is_question {
+                format!("主管问题 / {status}")
+            } else {
+                "用户答复 / 已记录".to_string()
+            };
+            let mut source_refs = vec![blackboard_source_ref(
+                "ledger_entry",
+                &ledger_entry.ledger_entry_id,
+                "主管对话账本",
+            )];
+            source_refs.extend(ledger_entry.audit_refs.iter().map(|audit_ref| {
+                blackboard_source_ref("workflow_audit", audit_ref, "主管对话审计")
+            }));
+            entries.push(blackboard_supervisor_message_entry(
+                format!(
+                    "blackboard:{}:supervisor-message:{}",
+                    workflow.workflow_id,
+                    stable_id(&ledger_entry.ledger_entry_id)
+                ),
+                &summary.project_id,
+                &summary.workflow_id,
+                BlackboardEntryKind::SupervisorMessage,
+                title,
+                ledger_entry.summary.clone(),
+                status,
+                source_refs,
+                ledger_entry.created_at.clone(),
+            ));
+        }
+
         for task_package in &workflow.task_packages {
             for memory_ref in &task_package.available_memory_refs {
                 entries.push(blackboard_candidate_entry(
@@ -471,6 +524,48 @@ fn blackboard_candidate_entry(
         source_refs,
         created_at,
         warnings,
+    }
+}
+
+fn blackboard_supervisor_message_entry(
+    entry_id: String,
+    project_id: &str,
+    workflow_id: &str,
+    kind: BlackboardEntryKind,
+    title: String,
+    summary: String,
+    status: &str,
+    source_refs: Vec<BlackboardSourceRef>,
+    created_at: Option<String>,
+) -> BlackboardEntry {
+    BlackboardEntry {
+        promotion_decision: BlackboardPromotionDecision {
+            decision_id: format!("promotion:{entry_id}"),
+            status: "not_applicable".to_string(),
+            target_kind: None,
+            decided_by_role: None,
+            decided_at: None,
+            reason: "主管问题和用户答复是会话事实，不是黑板候选，也不会推进工作流状态。"
+                .to_string(),
+            audit_refs: vec![],
+            warnings: vec!["supervisor_message_not_a_promotion_candidate".to_string()],
+        },
+        entry_id,
+        project_id: project_id.to_string(),
+        workflow_id: workflow_id.to_string(),
+        work_item_id: None,
+        workflow_node_id: None,
+        kind,
+        title,
+        summary,
+        status: status.to_string(),
+        source_status: Some(status.to_string()),
+        source_refs,
+        created_at,
+        warnings: vec![
+            "supervisor_message_is_read_model_only".to_string(),
+            "supervisor_message_does_not_advance_workflow".to_string(),
+        ],
     }
 }
 
@@ -1321,6 +1416,9 @@ const LEDGER_ENTRY_TYPES: &[&str] = &[
     "waiting_decision",
     "node_skipped",
     "node_cancelled",
+    "supervisor_question",
+    "user_reply",
+    "reply_injected",
 ];
 
 fn is_valid_ledger_entry_type(entry_type: &str) -> bool {
@@ -1380,6 +1478,9 @@ fn ledger_entry_type_from_audit(event_type: &str) -> String {
         "workflow_chain_node_skipped" => "node_skipped",
         "workflow_chain_node_cancelled" | "workflow_execution_cancelled" => "node_cancelled",
         "workflow_chain_director_summary" => "director_summary",
+        "supervisor_resident_question_asked" => "supervisor_question",
+        "supervisor_resident_question_answered" => "user_reply",
+        "supervisor_resident_reply_injected" => "reply_injected",
         _ => event_type,
     }
     .to_string()

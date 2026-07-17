@@ -16,8 +16,8 @@ fn query_workbench_page_read_model(
     let index = read_index(&state)?;
     let tasks_text = fs::read_to_string(&state.tasks_path).unwrap_or_default();
     let snapshot = build_snapshot(&state, &index, &tasks_text);
-    let snapshot_value =
-        serde_json::to_value(&snapshot).map_err(|error| format!("snapshot_serialize_failed:{error}"))?;
+    let snapshot_value = serde_json::to_value(&snapshot)
+        .map_err(|error| format!("snapshot_serialize_failed:{error}"))?;
     let workflow_state_value = read_workflow_state_snapshot(&state.workflow_state_path)
         .ok()
         .map(|snapshot| {
@@ -25,7 +25,8 @@ fn query_workbench_page_read_model(
                 .map_err(|error| format!("workflow_state_serialize_failed:{error}"))
         })
         .transpose()?;
-    let generated_at = optional_string(&index, "generated_at").unwrap_or_else(unix_timestamp_string);
+    let generated_at =
+        optional_string(&index, "generated_at").unwrap_or_else(unix_timestamp_string);
     page_read_model::query_page_read_model_with_snapshot_value(
         &request,
         &generated_at,
@@ -292,13 +293,20 @@ fn load_codex_session_page(
             );
             warnings.extend(merge_warnings);
             if sessions.is_empty() {
-                if let Some(query) = request.query.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+                if let Some(query) = request
+                    .query
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
                     if let Some(codex_home) = db_path.parent() {
                         if let Some(fallback_session) =
                             find_rollout_session_by_thread_query(codex_home, query)
                         {
                             sessions.push(fallback_session);
-                            warnings.push("sqlite_session_missing_rollout_filename_fallback".to_string());
+                            warnings.push(
+                                "sqlite_session_missing_rollout_filename_fallback".to_string(),
+                            );
                             source = "sqlite_page_rollout_filename_fallback".to_string();
                         }
                     }
@@ -321,7 +329,11 @@ fn load_codex_session_page(
             let archived_only = request.archived_only.unwrap_or(false);
             let page_size = request.page_size.unwrap_or(100).clamp(1, 250);
             let offset = request.offset.unwrap_or(0);
-            let query = request.query.as_deref().map(str::trim).filter(|value| !value.is_empty());
+            let query = request
+                .query
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
             let mut sessions: Vec<SessionRecord> = parse_sessions(&index)
                 .into_iter()
                 .filter(|session| {
@@ -358,7 +370,9 @@ fn load_codex_session_page(
                 has_more,
                 include_archived,
                 archived_only,
-                warnings: vec![format!("codex sqlite 分页读取失败，回落到旧索引分页：{error}")],
+                warnings: vec![format!(
+                    "codex sqlite 分页读取失败，回落到旧索引分页：{error}"
+                )],
                 source: "index_fallback_page".to_string(),
             })
         }
@@ -534,12 +548,7 @@ fn find_rollout_session_by_thread_query(codex_home: &Path, query: &str) -> Optio
         .max_by_key(|session| session.updated_at_ms.unwrap_or(0))
 }
 
-fn collect_rollout_matches(
-    root: &Path,
-    query: &str,
-    archived: bool,
-    out: &mut Vec<SessionRecord>,
-) {
+fn collect_rollout_matches(root: &Path, query: &str, archived: bool, out: &mut Vec<SessionRecord>) {
     let Ok(entries) = fs::read_dir(root) else {
         return;
     };
@@ -586,7 +595,11 @@ fn thread_id_from_rollout_file_name(file_name: &str) -> Option<String> {
     }
 }
 
-fn session_record_from_rollout_path(path: PathBuf, thread_id: String, archived: bool) -> SessionRecord {
+fn session_record_from_rollout_path(
+    path: PathBuf,
+    thread_id: String,
+    archived: bool,
+) -> SessionRecord {
     let (project_root, model, reasoning_effort) = rollout_session_meta(&path);
     let updated_at_ms = fs::metadata(&path)
         .and_then(|metadata| metadata.modified())
@@ -595,7 +608,10 @@ fn session_record_from_rollout_path(path: PathBuf, thread_id: String, archived: 
         .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64);
     SessionRecord {
         thread_id: thread_id.clone(),
-        title: format!("新建 Codex 对话 {}", thread_id.chars().take(8).collect::<String>()),
+        title: format!(
+            "新建 Codex 对话 {}",
+            thread_id.chars().take(8).collect::<String>()
+        ),
         project_root,
         updated_at_ms,
         archived,
@@ -653,7 +669,8 @@ mod command_rollout_fallback_tests {
         let project_root = "/tmp/stage-k-isolated-project";
         let rollout_dir = codex_home.join("sessions/2026/06/19");
         fs::create_dir_all(&rollout_dir).expect("create rollout dir");
-        let rollout_path = rollout_dir.join(format!("rollout-2026-06-19T13-18-58-{thread_id}.jsonl"));
+        let rollout_path =
+            rollout_dir.join(format!("rollout-2026-06-19T13-18-58-{thread_id}.jsonl"));
         fs::write(
             &rollout_path,
             format!(
@@ -683,7 +700,10 @@ mod command_rollout_fallback_tests {
             .expect("fallback session");
         assert_eq!(session.thread_id, thread_id);
         assert_eq!(session.project_root.as_deref(), Some(project_root));
-        assert_eq!(session.rollout_path.as_deref(), Some(rollout_path.to_str().expect("path")));
+        assert_eq!(
+            session.rollout_path.as_deref(),
+            Some(rollout_path.to_str().expect("path"))
+        );
         assert!(session.rollout_exists);
         assert!(session
             .warnings
@@ -707,6 +727,16 @@ mod command_rollout_fallback_tests {
         );
     }
 
+    #[test]
+    fn p1_b_supervisor_message_is_not_a_blackboard_candidate() {
+        assert_eq!(
+            reject_non_candidate_blackboard_entry_kind(BlackboardEntryKind::SupervisorMessage)
+                .expect_err("supervisor question/answer must not enter candidate sidecar"),
+            "supervisor_message_not_a_promotion_candidate"
+        );
+        assert!(reject_non_candidate_blackboard_entry_kind(BlackboardEntryKind::Risk).is_ok());
+    }
+
     fn temp_codex_home(label: &str) -> PathBuf {
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -723,13 +753,22 @@ mod command_rollout_fallback_tests {
     #[test]
     fn workflow_engine_gate_seals_non_test_project_regardless_of_env() {
         // 非测试真实项目:只凭 project_root 即 false(path-lock)，与 env 无关、任何环境都成立。
-        assert!(!workflow_engine_test_project_unsealed("/Users/yoyi/workspace/product-line"));
-        assert!(!workflow_engine_test_project_unsealed("/tmp/some-other-project"));
+        assert!(!workflow_engine_test_project_unsealed(
+            "/Users/yoyi/workspace/product-line"
+        ));
+        assert!(!workflow_engine_test_project_unsealed(
+            "/tmp/some-other-project"
+        ));
         assert!(!workflow_engine_test_project_unsealed(""));
         // P3-A:固定测试项目现在只凭 path 解封(不再需要 env 钥匙)——这是本次授权的松闸。
-        assert!(workflow_engine_test_project_unsealed("/Users/yoyi/codex-workflow-mario-test"));
+        assert!(workflow_engine_test_project_unsealed(
+            "/Users/yoyi/codex-workflow-mario-test"
+        ));
         // path-lock 那把锁是唯一解封键,常量固定、无隐式放开路径。
-        assert_eq!(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "/Users/yoyi/codex-workflow-mario-test");
+        assert_eq!(
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            "/Users/yoyi/codex-workflow-mario-test"
+        );
     }
 
     // 站 3b 小闸案发测试（2026-07-12 拍板）：只认「3b 项目根精确相等 ∧ 写根为空」。
@@ -740,19 +779,37 @@ mod command_rollout_fallback_tests {
         // 合法：3b 根 + 零写根。
         assert!(station3b_readonly_project_unsealed(root, &[]));
         // 案发：任何写根都不解封——包括写根就是 3b 根自己。
-        assert!(!station3b_readonly_project_unsealed(root, &[root.to_string()]));
+        assert!(!station3b_readonly_project_unsealed(
+            root,
+            &[root.to_string()]
+        ));
         assert!(!station3b_readonly_project_unsealed(
             root,
             &[WORKFLOW_ENGINE_TEST_PROJECT_ROOT.to_string()]
         ));
         // 案发：子目录 / 前缀 / 尾斜杠 / 其它项目一律拒（精确相等，无路径规范化魔法）。
-        assert!(!station3b_readonly_project_unsealed("/Users/yoyi/Documents/mario test/subdir", &[]));
-        assert!(!station3b_readonly_project_unsealed("/Users/yoyi/Documents/mario test/", &[]));
-        assert!(!station3b_readonly_project_unsealed("/Users/yoyi/Documents", &[]));
-        assert!(!station3b_readonly_project_unsealed("/Users/yoyi/gameai/crazytown", &[]));
+        assert!(!station3b_readonly_project_unsealed(
+            "/Users/yoyi/Documents/mario test/subdir",
+            &[]
+        ));
+        assert!(!station3b_readonly_project_unsealed(
+            "/Users/yoyi/Documents/mario test/",
+            &[]
+        ));
+        assert!(!station3b_readonly_project_unsealed(
+            "/Users/yoyi/Documents",
+            &[]
+        ));
+        assert!(!station3b_readonly_project_unsealed(
+            "/Users/yoyi/gameai/crazytown",
+            &[]
+        ));
         assert!(!station3b_readonly_project_unsealed("", &[]));
         // 固定测试项目不走 3b 小闸（它走 S1 原闸；两闸互不越界）。
-        assert!(!station3b_readonly_project_unsealed(WORKFLOW_ENGINE_TEST_PROJECT_ROOT, &[]));
+        assert!(!station3b_readonly_project_unsealed(
+            WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+            &[]
+        ));
     }
 
     // 站 4 案发测试（2026-07-14）：只认「mario 根精确相等 ∧ 写根恰一条且也精确等于 mario 根」。
@@ -772,7 +829,10 @@ mod command_rollout_fallback_tests {
             root,
             &[format!("{root}/subdir")]
         ));
-        assert!(!station4_write_project_unsealed(root, &[format!("{root}/")]));
+        assert!(!station4_write_project_unsealed(
+            root,
+            &[format!("{root}/")]
+        ));
         assert!(!station4_write_project_unsealed(
             root,
             &[root.to_string(), root.to_string()]
@@ -797,7 +857,9 @@ mod command_rollout_fallback_tests {
     fn station4_supervisor_authorization_shape_guard_keeps_3b_and_rejects_malformed_write_scope() {
         let root = STATION_4_WRITE_PROJECT_ROOT;
         assert!(require_supervisor_mario_authorization_write_shape(root, &[]).is_ok());
-        assert!(require_supervisor_mario_authorization_write_shape(root, &[root.to_string()]).is_ok());
+        assert!(
+            require_supervisor_mario_authorization_write_shape(root, &[root.to_string()]).is_ok()
+        );
         for malformed in [
             vec![format!("{root}/subdir")],
             vec![format!("{root}/")],
@@ -827,9 +889,17 @@ mod command_rollout_fallback_tests {
             true
         ));
         // 3b：仅「主管授权 + 零写根」为真。
-        assert!(real_execution_authorization_complete(station3b_root, &[], true));
+        assert!(real_execution_authorization_complete(
+            station3b_root,
+            &[],
+            true
+        ));
         // 经典线（无主管授权）喂 3b → 拒。
-        assert!(!real_execution_authorization_complete(station3b_root, &[], false));
+        assert!(!real_execution_authorization_complete(
+            station3b_root,
+            &[],
+            false
+        ));
         // 4：仅「主管授权 + 单一同根写根」为真；经典线、空写根、多写根仍拒。
         assert!(real_execution_authorization_complete(
             station4_root,
@@ -841,7 +911,11 @@ mod command_rollout_fallback_tests {
             &[station4_root.to_string()],
             false
         ));
-        assert!(!real_execution_authorization_complete(station4_root, &[], false));
+        assert!(!real_execution_authorization_complete(
+            station4_root,
+            &[],
+            false
+        ));
         assert!(!real_execution_authorization_complete(
             station4_root,
             &[station4_root.to_string(), station4_root.to_string()],
@@ -859,8 +933,13 @@ mod command_rollout_fallback_tests {
     // 尤其 j2_b_b1 旧桩写死的就是这个目录，并列小闸都不能让它复活。
     #[test]
     fn station3b_and_station4_do_not_widen_s1_gate_or_legacy_seals() {
-        assert_eq!(STATION_3B_READONLY_PROJECT_ROOT, STATION_4_WRITE_PROJECT_ROOT);
-        assert!(!workflow_engine_test_project_unsealed(STATION_4_WRITE_PROJECT_ROOT));
+        assert_eq!(
+            STATION_3B_READONLY_PROJECT_ROOT,
+            STATION_4_WRITE_PROJECT_ROOT
+        );
+        assert!(!workflow_engine_test_project_unsealed(
+            STATION_4_WRITE_PROJECT_ROOT
+        ));
         assert!(require_test_project_path_lock(STATION_4_WRITE_PROJECT_ROOT, "x").is_err());
         assert_eq!(
             project_workflow_automation::J2_B_B1_PROJECT_ROOT,
@@ -1326,7 +1405,10 @@ fn run_project_workflow_automation_phase_a(
         &state.workflow_state_path,
         &request,
         &unix_timestamp_string(),
-        &format!("write-j2-project-workflow-automation-{}", unix_timestamp_nanos()),
+        &format!(
+            "write-j2-project-workflow-automation-{}",
+            unix_timestamp_nanos()
+        ),
     )
 }
 
@@ -1393,9 +1475,7 @@ fn ensure_k3_b_tauri_no_real_harness_request(
         .as_deref()
         .is_some_and(|body| !body.is_empty())
     {
-        return Err(
-            "k3_b_real_execution_requires_dedicated_level_b_authorization".to_string(),
-        );
+        return Err("k3_b_real_execution_requires_dedicated_level_b_authorization".to_string());
     }
     Ok(())
 }
@@ -1421,8 +1501,12 @@ fn l5_capture_governance_best_effort(
         observation_write_id: &obs,
         candidate_write_id: &cand,
     };
-    let _ =
-        memory_daily_loop::capture_governance_event_best_effort(path, &input, captured_at, &write_ids);
+    let _ = memory_daily_loop::capture_governance_event_best_effort(
+        path,
+        &input,
+        captured_at,
+        &write_ids,
+    );
 }
 
 #[tauri::command]
@@ -1656,6 +1740,7 @@ fn record_blackboard_candidate_decision(
     request: RecordBlackboardCandidateDecisionInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<RecordBlackboardCandidateDecisionOutput, String> {
+    reject_non_candidate_blackboard_entry_kind(request.entry_kind)?;
     control_core::validate_blackboard_candidate_decision(
         blackboard_entry_kind_name(request.entry_kind),
         blackboard_target_kind_name(request.target_kind),
@@ -1667,6 +1752,17 @@ fn record_blackboard_candidate_decision(
         &unix_timestamp_string(),
         &format!("write-{}", unix_timestamp_nanos()),
     )
+}
+
+// P1-B supervisor messages are a derived conversation view, never a candidate
+// for formal promotion.  Keep this at the command boundary so the shared enum
+// cannot route a question/answer into the existing candidate sidecar, without
+// changing the control-core guard contract.
+fn reject_non_candidate_blackboard_entry_kind(kind: BlackboardEntryKind) -> Result<(), String> {
+    if kind == BlackboardEntryKind::SupervisorMessage {
+        return Err("supervisor_message_not_a_promotion_candidate".to_string());
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1692,7 +1788,10 @@ fn capture_memory_event(
         &request,
         &timestamp,
         &format!("write-memory-capture-{}", unix_timestamp_nanos()),
-        &format!("write-memory-capture-observation-{}", unix_timestamp_nanos()),
+        &format!(
+            "write-memory-capture-observation-{}",
+            unix_timestamp_nanos()
+        ),
         &format!("write-memory-capture-candidate-{}", unix_timestamp_nanos()),
     )
 }
@@ -2421,7 +2520,7 @@ fn execute_experiment_node_dispatch_at(
             return Err(
                 "实验面本期只支持「续已有会话」（resume-only，用户拍板）；「开新会话」未启用。请选续已有会话并给一条已存在的 thread。"
                     .to_string(),
-            )
+            );
         }
         other => return Err(format!("未知会话策略：{other}")),
     };
@@ -2483,7 +2582,8 @@ fn execute_experiment_node_dispatch_at(
             .and_then(Value::as_array)
             .and_then(|items| {
                 items.iter().rev().find(|item| {
-                    optional_string_from(item, "workflow_id").as_deref() == Some(workflow_id.as_str())
+                    optional_string_from(item, "workflow_id").as_deref()
+                        == Some(workflow_id.as_str())
                         && optional_string_from(item, "title").as_deref() == Some(title.as_str())
                 })
             })
@@ -2547,7 +2647,13 @@ fn execute_experiment_node_dispatch_at(
             prompt_preview: Some(objective.to_string()),
         }),
     };
-    execute_workflow_node_dispatch_for_index_at(path, index, readback_db_path, runner, &exec_request)
+    execute_workflow_node_dispatch_for_index_at(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        &exec_request,
+    )
 }
 
 // P3 项目面真跑（架构方案 §9 的 C 映射）。项目画布只读运行态的节点 = workflow-state 的 work_item
@@ -2680,7 +2786,8 @@ fn execute_project_workflow_node_with_authorization_at(
         .and_then(|nodes| {
             nodes.iter().find(|n| {
                 optional_string_from(n, "workflow_id").as_deref() == Some(workflow_id.as_str())
-                    && optional_string_from(n, "node_id").as_deref() == Some(request.node_id.as_str())
+                    && optional_string_from(n, "node_id").as_deref()
+                        == Some(request.node_id.as_str())
             })
         })
         .and_then(|n| n.get("canvas_payload"))
@@ -2715,7 +2822,8 @@ fn execute_project_workflow_node_with_authorization_at(
         .and_then(|bindings| {
             bindings.iter().find(|b| {
                 optional_string_from(b, "workflow_id").as_deref() == Some(workflow_id.as_str())
-                    && optional_string_from(b, "node_id").as_deref() == Some(request.node_id.as_str())
+                    && optional_string_from(b, "node_id").as_deref()
+                        == Some(request.node_id.as_str())
                     && optional_string_from(b, "lifecycle").as_deref() == Some("active")
             })
         })
@@ -2886,8 +2994,13 @@ fn execute_project_workflow_node_with_authorization_at(
     // 绑定：若该 (node, work_item) 还没 active 绑定，用解析到的会话现绑（bind 已 workflow 感知）。
     let need_bind = {
         let current = read_workflow_state_value(path)?;
-        workflow_node_session_binding_index(&current, &workflow_id, &request.node_id, Some(&work_item_id))
-            .is_none()
+        workflow_node_session_binding_index(
+            &current,
+            &workflow_id,
+            &request.node_id,
+            Some(&work_item_id),
+        )
+        .is_none()
     };
     if need_bind {
         let session = find_index_thread_or_sqlite(index, &thread_id)
@@ -3030,9 +3143,7 @@ fn authorized_prepared_dispatch_for_execution(
         || requested_write_roots.len() != allowed_write.len()
         || package_write_roots_set.len() != package_write_roots.len()
     {
-        return Err(
-            "主管请求 allowed_write 与已批准任务包不一致，已拒绝启动 worker".to_string(),
-        );
+        return Err("主管请求 allowed_write 与已批准任务包不一致，已拒绝启动 worker".to_string());
     }
 
     let expected_project_id = project_id(project_root);
@@ -3046,8 +3157,7 @@ fn authorized_prepared_dispatch_for_execution(
                         == Some("authorized_prepared_auto_dispatch")
                     && optional_string_from(dispatch, "project_id").as_deref()
                         == Some(expected_project_id.as_str())
-                    && optional_string_from(dispatch, "workflow_id").as_deref()
-                        == Some(workflow_id)
+                    && optional_string_from(dispatch, "workflow_id").as_deref() == Some(workflow_id)
                     && optional_string_from(dispatch, "node_id").as_deref() == Some(node_id)
                     && optional_string_from(dispatch, "work_item_id").as_deref()
                         == Some(work_item_id)
@@ -3056,8 +3166,7 @@ fn authorized_prepared_dispatch_for_execution(
             })
         })
         .ok_or_else(|| {
-            "找不到与主管请求完全匹配的已授权 prepared dispatch，已拒绝启动 worker"
-                .to_string()
+            "找不到与主管请求完全匹配的已授权 prepared dispatch，已拒绝启动 worker".to_string()
         })?;
     let authorization_check: AutoDispatchGuardResult = serde_json::from_value(
         dispatch
@@ -3065,7 +3174,9 @@ fn authorized_prepared_dispatch_for_execution(
             .cloned()
             .ok_or_else(|| "已授权 prepared dispatch 缺授权检查，已拒绝启动 worker".to_string())?,
     )
-    .map_err(|error| format!("已授权 prepared dispatch 的授权检查损坏，已拒绝启动 worker：{error}"))?;
+    .map_err(|error| {
+        format!("已授权 prepared dispatch 的授权检查损坏，已拒绝启动 worker：{error}")
+    })?;
     if authorization_check.status != "authorized"
         || authorization_check.authorization_id.as_deref() != Some(authorization_id)
         || authorization_check.required_user_confirmation
@@ -3185,9 +3296,18 @@ fn list_project_workflows(
     let pid = project_id(&project_root);
     let slug = stable_id(&project_root);
     let default_id = default_workflow_id(&project_root);
-    let nodes = value.get("nodes").and_then(Value::as_array).cloned().unwrap_or_default();
+    let nodes = value
+        .get("nodes")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let mut out = Vec::new();
-    for wf in value.get("workflows").and_then(Value::as_array).cloned().unwrap_or_default() {
+    for wf in value
+        .get("workflows")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+    {
         let Some(wid) = optional_string_from(&wf, "workflow_id") else {
             continue;
         };
@@ -3304,10 +3424,18 @@ fn submit_project_workflow_draft_at(
     }
     let mut built_edges: Vec<Value> = Vec::new();
     for (i, de) in request.edges.iter().enumerate() {
-        let from_node = optional_string_from(de, "from")
-            .and_then(|c| id_map.iter().find(|(cid, _)| *cid == c).map(|(_, n)| n.clone()));
-        let to_node = optional_string_from(de, "to")
-            .and_then(|c| id_map.iter().find(|(cid, _)| *cid == c).map(|(_, n)| n.clone()));
+        let from_node = optional_string_from(de, "from").and_then(|c| {
+            id_map
+                .iter()
+                .find(|(cid, _)| *cid == c)
+                .map(|(_, n)| n.clone())
+        });
+        let to_node = optional_string_from(de, "to").and_then(|c| {
+            id_map
+                .iter()
+                .find(|(cid, _)| *cid == c)
+                .map(|(_, n)| n.clone())
+        });
         if let (Some(f), Some(t)) = (from_node, to_node) {
             built_edges.push(json!({
               "edge_id": format!("{workflow_id}:edge:{i}"),
@@ -3333,12 +3461,16 @@ fn submit_project_workflow_draft_at(
         .collect();
     {
         let nodes = ensure_array_mut(&mut value, "nodes")?;
-        nodes.retain(|n| optional_string_from(n, "workflow_id").as_deref() != Some(workflow_id.as_str()));
+        nodes.retain(|n| {
+            optional_string_from(n, "workflow_id").as_deref() != Some(workflow_id.as_str())
+        });
         nodes.extend(built_nodes);
     }
     {
         let edges = ensure_array_mut(&mut value, "edges")?;
-        edges.retain(|e| optional_string_from(e, "workflow_id").as_deref() != Some(workflow_id.as_str()));
+        edges.retain(|e| {
+            optional_string_from(e, "workflow_id").as_deref() != Some(workflow_id.as_str())
+        });
         edges.extend(built_edges);
     }
     // 后置B：prune 本工作流里 node_id 已不在新节点集的会话绑定——防位置式 node_id 下「删/重排节点后
@@ -3378,13 +3510,22 @@ fn submit_project_workflow_draft_at(
         .get("workflows")
         .and_then(Value::as_array)
         .and_then(|ws| {
-            ws.iter()
-                .find(|w| optional_string_from(w, "workflow_id").as_deref() == Some(workflow_id.as_str()))
+            ws.iter().find(|w| {
+                optional_string_from(w, "workflow_id").as_deref() == Some(workflow_id.as_str())
+            })
         })
         .cloned()
         .unwrap_or_else(|| json!({}));
-    let nodes_all = value.get("nodes").and_then(Value::as_array).cloned().unwrap_or_default();
-    let work_items_all = value.get("work_items").and_then(Value::as_array).cloned().unwrap_or_default();
+    let nodes_all = value
+        .get("nodes")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let work_items_all = value
+        .get("work_items")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     // 提交是保存「定义」，不该被运行时自动建的临时 work_item 卡住：跑链/跑节点会给每次执行建一个
     // canvas_run 临时 work_item（无任务包 artifact），它们会累积、在运行性检查里全 blocked（缺模型/
     // 读写范围/验收/会话绑定）→ 跑过一次后就再也存不了草案。存草案只看定义结构（director 等），故剔除
@@ -3394,7 +3535,11 @@ fn submit_project_workflow_draft_at(
         .filter(|wi| optional_string_from(wi, "source_kind").as_deref() != Some("canvas_run"))
         .cloned()
         .collect();
-    let artifacts_all = value.get("artifacts").and_then(Value::as_array).cloned().unwrap_or_default();
+    let artifacts_all = value
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let bindings_all = value
         .get("workflow_node_session_bindings")
         .and_then(Value::as_array)
@@ -3417,11 +3562,8 @@ fn submit_project_workflow_draft_at(
     }
 
     // 控制核心 / 审计：记审计事件；备份 + schema 校验后原子写。
-    let audit_event_id = crate::workflow_audit::audit_event_identity(
-        "workflow-submit",
-        &workflow_id,
-        &timestamp,
-    );
+    let audit_event_id =
+        crate::workflow_audit::audit_event_identity("workflow-submit", &workflow_id, &timestamp);
     ensure_array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
       "event_type": if is_new { "project_workflow_created_from_canvas" } else { "project_workflow_updated_from_canvas" },
@@ -3467,7 +3609,12 @@ fn get_project_workflow_nodes(
     let value = read_workflow_state_value(&state.workflow_state_path)?;
     let mut node_to_canvas: Vec<(String, String)> = Vec::new();
     let mut nodes_out: Vec<Value> = Vec::new();
-    for n in value.get("nodes").and_then(Value::as_array).cloned().unwrap_or_default() {
+    for n in value
+        .get("nodes")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+    {
         if optional_string_from(&n, "workflow_id").as_deref() != Some(workflow_id.as_str()) {
             continue;
         }
@@ -3476,7 +3623,8 @@ fn get_project_workflow_nodes(
             // 后置A 止血：老 bootstrap 节点无 canvas_payload → 合成时角色/种类按 node_type 派生
             // （别全写 subagent，对齐读模型真角色：director/审查/执行…）。CanvasNodeRole 只有
             // director|subagent；kind 开放（用于显示色/标签）。
-            let node_type = optional_string_from(&n, "node_type").unwrap_or_else(|| "custom".to_string());
+            let node_type =
+                optional_string_from(&n, "node_type").unwrap_or_else(|| "custom".to_string());
             let (role, kind) = match node_type.as_str() {
                 "director" => ("director", "director"),
                 "actor" => ("subagent", "subagent"),
@@ -3508,10 +3656,18 @@ fn get_project_workflow_nodes(
         if optional_string_from(e, "workflow_id").as_deref() != Some(workflow_id.as_str()) {
             continue;
         }
-        let from_c = optional_string_from(e, "from_node_id")
-            .and_then(|nid| node_to_canvas.iter().find(|(n, _)| *n == nid).map(|(_, c)| c.clone()));
-        let to_c = optional_string_from(e, "to_node_id")
-            .and_then(|nid| node_to_canvas.iter().find(|(n, _)| *n == nid).map(|(_, c)| c.clone()));
+        let from_c = optional_string_from(e, "from_node_id").and_then(|nid| {
+            node_to_canvas
+                .iter()
+                .find(|(n, _)| *n == nid)
+                .map(|(_, c)| c.clone())
+        });
+        let to_c = optional_string_from(e, "to_node_id").and_then(|nid| {
+            node_to_canvas
+                .iter()
+                .find(|(n, _)| *n == nid)
+                .map(|(_, c)| c.clone())
+        });
         if let (Some(f), Some(t)) = (from_c, to_c) {
             edges_out.push(json!({ "id": format!("seed-edge-{i}"), "from": f, "to": t }));
         }

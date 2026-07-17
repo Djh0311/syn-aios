@@ -27,11 +27,18 @@ type SupervisorResidentHostMap = BTreeMap<String, Arc<Mutex<SupervisorResidentHo
 // holds it, so independent project supervisors can make their own MCP calls in
 // parallel while a single project's thread remains strictly ordered.
 static SUPERVISOR_RESIDENT_HOSTS: OnceLock<Mutex<SupervisorResidentHostMap>> = OnceLock::new();
+// A user reply is a one-shot, user-originated fact.  Serializing its durable
+// check/write/injection sequence prevents concurrent duplicate commands from
+// silently injecting the same answer twice.
+// One fixed test project has one resident conversation.  Serializing the
+// command that can open a question and the command that can answer it keeps a
+// pre-issued question id from racing with a second opening turn.
+static SUPERVISOR_RESIDENT_CONVERSATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct SupervisorResidentTurn {
-    thread_id: String,
-    content: String,
+pub(crate) struct SupervisorResidentTurn {
+    pub(crate) thread_id: String,
+    pub(crate) content: String,
 }
 
 struct SupervisorResidentHostSlot {
@@ -469,8 +476,31 @@ pub(crate) fn consult_supervisor_resident(
     prompt: &str,
     prompt_kind: &str,
 ) -> Result<String, String> {
+    if prompt_kind == "user_reply" {
+        return Err("supervisor_resident_user_reply_requires_answer_command".to_string());
+    }
+    Ok(consult_supervisor_resident_turn(
+        workflow_state_path,
+        project_root,
+        workflow_id,
+        prompt,
+        prompt_kind,
+    )?
+    .content)
+}
+
+pub(crate) fn consult_supervisor_resident_turn(
+    workflow_state_path: &Path,
+    project_root: &str,
+    workflow_id: &str,
+    prompt: &str,
+    prompt_kind: &str,
+) -> Result<SupervisorResidentTurn, String> {
+    if prompt_kind == "user_reply" {
+        return Err("supervisor_resident_user_reply_requires_answer_command".to_string());
+    }
     reap_supervisor_temporary_homes_once()?;
-    let turn = consult_supervisor_resident_with(
+    consult_supervisor_resident_with(
         &RealSupervisorResidentMcpHostSpawner,
         resident_hosts(),
         workflow_state_path,
@@ -478,8 +508,7 @@ pub(crate) fn consult_supervisor_resident(
         workflow_id,
         prompt,
         prompt_kind,
-    )?;
-    Ok(turn.content)
+    )
 }
 
 fn consult_supervisor_resident_with(
@@ -747,11 +776,630 @@ fn validate_resident_request(
     }
     if !matches!(
         prompt_kind,
-        "project_consult" | "director_plan" | "director_plan_preview"
+        "project_consult" | "director_plan" | "director_plan_preview" | "user_reply"
     ) {
         return Err("supervisor_resident_prompt_kind_not_allowed".to_string());
     }
     Ok(())
+}
+
+const SUPERVISOR_RESIDENT_QUESTION_ASKED_EVENT: &str = "supervisor_resident_question_asked";
+const SUPERVISOR_RESIDENT_QUESTION_ANSWERED_EVENT: &str = "supervisor_resident_question_answered";
+const SUPERVISOR_RESIDENT_REPLY_INJECTED_EVENT: &str = "supervisor_resident_reply_injected";
+
+#[derive(serde::Deserialize)]
+pub(crate) struct SubmitSupervisorResidentAnswerRequest {
+    pub(crate) project_id: String,
+    pub(crate) workflow_id: String,
+    pub(crate) question_id: String,
+    // This is the only source permitted to become a user_reply prompt.  It is
+    // intentionally required (not serde-defaulted), so an omitted answer can
+    // never be mistaken for a real user decision.
+    pub(crate) answer_text: String,
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct SupervisorResidentAnswerOutcome {
+    pub(crate) status: String,
+    pub(crate) question_id: String,
+    pub(crate) reply_injected: bool,
+    pub(crate) thread_id: Option<String>,
+    pub(crate) supervisor_reply: Option<String>,
+    pub(crate) proposal: Option<crate::ProjectConsultationProposal>,
+    pub(crate) question: Option<crate::ResidentSupervisorQuestion>,
+    pub(crate) message: String,
+}
+
+#[derive(Clone, Debug)]
+struct ResidentQuestionState {
+    project_id: String,
+    workflow_id: String,
+    question_id: String,
+    round: u64,
+    question: String,
+    user_goal: String,
+    answered: bool,
+    answer_text: Option<String>,
+    reply_injected: bool,
+    question_thread_id: String,
+    reply_injected_thread_id: Option<String>,
+}
+
+pub(crate) fn resident_conversation_lock() -> &'static Mutex<()> {
+    SUPERVISOR_RESIDENT_CONVERSATION_LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn resident_supervisor_config(workflow_state_path: &Path, project_root: &str) -> McpServerConfig {
+    let run_id = resident_run_id(project_root);
+    supervisor_config(
+        workflow_state_path,
+        &run_id,
+        SupervisorQuotaLimits {
+            max_active_workers: DEFAULT_MAX_ACTIVE_WORKERS,
+            max_follow_ups_per_worker: DEFAULT_MAX_FOLLOW_UPS_PER_WORKER,
+            max_runtime_minutes: DEFAULT_MAX_RUNTIME_MINUTES,
+        },
+    )
+}
+
+fn resident_event_string<'a>(event: &'a Value, field: &str) -> Option<&'a str> {
+    event.get(field).and_then(Value::as_str)
+}
+
+fn resident_event_matches_question(
+    event: &Value,
+    event_type: &str,
+    project_id: &str,
+    workflow_id: &str,
+    question_id: &str,
+) -> bool {
+    resident_event_string(event, "event_type") == Some(event_type)
+        && resident_event_string(event, "project_id") == Some(project_id)
+        && resident_event_string(event, "workflow_id") == Some(workflow_id)
+        && resident_event_string(event, "question_id") == Some(question_id)
+}
+
+fn resident_question_target_ref(workflow_id: &str, question_id: &str) -> String {
+    format!("{workflow_id}:resident-question:{question_id}")
+}
+
+fn require_resident_workflow_binding(
+    workflow_state_path: &Path,
+    project_root: &str,
+    workflow_id: &str,
+) -> Result<String, String> {
+    if project_root != crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT {
+        return Err(crate::legacy_product_command_blocked_message(
+            "supervisor_resident_session",
+        ));
+    }
+    if workflow_id.trim().is_empty() {
+        return Err("supervisor_resident_workflow_id_required".to_string());
+    }
+    let project_id = crate::project_id(project_root);
+    let snapshot = crate::read_workflow_state_snapshot(workflow_state_path)?;
+    if snapshot.project_workflows.iter().any(|workflow| {
+        workflow.project_id == project_id
+            && workflow.project_root == project_root
+            && workflow.workflow_id == workflow_id
+    }) {
+        Ok(project_id)
+    } else {
+        Err("supervisor_resident_project_workflow_binding_not_found".to_string())
+    }
+}
+
+pub(crate) fn next_resident_question_expectation(
+    workflow_state_path: &Path,
+    project_root: &str,
+    workflow_id: &str,
+) -> Result<crate::ResidentQuestionExpectation, String> {
+    let project_id =
+        require_resident_workflow_binding(workflow_state_path, project_root, workflow_id)?;
+    let value = crate::read_workflow_state_value(workflow_state_path)?;
+    let audit_events = value
+        .get("audit_events")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "supervisor_resident_audit_events_missing".to_string())?;
+    let mut asked_questions = std::collections::BTreeMap::new();
+    let mut answered_questions = std::collections::BTreeSet::new();
+    for event in audit_events {
+        let event_project_id = resident_event_string(event, "project_id");
+        let event_workflow_id = resident_event_string(event, "workflow_id");
+        if event_project_id != Some(&project_id) || event_workflow_id != Some(workflow_id) {
+            continue;
+        }
+        let Some(question_id) = resident_event_string(event, "question_id") else {
+            continue;
+        };
+        match resident_event_string(event, "event_type") {
+            Some(SUPERVISOR_RESIDENT_QUESTION_ASKED_EVENT) => {
+                let round = event
+                    .get("round")
+                    .and_then(Value::as_u64)
+                    .filter(|round| *round > 0)
+                    .ok_or_else(|| "supervisor_resident_question_round_invalid".to_string())?;
+                if asked_questions
+                    .insert(question_id.to_string(), round)
+                    .is_some()
+                {
+                    return Err(
+                        "supervisor_resident_question_duplicate_canonical_record".to_string()
+                    );
+                }
+            }
+            Some(SUPERVISOR_RESIDENT_QUESTION_ANSWERED_EVENT) => {
+                answered_questions.insert(question_id.to_string());
+            }
+            _ => {}
+        }
+    }
+    if let Some(question_id) = asked_questions
+        .keys()
+        .find(|question_id| !answered_questions.contains(*question_id))
+    {
+        return Err(format!(
+            "supervisor_resident_question_waiting_user_reply:{question_id}"
+        ));
+    }
+    let highest_round = asked_questions.values().copied().max().unwrap_or(0);
+    let round = highest_round
+        .checked_add(1)
+        .ok_or_else(|| "supervisor_resident_question_round_exhausted".to_string())?;
+    Ok(crate::ResidentQuestionExpectation {
+        question_id: format!(
+            "resident-question:{}:{round}",
+            crate::stable_id(workflow_id)
+        ),
+        project_id,
+        workflow_id: workflow_id.to_string(),
+        round,
+    })
+}
+
+fn load_resident_question_state(
+    workflow_state_path: &Path,
+    project_id: &str,
+    workflow_id: &str,
+    question_id: &str,
+) -> Result<ResidentQuestionState, String> {
+    let value = crate::read_workflow_state_value(workflow_state_path)?;
+    let audit_events = value
+        .get("audit_events")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "supervisor_resident_audit_events_missing".to_string())?;
+    let mut question_state = None;
+    let mut answer_text = None;
+    let mut reply_injected_thread_id = None;
+    for event in audit_events {
+        if resident_event_matches_question(
+            event,
+            SUPERVISOR_RESIDENT_QUESTION_ASKED_EVENT,
+            project_id,
+            workflow_id,
+            question_id,
+        ) {
+            if question_state.is_some() {
+                return Err("supervisor_resident_question_duplicate_canonical_record".to_string());
+            }
+            let round = event
+                .get("round")
+                .and_then(Value::as_u64)
+                .filter(|round| *round > 0)
+                .ok_or_else(|| "supervisor_resident_question_round_invalid".to_string())?;
+            let question = resident_event_string(event, "question")
+                .filter(|question| !question.trim().is_empty())
+                .ok_or_else(|| "supervisor_resident_question_text_missing".to_string())?
+                .to_string();
+            let user_goal = resident_event_string(event, "user_goal")
+                .filter(|goal| !goal.trim().is_empty())
+                .ok_or_else(|| "supervisor_resident_question_user_goal_missing".to_string())?
+                .to_string();
+            let thread_id = resident_event_string(event, "thread_id")
+                .filter(|thread_id| !thread_id.trim().is_empty())
+                .ok_or_else(|| "supervisor_resident_question_thread_id_missing".to_string())?
+                .to_string();
+            question_state = Some((round, question, user_goal, thread_id));
+        } else if resident_event_matches_question(
+            event,
+            SUPERVISOR_RESIDENT_QUESTION_ANSWERED_EVENT,
+            project_id,
+            workflow_id,
+            question_id,
+        ) {
+            if answer_text.is_some() {
+                return Err("supervisor_resident_question_duplicate_canonical_answer".to_string());
+            }
+            let canonical_answer = resident_event_string(event, "answer_text")
+                .filter(|answer| !answer.trim().is_empty())
+                .ok_or_else(|| "supervisor_resident_question_answer_text_missing".to_string())?;
+            answer_text = Some(canonical_answer.to_string());
+        } else if resident_event_matches_question(
+            event,
+            SUPERVISOR_RESIDENT_REPLY_INJECTED_EVENT,
+            project_id,
+            workflow_id,
+            question_id,
+        ) {
+            if reply_injected_thread_id.is_some() {
+                return Err("supervisor_resident_question_duplicate_reply_injected".to_string());
+            }
+            let thread_id = resident_event_string(event, "thread_id")
+                .filter(|thread_id| !thread_id.trim().is_empty())
+                .ok_or_else(|| {
+                    "supervisor_resident_reply_injected_thread_id_missing".to_string()
+                })?;
+            reply_injected_thread_id = Some(thread_id.to_string());
+        }
+    }
+    let (round, question, user_goal, question_thread_id) =
+        question_state.ok_or_else(|| "supervisor_resident_question_not_found".to_string())?;
+    if reply_injected_thread_id.is_some() && answer_text.is_none() {
+        return Err("supervisor_resident_reply_injected_without_answer".to_string());
+    }
+    Ok(ResidentQuestionState {
+        project_id: project_id.to_string(),
+        workflow_id: workflow_id.to_string(),
+        question_id: question_id.to_string(),
+        round,
+        question,
+        user_goal,
+        answered: answer_text.is_some(),
+        answer_text,
+        reply_injected: reply_injected_thread_id.is_some(),
+        question_thread_id,
+        reply_injected_thread_id,
+    })
+}
+
+fn append_resident_question_canonical_event(
+    workflow_state_path: &Path,
+    event: Value,
+    phase: &str,
+) -> Result<(), String> {
+    let mut value = crate::read_workflow_state_value(workflow_state_path)?;
+    crate::array_mut(&mut value, "audit_events")?.push(event);
+    crate::write_m5b_batch2_workflow_state(workflow_state_path, phase, &value)
+}
+
+fn append_resident_question_asked_canonical(
+    workflow_state_path: &Path,
+    question: &crate::ResidentSupervisorQuestion,
+    user_goal: &str,
+    thread_id: &str,
+) -> Result<(), String> {
+    if user_goal.trim().is_empty() || thread_id.trim().is_empty() {
+        return Err("supervisor_resident_question_canonical_identity_incomplete".to_string());
+    }
+    let created_at = crate::unix_timestamp_string();
+    append_resident_question_canonical_event(
+        workflow_state_path,
+        json!({
+            "event_id": format!("supervisor-resident-question:asked:{}", crate::unix_timestamp_nanos()),
+            "event_type": SUPERVISOR_RESIDENT_QUESTION_ASKED_EVENT,
+            "target_ref": resident_question_target_ref(&question.workflow_id, &question.question_id),
+            "project_id": question.project_id,
+            "workflow_id": question.workflow_id,
+            "question_id": question.question_id,
+            "round": question.round,
+            "question": question.question,
+            "user_goal": user_goal,
+            "thread_id": thread_id,
+            "actor_ref": "supervisor_resident",
+            "source_kind": "supervisor_resident_session",
+            "permission_level": "read_only_conversation",
+            "created_at": created_at,
+            "reason": format!("第 {} 轮主管问题：{}", question.round, question.question),
+        }),
+        "supervisor_resident_question_asked",
+    )
+}
+
+fn append_resident_question_answered_canonical(
+    workflow_state_path: &Path,
+    question: &ResidentQuestionState,
+    answer_text: &str,
+) -> Result<(), String> {
+    let created_at = crate::unix_timestamp_string();
+    append_resident_question_canonical_event(
+        workflow_state_path,
+        json!({
+            "event_id": format!("supervisor-resident-question:answered:{}", crate::unix_timestamp_nanos()),
+            "event_type": SUPERVISOR_RESIDENT_QUESTION_ANSWERED_EVENT,
+            "target_ref": resident_question_target_ref(&question.workflow_id, &question.question_id),
+            "project_id": question.project_id,
+            "workflow_id": question.workflow_id,
+            "question_id": question.question_id,
+            "round": question.round,
+            "answer_text": answer_text,
+            "actor_ref": "user",
+            "source_kind": "supervisor_resident_answer_command",
+            "permission_level": "read_only_conversation",
+            "created_at": created_at,
+            "reason": format!("第 {} 轮用户答复：{}", question.round, answer_text),
+        }),
+        "supervisor_resident_question_answered",
+    )
+}
+
+fn append_resident_reply_injected_canonical(
+    workflow_state_path: &Path,
+    question: &ResidentQuestionState,
+    thread_id: &str,
+) -> Result<(), String> {
+    let created_at = crate::unix_timestamp_string();
+    append_resident_question_canonical_event(
+        workflow_state_path,
+        json!({
+            "event_id": format!("supervisor-resident-question:reply-injected:{}", crate::unix_timestamp_nanos()),
+            "event_type": SUPERVISOR_RESIDENT_REPLY_INJECTED_EVENT,
+            "target_ref": resident_question_target_ref(&question.workflow_id, &question.question_id),
+            "project_id": question.project_id,
+            "workflow_id": question.workflow_id,
+            "question_id": question.question_id,
+            "round": question.round,
+            "thread_id": thread_id,
+            "actor_ref": "supervisor_resident",
+            "source_kind": "supervisor_resident_answer_command",
+            "permission_level": "read_only_conversation",
+            "created_at": created_at,
+            "reason": format!("第 {} 轮用户答复已通过常驻主管会话注入（threadId={}）。", question.round, thread_id),
+        }),
+        "supervisor_resident_reply_injected",
+    )
+}
+
+pub(crate) fn record_supervisor_resident_question_asked(
+    workflow_state_path: &Path,
+    project_root: &str,
+    question: &crate::ResidentSupervisorQuestion,
+    user_goal: &str,
+    thread_id: &str,
+) -> Result<(), String> {
+    let project_id = require_resident_workflow_binding(
+        workflow_state_path,
+        project_root,
+        &question.workflow_id,
+    )?;
+    if question.project_id != project_id {
+        return Err("supervisor_resident_question_project_id_mismatch".to_string());
+    }
+    append_resident_question_asked_canonical(workflow_state_path, question, user_goal, thread_id)?;
+    let config = resident_supervisor_config(workflow_state_path, project_root);
+    supervisor_orchestrator::record_resident_question_asked(
+        &config,
+        project_root,
+        &question.workflow_id,
+        &question.question_id,
+        question.round,
+        thread_id,
+    )
+}
+
+fn resident_user_reply_prompt(
+    question: &ResidentQuestionState,
+    expected_question: &crate::ResidentQuestionExpectation,
+    answer_text: &str,
+) -> String {
+    format!(
+        "===== 工作台记录的原始用户目标 =====\n{}\n\n===== 主管上一轮问题（不是用户答复） =====\n{}\n\n===== 用户通过答复命令提交的唯一原文 =====\n问题 ID：{}\n{}\n===== 用户原文结束 =====\n\n请仅依据当前会话、工作台已注入事实和这段用户原文继续。不要把任何模型推测当作用户答复。\n\n{}",
+        question.user_goal,
+        question.question,
+        question.question_id,
+        answer_text,
+        crate::resident_consultation_turn_schema_prompt(expected_question),
+    )
+}
+
+fn resolve_resident_answer_scope(
+    workflow_state_path: &Path,
+    request: &SubmitSupervisorResidentAnswerRequest,
+) -> Result<String, String> {
+    if request.project_id.trim().is_empty()
+        || request.workflow_id.trim().is_empty()
+        || request.question_id.trim().is_empty()
+    {
+        return Err("supervisor_resident_answer_identity_incomplete".to_string());
+    }
+    let project_root = crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+    let expected_project_id =
+        require_resident_workflow_binding(workflow_state_path, project_root, &request.workflow_id)?;
+    if request.project_id != expected_project_id {
+        return Err("supervisor_resident_answer_project_id_mismatch".to_string());
+    }
+    Ok(project_root.to_string())
+}
+
+fn submit_supervisor_resident_answer_with(
+    spawner: &dyn SupervisorResidentMcpHostSpawner,
+    hosts: &Mutex<SupervisorResidentHostMap>,
+    workflow_state_path: &Path,
+    request: &SubmitSupervisorResidentAnswerRequest,
+) -> Result<SupervisorResidentAnswerOutcome, String> {
+    if request.answer_text.trim().is_empty() {
+        return Err("supervisor_resident_answer_text_empty".to_string());
+    }
+    let project_root = resolve_resident_answer_scope(workflow_state_path, request)?;
+    let question = load_resident_question_state(
+        workflow_state_path,
+        &request.project_id,
+        &request.workflow_id,
+        &request.question_id,
+    )?;
+    let config = resident_supervisor_config(workflow_state_path, &project_root);
+    // The question itself is canonical first, but this idempotent sidecar call
+    // also repairs a prior audit write that failed after the canonical append.
+    supervisor_orchestrator::record_resident_question_asked(
+        &config,
+        &project_root,
+        &question.workflow_id,
+        &question.question_id,
+        question.round,
+        &question.question_thread_id,
+    )?;
+    if question.reply_injected {
+        let answer_text = question
+            .answer_text
+            .as_deref()
+            .ok_or_else(|| "supervisor_resident_reply_injected_without_answer".to_string())?;
+        supervisor_orchestrator::record_resident_question_answered(
+            &config,
+            &project_root,
+            &question.workflow_id,
+            &question.question_id,
+            question.round,
+        )?;
+        supervisor_orchestrator::record_resident_reply_injected(
+            &config,
+            &project_root,
+            &question.workflow_id,
+            &question.question_id,
+            question.round,
+            question
+                .reply_injected_thread_id
+                .as_deref()
+                .ok_or_else(|| {
+                    "supervisor_resident_reply_injected_thread_id_missing".to_string()
+                })?,
+        )?;
+        return Ok(SupervisorResidentAnswerOutcome {
+            status: "already_answered".to_string(),
+            question_id: question.question_id,
+            reply_injected: true,
+            thread_id: question.reply_injected_thread_id,
+            supervisor_reply: None,
+            proposal: None,
+            question: None,
+            message: format!(
+                "该问题已有答复且已注入；拒绝重复提交，未再次调用模型。原答复长度={}。",
+                answer_text.chars().count()
+            ),
+        });
+    }
+
+    let answer_text = if question.answered {
+        let canonical_answer = question
+            .answer_text
+            .as_deref()
+            .ok_or_else(|| "supervisor_resident_question_answer_text_missing".to_string())?;
+        if request.answer_text != canonical_answer {
+            return Err("supervisor_resident_answer_already_recorded_text_mismatch".to_string());
+        }
+        // The first command durably recorded this exact user input but failed
+        // before a terminal resident reply.  The user has explicitly sent the
+        // same input again, so resume it once rather than silently inventing a
+        // new user reply or losing the durable answer.
+        canonical_answer.to_string()
+    } else {
+        // Persist before any MCP call: if the current host has died, the
+        // existing replacement path reads the derived blackboard and carries
+        // this answer into its opening turn instead of losing it.
+        append_resident_question_answered_canonical(
+            workflow_state_path,
+            &question,
+            &request.answer_text,
+        )?;
+        request.answer_text.clone()
+    };
+    supervisor_orchestrator::record_resident_question_answered(
+        &config,
+        &project_root,
+        &question.workflow_id,
+        &question.question_id,
+        question.round,
+    )?;
+
+    let expected_question = next_resident_question_expectation(
+        workflow_state_path,
+        &project_root,
+        &question.workflow_id,
+    )?;
+    let prompt = resident_user_reply_prompt(&question, &expected_question, &answer_text);
+    let turn = consult_supervisor_resident_with(
+        spawner,
+        hosts,
+        workflow_state_path,
+        &project_root,
+        &question.workflow_id,
+        &prompt,
+        "user_reply",
+    )?;
+
+    // The physical injection succeeded once a terminal reply is returned; log
+    // that fact before parsing so an invalid model payload cannot be mistaken
+    // for an unsubmitted user answer.
+    append_resident_reply_injected_canonical(workflow_state_path, &question, &turn.thread_id)?;
+    supervisor_orchestrator::record_resident_reply_injected(
+        &config,
+        &project_root,
+        &question.workflow_id,
+        &question.question_id,
+        question.round,
+        &turn.thread_id,
+    )?;
+
+    match crate::parse_resident_consultation_turn(&turn.content, &expected_question)? {
+        crate::ResidentConsultationTurn::Proposal(proposal) => {
+            let proposal = crate::write_consultation_proposal(
+                workflow_state_path,
+                &proposal,
+                &project_root,
+                &question.user_goal,
+                "project-consultant",
+            )?;
+            Ok(SupervisorResidentAnswerOutcome {
+                status: "proposal_created".to_string(),
+                question_id: question.question_id,
+                reply_injected: true,
+                thread_id: Some(turn.thread_id),
+                supervisor_reply: Some(turn.content),
+                proposal: Some(proposal),
+                question: None,
+                message: "用户答复已同 thread 注入，主管已输出待确认方案。".to_string(),
+            })
+        }
+        crate::ResidentConsultationTurn::SupervisorQuestion(next_question) => {
+            record_supervisor_resident_question_asked(
+                workflow_state_path,
+                &project_root,
+                &next_question,
+                &question.user_goal,
+                &turn.thread_id,
+            )?;
+            Ok(SupervisorResidentAnswerOutcome {
+                status: "question_asked".to_string(),
+                question_id: next_question.question_id.clone(),
+                reply_injected: true,
+                thread_id: Some(turn.thread_id),
+                supervisor_reply: Some(turn.content),
+                proposal: None,
+                question: Some(next_question),
+                message: "用户答复已同 thread 注入；主管提出下一轮问题。".to_string(),
+            })
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn submit_supervisor_resident_answer(
+    request: SubmitSupervisorResidentAnswerRequest,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<SupervisorResidentAnswerOutcome, String> {
+    let workflow_state_path = state.workflow_state_path.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = resident_conversation_lock()
+            .lock()
+            .map_err(|_| "supervisor_resident_conversation_lock_poisoned".to_string())?;
+        reap_supervisor_temporary_homes_once()?;
+        submit_supervisor_resident_answer_with(
+            &RealSupervisorResidentMcpHostSpawner,
+            resident_hosts(),
+            &workflow_state_path,
+            &request,
+        )
+    })
+    .await
+    .map_err(|error| format!("主管用户答复执行线程异常：{error}"))?
 }
 
 fn resident_run_id(project_root: &str) -> String {

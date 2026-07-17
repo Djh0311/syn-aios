@@ -1105,6 +1105,7 @@ fn blackboard_entry_kind_name(kind: BlackboardEntryKind) -> &'static str {
         BlackboardEntryKind::ToolSummary => "tool_summary",
         BlackboardEntryKind::MemoryCandidate => "memory_candidate",
         BlackboardEntryKind::KnowledgeRef => "knowledge_ref",
+        BlackboardEntryKind::SupervisorMessage => "supervisor_message",
     }
 }
 

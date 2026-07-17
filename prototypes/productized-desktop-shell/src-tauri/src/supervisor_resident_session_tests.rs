@@ -132,6 +132,120 @@ fn resident_fixture_cleanup(state_path: &Path) {
     }
 }
 
+fn resident_question_fixture_state_path(label: &str) -> (std::path::PathBuf, String) {
+    let root = std::env::temp_dir().join(format!(
+        "p1-b-supervisor-question-{label}-{}",
+        crate::unix_timestamp_nanos()
+    ));
+    fs::create_dir_all(&root).expect("create resident question fixture root");
+    let path = root.join("workflow-state.v0.json");
+    let project_root = crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+    crate::bootstrap_project_workflow_at(
+        &path,
+        &crate::ProjectRecord {
+            project_root: project_root.to_string(),
+            name: "P1-B resident question fixture".to_string(),
+            active_hint: true,
+            thread_count: 0,
+            active_thread_count: 0,
+            archived_thread_count: 0,
+            latest_updated_at_ms: None,
+            authority_files: vec![],
+            handoff_files: vec![],
+            evidence_files: vec![],
+            harness_candidates: vec![],
+            harness_resources: vec![],
+            context_warnings: vec![],
+            warnings: vec![],
+        },
+    )
+    .expect("bootstrap fixed resident question workflow");
+    let workflow_id = crate::default_workflow_id(project_root);
+    (path, workflow_id)
+}
+
+fn resident_question_turn_json(
+    expected: &crate::ResidentQuestionExpectation,
+    question: &str,
+) -> String {
+    serde_json::json!({
+        "schema_version": "supervisor_resident_turn.v1",
+        "kind": "supervisor_question",
+        "question_id": expected.question_id,
+        "project_id": expected.project_id,
+        "workflow_id": expected.workflow_id,
+        "round": expected.round,
+        "question": question,
+    })
+    .to_string()
+}
+
+fn resident_proposal_turn_json(summary: &str) -> String {
+    serde_json::json!({
+        "schema_version": "supervisor_resident_turn.v1",
+        "kind": "proposal",
+        "user_goal": "P1-B 固定测试项目问答闭环",
+        "goal_summary": summary,
+        "scope_note": "纯只读测试方案",
+        "reasoning": ["用户答复已通过受控同 thread 注入。"],
+        "risks": [{"severity": "info", "summary": "测试不修改项目", "mitigation": "保持 read-only。"}],
+        "must_stop_points": ["需要真实写入时停止"],
+        "next_steps": ["由用户确认方案"],
+        "worker_acceptance_criteria": ["不修改任何项目文件"],
+        "control_core_acceptance_criteria": ["只读沙箱与审计可核验"],
+        "supervisor_acceptance_criteria": ["主管仅输出方案"],
+        "execution_scope": null,
+        "suggest_workflow": false,
+    })
+    .to_string()
+}
+
+fn resident_record_mock_question(
+    spawner: &ResidentMockSpawner,
+    hosts: &Mutex<SupervisorResidentHostMap>,
+    state_path: &Path,
+    workflow_id: &str,
+    expected: &crate::ResidentQuestionExpectation,
+    user_goal: &str,
+) -> crate::ResidentSupervisorQuestion {
+    let turn = consult_supervisor_resident_with(
+        spawner,
+        hosts,
+        state_path,
+        crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+        workflow_id,
+        "P1-B mock initial question turn",
+        "project_consult",
+    )
+    .expect("mock question turn");
+    let question = match crate::parse_resident_consultation_turn(&turn.content, expected)
+        .expect("strict mock question turn")
+    {
+        crate::ResidentConsultationTurn::SupervisorQuestion(question) => question,
+        crate::ResidentConsultationTurn::Proposal(_) => panic!("mock should ask a question"),
+    };
+    record_supervisor_resident_question_asked(
+        state_path,
+        crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+        &question,
+        user_goal,
+        &turn.thread_id,
+    )
+    .expect("record canonical mock question");
+    question
+}
+
+fn resident_canonical_event_types(state_path: &Path) -> Vec<String> {
+    crate::read_workflow_state_value(state_path)
+        .expect("read resident canonical state")
+        .get("audit_events")
+        .and_then(Value::as_array)
+        .expect("canonical audit events")
+        .iter()
+        .filter_map(|event| event["event_type"].as_str().map(str::to_string))
+        .collect()
+}
+
 fn resident_audit_event_types(state_path: &Path) -> Vec<String> {
     let sidecar = crate::utils::store_paths::sidecar_path(
         state_path,
@@ -496,6 +610,453 @@ fn resident_project_slots_have_independent_locks() {
 }
 
 #[test]
+fn p1_b_resident_turn_schema_is_strict_binary_and_stops_on_invalid_shapes() {
+    let expected = crate::ResidentQuestionExpectation {
+        question_id: "resident-question:fixture:1".to_string(),
+        project_id: crate::project_id(crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT),
+        workflow_id: "workflow:p1-b:schema".to_string(),
+        round: 1,
+    };
+    let question = resident_question_turn_json(&expected, "请明确唯一验收目标？");
+    assert!(matches!(
+        crate::parse_resident_consultation_turn(&question, &expected),
+        Ok(crate::ResidentConsultationTurn::SupervisorQuestion(_))
+    ));
+    let proposal = resident_proposal_turn_json("严格方案 JSON 仍可通过既有闸");
+    assert!(matches!(
+        crate::parse_resident_consultation_turn(&proposal, &expected),
+        Ok(crate::ResidentConsultationTurn::Proposal(_))
+    ));
+
+    for invalid in [
+        "没有 json 的自由文本",
+        r#"{"schema_version":"supervisor_resident_turn.v1","kind":"supervisor_question","question_id":"resident-question:fixture:1","project_id":"wrong","workflow_id":"workflow:p1-b:schema","round":1,"question":"x"}"#,
+        r#"{"schema_version":"supervisor_resident_turn.v1","kind":"supervisor_question","question_id":"resident-question:fixture:1","project_id":"project:users-yoyi-codex-workflow-mario-test","workflow_id":"workflow:p1-b:schema","round":1,"question":"x","goal_summary":"mixed"}"#,
+        r#"{"schema_version":"supervisor_resident_turn.v1","kind":"unknown"}"#,
+        r#"说明文字```json
+{"schema_version":"supervisor_resident_turn.v1","kind":"supervisor_question","question_id":"resident-question:fixture:1","project_id":"project:users-yoyi-codex-workflow-mario-test","workflow_id":"workflow:p1-b:schema","round":1,"question":"x"}
+```"#,
+    ] {
+        let error = crate::parse_resident_consultation_turn(invalid, &expected)
+            .expect_err("invalid resident turn must conservatively stop");
+        assert!(
+            error.starts_with("protocol_invalid:supervisor_resident_turn_"),
+            "unexpected error: {error}"
+        );
+    }
+}
+
+#[test]
+fn p1_b_mock_question_answer_same_thread_proposal_then_duplicate_is_rejected() {
+    let (state_path, workflow_id) = resident_question_fixture_state_path("same-thread");
+    let first_expected = next_resident_question_expectation(
+        &state_path,
+        crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+        &workflow_id,
+    )
+    .expect("preissue first question id");
+    let alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let spawner = ResidentMockSpawner::new(vec![resident_mock_spec(
+        5101,
+        alive,
+        vec![
+            resident_mock_turn(
+                "thread-p1b-q1",
+                &resident_question_turn_json(&first_expected, "请给出唯一验收标记。"),
+            ),
+            resident_mock_turn(
+                "thread-p1b-q1",
+                &resident_proposal_turn_json("用户已答，输出待确认方案。"),
+            ),
+        ],
+    )]);
+    let hosts: Mutex<SupervisorResidentHostMap> = Mutex::new(BTreeMap::new());
+    let question = resident_record_mock_question(
+        &spawner,
+        &hosts,
+        &state_path,
+        &workflow_id,
+        &first_expected,
+        "P1-B：先提问，再收到答复后只输出方案。",
+    );
+    let request = SubmitSupervisorResidentAnswerRequest {
+        project_id: question.project_id.clone(),
+        workflow_id: workflow_id.clone(),
+        question_id: question.question_id.clone(),
+        answer_text: "验收标记是 P1B-ANSWER-ALPHA。".to_string(),
+    };
+    let pending = next_resident_question_expectation(
+        &state_path,
+        crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+        &workflow_id,
+    )
+    .expect_err("an unanswered canonical question must block another pre-issued id");
+    assert_eq!(
+        pending,
+        format!(
+            "supervisor_resident_question_waiting_user_reply:{}",
+            request.question_id
+        )
+    );
+
+    let outcome = submit_supervisor_resident_answer_with(&spawner, &hosts, &state_path, &request)
+        .expect("answer should resume same resident thread");
+    assert_eq!(outcome.status, "proposal_created");
+    assert!(outcome.reply_injected);
+    assert_eq!(outcome.thread_id.as_deref(), Some("thread-p1b-q1"));
+    assert!(outcome.proposal.is_some());
+    assert!(outcome
+        .supervisor_reply
+        .as_deref()
+        .is_some_and(|reply| reply.contains("待确认方案")));
+
+    let calls_before_duplicate = spawner.calls.lock().expect("resident calls").clone();
+    assert_eq!(
+        calls_before_duplicate
+            .iter()
+            .map(|call| call.tool_name.as_str())
+            .collect::<Vec<_>>(),
+        ["codex", "codex-reply"]
+    );
+    assert_eq!(
+        calls_before_duplicate[1].arguments["threadId"],
+        Value::String("thread-p1b-q1".to_string())
+    );
+    assert!(calls_before_duplicate[1].arguments["prompt"]
+        .as_str()
+        .expect("user reply prompt")
+        .contains(&request.answer_text));
+
+    let duplicate = submit_supervisor_resident_answer_with(&spawner, &hosts, &state_path, &request)
+        .expect("duplicate must return existing outcome, not inject again");
+    assert_eq!(duplicate.status, "already_answered");
+    assert!(duplicate.reply_injected);
+    assert_eq!(
+        spawner.calls.lock().expect("resident calls").len(),
+        calls_before_duplicate.len(),
+        "duplicate user answer must not call codex-reply again"
+    );
+
+    let canonical_types = resident_canonical_event_types(&state_path);
+    for event_type in [
+        SUPERVISOR_RESIDENT_QUESTION_ASKED_EVENT,
+        SUPERVISOR_RESIDENT_QUESTION_ANSWERED_EVENT,
+        SUPERVISOR_RESIDENT_REPLY_INJECTED_EVENT,
+    ] {
+        assert!(canonical_types.contains(&event_type.to_string()));
+    }
+    let sidecar_types = resident_audit_event_types(&state_path);
+    for event_type in [
+        SUPERVISOR_RESIDENT_QUESTION_ASKED_EVENT,
+        SUPERVISOR_RESIDENT_QUESTION_ANSWERED_EVENT,
+        SUPERVISOR_RESIDENT_REPLY_INJECTED_EVENT,
+    ] {
+        assert!(sidecar_types.contains(&event_type.to_string()));
+    }
+    let snapshot =
+        crate::read_workflow_state_snapshot(&state_path).expect("read question snapshot");
+    let messages = snapshot.project_blackboards[0]
+        .entries
+        .iter()
+        .filter(|entry| entry.kind == crate::BlackboardEntryKind::SupervisorMessage)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        messages.len(),
+        2,
+        "question and answer must both be readable"
+    );
+    assert!(messages.iter().any(|entry| entry.status == "answered"));
+    assert!(messages.iter().all(|entry| {
+        entry
+            .warnings
+            .contains(&"supervisor_message_does_not_advance_workflow".to_string())
+    }));
+    resident_fixture_cleanup(&state_path);
+}
+
+#[test]
+fn p1_b_mock_recovers_exact_durable_answer_after_pre_injection_failure() {
+    let (state_path, workflow_id) = resident_question_fixture_state_path("recover-durable-answer");
+    let first_expected = next_resident_question_expectation(
+        &state_path,
+        crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+        &workflow_id,
+    )
+    .expect("preissue first question id");
+    let first_alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let second_alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let spawner = ResidentMockSpawner::new(vec![
+        resident_mock_spec(
+            5151,
+            first_alive,
+            vec![
+                resident_mock_turn(
+                    "thread-p1b-recover-old",
+                    &resident_question_turn_json(&first_expected, "请给出恢复标记。"),
+                ),
+                Err("supervisor_resident_mcp_event_parse_failed:temporary".to_string()),
+            ],
+        ),
+        resident_mock_spec(
+            5152,
+            second_alive,
+            vec![resident_mock_turn(
+                "thread-p1b-recover-new",
+                &resident_proposal_turn_json("恢复后的同一用户答复已进入方案。"),
+            )],
+        ),
+    ]);
+    let hosts: Mutex<SupervisorResidentHostMap> = Mutex::new(BTreeMap::new());
+    let question = resident_record_mock_question(
+        &spawner,
+        &hosts,
+        &state_path,
+        &workflow_id,
+        &first_expected,
+        "P1-B：答复持久化后若注入前失败，只能由同一用户原文恢复。",
+    );
+    let request = SubmitSupervisorResidentAnswerRequest {
+        project_id: question.project_id,
+        workflow_id: workflow_id.clone(),
+        question_id: question.question_id,
+        answer_text: "P1B-DURABLE-RECOVERY-DELTA".to_string(),
+    };
+
+    let first_error =
+        match submit_supervisor_resident_answer_with(&spawner, &hosts, &state_path, &request) {
+            Err(error) => error,
+            Ok(_) => panic!("first post-answer transport failure must conservatively stop"),
+        };
+    assert_eq!(
+        first_error,
+        "supervisor_resident_mcp_event_parse_failed:temporary"
+    );
+    let wrong_answer = SubmitSupervisorResidentAnswerRequest {
+        project_id: request.project_id.clone(),
+        workflow_id: request.workflow_id.clone(),
+        question_id: request.question_id.clone(),
+        answer_text: "P1B-DIFFERENT-ANSWER".to_string(),
+    };
+    let wrong_answer_error = match submit_supervisor_resident_answer_with(
+        &spawner,
+        &hosts,
+        &state_path,
+        &wrong_answer,
+    ) {
+        Err(error) => error,
+        Ok(_) => panic!("a different answer must not revive a durable pending answer"),
+    };
+    assert_eq!(
+        wrong_answer_error,
+        "supervisor_resident_answer_already_recorded_text_mismatch"
+    );
+
+    let recovered = submit_supervisor_resident_answer_with(&spawner, &hosts, &state_path, &request)
+        .expect("the exact explicit command input may recover its pending injection");
+    assert_eq!(recovered.status, "proposal_created");
+    assert_eq!(
+        recovered.thread_id.as_deref(),
+        Some("thread-p1b-recover-new")
+    );
+    let calls = spawner.calls.lock().expect("resident calls").clone();
+    assert_eq!(
+        calls
+            .iter()
+            .map(|call| call.tool_name.as_str())
+            .collect::<Vec<_>>(),
+        ["codex", "codex-reply", "codex"]
+    );
+    assert!(calls[2].arguments["prompt"]
+        .as_str()
+        .expect("recovery opening prompt")
+        .contains(&request.answer_text));
+    let canonical_types = resident_canonical_event_types(&state_path);
+    assert_eq!(
+        canonical_types
+            .iter()
+            .filter(|event_type| *event_type == SUPERVISOR_RESIDENT_QUESTION_ANSWERED_EVENT)
+            .count(),
+        1,
+        "recovery must not append a second canonical user answer"
+    );
+    let sidecar_types = resident_audit_event_types(&state_path);
+    assert_eq!(
+        sidecar_types
+            .iter()
+            .filter(|event_type| *event_type == SUPERVISOR_RESIDENT_QUESTION_ANSWERED_EVENT)
+            .count(),
+        1,
+        "recovery must not duplicate the M5 user-answer audit"
+    );
+    resident_fixture_cleanup(&state_path);
+}
+
+#[test]
+fn p1_b_mock_supports_second_question_before_final_proposal() {
+    let (state_path, workflow_id) = resident_question_fixture_state_path("second-question");
+    let first_expected = next_resident_question_expectation(
+        &state_path,
+        crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+        &workflow_id,
+    )
+    .expect("preissue first question id");
+    let second_expected = crate::ResidentQuestionExpectation {
+        question_id: format!("resident-question:{}:2", crate::stable_id(&workflow_id)),
+        project_id: first_expected.project_id.clone(),
+        workflow_id: workflow_id.clone(),
+        round: 2,
+    };
+    let alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let spawner = ResidentMockSpawner::new(vec![resident_mock_spec(
+        5201,
+        alive,
+        vec![
+            resident_mock_turn(
+                "thread-p1b-chain",
+                &resident_question_turn_json(&first_expected, "第一问：选 A 还是 B？"),
+            ),
+            resident_mock_turn(
+                "thread-p1b-chain",
+                &resident_question_turn_json(&second_expected, "第二问：验收用什么标记？"),
+            ),
+            resident_mock_turn(
+                "thread-p1b-chain",
+                &resident_proposal_turn_json("两轮答复已齐，输出方案。"),
+            ),
+        ],
+    )]);
+    let hosts: Mutex<SupervisorResidentHostMap> = Mutex::new(BTreeMap::new());
+    let first_question = resident_record_mock_question(
+        &spawner,
+        &hosts,
+        &state_path,
+        &workflow_id,
+        &first_expected,
+        "P1-B：允许两轮问题，第二轮答复后才出方案。",
+    );
+    let first_outcome = submit_supervisor_resident_answer_with(
+        &spawner,
+        &hosts,
+        &state_path,
+        &SubmitSupervisorResidentAnswerRequest {
+            project_id: first_question.project_id.clone(),
+            workflow_id: workflow_id.clone(),
+            question_id: first_question.question_id,
+            answer_text: "选择 A。".to_string(),
+        },
+    )
+    .expect("first answer should produce second question");
+    assert_eq!(first_outcome.status, "question_asked");
+    let second_question = first_outcome.question.expect("second question outcome");
+    assert_eq!(second_question.question_id, second_expected.question_id);
+    assert_eq!(second_question.round, 2);
+
+    let second_outcome = submit_supervisor_resident_answer_with(
+        &spawner,
+        &hosts,
+        &state_path,
+        &SubmitSupervisorResidentAnswerRequest {
+            project_id: second_question.project_id,
+            workflow_id: workflow_id.clone(),
+            question_id: second_question.question_id,
+            answer_text: "验收标记是 P1B-CHAIN-BETA。".to_string(),
+        },
+    )
+    .expect("second answer should produce proposal");
+    assert_eq!(second_outcome.status, "proposal_created");
+    assert_eq!(
+        second_outcome.thread_id.as_deref(),
+        Some("thread-p1b-chain")
+    );
+    assert_eq!(
+        spawner
+            .calls
+            .lock()
+            .expect("resident calls")
+            .iter()
+            .map(|call| call.tool_name.as_str())
+            .collect::<Vec<_>>(),
+        ["codex", "codex-reply", "codex-reply"]
+    );
+    resident_fixture_cleanup(&state_path);
+}
+
+#[test]
+fn p1_b_mock_dead_host_rebuilds_with_durable_answer_and_injects_it() {
+    let (state_path, workflow_id) = resident_question_fixture_state_path("dead-host-answer");
+    let first_expected = next_resident_question_expectation(
+        &state_path,
+        crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+        &workflow_id,
+    )
+    .expect("preissue first question id");
+    let old_alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let new_alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let spawner = ResidentMockSpawner::new(vec![
+        resident_mock_spec(
+            5301,
+            old_alive.clone(),
+            vec![resident_mock_turn(
+                "thread-p1b-old",
+                &resident_question_turn_json(&first_expected, "旧宿主问题：给出恢复标记。"),
+            )],
+        ),
+        resident_mock_spec(
+            5302,
+            new_alive,
+            vec![resident_mock_turn(
+                "thread-p1b-new",
+                &resident_proposal_turn_json("换代后仍拿到了用户答复。"),
+            )],
+        ),
+    ]);
+    let hosts: Mutex<SupervisorResidentHostMap> = Mutex::new(BTreeMap::new());
+    let question = resident_record_mock_question(
+        &spawner,
+        &hosts,
+        &state_path,
+        &workflow_id,
+        &first_expected,
+        "P1-B：宿主死亡后也要把答复带进换代回合。",
+    );
+    old_alive.store(false, std::sync::atomic::Ordering::SeqCst);
+    let answer_text = "P1B-RECOVERY-GAMMA".to_string();
+    let outcome = submit_supervisor_resident_answer_with(
+        &spawner,
+        &hosts,
+        &state_path,
+        &SubmitSupervisorResidentAnswerRequest {
+            project_id: question.project_id,
+            workflow_id: workflow_id.clone(),
+            question_id: question.question_id,
+            answer_text: answer_text.clone(),
+        },
+    )
+    .expect("dead host answer must rebuild and inject in one command");
+    assert_eq!(outcome.status, "proposal_created");
+    assert_eq!(outcome.thread_id.as_deref(), Some("thread-p1b-new"));
+    let calls = spawner.calls.lock().expect("resident calls").clone();
+    assert_eq!(
+        calls
+            .iter()
+            .map(|call| call.tool_name.as_str())
+            .collect::<Vec<_>>(),
+        ["codex", "codex"],
+        "dead host must use P1-A replacement first turn, not silently drop answer"
+    );
+    let rebuilt_prompt = calls[1].arguments["prompt"]
+        .as_str()
+        .expect("replacement opening prompt");
+    assert!(rebuilt_prompt.contains(&answer_text));
+    assert!(rebuilt_prompt.contains("旧宿主问题：给出恢复标记。"));
+    assert!(rebuilt_prompt.contains("第 1 轮用户答复"));
+    let sidecar_types = resident_audit_event_types(&state_path);
+    assert!(sidecar_types.contains(&"supervisor_resident_session_replaced".to_string()));
+    assert!(sidecar_types.contains(&SUPERVISOR_RESIDENT_REPLY_INJECTED_EVENT.to_string()));
+    resident_fixture_cleanup(&state_path);
+}
+
+#[test]
 #[ignore = "requires the fixed test project, the built workbench binary, and model API access"]
 fn p1_a_live_fixed_project_reuses_thread_then_rebuilds_after_host_kill() {
     let executable = std::env::var_os("SYN_P1_A_RESIDENT_WORKBENCH_EXECUTABLE")
@@ -618,6 +1179,102 @@ fn p1_a_live_fixed_project_reuses_thread_then_rebuilds_after_host_kill() {
             .count(),
         4
     );
+
+    drop(hosts);
+    resident_fixture_cleanup(&state_path);
+}
+
+#[test]
+#[ignore = "requires the fixed test project, the built workbench binary, and model API access"]
+fn p1_b_live_fixed_project_question_answer_then_proposal_same_thread() {
+    let executable = std::env::var_os("SYN_P1_A_RESIDENT_WORKBENCH_EXECUTABLE")
+        .expect("P1-B 真跑须以命令行提供已构建工作台可执行文件");
+    assert!(
+        Path::new(&executable).is_file(),
+        "P1-B 真跑工作台文件不存在"
+    );
+
+    let (state_path, workflow_id) = resident_question_fixture_state_path("live-question-answer");
+    let expected_question = next_resident_question_expectation(
+        &state_path,
+        crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+        &workflow_id,
+    )
+    .expect("preissue live question identity");
+    let user_goal = "P1-B 固定测试项目真跑：本轮必须先按常驻主管协议提出一个具体问题；收到后续含 P1B-LIVE-ANSWER 的真实用户答复后，必须只输出 proposal，不得再提问题、不得调用工具、读取或修改任何文件。";
+    let opening_prompt = format!(
+        "{user_goal}\n\n{}",
+        crate::resident_consultation_turn_schema_prompt(&expected_question)
+    );
+    let hosts: Mutex<SupervisorResidentHostMap> = Mutex::new(BTreeMap::new());
+    let spawner = RealSupervisorResidentMcpHostSpawner;
+    let first = consult_supervisor_resident_with(
+        &spawner,
+        &hosts,
+        &state_path,
+        crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+        &workflow_id,
+        &opening_prompt,
+        "project_consult",
+    )
+    .expect("P1-B live question turn");
+    println!(
+        "P1B_LIVE 原始模型问句 threadId={} content={}",
+        first.thread_id, first.content
+    );
+    let question = match crate::parse_resident_consultation_turn(&first.content, &expected_question)
+        .expect("P1-B live question must satisfy strict schema")
+    {
+        crate::ResidentConsultationTurn::SupervisorQuestion(question) => question,
+        crate::ResidentConsultationTurn::Proposal(_) => {
+            panic!("P1-B live initial turn must ask one question")
+        }
+    };
+    record_supervisor_resident_question_asked(
+        &state_path,
+        crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+        &question,
+        user_goal,
+        &first.thread_id,
+    )
+    .expect("record P1-B live canonical question");
+
+    let outcome = submit_supervisor_resident_answer_with(
+        &spawner,
+        &hosts,
+        &state_path,
+        &SubmitSupervisorResidentAnswerRequest {
+            project_id: question.project_id,
+            workflow_id: workflow_id.clone(),
+            question_id: question.question_id,
+            answer_text: "P1B-LIVE-ANSWER=42。具体目标：为固定测试项目给出一份纯只读的检查方案；允许范围：只描述现有项目状态，不读取或修改任何文件、不调用工具；验收标准：输出严格 supervisor_resident_turn.v1 proposal JSON，且 risks 必须是对象数组，每项都有 severity、summary、mitigation。此纯咨询必须令 execution_scope 为 JSON null、suggest_workflow 为 JSON literal false，二者都不能是数组、字符串或 null 以外的值。现在请按协议只输出 proposal。".to_string(),
+        },
+    )
+    .expect("P1-B live answer continuation");
+    println!(
+        "P1B_LIVE 原始模型答复续跑 threadId={} content={}",
+        outcome.thread_id.as_deref().unwrap_or("<missing>"),
+        outcome.supervisor_reply.as_deref().unwrap_or("<missing>")
+    );
+    assert_eq!(outcome.status, "proposal_created");
+    assert_eq!(outcome.thread_id.as_deref(), Some(first.thread_id.as_str()));
+    assert!(outcome.proposal.is_some());
+
+    let canonical_types = resident_canonical_event_types(&state_path);
+    let sidecar_types = resident_audit_event_types(&state_path);
+    println!(
+        "P1B_LIVE canonical event_type={} sidecar event_type={}",
+        canonical_types.join(","),
+        sidecar_types.join(",")
+    );
+    for event_type in [
+        SUPERVISOR_RESIDENT_QUESTION_ASKED_EVENT,
+        SUPERVISOR_RESIDENT_QUESTION_ANSWERED_EVENT,
+        SUPERVISOR_RESIDENT_REPLY_INJECTED_EVENT,
+    ] {
+        assert!(canonical_types.contains(&event_type.to_string()));
+        assert!(sidecar_types.contains(&event_type.to_string()));
+    }
 
     drop(hosts);
     resident_fixture_cleanup(&state_path);

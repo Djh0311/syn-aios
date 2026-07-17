@@ -2903,6 +2903,7 @@ enum BlackboardEntryKind {
     ToolSummary,
     MemoryCandidate,
     KnowledgeRef,
+    SupervisorMessage,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]

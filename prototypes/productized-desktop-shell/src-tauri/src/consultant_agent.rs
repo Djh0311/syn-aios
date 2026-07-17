@@ -494,6 +494,196 @@ pub(crate) fn parse_consultation_proposal(raw: &str) -> Result<ConsultationPropo
     })
 }
 
+// P1-B keeps the legacy consultant proposal parser intact for the CLI path, but
+// gives the fixed-project resident conversation one strictly tagged turn shape:
+// either a proposal or one supervisor question.  A question is never inferred
+// from free text, and a malformed turn is deliberately a conservative stop.
+const SUPERVISOR_RESIDENT_TURN_SCHEMA_VERSION: &str = "supervisor_resident_turn.v1";
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct ResidentSupervisorQuestion {
+    pub(crate) question_id: String,
+    pub(crate) project_id: String,
+    pub(crate) workflow_id: String,
+    pub(crate) round: u64,
+    pub(crate) question: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ResidentQuestionExpectation {
+    pub(crate) question_id: String,
+    pub(crate) project_id: String,
+    pub(crate) workflow_id: String,
+    pub(crate) round: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ResidentConsultationTurn {
+    Proposal(ConsultationProposal),
+    SupervisorQuestion(ResidentSupervisorQuestion),
+}
+
+fn resident_turn_protocol_error(detail: &str) -> String {
+    format!("protocol_invalid:supervisor_resident_turn_{detail}")
+}
+
+fn resident_turn_required_string(
+    object: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<String, String> {
+    let value = object
+        .get(field)
+        .and_then(Value::as_str)
+        .ok_or_else(|| resident_turn_protocol_error(&format!("{field}_missing_or_not_string")))?;
+    if value.trim().is_empty() {
+        return Err(resident_turn_protocol_error(&format!("{field}_empty")));
+    }
+    Ok(value.to_string())
+}
+
+fn resident_turn_reject_unknown_fields(
+    object: &serde_json::Map<String, Value>,
+    allowed: &[&str],
+) -> Result<(), String> {
+    let mut unknown = object
+        .keys()
+        .filter(|field| !allowed.contains(&field.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    unknown.sort();
+    if let Some(field) = unknown.first() {
+        return Err(resident_turn_protocol_error(&format!(
+            "unknown_field:{field}"
+        )));
+    }
+    Ok(())
+}
+
+pub(crate) fn parse_resident_consultation_turn(
+    raw: &str,
+    expected_question: &ResidentQuestionExpectation,
+) -> Result<ResidentConsultationTurn, String> {
+    // Unlike the legacy CLI consultant, resident turns deliberately do not
+    // salvage a fenced block or braces embedded in prose.  The protocol says
+    // one bare JSON object; accepting a fragment would weaken the hard gate.
+    let json = raw.trim();
+    if json.is_empty() {
+        return Err(resident_turn_protocol_error("json_object_missing"));
+    }
+    let value: Value = serde_json::from_str(json)
+        .map_err(|error| resident_turn_protocol_error(&format!("json_parse_failed:{error}")))?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| resident_turn_protocol_error("not_object"))?;
+    let schema_version = resident_turn_required_string(object, "schema_version")?;
+    if schema_version != SUPERVISOR_RESIDENT_TURN_SCHEMA_VERSION {
+        return Err(resident_turn_protocol_error("schema_version_mismatch"));
+    }
+    let kind = resident_turn_required_string(object, "kind")?;
+    match kind.as_str() {
+        "proposal" => {
+            resident_turn_reject_unknown_fields(
+                object,
+                &[
+                    "schema_version",
+                    "kind",
+                    "user_goal",
+                    "goal_summary",
+                    "scope_note",
+                    "reasoning",
+                    "risks",
+                    "must_stop_points",
+                    "next_steps",
+                    "worker_acceptance_criteria",
+                    "control_core_acceptance_criteria",
+                    "supervisor_acceptance_criteria",
+                    "execution_scope",
+                    "suggest_workflow",
+                ],
+            )?;
+            parse_consultation_proposal(json).map(ResidentConsultationTurn::Proposal)
+        }
+        "supervisor_question" => {
+            resident_turn_reject_unknown_fields(
+                object,
+                &[
+                    "schema_version",
+                    "kind",
+                    "question_id",
+                    "project_id",
+                    "workflow_id",
+                    "round",
+                    "question",
+                ],
+            )?;
+            let question_id = resident_turn_required_string(object, "question_id")?;
+            let project_id = resident_turn_required_string(object, "project_id")?;
+            let workflow_id = resident_turn_required_string(object, "workflow_id")?;
+            let question = resident_turn_required_string(object, "question")?;
+            let round = object
+                .get("round")
+                .and_then(Value::as_u64)
+                .filter(|round| *round > 0)
+                .ok_or_else(|| resident_turn_protocol_error("round_missing_or_invalid"))?;
+            if question_id != expected_question.question_id
+                || project_id != expected_question.project_id
+                || workflow_id != expected_question.workflow_id
+                || round != expected_question.round
+            {
+                return Err(resident_turn_protocol_error("question_identity_mismatch"));
+            }
+            Ok(ResidentConsultationTurn::SupervisorQuestion(
+                ResidentSupervisorQuestion {
+                    question_id,
+                    project_id,
+                    workflow_id,
+                    round,
+                    question,
+                },
+            ))
+        }
+        _ => Err(resident_turn_protocol_error("kind_not_allowed")),
+    }
+}
+
+pub(crate) fn resident_consultation_turn_schema_prompt(
+    expected_question: &ResidentQuestionExpectation,
+) -> String {
+    format!(
+        r#"===== 常驻主管回合协议（本节取代上面的 legacy 最终 JSON 形状）=====
+本回合只能输出一个 JSON 对象；不得输出自然语言、Markdown、第二个对象或工具调用。schema_version 必须为 "{SUPERVISOR_RESIDENT_TURN_SCHEMA_VERSION}"。
+
+严格二选一，字段不得混用、不得新增：
+1) 出方案：kind="proposal"，允许字段只有 schema_version、kind、user_goal、goal_summary、scope_note、reasoning、risks、must_stop_points、next_steps、worker_acceptance_criteria、control_core_acceptance_criteria、supervisor_acceptance_criteria、execution_scope、suggest_workflow。proposal 的业务字段仍遵守上面既有咨询方案要求。类型也必须严格匹配：reasoning、must_stop_points、next_steps 和三类 acceptance criteria 都是字符串数组；risks 是对象数组且每项都有 severity、summary、mitigation；execution_scope 只能是 JSON null 或对象（若为对象，requires_write 必须是 JSON literal true 或 false）；suggest_workflow 必须是 JSON literal true 或 false，绝不能是数组、字符串或 null。纯咨询/只读答复应输出 "execution_scope": null 和 "suggest_workflow": false。
+2) 需要用户补充时：kind="supervisor_question"，且必须只含下面字段并逐字回显工作台预发值：
+{{
+  "schema_version": "{SUPERVISOR_RESIDENT_TURN_SCHEMA_VERSION}",
+  "kind": "supervisor_question",
+  "question_id": "{question_id}",
+  "project_id": "{project_id}",
+  "workflow_id": "{workflow_id}",
+  "round": {round},
+  "question": "需要用户回答的唯一、具体问题"
+}}
+如果证据不足且需要用户方向，只能走第 2 种；不要猜测用户答复。任何无法严格满足上述形状的输出都会被工作台保守拒绝。"#,
+        question_id = expected_question.question_id,
+        project_id = expected_question.project_id,
+        workflow_id = expected_question.workflow_id,
+        round = expected_question.round,
+    )
+}
+
+fn resident_consultant_build_prompt(
+    ctx: &ProjectContext,
+    question: &str,
+    expected_question: &ResidentQuestionExpectation,
+) -> String {
+    let mut prompt = consultant_build_prompt(ctx, question);
+    prompt.push_str("\n\n");
+    prompt.push_str(&resident_consultation_turn_schema_prompt(expected_question));
+    prompt
+}
+
 // ===== CliConsultantAgent（tier-1 impl：codex 自带 loop、自己只读读文档）=====
 pub(crate) struct CliConsultantAgent {
     pub(crate) timeout_ms: i64,
@@ -522,44 +712,6 @@ impl ConsultantAgent for CliConsultantAgent {
             &ctx.project_root,
             &prompt,
             Some(self.timeout_ms),
-        )?;
-        parse_consultation_proposal(&raw)
-    }
-}
-
-// P1-A only changes the fixed test project's project-supervisor conversation.
-// Keeping the legacy agent as the non-test fallback avoids widening Codex's real
-// execution surface in this light package.
-struct ResidentConsultantAgent {
-    workflow_state_path: std::path::PathBuf,
-    workflow_id: String,
-}
-
-impl ResidentConsultantAgent {
-    fn new(workflow_state_path: std::path::PathBuf, workflow_id: String) -> Self {
-        Self {
-            workflow_state_path,
-            workflow_id,
-        }
-    }
-}
-
-impl ConsultantAgent for ResidentConsultantAgent {
-    fn consult(
-        &self,
-        ctx: &ProjectContext,
-        question: &str,
-    ) -> Result<ConsultationProposal, String> {
-        if ctx.project_root != WORKFLOW_ENGINE_TEST_PROJECT_ROOT {
-            return CliConsultantAgent::default().consult(ctx, question);
-        }
-        let prompt = consultant_build_prompt(ctx, question);
-        let raw = supervisor_session_launcher::consult_supervisor_resident(
-            &self.workflow_state_path,
-            &ctx.project_root,
-            &self.workflow_id,
-            &prompt,
-            "project_consult",
         )?;
         parse_consultation_proposal(&raw)
     }
@@ -707,10 +859,7 @@ fn map_consultation_to_c1_input_with_user_requirement_snapshot(
                 }
             }
             ProjectConsultationProposalScopeDraft {
-                allowed_role_ids: vec![
-                    "project_consultant".to_string(),
-                    "codex-dev".to_string(),
-                ],
+                allowed_role_ids: vec!["project_consultant".to_string(), "codex-dev".to_string()],
                 allowed_agent_ids: vec![],
                 allowed_read_roots: vec![project_root.to_string()],
                 allowed_write_roots: vec![],
@@ -771,10 +920,38 @@ pub(crate) struct RunProjectConsultationRequest {
     pub(crate) goal: String,
     #[serde(default)]
     pub(crate) actor_id: Option<String>,
-    // workflow_id 保留（前端请求形）：方案在 prepare 阶段才绑 workflow，本命令出方案不用它（故 allow dead_code）。
+    // P1-B fixed-project resident turns need the server-bound project/workflow
+    // identity for a strict supervisor-question envelope.  Other legacy
+    // read-only consultant callers may still omit it.
     #[serde(default)]
-    #[allow(dead_code)]
+    pub(crate) project_id: Option<String>,
+    #[serde(default)]
     pub(crate) workflow_id: Option<String>,
+}
+
+pub(crate) fn write_consultation_proposal(
+    path: &std::path::Path,
+    proposal: &ConsultationProposal,
+    project_root: &str,
+    goal: &str,
+    actor_id: &str,
+) -> Result<ProjectConsultationProposal, String> {
+    // 映射进 C1 输入（含咨询提的执行范围；写范围越界/空值 → Err 早报）。
+    let input = map_consultation_to_c1_input_with_user_requirement_snapshot(
+        proposal,
+        project_root,
+        actor_id,
+        goal,
+    )?;
+    // 写进方案 store（status=PendingUserConfirmation·**不自动确认**·等用户走方案授权）。
+    let write_id = format!("run-project-consultation:{}", unix_timestamp_nanos());
+    let output = project_consultation_proposal_store::create_proposal(
+        path,
+        &input,
+        unix_timestamp_ms(),
+        &write_id,
+    )?;
+    Ok(output.proposal)
 }
 
 // 内层（同步·spawn_blocking 里调；可单测·注入 stub 咨询不起 codex）。
@@ -790,22 +967,58 @@ fn run_project_consultation_inner(
     ctx.memory_summary = recall_project_memory_summary_at(path, project_root);
     // 2. 咨询 LM 出方案（结构性只读·readonly_codex_consult·不碰执行闸）。
     let proposal = consultant.consult(&ctx, goal)?;
-    // 3. 映射进 C1 输入（含咨询提的执行范围；写范围越界/空值 → Err 早报）。
-    let input = map_consultation_to_c1_input_with_user_requirement_snapshot(
-        &proposal,
-        project_root,
-        actor_id,
-        goal,
-    )?;
-    // 4. 写进方案 store（status=PendingUserConfirmation·**不自动确认**·等用户走方案授权）。
-    let write_id = format!("run-project-consultation:{}", unix_timestamp_nanos());
-    let output = project_consultation_proposal_store::create_proposal(
+    write_consultation_proposal(path, &proposal, project_root, goal, actor_id)
+}
+
+fn run_resident_project_consultation_inner(
+    path: &std::path::Path,
+    project_root: &str,
+    workflow_id: &str,
+    goal: &str,
+    actor_id: &str,
+) -> Result<ProjectConsultationProposal, String> {
+    if workflow_id.trim().is_empty() {
+        return Err("supervisor_resident_workflow_id_required".to_string());
+    }
+    // A resident conversation can have at most one canonical question waiting
+    // for a user.  Share the answer-command lock so two opening turns cannot
+    // pre-issue the same question identity before either one persists it.
+    let _guard = supervisor_session_launcher::resident_conversation_lock()
+        .lock()
+        .map_err(|_| "supervisor_resident_conversation_lock_poisoned".to_string())?;
+    let mut ctx = load_project_context(project_root)?;
+    ctx.memory_summary = recall_project_memory_summary_at(path, project_root);
+    let expected_question = supervisor_session_launcher::next_resident_question_expectation(
         path,
-        &input,
-        unix_timestamp_ms(),
-        &write_id,
+        project_root,
+        workflow_id,
     )?;
-    Ok(output.proposal)
+    let prompt = resident_consultant_build_prompt(&ctx, goal, &expected_question);
+    let turn = supervisor_session_launcher::consult_supervisor_resident_turn(
+        path,
+        project_root,
+        workflow_id,
+        &prompt,
+        "project_consult",
+    )?;
+    match parse_resident_consultation_turn(&turn.content, &expected_question)? {
+        ResidentConsultationTurn::Proposal(proposal) => {
+            write_consultation_proposal(path, &proposal, project_root, goal, actor_id)
+        }
+        ResidentConsultationTurn::SupervisorQuestion(question) => {
+            supervisor_session_launcher::record_supervisor_resident_question_asked(
+                path,
+                project_root,
+                &question,
+                goal,
+                &turn.thread_id,
+            )?;
+            Err(format!(
+                "supervisor_resident_question_waiting_user:{}:第{}轮主管问题已写入项目黑板，等待用户答复。",
+                question.question_id, question.round
+            ))
+        }
+    }
 }
 
 #[tauri::command]
@@ -816,21 +1029,40 @@ async fn run_project_consultation(
     // path 在 await 前从 state 取（State 不能跨进 'static 闭包）；咨询真 codex 长耗时 → spawn_blocking 不冻 UI。
     let path = state.workflow_state_path.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let consultant = ResidentConsultantAgent::new(
-            path.clone(),
-            request.workflow_id.clone().unwrap_or_default(),
-        );
         let actor_id = request
             .actor_id
             .clone()
             .unwrap_or_else(|| "project-consultant".to_string());
-        run_project_consultation_inner(
-            &path,
-            &consultant,
-            &request.project_root,
-            &request.goal,
-            &actor_id,
-        )
+        if request.project_root == WORKFLOW_ENGINE_TEST_PROJECT_ROOT {
+            let derived_project_id = project_id(&request.project_root);
+            if request
+                .project_id
+                .as_deref()
+                .is_some_and(|project_id| project_id != derived_project_id)
+            {
+                return Err("supervisor_resident_project_id_mismatch".to_string());
+            }
+            let workflow_id = request
+                .workflow_id
+                .as_deref()
+                .filter(|workflow_id| !workflow_id.trim().is_empty())
+                .ok_or_else(|| "supervisor_resident_workflow_id_required".to_string())?;
+            run_resident_project_consultation_inner(
+                &path,
+                &request.project_root,
+                workflow_id,
+                &request.goal,
+                &actor_id,
+            )
+        } else {
+            run_project_consultation_inner(
+                &path,
+                &CliConsultantAgent::default(),
+                &request.project_root,
+                &request.goal,
+                &actor_id,
+            )
+        }
     })
     .await
     .map_err(|error| format!("咨询执行线程异常：{error}"))?
@@ -1150,6 +1382,9 @@ mod consultant_recall_tests {
             "只读盘点 game.js，不写文件。",
         )
         .expect_err("model must not invent readonly checks");
-        assert_eq!(error, "consultant_readonly_check_not_in_user_requirement:npm test");
+        assert_eq!(
+            error,
+            "consultant_readonly_check_not_in_user_requirement:npm test"
+        );
     }
 }

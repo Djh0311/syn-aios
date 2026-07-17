@@ -143,6 +143,7 @@ macro_rules! workbench_command_handler {
             confirm_project_director_task_session_bindings,
             preview_pending_proposal_director_plan,
             run_project_consultation,
+            supervisor_session_launcher::submit_supervisor_resident_answer,
             supervisor_session_launcher::launch_supervisor_pilot,
             supervisor_session_launcher::load_supervisor_pilot_read_model,
             global_supervisor_agent::run_global_supervisor_review,

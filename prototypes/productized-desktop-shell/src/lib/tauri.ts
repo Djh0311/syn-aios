@@ -18,6 +18,8 @@ import type {
   StartProjectDirectorChainRequest,
   DirectorChainOutcome,
   RunProjectConsultationRequest,
+  SubmitSupervisorResidentAnswerRequest,
+  SupervisorResidentAnswerOutcome,
   AutoAdvanceAuthorizedRoleLoopRequest,
   AutoAdvanceRoleLoopOutcome,
   ProjectDirectorFailedActionRequest,
@@ -917,6 +919,15 @@ export function runProjectConsultation(
 ): Promise<ProjectConsultationProposal> {
   ensureTauriRuntime();
   return invoke<ProjectConsultationProposal>("run_project_consultation", { request });
+}
+
+// P1-B: user-originated answer only.  UI rendering/entry belongs to P1-C; this
+// wrapper intentionally exposes no way for model or pilot code to invent one.
+export function submitSupervisorResidentAnswer(
+  request: SubmitSupervisorResidentAnswerRequest,
+): Promise<SupervisorResidentAnswerOutcome> {
+  ensureTauriRuntime();
+  return invoke<SupervisorResidentAnswerOutcome>("submit_supervisor_resident_answer", { request });
 }
 
 // 件 B · 授权后自动推进（核心·步骤塌缩）：前提 = 已有 active 授权；一下串 拆任务→prepare→worker 链跑。
