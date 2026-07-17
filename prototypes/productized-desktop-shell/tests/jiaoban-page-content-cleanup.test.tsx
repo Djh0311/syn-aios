@@ -7,7 +7,6 @@ import {
   JiaobanHistoryDetail,
   JiaobanPlanPreviewCanvas,
   JiaobanRunningState,
-  JiaobanSayState,
 } from "../src/views/projects/ProjectJiaobanPanel";
 import { JiaobanMergedLayout } from "../src/views/projects/ProjectWorkspaceShell";
 import type {
@@ -60,7 +59,6 @@ function authorizeHtml(proposalIsStale = false): string {
       proposal={proposalFixture()}
       proposalIsStale={proposalIsStale}
       amendment=""
-      onAmendmentChange={noop}
       onAmend={noop}
       onAuthorizeAndStart={noop}
       onRePlan={noop}
@@ -98,26 +96,12 @@ function authorizeHtml(proposalIsStale = false): string {
   assert(stale.includes("重新说目标出新方案"), "旧方案主按钮仍应引导重新出方案");
   assert(stale.includes("仍要允许并开始（旧方案）"), "旧方案手动开工次按钮仍应保留");
   assert(!stale.includes('aria-label="修改方案"'), "旧方案仍应收起无消费者的修改框");
+  // P1-D:卡上修改框(input)彻底退场——正常态也不再有,只留常驻框(见下方开放问题块的收编测试)。
+  assert(!authorize.includes('aria-label="修改方案"'), "正常态也不应再有卡上修改框，只留常驻框");
 }
 
-{
-  const say = renderToStaticMarkup(
-    <JiaobanSayState
-      goal="清理交办页"
-      onGoalChange={noop}
-      onSubmit={noop}
-      lastStopHint={null}
-      loading={false}
-      error={null}
-      onEditAgain={noop}
-    />,
-  );
-  assert(!say.includes(removedCopy("这期间界面不会卡，也可以", "先去忙别的")), "说相底部重复时长说明应删除");
-  // 07-15 走查修·对齐定稿(hi-fi F 说态):教育句不上脸(标题+占位例句已说明白),label 收进 sr-only 保读屏。
-  assert(!say.includes("说一句话，AI 会读你的项目、想个方案给你审。"), "说相教育句不再上脸");
-  assert(say.includes("sr-only"), "说相输入框可及标签保留");
-  assert(!say.includes(removedCopy('class="eyebrow">交', "办")), "说相 eyebrow 应删除");
-}
+// P1-D 人闸收敛:说态卡 JiaobanSayState 已退场——phase="say" 改由常驻框 new_goal 路由承载(修单3);
+// 说态卡本体、教育句、eyebrow 等断言随卡退场,不再有独立说态卡可测。
 
 {
   const historyEntry = {
@@ -275,18 +259,17 @@ function authorizeHtml(proposalIsStale = false): string {
 
 console.log("jiaoban-page-content-cleanup: 七项交办内容清理离线 DOM 断言全过");
 
-// 07-16 真单实案:方案开放问题(「用户确认/补充…」步骤)必须上批卡,且主按钮降级为答问题出新方案。
+// P1-D 人闸收敛(翻案自 07-16 真单实案):方案步骤里"用户确认/补充…"正则止血件 extractOpenQuestions
+// 已退场——P1-B 结构化 waiting_user 读模型已替代它(待答追问独占常驻框答复通道、方案卡本身随
+// hasPendingSupervisorQuestion 冻结交互，见 jiaoban-conversation-center.test.tsx)。这里锁住:
+// 即使方案步骤文本长得像旧启发式会命中的"用户确认/补充…"句式，批卡也不再解析出问题块或降级按钮。
 {
-  const { extractOpenQuestions } = await import("../src/views/projects/jiaoban/JiaobanAuthorizeStates");
-  const qs = extractOpenQuestions([
-    "目标文件：index.agent-copy.html",
-    "用户确认副本名是否采用 index.agent-copy.html。",
-    "用户补充唯一 worker 在副本上需要完成的具体改动。",
-    "控制核心建立一个且仅一个工作项。",
-  ]);
-  assert(qs.length === 2, "启发式应提取出两个开放问题");
+  assert(
+    !("extractOpenQuestions" in (await import("../src/views/projects/jiaoban/JiaobanAuthorizeStates"))),
+    "止血件正则函数应已删除，不再从模块导出",
+  );
 
-  const withQuestions = renderToStaticMarkup(
+  const looksLikeOpenQuestions = renderToStaticMarkup(
     <JiaobanAuthorizeState
       proposal={{
         ...proposalFixture(),
@@ -298,7 +281,6 @@ console.log("jiaoban-page-content-cleanup: 七项交办内容清理离线 DOM �
       }}
       proposalIsStale={false}
       amendment=""
-      onAmendmentChange={noop}
       onAmend={noop}
       onAuthorizeAndStart={noop}
       onRePlan={noop}
@@ -314,13 +296,13 @@ console.log("jiaoban-page-content-cleanup: 七项交办内容清理离线 DOM �
       onBoundaryRetry={noop}
     />,
   );
-  assert(withQuestions.includes("方案在等你答"), "开放问题块应上脸");
-  assert(withQuestions.includes("用户确认副本名是否采用"), "问题逐条显示");
-  assert(withQuestions.includes("答完问题出新方案"), "主按钮降级为答问题出新方案");
-  assert(withQuestions.includes("仍要允许并开始（2 问未答）"), "硬批降为次按钮且标注未答数");
+  assert(!looksLikeOpenQuestions.includes("方案在等你答"), "止血件退场后不应再解析出开放问题块");
+  assert(!looksLikeOpenQuestions.includes("答完问题出新方案"), "止血件退场后主按钮不应降级");
+  assert(!looksLikeOpenQuestions.includes("仍要允许并开始（"), "止血件退场后次按钮不应带未答计数");
+  assert(looksLikeOpenQuestions.includes("允许并开始"), "正常写根方案应回落三态收敛后的默认按钮组");
 
   const noQuestions = authorizeHtml();
-  assert(!noQuestions.includes("方案在等你答"), "零问题方案不出问题块");
+  assert(!noQuestions.includes("方案在等你答"), "零问题方案原样不出问题块");
   assert(!noQuestions.includes("仍要允许并开始（"), "零问题方案按钮原样");
 }
 

@@ -8498,15 +8498,18 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let _ = fs::remove_dir_all(dir);
     }
 
-    // 开工前绑定面板：顶层旧会话只作第一项预填。确认后必须停在 needs_binding，绝不把它直接绑成整链共用。
+    // P1-D 人闸收敛：顶层旧会话在没有 M1 预选时彻底不参与——默认自动新会话直进 prepare→链跑完，
+    // 绝不把顶层 existing 直接绑成整链共用（这条护栏比旧「先停 needs_binding」更硬：新路径压根不读
+    // request.session_id，用哪个会话完全由 C1 出生口决定）。
     #[test]
     fn confirm_and_start_runs_from_pending_with_existing_session() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
         let thread_id = "thread-jiaoban";
+        let fresh_thread_id = "thread-fresh-default";
         let dir = test_temp_dir("confirm-and-start");
         let path = dir.join("workflow-state.v0.json");
         let index_path = dir.join("codex-index.json");
-        let index = fixture_dispatch_index(test_root, thread_id);
+        let index = fixture_multi_thread_index(test_root, &[thread_id, fresh_thread_id]);
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
         // 造 Pending 方案（要改东西·execution_scope Some → map → 档位 写范围 + codex-dev）。
         let proposal = consult_proposal_fixture(Some(ConsultationExecutionScope {
@@ -8548,29 +8551,37 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             approved_planned_tasks: None,
             preview_session_bindings: vec![],
         };
-        let paused = run_confirm_and_start_authorized_run_inner(
+        let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
             &index,
             &index_path,
             &runner,
             &StubDirector,
-            // 回归护栏：existing 分支绝不碰新会话出生口（碰到即 panic）。
-            &PanicJiaobanSessionCreator,
+            &FixedJiaobanNewSessionCreator {
+                thread_id: fresh_thread_id.to_string(),
+            },
             &request,
         )
-        .expect("确认后应停在逐任务绑定面板");
+        .expect("P1-D 后确认应一口气自动推进到完成");
         assert_eq!(
-            paused.stage, "needs_binding",
-            "确认→复核→拆任务后应停在绑定面板：{paused:?}"
+            outcome.stage, "completed",
+            "确认→复核→拆任务→prepare→链应一口气跑完：{outcome:?}"
         );
-        assert!(paused.task_session_binding_required, "需要逐任务映射标记");
-        assert_eq!(paused.prepared_count, 0, "停点前不得 prepare/派发");
         assert!(
-            read_json_file(&path)["workflow_node_session_bindings"]
-                .as_array()
-                .map(|bindings| bindings.is_empty())
-                .unwrap_or(true),
-            "顶层 existing 不得写全局 codex-dev 绑定"
+            !outcome.task_session_binding_required,
+            "P1-D 后不应再停逐任务绑定面板"
+        );
+        assert_eq!(outcome.prepared_count, 2, "StubDirector 拆的两项任务都应真正 prepare");
+        let bindings = read_json_file(&path)["workflow_node_session_bindings"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(bindings.len(), 2, "两项任务应各自留下绑定记录");
+        assert!(
+            bindings.iter().all(|binding| optional_string_from(binding, "native_thread_id")
+                .as_deref()
+                == Some(fresh_thread_id)),
+            "必须绑到 C1 现生的新会话，不是顶层旧 existing 会话：{bindings:?}"
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -8673,25 +8684,58 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 transcript_target_hits: 0,
             },
         };
-        let paused = run_confirm_and_start_authorized_run_inner(
+        // 本测试的目标是 run_confirm_project_director_task_session_bindings_inner 的校验（缺项/多项/失效 existing）——
+        // P1-D 后默认路径不再产出「已拆任务但未绑定」的中间态，改走手动确认+边界复核两步直接拿 planned_tasks
+        // （等价于 P1-D 前 run_confirm_and_start_authorized_run_inner 内部做的事）。
+        let confirmed = project_consultation_proposal_store::record_decision(
+            &path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "用户确认。".to_string(),
+                expected_proposal_store_revision: Some(created.store_revision),
+                expected_plan_authorization_store_revision: None,
+            },
+            1_765_300_000_001,
+            "task-session-binding-validation-confirm",
+            "task-session-binding-validation-auth",
+            "task-session-binding-validation-auth-user",
+        )
+        .expect("confirm");
+        let authorization = confirmed
+            .plan_authorization
+            .clone()
+            .expect("authorization");
+        let revision = confirmed
+            .plan_authorization_store_revision
+            .expect("revision");
+        plan_authorization_store::record_global_boundary_review_with_proposal(
+            &path,
+            &fixture_global_boundary_review_input(
+                test_root,
+                &confirmed.proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+            ),
+            1_765_300_000_002,
+            "task-session-binding-validation-boundary",
+        )
+        .expect("boundary review");
+        let paused = run_auto_advance_authorized_role_loop_until_task_session_binding(
             &path,
             &index,
             &index_path,
             &runner,
             &StubDirector,
-            &PanicJiaobanSessionCreator,
-            &ConfirmAndStartAuthorizedRunRequest {
-                project_root: test_root.to_string(),
-                proposal_id: created.proposal.proposal_id.clone(),
-                session_choice: "new".to_string(),
-                session_id: None,
-                actor_id: Some("user-fixture".to_string()),
-                max_nodes: Some(10),
-                approved_planned_tasks: None,
-                preview_session_bindings: vec![],
-            },
+            test_root,
+            &created.proposal.workflow_id,
+            "user-fixture",
+            10,
+            None,
         )
-        .expect("确认应给绑定面板");
+        .expect("应停在逐任务绑定面板");
         let make_request =
             |task_session_bindings| ConfirmProjectDirectorTaskSessionBindingsRequest {
                 project_root: test_root.to_string(),
@@ -8811,25 +8855,60 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             thread_id: "thread-new",
             received_texts: std::cell::RefCell::new(vec![]),
         };
-        let paused = run_confirm_and_start_authorized_run_inner(
+        // 本测试的目标是 run_confirm_project_director_task_session_bindings_inner 本身（existing+new 混合
+        // 映射逐任务落位）——这条能力保留给 P2-B「挑会话」入口，P1-D 只摘默认路径的停点。P1-D 后
+        // run_confirm_and_start_authorized_run_inner 在没有 M1 预选时会一口气自动推进、不再产出「已拆任务
+        // 但未绑定」的中间态，所以这里改为手动走确认+边界复核两步，直接拿 paused.planned_tasks 喂给下面
+        // 的绑定确认调用（等价于 P1-D 前 run_confirm_and_start_authorized_run_inner 内部做的事）。
+        let confirmed = project_consultation_proposal_store::record_decision(
+            &path,
+            &RecordProjectConsultationProposalDecisionInput {
+                project_root: test_root.to_string(),
+                proposal_id: created.proposal.proposal_id.clone(),
+                actor_id: "user-fixture".to_string(),
+                decision: ProjectConsultationProposalDecisionKind::Confirm,
+                summary: "用户确认。".to_string(),
+                expected_proposal_store_revision: Some(created.store_revision),
+                expected_plan_authorization_store_revision: None,
+            },
+            1_765_300_000_001,
+            "task-session-binding-per-task-confirm",
+            "task-session-binding-per-task-auth",
+            "task-session-binding-per-task-auth-user",
+        )
+        .expect("confirm");
+        let authorization = confirmed
+            .plan_authorization
+            .clone()
+            .expect("authorization");
+        let revision = confirmed
+            .plan_authorization_store_revision
+            .expect("revision");
+        plan_authorization_store::record_global_boundary_review_with_proposal(
+            &path,
+            &fixture_global_boundary_review_input(
+                test_root,
+                &confirmed.proposal.proposal_id,
+                &authorization.authorization_id,
+                revision,
+            ),
+            1_765_300_000_002,
+            "task-session-binding-per-task-boundary",
+        )
+        .expect("boundary review");
+        let paused = run_auto_advance_authorized_role_loop_until_task_session_binding(
             &path,
             &index,
             &index_path,
             &runner,
             &StubDirector,
-            &creator,
-            &ConfirmAndStartAuthorizedRunRequest {
-                project_root: test_root.to_string(),
-                proposal_id: created.proposal.proposal_id.clone(),
-                session_choice: "existing".to_string(),
-                session_id: Some("thread-existing".to_string()),
-                actor_id: Some("user-fixture".to_string()),
-                max_nodes: Some(10),
-                approved_planned_tasks: None,
-                preview_session_bindings: vec![],
-            },
+            test_root,
+            &created.proposal.workflow_id,
+            "user-fixture",
+            10,
+            None,
         )
-        .expect("确认应给绑定面板");
+        .expect("应停在逐任务绑定面板");
         assert_eq!(paused.planned_tasks.len(), 2, "fixture 需要两个任务");
         let binding_request = ConfirmProjectDirectorTaskSessionBindingsRequest {
             project_root: test_root.to_string(),
@@ -9067,7 +9146,10 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             approved_planned_tasks: None,
             preview_session_bindings: vec![],
         };
-        let paused = run_confirm_and_start_authorized_run_inner(
+        // P1-D 人闸收敛：绑定停点摘除后，默认(无 M1 预选)一口气建→绑→推进到完成，不再需要「先停在
+        // needs_binding 面→逐任务手填 new 映射→再确认一次」的两步——一次 run_confirm_and_start_authorized_run_inner
+        // 调用即等价于旧两步之和（内部复用同一套 C1 先生后绑机器，逐任务信号全不变）。
+        let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
             &index,
             &index_path,
@@ -9076,37 +9158,12 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &creator,
             &request,
         )
-        .expect("确认应先停在逐任务绑定面板");
-        assert_eq!(paused.stage, "needs_binding", "{paused:?}");
-        assert!(paused.task_session_binding_required, "{paused:?}");
-        let task_session_bindings = paused
-            .planned_tasks
-            .iter()
-            .map(|task| ProjectDirectorTaskSessionBinding {
-                planned_task_id: task.planned_task_id.clone(),
-                session_choice: "new".to_string(),
-                session_id: None,
-            })
-            .collect();
-        let binding_request = ConfirmProjectDirectorTaskSessionBindingsRequest {
-            project_root: test_root.to_string(),
-            workflow_id: created.proposal.workflow_id.clone(),
-            planned_tasks: paused.planned_tasks,
-            task_session_bindings,
-            actor_id: Some("user-fixture".to_string()),
-            max_nodes: Some(10),
-        };
-        let outcome = run_confirm_project_director_task_session_bindings_inner(
-            &path,
-            &index,
-            &index_path,
-            &runner,
-            &StubDirector,
-            &creator,
-            &binding_request,
-        )
-        .expect("全新映射应逐任务建→绑→推进");
+        .expect("P1-D 后确认应一口气建→绑→推进到完成");
         assert_eq!(outcome.stage, "completed", "建→绑→链应全通：{outcome:?}");
+        assert!(
+            !outcome.task_session_binding_required,
+            "P1-D 后不应再停逐任务绑定面板"
+        );
         assert!(
             outcome
                 .chain_outcome
@@ -9147,6 +9204,62 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             2,
             "2 任务各物化互异 target_session_id：{session_ids:?}"
         );
+        // P1-D §A4 mock E2E：批准一下→自动经绑定/prepare/dispatch 到跑，中间零用户停点；
+        // 打印完整审计序列核实物（授权→prepare→dispatch 各笔在、语义真）。
+        let audit_events = state["audit_events"].as_array().cloned().unwrap_or_default();
+        println!("[P1-D_MOCK_E2E] 审计序列(共 {} 笔)：", audit_events.len());
+        for event in &audit_events {
+            println!(
+                "  {} | actor={} | permission={} | reason={}",
+                optional_string_from(event, "event_type").unwrap_or_default(),
+                optional_string_from(event, "actor_ref").unwrap_or_default(),
+                optional_string_from(event, "permission_level").unwrap_or_default(),
+                optional_string_from(event, "reason").unwrap_or_default(),
+            );
+        }
+        assert!(
+            !audit_events.iter().any(|event| {
+                optional_string_from(event, "event_type").as_deref()
+                    == Some("role_loop_auto_advance_stopped")
+                    && optional_string_from(event, "reason")
+                        .is_some_and(|reason| reason.contains("needs_binding"))
+            }),
+            "P1-D 后批准一下到跑完，中间不得再有 needs_binding 停点审计"
+        );
+        let dispatch_events: Vec<&Value> = audit_events
+            .iter()
+            .filter(|event| {
+                matches!(
+                    optional_string_from(event, "event_type").as_deref(),
+                    Some("workflow_node_dispatch_prepared") | Some("workflow_node_dispatch_started")
+                )
+            })
+            .collect();
+        assert_eq!(
+            dispatch_events.len(),
+            4,
+            "2 任务各一笔 prepared+一笔 started，不缺笔不多笔：{dispatch_events:?}"
+        );
+        for event in &dispatch_events {
+            assert_eq!(
+                optional_string_from(event, "actor_ref").as_deref(),
+                Some("project_director"),
+                "P1-D 后派发两笔审计 actor 应改真话，不再冒称 user_confirmed_desktop_shell：{event:?}"
+            );
+            let permission = optional_string_from(event, "permission_level").unwrap_or_default();
+            assert!(
+                permission.starts_with("plan_authorized_"),
+                "permission_level 应落 plan_authorized_* 语义族：{permission}"
+            );
+            let reason = optional_string_from(event, "reason").unwrap_or_default();
+            // 合流命令→C1 每任务派发这条默认路径在 execute 层拿不到 plan_authorization_id(prepare 阶段
+            // 已核过 scope，execute 复用现成 gated _at、不重传授权对象)，reason 只保证不冒称用户确认；
+            // 主管试点经 execute_authorized_project_workflow_node_at 传 id，才会多带「active 授权 {id}」。
+            assert!(
+                reason.contains("项目主管自动") && !reason.contains("用户确认"),
+                "reason 应说自动、不再冒称用户确认：{reason}"
+            );
+        }
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -9196,7 +9309,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             approved_planned_tasks: None,
             preview_session_bindings: vec![],
         };
-        let paused = run_confirm_and_start_authorized_run_inner(
+        // P1-D 后默认路径（无 M1 预选）一口气建→绑→推进，建会话失败信号在同一次调用内就冒出来，
+        // 不再需要「先停 needs_binding→手填 new 映射→再确认」两步。
+        let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
             &index,
             &index_path,
@@ -9204,33 +9319,6 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &StubDirector,
             &creator,
             &request,
-        )
-        .expect("确认应先停在逐任务绑定面板");
-        assert_eq!(paused.stage, "needs_binding", "{paused:?}");
-        let binding_request = ConfirmProjectDirectorTaskSessionBindingsRequest {
-            project_root: test_root.to_string(),
-            workflow_id: created.proposal.workflow_id.clone(),
-            task_session_bindings: paused
-                .planned_tasks
-                .iter()
-                .map(|task| ProjectDirectorTaskSessionBinding {
-                    planned_task_id: task.planned_task_id.clone(),
-                    session_choice: "new".to_string(),
-                    session_id: None,
-                })
-                .collect(),
-            planned_tasks: paused.planned_tasks,
-            actor_id: Some("user-fixture".to_string()),
-            max_nodes: Some(10),
-        };
-        let outcome = run_confirm_project_director_task_session_bindings_inner(
-            &path,
-            &index,
-            &index_path,
-            &runner,
-            &StubDirector,
-            &creator,
-            &binding_request,
         )
         .expect("C1 链内建会话失败即停走 Ok（链自报 stopped）·不外抛 Err");
         // ① 确实走了出生口（不是悄悄改走别的路/回落）。

@@ -1,83 +1,15 @@
-// 交办·说态+批态(五态之「说/批」)——阶段3拆巨石第六刀:自 ProjectJiaobanPanel.tsx 原样迁出,零逻辑改动。
-// 宪法归属:§一 说态(唯一问题=它理解对了吗)/批态(唯一问题=它要动什么·我敢不敢)。
+// 交办·批态(五态之「批」)——阶段3拆巨石第六刀:自 ProjectJiaobanPanel.tsx 原样迁出,零逻辑改动。
+// 宪法归属:§一 批态(唯一问题=它要动什么·我敢不敢)。
+// P1-D 人闸收敛:说态卡 JiaobanSayState 已退场——phase="say" 由常驻框 new_goal 路由承载(修单3)。
 import type {
   GlobalSupervisorBoundaryReviewOutcome,
   ProjectConsultationProposal,
-  ProjectDirectorPlannedTask,
   SessionRecord,
 } from "../../../lib/types";
 import type { JiaobanOrchestrationMode } from "../ProjectJiaobanPanel";
 import { JiaobanSessionPicker } from "./jiaobanSessionParts";
 
-// 1. 说
-export function JiaobanSayState({
-  goal,
-  onGoalChange,
-  onSubmit,
-  lastStopHint,
-  loading,
-  error,
-  onEditAgain,
-}: {
-  goal: string;
-  onGoalChange: (value: string) => void;
-  onSubmit: () => void;
-  lastStopHint: string | null;
-  loading: boolean;
-  error: string | null;
-  onEditAgain: () => void;
-}) {
-  return (
-    <div className="project-canvas-detail-card jiaoban-say" aria-label="想让 AI 干点啥">
-      <div className="panel-heading">
-        <div>
-          <h3>想让 AI 干点啥？</h3>
-        </div>
-      </div>
-      {lastStopHint ? (
-        <div className="jiaoban-say-hint" role="note" aria-label="上次停在哪">
-          上次停在：{lastStopHint}——目标已带回来，改一改再出一版新方案。
-        </div>
-      ) : null}
-      {/* fix8：出方案失败上脸——人话（供给类专句/后端原话）+ 目标不清空，绝不静默死。 */}
-      {error ? (
-        <div className="jiaoban-consult-error" role="alert" aria-label="出方案没成">
-          <span aria-hidden="true">⚠</span> {error}
-        </div>
-      ) : null}
-      {/* 定稿(hi-fi F 说态·07-15 走查对齐):卡面=标题+占位例句+[出方案],教育句不上脸;label 文案留给读屏。 */}
-      <label className="proposal-decision-field">
-        <span className="sr-only">想让 AI 干点啥</span>
-        <textarea
-          value={goal}
-          onChange={(event) => onGoalChange(event.target.value)}
-          placeholder="例：给这小游戏加个计分板——吃到东西 +1、显示在右上角。"
-          rows={4}
-          disabled={loading}
-        />
-      </label>
-      <div className="workflow-state-actions">
-        {error && !loading ? (
-          // 失败态：绝不零按钮——[重试]（重发原目标·目标还在框里）+ [改要求]（回编辑态改了再出）。
-          <>
-            <button className="primary-button" type="button" disabled={!goal.trim()} onClick={onSubmit}>
-              重试
-            </button>
-            <button className="secondary-button" type="button" onClick={onEditAgain}>
-              改要求
-            </button>
-          </>
-        ) : (
-          <button className="primary-button" type="button" disabled={loading || !goal.trim()} onClick={onSubmit}>
-            {loading ? "AI 正在读项目、想方案…（约 1–2 分钟）" : "出方案"}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// 2. 批（授权卡·定稿字段）
+// 批（授权卡·定稿字段）
 // export 供离线 DOM 断言（fix9 诚实脸两态；renderToStaticMarkup 渲染·不平铺调用）。
 // 批态卡=决策本体(07-15 二审稿用户拍):标题/会动什么/怎么算做好(人读条)/主管一句/三键。
 // 治理保证与「怎么跑」配置移出卡面,成为右区信息展开面的视图——卡上只留两行入口(点了右区切换)。
@@ -85,7 +17,6 @@ export function JiaobanAuthorizeState({
   proposal,
   proposalIsStale,
   amendment,
-  onAmendmentChange,
   onAmend,
   onAuthorizeAndStart,
   onRePlan,
@@ -103,8 +34,8 @@ export function JiaobanAuthorizeState({
 }: {
   proposal: ProjectConsultationProposal;
   proposalIsStale: boolean;
+  // P1-D:卡上修改框退场,只留常驻框——这是常驻框当前草稿的只读镜像,只用来判[按我说的改]是否可点。
   amendment: string;
-  onAmendmentChange: (value: string) => void;
   onAmend: () => void;
   onAuthorizeAndStart: () => void;
   onRePlan: () => void;
@@ -130,10 +61,16 @@ export function JiaobanAuthorizeState({
   const supervisorAcceptance = proposal.supervisor_acceptance_criteria ?? [];
   const governanceCount = controlCoreAcceptance.length + supervisorAcceptance.length;
   const userChecks = workerAcceptance.length ? workerAcceptance : proposal.acceptance_criteria;
-  // 07-16 真单实案:咨询把「等用户答的问题」写在方案步骤里,批卡不上脸→用户批了带问号的方案→
-  // 主管拆任务空单卡住。开放问题=批不批的关键信息,必须上脸;有问题未答时主按钮降级(同旧方案套路)。
-  const openQuestions = extractOpenQuestions(proposal.proposed_steps);
-  const hasOpenQuestions = openQuestions.length > 0;
+  const { primary: primaryAction, secondary: secondaryAction } = jiaobanAuthorizeActionButtons({
+    willWrite,
+    proposalIsStale,
+    starting,
+    consultLoading,
+    amendmentTrim: Boolean(amendment.trim()),
+    onAuthorizeAndStart,
+    onRePlan,
+    onAmend,
+  });
 
   return (
     <div className="project-canvas-detail-card jiaoban-authorize" aria-label="方案">
@@ -143,16 +80,6 @@ export function JiaobanAuthorizeState({
       {/* 定式卡素面(07-15 三波):旧「人话区」绿框记号退场——整卡已是人话,色块反成噪音。 */}
       <div className="jiaoban-plan-body" aria-label="方案要点（人话）">
         <h3 className="jiaoban-plan-title">{proposal.goal_summary || proposal.user_goal}</h3>
-        {hasOpenQuestions ? (
-          <div className="jiaoban-open-questions" role="note" aria-label="方案在等你答">
-            <p className="jiaoban-plan-seg">方案在等你答（不答，主管可能拆不出任务）</p>
-            <ol>
-              {openQuestions.map((question, index) => (
-                <li key={index}>{question}</li>
-              ))}
-            </ol>
-          </div>
-        ) : null}
         {targetFiles || willWrite ? (
           <div className="jiaoban-plan-facts" aria-label="会动什么">
             <p className="jiaoban-plan-seg">会动什么</p>
@@ -218,20 +145,6 @@ export function JiaobanAuthorizeState({
         </button>
       ) : null}
 
-      {/* 修改框只在非旧方案态显示——旧方案没有[按我说的改]按钮,裸输入框=没消费者的杂讯(07-15 五波)。 */}
-      {!readOnly && !proposalIsStale ? (
-        <label className="proposal-decision-field jiaoban-amend">
-          <input
-            type="text"
-            aria-label="修改方案"
-            value={amendment}
-            onChange={(event) => onAmendmentChange(event.target.value)}
-            placeholder={hasOpenQuestions ? "回答上面的问题，例：副本名用 X；子 agent 只建隔离副本" : "例：改成暗色、分数存下来…"}
-            disabled={consultLoading}
-          />
-        </label>
-      ) : null}
-
       {/* fix8：改要求出新方案期间/失败也上脸——loading 提示 + 失败人话，绝不静默。 */}
       {!readOnly && consultLoading ? (
         <p className="muted small-note">正在出新方案…（约 1–2 分钟）</p>
@@ -241,93 +154,88 @@ export function JiaobanAuthorizeState({
         </div>
       ) : null}
 
-      {!readOnly ? <div className="workflow-state-actions">
-        {!willWrite ? (
-          // 只读单的唯一开工门仍是 [允许并开始]；重新出方案保留为次操作。
-          <>
-            <button
-              className="primary-button"
-              type="button"
-              disabled={starting || consultLoading}
-              onClick={onAuthorizeAndStart}
-            >
-              {starting ? "正在开始…" : "允许并开始（只读）"}
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={starting || consultLoading}
-              onClick={onRePlan}
-            >
-              {consultLoading ? "正在出新方案…" : "重新出方案（要动手）"}
-            </button>
-          </>
-        ) : proposalIsStale ? (
-          // 旧方案：主按钮 = 重新说目标；[允许并开始] 降为次按钮（防再批库存），但仍可手动点。
-          <>
-            <button
-              className="primary-button"
-              type="button"
-              disabled={starting || consultLoading}
-              onClick={onRePlan}
-            >
-              {consultLoading ? "正在出新方案…" : "重新说目标出新方案"}
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={starting || consultLoading}
-              onClick={onAuthorizeAndStart}
-            >
-              {starting ? "正在开始…" : "仍要允许并开始（旧方案）"}
-            </button>
-          </>
-        ) : hasOpenQuestions ? (
-          // 方案有未答问题:主按钮=按我说的改(答完问题出新方案),硬批降为次按钮(同旧方案降级套路)。
-          <>
-            <button
-              className="primary-button"
-              type="button"
-              disabled={starting || consultLoading || !amendment.trim()}
-              onClick={onAmend}
-            >
-              {consultLoading ? "正在出新方案…" : "答完问题出新方案"}
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={starting || consultLoading}
-              onClick={onAuthorizeAndStart}
-            >
-              {starting ? "正在开始…" : `仍要允许并开始（${openQuestions.length} 问未答）`}
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              className="primary-button"
-              type="button"
-              disabled={starting || consultLoading}
-              onClick={onAuthorizeAndStart}
-            >
-              {starting ? "正在开始…" : "允许并开始"}
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={starting || consultLoading || !amendment.trim()}
-              onClick={onAmend}
-            >
-              {consultLoading ? "正在出新方案…" : "按我说的改"}
-            </button>
-          </>
-        )}
-        <button className="secondary-button" type="button" disabled={starting} onClick={onDecline}>
-          先不做
-        </button>
-      </div> : null}
+      {/* P1-D:按钮四态(只读/旧方案/开放问题未答/正常)收敛成单一渲染,判据见 jiaobanAuthorizeActionButtons——
+          按钮文案逐字不改(07-15 定稿感受件)，只是不再四份 JSX 各写一遍。 */}
+      {!readOnly ? (
+        <div className="workflow-state-actions">
+          <button
+            className="primary-button"
+            type="button"
+            disabled={primaryAction.disabled}
+            onClick={primaryAction.onClick}
+          >
+            {primaryAction.label}
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={secondaryAction.disabled}
+            onClick={secondaryAction.onClick}
+          >
+            {secondaryAction.label}
+          </button>
+          <button className="secondary-button" type="button" disabled={starting} onClick={onDecline}>
+            先不做
+          </button>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+// P1-D·按钮四态收敛(A3②)：批态卡=只读/旧方案/正常三种写根形态(开放问题态随 extractOpenQuestions
+// 止血件一并退场,P1-B 结构化 waiting_user 已替代)。每态给一对{主按钮,次按钮},文案逐字沿用旧四分支。
+export type JiaobanAuthorizeActionButton = {
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+};
+
+export function jiaobanAuthorizeActionButtons({
+  willWrite,
+  proposalIsStale,
+  starting,
+  consultLoading,
+  amendmentTrim,
+  onAuthorizeAndStart,
+  onRePlan,
+  onAmend,
+}: {
+  willWrite: boolean;
+  proposalIsStale: boolean;
+  starting: boolean;
+  consultLoading: boolean;
+  amendmentTrim: boolean;
+  onAuthorizeAndStart: () => void;
+  onRePlan: () => void;
+  onAmend: () => void;
+}): { primary: JiaobanAuthorizeActionButton; secondary: JiaobanAuthorizeActionButton } {
+  const busy = starting || consultLoading;
+  const authorize = (label: string): JiaobanAuthorizeActionButton => ({
+    label: starting ? "正在开始…" : label,
+    onClick: onAuthorizeAndStart,
+    disabled: busy,
+  });
+  const replan = (label: string): JiaobanAuthorizeActionButton => ({
+    label: consultLoading ? "正在出新方案…" : label,
+    onClick: onRePlan,
+    disabled: busy,
+  });
+  const amend = (label: string): JiaobanAuthorizeActionButton => ({
+    label: consultLoading ? "正在出新方案…" : label,
+    onClick: onAmend,
+    disabled: busy || !amendmentTrim,
+  });
+
+  if (!willWrite) {
+    // 只读单的唯一开工门仍是 [允许并开始]；重新出方案保留为次操作。
+    return { primary: authorize("允许并开始（只读）"), secondary: replan("重新出方案（要动手）") };
+  }
+  if (proposalIsStale) {
+    // 旧方案：主按钮 = 重新说目标；[允许并开始] 降为次按钮（防再批库存），但仍可手动点。
+    return { primary: replan("重新说目标出新方案"), secondary: authorize("仍要允许并开始（旧方案）") };
+  }
+  return { primary: authorize("允许并开始"), secondary: amend("按我说的改") };
 }
 
 // Station 2：按单选择入口。默认经典；试点不可用时仍展示原因，不能靠前端状态偷开。
@@ -474,18 +382,12 @@ function JiaobanWorksmap({
   );
 }
 
-// 方案里「等用户答」的开放问题:咨询按惯例写成「用户确认/补充…」步骤(结构化字段暂无·前端启发式提取)。
-// export 供离线断言。
 // 人话优先(07-17 用户拍):界面默认只说「哪个目录」,完整路径收进「工程详情」。
 export function humanizeWriteRoots(roots: string[]): string {
   const names = roots
     .map((root) => root.replace(/\/+$/, "").split("/").pop() || root)
     .filter(Boolean);
   return names.length ? `就在「${names.join("、")}」目录里` : "";
-}
-
-export function extractOpenQuestions(proposedSteps: string[]): string[] {
-  return proposedSteps.filter((step) => /^用户(确认|补充|指定|提供|选择|说明|决定)/.test(step.trim()));
 }
 
 function extractTargetFiles(proposedSteps: string[]): string | null {

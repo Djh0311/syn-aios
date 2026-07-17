@@ -4263,7 +4263,7 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
     timeout_auto_replan_budget: usize,
     // C1·mode-aware（canon 2026-07-09）：Some=新对话/自动免管路 → 每任务先生后绑建专属会话；
     // None=拐杖（手动挡/existing/旧测试）→ 沿用节点预绑 resume。守卫（path-lock/授权/拒绝）在会话创建之前
-    // 就拦，故 None/Some 都不误伤 PanicCreator 守卫。
+    // 就拦，故 None/Some 都不误伤真实新会话出生口（旧「碰即炸」测试桩已随 P1-D 换成能走到底的桩）。
     session_creator: Option<&dyn JiaobanNewSessionCreator>,
     // 首次用户确认后，主管刚拆完任务即停在绑定面板；复用 needs_binding，不新造阶段。
     pause_for_task_session_binding: bool,
@@ -5063,9 +5063,25 @@ fn run_confirm_and_start_authorized_run_inner(
         );
     }
     post_confirm?;
-    // 5. 主管拆完即停在现成 needs_binding 面；M1 若用户已经在预演图逐项点好会话，
-    //    就在同一人闸之后自动复用既有确认函数。校验拒绝不吞掉：带回原面板给用户改。
-    let mut paused = run_auto_advance_authorized_role_loop_until_task_session_binding(
+    // 5. P1-D 人闸收敛：绑定停点摘除——没有 M1 预选会话=直接走[接着跑]同款「C1 每任务自动新会话」
+    //    既有路径，一口气进 prepare→链，不再停 needs_binding 面。M1 若已在预演图逐项点好会话，仍需
+    //    先拆任务拿真实 task id 才能把预演节点映射过去，保留两步（挑会话能力留给 P2-B 处置，不删件）。
+    if request.preview_session_bindings.is_empty() {
+        return run_auto_advance_authorized_role_loop_with_session_creator(
+            path,
+            index,
+            readback_db_path,
+            runner,
+            director,
+            &request.project_root,
+            &workflow_id,
+            &actor_id,
+            request.max_nodes.unwrap_or(50),
+            request.approved_planned_tasks.as_deref(),
+            session_creator,
+        );
+    }
+    let paused = run_auto_advance_authorized_role_loop_until_task_session_binding(
         path,
         index,
         readback_db_path,
@@ -5077,10 +5093,9 @@ fn run_confirm_and_start_authorized_run_inner(
         request.max_nodes.unwrap_or(50),
         request.approved_planned_tasks.as_deref(),
     )?;
-    if !paused.task_session_binding_required || request.preview_session_bindings.is_empty() {
+    if !paused.task_session_binding_required {
         return Ok(paused);
     }
-
     let mapped_bindings = map_preview_node_session_bindings_to_planned_tasks(
         &paused.planned_tasks,
         &request.preview_session_bindings,
@@ -5089,11 +5104,13 @@ fn run_confirm_and_start_authorized_run_inner(
         project_root: request.project_root.clone(),
         workflow_id: workflow_id.clone(),
         planned_tasks: paused.planned_tasks.clone(),
-        task_session_bindings: mapped_bindings.clone(),
+        task_session_bindings: mapped_bindings,
         actor_id: Some(actor_id),
         max_nodes: request.max_nodes,
     };
-    match run_confirm_project_director_task_session_bindings_inner(
+    // 绑定面板已随本包退场：映射校验失败（缺项/多项/选中的旧会话已不可用……）不再有面板可回落，
+    // 按人话错误上抛——走跟本函数其余步骤同款的失败面（对话流报错，用户可重新出方案）。
+    run_confirm_project_director_task_session_bindings_inner(
         path,
         index,
         readback_db_path,
@@ -5101,15 +5118,7 @@ fn run_confirm_and_start_authorized_run_inner(
         director,
         session_creator,
         &binding_request,
-    ) {
-        Ok(outcome) => Ok(outcome),
-        Err(error) => {
-            // 现成校验（缺项、多项、不可用 existing 会话等）仍是唯一裁判；这里只把它留在原绑定面板上。
-            paused.task_session_bindings = mapped_bindings;
-            paused.task_session_binding_error = Some(error);
-            Ok(paused)
-        }
-    }
+    )
 }
 
 #[tauri::command]
@@ -5511,14 +5520,44 @@ mod fix9_tests {
             panic!("fix9 守卫应在 runner 之前拦住");
         }
     }
-    struct PanicCreator;
-    impl JiaobanNewSessionCreator for PanicCreator {
+    // P1-D 绑定停点摘除后，guard 放行的方案会一口气跑到新会话出生口+runner；这两个桩换 fix9 里
+    // 「guard 不误伤」的用例，好验证真的推进到底，而不是只停在旧 needs_binding 面板。
+    struct SucceedingCreator;
+    impl JiaobanNewSessionCreator for SucceedingCreator {
         fn create_initialized_session(
             &self,
             _initialization_text: &str,
             _requested_by: &str,
         ) -> Result<String, String> {
-            panic!("fix9 守卫应在新会话出生口之前拦住");
+            Ok("thread-fix9-succeeding".to_string())
+        }
+    }
+    struct SucceedingRunner;
+    impl CodexResumeRunner for SucceedingRunner {
+        fn resume_with_options(
+            &self,
+            _thread_id: &str,
+            _prompt: &str,
+            last_message_path: &std::path::Path,
+            _options: &CodexResumeRequestOptions,
+        ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String> {
+            if let Some(parent) = last_message_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::write(
+                last_message_path,
+                "干完了。\n```json\n{\"did\":\"fix9 桩任务完成\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"桩验证\"]}\n```",
+            );
+            Ok((
+                CodexResumeRunResult {
+                    exit_code: 0,
+                    timed_out: false,
+                    stderr_summary: None,
+                },
+                WorkflowNodeDispatchExecutionOptions {
+                    readback_stats: None,
+                },
+            ))
         }
     }
 
@@ -5877,9 +5916,10 @@ mod fix9_tests {
         let _ = fs::remove_dir_all(dir);
     }
 
-    // §4①：纯建议方案（写根空）→ 同一人闸建只读授权，并停在既有逐任务绑定面。
+    // §4①：纯建议方案（写根空）→ 同一人闸建只读授权，P1-D 后默认自动新会话直进 prepare→链跑完，
+    // 不再停逐任务绑定面。
     #[test]
-    fn advice_only_confirm_authorizes_readonly_and_waits_for_task_binding() {
+    fn advice_only_confirm_authorizes_readonly_and_advances_to_completion() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
         let dir = tmp_dir("confirm-guard");
         let path = dir.join("workflow-state.v0.json");
@@ -5896,19 +5936,24 @@ mod fix9_tests {
             approved_planned_tasks: None,
             preview_session_bindings: vec![],
         };
+        // SucceedingCreator 恒回一个假 thread id；绑定步要在索引里真找到它，否则会真的轮询 sqlite 兜底 30s 才认输。
+        let fixture_index = serde_json::json!({
+            "projects": [{"project_root": test_root}],
+            "threads": [{"thread_id": "thread-fix9-succeeding", "title": "fix9 桩会话", "project_root": test_root, "rollout_exists": true}],
+        });
         let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
-            &serde_json::json!({"projects": [{"project_root": test_root}]}),
+            &fixture_index,
             &dir.join("readback.sqlite"),
-            &PanicRunner,
+            &SucceedingRunner,
             &OneTaskDirector,
-            &PanicCreator,
+            &SucceedingCreator,
             &request,
         )
-        .expect("只读单应建授权并进入逐任务绑定面");
+        .expect("只读单应建授权并一口气自动推进到完成");
         assert!(
-            outcome.task_session_binding_required && outcome.stage == "needs_binding",
-            "只读单应和普通单一样等待逐任务绑定：{outcome:?}"
+            outcome.stage == "completed" && !outcome.task_session_binding_required,
+            "P1-D 后只读单批准应直接跑完，不再停逐任务绑定面：{outcome:?}"
         );
         let auth_store =
             plan_authorization_store::load_store(&path, unix_timestamp_ms()).expect("auth store");
@@ -6178,8 +6223,9 @@ mod fix9_tests {
         let _ = fs::remove_dir_all(dir);
     }
 
-    // §4③：正常档位方案（execution_scope Some → 档位写根非空）不触守卫——确认后主管可拆任务，
-    // 但必须停在新的逐任务绑定面板，不能因顶层旧会话直接绑定或派发。
+    // §4③：正常档位方案（execution_scope Some → 档位写根非空）不触守卫——确认后 P1-D 应一口气自动
+    // 新会话直进 prepare→链跑完，且绝不因顶层旧会话（session_id="thread-not-in-index"，故意给个不
+    // 在索引里的值）直接绑定或派发——新路径根本不读这个字段，只认 session_creator 现生的新会话。
     #[test]
     fn fix9_guard_does_not_touch_profile_backed_proposal() {
         let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
@@ -6229,23 +6275,28 @@ mod fix9_tests {
             approved_planned_tasks: None,
             preview_session_bindings: vec![],
         };
+        // SucceedingCreator 恒回一个假 thread id；绑定步要在索引里真找到它，否则会真的轮询 sqlite 兜底 30s 才认输。
+        let fixture_index = serde_json::json!({
+            "projects": [{"project_root": test_root}],
+            "threads": [{"thread_id": "thread-fix9-succeeding", "title": "fix9 桩会话", "project_root": test_root, "rollout_exists": true}],
+        });
         let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
-            &serde_json::json!({"projects": [{"project_root": test_root}]}),
+            &fixture_index,
             &dir.join("readback.sqlite"),
-            &PanicRunner,
+            &SucceedingRunner,
             &OneTaskDirector,
-            &PanicCreator,
+            &SucceedingCreator,
             &request,
         )
-        .expect("正常档位方案应停在逐任务绑定面板");
+        .expect("正常档位方案应一口气自动推进到完成");
         assert!(
-            outcome.task_session_binding_required && outcome.stage == "needs_binding",
-            "正常档位方案不得被纯建议守卫误伤：{outcome:?}"
+            outcome.stage == "completed" && !outcome.task_session_binding_required,
+            "正常档位方案不得被纯建议守卫误伤，P1-D 后应直接跑完：{outcome:?}"
         );
         assert_eq!(
-            outcome.prepared_count, 0,
-            "绑定面板前不得因顶层旧会话 prepare 或派发"
+            outcome.prepared_count, 1,
+            "P1-D 后应真正 prepare 并派发（不再停在旧绑定面板前）"
         );
         let _ = fs::remove_dir_all(dir);
     }

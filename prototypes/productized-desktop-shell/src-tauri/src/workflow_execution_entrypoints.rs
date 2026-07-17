@@ -285,6 +285,46 @@ fn dedupe_strings(values: Vec<String>) -> Vec<String> {
         .collect()
 }
 
+// P1-D 人闸收敛·A2：派发两笔审计的 actor/reason 一律改真话——「project_director 自动…」，不再冒称
+// 「用户确认」。实测锁死(§A4 mock E2E)：合流命令→C1 每任务派发这条**最常走的路**在这一层已经拿不到
+// plan_authorization_id 了(execute_project_workflow_node_at 的未授权分支——prepare 阶段已经把授权
+// scope 核过，execute 阶段复用现成 gated _at、不重传授权对象，见 commands.rs 调用链)，条件式「有 id 才
+// 改真话/没 id 走老文案」在这条主路径上恒假、等于没改。改成一律真话 + 有 id 就顺手引用（主管试点经
+// execute_authorized_project_workflow_node_at 传了 id，能拿到）；旧画布入口 execute_workflow_node_dispatch
+// （唯一前端调用者 WorkflowCanvasEngine.tsx）复用同一份代码，文案连带改真——recon 已点名知情，不代表它
+// 变成了自动，只是同一处 audit 写点措辞统一，不产生新的越权语义（S1/path-lock/guard 三支闸零改零碰）。
+fn dispatch_prepared_audit_actor_and_reason(
+    plan_authorization_id: Option<&str>,
+    prompt_kind: &str,
+) -> (&'static str, &'static str, String) {
+    let base = if prompt_kind == "safe_probe" {
+        "项目主管自动准备工作流节点 Codex safe probe 派发；只写工作台状态，不发送消息。".to_string()
+    } else {
+        "项目主管自动准备工作流节点用户审核业务派发；只写工作台状态，不发送消息。".to_string()
+    };
+    let reason = match plan_authorization_id {
+        Some(authorization_id) => format!("{base}（active 授权 {authorization_id}）"),
+        None => base,
+    };
+    ("project_director", "plan_authorized_prepared", reason)
+}
+
+fn dispatch_started_audit_actor_and_reason(
+    plan_authorization_id: Option<&str>,
+    prompt_kind: &str,
+) -> (&'static str, &'static str, String) {
+    let base = if prompt_kind == "safe_probe" {
+        "项目主管自动向绑定 Codex 会话发送 safe probe；会写 /Users/yoyi/.codex 和工作台 workflow state。".to_string()
+    } else {
+        "项目主管自动向绑定 Codex 会话发送用户审核业务指令；会写 /Users/yoyi/.codex、工作台 workflow state 和用户允许的业务路径。".to_string()
+    };
+    let reason = match plan_authorization_id {
+        Some(authorization_id) => format!("{base}（active 授权 {authorization_id}）"),
+        None => base,
+    };
+    ("project_director", "plan_authorized_dispatched", reason)
+}
+
 fn write_prepared_dispatch(
     path: &Path,
     context: WorkflowNodeDispatchContext,
@@ -334,17 +374,21 @@ fn write_prepared_dispatch(
         &dispatch_id,
         &timestamp,
     );
+    let (actor_ref, permission_level, reason) = dispatch_prepared_audit_actor_and_reason(
+        context.plan_authorization_id.as_deref(),
+        &context.prompt_kind,
+    );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": audit_event_id,
       "event_type": "workflow_node_dispatch_prepared",
       "target_ref": context.work_item_id,
-      "actor_ref": "user_confirmed_desktop_shell",
+      "actor_ref": actor_ref,
       "source_kind": "workspace_state",
-      "permission_level": "user_confirmed_write",
+      "permission_level": permission_level,
       "before_state": context.work_item_state,
       "after_state": "prepared",
       "created_at": timestamp,
-      "reason": if context.prompt_kind == "safe_probe" { "用户确认准备工作流节点 Codex safe probe 派发；只写工作台状态，不发送消息。" } else { "用户确认准备工作流节点用户审核业务派发；只写工作台状态，不发送消息。" }
+      "reason": reason
     }));
     value["updated_at"] = Value::String(timestamp);
     write_validated_workflow_state(path, &value)?;
@@ -401,17 +445,21 @@ fn write_prepared_dispatch_db_primary(
         &dispatch_id,
         &timestamp,
     );
+    let (actor_ref, permission_level, reason) = dispatch_prepared_audit_actor_and_reason(
+        context.plan_authorization_id.as_deref(),
+        &context.prompt_kind,
+    );
     let audit_event = json!({
       "event_id": audit_event_id.clone(),
       "event_type": "workflow_node_dispatch_prepared",
       "target_ref": dispatch["work_item_id"].clone(),
-      "actor_ref": "user_confirmed_desktop_shell",
+      "actor_ref": actor_ref,
       "source_kind": "workspace_state",
-      "permission_level": "user_confirmed_write",
+      "permission_level": permission_level,
       "before_state": context.work_item_state,
       "after_state": "prepared",
       "created_at": timestamp.clone(),
-      "reason": if dispatch["prompt_kind"] == "safe_probe" { "用户确认准备工作流节点 Codex safe probe 派发；只写工作台状态，不发送消息。" } else { "用户确认准备工作流节点用户审核业务派发；只写工作台状态，不发送消息。" }
+      "reason": reason
     });
     array_mut(&mut value, "audit_events")?.push(audit_event.clone());
     value["updated_at"] = Value::String(timestamp.clone());
@@ -510,17 +558,21 @@ fn write_started_dispatch(
         work_item["updated_at"] = Value::String(timestamp.clone());
     }
     update_node_state_for_id(&mut value, &context.node_id, "running", &timestamp)?;
+    let (actor_ref, permission_level, reason) = dispatch_started_audit_actor_and_reason(
+        context.plan_authorization_id.as_deref(),
+        &context.prompt_kind,
+    );
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": crate::workflow_audit::audit_event_identity("workflow-node-dispatch-started", &dispatch_id, &timestamp),
       "event_type": "workflow_node_dispatch_started",
       "target_ref": context.work_item_id,
-      "actor_ref": "user_confirmed_desktop_shell",
+      "actor_ref": actor_ref,
       "source_kind": "workspace_state_and_codex_resume",
-      "permission_level": "user_confirmed_write",
+      "permission_level": permission_level,
       "before_state": before_state,
       "after_state": "running",
       "created_at": timestamp,
-      "reason": if context.prompt_kind == "safe_probe" { "用户确认向绑定 Codex 会话发送 safe probe；会写 /Users/yoyi/.codex 和工作台 workflow state。" } else { "用户确认向绑定 Codex 会话发送用户审核业务指令；会写 /Users/yoyi/.codex、工作台 workflow state 和用户允许的业务路径。" }
+      "reason": reason
     }));
     value["updated_at"] = Value::String(timestamp);
     write_validated_workflow_state(path, &value)?;
@@ -599,17 +651,21 @@ fn write_started_dispatch_db_primary(
         &dispatch_id,
         &timestamp,
     );
+    let (actor_ref, permission_level, reason) = dispatch_started_audit_actor_and_reason(
+        context.plan_authorization_id.as_deref(),
+        &context.prompt_kind,
+    );
     let audit_event = json!({
       "event_id": audit_event_id.clone(),
       "event_type": "workflow_node_dispatch_started",
       "target_ref": context.work_item_id,
-      "actor_ref": "user_confirmed_desktop_shell",
+      "actor_ref": actor_ref,
       "source_kind": "workspace_state_and_codex_resume",
-      "permission_level": "user_confirmed_write",
+      "permission_level": permission_level,
       "before_state": before_state.clone(),
       "after_state": "running",
       "created_at": timestamp.clone(),
-      "reason": if context.prompt_kind == "safe_probe" { "用户确认向绑定 Codex 会话发送 safe probe；会写 /Users/yoyi/.codex 和工作台 workflow state。" } else { "用户确认向绑定 Codex 会话发送用户审核业务指令；会写 /Users/yoyi/.codex、工作台 workflow state 和用户允许的业务路径。" }
+      "reason": reason
     });
     array_mut(&mut value, "audit_events")?.push(audit_event.clone());
     value["updated_at"] = Value::String(timestamp.clone());

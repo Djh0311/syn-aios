@@ -357,13 +357,8 @@ for (const phase of ["say", "authorize", "binding", "running", "done", "waiting_
   assert(!shellOut.includes("运行器"), "「运行器」词表废止(状态条面)");
   assert(!shellOut.includes(">阶段<"), "「阶段」机器词格删除(进度人话在主卡 pill)");
 
-  const { JiaobanSayState } = await import("../src/views/projects/jiaoban/JiaobanAuthorizeStates");
-  const sayOut = renderToStaticMarkup(
-    <JiaobanSayState goal="" onGoalChange={noop} onSubmit={noop} lastStopHint={null} loading={false} error={null} onEditAgain={noop} />,
-  );
-  assert(!sayOut.includes("说一句话，AI 会读你的项目"), "说态卡教育句不上脸(定稿=标题+占位+出方案)");
-  assert(sayOut.includes("sr-only"), "textarea 的可及标签保留(读屏)");
-  assert(sayOut.includes("出方案"), "主动作在");
+  // P1-D 人闸收敛:说态卡 JiaobanSayState 已退场(phase="say" 改由常驻框 new_goal 路由承载,修单3)——
+  // 原「说态卡教育句不上脸/出方案主动作在」断言随卡退场,不再有独立说态卡可测。
 
   const { JiaobanHistoryColumn } = await import("../src/views/projects/jiaoban/JiaobanHistory");
   const historyOut = renderToStaticMarkup(

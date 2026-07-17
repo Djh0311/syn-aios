@@ -174,7 +174,6 @@ function authorizeHtml(
       proposal={proposalFixture(allowedWriteRoots)}
       proposalIsStale={false}
       amendment=""
-      onAmendmentChange={noop}
       onAmend={noop}
       onAuthorizeAndStart={noop}
       onRePlan={noop}

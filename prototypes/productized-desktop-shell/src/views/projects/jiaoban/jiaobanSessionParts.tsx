@@ -1,10 +1,6 @@
 // 交办·会话选择件(共享:批态/绑定态/卡住态都用)——阶段3拆巨石第二刀:自 ProjectJiaobanPanel.tsx 原样迁出,零逻辑改动。
 import { useMemo, useState } from "react";
-import type {
-  ProjectDirectorPlannedTask,
-  ProjectDirectorTaskSessionBinding,
-  SessionRecord,
-} from "../../../lib/types";
+import type { SessionRecord } from "../../../lib/types";
 
 export const NEW_SESSION_CHOICE = "__new_session__";
 
@@ -37,89 +33,9 @@ export function JiaobanRawSessionLink({
   );
 }
 
-// 开工前逐任务绑定面板。每项默认新会话；旧会话只会精确绑定到其自己的 node + work item。
-// export 供离线 DOM 断言（无 hooks·映射校验仍由后端做最终裁决）。
-export function JiaobanTaskSessionBindingState({
-  tasks,
-  sessions,
-  bindings,
-  error,
-  starting,
-  onBindingChange,
-  onStart,
-  onReplan,
-  onStop,
-}: {
-  tasks: ProjectDirectorPlannedTask[];
-  sessions: SessionRecord[];
-  bindings: ProjectDirectorTaskSessionBinding[];
-  error: string | null;
-  starting: boolean;
-  onBindingChange: (plannedTaskId: string, sessionChoice: string | null) => void;
-  onStart: () => void;
-  onReplan: () => void;
-  onStop: () => void;
-}) {
-  const bindingsByTask = new Map(bindings.map((binding) => [binding.planned_task_id, binding]));
-  const canStart =
-    tasks.length > 0 &&
-    tasks.every((task) => bindingsByTask.has(task.planned_task_id)) &&
-    !error;
-
-  return (
-    <div className="project-canvas-detail-card" aria-label="任务会话绑定">
-      <div className="panel-heading">
-        <div>
-          <h3>先给每项任务选对话</h3>
-        </div>
-      </div>
-      <p className="role-loop-plain-lead">
-        每个任务默认用自己的新会话；想让某个任务接着某条旧对话，就给它单独选。
-      </p>
-
-      {tasks.length > 0 && !error ? (
-        <div className="role-loop-plain" aria-label="逐任务会话选择">
-          {tasks.map((task, index) => {
-            const binding = bindingsByTask.get(task.planned_task_id);
-            const sessionChoice =
-              binding?.session_choice === "existing" ? (binding.session_id ?? null) : NEW_SESSION_CHOICE;
-            return (
-              <div className="jiaoban-task-session-row" key={task.planned_task_id}>
-                <p className="jiaoban-field-label">{task.title}</p>
-                <JiaobanSessionPicker
-                  sessions={sessions}
-                  sessionChoice={sessionChoice}
-                  onSessionChoiceChange={(nextChoice) => onBindingChange(task.planned_task_id, nextChoice)}
-                  label="这项任务用哪个对话"
-                  inputName={`jiaoban-task-session-${index}`}
-                  newSessionText="开个新的（为这项任务新建一个对话）"
-                />
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="jiaoban-consult-error" role="alert">
-          {error ?? "任务清单没有准备好，不能开始跑。请重新出方案或停下。"}
-        </p>
-      )}
-
-      <div className="workflow-state-actions">
-        {canStart ? (
-          <button className="primary-button" type="button" disabled={starting} onClick={onStart}>
-            {starting ? "正在开始跑…" : "开始跑"}
-          </button>
-        ) : null}
-        <button className="secondary-button" type="button" disabled={starting} onClick={onReplan}>
-          重新出方案
-        </button>
-        <button className="secondary-button" type="button" disabled={starting} onClick={onStop}>
-          停下
-        </button>
-      </div>
-    </div>
-  );
-}
+// P1-D 人闸收敛:开工前逐任务绑定面板 JiaobanTaskSessionBindingState 已退场——绑定停点摘除后
+// 批准直接自动新会话进 prepare,不再有「先给每项任务选对话」这一步(挑会话能力留在下面的
+// JiaobanSessionPicker/「怎么跑」视图,只是不再靠这块面板触发)。
 
 // 会话收纳：默认收起一行「用哪个对话干：接现有 · <最近一条标题> ▾」，点开才展开选择。
 // 展开后：最近 5 条直列 + 其余折叠/可搜；新会话始终可选，逐任务绑定面板可用它直接开工。

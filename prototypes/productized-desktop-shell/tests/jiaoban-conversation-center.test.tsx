@@ -74,7 +74,9 @@ function stream(overrides: Partial<Parameters<typeof JiaobanConversationStream>[
       entries={[]}
       userGoal={null}
       phaseKind="legacy"
-      phaseContent={<p>旧七态内容照常在</p>}
+      // P1-D 后「binding」相位已不可达(批准默认自动新会话直进 prepare)；phaseContent 通道本体是
+      // P3-C 占位件(blocked/legacy 渲法)，随 P3-C 退场，本包零碰——这里改名去掉过期的「旧七态」框架。
+      phaseContent={<p>blocked 相位占位内容照常在</p>}
       consultLoading={false}
       answerBusyQuestionId={null}
       answerReceipts={{}}
@@ -465,7 +467,7 @@ assertDeepEqual(
   );
 }
 
-// 3) answered 追问收成默认闭合摘要，旧七态内容仍并存，且不再挂回答框。
+// 3) answered 追问收成默认闭合摘要，P3-C blocked 占位内容仍并存(不属本包范围·零碰)，且不再挂回答框。
 {
   const tree = stream({ entries: [answeredQuestion] });
   const markup = renderToStaticMarkup(tree);
@@ -481,7 +483,7 @@ assertDeepEqual(
     "折叠摘要应说明已答并保留问题",
   );
   assert(!markup.includes('aria-label="回答主管"') && !markup.includes(">答主管<"), "answered 追问不应再挂输入框");
-  assert(markup.includes("旧七态内容照常在"), "消息流过渡期不得拆掉旧七态内容");
+  assert(markup.includes("blocked 相位占位内容照常在"), "P3-C 占位件(blocked/legacy 渲法)不属 P1-D 范围，不得被误删");
 }
 
 // 4) already_answered 只显示人话回执，不把机器状态或后端注入细节带上脸。

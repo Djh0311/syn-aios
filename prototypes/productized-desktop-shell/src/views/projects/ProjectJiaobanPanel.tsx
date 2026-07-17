@@ -53,7 +53,6 @@ import {
 import {
   JiaobanRawSessionLink,
   JiaobanSessionPicker,
-  JiaobanTaskSessionBindingState,
   NEW_SESSION_CHOICE,
 } from "./jiaoban/jiaobanSessionParts";
 import { formatProposalTime, proposalAgeDays } from "./jiaoban/jiaobanTime";
@@ -62,7 +61,6 @@ import {
   applyProjectDirectorFailedAction,
   autoAdvanceAuthorizedRoleLoop,
   confirmAndStartAuthorizedRun,
-  confirmProjectDirectorTaskSessionBindings,
   getProjectWorkflowChainStatus,
   launchSupervisorPilot,
   listProjectRunHistory,
@@ -88,7 +86,6 @@ import type {
   ProjectConsultationProposal,
   ProjectDirectorPlannedTask,
   ProjectDirectorPreviewNodeSessionBinding,
-  ProjectDirectorTaskSessionBinding,
   ProjectConsultationProposalStoreV1,
   ProjectRecord,
   ProjectWorkflowChainStatus,
@@ -161,7 +158,8 @@ export function jiaobanStageFromChainOutcome(chain: DirectorChainOutcome | null)
 }
 
 export function jiaobanPhaseForOutcome(outcome: AutoAdvanceRoleLoopOutcome): JiaobanPhase {
-  if (outcome.task_session_binding_required) return "binding";
+  // P1-D 人闸收敛:绑定停点已摘除——批准后默认自动新会话直进 prepare,合流命令再也不会
+  // 回 task_session_binding_required=true,「binding」相位在此不再有出口(相位机本身零改)。
   if (outcome.stage === "completed") return "done";
   if (outcome.stage === "waiting_decision") return "waiting_decision";
   return "blocked";
@@ -199,23 +197,6 @@ export function ProjectJiaobanPanel(props: ProjectJiaobanPanelProps) {
 // 重挂载/默认效果会把用户的显式选择无声改回「接现有」（真机踩到：明确选了新建却路由到旧对话）。
 // export 供离线 DOM 断言测试对齐哨兵值（纯暴露·不改会话选择语义）。
 
-function defaultTaskSessionBindings(
-  tasks: ProjectDirectorPlannedTask[],
-  topLevelChoice: string | null,
-): ProjectDirectorTaskSessionBinding[] {
-  const firstExistingSession =
-    topLevelChoice && topLevelChoice !== NEW_SESSION_CHOICE ? topLevelChoice : null;
-  return tasks.map((task, index) =>
-    index === 0 && firstExistingSession
-      ? {
-          planned_task_id: task.planned_task_id,
-          session_choice: "existing",
-          session_id: firstExistingSession,
-        }
-      : { planned_task_id: task.planned_task_id, session_choice: "new" },
-  );
-}
-
 // 阶段3拆巨石:预演画布类型与工具迁 jiaoban/jiaobanPreviewCanvas.tsx(原样零逻辑改动);re-export 保外部 import 面。
 export {
   JiaobanPlanPreviewCanvas,
@@ -245,8 +226,6 @@ type JiaobanRunCache = {
   runIsNewSession: boolean;
   // 方案a fix：会话选择跨重挂载保留（NEW_SESSION_CHOICE / thread_id / null=未定）。
   sessionChoice: string | null;
-  // 开工前任务→会话映射：拆任务后才有，切 tab 回来也仍留在绑定面板。
-  taskSessionBindings: ProjectDirectorTaskSessionBinding[];
   // M1：批前预演节点→会话选择。与任务绑定不同，它允许简单活使用虚拟步骤 id。
   previewSessionBindings: ProjectDirectorPreviewNodeSessionBinding[];
   // 运行/终态继续使用本轮已批的图，不能随方案 store 刷新退回旧 ReactFlow 视图。
@@ -274,7 +253,6 @@ function writeJiaobanRunCache(projectRoot: string, patch: Partial<JiaobanRunCach
     runStartedAtMs: null,
     runIsNewSession: false,
     sessionChoice: null,
-    taskSessionBindings: [],
     previewSessionBindings: [],
     runCanvasNodes: [],
     runCanvasBindings: [],
@@ -403,7 +381,6 @@ function ProjectJiaobanPanelBrowser({
       alive = false;
     };
   }, [projectWorkflow?.project_id]);
-  const [amendment, setAmendment] = useState("");
   // 「说」面顶部的上次停因摘要（重新出方案时带过来；空则不显示）。
   const [sayHint, setSayHint] = useState<string | null>(null);
   // 「用哪个对话干」：默认选最近一条现有会话（下面 effect 里补默认；null 只在真无会话时保留）。
@@ -424,10 +401,6 @@ function ProjectJiaobanPanelBrowser({
   const [starting, setStarting] = useState(false);
   const [outcome, setOutcome] = useState<AutoAdvanceRoleLoopOutcome | null>(cached?.outcome ?? null);
   const [startError, setStartError] = useState<string | null>(cached?.startError ?? null);
-  const [taskSessionBindings, setTaskSessionBindings] = useState<ProjectDirectorTaskSessionBinding[]>(
-    cached?.taskSessionBindings ?? [],
-  );
-  const [taskSessionBindingError, setTaskSessionBindingError] = useState<string | null>(null);
   const [needsReworkActionError, setNeedsReworkActionError] = useState<string | null>(null);
   // 合流命令拒「方案不是待用户确认」时置 true → 卡住脸给[接着跑,不用重批]。
   const [continueHint, setContinueHint] = useState<boolean>(cached?.continueHint ?? false);
@@ -515,7 +488,8 @@ function ProjectJiaobanPanelBrowser({
 
   function rememberRunCanvas(
     nodes = previewCanvasNodes,
-    bindings = runCanvasBindingsFor(nodes, previewBindingsForCanvas, taskSessionBindings),
+    // P1-D 后逐任务绑定面板退场,任务侧映射恒空——只按 M1 预演选择装配。
+    bindings = runCanvasBindingsFor(nodes, previewBindingsForCanvas, []),
   ) {
     setRunCanvasNodes(nodes);
     setRunCanvasBindings(bindings);
@@ -587,9 +561,6 @@ function ProjectJiaobanPanelBrowser({
     setSupervisorPilotRunId(null);
     setSupervisorPilotReadModel(null);
     setSupervisorPilotLedgerError(null);
-    setTaskSessionBindings([]);
-    setTaskSessionBindingError(null);
-    setAmendment("");
     ranProposalIdRef.current = null;
     clearJiaobanRunCache(projectRoot);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -885,7 +856,12 @@ function ProjectJiaobanPanelBrowser({
     const trimmed = text.trim();
     if (trimmed && latestProposal) void runConsultation(`${latestProposal.user_goal}\n\n补充意见：${trimmed}`, trimmed);
   }
-  const submitAmendment = () => submitAmendmentText(amendment);
+  // 常驻输入框(修单3):路由与草稿都在会话 hook 里,这里只按当前相位取一份渲染参数。
+  // P1-D:批态卡上的[按我说的改]/[答完问题出新方案]按钮改走同一份常驻框草稿(双通道同源
+  // submitAmendmentText)——卡上不再单独留一个输入框(见 JiaobanAuthorizeState 的 amendment/onAmend)。
+  const conversationComposer = makeConversationComposer(
+    { phase, latestProposal, consultLoading, onAmendment: submitAmendmentText, onNewGoal: submitGoal },
+  );
 
   // 刀2「批前看图」触发条件 = 工作流开关开着（AI 建议时开关默认开·见上面 reset effect；用户也可手动开/关）。
   // 简单活默认关 → 不触发、不加一秒等待。
@@ -1026,7 +1002,8 @@ function ProjectJiaobanPanelBrowser({
     runningRef.current = true;
     ranProposalIdRef.current = latestProposal.proposal_id;
     const runStartedAt = Date.now(); // fix6-v2：本轮起点，判「这轮的链」用
-    // 顶层选择只决定绑定面板首项预填；此时还没有创建任何会话。
+    // 顶层选择只是合流命令的枚举校验位(existing|new)；P1-D 后不再有绑定面板消费它的预填值——
+    // 真正的会话选择走 M1 预演画布(previewBindingsForCanvas)或默认自动新会话。
     const topLevelUsesNew = sessionChoice === NEW_SESSION_CHOICE || sessionChoice === null;
     const isNewSession = false;
     setRunStartedAtMs(runStartedAt);
@@ -1038,8 +1015,6 @@ function ProjectJiaobanPanelBrowser({
     setSupervisorPilotRunId(null);
     setSupervisorPilotReadModel(null);
     setSupervisorPilotLedgerError(null);
-    setTaskSessionBindings([]);
-    setTaskSessionBindingError(null);
     setSupervisorReview(null); // B1：新一轮开跑，上一轮复核意见随之清（防旧轮意见冒充本轮）。
     setManualPhase("running");
     writeJiaobanRunCache(projectRoot, {
@@ -1077,21 +1052,13 @@ function ProjectJiaobanPanelBrowser({
         approved_planned_tasks: previewTasks ?? undefined,
         preview_session_bindings: previewBindingsForCanvas,
       });
-      const bindings = outcome.task_session_binding_required
-        ? outcome.task_session_bindings?.length
-          ? outcome.task_session_bindings
-          : defaultTaskSessionBindings(outcome.planned_tasks ?? [], sessionChoice)
-        : [];
       const nextPhase = jiaobanPhaseForOutcome(outcome);
       setOutcome(outcome);
       setManualPhase(nextPhase);
-      setTaskSessionBindings(bindings);
-      setTaskSessionBindingError(outcome.task_session_binding_error ?? null);
       writeJiaobanRunCache(projectRoot, {
         manualPhase: nextPhase,
         outcome,
         startError: null,
-        taskSessionBindings: bindings,
       });
     } catch (e) {
       // record_decision 成功后的后续写（尤其边界批准）仍可能失败。先刷新方案店：否则 props 还停在
@@ -1120,99 +1087,11 @@ function ProjectJiaobanPanelBrowser({
     }
   }
 
-  function updateTaskSessionBinding(plannedTaskId: string, sessionChoice: string | null) {
-    const nextChoice =
-      sessionChoice && sessionChoice !== NEW_SESSION_CHOICE
-        ? { planned_task_id: plannedTaskId, session_choice: "existing" as const, session_id: sessionChoice }
-        : { planned_task_id: plannedTaskId, session_choice: "new" as const };
-    setTaskSessionBindings((current) => {
-      const next = current.map((binding) =>
-        binding.planned_task_id === plannedTaskId ? nextChoice : binding,
-      );
-      writeJiaobanRunCache(projectRoot, { taskSessionBindings: next });
-      return next;
-    });
-  }
-
-  async function startWithTaskSessionBindings() {
-    if (!projectWorkflow || !outcome || starting || runningRef.current) return;
-    const plannedTasks = outcome.planned_tasks ?? [];
-    if (plannedTasks.length === 0) {
-      setTaskSessionBindingError("任务清单没有准备好，不能开始跑。请重新出方案或停下。 ");
-      return;
-    }
-    rememberRunCanvas(
-      previewCanvasNodes,
-      runCanvasBindingsFor(previewCanvasNodes, previewBindingsForCanvas, taskSessionBindings),
-    );
-    runningRef.current = true;
-    const runStartedAt = Date.now();
-    const hasNewSession = taskSessionBindings.some((binding) => binding.session_choice === "new");
-    setRunStartedAtMs(runStartedAt);
-    setRunIsNewSession(hasNewSession);
-    setStarting(true);
-    setTaskSessionBindingError(null);
-    setStartError(null);
-    setChainStatus(null);
-    setManualPhase("running");
-    writeJiaobanRunCache(projectRoot, {
-      manualPhase: "running",
-      startError: null,
-      runStartedAtMs: runStartedAt,
-      runIsNewSession: hasNewSession,
-      taskSessionBindings,
-    });
-    try {
-      const nextOutcome = await confirmProjectDirectorTaskSessionBindings({
-        project_root: projectWorkflow.project_root,
-        workflow_id: projectWorkflow.workflow_id,
-        planned_tasks: plannedTasks,
-        task_session_bindings: taskSessionBindings,
-        actor_id: "user",
-      });
-      const nextPhase = jiaobanPhaseForOutcome(nextOutcome);
-      setOutcome(nextOutcome);
-      setManualPhase(nextPhase);
-      writeJiaobanRunCache(projectRoot, {
-        manualPhase: nextPhase,
-        outcome: nextOutcome,
-        startError: null,
-        taskSessionBindings,
-      });
-    } catch (error) {
-      const humanized = error instanceof Error ? error.message : String(error);
-      setTaskSessionBindingError(humanized);
-      setManualPhase("binding");
-      writeJiaobanRunCache(projectRoot, {
-        manualPhase: "binding",
-        startError: null,
-        taskSessionBindings,
-      });
-    } finally {
-      setStarting(false);
-      runningRef.current = false;
-    }
-  }
-
-  function stopBeforeTaskSessionBinding() {
-    setSayHint("这单停在开工前，没有派发任务。 ");
-    setTaskSessionBindingError(null);
-    setTaskSessionBindings([]);
-    setOutcome(null);
-    setManualPhase("say");
-    clearJiaobanRunCache(projectRoot);
-  }
-
   // 接着跑，不用重批：方案已 user_confirmed（授权还活着）时的重试口——不走合流命令（会被「已确认」拒），
   // 直接调现成 autoAdvanceAuthorizedRoleLoop 从拆任务接着推进。防冻套路同 authorizeAndStart：
   // 先切「正在干」相位再 await、runningRef 防重入、缓存同步；返回走现有 outcome→脸 映射。
   async function continueRun() {
     if (!projectWorkflow || starting || runningRef.current) return;
-    if (outcome?.task_session_binding_required) {
-      setManualPhase("binding");
-      writeJiaobanRunCache(projectRoot, { manualPhase: "binding" });
-      return;
-    }
     if (runCanvasNodes.length === 0) rememberRunCanvas();
     runningRef.current = true;
     const runStartedAt = Date.now(); // fix6-v2：本轮起点
@@ -1357,9 +1236,6 @@ function ProjectJiaobanPanelBrowser({
     setStartError(null);
     setContinueHint(false);
     setChainStatus(null);
-    setTaskSessionBindings([]);
-    setTaskSessionBindingError(null);
-    setAmendment("");
     ranProposalIdRef.current = null;
     clearJiaobanRunCache(projectRoot);
   }
@@ -1591,9 +1467,9 @@ function ProjectJiaobanPanelBrowser({
     <JiaobanAuthorizeState
       proposal={focusedProposal}
       proposalIsStale={proposalAgeDays(focusedProposal.created_at_ms) >= 1}
-      amendment={proposalInteractive ? amendment : ""}
-      onAmendmentChange={setAmendment}
-      onAmend={submitAmendment}
+      // P1-D:卡上修改框退场,只留常驻框——[按我说的改]提交的是常驻框当前草稿(双通道同源 submitAmendmentText)。
+      amendment={proposalInteractive ? conversationComposer?.draft ?? "" : ""}
+      onAmend={() => conversationComposer?.onSubmit()}
       onAuthorizeAndStart={() => void authorizeAndStart()}
       onRePlan={backToSay}
       onDecline={backToSay}
@@ -1668,20 +1544,6 @@ function ProjectJiaobanPanelBrowser({
   ) : null;
   const phaseContent = (
     <>
-          {phase === "binding" ? (
-            <JiaobanTaskSessionBindingState
-              tasks={outcome?.planned_tasks ?? []}
-              sessions={projectSessions}
-              bindings={taskSessionBindings}
-              error={taskSessionBindingError}
-              starting={starting}
-              onBindingChange={updateTaskSessionBinding}
-              onStart={() => void startWithTaskSessionBindings()}
-              onReplan={backToSay}
-              onStop={stopBeforeTaskSessionBinding}
-            />
-          ) : null}
-
           {phase === "running" ? (
             supervisorPilotRunId ? (
               <JiaobanSupervisorPilotRunningState
@@ -1740,10 +1602,6 @@ function ProjectJiaobanPanelBrowser({
   );
   const conversationPhaseKind: JiaobanConversationPhaseKind =
     phase === "say" ? "composer" : phase === "authorize" ? "proposal" : phase === "done" ? "delivery" : phase === "blocked" ? "legacy" : "conversation";
-  // 常驻输入框(修单3):路由与草稿都在会话 hook 里,这里只按当前相位取一份渲染参数。
-  const conversationComposer = makeConversationComposer(
-    { phase, latestProposal, consultLoading, onAmendment: submitAmendmentText, onNewGoal: submitGoal },
-  );
   const mainContent = (
     <div className="project-jiaoban-main">
       <div className="project-jiaoban-col" data-conversation-phase={conversationPhaseKind}>
@@ -1774,7 +1632,7 @@ function ProjectJiaobanPanelBrowser({
     ? jiaobanRuntimeNodeStates(canvasNodes, thisRoundChainStatus, outcome?.chain_outcome?.steps ?? [])
     : null;
   const showPlanCanvas =
-    ((phase === "authorize" || phase === "binding") && Boolean(latestProposal)) ||
+    (phase === "authorize" && Boolean(latestProposal)) ||
     (runtimeCanvasPhase && canvasNodes.length > 0);
   const previewCanvas = showPlanCanvas ? (
     <JiaobanPlanPreviewCanvas
@@ -1875,7 +1733,6 @@ export {
   JiaobanAuthorizeState,
   JiaobanBoundaryReviewSection,
   JiaobanOrchestrationModePicker,
-  JiaobanSayState,
 } from "./jiaoban/JiaobanAuthorizeStates";
 
 // 「看原始对话」桥（定稿承诺补做·2026-07-06）：凡能确定对话的地方给一键钻进智能体页。
@@ -1884,7 +1741,6 @@ export {
 export {
   JiaobanRawSessionLink,
   JiaobanSessionPicker,
-  JiaobanTaskSessionBindingState,
   NEW_SESSION_CHOICE,
 } from "./jiaoban/jiaobanSessionParts";
 

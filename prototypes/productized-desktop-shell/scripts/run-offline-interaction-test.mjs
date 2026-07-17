@@ -20,7 +20,6 @@ const testEntries = [
   "tests/secretary-pending-board-face.test.tsx",
   "tests/jiaoban-history-and-secretary-board.test.tsx",
   "tests/jiaoban-needs-rework-disposal.test.tsx",
-  "tests/jiaoban-task-session-binding.test.tsx",
   "tests/jiaoban-merged-layout.test.tsx",
   "tests/jiaoban-conversation-center.test.tsx",
   "tests/jiaoban-plan-preview-canvas.test.tsx",

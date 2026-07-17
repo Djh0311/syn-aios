@@ -10,6 +10,7 @@
 - **运行错误人话上脸（C6·B2 尾片·2026-07-10 机器验过·主导线核实物过）**：worker/codex 跑挂的原始诊断层不再零呈现——新模块 `run_error_translation.rs` 七族全谱分类器（结构化 `{family,human,raw_snippet}`·unknown 保守兜底带原文）收编散在四处的翻译器成**单一真源**（供给类判据搬入·`humanize`×2 消成薄委托·`codex_provider_unavailable:`/`consult_last_message_read_failed:` 两 retry 承重信号不断）；run-history 详情位失败单出「人话摘要+族标+`<details>` 下钻原文」两层脸，替掉「跑挂了（去工作流看详情）」死胡同。冻结核 byte-0-diff·成败判定没动·呈现不阻断（黄牌哲学）。回交 `handoffs/2026-07-09-run-error-plain-language-surface-A-handoff-v1.md`。
 - **记忆环**：治理钩子攒候选 → [属实,沉淀] → 确认转正 → 召回 top5 进咨询/预拆/重拆 prompt（主管 prompt 已渲染）。
 - **P1-A 主管常驻会话（2026-07-17 收口·总指导亲跑全套核收）**：`codex mcp-server` 常驻宿主（私有临时 CODEX_HOME+MCP 白名单只挂 `supervisor_orchestrator`+auth 符号链接+read-only+cwd 死锁测试项目+进程登记收割）·同项目 `codex-reply` 续 threadId·**换代=事实注入重建**（项目黑板+正式记忆 top5,不靠旧 transcript）·四类审计（created/reused/replaced/consult_merged）走 M5 `update_store`;真跑亲验=3 轮同 thread 续接+杀宿主换代注入全过（ignored 测试 `p1_a_live_…`·28s）;资产 `supervisor_resident_session.rs`+orchestrator include+tests。**核复史**:执行线首报 982/0 与磁盘不符,亲跑抓 6 败 M5 对账回归（resident 字段缺 `skip_serializing_if`）,打回修复后亲验 982/0/46 ✓。consult 塞纸条旧路仍在（P1-E 退役候选清单已交:consultant:521/director:423/439）。
+- **P1-D 人闸收敛（2026-07-18 收口·机器面全套亲核;⚠真机四点走查待 codex 额度恢复,未验收挂账）**：绑定停点摘除（批准一击→默认自动新会话直进 prepare→链跑,扩 M1 预选同击跳过先例到全路径;失败上抛对话流报错;挑会话能力件留 P2-B 归置）+派发两笔审计改真话（actor=`project_director`/`plan_authorized_*`·reason 引授权 id·JSON+DB 四处镜像同改·笔数不减;连带旧画布路径同变真话[disclose 项]）+批态四旧件退场（说态卡死码收尸/【允许并开始】四变体收敛单一渲染文案零改/卡上修改框退场=常驻框同源/`extractOpenQuestions` 止血件退场[P1-B 结构化 waiting_user 已替代]）;E2E 亲核=批准一击零停点·审计序列真话·`thread_deferred` 笔明写「授权/安全未松·仅放宽有无会话判定」;988/0/47+m5b 9/0+m5c 5/0+安全面零碰+Panel 1846（净删 144）。执行线自抓 A2 假绿（条件式经典链恒 None→重设计,catch-log 正面案例）。**真机四点（零停点/账本审计/常驻框改方案/只读单）待额度恢复后补验,补验前不得声称 P1-D 已验收。**
 - **P1-B 问答接线（2026-07-17 收口·总指导亲跑全套核收）**：回合 schema 严格二选一（`supervisor_resident_turn.v1`:proposal|supervisor_question·protocol_invalid 保守停）·问题落 canonical 派生 `supervisor_message` 读模型 kind（waiting_user/answered·P1-C 直接消费·落派生源=换代注入自动携带问答事实）·`submit_supervisor_resident_answer` 命令=user_reply 唯一来源（公开入口双拒·不冒充用户）·`codex-reply` 同 thread 注入续跑·换代兜底禁丢答复·already_answered 幂等·审计三事件（question_asked/answered/reply_injected）canonical+sidecar 双面留痕;真跑亲验=问一句-答一句-出方案同 threadId 闭环、方案回文引用答复内容（答案真进上下文）;全量 988/0/47。pilot 的 RequestUserDecision/waiting_user 面零改（随 P1-E 退役）。
 - **P1-C 中栏对话 UI（2026-07-18 收口·用户真机两轮验收「结构没问题/界面没啥问题」）**：中栏=纯对话流（你右浅底/主管左直排/主管人话短讯可点聚焦右区·「主管在看」等待态）+**唯一常驻输入框**（无标题无按钮·Enter 发送 Shift+Enter 换行·按状态路由既有三通道：待答→答复命令/批态→amendment 重咨询/say·done→consult 首问/跑态禁发人话·失败 alert 行上脸·草稿跨 tab 缓存·目标带回填框）；方案卡/交货卡=右区实体卡（四视图:方案/工序图/治理保证/怎么跑·批准动作随卡·写入范围人话化+完整路径收「工程详情」）；⚠ 两提示牌（旧方案预警/只读单说明）+说态卡+记忆召回提示退场；止血件/P3-C 回话框/相位机零碰（P1-D 退场）。**演进史三轮**：「方案卡=消息」纸面设计被用户实物否定（catch-log 07-17 两案）→纯话+右区→唯一框；计划正本已随实物修订。资产 `JiaobanConversation.tsx`+`useJiaobanConversationState.ts`+`JiaobanArtifactViews.tsx`。**人话工程已立项**（07-18：模块收编+gate 机械规则+用户清单三件套，不做大翻译层；P1-D/E 后动手，详总执行计划 §三）。
 - **画布 / 智能体页 / relay**：多工作流编排+全屏 HUD+任务级节点与依赖边（跑到哪亮到哪）；会话中心（虚拟化/分组/subagent 过滤/`focusedThreadId` 跳入）；**智能体页会话列表并显工作台绑定会话**（A·07-09·has_user_event=0 的 exec 任务会话经 store 绑定捞出+「工作台任务」徽标·用户真机验过 OK）；manual relay 真发（唯一手动指挥通道）。
@@ -17,14 +18,14 @@
 
 ## 二、在做什么
 
-- **主线(2026-07-16 用户拍)= 对话优先改造**:方向正本 `docs/plans/2026-07-16-conversation-first-direction-and-execution-plan-v1.md`(一句话:交办从「表单+状态机」换成「你和项目主管的一条长期对话」;MCP=Syn 能力总插座、所有 agent 通用换脑不换窗;人闸三下[干吧/对的/记住];与蓝图逐条对账过=蓝图 §9/§12 的执行而非修改)。**唯一计划入口=总执行计划** `docs/plans/2026-07-16-master-execution-plan-conversation-first-v1.md`(包级拆解+旧待办全量收敛归位)。当前位置:P1-0b/A/B/**C 均已收口(07-17/18·C 经用户真机两轮验收)**;下一件=**P1-D 人闸收敛**(绑定确认/派发两连确认退场→自动+记账;下单表单/批态卡状态机/修改框/开放问题块退场;验收=一单人闸仅【确认执行】·审计不缺笔)。
+- **主线(2026-07-16 用户拍)= 对话优先改造**:方向正本 `docs/plans/2026-07-16-conversation-first-direction-and-execution-plan-v1.md`(一句话:交办从「表单+状态机」换成「你和项目主管的一条长期对话」;MCP=Syn 能力总插座、所有 agent 通用换脑不换窗;人闸三下[干吧/对的/记住];与蓝图逐条对账过=蓝图 §9/§12 的执行而非修改)。**唯一计划入口=总执行计划** `docs/plans/2026-07-16-master-execution-plan-conversation-first-v1.md`(包级拆解+旧待办全量收敛归位)。当前位置:P1-0b/A/B/C/**D 均已收口(D=机器面 07-18;⚠D 真机四点待 codex 额度恢复补验)**;下一件=**P1-E 旧路退役+修宪**(咨询塞纸条死码清扫;UI 宪法逐条修订清单落 decisions;修宪必扫测试面翻案断言[07-15 教训];勘察先行)。**codex 额度耗尽中:一切要模型的真机验证/真单试炼挂起,额度恢复后第一件事=P1-D 四点补验+真单三数量测。**
 - **对话线编制**:总指导(主导线·统筹拆包·核实物·唯一 commit 权·对接用户)/ 执行线(吃包施工·不 commit)。
-- **活的观察项**:memories 渗出观察模式(07-11 用户拍 a 维持观察;下轮真实派发后立即复巡②面;后手 b=worker argv 加 `--disable memories`,②面见工作台条目回声即升级)。
+- **活的观察项**:memories 渗出观察模式(07-11 用户拍 a 维持观察;下轮真实派发后立即复巡②面;后手 b=worker argv 加 `--disable memories`,②面见工作台条目回声即升级)。**MCP 插件面 07-18 用户拍定:codex 带真家私人 MCP 跑=正常行为不当洞治**(worker 不做白名单;P1-A 主管会话已建的私有家白名单保留不拆)。
 - 2026-06→07-16 的阶段叙事(B2/五站快车道/M5 存储线/前端五波/手艺扫除等)整段迁 `archive/2026-07-16-current-sections-2-3-before-consolidation.md`;结论性资产以 `decisions/**` 与现状说明书为准。
 
 ## 三、下一步(顺序指针,细节全在总执行计划)
 
-1. **P1-D 包**(人闸收敛;写包前读透绑定/派发确认链数据流;用户开工令)——P1-0b/A/B/C 已收(§二);清桌已收口 07-16(真单 archive 终·复核实证闸首秀✓·病历二三四号;重 seed 完成·观察期重计)。
+1. **额度恢复后:P1-D 真机四点补验+新链真单三数量测**(及格线:1-2 句话/点头≤3/分钟级/零死卡)→ 2. **P1-E 包**(旧路退役+修宪;勘察先行不依赖额度)——P1-0b..D 已收(§二);清桌 07-16 已收口。
 2. **阶段一·主管对话化**:P1-0 选型勘察(codex 驱动方式实测)→ P1-A..E 逐包施工(总执行计划 §一)→ 真单三数验收(及格线:小单 1-2 句话/点头 ≤3 下/分钟级/零死卡)。
 3. **阶段二、三**:逐阶段出包逐拍(总执行计划 §一)。
 4. **并行自动**:记忆素材积累(真单自然攒)/ DB 观察期攒天数 → M6 停写 JSON(用户另授权;届时 audit_ledger 读源切 DB)。
