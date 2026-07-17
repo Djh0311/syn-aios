@@ -186,7 +186,7 @@ export function App() {
     }
   }
 
-  async function reloadWorkflowState() {
+  async function reloadWorkflowStateCore(refreshCandidateStores: boolean) {
     if (browserPreviewEnabled) {
       setWorkflowState(browserPreviewWorkflowState);
       setPlanAuthorizationStore(browserPreviewPlanAuthorizationStore);
@@ -200,13 +200,21 @@ export function App() {
     try {
       const nextWorkflowState = await loadWorkflowStateSnapshot();
       setWorkflowState(nextWorkflowState);
-      void reloadCandidateStores();
+      if (refreshCandidateStores) await reloadCandidateStores();
     } catch (loadError) {
       setWorkflowState(null);
       setWorkflowStateError(messageOf(loadError));
     } finally {
       setWorkflowStateLoading(false);
     }
+  }
+
+  async function reloadWorkflowState() {
+    await reloadWorkflowStateCore(true);
+  }
+
+  async function reloadProposalAndWorkflowState() {
+    await Promise.all([reloadCandidateStores(), reloadWorkflowStateCore(false)]);
   }
 
   async function reloadCandidateStores() {
@@ -705,7 +713,7 @@ export function App() {
           workflowStateError,
           onReloadWorkflowState: reloadWorkflowState,
           onNotice: setNotice,
-          onProposalStoreRefresh: reloadCandidateStores,
+          onProposalStoreRefresh: reloadProposalAndWorkflowState,
           hasRealSnapshot: Boolean(filteredSnapshot),
           onOpenAgentSession: (threadId) => {
             setFocusedAgentThreadId(threadId);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Badge } from "../../components/Badge";
 import {
   JiaobanBlockedState,
@@ -18,7 +18,6 @@ import {
   JiaobanAuthorizeState,
   JiaobanGovernanceView,
   JiaobanHowRunView,
-  JiaobanSayState,
 } from "./jiaoban/JiaobanAuthorizeStates";
 import {
   JiaobanPlanPreviewCanvas,
@@ -28,7 +27,29 @@ import {
   runCanvasBindingsFor,
   type JiaobanPreviewCanvasNode,
 } from "./jiaoban/jiaobanPreviewCanvas";
-import { JiaobanHistoryColumn, JiaobanHistoryDetail, type HistoryFilter } from "./jiaoban/JiaobanHistory";
+import {
+  conversationMessageIdForHistoryEntry,
+  JiaobanHistoryColumn,
+  JiaobanHistoryDetail,
+  type HistoryFilter,
+} from "./jiaoban/JiaobanHistory";
+import {
+  JiaobanConversationComposer,
+  JiaobanConversationStream,
+  artifactNoticesForConversation,
+  conversationMessageIdForDelivery,
+  conversationMessageIdForProposal,
+  mergeConversationUserTurns,
+  supervisorConversationEntriesForProject,
+  userTurnsFromProposalHistory,
+  type JiaobanConversationPhaseKind,
+} from "./jiaoban/JiaobanConversation";
+import { buildJiaobanArtifactCanvasViews, type JiaobanCanvasViewSpec, type JiaobanPhase } from "./jiaoban/JiaobanArtifactViews";
+import {
+  scrollToConversationMessage,
+  useConversationAutoScroll,
+  useJiaobanConversationState,
+} from "./jiaoban/useJiaobanConversationState";
 import {
   JiaobanRawSessionLink,
   JiaobanSessionPicker,
@@ -129,14 +150,7 @@ export type ProjectJiaobanPanelProps = {
   renderLayout?: (content: ProjectJiaobanPanelLayout) => ReactNode;
 };
 
-export type JiaobanPhase =
-  | "say"
-  | "authorize"
-  | "binding"
-  | "running"
-  | "done"
-  | "waiting_decision"
-  | "blocked";
+export type { JiaobanCanvasViewSpec, JiaobanPhase } from "./jiaoban/JiaobanArtifactViews";
 
 export function jiaobanStageFromChainOutcome(chain: DirectorChainOutcome | null): string {
   const reason = chain?.stopped_reason?.trim() ?? "";
@@ -152,14 +166,6 @@ export function jiaobanPhaseForOutcome(outcome: AutoAdvanceRoleLoopOutcome): Jia
   if (outcome.stage === "waiting_decision") return "waiting_decision";
   return "blocked";
 }
-
-// 右区信息展开面的一个视图(07-15 二审稿用户拍:右区不再是工序图专座,想看什么切什么)。
-export type JiaobanCanvasViewSpec = {
-  key: string;
-  label: string;
-  subtitle?: string;
-  content: ReactNode;
-};
 
 export type ProjectJiaobanPanelLayout = {
   phase: JiaobanPhase;
@@ -340,6 +346,20 @@ function ProjectJiaobanPanelBrowser({
     [projectConsultationProposalStore, planAuthorizationStore, projectWorkflow?.project_id, projectWorkflow?.workflow_id],
   );
   const latestProposal = proposalSummary.latest_proposal;
+  const workflowProposals = useMemo(
+    () =>
+      [...(projectConsultationProposalStore?.proposals ?? [])]
+        .filter(
+          (proposal) =>
+            proposal.project_id === projectWorkflow?.project_id &&
+            proposal.workflow_id === projectWorkflow?.workflow_id,
+        )
+        .sort(
+          (left, right) =>
+            left.created_at_ms - right.created_at_ms || left.proposal_id.localeCompare(right.proposal_id),
+        ),
+    [projectConsultationProposalStore, projectWorkflow?.project_id, projectWorkflow?.workflow_id],
+  );
 
   const isTestProject = project.project_root === TEST_PROJECT_ROOT;
   // 站 3b：唯一获批的真实项目只读入口——进交办流，但只开主管编排（经典模式后端 S1 闸原样拒）。
@@ -426,6 +446,23 @@ function ProjectJiaobanPanelBrowser({
   const [consultLoading, setConsultLoading] = useState(false);
   const [consultError, setConsultError] = useState<string | null>(null);
   const consultingRef = useRef(false);
+  const {
+    answerBusyQuestionId: residentAnswerBusyQuestionId,
+    answerReceipts: residentAnswerReceipts,
+    answerErrors: residentAnswerErrors,
+    userTurns: conversationUserTurns,
+    recordUserTurn: recordConversationUserTurn,
+    makeConversationComposer,
+    setComposerDraft: setConversationComposerDraft,
+  } = useJiaobanConversationState({
+    projectWorkflow,
+    workflowState,
+    projectRoot,
+    onProposalStoreRefresh,
+    onAnswerAccepted: () => setConsultError(null),
+    humanizeAnswerError: (error) =>
+      humanizeProviderUnavailable(error) ?? "这句没送到主管——稍后再试一次。",
+  });
 
   // Part①·工作历史（左栏数据·倒序读模型·不轮询·挂载/交货/重拆各拉一次）。失败静默：历史是增益不是闸。
   const [history, setHistory] = useState<RunHistoryEntry[]>([]);
@@ -445,8 +482,12 @@ function ProjectJiaobanPanelBrowser({
   // 结果按 proposal_id 缓存（切 tab 回来不重拆·下面 effect 命中即恢复）；loading/error 是瞬态。
   // 批时 previewTasks 原样回传后端 = 所见即所跑；简单活/预拆失败则 previewTasks 为空 → 不传 → 后端照旧拆。
   const [workflowSwitchOn, setWorkflowSwitchOn] = useState(latestProposal?.suggest_workflow === true);
-  // 右区信息展开面当前视图(07-15 二审稿):批态三视图,默认工序图(M1 图上选会话不丢);相位一换回默认。
-  const [canvasViewKey, setCanvasViewKey] = useState("graph");
+  // 右区信息展开面当前视图：首帧也按缓存相位落到本态定稿物，随后由呈现 effect 随相位同步。
+  const [canvasViewKey, setCanvasViewKey] = useState(() => {
+    if (cached?.manualPhase === "done") return "delivery";
+    if (cached?.manualPhase && cached.manualPhase !== "say") return "graph";
+    return latestProposal && cached?.manualPhase !== "say" ? "proposal" : "graph";
+  });
   // 批卡「怎么跑」入口一行的摘要(真值随右区视图里的控件走)。
   const howRunSummary = `${orchestrationMode === "supervisor_pilot" ? "主管编排(试点)" : "经典状态机"} · ${
     sessionChoice && sessionChoice !== NEW_SESSION_CHOICE ? "接现有对话" : "开个新对话"
@@ -632,10 +673,11 @@ function ProjectJiaobanPanelBrowser({
 
   // 当前该显哪张脸：手动相位优先；否则由「有没有方案」决定说/批。
   const phase: JiaobanPhase = manualPhase ?? (latestProposal ? "authorize" : "say");
-  // 相位一换,右区回默认视图(工序图)——防上一态停在「怎么跑」把新态的图挡住。
-  useEffect(() => {
-    setCanvasViewKey("graph");
-  }, [phase]);
+  // 右区默认看本态的定稿物；同一 authorize 相位换了新方案，也回到新方案本身。
+  // 这里只切既有呈现 state，不参与相位/命令/读模型判断。
+  useLayoutEffect(() => {
+    setCanvasViewKey(phase === "done" ? "delivery" : phase === "authorize" && latestProposal ? "proposal" : "graph");
+  }, [phase, latestProposal?.proposal_id]);
   // fix6-v2：只认「这一轮」的链——started_at（后端 ms）>= 本轮点击时刻。旧链时间戳更早、天然排除，
   // 防拆任务期（本轮链还没起、轮询却拿到旧链的绿状态）提前翻交货 / 显旧步骤。链没起 = null → 照显「主管正在拆任务」。
   const thisRoundChainStatus =
@@ -797,7 +839,7 @@ function ProjectJiaobanPanelBrowser({
 
   // fix8：说 → 出方案 = 面板直调 runProjectConsultation（去掉那层通用确认弹层：咨询只读·决策 2026-06-25 豁免·
   // 人闸=[允许并开始]那一下不动）。自管 loading/失败态，失败人话上脸 + 目标不清空；防重入。成功后刷店→自动进批脸。
-  async function runConsultation(goal: string) {
+  async function runConsultation(goal: string, conversationText = goal) {
     // 永不冻：projectWorkflow 缺失不是用户的错，也绝不许无声——说清楚、可行动。
     if (!projectWorkflow) {
       setConsultError(
@@ -805,7 +847,10 @@ function ProjectJiaobanPanelBrowser({
       );
       return;
     }
-    if (!goal.trim() || consultingRef.current) return;
+    const submittedGoal = goal.trim();
+    if (!submittedGoal || consultingRef.current) return;
+    const submittedAtMs = Date.now();
+    recordConversationUserTurn(conversationText.trim(), submittedAtMs);
     consultingRef.current = true;
     setConsultLoading(true);
     setConsultError(null);
@@ -814,11 +859,16 @@ function ProjectJiaobanPanelBrowser({
         project_root: projectRoot,
         project_id: projectWorkflow.project_id,
         workflow_id: projectWorkflow.workflow_id,
-        goal,
+        goal: submittedGoal,
         actor_id: "user",
       });
       await onProposalStoreRefresh?.(); // 刷方案店 → latestProposal 更新 → phase 推导自动进批脸
     } catch (e) {
+      // resident 首问是「先落 canonical，再以 waiting_user Err 收回本回合」；这里也必须刷黑板。
+      // question_id 只读结构化 entry，严禁从 Err 机器串拆 id。
+      if (isSupervisorResidentQuestionWaitingUserError(e)) {
+        await onProposalStoreRefresh?.();
+      }
       setConsultError(humanizeConsultError(e)); // 失败上脸（供给类专句/后端原话），绝不静默
     } finally {
       consultingRef.current = false;
@@ -831,10 +881,11 @@ function ProjectJiaobanPanelBrowser({
   }
 
   // 按我说的改：原目标 + 这句意见拼成新目标，重出方案（同一直调路径）。
-  function submitAmendment() {
-    if (!amendment.trim() || !latestProposal) return;
-    void runConsultation(`${latestProposal.user_goal}\n\n补充意见：${amendment.trim()}`);
+  function submitAmendmentText(text: string) {
+    const trimmed = text.trim();
+    if (trimmed && latestProposal) void runConsultation(`${latestProposal.user_goal}\n\n补充意见：${trimmed}`, trimmed);
   }
+  const submitAmendment = () => submitAmendmentText(amendment);
 
   // 刀2「批前看图」触发条件 = 工作流开关开着（AI 建议时开关默认开·见上面 reset effect；用户也可手动开/关）。
   // 简单活默认关 → 不触发、不加一秒等待。
@@ -1298,8 +1349,10 @@ function ProjectJiaobanPanelBrowser({
     const reason =
       outcome?.stop_reason?.trim() || outcome?.message?.trim() || startError?.trim() || null;
     setSayHint(reason);
-    if (latestProposal?.user_goal) setGoal(latestProposal.user_goal);
+    // 目标带回常驻框(07-18 唯一对话框):改一改 Enter 就重出。
+    if (latestProposal?.user_goal) setConversationComposerDraft(latestProposal.user_goal);
     setManualPhase("say");
+    setCanvasViewKey("graph");
     setOutcome(null);
     setStartError(null);
     setContinueHint(false);
@@ -1380,10 +1433,6 @@ function ProjectJiaobanPanelBrowser({
       </section>
     );
   }
-
-  // 旧方案判定：方案生成不是今天 → 批面出黄条 + 主按钮换「重新说目标」，防再批库存。
-  const proposalAge = latestProposal ? proposalAgeDays(latestProposal.created_at_ms) : 0;
-  const proposalIsStale = proposalAge >= 1;
 
   // B2 展示门控：意见永远跟着当前这份方案（proposalId 对上才显·防旧方案意见冒充新方案）。
   const boundaryForThisProposal =
@@ -1466,6 +1515,46 @@ function ProjectJiaobanPanelBrowser({
   const selectedHistoryEntry = selectedHistoryId
     ? history.find((entry) => entry.proposal_id === selectedHistoryId) ?? null
     : null;
+  const currentHistoryEntry = currentProposalId
+    ? history.find((entry) => entry.proposal_id === currentProposalId) ?? null
+    : null;
+
+  const supervisorConversationEntries = useMemo(
+    () => supervisorConversationEntriesForProject(workflowState, projectRoot, projectWorkflow?.workflow_id),
+    [workflowState, projectRoot, projectWorkflow?.workflow_id],
+  );
+  const hasPendingSupervisorQuestion = supervisorConversationEntries.some(
+    (entry) =>
+      entry.title.startsWith("主管问题") &&
+      (entry.source_status ?? entry.status) === "waiting_user" &&
+      Boolean(entry.question_id?.trim()),
+  );
+  const conversationStarted =
+    consultLoading ||
+    Boolean(consultError) ||
+    supervisorConversationEntries.length > 0 ||
+    latestProposal != null ||
+    phase !== "say";
+
+  function selectHistoryConversationEntry(entry: RunHistoryEntry) {
+    const isCurrent = entry.proposal_id === currentProposalId;
+    setSelectedHistoryId(isCurrent ? null : entry.proposal_id);
+    setCanvasViewKey(entry.state === "delivered" ? "delivery" : "proposal");
+    scrollToConversationMessage(conversationMessageIdForHistoryEntry(entry));
+  }
+
+  function backToCurrentConversationMessage() {
+    setSelectedHistoryId(null);
+    const currentView = phase === "done" ? "delivery" : currentProposalId ? "proposal" : "graph";
+    setCanvasViewKey(currentView);
+    scrollToConversationMessage(
+      currentProposalId
+        ? phase === "done"
+          ? conversationMessageIdForDelivery(currentProposalId)
+          : conversationMessageIdForProposal(currentProposalId)
+        : null,
+    );
+  }
 
   const historyContent = (
     <JiaobanHistoryColumn
@@ -1477,8 +1566,8 @@ function ProjectJiaobanPanelBrowser({
       selectedId={selectedHistoryId}
       currentProposalId={currentProposalId}
       latestBlockedId={latestBlockedId}
-      onSelectEntry={(entry) => setSelectedHistoryId(entry.proposal_id)}
-      onBackToCurrent={() => setSelectedHistoryId(null)}
+      onSelectEntry={selectHistoryConversationEntry}
+      onBackToCurrent={backToCurrentConversationMessage}
       onNewJiaoban={() => {
         setSelectedHistoryId(null);
         backToSay();
@@ -1486,57 +1575,99 @@ function ProjectJiaobanPanelBrowser({
       onContinueRun={() => void continueRun()}
     />
   );
-  const mainContent = (
-    <div className="project-jiaoban-main">
-      {selectedHistoryEntry ? (
-        <JiaobanHistoryDetail entry={selectedHistoryEntry} onBackToCurrent={() => setSelectedHistoryId(null)} />
-      ) : (
-        <div className="project-jiaoban-col">
-          {phase === "say" ? (
-            <>
-              {memoryCount > 0 ? (
-                <p className="jiaoban-recall-hint" role="note" aria-label="记忆召回">
-                  出方案会带上 {memoryCount} 条项目记忆
-                </p>
-              ) : null}
-              <JiaobanSayState
-                goal={goal}
-                onGoalChange={setGoal}
-                onSubmit={() => submitGoal(goal)}
-                lastStopHint={sayHint}
-                loading={consultLoading}
-                error={consultError}
-                onEditAgain={() => setConsultError(null)}
-              />
-            </>
-          ) : null}
-
-          {phase === "authorize" && latestProposal ? (
-            <JiaobanAuthorizeState
-              proposal={latestProposal}
-              proposalIsStale={proposalIsStale}
-              proposalAgeDays={proposalAge}
-              amendment={amendment}
-              onAmendmentChange={setAmendment}
-              onAmend={submitAmendment}
-              onAuthorizeAndStart={() => void authorizeAndStart()}
-              onRePlan={backToSay}
-              onDecline={backToSay}
-              starting={starting}
-              consultLoading={consultLoading}
-              consultError={consultError}
-              howRunSummary={howRunSummary}
-              onShowGovernance={() => setCanvasViewKey("governance")}
-              onShowHowRun={() => setCanvasViewKey("howrun")}
-              boundaryLoading={boundaryLoadingForThisProposal}
-              boundaryOutcome={boundaryForThisProposal}
-              onBoundaryRetry={() => {
-                // [重试]：force 穿透幂等重跑本方案的边界意见。
-                if (latestProposal) void requestBoundaryReview(latestProposal.proposal_id, true);
-              }}
-            />
-          ) : null}
-
+  const focusedProposalId = selectedHistoryId ?? currentProposalId;
+  const focusedProposal = focusedProposalId
+    ? workflowProposals.find((proposal) => proposal.proposal_id === focusedProposalId) ?? null
+    : latestProposal;
+  const focusedProposalIsLatest = focusedProposal?.proposal_id === latestProposal?.proposal_id;
+  const proposalInteractive =
+    focusedProposalIsLatest &&
+    selectedHistoryId == null &&
+    phase === "authorize" &&
+    !consultLoading &&
+    residentAnswerBusyQuestionId == null &&
+    !hasPendingSupervisorQuestion;
+  const proposalCard = focusedProposal ? (
+    <JiaobanAuthorizeState
+      proposal={focusedProposal}
+      proposalIsStale={proposalAgeDays(focusedProposal.created_at_ms) >= 1}
+      amendment={proposalInteractive ? amendment : ""}
+      onAmendmentChange={setAmendment}
+      onAmend={submitAmendment}
+      onAuthorizeAndStart={() => void authorizeAndStart()}
+      onRePlan={backToSay}
+      onDecline={backToSay}
+      starting={starting}
+      consultLoading={proposalInteractive && consultLoading}
+      consultError={proposalInteractive ? consultError : null}
+      howRunSummary={howRunSummary}
+      onShowGovernance={() => setCanvasViewKey("governance")}
+      onShowHowRun={() => setCanvasViewKey("howrun")}
+      boundaryLoading={proposalInteractive && boundaryLoadingForThisProposal}
+      boundaryOutcome={proposalInteractive ? boundaryForThisProposal : null}
+      onBoundaryRetry={() => {
+        if (focusedProposalIsLatest) void requestBoundaryReview(focusedProposal.proposal_id, true);
+      }}
+      readOnly={!proposalInteractive}
+    />
+  ) : null;
+  const artifactNotices = artifactNoticesForConversation({
+    proposals: workflowProposals,
+    history,
+    currentProposalId,
+    includeCurrentDelivery: phase === "done",
+    currentProposalCreatedAtMs: latestProposal?.created_at_ms ?? null,
+    onActivate: (kind, proposalId) => {
+      setSelectedHistoryId(proposalId === currentProposalId ? null : proposalId);
+      setCanvasViewKey(kind);
+    },
+  });
+  const baseConversationGoal =
+    workflowProposals[0]?.user_goal ??
+    conversationUserTurns[0]?.text ??
+    (conversationStarted ? goal : null);
+  const persistedUserTurns = userTurnsFromProposalHistory(workflowProposals);
+  const timelineUserTurns = mergeConversationUserTurns(
+    baseConversationGoal,
+    persistedUserTurns,
+    conversationUserTurns,
+  );
+  // A3·视口停最新：当前单可见内容(条数/相位/等待态)变了就滚回底部,逻辑本体在会话 hook 里。
+  useConversationAutoScroll(
+    `${supervisorConversationEntries.length}:${timelineUserTurns.length}:${artifactNotices.length}:${phase}:${consultLoading}:${residentAnswerBusyQuestionId ?? ""}`,
+  );
+  const currentDeliveryCard = phase === "done" ? (
+    <JiaobanDoneState
+      outcome={outcome}
+      chainStatus={thisRoundChainStatus}
+      onContinue={backToSay}
+      needsRework={needsRework}
+      needsReworkActionError={needsReworkActionError}
+      needsReworkActionStarting={starting}
+      onNeedsReworkContinue={() => void continueRun()}
+      onNeedsReworkAction={(action) => void applyDecisionAction(action)}
+      onRequestAction={onRequestAction}
+      factCtx={{
+        projectRoot: project.project_root,
+        projectId: projectWorkflow?.project_id ?? null,
+        workflowId: projectWorkflow?.workflow_id ?? null,
+      }}
+      sessionChoice={sessionChoice}
+      latestSessionThreadId={latestSessionThreadId}
+      onOpenAgentSession={onOpenAgentSession}
+      derivedWorkflow={projectWorkflow?.derived_workflow ?? null}
+      supervisorLoading={supervisorLoading}
+      supervisorOutcome={supervisorReview?.outcome ?? null}
+      onSupervisorRetry={() => {
+        // [重试]/[重新复核]：force 穿透幂等重跑。键优先取已有结果的轮键，兜底本轮链 started_at。
+        const key = supervisorReview?.key ?? thisRoundChainStatus?.started_at ?? null;
+        if (key) void requestSupervisorReview(key, true);
+      }}
+      onSupervisorReplan={backToSay}
+    />
+  ) : null;
+  const phaseContent = (
+    <>
           {phase === "binding" ? (
             <JiaobanTaskSessionBindingState
               tasks={outcome?.planned_tasks ?? []}
@@ -1569,37 +1700,6 @@ function ProjectJiaobanPanelBrowser({
                 onOpenAgentSession={onOpenAgentSession}
               />
             )
-          ) : null}
-
-          {phase === "done" ? (
-            <JiaobanDoneState
-              outcome={outcome}
-              chainStatus={thisRoundChainStatus}
-              onContinue={backToSay}
-              needsRework={needsRework}
-              needsReworkActionError={needsReworkActionError}
-              needsReworkActionStarting={starting}
-              onNeedsReworkContinue={() => void continueRun()}
-              onNeedsReworkAction={(action) => void applyDecisionAction(action)}
-              onRequestAction={onRequestAction}
-              factCtx={{
-                projectRoot: project.project_root,
-                projectId: projectWorkflow?.project_id ?? null,
-                workflowId: projectWorkflow?.workflow_id ?? null,
-              }}
-              sessionChoice={sessionChoice}
-              latestSessionThreadId={latestSessionThreadId}
-              onOpenAgentSession={onOpenAgentSession}
-              derivedWorkflow={projectWorkflow?.derived_workflow ?? null}
-              supervisorLoading={supervisorLoading}
-              supervisorOutcome={supervisorReview?.outcome ?? null}
-              onSupervisorRetry={() => {
-                // [重试]/[重新复核]：force 穿透幂等重跑。键优先取已有结果的轮键，兜底本轮链 started_at。
-                const key = supervisorReview?.key ?? thisRoundChainStatus?.started_at ?? null;
-                if (key) void requestSupervisorReview(key, true);
-              }}
-              onSupervisorReplan={backToSay}
-            />
           ) : null}
 
           {phase === "waiting_decision" ? (
@@ -1636,8 +1736,34 @@ function ProjectJiaobanPanelBrowser({
               followUpReady={false}
             />
           ) : null}
-        </div>
-      )}
+    </>
+  );
+  const conversationPhaseKind: JiaobanConversationPhaseKind =
+    phase === "say" ? "composer" : phase === "authorize" ? "proposal" : phase === "done" ? "delivery" : phase === "blocked" ? "legacy" : "conversation";
+  // 常驻输入框(修单3):路由与草稿都在会话 hook 里,这里只按当前相位取一份渲染参数。
+  const conversationComposer = makeConversationComposer(
+    { phase, latestProposal, consultLoading, onAmendment: submitAmendmentText, onNewGoal: submitGoal },
+  );
+  const mainContent = (
+    <div className="project-jiaoban-main">
+      <div className="project-jiaoban-col" data-conversation-phase={conversationPhaseKind}>
+        <JiaobanConversationStream
+          entries={supervisorConversationEntries}
+          userGoal={conversationStarted ? baseConversationGoal : null}
+          userTurns={timelineUserTurns}
+          artifactNotices={artifactNotices}
+          proposals={workflowProposals}
+          phaseKind={conversationPhaseKind}
+          phaseContent={phase === "blocked" ? phaseContent : null}
+          consultLoading={consultLoading}
+          answerBusyQuestionId={residentAnswerBusyQuestionId}
+          answerReceipts={residentAnswerReceipts}
+          answerErrors={residentAnswerErrors}
+        />
+        {conversationComposer ? (
+          <JiaobanConversationComposer {...conversationComposer} error={consultError} />
+        ) : null}
+      </div>
     </div>
   );
   const runtimeCanvasPhase =
@@ -1666,48 +1792,48 @@ function ProjectJiaobanPanelBrowser({
     />
   ) : null;
 
-  // 右区信息展开面(07-15 二审稿):批态三视图——工序图(默认·M1 选会话)/治理保证全文/怎么跑配置。
-  const jiaobanCanvasViews: JiaobanCanvasViewSpec[] | undefined =
-    phase === "authorize" && latestProposal
-      ? [
-          {
-            key: "graph",
-            label: "工序图",
-            subtitle: "批准后照这个跑",
-            content:
-              previewCanvas ?? (
-                <p className="muted small-note">预演图关着——到「怎么跑」打开;也可以直接批,先批就按现场拆。</p>
-              ),
-          },
-          {
-            key: "governance",
-            label: "治理保证",
-            subtitle: "这一单里 Syn 和主管对自己的约束",
-            content: <JiaobanGovernanceView proposal={latestProposal} />,
-          },
-          {
-            key: "howrun",
-            label: "怎么跑",
-            subtitle: "预演 · 执行模式 · 预填对话",
-            content: (
-              <JiaobanHowRunView
-                suggestWorkflow={latestProposal.suggest_workflow === true}
-                worksmapSwitchOn={workflowSwitchOn}
-                onToggleWorksmapSwitch={setWorkflowSwitchOn}
-                orchestrationMode={orchestrationMode}
-                onOrchestrationModeChange={setOrchestrationMode}
-                supervisorPilotDisabledReason={supervisorPilotDisabledReason}
-                classicDisabledReason={classicModeUnavailableReason(projectRoot)}
-                disabled={starting || consultLoading}
-                sessions={projectSessions}
-                sessionChoice={sessionChoice}
-                onSessionChoiceChange={setSessionChoice}
-                onOpenAgentSession={onOpenAgentSession}
-              />
-            ),
-          },
-        ]
-      : undefined;
+  // 右区是定稿物的家：中栏只说话；方案/交货卡连同原动作回调整体搬到这里。
+  const selectedHistoryCard = selectedHistoryEntry
+    ? <JiaobanHistoryDetail entry={selectedHistoryEntry} onBackToCurrent={backToCurrentConversationMessage} />
+    : null;
+  const currentDeliveryHistoryCard = currentHistoryEntry?.state === "delivered" ? (
+    <JiaobanHistoryDetail entry={currentHistoryEntry} onBackToCurrent={backToCurrentConversationMessage} showBackAction={false} />
+  ) : null;
+  const proposalViewContent = proposalCard ?? (selectedHistoryEntry?.state !== "delivered" ? selectedHistoryCard : null);
+  const deliveryViewContent = selectedHistoryEntry?.state === "delivered"
+    ? selectedHistoryCard
+    : selectedHistoryId == null
+      ? currentDeliveryCard ?? currentDeliveryHistoryCard
+      : null;
+  const jiaobanCanvasViews = buildJiaobanArtifactCanvasViews({
+    phase,
+    selectedHistoryId,
+    activeViewKey: canvasViewKey,
+    proposalInteractive,
+    proposalContent: proposalViewContent,
+    deliveryContent: deliveryViewContent,
+    graphContent: phase === "authorize"
+      ? previewCanvas ?? <p className="muted small-note">预演图关着——到「怎么跑」打开;也可以直接批,先批就按现场拆。</p>
+      : previewCanvas,
+    workStateContent: phaseContent,
+    governanceContent: latestProposal ? <JiaobanGovernanceView proposal={latestProposal} /> : null,
+    howRunContent: latestProposal ? (
+      <JiaobanHowRunView
+        suggestWorkflow={latestProposal.suggest_workflow === true}
+        worksmapSwitchOn={workflowSwitchOn}
+        onToggleWorksmapSwitch={setWorkflowSwitchOn}
+        orchestrationMode={orchestrationMode}
+        onOrchestrationModeChange={setOrchestrationMode}
+        supervisorPilotDisabledReason={supervisorPilotDisabledReason}
+        classicDisabledReason={classicModeUnavailableReason(projectRoot)}
+        disabled={starting || consultLoading}
+        sessions={projectSessions}
+        sessionChoice={sessionChoice}
+        onSessionChoiceChange={setSessionChoice}
+        onOpenAgentSession={onOpenAgentSession}
+      />
+    ) : null,
+  });
 
   return (
     <section className="project-jiaoban project-jiaoban--split" aria-label="交办">
@@ -1824,9 +1950,17 @@ function humanizeProviderUnavailable(e: unknown): string | null {
 }
 
 // fix8：出方案失败的人话。先认供给类；否则显后端原话（有）；再兜底一句「点重试或改要求」。绝不静默。
-function humanizeConsultError(e: unknown): string {
+export function isSupervisorResidentQuestionWaitingUserError(e: unknown): boolean {
+  const raw = e instanceof Error ? e.message : String(e ?? "");
+  return raw.includes("supervisor_resident_question_waiting_user:");
+}
+
+export function humanizeConsultError(e: unknown): string {
   const provider = humanizeProviderUnavailable(e);
   if (provider) return provider;
+  if (isSupervisorResidentQuestionWaitingUserError(e)) {
+    return "主管想先问清一件事，请在下面直接回答。";
+  }
   const raw = e instanceof Error ? e.message : String(e ?? "");
   return raw && raw.trim().length > 0 ? raw : "出方案没成——可以点重试，或改一下要求再来一版。";
 }
@@ -1854,4 +1988,3 @@ function humanizeAuthorizeError(e: unknown): string {
 // ============================================================
 
 // 从 proposed_steps 里抽「目标文件：…」行的文件部分（后端 consultant_agent 会把 target_files 塞在最前）。
-

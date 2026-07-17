@@ -4,11 +4,36 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server.browser";
 import { JiaobanMergedLayout } from "../src/views/projects/ProjectWorkspaceShell";
 import type { JiaobanPhase } from "../src/views/projects/ProjectJiaobanPanel";
+import { buildJiaobanArtifactCanvasViews } from "../src/views/projects/jiaoban/JiaobanArtifactViews";
 import { ProjectWorkflowCanvasView } from "../src/views/projects/ProjectWorkflowCanvasView";
 import type { ProjectRecord } from "../src/lib/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`[jiaoban-merged-layout] ${message}`);
+}
+
+function openingTagBefore(html: string, marker: string, requiredAttribute: string): string {
+  const markerIndex = html.indexOf(marker);
+  assert(markerIndex >= 0, `应找到正文标记：${marker}`);
+  const attributeIndex = html.lastIndexOf(requiredAttribute, markerIndex);
+  assert(attributeIndex >= 0, `${marker} 应属于 ${requiredAttribute}`);
+  const tagStart = html.lastIndexOf("<", attributeIndex);
+  const tagEnd = html.indexOf(">", attributeIndex);
+  assert(tagStart >= 0 && tagEnd >= 0, `${marker} 的容器起始标签应完整`);
+  return html.slice(tagStart, tagEnd + 1);
+}
+
+function tabOpeningTag(html: string, label: string): string {
+  const closing = `>${label}</button>`;
+  const labelIndex = html.indexOf(closing);
+  assert(labelIndex >= 0, `应找到「${label}」视图 tab`);
+  const tagStart = html.lastIndexOf("<button", labelIndex);
+  assert(tagStart >= 0, `「${label}」应由 button 承载`);
+  return html.slice(tagStart, labelIndex + 1);
+}
+
+function isHiddenTag(openingTag: string): boolean {
+  return /\shidden(?:=""|(?=[\s>]))/.test(openingTag);
 }
 
 const noop = () => {};
@@ -65,8 +90,8 @@ function html(phase: JiaobanPhase, initialHistoryOpen = true, previewCanvas: Rea
   assert(wide.includes("正在执行"), "宽态无预演图时保留运行标题");
 }
 
-// 2) 六态只切内容，不再切布局主次：同一个三栏壳，且宽度只由「有没有工序图」驱动，不由相位直接驱动。
-for (const phase of ["say", "authorize", "binding", "running", "done", "blocked"] as const) {
+// 2) 七态只切内容，不再切布局主次：同一个三栏壳，且宽度只由「有没有工序图」驱动，不由相位直接驱动。
+for (const phase of ["say", "authorize", "binding", "running", "done", "waiting_decision", "blocked"] as const) {
   const out = html(phase);
   assert(out.includes('class="jiaoban-merged-layout'), `${phase} 应使用同一三栏布局壳`);
   assert(!out.includes(removedLayoutHook("data-", "primary")), `${phase} 不应再驱动主区切换`);
@@ -123,29 +148,185 @@ for (const phase of ["say", "authorize", "binding", "running", "done", "blocked"
   }
 }
 
-// 7b) 右区=信息展开面(07-15 二审稿用户拍):多视图渲切换 chips,只渲激活视图;单视图/缺席=旧行为。
+// 7b) 右区=信息展开面：方案/交货实体卡随视图常驻，非激活正文 hidden；有视图时 say 也展开右区。
 {
-  const views = [
-    { key: "graph", label: "工序图", subtitle: "批准后照这个跑", content: <div>图内容</div> },
-    { key: "governance", label: "治理保证", content: <div>治理全文</div> },
-  ];
-  const out = renderToStaticMarkup(
+  const authorizeViews = buildJiaobanArtifactCanvasViews({
+    phase: "authorize",
+    selectedHistoryId: null,
+    activeViewKey: "proposal",
+    proposalInteractive: true,
+    proposalContent: <div>方案实体卡与批准动作</div>,
+    deliveryContent: null,
+    graphContent: <div>方案工序图正文</div>,
+    governanceContent: <div>方案治理全文</div>,
+    howRunContent: <div>方案运行配置</div>,
+  });
+  assert(authorizeViews, "authorize 有方案时应组装右区视图");
+  const authorizeOut = renderToStaticMarkup(
     <JiaobanMergedLayout
       phase="authorize"
       history={<div>历史</div>}
-      main={<div>批卡</div>}
+      main={<div>纯对话</div>}
       previewCanvas={null}
       workflowPanel={null}
       onOpenWorkflow={noop}
-      canvasViews={views}
-      activeCanvasView="governance"
+      canvasViews={authorizeViews}
+      activeCanvasView="proposal"
       onCanvasViewChange={noop}
     />,
   );
-  assert(out.includes("jiaoban-canvas-view-tabs"), "多视图应渲染切换 chips");
-  assert(out.includes("治理全文") && !out.includes("图内容"), "右区只渲染激活视图的内容");
-  assert(out.includes('aria-selected="true"'), "激活 chip 应有选中态");
-  assert(out.includes("在工作流页打开"), "宽态完整工作流跳转钮仍在");
+  assert(authorizeOut.includes("jiaoban-canvas-view-tabs"), "authorize 多视图应渲染切换 chips");
+  assert((authorizeOut.match(/role="tabpanel"/g) ?? []).length === 4, "authorize 四视图正文应常驻为四个 tabpanel");
+  const authorizeLabels = ["方案", "工序图", "治理保证", "怎么跑"];
+  for (let index = 1; index < authorizeLabels.length; index += 1) {
+    assert(
+      authorizeOut.indexOf(`>${authorizeLabels[index - 1]}</button>`) <
+        authorizeOut.indexOf(`>${authorizeLabels[index]}</button>`),
+      `authorize tab 顺序应为 ${authorizeLabels.join(" / ")}`,
+    );
+  }
+  assert(tabOpeningTag(authorizeOut, "方案").includes('aria-selected="true"'), "方案 tab 应默认激活");
+  for (const label of ["工序图", "治理保证", "怎么跑"]) {
+    assert(tabOpeningTag(authorizeOut, label).includes('aria-selected="false"'), `${label} tab 应为非激活`);
+  }
+  assert(
+    !isHiddenTag(openingTagBefore(authorizeOut, "方案实体卡与批准动作", 'role="tabpanel"')),
+    "激活方案正文不得 hidden",
+  );
+  for (const marker of ["方案工序图正文", "方案治理全文", "方案运行配置"]) {
+    assert(isHiddenTag(openingTagBefore(authorizeOut, marker, 'role="tabpanel"')), `${marker} 应常驻但 hidden`);
+  }
+  assert(authorizeOut.includes("在工作流页打开"), "authorize 宽态完整工作流跳转钮仍在");
+
+  const doneViews = buildJiaobanArtifactCanvasViews({
+    phase: "done",
+    selectedHistoryId: null,
+    activeViewKey: "delivery",
+    proposalInteractive: false,
+    proposalContent: <div>交货后的方案留痕</div>,
+    deliveryContent: <div>交货实体卡与属实沉淀动作</div>,
+    graphContent: <div>交货工序图正文</div>,
+    governanceContent: null,
+    howRunContent: null,
+  });
+  assert(doneViews, "done 有交货时应组装右区视图");
+  const doneOut = renderToStaticMarkup(
+    <JiaobanMergedLayout
+      phase="done"
+      history={<div>历史</div>}
+      main={<div>交货短讯</div>}
+      previewCanvas={null}
+      workflowPanel={null}
+      onOpenWorkflow={noop}
+      canvasViews={doneViews}
+      activeCanvasView="delivery"
+      onCanvasViewChange={noop}
+    />,
+  );
+  assert((doneOut.match(/role="tabpanel"/g) ?? []).length === 3, "done 交货、方案留痕与工序图正文应常驻");
+  assert(tabOpeningTag(doneOut, "交货").includes('aria-selected="true"'), "done 应默认激活交货 tab");
+  assert(
+    !isHiddenTag(openingTagBefore(doneOut, "交货实体卡与属实沉淀动作", 'role="tabpanel"')),
+    "激活交货正文不得 hidden",
+  );
+  assert(
+    isHiddenTag(openingTagBefore(doneOut, "交货工序图正文", 'role="tabpanel"')),
+    "done 非激活工序图应常驻但 hidden",
+  );
+  assert(
+    isHiddenTag(openingTagBefore(doneOut, "交货后的方案留痕", 'role="tabpanel"')),
+    "done 非激活方案留痕应常驻但 hidden",
+  );
+
+  const sayArtifactViews = buildJiaobanArtifactCanvasViews({
+    phase: "say",
+    selectedHistoryId: null,
+    activeViewKey: "proposal",
+    proposalInteractive: false,
+    proposalContent: <div>说态回看的方案</div>,
+    deliveryContent: null,
+    graphContent: null,
+    governanceContent: null,
+    howRunContent: null,
+  });
+  assert(sayArtifactViews, "say 点方案短讯后应组装 artifact views");
+  assert(
+    buildJiaobanArtifactCanvasViews({
+      phase: "say",
+      selectedHistoryId: null,
+      activeViewKey: "graph",
+      proposalInteractive: false,
+      proposalContent: <div>未主动点开的方案</div>,
+      deliveryContent: null,
+      graphContent: null,
+      governanceContent: null,
+      howRunContent: null,
+    }) === undefined,
+    "普通 say 未点定稿物时不得主动展开右区",
+  );
+  const sayWithViews = renderToStaticMarkup(
+    <JiaobanMergedLayout
+      phase="say"
+      history={<div>历史</div>}
+      main={<div>说态输入框</div>}
+      previewCanvas={null}
+      workflowPanel={null}
+      onOpenWorkflow={noop}
+      canvasViews={sayArtifactViews}
+      activeCanvasView="proposal"
+      onCanvasViewChange={noop}
+    />,
+  );
+  assert(sayWithViews.includes("is-canvas-wide"), "say 只要带视图就应展开右区");
+  assert(!sayWithViews.includes("is-canvas-hint"), "say 带视图时不得退成提示窄条");
+  assert(sayWithViews.includes("jiaoban-canvas-view-tabs"), "say 带视图时应保留视图切换");
+
+  const runtimeViews = buildJiaobanArtifactCanvasViews({
+    phase: "running",
+    selectedHistoryId: null,
+    activeViewKey: "graph",
+    proposalInteractive: false,
+    proposalContent: <div>运行中可回看的方案</div>,
+    deliveryContent: null,
+    graphContent: null,
+    governanceContent: null,
+    howRunContent: null,
+  });
+  assert(runtimeViews?.map((view) => view.key).join(",") === "graph,proposal", "运行族应保留工序图默认与方案回看");
+  const runtimeOut = renderToStaticMarkup(
+    <JiaobanMergedLayout
+      phase="running"
+      history={<div>历史</div>}
+      main={<div>运行对话</div>}
+      previewCanvas={null}
+      workflowPanel={<div>既有工作流画布</div>}
+      onOpenWorkflow={noop}
+      canvasViews={runtimeViews}
+      activeCanvasView="graph"
+      onCanvasViewChange={noop}
+    />,
+  );
+  assert(runtimeOut.includes("既有工作流画布"), "运行族无工序图时 graph tab 应回落既有工作流画布");
+  assert(!runtimeOut.includes("预演图关着"), "运行族不得显示批准前的预演空话");
+
+  const runtimeWorkStateViews = buildJiaobanArtifactCanvasViews({
+    phase: "running",
+    selectedHistoryId: null,
+    activeViewKey: "graph",
+    proposalInteractive: false,
+    proposalContent: null,
+    deliveryContent: null,
+    graphContent: <div>运行工序图</div>,
+    workStateContent: <div>正在干与停下动作</div>,
+    governanceContent: null,
+    howRunContent: null,
+  });
+  assert(runtimeWorkStateViews?.map((view) => view.key).join(",") === "graph", "无方案时运行处置仍应落右区工序图");
+  const runtimeWorkStateOut = renderToStaticMarkup(runtimeWorkStateViews?.[0]?.content);
+  assert(
+    runtimeWorkStateOut.includes("运行工序图") && runtimeWorkStateOut.includes("正在干与停下动作"),
+    "工序图应承载运行处置，不能回流中栏",
+  );
 }
 
 // 7) 07-15 真机走查·交办页 chrome 与说态卡对齐定稿。
@@ -202,6 +383,7 @@ for (const phase of ["say", "authorize", "binding", "running", "done", "blocked"
     />,
   );
   assert(historyOut.includes('class="secondary-button jiaoban-history-new"'), "历史头 [+] 降为次级小钮");
+  assert(historyOut.includes("工作历史") && !historyOut.includes("项目对话"), "左栏只改锚点，不改既有标题");
   assert(historyOut.includes("+ 新交办"), "空态保留主动作 [+新交办](D7 空态答下一步)");
 }
 

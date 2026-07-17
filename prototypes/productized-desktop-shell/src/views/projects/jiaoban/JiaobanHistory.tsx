@@ -1,10 +1,20 @@
 // 交办·工作历史(回顾面)——阶段3拆巨石第一刀:自 ProjectJiaobanPanel.tsx 原样迁出,零逻辑改动。
 // 宪法归属:§六 回顾面(唯一问题=我要找的那单多快找到;永不打断)。
 import type { RunHistoryEntry } from "../../../lib/types";
+import {
+  conversationMessageIdForDelivery,
+  conversationMessageIdForProposal,
+} from "./JiaobanConversation";
 import { formatProposalTime, proposalAgeDays } from "./jiaobanTime";
 
 type HistoryVisual = { dot: string; toneClass: string; word: string };
 export type HistoryFilter = "all" | "mine" | "running";
+
+export function conversationMessageIdForHistoryEntry(entry: RunHistoryEntry): string {
+  return entry.state === "delivered"
+    ? conversationMessageIdForDelivery(entry.proposal_id)
+    : conversationMessageIdForProposal(entry.proposal_id);
+}
 
 function historyHasAttention(entry: RunHistoryEntry): boolean {
   const r = entry.review_flags.result_verdict;
@@ -186,7 +196,8 @@ export function JiaobanHistoryColumn({
                 className={`jiaoban-run ${isSelected ? "on" : ""}`}
                 type="button"
                 title={`${entry.state_note} · ${entry.goal_text || "（没写目标）"}`}
-                onClick={() => (isCurrent ? onBackToCurrent() : onSelectEntry(entry))}
+                aria-controls={conversationMessageIdForHistoryEntry(entry)}
+                onClick={() => (isCurrent && entry.state !== "delivered" ? onBackToCurrent() : onSelectEntry(entry))}
               >
                 <span className={`jiaoban-run-dot ${visual.toneClass}`} aria-hidden="true">
                   {visual.dot}
@@ -203,7 +214,15 @@ export function JiaobanHistoryColumn({
 }
 
 // 选中「非当前」历史单 → 主区显只读详情卡（不回放完整五态脸·诚实显读模型有的）。
-export function JiaobanHistoryDetail({ entry, onBackToCurrent }: { entry: RunHistoryEntry; onBackToCurrent: () => void }) {
+export function JiaobanHistoryDetail({
+  entry,
+  onBackToCurrent,
+  showBackAction = true,
+}: {
+  entry: RunHistoryEntry;
+  onBackToCurrent: () => void;
+  showBackAction?: boolean;
+}) {
   const visual = historyStateVisual(entry);
   const flags = entry.review_flags;
   const opinions = [
@@ -211,7 +230,10 @@ export function JiaobanHistoryDetail({ entry, onBackToCurrent }: { entry: RunHis
     flags.boundary_verdict ? `批前边界：${humanizeVerdict(flags.boundary_verdict)}` : null,
   ].filter(Boolean);
   return (
-    <div className="project-canvas-detail-card jiaoban-history-detail" aria-label="历史单详情">
+    <div
+      className="project-canvas-detail-card jiaoban-history-detail"
+      aria-label="历史单详情"
+    >
       <div className="panel-heading">
         <div>
           <p className="eyebrow">工作历史 · 这一单</p>
@@ -222,9 +244,11 @@ export function JiaobanHistoryDetail({ entry, onBackToCurrent }: { entry: RunHis
             {visual.word}
           </h3>
         </div>
-        <button className="secondary-button" type="button" onClick={onBackToCurrent}>
-          回到当前
-        </button>
+        {showBackAction ? (
+          <button className="secondary-button" type="button" onClick={onBackToCurrent}>
+            回到当前
+          </button>
+        ) : null}
       </div>
       <p className="jiaoban-field">
         <span className="jiaoban-field-label">目标：</span>

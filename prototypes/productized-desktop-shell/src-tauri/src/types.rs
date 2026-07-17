@@ -2883,6 +2883,8 @@ struct BlackboardEntry {
     workflow_id: String,
     work_item_id: Option<String>,
     workflow_node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    question_id: Option<String>,
     kind: BlackboardEntryKind,
     title: String,
     summary: String,

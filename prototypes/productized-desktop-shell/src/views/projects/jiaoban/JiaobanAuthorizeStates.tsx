@@ -84,7 +84,6 @@ export function JiaobanSayState({
 export function JiaobanAuthorizeState({
   proposal,
   proposalIsStale,
-  proposalAgeDays,
   amendment,
   onAmendmentChange,
   onAmend,
@@ -100,10 +99,10 @@ export function JiaobanAuthorizeState({
   boundaryLoading,
   boundaryOutcome,
   onBoundaryRetry,
+  readOnly = false,
 }: {
   proposal: ProjectConsultationProposal;
   proposalIsStale: boolean;
-  proposalAgeDays: number;
   amendment: string;
   onAmendmentChange: (value: string) => void;
   onAmend: () => void;
@@ -121,6 +120,8 @@ export function JiaobanAuthorizeState({
   boundaryLoading: boolean;
   boundaryOutcome: GlobalSupervisorBoundaryReviewOutcome | null;
   onBoundaryRetry: () => void;
+  // 既有方案在右区回看时只收起决策动作，不另造卡形。
+  readOnly?: boolean;
 }) {
   const targetFiles = extractTargetFiles(proposal.proposed_steps);
   const willWrite = proposal.scope_draft.allowed_write_roots.length > 0;
@@ -136,27 +137,6 @@ export function JiaobanAuthorizeState({
 
   return (
     <div className="project-canvas-detail-card jiaoban-authorize" aria-label="方案">
-
-      {/* 旧方案不冒充当前：不是今天生成 → 顶部黄条 + 主按钮换「重新说目标」，防再批库存。 */}
-      {proposalIsStale ? (
-        <div className="jiaoban-stale-banner" role="note" aria-label="旧方案提醒">
-          <span aria-hidden="true">⚠</span>
-          {/* 同 advice-only 警条：正文包单 span 防 flex 拆柱（此条现在恰好没内联元素才幸免，统一防）。 */}
-          <span className="jiaoban-banner-body">
-            这是 {proposalAgeDays} 天前的旧方案，项目可能已变——建议重新说一遍。
-          </span>
-        </div>
-      ) : null}
-
-      {/* 写根空是可执行的只读单：仍走同一人闸，只是不授予写入。 */}
-      {!willWrite ? (
-        <div className="jiaoban-advice-only-banner" role="note" aria-label="只读单提醒">
-          <span aria-hidden="true">⚠</span>
-          <span className="jiaoban-banner-body">
-            这单是只读的——AI 只看不改，交货是结论不是改动
-          </span>
-        </div>
-      ) : null}
 
       {/* 批态卡定式(hi-fi F·07-15 走查#2 捞回总包漏项):标题=一句目标;「会动什么」=事实行(标签左值右);
           「怎么算做好」=全部验收逐条编号(执行→Syn→主管顺排·一条一行)——治「分号拼长句一坨上脸」。 */}
@@ -186,12 +166,20 @@ export function JiaobanAuthorizeState({
               <>
                 <p className="jiaoban-fact">
                   <span className="jiaoban-fact-label">写入范围</span>
-                  <span className="jiaoban-fact-value">{proposal.scope_draft.allowed_write_roots.join("、")}</span>
+                  <span className="jiaoban-fact-value">{humanizeWriteRoots(proposal.scope_draft.allowed_write_roots)}</span>
                 </p>
                 <p className="jiaoban-fact">
                   <span className="jiaoban-fact-label">不碰</span>
                   <span className="jiaoban-fact-value">写入范围以外的文件（沙箱锁死）</span>
                 </p>
+                {/* 人话优先(07-17 用户拍):完整路径这类工程内容默认收起,想看再展开。 */}
+                <details className="jiaoban-plan-tech-details">
+                  <summary>工程详情</summary>
+                  <p className="jiaoban-fact">
+                    <span className="jiaoban-fact-label">完整路径</span>
+                    <span className="jiaoban-fact-value">{proposal.scope_draft.allowed_write_roots.join("、")}</span>
+                  </p>
+                </details>
               </>
             ) : null}
           </div>
@@ -206,7 +194,7 @@ export function JiaobanAuthorizeState({
             </ol>
           </div>
         ) : null}
-        {governanceCount ? (
+        {governanceCount && !readOnly ? (
           <button type="button" className="jiaoban-plan-link" onClick={onShowGovernance}>
             治理保证 · Syn {controlCoreAcceptance.length} 条 / 主管 {supervisorAcceptance.length} 条 · 右侧看全文 →
           </button>
@@ -214,20 +202,24 @@ export function JiaobanAuthorizeState({
       </div>
 
       {/* B2·全局主管批前边界意见：方案要点之后、按钮区之前。async 后填·意见没到也可以先批（不拦事）。 */}
-      <JiaobanBoundaryReviewSection
-        loading={boundaryLoading}
-        outcome={boundaryOutcome}
-        onRetry={onBoundaryRetry}
-      />
+      {!readOnly ? (
+        <JiaobanBoundaryReviewSection
+          loading={boundaryLoading}
+          outcome={boundaryOutcome}
+          onRetry={onBoundaryRetry}
+        />
+      ) : null}
 
       {/* 「怎么跑」配置(预演开关/执行模式/预填对话)已移右区视图;卡上一行摘要入口。
           🔓 许可横幅已删——写入范围在「会动什么」事实行里说过,批准按钮本身就是人闸(信息四问·重复即删)。 */}
-      <button type="button" className="jiaoban-plan-link jiaoban-plan-link--howrun" onClick={onShowHowRun}>
-        怎么跑 · {howRunSummary} · 右侧可调 →
-      </button>
+      {!readOnly ? (
+        <button type="button" className="jiaoban-plan-link jiaoban-plan-link--howrun" onClick={onShowHowRun}>
+          怎么跑 · {howRunSummary} · 右侧可调 →
+        </button>
+      ) : null}
 
       {/* 修改框只在非旧方案态显示——旧方案没有[按我说的改]按钮,裸输入框=没消费者的杂讯(07-15 五波)。 */}
-      {!proposalIsStale ? (
+      {!readOnly && !proposalIsStale ? (
         <label className="proposal-decision-field jiaoban-amend">
           <input
             type="text"
@@ -241,15 +233,15 @@ export function JiaobanAuthorizeState({
       ) : null}
 
       {/* fix8：改要求出新方案期间/失败也上脸——loading 提示 + 失败人话，绝不静默。 */}
-      {consultLoading ? (
+      {!readOnly && consultLoading ? (
         <p className="muted small-note">正在出新方案…（约 1–2 分钟）</p>
-      ) : consultError ? (
+      ) : !readOnly && consultError ? (
         <div className="jiaoban-consult-error" role="alert" aria-label="出方案没成">
           <span aria-hidden="true">⚠</span> {consultError}
         </div>
       ) : null}
 
-      <div className="workflow-state-actions">
+      {!readOnly ? <div className="workflow-state-actions">
         {!willWrite ? (
           // 只读单的唯一开工门仍是 [允许并开始]；重新出方案保留为次操作。
           <>
@@ -333,7 +325,7 @@ export function JiaobanAuthorizeState({
         <button className="secondary-button" type="button" disabled={starting} onClick={onDecline}>
           先不做
         </button>
-      </div>
+      </div> : null}
     </div>
   );
 }
@@ -484,6 +476,14 @@ function JiaobanWorksmap({
 
 // 方案里「等用户答」的开放问题:咨询按惯例写成「用户确认/补充…」步骤(结构化字段暂无·前端启发式提取)。
 // export 供离线断言。
+// 人话优先(07-17 用户拍):界面默认只说「哪个目录」,完整路径收进「工程详情」。
+export function humanizeWriteRoots(roots: string[]): string {
+  const names = roots
+    .map((root) => root.replace(/\/+$/, "").split("/").pop() || root)
+    .filter(Boolean);
+  return names.length ? `就在「${names.join("、")}」目录里` : "";
+}
+
 export function extractOpenQuestions(proposedSteps: string[]): string[] {
   return proposedSteps.filter((step) => /^用户(确认|补充|指定|提供|选择|说明|决定)/.test(step.trim()));
 }

@@ -389,6 +389,10 @@ fn project_blackboard_from_workflow(summary: &ProjectWorkflowSummary) -> Project
                 ),
                 &summary.project_id,
                 &summary.workflow_id,
+                supervisor_message_question_id(
+                    &ledger_entry.workflow_id,
+                    &ledger_entry.source_refs,
+                ),
                 BlackboardEntryKind::SupervisorMessage,
                 title,
                 ledger_entry.summary.clone(),
@@ -516,6 +520,7 @@ fn blackboard_candidate_entry(
         workflow_id: workflow_id.to_string(),
         work_item_id,
         workflow_node_id,
+        question_id: None,
         kind,
         title,
         summary,
@@ -531,6 +536,7 @@ fn blackboard_supervisor_message_entry(
     entry_id: String,
     project_id: &str,
     workflow_id: &str,
+    question_id: Option<String>,
     kind: BlackboardEntryKind,
     title: String,
     summary: String,
@@ -555,6 +561,7 @@ fn blackboard_supervisor_message_entry(
         workflow_id: workflow_id.to_string(),
         work_item_id: None,
         workflow_node_id: None,
+        question_id,
         kind,
         title,
         summary,
@@ -567,6 +574,19 @@ fn blackboard_supervisor_message_entry(
             "supervisor_message_does_not_advance_workflow".to_string(),
         ],
     }
+}
+
+fn supervisor_message_question_id(
+    workflow_id: &str,
+    source_refs: &[String],
+) -> Option<String> {
+    let prefix = format!("{workflow_id}:resident-question:");
+    source_refs.iter().find_map(|source_ref| {
+        source_ref.strip_prefix(&prefix).and_then(|question_id| {
+            let question_id = question_id.trim();
+            (!question_id.is_empty()).then(|| question_id.to_string())
+        })
+    })
 }
 
 fn blackboard_source_ref(source_kind: &str, source_id: &str, label: &str) -> BlackboardSourceRef {

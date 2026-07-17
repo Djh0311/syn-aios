@@ -173,7 +173,6 @@ function authorizeHtml(
     <JiaobanAuthorizeState
       proposal={proposalFixture(allowedWriteRoots)}
       proposalIsStale={false}
-      proposalAgeDays={0}
       amendment=""
       onAmendmentChange={noop}
       onAmend={noop}
@@ -199,8 +198,10 @@ function authorizeHtml(
   const out = authorizeHtml([], mismatch);
   assert(out.includes("允许并开始（只读）"), "只读单：[允许并开始]仍是主按钮");
   assert(out.includes("重新出方案（要动手）"), "只读单：保留重新出方案次按钮");
-  assert(out.includes("这单是只读的——AI 只看不改，交货是结论不是改动"), "只读单：确定性警条仍在");
-  // 意见块与之共存（智能层与只读警条互证）。
+  assert(!out.includes('aria-label="只读单提醒"'), "只读单：提示牌应从呈现退场");
+  assert(!out.includes("jiaoban-advice-only-banner"), "只读单：提示牌卡形钩子不应残留");
+  assert(!out.includes("这单是只读的——AI 只看不改"), "只读单：提示牌文案不得换壳残留");
+  // 意见块与只读动作机制共存。
   assert(out.includes("全局主管意见（批前边界）"), "意见块与只读单操作共存");
   assert(out.includes("好像对不上你的目标"), "意见块 mismatch 显示");
   assert(!out.includes("审批"), "词表无「审批」");

@@ -685,6 +685,32 @@ fn p1_b_mock_question_answer_same_thread_proposal_then_duplicate_is_rejected() {
         question_id: question.question_id.clone(),
         answer_text: "验收标记是 P1B-ANSWER-ALPHA。".to_string(),
     };
+    let waiting_snapshot =
+        crate::read_workflow_state_snapshot(&state_path).expect("read waiting question snapshot");
+    let waiting_message = waiting_snapshot.project_blackboards[0]
+        .entries
+        .iter()
+        .find(|entry| entry.kind == crate::BlackboardEntryKind::SupervisorMessage)
+        .expect("waiting supervisor message should be derived");
+    assert_eq!(waiting_message.status, "waiting_user");
+    assert_eq!(
+        waiting_message.question_id.as_deref(),
+        Some(request.question_id.as_str())
+    );
+    assert_eq!(
+        serde_json::to_value(waiting_message)
+            .expect("serialize waiting supervisor message")["question_id"],
+        Value::String(request.question_id.clone())
+    );
+    let mut absent_question_id = (*waiting_message).clone();
+    absent_question_id.question_id = None;
+    assert!(
+        serde_json::to_value(&absent_question_id)
+            .expect("serialize blackboard entry without question id")
+            .get("question_id")
+            .is_none(),
+        "optional question_id must stay absent when it is not derived"
+    );
     let pending = next_resident_question_expectation(
         &state_path,
         crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
@@ -766,6 +792,9 @@ fn p1_b_mock_question_answer_same_thread_proposal_then_duplicate_is_rejected() {
         "question and answer must both be readable"
     );
     assert!(messages.iter().any(|entry| entry.status == "answered"));
+    assert!(messages.iter().all(|entry| {
+        entry.question_id.as_deref() == Some(request.question_id.as_str())
+    }));
     assert!(messages.iter().all(|entry| {
         entry
             .warnings

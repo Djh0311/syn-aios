@@ -269,8 +269,8 @@ type JiaobanMergedLayoutProps = ProjectJiaobanPanelLayout & {
 
 // 修宪(2026-07-14 深夜·用户拍·交互正本 §四.2)：交办页 = 左工作历史**独立栏**(可一键收起成窄条)
 // + 中交办主卡 + 右画布**动态宽**。取代旧的「32px rail + 历史悬浮覆盖层 + 两栏 panels」。
-// 画布宽窄判据 = 有没有工序图可画(用户 2026-07-15 拍「有图才宽」)：说态还没方案 → 收窄成提示条；
-// 方案一到(批态)就有预演图、要在节点上选会话(M1·07-11 收口) → 变宽。运行/交货态同理为宽。
+// 右区宽窄判据：普通说态无信息视图时收窄成提示条；有工序图或用户点开既有定稿物时展开。
+// 方案一到(批态)要在节点上选会话(M1·07-11 收口) → 变宽；运行/交货态同理为宽。
 export function JiaobanMergedLayout({
   phase,
   history,
@@ -289,8 +289,8 @@ export function JiaobanMergedLayout({
   // 右区=信息展开面(07-15 二审稿):多视图时顶部出切换 chips,想看什么切什么;单视图/缺席=旧行为。
   const views = canvasViews && canvasViews.length ? canvasViews : null;
   const activeView = views ? (views.find((view) => view.key === activeCanvasView) ?? views[0]) : null;
-  // 说态还没方案 = 没图可画 → 收窄成提示条；方案一到就有预演图(批态要在节点上选会话) → 变宽。
-  const canvasWide = phase !== "say";
+  // 说态无信息视图 = 收窄提示条；一旦上游给出视图，即使仍在说态也展开右区。
+  const canvasWide = phase !== "say" || views !== null;
 
   return (
     <div
@@ -331,7 +331,15 @@ export function JiaobanMergedLayout({
       </section>
       <section
         className="jiaoban-merged-region jiaoban-merged-canvas-region"
-        aria-label={showsPreviewCanvas ? (showsRuntimePlanGraph ? "工作流运行工序图" : "方案预演工序图") : "工作流运行视图"}
+        aria-label={
+          activeView
+            ? `${activeView.label}视图`
+            : showsPreviewCanvas
+              ? showsRuntimePlanGraph
+                ? "工作流运行工序图"
+                : "方案预演工序图"
+              : "工作流运行视图"
+        }
       >
         {/* 定稿(hi-fi A/F·07-15 真机走查):窄提示条=纯一句话,无标题无跳转——header 只在画布宽态渲染。
             180px 窄条塞 header 会竖排成一字一行(真机实测「工作/流进/度」),按钮还顶爆栏宽。 */}
@@ -343,8 +351,10 @@ export function JiaobanMergedLayout({
                 {views.map((view) => (
                   <button
                     key={view.key}
+                    id={`jiaoban-canvas-tab-${view.key}`}
                     type="button"
                     role="tab"
+                    aria-controls={`jiaoban-canvas-view-${view.key}`}
                     aria-selected={activeView?.key === view.key}
                     className={`jiaoban-chip ${activeView?.key === view.key ? "on" : ""}`}
                     onClick={() => onCanvasViewChange?.(view.key)}
@@ -379,10 +389,19 @@ export function JiaobanMergedLayout({
         <div className="jiaoban-merged-canvas-surface spec-scroll">
           {canvasWide ? (
             views && activeView ? (
-              <div className="jiaoban-canvas-view">
-                {activeView.subtitle ? <p className="jiaoban-canvas-view-subtitle">{activeView.subtitle}</p> : null}
-                {activeView.content}
-              </div>
+              views.map((view) => (
+                <div
+                  key={view.key}
+                  id={`jiaoban-canvas-view-${view.key}`}
+                  className="jiaoban-canvas-view"
+                  role="tabpanel"
+                  aria-labelledby={`jiaoban-canvas-tab-${view.key}`}
+                  hidden={activeView.key !== view.key}
+                >
+                  {view.subtitle ? <p className="jiaoban-canvas-view-subtitle">{view.subtitle}</p> : null}
+                  {view.content ?? (view.key === "graph" ? workflowPanel ?? <p>工作流数据暂不可用。</p> : null)}
+                </div>
+              ))
             ) : (
               previewCanvas ?? workflowPanel ?? <p>工作流数据暂不可用。</p>
             )

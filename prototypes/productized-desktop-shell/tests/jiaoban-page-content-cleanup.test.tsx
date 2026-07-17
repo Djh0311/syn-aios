@@ -54,12 +54,11 @@ function proposalFixture(): ProjectConsultationProposal {
   };
 }
 
-function authorizeHtml(proposalIsStale = false, proposalAgeDays = 0): string {
+function authorizeHtml(proposalIsStale = false): string {
   return renderToStaticMarkup(
     <JiaobanAuthorizeState
       proposal={proposalFixture()}
       proposalIsStale={proposalIsStale}
-      proposalAgeDays={proposalAgeDays}
       amendment=""
       onAmendmentChange={noop}
       onAmend={noop}
@@ -79,7 +78,7 @@ function authorizeHtml(proposalIsStale = false, proposalAgeDays = 0): string {
   );
 }
 
-// 1、4、5、6：所有交办内引导回到右侧画布；会话预填与人闸仍在，旧方案黄条不再重复时间和建议。
+// 1、4、5、6：所有交办内引导回到右侧画布；会话预填与人闸仍在，旧方案提示牌从呈现退场。
 {
   const authorize = authorizeHtml();
   // 07-15 二审稿:预填对话移右区「怎么跑」视图(覆盖在 advice-only-authorize-face 2b);卡上=摘要入口一行。
@@ -92,12 +91,13 @@ function authorizeHtml(proposalIsStale = false, proposalAgeDays = 0): string {
   assert(!authorize.includes(removedCopy("这里的选择与右侧第一个预演节点", "同步")), "授权卡应删会话同步小字");
   assert(!authorize.includes(removedCopy("碰到越界或拿不准的，会停下来", "问你，不硬来。")), "旧授权提醒不应残留");
 
-  const stale = authorizeHtml(true, 3);
-  assert(stale.includes("这是 3 天前的旧方案，项目可能已变——建议重新说一遍。"), "旧方案黄条应收为一句");
-  assert(
-    !stale.includes(removedCopy("生", "成于")) && !stale.includes(removedCopy("出一版", "新的")),
-    "旧方案黄条不应重复时间或建议",
-  );
+  const stale = authorizeHtml(true);
+  assert(!stale.includes('aria-label="旧方案提醒"'), "旧方案提示牌应从呈现退场");
+  assert(!stale.includes("jiaoban-stale-banner"), "旧方案提示牌的卡形钩子不应残留");
+  assert(!stale.includes("天前的旧方案，项目可能已变"), "旧方案提示牌文案不得换壳残留");
+  assert(stale.includes("重新说目标出新方案"), "旧方案主按钮仍应引导重新出方案");
+  assert(stale.includes("仍要允许并开始（旧方案）"), "旧方案手动开工次按钮仍应保留");
+  assert(!stale.includes('aria-label="修改方案"'), "旧方案仍应收起无消费者的修改框");
 }
 
 {
@@ -297,7 +297,6 @@ console.log("jiaoban-page-content-cleanup: 七项交办内容清理离线 DOM �
         ],
       }}
       proposalIsStale={false}
-      proposalAgeDays={0}
       amendment=""
       onAmendmentChange={noop}
       onAmend={noop}

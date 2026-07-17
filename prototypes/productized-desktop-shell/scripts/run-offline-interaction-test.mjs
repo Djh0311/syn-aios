@@ -22,6 +22,7 @@ const testEntries = [
   "tests/jiaoban-needs-rework-disposal.test.tsx",
   "tests/jiaoban-task-session-binding.test.tsx",
   "tests/jiaoban-merged-layout.test.tsx",
+  "tests/jiaoban-conversation-center.test.tsx",
   "tests/jiaoban-plan-preview-canvas.test.tsx",
   "tests/jiaoban-running-graph.test.tsx",
   "tests/jiaoban-director-planning-progress.test.tsx",

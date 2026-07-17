@@ -1021,6 +1021,7 @@ export type BlackboardEntry = {
   workflow_id: string;
   work_item_id?: string | null;
   workflow_node_id?: string | null;
+  question_id?: string | null;
   kind: BlackboardEntryKind;
   title: string;
   summary: string;

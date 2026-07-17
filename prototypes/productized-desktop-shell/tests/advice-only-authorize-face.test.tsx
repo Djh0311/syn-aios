@@ -1,6 +1,6 @@
 // 写根空的只读单离线 DOM 断言（renderToStaticMarkup·同现有 harness 风格）。
-// willWrite=false → 只读警条 + 主按钮=[允许并开始（只读）] + 保留重新出方案次按钮；
-// willWrite=true → 原样（无只读警条·主按钮=[允许并开始]）。
+// willWrite=false → 只读提示牌不呈现 + 主按钮=[允许并开始（只读）] + 保留重新出方案次按钮；
+// willWrite=true → 原样（无只读提示牌·主按钮=[允许并开始]）。
 import { renderToStaticMarkup } from "react-dom/server.browser";
 import { JiaobanAuthorizeState, JiaobanDoneState } from "../src/views/projects/ProjectJiaobanPanel";
 import { JiaobanHowRunView } from "../src/views/projects/jiaoban/JiaobanAuthorizeStates";
@@ -49,7 +49,6 @@ function html(allowedWriteRoots: string[]): string {
     <JiaobanAuthorizeState
       proposal={proposalFixture(allowedWriteRoots)}
       proposalIsStale={false}
-      proposalAgeDays={0}
       amendment=""
       onAmendmentChange={noop}
       onAmend={noop}
@@ -69,10 +68,12 @@ function html(allowedWriteRoots: string[]): string {
   );
 }
 
-// 1) 只读单（写根空）：警条在 + [允许并开始]仍是主按钮 + 保留重新出方案。
+// 1) 只读单（写根空）：提示牌退场，但 [允许并开始]仍是主按钮 + 保留重新出方案。
 {
   const out = html([]);
-  assert(out.includes("这单是只读的——AI 只看不改，交货是结论不是改动"), "警条应如实说明只读单");
+  assert(!out.includes('aria-label="只读单提醒"'), "只读提示牌应从呈现退场");
+  assert(!out.includes("jiaoban-advice-only-banner"), "只读提示牌的卡形钩子不应残留");
+  assert(!out.includes("这单是只读的——AI 只看不改"), "只读提示牌文案不得换壳残留");
   assert(out.includes("重新出方案（要动手）"), "应保留 [重新出方案（要动手）] 次按钮");
   assert(out.includes("允许并开始（只读）"), "[允许并开始] 应保留在只读单主按钮");
   // 主按钮位（primary-button）必须是允许并开始。

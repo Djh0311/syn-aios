@@ -2043,6 +2043,7 @@ function blackboardKindLabel(kind: BlackboardEntry["kind"]) {
   if (kind === "tool_summary") return "工具摘要";
   if (kind === "memory_candidate") return "记忆候选";
   if (kind === "knowledge_ref") return "知识引用";
+  if (kind === "supervisor_message") return "主管对话";
   return kind;
 }
 

@@ -635,14 +635,7 @@
   gap: 8px;
 }
 
-/* 旧方案黄条 / 「说」面上次停因摘要：与授权提示同族的告警块。 */
-/* 警条正文：单 flex item（防裸文本+内联元素被拆成竖柱——07-07 真机截图逮到）。 */
-.jiaoban-banner-body {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.jiaoban-stale-banner,
-.jiaoban-advice-only-banner,
+/* 「说」面上次停因摘要：保留真实停点，不属于授权说明横幅。 */
 .jiaoban-say-hint {
   display: flex;
   align-items: flex-start;
@@ -1566,10 +1559,26 @@
   min-width: 0;
   padding: 10px 12px;
 }
+.jiaoban-canvas-view[hidden] {
+  display: none;
+}
 .jiaoban-canvas-view-subtitle {
   margin: 0;
   font-size: 11px;
   color: var(--muted, #6b7068);
+}
+.jiaoban-canvas-work-state {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.jiaoban-canvas-work-state > .jiaoban-plan-preview {
+  height: auto;
+}
+.jiaoban-canvas-work-state > .project-canvas-detail-card {
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 .jiaoban-governance-view {
   display: grid;
@@ -1649,4 +1658,210 @@
   gap: 3px;
   font-size: 12.5px;
   line-height: 1.6;
+}
+
+/* P1-C rework2：中栏回归纯对话——用户右收浅底，主管左侧直排；定稿物只住右区。 */
+.jiaoban-conversation-stream {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.jiaoban-conversation-message {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  border-bottom: 0;
+  scroll-margin-top: 12px;
+}
+.jiaoban-conversation-message.is-user,
+.jiaoban-conversation-message.is-supervisor,
+.jiaoban-conversation-phase[data-message-kind="proposal"],
+.jiaoban-conversation-phase[data-message-kind="delivery"] {
+  padding: 0;
+  border-bottom: 0;
+}
+.jiaoban-conversation-message:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.jiaoban-conversation-message.is-user {
+  justify-self: end;
+  width: fit-content;
+  max-width: min(76%, 720px);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-md);
+  background: var(--panel-soft);
+}
+.jiaoban-conversation-message.is-user > .jiaoban-plan-seg {
+  color: var(--accent-strong);
+  text-align: right;
+}
+.jiaoban-conversation-message.is-supervisor {
+  justify-self: start;
+  width: 100%;
+}
+.jiaoban-conversation-message.is-supervisor > .jiaoban-plan-seg {
+  color: var(--accent-strong);
+}
+.jiaoban-conversation-copy {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.jiaoban-conversation-message.is-user .jiaoban-conversation-copy {
+  color: var(--ink-mid);
+}
+.jiaoban-conversation-notice-action {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.jiaoban-conversation-notice-action:hover .jiaoban-conversation-copy {
+  color: var(--accent-strong);
+}
+.jiaoban-conversation-notice-action:focus-visible {
+  border-radius: var(--r-sm);
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.jiaoban-conversation-answered {
+  margin: 0;
+}
+.jiaoban-conversation-answered > summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.jiaoban-conversation-answered[open] > summary {
+  margin-bottom: 8px;
+}
+/* 修单4:更早的单收成一条折叠行,默认闭合;展开后按单分组——各单目标一句+问答+短讯,复用既有样式。 */
+.jiaoban-conversation-earlier {
+  margin: 0;
+}
+.jiaoban-conversation-earlier > summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.jiaoban-conversation-earlier[open] > summary {
+  margin-bottom: 10px;
+}
+.jiaoban-conversation-earlier-order {
+  display: grid;
+  gap: 10px;
+}
+.jiaoban-conversation-earlier-order + .jiaoban-conversation-earlier-order {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hair);
+}
+/* 修单3:中栏常驻输入框——对话的自然收尾位,粘底随滚;话按状态路由既有通道。 */
+.jiaoban-conversation-composer {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: var(--space-2) 0;
+  background: var(--bg);
+}
+.jiaoban-conversation-composer textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+/* say 空场:唯一对话框限宽居中,与原说态卡同位(806 轨道拉满会失衡)。 */
+.project-jiaoban-col[data-conversation-phase="composer"] .jiaoban-conversation-composer {
+  width: min(100%, 720px);
+  justify-self: center;
+  margin-inline: auto;
+}
+.jiaoban-conversation-composer[data-composer-route="disabled"] textarea {
+  color: var(--ink-mid);
+}
+/* 人话优先(07-17 用户拍):工程详情默认收起。 */
+.jiaoban-plan-tech-details {
+  font-size: 12.5px;
+}
+.jiaoban-plan-tech-details > summary {
+  cursor: pointer;
+  color: var(--ink-mid);
+  font-size: 12px;
+}
+.jiaoban-conversation-waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-mid);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.jiaoban-conversation-waiting .jiaoban-spinner {
+  margin-right: 0;
+}
+/* 纯对话相位退掉中栏纸框；legacy 只留给红线要求零碰的 P3-C。 */
+.jiaoban-merged-jiaoban-region
+  .project-jiaoban-col:is(
+    [data-conversation-phase="conversation"],
+    [data-conversation-phase="proposal"],
+    [data-conversation-phase="delivery"]
+  ) {
+  border: 0;
+  border-radius: 0;
+}
+/* 修单1实体卡形原样搬到右区：白纸、细实线、12px 圆角、20px 内边距、14px 组距。 */
+.jiaoban-canvas-view
+  > :is(
+    .project-canvas-detail-card.jiaoban-authorize,
+    .project-canvas-detail-card.jiaoban-done,
+    .project-canvas-detail-card.jiaoban-history-detail
+  ) {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: var(--space-5);
+  gap: 14px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-lg);
+  background: var(--panel-raised);
+}
+/* 卡内只保留定式分组，不让旧主管块 / 结果块再成为第二层卡。 */
+.jiaoban-canvas-view
+  > .jiaoban-authorize
+  > .jiaoban-boundary,
+.jiaoban-canvas-view
+  > .jiaoban-done
+  > :is(.role-loop-plain[aria-label="结果（人话）"], .dispatch-result-card, .jiaoban-supervisor) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+/* 说态输入仍沿用中栏旧纸面拍平。 */
+.jiaoban-conversation-phase[data-message-kind="composer"] > .project-canvas-detail-card {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
