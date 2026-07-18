@@ -9,6 +9,11 @@ import type {
 // 这里若挂 useEffect，会被离线测试的裸函数调用 renderComposite 撞坏 hooks dispatcher）。
 export const CONVERSATION_STREAM_ANCHOR_ID = "jiaoban-conversation-stream";
 
+// P1-E 诚实关门（2026-07-18 用户拍板 a）：非固定测试项目的对话族入口统一给这句人话——与后端
+// consultant_agent.rs::HONEST_SHUTDOWN_NON_TEST_PROJECT_MESSAGE 逐字同句，别各说各话。
+export const HONEST_SHUTDOWN_NON_TEST_PROJECT_MESSAGE =
+  "这个项目还没接执行——当前版本先伺候固定测试项目，开放真实项目是后面阶段的事。";
+
 export type JiaobanConversationPhaseKind = "composer" | "conversation" | "proposal" | "delivery" | "legacy";
 
 export type JiaobanConversationUserTurn = {

@@ -98,7 +98,6 @@ impl SupervisorActionAdapter for WorkbenchSupervisorActionAdapter {
                 | SupervisorActionKind::WaitWorker { .. }
                 | SupervisorActionKind::Finalize { .. }
                 | SupervisorActionKind::ReportUser { .. }
-                | SupervisorActionKind::RequestUserDecision { .. }
         )
     }
 
@@ -152,18 +151,6 @@ impl SupervisorActionAdapter for WorkbenchSupervisorActionAdapter {
                     &action.runtime.authorization_id,
                     message,
                 )?
-            }
-            SupervisorActionKind::RequestUserDecision { question } => {
-                return Ok(SupervisorActionAdapterResult {
-                    status: "waiting_user".to_string(),
-                    summary: format!("主管请求用户决定：{question}"),
-                    worker_id: None,
-                    adapter_id: "syn-control-core".to_string(),
-                    evidence_present: false,
-                    dispatch_ref: None,
-                    readback_ref: None,
-                    audit_ref: None,
-                });
             }
         };
         let worker_id = value
@@ -762,9 +749,7 @@ fn guard_action(
             worker_task_package_fingerprint(runtime, worker_id)?
                 .unwrap_or_else(|| prior_identity.task_package_fingerprint())
         }
-        SupervisorActionKind::Finalize { .. }
-        | SupervisorActionKind::ReportUser { .. }
-        | SupervisorActionKind::RequestUserDecision { .. } => {
+        SupervisorActionKind::Finalize { .. } | SupervisorActionKind::ReportUser { .. } => {
             prior_identity.task_package_fingerprint()
         }
     };
@@ -1521,9 +1506,6 @@ fn action_idempotency_key(
         }),
         SupervisorActionKind::ReportUser { message } => {
             json!({"message_sha256": crate::utils::hash::sha256_hex(message)})
-        }
-        SupervisorActionKind::RequestUserDecision { question } => {
-            json!({"question_sha256": crate::utils::hash::sha256_hex(question)})
         }
     };
     let material = serde_json::to_string(&json!({
@@ -2924,29 +2906,7 @@ mod tests {
         assert_eq!(store.actions[0].execution_status, "protocol_invalid");
     }
 
-    #[test]
-    fn station3a_request_user_decision_is_waiting_without_user_cancel_attribution() {
-        let fixture = Fixture::new();
-        let proposal = parse_supervisor_action_proposal(
-            r#"{"schema_version":"supervisor_action_proposal.v1","kind":"request_user_decision","question":"是否扩大范围？","reason":"当前任务包不覆盖该写入","expected_result":"等待用户决定"}"#,
-        )
-        .expect("proposal");
-        let result = execute_supervisor_action(
-            &fixture.runtime,
-            proposal,
-            &WorkbenchSupervisorActionAdapter,
-        )
-        .expect("waiting result");
-        assert_eq!(result.status, "waiting_user");
-        assert!(!result.summary.contains("user_cancelled"));
-        assert_eq!(
-            load_store(&fixture.path)
-                .expect("action store")
-                .actions
-                .last()
-                .expect("waiting record")
-                .execution_status,
-            "waiting_user"
-        );
-    }
+    // P1-E 旧路退役：pilot 问人死胡同(RequestUserDecision)已整体退场，本测试随动作一起删除
+    // ——「不冒充用户取消」的语义已由 P1-B `submit_supervisor_resident_answer` 双拒测试承接
+    // （见 supervisor_resident_session_tests.rs），waiting_user 状态词本身不退（保守停/求助仍用它）。
 }

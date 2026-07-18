@@ -4,6 +4,12 @@
 // command_plan_for 不改），**不走 worker 执行闸**（只读 ≠ 执行，但结构性只读挡死写/跑命令）；产出喂 C1。
 // 本文件 include! 进 crate root（同 commands.rs/types.rs）：直接用 root 的 C1 类型；std 用全限定避免 use 撞。
 
+// P1-E 诚实关门（2026-07-18 用户拍板 a）：项目主管对话族（说目标出方案/授权后拆任务）目前只开通
+// 固定测试项目；非测试项目（含站 3b）统一给这句人话，不再默认走旧塞纸条 fallback。
+// consultant_agent.rs/director_agent.rs 经 lib.rs include! 共享同一 crate 根命名空间，两处直接复用。
+pub(crate) const HONEST_SHUTDOWN_NON_TEST_PROJECT_MESSAGE: &str =
+    "这个项目还没接执行——当前版本先伺候固定测试项目，开放真实项目是后面阶段的事。";
+
 // ===== 契约缝（稳定 trait，下游循环只认它）=====
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -43,10 +49,9 @@ pub(crate) struct ConsultationProposal {
     pub(crate) suggest_workflow: bool,
 }
 
-pub(crate) trait ConsultantAgent {
-    fn consult(&self, ctx: &ProjectContext, question: &str)
-        -> Result<ConsultationProposal, String>;
-}
+// P1-E 旧路退役（2026-07-18 用户拍板 a·诚实关门）：ConsultantAgent trait 随其唯一真实现 CliConsultantAgent
+// 一并删除——trait 只剩测试脚手架意义，生产 run_project_consultation 命令从不经它调用（测试项目走
+// run_resident_project_consultation_inner，非测试项目诚实关门 Err）。
 
 // ===== ProjectContext（注入·策展核心）=====
 
@@ -684,38 +689,10 @@ fn resident_consultant_build_prompt(
     prompt
 }
 
-// ===== CliConsultantAgent（tier-1 impl：codex 自带 loop、自己只读读文档）=====
-pub(crate) struct CliConsultantAgent {
-    pub(crate) timeout_ms: i64,
-}
-
-impl Default for CliConsultantAgent {
-    fn default() -> Self {
-        Self {
-            // 真咨询要 codex 只读交叉读多篇文档(红队/开发计划)+出结构化 JSON，180s 撞超时被 kill（取不回答案）。
-            // 调到 420s 留足只读+推理+JSON 的余量；被咨询项目仍只读（confinement 不变）。
-            timeout_ms: 420_000,
-        }
-    }
-}
-
-impl ConsultantAgent for CliConsultantAgent {
-    fn consult(
-        &self,
-        ctx: &ProjectContext,
-        question: &str,
-    ) -> Result<ConsultationProposal, String> {
-        let prompt = consultant_build_prompt(ctx, question);
-        // 结构性只读：readonly_codex_consult 写死 read-only 沙箱·写盘根空·不走执行闸（codex_local_runner）。
-        // P1-E 退役候选：P1-A 固定测试项目已改走项目主管常驻会话；非测试项目暂保留原有只读塞纸条。
-        let raw = codex_local_runner::readonly_codex_consult(
-            &ctx.project_root,
-            &prompt,
-            Some(self.timeout_ms),
-        )?;
-        parse_consultation_proposal(&raw)
-    }
-}
+// P1-E 旧路退役（2026-07-18 用户拍板 a·诚实关门）：CliConsultantAgent（非测试项目塞纸条 tier-1 impl）
+// 整体删除——固定测试项目早已改走项目主管常驻会话（P1-A），非测试项目现在诚实关门（见路由 else 分支）。
+// `readonly_codex_consult`/`consultant_build_prompt`/`parse_consultation_proposal` 等共享器官零碰：
+// 全局主管两钩点、秘书、resident 常驻路（P1-A/B）仍在消费。
 
 // 编辑类方案的唯一写授权白名单（站 4）：常量单点、不可配置、不可由咨询请求改写。
 // 白名单内才给当前项目根这一条写根；其余项目必须降为纯建议只读，防止“能预览任意项目”滑成“能改任意项目”。
@@ -734,11 +711,10 @@ fn profile_edit_test_project_scope(
         .then(|| {
             (
                 vec![project_root.to_string()],
-                vec![
-                    "read_file".to_string(),
-                    "write_file".to_string(),
-                    "apply_patch".to_string(),
-                ],
+                // worker 唯一执行工具=shell(director prompt 工具箱事实同口径);写域由沙箱锁定。
+                // 曾写 read_file/write_file/apply_patch 三个不存在的独立工具名→主管照抄进任务文本
+                // →toolbox lint 拦→重拆死循环(07-18 真单实锤),此处必须与 lint 白名单同一世界观。
+                vec!["shell(读写·写域由沙箱锁定)".to_string()],
                 vec!["codex-dev".to_string(), "project_director".to_string()],
             )
         })
@@ -837,7 +813,7 @@ fn map_consultation_to_c1_input_with_user_requirement_snapshot(
                     allowed_agent_ids: vec![],
                     allowed_read_roots: vec![project_root.to_string()],
                     allowed_write_roots: vec![],
-                    allowed_tools: vec!["read_file".to_string()],
+                    allowed_tools: vec!["shell(只读: cat/ls/sed)".to_string()],
                     allowed_checks: vec![],
                     allowed_task_package_kinds: vec!["task_package".to_string()],
                     stop_conditions,
@@ -863,7 +839,7 @@ fn map_consultation_to_c1_input_with_user_requirement_snapshot(
                 allowed_agent_ids: vec![],
                 allowed_read_roots: vec![project_root.to_string()],
                 allowed_write_roots: vec![],
-                allowed_tools: vec!["read_file".to_string()],
+                allowed_tools: vec!["shell(只读: cat/ls/sed)".to_string()],
                 allowed_checks: es.checks.clone(),
                 allowed_task_package_kinds: vec!["task_package".to_string()],
                 stop_conditions,
@@ -878,7 +854,7 @@ fn map_consultation_to_c1_input_with_user_requirement_snapshot(
             allowed_agent_ids: vec![],
             allowed_read_roots: vec![project_root.to_string()],
             allowed_write_roots: vec![],
-            allowed_tools: vec!["read_file".to_string()],
+            allowed_tools: vec!["shell(只读: cat/ls/sed)".to_string()],
             allowed_checks: vec![],
             allowed_task_package_kinds: vec!["task_package".to_string()],
             stop_conditions,
@@ -954,21 +930,9 @@ pub(crate) fn write_consultation_proposal(
     Ok(output.proposal)
 }
 
-// 内层（同步·spawn_blocking 里调；可单测·注入 stub 咨询不起 codex）。
-fn run_project_consultation_inner(
-    path: &std::path::Path,
-    consultant: &dyn ConsultantAgent,
-    project_root: &str,
-    goal: &str,
-    actor_id: &str,
-) -> Result<ProjectConsultationProposal, String> {
-    // 1. 装配 ProjectContext（注入策展文档正文·tier-1）+ 用**手里的真实 path** 召回本项目记忆（刀B·真值不死锚）。
-    let mut ctx = load_project_context(project_root)?;
-    ctx.memory_summary = recall_project_memory_summary_at(path, project_root);
-    // 2. 咨询 LM 出方案（结构性只读·readonly_codex_consult·不碰执行闸）。
-    let proposal = consultant.consult(&ctx, goal)?;
-    write_consultation_proposal(path, &proposal, project_root, goal, actor_id)
-}
+// P1-E 旧路退役：run_project_consultation_inner（内层·注入 ConsultantAgent trait 对象）随 trait 一并删除——
+// 已无生产调用者。它保护的「出方案即停·PendingUserConfirmation·不自动建授权」不变量改由测试直喂
+// write_consultation_proposal（本函数原先的下游共享落点，resident 成功分支也走它）覆盖。
 
 fn run_resident_project_consultation_inner(
     path: &std::path::Path,
@@ -1055,13 +1019,9 @@ async fn run_project_consultation(
                 &actor_id,
             )
         } else {
-            run_project_consultation_inner(
-                &path,
-                &CliConsultantAgent::default(),
-                &request.project_root,
-                &request.goal,
-                &actor_id,
-            )
+            // P1-E 诚实关门（用户 07-18 拍板 a）：项目主管对话族只开通固定测试项目；旧「非测试项目
+            // 塞纸条 fallback」（CliConsultantAgent）整体退役，不豁免站 3b（用户拍板明确扩到 3b）。
+            Err(HONEST_SHUTDOWN_NON_TEST_PROJECT_MESSAGE.to_string())
         }
     })
     .await
@@ -1278,11 +1238,7 @@ mod consultant_recall_tests {
             );
             assert_eq!(
                 input.scope_draft.allowed_tools,
-                vec![
-                    "read_file".to_string(),
-                    "write_file".to_string(),
-                    "apply_patch".to_string(),
-                ]
+                vec!["shell(读写·写域由沙箱锁定)".to_string()]
             );
             assert_eq!(
                 input.scope_draft.allowed_checks,
@@ -1300,7 +1256,7 @@ mod consultant_recall_tests {
             assert!(input.scope_draft.allowed_write_roots.is_empty());
             assert_eq!(
                 input.scope_draft.allowed_tools,
-                vec!["read_file".to_string()]
+                vec!["shell(只读: cat/ls/sed)".to_string()]
             );
             assert!(input.scope_draft.allowed_checks.is_empty());
             assert_eq!(
@@ -1342,7 +1298,7 @@ mod consultant_recall_tests {
         .expect("literal user check should map");
 
         assert!(input.scope_draft.allowed_write_roots.is_empty());
-        assert_eq!(input.scope_draft.allowed_tools, vec!["read_file"]);
+        assert_eq!(input.scope_draft.allowed_tools, vec!["shell(只读: cat/ls/sed)"]);
         assert_eq!(
             input.scope_draft.allowed_checks,
             vec!["node --check game.js"]

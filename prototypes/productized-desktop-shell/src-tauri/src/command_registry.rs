@@ -129,7 +129,6 @@ macro_rules! workbench_command_handler {
             update_work_item_state,
             bind_workflow_node_codex_session,
             unbind_workflow_node_codex_session,
-            prepare_workflow_node_dispatch,
             execute_workflow_node_dispatch,
             execute_experiment_node_dispatch,
             execute_project_workflow_node,

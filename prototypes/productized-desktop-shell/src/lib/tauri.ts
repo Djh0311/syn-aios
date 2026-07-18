@@ -25,7 +25,6 @@ import type {
   ProjectDirectorFailedActionRequest,
   ProjectDirectorFailedActionOutcome,
   ConfirmAndStartAuthorizedRunRequest,
-  ConfirmProjectDirectorTaskSessionBindingsRequest,
   PreviewPendingProposalDirectorPlanRequest,
   PreviewPendingProposalDirectorPlanOutcome,
   RunGlobalSupervisorReviewRequest,
@@ -172,7 +171,6 @@ import type {
   WorkflowNodeSessionBindRequest,
   WorkflowDispatchDirectorReviewRequest,
   WorkflowPermissionDecisionRequest,
-  WorkflowNodeDispatchPrepareRequest,
   WorkflowNodeDispatchResult,
   WorkflowNodeSessionUnbindRequest,
   WorkflowStateMutationResult,
@@ -729,10 +727,8 @@ export function unbindWorkflowNodeCodexSession(request: WorkflowNodeSessionUnbin
   return invoke<WorkflowStateMutationResult>("unbind_workflow_node_codex_session", { request });
 }
 
-export function prepareWorkflowNodeDispatch(request: WorkflowNodeDispatchPrepareRequest): Promise<WorkflowNodeDispatchResult> {
-  ensureTauriRuntime();
-  return invoke<WorkflowNodeDispatchResult>("prepare_workflow_node_dispatch", { request });
-}
+// P1-E 死码清扫（2026-07-18）：prepareWorkflowNodeDispatch 全仓零调用者（P1-D 勘察已实锤·本轮复核仍零）——
+// 随其删除的后端命令包装层见 commands.rs（内层 prepare_workflow_node_dispatch_for_index_at 仍被测试直调，未删）。
 
 export function prepareOfflineRoleDispatch(request: OfflineRoleDispatchRequest): Promise<WorkflowNodeDispatchResult> {
   ensureTauriRuntime();
@@ -957,13 +953,9 @@ export function confirmAndStartAuthorizedRun(
   return invoke<AutoAdvanceRoleLoopOutcome>("confirm_and_start_authorized_run", { request });
 }
 
-// 开工前逐任务会话映射确认：不是审批，后端仍复查 active 授权、任务集合与已有会话，再复用 prepare/C1 起链。
-export function confirmProjectDirectorTaskSessionBindings(
-  request: ConfirmProjectDirectorTaskSessionBindingsRequest,
-): Promise<AutoAdvanceRoleLoopOutcome> {
-  ensureTauriRuntime();
-  return invoke<AutoAdvanceRoleLoopOutcome>("confirm_project_director_task_session_bindings", { request });
-}
+// P1-E 死码清扫（2026-07-18）：confirmProjectDirectorTaskSessionBindings 前端 wrapper 零调用者
+// （P1-D 摘了绑定停点面板后没人再调）——后端命令 confirm_project_director_task_session_bindings
+// 仍注册在案（director_agent.rs），本包不动它：留给 P2-B「挑会话降为可选项」判是否复用，明示不静默漂。
 
 // Station 2 · 主管编排试点：只发给后端新发射器；授权确认仍复用现有人闸命令。
 export function launchSupervisorPilot(

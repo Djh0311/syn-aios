@@ -411,39 +411,10 @@ impl Default for CliDirectorAgent {
     }
 }
 
-impl DirectorAgent for CliDirectorAgent {
-    fn plan(
-        &self,
-        ctx: &ProjectContext,
-        proposal: &ProjectConsultationProposal,
-    ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
-        let prompt = director_build_prompt(ctx, proposal);
-        // 复用咨询的只读 confinement：readonly_codex_consult（read-only 沙箱·写盘根空·项目只读·不走执行闸）。
-        // P1-E 退役候选：P1-A 固定测试项目已改走项目主管常驻会话；非测试项目暂保留原有只读塞纸条。
-        let raw = codex_local_runner::readonly_codex_consult(
-            &ctx.project_root,
-            &prompt,
-            Some(self.timeout_ms),
-        )?;
-        parse_director_plan(&raw, proposal)
-    }
-
-    // 2.1 预拆：同一只读 confinement，只把 prompt 换成「待确认·仅预览」措辞（别对 LM 说已授权）。
-    fn plan_preview(
-        &self,
-        ctx: &ProjectContext,
-        proposal: &ProjectConsultationProposal,
-    ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
-        let prompt = director_build_prompt_variant(ctx, proposal, true);
-        // P1-E 退役候选：固定测试项目预拆已接入常驻主管；此处仍是非测试项目 fallback。
-        let raw = codex_local_runner::readonly_codex_consult(
-            &ctx.project_root,
-            &prompt,
-            Some(self.timeout_ms),
-        )?;
-        parse_director_plan(&raw, proposal)
-    }
-}
+// P1-E 旧路退役（2026-07-18 用户拍板 a·诚实关门）：CliDirectorAgent 的 `DirectorAgent` 实现（plan/
+// plan_preview，非测试项目塞纸条拆任务）整体删除——固定测试项目早已接常驻主管（P1-A）。struct 本体、
+// `DirectorFinalMarker`/`DirectorSummaryGenerator` 两个实现（`final_mark`/`summarize_chain`，链尾终标
+// 与总结，非对话对象）原样保留，红线：diff 绕开这两块。
 
 // P1-A's thin route adapter: it reuses the existing prompt builders and task
 // parser, but gives the fixed test project a resident supervisor thread. Other
@@ -467,7 +438,7 @@ impl DirectorAgent for ResidentProjectDirectorAgent {
         proposal: &ProjectConsultationProposal,
     ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
         if ctx.project_root != WORKFLOW_ENGINE_TEST_PROJECT_ROOT {
-            return CliDirectorAgent::default().plan(ctx, proposal);
+            return Err(HONEST_SHUTDOWN_NON_TEST_PROJECT_MESSAGE.to_string());
         }
         let prompt = director_build_prompt(ctx, proposal);
         let raw = supervisor_session_launcher::consult_supervisor_resident(
@@ -486,7 +457,7 @@ impl DirectorAgent for ResidentProjectDirectorAgent {
         proposal: &ProjectConsultationProposal,
     ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
         if ctx.project_root != WORKFLOW_ENGINE_TEST_PROJECT_ROOT {
-            return CliDirectorAgent::default().plan_preview(ctx, proposal);
+            return Err(HONEST_SHUTDOWN_NON_TEST_PROJECT_MESSAGE.to_string());
         }
         let prompt = director_build_prompt_variant(ctx, proposal, true);
         let raw = supervisor_session_launcher::consult_supervisor_resident(

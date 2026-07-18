@@ -860,7 +860,7 @@ function ProjectJiaobanPanelBrowser({
   // P1-D:批态卡上的[按我说的改]/[答完问题出新方案]按钮改走同一份常驻框草稿(双通道同源
   // submitAmendmentText)——卡上不再单独留一个输入框(见 JiaobanAuthorizeState 的 amendment/onAmend)。
   const conversationComposer = makeConversationComposer(
-    { phase, latestProposal, consultLoading, onAmendment: submitAmendmentText, onNewGoal: submitGoal },
+    { phase, latestProposal, consultLoading, isTestProject, onAmendment: submitAmendmentText, onNewGoal: submitGoal },
   );
 
   // 刀2「批前看图」触发条件 = 工作流开关开着（AI 建议时开关默认开·见上面 reset effect；用户也可手动开/关）。

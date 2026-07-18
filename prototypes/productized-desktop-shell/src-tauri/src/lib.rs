@@ -4562,32 +4562,31 @@ mod tests {
 
     // ===== S3 咨询第一刀·stub TDD（自动测试绝不真起 codex）=====
 
-    // stub ConsultantAgent：不起 codex，按 ctx/question 回固定结构化方案——证编排，不证脑。
-    struct StubConsultant;
-    impl ConsultantAgent for StubConsultant {
-        fn consult(
-            &self,
-            ctx: &ProjectContext,
-            question: &str,
-        ) -> Result<ConsultationProposal, String> {
-            Ok(ConsultationProposal {
-                user_goal: format!("就「{question}」给方向"),
-                goal_summary: format!("基于 {} 的入口文档定方向", ctx.project_name),
-                scope_note: "只读咨询、不执行".to_string(),
-                reasoning: vec![format!("入口文档存在={}", ctx.entry_document.is_some())],
-                risks: vec![ConsultationRisk {
-                    severity: "warning".to_string(),
-                    summary: "文档可能过期".to_string(),
-                    mitigation: "交叉核对".to_string(),
-                }],
-                must_stop_points: vec!["需用户确认范围".to_string()],
-                worker_acceptance_criteria: vec!["本次只读咨询不派发 worker".to_string()],
-                control_core_acceptance_criteria: vec!["保持只读且记录方案".to_string()],
-                supervisor_acceptance_criteria: vec!["检查咨询结论是否有依据".to_string()],
-                next_steps: vec!["进角色循环授权".to_string()],
-                execution_scope: None, // 只读咨询 stub·不需要下游改东西
-                suggest_workflow: false,
-            })
+    // stub 咨询方案：不起 codex，按 ctx/question 回固定结构化方案——证编排，不证脑。
+    // P1-E：ConsultantAgent trait 随其唯一真实现 CliConsultantAgent 一并退役（trait 只剩测试脚手架意义，
+    // 生产 run_project_consultation 命令从不经它——测试项目走 resident、非测试项目诚实关门）；
+    // 这里改普通夹具函数，产出与旧 StubConsultant 逐字节相同，供下方存量测试直喂 write_consultation_proposal。
+    fn stub_consultation_proposal_fixture(
+        ctx: &ProjectContext,
+        question: &str,
+    ) -> ConsultationProposal {
+        ConsultationProposal {
+            user_goal: format!("就「{question}」给方向"),
+            goal_summary: format!("基于 {} 的入口文档定方向", ctx.project_name),
+            scope_note: "只读咨询、不执行".to_string(),
+            reasoning: vec![format!("入口文档存在={}", ctx.entry_document.is_some())],
+            risks: vec![ConsultationRisk {
+                severity: "warning".to_string(),
+                summary: "文档可能过期".to_string(),
+                mitigation: "交叉核对".to_string(),
+            }],
+            must_stop_points: vec!["需用户确认范围".to_string()],
+            worker_acceptance_criteria: vec!["本次只读咨询不派发 worker".to_string()],
+            control_core_acceptance_criteria: vec!["保持只读且记录方案".to_string()],
+            supervisor_acceptance_criteria: vec!["检查咨询结论是否有依据".to_string()],
+            next_steps: vec!["进角色循环授权".to_string()],
+            execution_scope: None, // 只读咨询 stub·不需要下游改东西
+            suggest_workflow: false,
         }
     }
 
@@ -4671,10 +4670,7 @@ mod tests {
         let project_root = dir.to_string_lossy().to_string();
         // 装配 ProjectContext → stub 咨询 → 产出
         let ctx = load_project_context(&project_root).expect("ctx");
-        let agent = StubConsultant;
-        let proposal = agent
-            .consult(&ctx, "这个项目下一步该做什么?")
-            .expect("stub 咨询");
+        let proposal = stub_consultation_proposal_fixture(&ctx, "这个项目下一步该做什么?");
         assert!(!proposal.goal_summary.is_empty());
         // 映射进 C1 输入
         let input = map_consultation_to_c1_input(&proposal, &project_root, "consultant-fixture")
@@ -4720,9 +4716,13 @@ mod tests {
         bootstrap_project_workflow_at(&path, &fixture_project(&project_root)).expect("workflow");
         let user_original_requirement =
             "创建 station3a-control-core-proof-v4.txt，精确内容：v4 literal bytes: [A=1]; 不加换行。";
-        let proposal = run_project_consultation_inner(
+        // P1-E：ConsultantAgent/run_project_consultation_inner 随 CliConsultantAgent 一并退役；
+        // 改直喂生产共享的 write_consultation_proposal（resident 路成功分支也走它，见 consultant_agent.rs）。
+        let ctx = load_project_context(&project_root).expect("ctx");
+        let stub_proposal = stub_consultation_proposal_fixture(&ctx, user_original_requirement);
+        let proposal = write_consultation_proposal(
             &path,
-            &StubConsultant,
+            &stub_proposal,
             &project_root,
             user_original_requirement,
             "tester",
@@ -4775,7 +4775,10 @@ mod tests {
         let state_dir = test_temp_dir("p2-consult-readonly-state");
         let path = state_dir.join("workflow-state.v0.json");
         bootstrap_project_workflow_at(&path, &fixture_project(&project_root)).expect("workflow");
-        run_project_consultation_inner(&path, &StubConsultant, &project_root, "下一步?", "tester")
+        // P1-E：改直喂生产共享的 write_consultation_proposal（见上一测试同款理由）。
+        let ctx = load_project_context(&project_root).expect("ctx");
+        let stub_proposal = stub_consultation_proposal_fixture(&ctx, "下一步?");
+        write_consultation_proposal(&path, &stub_proposal, &project_root, "下一步?", "tester")
             .expect("咨询出方案");
         let value = read_workflow_state_value(&path).expect("state readable");
         let empty = |key: &str| {
@@ -4859,74 +4862,11 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         );
     }
 
-    // S3·§6 真咨询（高危·只读上真项目·用户在场·默认 #[ignore]）：CliConsultantAgent 上猫猫点菜 + 防幻觉真题。
-    // 真跑=spec §6 单独步；显式 `cargo test --lib s3_real_consult_mao_mao_dian_cai -- --ignored --nocapture` 才起真 codex。
-    #[test]
-    #[ignore = "S3 §6: real read-only codex consultation on a real non-test project (user present)"]
-    fn s3_real_consult_mao_mao_dian_cai() {
-        let project = "/Users/yoyi/project/猫猫点菜小程序";
-        let ctx = load_project_context(project).expect("装配猫猫点菜 ProjectContext");
-        assert!(
-            ctx.entry_document.is_some(),
-            "猫猫点菜应有入口文档(docs/README.md)"
-        );
-        let agent = CliConsultantAgent::default();
-        let question = "红队 19 条说全收口，抽查开发计划 M0，有没有红队点了、开发计划没接的?";
-        let proposal = agent
-            .consult(&ctx, question)
-            .expect("真咨询应产出结构化方案");
-        println!("[S3_CONSULT] goal_summary={}", proposal.goal_summary);
-        println!("[S3_CONSULT] reasoning={:?}", proposal.reasoning);
-        println!("[S3_CONSULT] risks={:?}", proposal.risks);
-        assert!(
-            !proposal.goal_summary.trim().is_empty() && !proposal.reasoning.is_empty(),
-            "答案应落地非空"
-        );
-        let input = map_consultation_to_c1_input(&proposal, project, "consultant").expect("map");
-        assert!(!input.proposed_steps.is_empty(), "产出应喂得进 C1");
-    }
-
-    // §5 真跑·咨询判定要改东西→给执行范围块（单独步·#[ignore]·真 codex 只读·用户在场）：对"要改代码"目标 → 真咨询
-    // 应给 execution_scope 块（判定改东西·非纯咨询）；map 后写范围非空(=档位) + 带 codex-dev 角色（修用户踩的
-    // "写入范围为空"/"角色不在授权范围"两卡点）。flake→retry（核方案实物·记忆 real-codex-run-flaky）。
-    #[test]
-    #[ignore = "consultant execution-scope: real read-only codex consult on a change-goal yields an execution_scope block; map assembles profile write range (user present)"]
-    fn consultant_real_consult_yields_execution_scope_for_change_goal() {
-        let project = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
-        let ctx = load_project_context(project).expect("ctx");
-        let proposal = CliConsultantAgent::default()
-            .consult(
-                &ctx,
-                "我要在这个项目里新增一个小功能、需要真改代码文件——给我落地方案，圈清要改哪些文件、怎么验收。",
-            )
-            .expect("真咨询应产出方案");
-        println!("[CONSULT_SCOPE] goal={}", proposal.goal_summary);
-        println!(
-            "[CONSULT_SCOPE] execution_scope={:?}",
-            proposal.execution_scope
-        );
-        assert!(
-            proposal.execution_scope.is_some(),
-            "要改代码的目标·咨询应给 execution_scope 块（判定改东西·非纯咨询/只读）"
-        );
-        // map 按档位装配 → 写范围非空(=固定测试项目根) + 接上 codex-dev（两卡点都不再触发）。
-        let input = map_consultation_to_c1_input(&proposal, project, "consultant").expect("map");
-        assert!(
-            !input.scope_draft.allowed_write_roots.is_empty(),
-            "map 后写范围非空"
-        );
-        assert!(
-            input
-                .scope_draft
-                .allowed_role_ids
-                .contains(&"codex-dev".to_string()),
-            "map 后带 codex-dev 执行角色"
-        );
-        println!(
-            "[CONSULT_SCOPE] mapped write_roots={:?} roles={:?}",
-            input.scope_draft.allowed_write_roots, input.scope_draft.allowed_role_ids
-        );
-    }
+    // P1-E 旧路退役（2026-07-18 用户拍板 a·诚实关门）：以下两条真跑测试随 CliConsultantAgent 一并删除——
+    // ①s3_real_consult_mao_mao_dian_cai 验的是「非测试真实项目真咨询」，该能力已整体退役（router else 分支
+    // 现直接 Err 诚实关门，不再有生产路径可测）；②consultant_real_consult_yields_execution_scope_for_change_goal
+    // 验的是「直接实例化 CliConsultantAgent 对测试项目咨询」，测试项目的生产路径现只走 resident（不同基础设施、
+    // 无同构 trait 调用可替换）。execution_scope 映射逻辑本身仍有 stub 覆盖（下方「咨询方案自带执行范围」区块）。
 
     // ===== 咨询方案自带执行范围（execution_scope）·map 透传 / 不默认 / 护栏 / 解析向后兼容 ·stub =====
 
@@ -4971,8 +4911,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             input
                 .scope_draft
                 .allowed_tools
-                .contains(&"write_file".to_string()),
-            "工具=档位（含写能力·非咨询报的）"
+                .contains(&"shell(读写·写域由沙箱锁定)".to_string()),
+            "工具=档位（真实 shell 口径·非咨询报的）"
         );
         assert_eq!(
             input.scope_draft.allowed_checks,
@@ -5007,7 +4947,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         );
         assert_eq!(
             input.scope_draft.allowed_tools,
-            vec!["read_file".to_string()],
+            vec!["shell(只读: cat/ls/sed)".to_string()],
             "纯咨询·只读工具"
         );
         assert_eq!(
@@ -5067,47 +5007,12 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         );
     }
 
-    // P2·§5 真跑（单独步·用户在场·真咨询只读·默认 #[ignore]）：真项目（猫猫点菜·只读）+ 目标 → **经命令内层** →
-    // CliConsultantAgent 真 codex 只读咨询 → 出 grounded 方案 → 写进 store（PendingUserConfirmation·没自动确认）。
-    // 证「一个命令把目标→AI 出方案跑通」。显式 `cargo test --lib run_project_consultation_real_run -- --ignored --nocapture`。
-    // 只读·读真实非测试项目不碰高危#1（只读豁免决策 2026-06-25）；flake → retry（咨询偶发·核方案实物）。
-    #[test]
-    #[ignore = "P2 consultant-LM: one command turns a goal into an AI-consulted proposal (real read-only codex) on a real project (user present)"]
-    fn run_project_consultation_real_run() {
-        let project = "/Users/yoyi/project/猫猫点菜小程序";
-        let state_dir = test_temp_dir("p2-consult-real-state");
-        let path = state_dir.join("workflow-state.v0.json");
-        bootstrap_project_workflow_at(&path, &fixture_project(project)).expect("workflow");
-        let consultant = CliConsultantAgent::default();
-        let proposal = run_project_consultation_inner(
-            &path,
-            &consultant,
-            project,
-            "红队 19 条说全收口，抽查开发计划 M0，有没有红队点了、开发计划没接的?",
-            "user-fixture",
-        )
-        .expect("一个命令应把目标→AI 出方案跑通");
-        println!(
-            "[P2_CONSULT] proposal_id={} status={:?} goal={}",
-            proposal.proposal_id, proposal.status, proposal.goal_summary
-        );
-        println!("[P2_CONSULT] steps={:?}", proposal.proposed_steps);
-        assert!(!proposal.proposal_id.is_empty(), "应建出方案");
-        assert!(
-            !proposal.goal_summary.trim().is_empty() && !proposal.proposed_steps.is_empty(),
-            "AI 方案应落地非空（grounded）"
-        );
-        assert!(
-            matches!(
-                proposal.status,
-                ProjectConsultationProposalStatus::PendingUserConfirmation
-            ),
-            "出方案就停·等用户确认（人闸不省）：{:?}",
-            proposal.status
-        );
-        assert!(proposal.plan_authorization_id.is_none(), "不自动建授权");
-        let _ = fs::remove_dir_all(state_dir);
-    }
+    // P1-E 旧路退役（2026-07-18 用户拍板 a·诚实关门）：run_project_consultation_real_run 随
+    // CliConsultantAgent/run_project_consultation_inner 一并删除——验的是「经命令内层对非测试真实项目真咨询」，
+    // 该函数已无生产调用者（真实 run_project_consultation 命令对非测试项目现直接 Err 诚实关门，从不落到
+    // run_project_consultation_inner；测试项目走 run_resident_project_consultation_inner，另一条函数）。
+    // 其保护的「出方案即停·不自动建授权·PendingUserConfirmation」不变量仍由上方 stub 测试覆盖
+    // （run_project_consultation_writes_pending_proposal_no_autoconfirm 等，已改直喂 write_consultation_proposal）。
 
     // ===== S3·项目主管 agent·stub TDD（自动测试不真起 codex）=====
 
@@ -5282,8 +5187,11 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
     #[ignore = "S3 director: real read-only LM decomposition of an authorized proposal (user present)"]
     fn s3_director_real_plan() {
         let (proposal, dir) = s3_director_fixture_proposal("s3-director-real");
+        // P1-E：CliDirectorAgent 的 DirectorAgent 实现已退役，非测试项目诚实关门；固定测试项目改走
+        // 生产同款 ResidentProjectDirectorAgent（真跑常驻主管路，与 confirm_and_start_authorized_run 一致）。
+        let path = dir.join("workflow-state.v0.json");
         let ctx = load_project_context(WORKFLOW_ENGINE_TEST_PROJECT_ROOT).expect("ctx");
-        let plan = CliDirectorAgent::default()
+        let plan = ResidentProjectDirectorAgent::new(path.clone())
             .plan(&ctx, &proposal)
             .expect("real director plan should return planned_tasks");
         println!("[S3_DIRECTOR] task_count={}", plan.len());
@@ -5893,9 +5801,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "write-s3-dispatch-boundary",
         )
         .expect("boundary review activate");
-        // 真 director LM 拆解
+        // 真 director LM 拆解（P1-E：改走生产同款 ResidentProjectDirectorAgent）
         let ctx = load_project_context(test_root).expect("ctx");
-        let planned = CliDirectorAgent::default()
+        let planned = ResidentProjectDirectorAgent::new(path.clone())
             .plan(&ctx, &confirmed.proposal)
             .expect("real director plan");
         println!("[S3_DISPATCH] director planned {} task(s)", planned.len());
@@ -6033,9 +5941,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "write-s3-chain-boundary",
         )
         .expect("boundary review activate");
-        // 真 director LM 拆解成自包含任务链（应 ≥2 任务、带 depends_on）。
+        // 真 director LM 拆解成自包含任务链（应 ≥2 任务、带 depends_on）。P1-E：改走生产同款 Resident。
         let ctx = load_project_context(test_root).expect("ctx");
-        let planned = CliDirectorAgent::default()
+        let planned = ResidentProjectDirectorAgent::new(path.clone())
             .plan(&ctx, &confirmed.proposal)
             .expect("real director plan");
         println!("[S3_CHAIN] director planned {} task(s)", planned.len());
@@ -6246,8 +6154,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "write-s3-midstop-boundary",
         )
         .expect("boundary review activate");
+        // P1-E：改走生产同款 ResidentProjectDirectorAgent。
         let ctx = load_project_context(test_root).expect("ctx");
-        let planned = CliDirectorAgent::default()
+        let planned = ResidentProjectDirectorAgent::new(path.clone())
             .plan(&ctx, &confirmed.proposal)
             .expect("real director plan");
         assert!(
@@ -9483,12 +9392,13 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             approved_planned_tasks: Some(vec![task]),
             preview_session_bindings: vec![],
         };
+        // P1-E：改走生产同款 ResidentProjectDirectorAgent（此测试跳过真 LM 拆，director 只走 final_mark/summarize 尾链）。
         let outcome = run_confirm_and_start_authorized_run_inner(
             &path,
             &index,
             &readback_db_path,
             &runner,
-            &CliDirectorAgent::default(),
+            &ResidentProjectDirectorAgent::new(path.clone()),
             &ManualRelayJiaobanNewSessionCreator,
             &request,
         )
@@ -9640,10 +9550,10 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &fixture_node_session_bind_request(test_root, &node_id, None, real_session),
         )
         .expect("bind");
-        // 一个命令：授权后自动推进（真主管 LM 拆 + 真 worker codex 链）。
+        // 一个命令：授权后自动推进（真主管 LM 拆 + 真 worker codex 链）。P1-E：改走生产同款 Resident。
         let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
         let readback_db_path = codex_db::default_state_db_path();
-        let director = CliDirectorAgent::default();
+        let director = ResidentProjectDirectorAgent::new(path.clone());
         let outcome = run_auto_advance_authorized_role_loop(
             &path,
             &index,
@@ -9725,9 +9635,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "write-jiaoban-real-proposal",
         )
         .expect("proposal");
-        // 合流：用户点[允许并开始] + 绑现有真会话。
+        // 合流：用户点[允许并开始] + 绑现有真会话。P1-E：改走生产同款 ResidentProjectDirectorAgent。
         let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
-        let director = CliDirectorAgent::default();
+        let director = ResidentProjectDirectorAgent::new(path.clone());
         let request = ConfirmAndStartAuthorizedRunRequest {
             project_root: test_root.to_string(),
             proposal_id: created.proposal.proposal_id.clone(),
@@ -10405,7 +10315,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "write-slice2-real-proposal",
         )
         .expect("proposal");
-        let director = CliDirectorAgent::default();
+        // P1-E：改走生产同款 ResidentProjectDirectorAgent。
+        let director = ResidentProjectDirectorAgent::new(path.clone());
         // 1) 批前预拆（真主管 LM 出图·零写盘·2.4 偶发早退自动重试一次）
         let preview = run_preview_pending_proposal_director_plan_inner(
             &path,

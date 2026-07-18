@@ -22,7 +22,6 @@ pub(crate) enum SupervisorActionKind {
     WaitWorker { worker_id: String },
     Finalize { verdict: SupervisorFinalizeVerdict },
     ReportUser { message: String },
-    RequestUserDecision { question: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,7 +48,6 @@ impl SupervisorActionKind {
             Self::WaitWorker { .. } => "wait_worker",
             Self::Finalize { .. } => "finalize",
             Self::ReportUser { .. } => "report_user",
-            Self::RequestUserDecision { .. } => "request_user_decision",
         }
     }
 }
@@ -114,9 +112,6 @@ pub(crate) fn parse_supervisor_action_proposal(
         }
         SupervisorActionKind::Finalize { .. } => {}
         SupervisorActionKind::ReportUser { message } => require_non_empty("message", message)?,
-        SupervisorActionKind::RequestUserDecision { question } => {
-            require_non_empty("question", question)?
-        }
     }
     Ok(proposal)
 }
@@ -137,9 +132,6 @@ fn allowed_fields_for(kind: &str) -> &'static [&'static str] {
         ],
         "finalize" => &["schema_version", "kind", "verdict", "reason", "expected_result"],
         "report_user" => &["schema_version", "kind", "message", "reason", "expected_result"],
-        "request_user_decision" => {
-            &["schema_version", "kind", "question", "reason", "expected_result"]
-        }
         _ => &[],
     }
 }
@@ -224,10 +216,6 @@ mod tests {
                 "report_user",
                 r#"{"schema_version":"supervisor_action_proposal.v1","kind":"report_user","message":"needs review","reason":"summary","expected_result":"visible report"}"#,
             ),
-            (
-                "request_user_decision",
-                r#"{"schema_version":"supervisor_action_proposal.v1","kind":"request_user_decision","question":"continue?","reason":"scope change","expected_result":"decision"}"#,
-            ),
         ] {
             assert_eq!(
                 parse_supervisor_action_proposal(proposal)
@@ -276,6 +264,23 @@ mod tests {
         }"#;
         assert!(parse_supervisor_action_proposal(missing_target).is_err());
         assert!(parse_supervisor_action_proposal(unknown_kind).is_err());
+    }
+
+    // P1-E 旧路退役：pilot 问人死胡同(RequestUserDecision)已退场——协议层不再认得这个 kind，
+    // 应和其它未知动作一样被拒（P1-B resident 问答通道已替代它）。
+    #[test]
+    fn station3a_protocol_rejects_retired_request_user_decision_kind() {
+        let retired = r#"{
+          "schema_version":"supervisor_action_proposal.v1",
+          "kind":"request_user_decision",
+          "question":"continue?",
+          "reason":"scope change",
+          "expected_result":"decision"
+        }"#;
+        assert!(
+            parse_supervisor_action_proposal(retired).is_err(),
+            "已退役的 request_user_decision 应和未知动作一样被拒"
+        );
     }
 
     #[test]

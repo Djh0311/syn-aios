@@ -4,6 +4,7 @@ import type { ProjectConsultationProposal, ProjectWorkflowSummary, WorkflowState
 import type { JiaobanPhase } from "./JiaobanArtifactViews";
 import {
   CONVERSATION_STREAM_ANCHOR_ID,
+  HONEST_SHUTDOWN_NON_TEST_PROJECT_MESSAGE,
   humanizeResidentAnswerOutcome,
   latestWaitingQuestionIdOf,
   supervisorConversationEntriesForProject,
@@ -132,17 +133,31 @@ export function useJiaobanConversationState({
     phase,
     latestProposal,
     consultLoading,
+    isTestProject,
     onAmendment,
     onNewGoal,
   }: {
     phase: JiaobanPhase;
     latestProposal: Pick<ProjectConsultationProposal, "created_at_ms"> | null;
     consultLoading: boolean;
+    isTestProject: boolean;
     onAmendment: (text: string) => void;
     onNewGoal: (text: string) => void;
   }) {
     // blocked=P3-C 通道不渲常驻框;say 也走同一个框(07-18 用户拍「只要一个对话框」);跑态禁发诚实说明。
     if (phase === "blocked") return null;
+    // P1-E 诚实关门（用户拍板 a·不豁免站 3b）：非固定测试项目——常驻框只出这一句人话，说新目标/按我说的改
+    // 都会打到后端已退役的塞纸条路；复用既有 disabled 路由形态，判据仍是调用方传入的 path-lock 结果，
+    // 这里不新造判断。已批准方案的[允许并开始]执行流走按钮而非本框，不受影响。
+    if (!isTestProject) {
+      return {
+        route: { kind: "disabled" as const, reason: HONEST_SHUTDOWN_NON_TEST_PROJECT_MESSAGE },
+        draft: composerDraft,
+        busy: false,
+        onDraftChange: setComposerDraft,
+        onSubmit: () => {},
+      };
+    }
     const waitingQuestionId = latestWaitingQuestionIdOf(
       supervisorConversationEntriesForProject(workflowState, projectRoot, projectWorkflow?.workflow_id),
     );

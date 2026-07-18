@@ -2314,14 +2314,9 @@ fn unbind_workflow_node_codex_session_for_index_at(
     unbind_workflow_node_codex_session_at(path, request)
 }
 
-#[tauri::command]
-fn prepare_workflow_node_dispatch(
-    request: WorkflowNodeDispatchPrepareRequest,
-    state: tauri::State<'_, AppState>,
-) -> Result<WorkflowNodeDispatchResult, String> {
-    let index = read_index(&state)?;
-    prepare_workflow_node_dispatch_for_index_at(&state.workflow_state_path, &index, &request)
-}
+// P1-E 死码清扫（2026-07-18）：#[tauri::command] fn prepare_workflow_node_dispatch（前端 wrapper 全仓零
+// 调用者）随其一并删除；下方 prepare_workflow_node_dispatch_for_index_at 仍被 lib.rs/
+// lib_task_package_dispatch_preparation_tests.rs 多处测试直调，保留不动。
 
 fn prepare_workflow_node_dispatch_for_index_at(
     path: &Path,

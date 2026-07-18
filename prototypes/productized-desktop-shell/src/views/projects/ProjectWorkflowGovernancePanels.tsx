@@ -36,6 +36,11 @@ import {
   stopProjectWorkflowChain,
 } from "../../lib/tauri";
 import { DetailLine } from "./projectWorkflowLabels";
+import { HONEST_SHUTDOWN_NON_TEST_PROJECT_MESSAGE } from "./jiaoban/JiaobanConversation";
+
+// 固定测试项目（自动干只在这真跑）。与 ProjectJiaobanPanel.tsx / WorkflowCommandConsoleView.tsx 同值同常量名
+// （历史留下的按文件各自一份，非本次新引入的判据——P1-E 复用既有形态，不新造判断）。
+const TEST_PROJECT_ROOT = "/Users/yoyi/codex-workflow-mario-test";
 
 export function ProjectDirectorTaskPlanCard({
   project,
@@ -520,6 +525,8 @@ export function ProjectConsultationProposalCard({
   const [decisionSummary, setDecisionSummary] = useState("");
   // 件 D · 说目标：让 AI 真咨询出方案的输入（取代手填模板）。
   const [goal, setGoal] = useState("");
+  // P1-E 诚实关门（用户拍板 a·不豁免站 3b）：非固定测试项目不再默认走塞纸条 fallback，本表单只出一句人话。
+  const isTestProject = project.project_root === TEST_PROJECT_ROOT;
 
   useEffect(() => {
     setDecisionSummary("");
@@ -543,7 +550,11 @@ export function ProjectConsultationProposalCard({
       {!proposal ? (
         <>
           {/* 件 D · 说目标 → AI 出方案（主路径）：真 codex 只读咨询出方案，取代手填模板。 */}
-          {projectWorkflow ? (
+          {projectWorkflow && !isTestProject ? (
+            <p className="role-loop-plain-note" aria-label="老实说明">
+              {HONEST_SHUTDOWN_NON_TEST_PROJECT_MESSAGE}
+            </p>
+          ) : projectWorkflow ? (
             <div className="role-loop-consult-trigger">
               <label className="proposal-decision-field">
                 <span>说目标 — 想让 AI 围绕什么出方案？</span>
@@ -582,7 +593,11 @@ export function ProjectConsultationProposalCard({
           {/* 已确认方案没有决策/重新创建按钮（canDecide 只认 draft/pending，重新创建只认 rejected/changes_requested）。
               一旦确认→授权→自动推进阻断（如「授权写入范围为空」），用户在此本无路重新出方案。补一个「重新说目标出方案」入口，
               复用现成 AI 咨询动作（buildRunProjectConsultationAction）——不加新后端调用；自动推进卡的「去重新出方案」按钮滚到这。 */}
-          {proposal.status === "user_confirmed" && projectWorkflow ? (
+          {proposal.status === "user_confirmed" && projectWorkflow && !isTestProject ? (
+            <p className="role-loop-plain-note" aria-label="老实说明">
+              {HONEST_SHUTDOWN_NON_TEST_PROJECT_MESSAGE}
+            </p>
+          ) : proposal.status === "user_confirmed" && projectWorkflow ? (
             <div className="role-loop-consult-trigger" aria-label="重新说目标出方案">
               <label className="proposal-decision-field">
                 <span>被阻断 / 想改方案？重新说目标让 AI 出新方案（会带上执行需要的读写范围）</span>
