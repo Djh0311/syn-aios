@@ -197,7 +197,7 @@ fn handle_request(config: &McpServerConfig, req: JsonRpcRequest) -> Option<JsonR
             return None;
         }
         "tools/list" => match config.role {
-            McpRole::SupervisorOrchestrator => Ok(supervisor_orchestrator::list_tools()),
+            McpRole::SupervisorOrchestrator => Ok(supervisor_orchestrator::list_tools(config)),
             _ => Ok(tools::list_tools(config.role)),
         },
         "tools/call" => match config.role {

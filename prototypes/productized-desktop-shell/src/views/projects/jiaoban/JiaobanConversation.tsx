@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import type {
   BlackboardEntry,
-  SupervisorResidentAnswerOutcome,
   WorkflowStateSnapshot,
 } from "../../../lib/types";
 
@@ -46,6 +45,23 @@ export function supervisorProcessCanvasView(entry: BlackboardEntry): "delivery" 
 
 export function supervisorProcessFocusedNodeId(entry: BlackboardEntry): string | null {
   return supervisorProcessCanvasView(entry) === "graph" ? entry.workflow_node_id?.trim() || null : null;
+}
+
+// S1：普通对话的说话人只认 read-model source identity，不能再由标题前缀猜测。
+// 旧 P1-B 记录没有此身份时保守显示为主管记录；新读模型必须写入下列二者之一。
+export const SUPERVISOR_RESIDENT_USER_MESSAGE_SOURCE_KIND = "supervisor_resident_user_message";
+export const SUPERVISOR_RESIDENT_SUPERVISOR_MESSAGE_SOURCE_KIND = "supervisor_resident_supervisor_message";
+
+function hasConversationSourceKind(entry: BlackboardEntry, sourceKind: string): boolean {
+  return (entry.source_refs ?? []).some((source) => source.source_kind === sourceKind);
+}
+
+export function isSupervisorResidentUserMessage(entry: BlackboardEntry): boolean {
+  return hasConversationSourceKind(entry, SUPERVISOR_RESIDENT_USER_MESSAGE_SOURCE_KIND);
+}
+
+export function isSupervisorResidentSupervisorMessage(entry: BlackboardEntry): boolean {
+  return hasConversationSourceKind(entry, SUPERVISOR_RESIDENT_SUPERVISOR_MESSAGE_SOURCE_KIND);
 }
 
 type ArtifactProposalSource = { proposal_id: string; created_at_ms: number };
@@ -115,9 +131,9 @@ type JiaobanConversationStreamProps = {
   phaseContent: ReactNode;
   phaseMessageId?: string;
   consultLoading: boolean;
-  answerBusyQuestionId: string | null;
-  answerReceipts: Readonly<Record<string, string>>;
-  answerErrors: Readonly<Record<string, string>>;
+  // Unified user-message state; it has no question_id route or proposal semantics.
+  messageBusyKey: string | null;
+  messageErrors: Readonly<Record<string, string>>;
   // P3-A：过程短讯只把用户带到右区既有工序图；回调不写事实，也不接通 P3-B 回话。
   onSupervisorProcessActivate?: (entry: BlackboardEntry) => void;
 };
@@ -203,47 +219,13 @@ export function mergeConversationUserTurns(
   return [...persisted, ...unmatchedTransient];
 }
 
-export function humanizeResidentAnswerOutcome(outcome: SupervisorResidentAnswerOutcome): string {
-  if (outcome.status === "already_answered") {
-    return "这问已经答过了，主管没有重复处理。";
-  }
-  if (outcome.status === "question_asked") {
-    return "这句主管收到了；它还有一问，接着答就行。";
-  }
-  if (outcome.status === "proposal_created") {
-    return "这句主管收到了，新方案已经接上。";
-  }
-  return "这句主管收到了。";
-}
-
-function isSupervisorQuestion(entry: BlackboardEntry): boolean {
-  return entry.title.startsWith("主管问题");
-}
-
-export function latestWaitingQuestionIdOf(entries: BlackboardEntry[]): string | null {
-  return (
-    [...entries]
-      .reverse()
-      .find(
-        (entry) =>
-          isSupervisorQuestion(entry) &&
-          (entry.source_status ?? entry.status) === "waiting_user" &&
-          Boolean(entry.question_id?.trim()),
-      )?.question_id ?? null
-  );
-}
-
-// 常驻输入框的路由：对话里的话按当前状态送进既有通道，零新命令（修单3）。
+// S1：常驻输入框只有一条用户消息通道；P1-E 关门态仍可复用 disabled 表达。
 export type JiaobanComposerRoute =
-  | { kind: "answer"; questionId: string; placeholder?: string }
-  | { kind: "amendment"; placeholder?: string }
-  | { kind: "new_goal"; placeholder?: string }
+  | { kind: "message"; placeholder?: string }
   | { kind: "disabled"; reason: string };
 
 const COMPOSER_PLACEHOLDERS: Record<Exclude<JiaobanComposerRoute["kind"], "disabled">, string> = {
-  answer: "直接回答主管这一问",
-  amendment: "想改哪里直接说——主管会按你说的重出方案",
-  new_goal: "跟主管说下一件事",
+  message: "跟主管说说你的想法",
 };
 
 // 「只要一个对话框,上下不带字」(07-18 用户拍):无标题无按钮,Enter 发送、Shift+Enter 换行;
@@ -295,10 +277,14 @@ export function JiaobanConversationComposer({
 
 function messageText(entry: BlackboardEntry): string {
   if (isSupervisorProcess(entry)) return entry.summary.trim();
-  if (isSupervisorQuestion(entry)) {
-    return entry.summary.replace(/^第\s*\d+\s*轮主管问题[：:]\s*/, "").trim();
-  }
-  return entry.summary.replace(/^第\s*\d+\s*轮用户答复[：:]\s*/, "").trim();
+  return entry.summary.trim();
+}
+
+function conversationSpeaker(entry: BlackboardEntry): "user" | "supervisor" {
+  if (isSupervisorResidentUserMessage(entry)) return "user";
+  if (isSupervisorResidentSupervisorMessage(entry)) return "supervisor";
+  // 旧 P1-B 历史没有新 source identity；不靠 title 反推用户身份，保守按主管记录呈现。
+  return "supervisor";
 }
 
 function phaseMessageLabel(kind: JiaobanConversationPhaseKind): string | null {
@@ -370,29 +356,19 @@ export function JiaobanConversationStream({
   phaseContent,
   phaseMessageId,
   consultLoading,
-  answerBusyQuestionId,
-  answerReceipts,
-  answerErrors,
+  messageBusyKey,
+  messageErrors,
   onSupervisorProcessActivate,
 }: JiaobanConversationStreamProps) {
-  const latestWaitingQuestionId = latestWaitingQuestionIdOf(entries);
-  // 待答追问独占当前动作区：不仅收起说态输入，也隔离仍在 store 里的旧方案授权动作。
-  // 回答并刷新后，新的相位消息才重新出现，避免绕过主管追问直接执行旧方案。
-  const pendingQuestionOwnsActionArea = latestWaitingQuestionId != null;
-  const supervisorThinking = consultLoading || answerBusyQuestionId != null;
-  const showPhaseContent = phaseContent != null && !supervisorThinking && !pendingQuestionOwnsActionArea;
+  const messageError = Object.values(messageErrors).find((value) => Boolean(value.trim())) ?? null;
+  const supervisorThinking = consultLoading || messageBusyKey != null;
+  const showPhaseContent = phaseContent != null && !supervisorThinking;
   const phaseLabel = phaseMessageLabel(phaseKind);
   const timelineItems: ConversationTimelineItem[] = [];
 
   for (const [sourceIndex, entry] of entries.entries()) {
     const process = isSupervisorProcess(entry);
-    const question = isSupervisorQuestion(entry);
-    const status = entry.source_status ?? entry.status;
-    const answered = question && status === "answered";
-    const questionId = entry.question_id?.trim() || null;
-    const waitingForThisAnswer = questionId != null && questionId === latestWaitingQuestionId;
-    const receipt = question && questionId ? answerReceipts[questionId] : null;
-    const error = question && questionId ? answerErrors[questionId] : null;
+    const speaker = conversationSpeaker(entry);
     const copy = messageText(entry);
     const content = process ? (
       <article
@@ -420,42 +396,14 @@ export function JiaobanConversationStream({
           <p className="jiaoban-conversation-copy">{copy}</p>
         )}
       </article>
-    ) : answered ? (
-      <article
-        key={entry.entry_id}
-        className="jiaoban-conversation-message is-supervisor is-answered"
-        data-message-kind="supervisor-question"
-      >
-        <details className="jiaoban-conversation-answered">
-          <summary>项目主管 · 已答</summary>
-          <p className="jiaoban-conversation-copy">{copy}</p>
-        </details>
-        {receipt ? (
-          <p className="muted small-note" role="status">
-            {receipt}
-          </p>
-        ) : null}
-      </article>
     ) : (
       <article
         key={entry.entry_id}
-        className={`jiaoban-conversation-message ${question ? "is-supervisor" : "is-user"}`}
-        data-message-kind={question ? "supervisor-question" : "user-answer"}
+        className={`jiaoban-conversation-message ${speaker === "user" ? "is-user" : "is-supervisor"}`}
+        data-message-kind={speaker}
       >
-        <p className="jiaoban-plan-seg">
-          {question ? `项目主管${waitingForThisAnswer ? " · 待答" : ""}` : "你"}
-        </p>
+        <p className="jiaoban-plan-seg">{speaker === "user" ? "你" : "项目主管"}</p>
         <p className="jiaoban-conversation-copy">{copy}</p>
-        {receipt ? (
-          <p className="muted small-note" role="status">
-            {receipt}
-          </p>
-        ) : null}
-        {error ? (
-          <p className="jiaoban-consult-error" role="alert">
-            {error}
-          </p>
-        ) : null}
       </article>
     );
     timelineItems.push({
@@ -557,6 +505,14 @@ export function JiaobanConversationStream({
       ) : null}
 
       {sortedCurrentItems.map((item) => item.content)}
+
+      {messageError ? (
+        <article className="jiaoban-conversation-message is-supervisor" data-message-kind="message-error">
+          <p className="jiaoban-consult-error" role="alert">
+            {messageError}
+          </p>
+        </article>
+      ) : null}
 
       {supervisorThinking ? (
         <article className="jiaoban-conversation-message is-supervisor" data-message-kind="waiting">

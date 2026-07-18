@@ -908,8 +908,8 @@ export function startProjectDirectorChain(
   return invoke<DirectorChainOutcome>("start_project_director_chain", { request });
 }
 
-// 件 A · 接咨询 LM（出方案自动化）：目标 → 真 codex 只读咨询 → 写一份 PendingUserConfirmation 方案（不自动确认·人闸守住）。
-// 异步长耗时（真 codex），前端只造请求 + 发；返回新建的方案（同 ProjectConsultationProposal 形）。
+// 历史兼容命令：S1 已退役这条“直接让 AI 出方案”路线，调用会得到明确错误；
+// 请改用项目主管对话，只有主管私有 submit_proposal 工具可以创建方案卡。
 export function runProjectConsultation(
   request: RunProjectConsultationRequest,
 ): Promise<ProjectConsultationProposal> {
@@ -917,8 +917,8 @@ export function runProjectConsultation(
   return invoke<ProjectConsultationProposal>("run_project_consultation", { request });
 }
 
-// P1-B: user-originated answer only.  UI rendering/entry belongs to P1-C; this
-// wrapper intentionally exposes no way for model or pilot code to invent one.
+// S1：用户消息统一注入常驻主管 thread。前端只能以 user identity 调用；方案等实物仍必须
+// 由主管 MCP 工具落库，批准仍在右侧方案卡。
 export function submitSupervisorResidentAnswer(
   request: SubmitSupervisorResidentAnswerRequest,
 ): Promise<SupervisorResidentAnswerOutcome> {

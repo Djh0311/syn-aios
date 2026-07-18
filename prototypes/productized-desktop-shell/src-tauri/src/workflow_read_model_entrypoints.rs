@@ -386,7 +386,7 @@ fn project_blackboard_from_workflow(
         for ledger_entry in workflow.ledger_entries.iter().filter(|entry| {
             matches!(
                 entry.entry_type.as_str(),
-                "supervisor_question" | "user_reply"
+                "supervisor_question" | "user_reply" | "user_message" | "supervisor_message"
             )
         }) {
             let is_question = ledger_entry.entry_type == "supervisor_question";
@@ -400,16 +400,31 @@ fn project_blackboard_from_workflow(
             } else {
                 "answered"
             };
-            let title = if is_question {
-                format!("主管问题 / {status}")
-            } else {
-                "用户答复 / 已记录".to_string()
+            let title = match ledger_entry.entry_type.as_str() {
+                "supervisor_question" => format!("主管问题 / {status}"),
+                "user_reply" => "用户答复 / 已记录".to_string(),
+                "user_message" => "你".to_string(),
+                "supervisor_message" => "主管".to_string(),
+                _ => unreachable!("conversation ledger types are filtered above"),
             };
             let mut source_refs = vec![blackboard_source_ref(
                 "ledger_entry",
                 &ledger_entry.ledger_entry_id,
                 "主管对话账本",
             )];
+            if let Some((source_kind, label)) = match ledger_entry.entry_type.as_str() {
+                "user_message" => Some(("supervisor_resident_user_message", "用户原文")),
+                "supervisor_message" => {
+                    Some(("supervisor_resident_supervisor_message", "主管原文"))
+                }
+                _ => None,
+            } {
+                source_refs.push(blackboard_source_ref(
+                    source_kind,
+                    &ledger_entry.ledger_entry_id,
+                    label,
+                ));
+            }
             source_refs.extend(ledger_entry.audit_refs.iter().map(|audit_ref| {
                 blackboard_source_ref("workflow_audit", audit_ref, "主管对话审计")
             }));
@@ -422,16 +437,20 @@ fn project_blackboard_from_workflow(
                 &summary.project_id,
                 &summary.workflow_id,
                 None,
-                supervisor_message_question_id(
-                    &ledger_entry.workflow_id,
-                    &ledger_entry.source_refs,
-                ),
+                (ledger_entry.entry_type == "supervisor_question")
+                    .then(|| {
+                        supervisor_message_question_id(
+                            &ledger_entry.workflow_id,
+                            &ledger_entry.source_refs,
+                        )
+                    })
+                    .flatten(),
                 BlackboardEntryKind::SupervisorMessage,
                 title,
                 ledger_entry.summary.clone(),
                 status,
                 Some(status.to_string()),
-                "主管问题和用户答复是会话事实，不是黑板候选，也不会推进工作流状态。",
+                "主管与用户消息是会话事实，不是黑板候选，也不会推进工作流状态。",
                 source_refs,
                 ledger_entry.created_at.clone(),
             ));
@@ -1529,6 +1548,9 @@ const LEDGER_ENTRY_TYPES: &[&str] = &[
     "supervisor_question",
     "user_reply",
     "reply_injected",
+    "user_message",
+    "user_message_injected",
+    "supervisor_message",
 ];
 
 fn is_valid_ledger_entry_type(entry_type: &str) -> bool {
@@ -1591,6 +1613,9 @@ fn ledger_entry_type_from_audit(event_type: &str) -> String {
         "supervisor_resident_question_asked" => "supervisor_question",
         "supervisor_resident_question_answered" => "user_reply",
         "supervisor_resident_reply_injected" => "reply_injected",
+        "supervisor_resident_user_message_recorded" => "user_message",
+        "supervisor_resident_user_message_injected" => "user_message_injected",
+        "supervisor_resident_supervisor_message_recorded" => "supervisor_message",
         _ => event_type,
     }
     .to_string()
@@ -2387,4 +2412,157 @@ fn dispatch_readback_stats_from_transcript(
 #[cfg(test)]
 thread_local! {
     static DISPATCH_READBACK_NATIVE_READ_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+mod s1_freeform_supervisor_read_model_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn s1_freeform_resident_messages_map_to_valid_ledger_and_nonadvancing_blackboard_entries() {
+        let project_id = "project:s1-freeform";
+        let project_root = "/tmp/s1-freeform";
+        let workflow_id = "workflow:s1-freeform";
+        let audit_events = vec![
+            json!({
+                "event_id": "audit:s1:user-message",
+                "event_type": "supervisor_resident_user_message_recorded",
+                "target_ref": format!("{workflow_id}:resident-message:user:1"),
+                "project_id": project_id,
+                "workflow_id": workflow_id,
+                "actor_ref": "user",
+                "source_kind": "supervisor_resident_user_message",
+                "reason": "先聊聊这个方案的边界。",
+                "created_at": "2026-07-18T00:00:00Z"
+            }),
+            json!({
+                "event_id": "audit:s1:user-message-injected",
+                "event_type": "supervisor_resident_user_message_injected",
+                "target_ref": format!("{workflow_id}:resident-message:user:1"),
+                "project_id": project_id,
+                "workflow_id": workflow_id,
+                "actor_ref": "supervisor_resident",
+                "source_kind": "supervisor_resident_user_message_injection",
+                "reason": "用户消息已通过同一常驻主管会话注入；未伪造用户输入。",
+                "created_at": "2026-07-18T00:00:01Z"
+            }),
+            json!({
+                "event_id": "audit:s1:supervisor-message",
+                "event_type": "supervisor_resident_supervisor_message_recorded",
+                "target_ref": format!("{workflow_id}:resident-message:supervisor:1"),
+                "project_id": project_id,
+                "workflow_id": workflow_id,
+                "actor_ref": "supervisor_resident",
+                "source_kind": "supervisor_resident_supervisor_message",
+                "reason": "可以。你最担心的是范围，还是验收标准？",
+                "created_at": "2026-07-18T00:00:02Z"
+            }),
+        ];
+
+        let ledger_entries =
+            derive_workflow_ledger_entries(workflow_id, &audit_events, &[], &[], &[]);
+        for (audit_id, expected_type) in [
+            ("audit:s1:user-message", "user_message"),
+            ("audit:s1:user-message-injected", "user_message_injected"),
+            ("audit:s1:supervisor-message", "supervisor_message"),
+        ] {
+            let entry = ledger_entries
+                .iter()
+                .find(|entry| entry.ledger_entry_id == audit_id)
+                .unwrap_or_else(|| panic!("{audit_id} should enter the workflow ledger"));
+            assert_eq!(entry.entry_type, expected_type);
+            assert!(is_valid_ledger_entry_type(&entry.entry_type));
+            assert!(
+                !entry
+                    .risk_flags
+                    .iter()
+                    .any(|warning| warning.starts_with("invalid_ledger_entry_type:")),
+                "{audit_id} must not introduce an invalid ledger vocabulary warning"
+            );
+        }
+
+        let state = json!({
+            "projects": [{
+                "project_id": project_id,
+                "root_path": project_root
+            }],
+            "workflows": [{
+                "workflow_id": workflow_id,
+                "project_id": project_id,
+                "title": "S1 freeform conversation",
+                "state": "draft"
+            }],
+            "nodes": [],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "workflow_node_session_bindings": [],
+            "workflow_node_dispatches": [],
+            "reviews": [],
+            "workflow_execution_controls": [],
+            "permission_requests": [],
+            "execution_attempts": [],
+            "audit_events": audit_events
+        });
+        let summaries = project_workflow_summaries(&state);
+        let summary = summaries
+            .first()
+            .expect("S1 workflow summary should be derived");
+        let blackboard = project_blackboard_from_workflow(
+            summary,
+            state["audit_events"]
+                .as_array()
+                .expect("fixture audit events should be an array"),
+        );
+
+        let user_message = blackboard
+            .entries
+            .iter()
+            .find(|entry| entry.entry_id.contains("audit-s1-user-message"))
+            .expect("canonical user speech should render in the blackboard conversation");
+        let supervisor_message = blackboard
+            .entries
+            .iter()
+            .find(|entry| entry.entry_id.contains("audit-s1-supervisor-message"))
+            .expect("canonical supervisor speech should render in the blackboard conversation");
+
+        for (entry, expected_title, expected_source_kind, expected_source_id) in [
+            (
+                user_message,
+                "你",
+                "supervisor_resident_user_message",
+                "audit:s1:user-message",
+            ),
+            (
+                supervisor_message,
+                "主管",
+                "supervisor_resident_supervisor_message",
+                "audit:s1:supervisor-message",
+            ),
+        ] {
+            assert_eq!(entry.kind, BlackboardEntryKind::SupervisorMessage);
+            assert_eq!(entry.title, expected_title);
+            assert_eq!(entry.question_id, None);
+            assert!(entry.source_refs.iter().any(|source| {
+                source.source_kind == expected_source_kind && source.source_id == expected_source_id
+            }));
+            assert!(entry
+                .warnings
+                .contains(&"supervisor_message_does_not_advance_workflow".to_string()));
+            assert_eq!(entry.promotion_decision.status, "not_applicable");
+            assert!(entry
+                .promotion_decision
+                .reason
+                .contains("不会推进工作流状态"));
+        }
+
+        assert!(
+            !blackboard.entries.iter().any(|entry| {
+                entry.entry_id
+                    .contains("audit-s1-user-message-injected")
+            }),
+            "the injection audit remains auditable in the ledger but must not impersonate a user or add a second chat bubble"
+        );
+    }
 }

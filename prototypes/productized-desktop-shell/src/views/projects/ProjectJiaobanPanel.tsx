@@ -74,7 +74,6 @@ import {
   recordProjectConsultationProposalDecision,
   runGlobalSupervisorBoundaryReview,
   runGlobalSupervisorReview,
-  runProjectConsultation,
   stopProjectWorkflowChain,
 } from "../../lib/tauri";
 import type {
@@ -316,8 +315,7 @@ function ProjectJiaobanPanelBrowser({
   const projectWorkflow =
     workflowState?.project_workflows.find((workflow) => workflow.project_root === project.project_root) ?? null;
 
-  // 本项目最新一份方案（授权卡的数据源）。runProjectConsultation 出方案后 App 会 reload proposal store，
-  // 这里随 prop 变化自动拿到新方案 → 从「说」跳到「批」。
+  // 本项目最新一份方案（授权卡的数据源）。主管私有 submit_proposal 落卡后，刷新读模型即切到「批」。
   const proposalSummary = useMemo(
     () =>
       summarizeProjectConsultationProposalStore(
@@ -362,7 +360,6 @@ function ProjectJiaobanPanelBrowser({
   const [manualPhase, setManualPhase] = useState<JiaobanPhase | null>(cached?.manualPhase ?? null);
   // 卡住态乙型「直接回它一句」的草稿：状态提升到本组件——JiaobanBlockedState 被离线测试平铺裸调，不能有 hooks。
   const [blockedReply, setBlockedReply] = useState("");
-  const [goal, setGoal] = useState("");
   // 刀B·记忆召回计数：说脸预告「出方案会带上 N 条项目记忆」（同后端召回口径：本项目 project_id + 活跃态）。
   // 只读 formal store·失败静默 0（召回是增益不是闸）。
   const [memoryCount, setMemoryCount] = useState(0);
@@ -420,16 +417,9 @@ function ProjectJiaobanPanelBrowser({
   const [supervisorPilotReadModel, setSupervisorPilotReadModel] = useState<SupervisorPilotReadModel | null>(null);
   const [supervisorPilotLedgerError, setSupervisorPilotLedgerError] = useState<string | null>(null);
   const runningRef = useRef(false);
-  // fix8：出方案（说/改要求）直调期间的 loading/失败态 + 防重入。失败人话上脸，绝不静默、目标不清空。
-  const [consultLoading, setConsultLoading] = useState(false);
-  const [consultError, setConsultError] = useState<string | null>(null);
-  const consultingRef = useRef(false);
   const {
-    answerBusyQuestionId: residentAnswerBusyQuestionId,
-    answerReceipts: residentAnswerReceipts,
-    answerErrors: residentAnswerErrors,
-    userTurns: conversationUserTurns,
-    recordUserTurn: recordConversationUserTurn,
+    messageBusy,
+    messageErrors,
     makeConversationComposer,
     setComposerDraft: setConversationComposerDraft,
   } = useJiaobanConversationState({
@@ -437,10 +427,12 @@ function ProjectJiaobanPanelBrowser({
     workflowState,
     projectRoot,
     onProposalStoreRefresh,
-    onAnswerAccepted: () => setConsultError(null),
     humanizeAnswerError: (error) =>
       humanizeProviderUnavailable(error) ?? "这句没送到主管——稍后再试一次。",
   });
+  const residentMessageBusyKey = messageBusy ? "resident-message" : null;
+  const consultLoading = messageBusy;
+  const consultError = messageErrors["resident-message"] ?? null;
 
   const refreshWorkflowStateReadModelAfterSuccessfulChainAction = useJiaobanRunningReadRefresh({
     manualPhase,
@@ -798,60 +790,9 @@ function ProjectJiaobanPanelBrowser({
 
   // ---- 动作 ----
 
-  // fix8：说 → 出方案 = 面板直调 runProjectConsultation（去掉那层通用确认弹层：咨询只读·决策 2026-06-25 豁免·
-  // 人闸=[允许并开始]那一下不动）。自管 loading/失败态，失败人话上脸 + 目标不清空；防重入。成功后刷店→自动进批脸。
-  async function runConsultation(goal: string, conversationText = goal) {
-    // 永不冻：projectWorkflow 缺失不是用户的错，也绝不许无声——说清楚、可行动。
-    if (!projectWorkflow) {
-      setConsultError(
-        `这个项目的工作流数据没加载出来（快照里 ${workflowState ? `有 ${workflowState.project_workflows.length} 条工作流、但没有匹配 ${projectRoot} 的` : "workflowState 为空——快照读取失败"}）。重开项目试试；还不行把这行话发给主导线。`,
-      );
-      return;
-    }
-    const submittedGoal = goal.trim();
-    if (!submittedGoal || consultingRef.current) return;
-    const submittedAtMs = Date.now();
-    recordConversationUserTurn(conversationText.trim(), submittedAtMs);
-    consultingRef.current = true;
-    setConsultLoading(true);
-    setConsultError(null);
-    try {
-      await runProjectConsultation({
-        project_root: projectRoot,
-        project_id: projectWorkflow.project_id,
-        workflow_id: projectWorkflow.workflow_id,
-        goal: submittedGoal,
-        actor_id: "user",
-      });
-      await onProposalStoreRefresh?.(); // 刷方案店 → latestProposal 更新 → phase 推导自动进批脸
-    } catch (e) {
-      // resident 首问是「先落 canonical，再以 waiting_user Err 收回本回合」；这里也必须刷黑板。
-      // question_id 只读结构化 entry，严禁从 Err 机器串拆 id。
-      if (isSupervisorResidentQuestionWaitingUserError(e)) {
-        await onProposalStoreRefresh?.();
-      }
-      setConsultError(humanizeConsultError(e)); // 失败上脸（供给类专句/后端原话），绝不静默
-    } finally {
-      consultingRef.current = false;
-      setConsultLoading(false);
-    }
-  }
-
-  function submitGoal(text: string) {
-    void runConsultation(text);
-  }
-
-  // 按我说的改：原目标 + 这句意见拼成新目标，重出方案（同一直调路径）。
-  function submitAmendmentText(text: string) {
-    const trimmed = text.trim();
-    if (trimmed && latestProposal) void runConsultation(`${latestProposal.user_goal}\n\n补充意见：${trimmed}`, trimmed);
-  }
-  // 常驻输入框(修单3):路由与草稿都在会话 hook 里,这里只按当前相位取一份渲染参数。
-  // P1-D:批态卡上的[按我说的改]/[答完问题出新方案]按钮改走同一份常驻框草稿(双通道同源
-  // submitAmendmentText)——卡上不再单独留一个输入框(见 JiaobanAuthorizeState 的 amendment/onAmend)。
-  const conversationComposer = makeConversationComposer(
-    { phase, latestProposal, consultLoading, isTestProject, onAmendment: submitAmendmentText, onNewGoal: submitGoal },
-  );
+  // 常驻输入框在所有状态都只调用 submit_supervisor_resident_answer。卡上的“按我说的改”复用
+  // 同一草稿和同一提交，不再存在“目标→直接出方案”的第二条路线。
+  const conversationComposer = makeConversationComposer({ isTestProject });
 
   // 刀2「批前看图」触发条件 = 工作流开关开着（AI 建议时开关默认开·见上面 reset effect；用户也可手动开/关）。
   // 简单活默认关 → 不触发、不加一秒等待。
@@ -1395,12 +1336,6 @@ function ProjectJiaobanPanelBrowser({
     () => supervisorConversationEntriesForProject(workflowState, projectRoot, projectWorkflow?.workflow_id),
     [workflowState, projectRoot, projectWorkflow?.workflow_id],
   );
-  const hasPendingSupervisorQuestion = supervisorConversationEntries.some(
-    (entry) =>
-      entry.title.startsWith("主管问题") &&
-      (entry.source_status ?? entry.status) === "waiting_user" &&
-      Boolean(entry.question_id?.trim()),
-  );
   const conversationStarted =
     consultLoading ||
     Boolean(consultError) ||
@@ -1455,23 +1390,21 @@ function ProjectJiaobanPanelBrowser({
   const proposalInteractive =
     focusedProposalIsLatest &&
     selectedHistoryId == null &&
-    phase === "authorize" &&
-    !consultLoading &&
-    residentAnswerBusyQuestionId == null &&
-    !hasPendingSupervisorQuestion;
+    phase === "authorize";
   const proposalCard = focusedProposal ? (
     <JiaobanAuthorizeState
       proposal={focusedProposal}
       proposalIsStale={proposalAgeDays(focusedProposal.created_at_ms) >= 1}
-      // P1-D:卡上修改框退场,只留常驻框——[按我说的改]提交的是常驻框当前草稿(双通道同源 submitAmendmentText)。
+      // 卡上修改框退场；[按我说的改]提交的是常驻框当前草稿和唯一消息入口。
       amendment={proposalInteractive ? conversationComposer?.draft ?? "" : ""}
       onAmend={() => conversationComposer?.onSubmit()}
       onAuthorizeAndStart={() => void authorizeAndStart()}
       onRePlan={backToSay}
       onDecline={backToSay}
       starting={starting}
-      consultLoading={proposalInteractive && consultLoading}
-      consultError={proposalInteractive ? consultError : null}
+      // 普通对话的发送中/失败态只属于中栏，不得锁住或污染右侧批准卡。
+      consultLoading={false}
+      consultError={null}
       howRunSummary={howRunSummary}
       onShowGovernance={() => setCanvasViewKey("governance")}
       onShowHowRun={() => setCanvasViewKey("howrun")}
@@ -1496,17 +1429,16 @@ function ProjectJiaobanPanelBrowser({
   });
   const baseConversationGoal =
     workflowProposals[0]?.user_goal ??
-    conversationUserTurns[0]?.text ??
-    (conversationStarted ? goal : null);
+    null;
   const persistedUserTurns = userTurnsFromProposalHistory(workflowProposals);
   const timelineUserTurns = mergeConversationUserTurns(
     baseConversationGoal,
     persistedUserTurns,
-    conversationUserTurns,
+    [],
   );
   // A3·视口停最新：当前单可见内容(条数/相位/等待态)变了就滚回底部,逻辑本体在会话 hook 里。
   useConversationAutoScroll(
-    `${supervisorConversationEntries.length}:${timelineUserTurns.length}:${artifactNotices.length}:${phase}:${consultLoading}:${residentAnswerBusyQuestionId ?? ""}`,
+    `${supervisorConversationEntries.length}:${timelineUserTurns.length}:${artifactNotices.length}:${phase}:${consultLoading}:${residentMessageBusyKey ?? ""}`,
   );
   const currentDeliveryCard = phase === "done" ? (
     <JiaobanDoneState
@@ -1610,9 +1542,8 @@ function ProjectJiaobanPanelBrowser({
           phaseKind={conversationPhaseKind}
           phaseContent={phase === "blocked" ? phaseContent : null}
           consultLoading={consultLoading}
-          answerBusyQuestionId={residentAnswerBusyQuestionId}
-          answerReceipts={residentAnswerReceipts}
-          answerErrors={residentAnswerErrors}
+          messageBusyKey={residentMessageBusyKey}
+          messageErrors={messageErrors}
           onSupervisorProcessActivate={(entry) => {
             setSelectedHistoryId(null);
             setFocusedRuntimeNodeId(supervisorProcessFocusedNodeId(entry));
@@ -1692,7 +1623,7 @@ function ProjectJiaobanPanelBrowser({
         onOrchestrationModeChange={setOrchestrationMode}
         supervisorPilotDisabledReason={supervisorPilotDisabledReason}
         classicDisabledReason={classicModeUnavailableReason(projectRoot)}
-        disabled={starting || consultLoading}
+        disabled={starting}
         sessions={projectSessions}
         sessionChoice={sessionChoice}
         onSessionChoiceChange={setSessionChoice}
@@ -1811,22 +1742,6 @@ function humanizeProviderUnavailable(e: unknown): string | null {
     return "codex 服务不可用（常见：额度用完 / 订阅过期 / 登录失效）——处理后点重试；若是网络抽风，重试一次通常就过。";
   }
   return null;
-}
-
-// fix8：出方案失败的人话。先认供给类；否则显后端原话（有）；再兜底一句「点重试或改要求」。绝不静默。
-export function isSupervisorResidentQuestionWaitingUserError(e: unknown): boolean {
-  const raw = e instanceof Error ? e.message : String(e ?? "");
-  return raw.includes("supervisor_resident_question_waiting_user:");
-}
-
-export function humanizeConsultError(e: unknown): string {
-  const provider = humanizeProviderUnavailable(e);
-  if (provider) return provider;
-  if (isSupervisorResidentQuestionWaitingUserError(e)) {
-    return "主管想先问清一件事，请在下面直接回答。";
-  }
-  const raw = e instanceof Error ? e.message : String(e ?? "");
-  return raw && raw.trim().length > 0 ? raw : "出方案没成——可以点重试，或改一下要求再来一版。";
 }
 
 // 合流命令的报错翻人话。最要紧的一类：对「已确认」方案后端会拒（方案不是待用户确认状态）——

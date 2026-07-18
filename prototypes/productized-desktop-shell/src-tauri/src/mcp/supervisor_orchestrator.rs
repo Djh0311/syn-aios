@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[path = "supervisor_orchestrator_submit_proposal.rs"]
+mod supervisor_orchestrator_submit_proposal;
 #[path = "supervisor_review_evidence.rs"]
 mod supervisor_review_evidence;
 
@@ -725,20 +727,41 @@ pub(crate) fn abandon_fresh_task_binding(
     )
 }
 
-pub fn list_tools() -> Value {
-    json!({
-        "tools": [
-            tool_def("read_worker_report", "只读投影 worker 结构化口供", json!({
+pub fn list_tools(config: &McpServerConfig) -> Value {
+    let mut tools = vec![
+        tool_def(
+            "read_worker_report",
+            "只读投影 worker 结构化口供",
+            json!({
                 "type": "object", "properties": {"worker_id": {"type": "string"}}, "required": ["worker_id"], "additionalProperties": false
-            })),
-            tool_def("wait_for_worker", "读取 worker 当前状态，不管理或终止进程", json!({
+            }),
+        ),
+        tool_def(
+            "wait_for_worker",
+            "读取 worker 当前状态，不管理或终止进程",
+            json!({
                 "type": "object", "properties": {"worker_id": {"type": "string"}}, "required": ["worker_id"], "additionalProperties": false
-            })),
-            tool_def("read_key_file", "在授权允许读取根内读取关键文本文件", json!({
+            }),
+        ),
+        tool_def(
+            "read_key_file",
+            "在授权允许读取根内读取关键文本文件",
+            json!({
                 "type": "object", "properties": {"project_root": {"type": "string"}, "workflow_id": {"type": "string"}, "authorization_id": {"type": "string"}, "path": {"type": "string"}}, "required": ["project_root", "workflow_id", "authorization_id", "path"], "additionalProperties": false
-            }))
-        ]
-    })
+            }),
+        ),
+    ];
+    // The first tools/list request precedes durable resident-session creation, so
+    // the server-owned run-id namespace is the display-only gate. tools/call
+    // independently requires the durable session binding before it can write.
+    if supervisor_orchestrator_submit_proposal::is_resident_supervisor_run(config) {
+        tools.push(tool_def(
+            "submit_proposal",
+            "将已达成共识的终版方案落为待用户确认卡；不会自动推进工作流",
+            supervisor_orchestrator_submit_proposal::input_schema(),
+        ));
+    }
+    json!({"tools": tools})
 }
 
 pub fn call_tool(config: &McpServerConfig, params: Value) -> Result<Value, String> {
@@ -759,6 +782,7 @@ fn call_tool_with_invoker(
         "read_worker_report" => read_worker_report(config, &arguments),
         "wait_for_worker" => wait_for_worker(config, &arguments),
         "read_key_file" => read_key_file(config, &arguments),
+        "submit_proposal" => supervisor_orchestrator_submit_proposal::submit(config, &arguments),
         _ => Err(format!("主管编排角色不认识工具：{name}")),
     };
     let result_summary = match &result {
@@ -2955,32 +2979,6 @@ mod tests {
     }
 
     #[test]
-    fn station3a_mcp_toolface_is_read_only_and_rejects_side_effect_names() {
-        let fixture = Fixture::new();
-        let toolface = list_tools();
-        let tools = toolface["tools"].as_array().expect("tools array");
-        let names = tools
-            .iter()
-            .filter_map(|tool| tool["name"].as_str())
-            .collect::<BTreeSet<_>>();
-        assert_eq!(
-            names,
-            BTreeSet::from(["read_key_file", "read_worker_report", "wait_for_worker"])
-        );
-        for rejected in [
-            "dispatch_worker",
-            "follow_up_worker",
-            "final_mark",
-            "report_user",
-        ] {
-            assert!(
-                fixture.call(rejected, json!({})).is_err(),
-                "{rejected} must not be an MCP action"
-            );
-        }
-    }
-
-    #[test]
     fn supervisor_role_requires_explicit_quota_flags() {
         assert!(super::super::parse_args(&[
             "--role".to_string(),
@@ -2995,4 +2993,5 @@ mod tests {
 
     include!("supervisor_review_evidence_e2e_tests.rs");
     include!("supervisor_orchestrator_m5b_tests.rs");
+    include!("supervisor_orchestrator_s1_tests.rs");
 }

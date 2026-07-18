@@ -1,26 +1,29 @@
 import { renderToStaticMarkup } from "react-dom/server.browser";
 import type {
   BlackboardEntry,
+  ProjectWorkflowSummary,
   RunHistoryEntry,
-  SupervisorResidentAnswerOutcome,
   WorkflowStateSnapshot,
 } from "../src/lib/types";
-import { humanizeConsultError } from "../src/views/projects/ProjectJiaobanPanel";
 import {
   JiaobanConversationComposer,
   JiaobanConversationStream,
+  SUPERVISOR_RESIDENT_SUPERVISOR_MESSAGE_SOURCE_KIND,
+  SUPERVISOR_RESIDENT_USER_MESSAGE_SOURCE_KIND,
   WORKFLOW_CHAIN_EVENT_SOURCE_KIND,
   artifactNoticesForConversation,
   groupConversationItemsByProposal,
-  humanizeResidentAnswerOutcome,
   isSupervisorProcess,
-  latestWaitingQuestionIdOf,
+  isSupervisorResidentSupervisorMessage,
+  isSupervisorResidentUserMessage,
   supervisorProcessCanvasView,
   supervisorProcessFocusedNodeId,
   userTurnsFromProposalHistory,
   supervisorConversationEntriesForProject,
 } from "../src/views/projects/jiaoban/JiaobanConversation";
+import type { JiaobanPhase } from "../src/views/projects/jiaoban/JiaobanArtifactViews";
 import { JiaobanHistoryColumn } from "../src/views/projects/jiaoban/JiaobanHistory";
+import { useJiaobanConversationState } from "../src/views/projects/jiaoban/useJiaobanConversationState";
 import {
   assert,
   assertDeepEqual,
@@ -32,8 +35,6 @@ import {
 const projectRoot = "/Users/yoyi/codex-workflow-mario-test";
 const projectId = "project:conversation-center";
 const workflowId = "workflow:conversation-center";
-const answeredQuestionId = "question:resident:001";
-const waitingQuestionId = "question:resident:002";
 const noop = () => {};
 
 function supervisorEntry(overrides: Partial<BlackboardEntry>): BlackboardEntry {
@@ -43,17 +44,17 @@ function supervisorEntry(overrides: Partial<BlackboardEntry>): BlackboardEntry {
     workflow_id: workflowId,
     work_item_id: null,
     workflow_node_id: null,
-    question_id: waitingQuestionId,
+    question_id: null,
     kind: "supervisor_message",
-    title: "主管问题 · 第 2 轮",
-    summary: "第 2 轮主管问题：这单只读吗？",
-    status: "waiting_user",
-    source_status: "waiting_user",
+    title: "主管消息",
+    summary: "我先梳理一下。",
+    status: "reported",
+    source_status: "reported",
     source_refs: [
       {
-        source_kind: "supervisor_resident_question",
-        source_id: waitingQuestionId,
-        label: "主管追问",
+        source_kind: SUPERVISOR_RESIDENT_SUPERVISOR_MESSAGE_SOURCE_KIND,
+        source_id: "message:resident:supervisor:fixture",
+        label: "主管自由消息",
       },
     ],
     created_at: "2026-07-17T02:00:00.000Z",
@@ -114,33 +115,36 @@ function stream(overrides: Partial<Parameters<typeof JiaobanConversationStream>[
       // P3-C 占位件(blocked/legacy 渲法)，随 P3-C 退场，本包零碰——这里改名去掉过期的「旧七态」框架。
       phaseContent={<p>blocked 相位占位内容照常在</p>}
       consultLoading={false}
-      answerBusyQuestionId={null}
-      answerReceipts={{}}
-      answerErrors={{}}
+      messageBusyKey={null}
+      messageErrors={{}}
       {...overrides}
     />
   );
 }
 
-const answeredQuestion = supervisorEntry({
-  entry_id: "blackboard:supervisor:answered",
-  question_id: answeredQuestionId,
-  title: "主管问题 · 第 1 轮",
-  summary: "第 1 轮主管问题：先确认验收是否只看离线结果？",
-  status: "answered",
-  source_status: "answered",
+const firstSupervisorMessage = supervisorEntry({
+  entry_id: "blackboard:supervisor:first-message",
+  // 标题故意像旧用户答复，断言角色绝不能从标题猜。
+  title: "用户答复 · 伪装标题",
+  summary: "先确认验收是否只看离线结果？",
   created_at: "2026-07-17T01:00:00.000Z",
 });
-const waitingQuestion = supervisorEntry({
-  entry_id: "blackboard:supervisor:waiting",
+const secondSupervisorMessage = supervisorEntry({
+  entry_id: "blackboard:supervisor:second-message",
+  summary: "这一单我会按只读边界推进。",
 });
-const userAnswer = supervisorEntry({
-  entry_id: "blackboard:supervisor:user-answer",
-  question_id: answeredQuestionId,
-  title: "用户答复 · 第 1 轮",
-  summary: "第 1 轮用户答复：只看离线结果，真机由用户重启后验。",
-  status: "answered",
-  source_status: "answered",
+const userMessage = supervisorEntry({
+  entry_id: "blackboard:supervisor:user-message",
+  // 标题故意像旧主管问题，仍必须显示为“你”。
+  title: "主管问题 · 伪装标题",
+  summary: "只看离线结果，真机由用户重启后验。",
+  source_refs: [
+    {
+      source_kind: SUPERVISOR_RESIDENT_USER_MESSAGE_SOURCE_KIND,
+      source_id: "message:resident:user:fixture",
+      label: "用户自由消息",
+    },
+  ],
   created_at: "2026-07-17T03:00:00.000Z",
 });
 const unrelatedRisk = supervisorEntry({
@@ -160,7 +164,7 @@ const workflowState = {
       project_id: projectId,
       project_root: projectRoot,
       workflow_id: workflowId,
-      entries: [userAnswer, waitingQuestion, unrelatedRisk, answeredQuestion],
+      entries: [userMessage, secondSupervisorMessage, unrelatedRisk, firstSupervisorMessage],
       warnings: [],
     },
   ],
@@ -169,8 +173,14 @@ const workflowState = {
 const chronologicalEntries = supervisorConversationEntriesForProject(workflowState, projectRoot, workflowId);
 assertDeepEqual(
   chronologicalEntries.map((entry) => entry.entry_id),
-  [answeredQuestion.entry_id, waitingQuestion.entry_id, userAnswer.entry_id],
+  [firstSupervisorMessage.entry_id, secondSupervisorMessage.entry_id, userMessage.entry_id],
   "主管消息应按 created_at 正序，且只取当前项目工作流的 supervisor_message",
+);
+assert(isSupervisorResidentSupervisorMessage(firstSupervisorMessage), "主管身份必须来自 structured source_kind");
+assert(isSupervisorResidentUserMessage(userMessage), "用户身份必须来自 structured source_kind");
+assert(
+  !isSupervisorResidentUserMessage(firstSupervisorMessage) && !isSupervisorResidentSupervisorMessage(userMessage),
+  "source identity 不得由标题前缀倒推或混淆",
 );
 
 assertDeepEqual(
@@ -203,7 +213,7 @@ assertDeepEqual(
     onActivate: (kind) => focusedViews.push(kind),
   });
   const proposalTree = stream({
-    entries: [answeredQuestion, userAnswer],
+    entries: [firstSupervisorMessage, userMessage],
     userGoal: "把中栏改成项目对话消息流。",
     phaseKind: "proposal",
     phaseContent: null,
@@ -221,8 +231,8 @@ assertDeepEqual(
     "方案实体卡与旧卡头不得回流进中栏",
   );
   assert(
-    (proposalMarkup.match(/data-message-kind="supervisor-question"/g) ?? []).length === 1,
-    "主管追问应使用 supervisor-question 消息包装",
+    (proposalMarkup.match(/data-message-kind="supervisor"/g) ?? []).length === 1,
+    "主管自由消息应使用 supervisor 消息包装",
   );
   const userTurn = findElement(
     proposalTree,
@@ -234,7 +244,7 @@ assertDeepEqual(
   const supervisorTurn = findElement(
     proposalTree,
     (element) =>
-      element.props?.["data-message-kind"] === "supervisor-question" &&
+      element.props?.["data-message-kind"] === "supervisor" &&
       typeof element.props?.className === "string" &&
       element.props.className.includes("is-supervisor"),
   );
@@ -246,7 +256,7 @@ assertDeepEqual(
       element.props.className.includes("is-supervisor") &&
       element.props.className.includes("jiaoban-conversation-notice"),
   );
-  assert(userTurn && supervisorTurn, "用户回合与主管回合应保留可独立排版的角色挂点");
+  assert(userTurn && supervisorTurn, "用户/主管自由消息应保留可独立排版的角色挂点");
   assert(proposalNotice, "方案短讯应使用主管角色形态并保留锚点");
   const proposalFocusButton = findElement(
     proposalTree,
@@ -259,14 +269,14 @@ assertDeepEqual(
   assertDeepEqual(focusedViews, ["proposal"], "方案短讯点击应只触发右区方案聚焦回调");
 
   const userGoalIndex = proposalMarkup.indexOf("把中栏改成项目对话消息流");
-  const firstQuestionIndex = proposalMarkup.indexOf("先确认验收是否只看离线结果");
-  const userAnswerIndex = proposalMarkup.indexOf("只看离线结果，真机由用户重启后验");
+  const firstSupervisorMessageIndex = proposalMarkup.indexOf("先确认验收是否只看离线结果");
+  const userMessageIndex = proposalMarkup.indexOf("只看离线结果，真机由用户重启后验");
   const proposalIndex = proposalMarkup.indexOf("方案好了，放你右手边了");
   assert(
-    userGoalIndex < firstQuestionIndex &&
-      firstQuestionIndex < userAnswerIndex &&
-      userAnswerIndex < proposalIndex,
-    "用户原话、主管往返与方案短讯应按消息时间序落位",
+    userGoalIndex < firstSupervisorMessageIndex &&
+      firstSupervisorMessageIndex < userMessageIndex &&
+      userMessageIndex < proposalIndex,
+    "用户原话、主管自由往返与方案短讯应按消息时间序落位",
   );
 
   const deliveryTree = stream({
@@ -384,7 +394,7 @@ assertDeepEqual(
 
   const amendmentMarkup = renderToStaticMarkup(
     stream({
-      entries: [waitingQuestion],
+      entries: [secondSupervisorMessage],
       userGoal: "旧目标",
       userTurns: [
         {
@@ -407,31 +417,54 @@ assertDeepEqual(
   );
   assert(
     amendmentMarkup.indexOf("方案好了，放你右手边了") < amendmentMarkup.indexOf("右区零改。") &&
-      amendmentMarkup.indexOf("右区零改。") < amendmentMarkup.indexOf("这单只读吗"),
-    "改要求后的真实口供应落在旧方案之后、主管新追问之前",
+      amendmentMarkup.indexOf("右区零改。") < amendmentMarkup.indexOf("这一单我会按只读边界推进。"),
+    "改要求后的真实口供应落在旧方案之后、主管自由回文之前",
   );
 }
 
-// 2) 常驻输入框(修单3)：answer 路由受控输入+提交；路由判据只认结构化 question_id；跑态禁发人话；
-//    消息流内不再内嵌输入框——输入统一走常驻框。
-{
-  assert(
-    latestWaitingQuestionIdOf(chronologicalEntries) === waitingQuestionId,
-    "常驻框 answer 路由判据必须来自结构化 entry.question_id",
-  );
-  assert(latestWaitingQuestionIdOf([answeredQuestion]) === null, "没有 waiting_user 时不应给出 answer 路由");
-  assert(waitingQuestionId !== waitingQuestion.entry_id, "question_id 不得退化为 blackboard entry_id");
+const testProjectWorkflow: ProjectWorkflowSummary = {
+  project_id: projectId,
+  project_root: projectRoot,
+  workflow_id: workflowId,
+  title: "conversation center fixture",
+  state: "running",
+  node_count: 0,
+  edge_count: 0,
+  task_draft_count: 0,
+  task_drafts: [],
+  node_session_bindings: [],
+  node_dispatches: [],
+  director_reviews: [],
+  execution_controls: [],
+  permission_requests: [],
+  execution_attempts: [],
+};
 
+function ComposerRouteProbe({ phase, isTestProject = true }: { phase: JiaobanPhase; isTestProject?: boolean }) {
+  void phase;
+  const conversation = useJiaobanConversationState({
+    projectWorkflow: testProjectWorkflow,
+    workflowState,
+    projectRoot,
+    onProposalStoreRefresh: noop,
+    humanizeAnswerError: () => "这句没送到主管——稍后再试一次。",
+  });
+  const composer = conversation.makeConversationComposer({ isTestProject });
+  return <JiaobanConversationComposer {...composer} />;
+}
+
+// 2) 底1常驻框：唯一 message 路由、受控草稿、Enter 语义不变；所有 test-project 相位均可发。
+{
   const draftChanges: string[] = [];
-  let submitted: number = 0;
+  const submission = { count: 0 };
   const composer = (
     <JiaobanConversationComposer
-      route={{ kind: "answer", questionId: waitingQuestionId }}
+      route={{ kind: "message" }}
       draft="保持只读。"
       busy={false}
       onDraftChange={(value) => draftChanges.push(value)}
       onSubmit={() => {
-        submitted += 1;
+        submission.count += 1;
       }}
     />
   );
@@ -445,24 +478,74 @@ assertDeepEqual(
   assert(onChange, "常驻输入框应接受受控变更回调");
   onChange({ target: { value: "只读，不写项目根。" } });
 
-  // 「只要一个对话框,上下不带字」:无按钮,Enter 发送、Shift+Enter 换行。
+  // 「只要一个对话框,上下不带字」：无按钮，Enter 发送、Shift+Enter 换行。
   assert(!findButtonByText(composer, "说给主管"), "常驻输入框不再挂发送按钮");
   const onKeyDown = textarea.props?.onKeyDown as
     | ((event: { key: string; shiftKey: boolean; preventDefault: () => void }) => void)
     | undefined;
   assert(onKeyDown, "常驻输入框应接 Enter 发送");
   onKeyDown({ key: "Enter", shiftKey: true, preventDefault: noop });
-  const submittedAfterShiftEnter = submitted;
-  assert(submittedAfterShiftEnter === 0, "Shift+Enter 只换行不发送");
+  assert(Number(submission.count) === 0, "Shift+Enter 只换行不发送");
   onKeyDown({ key: "Enter", shiftKey: false, preventDefault: noop });
-  const submittedAfterEnter = submitted;
-
   assertDeepEqual(draftChanges, ["只读，不写项目根。"], "草稿变更应回传输入值");
-  assert(submittedAfterEnter === 1, "Enter 应触发一次提交");
+  assert(Number(submission.count) === 1, "Enter 应触发一次提交");
+
+  for (const phase of ["say", "authorize", "running", "done", "blocked"] as JiaobanPhase[]) {
+    const markup = renderToStaticMarkup(<ComposerRouteProbe phase={phase} />);
+    assert(markup.includes('data-composer-route="message"'), `${phase} 相位必须走唯一 user message 路由`);
+    assert(!markup.includes("disabled"), `${phase} 相位不得因旧状态机锁住常驻框`);
+  }
+
+  const nonTestMarkup = renderToStaticMarkup(<ComposerRouteProbe phase="running" isTestProject={false} />);
+  assert(
+    nonTestMarkup.includes("这个项目还没接执行") && nonTestMarkup.includes("disabled"),
+    "P1-E 非测试项目的诚实关门语义仍须保留",
+  );
+
+  const streamMarkup = renderToStaticMarkup(stream({ entries: chronologicalEntries }));
+  assert(!streamMarkup.includes("<textarea"), "消息流内不再内嵌输入框——输入统一走常驻框");
+}
+
+// 3) 自由消息没有 question/answer 折叠或 receipt；右区方案批准动作不被一条普通消息锁走。
+{
+  const freeMessageMarkup = renderToStaticMarkup(stream({ entries: [firstSupervisorMessage, userMessage] }));
+  assert(
+    freeMessageMarkup.includes('data-message-kind="supervisor"') && freeMessageMarkup.includes('data-message-kind="user"'),
+    "普通主管/用户消息必须按 source identity 显示",
+  );
+  for (const retiredMarkup of ["supervisor-question", "user-answer", "waiting_user", "question_id", "已答"]) {
+    assert(!freeMessageMarkup.includes(retiredMarkup), `自由消息流不得再暴露 P1-B 回合语义：${retiredMarkup}`);
+  }
+  const proposalActionMarkup = renderToStaticMarkup(
+    stream({
+      entries: [secondSupervisorMessage],
+      phaseKind: "proposal",
+      phaseContent: <button type="button">允许并开始旧方案</button>,
+    }),
+  );
+  assert(
+    proposalActionMarkup.includes("允许并开始旧方案"),
+    "自由消息不应替右侧既有方案批准动作抢占或推进工作流",
+  );
+}
+
+// 4) 发送失败与刷新失败都以统一 alert 行上脸；不泄露已退役 question 路由机器词。
+{
+  const errorMarkup = renderToStaticMarkup(
+    stream({
+      entries: [userMessage],
+      messageErrors: { "resident-message": "这句没送到主管——稍后再试一次。" },
+    }),
+  );
+  assert(
+    errorMarkup.includes('data-message-kind="message-error"') && errorMarkup.includes('role="alert"'),
+    "统一用户消息失败必须以 alert 行上脸，不许静默",
+  );
+  assert(!errorMarkup.includes("question_id") && !errorMarkup.includes("waiting_user"), "失败行不得复活旧问答路由词");
 
   const composerErrorMarkup = renderToStaticMarkup(
     <JiaobanConversationComposer
-      route={{ kind: "new_goal" }}
+      route={{ kind: "message" }}
       draft=""
       busy={false}
       error="这句没送到主管——稍后再试一次。"
@@ -472,82 +555,11 @@ assertDeepEqual(
   );
   assert(
     composerErrorMarkup.includes('role="alert"') && composerErrorMarkup.includes("这句没送到主管"),
-    "出方案失败必须以 alert 行上脸,不许静默",
-  );
-
-  const disabledMarkup = renderToStaticMarkup(
-    <JiaobanConversationComposer
-      route={{ kind: "disabled", reason: "正在干活——有话等交货或卡住时说" }}
-      draft=""
-      busy={false}
-      onDraftChange={noop}
-      onSubmit={noop}
-    />,
-  );
-  assert(disabledMarkup.includes("正在干活——有话等交货或卡住时说"), "跑态应以人话说明禁发");
-  assert(disabledMarkup.includes("disabled"), "跑态输入框应禁用");
-
-  const streamMarkup = renderToStaticMarkup(stream({ entries: chronologicalEntries }));
-  assert(!streamMarkup.includes("<textarea"), "消息流内不再内嵌输入框——输入统一走常驻框");
-
-  const pendingWithOldProposal = renderToStaticMarkup(
-    stream({
-      entries: [waitingQuestion],
-      phaseKind: "proposal",
-      phaseContent: <button type="button">允许并开始旧方案</button>,
-    }),
-  );
-  assert(
-    !pendingWithOldProposal.includes("允许并开始旧方案"),
-    "待答追问必须独占当前动作区，不能露出仍在 store 里的旧方案授权动作",
+    "发送失败的常驻框也必须保留可访问 alert",
   );
 }
 
-// 3) answered 追问收成默认闭合摘要，P3-C blocked 占位内容仍并存(不属本包范围·零碰)，且不再挂回答框。
-{
-  const tree = stream({ entries: [answeredQuestion] });
-  const markup = renderToStaticMarkup(tree);
-  const details = findElement(
-    tree,
-    (element) => element.type === "details" && element.props?.className === "jiaoban-conversation-answered",
-  );
-  assert(details, "answered 追问应使用折叠详情");
-  assert(details.props?.open !== true, "answered 追问默认应闭合");
-  const detailsText = visibleText(details);
-  assert(
-    detailsText.includes("项目主管 · 已答") && detailsText.includes("先确认验收是否只看离线结果？"),
-    "折叠摘要应说明已答并保留问题",
-  );
-  assert(!markup.includes('aria-label="回答主管"') && !markup.includes(">答主管<"), "answered 追问不应再挂输入框");
-  assert(markup.includes("blocked 相位占位内容照常在"), "P3-C 占位件(blocked/legacy 渲法)不属 P1-D 范围，不得被误删");
-}
-
-// 4) already_answered 只显示人话回执，不把机器状态或后端注入细节带上脸。
-{
-  const outcome: SupervisorResidentAnswerOutcome = {
-    status: "already_answered",
-    question_id: answeredQuestionId,
-    reply_injected: true,
-    thread_id: "thread:resident:fixture",
-    supervisor_reply: null,
-    proposal: null,
-    question: null,
-    message: "该问题已有答复且已注入；拒绝重复提交，未再次调用模型。原答复长度=8。",
-  };
-  const receipt = humanizeResidentAnswerOutcome(outcome);
-  const markup = renderToStaticMarkup(
-    stream({
-      entries: [answeredQuestion],
-      answerReceipts: { [answeredQuestionId]: receipt },
-    }),
-  );
-  assert(markup.includes("这问已经答过了，主管没有重复处理。"), "幂等命中应显示可理解的人话回执");
-  for (const forbidden of ["already_answered", "已注入", "调用模型", "答复长度"]) {
-    assert(!markup.includes(forbidden), `幂等回执不得上脸机器词：${forbidden}`);
-  }
-}
-
-// 5) consulting 是带人话的「主管在看」等待消息，不允许裸 spinner；新 waiting_user 前缀也必须翻成人话。
+// 5) 提交期间的「主管在看」仍是人话等待态，但不会吞掉已落 canonical 的过程/对话消息。
 {
   const tree = stream({
     consultLoading: true,
@@ -559,27 +571,18 @@ assertDeepEqual(
     tree,
     (element) => element.props?.role === "status" && element.props?.["aria-label"] === "主管在看",
   );
-  assert(waitingStatus, "consulting 应有可访问的等待状态");
+  assert(waitingStatus, "发送期间应有可访问的等待状态");
   assert(visibleText(waitingStatus).includes("主管在看"), "等待态必须带主管在看人话，不能只有 spinner");
   assert(markup.includes('class="jiaoban-spinner" aria-hidden="true"'), "呼吸点只作装饰并应对读屏隐藏");
-  assert(!markup.includes("旧说态输入框"), "主管在看时不应同时露出旧说态输入框");
+  assert(!markup.includes("旧说态输入框"), "主管在看时不应同时露出旧相位内容");
 
-  const answerRoundMarkup = renderToStaticMarkup(
+  const messageRoundMarkup = renderToStaticMarkup(
     stream({
-      entries: [waitingQuestion],
-      answerBusyQuestionId: waitingQuestionId,
+      entries: [secondSupervisorMessage],
+      messageBusyKey: "resident-message",
     }),
   );
-  assert(answerRoundMarkup.includes("主管在看"), "回答送达后的 resident 新回合也必须进入主管在看等待态");
-
-  const humanized = humanizeConsultError(
-    new Error(`supervisor_resident_question_waiting_user:${waitingQuestionId}`),
-  );
-  assert(humanized === "主管想先问清一件事，请在下面直接回答。", "waiting_user 新前缀应翻成既定人话");
-  assert(
-    !humanized.includes("supervisor_resident_question_waiting_user") && !humanized.includes(waitingQuestionId),
-    "humanizeConsultError 不得泄露机器前缀或 question_id",
-  );
+  assert(messageRoundMarkup.includes("主管在看"), "任意用户消息送达后的 resident 回合都必须进入主管在看等待态");
 }
 
 // 6) 修单4·A4 分组判据：groupConversationItemsByProposal 是纯函数——纯数据摆样例验证，零 DOM。
@@ -660,27 +663,19 @@ assertDeepEqual(
     currentProposalCreatedAtMs: multiOrderProposals[2].created_at_ms,
     onActivate: noop,
   });
-  const order1AnsweredQuestion = supervisorEntry({
-    entry_id: "blackboard:supervisor:order1-answered",
-    question_id: "question:resident:order1",
-    title: "主管问题 · 第 1 轮",
-    summary: "第 1 轮主管问题：登录页要不要支持手机号？",
-    status: "answered",
-    source_status: "answered",
+  const order1SupervisorMessage = supervisorEntry({
+    entry_id: "blackboard:supervisor:order1-message",
+    summary: "登录页要不要支持手机号？",
     created_at: "2026-07-17T01:30:00.000Z",
   });
-  const order3WaitingQuestion = supervisorEntry({
-    entry_id: "blackboard:supervisor:order3-waiting",
-    question_id: "question:resident:order3",
-    title: "主管问题 · 第 2 轮",
-    summary: "第 2 轮主管问题：找回密码走邮箱还是短信？",
-    status: "waiting_user",
-    source_status: "waiting_user",
+  const order3SupervisorMessage = supervisorEntry({
+    entry_id: "blackboard:supervisor:order3-message",
+    summary: "找回密码走邮箱还是短信？",
     created_at: "2026-07-17T03:30:00.000Z",
   });
 
   const multiOrderTree = stream({
-    entries: [order1AnsweredQuestion, order3WaitingQuestion],
+    entries: [order1SupervisorMessage, order3SupervisorMessage],
     userGoal: order1Goal,
     userTurns: multiOrderTurns,
     artifactNotices: multiOrderNotices,
@@ -702,11 +697,11 @@ assertDeepEqual(
     earlierText.includes("先把登录页做好") &&
       earlierText.includes("登录页要不要支持手机号") &&
       earlierText.includes("加个记住我"),
-    "折叠段应含首单目标一句、首单问答(沿用已答折叠)、第二单补充目标一句",
+    "折叠段应含首单目标一句、首单主管消息、第二单补充目标一句",
   );
   assert(
     !earlierText.includes("找回密码走邮箱还是短信") && !earlierText.includes("再加个找回密码"),
-    "当前单(第三单)的问答与补充目标不得混进折叠段",
+    "当前单(第三单)的主管消息与补充目标不得混进折叠段",
   );
   assert(
     multiOrderMarkup.includes('data-proposal-id="proposal:order-1"') &&

@@ -355,31 +355,19 @@ export type RunProjectConsultationRequest = {
   workflow_id?: string;
 };
 
-// P1-B resident问答后端契约。P1-C 再负责将 read model 中的消息渲染为交互；本包不触碰组件。
-export type SupervisorResidentQuestion = {
-  question_id: string;
-  project_id: string;
-  workflow_id: string;
-  round: number;
-  question: string;
-};
-
+// S1·常驻主管自由对话：用户消息只以用户身份送入同一 resident thread；是否出方案由主管
+// 调 MCP 工具决定，不能由这条聊天请求直接写入或推进工作流。
 export type SubmitSupervisorResidentAnswerRequest = {
   project_id: string;
   workflow_id: string;
-  question_id: string;
-  answer_text: string;
+  message_text: string;
 };
 
 export type SupervisorResidentAnswerOutcome = {
-  status: "proposal_created" | "question_asked" | "already_answered" | string;
-  question_id: string;
-  reply_injected: boolean;
+  status: string;
   thread_id?: string | null;
   supervisor_reply?: string | null;
-  proposal?: ProjectConsultationProposal | null;
-  question?: SupervisorResidentQuestion | null;
-  message: string;
+  message?: string | null;
 };
 
 // 件 B · 授权后自动推进。逐字对 Rust director_agent.rs 的 AutoAdvanceAuthorizedRoleLoopRequest / AutoAdvanceRoleLoopOutcome。

@@ -6,6 +6,14 @@
 
 现在主管每句话被迫是「方案或提问」二选一,输入框按状态上锁——用户要的是正常聊天,聊到位方案才作为工具调用落到右区卡。本包=批前段全对话化:**聊天走会话,实物走工具,批准照旧在卡上**。
 
+## 勘察补遗:现成对话件盘点(2026-07-18 用户点破后补·施工必读)
+
+仓里已有**四条「往会话送话」的路**和**两张对话脸**——本包是接线+放开,不是造新轮:
+
+- 送话路:①`manual_relay`(preview+confirm 一次性·智能体页唯一手动指挥通道)②`submit_supervisor_resident_answer`(P1-B·主管 thread 注入)③`readonly_codex_consult`(一次性咨询·P1-E 后共享器官)④resident session 底层 codex-reply 器官(`supervisor_resident_session.rs`)。**A3 的泛化=改造②复用④,禁新增第五条**;与①的关系二选一明确写进回传:共用底层器官,或分界(①管任意会话/本包管主管 thread)+审计口径对齐。
+- 对话脸:P1-C 治理脸(黑板派生·中栏)/智能体页原始脸(`AgentConversationShell`+`TranscriptViews`+`AgentChatComposer`)。两张脸=修宪1号钉过的「工程详情 vs 开发者详情」设计边界,**都零碰**;本包只动中栏路由与主管回文落派生流。
+- 智能体页已实证「自由聊 codex 会话」技术可行(AgentChatComposer+manual relay 真发)——底1 的自由对话无未知技术风险,风险集中在协议放开与工具口。
+
 ## A·干什么
 
 1. **A1 回合放开(后端)**:主管常驻会话去掉 `supervisor_resident_turn.v1` 回合强制——主管回文=自由文本直接落对话流(黑板派生 `supervisor_message` 既有管道);`protocol_invalid` 保守停随之退役(其审计事件保留历史不删);主管提问=普通消息,不再要求 question schema。换代事实注入/threadId 续接零碰。
@@ -22,6 +30,7 @@
 4. serde 前科双件;audit id 单源;新 sidecar 零(gate `unknown_sidecar_json_kind` 基线零净增)。
 5. **并行纪律**:P3-A/记忆中心两包未提交文件清单内的 hunk 不碰(JiaobanConversation.tsx 双包都要动——本包只动路由/发送段,过程消息段零碰,冲突即停手报回);他线件(CURRENT/catch-log/k3_b1/design-mockups)不碰。
 6. 方案 schema/lint 规则本体零改(P2-A 资产原样搬用,改=越界)。
+7. **收编红线(勘察补遗对应)**:用户消息注入=泛化既有 P1-B 命令+复用 resident 底层器官,**禁新增独立发送路**;manual_relay/consult/智能体页两脸零碰;若发现共享底层可收编,只列建议进回传,不在本包动手。
 
 ## C·交付
 
