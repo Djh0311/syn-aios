@@ -1,4 +1,5 @@
 // 交办·预演画布(批前工序图/运行只读图)+运行节点态工具——阶段3拆巨石第七刀:自 ProjectJiaobanPanel.tsx 原样迁出,零逻辑改动。
+import { useEffect } from "react";
 import type {
   DirectorChainStep,
   ProjectConsultationProposal,
@@ -32,6 +33,12 @@ export type JiaobanRuntimeNodeStateInfo = {
   detail?: string;
   rawState?: string;
 };
+
+// P3-A：过程短讯用 workflow_node_id 指向右区既有只读图；编码后可作为稳定 DOM 锚点，
+// 不把任何消息或选中态写回工作流事实。
+export function jiaobanRuntimeNodeElementId(nodeId: string): string {
+  return `jiaoban-runtime-node-${encodeURIComponent(nodeId)}`;
+}
 
 const jiaobanRuntimeNodeLabel: Record<JiaobanRuntimeNodeState, string> = {
   pending: "等待",
@@ -194,6 +201,8 @@ export function JiaobanPlanPreviewCanvas({
   previewWarnings,
   readOnly = false,
   runtimeNodeStates = null,
+  focusedNodeId = null,
+  focusActive = false,
   onBindingChange,
   onRetryPreview,
   onOpenAgentSession,
@@ -206,10 +215,24 @@ export function JiaobanPlanPreviewCanvas({
   previewWarnings: string[];
   readOnly?: boolean;
   runtimeNodeStates?: Record<string, JiaobanRuntimeNodeStateInfo> | null;
+  focusedNodeId?: string | null;
+  // P3-A：右区 graph tab 显示时才滚动/聚焦，避免隐藏的交货或方案视图抢焦点。
+  focusActive?: boolean;
   onBindingChange: (previewNodeId: string, value: string | null) => void;
   onRetryPreview: () => void;
   onOpenAgentSession: (threadId: string) => void;
 }) {
+  useEffect(() => {
+    if (!readOnly || !focusActive || !focusedNodeId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(jiaobanRuntimeNodeElementId(focusedNodeId));
+      target?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      const summary = target?.querySelector("summary");
+      if (summary instanceof HTMLElement) summary.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusActive, focusedNodeId, readOnly]);
+
   if (waitingForPreview) {
     return (
       <div className="jiaoban-plan-preview-state" role="status" aria-label="预演工序图绘制中">
@@ -254,6 +277,7 @@ export function JiaobanPlanPreviewCanvas({
           const runtimeNodeState = readOnly
             ? runtimeNodeStates?.[node.preview_node_id] ?? { state: "pending" }
             : null;
+          const isFocused = readOnly && focusedNodeId === node.preview_node_id;
           const nodeLabel = runtimeNodeState ? jiaobanRuntimeNodeStateLabel(runtimeNodeState) : "预演";
           return (
             <div className="jiaoban-plan-preview-node-wrap" key={node.preview_node_id} role="listitem">
@@ -263,7 +287,10 @@ export function JiaobanPlanPreviewCanvas({
                 </span>
               ) : null}
               <details
-                className={`jiaoban-plan-preview-node${runtimeNodeState ? ` is-runtime-node is-${runtimeNodeState.state}` : ""}`}
+                id={readOnly ? jiaobanRuntimeNodeElementId(node.preview_node_id) : undefined}
+                className={`jiaoban-plan-preview-node${runtimeNodeState ? ` is-runtime-node is-${runtimeNodeState.state}` : ""}${isFocused ? " is-focused" : ""}`}
+                data-runtime-node-id={readOnly ? node.preview_node_id : undefined}
+                open={isFocused || undefined}
               >
                 <summary className="project-canvas-static-node task preflight">
                   <span>任务 · {nodeLabel}</span>

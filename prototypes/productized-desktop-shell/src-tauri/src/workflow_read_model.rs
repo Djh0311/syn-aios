@@ -1,10 +1,13 @@
 use crate::WorkflowLedgerEntry;
 use serde_json::Value;
 
-pub(crate) fn derive_project_blackboards<TWorkflow, TBlackboard>(
+pub(crate) fn derive_project_blackboards<TWorkflow, TBlackboard, F>(
     workflows: &[TWorkflow],
-    derive_one: fn(&TWorkflow) -> TBlackboard,
-) -> Vec<TBlackboard> {
+    derive_one: F,
+) -> Vec<TBlackboard>
+where
+    F: Fn(&TWorkflow) -> TBlackboard,
+{
     workflows.iter().map(derive_one).collect()
 }
 
@@ -26,13 +29,20 @@ pub(crate) fn derive_workflow_ledger_entries(
 ) -> Vec<WorkflowLedgerEntry> {
     let mut entries = Vec::new();
     for event in audit_events.iter().filter(|event| {
-        (fns.optional_string_from)(event, "target_ref")
-            .is_some_and(|target| target.contains(workflow_id))
-            || (fns.optional_string_from)(event, "event_type").is_some_and(|event_type| {
-                event_type.starts_with("task_")
-                    || event_type.starts_with("workflow_")
-                    || event_type.starts_with("offline_")
-            })
+        let event_type = (fns.optional_string_from)(event, "event_type").unwrap_or_default();
+        if event_type.starts_with("workflow_chain_") {
+            match (fns.optional_string_from)(event, "workflow_id") {
+                Some(event_workflow_id) => event_workflow_id == workflow_id,
+                None => (fns.optional_string_from)(event, "target_ref")
+                    .is_some_and(|target| target.contains(workflow_id)),
+            }
+        } else {
+            (fns.optional_string_from)(event, "target_ref")
+                .is_some_and(|target| target.contains(workflow_id))
+                || event_type.starts_with("task_")
+                || event_type.starts_with("workflow_")
+                || event_type.starts_with("offline_")
+        }
     }) {
         let event_type = (fns.optional_string_from)(event, "event_type")
             .unwrap_or_else(|| "audit_event".to_string());

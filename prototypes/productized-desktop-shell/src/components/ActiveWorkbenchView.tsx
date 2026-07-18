@@ -79,6 +79,8 @@ export type ActiveWorkbenchViewProps = {
   // App 一定传（secretaryContext 派生·672 穿参）；设可选让现有离线测试的其它 view 调用不必补它。
   secretaryContext?: SecretaryContext;
   onReloadWorkflowState: () => void;
+  // P3-A：运行期过程消息只需重读 workflow snapshot，避免复用会拉全候选店的刷新回调。
+  onWorkflowStateReadRefresh?: () => Promise<void>;
   onNotice: (msg: string) => void;
   onOpenAgentSession: (threadId: string) => void;
   // fix8：出方案成功刷店（穿到交办面板）。App 的 reloadCandidateStores 穿下来。
@@ -101,6 +103,7 @@ export function renderActiveWorkbenchView({
   workflowStateLoading,
   workflowStateError,
   onReloadWorkflowState,
+  onWorkflowStateReadRefresh,
   onNotice,
   hasRealSnapshot,
   onOpenAgentSession,
@@ -185,6 +188,7 @@ export function renderActiveWorkbenchView({
         workflowStateLoading={workflowStateLoading}
         workflowStateError={workflowStateError}
         onReloadWorkflowState={onReloadWorkflowState}
+        onWorkflowStateReadRefresh={onWorkflowStateReadRefresh}
         onRequestAction={onRequestAction}
         onProposalStoreRefresh={onProposalStoreRefresh}
         onLoadTranscript={browserPreviewData?.loadTranscript ?? loadCodexSessionTranscript}

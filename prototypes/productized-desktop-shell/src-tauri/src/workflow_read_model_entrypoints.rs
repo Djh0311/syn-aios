@@ -203,12 +203,44 @@ fn project_workflow_summaries(value: &Value) -> Vec<ProjectWorkflowSummary> {
 
 fn project_blackboards_from_workflows(
     workflows: &[ProjectWorkflowSummary],
+    audit_events: &[Value],
 ) -> Vec<ProjectBlackboard> {
-    workflow_read_model::derive_project_blackboards(workflows, project_blackboard_from_workflow)
+    workflow_read_model::derive_project_blackboards(workflows, |summary| {
+        project_blackboard_from_workflow(summary, audit_events)
+    })
 }
 
-fn project_blackboard_from_workflow(summary: &ProjectWorkflowSummary) -> ProjectBlackboard {
+fn workflow_chain_audit_event_types_for_workflow(
+    audit_events: &[Value],
+    workflow_id: &str,
+) -> BTreeMap<String, String> {
+    audit_events
+        .iter()
+        .filter_map(|event| {
+            let event_type = optional_string_from(event, "event_type")?;
+            if !event_type.starts_with("workflow_chain_") {
+                return None;
+            }
+            let belongs_to_workflow = match optional_string_from(event, "workflow_id") {
+                Some(audit_workflow_id) => audit_workflow_id == workflow_id,
+                None => optional_string_from(event, "target_ref")
+                    .is_some_and(|target_ref| target_ref.contains(workflow_id)),
+            };
+            if !belongs_to_workflow {
+                return None;
+            }
+            Some((optional_string_from(event, "event_id")?, event_type))
+        })
+        .collect()
+}
+
+fn project_blackboard_from_workflow(
+    summary: &ProjectWorkflowSummary,
+    audit_events: &[Value],
+) -> ProjectBlackboard {
     let mut entries = Vec::new();
+    let chain_audit_event_types =
+        workflow_chain_audit_event_types_for_workflow(audit_events, &summary.workflow_id);
 
     if let Some(workflow) = &summary.derived_workflow {
         for report in &workflow.subagent_reports {
@@ -389,6 +421,7 @@ fn project_blackboard_from_workflow(summary: &ProjectWorkflowSummary) -> Project
                 ),
                 &summary.project_id,
                 &summary.workflow_id,
+                None,
                 supervisor_message_question_id(
                     &ledger_entry.workflow_id,
                     &ledger_entry.source_refs,
@@ -397,7 +430,46 @@ fn project_blackboard_from_workflow(summary: &ProjectWorkflowSummary) -> Project
                 title,
                 ledger_entry.summary.clone(),
                 status,
+                Some(status.to_string()),
+                "主管问题和用户答复是会话事实，不是黑板候选，也不会推进工作流状态。",
                 source_refs,
+                ledger_entry.created_at.clone(),
+            ));
+        }
+
+        for (ledger_entry_ordinal, ledger_entry) in workflow.ledger_entries.iter().enumerate() {
+            let Some(audit_ref) = ledger_entry.audit_refs.first() else {
+                continue;
+            };
+            let Some(source_event_type) = chain_audit_event_types.get(audit_ref) else {
+                continue;
+            };
+            let Some((title, message_summary)) =
+                supervisor_process_message_template(source_event_type)
+            else {
+                continue;
+            };
+            entries.push(blackboard_supervisor_message_entry(
+                format!(
+                    "blackboard:{}:supervisor-process:{ledger_entry_ordinal:08}:{}",
+                    workflow.workflow_id,
+                    stable_id(&ledger_entry.ledger_entry_id)
+                ),
+                &summary.project_id,
+                &summary.workflow_id,
+                ledger_entry.workflow_node_id.clone(),
+                None,
+                BlackboardEntryKind::SupervisorMessage,
+                title.to_string(),
+                message_summary.to_string(),
+                "reported",
+                Some(source_event_type.to_string()),
+                "主管过程短讯是纯派生读模型，不是黑板候选，也不会推进工作流状态。",
+                vec![blackboard_source_ref(
+                    "workflow_chain_event",
+                    audit_ref,
+                    "链事件审计",
+                )],
                 ledger_entry.created_at.clone(),
             ));
         }
@@ -536,11 +608,14 @@ fn blackboard_supervisor_message_entry(
     entry_id: String,
     project_id: &str,
     workflow_id: &str,
+    workflow_node_id: Option<String>,
     question_id: Option<String>,
     kind: BlackboardEntryKind,
     title: String,
     summary: String,
     status: &str,
+    source_status: Option<String>,
+    promotion_reason: &str,
     source_refs: Vec<BlackboardSourceRef>,
     created_at: Option<String>,
 ) -> BlackboardEntry {
@@ -551,8 +626,7 @@ fn blackboard_supervisor_message_entry(
             target_kind: None,
             decided_by_role: None,
             decided_at: None,
-            reason: "主管问题和用户答复是会话事实，不是黑板候选，也不会推进工作流状态。"
-                .to_string(),
+            reason: promotion_reason.to_string(),
             audit_refs: vec![],
             warnings: vec!["supervisor_message_not_a_promotion_candidate".to_string()],
         },
@@ -560,13 +634,13 @@ fn blackboard_supervisor_message_entry(
         project_id: project_id.to_string(),
         workflow_id: workflow_id.to_string(),
         work_item_id: None,
-        workflow_node_id: None,
+        workflow_node_id,
         question_id,
         kind,
         title,
         summary,
         status: status.to_string(),
-        source_status: Some(status.to_string()),
+        source_status,
         source_refs,
         created_at,
         warnings: vec![
@@ -576,10 +650,26 @@ fn blackboard_supervisor_message_entry(
     }
 }
 
-fn supervisor_message_question_id(
-    workflow_id: &str,
-    source_refs: &[String],
-) -> Option<String> {
+fn supervisor_process_message_template(event_type: &str) -> Option<(&'static str, &'static str)> {
+    match event_type {
+        "workflow_chain_run_started" => Some(("主管进度 / 开跑", "我开跑了，任务已经排好队。")),
+        "workflow_chain_node_started" => Some(("主管进度 / 开始处理", "我在做下一件事了。")),
+        "workflow_chain_node_completed" => Some(("主管进度 / 一项完成", "这一件做完了。")),
+        "workflow_chain_node_waiting_decision" => {
+            Some(("主管进度 / 等待你", "我先停在这儿了——worker 有话想问你。"))
+        }
+        "workflow_chain_node_needs_rework" => {
+            Some(("主管进度 / 需要返工", "这一件要回去再做一遍。"))
+        }
+        "workflow_chain_run_completed" => Some(("主管进度 / 已完成", "都干完了，结果放你右手边。")),
+        "workflow_chain_run_failed" | "workflow_chain_run_stopped" => {
+            Some(("主管进度 / 已中断", "这轮先停下来了，原因在右边。"))
+        }
+        _ => None,
+    }
+}
+
+fn supervisor_message_question_id(workflow_id: &str, source_refs: &[String]) -> Option<String> {
     let prefix = format!("{workflow_id}:resident-question:");
     source_refs.iter().find_map(|source_ref| {
         source_ref.strip_prefix(&prefix).and_then(|question_id| {

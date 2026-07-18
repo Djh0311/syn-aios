@@ -9,10 +9,14 @@ import { humanizeConsultError } from "../src/views/projects/ProjectJiaobanPanel"
 import {
   JiaobanConversationComposer,
   JiaobanConversationStream,
+  WORKFLOW_CHAIN_EVENT_SOURCE_KIND,
   artifactNoticesForConversation,
   groupConversationItemsByProposal,
   humanizeResidentAnswerOutcome,
+  isSupervisorProcess,
   latestWaitingQuestionIdOf,
+  supervisorProcessCanvasView,
+  supervisorProcessFocusedNodeId,
   userTurnsFromProposalHistory,
   supervisorConversationEntriesForProject,
 } from "../src/views/projects/jiaoban/JiaobanConversation";
@@ -66,6 +70,38 @@ function supervisorEntry(overrides: Partial<BlackboardEntry>): BlackboardEntry {
     warnings: [],
     ...overrides,
   };
+}
+
+function supervisorProcessEntry({
+  entryId,
+  sourceEventType,
+  summary,
+  createdAt,
+  workflowNodeId = null,
+}: {
+  entryId: string;
+  sourceEventType: string;
+  summary: string;
+  createdAt: string;
+  workflowNodeId?: string | null;
+}): BlackboardEntry {
+  return supervisorEntry({
+    entry_id: entryId,
+    question_id: null,
+    workflow_node_id: workflowNodeId,
+    title: `主管过程 · ${sourceEventType}`,
+    summary,
+    status: "reported",
+    source_status: sourceEventType,
+    source_refs: [
+      {
+        source_kind: WORKFLOW_CHAIN_EVENT_SOURCE_KIND,
+        source_id: `audit:${sourceEventType}:${entryId}`,
+        label: "raw_reason: worker_retry_exhausted: confidential-machine-detail",
+      },
+    ],
+    created_at: createdAt,
+  });
 }
 
 function stream(overrides: Partial<Parameters<typeof JiaobanConversationStream>[0]> = {}) {
@@ -700,6 +736,151 @@ assertDeepEqual(
   );
 }
 
+// 8) P3-A：链审计派生的过程短讯走结构化 source_kind/source_status，不碰用户答复、机器 reason 或 P3-B 回话。
+{
+  const processEntries = [
+    supervisorProcessEntry({
+      entryId: "blackboard:process:run-started",
+      sourceEventType: "workflow_chain_run_started",
+      summary: "开跑了，3 个任务。",
+      createdAt: "2026-07-18T01:00:00.000Z",
+    }),
+    supervisorProcessEntry({
+      entryId: "blackboard:process:node-started",
+      sourceEventType: "workflow_chain_node_started",
+      summary: "第 1 件开始做了。",
+      createdAt: "2026-07-18T01:00:01.000Z",
+      workflowNodeId: "node:build-shell",
+    }),
+    supervisorProcessEntry({
+      entryId: "blackboard:process:node-completed",
+      sourceEventType: "workflow_chain_node_completed",
+      summary: "第 1 件干完了。",
+      createdAt: "2026-07-18T01:00:02.000Z",
+      workflowNodeId: "node:build-shell",
+    }),
+    supervisorProcessEntry({
+      entryId: "blackboard:process:waiting",
+      sourceEventType: "workflow_chain_node_waiting_decision",
+      summary: "停下来了——worker 有话问你。",
+      createdAt: "2026-07-18T01:00:03.000Z",
+      workflowNodeId: "node:review",
+    }),
+    supervisorProcessEntry({
+      entryId: "blackboard:process:rework",
+      sourceEventType: "workflow_chain_node_needs_rework",
+      summary: "这一步得回去重做。",
+      createdAt: "2026-07-18T01:00:04.000Z",
+      workflowNodeId: "node:review",
+    }),
+    supervisorProcessEntry({
+      entryId: "blackboard:process:run-completed",
+      sourceEventType: "workflow_chain_run_completed",
+      summary: "都干完了，结果放你右手边。",
+      createdAt: "2026-07-18T01:00:05.000Z",
+    }),
+    supervisorProcessEntry({
+      entryId: "blackboard:process:run-stopped",
+      sourceEventType: "workflow_chain_run_stopped",
+      summary: "这单停下来了，右边能看到进度。",
+      createdAt: "2026-07-18T01:00:06.000Z",
+    }),
+  ];
+  assert(processEntries.every(isSupervisorProcess), "链过程消息必须由 workflow_chain_event source ref 结构化识别");
+  assert(
+    processEntries.every((entry) => entry.status === "reported" && entry.question_id == null),
+    "过程消息是只读汇报，不得变成待答问题或回话入口",
+  );
+  assert(
+    processEntries.filter((entry) => supervisorProcessCanvasView(entry) === "delivery").length === 1,
+    "只有链完成过程消息可切交货；其余事件一律回到工序图",
+  );
+
+  const activatedProcessEntries: BlackboardEntry[] = [];
+  const processTree = stream({
+    entries: processEntries,
+    phaseKind: "conversation",
+    phaseContent: null,
+    onSupervisorProcessActivate: (entry) => activatedProcessEntries.push(entry),
+  });
+  const processMarkup = renderToStaticMarkup(processTree);
+  assert(
+    (processMarkup.match(/data-message-kind="supervisor-process"/g) ?? []).length === processEntries.length,
+    "七类链事件应各渲一条主管过程短讯，不得折成用户答复",
+  );
+  assert(!processMarkup.includes('data-message-kind="user-answer"'), "过程短讯不得误渲为“你”的答复");
+  assert(
+    !processMarkup.includes("worker_retry_exhausted") && !processMarkup.includes("confidential-machine-detail"),
+    "机器 reason 只能留在右区/details，过程消息正文不得泄露",
+  );
+  const sequence = processEntries.map((entry) => entry.summary);
+  for (let index = 1; index < sequence.length; index += 1) {
+    assert(
+      processMarkup.indexOf(sequence[index - 1]!) < processMarkup.indexOf(sequence[index]!),
+      "过程短讯应按审计派生时间顺序落入中心消息流",
+    );
+  }
+
+  const nodeProcessButton = findElement(
+    processTree,
+    (element) => element.type === "button" && element.props?.["aria-label"] === "打开右侧工序图并定位任务",
+  );
+  assert(nodeProcessButton, "节点过程短讯应可切右侧工序图并定位节点");
+  const activateNodeProcess = nodeProcessButton.props?.onClick as (() => void) | undefined;
+  assert(activateNodeProcess, "节点过程短讯应保留只读右区聚焦回调");
+  activateNodeProcess();
+  assert(
+    activatedProcessEntries[0]?.workflow_node_id === "node:build-shell" &&
+      supervisorProcessCanvasView(activatedProcessEntries[0]!) === "graph" &&
+      supervisorProcessFocusedNodeId(activatedProcessEntries[0]!) === "node:build-shell",
+    "节点过程消息应只切 graph 并携带原 workflow_node_id",
+  );
+
+  const graphOnlyProcessButton = findElement(
+    processTree,
+    (element) => element.type === "button" && element.props?.["aria-label"] === "打开右侧工序图",
+  );
+  assert(graphOnlyProcessButton, "无节点链过程短讯应只可打开右侧工序图");
+  const activateGraphOnlyProcess = graphOnlyProcessButton.props?.onClick as (() => void) | undefined;
+  assert(activateGraphOnlyProcess, "无节点过程短讯也应保留只读右区聚焦回调");
+  activateGraphOnlyProcess();
+  assert(
+    activatedProcessEntries[1]?.source_status === "workflow_chain_run_started" &&
+      supervisorProcessCanvasView(activatedProcessEntries[1]!) === "graph" &&
+      supervisorProcessFocusedNodeId(activatedProcessEntries[1]!) === null,
+    "无 workflow_node_id 的链过程消息只聚焦 graph，绝不伪造节点定位",
+  );
+
+  const deliveryProcessButton = findElement(
+    processTree,
+    (element) => element.type === "button" && element.props?.["aria-label"] === "打开右侧交货",
+  );
+  assert(deliveryProcessButton, "链完成短讯应可结构化聚焦右侧交货");
+  const activateDeliveryProcess = deliveryProcessButton.props?.onClick as (() => void) | undefined;
+  assert(activateDeliveryProcess, "链完成短讯应保留右侧交货回调");
+  activateDeliveryProcess();
+  assert(
+    activatedProcessEntries[2]?.source_status === "workflow_chain_run_completed" &&
+      supervisorProcessCanvasView(activatedProcessEntries[2]!) === "delivery" &&
+      supervisorProcessFocusedNodeId(activatedProcessEntries[2]!) === null,
+    "只有 canonical workflow_chain_run_completed 可切 delivery，不得看 title/reason 猜",
+  );
+
+  const processAndThinkingMarkup = renderToStaticMarkup(
+    stream({
+      entries: [processEntries[1]!],
+      consultLoading: true,
+      phaseKind: "conversation",
+      phaseContent: null,
+      onSupervisorProcessActivate: noop,
+    }),
+  );
+  assert(
+    processAndThinkingMarkup.includes("第 1 件开始做了。") && processAndThinkingMarkup.includes("主管在看"),
+    "跑期过程短讯应与“主管在看”等待态共存，不能被空转等待吞掉",
+  );
+}
+
 console.log(
-  "jiaoban-conversation-center: 5 组消息流/追问回答/幂等/等待态 + 2 组修单4分组折叠 离线 DOM 断言全过",
+  "jiaoban-conversation-center: 5 组消息流/追问回答/幂等/等待态 + 2 组修单4分组折叠 + P3-A 过程短讯 离线 DOM 断言全过",
 );

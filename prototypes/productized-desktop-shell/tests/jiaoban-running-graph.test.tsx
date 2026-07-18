@@ -3,6 +3,7 @@ import {
   JiaobanPlanPreviewCanvas,
   jiaobanRuntimeNodeStates,
 } from "../src/views/projects/ProjectJiaobanPanel";
+import { jiaobanRuntimeNodeElementId } from "../src/views/projects/jiaoban/jiaobanPreviewCanvas";
 import { JiaobanMergedLayout } from "../src/views/projects/ProjectWorkspaceShell";
 import type { ProjectWorkflowChainStatus, SessionRecord } from "../src/lib/types";
 
@@ -47,6 +48,7 @@ const runningGraph = (
     previewWarnings={[]}
     readOnly
     runtimeNodeStates={runtimeStates}
+    focusedNodeId="step-running"
     onBindingChange={noop}
     onRetryPreview={noop}
     onOpenAgentSession={noop}
@@ -61,6 +63,13 @@ assert(runningOutput.includes("实际已绑定会话") && runningOutput.includes
 assert(runningOutput.includes("看原始对话"), "运行态节点可只读查看已绑定对话");
 assert(!runningOutput.includes("<input") && !runningOutput.includes("给「"), "运行态节点不得再显示会话编辑器");
 assert(!runningOutput.includes(removedCopy("只会用于", "这一步；其余节点默认各开新会话。")), "点名文案应删除");
+assert(
+  runningOutput.includes(`id="${jiaobanRuntimeNodeElementId("step-running")}"`) &&
+    runningOutput.includes('data-runtime-node-id="step-running"') &&
+    runningOutput.includes("is-focused") &&
+    runningOutput.includes("open=\"\""),
+  "过程短讯指向的运行节点应有稳定锚点、展开/高亮 seam",
+);
 
 const runningMerged = renderToStaticMarkup(
   <JiaobanMergedLayout

@@ -85,6 +85,7 @@ type ProjectsViewProps = {
   workflowStateLoading?: boolean;
   workflowStateError?: string | null;
   onReloadWorkflowState?: () => void;
+  onWorkflowStateReadRefresh?: () => Promise<void>;
   onRequestAction: (action: PendingAction) => void;
   onNotice?: (msg: string) => void;
   onLoadTranscript: (threadId: string) => Promise<CodexTranscript>;

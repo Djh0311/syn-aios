@@ -142,6 +142,75 @@
     }
 
     #[test]
+    fn workflow_ledger_scopes_chain_audits_without_changing_legacy_audit_filter() {
+        let workflow_id = default_workflow_id("/tmp/p3-a-current");
+        let other_workflow_id = default_workflow_id("/tmp/p3-a-other");
+        let audit_events = vec![
+            json!({
+                "event_id": "audit:explicit-current",
+                "event_type": "workflow_chain_node_started",
+                "workflow_id": workflow_id,
+                "target_ref": "chain-run:current",
+                "reason": "current",
+            }),
+            json!({
+                "event_id": "audit:explicit-other-with-current-target",
+                "event_type": "workflow_chain_node_started",
+                "workflow_id": other_workflow_id,
+                "target_ref": workflow_id,
+                "reason": "must not leak through target_ref",
+            }),
+            json!({
+                "event_id": "audit:legacy-current",
+                "event_type": "workflow_chain_node_started",
+                "target_ref": workflow_id,
+                "reason": "legacy fallback",
+            }),
+            json!({
+                "event_id": "audit:legacy-other",
+                "event_type": "workflow_chain_node_started",
+                "target_ref": other_workflow_id,
+                "reason": "legacy other",
+            }),
+            json!({
+                "event_id": "audit:legacy-global-workflow",
+                "event_type": "workflow_legacy_global",
+                "workflow_id": other_workflow_id,
+                "target_ref": "global:legacy",
+                "reason": "non-chain events keep the original broad ledger filter",
+            }),
+        ];
+
+        let current_entries =
+            derive_workflow_ledger_entries(&workflow_id, &audit_events, &[], &[], &[]);
+        assert_eq!(
+            current_entries
+                .iter()
+                .map(|entry| entry.ledger_entry_id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "audit:explicit-current",
+                "audit:legacy-current",
+                "audit:legacy-global-workflow",
+            ]
+        );
+
+        let other_entries =
+            derive_workflow_ledger_entries(&other_workflow_id, &audit_events, &[], &[], &[]);
+        assert_eq!(
+            other_entries
+                .iter()
+                .map(|entry| entry.ledger_entry_id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "audit:explicit-other-with-current-target",
+                "audit:legacy-other",
+                "audit:legacy-global-workflow",
+            ]
+        );
+    }
+
+    #[test]
     fn workflow_ledger_validates_entry_type_without_panicking() {
         assert!(is_valid_ledger_entry_type("waiting_decision"));
         assert!(is_valid_ledger_entry_type("node_skipped"));
@@ -813,4 +882,287 @@
             .tool_capability_registry
             .blocked
             .contains(&"tool_output_fulltext_in_ledger".to_string()));
+    }
+
+    #[test]
+    #[ignore = "reads the local default workflow state only to measure P3-A read-model derive cost"]
+    fn p3_a_default_state_snapshot_derive_cost_probe() {
+        let path = default_workflow_state_path();
+        let metadata = fs::metadata(&path).unwrap_or_else(|error| {
+            panic!(
+                "P3-A cost probe needs the actual default workflow state {}: {error}",
+                path.display()
+            )
+        });
+        let value = read_json_file(&path);
+        let audit_events = value["audit_events"].as_array().unwrap_or_else(|| {
+            panic!(
+                "P3-A cost probe expects audit_events in default workflow state {}",
+                path.display()
+            )
+        });
+        let workflow_count = value["workflows"].as_array().map_or(0, Vec::len);
+        let chain_event_count = audit_events
+            .iter()
+            .filter(|event| {
+                optional_string_from(event, "event_type")
+                    .is_some_and(|event_type| event_type.starts_with("workflow_chain_"))
+            })
+            .count();
+        let canonical_chain_event_count = audit_events
+            .iter()
+            .filter(|event| {
+                optional_string_from(event, "event_type")
+                    .as_deref()
+                    .and_then(supervisor_process_message_template)
+                    .is_some()
+            })
+            .count();
+
+        let started_at = std::time::Instant::now();
+        let snapshot = read_workflow_state_snapshot(&path)
+            .expect("P3-A cost probe should derive the actual default state snapshot");
+        let elapsed_ms = started_at.elapsed().as_millis();
+        let ledger_entry_count = snapshot
+            .project_workflows
+            .iter()
+            .filter_map(|workflow| workflow.derived_workflow.as_ref())
+            .map(|workflow| workflow.ledger_entries.len())
+            .sum::<usize>();
+        let blackboard_entry_count = snapshot
+            .project_blackboards
+            .iter()
+            .map(|blackboard| blackboard.entries.len())
+            .sum::<usize>();
+
+        assert!(snapshot.exists, "default state must remain readable");
+        assert_eq!(snapshot.counts.workflows, workflow_count);
+        println!(
+            "P3_A_FULL_SNAPSHOT_DERIVE_COST path={} bytes={} workflows={} audit_events={} chain_events={} canonical_chain_events={} ledger_entries={} blackboard_entries={} elapsed_ms={}",
+            path.display(),
+            metadata.len(),
+            workflow_count,
+            audit_events.len(),
+            chain_event_count,
+            canonical_chain_event_count,
+            ledger_entry_count,
+            blackboard_entry_count,
+            elapsed_ms,
+        );
+    }
+
+    fn assert_p3_a_chain_audits_reconcile_to_process_messages(
+        path: &Path,
+        workflow_id: &str,
+    ) -> Vec<String> {
+        let state = read_json_file(path);
+        let expected = state["audit_events"]
+            .as_array()
+            .expect("chain fixture should retain audit events")
+            .iter()
+            .enumerate()
+            .filter(|(_, audit)| match optional_string_from(audit, "workflow_id") {
+                Some(audit_workflow_id) => audit_workflow_id == workflow_id,
+                None => optional_string_from(audit, "target_ref")
+                    .is_some_and(|target_ref| target_ref.contains(workflow_id)),
+            })
+            .filter_map(|(audit_array_ordinal, audit)| {
+                let event_type = optional_string_from(audit, "event_type")?;
+                let (title, summary) = supervisor_process_message_template(&event_type)?;
+                Some((
+                    audit_array_ordinal,
+                    optional_string_from(audit, "event_id")
+                        .expect("chain audit should have an event id"),
+                    event_type,
+                    title,
+                    summary,
+                    optional_string_from(audit, "reason").unwrap_or_default(),
+                    optional_string_from(audit, "created_at"),
+                    optional_string_from(audit, "node_id"),
+                ))
+            })
+            .collect::<Vec<_>>();
+        let snapshot = read_workflow_state_snapshot(path)
+            .expect("chain audit snapshot should derive its blackboard without writing facts");
+        let blackboard = snapshot
+            .project_blackboards
+            .iter()
+            .find(|blackboard| blackboard.workflow_id == workflow_id)
+            .expect("chain workflow should have a blackboard");
+        let messages = blackboard
+            .entries
+            .iter()
+            .filter(|entry| {
+                entry.kind == BlackboardEntryKind::SupervisorMessage
+                    && entry
+                        .source_refs
+                        .iter()
+                        .any(|source| source.source_kind == "workflow_chain_event")
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            messages.len(),
+            expected.len(),
+            "each selected chain audit must yield exactly one process message"
+        );
+        for (_, audit_id, event_type, title, summary, reason, created_at, audit_node_id) in &expected {
+            assert!(
+                audit_node_id.is_none(),
+                "P3-A mock chain audit deliberately has no historical node key"
+            );
+            let matching = messages
+                .iter()
+                .filter(|entry| {
+                    entry.source_refs.iter().any(|source| {
+                        source.source_kind == "workflow_chain_event" && source.source_id == *audit_id
+                    })
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                matching.len(),
+                1,
+                "audit {audit_id} must reconcile to one process message"
+            );
+            let message = matching[0];
+            assert!(message
+                .entry_id
+                .starts_with(&format!("blackboard:{workflow_id}:supervisor-process:")));
+            assert_eq!(message.title, *title);
+            assert_eq!(message.summary, *summary);
+            assert_eq!(message.status, "reported");
+            assert_eq!(message.source_status.as_deref(), Some(event_type.as_str()));
+            assert_eq!(message.created_at.as_deref(), created_at.as_deref());
+            assert_eq!(
+                message.workflow_node_id, None,
+                "node-less audit may focus the graph/run, never a guessed node"
+            );
+            assert!(
+                !message.summary.contains(reason),
+                "machine audit reason belongs in details, not the supervisor message"
+            );
+        }
+
+        let mut expected_sequence = expected
+            .iter()
+            .map(|(audit_array_ordinal, audit_id, _, _, _, _, created_at, _)| {
+                (created_at.clone(), *audit_array_ordinal, audit_id.clone())
+            })
+            .collect::<Vec<_>>();
+        expected_sequence.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
+        let mut actual_sequence = messages
+            .iter()
+            .map(|message| {
+                let audit_id = message
+                    .source_refs
+                    .iter()
+                    .find(|source| source.source_kind == "workflow_chain_event")
+                    .expect("process message should retain its chain audit source")
+                    .source_id
+                    .clone();
+                (message.created_at.clone(), message.entry_id.clone(), audit_id)
+            })
+            .collect::<Vec<_>>();
+        actual_sequence.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
+        assert_eq!(
+            actual_sequence
+                .into_iter()
+                .map(|(_, _, audit_id)| audit_id)
+                .collect::<Vec<_>>(),
+            expected_sequence
+                .into_iter()
+                .map(|(_, _, audit_id)| audit_id)
+                .collect::<Vec<_>>(),
+            "process messages follow the conversation created_at then source-index (entry_id) order"
+        );
+
+        expected
+            .into_iter()
+            .map(|(_, _, event_type, _, _, _, _, _)| event_type)
+            .collect()
+    }
+
+    #[test]
+    fn p3_a_mock_chain_success_audits_reconcile_to_process_messages() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("p3-a-chain-success-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        fs::create_dir_all(&dir).expect("fixture dir");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        submit_chain_test_workflow(&path, test_root, "P3-A 成功链");
+        let workflow_id = chain_test_workflow_id_by_title(&path, "P3-A 成功链");
+        let index = fixture_multi_thread_index(test_root, &["thread-1", "thread-2", "thread-3"]);
+        let result = run_project_workflow_chain_at(
+            &path,
+            &index,
+            &index_path,
+            &chain_test_runner(),
+            &ProjectWorkflowChainRunRequest {
+                project_root: test_root.to_string(),
+                workflow_id: workflow_id.clone(),
+                max_nodes: None,
+            },
+        )
+        .expect("mock chain should complete");
+        assert_eq!(result.state, "completed");
+        let facts_before_derive = read_json_file(&path);
+        assert_eq!(
+            assert_p3_a_chain_audits_reconcile_to_process_messages(&path, &workflow_id),
+            vec![
+                "workflow_chain_run_started",
+                "workflow_chain_node_started",
+                "workflow_chain_node_completed",
+                "workflow_chain_node_started",
+                "workflow_chain_node_completed",
+                "workflow_chain_node_started",
+                "workflow_chain_node_completed",
+                "workflow_chain_run_completed",
+            ]
+        );
+        assert_eq!(
+            read_json_file(&path),
+            facts_before_derive,
+            "P3-A derive must not write chain facts or audit events"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn p3_a_mock_chain_failure_reconciles_one_run_interruption_message() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = std::env::temp_dir().join(format!("p3-a-chain-failure-{}", unix_timestamp_string()));
+        let path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        fs::create_dir_all(&dir).expect("fixture dir");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        submit_chain_test_workflow(&path, test_root, "P3-A 失败链");
+        let workflow_id = chain_test_workflow_id_by_title(&path, "P3-A 失败链");
+        let index = fixture_multi_thread_index(test_root, &["thread-1", "thread-2", "thread-3"]);
+        let result = run_project_workflow_chain_at(
+            &path,
+            &index,
+            &index_path,
+            &FailingCodexResumeRunner {
+                exit_code: 1,
+                timed_out: false,
+            },
+            &ProjectWorkflowChainRunRequest {
+                project_root: test_root.to_string(),
+                workflow_id: workflow_id.clone(),
+                max_nodes: None,
+            },
+        )
+        .expect("failed mock chain should return its failed result");
+        assert_eq!(result.state, "failed");
+        assert_eq!(
+            assert_p3_a_chain_audits_reconcile_to_process_messages(&path, &workflow_id),
+            vec![
+                "workflow_chain_run_started",
+                "workflow_chain_node_started",
+                "workflow_chain_run_failed",
+            ],
+            "node_failed stays in audit details; only run_failed yields the interruption message"
+        );
+        let _ = fs::remove_dir_all(dir);
     }

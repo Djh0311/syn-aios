@@ -1345,6 +1345,10 @@
 .jiaoban-plan-preview-node[open] .project-canvas-static-node {
   border-color: var(--vermil);
 }
+.jiaoban-plan-preview-node.is-focused .project-canvas-static-node {
+  border-color: var(--vermil);
+  box-shadow: 0 0 0 3px rgba(214, 77, 45, 0.14);
+}
 .jiaoban-plan-preview-node.is-runtime-node .project-canvas-static-node {
   border-style: solid;
 }
@@ -1716,7 +1720,8 @@
 .jiaoban-conversation-message.is-user .jiaoban-conversation-copy {
   color: var(--ink-mid);
 }
-.jiaoban-conversation-notice-action {
+.jiaoban-conversation-notice-action,
+.jiaoban-conversation-process-action {
   width: fit-content;
   max-width: 100%;
   margin: 0;
@@ -1728,10 +1733,12 @@
   text-align: left;
   cursor: pointer;
 }
-.jiaoban-conversation-notice-action:hover .jiaoban-conversation-copy {
+.jiaoban-conversation-notice-action:hover .jiaoban-conversation-copy,
+.jiaoban-conversation-process-action:hover .jiaoban-conversation-copy {
   color: var(--accent-strong);
 }
-.jiaoban-conversation-notice-action:focus-visible {
+.jiaoban-conversation-notice-action:focus-visible,
+.jiaoban-conversation-process-action:focus-visible {
   border-radius: var(--r-sm);
   outline: 2px solid var(--accent);
   outline-offset: 4px;

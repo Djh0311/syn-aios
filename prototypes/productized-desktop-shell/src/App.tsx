@@ -213,6 +213,11 @@ export function App() {
     await reloadWorkflowStateCore(true);
   }
 
+  // P3-A：过程消息只依赖 workflow snapshot 内的黑板派生；别借此轮询候选/方案/记忆店。
+  async function reloadWorkflowStateReadOnly() {
+    await reloadWorkflowStateCore(false);
+  }
+
   async function reloadProposalAndWorkflowState() {
     await Promise.all([reloadCandidateStores(), reloadWorkflowStateCore(false)]);
   }
@@ -712,6 +717,7 @@ export function App() {
           workflowStateLoading,
           workflowStateError,
           onReloadWorkflowState: reloadWorkflowState,
+          onWorkflowStateReadRefresh: reloadWorkflowStateReadOnly,
           onNotice: setNotice,
           onProposalStoreRefresh: reloadProposalAndWorkflowState,
           hasRealSnapshot: Boolean(filteredSnapshot),

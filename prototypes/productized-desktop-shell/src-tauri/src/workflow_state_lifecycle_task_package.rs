@@ -16,7 +16,12 @@ fn read_workflow_state_snapshot(path: &Path) -> Result<WorkflowStateSnapshot, St
     let mut warnings = validate_workflow_state(&value);
 
     let project_workflows = project_workflow_summaries(&value);
-    let project_blackboards = project_blackboards_from_workflows(&project_workflows);
+    let audit_events = value
+        .get("audit_events")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let project_blackboards = project_blackboards_from_workflows(&project_workflows, audit_events);
 
     Ok(WorkflowStateSnapshot {
         exists: true,

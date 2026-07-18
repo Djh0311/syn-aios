@@ -31,6 +31,23 @@ export type JiaobanConversationArtifactNotice = {
   onActivate: () => void;
 };
 
+// P3-A：链事件仍是黑板只读派生；用 source ref 的结构化身份区分过程短讯，绝不靠标题或 reason 猜。
+// 后端的 source_id 保留 audit event id，中心只消费已确定性人话的 summary。
+export const WORKFLOW_CHAIN_EVENT_SOURCE_KIND = "workflow_chain_event";
+
+export function isSupervisorProcess(entry: BlackboardEntry): boolean {
+  return (entry.source_refs ?? []).some((source) => source.source_kind === WORKFLOW_CHAIN_EVENT_SOURCE_KIND);
+}
+
+// 右区目标同样只看派生时保留的 canonical source event type；不从标题、摘要或机器 reason 反推。
+export function supervisorProcessCanvasView(entry: BlackboardEntry): "delivery" | "graph" {
+  return entry.source_status === "workflow_chain_run_completed" ? "delivery" : "graph";
+}
+
+export function supervisorProcessFocusedNodeId(entry: BlackboardEntry): string | null {
+  return supervisorProcessCanvasView(entry) === "graph" ? entry.workflow_node_id?.trim() || null : null;
+}
+
 type ArtifactProposalSource = { proposal_id: string; created_at_ms: number };
 type ArtifactDeliverySource = {
   proposal_id: string;
@@ -101,6 +118,8 @@ type JiaobanConversationStreamProps = {
   answerBusyQuestionId: string | null;
   answerReceipts: Readonly<Record<string, string>>;
   answerErrors: Readonly<Record<string, string>>;
+  // P3-A：过程短讯只把用户带到右区既有工序图；回调不写事实，也不接通 P3-B 回话。
+  onSupervisorProcessActivate?: (entry: BlackboardEntry) => void;
 };
 
 function createdAtSortValue(value: string | number | null | undefined): number | null {
@@ -275,6 +294,7 @@ export function JiaobanConversationComposer({
 }
 
 function messageText(entry: BlackboardEntry): string {
+  if (isSupervisorProcess(entry)) return entry.summary.trim();
   if (isSupervisorQuestion(entry)) {
     return entry.summary.replace(/^第\s*\d+\s*轮主管问题[：:]\s*/, "").trim();
   }
@@ -353,6 +373,7 @@ export function JiaobanConversationStream({
   answerBusyQuestionId,
   answerReceipts,
   answerErrors,
+  onSupervisorProcessActivate,
 }: JiaobanConversationStreamProps) {
   const latestWaitingQuestionId = latestWaitingQuestionIdOf(entries);
   // 待答追问独占当前动作区：不仅收起说态输入，也隔离仍在 store 里的旧方案授权动作。
@@ -364,6 +385,7 @@ export function JiaobanConversationStream({
   const timelineItems: ConversationTimelineItem[] = [];
 
   for (const [sourceIndex, entry] of entries.entries()) {
+    const process = isSupervisorProcess(entry);
     const question = isSupervisorQuestion(entry);
     const status = entry.source_status ?? entry.status;
     const answered = question && status === "answered";
@@ -372,7 +394,33 @@ export function JiaobanConversationStream({
     const receipt = question && questionId ? answerReceipts[questionId] : null;
     const error = question && questionId ? answerErrors[questionId] : null;
     const copy = messageText(entry);
-    const content = answered ? (
+    const content = process ? (
+      <article
+        key={entry.entry_id}
+        className="jiaoban-conversation-message is-supervisor jiaoban-conversation-process"
+        data-message-kind="supervisor-process"
+      >
+        <p className="jiaoban-plan-seg">项目主管</p>
+        {onSupervisorProcessActivate ? (
+          <button
+            className="jiaoban-conversation-process-action"
+            type="button"
+            aria-label={
+              supervisorProcessCanvasView(entry) === "delivery"
+                ? "打开右侧交货"
+                : supervisorProcessFocusedNodeId(entry)
+                  ? "打开右侧工序图并定位任务"
+                  : "打开右侧工序图"
+            }
+            onClick={() => onSupervisorProcessActivate(entry)}
+          >
+            <span className="jiaoban-conversation-copy">{copy}</span>
+          </button>
+        ) : (
+          <p className="jiaoban-conversation-copy">{copy}</p>
+        )}
+      </article>
+    ) : answered ? (
       <article
         key={entry.entry_id}
         className="jiaoban-conversation-message is-supervisor is-answered"

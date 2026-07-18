@@ -40,6 +40,8 @@ import {
   conversationMessageIdForDelivery,
   conversationMessageIdForProposal,
   mergeConversationUserTurns,
+  supervisorProcessCanvasView,
+  supervisorProcessFocusedNodeId,
   supervisorConversationEntriesForProject,
   userTurnsFromProposalHistory,
   type JiaobanConversationPhaseKind,
@@ -50,6 +52,7 @@ import {
   useConversationAutoScroll,
   useJiaobanConversationState,
 } from "./jiaoban/useJiaobanConversationState";
+import { useJiaobanRunningReadRefresh } from "./jiaoban/useJiaobanRunningReadRefresh";
 import {
   JiaobanRawSessionLink,
   JiaobanSessionPicker,
@@ -141,6 +144,7 @@ export type ProjectJiaobanPanelProps = {
   // fix8：出方案成功后刷新方案店（App 的 reloadCandidateStores 穿下来）→ latestProposal 更新 → 自动进批脸。
   // 可选：mock/gallery callsite 可不传（刷新走 noop，不崩）。
   onProposalStoreRefresh?: () => Promise<void>;
+  onWorkflowStateReadRefresh?: () => Promise<void>; // P3-A：只读黑板派生刷新，不连带方案/候选店。
   // M2：外壳提供的「完整工作流」跳转；交办内的五态与命令不碰。
   onOpenWorkflow?: () => void;
   // M2：只把已有历史/五态内容交给 Shell 排版，面板自身仍拥有数据、状态与命令。
@@ -305,6 +309,7 @@ function ProjectJiaobanPanelBrowser({
   onRequestAction,
   onOpenAgentSession,
   onProposalStoreRefresh,
+  onWorkflowStateReadRefresh,
   onOpenWorkflow,
   renderLayout,
 }: ProjectJiaobanPanelProps) {
@@ -437,6 +442,14 @@ function ProjectJiaobanPanelBrowser({
       humanizeProviderUnavailable(error) ?? "这句没送到主管——稍后再试一次。",
   });
 
+  const refreshWorkflowStateReadModelAfterSuccessfulChainAction = useJiaobanRunningReadRefresh({
+    manualPhase,
+    projectRoot: projectWorkflow?.project_root ?? null,
+    workflowId: projectWorkflow?.workflow_id ?? null,
+    onChainStatus: setChainStatus,
+    onWorkflowStateReadRefresh,
+  });
+
   // Part①·工作历史（左栏数据·倒序读模型·不轮询·挂载/交货/重拆各拉一次）。失败静默：历史是增益不是闸。
   const [history, setHistory] = useState<RunHistoryEntry[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
@@ -461,6 +474,7 @@ function ProjectJiaobanPanelBrowser({
     if (cached?.manualPhase && cached.manualPhase !== "say") return "graph";
     return latestProposal && cached?.manualPhase !== "say" ? "proposal" : "graph";
   });
+  const [focusedRuntimeNodeId, setFocusedRuntimeNodeId] = useState<string | null>(null);
   // 批卡「怎么跑」入口一行的摘要(真值随右区视图里的控件走)。
   const howRunSummary = `${orchestrationMode === "supervisor_pilot" ? "主管编排(试点)" : "经典状态机"} · ${
     sessionChoice && sessionChoice !== NEW_SESSION_CHOICE ? "接现有对话" : "开个新对话"
@@ -589,30 +603,6 @@ function ProjectJiaobanPanelBrowser({
       sessionDefaultedRef.current = true;
     }
   }, [projectSessions]);
-
-  // 干活期间轮询进度（复用现成只读命令）。fix6：改成 phase==running 就轮——
-  // 点允许/接着跑那刻（相位先行）即开轮，执行期步骤逐格亮；重挂载后 phase 从缓存恢复=running→照轮→371 兜底翻脸=自愈。
-  // （旧实现守最终 outcome.stage，但合流/接着跑是同步跑到底才返回、跑中 outcome 恒 null，重挂载新实例 outcome 也 null → 整个执行期一格不轮、卡「正在干」。）
-  useEffect(() => {
-    // 用 manualPhase（phase 常量定义在本 effect 之后、直接用会 TDZ；running 只可能来自 manualPhase，二者等价）。
-    if (manualPhase !== "running" || !projectWorkflow) return;
-    const { project_root: projectRoot, workflow_id: workflowId } = projectWorkflow;
-    let active = true;
-    const poll = async () => {
-      try {
-        const status = await getProjectWorkflowChainStatus(projectRoot, workflowId);
-        if (active && status) setChainStatus(status);
-      } catch {
-        // 轮询失败不致命——进度暂缺不影响永不冻。
-      }
-    };
-    void poll();
-    const id = setInterval(() => void poll(), 2500);
-    return () => {
-      active = false;
-      clearInterval(id);
-    };
-  }, [manualPhase, projectWorkflow]);
 
   // 主管试点进度来自它自己的 sidecar 账本。链读模型照旧可轮询，但不拿它猜主管状态。
   useEffect(() => {
@@ -1062,6 +1052,7 @@ function ProjectJiaobanPanelBrowser({
         outcome,
         startError: null,
       });
+      refreshWorkflowStateReadModelAfterSuccessfulChainAction();
     } catch (e) {
       // record_decision 成功后的后续写（尤其边界批准）仍可能失败。先刷新方案店：否则 props 还停在
       // pending，界面既不再待批、又不知道已确认而不给[接着跑]。刷新失败不覆盖原始错误。
@@ -1125,6 +1116,7 @@ function ProjectJiaobanPanelBrowser({
       setOutcome(nextOutcome);
       setManualPhase(nextPhase);
       writeJiaobanRunCache(projectRoot, { manualPhase: nextPhase, outcome: nextOutcome, startError: null });
+      refreshWorkflowStateReadModelAfterSuccessfulChainAction();
     } catch (e) {
       // 接着跑也可能失败（如授权真过期）→ 翻人话进卡住脸。若仍是「已确认」类，continueHint 留着还给[接着跑]。
       const alreadyConfirmed = isAlreadyConfirmedRejection(e);
@@ -1197,6 +1189,7 @@ function ProjectJiaobanPanelBrowser({
       setOutcome(nextOutcome);
       setManualPhase(nextPhase);
       writeJiaobanRunCache(projectRoot, { manualPhase: nextPhase, outcome: nextOutcome, startError: null });
+      refreshWorkflowStateReadModelAfterSuccessfulChainAction();
       try {
         const status = await getProjectWorkflowChainStatus(projectRoot, projectWorkflow.workflow_id);
         if (status) setChainStatus(status);
@@ -1217,6 +1210,7 @@ function ProjectJiaobanPanelBrowser({
         project_root: projectWorkflow.project_root,
         workflow_id: projectWorkflow.workflow_id,
       });
+      refreshWorkflowStateReadModelAfterSuccessfulChainAction();
     } catch (e) {
       setStartError(e instanceof Error ? e.message : String(e));
     }
@@ -1619,6 +1613,11 @@ function ProjectJiaobanPanelBrowser({
           answerBusyQuestionId={residentAnswerBusyQuestionId}
           answerReceipts={residentAnswerReceipts}
           answerErrors={residentAnswerErrors}
+          onSupervisorProcessActivate={(entry) => {
+            setSelectedHistoryId(null);
+            setFocusedRuntimeNodeId(supervisorProcessFocusedNodeId(entry));
+            setCanvasViewKey(supervisorProcessCanvasView(entry));
+          }}
         />
         {conversationComposer ? (
           <JiaobanConversationComposer {...conversationComposer} error={consultError} />
@@ -1652,6 +1651,7 @@ function ProjectJiaobanPanelBrowser({
       previewWarnings={runtimeCanvasPhase ? [] : previewWarnings}
       readOnly={runtimeCanvasPhase}
       runtimeNodeStates={runtimeNodeStates}
+      focusedNodeId={focusedRuntimeNodeId} focusActive={canvasViewKey === "graph"}
       onBindingChange={updatePreviewSessionBinding}
       onRetryPreview={retryPreview}
       onOpenAgentSession={onOpenAgentSession}

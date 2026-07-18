@@ -31,6 +31,262 @@
     }
 
     #[test]
+    fn project_blackboard_derives_node_less_canonical_chain_process_messages_without_cross_workflow_leakage() {
+        let dir = std::env::temp_dir().join(format!(
+            "p3-a-chain-events-blackboard-{}",
+            unix_timestamp_string()
+        ));
+        let path = dir.join("workflow-state.v0.json");
+        let project_a = fixture_project("/tmp/p3-a-chain-events-project-a");
+        let project_b = fixture_project("/tmp/p3-a-chain-events-project-b");
+        let workflow_a = default_workflow_id(&project_a.project_root);
+        let workflow_b = default_workflow_id(&project_b.project_root);
+
+        bootstrap_project_workflow_at(&path, &project_a).expect("first workflow should exist");
+        bootstrap_project_workflow_at(&path, &project_b).expect("second workflow should exist");
+
+        let canonical_events = [
+            (
+                "run-started",
+                "workflow_chain_run_started",
+                "主管进度 / 开跑",
+                "我开跑了，任务已经排好队。",
+            ),
+            (
+                "node-started",
+                "workflow_chain_node_started",
+                "主管进度 / 开始处理",
+                "我在做下一件事了。",
+            ),
+            (
+                "node-completed",
+                "workflow_chain_node_completed",
+                "主管进度 / 一项完成",
+                "这一件做完了。",
+            ),
+            (
+                "waiting-decision",
+                "workflow_chain_node_waiting_decision",
+                "主管进度 / 等待你",
+                "我先停在这儿了——worker 有话想问你。",
+            ),
+            (
+                "needs-rework",
+                "workflow_chain_node_needs_rework",
+                "主管进度 / 需要返工",
+                "这一件要回去再做一遍。",
+            ),
+            (
+                "run-completed",
+                "workflow_chain_run_completed",
+                "主管进度 / 已完成",
+                "都干完了，结果放你右手边。",
+            ),
+            (
+                "run-stopped",
+                "workflow_chain_run_stopped",
+                "主管进度 / 已中断",
+                "这轮先停下来了，原因在右边。",
+            ),
+        ];
+        let mut value = read_json_file(&path);
+        let audit_events = value["audit_events"]
+            .as_array_mut()
+            .expect("audit events should be an array");
+        for (index, (suffix, event_type, _, _)) in canonical_events.iter().enumerate() {
+            let created_at = if index < 2 {
+                "2026-07-18T00:00:00Z".to_string()
+            } else {
+                format!("2026-07-18T00:00:{index:02}Z")
+            };
+            audit_events.push(json!({
+                "event_id": format!("audit:p3-a:a:{suffix}"),
+                "event_type": event_type,
+                "workflow_id": workflow_a.clone(),
+                "target_ref": "chain-run:p3-a",
+                "actor_ref": "project_director",
+                "reason": format!("MACHINE_REASON_P3_A_{suffix}"),
+                "created_at": created_at,
+            }));
+        }
+        audit_events.push(json!({
+            "event_id": "audit:p3-a:a:noncanonical",
+            "event_type": "workflow_chain_node_director_deterministic_completed",
+            "workflow_id": workflow_a.clone(),
+            "target_ref": "chain-run:p3-a",
+            "actor_ref": "project_director",
+            "reason": "MACHINE_REASON_P3_A_noncanonical",
+            "created_at": "2026-07-18T00:01:00Z",
+        }));
+        audit_events.push(json!({
+            "event_id": "audit:p3-a:b:run-started",
+            "event_type": "workflow_chain_run_started",
+            "workflow_id": workflow_b.clone(),
+            "target_ref": "chain-run:p3-b",
+            "actor_ref": "project_director",
+            "reason": "MACHINE_REASON_P3_A_B",
+            "created_at": "2026-07-18T00:02:00Z",
+        }));
+        audit_events.push(json!({
+            "event_id": "audit:p3-a:b:node-failed",
+            "event_type": "workflow_chain_node_failed",
+            "workflow_id": workflow_b.clone(),
+            "target_ref": "chain-run:p3-b",
+            "actor_ref": "project_director",
+            "reason": "MACHINE_REASON_P3_A_B_NODE_FAILED",
+            "created_at": "2026-07-18T00:02:01Z",
+        }));
+        audit_events.push(json!({
+            "event_id": "audit:p3-a:b:run-failed",
+            "event_type": "workflow_chain_run_failed",
+            "workflow_id": workflow_b.clone(),
+            "target_ref": "chain-run:p3-b",
+            "actor_ref": "project_director",
+            "reason": "MACHINE_REASON_P3_A_B_RUN_FAILED",
+            "created_at": "2026-07-18T00:02:02Z",
+        }));
+        write_validated_workflow_state(&path, &value).expect("chain event fixture should write");
+        let expected_fact_state = read_json_file(&path);
+
+        let snapshot = read_workflow_state_snapshot(&path).expect("snapshot should read");
+        assert_eq!(
+            read_json_file(&path),
+            expected_fact_state,
+            "blackboard derive must not write facts or audit records"
+        );
+
+        let blackboard_a = snapshot
+            .project_blackboards
+            .iter()
+            .find(|blackboard| blackboard.workflow_id == workflow_a)
+            .expect("workflow A blackboard should exist");
+        let mut process_entries_a = blackboard_a
+            .entries
+            .iter()
+            .filter(|entry| {
+                entry.kind == BlackboardEntryKind::SupervisorMessage
+                    && entry
+                        .source_refs
+                        .iter()
+                        .any(|source| source.source_kind == "workflow_chain_event")
+            })
+            .collect::<Vec<_>>();
+        process_entries_a.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+
+        assert_eq!(
+            process_entries_a.len(),
+            canonical_events.len(),
+            "one message per canonical audit event"
+        );
+        for (index, entry) in process_entries_a.iter().enumerate() {
+            let (suffix, event_type, expected_title, expected_summary) = canonical_events[index];
+            assert_eq!(entry.title, expected_title);
+            assert_eq!(entry.summary, expected_summary);
+            assert_eq!(entry.status, "reported");
+            assert_eq!(entry.source_status.as_deref(), Some(event_type));
+            assert_eq!(entry.question_id, None);
+            assert_eq!(
+                entry.workflow_node_id, None,
+                "production chain audit shape is node-less, so this message can only focus the graph"
+            );
+            assert_eq!(entry.source_refs.len(), 1);
+            assert_eq!(entry.source_refs[0].source_kind, "workflow_chain_event");
+            assert_eq!(
+                entry.source_refs[0].source_id,
+                format!("audit:p3-a:a:{suffix}")
+            );
+            assert!(!entry.summary.contains("MACHINE_REASON_P3_A"));
+            assert_eq!(entry.promotion_decision.status, "not_applicable");
+            assert!(entry
+                .warnings
+                .contains(&"supervisor_message_is_read_model_only".to_string()));
+            assert!(entry
+                .warnings
+                .contains(&"supervisor_message_does_not_advance_workflow".to_string()));
+        }
+        assert!(process_entries_a.iter().all(|entry| {
+            entry.source_refs[0].source_id != "audit:p3-a:a:noncanonical"
+        }));
+
+        let derived_a = snapshot
+            .project_workflows
+            .iter()
+            .find(|workflow| workflow.workflow_id == workflow_a)
+            .and_then(|workflow| workflow.derived_workflow.as_ref())
+            .expect("workflow A read model should exist");
+        assert!(derived_a.ledger_entries.iter().any(|entry| {
+            entry.audit_refs == vec!["audit:p3-a:a:run-started".to_string()]
+                && entry.summary == "MACHINE_REASON_P3_A_run-started"
+        }));
+        let tied_process_entries = process_entries_a
+            .iter()
+            .filter(|entry| entry.created_at.as_deref() == Some("2026-07-18T00:00:00Z"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            tied_process_entries
+                .iter()
+                .map(|entry| entry.source_refs[0].source_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["audit:p3-a:a:run-started", "audit:p3-a:a:node-started"],
+            "same-created_at process messages must keep their audit ledger order"
+        );
+        for entry in tied_process_entries {
+            let audit_id = &entry.source_refs[0].source_id;
+            let ledger_entry_ordinal = derived_a
+                .ledger_entries
+                .iter()
+                .position(|ledger_entry| ledger_entry.ledger_entry_id == *audit_id)
+                .expect("process source audit should retain its ledger ordinal");
+            assert_eq!(
+                entry.entry_id,
+                format!(
+                    "blackboard:{workflow_a}:supervisor-process:{ledger_entry_ordinal:08}:{}",
+                    stable_id(audit_id)
+                )
+            );
+        }
+
+        let blackboard_b = snapshot
+            .project_blackboards
+            .iter()
+            .find(|blackboard| blackboard.workflow_id == workflow_b)
+            .expect("workflow B blackboard should exist");
+        let mut process_entries_b = blackboard_b
+            .entries
+            .iter()
+            .filter(|entry| {
+                entry.kind == BlackboardEntryKind::SupervisorMessage
+                    && entry
+                        .source_refs
+                        .iter()
+                        .any(|source| source.source_kind == "workflow_chain_event")
+            })
+            .collect::<Vec<_>>();
+        process_entries_b.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+        assert_eq!(
+            process_entries_b.len(),
+            2,
+            "workflow B must not receive A events or duplicate node_failed"
+        );
+        assert_eq!(
+            process_entries_b[0].source_refs[0].source_id,
+            "audit:p3-a:b:run-started"
+        );
+        assert_eq!(process_entries_b[0].summary, "我开跑了，任务已经排好队。");
+        assert_eq!(
+            process_entries_b[1].source_refs[0].source_id,
+            "audit:p3-a:b:run-failed"
+        );
+        assert_eq!(process_entries_b[1].title, "主管进度 / 已中断");
+        assert_eq!(process_entries_b[1].summary, "这轮先停下来了，原因在右边。");
+        assert!(process_entries_b.iter().all(|entry| {
+            entry.source_refs[0].source_id != "audit:p3-a:b:node-failed"
+        }));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn workflow_node_session_binding_binds_rebinds_and_unbinds() {
         let dir =
             std::env::temp_dir().join(format!("node-session-bind-{}", unix_timestamp_string()));
@@ -825,8 +1081,12 @@
                     .warnings
                     .contains(&"knowledge_ref_is_not_memory".to_string())
         }));
+        let state = read_json_file(&path);
+        let audit_events = state["audit_events"]
+            .as_array()
+            .expect("blackboard fixture should retain audit events");
         assert_eq!(
-            project_blackboards_from_workflows(&snapshot.project_workflows),
+            project_blackboards_from_workflows(&snapshot.project_workflows, audit_events),
             snapshot.project_blackboards
         );
 

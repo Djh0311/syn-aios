@@ -78,6 +78,8 @@ export type ProjectDetailProps = {
   sessions: SessionRecord[];
   workflowState?: WorkflowStateSnapshot | null;
   onReloadWorkflowState?: () => void;
+  // P3-A：只重读 workflow snapshot（含黑板过程消息），不连带候选/方案等其它店。
+  onWorkflowStateReadRefresh?: () => Promise<void>;
   blackboardCandidateStore?: BlackboardCandidateStoreV1 | null;
   planAuthorizationStore?: PlanAuthorizationStoreV1 | null;
   projectConsultationProposalStore?: ProjectConsultationProposalStoreV1 | null;
@@ -131,6 +133,7 @@ export function ProjectWorkspaceShell({
   onBackToGallery,
   onRequestAction,
   onProposalStoreRefresh,
+  onWorkflowStateReadRefresh,
   onRenderTaskPreview,
   onInspectDispatchReadiness,
   workflowPanel = null,
@@ -214,6 +217,7 @@ export function ProjectWorkspaceShell({
             onRequestAction={onRequestAction}
             onOpenAgentSession={onOpenAgentSession}
             onProposalStoreRefresh={onProposalStoreRefresh}
+            onWorkflowStateReadRefresh={onWorkflowStateReadRefresh}
             onOpenWorkflow={() => onSelectTool("workflow")}
             renderLayout={(content) => (
               <JiaobanMergedLayout
