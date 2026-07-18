@@ -837,6 +837,18 @@ export type ProjectConsultationProposalRisk = {
   mitigation: string;
 };
 
+// P2-A：方案自带任务图——你批的就是已质检的任务图，批后拆任务一跳退场。字段名逐字对齐后端
+// consultant_agent.rs::ConsultationProposalTask / director_agent.rs::DirectorTaskJson（统一 task_goal，
+// 不是历史包袱字段 objective——ProjectDirectorPlannedTask.objective 是另一条待修的旧暗雷，本类型不沿用它）。
+export type ProjectConsultationProposalTask = {
+  title: string;
+  task_goal: string;
+  target_role: string;
+  depends_on: string[];
+  acceptance_criteria: string[];
+  report_format: string[];
+};
+
 export type ProjectConsultationProposal = {
   proposal_id: string;
   schema_version: "project_consultation_proposal.v1" | string;
@@ -860,6 +872,8 @@ export type ProjectConsultationProposal = {
   // 刀2：咨询判「这活值不值得先看工序图」（后端 types.rs ProjectConsultationProposal.suggest_workflow）。
   // 只影响授权卡图区显隐·不碰授权/写范围。可选：旧方案数据无此字段时按 false 处理。
   suggest_workflow?: boolean;
+  // P2-A：方案自带任务图；老方案/纯咨询方案缺省该字段（后端 skip_serializing_if 不落盘空数组）。
+  tasks?: ProjectConsultationProposalTask[];
 };
 
 export type ProjectConsultationProposalDecision = {

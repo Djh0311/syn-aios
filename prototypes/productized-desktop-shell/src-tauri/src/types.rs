@@ -2199,6 +2199,17 @@ struct ProjectConsultationProposalRisk {
     mitigation: String,
 }
 
+// P2-A 方案任务图持久化正本;字段名逐字对齐 consultant/director 两处 JSON 契约,不发明第二套。
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+struct ProjectConsultationProposalTask {
+    title: String,
+    task_goal: String,
+    target_role: String,
+    depends_on: Vec<String>,
+    acceptance_criteria: Vec<String>,
+    report_format: Vec<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 struct ProjectConsultationProposal {
     proposal_id: String,
@@ -2230,6 +2241,9 @@ struct ProjectConsultationProposal {
     // #[serde(default)]：老持久化数据缺此字段 → false（向后兼容·不破旧 store 反序列化）。
     #[serde(default)]
     suggest_workflow: bool,
+    // P2-A 方案自带任务图。serde 双件(M5 前科):default 保老数据反序列化;skip 空数组保 record_hash 零漂移。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    tasks: Vec<ProjectConsultationProposalTask>,
     created_at_ms: i64,
     updated_at_ms: i64,
 }
@@ -2313,6 +2327,9 @@ struct CreateProjectConsultationProposalInput {
     // 交办·刀2 2.5：咨询判定的「建议按工作流」轻标记透传（缺省 false·老调用方/样本不受影响）。
     #[serde(default)]
     suggest_workflow: bool,
+    // P2-A：方案自带任务图透传（缺省空数组·老调用方/样本不受影响；仅 Deserialize，不落盘不需 skip_serializing_if）。
+    #[serde(default)]
+    tasks: Vec<ProjectConsultationProposalTask>,
     actor_id: String,
     expected_store_revision: Option<i64>,
 }

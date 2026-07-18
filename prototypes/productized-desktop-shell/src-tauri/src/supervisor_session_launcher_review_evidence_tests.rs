@@ -70,6 +70,7 @@ fn station4_byte_review_proposal(
         plan_authorization_id: Some(authorization.authorization_id.clone()),
         created_by_role: crate::ProjectConsultationProposalCreatorRole::ProjectConsultant,
         suggest_workflow: true,
+        tasks: vec![],
         created_at_ms: 0,
         updated_at_ms: 0,
     }

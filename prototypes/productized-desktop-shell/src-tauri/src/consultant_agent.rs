@@ -19,6 +19,19 @@ pub(crate) struct ConsultationRisk {
     pub(crate) mitigation: String,
 }
 
+// P2-A：方案自带任务图（终版方案自带任务图·拆任务一跳退场）。字段名逐字对齐 director_agent.rs 的
+// `DirectorTaskJson`（title/task_goal/target_role/depends_on/acceptance_criteria/report_format）——
+// 别发明第二套字段名（勘察 §2.2 点名）。这是新引入字段，不带历史 `objective` 别名包袱，统一只认 task_goal。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ConsultationProposalTask {
+    pub(crate) title: String,
+    pub(crate) task_goal: String,
+    pub(crate) target_role: String,
+    pub(crate) depends_on: Vec<String>,
+    pub(crate) acceptance_criteria: Vec<String>,
+    pub(crate) report_format: Vec<String>,
+}
+
 // 执行范围（像开发任务包那样）：咨询在方案里**自己提出**下游执行需要的写范围/目标文件/工具/检查。
 // 可空：纯问答咨询不需要下游改任何东西 → None。**后端只忠实透传·绝不默认/兜底缺失的写范围（用户硬约束）。**
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -47,6 +60,9 @@ pub(crate) struct ConsultationProposal {
     pub(crate) execution_scope: Option<ConsultationExecutionScope>,
     // 交办·刀2 2.5：咨询判「这活是否值得拆成多步工作流」（复杂活 true·简单/纯咨询 false）。UI 用它决定图区出不出现。
     pub(crate) suggest_workflow: bool,
+    // P2-A：终版方案自带任务图——你批的就是已质检的任务图，批后拆任务一跳退场。空=纯咨询/execution_scope=null
+    // 合法（无需下游执行）；要执行的方案 tasks 是否必须非空由确认时 validate_approved_planned_tasks 兜底判。
+    pub(crate) tasks: Vec<ConsultationProposalTask>,
 }
 
 // P1-E 旧路退役（2026-07-18 用户拍板 a·诚实关门）：ConsultantAgent trait 随其唯一真实现 CliConsultantAgent
@@ -338,8 +354,7 @@ fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
         p.push_str(&format!("\n--- 项目记忆 ---\n{mem}\n"));
     }
     p.push_str(&format!("\n===== 用户的问题 =====\n{question}\n"));
-    p.push_str(
-        r#"
+    let answer_rules = r#"
 ===== 怎么答 =====
 你**读不到**未注入的文件(这个模式没有按需读取工具);**只依据上面已注入的文档正文作答**,不许假设未注入的内容存在。
 要交叉核对(如红队 vs 开发计划),就在已注入的对应文档正文里逐条找依据并原文引用。
@@ -360,7 +375,17 @@ fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
     "target_files": ["预期改动的具体文件·相对项目根(尽量列出·可空)"],
     "checks": ["怎么验收,如 cargo test / npm test / 浏览器打开看效果"]
   },
-  "suggest_workflow": true
+  "suggest_workflow": true,
+  "tasks": [
+    {
+      "title": "任务名",
+      "task_goal": "自包含完整指令:做什么 + 目标文件完整路径 + 要写的具体内容 + 依据(worker 只看这段就能干,不引用方案/别任务，不许写"参见方案/见上文/如上所述")",
+      "target_role": "执行角色(如 codex-dev)",
+      "depends_on": ["前置任务的 title(无前置则空数组)"],
+      "acceptance_criteria": ["怎么算这个任务完成"],
+      "report_format": ["worker 该结构化返回哪些:做了啥 / 产出在哪 / 成败"]
+    }
+  ]
 }
 **判断这个目标要不要下游真改代码/文件**:
 - **凡用户目标需要下游读取项目文件、运行检查或创建/修改/删除文件,都必须输出 execution_scope**；仅当目标是无需下游工作的纯问答时才给 null。漏给这个字段=用户批的方案会变成不能执行的空转单。
@@ -372,8 +397,17 @@ fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
 - **纯咨询/只读/盘点类目标同样三类都不许为空**：worker 的可验证事实=口供本身的硬要求（如"问题清单每条带 file:line+原文引用""对照 README 逐条判定""不写任何文件"），控制核心=零写根/只读沙箱/唯一派发等账本事实，主管=核对口供引用与终标报告。没有文件改动 ≠ 没有 worker 验收。
 **判断这活值不值得拆成多步工作流(suggest_workflow)**:
 - 需要多步、有先后依赖、值得先看工序图再动手(复杂改造/多文件协作) → suggest_workflow=**true**。
-- 一两步就完、或纯咨询不改东西 → suggest_workflow=**false**(缺省)。"#,
-    );
+- 一两步就完、或纯咨询不改东西 → suggest_workflow=**false**(缺省)。
+**任务图(tasks)——你批的就是已质检的任务图,批后不再重拆**:
+- execution_scope 非 null(要下游真跑,不论 requires_write true/false)→ **必须同时给 tasks**：把这个方案拆成
+  1 个或多个可直接派发给 worker 的具体任务；哪怕只有一步，也要用 1 个 task 表达(别把 tasks 留空指望批准后
+  有人再拆一次)。execution_scope=null(纯咨询/不需下游执行)→ tasks 可以留空。
+- tasks 里每个任务的字段规则、worker 工具箱事实(worker 只有 shell，没有独立的 read_file/write_file 等工具名，
+  任务文本绝不能禁止 shell 或指定不存在的工具)、task_goal 自包含铁律，与项目主管拆任务时完全同一套标准
+  (见下方【worker 工具箱事实】)——这套标准不是摆设，任务文本一旦违反会在方案确认前就被打回重出，不会等
+  批准后才发现。
+{TOOLBOX_FACTS}"#;
+    p.push_str(&answer_rules.replace("{TOOLBOX_FACTS}", DIRECTOR_WORKER_TOOLBOX_FACTS));
     p
 }
 
@@ -399,6 +433,22 @@ struct ConsultExecutionScopeJson {
     tools: Vec<String>,
     #[serde(default)]
     checks: Vec<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct ConsultTaskJson {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    task_goal: String,
+    #[serde(default)]
+    target_role: String,
+    #[serde(default)]
+    depends_on: Vec<String>,
+    #[serde(default)]
+    acceptance_criteria: Vec<String>,
+    #[serde(default)]
+    report_format: Vec<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -429,6 +479,9 @@ struct ConsultProposalJson {
     // 2.5：向后兼容——旧样本缺此字段 → false（纯咨询/简单活默认不建议工作流）。
     #[serde(default)]
     suggest_workflow: bool,
+    // P2-A：方案自带任务图；老模型不发 → 空数组（向后兼容，走 director.plan fallback 路）。
+    #[serde(default)]
+    tasks: Vec<ConsultTaskJson>,
 }
 
 // 从 codex 输出抠最后一个 ```json 块（无围栏则退到首尾大括号）。
@@ -496,6 +549,19 @@ pub(crate) fn parse_consultation_proposal(raw: &str) -> Result<ConsultationPropo
         }),
         // 2.5：咨询判定的「建议按工作流」（缺省 false）。
         suggest_workflow: dto.suggest_workflow,
+        // P2-A：方案自带任务图，字段名逐字对齐 DirectorTaskJson（别发明第二套字段名）。
+        tasks: dto
+            .tasks
+            .into_iter()
+            .map(|t| ConsultationProposalTask {
+                title: t.title,
+                task_goal: t.task_goal,
+                target_role: t.target_role,
+                depends_on: t.depends_on,
+                acceptance_criteria: t.acceptance_criteria,
+                report_format: t.report_format,
+            })
+            .collect(),
     })
 }
 
@@ -604,6 +670,9 @@ pub(crate) fn parse_resident_consultation_turn(
                     "supervisor_acceptance_criteria",
                     "execution_scope",
                     "suggest_workflow",
+                    // P2-A：方案自带任务图——漏加此白名单项会让带图方案在严格闸即刻 protocol_invalid 保守停
+                    // （勘察 §2.2 点名「第一个会咬人的点」）。
+                    "tasks",
                 ],
             )?;
             parse_consultation_proposal(json).map(ResidentConsultationTurn::Proposal)
@@ -659,7 +728,7 @@ pub(crate) fn resident_consultation_turn_schema_prompt(
 本回合只能输出一个 JSON 对象；不得输出自然语言、Markdown、第二个对象或工具调用。schema_version 必须为 "{SUPERVISOR_RESIDENT_TURN_SCHEMA_VERSION}"。
 
 严格二选一，字段不得混用、不得新增：
-1) 出方案：kind="proposal"，允许字段只有 schema_version、kind、user_goal、goal_summary、scope_note、reasoning、risks、must_stop_points、next_steps、worker_acceptance_criteria、control_core_acceptance_criteria、supervisor_acceptance_criteria、execution_scope、suggest_workflow。proposal 的业务字段仍遵守上面既有咨询方案要求。类型也必须严格匹配：reasoning、must_stop_points、next_steps 和三类 acceptance criteria 都是字符串数组；risks 是对象数组且每项都有 severity、summary、mitigation；execution_scope 只能是 JSON null 或对象（若为对象，requires_write 必须是 JSON literal true 或 false）；suggest_workflow 必须是 JSON literal true 或 false，绝不能是数组、字符串或 null。纯咨询/只读答复应输出 "execution_scope": null 和 "suggest_workflow": false。
+1) 出方案：kind="proposal"，允许字段只有 schema_version、kind、user_goal、goal_summary、scope_note、reasoning、risks、must_stop_points、next_steps、worker_acceptance_criteria、control_core_acceptance_criteria、supervisor_acceptance_criteria、execution_scope、suggest_workflow、tasks。proposal 的业务字段仍遵守上面既有咨询方案要求。类型也必须严格匹配：reasoning、must_stop_points、next_steps 和三类 acceptance criteria 都是字符串数组；risks 是对象数组且每项都有 severity、summary、mitigation；execution_scope 只能是 JSON null 或对象（若为对象，requires_write 必须是 JSON literal true 或 false）；suggest_workflow 必须是 JSON literal true 或 false，绝不能是数组、字符串或 null；tasks 是对象数组，每项都有 title、task_goal、target_role、depends_on（字符串数组）、acceptance_criteria（字符串数组）、report_format（字符串数组）——execution_scope 非 null 时 tasks 必须非空，execution_scope 为 null（纯咨询）时 tasks 给空数组。纯咨询/只读答复应输出 "execution_scope": null 和 "suggest_workflow": false。
 2) 需要用户补充时：kind="supervisor_question"，且必须只含下面字段并逐字回显工作台预发值：
 {{
   "schema_version": "{SUPERVISOR_RESIDENT_TURN_SCHEMA_VERSION}",
@@ -880,6 +949,19 @@ fn map_consultation_to_c1_input_with_user_requirement_snapshot(
         created_by_role: ProjectConsultationProposalCreatorRole::ProjectConsultant,
         // 2.5：透传咨询的「建议按工作流」判定（写范围/工具走档位·此标记只影响 UI 图区显隐·不碰授权）。
         suggest_workflow: proposal.suggest_workflow,
+        // P2-A：方案自带任务图透传（字段名逐字对齐，见 ConsultationProposalTask 定义处注释）。
+        tasks: proposal
+            .tasks
+            .iter()
+            .map(|t| ProjectConsultationProposalTask {
+                title: t.title.clone(),
+                task_goal: t.task_goal.clone(),
+                target_role: t.target_role.clone(),
+                depends_on: t.depends_on.clone(),
+                acceptance_criteria: t.acceptance_criteria.clone(),
+                report_format: t.report_format.clone(),
+            })
+            .collect(),
         actor_id: actor_id.to_string(),
         expected_store_revision: None,
     })
@@ -905,6 +987,29 @@ pub(crate) struct RunProjectConsultationRequest {
     pub(crate) workflow_id: Option<String>,
 }
 
+// P2-A：出方案/确认答复共用的落库前闸——lint 前移到这里，方案带毒任务图（禁 shell/引用不存在工具/
+// 误把注入材料当唯一事实来源）在批之前就被拒，用户看不到「批准后拆任务死循环」。两个方案产出口
+// （首问 run_resident_project_consultation_inner / 问答后 submit_supervisor_resident_answer_with）都经
+// 同一个 write_consultation_proposal 落库，挂这里=一处覆盖两口（勘察 §2.1「两个方案产出口都经同一写漏斗」）。
+// 保守停不自动重出：与 resident 侧其它 protocol 错误同款处置——上抛错误，用户在对话里再说一次即可重新出方案。
+fn lint_consultation_proposal_tasks(tasks: &[ConsultationProposalTask]) -> Result<(), String> {
+    if let Some((task, reason)) = tasks.iter().find_map(|task| {
+        worker_toolbox_lint_reason_for_text(
+            &task.title,
+            &task.task_goal,
+            &task.acceptance_criteria,
+            &task.report_format,
+        )
+        .map(|reason| (task, reason))
+    }) {
+        return Err(format!(
+            "proposal_task_toolbox_lint_failed:任务「{}」{}；方案已拒绝，请重新说一次目标出方案。",
+            task.title, reason
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn write_consultation_proposal(
     path: &std::path::Path,
     proposal: &ConsultationProposal,
@@ -912,6 +1017,8 @@ pub(crate) fn write_consultation_proposal(
     goal: &str,
     actor_id: &str,
 ) -> Result<ProjectConsultationProposal, String> {
+    // P2-A：方案带任务图 → 出方案就 lint，批的就是已质检的图（在 map/create 之前拦，方案根本不会落库）。
+    lint_consultation_proposal_tasks(&proposal.tasks)?;
     // 映射进 C1 输入（含咨询提的执行范围；写范围越界/空值 → Err 早报）。
     let input = map_consultation_to_c1_input_with_user_requirement_snapshot(
         proposal,
@@ -1224,6 +1331,7 @@ mod consultant_recall_tests {
                 checks: vec!["cargo test --lib".to_string()],
             }),
             suggest_workflow: false,
+            tasks: vec![],
         };
 
         for project_root in [
@@ -1330,6 +1438,7 @@ mod consultant_recall_tests {
                 checks: vec!["npm test".to_string()],
             }),
             suggest_workflow: false,
+            tasks: vec![],
         };
         let error = map_consultation_to_c1_input_with_user_requirement_snapshot(
             &proposal,

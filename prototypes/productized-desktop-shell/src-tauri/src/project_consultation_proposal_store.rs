@@ -6,7 +6,7 @@ use crate::{
     ProjectConsultationProposalAuditEvent, ProjectConsultationProposalDecision,
     ProjectConsultationProposalDecisionKind, ProjectConsultationProposalMarkdown,
     ProjectConsultationProposalReadModel, ProjectConsultationProposalScopeDraft,
-    ProjectConsultationProposalStatus, ProjectConsultationProposalStoreV1,
+    ProjectConsultationProposalStatus, ProjectConsultationProposalStoreV1, ProjectConsultationProposalTask,
     RecordPlanAuthorizationUserConfirmationInput, RecordProjectConsultationProposalDecisionInput,
     RecordProjectConsultationProposalDecisionOutput,
     RenderProjectConsultationProposalMarkdownInput,
@@ -115,6 +115,8 @@ pub(crate) fn create_proposal(
         created_by_role: input.created_by_role,
         // 交办·刀2 2.5：透传咨询的「建议按工作流」轻标记（map 从咨询 LM 判定填入 input）。
         suggest_workflow: input.suggest_workflow,
+        // P2-A：方案自带任务图透传（结构化对象数组，不逐字段 trim——与 risks 同款处置）。
+        tasks: input.tasks.clone(),
         created_at_ms: timestamp_ms,
         updated_at_ms: timestamp_ms,
     };
@@ -640,7 +642,30 @@ fn validate_create_input(input: &CreateProjectConsultationProposalInput) -> Resu
         &input.worker_acceptance_criteria,
         &input.control_core_acceptance_criteria,
         &input.supervisor_acceptance_criteria,
-    )
+    )?;
+    validate_task_graph_toolbox_lint(&input.tasks)
+}
+
+// P2-A：create_proposal 是所有方案产出口的共同落库点（write_consultation_proposal 的两个 resident 口子经它，
+// 前端可能直调的 create_project_consultation_proposal 命令也直接经它）——lint 挂在这里兜底所有入口，不止
+// resident 那两条；resident 侧 write_consultation_proposal 已经在更早处 lint 过一次，这里重跑是幂等的
+// 双保险（同确认时 validate_approved_planned_tasks 重跑 lint 的既有纪律一致），不是遗漏后的补丁。
+fn validate_task_graph_toolbox_lint(tasks: &[ProjectConsultationProposalTask]) -> Result<(), String> {
+    if let Some((task, reason)) = tasks.iter().find_map(|task| {
+        crate::worker_toolbox_lint_reason_for_text(
+            &task.title,
+            &task.task_goal,
+            &task.acceptance_criteria,
+            &task.report_format,
+        )
+        .map(|reason| (task, reason))
+    }) {
+        return Err(format!(
+            "proposal_task_toolbox_lint_failed:任务「{}」{}；方案已拒绝。",
+            task.title, reason
+        ));
+    }
+    Ok(())
 }
 
 fn validate_proposal_fields(
@@ -1150,6 +1175,53 @@ impl StoreLock {
 impl Drop for StoreLock {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);
+    }
+}
+
+// P2-A：validate_task_graph_toolbox_lint 是 create_proposal（所有方案产出口共同落库点，含前端可能直调的
+// create_project_consultation_proposal 命令，不止 resident 两个口子）的兜底闸——单测直接钉这个函数本体，
+// 证明「绕开 write_consultation_proposal 直调 create_proposal」这条路也会被挡（不依赖完整 bootstrap 夹具）。
+#[cfg(test)]
+mod toolbox_lint_backstop_tests {
+    use super::*;
+
+    fn clean_task() -> ProjectConsultationProposalTask {
+        ProjectConsultationProposalTask {
+            title: "建证据文件".to_string(),
+            task_goal: "创建 proof.txt，只写入一行：ok".to_string(),
+            target_role: "codex-dev".to_string(),
+            depends_on: vec![],
+            acceptance_criteria: vec!["proof.txt 存在".to_string()],
+            report_format: vec!["做了什么".to_string()],
+        }
+    }
+
+    #[test]
+    fn empty_tasks_pass() {
+        assert!(validate_task_graph_toolbox_lint(&[]).is_ok());
+    }
+
+    #[test]
+    fn clean_task_passes() {
+        assert!(validate_task_graph_toolbox_lint(&[clean_task()]).is_ok());
+    }
+
+    #[test]
+    fn task_referencing_read_file_is_rejected() {
+        let mut poisoned = clean_task();
+        poisoned.task_goal = "先用 read_file 工具读取 README.md，再创建 proof.txt".to_string();
+        let error = validate_task_graph_toolbox_lint(&[poisoned])
+            .expect_err("绕开 write_consultation_proposal 直调 create_proposal 也该被拒");
+        assert!(error.contains("proposal_task_toolbox_lint_failed"), "{error}");
+        assert!(error.contains("引用不存在的独立读文件工具"), "{error}");
+    }
+
+    #[test]
+    fn task_forbidding_shell_is_rejected() {
+        let mut poisoned = clean_task();
+        poisoned.acceptance_criteria = vec!["禁止使用 shell，只能直接产出结果".to_string()];
+        let error = validate_task_graph_toolbox_lint(&[poisoned]).expect_err("禁 shell 措辞应被拒");
+        assert!(error.contains("禁止 worker 唯一可用的 shell 工具"), "{error}");
     }
 }
 

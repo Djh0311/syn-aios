@@ -889,9 +889,11 @@ function ProjectJiaobanPanelBrowser({
   }, [latestProposal?.proposal_id, projectRoot]);
 
   // 预拆触发：命中缓存直接恢复（切 tab 回来不重拆）；否则异步调后端预拆（零写盘·1-7 分钟），持住结果。防重入靠 ref。
+  // P2-A：方案自带任务图时不再触发这个旧 LM 预拆调用——previewCanvasNodesFor 直接读 proposal.tasks 秒出；
+  // 这条只保留给存量无图方案（fallback）。
   useEffect(() => {
     const proposalId = latestProposal?.proposal_id;
-    if (!proposalId || !shouldPreviewWorksmap) return;
+    if (!proposalId || !shouldPreviewWorksmap || (latestProposal?.tasks?.length ?? 0) > 0) return;
     const cachedPreview = jiaobanPreviewCacheByProposal.get(proposalId);
     if (cachedPreview) {
       setPreviewTasks(cachedPreview.tasks);
@@ -1639,7 +1641,13 @@ function ProjectJiaobanPanelBrowser({
       nodes={canvasNodes}
       bindings={canvasBindings}
       sessions={projectSessions}
-      waitingForPreview={!runtimeCanvasPhase && workflowSwitchOn && previewTasks === null && !previewError}
+      waitingForPreview={
+        !runtimeCanvasPhase &&
+        workflowSwitchOn &&
+        previewTasks === null &&
+        (latestProposal?.tasks?.length ?? 0) === 0 &&
+        !previewError
+      }
       previewError={runtimeCanvasPhase ? null : previewError}
       previewWarnings={runtimeCanvasPhase ? [] : previewWarnings}
       readOnly={runtimeCanvasPhase}

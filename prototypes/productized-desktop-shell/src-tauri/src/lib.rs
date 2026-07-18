@@ -2694,6 +2694,7 @@ mod tests {
             acceptance_criteria: vec!["确认后授权仍停在待全局复核。".to_string()],
             created_by_role: ProjectConsultationProposalCreatorRole::ProjectConsultant,
             suggest_workflow: false,
+            tasks: vec![],
             actor_id: "project-consultation-fixture".to_string(),
             expected_store_revision: None,
         }
@@ -4587,6 +4588,7 @@ mod tests {
             next_steps: vec!["进角色循环授权".to_string()],
             execution_scope: None, // 只读咨询 stub·不需要下游改东西
             suggest_workflow: false,
+            tasks: vec![], // 纯咨询 stub·execution_scope=None 时 tasks 允许空
         }
     }
 
@@ -4886,6 +4888,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             next_steps: vec!["下一步".to_string()],
             execution_scope,
             suggest_workflow: false,
+            tasks: vec![],
         }
     }
 

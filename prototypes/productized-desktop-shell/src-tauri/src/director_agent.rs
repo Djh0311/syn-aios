@@ -335,13 +335,63 @@ pub(crate) fn parse_director_plan(
     Ok(planned)
 }
 
-fn planned_task_toolbox_lint_reason(task: &ProjectDirectorPlannedTask) -> Option<&'static str> {
+// P2-A：终版方案自带任务图——直接从方案正本自己的 tasks 字段装配 Vec<ProjectDirectorPlannedTask>，
+// 零 LM 调用、零 JSON 解析。装配逻辑与 parse_director_plan 逐字同款（同一份 scope/id/acceptance 规则），
+// 只是输入换成方案自带的结构化图而不是 LM 现拆的 JSON——两条路产出的 ProjectDirectorPlannedTask 形状
+// 完全一致，下游 prepare/guard 无法区分、也不需要区分（guard 只能拦不能扩，安全口径不因来源而变）。
+pub(crate) fn assemble_planned_tasks_from_proposal_graph(
+    proposal: &ProjectConsultationProposal,
+) -> Vec<ProjectDirectorPlannedTask> {
+    proposal
+        .tasks
+        .iter()
+        .enumerate()
+        .map(|(index, task)| {
+            let scope = director_task_scope_from_proposal(proposal, &task.target_role);
+            let acceptance_criteria = if task.acceptance_criteria.is_empty() {
+                proposal.acceptance_criteria.clone()
+            } else {
+                task.acceptance_criteria.clone()
+            };
+            ProjectDirectorPlannedTask {
+                planned_task_id: format!("planned-task:{}:{}", proposal.workflow_id, index + 1),
+                title: task.title.clone(),
+                task_goal: task.task_goal.clone(),
+                scope,
+                depends_on: task.depends_on.clone(),
+                worker_acceptance_criteria: proposal.worker_acceptance_criteria.clone(),
+                control_core_acceptance_criteria: proposal.control_core_acceptance_criteria.clone(),
+                supervisor_acceptance_criteria: proposal.supervisor_acceptance_criteria.clone(),
+                acceptance_criteria,
+                report_format: task.report_format.clone(),
+                status: "planned".to_string(),
+                guard_result: None,
+                work_item_id: None,
+                workflow_node_id: None,
+                task_package_id: None,
+                memory_packet_snapshot_id: None,
+                prepared_dispatch_id: None,
+                blocked_reasons: vec![],
+            }
+        })
+        .collect()
+}
+
+// P2-A：词表核心抽成纯文本入参（title/task_goal/acceptance_criteria/report_format 四段拼串），供确认时
+// `ProjectDirectorPlannedTask` 与出方案时 `ConsultationProposalTask`（consultant_agent.rs）两种任务形状
+// 共用同一份词表——lint 前移到出方案时不需要（也不该）复制一份词表副本（勘察 §1.6/§2.4 点名词表零改可复用）。
+pub(crate) fn worker_toolbox_lint_reason_for_text(
+    title: &str,
+    task_goal: &str,
+    acceptance_criteria: &[String],
+    report_format: &[String],
+) -> Option<&'static str> {
     let text = format!(
         "{}\n{}\n{}\n{}",
-        task.title,
-        task.task_goal,
-        task.acceptance_criteria.join("\n"),
-        task.report_format.join("\n")
+        title,
+        task_goal,
+        acceptance_criteria.join("\n"),
+        report_format.join("\n")
     );
     let lowered = text.to_lowercase();
     let forbids_shell = [
@@ -383,6 +433,15 @@ fn planned_task_toolbox_lint_reason(task: &ProjectDirectorPlannedTask) -> Option
         return Some("任务文本把注入材料误写成唯一事实来源");
     }
     None
+}
+
+fn planned_task_toolbox_lint_reason(task: &ProjectDirectorPlannedTask) -> Option<&'static str> {
+    worker_toolbox_lint_reason_for_text(
+        &task.title,
+        &task.task_goal,
+        &task.acceptance_criteria,
+        &task.report_format,
+    )
 }
 
 fn lint_planned_tasks_worker_toolbox(tasks: &[ProjectDirectorPlannedTask]) -> Result<(), String> {
@@ -4361,13 +4420,6 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                 approved.to_vec()
             }
             None => {
-                // 刀B·记忆召回（真实 path·不死锚）：重拆前用手里的 path 填本项目记忆，与预拆/咨询同覆盖。
-                let mut ctx = load_project_context(project_root)?;
-                ctx.memory_summary = recall_project_memory_summary_at(path, project_root);
-                // 质量债·redo 幂等（只 re-plan 分支·调用方真 path 填·死锚纪律照刀B）：授权窗内
-                // 已完成事实喂重拆——「这些干完了，别重做」（2026-07-06 双删案根治）。失败 None 不挡重拆。
-                ctx.prior_completed_summary =
-                    collect_prior_completed_summary(path, workflow_id, auth_created_at_ms);
                 let proposal_store =
                     project_consultation_proposal_store::load_store(path, timestamp_ms)?;
                 let proposal = proposal_store
@@ -4375,23 +4427,53 @@ fn run_auto_advance_authorized_role_loop_with_timeout_budget(
                     .iter()
                     .find(|proposal| proposal.proposal_id == proposal_id)
                     .ok_or_else(|| format!("找不到 active 授权对应的已确认方案：{proposal_id}"))?;
-                let (mut tasks, retried) =
-                    director_plan_with_retry(director, &ctx, proposal, false)?;
-                if retried {
+                // P2-A 三处 None 清零之二/三（[接着跑]独立命令 + 超时自动重拆递归都硬传 None，两路共用本
+                // 分支）：方案自带任务图（出方案时已 lint 质检）→ 原样装配，零 LM 调用；方案无图（存量
+                // 老方案/schema 前数据）→ 走既有 director.plan 路（fallback，行为逐字不变，不许老方案变废纸）。
+                if !proposal.tasks.is_empty() {
+                    let tasks = assemble_planned_tasks_from_proposal_graph(proposal);
+                    // 对称补齐：Some(approved) 路经 validate_approved_planned_tasks 重跑 lint（confirm 内层
+                    // 走的也是这条路，见 planned_task_graph 计算）；[接着跑]/超时重拆两路硬传 None 直接落到
+                    // 本分支，此前没有独立重跑 lint——虽然 proposal.tasks 只能经落库前置闸写入、正常业务流程
+                    // 摸不到未 lint 的图，但双保险不该只覆盖一条入口，这里补上与 Some 路同款的重跑。
+                    lint_planned_tasks_worker_toolbox(&tasks)?;
                     append_role_loop_auto_advance_audit(
                         path,
                         workflow_id,
                         actor_id,
-                        "role_loop_director_plan_retried",
-                        "主管拆任务偶发早退或产物违反 worker 工具箱事实，已自动重拆一次。",
+                        "role_loop_used_approved_plan_graph",
+                        &format!(
+                            "所批即所跑：方案自带 {} 个任务图（出方案时已质检），跳过主管重拆（原样进 prepare·guard 仍逐个复核）。",
+                            tasks.len()
+                        ),
                     )?;
+                    tasks
+                } else {
+                    // 刀B·记忆召回（真实 path·不死锚）：重拆前用手里的 path 填本项目记忆，与预拆/咨询同覆盖。
+                    let mut ctx = load_project_context(project_root)?;
+                    ctx.memory_summary = recall_project_memory_summary_at(path, project_root);
+                    // 质量债·redo 幂等（只 re-plan 分支·调用方真 path 填·死锚纪律照刀B）：授权窗内
+                    // 已完成事实喂重拆——「这些干完了，别重做」（2026-07-06 双删案根治）。失败 None 不挡重拆。
+                    ctx.prior_completed_summary =
+                        collect_prior_completed_summary(path, workflow_id, auth_created_at_ms);
+                    let (mut tasks, retried) =
+                        director_plan_with_retry(director, &ctx, proposal, false)?;
+                    if retried {
+                        append_role_loop_auto_advance_audit(
+                            path,
+                            workflow_id,
+                            actor_id,
+                            "role_loop_director_plan_retried",
+                            "主管拆任务偶发早退或产物违反 worker 工具箱事实，已自动重拆一次。",
+                        )?;
+                    }
+                    // fix3 2.1：把 LM 编的界外角色归一到 codex-dev（只收不放）+ 出人话警告。
+                    advance_warnings.extend(clamp_planned_task_roles(
+                        &mut tasks,
+                        &proposal.scope_draft.allowed_role_ids,
+                    ));
+                    tasks
                 }
-                // fix3 2.1：把 LM 编的界外角色归一到 codex-dev（只收不放）+ 出人话警告。
-                advance_warnings.extend(clamp_planned_task_roles(
-                    &mut tasks,
-                    &proposal.scope_draft.allowed_role_ids,
-                ));
-                tasks
             }
         };
         // 开工前绑定面板：主管已把任务拆清，但还没有进入 prepare/派发。沿用 `needs_binding` 阶段，
@@ -5034,6 +5116,15 @@ fn run_confirm_and_start_authorized_run_inner(
         );
     }
     post_confirm?;
+    // P2-A 三处 None 清零之一：方案自带任务图（schema 正本，出方案时已 lint 质检）优先于前端回传的
+    // approved_planned_tasks——图已经在方案 parse/确认时质检过，批的就是已质检的图；前端字段只在方案
+    // 没有自带图时才当降级/兼容回落（存量老方案走这条，不许变废纸）。
+    let planned_task_graph: Option<Vec<ProjectDirectorPlannedTask>> =
+        if confirmed.proposal.tasks.is_empty() {
+            request.approved_planned_tasks.clone()
+        } else {
+            Some(assemble_planned_tasks_from_proposal_graph(&confirmed.proposal))
+        };
     // 5. P1-D 人闸收敛：绑定停点摘除——没有 M1 预选会话=直接走[接着跑]同款「C1 每任务自动新会话」
     //    既有路径，一口气进 prepare→链，不再停 needs_binding 面。M1 若已在预演图逐项点好会话，仍需
     //    先拆任务拿真实 task id 才能把预演节点映射过去，保留两步（挑会话能力留给 P2-B 处置，不删件）。
@@ -5048,7 +5139,7 @@ fn run_confirm_and_start_authorized_run_inner(
             &workflow_id,
             &actor_id,
             request.max_nodes.unwrap_or(50),
-            request.approved_planned_tasks.as_deref(),
+            planned_task_graph.as_deref(),
             session_creator,
         );
     }
@@ -5062,7 +5153,7 @@ fn run_confirm_and_start_authorized_run_inner(
         &workflow_id,
         &actor_id,
         request.max_nodes.unwrap_or(50),
-        request.approved_planned_tasks.as_deref(),
+        planned_task_graph.as_deref(),
     )?;
     if !paused.task_session_binding_required {
         return Ok(paused);
@@ -5581,6 +5672,7 @@ mod fix9_tests {
             next_steps: vec!["加怪".to_string()],
             execution_scope: None,
             suggest_workflow: false,
+            tasks: vec![],
         };
         let c1 = map_consultation_to_c1_input(&consult, project_root, "consultant").expect("map");
         assert!(
@@ -5967,6 +6059,284 @@ mod fix9_tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    // ===== P2-A·终版方案自带任务图·mock E2E（A5：带图直通/带毒图拦案发/旧图退方案 fallback 回归）=====
+
+    // 碰到即炸的桩：方案自带任务图时零 LM 调用是本包的核心承诺——director.plan/plan_preview 一旦被调
+    // 就说明「所批即所跑」没跑对路，图路又悄悄漏回 LM 拆任务那条死循环隐患路径。
+    struct PanicDirector;
+    impl DirectorAgent for PanicDirector {
+        fn plan(
+            &self,
+            _ctx: &ProjectContext,
+            _proposal: &ProjectConsultationProposal,
+        ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+            panic!("P2-A：方案自带任务图时不该调 director.plan（零 LM 调用承诺破了）");
+        }
+        fn plan_preview(
+            &self,
+            _ctx: &ProjectContext,
+            _proposal: &ProjectConsultationProposal,
+        ) -> Result<Vec<ProjectDirectorPlannedTask>, String> {
+            panic!("P2-A：方案自带任务图时不该调 director.plan_preview");
+        }
+    }
+
+    // 真分流产出的可执行方案（execution_scope.requires_write=true → 写根=测试项目根）+ 自带 1 个任务的图。
+    // 复用生产 API（map_consultation_to_c1_input → create_proposal），不手搓持久化正本。
+    fn create_pending_proposal_with_task_graph(
+        path: &std::path::Path,
+        project_root: &str,
+        task_goal: &str,
+    ) -> ProjectConsultationProposal {
+        let consult = ConsultationProposal {
+            user_goal: "创建 p2a-graph-proof.txt".to_string(),
+            goal_summary: "在项目根建证据文件".to_string(),
+            scope_note: "改一个文件".to_string(),
+            reasoning: vec!["P2-A 带图直通 mock E2E".to_string()],
+            risks: vec![],
+            must_stop_points: vec![],
+            worker_acceptance_criteria: vec!["按方案完成执行步骤并返回证据".to_string()],
+            control_core_acceptance_criteria: vec!["校验授权范围并记录状态".to_string()],
+            supervisor_acceptance_criteria: vec!["检查回程证据后给出结论".to_string()],
+            next_steps: vec!["建证据文件".to_string()],
+            execution_scope: Some(ConsultationExecutionScope {
+                requires_write: true,
+                write_roots: vec![],
+                target_files: vec!["p2a-graph-proof.txt".to_string()],
+                tools: vec![],
+                checks: vec![],
+            }),
+            suggest_workflow: false,
+            tasks: vec![ConsultationProposalTask {
+                title: "建证据文件".to_string(),
+                task_goal: task_goal.to_string(),
+                target_role: "codex-dev".to_string(),
+                depends_on: vec![],
+                acceptance_criteria: vec!["p2a-graph-proof.txt 存在".to_string()],
+                report_format: vec!["做了什么".to_string()],
+            }],
+        };
+        let c1 = map_consultation_to_c1_input(&consult, project_root, "consultant").expect("map");
+        assert!(
+            !c1.scope_draft.allowed_write_roots.is_empty(),
+            "前置：可写方案写根非空"
+        );
+        assert_eq!(c1.tasks.len(), 1, "前置：方案自带 1 个任务图");
+        project_consultation_proposal_store::create_proposal(
+            path,
+            &c1,
+            unix_timestamp_ms(),
+            &format!("p2a-graph-proposal:{}", unix_timestamp_nanos()),
+        )
+        .expect("create proposal")
+        .proposal
+    }
+
+    // A5①：方案带图 → 批准 → 重校（validate_approved_planned_tasks 原样跑）→ 零 LM 调用直进 prepare→链→完成；
+    // 打印+断言审计序列：恰一笔 role_loop_used_approved_plan_graph，零 role_loop_director_plan_retried。
+    #[test]
+    fn p2a_confirm_with_task_graph_skips_lm_plan_straight_to_completion() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("p2a-graph-direct");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project_record(test_root)).expect("bootstrap");
+        let proposal = create_pending_proposal_with_task_graph(
+            &path,
+            test_root,
+            "在当前项目根目录创建文件 p2a-graph-proof.txt，只写入一行：graph ok",
+        );
+        let request = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: proposal.proposal_id.clone(),
+            session_choice: "existing".to_string(),
+            session_id: Some("thread-any".to_string()),
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+            approved_planned_tasks: None,
+            preview_session_bindings: vec![],
+        };
+        let fixture_index = serde_json::json!({
+            "projects": [{"project_root": test_root}],
+            "threads": [{"thread_id": "thread-fix9-succeeding", "title": "fix9 桩会话", "project_root": test_root, "rollout_exists": true}],
+        });
+        let outcome = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &fixture_index,
+            &dir.join("readback.sqlite"),
+            &SucceedingRunner,
+            // PanicDirector：任何一次 LM 拆任务调用即炸——证明本轮全程零 LM 调用。
+            &PanicDirector,
+            &SucceedingCreator,
+            &request,
+        )
+        .expect("带图方案批准后应零 LM 调用直进 prepare→链→完成");
+        assert!(
+            outcome.stage == "completed" && !outcome.task_session_binding_required,
+            "带图直通：应一口气跑完，不停绑定面：{outcome:?}"
+        );
+        let state = read_state_json(&path);
+        let events: Vec<(String, String)> = state["audit_events"]
+            .as_array()
+            .map(|events| {
+                events
+                    .iter()
+                    .map(|event| {
+                        (
+                            event["event_type"].as_str().unwrap_or("").to_string(),
+                            event["reason"].as_str().unwrap_or("").to_string(),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        println!("[P2A_GRAPH_DIRECT] audit sequence:");
+        for (event_type, reason) in &events {
+            println!("[P2A_GRAPH_DIRECT]   {event_type} | {reason}");
+        }
+        let used_graph_count = events
+            .iter()
+            .filter(|(event_type, _)| event_type == "role_loop_used_approved_plan_graph")
+            .count();
+        assert_eq!(
+            used_graph_count, 1,
+            "应恰有 1 笔『所批即所跑』审计（每单必有笔）：{events:?}"
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|(event_type, _)| event_type == "role_loop_director_plan_retried"),
+            "带图直通零 LM 调用，不应出现重拆审计：{events:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // A5②：带毒任务图（task_goal 引用不存在的 read_file 工具）在出方案落库前就被拒——案发点是
+    // write_consultation_proposal（两个方案产出口共用的落库前闸），不是确认/派发时才发现。
+    #[test]
+    fn p2a_proposal_with_poisoned_task_graph_rejected_at_proposal_time() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("p2a-graph-poisoned");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project_record(test_root)).expect("bootstrap");
+        let poisoned = ConsultationProposal {
+            user_goal: "创建证据文件".to_string(),
+            goal_summary: "在项目根建证据文件".to_string(),
+            scope_note: "改一个文件".to_string(),
+            reasoning: vec!["P2-A 带毒图案发测试".to_string()],
+            risks: vec![],
+            must_stop_points: vec![],
+            worker_acceptance_criteria: vec!["按方案完成执行步骤并返回证据".to_string()],
+            control_core_acceptance_criteria: vec!["校验授权范围并记录状态".to_string()],
+            supervisor_acceptance_criteria: vec!["检查回程证据后给出结论".to_string()],
+            next_steps: vec!["建证据文件".to_string()],
+            execution_scope: Some(ConsultationExecutionScope {
+                requires_write: true,
+                write_roots: vec![],
+                target_files: vec!["poisoned-proof.txt".to_string()],
+                tools: vec![],
+                checks: vec![],
+            }),
+            suggest_workflow: false,
+            tasks: vec![ConsultationProposalTask {
+                title: "建证据文件".to_string(),
+                // 带毒：引用不存在的独立 read_file 工具——07-18 真单死循环病灶的原始措辞。
+                task_goal: "先用 read_file 工具读取 README.md，再创建 poisoned-proof.txt。".to_string(),
+                target_role: "codex-dev".to_string(),
+                depends_on: vec![],
+                acceptance_criteria: vec!["poisoned-proof.txt 存在".to_string()],
+                report_format: vec!["做了什么".to_string()],
+            }],
+        };
+        let store_before =
+            project_consultation_proposal_store::load_store(&path, unix_timestamp_ms())
+                .expect("load store before");
+        let error = write_consultation_proposal(
+            &path,
+            &poisoned,
+            test_root,
+            "创建证据文件",
+            "consultant",
+        )
+        .expect_err("带毒任务图应在出方案落库前就被拒");
+        assert!(
+            error.contains("proposal_task_toolbox_lint_failed"),
+            "错误应标出方案期 lint 拦截：{error}"
+        );
+        assert!(
+            error.contains("引用不存在的独立读文件工具"),
+            "错误人话应点名违规原因：{error}"
+        );
+        let store_after =
+            project_consultation_proposal_store::load_store(&path, unix_timestamp_ms())
+                .expect("load store after");
+        assert_eq!(
+            store_before.proposals.len(),
+            store_after.proposals.len(),
+            "拒绝应发生在落库之前——方案数不应增加"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // A5③：旧存量方案（无 tasks 字段/空图）批准后仍走既有 director.plan LM 拆任务 fallback 路——
+    // 不许因为新增了图路就让老方案变废纸。
+    #[test]
+    fn p2a_confirm_with_graph_less_proposal_still_uses_director_plan_fallback() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("p2a-graph-fallback");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project_record(test_root)).expect("bootstrap");
+        // 复用既有纯建议（写根空）方案 fixture——tasks 字段本就空，是本包 A1 之前就存在的存量形态。
+        let proposal = create_advice_only_pending_proposal(&path, test_root);
+        assert!(proposal.tasks.is_empty(), "前置：存量方案无任务图");
+        let request = ConfirmAndStartAuthorizedRunRequest {
+            project_root: test_root.to_string(),
+            proposal_id: proposal.proposal_id.clone(),
+            session_choice: "existing".to_string(),
+            session_id: Some("thread-any".to_string()),
+            actor_id: Some("user-fixture".to_string()),
+            max_nodes: Some(10),
+            approved_planned_tasks: None,
+            preview_session_bindings: vec![],
+        };
+        let fixture_index = serde_json::json!({
+            "projects": [{"project_root": test_root}],
+            "threads": [{"thread_id": "thread-fix9-succeeding", "title": "fix9 桩会话", "project_root": test_root, "rollout_exists": true}],
+        });
+        let outcome = run_confirm_and_start_authorized_run_inner(
+            &path,
+            &fixture_index,
+            &dir.join("readback.sqlite"),
+            &SucceedingRunner,
+            // OneTaskDirector：无图方案必须仍然走这条 LM fallback 路才拆得出任务——若图路误吞了无图分支，
+            // 这里会因为拿不到 planned_tasks 而失败。
+            &OneTaskDirector,
+            &SucceedingCreator,
+            &request,
+        )
+        .expect("旧无图方案应仍走 director.plan fallback 路跑完");
+        assert!(
+            outcome.stage == "completed" && !outcome.task_session_binding_required,
+            "旧无图方案 fallback：应一口气跑完：{outcome:?}"
+        );
+        let state = read_state_json(&path);
+        let event_types: Vec<String> = state["audit_events"]
+            .as_array()
+            .map(|events| {
+                events
+                    .iter()
+                    .filter_map(|event| event["event_type"].as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert!(
+            !event_types
+                .iter()
+                .any(|event_type| event_type == "role_loop_used_approved_plan_graph"),
+            "无图方案不应出现『所批即所跑』审计——它没有图可用：{event_types:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // §4②：空写根 active 授权（历史残留形态）+ [接着跑] → 合法只读推进，仍在绑定面停住。
     #[test]
     fn advice_only_active_authorization_advances_to_task_binding() {
@@ -6223,6 +6593,7 @@ mod fix9_tests {
                 checks: vec!["浏览器打开看效果".to_string()],
             }),
             suggest_workflow: false,
+            tasks: vec![],
         };
         let c1 = map_consultation_to_c1_input(&consult, test_root, "consultant").expect("map");
         assert!(
@@ -6346,6 +6717,7 @@ mod quality_debt_tests {
                 checks: vec![],
             }),
             suggest_workflow: false,
+            tasks: vec![],
         };
         let c1 = map_consultation_to_c1_input(&consult, test_root, "consultant").expect("map");
         let created = project_consultation_proposal_store::create_proposal(

@@ -140,6 +140,15 @@ export function previewCanvasNodesFor(
       depends_on: task.depends_on,
     }));
   }
+  // P2-A：方案自带任务图（出方案时已 lint 质检）——秒出，不必等旧的批前预拆 LM 调用。
+  // preview_node_id 在确认前还没有真实 planned_task_id，用方案 id+序号合成一个稳定占位。
+  if (proposal.tasks?.length) {
+    return proposal.tasks.map((task, index) => ({
+      preview_node_id: `proposal:${proposal.proposal_id}:task:${index}`,
+      title: task.title,
+      depends_on: task.depends_on,
+    }));
+  }
   return [previewFallbackNode(proposal)];
 }
 

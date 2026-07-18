@@ -303,6 +303,7 @@ mod tests {
                 checks: vec![],
             }),
             suggest_workflow: false,
+            tasks: vec![],
         };
         let c1 =
             crate::map_consultation_to_c1_input(&consult, "/p/root", "consultant").expect("map");

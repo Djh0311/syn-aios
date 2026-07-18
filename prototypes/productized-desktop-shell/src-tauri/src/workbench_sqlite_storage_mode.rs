@@ -1938,6 +1938,7 @@ mod tests {
             acceptance_criteria: vec!["fixture accepted".to_string()],
             created_by_role: crate::ProjectConsultationProposalCreatorRole::ProjectConsultant,
             suggest_workflow: false,
+            tasks: vec![],
             actor_id: "m5a-test".to_string(),
             expected_store_revision: None,
         }
@@ -2258,6 +2259,7 @@ mod tests {
             acceptance_criteria: vec!["legacy".to_string()],
             created_by_role: crate::ProjectConsultationProposalCreatorRole::ProjectConsultant,
             suggest_workflow: false,
+            tasks: vec![],
             actor_id: "m5a-byte-test".to_string(),
             expected_store_revision: None,
         };
