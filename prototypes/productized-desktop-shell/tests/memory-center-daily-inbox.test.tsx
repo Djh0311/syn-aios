@@ -30,8 +30,9 @@ const memoryCenterMarkup = renderToStaticMarkup(
   />,
 );
 
-assert(memoryCenterMarkup.includes("daily-memory-candidate-inbox"), "记忆中心候选区必须挂载日常候选收件箱");
-assert(memoryCenterMarkup.includes("采纳为正式记忆"), "候选详情必须显示采纳为正式记忆动作");
+assert(memoryCenterMarkup.includes('data-memory-group="candidate"'), "记忆中心必须将日常候选并入候选语义组");
+assert(!memoryCenterMarkup.includes("daily-memory-candidate-inbox"), "记忆中心不应再嵌入独立的日常候选收件箱面板");
+assert(memoryCenterMarkup.includes("记住（转正式）"), "候选详情必须保留确认后转正式的真实动作");
 
 const inboxElement = (
   <DailyMemoryCandidateInbox

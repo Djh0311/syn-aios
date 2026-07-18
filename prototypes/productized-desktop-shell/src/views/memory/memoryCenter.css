@@ -255,3 +255,445 @@
   border-radius: 0;
   background: transparent;
 }
+
+/* --------------------------------------------------------------------------
+   记忆中心愿景稿重排：这里是此页唯一的全高布局根。滚动只留给左右两栏。
+   -------------------------------------------------------------------------- */
+.stage:has(> .memory-center) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.stage:has(> .memory-center) > .memory-center {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.stage-pad.memory-center {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.memory-center .memwrap {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--panel);
+}
+
+.memory-center .mlist {
+  flex: 0 0 302px;
+  width: 302px;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-right: 1px solid var(--line);
+  padding: 12px 10px 20px;
+  background: var(--panel);
+  scrollbar-gutter: stable;
+}
+
+.memory-center .mmain {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 24px 40px;
+  scrollbar-gutter: stable;
+}
+
+.memory-center .mmain-col {
+  display: grid;
+  width: min(100%, 620px);
+  gap: 14px;
+  margin: 0 auto;
+}
+
+.memory-center .memory-list-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  padding: 2px 8px 8px;
+}
+
+.memory-center .memory-list-heading h1,
+.memory-center .memory-governance-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.memory-center .memory-list-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.memory-center .memory-list-tools {
+  display: grid;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
+.memory-center .memory-list-tools .jiaoban-session-search {
+  width: 100%;
+  min-width: 0;
+}
+
+.memory-center .memory-project-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.memory-center .memory-list-group {
+  display: grid;
+  gap: 2px;
+}
+
+.memory-center .mgroup {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: 0;
+  padding: 12px 8px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.memory-center .mgroup .n {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.memory-center .mrow {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.memory-center .mrow:hover {
+  background: var(--panel-soft);
+}
+
+.memory-center .mrow.sel {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+}
+
+.memory-center .mrow:focus-visible,
+.memory-center .mstat:focus-visible,
+.memory-center .memory-governance-trigger:focus-visible,
+.memory-center .memory-group-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.memory-center .mrow .t,
+.memory-center .mrow .m {
+  display: block;
+  min-width: 0;
+}
+
+.memory-center .mrow .t {
+  overflow: hidden;
+  font-size: 13.5px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-center .mrow .m {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.memory-center .memory-group-action,
+.memory-center .memory-governance-trigger,
+.memory-center .memory-governance-back {
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.memory-center .memory-group-action {
+  justify-self: start;
+  margin: 6px 10px 0;
+  padding: 4px 0;
+}
+
+.memory-center .memory-governance-trigger {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px 8px 0;
+  border-top: 1px dashed var(--hair);
+  color: var(--ink-mid);
+}
+
+.memory-center .mhead-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.memory-center .mstat {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 4px 12px;
+  background: var(--panel-raised);
+  color: var(--ink-mid);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.memory-center .mstat b {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-center .mstat:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.memory-center .memory-detail-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  background: var(--panel-raised);
+  box-shadow: none;
+}
+
+.memory-center .memory-detail-kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.memory-center .mem-body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.85;
+  text-wrap: pretty;
+}
+
+.memory-center .memory-detail-body {
+  margin: -2px 0 0;
+  color: var(--ink-mid);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.memory-center .memory-kv {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 8px;
+  margin: 0;
+  color: var(--ink-mid);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.memory-center .memory-kv strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.memory-center .memory-provenance {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.memory-center .memory-provenance h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.memory-center .memory-timeline {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-center .memory-timeline li {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--line);
+  color: var(--ink-mid);
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.memory-center .memory-timeline li:last-child {
+  border-bottom: 0;
+}
+
+.memory-center .memory-timeline time {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-center .lifecycle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 右栏是滚动容器，生命周期菜单必须在文档流里展开，不能再用 absolute 弹层。 */
+.memory-center .memory-lifecycle-menu {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.memory-center .memory-lifecycle-menu-body {
+  position: static;
+  display: grid;
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--panel-soft);
+  box-shadow: none;
+}
+
+.memory-center .memory-lifecycle-menu:not([open]) .memory-lifecycle-menu-body {
+  display: none;
+}
+
+.memory-center .memory-lifecycle-menu[open] .memory-lifecycle-menu-body {
+  display: grid;
+}
+
+.memory-center .memory-governance-view {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.memory-center .memory-governance-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.memory-center .memory-governance-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.memory-center .memory-governance-panels {
+  display: grid;
+  gap: 14px;
+}
+
+.memory-center .memory-governance-view .memory-center-panel {
+  grid-column: auto;
+}
+
+.memory-center .arrive {
+  animation: memory-arrive-in 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.memory-center .ring {
+  box-shadow: 0 0 0 2px var(--accent-bg), 0 0 0 3px var(--accent);
+}
+
+@keyframes memory-arrive-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 760px) {
+  .memory-center .memwrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .memory-center .mlist {
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .memory-center .mmain {
+    padding: 14px 16px 28px;
+  }
+
+  .memory-center .mstat {
+    min-height: 38px;
+  }
+
+  .memory-center .memory-detail-card {
+    padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-center .arrive {
+    animation: none;
+  }
+}

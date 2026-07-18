@@ -1,6 +1,5 @@
-import { DetailLine } from "../../components/WorkbenchPrimitives";
 import type { FormalMemoryListItem, MemoryCandidateListItem } from "../../lib/memoryCenter";
-import type { FormalMemoryLifecycleOperationKind } from "../../lib/types";
+import type { FormalMemoryLifecycleOperationKind, MemoryCandidate, MemoryLintFinding } from "../../lib/types";
 
 export function FormalMemoryDetail({
   item,
@@ -16,27 +15,61 @@ export function FormalMemoryDetail({
   const versionOperations: FormalMemoryLifecycleOperationKind[] = ["freeze", "unfreeze"];
   const secretarySuggestionOperations: FormalMemoryLifecycleOperationKind[] = ["promote_to_global", "merge", "archive"];
   const moreOperations: FormalMemoryLifecycleOperationKind[] = ["deprecate", "split", "demote_to_project"];
+  const timeline = [
+    {
+      at: item.record.created_at,
+      key: `created:${item.memory_id}:${item.record.created_at}`,
+      text: "正式记忆建立",
+    },
+    ...item.source_summaries.map((source) => ({
+      at: source.captured_at,
+      key: `source:${source.label}:${source.captured_at}`,
+      text: `来源记录：${source.label}`,
+    })),
+    ...item.versions.map((version) => ({
+      at: version.created_at,
+      key: `version:${version.version_label}:${version.created_at}`,
+      text: `${version.version_label} · ${version.change_summary}（${version.changed_by}）`,
+    })),
+    ...item.audits.map((audit) => ({
+      at: audit.created_at,
+      key: `audit:${audit.event_label}:${audit.created_at}`,
+      text: `${audit.event_label} · ${audit.status_label}：${audit.reason}`,
+    })),
+  ].sort((left, right) => left.at.localeCompare(right.at));
 
   return (
-    <div className="memory-detail-section">
-      <h4>正式记忆详情</h4>
-      <div className="workflow-draft-grid">
-        <DetailLine label="来源" value={sourceText(item.source_summaries)} />
-        <DetailLine label="版本摘要" value={item.version_summary} />
-        <DetailLine label="审计摘要" value={item.audit_summary} />
-        <DetailLine label="冲突 / 检查" value={item.conflict_summary} />
-        <DetailLine label="权限 / 外发" value={`${item.permission_summary} / ${item.model_export_summary}`} />
-        <DetailLine label="任务包入选状态" value={`${item.task_eligibility.label}：${item.task_eligibility.reason}`} />
-      </div>
-      {item.conflicts.finding_summaries.slice(0, 3).map((finding) => (
+    <article className="memory-detail-card fcard memory-detail-section" data-memory-detail-kind="formal">
+      <p className="memory-detail-kicker">正式 · {item.scope_label} · {item.status_label}</p>
+      <p className="mem-body">{item.claim}</p>
+      {item.body ? <p className="memory-detail-body">{item.body}</p> : null}
+
+      <section className="memory-provenance" aria-label="来龙去脉">
+        <h2>来龙去脉</h2>
+        {timeline.length ? (
+          <ol className="memory-timeline">
+            {timeline.map((entry) => (
+              <li key={entry.key}>
+                <time dateTime={entry.at}>{shortDate(entry.at)}</time>
+                <span>{entry.text}</span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="muted small-note">尚无可展示的来源、版本或审计记录。</p>
+        )}
+      </section>
+
+      {item.conflicts.finding_summaries.map((finding) => (
         <p className="state-warning" key={finding}>{finding}</p>
       ))}
+
       <div className="memory-lifecycle-actions" aria-label="正式记忆生命周期操作">
         <div className="memory-lifecycle-copy">
           <strong>生命周期</strong>
           <span>编辑会创建新版本，不覆盖旧版本；废弃不是移除实体；冻结后不能普通编辑。</span>
         </div>
-        <div className="memory-lifecycle-button-row">
+        <div className="memory-lifecycle-button-row lifecycle">
           <LifecycleActionButton
             busyKind={busyKind}
             operationKind="revise"
@@ -83,10 +116,10 @@ export function FormalMemoryDetail({
             </div>
           </details>
         </div>
-        <p className="muted small-note">非启用态记忆默认不进任务包；合并和拆分只使用明确可见的当前记录草稿。</p>
+        <p className="muted small-note">{item.task_eligibility.label}：{item.task_eligibility.reason}</p>
         {error ? <p className="state-warning">{error}</p> : null}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -94,37 +127,110 @@ export function CandidateMemoryDetail({
   item,
   canConfirm = false,
   canAdopt = false,
+  canDiscard = false,
+  canReject = false,
   onConfirm,
   onAdopt,
+  onDiscard,
+  onReject,
+  hasOpenLintFinding = false,
+  sourceRefs,
 }: {
   item: MemoryCandidateListItem;
   canConfirm?: boolean;
   canAdopt?: boolean;
+  canDiscard?: boolean;
+  canReject?: boolean;
   onConfirm?: () => void;
   onAdopt?: () => void;
+  onDiscard?: () => void;
+  onReject?: () => void;
+  hasOpenLintFinding?: boolean;
+  sourceRefs?: MemoryCandidate["source_refs"];
 }) {
   return (
-    <div className="memory-detail-section">
-      <h4>候选详情</h4>
-      <div className="workflow-draft-grid">
-        <DetailLine label="候选状态" value={item.status_label} />
-        <DetailLine label="确认要求" value={item.confirmation_summary} />
-        <DetailLine label="采纳回链" value={item.adoption_summary} />
-        <DetailLine label="任务包位置" value={`${item.task_position.label}：${item.task_position.reason}`} />
-        <DetailLine label="候选边界" value={item.formal_memory_boundary} />
-      </div>
-      <div className="knowledge-action-row">
-        {canConfirm ? (
-          <button className="secondary-button" type="button" onClick={onConfirm} disabled={!onConfirm}>
-            确认候选属实
+    <article className="memory-detail-card fcard memory-detail-section" data-memory-detail-kind="candidate">
+      <p className="memory-detail-kicker">候选 · {item.status_label} · {item.scope_label}</p>
+      <p className="mem-body">{item.claim}</p>
+      {item.body ? <p className="memory-detail-body">{item.body}</p> : null}
+      <p className="memory-kv"><strong>哪来的</strong>{candidateSourceText(sourceRefs, item.source_summaries)}</p>
+      {hasOpenLintFinding ? <p className="memory-kv"><strong>和现有记忆</strong>{item.lint_summary}</p> : null}
+      <p className="memory-kv"><strong>候选边界</strong>{item.formal_memory_boundary}</p>
+      <div className="knowledge-action-row lifecycle" aria-label="候选记忆操作">
+        {canConfirm && onConfirm ? (
+          <button className="secondary-button" type="button" onClick={onConfirm}>
+            属实（确认）
           </button>
         ) : null}
-        <button className="secondary-button" type="button" onClick={onAdopt} disabled={!canAdopt || !onAdopt}>
-          采纳为正式记忆
-        </button>
+        {canAdopt && onAdopt ? (
+          <button className="secondary-button" type="button" onClick={onAdopt}>
+            记住（转正式）
+          </button>
+        ) : null}
+        {canDiscard && onDiscard ? (
+          <button className="secondary-button" type="button" onClick={onDiscard}>
+            {canReject ? "暂不处理" : "不要"}
+          </button>
+        ) : null}
+        {canReject && onReject ? (
+          <button className="secondary-button" type="button" onClick={onReject}>
+            不要
+          </button>
+        ) : null}
       </div>
-      {!canAdopt ? <p className="muted small-note">候选需先确认，且未被采纳时才可转为正式记忆。</p> : null}
-    </div>
+      {!canConfirm && !canAdopt && !canDiscard && !canReject ? (
+        <p className="muted small-note">当前候选状态没有可执行的既有决定动作。</p>
+      ) : null}
+    </article>
+  );
+}
+
+export function MemoryLintFindingDetail({
+  finding,
+  targetMemory,
+  busyKind,
+  error,
+  onLifecycleAction,
+}: {
+  finding: MemoryLintFinding;
+  targetMemory: FormalMemoryListItem | null;
+  busyKind: FormalMemoryLifecycleOperationKind | null;
+  error: string | null;
+  onLifecycleAction: (operationKind: FormalMemoryLifecycleOperationKind) => void;
+}) {
+  const evidence = finding.evidence_refs
+    .map((source) => source.source_title || source.source_id || source.source_type)
+    .filter(Boolean)
+    .join("；");
+
+  return (
+    <article className="memory-detail-card fcard memory-detail-section" data-memory-detail-kind="lint">
+      <p className="memory-detail-kicker">维护检查发现 · {finding.severity === "blocking" ? "阻断级" : "需要复核"}</p>
+      <p className="mem-body">{finding.summary}</p>
+      <p className="memory-kv"><strong>证据</strong>{evidence || "检查未提供可展示的证据来源。"}</p>
+      {targetMemory ? (
+        <div className="knowledge-action-row lifecycle" aria-label="维护发现操作">
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={busyKind !== null}
+            onClick={() => onLifecycleAction("revise")}
+          >
+            {busyKind === "revise" ? "预览中" : "改写提案"}
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={busyKind !== null}
+            onClick={() => onLifecycleAction("deprecate")}
+          >
+            {busyKind === "deprecate" ? "预览中" : "废弃"}
+          </button>
+        </div>
+      ) : null}
+      {!targetMemory ? <p className="muted small-note">此发现没有可由 M9 生命周期命令处理的正式记忆目标。</p> : null}
+      {error ? <p className="state-warning">{error}</p> : null}
+    </article>
   );
 }
 
@@ -170,4 +276,24 @@ export function operationLabel(operationKind: FormalMemoryLifecycleOperationKind
 
 export function sourceText(sources: FormalMemoryListItem["source_summaries"] | MemoryCandidateListItem["source_summaries"]) {
   return sources.map((source) => `${source.label} / ${source.authority_label} / ${source.sensitive_label}`).join("；") || "来源未记录";
+}
+
+function candidateSourceText(
+  sourceRefs: MemoryCandidate["source_refs"] | undefined,
+  sourceSummaries: MemoryCandidateListItem["source_summaries"],
+): string {
+  if (!sourceRefs?.length) return sourceText(sourceSummaries);
+  return sourceRefs
+    .map((source) => {
+      const label = source.source_title || source.source_id || source.source_ref_id;
+      const anchor = source.anchor ? ` · 锚点 ${source.anchor}` : "";
+      return `${label} · ${source.source_type} · 引用 ${source.source_ref_id}${anchor}`;
+    })
+    .join("；");
+}
+
+function shortDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
