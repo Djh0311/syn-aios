@@ -153,19 +153,19 @@ pub(crate) fn register_supervisor_spawned_process(
     )
 }
 
-/// P1-A's resident MCP host must not continue unregistered: otherwise an app
-/// restart cannot safely reap it. The existing pilot keeps its historical
-/// best-effort wrapper above; this new path is deliberately fail-closed.
-pub(crate) fn register_supervisor_resident_process(
+/// S1B one-shot supervisor turns are independent codex-exec process groups.
+/// Registration is fail-closed so an app restart can only reap the exact group
+/// it launched; it never authorizes an mcp-server or arbitrary helper process.
+pub(crate) fn register_supervisor_oneshot_process_group(
     workflow_state_path: &Path,
     run_id: &str,
     pid: u32,
-) -> Result<ProcessRegistration, String> {
-    register_spawned_process_for_checked(
+) -> Result<DurableProcessRegistration, String> {
+    register_codex_process_group_with(
         workflow_state_path,
         run_id,
         pid,
-        false,
+        "supervisor one-shot",
         &SystemProcessOperations,
     )
 }
@@ -298,11 +298,9 @@ fn register_spawned_process_for_checked(
     let workflow_state_path = workflow_state_path.to_path_buf();
     let observed = operations
         .inspect(pid)?
-        .ok_or_else(|| format!("supervisor resident PID {pid} 在登记前已退出"))?;
+        .ok_or_else(|| format!("supervisor spawned PID {pid} 在登记前已退出"))?;
     if !is_workbench_supervisor_process(&observed.cmdline) {
-        return Err(format!(
-            "supervisor resident PID {pid} 不是可识别的 codex exec 或 codex mcp-server"
-        ));
+        return Err(format!("supervisor spawned PID {pid} 不是可识别的 codex exec"));
     }
     let entry = RegisteredProcess {
         pid,
@@ -542,12 +540,11 @@ fn is_workbench_codex_exec(cmdline: &str) -> bool {
     cmdline.contains("codex exec")
 }
 
-// The generic supervisor registration is intentionally broader than manual relay:
-// P1-A's resident host is `codex mcp-server`, while manual relay remains a strict
-// codex-exec process-group path above. Keep this exact two-command allowlist so a
-// registry entry can never turn into a general process killer.
+// Supervisor pilot and S1B one-shot transports both execute `codex exec`.
+// Keep the allowlist narrow so a registry entry can never turn into a general
+// process killer or revive the retired persistent mcp-server transport.
 fn is_workbench_supervisor_process(cmdline: &str) -> bool {
-    is_workbench_codex_exec(cmdline) || cmdline.contains("codex mcp-server")
+    is_workbench_codex_exec(cmdline)
 }
 
 fn same_process(entry: &RegisteredProcess, observed: &ObservedProcess) -> bool {
@@ -694,29 +691,36 @@ mod tests {
     }
 
     #[test]
-    fn resident_mcp_server_registration_is_fail_closed_and_reapable() {
-        let path = test_workflow_state_path("resident-mcp-server");
+    fn supervisor_exec_registration_is_fail_closed_and_reapable() {
+        let path = test_workflow_state_path("supervisor-exec");
         let pid = 43;
         let observed = ObservedProcess {
             started_at: "Fri Jul 17 10:00:00 2026".to_string(),
-            cmdline: "/tmp/codex mcp-server".to_string(),
+            cmdline: "/tmp/codex exec --json".to_string(),
             process_group_id: Some(pid),
         };
         let processes = FakeProcessOperations::with_process(pid, observed);
-        let registration = register_spawned_process_for_checked(
+        let registration = register_codex_process_group_with(
             &path,
             "supervisor-resident:test",
             pid,
-            false,
+            "supervisor one-shot",
             &processes,
         )
-        .expect("resident mcp-server must be durably registered");
+        .expect("supervisor codex exec must be durably registered");
         let sidecar = sidecar_path(&path).expect("sidecar");
         let stored = load_store(&sidecar).expect("stored registration");
         assert_eq!(stored.entries.len(), 1);
-        assert!(stored.entries[0].cmdline_summary.contains("codex mcp-server"));
-        registration.unregister();
-        assert!(load_store(&sidecar).expect("unregistered store").entries.is_empty());
+        assert!(stored.entries[0].cmdline_summary.contains("codex exec"));
+        assert!(stored.entries[0].process_group);
+        assert_eq!(stored.entries[0].process_group_id, Some(pid));
+        registration
+            .unregister()
+            .expect("unregister one-shot group");
+        assert!(load_store(&sidecar)
+            .expect("unregistered store")
+            .entries
+            .is_empty());
 
         let arbitrary = FakeProcessOperations::with_process(
             44,
@@ -726,17 +730,17 @@ mod tests {
                 process_group_id: Some(44),
             },
         );
-        let error = match register_spawned_process_for_checked(
+        let error = match register_codex_process_group_with(
             &path,
             "supervisor-resident:bad",
             44,
-            false,
+            "supervisor one-shot",
             &arbitrary,
         ) {
             Ok(_) => panic!("arbitrary process must not receive a reaper entry"),
             Err(error) => error,
         };
-        assert!(error.contains("不是可识别的 codex exec 或 codex mcp-server"));
+        assert!(error.contains("不是可识别的 codex exec"));
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 

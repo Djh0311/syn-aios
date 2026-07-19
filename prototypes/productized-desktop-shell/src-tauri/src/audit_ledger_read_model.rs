@@ -163,13 +163,18 @@ pub(crate) fn query_audit_ledger_read_model_at(
 }
 
 /// 逐源装配。任一源坏了只记 warning 并跳过该源——别让一个 sidecar 炸掉整页。
-fn collect_all_sources(workflow_state_path: &Path, warnings: &mut Vec<String>) -> Vec<AuditLedgerItem> {
+fn collect_all_sources(
+    workflow_state_path: &Path,
+    warnings: &mut Vec<String>,
+) -> Vec<AuditLedgerItem> {
     let mut items = Vec::new();
 
     match crate::read_workflow_state_value(workflow_state_path) {
         Ok(value) => match value.get("audit_events").and_then(Value::as_array) {
             Some(events) => push_source(&mut items, "workflow_state", events.iter().cloned()),
-            None => warnings.push("主 store 没有 audit_events 数组，这一段审计没进流。".to_string()),
+            None => {
+                warnings.push("主 store 没有 audit_events 数组，这一段审计没进流。".to_string())
+            }
         },
         Err(error) => warnings.push(format!("主 store 读不了，这一段审计没进流：{error}")),
     }
@@ -197,9 +202,11 @@ fn collect_all_sources(workflow_state_path: &Path, warnings: &mut Vec<String>) -
     }
 
     match crate::mcp::supervisor_orchestrator::db_primary_projection_records(workflow_state_path) {
-        Ok((_sessions, audit_events)) => {
-            push_source(&mut items, "supervisor_orchestrator", audit_events.into_iter())
-        }
+        Ok((_sessions, audit_events)) => push_source(
+            &mut items,
+            "supervisor_orchestrator",
+            audit_events.into_iter(),
+        ),
         Err(error) => warnings.push(format!("主管编排店读不了，这一段审计没进流：{error}")),
     }
 
@@ -261,11 +268,12 @@ fn push_serializable_source<T: Serialize>(
     }
 }
 
-fn map_event(source: &str, event: Value) -> AuditLedgerItem {
+fn map_event(source: &str, mut event: Value) -> AuditLedgerItem {
     let event_type = first_string(&event, AUDIT_TYPE_KEYS).unwrap_or_else(|| "unknown".to_string());
     let human_summary = first_non_empty_string(&event, AUDIT_SUMMARY_KEYS)
         // 任务包口径：没有人话字段就用 event_type 顶上（不编人话）。
         .unwrap_or_else(|| event_type.clone());
+    redact_supervisor_private_parameters_from_read_model(source, &mut event);
     AuditLedgerItem {
         at_ms: event_at_ms(&event).unwrap_or(0),
         source: source.to_string(),
@@ -273,6 +281,23 @@ fn map_event(source: &str, event: Value) -> AuditLedgerItem {
         human_summary,
         target_ref: first_non_empty_string(&event, AUDIT_TARGET_KEYS),
         raw_json: event,
+    }
+}
+
+/// Supervisor sidecar 的 `parameter_summary` 是私有运行诊断（可含 MCP 参数、stderr 等）。
+/// 它保留在原 sidecar 审计中；Audit Ledger 是用户可见读模型，只投影固定占位符。
+fn redact_supervisor_private_parameters_from_read_model(source: &str, event: &mut Value) {
+    if source != "supervisor_orchestrator" {
+        return;
+    }
+
+    if let Some(object) = event.as_object_mut() {
+        if object.contains_key("parameter_summary") {
+            object.insert(
+                "parameter_summary".to_string(),
+                Value::String("私有运行参数已隐藏。".to_string()),
+            );
+        }
     }
 }
 
@@ -291,12 +316,8 @@ fn event_at_ms(event: &Value) -> Option<i64> {
 }
 
 fn first_string(event: &Value, keys: &[&str]) -> Option<String> {
-    keys.iter().find_map(|key| {
-        event
-            .get(*key)
-            .and_then(Value::as_str)
-            .map(str::to_string)
-    })
+    keys.iter()
+        .find_map(|key| event.get(*key).and_then(Value::as_str).map(str::to_string))
 }
 
 fn first_non_empty_string(event: &Value, keys: &[&str]) -> Option<String> {
@@ -425,7 +446,12 @@ mod tests {
             &state_path,
         );
         push_main_audit(&state_path, "older_event", BASE_MS, "早一点那件事。");
-        push_main_audit(&state_path, "newer_event", BASE_MS + 1_000, "晚一点那件事。");
+        push_main_audit(
+            &state_path,
+            "newer_event",
+            BASE_MS + 1_000,
+            "晚一点那件事。",
+        );
 
         let page = query_audit_ledger_read_model_at(&state_path, &query(0, None, None));
 
@@ -437,9 +463,16 @@ mod tests {
         assert_eq!(ours.len(), 2, "两条都该进流：{:?}", page.items);
         assert_eq!(ours[0].event_type, "newer_event", "时间倒序·新的在前");
         assert_eq!(ours[0].source, "workflow_state");
-        assert_eq!(ours[0].human_summary, "晚一点那件事。", "有 reason 就用 reason");
+        assert_eq!(
+            ours[0].human_summary, "晚一点那件事。",
+            "有 reason 就用 reason"
+        );
         assert_eq!(ours[0].target_ref.as_deref(), Some("wf-1"));
-        assert_eq!(ours[0].at_ms, BASE_MS + 1_000, "毫秒串 created_at 要解析成 at_ms");
+        assert_eq!(
+            ours[0].at_ms,
+            BASE_MS + 1_000,
+            "毫秒串 created_at 要解析成 at_ms"
+        );
         assert!(
             page.kinds.iter().any(|kind| kind == "newer_event"),
             "kinds 要汇总出现过的类：{:?}",
@@ -464,8 +497,14 @@ mod tests {
             "supervisor_orchestrator",
             json!({"event_id": "e1", "tool": "dispatch_worker", "created_at_ms": BASE_MS}),
         );
-        assert_eq!(item.event_type, "dispatch_worker", "tool 是编排审计的 event_type 等价位");
-        assert_eq!(item.human_summary, "dispatch_worker", "没人话字段就用 event_type 顶上");
+        assert_eq!(
+            item.event_type, "dispatch_worker",
+            "tool 是编排审计的 event_type 等价位"
+        );
+        assert_eq!(
+            item.human_summary, "dispatch_worker",
+            "没人话字段就用 event_type 顶上"
+        );
         assert_eq!(item.at_ms, BASE_MS);
     }
 
@@ -483,7 +522,40 @@ mod tests {
             }),
         );
         assert_eq!(item.human_summary, "已把追问发给 worker。");
-        assert_eq!(item.target_ref.as_deref(), Some("run-9"), "没 target_ref 就退到 run_id");
+        assert_eq!(
+            item.target_ref.as_deref(),
+            Some("run-9"),
+            "没 target_ref 就退到 run_id"
+        );
+    }
+
+    #[test]
+    fn supervisor_private_parameters_are_redacted_from_user_facing_raw_json() {
+        let private_marker = "stderr: no rollout found for thread id private-thread";
+        let item = map_event(
+            "supervisor_orchestrator",
+            json!({
+                "event_id": "e-private",
+                "tool": "submit_proposal",
+                "result_summary": "方案卡没有生成；详细诊断已保留。",
+                "parameter_summary": private_marker,
+                "created_at_ms": BASE_MS,
+            }),
+        );
+
+        assert_eq!(
+            item.human_summary, "方案卡没有生成；详细诊断已保留。",
+            "人话摘要仍用于用户可见审计列表"
+        );
+        assert_eq!(
+            item.raw_json["parameter_summary"],
+            json!("私有运行参数已隐藏。")
+        );
+        assert!(
+            !item.raw_json.to_string().contains(private_marker),
+            "私有 MCP 参数或 stderr 不得透过用户可见 raw_json 泄露：{:?}",
+            item.raw_json
+        );
     }
 
     // 分页 + 过滤：total 是**过滤后**总数，不是本页条数。
@@ -506,25 +578,22 @@ mod tests {
         }
         push_main_audit(&state_path, "other_kind", BASE_MS + 99_000, "别的类。");
 
-        let first = query_audit_ledger_read_model_at(
-            &state_path,
-            &query(0, Some(2), Some("wanted_kind")),
-        );
+        let first =
+            query_audit_ledger_read_model_at(&state_path, &query(0, Some(2), Some("wanted_kind")));
         assert_eq!(first.total, 5, "total = 过滤后总数");
         assert_eq!(first.items.len(), 2, "本页 2 条");
         assert_eq!(first.page_size, 2);
-        assert!(first.items.iter().all(|item| item.event_type == "wanted_kind"));
+        assert!(first
+            .items
+            .iter()
+            .all(|item| item.event_type == "wanted_kind"));
 
-        let last = query_audit_ledger_read_model_at(
-            &state_path,
-            &query(2, Some(2), Some("wanted_kind")),
-        );
+        let last =
+            query_audit_ledger_read_model_at(&state_path, &query(2, Some(2), Some("wanted_kind")));
         assert_eq!(last.items.len(), 1, "第 3 页余 1 条");
 
-        let beyond = query_audit_ledger_read_model_at(
-            &state_path,
-            &query(99, Some(2), Some("wanted_kind")),
-        );
+        let beyond =
+            query_audit_ledger_read_model_at(&state_path, &query(99, Some(2), Some("wanted_kind")));
         assert!(beyond.items.is_empty(), "越界页 → 空 items");
         assert_eq!(beyond.total, 5, "越界页仍如实报 total·前端好回跳");
     }
@@ -545,7 +614,11 @@ mod tests {
         let _ = query_audit_ledger_read_model_at(&state_path, &query(0, None, None));
         let _ = query_audit_ledger_read_model_at(&state_path, &query(0, None, None));
 
-        assert_eq!(before, mtime(&state_path), "读模型纯只读·不许写 workflow state");
+        assert_eq!(
+            before,
+            mtime(&state_path),
+            "读模型纯只读·不许写 workflow state"
+        );
     }
 
     // 某源坏了只跳过该源 + 出 warning，不炸整页（其余源照出）。
@@ -563,7 +636,9 @@ mod tests {
         let page = query_audit_ledger_read_model_at(&state_path, &query(0, None, None));
 
         assert!(
-            page.warnings.iter().any(|warning| warning.contains("主 store 读不了")),
+            page.warnings
+                .iter()
+                .any(|warning| warning.contains("主 store 读不了")),
             "坏源要有人话报备：{:?}",
             page.warnings
         );

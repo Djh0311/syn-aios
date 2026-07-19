@@ -397,7 +397,11 @@ mod tests {
         assert!(model.manual_exact_command.user_execution_required);
         assert!(!model.manual_exact_command.workbench_executes_in_l1);
         assert!(model.manual_exact_command.runs_real_codex_if_user_executes);
-        assert!(model.manual_exact_command.writes_codex_home_if_user_executes);
+        assert!(
+            model
+                .manual_exact_command
+                .writes_codex_home_if_user_executes
+        );
         assert!(!command.contains("prompt body"));
     }
 

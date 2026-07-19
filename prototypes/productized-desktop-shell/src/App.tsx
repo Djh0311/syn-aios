@@ -222,6 +222,22 @@ export function App() {
     await Promise.all([reloadCandidateStores(), reloadWorkflowStateCore(false)]);
   }
 
+  // Resident 对话提交后的投影只重读它实际会改变的 canonical workflow 和 proposal
+  // store。保留错误给调用方，让中栏能诚实区分“已送达、但还没刷新”。
+  async function reloadJiaobanConversationProjection() {
+    if (browserPreviewEnabled) {
+      setWorkflowState(browserPreviewWorkflowState);
+      setProjectConsultationProposalStore(browserPreviewProposalStore);
+      return;
+    }
+    const [nextWorkflowState, nextProjectConsultationProposalStore] = await Promise.all([
+      loadWorkflowStateSnapshot(),
+      loadProjectConsultationProposalStore(),
+    ]);
+    setWorkflowState(nextWorkflowState);
+    setProjectConsultationProposalStore(nextProjectConsultationProposalStore);
+  }
+
   async function reloadCandidateStores() {
     if (browserPreviewEnabled) return;
     try {
@@ -719,7 +735,7 @@ export function App() {
           onReloadWorkflowState: reloadWorkflowState,
           onWorkflowStateReadRefresh: reloadWorkflowStateReadOnly,
           onNotice: setNotice,
-          onProposalStoreRefresh: reloadProposalAndWorkflowState,
+          onProposalStoreRefresh: reloadJiaobanConversationProjection,
           hasRealSnapshot: Boolean(filteredSnapshot),
           onOpenAgentSession: (threadId) => {
             setFocusedAgentThreadId(threadId);

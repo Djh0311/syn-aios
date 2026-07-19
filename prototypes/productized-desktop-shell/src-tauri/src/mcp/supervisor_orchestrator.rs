@@ -78,6 +78,10 @@ struct SupervisorSession {
     resident_host_pid: u32,
     #[serde(default, skip_serializing_if = "is_zero_u64")]
     resident_generation: u64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    resident_active_message_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    resident_active_proposal_outcome: String,
     #[serde(default)]
     workers: Vec<SupervisorWorker>,
     #[serde(default)]
@@ -751,9 +755,7 @@ pub fn list_tools(config: &McpServerConfig) -> Value {
             }),
         ),
     ];
-    // The first tools/list request precedes durable resident-session creation, so
-    // the server-owned run-id namespace is the display-only gate. tools/call
-    // independently requires the durable session binding before it can write.
+    // tools/list is display-only; tools/call requires the durable resident binding before it writes.
     if supervisor_orchestrator_submit_proposal::is_resident_supervisor_run(config) {
         tools.push(tool_def(
             "submit_proposal",
@@ -785,13 +787,8 @@ fn call_tool_with_invoker(
         "submit_proposal" => supervisor_orchestrator_submit_proposal::submit(config, &arguments),
         _ => Err(format!("主管编排角色不认识工具：{name}")),
     };
-    let result_summary = match &result {
-        Ok(value) => summary_of_value(value),
-        Err(error) => format!(
-            "denied: {}",
-            crate::run_error_translation::humanize_error_for_display(error)
-        ),
-    };
+    let result_summary =
+        supervisor_orchestrator_submit_proposal::tool_result_summary(config, &name, &result);
     let result_status = if result.is_ok() { "accepted" } else { "denied" };
     append_audit(
         config,
@@ -805,9 +802,7 @@ fn call_tool_with_invoker(
         .map_err(|error| crate::run_error_translation::humanize_error_for_display(&error))
 }
 
-// Side-effecting supervisor actions deliberately bypass the MCP tools/call surface.
-// They remain behind this host-only bridge so the controller can bind authority before
-// invoking the existing guarded worker entrypoints.
+// Side-effecting actions bypass MCP tools/call and remain host-only behind existing guarded entrypoints.
 pub(crate) fn ensure_control_core_run_active(config: &McpServerConfig) -> Result<(), String> {
     let store = load_store(config)?;
     let session = session(&store, &config.run_id)
@@ -2177,6 +2172,14 @@ fn append_audit(
             created_at_ms,
         });
         Ok(())
+    })
+    .map_err(|error| {
+        supervisor_orchestrator_submit_proposal::audit_write_failure_for_caller(
+            config,
+            tool,
+            result_status,
+            error,
+        )
     })
 }
 

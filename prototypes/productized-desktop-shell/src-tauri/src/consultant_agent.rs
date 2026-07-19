@@ -589,7 +589,10 @@ fn submit_proposal_error(detail: &str) -> String {
     format!("submit_proposal 参数不合法：{detail}")
 }
 
-fn submit_proposal_object<'a>(value: &'a Value, field: &str) -> Result<&'a serde_json::Map<String, Value>, String> {
+fn submit_proposal_object<'a>(
+    value: &'a Value,
+    field: &str,
+) -> Result<&'a serde_json::Map<String, Value>, String> {
     value
         .as_object()
         .ok_or_else(|| submit_proposal_error(&format!("{field} 必须是对象")))
@@ -662,7 +665,9 @@ pub(crate) fn parse_supervisor_submit_proposal_arguments(
     submit_proposal_reject_unknown_fields(object, SUPERVISOR_SUBMIT_PROPOSAL_FIELDS, "arguments")?;
     for field in SUPERVISOR_SUBMIT_PROPOSAL_FIELDS {
         if !object.contains_key(*field) {
-            return Err(submit_proposal_error(&format!("arguments 缺少字段 {field}")));
+            return Err(submit_proposal_error(&format!(
+                "arguments 缺少字段 {field}"
+            )));
         }
     }
 
@@ -675,7 +680,11 @@ pub(crate) fn parse_supervisor_submit_proposal_arguments(
         .map(|(index, value)| {
             let parent = format!("arguments.risks[{index}]");
             let risk = submit_proposal_object(value, &parent)?;
-            submit_proposal_reject_unknown_fields(risk, &["severity", "summary", "mitigation"], &parent)?;
+            submit_proposal_reject_unknown_fields(
+                risk,
+                &["severity", "summary", "mitigation"],
+                &parent,
+            )?;
             for field in ["severity", "summary", "mitigation"] {
                 if !risk.contains_key(field) {
                     return Err(submit_proposal_error(&format!("{parent} 缺少字段 {field}")));
@@ -772,7 +781,11 @@ pub(crate) fn parse_supervisor_submit_proposal_arguments(
                     "acceptance_criteria",
                     &parent,
                 )?,
-                report_format: submit_proposal_required_string_array(task, "report_format", &parent)?,
+                report_format: submit_proposal_required_string_array(
+                    task,
+                    "report_format",
+                    &parent,
+                )?,
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -820,7 +833,9 @@ pub(crate) fn parse_supervisor_submit_proposal_arguments(
         tasks,
     };
     if proposal.goal_summary.trim().is_empty() && proposal.reasoning.is_empty() {
-        return Err(submit_proposal_error("goal_summary 与 reasoning 不能同时为空"));
+        return Err(submit_proposal_error(
+            "goal_summary 与 reasoning 不能同时为空",
+        ));
     }
     Ok(proposal)
 }
@@ -1096,6 +1111,35 @@ pub(crate) fn write_consultation_proposal(
         &input,
         unix_timestamp_ms(),
         &write_id,
+    )?;
+    Ok(output.proposal)
+}
+
+// H2 resident turns carry a server-derived canonical message identity.  Keep
+// the existing strict mapping/lint funnel, then let the store decide whether a
+// technical replay must reuse the already-created Pending card.
+pub(crate) fn write_consultation_proposal_for_resident_turn(
+    path: &std::path::Path,
+    proposal: &ConsultationProposal,
+    project_root: &str,
+    goal: &str,
+    actor_id: &str,
+    idempotency_key: &str,
+) -> Result<ProjectConsultationProposal, String> {
+    lint_consultation_proposal_tasks(&proposal.tasks)?;
+    let input = map_consultation_to_c1_input_with_user_requirement_snapshot(
+        proposal,
+        project_root,
+        actor_id,
+        goal,
+    )?;
+    let write_id = format!("supervisor-resident-proposal:{idempotency_key}");
+    let output = project_consultation_proposal_store::create_resident_proposal_once(
+        path,
+        &input,
+        unix_timestamp_ms(),
+        &write_id,
+        idempotency_key,
     )?;
     Ok(output.proposal)
 }
@@ -1387,7 +1431,10 @@ mod consultant_recall_tests {
         .expect("literal user check should map");
 
         assert!(input.scope_draft.allowed_write_roots.is_empty());
-        assert_eq!(input.scope_draft.allowed_tools, vec!["shell(只读: cat/ls/sed)"]);
+        assert_eq!(
+            input.scope_draft.allowed_tools,
+            vec!["shell(只读: cat/ls/sed)"]
+        );
         assert_eq!(
             input.scope_draft.allowed_checks,
             vec!["node --check game.js"]

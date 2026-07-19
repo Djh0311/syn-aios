@@ -374,7 +374,7 @@ impl SupervisorProcessRegistry for WorkbenchSupervisorProcessRegistry {
         })
     }
 }
-include!("supervisor_resident_session.rs");
+include!("supervisor_resident_oneshot_session.rs");
 
 fn default_reasoning_effort() -> String {
     DEFAULT_REASONING_EFFORT.to_string()

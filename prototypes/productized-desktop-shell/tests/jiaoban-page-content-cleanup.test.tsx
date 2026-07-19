@@ -245,8 +245,8 @@ function authorizeHtml(proposalIsStale = false): string {
   const layout = renderToStaticMarkup(
     <JiaobanMergedLayout
       phase="say"
-      history={<div>历史</div>}
       main={<div>说相主区</div>}
+      proposalIndex={<div>历届方案</div>}
       workflowPanel={null}
       onOpenWorkflow={noop}
     />,

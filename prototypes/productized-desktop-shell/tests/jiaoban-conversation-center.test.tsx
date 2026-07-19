@@ -22,8 +22,11 @@ import {
   supervisorConversationEntriesForProject,
 } from "../src/views/projects/jiaoban/JiaobanConversation";
 import type { JiaobanPhase } from "../src/views/projects/jiaoban/JiaobanArtifactViews";
-import { JiaobanHistoryColumn } from "../src/views/projects/jiaoban/JiaobanHistory";
-import { useJiaobanConversationState } from "../src/views/projects/jiaoban/useJiaobanConversationState";
+import { JiaobanProposalIndex } from "../src/views/projects/jiaoban/JiaobanHistory";
+import {
+  reconcileResidentMessageSubmission,
+  useJiaobanConversationState,
+} from "../src/views/projects/jiaoban/useJiaobanConversationState";
 import {
   assert,
   assertDeepEqual,
@@ -339,7 +342,7 @@ assertDeepEqual(
   let selectedDeliveredCount = 0;
   let backToCurrentCount = 0;
   const deliveredHistoryRow = findElement(
-    <JiaobanHistoryColumn
+    <JiaobanProposalIndex
       entries={[deliveredHistoryEntry]}
       total={1}
       loading={false}
@@ -352,16 +355,17 @@ assertDeepEqual(
       onBackToCurrent={() => { backToCurrentCount += 1; }}
       onNewJiaoban={noop}
       onContinueRun={noop}
+      knownProposalIds={new Set([deliveredHistoryEntry.proposal_id])}
     />,
-    (element) => element.props?.["aria-controls"] === `jiaoban-delivery-${deliveredHistoryEntry.proposal_id}`,
+    (element) => element.props?.["aria-controls"] === "jiaoban-canvas-view-delivery",
   );
-  assert(deliveredHistoryRow, "已交货单行应声明交货短讯锚点");
+  assert(deliveredHistoryRow, "已交货单行应只声明右侧交货实体控制目标");
   const clickDeliveredHistory = deliveredHistoryRow.props?.onClick;
   assert(typeof clickDeliveredHistory === "function", "已交货单行应保留可执行的锚点点击");
   clickDeliveredHistory();
   assert(
     selectedDeliveredCount === 1 && backToCurrentCount === 0,
-    "即使是当前单，已交货行也必须走交货消息选择回调，不能错跳方案卡",
+    "即使是当前单，已交货行也必须走右侧交货选择回调，不能错跳方案卡或扰动对话",
   );
   const continuedMarkup = renderToStaticMarkup(
     stream({
@@ -447,7 +451,6 @@ function ComposerRouteProbe({ phase, isTestProject = true }: { phase: JiaobanPha
     workflowState,
     projectRoot,
     onProposalStoreRefresh: noop,
-    humanizeAnswerError: () => "这句没送到主管——稍后再试一次。",
   });
   const composer = conversation.makeConversationComposer({ isTestProject });
   return <JiaobanConversationComposer {...composer} />;
@@ -557,6 +560,96 @@ function ComposerRouteProbe({ phase, isTestProject = true }: { phase: JiaobanPha
     composerErrorMarkup.includes('role="alert"') && composerErrorMarkup.includes("这句没送到主管"),
     "发送失败的常驻框也必须保留可访问 alert",
   );
+}
+
+// 4b) S1B-H2：后端 outcome 决定人话；canonical/proposal 重读是唯一可见消息/卡来源。
+{
+  let refreshCount = 0;
+  const refresh = async () => {
+    refreshCount += 1;
+  };
+
+  const notRecorded = await reconcileResidentMessageSubmission({
+    submit: async () => ({ status: "message_not_recorded" }),
+    refreshCanonicalAndProposal: refresh,
+  });
+  assertDeepEqual(
+    notRecorded,
+    { clearDraft: false, messageError: "这句没送到主管——稍后再试一次。" },
+    "只有 canonical 确实未记录时才可说没送到主管",
+  );
+  assertDeepEqual(refreshCount, 1, "即使未落 canonical 也必须重读一次，避免把写后回包失败误说成没送到");
+
+  const supervisorIncomplete = await reconcileResidentMessageSubmission({
+    submit: async () => ({ status: "message_recorded_supervisor_incomplete" }),
+    refreshCanonicalAndProposal: refresh,
+  });
+  assertDeepEqual(
+    supervisorIncomplete,
+    { clearDraft: true, messageError: "消息已送到主管，但主管这次没回上来——可以再发一次。" },
+    "已落 canonical 但主管未完成必须保留完成对话并说人话",
+  );
+
+  const toolFailed = await reconcileResidentMessageSubmission({
+    submit: async () => ({ status: "message_sent_proposal_tool_failed" }),
+    refreshCanonicalAndProposal: refresh,
+  });
+  assertDeepEqual(
+    toolFailed,
+    { clearDraft: true, messageError: "主管收到了，但方案卡没有生成——请再说一次“出方案”。" },
+    "方案工具失败不得吞掉已完成对话",
+  );
+
+  const materialized = await reconcileResidentMessageSubmission({
+    submit: async () => ({ status: "message_sent_proposal_materialized" }),
+    refreshCanonicalAndProposal: refresh,
+  });
+  assertDeepEqual(
+    materialized,
+    { clearDraft: true, messageError: null },
+    "已落卡仅靠 canonical/proposal 重读展示，不乐观追加消息或卡",
+  );
+  assertDeepEqual(refreshCount, 4, "所有已解析的 outcome 都应恰好重读一次");
+
+  const notRecordedRefreshFailed = await reconcileResidentMessageSubmission({
+    submit: async () => ({ status: "message_not_recorded" }),
+    refreshCanonicalAndProposal: async () => {
+      throw new Error("fixture canonical reread failure");
+    },
+  });
+  assertDeepEqual(
+    notRecordedRefreshFailed,
+    { clearDraft: false, messageError: "消息状态暂时无法确认——请稍后刷新后再试一次。" },
+    "无法重读 canonical 时不能说没送到主管",
+  );
+
+  const refreshFailed = await reconcileResidentMessageSubmission({
+    submit: async () => ({ status: "message_sent_proposal_materialized" }),
+    refreshCanonicalAndProposal: async () => {
+      throw new Error("fixture refresh failure");
+    },
+  });
+  assertDeepEqual(
+    refreshFailed,
+    { clearDraft: true, messageError: "这句已经送到主管，但对话还没刷新。" },
+    "刷新失败不得改写为没送到主管",
+  );
+
+  let rejectedSubmitRefreshCount = 0;
+  const deliveryUnknown = await reconcileResidentMessageSubmission({
+    submit: async () => {
+      throw new Error("fixture transport rejection");
+    },
+    refreshCanonicalAndProposal: async () => {
+      rejectedSubmitRefreshCount += 1;
+    },
+  });
+  assertDeepEqual(
+    deliveryUnknown,
+    { clearDraft: false, messageError: "消息状态暂时无法确认——请稍后刷新后再试一次。" },
+    "运输层拒绝无法证明 canonical 未记录，不能说没送到主管",
+  );
+  assertDeepEqual(rejectedSubmitRefreshCount, 1, "运输层拒绝也应尝试一次 canonical/proposal 重读");
 }
 
 // 5) 提交期间的「主管在看」仍是人话等待态，但不会吞掉已落 canonical 的过程/对话消息。

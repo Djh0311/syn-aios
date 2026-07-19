@@ -74,8 +74,8 @@ assert(
 const runningMerged = renderToStaticMarkup(
   <JiaobanMergedLayout
     phase="running"
-    history={<div>历史</div>}
     main={<div>正在干</div>}
+    proposalIndex={<div>历届方案</div>}
     previewCanvas={runningGraph}
     workflowPanel={<div>旧 ReactFlow 运行视图</div>}
     onOpenWorkflow={noop}

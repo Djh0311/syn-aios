@@ -432,7 +432,7 @@
   align-content: start;
 }
 
-/* ===== Part①·工作历史左栏（两栏：左历史 + 右主区·主区内五态 col 行为 0-diff·仍居中）===== */
+/* ===== Part①·历届方案索引（旧工作历史数据源与九态语义不变）===== */
 .project-jiaoban--split {
   height: 100%;
   min-height: 0;
@@ -508,18 +508,20 @@
   gap: 10px;
   justify-items: start;
 }
-/* 历史行=单行三元素(状态点+标题+时间·07-15 走查#2 对齐定稿);state_note 进悬停与详情卡。
-   旧 r1/meta/note/quick 两行结构退役([接着跑]行内快捷违 canon §四.2 已拆)。 */
+/* 修宪3号·历届方案索引：目标一行，第二行给九态人话+日期；缺实体时如实标旧单。
+   [接着跑]仍只在卡住脸，不回流索引。 */
 .jiaoban-run {
   width: 100%;
   text-align: left;
   border: 1px solid transparent;
   background: none;
   border-radius: 8px;
-  padding: 6px 10px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
+  padding: 7px 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 7px;
+  row-gap: 3px;
+  align-items: start;
   min-width: 0;
   cursor: pointer;
 }
@@ -531,21 +533,42 @@
   background: var(--accent-bg, #eaf4f1);
 }
 .jiaoban-run-dot {
+  grid-row: 1 / span 2;
   font-size: 13px;
   flex: none;
+  margin-top: 1px;
 }
 .jiaoban-run-goal {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
 }
+.jiaoban-run-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink-light, #9a8f80);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.jiaoban-run-state {
+  flex: none;
+  color: var(--ink-mid);
+}
+.jiaoban-run-legacy {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .jiaoban-run-time {
   flex: none;
-  font-size: 11px;
+  margin-left: auto;
   color: var(--ink-light, #9a8f80);
+  font-variant-numeric: tabular-nums;
 }
 /* 九态状态点配色（词表死线映射 historyStateVisual）。 */
 .run-dot-running {
@@ -606,7 +629,7 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-/* 窄窗口（<900px）：历史栏收成顶部横条·不挤破五态主区。 */
+/* 独立 fallback 窄窗口（<900px）：方案索引收成中段横条，不挤破主区。 */
 @media (max-width: 900px) {
   .project-jiaoban--split {
     flex-direction: column;
@@ -1077,13 +1100,13 @@
   color: #6b6b6b;
 }
 
-/* 修宪(2026-07-14·交互正本 §四.2)三栏：左工作历史独立栏(可收起) │ 中交办主卡 │ 右画布动态宽。
-   四种组合 = 历史(展开 218px / 收起 36px) × 画布(未开工提示条 180px / 有图 1fr)。
+/* 修宪3号(2026-07-19)：左纯对话 │ 中历届方案索引(展开 240px / 收起 36px) │ 右实体卡。
+   四种组合 = 索引(展开/收起) × 实体区(未开工提示条 180px / 有实体 1fr)。
    壳固定：本层 overflow:hidden，滚动只在各栏 .spec-scroll 内。 */
 .jiaoban-merged-layout {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 218px minmax(0, 1fr) 180px;
+  grid-template-columns: minmax(0, 1fr) 240px 180px;
   gap: 14px; /* 七律③:列距统一 14 */
   position: relative;
   width: 100%;
@@ -1093,22 +1116,23 @@
   overflow: hidden;
 }
 .jiaoban-merged-layout.is-history-collapsed {
-  grid-template-columns: 36px minmax(0, 1fr) 180px;
+  grid-template-columns: minmax(0, 1fr) 36px 180px;
 }
 .jiaoban-merged-layout.is-canvas-wide {
-  grid-template-columns: 218px 500px minmax(0, 1fr); /* 二审稿:批/开工中栏 500(330 读不动方案) */
+  grid-template-columns: minmax(0, 1fr) 240px minmax(0, 1fr);
 }
 .jiaoban-merged-layout.is-history-collapsed.is-canvas-wide {
-  grid-template-columns: 36px 500px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr);
 }
 .jiaoban-history-column {
-  position: relative; /* 收起钮叠放进「工作历史」标题行(定稿同行·07-15 走查对齐) */
+  position: relative; /* 收起钮叠放进「历届方案」标题行。 */
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   border-right: 1px solid var(--hair-2);
+  border-left: 1px solid var(--hair-2);
   background: transparent;
 }
 .jiaoban-history-column-bar {
@@ -1396,22 +1420,25 @@
 }
 
 @media (max-width: 900px) {
-  /* 窄屏：三栏塌成单列纵排(历史 → 交办 → 画布)，四种宽度组合一律失效。 */
+  /* 窄屏：按桌面阅读顺序纵排(对话 → 历届方案 → 实体卡)，三块各自内滚，页面壳不滚。 */
   .jiaoban-merged-layout,
   .jiaoban-merged-layout.is-history-collapsed,
   .jiaoban-merged-layout.is-canvas-wide,
   .jiaoban-merged-layout.is-history-collapsed.is-canvas-wide {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(180px, auto) minmax(260px, 42vh);
-    height: auto;
-    overflow: visible;
+    grid-template-rows: minmax(0, 1.1fr) minmax(0, 0.65fr) minmax(0, 1fr);
+    height: 100%;
+    overflow: hidden;
   }
   .jiaoban-history-column {
+    border-left: 0;
     border-right: 0;
+    border-top: 1px solid var(--hair-2);
     border-bottom: 1px solid var(--hair-2);
   }
   .jiaoban-history-column-body {
-    max-height: 190px;
+    max-height: none;
+    overflow-y: auto;
   }
   .jiaoban-merged-canvas-head {
     align-items: flex-start;

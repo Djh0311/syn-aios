@@ -28,8 +28,7 @@ import {
   type JiaobanPreviewCanvasNode,
 } from "./jiaoban/jiaobanPreviewCanvas";
 import {
-  conversationMessageIdForHistoryEntry,
-  JiaobanHistoryColumn,
+  JiaobanProposalIndex,
   JiaobanHistoryDetail,
   type HistoryFilter,
 } from "./jiaoban/JiaobanHistory";
@@ -37,8 +36,6 @@ import {
   JiaobanConversationComposer,
   JiaobanConversationStream,
   artifactNoticesForConversation,
-  conversationMessageIdForDelivery,
-  conversationMessageIdForProposal,
   mergeConversationUserTurns,
   supervisorProcessCanvasView,
   supervisorProcessFocusedNodeId,
@@ -47,11 +44,7 @@ import {
   type JiaobanConversationPhaseKind,
 } from "./jiaoban/JiaobanConversation";
 import { buildJiaobanArtifactCanvasViews, type JiaobanCanvasViewSpec, type JiaobanPhase } from "./jiaoban/JiaobanArtifactViews";
-import {
-  scrollToConversationMessage,
-  useConversationAutoScroll,
-  useJiaobanConversationState,
-} from "./jiaoban/useJiaobanConversationState";
+import { useConversationAutoScroll, useJiaobanConversationState } from "./jiaoban/useJiaobanConversationState";
 import { useJiaobanRunningReadRefresh } from "./jiaoban/useJiaobanRunningReadRefresh";
 import {
   JiaobanRawSessionLink,
@@ -170,8 +163,8 @@ export function jiaobanPhaseForOutcome(outcome: AutoAdvanceRoleLoopOutcome): Jia
 
 export type ProjectJiaobanPanelLayout = {
   phase: JiaobanPhase;
-  history: ReactNode;
   main: ReactNode;
+  proposalIndex: ReactNode;
   // M1：批前、运行和终态都在 M2 的右侧画布区域展示同一张纵向工序图。
   previewCanvas?: ReactNode;
   // 右区=信息展开面:多视图时右区顶部出切换 chips(工序图/治理保证/怎么跑…);单视图/缺席=旧行为。
@@ -341,6 +334,13 @@ function ProjectJiaobanPanelBrowser({
         ),
     [projectConsultationProposalStore, projectWorkflow?.project_id, projectWorkflow?.workflow_id],
   );
+  const knownProposalIds = useMemo(
+    () =>
+      projectConsultationProposalStore == null
+        ? null
+        : new Set(workflowProposals.map((proposal) => proposal.proposal_id)),
+    [projectConsultationProposalStore, workflowProposals],
+  );
 
   const isTestProject = project.project_root === TEST_PROJECT_ROOT;
   // 站 3b：唯一获批的真实项目只读入口——进交办流，但只开主管编排（经典模式后端 S1 闸原样拒）。
@@ -427,8 +427,6 @@ function ProjectJiaobanPanelBrowser({
     workflowState,
     projectRoot,
     onProposalStoreRefresh,
-    humanizeAnswerError: (error) =>
-      humanizeProviderUnavailable(error) ?? "这句没送到主管——稍后再试一次。",
   });
   const residentMessageBusyKey = messageBusy ? "resident-message" : null;
   const consultLoading = messageBusy;
@@ -442,7 +440,7 @@ function ProjectJiaobanPanelBrowser({
     onWorkflowStateReadRefresh,
   });
 
-  // Part①·工作历史（左栏数据·倒序读模型·不轮询·挂载/交货/重拆各拉一次）。失败静默：历史是增益不是闸。
+  // Part①·历届方案索引（倒序读模型·不轮询·挂载/交货/重拆各拉一次）。失败静默：索引是增益不是闸。
   const [history, setHistory] = useState<RunHistoryEntry[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1343,28 +1341,20 @@ function ProjectJiaobanPanelBrowser({
     latestProposal != null ||
     phase !== "say";
 
-  function selectHistoryConversationEntry(entry: RunHistoryEntry) {
+  function selectProposalIndexEntry(entry: RunHistoryEntry) {
     const isCurrent = entry.proposal_id === currentProposalId;
     setSelectedHistoryId(isCurrent ? null : entry.proposal_id);
     setCanvasViewKey(entry.state === "delivered" ? "delivery" : "proposal");
-    scrollToConversationMessage(conversationMessageIdForHistoryEntry(entry));
   }
 
-  function backToCurrentConversationMessage() {
+  function backToCurrentArtifact() {
     setSelectedHistoryId(null);
     const currentView = phase === "done" ? "delivery" : currentProposalId ? "proposal" : "graph";
     setCanvasViewKey(currentView);
-    scrollToConversationMessage(
-      currentProposalId
-        ? phase === "done"
-          ? conversationMessageIdForDelivery(currentProposalId)
-          : conversationMessageIdForProposal(currentProposalId)
-        : null,
-    );
   }
 
-  const historyContent = (
-    <JiaobanHistoryColumn
+  const proposalIndexContent = (
+    <JiaobanProposalIndex
       entries={history}
       total={historyTotal}
       loading={historyLoading}
@@ -1373,13 +1363,14 @@ function ProjectJiaobanPanelBrowser({
       selectedId={selectedHistoryId}
       currentProposalId={currentProposalId}
       latestBlockedId={latestBlockedId}
-      onSelectEntry={selectHistoryConversationEntry}
-      onBackToCurrent={backToCurrentConversationMessage}
+      onSelectEntry={selectProposalIndexEntry}
+      onBackToCurrent={backToCurrentArtifact}
       onNewJiaoban={() => {
         setSelectedHistoryId(null);
         backToSay();
       }}
       onContinueRun={() => void continueRun()}
+      knownProposalIds={knownProposalIds}
     />
   );
   const focusedProposalId = selectedHistoryId ?? currentProposalId;
@@ -1551,7 +1542,7 @@ function ProjectJiaobanPanelBrowser({
           }}
         />
         {conversationComposer ? (
-          <JiaobanConversationComposer {...conversationComposer} error={consultError} />
+          <JiaobanConversationComposer {...conversationComposer} />
         ) : null}
       </div>
     </div>
@@ -1591,10 +1582,10 @@ function ProjectJiaobanPanelBrowser({
 
   // 右区是定稿物的家：中栏只说话；方案/交货卡连同原动作回调整体搬到这里。
   const selectedHistoryCard = selectedHistoryEntry
-    ? <JiaobanHistoryDetail entry={selectedHistoryEntry} onBackToCurrent={backToCurrentConversationMessage} />
+    ? <JiaobanHistoryDetail entry={selectedHistoryEntry} onBackToCurrent={backToCurrentArtifact} />
     : null;
   const currentDeliveryHistoryCard = currentHistoryEntry?.state === "delivered" ? (
-    <JiaobanHistoryDetail entry={currentHistoryEntry} onBackToCurrent={backToCurrentConversationMessage} showBackAction={false} />
+    <JiaobanHistoryDetail entry={currentHistoryEntry} onBackToCurrent={backToCurrentArtifact} showBackAction={false} />
   ) : null;
   const proposalViewContent = proposalCard ?? (selectedHistoryEntry?.state !== "delivered" ? selectedHistoryCard : null);
   const deliveryViewContent = selectedHistoryEntry?.state === "delivered"
@@ -1637,8 +1628,8 @@ function ProjectJiaobanPanelBrowser({
       {renderLayout ? (
         renderLayout({
           phase,
-          history: historyContent,
           main: mainContent,
+          proposalIndex: proposalIndexContent,
           previewCanvas,
           canvasViews: jiaobanCanvasViews,
           activeCanvasView: canvasViewKey,
@@ -1646,8 +1637,8 @@ function ProjectJiaobanPanelBrowser({
         })
       ) : (
         <>
-          {historyContent}
           {mainContent}
+          {proposalIndexContent}
         </>
       )}
     </section>
@@ -1655,11 +1646,10 @@ function ProjectJiaobanPanelBrowser({
 }
 
 // ============================================================
-// Part①·工作历史左栏（纯只读呈现·吃 listProjectRunHistory 读模型；五态主区行为 0-diff）
+// Part①·历届方案索引（纯只读呈现·吃 listProjectRunHistory 读模型；五态主区行为 0-diff）
 // ============================================================
 
-// 阶段3拆巨石:工作历史(回顾面)迁 jiaoban/JiaobanHistory.tsx(原样零逻辑改动);此处 re-export 保外部 import 面不变。
-export { JiaobanHistoryColumn, JiaobanHistoryDetail } from "./jiaoban/JiaobanHistory";
+export { JiaobanProposalIndex, JiaobanHistoryDetail } from "./jiaoban/JiaobanHistory";
 export type { HistoryFilter } from "./jiaoban/JiaobanHistory";
 
 // ============================================================

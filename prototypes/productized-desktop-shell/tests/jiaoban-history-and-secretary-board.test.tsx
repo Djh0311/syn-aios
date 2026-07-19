@@ -1,8 +1,8 @@
-// Part①②·工作历史左栏 + 秘书看板·离线 DOM 断言（renderToStaticMarkup·同 harness 风格）。
-// §4：历史九态点/筛选 chips/最新卡住单才有[接着跑]/空历史/详情卡 time_window 近似；
+// Part①②·历届方案索引 + 秘书看板·离线 DOM 断言（renderToStaticMarkup·同 harness 风格）。
+// 修宪3号：方案索引九态/日期/旧单兜底/筛选；详情卡与秘书看板语义原样。
 //     看板四列/空列文案/去处按钮/边界话。词表死线：不露英文枚举原文。
 import { renderToStaticMarkup } from "react-dom/server.browser";
-import { JiaobanHistoryColumn, JiaobanHistoryDetail } from "../src/views/projects/ProjectJiaobanPanel";
+import { JiaobanProposalIndex, JiaobanHistoryDetail } from "../src/views/projects/ProjectJiaobanPanel";
 import { SecretaryBoardView } from "../src/components/SecretaryBoardView";
 import type { RunHistoryEntry } from "../src/lib/types";
 import type { SecretaryContext, SecretaryPendingBoard } from "../src/lib/secretaryReadModel";
@@ -29,10 +29,11 @@ function entry(over: Partial<RunHistoryEntry>): RunHistoryEntry {
   };
 }
 
-function historyHtml(props: Partial<Parameters<typeof JiaobanHistoryColumn>[0]>): string {
+function historyHtml(props: Partial<Parameters<typeof JiaobanProposalIndex>[0]>): string {
+  const testEntries = props.entries ?? [];
+  const knownProposalIds = props.knownProposalIds ?? new Set(testEntries.map((item) => item.proposal_id));
   return renderToStaticMarkup(
-    <JiaobanHistoryColumn
-      entries={[]}
+    <JiaobanProposalIndex
       total={0}
       loading={false}
       filter="all"
@@ -45,6 +46,8 @@ function historyHtml(props: Partial<Parameters<typeof JiaobanHistoryColumn>[0]>)
       onNewJiaoban={noop}
       onContinueRun={noop}
       {...props}
+      entries={testEntries}
+      knownProposalIds={knownProposalIds}
     />,
   );
 }
@@ -65,25 +68,33 @@ function historyHtml(props: Partial<Parameters<typeof JiaobanHistoryColumn>[0]>)
   assert(!out.includes("needs_human_check") && !out.includes("delivered") && !out.includes("advice_only"), "词表：不露英文枚举");
 }
 
-// 2) 历史栏零[接着跑]——canon §四.2:「[接着跑]在卡住脸不在历史栏」。行内快捷是修宪(07-14)前遗留,
-//    07-15 走查#2 拆除;本组原断言「只最新卡住单有行内快捷」锁的正是违宪物,按宪法优先翻案。
+// 2) 索引零[接着跑]；目标一行，第二行显九态人话+日期。
 {
   const entries: RunHistoryEntry[] = [
     entry({ proposal_id: "b2", state: "blocked", state_note: "卡住 2" }),
     entry({ proposal_id: "b1", state: "blocked", state_note: "卡住 1" }),
   ];
   const out = historyHtml({ entries, total: 2, latestBlockedId: "b2" });
-  assert((out.match(/接着跑/g) || []).length === 0, "历史栏不得再有行内[接着跑](属卡住脸)");
-  assert(!out.includes("jiaoban-run-meta"), "历史行=单行三元素,两行 meta 结构退役");
-  assert(out.includes("jiaoban-run-time"), "时间元素在行内");
+  assert((out.match(/接着跑/g) || []).length === 0, "方案索引不得有行内[接着跑](属卡住脸)");
+  assert(out.includes("jiaoban-run-meta") && out.includes("卡住"), "第二行显九态人话");
+  assert(out.includes("jiaoban-run-time") && /\d{2}-\d{2}/.test(out), "日期元素在行内");
   assert(out.includes('title="卡住 2'), "state_note 人话进悬停");
 }
 
-// 3) 空历史 → 人话 + [+ 新交办]。
+// 3) 空索引 → 人话 + [+ 新交办]。
 {
   const out = historyHtml({ entries: [], total: 0 });
-  assert(out.includes("这个项目还没交办过活"), "空历史文案");
-  assert(out.includes("新交办"), "空历史给[+ 新交办]");
+  assert(out.includes("这个项目还没有方案记录"), "空索引文案");
+  assert(out.includes("新交办"), "空索引给[+ 新交办]");
+}
+
+// 3b) 历史条目找不到方案实体时只标旧单，不造假方案骨架；控制目标仍是右侧实体区。
+{
+  const oldEntry = entry({ proposal_id: "old-without-proposal", goal_text: "旧交办目标", state: "delivered" });
+  const out = historyHtml({ entries: [oldEntry], total: 1, knownProposalIds: new Set() });
+  assert(out.includes("旧单·无方案记录"), "缺方案实体应诚实兜底");
+  assert(out.includes('aria-controls="jiaoban-canvas-view-delivery"'), "旧交货单只控制右侧交货/账本面");
+  assert(!out.includes("jiaoban-message-old-without-proposal"), "索引不再控制对话短讯锚点");
 }
 
 // 4) 详情卡：time_window 近似小字 + 字段 + verdict 人话化 + [回到当前]。
@@ -166,4 +177,4 @@ function historyHtml(props: Partial<Parameters<typeof JiaobanHistoryColumn>[0]>)
   assert(out.includes("秘书零写入"), "页脚边界话在");
 }
 
-console.log("history-and-board: 6 组离线 DOM 断言全过");
+console.log("history-and-board: 7 组离线 DOM / 历届方案索引 / 旧单诚实兜底断言全过");

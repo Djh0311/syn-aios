@@ -361,6 +361,9 @@ export type SubmitSupervisorResidentAnswerRequest = {
   project_id: string;
   workflow_id: string;
   message_text: string;
+  // UI-owned opaque retry correlation only. The server still creates the
+  // canonical message id and the supervisor MCP never receives this value.
+  client_request_id: string;
 };
 
 export type SupervisorResidentAnswerOutcome = {

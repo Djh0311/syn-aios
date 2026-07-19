@@ -39,6 +39,27 @@ fn resident_submit_proposal_config(fixture: &Fixture) -> McpServerConfig {
         1,
     )
     .expect("durable resident session binding");
+    // H2 binds submit_proposal to the canonical user message of the active
+    // finite turn; this S1 fixture must model that server-owned boundary,
+    // rather than granting a bare historical thread permission.
+    record_resident_turn_prepared(
+        &config,
+        PROJECT,
+        WORKFLOW,
+        4321,
+        1,
+        Some("user:s1-submit-proposal"),
+    )
+    .expect("active canonical user-message turn");
+    record_resident_session_reused(
+        &config,
+        PROJECT,
+        WORKFLOW,
+        "thread-s1-submit-proposal",
+        4321,
+        1,
+    )
+    .expect("active resident turn binding");
     config
 }
 
@@ -155,9 +176,9 @@ fn s1_resident_submit_proposal_rejects_toxic_task_graph_without_card_or_chain() 
         &FakeInvoker,
     )
     .expect_err("toxic task graph must be refused before proposal storage");
-    assert!(
-        error.contains("引用不存在的独立读文件工具"),
-        "tool must return a human-readable lint error: {error}"
+    assert_eq!(
+        error, "方案卡没有生成；详细诊断已保留。",
+        "the tool must return the stable human-facing failure, not untrusted task text"
     );
     assert!(
         proposal_store_for(&fixture).proposals.is_empty(),
@@ -183,9 +204,9 @@ fn s1_resident_submit_proposal_rejects_unknown_and_wrong_nested_fields_before_st
         &FakeInvoker,
     )
     .expect_err("unknown nested field must be rejected at the tool boundary");
-    assert!(
-        unknown_error.contains("arguments.risks[0] 不允许字段 untrusted_flag"),
-        "wrong error: {unknown_error}"
+    assert_eq!(
+        unknown_error, "方案卡没有生成；详细诊断已保留。",
+        "untrusted MCP field names must not be projected to the caller"
     );
     assert!(
         proposal_store_for(&fixture).proposals.is_empty(),
@@ -200,9 +221,9 @@ fn s1_resident_submit_proposal_rejects_unknown_and_wrong_nested_fields_before_st
         &FakeInvoker,
     )
     .expect_err("wrong nested type must be rejected at the tool boundary");
-    assert!(
-        wrong_error.contains("arguments.tasks[0].depends_on 必须是字符串数组"),
-        "wrong error: {wrong_error}"
+    assert_eq!(
+        wrong_error, "方案卡没有生成；详细诊断已保留。",
+        "untrusted MCP parameter diagnostics must remain private"
     );
     assert!(
         proposal_store_for(&fixture).proposals.is_empty(),
@@ -213,6 +234,33 @@ fn s1_resident_submit_proposal_rejects_unknown_and_wrong_nested_fields_before_st
         json!([]),
         "schema failures must not start or advance a workflow chain"
     );
+}
+
+#[test]
+fn s1b_h2_resident_submit_proposal_audit_write_failure_never_returns_raw_detail() {
+    let fixture = Fixture::new();
+    let private_marker = "H2_PRIVATE_AUDIT_WRITE_FAILURE";
+    let blocked_parent = fixture.root.join(private_marker);
+    fs::write(&blocked_parent, "not a directory").expect("audit write failure fixture");
+    let mut config = fixture.config.clone();
+    config.run_id = "supervisor-resident:h2-audit-write-failure".to_string();
+    config.supervisor_workflow_state_path = Some(blocked_parent.join("workflow-state.v0.json"));
+
+    for (result_status, expected) in [
+        ("denied", "方案卡没有生成；内部审计未完成。"),
+        ("accepted", "方案已落卡，但工具审计未完成。"),
+    ] {
+        let error = append_audit(
+            &config,
+            "submit_proposal",
+            &format!("private={private_marker}"),
+            "raw detail must not escape",
+            result_status,
+        )
+        .expect_err("audit write must fail through the stable resident facade");
+        assert_eq!(error, expected);
+        assert!(!error.contains(private_marker));
+    }
 }
 
 #[test]

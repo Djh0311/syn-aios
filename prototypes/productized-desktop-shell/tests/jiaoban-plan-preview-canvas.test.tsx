@@ -62,8 +62,8 @@ assert(simpleOutput.includes("这单活本身") && simpleOutput.includes("新会
 const merged = renderToStaticMarkup(
   <JiaobanMergedLayout
     phase="authorize"
-    history={<div>历史</div>}
     main={<button type="button">允许并开始</button>}
+    proposalIndex={<div>历届方案</div>}
     previewCanvas={previewCanvas}
     workflowPanel={<div>不应展示的运行态画布</div>}
     onOpenWorkflow={noop}

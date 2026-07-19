@@ -6,8 +6,9 @@ use crate::{
     ProjectConsultationProposalAuditEvent, ProjectConsultationProposalDecision,
     ProjectConsultationProposalDecisionKind, ProjectConsultationProposalMarkdown,
     ProjectConsultationProposalReadModel, ProjectConsultationProposalScopeDraft,
-    ProjectConsultationProposalStatus, ProjectConsultationProposalStoreV1, ProjectConsultationProposalTask,
-    RecordPlanAuthorizationUserConfirmationInput, RecordProjectConsultationProposalDecisionInput,
+    ProjectConsultationProposalStatus, ProjectConsultationProposalStoreV1,
+    ProjectConsultationProposalTask, RecordPlanAuthorizationUserConfirmationInput,
+    RecordProjectConsultationProposalDecisionInput,
     RecordProjectConsultationProposalDecisionOutput,
     RenderProjectConsultationProposalMarkdownInput,
 };
@@ -60,6 +61,41 @@ pub(crate) fn create_proposal(
     timestamp_ms: i64,
     write_id: &str,
 ) -> Result<CreateProjectConsultationProposalOutput, String> {
+    create_proposal_with_resident_idempotency(
+        workflow_state_path,
+        input,
+        timestamp_ms,
+        write_id,
+        None,
+    )
+}
+
+/// The resident MCP handler supplies this only from its server-recorded
+/// canonical message identity.  A replay with the same identity returns the
+/// original card before either the DB or JSON projection is written again.
+pub(crate) fn create_resident_proposal_once(
+    workflow_state_path: &Path,
+    input: &CreateProjectConsultationProposalInput,
+    timestamp_ms: i64,
+    write_id: &str,
+    idempotency_key: &str,
+) -> Result<CreateProjectConsultationProposalOutput, String> {
+    create_proposal_with_resident_idempotency(
+        workflow_state_path,
+        input,
+        timestamp_ms,
+        write_id,
+        Some(idempotency_key),
+    )
+}
+
+fn create_proposal_with_resident_idempotency(
+    workflow_state_path: &Path,
+    input: &CreateProjectConsultationProposalInput,
+    timestamp_ms: i64,
+    write_id: &str,
+    resident_idempotency_key: Option<&str>,
+) -> Result<CreateProjectConsultationProposalOutput, String> {
     validate_create_input(input)?;
     let project_id_value = input
         .project_id
@@ -75,6 +111,49 @@ pub(crate) fn create_proposal(
     ensure_sidecar_parent(&sidecar)?;
     let lock = StoreLock::acquire(&lock_path_for(&sidecar)?, write_id)?;
     let mut store = load_store(workflow_state_path, timestamp_ms)?;
+    if let Some(idempotency_key) = resident_idempotency_key {
+        if idempotency_key.len() != 64
+            || !idempotency_key.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err("supervisor_resident_idempotency_key_invalid".to_string());
+        }
+        let expected_actor_id = format!("supervisor-resident:{idempotency_key}");
+        if input.actor_id != expected_actor_id {
+            return Err("supervisor_resident_idempotency_actor_mismatch".to_string());
+        }
+        if let Some(audit_event) = store
+            .audit_events
+            .iter()
+            .find(|event| {
+                event.event_type == "project_consultation_proposal_created"
+                    && event.actor_id == expected_actor_id
+                    && event.project_id == project_id_value
+                    && event.workflow_id == workflow_id_value
+            })
+            .cloned()
+        {
+            let proposal_id = audit_event.proposal_id.as_deref().ok_or_else(|| {
+                "supervisor_resident_idempotency_audit_proposal_missing".to_string()
+            })?;
+            let proposal = store
+                .proposals
+                .iter()
+                .find(|proposal| proposal.proposal_id == proposal_id)
+                .cloned()
+                .ok_or_else(|| "supervisor_resident_idempotency_proposal_missing".to_string())?;
+            return Ok(CreateProjectConsultationProposalOutput {
+                proposal,
+                audit_event,
+                read_model: summarize_store_for_workflow(
+                    &store,
+                    &project_id_value,
+                    &workflow_id_value,
+                ),
+                store_revision: store.revision,
+                warnings: store.warnings.clone(),
+            });
+        }
+    }
     validate_expected_revision(input.expected_store_revision, store.revision)?;
 
     let proposal_id = format!(
@@ -650,7 +729,9 @@ fn validate_create_input(input: &CreateProjectConsultationProposalInput) -> Resu
 // 前端可能直调的 create_project_consultation_proposal 命令也直接经它）——lint 挂在这里兜底所有入口，不止
 // resident 那两条；resident 侧 write_consultation_proposal 已经在更早处 lint 过一次，这里重跑是幂等的
 // 双保险（同确认时 validate_approved_planned_tasks 重跑 lint 的既有纪律一致），不是遗漏后的补丁。
-fn validate_task_graph_toolbox_lint(tasks: &[ProjectConsultationProposalTask]) -> Result<(), String> {
+fn validate_task_graph_toolbox_lint(
+    tasks: &[ProjectConsultationProposalTask],
+) -> Result<(), String> {
     if let Some((task, reason)) = tasks.iter().find_map(|task| {
         crate::worker_toolbox_lint_reason_for_text(
             &task.title,
@@ -1212,7 +1293,10 @@ mod toolbox_lint_backstop_tests {
         poisoned.task_goal = "先用 read_file 工具读取 README.md，再创建 proof.txt".to_string();
         let error = validate_task_graph_toolbox_lint(&[poisoned])
             .expect_err("绕开 write_consultation_proposal 直调 create_proposal 也该被拒");
-        assert!(error.contains("proposal_task_toolbox_lint_failed"), "{error}");
+        assert!(
+            error.contains("proposal_task_toolbox_lint_failed"),
+            "{error}"
+        );
         assert!(error.contains("引用不存在的独立读文件工具"), "{error}");
     }
 
@@ -1221,7 +1305,10 @@ mod toolbox_lint_backstop_tests {
         let mut poisoned = clean_task();
         poisoned.acceptance_criteria = vec!["禁止使用 shell，只能直接产出结果".to_string()];
         let error = validate_task_graph_toolbox_lint(&[poisoned]).expect_err("禁 shell 措辞应被拒");
-        assert!(error.contains("禁止 worker 唯一可用的 shell 工具"), "{error}");
+        assert!(
+            error.contains("禁止 worker 唯一可用的 shell 工具"),
+            "{error}"
+        );
     }
 }
 

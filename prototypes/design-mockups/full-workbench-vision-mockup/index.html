@@ -1,0 +1,1268 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>(5) Codex 治理工作台</title>
+<style>
+  /* ===== token:真软件骨架 × v1 水墨气质(纸底·宋体·朱砂·墨绿) ===== */
+  :root{
+    --bg:#f6f2e9; --bg-subtle:#efe9dc; --panel:#faf6ec; --panel-soft:#f1ecdf; --panel-raised:#fffdf7;
+    --ink:#2f2a24; --ink-mid:#5c5348; --muted:#8d8171; --hair:#d8cfc0; --line:#e6dfd2;
+    --accent:#a4443a; --accent-strong:#8c352c; --accent-bg:#fdf0ec;
+    --run:#3f5f7a; --run-bg:#ecf1f5;
+    --warning:#9a6b1f; --warning-bg:#faf3e3; --warning-border:rgba(154,107,31,.35);
+    --danger:#a4443a; --danger-bg:#fdf0ec;
+    --ok:#3d6b4f; --ok-bg:#eef4ee;
+    --vermil:#a4443a;
+    --sidebar-w:148px; --topbar-h:54px; --dock-h:66px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:radial-gradient(circle at 12% 6%,rgba(155,125,74,.12),transparent 30%),linear-gradient(135deg,#f7f1e3 0%,#f3edde 44%,#ece3d0 100%);color:var(--ink);font:14.5px/1.75 "Songti SC","STSong","Noto Serif SC","PingFang SC",serif;overflow:hidden;-webkit-font-smoothing:antialiased}
+  button{font:inherit;cursor:pointer;border:1px solid var(--hair);background:var(--panel-raised);border-radius:8px;padding:6px 13px;color:var(--ink)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.linklike{border:none;background:none;color:var(--accent-strong);padding:0;text-decoration:underline;text-underline-offset:3px}
+  button.ghost{border:none;background:none;color:var(--muted)}
+  .muted{color:var(--muted);font-size:12.5px}
+  .weak{color:var(--muted);font-size:12px;opacity:.85}
+  .serif{font-family:"Songti SC","STSong","Noto Serif SC",serif}
+
+  /* 标注层:默认关。开了才显示「现在就有 / Phase / 改点·待拍」 */
+  .badge{display:none;font-size:11px;line-height:1;padding:3px 7px;border-radius:9px;vertical-align:2px;white-space:nowrap}
+  .badge.now{color:var(--ok);background:var(--ok-bg);border:1px solid rgba(42,107,94,.3)}
+  .badge.soon{color:var(--muted);background:none;border:1px dashed var(--muted)}
+  .badge.idea{color:var(--warning);background:none;border:1px dotted var(--warning-border);border-width:1.5px}
+  body.noted .badge{display:inline-block}
+  .note{display:none}
+  body.noted .note{display:revert}
+
+  /* ===== 壳:与现软件同构(sidebar | topbar / main / rail + dock) ===== */
+  .app-shell{display:grid;height:100vh;grid-template-columns:var(--sidebar-w) minmax(0,1fr) auto;grid-template-rows:var(--topbar-h) minmax(0,1fr) var(--dock-h);grid-template-areas:"sidebar topbar topbar" "sidebar main rail" "sidebar dock dock"}
+
+  /* 顶栏(沿现软件) */
+  .shell-topbar{grid-area:topbar;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .seal{width:38px;height:38px;flex:none;display:grid;place-items:center;border:none;background:transparent;cursor:pointer}
+  .seal span{width:32px;height:32px;display:grid;place-items:center;border-radius:8px;color:#fff;background:var(--vermil);font-family:"Songti SC",serif;font-size:17px}
+  .project-switch{display:flex;gap:7px;align-items:center;border:1px solid var(--hair);border-radius:8px;padding:5px 11px;background:var(--panel-raised);font-size:13px;white-space:nowrap;flex:none}
+  .project-switch .pdot{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+  .project-switch b{font-weight:600}
+  .search-box{display:flex;gap:7px;align-items:center;border:1px solid var(--hair);border-radius:8px;padding:5px 11px;background:var(--panel-raised);color:var(--muted);flex:0 1 220px;min-width:80px}
+  .search-box input{border:none;background:none;outline:none;font:inherit;width:100%;color:var(--ink)}
+  .pending-review-button{border-color:var(--warning-border);background:var(--warning-bg);color:var(--warning);font-size:13px;white-space:nowrap;flex:none}
+  .topbar-right{flex:none}
+  @media (max-width:980px){
+    .meta-text,.search-box{display:none} .project-switch .muted{display:none}
+    .secretary-orb{letter-spacing:0;padding:6px 10px} .secretary-orb .txt{display:none}
+    .dock-chips .chip:not(.send){display:none}
+    .dock .badge{display:none !important}
+  }
+  .dock,.dock-input-wrap{min-width:0}
+  .dock-input-wrap input{min-width:40px}
+  .secretary-orb{flex:none}
+  .meta-text{color:var(--muted);font-size:12.5px;white-space:nowrap}
+  .health-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);flex:none}
+  .topbar-right{margin-left:auto;display:flex;gap:10px;align-items:center}
+
+  /* 左侧栏(沿现软件:分组九入口+设置,原样不收编) */
+  .sidebar{grid-area:sidebar;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;overflow-y:auto;padding:14px 10px}
+  .nav-section-label{font-size:11px;color:var(--muted);letter-spacing:.12em;padding:10px 8px 4px}
+  .nav-item{display:flex;gap:9px;align-items:center;width:100%;border:none;background:none;text-align:left;padding:7px 10px;border-radius:8px;color:var(--ink-mid);font-size:13.5px;margin-bottom:1px}
+  .nav-item:hover{background:var(--panel-soft)}
+  .nav-item.active{background:var(--accent-bg);color:var(--accent-strong);font-weight:600}
+  .nav-glyph{width:16px;text-align:center;color:var(--muted)}
+  .nav-item.active .nav-glyph{color:var(--accent-strong)}
+  .sidebar .navnote{margin-top:auto;padding:8px}
+
+  /* 主区 */
+  .main-panel{grid-area:main;min-width:0;min-height:0;overflow-y:auto;background:transparent}
+  .page{display:none}
+  .page.on{display:block}
+
+  /* 右竖条(沿现软件:秘/知/待/想/行/管+统计) */
+  .status-rail{grid-area:rail;display:flex;border-left:1px solid var(--line);background:var(--panel);position:relative}
+  .right-icon-strip{width:46px;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px}
+  .rail-icon-button{width:32px;height:32px;display:grid;place-items:center;border:1px solid transparent;background:none;border-radius:8px;font-size:13px;color:var(--ink-mid);padding:0;position:relative}
+  .rail-icon-button:hover{background:var(--panel-soft)}
+  .rail-icon-button.active{border-color:var(--accent);color:var(--accent-strong);background:var(--accent-bg)}
+  .rail-icon-button i{position:absolute;top:-4px;right:-4px;background:var(--vermil);color:#fff;font-style:normal;font-size:10px;border-radius:8px;padding:0 4px}
+  .rail-mini-stats{margin-top:auto;display:flex;flex-direction:column;gap:2px;align-items:center;padding-bottom:8px;color:var(--muted);font-size:11px}
+  .rail-health{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-bottom:12px}
+  /* 秘书面板(点「秘」展开·沿现软件 RightDetailPanel 位置) */
+  .sec-panel{display:none;width:300px;border-right:1px solid var(--line);order:-1;background:var(--panel);flex-direction:column;min-height:0}
+  .status-rail.open .sec-panel{display:flex}
+  .sec-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .sec-body{flex:1;overflow-y:auto;padding:12px 14px}
+  .sec-group{margin-bottom:14px}
+  .sec-group h4{font-size:13px;margin-bottom:6px;display:flex;gap:8px;align-items:center}
+  .sec-item{border:1px solid var(--line);border-radius:8px;padding:7px 10px;margin-bottom:6px;font-size:13px;cursor:pointer;background:var(--panel-raised)}
+  .sec-item:hover{border-color:var(--accent)}
+  .sec-item .go{display:block;font-size:11.5px;color:var(--muted)}
+  .pj{font-size:11px;border:1px solid var(--hair);border-radius:8px;padding:1px 7px;background:var(--panel-soft);color:var(--muted);white-space:nowrap;margin-right:6px}
+
+  /* 底 dock(沿现软件:秘书 orb + 输入条;改:输入条=说一句开工) */
+  .dock{grid-area:dock;display:flex;gap:12px;align-items:center;padding:0 20px;border-top:1px solid var(--line);background:var(--panel)}
+  .secretary-orb{display:flex;gap:8px;align-items:center;border:1px solid var(--hair);border-radius:20px;padding:6px 14px;background:var(--panel-raised);font-size:13px;letter-spacing:.2em;white-space:nowrap}
+  .secretary-orb .orb{width:10px;height:10px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,var(--accent));flex:none}
+  .dock-input-wrap{flex:1;display:flex;gap:8px;align-items:center;border:1px solid var(--hair);border-radius:10px;padding:6px 12px;background:var(--panel-raised)}
+  .dock-input-wrap .prompt{color:var(--muted)}
+  .dock-input-wrap input{flex:1;min-width:0;border:none;background:none;outline:none;font:inherit;color:var(--ink)}
+  .dock-pjpick{flex:none;font-size:12px;color:var(--ink-mid);border:1px solid var(--hair);border-radius:8px;padding:2px 9px;background:var(--panel-soft);cursor:pointer;white-space:nowrap}
+  .dock-chips{display:flex;gap:6px;align-items:center}
+  .chip{font-size:12px;border:1px solid var(--hair);border-radius:10px;padding:3px 10px;background:var(--panel-raised);cursor:pointer;color:var(--ink-mid);white-space:nowrap}
+  .chip.send{background:var(--accent);border-color:var(--accent);color:#fff}
+
+  /* ===== 首页(在现 HomeView 基础上改) ===== */
+  .home-col{max-width:880px;margin:0 auto;padding:20px 24px 30px}
+  .eyebrow{font-size:11.5px;color:var(--muted);letter-spacing:.14em}
+  .home-action-hero{display:flex;gap:14px;align-items:center;justify-content:space-between;background:var(--panel-raised);border:1px solid var(--line);border-radius:14px;padding:18px 22px;margin-bottom:18px;box-shadow:0 1px 3px rgba(26,28,26,.07)}
+  .home-action-hero h1{font-size:27px;margin:2px 0 4px;letter-spacing:.03em}
+  .home-action-hero h1 b{color:var(--accent)}
+  .grp{margin-bottom:22px}
+  .grp>h2{font-size:13px;color:var(--ink-mid);font-weight:600;letter-spacing:.06em;margin-bottom:8px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+  .grp>h2 .cnt{color:var(--vermil);font-weight:700}
+  /* 单据行 */
+  .row{width:100%;display:flex;gap:11px;align-items:baseline;background:var(--panel-raised);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:7px;text-align:left;font:inherit;cursor:pointer}
+  .row:hover{border-color:var(--accent)}
+  .row .st{flex:none;width:16px;text-align:center;font-size:12.5px}
+  .s-pi{color:var(--accent);font-weight:700}
+  .s-ka{color:var(--danger);font-weight:700}
+  .s-run{color:var(--run)}
+  .s-ok{color:var(--ok)}
+  .row .bd{flex:1;min-width:0}
+  .row .l1{display:flex;gap:8px;align-items:baseline}
+  .row .l1 .rpj{flex:none;font-size:11.5px;color:var(--muted)}
+  .row .l1 .goal{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+  .row .l2{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .tm{flex:none;font-size:11.5px;color:var(--muted)}
+  .row .act{flex:none;font-size:12.5px;color:var(--run);white-space:nowrap}
+  @keyframes breathe{0%,100%{opacity:.35}50%{opacity:1}}
+  .pulse{animation:breathe 2.4s ease-in-out infinite}
+  /* 展开卡(就地办完) */
+  .exp{display:none;background:var(--panel-raised);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;margin:-3px 0 10px;box-shadow:0 4px 16px rgba(26,28,26,.08)}
+  .exp.on{display:block}
+  .kv{margin:4px 0;font-size:13.5px}
+  .kv b{color:var(--muted);font-weight:500;font-size:12.5px;margin-right:8px}
+  .memo{border-left:3px solid var(--hair);padding:7px 12px;background:var(--panel-soft);border-radius:0 8px 8px 0;margin:10px 0;font-size:13px;color:var(--ink-mid)}
+  .memo .who{font-size:11.5px;color:var(--muted);margin-bottom:2px}
+  .flagline{border:1px solid var(--warning-border);background:var(--warning-bg);border-radius:8px;padding:8px 12px;margin:10px 0;font-size:13px;display:flex;gap:8px;color:var(--ink-mid)}
+  .btns{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center}
+  .btns .sub{font-size:11.5px;color:var(--muted);width:100%;margin-top:-6px}
+  textarea{width:100%;border:1px solid var(--hair);border-radius:8px;background:var(--panel-soft);padding:9px;font:inherit;min-height:38px;resize:vertical;margin-top:8px}
+  .sticky-note{border:1px dashed var(--hair);border-radius:10px;padding:9px 14px;margin-bottom:7px;font-size:13px;color:var(--ink-mid);background:none;cursor:pointer;width:100%;text-align:left;font-family:inherit}
+  .sticky-note:hover{border-color:var(--muted)}
+  .mem-line{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px}
+  .mem-line:last-child{border:none}
+  .mem-line .tx{flex:1}
+  /* 运行中/最近交货 两面板(沿现 home-now-grid) */
+  .home-now-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:22px}
+  .home-panel{background:var(--panel-raised);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+  .home-panel-head{display:flex;gap:8px;align-items:baseline;margin-bottom:8px}
+  .home-panel-head h2{font-size:14px}
+  .home-panel-head .n{color:var(--run);font-weight:700;font-size:13px}
+  .home-panel .row{border-color:transparent;background:var(--panel-soft);padding:8px 11px}
+  .home-panel .row:hover{border-color:var(--accent)}
+  /* 最近工作(沿现 home-recent-work) */
+  .home-recent-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(120px,1fr) minmax(120px,1fr);gap:12px;align-items:start}
+  .home-entry-tile{display:flex;flex-direction:column;gap:2px;border:1px solid var(--line);background:var(--panel-raised);border-radius:12px;padding:12px 14px;text-align:left}
+  .home-entry-tile span{font-size:12px;color:var(--muted)}
+  .home-entry-tile strong{font-size:20px}
+  .home-entry-tile em{font-style:normal;font-size:11.5px;color:var(--muted)}
+
+  /* ===== 项目页(真交办 tab 基础 + 工作历史列[已拍需求] + 经过展开[改]) ===== */
+  .proj{display:flex;min-height:0;height:100%}
+  .plist{width:236px;flex:none;border-right:1px solid var(--line);overflow-y:auto;padding:12px 8px;background:var(--panel)}
+  .plist-head{display:flex;gap:6px;align-items:center;padding:0 8px 10px}
+  .plist .row{border-color:transparent;background:none;margin-bottom:2px;padding:8px 9px}
+  .plist .row:hover{background:var(--panel-soft)}
+  .plist .row.sel{background:var(--accent-bg);border-color:var(--accent)}
+  .plist .row .l1 .goal{font-size:13px}
+  .pmain{flex:1;min-width:0;overflow-y:auto;padding:16px 24px 30px}
+  .pmain-col{max-width:640px;margin:0 auto}
+  .ptop{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .ptop .tabs{display:flex;gap:2px}
+  .ptop .tabs button{border:none;background:none;padding:4px 12px;border-radius:8px;color:var(--ink-mid);font-size:13.5px}
+  .ptop .tabs button.on{background:var(--accent-bg);color:var(--accent-strong);font-weight:600}
+  .tabpage{display:none}
+  .tabpage.on{display:block}
+  .face{display:none}
+  .face.on{display:block}
+  .fcard{background:var(--panel-raised);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 3px rgba(26,28,26,.05)}
+  .fcard h3{font-size:15.5px;margin-bottom:8px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-family:"Songti SC","Noto Serif SC",serif}
+  .stamp{font-size:11.5px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:2px 8px}
+  .histoggle{border:none;background:none;color:var(--muted);font-size:12.5px;padding:0;margin-bottom:10px;cursor:pointer;text-align:left}
+  .histoggle:hover{color:var(--accent-strong)}
+  .hist{display:none;margin-bottom:12px}
+  .hist.on{display:block}
+  .you-said{display:flex;gap:10px;align-items:baseline;margin:4px 0 10px}
+  .you-said .say{background:var(--accent-bg);border:1px solid rgba(42,107,94,.25);border-radius:12px 12px 12px 3px;padding:7px 13px;font-size:13.5px}
+  .you-said .tm{font-size:11.5px;color:var(--muted)}
+  .fold{border:1px solid var(--line);border-radius:10px;padding:7px 13px;margin-bottom:8px;color:var(--muted);font-size:12.5px;cursor:pointer;background:var(--panel-raised)}
+  .fold:hover{border-color:var(--hair)}
+  .stages{display:flex;align-items:center;margin:10px 0 4px;flex-wrap:wrap}
+  .stg{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+  .stg .dot{width:9px;height:9px;border-radius:50%;background:var(--hair);flex:none}
+  .stg.done{color:var(--ok)} .stg.done .dot{background:var(--ok)}
+  .stg.cur{color:var(--run);font-weight:600} .stg.cur .dot{background:var(--run)}
+  .stg-line{width:30px;height:1px;background:var(--hair);margin:0 8px;flex:none}
+  .nowline{font-size:13.5px;margin:8px 0 2px}
+  .nowline b{font-weight:500;color:var(--run)}
+  .steps{list-style:none;margin:8px 0}
+  .steps li{display:flex;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px dashed var(--line);font-size:13px}
+  .steps li:last-child{border:none}
+  .steps .sst{flex:none;font-size:12px}
+  .evi{border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);padding:7px 12px;font-size:12px;color:var(--ink-mid);margin:8px 0;font-family:"SF Mono",Menlo,monospace}
+  .deep{margin-top:4px;font-size:12.5px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
+  .deep button{border:none;background:none;color:var(--ink-mid);padding:0;font-size:12.5px;text-decoration:underline;text-underline-offset:3px}
+  .deep button:hover{color:var(--accent-strong)}
+  .fmrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:16px;border:1px dashed var(--hair);border-radius:12px;background:var(--panel-raised);margin:12px 0}
+  .fnode{border:1px solid var(--hair);border-radius:10px;background:var(--panel-soft);padding:8px 12px;min-width:140px}
+  .fnode .fs{font-size:11.5px;margin-bottom:1px}
+  .fnode .ft{font-size:13px}
+  .fedge{color:var(--muted);font-size:13px}
+  .mem-item{display:flex;gap:10px;align-items:baseline;border:1px solid var(--line);border-radius:10px;padding:9px 13px;margin-bottom:7px;background:var(--panel-raised);font-size:13px}
+  .mem-item .tx{flex:1;min-width:0}
+
+  /* ===== M2 · 智能体页(沿现骨架:左分组列表+右对话) ===== */
+  .agent-shell{display:flex;min-height:0;height:100%}
+  .sess-list{width:250px;flex:none;border-right:1px solid var(--line);overflow-y:auto;padding:12px 8px;background:var(--panel)}
+  .sg-head{display:flex;gap:6px;align-items:baseline;padding:8px 8px 4px;font-size:12px;color:var(--muted);cursor:pointer}
+  .sg-head .n{margin-left:auto}
+  .sess-row{width:100%;display:flex;flex-direction:column;gap:1px;border:1px solid transparent;background:none;border-radius:8px;padding:7px 10px;text-align:left;font:inherit;cursor:pointer;margin-bottom:1px}
+  .sess-row:hover{background:var(--panel-soft)}
+  .sess-row.sel{background:var(--accent-bg);border-color:var(--accent)}
+  .sess-row .t{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sess-row .m{font-size:11.5px;color:var(--muted)}
+  .agent-main{flex:1;min-width:0;overflow-y:auto;padding:16px 24px 30px}
+  .agent-col{max-width:640px;margin:0 auto}
+  .turn{margin-bottom:14px}
+  .turn .who{font-size:11.5px;color:var(--muted);margin-bottom:3px}
+  .bubble{background:var(--panel-raised);border:1px solid var(--line);border-radius:12px;padding:9px 14px;font-size:13.5px}
+  .bubble.me{background:var(--accent-bg);border-color:rgba(42,107,94,.25);border-radius:12px 12px 3px 12px}
+  .procfold{border:1px dashed var(--hair);border-radius:10px;padding:6px 12px;font-size:12.5px;color:var(--muted);cursor:pointer;margin:6px 0;background:none}
+  .composer{display:flex;gap:8px;margin-top:14px;border:1px solid var(--hair);border-radius:10px;padding:8px 12px;background:var(--panel-raised)}
+  .composer input{flex:1;min-width:0;border:none;background:none;outline:none;font:inherit}
+  .belongchip{font-size:12px;border:1px dotted var(--warning-border);border-radius:9px;padding:2px 9px;color:var(--warning);background:none;cursor:pointer}
+
+  /* ===== M2 · 记忆层(兼布局重做设计稿) ===== */
+  .mem-col2{max-width:760px;margin:0 auto;padding:18px 24px 40px}
+  .gov-fold{border:1px solid var(--line);border-radius:10px;background:var(--panel-raised);padding:10px 14px;margin-top:14px}
+  .gov-fold summary{cursor:pointer;font-size:13px;color:var(--ink-mid)}
+  .gov-fold .gv{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .refchip{font-size:11px;border:1px dotted var(--hair);border-radius:8px;padding:1px 7px;color:var(--muted);white-space:nowrap}
+
+  /* ===== M2 · 秘书全页(三卡) ===== */
+  .secfull-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;max-width:1020px;margin:0 auto;padding:18px 24px 10px}
+  .secfull-grid .fcard{margin-bottom:0}
+  .sec-footline{max-width:1020px;margin:10px auto 30px;padding:0 24px;color:var(--muted);font-size:12.5px}
+
+  /* ===== M2 · 审计回看 ===== */
+  .audit-col{max-width:720px;margin:0 auto;padding:18px 24px 40px}
+  .atoggle{display:flex;gap:4px;margin:10px 0}
+  .atoggle button{border:none;background:none;padding:4px 12px;border-radius:8px;color:var(--ink-mid);font-size:13px}
+  .atoggle button.on{background:var(--accent-bg);color:var(--accent-strong);font-weight:600}
+  .aline{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13.5px}
+  .aline:last-child{border:none}
+  .aline .at{flex:none;width:44px;font-size:11.5px;color:var(--muted)}
+  .aline .who{flex:none;font-size:11px;border:1px solid var(--hair);border-radius:8px;padding:1px 7px;background:var(--panel-soft);color:var(--ink-mid);white-space:nowrap}
+  .aline .who.you{border-color:var(--vermil);color:var(--vermil);background:none}
+  .aline .who.sup{border-color:rgba(42,107,94,.4);color:var(--accent-strong)}
+  .aline .tx{flex:1;min-width:0}
+  .ladder{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;font-size:12.5px;color:var(--ink-mid)}
+  .ladder .lv{border:1px solid var(--hair);border-radius:9px;padding:3px 10px;background:var(--panel-raised)}
+  .ladder .lv.cur{border-color:var(--accent);color:var(--accent-strong);background:var(--accent-bg)}
+
+  /* ===== 记忆层重做:左列表 + 右详情(来龙去脉为重头) ===== */
+  .memwrap{display:flex;height:100%;min-height:0}
+  .mlist{width:302px;flex:none;border-right:1px solid var(--line);overflow-y:auto;padding:12px 10px;background:var(--panel)}
+  .mgroup{font-size:12px;color:var(--muted);letter-spacing:.08em;padding:12px 8px 4px;display:flex;gap:6px;align-items:baseline}
+  .mgroup .n{color:var(--accent);font-weight:700}
+  .mrow{width:100%;text-align:left;font:inherit;border:1px solid transparent;background:none;border-radius:8px;padding:7px 10px;margin-bottom:2px;cursor:pointer;display:block}
+  .mrow:hover{background:var(--panel-soft)}
+  .mrow.sel{background:var(--accent-bg);border-color:var(--accent)}
+  .mrow .t{font-size:13.5px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mrow .m{font-size:11.5px;color:var(--muted)}
+  .mmain{flex:1;min-width:0;overflow-y:auto;padding:18px 24px 40px}
+  .mmain-col{max-width:620px;margin:0 auto}
+  .mdetail{display:none}
+  .mdetail.on{display:block}
+  .mhead-strip{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .mstat{font-size:12.5px;border:1px solid var(--line);border-radius:11px;padding:3px 12px;background:var(--panel-raised);cursor:pointer}
+  .mstat b{color:var(--accent)}
+  .mem-body{font-size:17px;line-height:1.9;font-weight:600;margin:4px 0 10px}
+  .lifecycle{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+
+  /* 活起来:新卡入列动效 */
+  @keyframes arrivein{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+  .arrive{animation:arrivein .5s ease-out}
+  .ring{box-shadow:0 0 0 2px var(--accent-bg),0 0 0 3.5px var(--accent) !important;transition:box-shadow 1.4s}
+
+  #toast{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--panel);border-radius:9px;padding:9px 18px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:60;max-width:82vw}
+  #toast.on{opacity:.96}
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ================= 左侧栏:沿现软件原样(九入口·不收编) ================= -->
+  <aside class="sidebar">
+    <p class="nav-section-label">主入口</p>
+    <button class="nav-item" id="n-proj" onclick="goProject()"><span class="nav-glyph">▤</span>项目</button>
+    <button class="nav-item" id="n-agents" onclick="goAgents()"><span class="nav-glyph">◍</span>智能体</button>
+    <p class="nav-section-label">流转</p>
+    <button class="nav-item" onclick="real('想法箱')"><span class="nav-glyph">✎</span>想法箱</button>
+    <button class="nav-item" onclick="real('实验画布')"><span class="nav-glyph">⊹</span>实验画布</button>
+    <button class="nav-item" onclick="real('发令台')"><span class="nav-glyph">►</span>发令台</button>
+    <p class="nav-section-label">积累</p>
+    <button class="nav-item" onclick="real('知识库')"><span class="nav-glyph">▢</span>知识库</button>
+    <button class="nav-item" id="n-memory" onclick="goMemory()"><span class="nav-glyph">◐</span>记忆层</button>
+    <p class="nav-section-label">中枢</p>
+    <button class="nav-item" onclick="real('技能')"><span class="nav-glyph">✦</span>技能</button>
+    <button class="nav-item" onclick="real('运行器')"><span class="nav-glyph">⬡</span>运行器</button>
+    <div class="navnote"><span class="badge now" title="左导航沿现软件原样,一个入口没动(收编方案 2026-07-02 被否,这版不再提)">导航 = 现软件原样 · 未收编</span></div>
+    <button class="nav-item" style="margin-top:6px" onclick="real('设置')"><span class="nav-glyph">…</span>设置</button>
+  </aside>
+
+  <!-- ================= 顶栏:沿现软件 ================= -->
+  <header class="shell-topbar">
+    <button class="seal" onclick="goHome()" title="首页"><span>案</span></button>
+    <button class="project-switch" onclick="goProject()"><span class="pdot"></span><span class="muted">最近项目</span><b>mario-test</b></button>
+    <label class="search-box"><span>⌕</span><input placeholder="搜索" onkeydown="if(event.key==='Enter')toast('示意:全局搜索(现软件已有)')"></label>
+    <div class="topbar-right">
+      <button class="pending-review-button" id="pendbtn" onclick="goHome();flashNeed()">5 待审</button>
+      <span class="meta-text">3 项目</span>
+      <button class="ghost" title="重新读取" onclick="toast('示意:重新读取(现软件已有)')">↺</button>
+      <span class="health-dot" title="可用"></span>
+      <button class="ghost" id="noteBtn" style="font-size:12px" onclick="noteToggle()" title="打开后标出:哪些是现软件已有 / 哪些是这版改的 / 哪些是未来">标注:关</button>
+    </div>
+  </header>
+
+  <!-- ================= 主区 ================= -->
+  <main class="main-panel">
+
+    <!-- ═══ 首页(在现 HomeView 基础上改) ═══ -->
+    <div class="page on" id="pg-home">
+      <div class="home-col">
+
+        <!-- hero:沿现软件(「N 件需要你看一眼」) -->
+        <section class="home-action-hero">
+          <div>
+            <p class="eyebrow">工作台 · 此刻</p>
+            <h1><b id="heroN">5</b> 件需要你看一眼</h1>
+            <p class="muted">项目 3 · 智能体 12 · 技能 4 · 运行器 2</p>
+          </div>
+          <div style="text-align:right">
+            <span class="badge now">hero = 现软件已有</span><br>
+            <span class="badge idea" title="现软件此处是[去确认][去处理][去审批]三个泛跳转;这版改成下方就地清单,不用跳来跳去">改:泛跳转按钮 → 下方就地清单</span>
+          </div>
+        </section>
+
+        <!-- 改①:等我拍板清单(原三个按钮的活,就地办完) -->
+        <div class="grp" id="g-need">
+          <h2>等我拍板 <span class="cnt" id="cnt-need">5</span><span class="weak">处理一件少一件,清空就没有欠你的事</span><span class="badge now" title="成员(待批方案/卡住/交货要看/记忆候选)现软件全有,散在各页">成员 = 现软件已有</span><span class="badge idea">改:汇成一列 · 就地办完</span></h2>
+
+          <div id="u-emoji">
+            <button class="row" onclick="exp('emoji')">
+              <span class="st s-pi">批</span>
+              <span class="bd"><span class="l1"><span class="rpj">mario-test</span><span class="goal">给页面标题加个 emoji</span></span>
+              <span class="l2">方案好了:只动 index.html,批了就开工</span></span>
+              <span class="tm">10:12</span>
+            </button>
+            <div class="exp" id="x-emoji">
+              <p class="kv"><b>要干什么</b>给页面标题加一个合适的 emoji</p>
+              <p class="kv"><b>会碰什么</b>index.html(1 个文件)<span class="badge now">授权卡 · 现软件已有</span></p>
+              <p class="kv"><b>改完怎么验</b>打开页面看标题;游戏功能不受影响</p>
+              <p class="kv"><b>最坏情况</b>标题改错——git 一步可回滚 <span class="badge idea">改:新增「最坏情况」行</span></p>
+              <p class="kv"><b>用哪个对话</b>(默认)接现有 · 删怪那条 <button class="linklike" style="font-size:12px" onclick="event.stopPropagation();toast('示意:最近 5 条可搜 / 开个新的(现软件已有)')">换一个 ▾</button></p>
+              <div class="memo"><div class="who">全局主管看了一眼(参考,不是闸)<span class="badge now">现软件已有</span></div>范围对得上目标,只动一个文件,没有越界苗头。</div>
+              <div class="btns">
+                <button class="primary" onclick="approveEmoji(event)">允许并开始 · 改 1 个文件</button>
+                <button onclick="event.stopPropagation();toast('示意:说一句怎么改,AI 重新出方案')">按我说的改</button>
+                <button class="ghost" onclick="exp('emoji')">先不做</button>
+                <span class="sub">批这一下 = 授权这一段;之后自动干,碰到越界会停下来问你 <span class="badge now">人闸 · 现软件已有</span></span>
+              </div>
+            </div>
+          </div>
+
+          <button class="row" onclick="m2('kt-erp 的批卡')">
+            <span class="st s-pi">批</span>
+            <span class="bd"><span class="l1"><span class="rpj">kt-erp</span><span class="goal">客户列表加分页</span></span>
+            <span class="l2">方案好了:改 2 个文件,等你批</span></span>
+            <span class="tm">昨天</span>
+          </button>
+
+          <button class="row" onclick="m2('产品手册的批卡')">
+            <span class="st s-pi">批</span>
+            <span class="bd"><span class="l1"><span class="rpj">产品手册</span><span class="goal">重写安装章节</span></span>
+            <span class="l2">方案好了:只动 docs/install.md</span></span>
+            <span class="tm">昨天</span>
+          </button>
+
+          <div id="u-guai">
+            <button class="row" onclick="exp('guai')">
+              <span class="st s-ka">卡</span>
+              <span class="bd"><span class="l1"><span class="rpj">mario-test</span><span class="goal">把游戏里的巡逻怪加回 1 个</span></span>
+              <span class="l2">验收一步超时停了——给你留了三条路</span></span>
+              <span class="tm">昨天</span>
+            </button>
+            <div class="exp" id="x-guai">
+              <p style="font-size:13.5px">「浏览器手动验收」跑满 600 秒被停。系统已自动打回重拆 1 次(没重做已完成的步),重拆后仍超时。<span class="badge now">超时自动打回 · 现软件已有</span></p>
+              <p class="kv" style="margin-top:8px"><b>已干完、会保留</b>加回巡逻怪的改动已完成,只差验收 <span class="badge now">重拆不重做已完成事实 · 现软件已有</span></p>
+              <div class="btns">
+                <button class="primary" onclick="continueGuai(event)">接着跑,不用重批</button>
+                <button onclick="event.stopPropagation();toast('示意:带着停因重新出方案')">重新出方案</button>
+                <button class="ghost" onclick="event.stopPropagation();goAgents('shan')">我来看看(原始对话)</button>
+                <span class="sub">卡住永远有按钮,绝不冻着你 <span class="badge now">永不冻 · 现软件已有</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div id="u-shan">
+            <button class="row" onclick="exp('shan')">
+              <span class="st s-pi">看</span>
+              <span class="bd"><span class="l1"><span class="rpj">mario-test</span><span class="goal">删一个巡逻怪</span></span>
+              <span class="l2">交货了:巡逻怪 3 → 2;有 1 项没验完,建议你亲验</span></span>
+              <span class="tm">07-06</span>
+            </button>
+            <div class="exp" id="x-shan">
+              <div class="flagline"><span>⚠</span><span><strong>1 项没干完</strong>:浏览器手动验收——自述「浏览器起不来,没验完」。<span class="badge now">黄牌 · 现软件已有</span></span></div>
+              <p class="kv"><b>做了什么</b>index.html 巡逻怪 3 → 2,没动其他</p>
+              <p class="kv"><b>怎么验的</b>代码层已核对怪物数组;浏览器亲验没做成(见黄牌)</p>
+              <div class="evi">$ grep -c basePatrols index.html → 数组项 2(原 3)</div>
+              <div class="memo"><div class="who">全局主管复核(参考,不是闸)<span class="badge now">现软件已有</span></div>改动对得上方案,但验收没做完——建议你打开 index.html 数一下怪、跳一跳。</div>
+              <div class="btns">
+                <button class="primary" onclick="acceptShan(event)">收货 · 我亲验过了</button>
+                <button onclick="event.stopPropagation();toast('示意:按主管建议打回、重拆(现软件已有)')">打回重干</button>
+                <button class="ghost" onclick="event.stopPropagation();goProject('shan')">看这单经过</button>
+                <span class="sub"><span class="badge idea">改:新增「收货」动作</span><span class="badge now">打回重拆/属实沉淀 · 现软件已有</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div id="u-mem">
+            <button class="sticky-note" onclick="exp('mem')">✎ AI 想记住 3 件事(你确认了才算数)▸ <span class="badge now">候选确认制 · 现软件已有</span><span class="badge idea">改:便签形态</span></button>
+            <div class="exp" id="x-mem">
+              <div class="mem-line" id="mL1"><span class="tx">basePatrols 数组控制巡逻怪数量</span><button class="linklike" style="font-size:12px" onclick="memOk(event,'mL1')">记住</button><button class="ghost" style="font-size:12px;padding:0 6px" onclick="memNo(event,'mL1')">不要</button></div>
+              <div class="mem-line" id="mL2"><span class="tx">巡逻怪删改后要在浏览器里核怪物数</span><button class="linklike" style="font-size:12px" onclick="memOk(event,'mL2')">记住</button><button class="ghost" style="font-size:12px;padding:0 6px" onclick="memNo(event,'mL2')">不要</button></div>
+              <div class="mem-line" id="mL3"><span class="tx">删怪单复核:建议亲验(系统自己攒的)</span><button class="linklike" style="font-size:12px" onclick="memOk(event,'mL3')">记住</button><button class="ghost" style="font-size:12px;padding:0 6px" onclick="memNo(event,'mL3')">不要</button></div>
+              <p class="weak" style="margin-top:6px">记住的会在下次出方案/拆任务时自动带上。<span class="badge now">召回 · 现软件已有</span></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 沿现软件:运行中 / 变更 两面板(变更→最近交货) -->
+        <div class="home-now-grid">
+          <div class="home-panel" id="g-run">
+            <div class="home-panel-head"><h2>运行中</h2><span class="n" id="cnt-run">2</span><span class="badge now">面板 · 现软件已有</span><span class="badge idea">改:行内换人话进度+停</span></div>
+            <button class="row" id="r-jifen" onclick="goProject('jifen')">
+              <span class="st s-run pulse">●</span>
+              <span class="bd"><span class="l1"><span class="rpj">mario-test</span><span class="goal">给游戏加一个计分板</span></span>
+              <span class="l2">正在:加金币加分逻辑(第 2/3 步)· 已 4 分钟</span></span>
+              <span class="act" onclick="event.stopPropagation();toast('示意:真停,停在任务边界(现软件已有)')">停</span>
+            </button>
+            <button class="row" id="r-kt" onclick="m2('kt-erp 的单据')">
+              <span class="st s-run pulse">●</span>
+              <span class="bd"><span class="l1"><span class="rpj">kt-erp</span><span class="goal">报表导出加 CSV</span></span>
+              <span class="l2">正在:写导出函数(第 1/4 步)· 刚开始</span></span>
+              <span class="act" onclick="event.stopPropagation();toast('示意:真停,停在任务边界')">停</span>
+            </button>
+            <p class="weak" style="margin-top:6px">不用盯,交货或卡住会浮到「等我拍板」来。</p>
+          </div>
+          <div class="home-panel">
+            <div class="home-panel-head"><h2>最近交货</h2><span class="n">3</span><span class="badge idea" title="现软件此处是「变更」空面板(change-feed 未接入不伪造);这版改成交货流水,顺便把坑填上">改:原「变更」空面板 → 交货流水</span></div>
+            <button class="row" onclick="m2('kt-erp 的单据')">
+              <span class="st s-ok">✓</span>
+              <span class="bd"><span class="l1"><span class="rpj">kt-erp</span><span class="goal">修登录超时</span></span><span class="l2">昨天交货 · 全绿</span></span>
+            </button>
+            <button class="row" onclick="goProject('zanting')">
+              <span class="st s-ok">✓</span>
+              <span class="bd"><span class="l1"><span class="rpj">mario-test</span><span class="goal">给游戏加暂停功能</span></span><span class="l2">07-06 交货 · 4/4 全绿</span></span>
+            </button>
+            <button class="row" onclick="goProject('gaijin')">
+              <span class="st s-run">◐</span>
+              <span class="bd"><span class="l1"><span class="rpj">mario-test</span><span class="goal">了解还有哪些可以改进</span></span><span class="l2">纯建议,没动手</span></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 沿现软件:最近工作 -->
+        <div class="grp">
+          <h2>最近工作<span class="badge now">现软件已有</span><span class="badge idea">改:项目行带「在干/等我」数</span></h2>
+          <div class="home-recent-grid">
+            <div>
+              <button class="row" onclick="goProject()">
+                <span class="st s-run">▤</span>
+                <span class="bd"><span class="l1"><span class="goal">mario-test</span></span><span class="l2">在干 1 · 卡住 1 · 等我 3 件</span></span>
+              </button>
+              <button class="row" onclick="m2('kt-erp 项目页')">
+                <span class="st s-run">▤</span>
+                <span class="bd"><span class="l1"><span class="goal">kt-erp</span></span><span class="l2">在干 1 · 等我 1 件</span></span>
+              </button>
+              <button class="row" onclick="m2('产品手册项目页')">
+                <span class="st" style="color:var(--muted)">▤</span>
+                <span class="bd"><span class="l1"><span class="goal">产品手册</span></span><span class="l2">没在跑 · 等我 1 件</span></span>
+              </button>
+            </div>
+            <button class="home-entry-tile" onclick="real('技能')"><span>技能</span><strong>4</strong><em>可复用能力</em></button>
+            <button class="home-entry-tile" onclick="real('运行器')"><span>运行器</span><strong>2</strong><em>运行器资源</em></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 项目页(真交办 tab 为基 + 工作历史列 + 经过展开) ═══ -->
+    <div class="page" id="pg-project">
+      <div class="proj">
+        <aside class="plist">
+          <div class="plist-head">
+            <strong style="font-size:14.5px">mario-test</strong>
+            <button class="ghost" style="font-size:12px;padding:2px 6px" onclick="m2('项目切换(kt-erp / 产品手册)')">切换 ▾</button>
+          </div>
+          <button class="row" id="p-jifen" onclick="pick('jifen')">
+            <span class="st s-run pulse">●</span>
+            <span class="bd"><span class="l1"><span class="goal">加计分板,吃金币加10分</span></span><span class="l2">正在干 第 2/3 步</span></span>
+          </button>
+          <button class="row" id="p-guai" onclick="pick('guai')">
+            <span class="st s-ka">卡</span>
+            <span class="bd"><span class="l1"><span class="goal">把巡逻怪加回 1 个</span></span><span class="l2">超时停了,等你选路</span></span>
+          </button>
+          <button class="row" id="p-emoji" onclick="pick('emoji')">
+            <span class="st s-pi">批</span>
+            <span class="bd"><span class="l1"><span class="goal">给页面标题加个 emoji</span></span><span class="l2">方案好了,等你批</span></span>
+          </button>
+          <button class="row" id="p-gaijin" onclick="pick('gaijin')">
+            <span class="st s-run">◐</span>
+            <span class="bd"><span class="l1"><span class="goal">了解还有哪些可以改进</span></span><span class="l2">纯建议,没动手</span></span>
+          </button>
+          <button class="row" id="p-shan" onclick="pick('shan')">
+            <span class="st s-pi">看</span>
+            <span class="bd"><span class="l1"><span class="goal">删一个巡逻怪</span></span><span class="l2">交货 · 1 项要看一眼</span></span>
+          </button>
+          <button class="row" id="p-zanting" onclick="pick('zanting')">
+            <span class="st s-ok">✓</span>
+            <span class="bd"><span class="l1"><span class="goal">给游戏加暂停功能</span></span><span class="l2">07-06 交货 · 全绿</span></span>
+          </button>
+          <p class="weak" style="padding:10px 8px 0">一单一行,点开看它现在的脸。<span class="badge idea">工作历史列 · 已拍需求待实现</span></p>
+        </aside>
+
+        <div class="pmain"><div class="pmain-col">
+          <div class="ptop">
+            <div class="tabs">
+              <button class="on" id="pt-dan" onclick="ptab('dan')">交办</button>
+              <button id="pt-flow" onclick="ptab('flow')">工作流</button>
+              <button id="pt-mem" onclick="ptab('mem')">记忆 <span class="badge idea">改:项目内入口</span></button>
+            </div>
+            <span class="weak" style="margin-left:auto">交办 = 默认页 <span class="badge now">现软件已有</span></span>
+          </div>
+
+          <div class="tabpage on" id="tab-dan">
+
+            <div class="face on" id="f-jifen">
+              <button class="histoggle" onclick="hist('jifen')">▸ 这单的完整经过(你说 → 方案 → 干)<span class="badge idea">改:经过可展开</span></button>
+              <div class="hist" id="h-jifen">
+                <div class="you-said"><span class="say">给游戏加一个计分板,吃金币加10分</span><span class="tm">14:02 你说</span></div>
+                <div class="fold" onclick="toast('示意:展开已批的方案(存档,所批即所跑)')">▸ 方案 · 已放行 14:05 —— 3 步,改 index.html <span class="badge now">所批即所跑 · 现软件已有</span></div>
+              </div>
+              <div class="fcard">
+                <h3>正在干 <span class="stamp">已 4 分钟</span><span class="badge now">现软件已有</span></h3>
+                <div class="stages">
+                  <span class="stg done"><span class="dot"></span>已放行</span><span class="stg-line"></span>
+                  <span class="stg cur"><span class="dot"></span>在干(第 2/3 步)</span><span class="stg-line"></span>
+                  <span class="stg"><span class="dot"></span>自检</span><span class="stg-line"></span>
+                  <span class="stg"><span class="dot"></span>交货</span>
+                </div>
+                <p class="nowline">正在:<b>加金币加分逻辑</b><span class="muted">(单步最长约 10 分钟,超了会自动打回重拆)</span></p>
+                <ul class="steps">
+                  <li><span class="sst s-ok">✓</span>读取现有游戏结构</li>
+                  <li><span class="sst" style="color:var(--run)">●</span>加计分板与金币加分逻辑</li>
+                  <li><span class="sst" style="color:var(--muted)">○</span>浏览器手动验收</li>
+                </ul>
+                <p class="muted">跑完自动交货,主管会自动复核一遍(不挡交货)。你可以去干别的,交货或卡住会叫你。</p>
+                <div class="btns"><button onclick="toast('示意:真停,停在任务边界(现软件已有)')">停下</button><button class="ghost" onclick="ptab('flow')">画布看工序 →</button></div>
+              </div>
+              <div class="deep"><span>深挖:</span><button onclick="goAgents('jifen')">原始对话</button><button onclick="goAudit()">完整轨迹</button></div>
+            </div>
+
+            <div class="face" id="f-guai">
+              <button class="histoggle" onclick="hist('guai')">▸ 这单的完整经过</button>
+              <div class="hist" id="h-guai">
+                <div class="you-said"><span class="say">把游戏里的巡逻怪加回 1 个</span><span class="tm">昨天 你说</span></div>
+                <div class="fold" onclick="toast('示意:展开已批的方案(存档)')">▸ 方案 · 已放行 昨天 16:20 —— 2 步,改 index.html</div>
+              </div>
+              <div class="fcard">
+                <h3>卡住了 · 等你选路 <span class="badge now">现软件已有</span></h3>
+                <p style="font-size:13.5px">「浏览器手动验收」跑满 600 秒被停。系统自动打回重拆过 1 次(没重做已完成的步),重拆后仍超时。<span class="badge now">自动打回 · 现软件已有</span></p>
+                <p class="kv" style="margin-top:6px"><b>已干完、会保留</b>加回巡逻怪的改动已完成,只差验收</p>
+                <div class="btns">
+                  <button class="primary" onclick="toast('示意:不用重批,接着跑(现软件已有)')">接着跑,不用重批</button>
+                  <button onclick="toast('示意:带着停因重新出方案(现软件已有)')">重新出方案</button>
+                  <button class="ghost" onclick="goAgents('shan')">我来看看</button>
+                </div>
+              </div>
+              <div class="deep"><span>深挖:</span><button onclick="goAgents('shan')">原始对话</button><button onclick="goAudit()">完整轨迹</button></div>
+            </div>
+
+            <div class="face" id="f-emoji">
+              <button class="histoggle" onclick="hist('emoji')">▸ 这单的完整经过</button>
+              <div class="hist" id="h-emoji">
+                <div class="you-said"><span class="say">给页面标题加个 emoji</span><span class="tm">10:12 你说</span></div>
+              </div>
+              <div class="fcard">
+                <h3>AI 的方案 · 等你批 <span class="badge now">授权卡 · 现软件已有</span></h3>
+                <p class="kv"><b>要干什么</b>给页面标题加一个合适的 emoji</p>
+                <p class="kv"><b>会碰什么</b>index.html(1 个文件)</p>
+                <p class="kv"><b>改完怎么验</b>打开页面看标题;游戏功能不受影响</p>
+                <p class="kv"><b>最坏情况</b>标题改错——git 一步可回滚 <span class="badge idea">改:新增行</span></p>
+                <p class="kv"><b>用哪个对话</b>(默认)接现有 · 删怪那条 <button class="linklike" style="font-size:12px" onclick="toast('示意:最近 5 条可搜 / 开个新的(现软件已有)')">换一个 ▾</button></p>
+                <div class="memo"><div class="who">全局主管看了一眼(参考,不是闸)</div>范围对得上目标,只动一个文件,没有越界苗头。</div>
+                <textarea placeholder="想改直接说……"></textarea>
+                <div class="btns">
+                  <button class="primary" onclick="toast('批这一下 = 授权这一段;之后自动干(首页「等我拍板」里试这条更顺手)')">允许并开始 · 改 1 个文件</button>
+                  <button>按我说的改</button><button class="ghost">先不做</button>
+                </div>
+              </div>
+              <div class="deep"><span>深挖:</span><button onclick="goAgents('shan')">原始对话</button></div>
+            </div>
+
+            <div class="face" id="f-gaijin">
+              <button class="histoggle" onclick="hist('gaijin')">▸ 这单的完整经过</button>
+              <div class="hist" id="h-gaijin">
+                <div class="you-said"><span class="say">了解这个小游戏还有哪些可以改进</span><span class="tm">昨天 你说</span></div>
+              </div>
+              <div class="fcard">
+                <h3>AI 的建议(没动手)<span class="badge now">纯建议诚实脸 · 现软件已有</span></h3>
+                <div class="flagline"><span>⚠</span><span>这份方案<strong>不会改任何文件</strong>——它是纯建议。要动手,就让它重新出个能干活的方案。</span></div>
+                <p class="muted">建议摘要:可加音效、计分排行、关卡选择;详细内容在原始对话里。</p>
+                <div class="memo"><div class="who">全局主管看了一眼(参考,不是闸)</div>目标是了解改进点,不动文件不算错配;但验收写得含糊——要动手时让方案更明确。</div>
+                <div class="btns"><button class="primary" onclick="toast('示意:回到「说一句」,重新出要动手的方案')">重新出方案(要动手)</button></div>
+              </div>
+              <div class="deep"><span>深挖:</span><button onclick="goAgents('shan')">原始对话</button></div>
+            </div>
+
+            <div class="face" id="f-shan">
+              <button class="histoggle" onclick="hist('shan')">▸ 这单的完整经过</button>
+              <div class="hist" id="h-shan">
+                <div class="you-said"><span class="say">删一个巡逻怪</span><span class="tm">07-06 你说</span></div>
+                <div class="fold" onclick="toast('示意:展开已批的方案(存档)')">▸ 方案 · 已放行 07-06 14:32 —— 3 步,改 index.html</div>
+              </div>
+              <div class="fcard">
+                <h3>交货 · 巡逻怪 3 → 2 <span class="stamp">共 12 分钟</span><span class="badge now">现软件已有</span></h3>
+                <div class="flagline"><span>⚠</span><span><strong>1 项没干完</strong>:浏览器手动验收——自述「浏览器起不来,没验完」。建议你亲验。<span class="badge now">黄牌 · 现软件已有</span></span></div>
+                <div class="evi">$ grep -c basePatrols index.html → 数组项 2(原 3)</div>
+                <ul class="steps">
+                  <li><span class="sst s-ok">✓</span>定位怪物来源<span class="muted">— 自述:已找到 basePatrols</span><button class="linklike" style="margin-left:auto;font-size:12px" onclick="toast('已进记忆候选(首页便签里确认,现软件已有)')">属实,沉淀</button></li>
+                  <li><span class="sst s-ok">✓</span>删除一个巡逻怪<span class="muted">— 自述:3 改 2</span><button class="linklike" style="margin-left:auto;font-size:12px" onclick="toast('已进记忆候选(首页便签里确认,现软件已有)')">属实,沉淀</button></li>
+                  <li><span class="sst" style="color:var(--warning)">⚠</span>浏览器手动验收<span class="muted">— 没验完</span></li>
+                </ul>
+                <div class="memo"><div class="who">全局主管复核(参考,不是闸)</div>改动对得上方案;验收没做完,建议亲验:打开 index.html 数怪、跳一跳。</div>
+                <div class="btns">
+                  <button class="primary" onclick="toast('收货入账(「收货」动作 = 这版改点;打回/沉淀现软件已有)')">收货 · 我亲验过了</button>
+                  <button onclick="toast('示意:按主管建议打回、重拆(现软件已有)')">打回重干</button>
+                </div>
+              </div>
+              <div class="deep"><span>深挖:</span><button onclick="goAgents('shan')">原始对话</button><button onclick="goAudit()">完整轨迹</button></div>
+            </div>
+
+            <div class="face" id="f-zanting">
+              <button class="histoggle" onclick="hist('zanting')">▸ 这单的完整经过</button>
+              <div class="hist" id="h-zanting">
+                <div class="you-said"><span class="say">给游戏加暂停功能</span><span class="tm">07-06 早 你说</span></div>
+                <div class="fold" onclick="toast('示意:展开已批的方案(存档)')">▸ 方案 · 已放行 07-06 08:35 —— 4 步</div>
+              </div>
+              <div class="fcard">
+                <h3>交货 · 暂停功能上线 <span class="stamp">4/4 全绿 · 12 分钟</span></h3>
+                <p class="kv"><b>怎么验的</b>浏览器亲验:P 键暂停/恢复,计时停走正常</p>
+                <div class="evi">4/4 任务 completed · 审计「全跑完」</div>
+                <p class="muted">全绿的单,收完就沉底,不占你的注意力。</p>
+              </div>
+              <div class="deep"><span>深挖:</span><button onclick="goAgents('zanting')">原始对话</button><button onclick="goAudit()">完整轨迹</button></div>
+            </div>
+          </div>
+
+          <div class="tabpage" id="tab-flow">
+            <h3 class="serif" style="font-size:15.5px;margin:6px 0 4px">这张图 = 你批过的工序 <span class="badge now">所批即所跑 · 现软件已有</span></h3>
+            <p class="muted">批前浮在方案卡上,批后落到这里,跑到哪亮到哪。图上是「加计分板」那单。</p>
+            <div class="fmrow">
+              <div class="fnode"><div class="fs s-ok">✓ 完成</div><div class="ft">读取现有游戏结构</div></div>
+              <span class="fedge">┈┈▶</span>
+              <div class="fnode" style="border-color:var(--run)"><div class="fs" style="color:var(--run)">● 正在干</div><div class="ft">加计分板与金币加分逻辑</div></div>
+              <span class="fedge">┈┈▶</span>
+              <div class="fnode"><div class="fs" style="color:var(--muted)">○ 排队</div><div class="ft">浏览器手动验收</div></div>
+            </div>
+            <p class="weak">任务节点只看不点——不给绕过人闸的口子。<span class="note">画布本体(多工作流编辑/全屏/发令台/手动挡)现软件都有,原型不展开。</span></p>
+            <div class="btns"><button onclick="toast('示意:进完整画布(现软件已有)')">打开完整画布</button><button class="ghost" onclick="ptab('dan')">← 回交办</button></div>
+          </div>
+
+          <div class="tabpage" id="tab-mem">
+            <h3 class="serif" style="font-size:15.5px;margin:6px 0 4px">项目记忆 <span class="badge idea">改:项目内入口(记忆层现为全局页)</span></h3>
+            <p class="muted">确认过的记忆,出方案/拆任务时自动带上。<span class="note">= 全局记忆层按本项目过滤的同一份数据,不是另一套库。</span></p>
+            <p class="weak" style="margin:10px 0 4px">正式 · 2 条 <span class="badge now">现软件已有</span></p>
+            <div class="mem-item"><span class="tx">index.html 是唯一游戏文件,改游戏 = 改它</span></div>
+            <div class="mem-item"><span class="tx">验收必须真开浏览器;worker 环境起不来要标黄牌</span></div>
+            <p class="weak" style="margin:10px 0 4px">候选 · 3 条(在首页便签里等你确认)</p>
+            <div class="btns"><button onclick="goMemory()">去记忆层(全局)→</button><button class="ghost" onclick="ptab('dan')">← 回交办</button></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+    <!-- ═══ M2 · 智能体页(现软件已有 · 真机验收过;改点只有反向标注) ═══ -->
+    <div class="page" id="pg-agents">
+      <div class="agent-shell">
+        <aside class="sess-list">
+          <div style="padding:2px 8px 8px;display:flex;gap:8px;align-items:baseline"><strong style="font-size:14.5px">智能体</strong><span class="weak">手动直连会话</span></div>
+          <div class="sg-head"><span>▾ mario-test</span><span class="n">3</span></div>
+          <button class="sess-row sel" id="ss-shan" onclick="pickSess('shan')"><span class="t">删怪那条</span><span class="m">07-06 · 12 轮</span></button>
+          <button class="sess-row" id="ss-jifen" onclick="pickSess('jifen')"><span class="t">计分板那条</span><span class="m">● 正在干 · 14:02 起</span></button>
+          <button class="sess-row" id="ss-zanting" onclick="pickSess('zanting')"><span class="t">加暂停功能那条</span><span class="m">07-06 · 全绿收尾</span></button>
+          <div class="sg-head"><span>▾ kt-erp</span><span class="n">1</span></div>
+          <button class="sess-row" onclick="toast('示意:kt-erp 会话(M2 假数据不展开)')"><span class="t">报表导出那条</span><span class="m">● 正在干</span></button>
+          <div class="sg-head"><span>▸ 无项目</span><span class="n">1</span></div>
+          <p class="weak" style="padding:8px 8px 0">分组/折叠/搜索/过滤 = 现软件已有,原型简画。<span class="badge now">列表骨架 · 现软件已有</span></p>
+        </aside>
+        <div class="agent-main"><div class="agent-col">
+          <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:12px">
+            <h3 class="serif" style="font-size:15.5px" id="sessTitle">删怪那条</h3>
+            <button class="belongchip" id="sessBelong" onclick="goProject('shan')" title="这条会话被哪单交办用过——反向标注,构想·待拍">属于交办:删一个巡逻怪 →</button>
+            <span class="badge idea">反向标注 · 构想·待拍</span>
+            <span class="badge now" title="正向桥(交办→看原始对话→这里)现软件已有">正向桥 · 现软件已有</span>
+          </div>
+          <div id="sessBody">
+            <div class="turn"><div class="who">你 · 07-06 14:36</div><div class="bubble me">按任务包执行:删除一个巡逻怪,改完自述。</div></div>
+            <div class="turn"><div class="who">codex</div>
+              <button class="procfold" onclick="toast('示意:过程折叠,点开看 12 步(现软件已有)')">▸ 过程 12 步(读文件 / 定位 basePatrols / 改数组…)折叠</button>
+              <div class="bubble">已删除一个巡逻怪:basePatrols 3 → 2,未动其他逻辑。json 汇报已交(did/outputs/status/evidence)。</div></div>
+            <div class="turn"><div class="who">你 · 14:45</div><div class="bubble me">验收了吗?</div></div>
+            <div class="turn"><div class="who">codex</div><div class="bubble">浏览器起不来,手动验收没做完——已在汇报里如实标注(黄牌)。</div></div>
+          </div>
+          <div class="composer"><input placeholder="输入,Enter 直发(绑会话)…" onkeydown="if(event.key==='Enter'){this.value='';toast('示意:relay 直发(现软件已有·唯一手动指挥通道)')}"><span class="badge now">Enter 直发 · 现软件已有</span></div>
+          <p class="weak" style="margin-top:10px">交办 = 有结构有闸的自动跑;这里 = 手动直连一个会话。两边靠「看原始对话」和上面的反向标注互跳。</p>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- ═══ M2 · 记忆层(重做:AI 的随身笔记本,你是主编;兼「布局重做」设计稿) ═══ -->
+    <div class="page" id="pg-memory">
+      <div class="memwrap">
+        <aside class="mlist">
+          <div style="display:flex;gap:8px;align-items:baseline;padding:2px 8px 6px;flex-wrap:wrap">
+            <strong style="font-size:14.5px">记忆层</strong>
+            <span class="weak">AI 记着什么,你说了算</span>
+          </div>
+          <p style="padding:0 8px 2px;font-size:12px">筛选:<span class="pj" style="cursor:pointer">全部</span><span class="pj" style="cursor:pointer;border-color:var(--accent);color:var(--accent-strong)">mario-test</span><span class="pj" style="cursor:pointer" onclick="toast('示意:按项目过滤')">kt-erp</span><span class="pj" style="cursor:pointer" onclick="toast('示意:按项目过滤')">全局</span></p>
+
+          <div class="mgroup">候选 · 等你确认 <span class="n" id="cnt-cand">3</span></div>
+          <button class="mrow" id="mm1" onclick="pickMem('c1')"><span class="t">basePatrols 数组控制巡逻怪数量</span><span class="m">来自:删怪单[属实] · 07-06</span></button>
+          <button class="mrow" id="mm2" onclick="pickMem('c2')"><span class="t">巡逻怪删改后要在浏览器里核怪物数</span><span class="m">来自:删怪单[属实] · 07-06</span></button>
+          <button class="mrow" id="mm3" onclick="pickMem('c3')"><span class="t">删怪单复核:建议亲验</span><span class="m">治理钩子自动攒 · 07-06</span></button>
+
+          <div class="mgroup">要你看 <span class="n" id="cnt-lint">1</span></div>
+          <button class="mrow" id="ml1" onclick="pickMem('l1')"><span class="t">⚠ 疑似过期:「index.html 是唯一游戏文件」</span><span class="m">维护检查发现 · 今天</span></button>
+
+          <div class="mgroup">正式 · mario-test <span class="n" id="cnt-formal">2</span></div>
+          <div id="formalList">
+            <button class="mrow sel" id="mf1" onclick="pickMem('f1')"><span class="t">index.html 是唯一游戏文件,改游戏 = 改它</span><span class="m">被引用 4 次 · 活跃</span></button>
+            <button class="mrow" id="mf2" onclick="pickMem('f2')"><span class="t">验收必须真开浏览器;起不来标黄牌</span><span class="m">被引用 2 次 · 活跃</span></button>
+          </div>
+
+          <div class="mgroup">正式 · 全局 <span class="n">1</span></div>
+          <button class="mrow" id="mf3" onclick="pickMem('f3')"><span class="t">交办目标带上文件名/功能名更稳</span><span class="m">被引用 6 次 · 跨项目</span></button>
+
+          <p class="weak" style="padding:12px 8px 0">实体关系 / 成熟模式 / 捕获总线 / 观察 / 快照 / 最近变化——现软件 11 块治理面板收在 <button class="linklike" style="font-size:12px" onclick="toast('示意:原有面板原样打开(现软件已有,原型不展开)')">更多治理 ▸</button><span class="badge now">面板 · 现软件已有</span><span class="badge idea">改:收纳</span></p>
+        </aside>
+
+        <div class="mmain"><div class="mmain-col">
+          <div class="mhead-strip">
+            <span class="mstat" onclick="pickMem('c1')"><b id="ms-cand">3</b> 条候选等确认</span>
+            <span class="mstat" onclick="pickMem('l1')"><b id="ms-lint">1</b> 条要你看</span>
+            <span class="mstat" onclick="pickMem('f1')" title="确认过的记忆,出方案/拆任务自动带上,顶格 5 条(现软件已有)">出方案会带上 <b>3</b> 条 ▾</span>
+            <span class="badge now">候选确认制/召回/检查 · 现软件已有</span>
+            <span class="badge idea" title="现软件此页 11 块面板平铺;这版=左列表右详情+体检行+人话维护卡——即挂账的「记忆中心布局重做」设计稿">改:整页重排(Phase D 挂账的设计稿)</span>
+          </div>
+
+          <!-- 候选详情 -->
+          <div class="mdetail" id="md-c1">
+            <div class="fcard">
+              <p class="weak">候选 · 等你确认 <span class="badge now">确认制 · 现软件已有</span></p>
+              <p class="mem-body">basePatrols 数组控制巡逻怪数量</p>
+              <p class="kv"><b>哪来的</b>删怪单交货脸,你点了[属实,沉淀] <button class="linklike" style="font-size:12px" onclick="goProject('shan')">看那单 →</button></p>
+              <p class="kv"><b>和现有记忆</b>不打架、不重复(检查过)<span class="badge now">冲突检查 · 现软件已有</span><span class="badge idea">改:确认时内联提示</span></p>
+              <div class="btns"><button class="primary" onclick="mdAdopt(event,1)">记住(转正式)</button><button class="ghost" onclick="mdDrop(event,1)">不要</button><span class="sub">记住之后,出方案/拆任务会自动带上它</span></div>
+            </div>
+          </div>
+          <div class="mdetail" id="md-c2">
+            <div class="fcard">
+              <p class="weak">候选 · 等你确认</p>
+              <p class="mem-body">巡逻怪删改后要在浏览器里核怪物数</p>
+              <p class="kv"><b>哪来的</b>删怪单交货脸,你点了[属实,沉淀] <button class="linklike" style="font-size:12px" onclick="goProject('shan')">看那单 →</button></p>
+              <p class="kv"><b>和现有记忆</b>与「验收必须真开浏览器」相近但不重复——一条讲验收方式,一条讲核对对象</p>
+              <div class="btns"><button class="primary" onclick="mdAdopt(event,2)">记住(转正式)</button><button class="ghost" onclick="mdDrop(event,2)">不要</button></div>
+            </div>
+          </div>
+          <div class="mdetail" id="md-c3">
+            <div class="fcard">
+              <p class="weak">候选 · 等你确认</p>
+              <p class="mem-body">删怪单复核:建议亲验</p>
+              <p class="kv"><b>哪来的</b>治理动作自动攒的(全局主管复核落库时)<button class="linklike" style="font-size:12px" onclick="goAudit()">看轨迹 →</button><span class="badge now">钩子自动攒 · 现软件已有</span></p>
+              <p class="kv"><b>提醒</b>这条更像一次性提醒,不像长期记忆——不要也不可惜</p>
+              <div class="btns"><button class="primary" onclick="mdAdopt(event,3)">记住(转正式)</button><button class="ghost" onclick="mdDrop(event,3)">不要</button></div>
+            </div>
+          </div>
+
+          <!-- 维护发现详情 -->
+          <div class="mdetail" id="md-l1">
+            <div class="fcard">
+              <p class="weak">维护检查发现 · 只提醒,不自动改 <span class="badge now">检查 · 现软件已有</span><span class="badge idea">改:人话卡+就地处理</span></p>
+              <div class="flagline"><span>⚠</span><span><strong>疑似过期</strong>:「index.html 是唯一游戏文件」——最近的观察里项目出现了 style.css,这条可能不再成立。</span></div>
+              <div class="evi">检查报告:formal#1 ↔ 观察 2026-07-08「新增 style.css」不一致</div>
+              <div class="btns">
+                <button class="primary" onclick="lintKeep(event)">仍属实,保留</button>
+                <button onclick="toast('改写这条 = 记忆编辑(Phase D:命令有,界面未接全)')">改写这条</button>
+                <button class="ghost" onclick="toast('废弃 = 生命周期操作(Phase D)')">废弃</button>
+                <span class="sub">你处理的结果会记进审计;检查永远只提醒、不动正式记忆</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 正式记忆详情(重头:来龙去脉) -->
+          <div class="mdetail on" id="md-f1">
+            <div class="fcard">
+              <p class="weak">正式 · mario-test · 活跃 <span class="pj">项目事实</span></p>
+              <p class="mem-body">index.html 是唯一游戏文件,改游戏 = 改它</p>
+              <p class="kv"><b>版本</b>v1(没改过)<span class="badge soon">版本历史 · Phase D</span></p>
+              <div class="memo" style="margin-top:12px"><div class="who">来龙去脉</div>
+                <div class="aline"><span class="at" style="width:56px">07-05</span><span class="tx">计分板单观察中攒成候选</span></div>
+                <div class="aline"><span class="at" style="width:56px">07-05</span><span class="tx"><strong>你确认转正</strong>(候选→正式,留审计)</span></div>
+                <div class="aline"><span class="at" style="width:56px">之后</span><span class="tx">被带去干活 <strong>4 次</strong>:计分板出方案 · 删怪拆任务 · 巡逻怪重拆 · 今天 emoji 出方案 <span class="badge idea">引用可见 · 构想·待拍</span></span></div>
+              </div>
+              <div class="lifecycle"><button onclick="toast('编辑 = Phase D(命令有,界面未接全)')">编辑</button><button onclick="toast('升到全局 = Phase D')">升到全局</button><button class="ghost" onclick="toast('冻结 = Phase D')">冻结</button><button class="ghost" onclick="toast('废弃 = Phase D')">废弃</button><span class="badge soon">完整生命周期 · Phase D</span></div>
+              <p class="weak" style="margin-top:10px">⚠ 维护检查对这条有一个「疑似过期」发现 <button class="linklike" style="font-size:12px" onclick="pickMem('l1')">去处理 →</button></p>
+            </div>
+          </div>
+          <div class="mdetail" id="md-f2">
+            <div class="fcard">
+              <p class="weak">正式 · mario-test · 活跃 <span class="pj">教训</span></p>
+              <p class="mem-body">验收必须真开浏览器;worker 环境起不来要标黄牌</p>
+              <p class="kv"><b>版本</b>v1</p>
+              <div class="memo" style="margin-top:12px"><div class="who">来龙去脉</div>
+                <div class="aline"><span class="at" style="width:56px">07-06</span><span class="tx">删怪单黄牌(验收没做完)→ 你[属实]后攒成候选</span></div>
+                <div class="aline"><span class="at" style="width:56px">07-06</span><span class="tx"><strong>你确认转正</strong></span></div>
+                <div class="aline"><span class="at" style="width:56px">之后</span><span class="tx">被带去干活 <strong>2 次</strong>:巡逻怪重拆 · 今天 emoji 出方案——AI 因此把「浏览器亲验」写进了验收 <span class="badge idea">引用可见 · 待拍</span></span></div>
+              </div>
+              <div class="lifecycle"><button onclick="toast('编辑 = Phase D')">编辑</button><button onclick="toast('升到全局 = Phase D')">升到全局</button><button class="ghost" onclick="toast('冻结 = Phase D')">冻结</button><button class="ghost" onclick="toast('废弃 = Phase D')">废弃</button><span class="badge soon">Phase D</span></div>
+            </div>
+          </div>
+          <div class="mdetail" id="md-f3">
+            <div class="fcard">
+              <p class="weak">正式 · 全局(所有项目都带)<span class="pj">你的偏好</span><span class="badge idea" title="作用域分组呈现=改;升降全局=Phase D">全局作用域呈现 · 改</span></p>
+              <p class="mem-body">交办目标带上文件名/功能名更稳</p>
+              <div class="memo" style="margin-top:12px"><div class="who">来龙去脉</div>
+                <div class="aline"><span class="at" style="width:56px">07-02</span><span class="tx">你在交办里说过两次 → 攒成候选,你确认转正</span></div>
+                <div class="aline"><span class="at" style="width:56px">之后</span><span class="tx">三个项目共被带去 <strong>6 次</strong>(说脸的输入提示就是它)</span></div>
+              </div>
+              <div class="lifecycle"><button onclick="toast('编辑 = Phase D')">编辑</button><button class="ghost" onclick="toast('降回项目 = Phase D')">降回项目</button><span class="badge soon">Phase D</span></div>
+            </div>
+          </div>
+
+          <!-- 刚转正的动态详情 -->
+          <div class="mdetail" id="md-dyn">
+            <div class="fcard">
+              <p class="weak">正式 · mario-test · 刚转正</p>
+              <p class="mem-body" id="dynMemText"></p>
+              <div class="memo" style="margin-top:12px"><div class="who">来龙去脉</div>
+                <div class="aline"><span class="at" style="width:56px">今天</span><span class="tx"><strong>你确认转正</strong>——下次出方案/拆任务自动带上</span></div>
+              </div>
+              <div class="lifecycle"><button onclick="toast('编辑 = Phase D')">编辑</button><button onclick="toast('升到全局 = Phase D')">升到全局</button><span class="badge soon">Phase D</span></div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- ═══ M2 · 秘书全页(今天没有此页;沿 v1 三卡加深) ═══ -->
+    <div class="page" id="pg-secretary">
+      <div style="max-width:1020px;margin:0 auto;padding:18px 24px 0;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+        <h3 class="serif" style="font-size:16.5px">秘书</h3>
+        <span class="badge idea">改:新页(今天只有右栏;v1 有设计稿)</span>
+        <span class="weak">它整理和解释,不判断、不裁决、不派活</span>
+      </div>
+      <div class="secfull-grid">
+        <div class="fcard"><h3>待你拍板 <span class="badge now">数据 · 现软件已有</span></h3>
+          <div class="sec-item" onclick="goHome();exp('emoji',true)"><span class="pj">mario-test</span>「加 emoji」方案好了<span class="go">→ 首页·批</span></div>
+          <div class="sec-item" onclick="goProject('guai')"><span class="pj">mario-test</span>巡逻怪:超时停了,三条路<span class="go">→ 项目·选路</span></div>
+          <div class="sec-item" onclick="goProject('shan')"><span class="pj">mario-test</span>删怪单:验收没做完,建议亲验<span class="go">→ 项目·交货脸</span></div>
+          <div class="sec-item" onclick="goMemory()"><span class="pj">mario-test</span>3 条记忆候选等确认<span class="go">→ 记忆层</span></div>
+          <div class="sec-item" onclick="m2('kt-erp 批卡')"><span class="pj">kt-erp</span>「客户列表加分页」等批<span class="go">→ kt-erp</span></div>
+        </div>
+        <div class="fcard"><h3>简报与提醒 <span class="badge soon">机会简报 · B3+</span></h3>
+          <div class="sec-item" style="cursor:default">本周:交办 7 单——交货 5 · 卡住 1 · 纯建议 1;假完成被复核逮到 1 次。</div>
+          <div class="sec-item" style="cursor:default">风险:巡逻怪单超时两次,验收步宜拆细。</div>
+          <div class="sec-item" style="cursor:default">机会:跑顺的「改游戏」工序可沉淀成模版。<span class="badge soon">Phase D</span></div>
+        </div>
+        <div class="fcard"><h3>解释与问答</h3>
+          <button style="width:100%" onclick="toast('示意:AI 把现状讲给你听,约 1-2 分钟(现软件已有)')">让 AI 解释现状(约 1-2 分钟)</button>
+          <div class="composer" style="margin-top:10px"><input placeholder="随口问:昨天那单为什么卡?…" onkeydown="if(event.key==='Enter'){this.value='';toast('对话式秘书 = Phase C 同期再议')}"><span class="badge soon">对话式 · Phase C</span></div>
+          <p class="weak" style="margin-top:8px">按需解释今天就有;随口问答是未来的。</p>
+        </div>
+      </div>
+      <p class="sec-footline">边界(架构 §7):<strong>秘书零写入 · 不判断 · 不派活</strong>——上面每一条都只是提醒,不是命令。</p>
+    </div>
+
+    <!-- ═══ M2 · 审计回看(今天只有开发者原始面板;这页 = 给人看的审计) ═══ -->
+    <div class="page" id="pg-audit">
+      <div class="audit-col">
+        <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+          <h3 class="serif" style="font-size:16.5px">审计回看</h3>
+          <span class="badge idea">改:新页(今天审计落库全、但只有开发者原始面板)</span>
+          <span class="badge now" title="审计事件本体(工作流 audit_events + 主管意见内嵌审计)今天落库齐全">事件数据 · 现软件已有</span>
+        </div>
+        <div class="atoggle"><button class="on" id="at-dan" onclick="atab('dan')">按单</button><button id="at-day" onclick="atab('day')">按天</button></div>
+
+        <div id="audit-dan">
+          <p class="muted" style="margin-bottom:6px">单:<span class="pj" style="border-color:var(--accent);color:var(--accent-strong)">删一个巡逻怪(07-06)</span><span class="pj" style="cursor:pointer" onclick="toast('示意:切到那单的时间线')">加暂停功能</span><span class="pj" style="cursor:pointer" onclick="toast('示意:切到那单的时间线')">巡逻怪加回</span></p>
+          <div class="fcard">
+            <div class="aline"><span class="at">14:20</span><span class="who you">你</span><span class="tx">说目标:「删一个巡逻怪」</span></div>
+            <div class="aline"><span class="at">14:28</span><span class="who">咨询</span><span class="tx">出方案:改 index.html,3 步,附验收法</span></div>
+            <div class="aline"><span class="at">14:32</span><span class="who you">你</span><span class="tx"><strong>允许并开始</strong>(人闸·授权这一段)</span></div>
+            <div class="aline"><span class="at">14:33</span><span class="who sup">全局主管</span><span class="tx">批前边界意见:范围对得上,没越界苗头 <span class="badge now">现软件已有</span></span></div>
+            <div class="aline"><span class="at">14:35</span><span class="who">项目主管</span><span class="tx">拆 3 任务,依赖成链(所批即所跑)</span></div>
+            <div class="aline"><span class="at">14:36</span><span class="who">worker</span><span class="tx">干活:定位 basePatrols → 删一个 → 交回结构化自述</span></div>
+            <div class="aline"><span class="at">14:47</span><span class="who">worker</span><span class="tx">自述「浏览器起不来,验收没做完」→ 黄牌 ⚠</span></div>
+            <div class="aline"><span class="at">14:48</span><span class="who sup">全局主管</span><span class="tx">结果复核:验收没做完——建议你亲验 <span class="badge now">现软件已有</span></span></div>
+            <div class="aline"><span class="at">14:52</span><span class="who you">你</span><span class="tx">[属实,沉淀] × 2 → 记忆候选入库</span></div>
+            <div class="btns"><button onclick="goProject('shan')">回到这单交货脸 →</button><button class="ghost" onclick="toast('示意:开发者原始面板(现软件已有)')">看原始事件</button></div>
+          </div>
+        </div>
+
+        <div id="audit-day" style="display:none">
+          <div class="fcard">
+            <p class="muted" style="margin-bottom:4px">07-06(那天你批了 2 单、逮到 1 张黄牌)</p>
+            <div class="aline"><span class="at">08:35</span><span class="who you">你</span><span class="tx">批「加暂停功能」→ 12 分钟后 4/4 全绿交货</span></div>
+            <div class="aline"><span class="at">14:32</span><span class="who you">你</span><span class="tx">批「删一个巡逻怪」→ 交货带 1 黄牌(验收没做完)</span></div>
+            <div class="aline"><span class="at">14:48</span><span class="who sup">全局主管</span><span class="tx">复核建议亲验——你还没验(它还在「等我拍板」里)</span></div>
+          </div>
+        </div>
+
+        <div class="fcard">
+          <h3 style="font-size:14px">信任阶梯 <span class="badge idea">构想·待拍(愿景 §4/§6)</span></h3>
+          <div class="ladder">
+            <span class="lv cur">每次确认(现在)</span>→<span class="lv">高风险点确认</span>→<span class="lv">免确认·留审计</span>→<span class="lv">脚本化</span>
+          </div>
+          <p class="weak">升档记录:无——每一次升档都是你单独拍板,永远可召回。换脑(模型升级)记为显式人事事件,留在这页可查。</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ================= 右竖条:沿现软件(秘/知/待/想/行/管+统计) ================= -->
+  <aside class="status-rail" id="rail">
+    <div class="sec-panel">
+      <div class="sec-head"><strong style="flex:1">秘书 · 待你拍板</strong><button class="linklike" onclick="secToggle(false);goSecretary()">全页 ↗</button><button class="ghost" style="padding:0 4px" onclick="secToggle(false)">⇥</button></div>
+      <div class="sec-body">
+        <div class="sec-group"><h4>待批方案 3 <span class="badge now">现软件已有</span></h4>
+          <div class="sec-item" onclick="goHome();exp('emoji',true)"><span class="pj">mario-test</span>「加 emoji」方案好了<span class="go">→ 首页·批</span></div>
+          <div class="sec-item" onclick="m2('kt-erp 批卡')"><span class="pj">kt-erp</span>「客户列表加分页」等批<span class="go">→ kt-erp</span></div>
+          <div class="sec-item" onclick="m2('产品手册批卡')"><span class="pj">产品手册</span>「重写安装章节」等批<span class="go">→ 手册</span></div></div>
+        <div class="sec-group"><h4>卡住等你 1</h4>
+          <div class="sec-item" onclick="goHome();exp('guai',true)"><span class="pj">mario-test</span>巡逻怪:超时停了,三条路<span class="go">→ 首页·选路</span></div></div>
+        <div class="sec-group"><h4>交货要看 1 <span class="badge now">主管提醒 · 现软件已有</span></h4>
+          <div class="sec-item" onclick="goHome();exp('shan',true)"><span class="pj">mario-test</span>删怪单:验收没做完,建议亲验<span class="go">→ 首页·看交货</span></div></div>
+        <div class="sec-group"><h4>记忆候选 3 <span class="badge now">现软件已有</span></h4>
+          <div class="sec-item" onclick="goHome();exp('mem',true)"><span class="pj">mario-test</span>3 条候选等确认<span class="go">→ 首页·便签</span></div></div>
+        <hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
+        <button style="width:100%" onclick="toast('示意:AI 把现状讲给你听,约 1-2 分钟(现软件已有)')">让 AI 解释现状(约 1-2 分钟)</button>
+        <p class="muted" style="margin-top:8px">这些是提醒,不是命令。秘书零写入、不判断、不派活。</p>
+      </div>
+    </div>
+    <div class="right-icon-strip">
+      <button class="rail-icon-button" id="railSec" title="秘书" onclick="secToggle()"><span>秘</span><i id="railN">5</i></button>
+      <button class="rail-icon-button" title="通知" onclick="real('通知')"><span>知</span></button>
+      <button class="rail-icon-button" title="待办" onclick="real('待办')"><span>待</span></button>
+      <button class="rail-icon-button" title="想法" onclick="real('想法')"><span>想</span></button>
+      <button class="rail-icon-button" title="运行中" onclick="real('运行中')"><span>行</span></button>
+      <button class="rail-icon-button" id="railAudit" title="管理(审计)" onclick="goAudit()"><span>管</span></button>
+      <div class="rail-mini-stats"><span title="项目 3">3</span><span title="会话 12">12</span><span title="工作流 2">2</span><span title="工作项 6">6</span></div>
+      <span class="rail-health"></span>
+    </div>
+  </aside>
+
+  <!-- ================= 底 dock:沿现软件(秘书 orb + 输入条);改:输入条 = 说一句开工 ================= -->
+  <footer class="dock">
+    <button class="secretary-orb" onclick="secToggle()"><span class="orb"></span><span class="txt">秘 书 · 辅 助</span></button>
+    <div class="dock-input-wrap">
+      <span class="prompt">›</span>
+      <span class="dock-pjpick" onclick="toast('示意:选项目(手选=现软件交办已有;说完自动识别项目=Phase C)')">mario-test ▾</span>
+      <input id="sayin" placeholder="说一句,开新活……(⌘K)" onkeydown="if(event.key==='Enter')saySubmit()">
+      <span class="badge idea">改:dock 输入条 = 说目标开工</span>
+      <span class="badge soon">自动识别项目 · Phase C</span>
+    </div>
+    <div class="dock-chips">
+      <button class="chip send" onclick="saySubmit()">出方案</button>
+      <button class="chip" onclick="toast('示意:秘书解释(现软件已有)')">解释</button>
+      <button class="chip" onclick="secToggle(true)">打开秘书</button>
+    </div>
+  </footer>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  /* ---- 标注层 ---- */
+  function noteToggle(){
+    const on=document.body.classList.toggle('noted');
+    document.getElementById('noteBtn').textContent='标注:'+(on?'开':'关');
+  }
+  /* ---- 页切换(六面) ---- */
+  function showPage(pageId,navId){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+    document.getElementById(pageId).classList.add('on');
+    document.querySelectorAll('.sidebar .nav-item').forEach(b=>b.classList.remove('active'));
+    if(navId) document.getElementById(navId).classList.add('active');
+    document.getElementById('railAudit').classList.toggle('active',pageId==='pg-audit');
+  }
+  function goHome(){ showPage('pg-home'); }
+  function goProject(order){ showPage('pg-project','n-proj'); ptab('dan'); pick(order||'jifen'); }
+  function goAgents(sess){ showPage('pg-agents','n-agents'); if(sess) pickSess(sess); }
+  function goMemory(){ showPage('pg-memory','n-memory'); }
+  function goSecretary(){ showPage('pg-secretary'); }
+  function goAudit(){ showPage('pg-audit'); }
+  /* ---- 智能体页:会话选中 ---- */
+  const SESS={
+    shan:{title:'删怪那条',belong:'属于交办:删一个巡逻怪 →',go:'shan'},
+    jifen:{title:'计分板那条',belong:'属于交办:给游戏加一个计分板 →',go:'jifen'},
+    zanting:{title:'加暂停功能那条',belong:'属于交办:给游戏加暂停功能 →',go:'zanting'},
+  };
+  function pickSess(k){
+    document.querySelectorAll('.sess-row').forEach(r=>r.classList.remove('sel'));
+    const r=document.getElementById('ss-'+k); if(r) r.classList.add('sel');
+    const s=SESS[k]; if(!s) return;
+    document.getElementById('sessTitle').textContent=s.title;
+    const b=document.getElementById('sessBelong');
+    b.textContent=s.belong;
+    b.onclick=()=>goProject(s.go);
+    if(k!=='shan') toast('示意:切到该会话(对话流假数据只铺了删怪那条)');
+  }
+  /* ---- 审计:按单/按天 ---- */
+  function atab(k){
+    document.getElementById('audit-dan').style.display=(k==='dan')?'block':'none';
+    document.getElementById('audit-day').style.display=(k==='day')?'block':'none';
+    document.getElementById('at-dan').classList.toggle('on',k==='dan');
+    document.getElementById('at-day').classList.toggle('on',k==='day');
+  }
+  /* ---- 记忆:列表↔详情 + 候选两处同源联动(首页便签 / 记忆层) ---- */
+  const MEMTXT={1:'basePatrols 数组控制巡逻怪数量',2:'巡逻怪删改后要在浏览器里核怪物数',3:'删怪单复核:建议亲验'};
+  const MEMROW={c1:'mm1',c2:'mm2',c3:'mm3',l1:'ml1',f1:'mf1',f2:'mf2',f3:'mf3'};
+  function pickMem(k,rowEl){
+    document.querySelectorAll('.mlist .mrow').forEach(r=>r.classList.remove('sel'));
+    const row=rowEl||(MEMROW[k]?document.getElementById(MEMROW[k]):null);
+    if(row) row.classList.add('sel');
+    document.querySelectorAll('.mdetail').forEach(d=>d.classList.remove('on'));
+    const d=document.getElementById('md-'+k); if(d) d.classList.add('on');
+  }
+  function memRecount(){
+    let c=0;[1,2,3].forEach(i=>{const l=document.getElementById('mm'+i);if(l&&!l.dataset.done)c++});
+    document.getElementById('cnt-cand').textContent=c;
+    document.getElementById('ms-cand').textContent=c;
+    document.getElementById('cnt-formal').textContent=document.querySelectorAll('#formalList .mrow').length;
+  }
+  function candDone(n,adopted){
+    const hl=document.getElementById('mL'+n);
+    if(hl&&!hl.dataset.done){hl.dataset.done='1';
+      if(adopted){hl.style.opacity=.45;hl.querySelectorAll('button').forEach(b=>b.remove());hl.insertAdjacentHTML('beforeend','<span class="weak">✓ 已记住</span>');}
+      else hl.style.display='none';
+    }
+    const row=document.getElementById('mm'+n);
+    if(row&&!row.dataset.done){row.dataset.done='1';row.style.display='none';
+      if(adopted){
+        const b=document.createElement('button');b.className='mrow arrive';
+        b.innerHTML='<span class="t"></span><span class="m">刚转正 · 活跃</span>';
+        b.querySelector('.t').textContent=MEMTXT[n];
+        b.onclick=()=>{document.getElementById('dynMemText').textContent=MEMTXT[n];pickMem('dyn',b)};
+        document.getElementById('formalList').appendChild(b);
+      }
+    }
+    memRecount();
+  }
+  function nextCand(){const i=[1,2,3].find(x=>{const l=document.getElementById('mm'+x);return l&&!l.dataset.done});return i?'c'+i:'f1'}
+  function mdAdopt(ev,n){ev.stopPropagation();candDone(n,true);toast('已转正式,下次出方案自动带上。');pickMem(nextCand());}
+  function mdDrop(ev,n){ev.stopPropagation();candDone(n,false);toast('不记了。');pickMem(nextCand());}
+  function lintKeep(ev){ev.stopPropagation();const r=document.getElementById('ml1');r.style.opacity=.45;r.querySelector('.t').textContent='✓ 已确认仍属实';r.dataset.done='1';document.getElementById('cnt-lint').textContent='0';document.getElementById('ms-lint').textContent='0';toast('已记一条审计:你确认这条仍属实。');pickMem('f1');}
+  function flashNeed(){
+    const g=document.getElementById('g-need');
+    g.scrollIntoView({behavior:'smooth'});
+  }
+  /* ---- 项目页 ---- */
+  function pick(k){
+    document.querySelectorAll('.face').forEach(f=>f.classList.remove('on'));
+    const f=document.getElementById('f-'+k); if(f) f.classList.add('on');
+    document.querySelectorAll('.plist .row').forEach(r=>r.classList.remove('sel'));
+    const p=document.getElementById('p-'+k); if(p) p.classList.add('sel');
+    ptab('dan');
+  }
+  function ptab(k){
+    document.querySelectorAll('.tabpage').forEach(t=>t.classList.remove('on'));
+    document.getElementById('tab-'+k).classList.add('on');
+    document.querySelectorAll('.ptop .tabs button').forEach(b=>b.classList.remove('on'));
+    document.getElementById('pt-'+k).classList.add('on');
+  }
+  function hist(k){ document.getElementById('h-'+k).classList.toggle('on'); }
+  /* ---- 首页:展开/收起(一次一张) ---- */
+  function exp(k,force){
+    const x=document.getElementById('x-'+k);
+    const was=x.classList.contains('on');
+    document.querySelectorAll('.exp').forEach(e=>e.classList.remove('on'));
+    if(force||!was) x.classList.add('on');
+  }
+  /* ---- 计数(hero/待审钮/秘书角标/标题四处同步) ---- */
+  function recount(){
+    let n=0;
+    document.querySelectorAll('#g-need .row').forEach(r=>{ if(r.offsetParent!==null) n++; });
+    let run=0;
+    document.querySelectorAll('#g-run .row').forEach(r=>{ if(r.offsetParent!==null) run++; });
+    document.getElementById('cnt-need').textContent=n;
+    document.getElementById('heroN').textContent=n;
+    document.getElementById('cnt-run').textContent=run;
+    document.getElementById('railN').textContent=n;
+    document.getElementById('pendbtn').textContent=n+' 待审';
+    document.title=(n>0?'('+n+') ':'')+'Codex 治理工作台';
+  }
+  /* ---- 当场办完 ---- */
+  function addRunRow(pj,goal,l2){
+    const g=document.getElementById('g-run');
+    const b=document.createElement('button');
+    b.className='row arrive';
+    b.innerHTML='<span class="st s-run pulse">●</span><span class="bd"><span class="l1"><span class="rpj">'+pj+'</span><span class="goal"></span></span><span class="l2"></span></span>';
+    b.querySelector('.goal').textContent=goal;
+    b.querySelector('.l2').textContent=l2;
+    b.onclick=()=>toast('示意:点开看这单');
+    g.appendChild(b);
+    return b;
+  }
+  function approveEmoji(ev){
+    ev.stopPropagation();
+    document.getElementById('u-emoji').style.display='none';
+    addRunRow('mario-test','给页面标题加个 emoji','正在:准备开工 · 批过了,不再逐步问');
+    recount();
+    toast('开始干了。你可以去干别的,交货或卡住会叫你。');
+  }
+  function continueGuai(ev){
+    ev.stopPropagation();
+    document.getElementById('u-guai').style.display='none';
+    addRunRow('mario-test','把游戏里的巡逻怪加回 1 个','正在:重跑浏览器验收 · 前面完成的步不重做');
+    recount();
+    toast('接着跑了,不用重批。');
+  }
+  function acceptShan(ev){
+    ev.stopPropagation();
+    document.getElementById('u-shan').style.display='none';
+    recount();
+    toast('收货入账。这单沉到项目历史里,随时可回看。');
+  }
+  function memOk(ev,id){ ev.stopPropagation(); candDone(Number(id.slice(2)),true); toast('已转正式记忆(记忆层同步),下次出方案自动带上。'); }
+  function memNo(ev,id){ ev.stopPropagation(); candDone(Number(id.slice(2)),false); toast('不记了。'); }
+  /* ---- 活起来:动态卡(新交货/新方案浮进「等我拍板」,亮一圈) ---- */
+  let seq=0;
+  function mkNeedCard(kind,pj,goal,l2,expHtml){
+    seq++;const uid='dyn'+seq;
+    const wrap=document.createElement('div');wrap.id='u-'+uid;
+    wrap.innerHTML='<button class="row arrive"><span class="st s-pi">'+kind+'</span>'+
+      '<span class="bd"><span class="l1"><span class="rpj">'+pj+'</span><span class="goal"></span></span>'+
+      '<span class="l2"></span></span><span class="tm">刚刚</span></button>'+
+      '<div class="exp" id="x-'+uid+'">'+expHtml+'</div>';
+    wrap.querySelector('.goal').textContent=goal;
+    wrap.querySelector('.l2').textContent=l2;
+    wrap.querySelector('.row').onclick=()=>exp(uid);
+    const g=document.getElementById('g-need');
+    g.insertBefore(wrap,g.children[1]);
+    const row=wrap.querySelector('.row');
+    row.classList.add('ring');setTimeout(()=>row.classList.remove('ring'),2200);
+    recount();
+    return wrap;
+  }
+  function dynClose(wrap){ wrap.style.display='none'; recount(); }
+  /* kt-erp 半路交货:多项目并行推进的场面 */
+  function ktDeliver(){
+    const r=document.getElementById('r-kt'); if(!r) return; r.remove();
+    const wrap=mkNeedCard('看','kt-erp','报表导出加 CSV','交货了:4/4 全绿——过一眼就能收',
+      '<p class="kv"><b>做了什么</b>导出按钮 + CSV 生成,4 个任务全绿</p>'+
+      '<div class="evi">✓ 单测 12/12 · ✓ 手动导出成功(evidence.csv)</div>'+
+      '<div class="memo"><div class="who">全局主管复核(参考,不是闸)</div>与方案一致,验收完整,没有要补的。</div>'+
+      '<div class="btns"><button class="primary">收货</button><button class="ghost">看轨迹</button></div>');
+    const [ok,deep]=wrap.querySelectorAll('.btns button');
+    ok.onclick=(ev)=>{ev.stopPropagation();dynClose(wrap);toast('收货入账。');};
+    deep.onclick=(ev)=>{ev.stopPropagation();goAudit();};
+    toast('kt-erp · 报表导出交货了(全绿)——多项目在替你并行推进');
+  }
+  /* 计分板步进:进度自己走,不吵你 */
+  function jifenAdvance(){
+    const r=document.getElementById('r-jifen'); if(!r) return;
+    r.querySelector('.l2').textContent='正在:浏览器手动验收(第 3/3 步)· 快好了';
+  }
+  /* ---- 说一句(dock):说 → 方案回来 → 批 → 跑 → 交货,全链活演 ---- */
+  function saySubmit(){
+    const v=document.getElementById('sayin').value.trim();
+    if(!v){ toast('说一句目标,带上文件名/功能名更稳'); return; }
+    document.getElementById('sayin').value='';
+    goHome();
+    const runRow=addRunRow('mario-test',v,'正在:出方案 · 真实约 1-2 分钟(演示 7 秒)');
+    recount();
+    toast('在出方案了,好了会进「等我拍板」。');
+    setTimeout(()=>{
+      runRow.remove();
+      const wrap=mkNeedCard('批','mario-test',v,'方案好了:只动 index.html,批了就开工',
+        '<p class="kv"><b>要干什么</b><span class="dyn-goal"></span></p>'+
+        '<p class="kv"><b>会碰什么</b>index.html(1 个文件)</p>'+
+        '<p class="kv"><b>改完怎么验</b>浏览器亲验;游戏功能不受影响</p>'+
+        '<p class="kv"><b>最坏情况</b>改错——git 一步可回滚</p>'+
+        '<div class="memo"><div class="who">全局主管看了一眼(参考,不是闸)</div>范围对得上目标,没越界苗头。</div>'+
+        '<div class="btns"><button class="primary">允许并开始 · 改 1 个文件</button><button class="ghost">先不做</button></div>');
+      wrap.querySelector('.dyn-goal').textContent=v;
+      const [go,no]=wrap.querySelectorAll('.btns button');
+      no.onclick=(ev)=>{ev.stopPropagation();dynClose(wrap);toast('先不做,收起了。');};
+      go.onclick=(ev)=>{
+        ev.stopPropagation();dynClose(wrap);
+        const rr=addRunRow('mario-test',v,'正在:动手改(第 1/2 步)· 批过了,不再逐步问');
+        recount();
+        toast('开始干了。你可以去干别的,交货会叫你。');
+        setTimeout(()=>{
+          rr.remove();
+          const dw=mkNeedCard('看','mario-test',v,'交货了:全绿——浏览器亲验过',
+            '<p class="kv"><b>做了什么</b><span class="dyn-goal2"></span>,一次到位</p>'+
+            '<div class="evi">✓ 改动落盘 · ✓ 浏览器亲验通过</div>'+
+            '<div class="memo"><div class="who">全局主管复核(参考,不是闸)</div>与方案一致,验收完整。</div>'+
+            '<div class="btns"><button class="primary">收货</button></div>');
+          dw.querySelector('.dyn-goal2').textContent=v;
+          dw.querySelector('.btns button').onclick=(ev2)=>{ev2.stopPropagation();dynClose(dw);toast('收货入账。一圈走完:说→批→干→交货。');};
+          toast('「'+v+'」交货了(全绿)——来收货');
+        },12000);
+      };
+      toast('方案好了,进「等我拍板」了——批一下就开工。');
+    },7000);
+  }
+  window.addEventListener('keydown',e=>{
+    if((e.metaKey||e.ctrlKey)&&e.key==='k'){ e.preventDefault(); document.getElementById('sayin').focus(); }
+  });
+  /* ---- 秘书面板(右竖条展开) ---- */
+  function secToggle(open){
+    const r=document.getElementById('rail');
+    const to=(open===undefined)?!r.classList.contains('open'):open;
+    r.classList.toggle('open',to);
+    document.getElementById('railSec').classList.toggle('active',to);
+  }
+  /* ---- 现软件已有的页(原型不展开) ---- */
+  function real(name){ toast(name+':现软件已有这一页,原型不展开(M2 按愿景加深)'); }
+  function m2(name){ toast(name+':M2 再画(先定首页+项目页的调)'); }
+  /* ---- 提示条 ---- */
+  let toastTimer=null;
+  function toast(msg){
+    const t=document.getElementById('toast');
+    t.textContent=msg; t.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>t.classList.remove('on'),3000);
+  }
+  recount();
+  /* 开机后的活演时间线:进度自己走(不吵),交货自己浮上来(叫你)——「不用盯,会叫你」的体感 */
+  setTimeout(jifenAdvance,9000);
+  setTimeout(ktDeliver,16000);
+</script>
+</body>
+</html>

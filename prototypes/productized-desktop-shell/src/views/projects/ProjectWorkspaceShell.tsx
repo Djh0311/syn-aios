@@ -268,26 +268,26 @@ export function ProjectWorkspaceShell({
 type JiaobanMergedLayoutProps = ProjectJiaobanPanelLayout & {
   workflowPanel?: ReactNode;
   onOpenWorkflow: () => void;
-  initialHistoryOpen?: boolean;
+  initialProposalIndexOpen?: boolean;
 };
 
-// 修宪(2026-07-14 深夜·用户拍·交互正本 §四.2)：交办页 = 左工作历史**独立栏**(可一键收起成窄条)
-// + 中交办主卡 + 右画布**动态宽**。取代旧的「32px rail + 历史悬浮覆盖层 + 两栏 panels」。
+// 修宪3号(2026-07-19·用户拍)：交办页 = 左纯对话 + 中历届方案索引 + 右方案/交货实体。
+// 索引继续可一键收成窄条，但它只控制右侧实体，不再控制或滚动左侧对话。
 // 右区宽窄判据：普通说态无信息视图时收窄成提示条；有工序图或用户点开既有定稿物时展开。
 // 方案一到(批态)要在节点上选会话(M1·07-11 收口) → 变宽；运行/交货态同理为宽。
 export function JiaobanMergedLayout({
   phase,
-  history,
   main,
+  proposalIndex,
   previewCanvas = null,
   canvasViews,
   activeCanvasView,
   onCanvasViewChange,
   workflowPanel = null,
   onOpenWorkflow,
-  initialHistoryOpen = true,
+  initialProposalIndexOpen = true,
 }: JiaobanMergedLayoutProps) {
-  const [historyOpen, setHistoryOpen] = useState(initialHistoryOpen);
+  const [proposalIndexOpen, setProposalIndexOpen] = useState(initialProposalIndexOpen);
   const showsPreviewCanvas = Boolean(previewCanvas);
   const showsRuntimePlanGraph = showsPreviewCanvas && (phase === "running" || phase === "done" || phase === "blocked");
   // 右区=信息展开面(07-15 二审稿):多视图时顶部出切换 chips,想看什么切什么;单视图/缺席=旧行为。
@@ -300,39 +300,40 @@ export function JiaobanMergedLayout({
     <div
       className={[
         "jiaoban-merged-layout",
-        historyOpen ? "" : "is-history-collapsed",
+        proposalIndexOpen ? "" : "is-history-collapsed",
         canvasWide ? "is-canvas-wide" : "is-canvas-hint",
       ]
         .filter(Boolean)
         .join(" ")}
       style={{ minWidth: 0, minHeight: 0 }}
     >
-      <aside className="jiaoban-history-column" aria-label="工作历史">
+      <section className="jiaoban-merged-region jiaoban-merged-jiaoban-region spec-scroll" aria-label="主管对话">
+        {main}
+      </section>
+
+      <aside className="jiaoban-history-column" aria-label="历届方案索引">
         <div className="jiaoban-history-column-bar">
           <button
             className="jiaoban-history-column-toggle"
             type="button"
-            aria-controls="jiaoban-history-drawer"
-            aria-expanded={historyOpen}
-            onClick={() => setHistoryOpen((open) => !open)}
-            title={historyOpen ? "收起工作历史" : "展开工作历史"}
+            aria-controls="jiaoban-proposal-index"
+            aria-expanded={proposalIndexOpen}
+            onClick={() => setProposalIndexOpen((open) => !open)}
+            title={proposalIndexOpen ? "收起历届方案" : "展开历届方案"}
           >
-            <span aria-hidden="true">{historyOpen ? "◀" : "▶"}</span>
-            <span className={historyOpen ? "jiaoban-history-column-toggle-text" : "sr-only"}>
-              {historyOpen ? "收起" : "展开工作历史"}
+            <span aria-hidden="true">{proposalIndexOpen ? "◀" : "▶"}</span>
+            <span className={proposalIndexOpen ? "jiaoban-history-column-toggle-text" : "sr-only"}>
+              {proposalIndexOpen ? "收起" : "展开历届方案"}
             </span>
           </button>
         </div>
-        {historyOpen ? (
-          <div className="jiaoban-history-column-body spec-scroll" id="jiaoban-history-drawer">
-            {history}
+        {proposalIndexOpen ? (
+          <div className="jiaoban-history-column-body spec-scroll" id="jiaoban-proposal-index">
+            {proposalIndex}
           </div>
         ) : null}
       </aside>
 
-      <section className="jiaoban-merged-region jiaoban-merged-jiaoban-region spec-scroll" aria-label="交办主区">
-        {main}
-      </section>
       <section
         className="jiaoban-merged-region jiaoban-merged-canvas-region"
         aria-label={

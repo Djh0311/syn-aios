@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Syn 工作台 · 交互原型</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2318231d'/%3E%3Ctext x='32' y='43' text-anchor='middle' font-size='34' font-family='Arial' font-weight='700' fill='white'%3ES%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10M9 20v-6h6v6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10v10.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M3 10h18"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="13" rx="3"/><path d="M12 3v3M8.5 11h.01M15.5 11h.01M8 15h8"/></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M8.2 15.5A7 7 0 1 1 15.8 15.5C14.8 16.2 14.5 17 14.5 18h-5c0-1-.3-1.8-1.3-2.5Z"/></symbol>
+    <symbol id="i-canvas" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M8 6h8M7 8l4 8M17 8l-4 8"/></symbol>
+    <symbol id="i-command" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M12 15h5"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H12v18H7.5A3.5 3.5 0 0 0 4 23Z"/><path d="M20 5.5A3.5 3.5 0 0 0 16.5 2H12v18h4.5A3.5 3.5 0 0 1 20 23Z"/></symbol>
+    <symbol id="i-memory" viewBox="0 0 24 24"><path d="M9 3a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5.2A3 3 0 0 0 6 17v1a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M15 3a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5.2A3 3 0 0 1 18 17v1a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3ZM8 8h4M12 13h4"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7ZM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8Z"/></symbol>
+    <symbol id="i-runner" viewBox="0 0 24 24"><path d="m12 2 8 4.5v9L12 20l-8-4.5v-9Z"/><path d="m8.5 13 2-2-2-2M12.5 14H16"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 5-3.4 8.2-8 9.5C7.4 20.2 4 17 4 12V6Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 12 2-6h6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <button class="mobile-menu-button icon-button" id="mobile-menu-button" type="button" aria-label="打开导航" aria-controls="sidebar" aria-expanded="false">
+        <svg><use href="#i-menu"/></svg>
+      </button>
+      <button class="brand-button" type="button" data-nav="home" aria-label="回到 Syn 首页">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span class="brand-copy"><strong>Syn</strong><small>你的工作台</small></span>
+      </button>
+
+      <button class="project-switcher" type="button" data-nav="projects" aria-label="打开项目：Syn 工作台">
+        <span class="project-dot" aria-hidden="true"></span>
+        <span class="project-switcher-copy"><small>当前项目</small><strong>Syn 工作台</strong></span>
+        <svg aria-hidden="true"><use href="#i-chevron"/></svg>
+      </button>
+
+      <label class="global-search">
+        <svg aria-hidden="true"><use href="#i-search"/></svg>
+        <input type="search" placeholder="搜索项目、对话或记忆" aria-label="搜索项目、对话或记忆">
+        <kbd>⌘ K</kbd>
+      </label>
+
+      <div class="top-actions">
+        <span class="prototype-tag">交互原型</span>
+        <button class="decision-top-button" id="decision-top-button" type="button">
+          <span class="decision-dot" aria-hidden="true"></span>
+          <span id="decision-top-label">1 件需要你决定</span>
+        </button>
+        <span class="health-indicator"><i aria-hidden="true"></i>运行正常</span>
+      </div>
+    </header>
+
+    <aside class="sidebar" id="sidebar">
+      <nav class="sidebar-nav" aria-label="主导航">
+        <section class="nav-group" aria-labelledby="nav-main-label">
+          <p class="nav-label" id="nav-main-label">主入口</p>
+          <button class="nav-item" type="button" data-nav="projects"><svg><use href="#i-folder"/></svg><span>项目</span></button>
+          <button class="nav-item" type="button" data-nav="agents"><svg><use href="#i-bot"/></svg><span>智能体</span></button>
+        </section>
+
+        <section class="nav-group" aria-labelledby="nav-flow-label">
+          <p class="nav-label" id="nav-flow-label">流转</p>
+          <button class="nav-item" type="button" data-nav="ideas"><svg><use href="#i-bulb"/></svg><span>想法箱</span></button>
+          <button class="nav-item" type="button" data-nav="canvas"><svg><use href="#i-canvas"/></svg><span>实验画布</span></button>
+          <button class="nav-item" type="button" data-nav="command"><svg><use href="#i-command"/></svg><span>发令台</span></button>
+        </section>
+
+        <section class="nav-group" aria-labelledby="nav-asset-label">
+          <p class="nav-label" id="nav-asset-label">积累</p>
+          <button class="nav-item" type="button" data-nav="knowledge"><svg><use href="#i-book"/></svg><span>知识库</span></button>
+          <button class="nav-item" type="button" data-nav="memory"><svg><use href="#i-memory"/></svg><span>记忆层</span></button>
+        </section>
+
+        <section class="nav-group" aria-labelledby="nav-core-label">
+          <p class="nav-label" id="nav-core-label">中枢</p>
+          <button class="nav-item" type="button" data-nav="skills"><svg><use href="#i-spark"/></svg><span>技能</span></button>
+          <button class="nav-item" type="button" data-nav="runner"><svg><use href="#i-runner"/></svg><span>运行器</span></button>
+        </section>
+
+        <div class="sidebar-spacer"></div>
+        <button class="nav-item settings-item" type="button" data-nav="settings"><svg><use href="#i-settings"/></svg><span>设置</span></button>
+      </nav>
+      <div class="sidebar-assurance">
+        <svg aria-hidden="true"><use href="#i-shield"/></svg>
+        <span><strong>边界守护已开启</strong><small>关键变化先问你</small></span>
+      </div>
+    </aside>
+
+    <button class="sidebar-scrim" id="sidebar-scrim" type="button" tabindex="-1" aria-hidden="true"></button>
+
+    <main class="main" id="main-content" tabindex="-1">
+      <section class="page active" data-page="home" aria-labelledby="home-title">
+        <div class="page-container home-container">
+          <header class="welcome-head">
+            <div>
+              <p class="eyebrow">上午好，yoyi</p>
+              <h1 id="home-title">今天想推进什么？</h1>
+              <p>不用想该找谁、开什么对话。把目标告诉 Syn，剩下的由工作台安排。</p>
+            </div>
+            <div class="today-status" aria-label="今日状态">
+              <span><strong id="status-running-count">3</strong> 件正在推进</span>
+              <span><strong id="status-decision-count">1</strong> 件等你决定</span>
+            </div>
+          </header>
+
+          <form class="command-composer" id="command-form">
+            <label for="command-input">告诉 Syn 你想完成什么</label>
+            <textarea id="command-input" rows="2" placeholder="例如：把新手第一次打开工作台的流程做得更简单"></textarea>
+            <div class="composer-footer">
+              <span class="composer-help">不用整理成专业需求，说人话就可以。</span>
+              <button class="primary-button" type="submit"><span>交给 Syn</span><svg aria-hidden="true"><use href="#i-send"/></svg></button>
+            </div>
+          </form>
+
+          <section class="section-block" id="decision-section" aria-labelledby="decision-heading">
+            <div class="section-heading">
+              <div><p class="eyebrow" id="decision-section-kicker">只在必须由你决定时出现</p><h2 id="decision-heading">需要你决定</h2></div>
+              <span class="count-badge" id="decision-count-badge">1</span>
+            </div>
+
+            <article class="decision-card" data-decision-surface>
+              <div class="decision-icon"><svg aria-hidden="true"><use href="#i-shield"/></svg></div>
+              <div class="decision-content">
+                <div class="decision-meta"><span class="attention-label">需要你决定</span><span>Syn 工作台 · 项目主管</span></div>
+                <h3>建议让项目主管重新开始这一段工作</h3>
+                <p class="decision-summary">它连续两次用了已经作废的方案。Syn 建议保留原对话，开启一段干净工作，再继续当前任务。</p>
+
+                <div class="assurance-grid">
+                  <div><svg aria-hidden="true"><use href="#i-check"/></svg><span><strong>会完整保留</strong>目标、已确认方案、权限和当前进度</span></div>
+                  <div><svg aria-hidden="true"><use href="#i-shield"/></svg><span><strong>不会改变</strong>项目范围、数据发送范围和你的最终决定权</span></div>
+                  <div><svg aria-hidden="true"><use href="#i-clock"/></svg><span><strong>预计影响</strong>约多 20 秒；若费用可能变化，Syn 会先说明</span></div>
+                </div>
+
+                <details class="reason-details">
+                  <summary>查看为什么</summary>
+                  <div class="reason-body">
+                    <p>Syn 先排除了权限和工具故障，再做了不写文件的干净检查：</p>
+                    <ul>
+                      <li>原对话两次引用了 6 月 30 日已停用的方案。</li>
+                      <li>干净检查能正确读回 7 月 10 日的当前方案和停止条件。</li>
+                      <li>新工作开始前还会再次核对目标、权限和验收；不一致就暂停。</li>
+                    </ul>
+                    <details class="technical-details">
+                      <summary>技术详情</summary>
+                      <dl><div><dt>处理方式</dt><dd>同一能力，新建运行会话</dd></div><div><dt>原因代码</dt><dd>CONTEXT_CONTAMINATION</dd></div><div><dt>授权范围</dt><dd>现有项目授权，不扩大</dd></div></dl>
+                    </details>
+                  </div>
+                </details>
+
+                <div class="decision-actions">
+                  <button class="primary-button" type="button" data-decision-action="accept">按建议继续</button>
+                  <button class="secondary-button" type="button" data-decision-action="pause"><svg aria-hidden="true"><use href="#i-pause"/></svg>先暂停</button>
+                  <button class="text-button" type="button" data-decision-action="later">稍后提醒</button>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <div class="home-grid">
+            <section class="section-block running-section" aria-labelledby="running-heading">
+              <div class="section-heading compact"><div><p class="eyebrow">Syn 正在替你推进</p><h2 id="running-heading">正在进行</h2></div><button class="text-button" type="button" data-nav="projects">查看全部</button></div>
+              <div class="work-list" id="work-list">
+                <button class="work-row" type="button" data-nav="projects"><span class="work-status running"><i></i>开发中</span><span class="work-copy"><strong>工作接续规则</strong><small>正在整理关键角色的提醒流程</small></span><span class="work-progress">第 2 / 4 步</span><svg aria-hidden="true"><use href="#i-chevron"/></svg></button>
+                <button class="work-row" type="button" data-nav="projects"><span class="work-status checking"><i></i>检查中</span><span class="work-copy"><strong>新手首页体验</strong><small>正在检查文字是否足够好懂</small></span><span class="work-progress">刚刚更新</span><svg aria-hidden="true"><use href="#i-chevron"/></svg></button>
+                <button class="work-row" type="button" data-nav="agents" data-key-role-work><span class="work-status waiting"><i></i>等你决定</span><span class="work-copy"><strong>项目主管当前工作</strong><small>建议重新开始这一段工作</small></span><span class="work-progress">已暂停</span><svg aria-hidden="true"><use href="#i-chevron"/></svg></button>
+              </div>
+            </section>
+
+            <aside class="section-block quiet-log" aria-labelledby="quiet-log-heading">
+              <div class="section-heading compact"><div><p class="eyebrow">不打扰，只留痕</p><h2 id="quiet-log-heading">Syn 刚刚替你处理</h2></div></div>
+              <div class="quiet-list" id="quiet-list">
+                <details class="quiet-item"><summary><span class="quiet-icon"><svg><use href="#i-check"/></svg></span><span><strong>报表整理已恢复</strong><small>执行助手卡住后，Syn 已重新接续</small></span><time>2 分钟前</time></summary><div><p>使用同一种能力开启了干净工作，重新核对目标和权限后继续。没有改变范围，也没有增加待办。</p><button class="text-button" type="button" data-nav="runner">查看运行记录</button></div></details>
+                <details class="quiet-item"><summary><span class="quiet-icon"><svg><use href="#i-check"/></svg></span><span><strong>连接已自动恢复</strong><small>短暂中断，没有影响任务内容</small></span><time>18 分钟前</time></summary><div><p>只是底层连接重建，没有放弃原工作，也没有改变使用方式。</p></div></details>
+              </div>
+              <p class="quiet-summary">今天已自动恢复 3 次执行中断，均未改变范围、权限或数据发送方式。</p>
+            </aside>
+          </div>
+
+          <section class="recent-section" aria-labelledby="recent-heading">
+            <div class="section-heading compact"><div><p class="eyebrow">一键回到刚才</p><h2 id="recent-heading">最近工作</h2></div></div>
+            <div class="recent-grid">
+              <button class="recent-card" type="button" data-nav="projects"><span class="recent-mark green">S</span><span><strong>Syn 工作台</strong><small id="recent-syn-status">3 件推进中 · 1 件等你</small></span><svg aria-hidden="true"><use href="#i-arrow"/></svg></button>
+              <button class="recent-card" type="button" data-nav="projects"><span class="recent-mark blue">K</span><span><strong>KT-ERP</strong><small>刚完成库存检查</small></span><svg aria-hidden="true"><use href="#i-arrow"/></svg></button>
+              <button class="recent-card" type="button" data-nav="agents"><span class="recent-mark amber">对</span><span><strong>和 Syn 的设计讨论</strong><small>上次停在：首页应该多简单</small></span><svg aria-hidden="true"><use href="#i-arrow"/></svg></button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="page" data-page="projects" aria-labelledby="projects-title">
+        <div class="page-container standard-container">
+          <header class="page-head"><div><p class="eyebrow">项目</p><h1 id="projects-title">你正在推进的事情</h1><p>每个项目只告诉你现在到哪、下一步是什么、有没有需要你决定。</p></div><button class="primary-button" type="button" data-demo-feedback="这个原型先验证最常用的工作流程。新建项目会在下一轮补成完整流程。">新建项目</button></header>
+          <div class="project-list">
+            <button class="project-card featured" type="button" data-nav="home"><span class="project-card-mark">S</span><span class="project-card-copy"><span class="project-title-row"><strong>Syn 工作台</strong><em id="project-running-count">3 件进行中</em></span><small>当前：让 Syn 自动判断工作何时需要重新开始</small><span class="project-next" id="project-decision-status"><i></i><span>1 件需要你决定</span></span></span><svg aria-hidden="true"><use href="#i-chevron"/></svg></button>
+            <button class="project-card" type="button" data-demo-feedback="KT-ERP 的详细项目页不在本原型范围内；这里先保留真实工作台的项目入口。"><span class="project-card-mark blue">K</span><span class="project-card-copy"><span class="project-title-row"><strong>KT-ERP</strong><em>运行正常</em></span><small>当前：洛阳门店真实订单与库存交接</small><span class="project-next ok"><i></i>没有需要你处理的事</span></span><svg aria-hidden="true"><use href="#i-chevron"/></svg></button>
+            <button class="project-card" type="button" data-demo-feedback="产品研究的详细项目页不在本原型范围内；当前状态是安全暂停。"><span class="project-card-mark neutral">研</span><span class="project-card-copy"><span class="project-title-row"><strong>产品研究</strong><em>已暂停</em></span><small>上次：整理日本乙女市场研究</small><span class="project-next muted"><i></i>随时可以继续</span></span><svg aria-hidden="true"><use href="#i-chevron"/></svg></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" data-page="agents" aria-labelledby="agents-title">
+        <div class="agent-page">
+          <aside class="conversation-list" id="conversation-list" aria-label="角色与对话">
+            <div class="conversation-list-head"><div><p class="eyebrow">智能体</p><h1 id="agents-title">工作对话</h1></div><div class="conversation-list-actions"><button class="icon-button mobile-list-close" id="mobile-list-close" type="button" aria-label="关闭角色列表"><svg><use href="#i-close"/></svg></button><button class="icon-button" type="button" aria-label="新建对话" data-demo-feedback="新对话流程不在本轮原型范围内；首页说一句目标即可体验主要流程。">＋</button></div></div>
+            <label class="list-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="search" placeholder="找对话" aria-label="找对话"></label>
+            <p class="list-group-label">会影响方向</p>
+            <button class="conversation-row selected" type="button" data-role="manager"><span class="avatar role">主</span><span><strong>项目主管</strong><small id="key-role-conversation-status">Syn 工作台 · 已暂停</small></span><i class="attention-pip" id="key-role-attention" aria-label="需要决定"></i></button>
+            <button class="conversation-row" type="button" data-role="advisor"><span class="avatar role">询</span><span><strong>项目咨询</strong><small>Syn 工作台 · 2 小时前</small></span></button>
+            <p class="list-group-label">执行工作</p>
+            <button class="conversation-row" type="button" data-role="frontend"><span class="avatar worker">前</span><span><strong>前端开发</strong><small>正在工作 · 第 2 / 4 步</small></span></button>
+            <button class="conversation-row" type="button" data-role="review"><span class="avatar worker">测</span><span><strong>体验检查</strong><small>正在检查 · 刚刚更新</small></span></button>
+          </aside>
+
+          <button class="agent-list-scrim" id="agent-list-scrim" type="button" tabindex="-1" aria-hidden="true"></button>
+
+          <div class="conversation-main">
+            <header class="conversation-head"><div><button class="secondary-button compact-button mobile-role-button" id="mobile-role-button" type="button" aria-controls="conversation-list" aria-expanded="false"><svg aria-hidden="true"><use href="#i-user"/></svg>切换角色</button><span class="avatar role" id="conversation-role-avatar">主</span><span><strong id="conversation-role-name">项目主管</strong><small id="conversation-role-meta">Syn 工作台 · 会影响方向的角色</small></span></div><button class="secondary-button compact-button" type="button" data-demo-feedback="更多角色设置不在本轮原型范围内；高风险设置会在执行前单独解释。"><svg aria-hidden="true"><use href="#i-more"/></svg>更多</button></header>
+            <div class="conversation-body">
+              <div class="conversation-view active" data-conversation-view="manager">
+                <div class="message assistant"><span class="avatar role">主</span><div><small>项目主管 · 09:42</small><p>我会按 6 月 30 日的方案，把工作方式选择放进左侧栏单独管理。</p></div></div>
+                <div class="message system"><svg aria-hidden="true"><use href="#i-info"/></svg><p>Syn 发现这条回复引用了已停用方案，已暂停继续执行。</p></div>
+                <article class="inline-guard" data-decision-surface>
+                  <div class="inline-guard-head"><span class="decision-icon small"><svg aria-hidden="true"><use href="#i-shield"/></svg></span><div><span class="attention-label">需要你决定</span><h2>建议重新开始这一段工作</h2></div></div>
+                  <p>原对话会保留。目标、已确认方案、权限和进度会完整带过去；使用能力不变。</p>
+                  <details class="reason-details"><summary>查看为什么</summary><div class="reason-body"><ul><li>连续两次引用已停用方案。</li><li>干净检查已正确读回当前方案。</li><li>重新开始前会再次核对权限和验收。</li></ul></div></details>
+                  <div class="decision-actions"><button class="primary-button" type="button" data-decision-action="accept">按建议继续</button><button class="secondary-button" type="button" data-decision-action="pause">先暂停</button><button class="text-button" type="button" data-decision-action="later">稍后提醒</button></div>
+                </article>
+              </div>
+              <div class="conversation-view" data-conversation-view="advisor">
+                <div class="message assistant"><span class="avatar role">询</span><div><small>项目咨询 · 2 小时前</small><p>我把三种首页方向整理成了人话版本。当前建议仍是：先让用户说一句目标，再逐步展开细节。</p></div></div>
+              </div>
+              <div class="conversation-view" data-conversation-view="frontend">
+                <div class="message assistant"><span class="avatar worker">前</span><div><small>前端开发 · 刚刚</small><p>桌面版已经完成，正在检查手机左栏、按钮尺寸和页面宽度。</p></div></div>
+                <div class="message system safe"><svg aria-hidden="true"><use href="#i-check"/></svg><p>一次执行中断已由 Syn 自动恢复，没有改变目标或权限。</p></div>
+              </div>
+              <div class="conversation-view" data-conversation-view="review">
+                <div class="message assistant"><span class="avatar worker">测</span><div><small>体验检查 · 刚刚</small><p>主要流程不需要理解底层技术就能完成。正在检查是否还有看似能点却没有反应的地方。</p></div></div>
+              </div>
+            </div>
+            <form class="chat-composer" id="chat-form"><label class="sr-only" for="chat-input">给当前角色发消息</label><textarea id="chat-input" rows="1" placeholder="告诉当前角色你想怎么做"></textarea><button class="primary-icon-button" type="submit" aria-label="发送"><svg><use href="#i-send"/></svg></button></form>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" data-page="runner" aria-labelledby="runner-title">
+        <div class="page-container standard-container">
+          <header class="page-head"><div><p class="eyebrow">运行器</p><h1 id="runner-title">Syn 怎么替你守住工作</h1><p>你只看规则和结果。更细的运行参数放在技术详情里。</p></div><span class="health-card"><i></i><span><strong>运行正常</strong><small>所有边界检查已开启</small></span></span></header>
+
+          <div class="policy-grid">
+            <article class="policy-card"><span class="policy-icon key"><svg><use href="#i-user"/></svg></span><div><span class="policy-kicker">会影响方向的角色</span><h2>改变前先问你</h2><p>项目主管、咨询和最终判断角色需要换工作方式时，Syn 会先解释原因，再等你决定。</p><span class="policy-status"><svg><use href="#i-check"/></svg>当前已开启</span></div></article>
+            <article class="policy-card"><span class="policy-icon auto"><svg><use href="#i-activity"/></svg></span><div><span class="policy-kicker">受限执行角色</span><h2>小故障自动处理</h2><p>执行助手卡住时，Syn 会在你已允许的范围内恢复；不改变目标、权限或数据发送方式。</p><span class="policy-status"><svg><use href="#i-check"/></svg>今天自动恢复 3 次</span></div></article>
+            <article class="policy-card"><span class="policy-icon stop"><svg><use href="#i-shield"/></svg></span><div><span class="policy-kicker">硬边界</span><h2>不安全就停</h2><p>只要涉及范围、权限、隐私、费用或验收变化，Syn 不会用“继续”按钮绕过去。</p><span class="policy-status"><svg><use href="#i-check"/></svg>没有越界记录</span></div></article>
+          </div>
+
+          <section class="run-history" aria-labelledby="run-history-title">
+            <div class="section-heading compact"><div><p class="eyebrow">可追溯，但不打扰</p><h2 id="run-history-title">最近处理记录</h2></div><button class="secondary-button compact-button" type="button" data-demo-feedback="本原型只有三条示例记录，暂时不需要筛选。">筛选</button></div>
+            <div class="timeline">
+              <article class="timeline-item"><span class="timeline-dot ok"><svg><use href="#i-check"/></svg></span><div><div class="timeline-head"><strong>报表整理已恢复并继续</strong><time>09:38</time></div><p>执行助手卡住后，Syn 使用同一种能力重新开始，核对目标和权限后继续。</p><div class="timeline-tags"><span>执行角色</span><span>范围未变</span><span>检查通过</span></div><details class="technical-details"><summary>技术详情</summary><dl><div><dt>动作</dt><dd>NEW_SESSION_SAME_MODEL</dd></div><div><dt>交接核对</dt><dd>7 / 7 通过</dd></div></dl></details></div></article>
+              <article class="timeline-item" data-key-role-history><span class="timeline-dot neutral"><svg><use href="#i-activity"/></svg></span><div><div class="timeline-head"><strong>项目主管已暂停，等你决定</strong><time>09:42</time></div><p>发现原对话引用停用方案。Syn 只准备了干净交接，没有激活新对话。</p><div class="timeline-tags"><span>关键角色</span><span>等待确认</span></div></div></article>
+              <article class="timeline-item"><span class="timeline-dot ok"><svg><use href="#i-check"/></svg></span><div><div class="timeline-head"><strong>连接中断已恢复</strong><time>09:06</time></div><p>底层连接重建，逻辑工作未改变，因此没有打扰你。</p><div class="timeline-tags"><span>底层恢复</span><span>无内容变化</span></div></div></article>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="page simple-page" data-page="ideas" data-title="想法箱" data-kicker="流转" data-copy="随手记一句，Syn 会帮你归到合适项目；没有经过你确认，不会自动变成正式任务。"></section>
+      <section class="page simple-page" data-page="canvas" data-title="实验画布" data-kicker="流转" data-copy="把复杂工作摊开看。你只需要看清顺序、负责人和哪里正在等待。"></section>
+      <section class="page simple-page" data-page="command" data-title="发令台" data-kicker="流转" data-copy="给工作台下明确指令的地方。普通使用不需要来这里，首页说一句就够。"></section>
+      <section class="page simple-page" data-page="knowledge" data-title="知识库" data-kicker="积累" data-copy="项目的权威资料放在这里。Syn 只从被允许的来源取事实。"></section>
+      <section class="page simple-page" data-page="memory" data-title="记忆层" data-kicker="积累" data-copy="Syn 记住的工作习惯和长期事实。候选记忆先让你看，再成为正式记忆。"></section>
+      <section class="page simple-page" data-page="skills" data-title="技能" data-kicker="中枢" data-copy="Syn 可以复用的能力。普通工作不需要手动选择，只有想管理时才来这里。"></section>
+      <section class="page simple-page" data-page="settings" data-title="设置" data-kicker="工作台" data-copy="管理项目、隐私和自动化边界。危险设置会单独解释影响，不会藏在普通开关里。"></section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

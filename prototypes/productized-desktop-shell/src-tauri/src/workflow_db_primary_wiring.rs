@@ -6,13 +6,19 @@ fn write_m5b_batch1_workflow_state(
     phase: &str,
     value: &Value,
 ) -> Result<(), String> {
-    if let Some(repository) =
-        crate::workbench_sqlite_storage_mode::primary_repository_for_write(path)?
-    {
-        return write_m5b_batch1_workflow_state_db_primary(path, phase, value, &repository);
+    match crate::workbench_sqlite_storage_mode::workflow_state_write_route(path)? {
+        crate::workbench_sqlite_storage_mode::WorkflowStateWriteRoute::DbPrimary(repository) => {
+            write_m5b_batch1_workflow_state_db_primary(path, phase, value, &repository)
+        }
+        crate::workbench_sqlite_storage_mode::WorkflowStateWriteRoute::JsonOnly => {
+            write_validated_workflow_state(path, value)
+        }
+        crate::workbench_sqlite_storage_mode::WorkflowStateWriteRoute::BlockedJsonOnly(
+            degradation,
+        ) => degradation.write_with_degradation_audit(value, |combined| {
+            write_validated_workflow_state(path, combined)
+        }),
     }
-
-    write_validated_workflow_state(path, value)
 }
 
 fn write_m5b_batch1_workflow_state_db_primary(
@@ -35,13 +41,19 @@ fn write_m5b_batch2_workflow_state(
     phase: &str,
     value: &Value,
 ) -> Result<(), String> {
-    if let Some(repository) =
-        crate::workbench_sqlite_storage_mode::primary_repository_for_write(path)?
-    {
-        return write_m5b_batch2_workflow_state_db_primary(path, phase, value, &repository);
+    match crate::workbench_sqlite_storage_mode::workflow_state_write_route(path)? {
+        crate::workbench_sqlite_storage_mode::WorkflowStateWriteRoute::DbPrimary(repository) => {
+            write_m5b_batch2_workflow_state_db_primary(path, phase, value, &repository)
+        }
+        crate::workbench_sqlite_storage_mode::WorkflowStateWriteRoute::JsonOnly => {
+            write_validated_workflow_state(path, value)
+        }
+        crate::workbench_sqlite_storage_mode::WorkflowStateWriteRoute::BlockedJsonOnly(
+            degradation,
+        ) => degradation.write_with_degradation_audit(value, |combined| {
+            write_validated_workflow_state(path, combined)
+        }),
     }
-
-    write_validated_workflow_state(path, value)
 }
 
 fn write_m5b_batch2_workflow_state_db_primary(

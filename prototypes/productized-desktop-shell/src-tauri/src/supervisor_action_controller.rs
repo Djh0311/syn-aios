@@ -2908,5 +2908,5 @@ mod tests {
 
     // P1-E 旧路退役：pilot 问人死胡同(RequestUserDecision)已整体退场，本测试随动作一起删除
     // ——「不冒充用户取消」的语义已由 P1-B `submit_supervisor_resident_answer` 双拒测试承接
-    // （见 supervisor_resident_session_tests.rs），waiting_user 状态词本身不退（保守停/求助仍用它）。
+    // （历史 P1-B 测试已由 S1B transport fixture 取代），waiting_user 状态词本身不退（保守停/求助仍用它）。
 }

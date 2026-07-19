@@ -590,6 +590,11 @@ pub fn run() {
     if let Err(error) = crate::exec_process_registry::reap_registered_orphans(&state.workflow_state_path) {
         eprintln!("执行进程遗留回收未完成：{error}");
     }
+    if let Err(error) = crate::supervisor_session_launcher::reap_supervisor_resident_stale_sessions_at(
+        &state.workflow_state_path,
+    ) {
+        eprintln!("主管一次一发会话陈账对账未完成：{error}");
+    }
     if let Err(error) = crate::workbench_sqlite_storage_mode::initialize_for_startup(
         &state.workflow_state_path,
     ) {

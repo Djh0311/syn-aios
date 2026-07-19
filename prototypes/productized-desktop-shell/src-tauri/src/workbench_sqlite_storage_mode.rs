@@ -14,11 +14,17 @@ use std::sync::{Mutex, OnceLock};
 #[path = "workbench_sqlite_storage_mode_m5c.rs"]
 mod m5c;
 
+#[path = "workbench_sqlite_storage_mode_m5f1.rs"]
+mod m5f1;
+
 // A·只读访问器（系统状态读模型用）。单独成文件而非挂在本文件里：本文件已贴着 shape gate 的
 // 3000 行上限（加 16 行就破线·gate 当场抓到），故照 m5c 先例拆子模块。
 #[path = "workbench_sqlite_storage_mode_read_model.rs"]
 mod read_model;
 
+pub(crate) use m5f1::{
+    primary_repository_for_write, workflow_state_write_route, WorkflowStateWriteRoute,
+};
 pub(crate) use read_model::db_primary_health_snapshot;
 
 pub(crate) const STORAGE_MODE_SCHEMA_VERSION: &str = "storage-mode.v1";
@@ -123,50 +129,6 @@ pub(crate) fn storage_mode_for(workflow_state_path: &Path) -> StorageMode {
     let mode = resolve_storage_mode(workflow_state_path);
     cache.insert(key, mode.clone());
     mode
-}
-
-pub(crate) fn primary_repository_for_write(
-    workflow_state_path: &Path,
-) -> Result<Option<WorkbenchSqliteRepository>, String> {
-    match storage_mode_for(workflow_state_path) {
-        StorageMode::JsonOnly { .. } => Ok(None),
-        StorageMode::DbPrimaryJsonProjection(config) => {
-            let key = workflow_state_path.to_path_buf();
-            let health = health_cache().lock().expect("storage mode health lock");
-            let blocked_reason = match health.get(&key) {
-                Some(DbPrimaryHealth::Ready) => None,
-                Some(DbPrimaryHealth::Blocked(reason)) => Some(reason.clone()),
-                None => {
-                    return Err(
-                        "db_primary_startup_reconciliation_required: refusing DB primary write before startup reconciliation"
-                            .to_string(),
-                    );
-                }
-            };
-            drop(health);
-            if let Some(reason) = blocked_reason {
-                record_blocked_json_only_degradation(&config, &reason);
-                return Ok(None);
-            }
-            WorkbenchSqliteRepository::open_confirmed(&config.repository_config()).map(Some)
-        }
-    }
-}
-
-fn record_blocked_json_only_degradation(config: &DbPrimaryJsonProjectionConfig, reason: &str) {
-    let mut recorded = degradation_audit_recorded()
-        .lock()
-        .expect("storage mode degradation audit lock");
-    if *recorded {
-        return;
-    }
-    *recorded = true;
-    eprintln!(
-        "storage mode=db_primary_json_projection blocked; 已降级 json_only，数据无损，需重 seed 恢复 DB 主写；reason={reason}"
-    );
-    if let Err(error) = append_blocked_json_only_degradation_audit(config, reason) {
-        eprintln!("storage mode=json_only degradation audit failed:{error}");
-    }
 }
 
 // Once a DB commit has succeeded, a failed JSON projection must stop this process from
@@ -699,41 +661,6 @@ fn append_startup_mode_audit(
     };
     WorkbenchSqliteRepository::open_confirmed(&config.repository_config())?
         .append_audit(&audit, None)?;
-    let audits = value
-        .get_mut("audit_events")
-        .and_then(Value::as_array_mut)
-        .ok_or_else(|| "storage_mode_workflow_audit_array_required".to_string())?;
-    audits.push(event);
-    value["updated_at"] = Value::String(timestamp.clone());
-    crate::backup_workflow_state_file(&config.workflow_state_path, &timestamp)?;
-    crate::write_validated_workflow_state(&config.workflow_state_path, &value)
-}
-
-fn append_blocked_json_only_degradation_audit(
-    config: &DbPrimaryJsonProjectionConfig,
-    blocked_reason: &str,
-) -> Result<(), String> {
-    let timestamp = crate::unix_timestamp_string();
-    let mut value = crate::read_workflow_state_value(&config.workflow_state_path)?;
-    let event_id = crate::workflow_audit::audit_event_identity(
-        "storage-mode-degraded-json-only",
-        &config.db_path_hash(),
-        &timestamp,
-    );
-    let event = json!({
-        "event_id": event_id,
-        "event_type": "storage_mode_degraded_json_only",
-        "target_ref": config.db_path_hash(),
-        "actor_ref": "workbench_storage_mode",
-        "source_kind": "workspace_state",
-        "permission_level": "system_runtime",
-        "before_state": "db_primary_json_projection_blocked",
-        "after_state": "json_only",
-        "created_at": timestamp.clone(),
-        "reason": format!(
-            "DB 主写已冻结：{blocked_reason}；本进程已降级 json_only，数据无损；需重新 seed 恢复 DB 主写。"
-        )
-    });
     let audits = value
         .get_mut("audit_events")
         .and_then(Value::as_array_mut)
@@ -1885,6 +1812,7 @@ mod tests {
     }
 
     fn db_primary_fixture(label: &str) -> DbPrimaryFixture {
+        clear_storage_mode_cache_for_tests();
         let root = fresh_root(label);
         let project_root = root.join("fixture-project").display().to_string();
         let (state_path, project_id, workflow_id, work_item_id) =

@@ -1,0 +1,37 @@
+# 测试项目 /Users/yoyi/codex-workflow-mario-test 冻结（2026-07-19 Gate 0）
+
+HEAD = caa02ded684d9e1d92d00c367949fab6f83430d1
+
+git status --short:
+ M README.md
+ M index.html
+?? chain-proof.txt
+?? index.agent-copy.html
+?? jiaoban-plan-a-proof.txt
+?? jiaoban-proof.txt
+?? jiaoban-slice2-proof.txt
+?? s1-step3-proof.txt
+?? s2-3-loop-proof.txt
+?? station3a-control-core-proof-v6.txt
+?? station3a-control-core-proof-v7.txt
+?? station3a-supervisor-write-proof.txt
+?? workflow-fulldispatch-proof.txt
+?? workflow-real-run-proof.txt
+
+全文件 SHA-256（.git 除外，16 个）：
+2b22a952e870a853f2e2b4de898a6fd4cd7b07cb51b23f08d46329fbe87b9599  ./README.md
+10e6b2a6f5a4fc43e21cb9c65ffa6fec6818523bcc485cb00a57b752a7bfafd2  ./chain-proof.txt
+a794af1e4116edf3cdf456c14f20da36394de8bb989c0799a3b017bf48c7f2ee  ./game.js
+0df998f7729cf6070749c8fa61c982b856de9f74a51ab67e800d4aac6050ca55  ./index.agent-copy.html
+204b0a06b216c8b0b1963eff4ec9d606b233eda3e20041c5ee436c62e433ed65  ./index.html
+1d9cef068645859b00d8d3ecf02cea2fd4ef067bad4a51f5ff2b249c0f833fe3  ./jiaoban-plan-a-proof.txt
+a1554d024f1587196faf197166d8fd26f0599a7e55d00818ee931406ddfd9f3f  ./jiaoban-proof.txt
+cb29dade551705406447e009f181ea566c6b40c5dc70603e6714daf9eecebe9d  ./jiaoban-slice2-proof.txt
+453f6fc2dea2377afcd9702f9427892f7a41b3b2230984ee8aa4b6c12eea8aa3  ./s1-step3-proof.txt
+8b1a384c83d1c5b8ccb3f3c296697e8ce0765cd49dad09da064fb7eaca065f41  ./s2-3-loop-proof.txt
+a9b49256fb1a028ec3675722683a6cf2b871d494b4629a1e20be4f086331144c  ./station3a-control-core-proof-v6.txt
+7777cfb8a53af75923f665191c80e5acf83c81436658c0b4cc61a25a420c18f3  ./station3a-control-core-proof-v7.txt
+bcf28baf88f919372335a2ddfa7174fc60b33923559c43ce6583f56f6d186345  ./station3a-supervisor-write-proof.txt
+7c866d69c5d6c52d69ede7e14803b5b6eb2fdacca3b7ef76917ac061b65bde1e  ./styles.css
+c276ab7a2967feef2316691dba138d8f9925477f69bb855ff74003563174f6dc  ./workflow-fulldispatch-proof.txt
+8298738b37a9f9042b05603dcaff5cc24dd682c97bc2d5951e3cb639dae9de77  ./workflow-real-run-proof.txt

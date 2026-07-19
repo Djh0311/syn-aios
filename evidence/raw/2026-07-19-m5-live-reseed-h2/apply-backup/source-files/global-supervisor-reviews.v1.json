@@ -1,0 +1,1817 @@
+{
+  "schema_version": "global_supervisor_review_store.v1",
+  "revision": 64,
+  "updated_at_ms": 1784378073154,
+  "reviews": [
+    {
+      "review_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783395278635",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783395278635",
+      "status": "ready",
+      "overall": "needs_human_check",
+      "summary": "从口供看，核心代码改动大体对得上方案：在 index.html 里少了 1 个怪物，且没有引入额外东西。但浏览器验收未完成，又有一个任务没交口供，所以不能保守判通过。",
+      "suggested_action": "human_verify",
+      "human_note": "请亲自用浏览器打开 /Users/yoyi/codex-workflow-mario-test/index.html，确认怪物为 0 个且开始、移动、跳跃、暂停/继续和胜利流程没有异常。",
+      "tasks": [
+        {
+          "title": "只读定位怪物来源",
+          "verdict": "ok",
+          "comment": "口供说已在 index.html 找到 basePatrols 且当前只有 1 个怪物，和方案的先确认来源相符，但这仍只是 worker 自述。"
+        },
+        {
+          "title": "减少怪物数量",
+          "verdict": "ok",
+          "comment": "口供说已删除唯一怪物配置，把数量从 1 降到 0，符合“减少 1 个、不重设计、不加依赖”的目标。"
+        },
+        {
+          "title": "浏览器验收",
+          "verdict": "issue",
+          "comment": "口供状态不是完成，浏览器手动验收被阻塞，只做了静态检查，无法确认实际画面和操作是否正常。"
+        },
+        {
+          "title": "未交口供任务",
+          "verdict": "issue",
+          "comment": "任务列表有 4 个节点但只收到 3 份口供，缺失的任务无法判断做了什么、是否成功或有无证据。"
+        }
+      ],
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-profile.v1",
+      "created_at_ms": 1783398428761,
+      "updated_at_ms": 1783398428761
+    },
+    {
+      "review_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783417639770",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783417639770",
+      "status": "ready",
+      "overall": "needs_human_check",
+      "summary": "整体看，静态修改方向像是符合方案，但运行验收缺失，且 4 个任务只收到 2 份口供。保守判需要用户亲自确认。",
+      "suggested_action": "human_verify",
+      "human_note": "请直接用浏览器打开 index.html，开始游戏后确认新增巡逻怪可见、会巡逻，并测试碰撞失败/重开流程。",
+      "tasks": [
+        {
+          "title": "planned-task 1",
+          "verdict": "ok",
+          "comment": "自报改动和方案目标基本对上：只改 index.html，在 basePatrols 从 0 个加到 1 个；但证据仍只是 worker 自述，未实地复核。"
+        },
+        {
+          "title": "planned-task 2",
+          "verdict": "issue",
+          "comment": "浏览器 smoke 验收未完成，关键的可见性、移动、碰撞和重开流程都没有运行证据，所以不能判定功能已验过。"
+        },
+        {
+          "title": "planned-task 3",
+          "verdict": "issue",
+          "comment": "任务状态显示 completed，但没有交口供；看不到它做了什么、产出什么、是否验证。"
+        },
+        {
+          "title": "planned-task 4",
+          "verdict": "issue",
+          "comment": "任务状态显示 completed，但没有交口供；这属于黄牌，无法对照方案目标复核。"
+        }
+      ],
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-profile.v1",
+      "created_at_ms": 1783417849154,
+      "updated_at_ms": 1783417849154
+    },
+    {
+      "review_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783431637295",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783431637295",
+      "status": "ready",
+      "overall": "needs_human_check",
+      "summary": "实现口供看起来基本贴合方案，但关键浏览器验收缺失，且有一个任务没交口供；不能保守判通过。",
+      "suggested_action": "human_verify",
+      "human_note": "请直接用浏览器打开 index.html，亲手确认初始 0 分、吃 1 枚金币变 10 分、多枚累加、重开后归 0。",
+      "tasks": [
+        {
+          "title": "任务1：只读定位 index.html",
+          "verdict": "ok",
+          "comment": "定位范围和方案要求对得上，找到了金币、重置和 HUD 位置，只读任务没改文件可以接受。"
+        },
+        {
+          "title": "任务2：实现分数 HUD 与金币 +10",
+          "verdict": "ok",
+          "comment": "自述改动对上方案目标：复用分数显示、拾取同处分支加 10、重开通过 reset 归零，但这仍只是 worker 自报。"
+        },
+        {
+          "title": "任务3：浏览器手动验收",
+          "verdict": "issue",
+          "comment": "黄牌：自报没有完成浏览器验收，初始 0 分、吃金币加分、多枚累加、重开归零都没实际确认。"
+        },
+        {
+          "title": "任务4：未收到口供",
+          "verdict": "issue",
+          "comment": "黄牌：任务节点存在且显示 completed，但没有 worker 口供，无法判断它做了什么、是否有产出或证据。"
+        }
+      ],
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-profile.v1",
+      "created_at_ms": 1783431883421,
+      "updated_at_ms": 1783431883421
+    },
+    {
+      "review_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783587368113",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783587368113",
+      "status": "ready",
+      "overall": "needs_human_check",
+      "summary": "整体看，执行内容大体贴着方案走，没有看到明显扩大复杂度的自述；但最终验收没完成真实浏览器交互确认，只能判需要人工复核。",
+      "suggested_action": "human_verify",
+      "human_note": "请直接用浏览器打开 index.html，亲手验方向键/A-D、空格/上/W、开始/重开、暂停/继续是否都正常。",
+      "tasks": [
+        {
+          "title": "任务1：静态边界核对",
+          "verdict": "ok",
+          "comment": "自报核对了 README 和 index.html，结论与方案的零依赖、无构建、直接打开目标基本对得上，但这仍只是 worker 自述。"
+        },
+        {
+          "title": "任务2：index.html 体验优化",
+          "verdict": "ok",
+          "comment": "自报改动集中在操作说明、状态反馈、按钮文案和按键防滚动，方向符合方案要求，且未报告新增依赖或外部资源。"
+        },
+        {
+          "title": "任务3：README 与界面一致性核对",
+          "verdict": "ok",
+          "comment": "自报未改 README，只核对运行方式、按键和按钮文案一致，和方案的低复杂度边界不冲突。"
+        },
+        {
+          "title": "任务4：最终验收",
+          "verdict": "issue",
+          "comment": "黄牌：worker 自报 status 是 needs_rework，真实浏览器交互读取被权限阻断，所以不能确认浏览器里按键、暂停和重开都已实际可用。"
+        }
+      ],
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-profile.v1",
+      "created_at_ms": 1783588889631,
+      "updated_at_ms": 1783588889631
+    },
+    {
+      "review_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783670671226",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783670671226",
+      "status": "ready",
+      "overall": "needs_human_check",
+      "summary": "本轮四个任务均未交口供，且任务 1 仍需返工；现有信息不足以确认结果符合用户批准的静态单页关卡扩展方案。",
+      "suggested_action": "human_verify",
+      "human_note": "请亲自打开 index.html，从头游玩并检查关卡节奏、通关、死亡重开、暂停恢复和终点触发。",
+      "tasks": [
+        {
+          "title": "任务 1",
+          "verdict": "issue",
+          "comment": "状态为需返工且未交口供，无法判断是否已按方案审阅并扩展 index.html。"
+        },
+        {
+          "title": "任务 2",
+          "verdict": "issue",
+          "comment": "虽显示完成，但没有口供或证据，无法确认既有操作与重置流程是否保留。"
+        },
+        {
+          "title": "任务 3",
+          "verdict": "issue",
+          "comment": "虽显示完成，但未说明产出，无法确认第一关是否形成三段式节奏而非单纯拉长距离。"
+        },
+        {
+          "title": "任务 4",
+          "verdict": "issue",
+          "comment": "虽显示完成，但未交浏览器游玩结果，无法确认通关、死亡重开、暂停恢复和终点触发。"
+        }
+      ],
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-profile.v1",
+      "created_at_ms": 1783671056589,
+      "updated_at_ms": 1783671056589
+    },
+    {
+      "review_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783674174155",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783674174155",
+      "status": "ready",
+      "overall": "needs_human_check",
+      "summary": "现有口供只证明有人做过只读审阅，未提供第一关扩展的明确改动与实际游玩证据。浏览器验收明确未完成，因此不能确认方案目标已达成。",
+      "suggested_action": "human_verify",
+      "human_note": "请亲手打开 index.html，从头游玩确认第一关确有三段节奏变化，并检查死亡重开、暂停恢复和终点触发。",
+      "tasks": [
+        {
+          "title": "任务1：现状审阅与定位",
+          "verdict": "ok",
+          "comment": "自述已读 index.html 和 README 并定位关卡、重置和终点逻辑，但这只是未核实的审阅口供。"
+        },
+        {
+          "title": "任务2：浏览器实际验收",
+          "verdict": "issue",
+          "comment": "状态为 waiting_decision，且自述无可用浏览器，开始、跳跃、重开、暂停和终点均未实际验收。"
+        },
+        {
+          "title": "任务3：第一关三段式扩展实现",
+          "verdict": "issue",
+          "comment": "节点虽显示 completed，但没有收到口供，无法判断是否真的改了第一关或是否符合三段式目标。"
+        },
+        {
+          "title": "任务4：改动后的复核",
+          "verdict": "issue",
+          "comment": "节点虽显示 completed，但没有收到口供，也没有可核对的产出或验收说明。"
+        }
+      ],
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-profile.v1",
+      "created_at_ms": 1783674567686,
+      "updated_at_ms": 1783674567686
+    },
+    {
+      "review_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783728669411",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783728669411",
+      "status": "ready",
+      "overall": "needs_human_check",
+      "summary": "本轮停在等待决定，其余节点仍未执行；现有口供只说明未开展核验，不能判断项目实际状态。",
+      "suggested_action": "human_verify",
+      "human_note": "请先只读核对项目文件清单、README、index.html 及引用链，再决定是否授权浏览器实测。",
+      "tasks": [
+        {
+          "title": "项目只读核验",
+          "verdict": "issue",
+          "comment": "任务自报 blocked，且任务节点为 0 却有 1 份口供；未读取任何文件，方案第 7—10 步均无结果，无法核实 README 声明。"
+        }
+      ],
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-profile.v1",
+      "created_at_ms": 1783728731698,
+      "updated_at_ms": 1783728731698
+    },
+    {
+      "review_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783730827051",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783730827051",
+      "status": "ready",
+      "overall": "needs_human_check",
+      "summary": "本轮没有形成任何可复核的项目证据，方案中的文件、功能及 workflow 测试均仍未验证；且任务节点数量与口供数量不一致，执行记录本身也需人工确认。",
+      "suggested_action": "human_verify",
+      "human_note": "请确认执行环境具备只读文件、Shell、Git 和浏览器能力，并按原方案重新完成核验及提交逐项证据。",
+      "tasks": [
+        {
+          "title": "计划任务1",
+          "verdict": "issue",
+          "comment": "worker 自报 blocked，实际未读取 README、目录、Git 或浏览器，因而没有完成方案要求的只读核验。"
+        },
+        {
+          "title": "计划任务2",
+          "verdict": "issue",
+          "comment": "仍为 pending 且没有口供，无法判断是否执行或产生证据。"
+        },
+        {
+          "title": "计划任务3",
+          "verdict": "issue",
+          "comment": "仍为 pending 且没有口供，无法判断是否执行或产生证据。"
+        },
+        {
+          "title": "计划任务4",
+          "verdict": "issue",
+          "comment": "仍为 pending 且没有口供，无法判断是否执行或产生证据。"
+        },
+        {
+          "title": "计划任务5",
+          "verdict": "issue",
+          "comment": "仍为 pending 且没有口供，无法判断是否执行或产生证据。"
+        },
+        {
+          "title": "计划任务6",
+          "verdict": "issue",
+          "comment": "仍为 pending 且没有口供，无法判断是否执行或产生证据。"
+        }
+      ],
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-profile.v1",
+      "created_at_ms": 1783730879283,
+      "updated_at_ms": 1783730879283
+    },
+    {
+      "review_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783735539001",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783735539001",
+      "status": "ready",
+      "overall": "needs_human_check",
+      "summary": "本轮没有形成可复核的项目事实，唯一口供也是 blocked；当前只能维持原方案中的“尚未验证”结论。",
+      "suggested_action": "human_verify",
+      "human_note": "请先亲手或换用具备只读文件与浏览器能力的执行者核验文件清单、Git 版本、源码功能、workflow 证据和实际运行情况。",
+      "tasks": [
+        {
+          "title": "planned-task 1",
+          "verdict": "issue",
+          "comment": "worker 自报因缺少 read_file 而阻塞，未核验任何文件，方案要求的文件清单与 index.html 存在性仍未知。"
+        },
+        {
+          "title": "planned-task 2",
+          "verdict": "issue",
+          "comment": "任务仍为 pending 且没有口供，Git 状态、提交版本及测试记录的版本关联均未核验。"
+        },
+        {
+          "title": "planned-task 3",
+          "verdict": "issue",
+          "comment": "任务仍为 pending 且没有口供，入口、本地引用、依赖和静态项目声明均无核验结果。"
+        },
+        {
+          "title": "planned-task 4",
+          "verdict": "issue",
+          "comment": "任务仍为 pending 且没有口供，移动、跳跃、开始、重开、暂停和继续的实现情况均未知。"
+        },
+        {
+          "title": "planned-task 5",
+          "verdict": "issue",
+          "comment": "任务仍为 pending 且没有口供，两项 workflow 通过记录仍只有 README 声明，没有独立证据。"
+        },
+        {
+          "title": "planned-task 6",
+          "verdict": "issue",
+          "comment": "任务仍为 pending 且没有口供，浏览器只读运行检查和最终核验报告均未完成。"
+        }
+      ],
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-profile.v1",
+      "created_at_ms": 1783735604421,
+      "updated_at_ms": 1783735604421
+    },
+    {
+      "review_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783781268707",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783781268707",
+      "status": "ready",
+      "overall": "needs_human_check",
+      "summary": "自述内容与方案的只读核对目标基本对得上，但任务节点数与口供数不一致，且所有证据均未独立核实。",
+      "suggested_action": "human_verify",
+      "human_note": "请亲手用浏览器直接打开 index.html，确认游戏能加载、操作和正常开始。",
+      "tasks": [
+        {
+          "title": "根目录与入口只读核对",
+          "verdict": "issue",
+          "comment": "自述已完成方案要求的静态核对并确认 index.html 存在，但状态是 reported_completed 而非 done，且未做浏览器冒烟，运行可用性仍无法确认。"
+        }
+      ],
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-profile.v1",
+      "created_at_ms": 1783781396307,
+      "updated_at_ms": 1783781396307
+    }
+  ],
+  "audit_events": [
+    {
+      "event_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783395278635:1783398428761",
+      "event_type": "global_supervisor_review_recorded",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783395278635",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783398428761
+    },
+    {
+      "event_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783417639770:1783417849154",
+      "event_type": "global_supervisor_review_recorded",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783417639770",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783417849154
+    },
+    {
+      "event_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783431637295:1783431883421",
+      "event_type": "global_supervisor_review_recorded",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783431637295",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783431883421
+    },
+    {
+      "event_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783587368113:1783588889631",
+      "event_type": "global_supervisor_review_recorded",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783587368113",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783588889631
+    },
+    {
+      "event_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783670671226:1783671056589",
+      "event_type": "global_supervisor_review_recorded",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783670671226",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783671056589
+    },
+    {
+      "event_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783674174155:1783674567686",
+      "event_type": "global_supervisor_review_recorded",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783674174155",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783674567686
+    },
+    {
+      "event_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783728669411:1783728731698",
+      "event_type": "global_supervisor_review_recorded",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783728669411",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783728731698
+    },
+    {
+      "event_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783730827051:1783730879283",
+      "event_type": "global_supervisor_review_recorded",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783730827051",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783730879283
+    },
+    {
+      "event_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783735539001:1783735604421",
+      "event_type": "global_supervisor_review_recorded",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783735539001",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783735604421
+    },
+    {
+      "event_id": "global-supervisor-review:workflow:users-yoyi-codex-workflow-mario-test:default:1783781268707:1783781396307",
+      "event_type": "global_supervisor_review_recorded",
+      "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:default",
+      "chain_started_at": "1783781268707",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783781396307
+    }
+  ],
+  "boundary_reviews": [
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783411986544",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783411986544",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "用户目标是判断下一步做什么，不是明确要求立刻改文件；只读方案总体对得上，不算“要动手却不改文件”的错配。",
+        "但方案第 6 步要做浏览器手测，方案范围却只给了 read_file 工具，执行能力和验收动作不完全一致。",
+        "没有越界路径、写 ~/.codex、git push 或不可逆删除苗头。",
+        "风险漏报不明显，已点出证据不足和不宜过早引依赖。"
+      ],
+      "summary": "总体方向是稳的：先验收现状再决定修 bug 还是小增量。需要补清楚浏览器手测是否真的被允许执行，否则验收标准比工具范围多了一截。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783422255272,
+      "updated_at_ms": 1783422255272
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-mvp-ip-mvp-ip:1782636166789",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-mvp-ip-mvp-ip:1782636166789",
+      "status": "ready",
+      "verdict": "mismatch",
+      "points": [
+        "用户要快速做一个小游戏，明显是动手交付；但方案写根为空、角色是咨询、工具只有 read_file，这方案不会改任何文件。",
+        "方案步骤里有“补齐玩法闭环”和“浏览器验证”，但当前权限范围和工具配置无法执行这些动作，验收标准和执行能力不匹配。",
+        "IP 风险、无依赖约束、未读代码风险都有提到；未见越界到测试项目外路径、~/.codex、git push 或不可逆删除。"
+      ],
+      "summary": "目标复述方向基本合理：做原创横版跳跃 MVP，不复刻马里奥 IP。但作为执行方案它是错配的：用户要做出来，方案却只能只读咨询，批了也不会产生游戏改动。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783422957276,
+      "updated_at_ms": 1783422957276
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783431025925",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783431025925",
+      "status": "ready",
+      "verdict": "looks_ok",
+      "points": [
+        "目标和方案对得上：会改 index.html，新增计分显示、金币加 10、重开归零。",
+        "没有看到越界动作：未写 ~/.codex、未 git push、未删数据，写根在测试项目内。",
+        "步骤和验收基本齐：先确认金币/重置逻辑，再改 HUD 和计分，最后浏览器手动验收。",
+        "主要不确定点已自列：还没读 index.html，需执行时确认现有碰撞和消费逻辑。"
+      ],
+      "summary": "整体范围贴合用户目标，方案不是纯建议，验收也能覆盖核心行为。执行时注意只动 index.html，别顺手扩展最高分、本地存储或依赖。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783431026114,
+      "updated_at_ms": 1783431026114
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783432268321",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783432268321",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "用户目标是了解改进点，不是要求立刻改文件，所以写根为空不算错配。",
+        "但方案一边说仅基于 README，一边又把读取 index.html 作为关键步骤；如果不实际读源码，就只能给泛泛建议，答不准“代码还有哪些可以改进”。",
+        "未看到越界路径、写 ~/.codex、git push 或删除数据等苗头。",
+        "步骤方向基本对，但验收应更明确：最终要产出基于 index.html 证据的改进清单，而不是只列候选方向。"
+      ],
+      "summary": "整体可以走只读审查路线，但要把边界说清：必须读源码后再下判断；只基于 README 的咨询不足以完成用户目标。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783432268512,
+      "updated_at_ms": 1783432268512
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783586710246",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783586710246",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "用户只是想知道有没有简单优化，不是明确要动手改，所以写根为空不算错配。",
+        "方案主要依据 README，自己也承认没读 index.html；要判断哪些优化真的值得做，证据偏弱。",
+        "步骤有方向，但验收标准更像优化清单；如果只是咨询可以接受，如果要落到可验证结论，至少应补读 index.html 或浏览器打开检查。",
+        "没看到越界路径、写 ~/.codex、git push、删除数据这类苗头。"
+      ],
+      "summary": "范围大体对得上：这是咨询方案，不是实施方案。主要问题是证据不足，不能只靠 README 判断游戏体验和状态问题是否真实存在。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783586710713,
+      "updated_at_ms": 1783586710713
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783587143882",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783587143882",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标大体对得上：用户要小范围体验优化并交给下游落实，方案有写根、有目标文件、有下游执行口径，不是空转纯建议。",
+        "主要留意点是方案还没读 index.html，具体改哪些状态提示和输入处理只能算方向，不算已锁定的可执行补丁。",
+        "没有看到越界苗头：写根限制在测试项目内，也没出现 ~/.codex、git push、删除数据或引入依赖。",
+        "验收项基本齐，但建议下游先读 index.html 后把“检查并完善”收敛成明确改动点再动手。"
+      ],
+      "summary": "可以放行给下游做小范围实现，但要把当前方案当成方向性执行单，不要当成已经验证过源码后的精确改法。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783587144174,
+      "updated_at_ms": 1783587144174
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783670505603",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783670505603",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标和方案基本对得上：会实际改 index.html，并用完整游玩验证，不是纯建议。",
+        "关卡数据和绘制逻辑尚未审阅，三段式设计能否按现有实现落地仍待确认。",
+        "“至少两处可感知变化”有验收方向，但具体改哪些平台、路线或机制还没写死。"
+      ],
+      "summary": "范围未越界，步骤和验证也齐；先确认 index.html 的实现方式，再把具体关卡改动定下来即可。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783670505883,
+      "updated_at_ms": 1783670505883
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783691352057",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783691352057",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标与只读咨询方案基本对得上，写根为空不是错配。",
+        "方案把浏览器实测和 Git 状态核验列入验收，但现有工具只有 read_file，当前无法完成这些核验。",
+        "“缺少 index.html 及源码”应表述为“当前材料未提供”，不能据此断言项目文件实际缺失。"
+      ],
+      "summary": "现有内容足以形成初步状态和证据缺口清单，但应区分已确认事实与待核验事项，并补齐执行后续核验所需的工具或证据。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783691352305,
+      "updated_at_ms": 1783691352305
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783692170880",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783692170880",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标本身是梳理现有证据并给出只读核验方向，所以写根为空是对的，不是错配。",
+        "现状、证据缺口、后续步骤和验收产物基本齐全。",
+        "要留意工具范围：仅有 read_file，却把 git 状态核验和浏览器实测列入验收；若要求本方案直接完成验收，现有工具不够，若只是交给下游的核验方向则成立。"
+      ],
+      "summary": "总体与用户目标对得上，也没有明显越界苗头；唯一需要说清的是后续核验项究竟只是建议，还是本方案必须实际完成。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783692171089,
+      "updated_at_ms": 1783692171089
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783727213829",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783727213829",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标是梳理现状并规划只读核验，写根为空与目标一致，不是错配。",
+        "文档声明、已验证事实和证据缺口区分清楚，后续核验步骤也基本齐全。",
+        "验收标准混入了尚未执行的下游核验；建议把本轮验收限定为产出状态结论、证据缺口和只读核验计划。",
+        "第11步需要浏览器能力和另行授权，当前角色与 read_file 工具无法执行；方案已说明下游执行，但应单列为后续验收。"
+      ],
+      "summary": "总体范围与目标对得上，没有越界写入苗头。主要需理清本轮咨询交付与后续只读执行的验收边界。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783727214000,
+      "updated_at_ms": 1783727214000
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-workf-readme-workflow:1783730114402",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-workf-readme-workflow:1783730114402",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "用户目标本来就是梳理现状并规划后续只读核验，写根为空不构成错配。",
+        "方案的事实分层、证据缺口、核验步骤和验收标准基本齐全。",
+        "当前工具只有 read_file，却计划执行 Git 命令和浏览器检查；若后续真要完成这些验收，需要补足只读命令与浏览器能力。",
+        "“未注入源码”只阻碍验证游戏，不阻碍完成本轮材料梳理，标成 blocker 容易让人误以为整项工作无法推进。"
+      ],
+      "summary": "方向与目标对得上，没有明显越界；主要要修正工具能力与验收动作不匹配，并收窄 blocker 的表述。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783730114584,
+      "updated_at_ms": 1783730114584
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-index-html-readme-index-html-readme-md-index-html:1783778958339",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-index-html-readme-index-html-readme-md-index-html:1783778958339",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标是只读核对并报告实际状态，写根为空不构成错配。",
+        "步骤与验收基本对应，但“若需确认可用性”条件模糊；本目标只要求入口和文件构成，浏览器冒烟应明确为可选项。",
+        "工具只列 read_file，需确认它能列出项目根目录；否则无法完成“实际文件构成”的核对。"
+      ],
+      "summary": "方案范围没有越界，且已说明 README 不能代替实际证据。补清目录枚举方式和浏览器验证是否属于本次验收即可。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783778958500,
+      "updated_at_ms": 1783778958500
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-index-html-readme-index-html:1783782036953",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-index-html-readme-index-html:1783782036953",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标是核对并报告实际状态，方案保持只读且不改文件，范围对得上。",
+        "方案要求列出根文件树和浏览器运行验证，但工具只写了 read_file，未覆盖目录枚举和浏览器操作，执行条件不齐。",
+        "验收步骤明确；需先补足文件树读取与浏览器验证能力，才能产出“实际状态”结论。"
+      ],
+      "summary": "方向正确、无明显越界，也已报告关键证据缺口；但现有工具配置不足以完成方案承诺的实际核验。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783782037114,
+      "updated_at_ms": 1783782037114
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783791258901",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783791258901",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标不要求动手删文件，写根为空不构成错配；但当前方案只能索要材料，尚不能完成“核查关系并给出安全删除清单”。",
+        "步骤、验收和无法删除的风险都写清了；拿到源码、八个 proof 文件及相关 Git diff 前，不应输出任何可安全删除结论。"
+      ],
+      "summary": "范围没有明显越界，也未见不可逆操作；这是材料补齐方案，不是可交付考古结论。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783791259408,
+      "updated_at_ms": 1783791259408
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783796285948",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783796285948",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标与步骤对得上：只创建根目录目标文件，并逐字验收内容。",
+        "当前无法确认目标文件不存在；若已存在，应停止，不能覆盖。",
+        "写根覆盖整个项目根，执行时需以实际变更清单确认只新增这一个文件。"
+      ],
+      "summary": "方案基本符合目标，批准后应先确认文件不存在，再写入并核对无额外换行及变更范围。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783796286177,
+      "updated_at_ms": 1783796286177
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797052292",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797052292",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标、写入范围、执行步骤和验收都对得上，会实际新增并核验目标文件。",
+        "同名文件是否已存在尚未确认；若存在，创建动作可能变成覆盖，应先核实。"
+      ],
+      "summary": "方案可执行，未见越界操作；唯一需留意的是同名文件的既有状态。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783797052513,
+      "updated_at_ms": 1783797052513
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797551168",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797551168",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标、写根和仅新增该文件的范围对得上，且已明确无额外换行的字节验收。",
+        "`git diff -- station3a-supervisor-write-proof.txt`默认不会显示未跟踪的新文件，不能单靠它确认“仅新增”；应补充未跟踪文件检查。"
+      ],
+      "summary": "方案会实际创建目标文件，步骤和验收基本齐全；补足新增文件的变更检查即可。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783797551325,
+      "updated_at_ms": 1783797551325
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797884483",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797884483",
+      "status": "ready",
+      "verdict": "looks_ok",
+      "points": [],
+      "summary": "目标、写入步骤和验收均对得上：会创建指定单文件、写入精确字节且无换行，并核对实际改动。目标文件若已存在会停止，符合“仅创建”的边界。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783797884639,
+      "updated_at_ms": 1783797884639
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783799061357",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783799061357",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标、主管派 worker、读取报告后终标 PASS 的闭环对得上。",
+        "指定字串“station3a supervisor worker write verified”按 ASCII 计为 43 字节，不是方案写的 39 字节；验收会因此误判，需先更正。",
+        "写根覆盖整个项目，虽步骤限制只动目标文件，但边界授权仍偏宽，需靠执行前后基线复核兜底。"
+      ],
+      "summary": "方案总体能完成目标，但字节长度存在明确错误；修正后再执行更稳妥。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783799061531,
+      "updated_at_ms": 1783799061531
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783799641093",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783799641093",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标、单 worker、条件写入、基线比对和 PASS/停止验收基本对得上。",
+        "写根写成整个测试项目，和“唯一允许文件”不完全一致；执行权限范围最好收紧到 station3a-supervisor-write-proof.txt。"
+      ],
+      "summary": "方案步骤和验收齐全，也列出了关键风险；主要需防止写根过宽带来越界写入空间。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783799641256,
+      "updated_at_ms": 1783799641256
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-3a-3a:1783800163414",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-3a-3a:1783800163414",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标与方案对得上：会先采集基线、只派发一个受限 worker 条件写入，再由主管读报告复核后给 PASS。",
+        "允许写根覆盖整个测试项目，虽步骤说 worker 仅能写目标文件，但执行时应实际收紧到该单一文件，避免权限描述与验收边界不一致。",
+        "需明确 worker 报告是对话回传还是文件；若落盘，报告文件会违反“仅目标文件可新增变化”的验收条件。"
+      ],
+      "summary": "方案步骤、验证和风险基本齐全，没有看到测试项目外路径、写 ~/.codex、push 或不可逆删除。补清 worker 的实际写权限与报告载体后即可执行。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783800163581,
+      "updated_at_ms": 1783800163581
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783824654810",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783824654810",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标和方案基本对得上：满足前置条件后会由 worker 在本项目内写入证明文件，主管再按派发前基线和报告判定 PASS。",
+        "写入路径在允许写根内，未见测试项目外路径、写 ~/.codex、git push 或不可逆删除。",
+        "步骤和验收链条完整，但当前材料尚不能证明本项目确有可派发 worker、报告约定或可归因的基线。",
+        "方案把“基线干净”设为写入前提；若只是存在可识别的既有改动，可能比用户目标要求更严格，应由用户确认。"
+      ],
+      "summary": "可作为条件性执行方案，但应先在当前项目核实 worker、报告和基线，并确认是否必须要求基线完全干净。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783824654944,
+      "updated_at_ms": 1783824654944
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-station3a-pass-station3a-pass-worker:1783830160640",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-station3a-pass-station3a-pass-worker:1783830160640",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标、唯一写入物、worker 条件执行和主管复核链条是对得上的。",
+        "但 station3a 的具体前置条件尚未定义，当前只能按计划阻断 PASS，不能靠 README 旧文案补证。",
+        "需先定死精确内容是否包含末尾换行，否则字节验收会有歧义。"
+      ],
+      "summary": "方案范围没有明显越界，步骤和验收也齐；补齐可核对的前置条件与字节口径后再执行。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783830160770,
+      "updated_at_ms": 1783830160770
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-utf-8-38-station3a-contr-utf-8-38-station3a-control-core-proof-v2-txt-pass:1783837742592",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-utf-8-38-station3a-contr-utf-8-38-station3a-control-core-proof-v2-txt-pass:1783837742592",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标、写根、单 worker 派发和受控写入步骤基本对得上，不是纯建议方案。",
+        "要把“唯一变更”口径写死：若要求整个工作区只变这一个文件，发现写入前已有变更就应停止；目前“相对基线唯一变化”可能允许脏工作区。",
+        "方案已有明确步骤、字节级验收和无换行校验；未见越界路径、写 ~/.codex、push 或不可逆删除。"
+      ],
+      "summary": "方案总体可执行，但“唯一变更”是相对写入前基线还是整个工作区必须干净，仍需用户确认后才能据此判 PASS。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783837742792,
+      "updated_at_ms": 1783837742792
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783841711806",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783841711806",
+      "status": "ready",
+      "verdict": "mismatch",
+      "points": [
+        "目标指定的 ASCII 文本实际是 37 字节，不是 38 字节；方案的计数相加也算错了。",
+        "因此无法同时满足“内容精确相等”和“恰为 38 字节”，需用户先决定改文本还是改验收字节数。"
+      ],
+      "summary": "范围、单 worker 和回验流程都对得上，但核心字节验收自相矛盾，当前方案不能按目标验收通过。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783841712015,
+      "updated_at_ms": 1783841712015
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783842208993",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783842208993",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标文件、38 字节和无末尾换行的写入与回读步骤对得上，写根也在项目内。",
+        "v3 authorization、work item、supervisor run 的实际创建入口、记录位置和唯一 worker 身份证据未明确，当前无法确认这条审计链能落地。",
+        "现有工具清单未列出逐字节或文件末尾检查工具；需确保交付记录能可靠证明无 LF/CRLF，而不只是文本显示一致。"
+      ],
+      "summary": "方案没有明显越界，也不是纯建议；但审计实体和单-worker 证据的落地方式尚不清楚，验收前应补齐可核对的记录来源。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783842209134,
+      "updated_at_ms": 1783842209134
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783844090607",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783844090607",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标与方案基本对得上：方案包含通过 UI 新建 v4 流程、仅派一个 worker、实际写入文件及结构化回程验收，不是纯建议。",
+        "最大前提未证实：README 没有 UI 工作流或角色机制依据；应先实际展示入口，否则后续步骤无法确认可执行。",
+        "“全新”应在 UI 中明确核验 v4 标识此前不存在，避免只是新建了名称相同的记录。",
+        "验收项齐全，且已覆盖短文本被改写、自动追加换行和 supervisor 提前 PASS 的主要风险。"
+      ],
+      "summary": "方案范围未明显越界，步骤和验收能覆盖目标；但 UI 机制是否存在仍是阻断性未知，先核验入口再执行。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783844090815,
+      "updated_at_ms": 1783844090815
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-v4-worker-ui-v4-worker-ui:1783846797277",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-v4-worker-ui-v4-worker-ui:1783846797277",
+      "status": "ready",
+      "verdict": "mismatch",
+      "points": [
+        "目标要求全新 v5，但方案复述和标题写成“不可复用 v4”，版本对象对不上。",
+        "方案要求仅通过 UI 新建，但列出的工具只有读写文件工具，没有 UI 操作能力；这项执行前提未被风险明确覆盖。",
+        "步骤和验收链条基本齐全，写根也未见越界路径或不可逆操作。"
+      ],
+      "summary": "核心目标是 v5 的纯 UI 新建与验证，方案却混入 v4 表述，需先改正；并确认实际具备可用的 UI 操作入口后再执行。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783846797469,
+      "updated_at_ms": 1783846797469
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-finalize-pa-finalize-pass:1783850158844",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-finalize-pa-finalize-pass:1783850158844",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标与方案方向一致：会在项目根内写入指定证明文件，并要求唯一 worker 和主管审查后报告。",
+        "但现有材料未证明 UI 授权链、账本和 worker 回程契约真实存在；这些前置证据补不齐，就不能把流程判为通过。",
+        "步骤和字节验收都写得明确，未见越出项目根、写 ~/.codex、git push 或不可逆删除的苗头。"
+      ],
+      "summary": "方案没有明显范围错配，但能否执行并 finalize pass 取决于控制系统与回程契约能否先被证实。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783850159096,
+      "updated_at_ms": 1783850159096
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-proof-proof:1783851938159",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-proof-proof:1783851938159",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标与方案基本对得上：新建控制对象、单次派发唯一 worker、创建并字节验收 proof 文件。",
+        "方案只列了文件读写工具，没说明如何实际操作 UI 创建 authorization、work item 和 supervisor run，控制闭环能否执行拿不准。",
+        "验收应记录并核对三个新对象的唯一 ID、worker 派发次数及 finalize 结果，才能证明没有复用旧记录。",
+        "应明确文件内容以英文感叹号结束，中文句号不属于内容，避免破坏 39 bytes 验收。"
+      ],
+      "summary": "文件范围和字节验收都清楚，也没有明显越界路径；主要缺口是控制面操作手段及“全新、单次”的可核验证据还不够具体。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783851938362,
+      "updated_at_ms": 1784186929444
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783869010610",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783869010610",
+      "status": "ready",
+      "verdict": "mismatch",
+      "points": [
+        "目标是盘点 Demo 现状并列出前 5 问题，但方案只读 README，不能核对实际实现。",
+        "写根为空本身不冲突：用户没有要求改文件；问题在于方案无法产出可信的现状盘点。",
+        "后续只读源码盘点写在验收里，却不是本方案已执行步骤，验收闭环不完整。"
+      ],
+      "summary": "应先只读核对 README、index.html、styles.css、game.js，再给前 5 个可证实问题和 50 字总评；当前方案最多能报告证据不足。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783869011177,
+      "updated_at_ms": 1783869011177
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783870978519",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783870978519",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标是只读侦察，方案不改文件，范围对得上。",
+        "方案要求浏览器验证，但工具只列 read_file，能否实际核验运行行为拿不准。",
+        "已说明源码缺失、无法运行和手感判断的风险，且验收路径明确。"
+      ],
+      "summary": "总体可行；先确认只读环境是否具备浏览器核验能力，否则报告应明确限于静态代码核查。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783870978724,
+      "updated_at_ms": 1783870978724
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783873887416",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783873887416",
+      "status": "ready",
+      "verdict": "looks_ok",
+      "points": [],
+      "summary": "目标是只读盘点并出报告，方案不改文件、逐项读取核心文件并按行号抽核，范围和验收基本对得上。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783873888036,
+      "updated_at_ms": 1783873888036
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-md-readme-md:1783882965084",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-md-readme-md:1783882965084",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "只读、空写根和不运行程序都与目标一致，没有越界苗头。",
+        "方案目前主要复述 README 并建议另派侦察，缺少“本方案直接核对文件树、读取三个源码文件并产出报告”的明确执行步骤。",
+        "验收标准应改成可核验的交付结果，例如逐文件记录存在性和证据，并逐项给出“已实现、未实现或证据不足”的结论。",
+        "浏览器兼容性和可玩性只能列为本轮未验证项，不能成为只读侦察的验收要求。"
+      ],
+      "summary": "方向和边界对得上，但方案还停在建议层，尚未完整覆盖“形成只读侦察报告”这一交付目标。补齐实际读取步骤和报告验收格式后更稳妥。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783882965305,
+      "updated_at_ms": 1783882965305
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783883098196",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783883098196",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "只读目标与空写根一致，不存在“用户要改文件、方案却不改”的错配。",
+        "方案要求执行 `node --check game.js`，但工具只有 `read_file`，按当前边界无法完成这项验收。",
+        "方案大半在说明“源码未注入、当前不可核验”，没有直接落实读取四个文件并逐条比对；若下游确有读取能力，应把这部分改成实际盘点步骤。",
+        "未发现写入测试项目外路径、写 `~/.codex`、`git push` 或不可逆删除等越界苗头。"
+      ],
+      "summary": "方向和只读边界基本对得上，但执行能力与验收要求不一致：没有命令工具就无法完成语法检查，也不能把“尚未核验”当成最终盘点结果。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783883098403,
+      "updated_at_ms": 1783883098403
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-5-readme-5:1783885374034",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-5-readme-5:1783885374034",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "零写与“只读盘点”一致，不是范围错配。",
+        "方案大半停留在“源码未注入、无法核验”，没有直接读取四个文件，尚未完成目标。",
+        "工具仅列 read_file，却要求执行 node --check game.js；缺少命令执行能力，验收可能落空。",
+        "验收项完整，但应明确实际执行者、Node 退出码及零写证据的获取方式。"
+      ],
+      "summary": "方向基本对，但当前更像派工说明，不是可直接完成盘点的执行方案；尤其 node 检查的工具与步骤没有闭合。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783885374204,
+      "updated_at_ms": 1783885374204
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-5-5:1783885468796",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-5-5:1783885468796",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "只读目标与空写根一致，不存在“要动手却不改文件”的错配。",
+        "方案没有直接完成源码核对和 node --check，而是把核心工作转交给后续 worker；当前列出的工具只有 read_file，也无法执行语法检查。",
+        "验收项基本齐全，但步骤 1—5 只是摘录 README 承诺，缺少逐项对照 index.html、styles.css、game.js 并形成判定的具体步骤。",
+        "静态核对和语法检查不能证明实际运行效果，这项风险已如实列出。"
+      ],
+      "summary": "方向与只读目标基本一致，但当前方案更像任务转派说明，不是可直接完成目标的执行方案；需确保后续只读 worker 真正读取源码、运行命令并返回完整证据。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783885468965,
+      "updated_at_ms": 1783885468965
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783918092798",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783918092798",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "只读目标与空写根一致，不存在“要改文件却不写”的错配。",
+        "方案要求执行 node --check game.js，但允许工具只有 read_file，且自称禁止执行命令；不补足命令执行权限就无法完成核心验收。",
+        "源码核对步骤和验收方式基本齐全；不启动浏览器意味着结论只能覆盖静态实现与语法，不能证明实际运行。"
+      ],
+      "summary": "目标方向对得上，但工具边界与 Node 语法检查直接冲突，当前方案按原范围无法完整执行。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783918221821,
+      "updated_at_ms": 1783918221821
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-node-node:1783918449220",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-node-node:1783918449220",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "只读范围与用户目标一致，写根为空不是错配。",
+        "方案把 allowed_tools 限定为 read_file，却要求执行 node --check game.js；工具权限前后矛盾，可能导致关键验收无法完成。",
+        "逐项核对、前 5 个问题和语法检查都有明确步骤与验收；未做浏览器实测的证据边界也已说明。"
+      ],
+      "summary": "方向对得上，但应先允许执行只读命令，否则无法取得 node --check 的真实证据。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1783918449420,
+      "updated_at_ms": 1783918449420
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784008552579",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784008552579",
+      "status": "ready",
+      "verdict": "mismatch",
+      "points": [
+        "目标要求在当前项目根目录创建 test.txt，但方案写根是 /Users/yoyi/codex-workflow-mario-test，与当前项目路径不一致，按此执行可能不会改到本项目。",
+        "串行执行、已存在即停、内容与字节数复核都有明确步骤和验收。",
+        "方案写的是向主管报告；用户要求向总指导汇报，汇报对象需确认是否为同一角色。"
+      ],
+      "summary": "流程设计基本对得上，但允许写入路径与项目根目录不一致，先纠正范围再执行。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1784008553380,
+      "updated_at_ms": 1784008620183
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784008723122",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784008723122",
+      "status": "ready",
+      "verdict": "mismatch",
+      "points": [
+        "用户要在 /Users/yoyi/Documents/mario test 动手创建 test.txt，但方案允许写入的根目录却是 /Users/yoyi/codex-workflow-mario-test，执行边界对不上。",
+        "步骤和复核验收基本齐全，但 test.txt 若已存在该创建还是覆盖，方案没有明确处理规则。"
+      ],
+      "summary": "方案意图和验收方式基本对，但写根写错会让它无法安全完成用户指定的文件改动；先把允许写入范围改为当前项目根再执行。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1784008723370,
+      "updated_at_ms": 1784008723370
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784019716178",
+      "project_id": "project:users-yoyi-documents-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784019716178",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "创建并复核 test.txt 的范围和顺序与目标对得上，写根也限定在当前项目。",
+        "“向总指导汇报”尚无明确入口，方案不能保证这一步能实际完成。",
+        "验收标准主要写了派发流程，建议明确把“test.txt 内容为 12345678 的复核证据”纳入验收。"
+      ],
+      "summary": "文件操作部分可执行，但汇报渠道未定，且验收对实际文件结果的表述不够完整。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1784019716574,
+      "updated_at_ms": 1784019936173
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1784196734512",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1784196734512",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "大方向对得上：项目内复制游戏文件、只派一个子 agent 操作副本、最后由主管复核。",
+        "子 agent 具体要做什么及对应验收结果仍然缺失，当前无法形成可验收任务。",
+        "方案一边写定 `index.agent-copy.html`，一边又称副本名未确认，表述需要统一。",
+        "写根覆盖整个项目，宽于“只在副本上工作”的目标；应将唯一可写文件收窄到副本，其他文件只读。",
+        "现有浏览器检查只能验证原玩法未损坏，补齐工作内容后还需增加针对该改动的验收。"
+      ],
+      "summary": "目标与执行骨架基本一致，但任务内容未定义、写范围偏宽，当前仍是待补齐的执行方案。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1784196734950,
+      "updated_at_ms": 1784196734950
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1784197332733",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1784197332733",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标与方案基本对得上：会复制入口、只派一个 worker，并由主管后置复核。",
+        "目前没说明 worker 要在副本上改什么；若不只是建立副本，现方案还无法完成业务验收。",
+        "验收标准偏重流程条件，应补上副本存在、原文件哈希不变、仅副本发生变更、浏览器基线通过等结果。",
+        "写根覆盖整个项目，宽于实际目标文件；虽然方案承诺核对唯一变更，仍建议将授权明确收窄到副本。"
+      ],
+      "summary": "方向正确，没有项目外写入或不可逆操作的越界苗头；但具体改动目标和结果型验收还没闭合，批准前需要用户确认。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1784197333694,
+      "updated_at_ms": 1784197333694
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-index-html:1784198719646",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-index-html:1784198719646",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标、步骤和验收基本对得上：会实际创建副本，并用字节比较、字节数和基线增量复核。",
+        "写根放宽到整个项目目录，和“只允许创建 index.agent-copy.html”的边界不完全一致；应以实际文件级写入锁定为准。",
+        "“仅一个子 agent 创建”只能靠派发与交接记录佐证，方案已如实提示这一点，不能仅凭产物证明。"
+      ],
+      "summary": "方案可执行，验证也齐全；主要留意写入授权不能因项目级写根而扩大到其他文件。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1784198720037,
+      "updated_at_ms": 1784198720037
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-index-agent-copy-index-html-index-agent-copy-html:1784206015478",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-index-agent-copy-index-html-index-agent-copy-html:1784206015478",
+      "status": "ready",
+      "verdict": "looks_ok",
+      "points": [
+        "目标、操作和验收一致：只新建 index.agent-copy.html，并以 cmp 逐字节核验。",
+        "方案已覆盖源文件不可读、目标文件已存在和文本编辑破坏字节一致性的主要风险。"
+      ],
+      "summary": "范围未见越界苗头，步骤和验收闭环完整；执行时应严格只写目标文件。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1784206016352,
+      "updated_at_ms": 1784206016352
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-html-emo-index-html-html-emoji:1784359325180",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-html-emo-index-html-html-emoji:1784359325180",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标和方案对得上：会实际修改 index.html 的 <title>，并验证浏览器标签标题。",
+        "允许改动范围写成了整个项目根目录，和“只改 index.html”的目标相比偏宽；执行时应严格限定为该文件。",
+        "🎮 的选择有依据，但用户未指定 emoji；如对风格敏感，批准前可确认。"
+      ],
+      "summary": "方案步骤和验收完整，没有明显越界动作；主要注意把实际写入边界收紧到 index.html。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1784359326852,
+      "updated_at_ms": 1784359326852
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-emoji-index-html-emoji:1784362889268",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-emoji-index-html-emoji:1784362889268",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标和改动范围对得上，会修改 index.html，不是纯建议。",
+        "“标题”可能是 <title>、页面主标题或两者；方案虽要求先读取确认，但尚未明确最终改哪一处。",
+        "步骤、差异检查和浏览器验收都有；验收时应明确核对浏览器标签标题还是页面可见标题。"
+      ],
+      "summary": "方案基本可执行，没有明显越界；先根据 index.html 实际结构确定标题对象，再做最小改动。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1784362890980,
+      "updated_at_ms": 1784362890980
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-html-title-index-html-html-title:1784371130588",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-html-title-index-html-html-title:1784371130588",
+      "status": "ready",
+      "verdict": "caution",
+      "points": [
+        "目标、改动文件和验证方式对得上，确实会修改 index.html 的 <title>。",
+        "用户未指定 emoji，方案默认使用“⭐”；需由用户认可这个默认选择。",
+        "尚未实读 index.html，但方案已把结构确认和最小差异核对列为执行前后检查。"
+      ],
+      "summary": "方案边界清楚，没有测试项目外写入、推送或删除风险。唯一需留意的是 emoji 默认值和现有标题结构仍待执行时确认。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1784371131770,
+      "updated_at_ms": 1784371131770
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-html-title-html-title:1784371957242",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-html-title-html-title:1784371957242",
+      "status": "ready",
+      "verdict": "looks_ok",
+      "points": [],
+      "summary": "目标、改动范围和验收方式一致；批准后会只修改 index.html 的 title，并以精确回读和差异检查验证。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1784371958188,
+      "updated_at_ms": 1784371958188
+    },
+    {
+      "review_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-html-index-html-html:1784378071513",
+      "project_id": "project:users-yoyi-codex-workflow-mario-test",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-html-index-html-html:1784378071513",
+      "status": "ready",
+      "verdict": "looks_ok",
+      "points": [],
+      "summary": "目标与方案对得上：会把 index.html 的唯一 <title> 精确改为“🌟 小马里奥”。步骤、验收和范围核对齐全，且没有明显越界操作。",
+      "unavailable_reason": null,
+      "model": "codex-cli-default",
+      "profile_version": "global-supervisor-boundary-profile.v1",
+      "created_at_ms": 1784378073154,
+      "updated_at_ms": 1784378073154
+    }
+  ],
+  "boundary_audit_events": [
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783411986544:1783422255272",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783411986544",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783422255272
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-mvp-ip-mvp-ip:1782636166789:1783422957276",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-mvp-ip-mvp-ip:1782636166789",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783422957276
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783431025925:1783431026114",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783431025925",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783431026114
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783432268321:1783432268512",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783432268321",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783432268512
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783586710246:1783586710713",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783586710246",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783586710713
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783587143882:1783587144174",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783587143882",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783587144174
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783670505603:1783670505883",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783670505603",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783670505883
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783691352057:1783691352305",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783691352057",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783691352305
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783692170880:1783692171089",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783692170880",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783692171089
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783727213829:1783727214000",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783727213829",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783727214000
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-workf-readme-workflow:1783730114402:1783730114584",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-workf-readme-workflow:1783730114402",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783730114584
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-index-html-readme-index-html-readme-md-index-html:1783778958339:1783778958500",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-index-html-readme-index-html-readme-md-index-html:1783778958339",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783778958500
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-index-html-readme-index-html:1783782036953:1783782037114",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-index-html-readme-index-html:1783782036953",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783782037114
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783791258901:1783791259408",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-readme-readme:1783791258901",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783791259408
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783796285948:1783796286177",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783796285948",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783796286177
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797052292:1783797052513",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797052292",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783797052513
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797551168:1783797551325",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797551168",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783797551325
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797884483:1783797884639",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783797884483",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783797884639
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783799061357:1783799061531",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783799061357",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783799061531
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783799641093:1783799641256",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783799641093",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783799641256
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-3a-3a:1783800163414:1783800163581",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-3a-3a:1783800163414",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783800163581
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783824654810:1783824654944",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783824654810",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783824654944
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-station3a-pass-station3a-pass-worker:1783830160640:1783830160770",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-station3a-pass-station3a-pass-worker:1783830160640",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783830160770
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-utf-8-38-station3a-contr-utf-8-38-station3a-control-core-proof-v2-txt-pass:1783837742592:1783837742792",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-utf-8-38-station3a-contr-utf-8-38-station3a-control-core-proof-v2-txt-pass:1783837742592",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783837742792
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783841711806:1783841712015",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783841711806",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783841712015
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783842208993:1783842209134",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1783842208993",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783842209134
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783844090607:1783844090815",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1783844090607",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783844090815
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-v4-worker-ui-v4-worker-ui:1783846797277:1783846797469",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-v4-worker-ui-v4-worker-ui:1783846797277",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783846797469
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-finalize-pa-finalize-pass:1783850158844:1783850159096",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-finalize-pa-finalize-pass:1783850158844",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783850159096
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-proof-proof:1783851938159:1783851938362",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-proof-proof:1783851938159",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783851938362
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783869010610:1783869011177",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783869010610",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783869011177
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783870978519:1783870978724",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783870978519",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783870978724
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783873887416:1783873888036",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783873887416",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783873888036
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-md-readme-md:1783882965084:1783882965305",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-md-readme-md:1783882965084",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783882965305
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783883098196:1783883098403",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783883098196",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783883098403
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-5-readme-5:1783885374034:1783885374204",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-5-readme-5:1783885374034",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783885374204
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-5-5:1783885468796:1783885468965",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-5-5:1783885468796",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783885468965
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783918092798:1783918221821",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-readme-readme:1783918092798",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783918221821
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-node-node:1783918449220:1783918449420",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default-node-node:1783918449220",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1783918449420
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784008552579:1784008553380",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784008552579",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784008553380
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784008552579:1784008620183",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784008552579",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784008620183
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784008723122:1784008723370",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784008723122",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784008723370
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784019716178:1784019716574",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784019716178",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784019716574
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784019716178:1784019936173",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-documents-mario-test-workflow-users-yoyi-documents-mario-test-default:1784019716178",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784019936173
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-proof-proof:1783851938159:1784186929444",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-proof-proof:1783851938159",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784186929444
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1784196734512:1784196734950",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default:1784196734512",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784196734950
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1784197332733:1784197333694",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-worker-worker:1784197332733",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784197333694
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-index-html:1784198719646:1784198720037",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-index-html:1784198719646",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784198720037
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-index-agent-copy-index-html-index-agent-copy-html:1784206015478:1784206016352",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-index-agent-copy-index-html-index-agent-copy-html:1784206015478",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784206016352
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-html-emo-index-html-html-emoji:1784359325180:1784359326852",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-html-emo-index-html-html-emoji:1784359325180",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784359326852
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-emoji-index-html-emoji:1784362889268:1784362890980",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-emoji-index-html-emoji:1784362889268",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784362890980
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-html-title-index-html-html-title:1784371130588:1784371131770",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-html-title-index-html-html-title:1784371130588",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784371131770
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-html-title-html-title:1784371957242:1784371958188",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-html-title-html-title:1784371957242",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784371958188
+    },
+    {
+      "event_id": "global-supervisor-boundary-review:proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-html-index-html-html:1784378071513:1784378073154",
+      "event_type": "global_supervisor_boundary_review_recorded",
+      "proposal_id": "proposal:project-users-yoyi-codex-workflow-mario-test-workflow-users-yoyi-codex-workflow-mario-test-default-index-html-html-index-html-html:1784378071513",
+      "review_status": "ready",
+      "actor_ref": "global_supervisor_agent",
+      "created_at_ms": 1784378073154
+    }
+  ]
+}

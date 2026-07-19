@@ -1,20 +1,10 @@
-// 交办·工作历史(回顾面)——阶段3拆巨石第一刀:自 ProjectJiaobanPanel.tsx 原样迁出,零逻辑改动。
-// 宪法归属:§六 回顾面(唯一问题=我要找的那单多快找到;永不打断)。
+// 交办·历届方案索引——由原工作历史栏演化而来，数据源与九态语义不变。
+// 宪法归属:修宪3号「话在左·物右侧双列」；本组件只控制右侧方案/交货实体，不再控制对话锚点。
 import type { RunHistoryEntry } from "../../../lib/types";
-import {
-  conversationMessageIdForDelivery,
-  conversationMessageIdForProposal,
-} from "./JiaobanConversation";
-import { formatProposalTime, proposalAgeDays } from "./jiaobanTime";
+import { formatProposalTime } from "./jiaobanTime";
 
 type HistoryVisual = { dot: string; toneClass: string; word: string };
 export type HistoryFilter = "all" | "mine" | "running";
-
-export function conversationMessageIdForHistoryEntry(entry: RunHistoryEntry): string {
-  return entry.state === "delivered"
-    ? conversationMessageIdForDelivery(entry.proposal_id)
-    : conversationMessageIdForProposal(entry.proposal_id);
-}
 
 function historyHasAttention(entry: RunHistoryEntry): boolean {
   const r = entry.review_flags.result_verdict;
@@ -85,13 +75,11 @@ function matchesHistoryFilter(entry: RunHistoryEntry, filter: HistoryFilter): bo
   return true;
 }
 
-// 紧凑时间：今天 HH:mm / 昨天 / 更早 MM-DD。复用 proposalAgeDays 的日历日判据。
-function formatHistoryTime(createdAtMs: number): string {
-  const days = proposalAgeDays(createdAtMs);
+// 方案索引只显示日期：当年 MM-DD，跨年 YYYY-MM-DD。
+function formatProposalIndexDate(createdAtMs: number): string {
   const d = new Date(createdAtMs);
-  if (days <= 0) return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  if (days === 1) return "昨天";
-  return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const monthDay = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return d.getFullYear() === new Date().getFullYear() ? monthDay : `${d.getFullYear()}-${monthDay}`;
 }
 
 // verdict 英文枚举 → 人话（词表死线）。
@@ -115,7 +103,7 @@ function humanizeVerdict(v: string): string {
   }
 }
 
-export function JiaobanHistoryColumn({
+export function JiaobanProposalIndex({
   entries,
   total,
   loading,
@@ -128,6 +116,7 @@ export function JiaobanHistoryColumn({
   onBackToCurrent,
   onNewJiaoban,
   onContinueRun,
+  knownProposalIds,
 }: {
   entries: RunHistoryEntry[];
   total: number;
@@ -141,14 +130,16 @@ export function JiaobanHistoryColumn({
   onBackToCurrent: () => void;
   onNewJiaoban: () => void;
   onContinueRun: () => void;
+  // null=方案店尚不可用，不能武断标成旧单；Set=可据实判断右侧是否有方案实体。
+  knownProposalIds: ReadonlySet<string> | null;
 }) {
   const mineCount = entries.filter((entry) => matchesHistoryFilter(entry, "mine")).length;
   const runningCount = entries.filter((entry) => entry.state === "running").length;
   const visible = entries.filter((entry) => matchesHistoryFilter(entry, filter));
   return (
-    <aside className="jiaoban-history" aria-label="工作历史">
+    <aside className="jiaoban-history" aria-label="历届方案">
       <div className="jiaoban-history-head">
-        <strong>工作历史</strong>
+        <strong>历届方案</strong>
         {/* 07-15 走查:头部入口降为次级小钮——空态里的 [+新交办] 才是主动作,俩黑色主钮叠着打架。 */}
         <button
           className="secondary-button jiaoban-history-new"
@@ -173,10 +164,10 @@ export function JiaobanHistoryColumn({
       </div>
       <div className="jiaoban-history-list">
         {loading && entries.length === 0 ? (
-          <p className="muted small-note">正在读工作历史…</p>
+          <p className="muted small-note">正在读历届方案…</p>
         ) : total === 0 ? (
           <div className="jiaoban-history-empty">
-            <p className="muted">这个项目还没交办过活。</p>
+            <p className="muted">这个项目还没有方案记录。</p>
             <button className="primary-button" type="button" onClick={onNewJiaoban}>
               + 新交办
             </button>
@@ -188,22 +179,31 @@ export function JiaobanHistoryColumn({
             const visual = historyStateVisual(entry);
             const isCurrent = currentProposalId != null && entry.proposal_id === currentProposalId;
             const isSelected = selectedId === entry.proposal_id || (selectedId === null && isCurrent);
-            // 07-15 走查#2·对齐定稿+宪法:行=单行三元素(状态点+标题+时间);state_note 人话进悬停与详情卡;
-            // 行内[接着跑]快捷钮拆除——canon §四.2 明写「[接着跑]在卡住脸不在历史栏」,旧快捷是修宪前遗留。
+            const hasProposalRecord = knownProposalIds == null || knownProposalIds.has(entry.proposal_id);
+            const canvasView = entry.state === "delivered" ? "delivery" : "proposal";
+            const dateLabel = formatProposalIndexDate(entry.created_at_ms);
+            // 修宪3号:目标一句 + 九态人话状态 + 日期；缺实体只如实标旧单，不补造方案。
+            // 行内[接着跑]仍不回流索引——它只属于卡住脸。
             return (
               <button
                 key={entry.proposal_id}
                 className={`jiaoban-run ${isSelected ? "on" : ""}`}
                 type="button"
-                title={`${entry.state_note} · ${entry.goal_text || "（没写目标）"}`}
-                aria-controls={conversationMessageIdForHistoryEntry(entry)}
+                title={`${entry.state_note} · ${entry.goal_text || "（没写目标）"}${hasProposalRecord ? "" : " · 旧单·无方案记录"}`}
+                aria-controls={`jiaoban-canvas-view-${canvasView}`}
                 onClick={() => (isCurrent && entry.state !== "delivered" ? onBackToCurrent() : onSelectEntry(entry))}
               >
                 <span className={`jiaoban-run-dot ${visual.toneClass}`} aria-hidden="true">
                   {visual.dot}
                 </span>
                 <span className="jiaoban-run-goal">{entry.goal_text || "（没写目标）"}</span>
-                <span className="jiaoban-run-time">{formatHistoryTime(entry.created_at_ms)}</span>
+                <span className="jiaoban-run-meta">
+                  <span className="jiaoban-run-state">{visual.word}</span>
+                  {!hasProposalRecord ? <span className="jiaoban-run-legacy">旧单·无方案记录</span> : null}
+                  <time className="jiaoban-run-time" dateTime={new Date(entry.created_at_ms).toISOString()}>
+                    {dateLabel}
+                  </time>
+                </span>
               </button>
             );
           })
@@ -236,7 +236,7 @@ export function JiaobanHistoryDetail({
     >
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">工作历史 · 这一单</p>
+          <p className="eyebrow">历届方案 · 这一单</p>
           <h3>
             <span className={`jiaoban-run-dot ${visual.toneClass}`} aria-hidden="true">
               {visual.dot}
