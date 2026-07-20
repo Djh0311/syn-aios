@@ -1,4 +1,4 @@
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import { pathTail } from "../../lib/format";
 import type {
   H2RealResumeAuthorizationReadiness,
@@ -68,18 +68,18 @@ export function SessionContinuationPreviewPanel({ previews }: { previews: Sessio
                 <strong>{adapterDisplayName(group.adapterId)}</strong>
                 <span>{group.previews.length} 个继续预览</span>
               </div>
-              <Badge tone={group.adapterId === "codex-local" ? "unknown" : "warning"}>
+              <Pill tone={group.adapterId === "codex-local" ? "unknown" : "warn"}>
                 {group.adapterId === "codex-local" ? "预览协议" : "计划中阻断"}
-              </Badge>
+              </Pill>
             </div>
             <div className="session-continuation-list">
               {group.previews.map((preview) => (
                 <div className={`session-continuation-item ${preview.guard_result.status}`} key={preview.preview_id}>
                   <div className="session-continuation-main">
                     <span>{sessionContinuationOperationLabel(preview.operation_id)}</span>
-                    <Badge tone={sessionContinuationStatusTone(preview.guard_result.status)}>
+                    <Pill tone={sessionContinuationStatusTone(preview.guard_result.status)}>
                       {sessionContinuationStatusLabel(preview.guard_result.status)}
-                    </Badge>
+                    </Pill>
                     <em>{guardSeverityLabel(preview.guard_result.severity)}</em>
                   </div>
                   <div className="session-continuation-target">
@@ -188,9 +188,9 @@ export function ControlledSessionContinuationPanel({
                   <div>
                     <strong>{sessionContinuationOperationLabel(continuation.operation_id)}</strong>
                   </div>
-                  <Badge tone={controlledContinuationTone(continuation.status)}>
+                  <Pill tone={controlledContinuationTone(continuation.status)}>
                     {controlledContinuationLabel(continuation.status)}
-                  </Badge>
+                  </Pill>
                 </div>
                 <p>{continuation.prompt_summary}</p>
                 <div className="controlled-continuation-facts">
@@ -275,7 +275,7 @@ export function H2RealResumeAuthorizationPanel({ readiness }: { readiness: H2Rea
           <article className={`h2-resume-authorization-item ${item.status}`} key={item.item_id}>
             <div className="h2-resume-authorization-item-head">
               <strong>{item.label}</strong>
-              <Badge tone={h2ReadinessItemTone(item.status)}>{h2ReadinessItemStatusLabel(item.status)}</Badge>
+              <Pill tone={h2ReadinessItemTone(item.status)}>{h2ReadinessItemStatusLabel(item.status)}</Pill>
             </div>
             <span>{item.value ?? "待确认"}</span>
             <small>{item.user_visible_reason}</small>
@@ -316,9 +316,9 @@ export function H2RealResumeExecutionDecisionPanel({ surface }: { surface: H2Rea
           <article className={`h2-execution-decision-check ${check.status}`} key={check.check_id}>
             <div className="h2-execution-decision-check-head">
               <strong>{check.label}</strong>
-              <Badge tone={h2DecisionCheckTone(check.status, check.blocks_final_approval)}>
+              <Pill tone={h2DecisionCheckTone(check.status, check.blocks_final_approval)}>
                 {h2DecisionCheckStatusLabel(check.status, check.blocks_final_approval)}
-              </Badge>
+              </Pill>
             </div>
             <span>{check.value ?? "待确认"}</span>
             <small>{check.user_visible_reason}</small>
@@ -411,9 +411,9 @@ export function RuntimeSessionAttentionPanel({
                 <strong>{summary.session_id}</strong>
                 <span>{adapterDisplayName(summary.adapter_id)} · {runtimeAttentionLabel(summary.current_status) || summary.current_status_label}</span>
               </div>
-              <Badge tone={runtimeAttentionTone(summary.current_status)}>
+              <Pill tone={runtimeAttentionTone(summary.current_status)}>
                 {runtimeAttentionLabel(summary.current_status)}
-              </Badge>
+              </Pill>
               <small>
                 关注 {summary.attention_count} · 阻断 {summary.blocking_count} · 需要用户 {summary.needs_user_count} · 读回 {readbackStatusLabel(summary.readback_status)}
               </small>
@@ -429,9 +429,9 @@ export function RuntimeSessionAttentionPanel({
                 <strong>{item.title}</strong>
                 <span>{adapterDisplayName(item.adapter_id)} · {item.session_id ?? "未绑定会话"} · {runtimeAttentionLabel(item.status)}</span>
               </div>
-              <Badge tone={runtimeAttentionTone(item.status)}>
+              <Pill tone={runtimeAttentionTone(item.status)}>
                 {runtimeAttentionLabel(item.status)}
-              </Badge>
+              </Pill>
             </div>
             <p>{item.user_message}</p>
             <small>{item.recommended_next_step}</small>
@@ -499,9 +499,9 @@ export function AdapterSdkCliDiagnosticsPanel({ workerProtocol }: { workerProtoc
                   <strong>{adapterDisplayName(checklist.adapter_id)}</strong>
                   <span>{adapterContractStatusLabel(checklist.status)}</span>
                 </div>
-                <Badge tone={checklist.status === "ready_for_controlled_adapter_contract" ? "candidate" : "warning"}>
+                <Pill tone={checklist.status === "ready_for_controlled_adapter_contract" ? "candidate" : "warn"}>
                   {adapterContractStatusLabel(checklist.status)}
-                </Badge>
+                </Pill>
               </div>
               <div className="adapter-sdk-diagnostics-flags">
                 <span>控制核心：{yesNoLabel(checklist.control_core_required)}</span>

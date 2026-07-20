@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import { conversationTurns } from "../../lib/conversationTurns";
 import {
   commandFromArguments,
@@ -555,7 +555,7 @@ function TranscriptEventCard({ event }: { event: CodexTranscriptEvent }) {
     <article className={`timeline-event ${event.actor || "system"}`}>
       <div className="timeline-event-head">
         <div>
-          <Badge tone={toneForEvent(event.event_type)}>{labelForEvent(event.event_type)}</Badge>
+          <Pill tone={toneForEvent(event.event_type)}>{labelForEvent(event.event_type)}</Pill>
           <strong>{event.tool_name || event.actor || "system"}</strong>
         </div>
         <span>{event.timestamp || event.event_id}</span>
@@ -580,9 +580,9 @@ export function WarningStrip({ warnings, compact = false }: { warnings: string[]
   return (
     <div className={`warning-row ${compact ? "compact-warning-row" : ""}`}>
       {warnings.map((warning) => (
-        <Badge tone="warning" key={warning}>
+        <Pill tone="warn" key={warning}>
           {warning}
-        </Badge>
+        </Pill>
       ))}
     </div>
   );
@@ -605,11 +605,11 @@ function labelForEvent(eventType?: string | null) {
   return eventType || "事件";
 }
 
-function toneForEvent(eventType?: string | null): "candidate" | "warning" | "unknown" | "neutral" {
-  if (eventType === "unknown") return "warning";
+function toneForEvent(eventType?: string | null): "candidate" | "warn" | "unknown" | "plain" {
+  if (eventType === "unknown") return "warn";
   if (eventType === "tool_call" || eventType === "tool_result" || eventType === "command_output") return "unknown";
   if (eventType === "user_message" || eventType === "assistant_message") return "candidate";
-  return "neutral";
+  return "plain";
 }
 
 function valuePreview(value: unknown): string {

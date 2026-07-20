@@ -1,7 +1,7 @@
 // 交办·交货态(五态之「交货」)——阶段3拆巨石第五刀:自 ProjectJiaobanPanel.tsx 原样迁出,零逻辑改动。
 // 宪法归属:§一 交货态(唯一问题=能信吗·证据呢;口供上脸+黄牌+[属实,沉淀])。
 import { useState } from "react";
-import { Badge } from "../../../components/Badge";
+import { Pill, PillRow } from "../../../components/SpecPrimitives";
 import type {
   AutoAdvanceRoleLoopOutcome,
   CreateMemoryCandidateInput,
@@ -15,6 +15,9 @@ import type {
 import { dedupeUiStrings } from "../ProjectWorkflowExecutionHelpers";
 import { JiaobanNeedsReworkDisposal } from "./JiaobanBlockedStates";
 import { JiaobanRawSessionLink } from "./jiaobanSessionParts";
+
+// 定式扶正（G2）：step-badge 四 tone → spec-pill tone 查表（行 tone 类名不走此表）。
+const stepBadgePillTone = { green: "ok", yellow: "warn", red: "bad", gray: "plain" } as const;
 
 // 批1尾件·证据单一真源(用户 07-14 拍「交货证据该在交办页」):交办交货卡渲染主份,
 // 工作流页 C6 卡引同一组件(批5 退役它时删引用即可)。数据全空=零渲染,不占屏。
@@ -65,7 +68,7 @@ export function JiaobanAcceptanceEvidence({ derivedWorkflow }: { derivedWorkflow
                 <li key={gate.gate_id} className={`jiaoban-step-row tone-${tone}`}>
                   <span className="jiaoban-step-title">{gate.label}</span>
                   {gate.reason ? <span className="jiaoban-step-say">{gate.reason}</span> : null}
-                  <span className={`jiaoban-step-badge tone-${tone}`}>{word}</span>
+                  <Pill tone={stepBadgePillTone[tone]}>{word}</Pill>
                 </li>
               );
             })}
@@ -223,10 +226,10 @@ export function JiaobanStepReportList({
             {step.report_summary ? (
               <span className="jiaoban-step-say">{step.report_summary}</span>
             ) : null}
-            <span className={`jiaoban-step-badge tone-${flag.tone}`}>
+            <Pill tone={stepBadgePillTone[flag.tone]}>
               {flag.tone === "yellow" ? "⚠ " : ""}
               {flag.badge}
-            </span>
+            </Pill>
             {flag.kind === "ok" && step.report_summary && onConfirmFact ? (
               confirmedTaskIds?.has(step.planned_task_id) ? (
                 <span className="jiaoban-fact-done">已沉淀 ✓</span>
@@ -417,17 +420,17 @@ export function JiaobanDoneState({
                 : "这单没有完整交货"}
           </h3>
         </div>
-        <Badge tone={isCompleted ? "candidate" : "warning"}>{isCompleted ? "已交货" : "未交货"}</Badge>
+        <Pill tone={isCompleted ? "candidate" : "warn"}>{isCompleted ? "已交货" : "未交货"}</Pill>
       </div>
       {/* 批1·骨架化(DESIGN.md §二):状态 pill 行=现有事实上脸,不造数据;只读单注升为 pill。 */}
       {isCompleted ? (
-        <div className="jiaoban-done-pills" aria-label="这单概览">
-          {chain ? <span className="jiaoban-step-badge tone-green">完成 {chain.completed} 步</span> : null}
+        <PillRow>
+          {chain ? <Pill tone="ok">完成 {chain.completed} 步</Pill> : null}
           {countYellowFlags(chain?.steps ?? []) > 0 ? (
-            <span className="jiaoban-step-badge tone-yellow">⚠ {countYellowFlags(chain?.steps ?? [])} 项要看一眼</span>
+            <Pill tone="warn">⚠ {countYellowFlags(chain?.steps ?? [])} 项要看一眼</Pill>
           ) : null}
-          {isReadOnlyRun ? <span className="jiaoban-step-badge tone-gray">只读单·未改文件</span> : null}
-        </div>
+          {isReadOnlyRun ? <Pill tone="plain">只读单·未改文件</Pill> : null}
+        </PillRow>
       ) : null}
       <div className="role-loop-plain" aria-label="结果（人话）">
         <p className="role-loop-plain-lead">{resultLine}</p>

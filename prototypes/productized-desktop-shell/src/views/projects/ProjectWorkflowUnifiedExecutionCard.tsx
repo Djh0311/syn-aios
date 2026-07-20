@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import { summarizeTaskMemoryPacketPreview } from "../../lib/candidateGovernance";
 import type {
   PendingAction,
@@ -118,9 +118,9 @@ export function ProjectUnifiedExecutionStateCard({
           <p className="eyebrow">统一执行链路</p>
           <h3>{selectedTask?.title ?? "等待选择工作项"}</h3>
         </div>
-        <Badge tone={latestAttempt?.state === "failed" || latestAttempt?.state === "timed_out" ? "warning" : recentDispatch ? "candidate" : "unknown"}>
+        <Pill tone={latestAttempt?.state === "failed" || latestAttempt?.state === "timed_out" ? "warn" : recentDispatch ? "candidate" : "unknown"}>
           {recentDispatch?.state ?? selectedTask?.state ?? "无派发"}
-        </Badge>
+        </Pill>
       </div>
       {automation?.latest_plan ? (
         <div className="workflow-compact-list">

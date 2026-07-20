@@ -9,8 +9,7 @@
 //
 // hooks 约定：本组件只经 `visibleText`(真 SSR)消费(tests/offline-permission-dialog.test.tsx:3503) → 可用 hooks。
 import { useMemo, useState } from "react";
-import { Badge } from "../components/Badge";
-import { EmptyState, FactRow, ListRow, SegTitle } from "../components/SpecPrimitives";
+import { EmptyState, FactRow, ListRow, Pill, SegTitle } from "../components/SpecPrimitives";
 import { formatDate } from "../lib/format";
 import type { HarnessCandidate, HarnessResource, ProjectRecord } from "../lib/types";
 
@@ -149,10 +148,10 @@ export function HarnessBoardView({ projects }: HarnessBoardViewProps) {
 }
 
 function rowBadge(row: HarnessRow) {
-  if (row.kind === "candidate") return <Badge tone="candidate">文件候选</Badge>;
+  if (row.kind === "candidate") return <Pill tone="candidate">文件候选</Pill>;
   const ready = row.resource.entrypoints.length > 0 && !row.resource.warnings.length;
   // 「有入口」只说入口存在，不说「可运行 / 已验证」——那是索引给不出的判断。
-  return ready ? <Badge tone="candidate">有入口</Badge> : <Badge tone="warning">缺配置</Badge>;
+  return ready ? <Pill tone="candidate">有入口</Pill> : <Pill tone="warn">缺配置</Pill>;
 }
 
 function rowClaim(row: HarnessRow) {

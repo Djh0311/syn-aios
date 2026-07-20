@@ -1,4 +1,4 @@
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import type { FormalMemoryListItem, MemoryCandidateListItem } from "../../lib/memoryCenter";
 import type {
   MaturePatternCandidate,
@@ -10,6 +10,8 @@ import type {
   MemoryRelationCandidate,
 } from "../../lib/types";
 import { sourceText } from "./MemoryDetailPanels";
+
+const badgePillTone = { neutral: "plain", candidate: "candidate", warning: "warn", unknown: "unknown" } as const;
 
 // 批2·P0修复:列表卡可选中(点哪条详情看哪条——此前详情死绑数组第一项,其余记录永久点不开)。
 // onSelect 可选:不传=纯展示(旧调用点零破坏);键盘导航按宪法§八显式不做。
@@ -31,7 +33,7 @@ export function FormalMemoryItem({
     >
       <div className="memory-item-topline">
         <strong>{item.kind_label} / {item.status_label}</strong>
-        <Badge tone={item.task_eligibility.badge_tone}>{item.task_eligibility.label}</Badge>
+        <Pill tone={badgePillTone[item.task_eligibility.badge_tone]}>{item.task_eligibility.label}</Pill>
       </div>
       <span>{item.claim}</span>
       <em>来源：{sourceText(item.source_summaries)}</em>
@@ -62,7 +64,7 @@ export function CandidateMemoryItem({
     >
       <div className="memory-item-topline">
         <strong>{item.kind_label} / {item.status_label}</strong>
-        <Badge tone={item.task_position.badge_tone}>{item.task_position.label}</Badge>
+        <Pill tone={badgePillTone[item.task_position.badge_tone]}>{item.task_position.label}</Pill>
       </div>
       <span>{item.claim}</span>
       <em>{item.formal_memory_boundary}</em>
@@ -88,7 +90,7 @@ export function EntityCandidateItem({
     <div className="workflow-compact-item memory-entity-candidate-item">
       <div className="memory-item-topline">
         <strong>实体候选 / {entityKindLabel(candidate.entity_kind)}</strong>
-        <Badge tone="warning">{candidate.status}</Badge>
+        <Pill tone="warn">{candidate.status}</Pill>
       </div>
       <span>{candidate.display_name}</span>
       <em>{candidate.reason}</em>
@@ -115,7 +117,7 @@ export function MergeCandidateItem({
     <div className="workflow-compact-item memory-merge-candidate-item">
       <div className="memory-item-topline">
         <strong>去重候选</strong>
-        <Badge tone={candidate.source_kind === "similarity_hit" ? "warning" : "candidate"}>{sourceKindLabel(candidate.source_kind)}</Badge>
+        <Pill tone={candidate.source_kind === "similarity_hit" ? "warn" : "candidate"}>{sourceKindLabel(candidate.source_kind)}</Pill>
       </div>
       <span>{candidate.left_label} / {candidate.right_label}</span>
       <em>{candidate.reason}</em>
@@ -142,7 +144,7 @@ export function RelationCandidateItem({
     <div className="workflow-compact-item memory-relation-candidate-item">
       <div className="memory-item-topline">
         <strong>关系候选 / {relationKindLabel(candidate.relation_kind)}</strong>
-        <Badge tone={candidate.relation_kind === "causal" ? "warning" : "candidate"}>{sourceKindLabel(candidate.source_kind)}</Badge>
+        <Pill tone={candidate.relation_kind === "causal" ? "warn" : "candidate"}>{sourceKindLabel(candidate.source_kind)}</Pill>
       </div>
       <span>{candidate.subject_label} {"->"} {candidate.object_label}</span>
       <em>{candidate.reason}</em>
@@ -162,7 +164,7 @@ export function ConfirmedRelationItem({ relation }: { relation: MemoryRelation }
     <div className="workflow-compact-item memory-confirmed-relation-item">
       <div className="memory-item-topline">
         <strong>已确认关系 / {relationKindLabel(relation.relation_kind)}</strong>
-        <Badge tone="candidate">已确认</Badge>
+        <Pill tone="candidate">已确认</Pill>
       </div>
       <span>{relation.subject_label} {"->"} {relation.object_label}</span>
       <em>{relation.confirmation_reason}</em>
@@ -190,7 +192,7 @@ export function MaturePatternCandidateItem({
     <div className="workflow-compact-item mature-pattern-candidate-item">
       <div className="memory-item-topline">
         <strong>成熟模式候选</strong>
-        <Badge tone={maturePatternStatusTone(candidate.status)}>{candidate.status}</Badge>
+        <Pill tone={maturePatternStatusTone(candidate.status)}>{candidate.status}</Pill>
       </div>
       <span>{candidate.title}</span>
       <em>{candidate.claim}</em>
@@ -220,7 +222,7 @@ export function MemoryClusterReportItem({ report }: { report: MemoryClusterRepor
     <div className="workflow-compact-item memory-cluster-report-item">
       <div className="memory-item-topline">
         <strong>跨项目主题报告</strong>
-        <Badge tone={report.staleness === "fresh" ? "candidate" : "warning"}>{stalenessLabel(report.staleness)}</Badge>
+        <Pill tone={report.staleness === "fresh" ? "candidate" : "warn"}>{stalenessLabel(report.staleness)}</Pill>
       </div>
       <span>{report.title}</span>
       <em>{report.display_text}</em>
@@ -245,9 +247,9 @@ export function AcceptanceSummaryItem({ acceptanceSummary }: { acceptanceSummary
     <div className="workflow-compact-item memory-acceptance-summary-item">
       <div className="memory-item-topline">
         <strong>验收门禁摘要</strong>
-        <Badge tone={acceptanceSummary.blocked_count ? "warning" : "candidate"}>
+        <Pill tone={acceptanceSummary.blocked_count ? "warn" : "candidate"}>
           {acceptanceSummary.passed_count}/{acceptanceSummary.gate_count}
-        </Badge>
+        </Pill>
       </div>
       <span>{acceptanceSummary.display_text}</span>
       <em>阻断 {acceptanceSummary.blocked_count} / 后置 {acceptanceSummary.deferred_count} / 范围 {acceptanceSummary.scope_label}</em>
@@ -304,7 +306,7 @@ function stalenessLabel(staleness: string): string {
 }
 
 function maturePatternStatusTone(status: MaturePatternCandidate["status"]) {
-  if (status === "candidate" || status === "changes_requested") return "warning";
+  if (status === "candidate" || status === "changes_requested") return "warn";
   if (status === "confirmed") return "candidate";
   return "unknown";
 }

@@ -46,9 +46,9 @@ export function roleLabel(role?: string | null) {
   return role || "未指派";
 }
 
-export function runCheckTone(status?: WorkflowRunCheck["status"] | null): "candidate" | "warning" | "unknown" {
+export function runCheckTone(status?: WorkflowRunCheck["status"] | null): "candidate" | "warn" | "unknown" {
   if (status === "runnable") return "candidate";
-  if (status === "warning" || status === "blocked") return "warning";
+  if (status === "warning" || status === "blocked") return "warn";
   return "unknown";
 }
 

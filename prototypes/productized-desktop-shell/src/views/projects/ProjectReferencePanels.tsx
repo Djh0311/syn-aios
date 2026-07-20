@@ -1,4 +1,4 @@
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import type { FileCandidate, ProjectRecord } from "../../lib/types";
 
 export function ProjectHandoffEvidencePanel({
@@ -24,7 +24,7 @@ export function ProjectHandoffEvidencePanel({
           <p className="eyebrow">交接 / 证据 / 权威</p>
           <h3>{compact ? "最近资料摘要" : "项目资料索引"}</h3>
         </div>
-        <Badge tone="unknown">{fileCount} 文件</Badge>
+        <Pill tone="unknown">{fileCount} 文件</Pill>
       </div>
       {compact ? (
         fileColumns
@@ -78,7 +78,7 @@ export function ProjectResourcesPanel({ project }: { project: ProjectRecord }) {
           <p className="eyebrow">资源</p>
           <h3>技能、运行器和项目级设置分散在对应资源里</h3>
         </div>
-        <Badge tone="unknown">{resourceCount} 项</Badge>
+        <Pill tone="unknown">{resourceCount} 项</Pill>
       </div>
       <details className="project-disclosure" open={resourceCount <= 2}>
         <summary>展开资源详情</summary>

@@ -531,21 +531,6 @@
   overflow-wrap: anywhere;
 }
 
-.memory-center .memory-kv {
-  display: grid;
-  grid-template-columns: 68px minmax(0, 1fr);
-  gap: 8px;
-  margin: 0;
-  color: var(--ink-mid);
-  font-size: var(--text-sm);
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-
-.memory-center .memory-kv strong {
-  color: var(--ink);
-  font-weight: 600;
-}
 
 .memory-center .memory-provenance {
   display: grid;

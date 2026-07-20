@@ -8,6 +8,7 @@ import type {
 } from "../../../lib/types";
 import type { JiaobanOrchestrationMode } from "../ProjectJiaobanPanel";
 import { JiaobanSessionPicker } from "./jiaobanSessionParts";
+import { FactRow } from "../../../components/SpecPrimitives";
 // 人话工程①(2026-07-20):humanizeWriteRoots 逐字迁 src/lib/humanize.ts;import-back + re-export 保导入面。
 import { humanizeWriteRoots } from "../../../lib/humanize";
 
@@ -88,28 +89,16 @@ export function JiaobanAuthorizeState({
           <div className="jiaoban-plan-facts" aria-label="会动什么">
             <p className="jiaoban-plan-seg">会动什么</p>
             {targetFiles ? (
-              <p className="jiaoban-fact">
-                <span className="jiaoban-fact-label">会改的文件</span>
-                <span className="jiaoban-fact-value">{targetFiles}</span>
-              </p>
+              <FactRow k="会改的文件">{targetFiles}</FactRow>
             ) : null}
             {willWrite ? (
               <>
-                <p className="jiaoban-fact">
-                  <span className="jiaoban-fact-label">写入范围</span>
-                  <span className="jiaoban-fact-value">{humanizeWriteRoots(proposal.scope_draft.allowed_write_roots)}</span>
-                </p>
-                <p className="jiaoban-fact">
-                  <span className="jiaoban-fact-label">不碰</span>
-                  <span className="jiaoban-fact-value">写入范围以外的文件（沙箱锁死）</span>
-                </p>
+                <FactRow k="写入范围">{humanizeWriteRoots(proposal.scope_draft.allowed_write_roots)}</FactRow>
+                <FactRow k="不碰">写入范围以外的文件（沙箱锁死）</FactRow>
                 {/* 人话优先(07-17 用户拍):完整路径这类工程内容默认收起,想看再展开。 */}
                 <details className="jiaoban-plan-tech-details">
                   <summary>工程详情</summary>
-                  <p className="jiaoban-fact">
-                    <span className="jiaoban-fact-label">完整路径</span>
-                    <span className="jiaoban-fact-value">{proposal.scope_draft.allowed_write_roots.join("、")}</span>
-                  </p>
+                  <FactRow k="完整路径">{proposal.scope_draft.allowed_write_roots.join("、")}</FactRow>
                 </details>
               </>
             ) : null}

@@ -1,4 +1,4 @@
-import { Badge } from "./Badge";
+import { Pill } from "./SpecPrimitives";
 import {
   buildAdoptMemoryCandidateAction,
   buildBatchAdoptMemoryCandidatesAction,
@@ -32,7 +32,7 @@ export function DailyMemoryCandidateInbox({
     <section className="panel running-section daily-memory-candidate-inbox" aria-label="日常记忆候选收件箱">
       <div className="panel-h">
         日常记忆候选收件箱
-        <Badge tone={inbox.pending_count ? "warning" : "neutral"}>{inbox.pending_count} 条</Badge>
+        <Pill tone={inbox.pending_count ? "warn" : "plain"}>{inbox.pending_count} 条</Pill>
       </div>
       <p className="muted small-note">
         {inbox.pending_count} 条记忆候选待确认；{inbox.boundary_text}

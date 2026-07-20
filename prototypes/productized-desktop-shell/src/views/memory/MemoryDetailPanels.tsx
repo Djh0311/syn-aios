@@ -1,5 +1,6 @@
 import type { FormalMemoryListItem, MemoryCandidateListItem } from "../../lib/memoryCenter";
 import type { FormalMemoryLifecycleOperationKind, MemoryCandidate, MemoryLintFinding } from "../../lib/types";
+import { FactRow } from "../../components/SpecPrimitives";
 
 export function FormalMemoryDetail({
   item,
@@ -153,9 +154,9 @@ export function CandidateMemoryDetail({
       <p className="memory-detail-kicker">候选 · {item.status_label} · {item.scope_label}</p>
       <p className="mem-body">{item.claim}</p>
       {item.body ? <p className="memory-detail-body">{item.body}</p> : null}
-      <p className="memory-kv"><strong>哪来的</strong>{candidateSourceText(sourceRefs, item.source_summaries)}</p>
-      {hasOpenLintFinding ? <p className="memory-kv"><strong>和现有记忆</strong>{item.lint_summary}</p> : null}
-      <p className="memory-kv"><strong>候选边界</strong>{item.formal_memory_boundary}</p>
+      <FactRow k="哪来的">{candidateSourceText(sourceRefs, item.source_summaries)}</FactRow>
+      {hasOpenLintFinding ? <FactRow k="和现有记忆">{item.lint_summary}</FactRow> : null}
+      <FactRow k="候选边界">{item.formal_memory_boundary}</FactRow>
       <div className="knowledge-action-row lifecycle" aria-label="候选记忆操作">
         {canConfirm && onConfirm ? (
           <button className="secondary-button" type="button" onClick={onConfirm}>
@@ -207,7 +208,7 @@ export function MemoryLintFindingDetail({
     <article className="memory-detail-card fcard memory-detail-section" data-memory-detail-kind="lint">
       <p className="memory-detail-kicker">维护检查发现 · {finding.severity === "blocking" ? "阻断级" : "需要复核"}</p>
       <p className="mem-body">{finding.summary}</p>
-      <p className="memory-kv"><strong>证据</strong>{evidence || "检查未提供可展示的证据来源。"}</p>
+      <FactRow k="证据">{evidence || "检查未提供可展示的证据来源。"}</FactRow>
       {targetMemory ? (
         <div className="knowledge-action-row lifecycle" aria-label="维护发现操作">
           <button

@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from "react";
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import type { WorkflowRunCheck } from "../../lib/types";
 import { DetailLine, runCheckItemStatusLabel, runCheckStatusLabel, runCheckTone } from "./projectWorkflowLabels";
 
@@ -47,9 +47,9 @@ export const WorkflowRunCheckPanel = memo(function WorkflowRunCheckPanel({
           <p className="eyebrow">运行前检查</p>
           <h3>{runCheck ? runCheckStatusLabel(runCheck.status) : "只阻止运行，不阻止查看草稿"}</h3>
         </div>
-        <Badge tone={runCheckTone(runCheck?.status ?? derivedStatus)}>
+        <Pill tone={runCheckTone(runCheck?.status ?? derivedStatus)}>
           {runCheck?.status ? runCheckStatusLabel(runCheck.status) : derivedStatus ? runCheckStatusLabel(derivedStatus) : "未检查"}
-        </Badge>
+        </Pill>
       </div>
       <div className="workflow-draft-grid">
         <DetailLine label="当前运行器" value="只读展示；不会自动运行运行器" />

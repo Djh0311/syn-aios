@@ -1,4 +1,4 @@
-import { Badge } from "./Badge";
+import { Pill } from "./SpecPrimitives";
 import type { PendingAction, WorkflowStateSnapshot } from "../lib/types";
 
 type WorkflowStatePanelProps = {
@@ -27,9 +27,9 @@ export function WorkflowStatePanel({
           <p className="eyebrow">本地事实层 v0</p>
           <h3>工作流状态文件</h3>
         </div>
-        <Badge tone={workflowState?.exists ? "candidate" : "unknown"}>
+        <Pill tone={workflowState?.exists ? "candidate" : "unknown"}>
           {workflowState?.exists ? "已初始化" : "未初始化"}
-        </Badge>
+        </Pill>
       </div>
 
       <div className="workflow-state-grid">

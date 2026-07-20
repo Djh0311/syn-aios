@@ -7,8 +7,7 @@
 // hooks 约定：本组件只经 `visibleText`(真 SSR)消费(见 tests/offline-permission-dialog.test.tsx:3498)，
 // 不被 renderComposite 裸调 → 可以用 hooks。(对比 ProjectOverview 必须零 hooks。)
 import { useMemo, useState } from "react";
-import { Badge } from "../components/Badge";
-import { EmptyState, FactRow, ListRow, SegTitle } from "../components/SpecPrimitives";
+import { EmptyState, FactRow, ListRow, Pill, SegTitle } from "../components/SpecPrimitives";
 import type { PluginRecord, ProjectRecord, SkillRecord } from "../lib/types";
 
 type SkillsBoardViewProps = {
@@ -72,7 +71,7 @@ export function SkillsBoardView({ skills, plugins }: SkillsBoardViewProps) {
             {rows.map((skill) => (
               <ListRow
                 key={skill.skill_id}
-                badge={<Badge tone={skill.source_type === "plugin" ? "candidate" : "neutral"}>{sourceLabel(skill.source_type)}</Badge>}
+                badge={<Pill tone={skill.source_type === "plugin" ? "candidate" : "plain"}>{sourceLabel(skill.source_type)}</Pill>}
                 claim={skill.description ? `${skill.title} — ${skill.description}` : skill.title}
                 time={skill.plugin_name ?? undefined}
                 selected={selectedSkill?.skill_id === skill.skill_id}

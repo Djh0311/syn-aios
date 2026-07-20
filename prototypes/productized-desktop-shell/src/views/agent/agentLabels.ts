@@ -242,9 +242,9 @@ export function auditImpactLabel(impact: string) {
   return impact;
 }
 
-export function controlledContinuationTone(status: string): "candidate" | "warning" | "unknown" {
+export function controlledContinuationTone(status: string): "candidate" | "warn" | "unknown" {
   if (status === "succeeded_stub") return "candidate";
-  if (status === "failed_stub" || status === "timed_out" || status === "blocked") return "warning";
+  if (status === "failed_stub" || status === "timed_out" || status === "blocked") return "warn";
   return "unknown";
 }
 
@@ -274,9 +274,9 @@ export function h2ReadinessStatusLabel(status: string) {
   return status;
 }
 
-export function h2ReadinessItemTone(status: string): "candidate" | "warning" | "unknown" {
+export function h2ReadinessItemTone(status: string): "candidate" | "warn" | "unknown" {
   if (status === "confirmed") return "candidate";
-  if (status === "blocked") return "warning";
+  if (status === "blocked") return "warn";
   return "unknown";
 }
 
@@ -307,8 +307,8 @@ export function h2DecisionStatusLabel(status: string) {
   return status;
 }
 
-export function h2DecisionCheckTone(status: string, blocksFinalApproval: boolean): "candidate" | "warning" | "unknown" {
-  if (blocksFinalApproval || status === "blocked" || status === "missing") return "warning";
+export function h2DecisionCheckTone(status: string, blocksFinalApproval: boolean): "candidate" | "warn" | "unknown" {
+  if (blocksFinalApproval || status === "blocked" || status === "missing") return "warn";
   if (status === "ready") return "candidate";
   return "unknown";
 }
@@ -322,9 +322,9 @@ export function h2DecisionCheckStatusLabel(status: string, blocksFinalApproval: 
   return status;
 }
 
-export function runtimeAttentionTone(status: string): "candidate" | "warning" | "unknown" {
+export function runtimeAttentionTone(status: string): "candidate" | "warn" | "unknown" {
   if (status === "blocked_by_guard" || status === "failed_stub" || status === "timed_out" || status === "readback_failed" || status === "codex_state_error") {
-    return "warning";
+    return "warn";
   }
   if (status === "readback_unavailable" || status === "waiting_permission" || status === "waiting_level_b_authorization") {
     return "unknown";
@@ -390,10 +390,10 @@ export function j1ControlSlug(value: string) {
     .slice(0, 80) || "unknown";
 }
 
-export function sessionContinuationStatusTone(status: SessionContinuationPreview["guard_result"]["status"]): "candidate" | "warning" | "unknown" {
+export function sessionContinuationStatusTone(status: SessionContinuationPreview["guard_result"]["status"]): "candidate" | "warn" | "unknown" {
   if (status === "allowed_preview") return "candidate";
   if (status === "needs_user_confirmation") return "unknown";
-  return "warning";
+  return "warn";
 }
 
 export function sessionContinuationStatusLabel(status: SessionContinuationPreview["guard_result"]["status"]) {
@@ -432,10 +432,10 @@ export function adapterDisplayName(adapterId: string) {
   return adapterId;
 }
 
-export function sessionOperationStatusTone(status: SessionOperationDescriptor["current_status"]): "candidate" | "warning" | "unknown" {
+export function sessionOperationStatusTone(status: SessionOperationDescriptor["current_status"]): "candidate" | "warn" | "unknown" {
   if (status === "readonly_available") return "candidate";
   if (status === "planned") return "unknown";
-  return "warning";
+  return "warn";
 }
 
 export function sessionOperationStatusLabel(status: SessionOperationDescriptor["current_status"]) {
@@ -468,9 +468,9 @@ export function sessionOperationFlags(operation: SessionOperationDescriptor) {
   ];
 }
 
-export function providerAvailabilityTone(status: ProviderAvailabilitySummary["availability_status"]): "candidate" | "warning" | "unknown" {
+export function providerAvailabilityTone(status: ProviderAvailabilitySummary["availability_status"]): "candidate" | "warn" | "unknown" {
   if (status === "available_readonly") return "candidate";
-  if (status === "planned" || status === "not_configured" || status === "not_verified" || status === "blocked") return "warning";
+  if (status === "planned" || status === "not_configured" || status === "not_verified" || status === "blocked") return "warn";
   return "unknown";
 }
 
@@ -578,9 +578,9 @@ export function eventKindLabel(kind: string) {
   return kind;
 }
 
-export function adapterStatusTone(status: AgentAdapterDescriptor["status"]): "candidate" | "warning" | "unknown" {
+export function adapterStatusTone(status: AgentAdapterDescriptor["status"]): "candidate" | "warn" | "unknown" {
   if (status === "available") return "candidate";
-  if (status === "planned" || status === "not_configured" || status === "blocked") return "warning";
+  if (status === "planned" || status === "not_configured" || status === "blocked") return "warn";
   return "unknown";
 }
 

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Badge } from "../components/Badge";
-import { EmptyState, FactRow, ListRow, SegTitle } from "../components/SpecPrimitives";
+import { EmptyState, FactRow, ListRow, Pill, SegTitle } from "../components/SpecPrimitives";
 import { displayStatus, formatDate, listRowTimeLabel, runtimeLogCategoryLabel } from "../lib/format";
 import {
   queryAuditLedgerReadModel,
@@ -41,7 +40,7 @@ type ParallelAuditRow = {
   key: string;
   kind: Exclude<ParallelAuditFilter, "all">;
   badgeLabel: string;
-  badgeTone: "neutral" | "candidate" | "warning" | "unknown";
+  badgeTone: "plain" | "candidate" | "warn" | "unknown";
   claim: string;
   timeLabel: string | null;
   facts: AuditLedgerFact[];
@@ -168,7 +167,7 @@ export function AuditLedgerView({
             {mainRows.map((row) => (
               <ListRow
                 key={row.key}
-                badge={<Badge tone={row.item.event_type === "unknown" ? "warning" : "neutral"}>账本</Badge>}
+                badge={<Pill tone={row.item.event_type === "unknown" ? "warn" : "plain"}>账本</Pill>}
                 claim={row.item.human_summary}
                 time={formatDate(row.item.at_ms)}
                 selected={selectedLedger?.key === row.key}
@@ -244,7 +243,7 @@ export function AuditLedgerView({
             {visibleParallelRows.map((row) => (
               <ListRow
                 key={row.key}
-                badge={<Badge tone={row.badgeTone}>{row.badgeLabel}</Badge>}
+                badge={<Pill tone={row.badgeTone}>{row.badgeLabel}</Pill>}
                 claim={row.claim}
                 time={row.timeLabel ?? "时间未登记"}
                 selected={selectedParallel?.key === row.key}
@@ -356,7 +355,7 @@ function buildParallelAuditRows(snapshot: WorkbenchSnapshot): ParallelAuditRow[]
       key: "runtime-log:" + entry.entry_id,
       kind: "runtime" as const,
       badgeLabel: runtimeLogCategoryLabel(entry.category),
-      badgeTone: entry.severity === "error" ? ("warning" as const) : entry.severity === "warning" ? ("warning" as const) : ("neutral" as const),
+      badgeTone: entry.severity === "error" ? ("warn" as const) : entry.severity === "warning" ? ("warn" as const) : ("plain" as const),
       claim: entry.summary,
       timeLabel: listRowTimeLabel(entry.started_at ?? entry.finished_at),
       facts: [
@@ -379,7 +378,7 @@ function buildParallelAuditRows(snapshot: WorkbenchSnapshot): ParallelAuditRow[]
     key: "degraded-state:" + state.state_id,
     kind: "health" as const,
     badgeLabel: "健康诊断",
-    badgeTone: state.blocks_real_execution ? ("warning" as const) : ("unknown" as const),
+    badgeTone: state.blocks_real_execution ? ("warn" as const) : ("unknown" as const),
     claim: state.title + "：" + state.summary,
     // ServiceDegradedState 没有时间字段（后端未提供）→ 留白，不编。
     timeLabel: null,

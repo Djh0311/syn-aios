@@ -1,4 +1,4 @@
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import type {
   AgentAdapterDescriptor,
   ProviderAvailabilitySummary,
@@ -41,7 +41,7 @@ export function AgentAdapterCapabilityPanel({ descriptors }: { descriptors: Agen
                 <strong>{descriptor.display_name}</strong>
                 <span>{descriptor.provider}</span>
               </div>
-              <Badge tone={adapterStatusTone(descriptor.status)}>{adapterStatusLabel(descriptor.status)}</Badge>
+              <Pill tone={adapterStatusTone(descriptor.status)}>{adapterStatusLabel(descriptor.status)}</Pill>
             </div>
             <div className="adapter-status-grid">
               <span>执行：{adapterExecutionStatusLabel(descriptor.execution_status)}</span>
@@ -112,9 +112,9 @@ export function ProviderAvailabilityPanel({ summaries }: { summaries: ProviderAv
               <div>
                 <strong>{summary.provider_label}</strong>
               </div>
-              <Badge tone={providerAvailabilityTone(summary.availability_status)}>
+              <Pill tone={providerAvailabilityTone(summary.availability_status)}>
                 {providerAvailabilityStatusLabel(summary.availability_status)}
-              </Badge>
+              </Pill>
             </div>
             <div className="provider-status-grid">
               <span>凭据：{credentialBoundaryStatusLabel(summary.credential_status)}</span>
@@ -167,18 +167,18 @@ export function SessionOperationBoundaryPanel({ operations }: { operations: Sess
                 <strong>{adapterDisplayName(group.adapterId)}</strong>
                 <span>{group.operations.length} 个操作边界</span>
               </div>
-              <Badge tone={group.adapterId === "codex-local" ? "unknown" : "warning"}>
+              <Pill tone={group.adapterId === "codex-local" ? "unknown" : "warn"}>
                 {group.adapterId === "codex-local" ? "只读边界" : "计划中不可执行"}
-              </Badge>
+                    </Pill>
             </div>
             <div className="session-operation-list">
               {group.operations.map((operation) => (
                 <div className={`session-operation-item ${operation.current_status}`} key={`${operation.adapter_id}:${operation.operation_id}`}>
                   <div className="session-operation-main">
                     <span>{operation.label}</span>
-                    <Badge tone={sessionOperationStatusTone(operation.current_status)}>
+                    <Pill tone={sessionOperationStatusTone(operation.current_status)}>
                       {sessionOperationStatusLabel(operation.current_status)}
-                    </Badge>
+              </Pill>
                     <em>{sessionOperationRiskLabel(operation.risk_level)}</em>
                   </div>
                   <p>{operation.unavailable_reason}</p>

@@ -1,4 +1,4 @@
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import { formatDate, pathTail } from "../../lib/format";
 import { summarizePlanAuthorizationStore } from "../../lib/planAuthorization";
 import { summarizeProjectConsultationProposalStore } from "../../lib/projectConsultationProposal";
@@ -120,7 +120,7 @@ export function WorkItemOrchestrationCard({
             <p className="path-text">工作项 ID：{workItem.work_item_id}</p>
           </details>
         </div>
-        <Badge tone={workItem.state === "accepted" ? "candidate" : "unknown"}>{stateLabel(workItem.state)}</Badge>
+        <Pill tone={workItem.state === "accepted" ? "candidate" : "unknown"}>{stateLabel(workItem.state)}</Pill>
       </div>
       <div className="workflow-draft-grid">
         <DetailLine label="负责角色" value={roleLabel(workItem.assigned_role_id)} />
@@ -144,7 +144,7 @@ export function WorkItemOrchestrationCard({
             <p className="eyebrow">节点会话绑定</p>
             <h3>{currentBinding ? "派发位置已有绑定" : "选择已有 Codex 会话"}</h3>
           </div>
-          <Badge tone={currentBinding ? "candidate" : "unknown"}>{currentBinding ? currentBinding.binding_source : "未绑定"}</Badge>
+          <Pill tone={currentBinding ? "candidate" : "unknown"}>{currentBinding ? currentBinding.binding_source : "未绑定"}</Pill>
         </div>
         {currentBinding ? (
           <div className="binding-current-card">
@@ -304,9 +304,9 @@ export function WorkItemOrchestrationCard({
             <p className="eyebrow">总指导回收</p>
             <h3>{recentDirectorReview ? directorDecisionLabel(recentDirectorReview.decision) : "记录派发结果判断"}</h3>
           </div>
-          <Badge tone={workItem.state === "ready_for_review" ? "candidate" : "unknown"}>
+          <Pill tone={workItem.state === "ready_for_review" ? "candidate" : "unknown"}>
             {workItem.state === "ready_for_review" ? "待回收" : stateLabel(workItem.state)}
-          </Badge>
+          </Pill>
         </div>
         {/* 简化：只留一句「收没收」的中文状态，砍掉派发结果 / 复核明细卡（含机器码、ID、命中数等）。 */}
         {completedDispatch ? (
@@ -436,9 +436,9 @@ function ProcessFactConfirmationPanel({
           <p className="eyebrow">C5 工作者汇报 / 过程事实</p>
           <h3>{latestReportAlreadyConfirmed ? "过程事实已确认" : latestReport ? "待主管确认" : "等待工作者汇报"}</h3>
         </div>
-        <Badge tone={openIssues.length ? "warning" : confirmedFactCount ? "candidate" : "unknown"}>
+        <Pill tone={openIssues.length ? "warn" : confirmedFactCount ? "candidate" : "unknown"}>
           {confirmedFactCount ? "已记录观察" : pendingConfirmationCount ? "待确认" : "准备中"}
-        </Badge>
+        </Pill>
       </div>
       {/* 简化：只留最新一条工作者汇报的中文摘要，砍数字栅格 + 过程事实复核明细 + 未决问题列表（含机器码 / 角色码 / 证据 ref）。 */}
       {latestReport ? (
@@ -592,9 +592,9 @@ function WorkflowResultSummaryPanel({
           <p className="eyebrow">C6 结果 / 阶段验收</p>
           <h3>{stageSummary?.accepted_as_stage_c_complete ? "阶段 C 验收门禁已通过" : finalReviewAccepted ? "等待用户结果决定 / 门禁摘要" : "待全局主管复核"}</h3>
         </div>
-        <Badge tone={stageSummary?.accepted_as_stage_c_complete ? "candidate" : blockedCount || needsChangesCount ? "warning" : "unknown"}>
+        <Pill tone={stageSummary?.accepted_as_stage_c_complete ? "candidate" : blockedCount || needsChangesCount ? "warn" : "unknown"}>
           {stageSummary?.accepted_as_stage_c_complete ? "阶段 C 已验收" : resultSummary?.final_review_status === "pending" ? "待复核" : "进行中"}
-        </Badge>
+        </Pill>
       </div>
       {/* 简化：只留「结果接没接受」的最终复核 / 用户决定一句话 + 动作按钮；
           砍数字栅格（阶段门禁 / 过程事实计数）、阶段门禁摘要卡、未决项 / 后置项列表。 */}

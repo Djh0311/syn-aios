@@ -1,4 +1,4 @@
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import { DetailLine as PrimitiveDetailLine, SummaryTile } from "../../components/WorkbenchPrimitives";
 import type { K3B1RecoveryReadModel } from "../../lib/types";
 import { ProjectCanvasDetailLine } from "./ProjectCanvasDetailPrimitives";
@@ -31,7 +31,7 @@ export function K3B1RecoveryCard({
           <h3>K3-B1 被安全审查再次阻断</h3>
           <p className="path-text">这不是执行失败可自动重试，也不是已完成恢复。</p>
         </div>
-        <Badge tone="warning">阻断</Badge>
+        <Pill tone="warn">阻断</Pill>
       </div>
       <p className="muted small-note">
         阻断原因：真实 Codex resume 会向外部服务发送项目/session 派生提示词，并写入 Codex 本地状态。

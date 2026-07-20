@@ -14,7 +14,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import { DetailLine } from "../../components/WorkbenchPrimitives";
 import {
   buildBlackboardCandidateOverlay,
@@ -811,7 +811,7 @@ export function ProjectWorkflowCanvasView({
                   .join(" ")}
               </span>
             ) : null}
-            <Badge tone={projectWorkflow ? "candidate" : "warning"}>{projectWorkflow ? projectWorkflow.state : "缺 workflow"}</Badge>
+            <Pill tone={projectWorkflow ? "candidate" : "warn"}>{projectWorkflow ? projectWorkflow.state : "缺 workflow"}</Pill>
             {/* P3：过程内容进按需抽屉——这个按钮唤起 / 收起右侧「工作流详情」抽屉（节点详情已挪到节点旁小面板）。 */}
             <button
               className="secondary-button canvas-detail-toggle"
@@ -883,6 +883,18 @@ export function ProjectWorkflowCanvasView({
 
 // D · 项目规则状态条（蓝图 §11.2）：把已派生的运行性 / 状态原因 / 全局徽标
 // （关注 / 权限 / 黑板）condense 成顶部一条；纯读派生数据，不补编、不触发执行。
+// 定式扶正（G2）：prsb-pill / canvas-status-pill tone → spec-pill tone 查表。
+const runcheckPillTone = { runnable: "ok", warning: "warn", blocked: "bad", unknown: "plain" } as const;
+const canvasBadgePillTone = {
+  neutral: "plain",
+  ready: "ok",
+  accepted: "ok",
+  running: "run",
+  warning: "warn",
+  blocked: "warn",
+  failed: "warn",
+} as const;
+
 function ProjectRuleStatusBar({
   canvasModel,
   runCheckStatus,
@@ -893,13 +905,11 @@ function ProjectRuleStatusBar({
   return (
     <div className="project-rule-status-bar" aria-label="项目规则状态条">
       <span className="prsb-headline">{canvasModel.status_reason.label}</span>
-      <span className={`prsb-pill runcheck ${runCheckStatus ?? "unknown"}`}>
-        运行性：{runCheckStatusLabel(runCheckStatus)}
-      </span>
+      <Pill tone={runcheckPillTone[runCheckStatus ?? "unknown"]}>运行性：{runCheckStatusLabel(runCheckStatus)}</Pill>
       {canvasModel.global_badges.map((badgeItem) => (
-        <span className={`prsb-pill ${badgeItem.tone}`} key={badgeItem.badge_id}>
+        <Pill tone={canvasBadgePillTone[badgeItem.tone]} key={badgeItem.badge_id}>
           {badgeItem.label}
-        </span>
+        </Pill>
       ))}
     </div>
   );
@@ -1003,9 +1013,9 @@ function ProjectWorkflowReactFlowCanvasBrowser({
     <div className="project-flow-stage" aria-label="项目工作流画布">
       <div className="project-canvas-status-bar" aria-label="画布全局状态">
         {canvasModel.global_badges.map((badgeItem) => (
-          <span className={`project-canvas-status-pill ${badgeItem.tone}`} key={badgeItem.badge_id}>
+          <Pill tone={canvasBadgePillTone[badgeItem.tone]} key={badgeItem.badge_id}>
             {badgeItem.label}
-          </span>
+          </Pill>
         ))}
       </div>
       <ProjectCanvasAttentionStrip canvasModel={canvasModel} />
@@ -1047,9 +1057,9 @@ function ProjectCanvasStaticStage({
     <div className="project-flow-stage static" aria-label="项目画布静态状态样例">
       <div className="project-canvas-status-bar" aria-label="画布全局状态">
         {canvasModel.global_badges.map((badgeItem) => (
-          <span className={`project-canvas-status-pill ${badgeItem.tone}`} key={badgeItem.badge_id}>
+          <Pill tone={canvasBadgePillTone[badgeItem.tone]} key={badgeItem.badge_id}>
             {badgeItem.label}
-          </span>
+          </Pill>
         ))}
       </div>
       <ProjectCanvasAttentionStrip canvasModel={canvasModel} />
@@ -1113,7 +1123,7 @@ export function ProjectCanvasAttentionPanel({ canvasModel }: { canvasModel: Proj
           <h3>{canvasModel.status_reason.label}</h3>
           <p className="path-text">{canvasModel.status_reason.summary}</p>
         </div>
-        <Badge tone={badgeToneForCanvasStatus(canvasModel.status)}>{canvasModel.attention_items.length} 项</Badge>
+        <Pill tone={badgeToneForCanvasStatus(canvasModel.status)}>{canvasModel.attention_items.length} 项</Pill>
       </div>
       {canvasModel.attention_items.length ? (
         <div className="workflow-compact-list">
@@ -1142,7 +1152,7 @@ export function ProjectCanvasEditBoundaryPanel({ boundary }: { boundary: Project
           <h3>编辑 / 布局边界</h3>
           <p className="path-text">{layout.summary}</p>
         </div>
-        <Badge tone="unknown">只读</Badge>
+        <Pill tone="unknown">只读</Pill>
       </div>
       <div className="workflow-draft-grid">
         <DetailLine label="布局" value="仅视图布局" />
@@ -1189,7 +1199,7 @@ export function ProjectCanvasSurfaceBoundaryPanel({ boundary }: { boundary: Canv
           <h3>{boundary.title}</h3>
           <p className="path-text">{boundary.summary}</p>
         </div>
-        <Badge tone="candidate">项目边界</Badge>
+        <Pill tone="candidate">项目边界</Pill>
       </div>
       <div className="workflow-draft-grid">
         {boundary.items.map((item) => (
@@ -1369,11 +1379,11 @@ function stateLabel(state: string) {
   return state || "未知";
 }
 
-export function badgeToneForCanvasStatus(status: ProjectCanvasStatus): "candidate" | "warning" | "unknown" {
+export function badgeToneForCanvasStatus(status: ProjectCanvasStatus): "candidate" | "warn" | "unknown" {
   if (status === "accepted" || status === "ready_to_dispatch" || status === "ready_for_review" || status === "prepared") return "candidate";
   if (status === "running") return "candidate";
   if (status === "waiting_for_permission" || status === "blocked" || status === "failed" || status === "timed_out" || status === "needs_changes" || status === "needs_review" || status === "readback_unavailable") {
-    return "warning";
+    return "warn";
   }
   return "unknown";
 }

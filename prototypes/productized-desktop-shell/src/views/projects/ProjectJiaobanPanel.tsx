@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import {
   JiaobanBlockedState,
   JiaobanNeedsReworkDisposal,
@@ -1203,7 +1203,7 @@ function ProjectJiaobanPanelBrowser({
             <div>
               <h3>这个项目现在用智能体直连</h3>
             </div>
-            <Badge tone="unknown">未开通自动干</Badge>
+            <Pill tone="unknown">未开通自动干</Pill>
           </div>
           <div className="role-loop-plain" aria-label="老实说明">
             <p className="role-loop-plain-lead">
@@ -1238,7 +1238,7 @@ function ProjectJiaobanPanelBrowser({
             <div>
               <h3>这个项目还没准备好交办</h3>
             </div>
-            <Badge tone="warning">缺项目工作流</Badge>
+            <Pill tone="warn">缺项目工作流</Pill>
           </div>
           <p className="muted small-note">先在右侧画布建起这个项目的工作流，再回来交办。</p>
         </div>

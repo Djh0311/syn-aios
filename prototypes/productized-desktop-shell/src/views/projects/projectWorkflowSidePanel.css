@@ -1052,28 +1052,6 @@
   flex: 1 1 auto;
   overflow-wrap: anywhere;
 }
-.jiaoban-step-badge {
-  font-size: var(--text-sm);
-  padding: 1px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-.jiaoban-step-badge.tone-green {
-  color: #2e7d4f;
-  background: rgba(46, 125, 79, 0.12);
-}
-.jiaoban-step-badge.tone-yellow {
-  color: #a86a00;
-  background: rgba(217, 164, 65, 0.18);
-}
-.jiaoban-step-badge.tone-red {
-  color: #b23b3b;
-  background: rgba(224, 86, 86, 0.15);
-}
-.jiaoban-step-badge.tone-gray {
-  color: #666;
-  background: rgba(150, 150, 150, 0.15);
-}
 /* 刀B·事实确认：绿✓行的 [属实,沉淀] 按钮 + 已沉淀标记。 */
 .jiaoban-fact-btn {
   font-size: var(--text-sm);
@@ -1469,25 +1447,6 @@
 .jiaoban-plan-facts {
   display: grid;
   gap: 0;
-}
-.jiaoban-fact {
-  margin: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  padding: 5px 0;
-  border-bottom: 1px dashed var(--hair);
-  font-size: var(--text-sm);
-}
-.jiaoban-fact-label {
-  flex: none;
-  color: var(--muted);
-}
-.jiaoban-fact-value {
-  min-width: 0;
-  text-align: right;
-  overflow-wrap: anywhere;
 }
 .jiaoban-plan-checks ol {
   margin: 2px 0 0;

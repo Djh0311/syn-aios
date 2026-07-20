@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const machineFaceRule = require('./lib/machine-face-rule.js');
 const hardcodedHexRule = require('./lib/hardcoded-hex-rule.js');
+const retiredStyleFamilyRule = require('./lib/retired-style-family-rule.js');
 
 const PRODUCT_ROOT = 'prototypes/productized-desktop-shell';
 const R_PREFLIGHT_BASELINE_COMMIT = 'ed01c6f281e3fd7a38548da948046e8366cc368d';
@@ -360,6 +361,7 @@ function buildReport(args) {
   report.metrics.helper_duplicates = scanHelperDuplicates(args.target);
   machineFaceRule.attachMachineFace(report, args.target, { walkFiles, rel, readText }, addFinding);
   hardcodedHexRule.attachHardcodedHex(report, args.target, { walkFiles, rel, readText }, addFinding);
+  retiredStyleFamilyRule.attachRetiredStyleFamily(report, args.target, { walkFiles, rel, readText }, addFinding);
 
   const scriptPath = path.join(args.target, 'scripts/harness/workbench-shape-gate.js');
   if (fs.existsSync(scriptPath)) {
@@ -460,6 +462,7 @@ function printReport(report) {
   console.log(`- Converged-helper dups outside utils/: ${report.metrics.helper_duplicates.duplicates.length} (${report.metrics.helper_duplicates.deferred.length} deferred-whitelisted)`);
   console.log(`- Machine-face on UI: ${report.metrics.machine_face.violations.length} error-form, ${report.metrics.machine_face.warnings.length} state-form warns (${report.metrics.machine_face.deferred.length} deferred-whitelisted)`);
   console.log(`- Hardcoded hex on UI: ${report.metrics.hardcoded_hex.violations.length} violations (${report.metrics.hardcoded_hex.deferred.length} deferred-whitelisted)`);
+  console.log(`- Retired style family: ${report.metrics.retired_style_family.violations.length} violations (${report.metrics.retired_style_family.deferred.length} deferred-whitelisted)`);
   console.log('');
   console.log('Ratchet waterlines:');
   for (const entry of report.metrics.lines.ratchet_files) {

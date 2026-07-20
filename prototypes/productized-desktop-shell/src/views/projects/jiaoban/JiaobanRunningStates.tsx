@@ -1,6 +1,6 @@
 // 交办·干态(五态之「干」)——阶段3拆巨石第四刀:自 ProjectJiaobanPanel.tsx 原样迁出,零逻辑改动。
 // 宪法归属:§一 干态(唯一问题=需要我吗·还要多久;逐格亮·不需要我=零打断)。
-import { Badge } from "../../../components/Badge";
+import { Pill } from "../../../components/SpecPrimitives";
 import type {
   ProjectWorkflowChainStatus,
   SupervisorPilotReadModel,
@@ -40,7 +40,7 @@ export function JiaobanRunningState({
         <div>
           <h3>正在干…</h3>
         </div>
-        <Badge tone="candidate">进行中</Badge>
+        <Pill tone="candidate">进行中</Pill>
       </div>
       <div className="role-loop-plain" aria-label="进度（人话）">
         <p className="role-loop-plain-lead">
@@ -100,7 +100,7 @@ export function JiaobanSupervisorPilotRunningState({
         <div>
           <h3>{isActive ? "主管进行中…" : status === "waiting_user" ? "主管等待用户决定" : "主管进程已结束"}</h3>
         </div>
-        <Badge tone={status === "failed" || status === "waiting_user" ? "warning" : "candidate"}>{statusText}</Badge>
+        <Pill tone={status === "failed" || status === "waiting_user" ? "warn" : "candidate"}>{statusText}</Pill>
       </div>
       <div className="role-loop-plain" aria-label="主管账本事件流">
         <p className="role-loop-plain-lead">

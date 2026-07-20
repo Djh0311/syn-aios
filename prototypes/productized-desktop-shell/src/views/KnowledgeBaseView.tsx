@@ -1,4 +1,4 @@
-import { Badge } from "../components/Badge";
+import { Pill } from "../components/SpecPrimitives";
 import { DetailLine } from "../components/WorkbenchPrimitives";
 import { deriveKnowledgeBaseSummary, type KnowledgeDocumentReadModel, type KnowledgeMemoryLink } from "../lib/knowledgeBase";
 import { deriveKnowledgeBasePageReadModelFromParts } from "../lib/pageSelectors";
@@ -65,7 +65,7 @@ export function KnowledgeBaseView({
               <p className="eyebrow">资料列表</p>
               <h3>项目文档 / 来源锚点</h3>
             </div>
-            <Badge tone="neutral">{summary.documents.length}</Badge>
+            <Pill tone="plain">{summary.documents.length}</Pill>
           </div>
           <div className="workflow-compact-list">
             {summary.documents.map((document) => (
@@ -94,7 +94,7 @@ export function KnowledgeBaseView({
               <p className="eyebrow">边界</p>
               <h3>{pageReadModel.obsidian_boundary.label}</h3>
             </div>
-            <Badge tone="unknown">占位</Badge>
+            <Pill tone="unknown">占位</Pill>
           </div>
           <div className="workflow-compact-list">
             <div className="workflow-compact-item">
@@ -116,7 +116,7 @@ export function KnowledgeBaseView({
               <p className="eyebrow">资料详情</p>
               <h3>来源 / 反向引用 / 候选入口</h3>
             </div>
-            <Badge tone={summary.documents.length ? "candidate" : "unknown"}>{summary.documents.length ? "可提出候选" : "空"}</Badge>
+            <Pill tone={summary.documents.length ? "candidate" : "unknown"}>{summary.documents.length ? "可提出候选" : "空"}</Pill>
           </div>
           {summary.documents.length ? (
             summary.documents.map((document) => (
@@ -133,7 +133,7 @@ export function KnowledgeBaseView({
               <p className="eyebrow">记忆捕获</p>
               <h3>事件 / 观察 / 候选来源</h3>
             </div>
-            <Badge tone={summary.capture_event_count ? "candidate" : "unknown"}>{summary.capture_event_count}</Badge>
+            <Pill tone={summary.capture_event_count ? "candidate" : "unknown"}>{summary.capture_event_count}</Pill>
           </div>
           <div className="workflow-compact-list">
             {summary.recent_capture_events.map((event) => (

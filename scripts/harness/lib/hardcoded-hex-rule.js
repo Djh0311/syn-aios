@@ -22,9 +22,9 @@ const CSS_FILES = [
 
 // 预登记 86 条（勘察 §6 口径：styles.css 49 + sidePanel 25 + ActiveWorkbenchView 3 +
 // canvasNodeData 6 + ProjectWorkflowCanvasView 1 + WorkflowCommandConsoleView 2），
-// G1 施工后实际 42 条（治平一批核销一批·只减不增）：
+// G1 施工后实际 42 条；G2 定式扶正核销 prsb 3 条 → 39 条（治平一批核销一批·只减不增）：
 const HARDCODED_HEX_WHITELIST = new Set([
-  // styles.css 26 = boot 诊断屏 6 + SVG 转义 2 + 无等值 token 的 live 零散值 18（b 类兜底·值未调）
+  // styles.css 23 = boot 诊断屏 6 + SVG 转义 2 + 无等值 token 的 live 零散值 15（b 类兜底·值未调）
   '#1a1c1a|prototypes/productized-desktop-shell/src/styles.css',
   '#f7f1e3|prototypes/productized-desktop-shell/src/styles.css',
   '#f1ead9|prototypes/productized-desktop-shell/src/styles.css',
@@ -48,9 +48,6 @@ const HARDCODED_HEX_WHITELIST = new Set([
   '#18211f|prototypes/productized-desktop-shell/src/styles.css',
   '#edf7f1|prototypes/productized-desktop-shell/src/styles.css',
   '#cfc8b6|prototypes/productized-desktop-shell/src/styles.css',
-  '#3f5235|prototypes/productized-desktop-shell/src/styles.css',
-  '#7a2e2e|prototypes/productized-desktop-shell/src/styles.css',
-  '#f7e8e8|prototypes/productized-desktop-shell/src/styles.css',
   // projectWorkflowSidePanel.css 9（状态色零散值·无等值 token）
   '#2e7d4f|prototypes/productized-desktop-shell/src/views/projects/projectWorkflowSidePanel.css',
   '#4caf72|prototypes/productized-desktop-shell/src/views/projects/projectWorkflowSidePanel.css',

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge } from "../components/Badge";
+import { Pill } from "../components/SpecPrimitives";
 import { DailyMemoryCandidateInbox } from "../components/DailyMemoryCandidateInbox";
 import { DetailLine, SummaryTile } from "../components/WorkbenchPrimitives";
 import { pathTail } from "../lib/format";
@@ -230,9 +230,9 @@ export function RunningWorkflowsView({
           <section className="panel running-section">
             <div className="panel-h">
               运行队列
-              <Badge tone={runQueue.blocked_count || runQueue.failed_count ? "warning" : runQueue.running_count ? "candidate" : "neutral"}>
+              <Pill tone={runQueue.blocked_count || runQueue.failed_count ? "warn" : runQueue.running_count ? "candidate" : "plain"}>
                 {runQueue.running_count} 运行 · {runQueue.waiting_user_count} 待确认
-              </Badge>
+              </Pill>
             </div>
             <div className="running-workflow-list">
               {leadQueueItems.length ? (
@@ -268,7 +268,7 @@ export function RunningWorkflowsView({
           <section className="panel running-section">
             <div className="panel-h">
               待确认
-              <Badge tone={leadConfirmations.length ? "warning" : "neutral"}>{runQueue.user_confirmation_queue.length} 项</Badge>
+              <Pill tone={leadConfirmations.length ? "warn" : "plain"}>{runQueue.user_confirmation_queue.length} 项</Pill>
             </div>
             <p className="muted small-note">
               其中记忆事项 {pageReadModel.memory_pending.confirmation_count} 项：候选确认、正式化或捕获补证都不会自动写正式记忆。
@@ -294,7 +294,7 @@ export function RunningWorkflowsView({
           <section className="panel running-section">
             <div className="panel-h">
               失败控制
-              <Badge tone={leadFailures.length ? "warning" : "neutral"}>{runQueue.failure_control_summaries.length} 条</Badge>
+              <Pill tone={leadFailures.length ? "warn" : "plain"}>{runQueue.failure_control_summaries.length} 条</Pill>
             </div>
             <div className="running-workflow-list">
               {leadFailures.length ? (
@@ -319,9 +319,9 @@ export function RunningWorkflowsView({
           <section className="panel running-section">
             <div className="panel-h">
               操作控制 / 恢复建议
-              <Badge tone={operationControl.confirmation_required_count || operationControl.readback_issue_count ? "warning" : "neutral"}>
+              <Pill tone={operationControl.confirmation_required_count || operationControl.readback_issue_count ? "warn" : "plain"}>
                 L3 决策面
-              </Badge>
+              </Pill>
             </div>
             <div className="running-summary-grid compact">
               <SummaryTile label="重试提案" value={`${operationControl.retry_proposal_count}`} hint="需重新确认，不自动重试" />
@@ -353,9 +353,9 @@ export function RunningWorkflowsView({
           <section className="panel running-section">
             <div className="panel-h">
               自动编排
-              <Badge tone={automation?.blocked_count ? "warning" : automation?.available ? "candidate" : "neutral"}>
+              <Pill tone={automation?.blocked_count ? "warn" : automation?.available ? "candidate" : "plain"}>
                 {automationStatusLabel(automation?.latest_status)}
-              </Badge>
+              </Pill>
             </div>
             {automation?.latest_plan ? (
               <>
@@ -390,9 +390,9 @@ export function RunningWorkflowsView({
           <section className="panel running-section">
             <div className="panel-h">
               统一执行命令
-              <Badge tone={productCommandReadModel?.blocked_attempt_count ? "warning" : "neutral"}>
+              <Pill tone={productCommandReadModel?.blocked_attempt_count ? "warn" : "plain"}>
                 {productCommandStatusLabel(productCommandReadModel)}
-              </Badge>
+              </Pill>
             </div>
             <div className="running-summary-grid compact">
               <SummaryTile label="命令" value={`${productCommandReadModel?.command_count ?? 0}`} hint="统一产品命令读模型" />
@@ -446,7 +446,7 @@ export function RunningWorkflowsView({
           <section className="panel running-section">
             <div className="panel-h">
               智能体运行关注
-              <Badge tone={runtimeAttention.length ? "warning" : "neutral"}>{runtimeAttention.length} 条</Badge>
+              <Pill tone={runtimeAttention.length ? "warn" : "plain"}>{runtimeAttention.length} 条</Pill>
             </div>
             <div className="running-workflow-list">
               {runtimeAttention.length ? (
@@ -778,7 +778,7 @@ function RunningNodeDetailPanel({
           <h3>{detail.title}</h3>
           {detail.summary ? <p className="path-text">{detail.summary}</p> : null}
         </div>
-        <Badge tone="candidate">{detail.sections.length} 节</Badge>
+        <Pill tone="candidate">{detail.sections.length} 节</Pill>
       </div>
       <RunningNodeRunContext canvasModel={canvasModel} />
       <div className="running-canvas-detail-sections">
@@ -836,7 +836,7 @@ function WorkflowCard({ workflow, onNavigate }: { workflow: ProjectWorkflowSumma
           <strong>{workflow.title}</strong>
           <span>{pathTail(workflow.project_root)} · {workflow.node_count} 节点 · {workflow.task_draft_count} 工作项</span>
         </div>
-        <Badge tone={focusTasks.length ? "warning" : "neutral"}>{workflowStatusLabel(workflow.state)}</Badge>
+        <Pill tone={focusTasks.length ? "warn" : "plain"}>{workflowStatusLabel(workflow.state)}</Pill>
       </div>
       <div className="running-task-list">
         {topTasks.map((task) => (

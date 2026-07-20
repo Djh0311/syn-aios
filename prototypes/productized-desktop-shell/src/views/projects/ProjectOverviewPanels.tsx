@@ -1,6 +1,5 @@
-import { Badge } from "../../components/Badge";
 import { DetailLine } from "../../components/WorkbenchPrimitives";
-import { FactRow, SegTitle } from "../../components/SpecPrimitives";
+import { FactRow, Pill, SegTitle } from "../../components/SpecPrimitives";
 import type {
   PlanAuthorization,
   PlanAuthorizationStoreV1,
@@ -43,7 +42,7 @@ export function ProjectOverview({
           <div>
             <SegTitle>项目事实</SegTitle>
           </div>
-          <Badge tone={warningCount ? "warning" : "candidate"}>{warningCount ? `${warningCount} warning` : "无 warning"}</Badge>
+          <Pill tone={warningCount ? "warn" : "candidate"}>{warningCount ? `${warningCount} warning` : "无 warning"}</Pill>
         </div>
         <div>
           <FactRow k="路径">{project.project_root}</FactRow>
@@ -101,7 +100,7 @@ export function ProjectAgentMovedPanel({
           <p className="eyebrow">智能体承接</p>
           <h3>会话列表和对话界面不再放在项目工作台</h3>
         </div>
-        <Badge tone="unknown">{sessions.length} 会话</Badge>
+        <Pill tone="unknown">{sessions.length} 会话</Pill>
       </div>
       <p className="muted small-note">
         {project.name} 的会话仍按 project_root 过滤，但入口在智能体页：先选智能体，再看会话列表和正文。
@@ -127,7 +126,7 @@ export function ProjectToolPlaceholder({ project, label }: { project: ProjectRec
         <div>
           <h3>{label}</h3>
         </div>
-        <Badge tone="unknown">占位</Badge>
+        <Pill tone="unknown">占位</Pill>
       </div>
       <p className="muted small-note">{project.name}</p>
     </section>

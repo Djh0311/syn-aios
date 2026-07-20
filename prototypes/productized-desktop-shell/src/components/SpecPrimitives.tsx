@@ -21,7 +21,13 @@ export function SegTitle({ children }: { children: ReactNode }) {
 export function PillRow({ children }: { children: ReactNode }) {
   return <div className="spec-pill-row">{children}</div>;
 }
-export function Pill({ tone = "plain", children }: { tone?: "plain" | "ok" | "warn" | "run"; children: ReactNode }) {
+export function Pill({
+  tone = "plain",
+  children,
+}: {
+  tone?: "plain" | "ok" | "warn" | "run" | "candidate" | "unknown" | "bad";
+  children: ReactNode;
+}) {
   return <span className={`spec-pill spec-pill-${tone}`}>{children}</span>;
 }
 

@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from "react";
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import { summarizeTaskPackageMemoryInjection } from "../../lib/candidateGovernance";
 import type {
   PendingAction,
@@ -36,7 +36,7 @@ export function ProjectWorkflowDraftPanel({
           <p className="eyebrow">项目工作流草稿</p>
           <h3>{projectWorkflow ? "当前项目已有本地工作流草稿" : "当前项目还没有本地工作流草稿"}</h3>
         </div>
-        <Badge tone={projectWorkflow ? "candidate" : "unknown"}>{projectWorkflow ? "已创建" : "未创建"}</Badge>
+        <Pill tone={projectWorkflow ? "candidate" : "unknown"}>{projectWorkflow ? "已创建" : "未创建"}</Pill>
       </div>
       <div className="workflow-draft-grid">
         <DetailLine label="工作流" value={projectWorkflow?.workflow_id || "未创建"} />
@@ -139,7 +139,7 @@ export function ProjectWorkflowDraftPanel({
                 <p className="eyebrow">任务包 Markdown 预览</p>
                 <h3>预览，不是已派发任务包</h3>
               </div>
-              <Badge tone="unknown">选择草稿后渲染</Badge>
+              <Pill tone="unknown">选择草稿后渲染</Pill>
             </div>
             <p className="muted small-note">有任务草稿时可以点“预览 Markdown”查看只读文本。</p>
             <p className="muted small-note">编辑字段表单会绑定当前选中的任务草稿。</p>
@@ -334,7 +334,7 @@ export function TaskFileGenerationController({
           <p className="eyebrow">真实任务包文件</p>
           <h3>{generatedPath ? "该草稿已有生成文件" : "从当前草稿生成文件"}</h3>
         </div>
-        <Badge tone={generatedPath ? "candidate" : "unknown"}>{generatedPath ? "已生成" : "未生成"}</Badge>
+        <Pill tone={generatedPath ? "candidate" : "unknown"}>{generatedPath ? "已生成" : "未生成"}</Pill>
       </div>
       {generatedPath ? <p className="path-text">{generatedPath}</p> : null}
       <div className="workflow-state-actions">
@@ -447,7 +447,7 @@ export function TaskDispatchReadinessShell({
           <p className="eyebrow">派发准备</p>
           <h3>{ready ? "任务包可作为后续派发入口" : "任务包还不能派发"}</h3>
         </div>
-        <Badge tone={ready ? "candidate" : "unknown"}>{readiness ? readiness.status : "未检查"}</Badge>
+        <Pill tone={ready ? "candidate" : "unknown"}>{readiness ? readiness.status : "未检查"}</Pill>
       </div>
       <div className="workflow-state-actions">
         <button className="secondary-button" type="button" onClick={onInspect}>
@@ -570,7 +570,7 @@ export function TaskDispatchFieldCorrectionShell({
           <p className="eyebrow">修正任务字段</p>
           <h3>保存前先看字段预览</h3>
         </div>
-        <Badge tone="warning">不自动补编</Badge>
+        <Pill tone="warn">不自动补编</Pill>
       </div>
       <div className="task-fields-grid">
         <label>
@@ -612,7 +612,7 @@ export function TaskFieldCorrectionPreview({ fields }: { fields: TaskPackageFiel
           <p className="eyebrow">字段级预览</p>
           <h3>{missing.length ? "仍有字段缺失" : "字段已填写，可复检 readiness"}</h3>
         </div>
-        <Badge tone={missing.length ? "unknown" : "candidate"}>{missing.length ? "not_ready" : "ready 候选"}</Badge>
+        <Pill tone={missing.length ? "unknown" : "candidate"}>{missing.length ? "not_ready" : "ready 候选"}</Pill>
       </div>
       <div className="workflow-draft-grid">
         <DetailLine label="任务名" value={fields.task_name || "待补充"} />
@@ -679,7 +679,7 @@ function TaskFieldsEditor({
           <p className="eyebrow">编辑字段</p>
           <h3>结构化字段是事实来源</h3>
         </div>
-        <Badge tone="candidate">task_package_v1</Badge>
+        <Pill tone="candidate">task_package_v1</Pill>
       </div>
       <div className="task-fields-grid">
         <label>

@@ -1,4 +1,4 @@
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import type { TaskPackage, WorkflowStateSnapshot } from "../../lib/types";
 import { DetailLine, WorkflowNode, listText, runCheckTone } from "./projectWorkflowLabels";
 
@@ -19,7 +19,7 @@ export function ProjectCanvasDerivedSummary({
           <p className="eyebrow">工作流详情摘要</p>
           <h3>{workflow.title}</h3>
         </div>
-        <Badge tone={runCheckTone(workflow.run_check_status)}>{workflow.run_check_status}</Badge>
+        <Pill tone={runCheckTone(workflow.run_check_status)}>{workflow.run_check_status}</Pill>
       </div>
       <div className="workflow-draft-grid">
         <DetailLine label="任务包" value={selectedTaskPackage?.task_package_id ?? `${workflow.task_packages.length} 个`} />
@@ -51,7 +51,7 @@ export function DerivedWorkflowSummary({
           <p className="eyebrow">派生 v1 读模型</p>
           <h3>{workflow.title}</h3>
         </div>
-        <Badge tone={runCheckTone(workflow.run_check_status)}>{workflow.run_check_status}</Badge>
+        <Pill tone={runCheckTone(workflow.run_check_status)}>{workflow.run_check_status}</Pill>
       </div>
       <div className="workflow-draft-grid">
         <DetailLine label="节点" value={`${workflow.nodes.length} 个`} />
@@ -83,9 +83,9 @@ function TaskPackageReadModelPreview({ taskPackage }: { taskPackage: TaskPackage
           <p className="eyebrow">任务包预览字段</p>
           <h3>{taskPackage.task_goal || "任务目标未登记"}</h3>
         </div>
-        <Badge tone={taskPackage.stale || taskPackage.missing_fields.length ? "warning" : "candidate"}>
+        <Pill tone={taskPackage.stale || taskPackage.missing_fields.length ? "warn" : "candidate"}>
           v{taskPackage.version} / {taskPackage.stale ? "过期" : "新鲜"}
-        </Badge>
+        </Pill>
       </div>
       <div className="workflow-draft-grid">
         <DetailLine label="模型" value={taskPackage.model_id || "缺失：缺模型"} />
@@ -144,7 +144,7 @@ function WorkflowBlueprintCanvas({
           <p className="eyebrow">项目工作流画布</p>
           <h3>方案视图 / 运行状态视图</h3>
         </div>
-        <Badge tone="unknown">项目事实</Badge>
+        <Pill tone="unknown">项目事实</Pill>
       </div>
       <div className="workflow-state-actions" aria-label="工作流视图切换">
         <button className="secondary-button" type="button">方案视图</button>

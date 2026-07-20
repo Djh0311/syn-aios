@@ -14,14 +14,15 @@
 4. 白名单预登记上限 86 条（勘察 §6：styles.css 49 + sidePanel 25 + ActiveWorkbenchView 3 +
    canvasNodeData 6 + ProjectWorkflowCanvasView 1 + WorkflowCommandConsoleView 2）；
    **G1 施工后实际 42 条，治平一批核销一批，只减不增**；不得为过关塞新违规。
+   **G2 定式扶正（2026-07-20）核销 prsb 3 条（`#3f5235`/`#7a2e2e`/`#f7e8e8`，随 `styles.css` prsb-pill 系退休）→ 39 条。**
 
-## 白名单 42 条明细（与 lib/hardcoded-hex-rule.js 一一对应）
+## 白名单 39 条明细（与 lib/hardcoded-hex-rule.js 一一对应）
 
 | 组 | 条目 | 理由 |
 |---|---|---|
-| styles.css 26 | boot 诊断屏 6 值（`#1a1c1a`/`#f7f1e3`/`#f1ead9`/`#e8dfcd`/`#5c3a1f`/`#2a2419`） | 启动失败屏一次性面（c 类·随③清单另包治平） |
+| styles.css 23 | boot 诊断屏 6 值（`#1a1c1a`/`#f7f1e3`/`#f1ead9`/`#e8dfcd`/`#5c3a1f`/`#2a2419`） | 启动失败屏一次性面（c 类·随③清单另包治平） |
 | | SVG data-URI 转义 2 值（`%231c1f24`/`%23a14242`，9 处） | url() 内转义形无法写 var（c 类） |
-| | 无等值 token 的 live 零散值 18（`#d8d3c5`/`#faf8f3`/`#ccc`/`#8a8275`/`#ddd`/`#c9bfa6`/`#faf7f0`/`#b14422`/`#c8a05a`/`#8a7f6a`/`#f7f1e6`/`#fffdf8`/`#18211f`/`#edf7f1`/`#cfc8b6`/`#3f5235`/`#7a2e2e`/`#f7e8e8`） | b 类兜底：正典表为合同不扩列，就近 token 会调色（禁），值取 live 登记 |
+| | 无等值 token 的 live 零散值 15（`#d8d3c5`/`#faf8f3`/`#ccc`/`#8a8275`/`#ddd`/`#c9bfa6`/`#faf7f0`/`#b14422`/`#c8a05a`/`#8a7f6a`/`#f7f1e6`/`#fffdf8`/`#18211f`/`#edf7f1`/`#cfc8b6`） | b 类兜底：正典表为合同不扩列，就近 token 会调色（禁），值取 live 登记；G2 核销 `#3f5235`/`#7a2e2e`/`#f7e8e8` 3 值 |
 | sidePanel 9 | `#2e7d4f`/`#4caf72`/`#666`/`#6b6b6b`/`#a86a00`/`#b0b0b0`/`#b23b3b`/`#d9a441`/`#e05656` | 状态色零散值·同上 |
 | canvasNodeData.ts 6 | `#c8602b`/`#5a6f4a`/`#3a6a77`/`#8a7f6a`/`#b9b3a6`/`#a14242` | 节点调色板**数据**非样式（c 类） |
 | ProjectWorkflowCanvasView.tsx 1 | `#9aa0a6` | SVG 依赖边 stroke·无等值 token（§八「替换」与 §六.3 白名单冲突，取零调色侧并披露） |

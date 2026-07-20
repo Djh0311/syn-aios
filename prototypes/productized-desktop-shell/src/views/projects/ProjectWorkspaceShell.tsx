@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import { formatDate } from "../../lib/format";
 import type {
   AutoDispatchGuardInput,
@@ -168,7 +168,7 @@ export function ProjectWorkspaceShell({
             <h1 title={project.project_root}>{project.name}</h1>
           </div>
           <div className="project-workspace-meta">
-            <Badge tone={project.active_hint ? "candidate" : "unknown"}>{project.active_hint ? "活跃" : "静默"}</Badge>
+            <Pill tone={project.active_hint ? "candidate" : "unknown"}>{project.active_hint ? "活跃" : "静默"}</Pill>
             <span>{sessions.length || project.thread_count} 会话</span>
             <details className="project-settings-menu">
               <summary>设置</summary>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import {
   globalBoundaryReviewStatusLabels,
   summarizeAutoDispatchGuardResult,
@@ -73,7 +73,7 @@ export function ProjectDirectorTaskPlanCard({
           <p className="eyebrow">项目主管拆任务</p>
           <h3>{projectDirectorTaskPlanHeadline(request, plan, loading, error)}</h3>
         </div>
-        <Badge tone={projectDirectorTaskPlanTone(plan, loading, error)}>{summary.status_label}</Badge>
+        <Pill tone={projectDirectorTaskPlanTone(plan, loading, error)}>{summary.status_label}</Pill>
       </div>
       {/* 裁掉数字栅格（已计划 / 已准备 / 待绑定 / 已阻断 / 记忆快照）——只动展示层；标题/状态/按钮保留。 */}
       {error ? <p className="state-warning">拆任务草案读取失败：{error}</p> : null}
@@ -339,9 +339,9 @@ function AutoAdvanceRoleLoopButtonBrowser({
           <p className="eyebrow">一键自动推进</p>
           <h3>授权范围内自动跑：拆任务 → 准备 → 工作者链跑</h3>
         </div>
-        <Badge tone={outcome?.stage === "completed" ? "candidate" : outcome ? "warning" : "unknown"}>
+        <Pill tone={outcome?.stage === "completed" ? "candidate" : outcome ? "warn" : "unknown"}>
           {outcome ? autoAdvanceStageLabel(outcome.stage) : running ? "运行中" : "待运行"}
-        </Badge>
+        </Pill>
       </div>
       <div className="role-loop-plain" aria-label="一键自动推进在做什么（人话）">
         <p className="role-loop-plain-lead">
@@ -445,7 +445,7 @@ function projectDirectorTaskPlanHeadline(
 }
 
 function projectDirectorTaskPlanTone(plan: ProjectDirectorTaskPlan | null, loading: boolean, error: string | null) {
-  if (error || plan?.blocked_count) return "warning";
+  if (error || plan?.blocked_count) return "warn";
   if (loading || !plan) return "unknown";
   if (plan.prepared_dispatch_count > 0 || plan.authorized_task_count > 0) return "candidate";
   return "unknown";
@@ -542,9 +542,9 @@ export function ProjectConsultationProposalCard({
         <div>
           <p className="eyebrow">项目咨询方案草案</p>
         </div>
-        <Badge tone={proposal?.status === "user_confirmed" ? "candidate" : proposal ? "warning" : "unknown"}>
+        <Pill tone={proposal?.status === "user_confirmed" ? "candidate" : proposal ? "warn" : "unknown"}>
           {summary.status_label}
-        </Badge>
+        </Pill>
       </div>
 
       {!proposal ? (
@@ -749,9 +749,9 @@ export function GlobalBoundaryReviewCard({
           <p className="eyebrow">全局边界复核</p>
           <h3>{summary.display_text}</h3>
         </div>
-        <Badge tone={summary.authorization?.status === "active" ? "candidate" : summary.review?.status === "blocked" ? "warning" : "unknown"}>
+        <Pill tone={summary.authorization?.status === "active" ? "candidate" : summary.review?.status === "blocked" ? "warn" : "unknown"}>
           {summary.status_label}
-        </Badge>
+        </Pill>
       </div>
       <div className="workflow-draft-grid">
         <DetailLine label="用户确认" value={summary.proposal?.status === "user_confirmed" ? "已确认" : "未就绪"} />
@@ -1094,9 +1094,9 @@ export function PlanAuthorizationSummaryCard({
           <p className="eyebrow">方案授权摘要</p>
           <h3>{summary.display_text}</h3>
         </div>
-        <Badge tone={guardSummary.status === "authorized" ? "candidate" : guardSummary.status === "not_checked" ? "unknown" : "warning"}>
+        <Pill tone={guardSummary.status === "authorized" ? "candidate" : guardSummary.status === "not_checked" ? "unknown" : "warn"}>
           {guardSummary.status}
-        </Badge>
+        </Pill>
       </div>
       <div className="workflow-draft-grid">
         <DetailLine label="允许角色" value={String(summary.actor_scope?.allowed_role_ids.length ?? 0)} />

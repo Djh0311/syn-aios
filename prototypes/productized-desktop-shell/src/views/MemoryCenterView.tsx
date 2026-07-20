@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { Badge } from "../components/Badge";
-import { EmptyState } from "../components/SpecPrimitives";
+import { EmptyState, Pill } from "../components/SpecPrimitives";
 import { deriveMemoryManagementSummary, type FormalMemoryListItem } from "../lib/memoryCenter";
 import {
   buildAdoptMemoryCandidateAction,
@@ -800,12 +799,12 @@ export function MemoryCenterView({
               <p className="eyebrow">实体 / 关系治理</p>
               <h3>实体候选 / 关系候选 / 已确认关系</h3>
             </div>
-            <Badge tone={summary.entity_relation_summary.confirmed_relation_count ? "candidate" : "unknown"}>
+            <Pill tone={summary.entity_relation_summary.confirmed_relation_count ? "candidate" : "unknown"}>
               {summary.entity_relation_summary.entity_candidates.length +
                 summary.entity_relation_summary.merge_candidates.length +
                 summary.entity_relation_summary.relation_candidates.length}{" 候选 · "}
               {summary.entity_relation_summary.confirmed_relation_count}{" 已确认"}
-            </Badge>
+            </Pill>
           </div>
           <div className="workflow-compact-list">
             <div className="workflow-compact-item">
@@ -861,9 +860,9 @@ export function MemoryCenterView({
               <p className="eyebrow">任务包冻结快照</p>
               <h3>入选 / 排除 / 待审查材料</h3>
             </div>
-            <Badge tone={summary.task_package_summary.snapshot_count ? "candidate" : "unknown"}>
+            <Pill tone={summary.task_package_summary.snapshot_count ? "candidate" : "unknown"}>
               {summary.task_package_summary.snapshot_count}
-            </Badge>
+            </Pill>
           </div>
           <div className="workflow-compact-list">
             <div className="workflow-compact-item">
@@ -888,9 +887,9 @@ export function MemoryCenterView({
               <p className="eyebrow">维护任务</p>
               <h3>运行 / 发现 / 报告</h3>
             </div>
-            <Badge tone={summary.maintenance_summary.blocking_count ? "warning" : "candidate"}>
+            <Pill tone={summary.maintenance_summary.blocking_count ? "warn" : "candidate"}>
               {summary.maintenance_summary.blocking_count}{" 阻断 · "}{summary.maintenance_summary.check_summaries.length}{" 检查"}
-            </Badge>
+            </Pill>
           </div>
           <div className="workflow-compact-list">
             <div className="workflow-compact-item">
@@ -922,9 +921,9 @@ export function MemoryCenterView({
               <p className="eyebrow">成熟模式 / 跨项目主题</p>
               <h3>候选 / 报告 / 验收门禁</h3>
             </div>
-            <Badge tone={summary.mature_pattern_summary.user_confirmation_required_count ? "warning" : "unknown"}>
+            <Pill tone={summary.mature_pattern_summary.user_confirmation_required_count ? "warn" : "unknown"}>
               {summary.mature_pattern_summary.mature_pattern_candidate_count}
-            </Badge>
+            </Pill>
           </div>
           <div className="workflow-compact-list">
             <div className="workflow-compact-item">
@@ -964,7 +963,7 @@ export function MemoryCenterView({
               <p className="eyebrow">记忆捕获</p>
               <h3>操作先进入捕获总线</h3>
             </div>
-            <Badge tone="unknown">{summary.capture_events.length}</Badge>
+            <Pill tone="unknown">{summary.capture_events.length}</Pill>
           </div>
           <div className="workflow-compact-list">
             {summary.capture_events.map((item) => (
@@ -985,7 +984,7 @@ export function MemoryCenterView({
               <p className="eyebrow">观察来源</p>
               <h3>观察不是正式记忆</h3>
             </div>
-            <Badge tone="unknown">{summary.observation_sources.length}</Badge>
+            <Pill tone="unknown">{summary.observation_sources.length}</Pill>
           </div>
           <div className="workflow-compact-list">
             {summary.observation_sources.map((item) => (
@@ -1006,7 +1005,7 @@ export function MemoryCenterView({
               <p className="eyebrow">项目相关记忆摘要</p>
               <h3>轻量汇总</h3>
             </div>
-            <Badge tone="neutral">{summary.project_summaries.length}</Badge>
+            <Pill tone="plain">{summary.project_summaries.length}</Pill>
           </div>
           <div className="workflow-compact-list">
             {summary.project_summaries.map((item) => (
@@ -1025,7 +1024,7 @@ export function MemoryCenterView({
               <p className="eyebrow">最近变化</p>
               <h3>版本 / 审计 / 检查</h3>
             </div>
-            <Badge tone="neutral">{summary.recent_changes.length}</Badge>
+            <Pill tone="plain">{summary.recent_changes.length}</Pill>
           </div>
           <div className="workflow-compact-list">
             {summary.recent_changes.map((change) => (

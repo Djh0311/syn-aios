@@ -1,4 +1,4 @@
-import { Badge } from "../components/Badge";
+import { Pill } from "../components/SpecPrimitives";
 import { DetailLine } from "../components/WorkbenchPrimitives";
 import type { OfflineRoleDispatchProposal, PendingAction, ProjectRecord, ProjectWorkflowSummary, SessionRecord } from "../lib/types";
 
@@ -139,7 +139,7 @@ export function OfflineRoleOrchestrationPanel({
           <h3>总指导派发闭环</h3>
           <p className="path-text">离线演示：确认后只写工作台自己的 workflow-state.v0.json；不启动 Codex、不恢复会话、不写 /Users/yoyi/.codex。</p>
         </div>
-        <Badge tone={proposal ? "candidate" : "warning"}>{proposal ? "派发块有效" : "缺字段"}</Badge>
+        <Pill tone={proposal ? "candidate" : "warn"}>{proposal ? "派发块有效" : "缺字段"}</Pill>
       </div>
 
       <div className="offline-role-grid">
@@ -274,7 +274,7 @@ export function OfflineDispatchProposalPreview({ proposal }: { proposal: Offline
           <p className="eyebrow">派发预览</p>
           <h3>{proposal.task_title}</h3>
         </div>
-        <Badge tone="candidate">{proposal.target_role_label}</Badge>
+        <Pill tone="candidate">{proposal.target_role_label}</Pill>
       </div>
       <div className="workflow-draft-grid">
         <DetailLine label="目标角色" value={`${proposal.target_role_label} / ${proposal.target_role_id}`} emptyValue="未登记" />

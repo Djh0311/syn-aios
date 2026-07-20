@@ -1,6 +1,6 @@
 // 交办·卡住/待决定态(五态之「卡住」)——阶段3拆巨石第三刀:自 ProjectJiaobanPanel.tsx 原样迁出,零逻辑改动。
 // 宪法归属:§一 卡住态(唯一问题=为什么停·我选哪个;人话停因+死配对按钮·永不冻)。
-import { Badge } from "../../../components/Badge";
+import { Pill } from "../../../components/SpecPrimitives";
 import type { AutoAdvanceRoleLoopOutcome, SessionRecord } from "../../../lib/types";
 import { JiaobanRawSessionLink, JiaobanSessionPicker } from "./jiaobanSessionParts";
 
@@ -29,7 +29,7 @@ export function JiaobanWaitingDecisionState({
         <div>
           <h3 className="jiaoban-blocked-title">待你决定</h3>
         </div>
-        <Badge tone="warning">未自动重跑</Badge>
+        <Pill tone="warn">未自动重跑</Pill>
       </div>
       <div className="role-loop-plain" aria-label="worker 求助原文">
         <p className="role-loop-plain-lead">{reason}</p>
@@ -311,7 +311,7 @@ export function JiaobanBlockedState({
         <div>
           <h3 className="jiaoban-blocked-title">{faceTitle}</h3>
         </div>
-        <Badge tone="warning">{faceBadge}</Badge>
+        <Pill tone="warn">{faceBadge}</Pill>
       </div>
       <div className="role-loop-plain" aria-label="停下的原因（人话）">
         <p className="role-loop-plain-lead">{reason}</p>

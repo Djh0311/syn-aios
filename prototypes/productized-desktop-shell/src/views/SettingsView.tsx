@@ -4,8 +4,7 @@
 // ⚠️ 零 hooks:本文件被 `tests/r4-page-read-model-settings.test.tsx` 与
 // `tests/offline-permission-dialog.test.tsx:2400` 以 `visibleText(<SettingsView …/>)` 走真 SSR 消费,
 // 当前不在 renderComposite 裸调路径上。仍不引 hooks——四行全是纯投影,不需要。
-import { Badge } from "../components/Badge";
-import { FactRow } from "../components/SpecPrimitives";
+import { FactRow, Pill } from "../components/SpecPrimitives";
 import { deriveSettingsPageReadModelFromParts } from "../lib/pageSelectors";
 import type { HomeSystemStatusReadModel } from "./HomeView";
 import type { WorkbenchSnapshot, WorkflowStateSnapshot } from "../lib/types";
@@ -72,7 +71,7 @@ export function SettingsView({
       <section className="panel settings-section settings-plain-card">
         <div className="panel-h">
           设置
-          <Badge tone="unknown">还没接上开关</Badge>
+          <Pill tone="unknown">还没接上开关</Pill>
         </div>
         <FactRow k="通知">{NOT_WIRED}</FactRow>
         <FactRow k="数据">{storageLine(systemStatus)}</FactRow>
@@ -94,14 +93,12 @@ export function SettingsView({
         <section className="panel settings-section">
           <div className="panel-h">
             常规
-            <Badge tone={workflowStateError ? "warning" : "neutral"}>{workflowStateError ? "事实层异常" : "只读"}</Badge>
+            <Pill tone={workflowStateError ? "warn" : "plain"}>{workflowStateError ? "事实层异常" : "只读"}</Pill>
           </div>
-          <div className="settings-fact-grid">
-            <SettingFact label="项目" value={`${pageReadModel.general.project_count}`} />
-            <SettingFact label="智能体会话" value={`${pageReadModel.general.session_count}`} />
-            <SettingFact label="技能" value={`${pageReadModel.general.skill_count}`} />
-            <SettingFact label="工作流" value={`${pageReadModel.general.workflow_count}`} />
-          </div>
+          <FactRow k="项目">{`${pageReadModel.general.project_count}`}</FactRow>
+          <FactRow k="智能体会话">{`${pageReadModel.general.session_count}`}</FactRow>
+          <FactRow k="技能">{`${pageReadModel.general.skill_count}`}</FactRow>
+          <FactRow k="工作流">{`${pageReadModel.general.workflow_count}`}</FactRow>
           <p className="muted small-note">
             普通主导航展示项目、智能体、想法箱、知识库、记忆层、技能、运行器、运行中工作流；开发和内部边界统一从本页进入。
           </p>
@@ -111,7 +108,7 @@ export function SettingsView({
         <section className="panel settings-section developer-settings-section">
           <div className="panel-h">
             开发者
-            <Badge tone="unknown">主动进入</Badge>
+            <Pill tone="unknown">主动进入</Pill>
           </div>
           <p className="muted small-note">
             这里收纳开发、内部边界和诊断入口：建议方案、实验画布、工具、模型/凭据、适配器、供应方、边车文件、原始状态、诊断等只读材料。
@@ -136,7 +133,7 @@ export function SettingsView({
       <section className="panel settings-section developer-boundary-section">
         <div className="panel-h">
           内部边界摘要
-          <Badge tone="unknown">不展开原始材料</Badge>
+          <Pill tone="unknown">不展开原始材料</Pill>
         </div>
         <div className="developer-boundary-grid">
           <BoundaryItem
@@ -165,7 +162,7 @@ export function SettingsView({
       <section className="panel settings-section developer-boundary-section">
         <div className="panel-h">
           页面读模型合同
-          <Badge tone="unknown">R4-A1</Badge>
+          <Pill tone="unknown">R4-A1</Pill>
         </div>
         <p className="muted small-note">
           当前只冻结每个页面该读取什么、哪些内部材料不能放到首屏；页面仍使用既有 WorkbenchSnapshot，尚未切到按页查询。
@@ -209,15 +206,6 @@ function storageLine(status: HomeSystemStatusReadModel | null): string {
   return status.storage_mode === "db_primary"
     ? `存得很稳（新引擎试运行中，第 ${status.observation_day} 天，一切正常）`
     : "存得很稳";
-}
-
-function SettingFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="settings-fact">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
 }
 
 function BoundaryItem({ title, value, note }: { title: string; value: string; note: string }) {

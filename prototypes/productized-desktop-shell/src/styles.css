@@ -578,7 +578,6 @@
   min-width: 0;
 }
 
-.settings-fact-grid,
 .running-summary-grid,
 .developer-boundary-grid {
   display: grid;
@@ -586,7 +585,6 @@
   gap: 10px;
 }
 
-.settings-fact,
 .developer-boundary-item {
   display: grid;
   gap: 5px;
@@ -596,7 +594,6 @@
   background: rgba(28, 31, 36, 0.025);
 }
 
-.settings-fact span,
 .developer-boundary-item span,
 .developer-boundary-item em {
   color: var(--ink-light);
@@ -606,7 +603,6 @@
   line-height: 1.55;
 }
 
-.settings-fact strong,
 .developer-boundary-item strong {
   color: var(--ink-deep);
   font-family: var(--font-serif);
@@ -3433,7 +3429,6 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
-.badge-row,
 .action-row {
   display: flex;
   flex-wrap: wrap;
@@ -3446,37 +3441,6 @@ button:disabled {
 
 .action-row.compact {
   margin: 0;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-size: var(--text-sm);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.badge.candidate {
-  background: var(--candidate-bg);
-  color: var(--candidate);
-}
-
-.badge.warning {
-  background: var(--warning-bg);
-  color: var(--warning);
-}
-
-.badge.unknown {
-  background: var(--unknown-bg);
-  color: var(--unknown);
-}
-
-.badge.neutral {
-  background: var(--panel-soft);
-  color: var(--muted);
 }
 
 .detail-grid {
@@ -8478,35 +8442,6 @@ textarea {
   font-size: var(--text-md);
   margin-right: 4px;
 }
-.project-rule-status-bar .prsb-pill {
-  font-size: var(--text-xs);
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--hair-2);
-  background: var(--rice);
-  color: rgba(28, 31, 36, 0.72);
-}
-.project-rule-status-bar .prsb-pill.warning {
-  border-color: var(--canvas-gold);
-  color: var(--canvas-brown);
-  background: var(--canvas-gold-bg);
-}
-.project-rule-status-bar .prsb-pill.runcheck.runnable {
-  border-color: var(--canvas-green);
-  color: #3f5235;
-  background: var(--canvas-green-bg);
-}
-.project-rule-status-bar .prsb-pill.runcheck.warning {
-  border-color: var(--canvas-gold);
-  color: var(--canvas-brown);
-  background: var(--canvas-gold-bg);
-}
-.project-rule-status-bar .prsb-pill.runcheck.blocked {
-  border-color: var(--vermil);
-  color: #7a2e2e;
-  background: #f7e8e8;
-}
-
 /* 实验画布「清空 / 新建画布」两步确认（行内换行排布）。 */
 .canvas-reset-confirm {
   display: inline-flex;
@@ -9058,30 +8993,6 @@ textarea {
   pointer-events: none;
 }
 
-.project-canvas-status-pill {
-  min-height: 26px;
-  padding: 5px 9px;
-  border: 1px solid var(--hair);
-  background: rgba(245, 241, 232, 0.84);
-  color: var(--ink-mid);
-  font-size: var(--text-sm);
-  line-height: 1.2;
-}
-
-.project-canvas-status-pill.ready,
-.project-canvas-status-pill.accepted,
-.project-canvas-status-pill.running {
-  border-color: rgba(35, 108, 104, 0.35);
-  color: var(--accent-strong);
-}
-
-.project-canvas-status-pill.warning,
-.project-canvas-status-pill.blocked,
-.project-canvas-status-pill.failed {
-  border-color: rgba(155, 74, 24, 0.35);
-  color: var(--warning);
-}
-
 .project-canvas-attention-strip {
   position: absolute;
   z-index: 5;
@@ -9604,14 +9515,6 @@ textarea {
 }
 .project-side-dev-detail-toggle input {
   cursor: pointer;
-}
-
-/* 批1·交货卡 pill 行(骨架:状态行=现有事实小徽章;复用 jiaoban-step-badge 徽章样式)。 */
-.jiaoban-done-pills {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 2px 0 10px;
 }
 
 /* 批2·记忆中心列表卡选中态(点哪条详情看哪条)。 */
@@ -10163,6 +10066,9 @@ textarea {
 .spec-pill-ok { background: var(--accent-bg); color: var(--accent-strong); }
 .spec-pill-warn { background: var(--warning-bg); color: var(--warning); }
 .spec-pill-run { background: var(--run-bg); color: var(--run); }
+.spec-pill-candidate { background: var(--candidate-bg); color: var(--candidate); }
+.spec-pill-unknown { background: var(--unknown-bg); color: var(--unknown); }
+.spec-pill-bad { background: var(--danger-bg); color: var(--danger); }
 .spec-list-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--bg-subtle); font-size: var(--text-sm); }
 .spec-list-row.is-selectable { cursor: pointer; }
 .spec-list-row.is-selectable:hover { background: var(--panel-soft); }

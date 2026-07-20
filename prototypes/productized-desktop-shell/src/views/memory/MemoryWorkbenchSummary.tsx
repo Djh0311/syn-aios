@@ -1,6 +1,8 @@
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import type { MemoryManagementSummary } from "../../lib/memoryCenter";
 import type { MemoryCenterPageReadModel } from "../../lib/pageSelectors";
+
+const badgePillTone = { neutral: "plain", candidate: "candidate", warning: "warn", unknown: "unknown" } as const;
 
 export function MemoryCenterStats({ pageReadModel }: { pageReadModel: MemoryCenterPageReadModel }) {
   return (
@@ -31,9 +33,9 @@ export function MemoryWorkbenchSummary({
           <p className="eyebrow">记忆工作台</p>
           <h3>捕获 / 候选 / 任务记忆包</h3>
         </div>
-        <Badge tone={pageReadModel.memory_workbench.action_count ? "warning" : "candidate"}>
+        <Pill tone={pageReadModel.memory_workbench.action_count ? "warn" : "candidate"}>
           {pageReadModel.memory_workbench.action_count} 待处理
-        </Badge>
+        </Pill>
       </div>
       <div className="memory-workbench-strip" aria-label="记忆工作台关键数字">
         <MiniMetric label="捕获" value={`${pageReadModel.memory_workbench.capture_count}`} />
@@ -57,7 +59,7 @@ export function MemoryWorkbenchSummary({
           <div className="workflow-compact-item memory-workbench-action" key={item.action_id}>
             <div className="memory-item-topline">
               <strong>{item.title}</strong>
-              <Badge tone={item.badge_tone}>{memoryWorkbenchActionLabel(item.kind)}</Badge>
+              <Pill tone={badgePillTone[item.badge_tone]}>{memoryWorkbenchActionLabel(item.kind)}</Pill>
             </div>
             <span>{item.summary}</span>
             <em>下一步：{item.next_step}</em>

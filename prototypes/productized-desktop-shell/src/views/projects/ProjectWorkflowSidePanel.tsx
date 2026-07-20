@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { Badge } from "../../components/Badge";
+import { Pill } from "../../components/SpecPrimitives";
 import type { ProjectCanvasNode, ProjectWorkflowCanvasReadModel } from "../../lib/projectCanvas";
 import type {
   TaskPackage,
@@ -290,7 +290,7 @@ export function ProjectCanvasNodeDetailView({ detail, node }: { detail: NonNulla
           <h3>{detail.title}</h3>
           {/* 精简：去掉重复的 summary（多是节点 kind，如 director——和标题/徽章重复）。 */}
         </div>
-        <Badge tone={badgeToneForCanvasStatus(node?.status ?? "unknown")}>{node ? stateLabel(node.status) : "未知"}</Badge>
+        <Pill tone={badgeToneForCanvasStatus(node?.status ?? "unknown")}>{node ? stateLabel(node.status) : "未知"}</Pill>
       </div>
       {/* 用户定（2026-06-30）：警告码隐掉后「用户摘要/节点状态」可能空，补一句始终都有的中文状态概况。 */}
       {node ? <p className="node-detail-summary">{nodeStateHint(node.status)}</p> : null}
