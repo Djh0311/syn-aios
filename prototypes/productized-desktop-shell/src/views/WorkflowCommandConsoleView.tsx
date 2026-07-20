@@ -172,7 +172,7 @@ export function WorkflowCommandConsoleView({
           <code>{projectRoot}</code>
         )}
         {projectRoot !== TEST_PROJECT_ROOT ? (
-          <span className="meta-text" style={{ color: "var(--warning, #b80)" }}>
+          <span className="meta-text" style={{ color: "var(--warning)" }}>
             ⚠️ 非固定测试项目，链会被 path-lock 闸拒（零执行）
           </span>
         ) : null}
@@ -223,9 +223,9 @@ export function WorkflowCommandConsoleView({
           minHeight: 120,
           overflowY: "auto",
           fontFamily: "monospace",
-          fontSize: 12,
+          fontSize: "var(--text-sm)",
           lineHeight: 1.6,
-          border: "1px solid var(--border, #3334)",
+          border: "1px solid var(--hair)",
           borderRadius: 6,
           padding: 10,
           whiteSpace: "pre-wrap",

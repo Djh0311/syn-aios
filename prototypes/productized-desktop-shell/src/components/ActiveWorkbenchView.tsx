@@ -540,12 +540,12 @@ function CanvasRunResidueSweeperCard() {
       style={{
         marginTop: 16,
         padding: 16,
-        border: "1px solid var(--border-subtle, #333)",
+        border: "1px solid var(--hair)",
         borderRadius: 10,
       }}
     >
-      <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>清理画布历史残料</h3>
-      <p style={{ margin: "0 0 12px", opacity: 0.7, fontSize: 13, lineHeight: 1.5 }}>
+      <h3 style={{ margin: "0 0 4px", fontSize: "var(--text-lg)" }}>清理画布历史残料</h3>
+      <p style={{ margin: "0 0 12px", opacity: 0.7, fontSize: "var(--text-md)", lineHeight: 1.5 }}>
         把「canvas-run 形状 + 待审(ready_for_review) + 超 7 天」的历史工作项合法归档为 paused（一步合法 ·
         可逆 · 不删记录 · 带审计）。先盘点，确认后再执行。
       </p>
@@ -563,7 +563,7 @@ function CanvasRunResidueSweeperCard() {
         {preview && preview.matched_count > 0 ? (
           confirming ? (
             <>
-              <span style={{ fontSize: 13 }}>确认归档 {preview.matched_count} 条？</span>
+              <span style={{ fontSize: "var(--text-md)" }}>确认归档 {preview.matched_count} 条？</span>
               <button
                 type="button"
                 disabled={busy}
@@ -586,15 +586,15 @@ function CanvasRunResidueSweeperCard() {
         ) : null}
       </div>
       {error ? (
-        <p style={{ color: "var(--danger, #e55b5b)", marginTop: 12, fontSize: 13 }}>出错：{error}</p>
+        <p style={{ color: "var(--danger)", marginTop: 12, fontSize: "var(--text-md)" }}>出错：{error}</p>
       ) : null}
       {preview ? (
         <div style={{ marginTop: 12 }}>
-          <p style={{ margin: "0 0 6px", fontSize: 13 }}>
+          <p style={{ margin: "0 0 6px", fontSize: "var(--text-md)" }}>
             找到 {preview.matched_count} 条{preview.matched_count > 0 ? "，预览如下：" : "。"}
           </p>
           {preview.matched_count === 0 ? (
-            <p style={{ opacity: 0.6, fontSize: 13 }}>没有命中的残料，无需清理。</p>
+            <p style={{ opacity: 0.6, fontSize: "var(--text-md)" }}>没有命中的残料，无需清理。</p>
           ) : (
             <ul
               style={{
@@ -602,7 +602,7 @@ function CanvasRunResidueSweeperCard() {
                 paddingLeft: 18,
                 maxHeight: 220,
                 overflow: "auto",
-                fontSize: 12,
+                fontSize: "var(--text-sm)",
                 lineHeight: 1.6,
               }}
             >
@@ -618,9 +618,9 @@ function CanvasRunResidueSweeperCard() {
       ) : null}
       {done ? (
         <div style={{ marginTop: 12 }}>
-          <p style={{ margin: 0, color: "var(--success, #4caf72)", fontSize: 13 }}>{done.message}</p>
+          <p style={{ margin: 0, color: "var(--accent)", fontSize: "var(--text-md)" }}>{done.message}</p>
           {done.backup_path ? (
-            <p style={{ margin: "4px 0 0", opacity: 0.6, fontSize: 12 }}>
+            <p style={{ margin: "4px 0 0", opacity: 0.6, fontSize: "var(--text-sm)" }}>
               已备份：<code>{done.backup_path}</code>
             </p>
           ) : null}

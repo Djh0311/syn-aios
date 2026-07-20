@@ -41,13 +41,13 @@
   border: 1.5px dashed var(--hair-2);
   border-radius: 10px;
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-align: center;
 }
 
 .project-overview-reserved span {
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   line-height: 1.55;
 }
 
@@ -65,7 +65,7 @@
   color: var(--ink-mid);
   cursor: pointer;
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
   letter-spacing: 0.08em;
   list-style: none;
 }
@@ -107,8 +107,8 @@
 .project-file-list strong,
 .project-resource-grid strong {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 14px;
+  font-family: var(--font-serif);
+  font-size: var(--text-md);
   font-weight: 400;
   letter-spacing: 0.08em;
 }
@@ -116,7 +116,7 @@
 .project-file-list span,
 .project-resource-grid span {
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
   overflow-wrap: anywhere;
 }

@@ -1,94 +1,93 @@
 :root {
   color-scheme: light;
 
-  /* ── Surface ── */
+  /* ── 纸墨中性（G1 正典·2026-07-20：中性=live 值入正典；--bg 定回拍板值 #f3f0ea）── */
   --bg: #f3f0ea;
   --bg-subtle: #ede9e1;
   --panel: #faf8f4;
   --panel-soft: #f0ede6;
   --panel-raised: #ffffff;
+  --paper-card: #fbfcf8;
+  --rice: var(--bg);
+  --rice-2: #efeadd;
+  --shell: #ebe5d4;
+  --ink-deep: #1c1f24;
+  --ink: var(--ink-deep);
+  --ink-mid: #4a4d54;
+  --ink-light: #8a8a85;
+  --muted: var(--ink-light);
+  --ink-mist: #b6b3a8;
+  --hair: rgba(28, 31, 36, 0.1);
+  --hair-2: rgba(28, 31, 36, 0.18);
+  --line: var(--hair-2);
 
-  /* ── Ink ── */
-  --ink: #1a1c1a;
-  --ink-mid: #3d4039;
-  --muted: #6b7068;
-  --hair: #d6d2c8;
-  --line: #dbd7cf;
-
-  /* ── Semantic status colors ── */
+  /* ── 强调/语义（--warning 定回拍板值 #8a4010；danger=vermil 朱砂只做黄牌/危险）── */
   --accent: #2a6b5e;
   --accent-strong: #1b4f45;
   --accent-bg: #eaf4f1;
-
-  /* running / in-progress */
-  --run: #1a5c8a;
-  --run-bg: #e7f2fa;
-
-  /* warning / pending confirm */
+  --vermil: #a14242;
+  --danger: var(--vermil);
+  --danger-bg: #fdf0f0;
+  --danger-border: rgba(162, 66, 66, 0.25);
   --warning: #8a4010;
   --warning-bg: #fff0e0;
   --warning-border: rgba(138, 64, 16, 0.25);
-
-  /* blocked / error */
-  --danger: #8a2828;
-  --danger-bg: #fdf0f0;
-  --danger-border: rgba(138, 40, 40, 0.25);
-
-  /* candidate / proposed */
-  --candidate: #1a5580;
-  --candidate-bg: #e8f3fa;
-
-  /* planned / unavailable */
-  --planned: #6b5e2a;
-  --planned-bg: #faf5e4;
-
-  /* unknown / degraded */
+  --run: #1a5c8a;
+  --run-bg: #e7f2fa;
+  --candidate: #546845;
+  --candidate-bg: rgba(110, 127, 91, 0.1);
   --unknown: #5a5068;
   --unknown-bg: #f0eef6;
+  --ok: var(--accent);
+  --ok-bg: var(--accent-bg);
+  --tea: #6e7f5b;
+  --terra: #b87341;
 
-  /* ok / formal */
-  --ok: #2a6b5e;
-  --ok-bg: #eaf4f1;
+  /* ── 画布色族（G1 新增，收 b 类裸值·值取 live 不调色）── */
+  --canvas-green: #5a6f4a;
+  --canvas-green-bg: #eef2e8;
+  --canvas-line: #c8c2b4;
+  --canvas-ink: #2e2a25;
+  --canvas-orange: #c8602b;
+  --canvas-orange-bg: #fff3e6;
+  --canvas-red: #b1493f;
+  --canvas-red-bg: #fbeceb;
+  --canvas-gold: #c8993f;
+  --canvas-gold-bg: #faf3e2;
+  --canvas-brown: #8a5a12;
 
-  /* ── Typography scale ── */
-  --text-xs: 11px;
-  --text-sm: 13px;
-  --text-base: 14px;
-  --text-md: 15px;
-  --text-lg: 18px;
-  --text-xl: 22px;
-  --text-2xl: 28px;
-
-  /* ── Spacing ── */
+  /* ── 尺寸（断点尺寸块见 ≤1180px / ≥1181px 两媒体块）── */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
-  --space-8: 32px;
-
-  /* ── Radius ── */
   --r-sm: 6px;
   --r-md: 8px;
   --r-lg: 12px;
-
-  /* ── Shadow ── */
-  --shadow-sm: 0 1px 3px rgba(26, 28, 26, 0.07);
-  --shadow: 0 4px 16px rgba(26, 28, 26, 0.08);
+  --shadow: 0 1px 2px rgba(26, 28, 26, 0.06);
   --shadow-lg: 0 12px 40px rgba(26, 28, 26, 0.10);
-
-  /* ── Shell dimensions ── */
+  --rail-left: 48px;
+  --rail-right: 58px;
+  --rail-right-expanded: 320px;
+  --topbar-h: 46px;
+  --dock-h: 64px;
   --sidebar-w: 144px;
-  --topbar-h: 52px;
-  --dock-h: 0px;
-  --right-rail-w: 44px;
-  --right-panel-w: 320px;
 
-  --status-ok: var(--ok);
-  --status-warn: var(--warning);
-  --status-err: var(--danger);
-  --status-run: var(--run);
+  /* ── 字号正典（21 裸档收敛靶·半像素档消灭）── */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 17px;
+  --text-2xl: 22px;
+
+  /* ── 字体族正典（宋=标题与主管正文 / 黑=chrome·标签·meta / 等宽=数字·代码·路径）── */
+  --font-serif: "Songti SC", "STSong", serif;
+  --font-sans: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 
 .boot-diagnostic-shell {
@@ -99,7 +98,7 @@
   background:
     radial-gradient(circle at 12% 8%, rgba(155, 125, 74, 0.14), transparent 28%),
     linear-gradient(135deg, #f7f1e3 0%, #f1ead9 44%, #e8dfcd 100%);
-  font-family: "Songti SC", "STSong", "PingFang SC", serif;
+  font-family: var(--font-serif);
 }
 
 .boot-diagnostic-shell strong,
@@ -111,7 +110,7 @@
 
 .boot-diagnostic-shell strong {
   margin-bottom: 10px;
-  font-size: 24px;
+  font-size: var(--text-xl);
   font-weight: 700;
 }
 
@@ -141,8 +140,8 @@
   background: rgba(247, 241, 227, 0.94);
   color: #2a2419;
   box-shadow: 0 14px 34px rgba(49, 41, 25, 0.16);
-  font-family: "Songti SC", "STSong", "PingFang SC", serif;
-  font-size: 13px;
+  font-family: var(--font-serif);
+  font-size: var(--text-md);
 }
 
 /* Skill / Harness object pages: keep ordinary surfaces object-oriented and move raw details behind disclosure. */
@@ -167,7 +166,7 @@
   color: var(--ink-light);
   cursor: pointer;
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
   letter-spacing: 0.08em;
 }
 
@@ -250,7 +249,7 @@
 .running-canvas-eyebrow {
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
@@ -258,8 +257,8 @@
 .running-canvas-title {
   margin: 0;
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 24px;
+  font-family: var(--font-serif);
+  font-size: var(--text-xl);
   font-weight: 500;
   line-height: 1.2;
   overflow-wrap: anywhere;
@@ -275,7 +274,7 @@
 .running-canvas-head-meta span {
   color: var(--ink-mid);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 
@@ -291,7 +290,7 @@
   border: 1px solid var(--hair);
   background: rgba(245, 241, 232, 0.84);
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.2;
 }
 
@@ -341,7 +340,7 @@
 .running-stage-segment-label {
   color: var(--ink-mid);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
@@ -351,7 +350,7 @@
 .running-stage-segment-state {
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-style: normal;
   line-height: 1.2;
 }
@@ -388,7 +387,7 @@
 .running-stage-band-progress {
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 
@@ -437,14 +436,14 @@
 
 .running-canvas-empty strong {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 18px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   font-weight: 500;
 }
 
 .running-canvas-empty span {
   color: var(--ink-light);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
@@ -467,7 +466,7 @@
   margin: 0 0 8px;
   color: var(--ink-mid);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: 0.04em;
 }
@@ -495,7 +494,7 @@
   background: transparent;
   color: var(--ink-mid);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -520,7 +519,7 @@
   padding: 8px 0;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 @media (max-width: 980px) {
@@ -602,7 +601,7 @@
 .developer-boundary-item em {
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-style: normal;
   line-height: 1.55;
 }
@@ -610,8 +609,8 @@
 .settings-fact strong,
 .developer-boundary-item strong {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 15px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   font-weight: 400;
   overflow-wrap: anywhere;
 }
@@ -653,7 +652,7 @@
 .settings-link-glyph {
   grid-row: span 2;
   color: var(--vermil);
-  font-size: 16px;
+  font-size: var(--text-lg);
   line-height: 1.3;
 }
 
@@ -664,15 +663,15 @@
 }
 
 .settings-link-card strong {
-  font-family: "Noto Serif SC", serif;
-  font-size: 15px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   font-weight: 400;
 }
 
 .settings-link-card em {
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-style: normal;
   line-height: 1.55;
 }
@@ -724,8 +723,8 @@
 .running-card-head strong,
 .running-attention-card strong {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 15px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   font-weight: 400;
   overflow-wrap: anywhere;
 }
@@ -746,7 +745,7 @@
 .running-task-row {
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-style: normal;
   line-height: 1.55;
 }
@@ -770,8 +769,8 @@
 .running-action-note {
   flex: none;
   color: var(--ink-mid);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
   font-style: normal;
 }
 
@@ -795,8 +794,8 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--ink);
-  font-family: "DM Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  font-size: var(--text-base);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -876,8 +875,8 @@ button:disabled {
   border-radius: var(--r-md);
   background: var(--ink);
   color: var(--panel);
-  font-family: "Noto Serif SC", serif;
-  font-size: 15px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -969,7 +968,7 @@ button:disabled {
 
 .nav-glyph {
   flex: none;
-  font-size: 14px;
+  font-size: var(--text-md);
   opacity: 0.7;
 }
 
@@ -1007,7 +1006,7 @@ button:disabled {
 .source-path {
   margin: 4px 0 0;
   color: var(--ink);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   word-break: break-word;
 }
 
@@ -1106,7 +1105,7 @@ button:disabled {
 .search-box kbd {
   color: var(--muted);
   font-size: var(--text-xs);
-  font-family: "DM Mono", monospace;
+  font-family: var(--font-mono);
 }
 
 /* ── Buttons ── */
@@ -1180,7 +1179,7 @@ button:disabled {
 }
 
 .section-heading h2 {
-  font-size: 28px;
+  font-size: var(--text-2xl);
   line-height: 1.2;
 }
 
@@ -1215,13 +1214,13 @@ button:disabled {
 
 .metric span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .metric strong {
   display: block;
   margin-top: 8px;
-  font-size: 30px;
+  font-size: var(--text-2xl);
   line-height: 1;
 }
 
@@ -1277,7 +1276,7 @@ button:disabled {
 }
 
 .entry-card strong {
-  font-size: 26px;
+  font-size: var(--text-2xl);
   line-height: 1.15;
 }
 
@@ -1287,8 +1286,8 @@ button:disabled {
 }
 
 .entry-kicker {
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--text-sm);
+  font-weight: 700;
   color: var(--accent-strong) !important;
 }
 
@@ -1311,7 +1310,7 @@ button:disabled {
   padding: 7px 8px;
   border-radius: 8px;
   background: var(--panel-soft);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .gap-grid {
@@ -1327,7 +1326,7 @@ button:disabled {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .gap-line strong,
@@ -1339,7 +1338,7 @@ button:disabled {
 .detail-line span,
 .small-note {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.45;
 }
 
@@ -1392,7 +1391,7 @@ button:disabled {
   left: 50%;
   transform: translateX(-50%);
   width: 1px;
-  background: var(--ui-line);
+  background: var(--hair);
   opacity: 0.5;
   transition: opacity 0.12s ease, width 0.12s ease;
 }
@@ -1480,14 +1479,14 @@ button:disabled {
   margin: 2px 0 4px;
   color: var(--ink-deep);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 17px;
-  font-weight: 650;
+  font-size: var(--text-xl);
+  font-weight: 600;
   letter-spacing: 0;
 }
 .agent-list-head .agent-list-count {
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
 }
 .agent-new-chat-button {
   display: flex;
@@ -1502,14 +1501,14 @@ button:disabled {
   background: rgba(255, 255, 255, 0.72);
   color: var(--ink-deep);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--text-sm);
+  font-weight: 600;
   letter-spacing: 0;
   cursor: pointer;
 }
 
 .agent-new-chat-button span {
-  font-size: 17px;
+  font-size: var(--text-xl);
   line-height: 1;
 }
 
@@ -1529,7 +1528,7 @@ button:disabled {
 .agent-chat-composer label span {
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
 }
 
@@ -1547,13 +1546,13 @@ button:disabled {
   min-height: 29px;
   padding: 5px 8px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .agent-chat-composer p,
 .agent-chat-composer-foot span {
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -1592,7 +1591,7 @@ button:disabled {
   min-height: 16px;
   min-width: 0;
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .agent-composer-target,
@@ -1627,8 +1626,8 @@ button:disabled {
   flex: none;
   color: var(--ink-deep);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--text-xs);
+  font-weight: 600;
 }
 
 .agent-composer-statusline span,
@@ -1698,7 +1697,7 @@ button:disabled {
   min-height: 26px;
   padding: 3px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .agent-chat-composer p {
@@ -1715,14 +1714,14 @@ button:disabled {
   border-radius: 6px;
   background: rgba(255, 248, 239, 0.78);
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
 .agent-composer-error strong {
   color: var(--ink-deep);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--text-sm);
+  font-weight: 600;
 }
 
 .agent-composer-error span {
@@ -1736,7 +1735,7 @@ button:disabled {
   min-height: 28px;
   padding: 4px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .agent-composer-error details {
@@ -1752,7 +1751,7 @@ button:disabled {
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.58);
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -1773,15 +1772,15 @@ button:disabled {
 
 .agent-send-preview strong {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 14px;
+  font-family: var(--font-serif);
+  font-size: var(--text-md);
   font-weight: 400;
   letter-spacing: 0.04em;
 }
 
 .agent-send-preview span {
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -1803,7 +1802,7 @@ button:disabled {
   border-radius: 999px;
   background: rgba(255, 240, 224, 0.7);
   color: var(--warning);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 /* 会话筛选 chip 行 */
@@ -1820,15 +1819,15 @@ button:disabled {
   background: transparent;
   color: var(--ink-mid);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
   letter-spacing: 0.04em;
   cursor: pointer;
 }
 .filter-chip em {
   margin-left: 5px;
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   font-style: normal;
 }
 .filter-chip:hover {
@@ -1855,7 +1854,7 @@ button:disabled {
   gap: 5px;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .session-search input {
@@ -1867,7 +1866,7 @@ button:disabled {
   background: rgba(255, 255, 255, 0.62);
   color: var(--ink-deep);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   outline: none;
 }
 
@@ -1893,7 +1892,7 @@ button:disabled {
   border: 1px dashed var(--hair-2);
   background: rgba(245, 241, 232, 0.72);
   color: var(--terra);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.5;
 }
 
@@ -1920,14 +1919,14 @@ button:disabled {
 .session-group-head .sg-caret {
   flex: none;
   color: var(--ink-light);
-  font-size: 10px;
+  font-size: var(--text-2xs);
 }
 .session-group-head .sg-name {
   flex: 1;
   color: var(--ink-deep);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--text-sm);
+  font-weight: 600;
   letter-spacing: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1936,8 +1935,8 @@ button:disabled {
 .session-group-head .sg-sub {
   flex: none;
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
 }
 
 .session-card-list {
@@ -2010,7 +2009,7 @@ button:disabled {
   min-width: 0;
   color: var(--ink-deep);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   font-weight: 500;
   line-height: 1.4;
   overflow: hidden;
@@ -2028,7 +2027,7 @@ button:disabled {
   flex: none;
   color: var(--ink-mid);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .session-card .sc-sep {
   color: var(--ink-mist);
@@ -2038,7 +2037,7 @@ button:disabled {
   flex: none;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .session-card .sc-status.warn {
   color: var(--terra);
@@ -2069,7 +2068,7 @@ button:disabled {
   margin: 6px 0 0;
   color: var(--ink-mid);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .session-reader-sub .sc-sep {
   color: var(--ink-mist);
@@ -2078,7 +2077,7 @@ button:disabled {
 .session-reader-boundary {
   margin: 0;
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .agent-session-dev-details {
@@ -2087,7 +2086,7 @@ button:disabled {
   border-bottom: 1px solid var(--hair-2);
   background: rgba(245, 241, 232, 0.34);
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .agent-session-dev-details > summary {
@@ -2095,7 +2094,7 @@ button:disabled {
   color: var(--ink-light);
   cursor: pointer;
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.08em;
 }
 
@@ -2133,8 +2132,8 @@ button:disabled {
 .session-reader-head h3 {
   margin: 0;
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: var(--text-md);
+  font-weight: 600;
   line-height: 1.2;
   /* Conversation-page top-bar title: codex stores the whole first message here,
      so clamp to one ellipsised line instead of wrapping a wall of text. */
@@ -2147,7 +2146,7 @@ button:disabled {
 .session-reader-head .action-row.compact .secondary-button {
   min-height: 28px;
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .session-detail-grid,
@@ -2184,7 +2183,7 @@ button:disabled {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .timeline-event.user {
@@ -2220,7 +2219,7 @@ button:disabled {
 
 .timeline-event-head span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .timeline-event p {
@@ -2241,7 +2240,7 @@ button:disabled {
 .event-details summary {
   color: var(--muted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 700;
 }
 
@@ -2254,8 +2253,8 @@ button:disabled {
   border-radius: 8px;
   background: #18211f;
   color: #edf7f1;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -2300,12 +2299,12 @@ button:disabled {
   border-radius: 8px;
   background: var(--candidate-bg);
   color: var(--candidate);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 700;
 }
 
 .empty-agent {
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .project-workbench {
@@ -2343,7 +2342,7 @@ button:disabled {
 
 .pane-heading h2 {
   margin: 4px 0 12px;
-  font-size: 20px;
+  font-size: var(--text-xl);
 }
 
 .project-list {
@@ -2377,7 +2376,7 @@ button:disabled {
 .project-list-item strong {
   display: block;
   overflow: hidden;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2413,7 +2412,7 @@ button:disabled {
   background: transparent;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -2462,7 +2461,7 @@ button:disabled {
   background:
     linear-gradient(rgba(216, 223, 219, 0.5) 1px, transparent 1px),
     linear-gradient(90deg, rgba(216, 223, 219, 0.5) 1px, transparent 1px),
-    #fbfcf8;
+    var(--paper-card);
   background-size: 28px 28px;
   overflow: auto;
 }
@@ -2511,7 +2510,7 @@ button:disabled {
   border-radius: 8px;
   background: white;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 700;
   text-align: center;
 }
@@ -2543,7 +2542,7 @@ button:disabled {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 /* 节点详情顶部一句中文状态概况（警告码隐掉后兜底，不让面板空着）。 */
@@ -2558,7 +2557,7 @@ button:disabled {
   background:
     linear-gradient(rgba(216, 223, 219, 0.42) 1px, transparent 1px),
     linear-gradient(90deg, rgba(216, 223, 219, 0.42) 1px, transparent 1px),
-    #fbfcf8;
+    var(--paper-card);
   background-size: 24px 24px;
 }
 
@@ -2601,14 +2600,14 @@ button:disabled {
 }
 
 .workflow-compact-item strong {
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.35;
 }
 
 .workflow-compact-item span,
 .workflow-compact-item em {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-style: normal;
   line-height: 1.4;
 }
@@ -2626,7 +2625,7 @@ button:disabled {
   padding: 9px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .run-check-item.blocked {
@@ -2640,7 +2639,7 @@ button:disabled {
 .run-check-item span,
 .run-check-item em {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-style: normal;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -2657,7 +2656,7 @@ button:disabled {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .offline-role-grid {
@@ -2678,8 +2677,8 @@ button:disabled {
 
 .offline-role-card span {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
 
 .offline-role-card strong,
@@ -2689,7 +2688,7 @@ button:disabled {
 
 .offline-role-card em {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-style: normal;
 }
 
@@ -2703,8 +2702,8 @@ button:disabled {
   display: grid;
   gap: 6px;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
 
 .offline-orchestration-grid textarea {
@@ -2731,7 +2730,7 @@ button:disabled {
 .offline-role-result-card span,
 .offline-role-result-card em {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-style: normal;
 }
 
@@ -2768,7 +2767,7 @@ button:disabled {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .audit-summary-item strong,
@@ -2780,7 +2779,7 @@ button:disabled {
 .audit-summary-item span,
 .audit-summary-item em {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-style: normal;
 }
 
@@ -2788,28 +2787,28 @@ button:disabled {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .node-dispatch-box {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .director-review-box {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .execution-control-box {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .dispatch-preview-block,
@@ -2841,7 +2840,7 @@ button:disabled {
 .attempt-card span,
 .attempt-card em {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-style: normal;
 }
 
@@ -2868,10 +2867,10 @@ button:disabled {
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
-  color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  background: var(--paper-card);
+  color: var(--ink-deep);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   line-height: 1.5;
   white-space: pre-wrap;
 }
@@ -2892,13 +2891,13 @@ button:disabled {
 .binding-current-card span,
 .binding-current-card em {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-style: normal;
 }
 
 .project-inline-dev-detail {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .project-inline-dev-detail summary {
@@ -2940,7 +2939,7 @@ button:disabled {
 .binding-candidate-item span,
 .binding-candidate-item em {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-style: normal;
 }
 
@@ -2967,12 +2966,12 @@ button:disabled {
 
 .workflow-node span {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
 
 .workflow-node strong {
-  font-size: 15px;
+  font-size: var(--text-lg);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -3020,7 +3019,7 @@ button:disabled {
   border-radius: 8px;
   background: white;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   transform: translateX(-50%);
   white-space: nowrap;
 }
@@ -3034,7 +3033,7 @@ button:disabled {
   border-radius: 8px;
   background: white;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.45;
 }
 
@@ -3042,7 +3041,7 @@ button:disabled {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .workflow-state-panel {
@@ -3052,7 +3051,7 @@ button:disabled {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .workflow-draft-panel {
@@ -3061,7 +3060,7 @@ button:disabled {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .workflow-draft-grid {
@@ -3087,8 +3086,8 @@ button:disabled {
   display: grid;
   gap: 6px;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
 
 .task-draft-form input,
@@ -3131,7 +3130,7 @@ button:disabled {
 .task-draft-item span,
 .task-draft-item em {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-style: normal;
 }
 
@@ -3153,8 +3152,8 @@ button:disabled {
   border-radius: 8px;
   background: #18211f;
   color: #edf7f1;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -3166,7 +3165,7 @@ button:disabled {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .task-fields-grid {
@@ -3179,8 +3178,8 @@ button:disabled {
   display: grid;
   gap: 6px;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
 
 .task-fields-grid input,
@@ -3217,12 +3216,12 @@ button:disabled {
 
 .state-cell span {
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: var(--text-xs);
+  font-weight: 700;
 }
 
 .state-cell strong {
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -3236,7 +3235,7 @@ button:disabled {
 .state-warning {
   margin: 0;
   color: var(--warning);
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.45;
 }
 
@@ -3267,12 +3266,12 @@ button:disabled {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .board-card span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -3301,13 +3300,13 @@ button:disabled {
 .summary-tile span,
 .summary-tile em {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-style: normal;
   line-height: 1.35;
 }
 
 .summary-tile strong {
-  font-size: 26px;
+  font-size: var(--text-2xl);
   line-height: 1.1;
 }
 
@@ -3330,7 +3329,7 @@ button:disabled {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .warning-card {
@@ -3360,7 +3359,7 @@ button:disabled {
 
 .resource-card-head span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .resource-fields {
@@ -3386,12 +3385,12 @@ button:disabled {
 
 .resource-field span {
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: var(--text-xs);
+  font-weight: 700;
 }
 
 .resource-field strong {
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -3405,7 +3404,7 @@ button:disabled {
 .neutral-warning {
   align-items: center;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .panel,
@@ -3420,7 +3419,7 @@ button:disabled {
 
 .item-title {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--text-lg);
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
@@ -3428,8 +3427,8 @@ button:disabled {
 .path-text {
   margin: 6px 0 0;
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -3455,7 +3454,7 @@ button:disabled {
   min-height: 24px;
   padding: 3px 8px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -3492,19 +3491,19 @@ button:disabled {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .detail span {
   display: block;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .detail strong {
   display: block;
   margin-top: 5px;
-  font-size: 15px;
+  font-size: var(--text-lg);
   overflow-wrap: anywhere;
 }
 
@@ -3520,7 +3519,7 @@ button:disabled {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .mini-row strong,
@@ -3530,7 +3529,7 @@ button:disabled {
 
 .mini-row span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .candidate-block {
@@ -3541,7 +3540,7 @@ button:disabled {
 
 .candidate-block h4 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .file-list {
@@ -3560,8 +3559,8 @@ button:disabled {
   border-radius: 8px;
   background: var(--panel-soft);
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 
@@ -3590,13 +3589,13 @@ td {
 th {
   position: sticky;
   top: 0;
-  background: #fbfcf8;
+  background: var(--paper-card);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 td {
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .session-title {
@@ -3612,7 +3611,7 @@ td {
   border: 1px dashed var(--line);
   border-radius: 8px;
   color: var(--muted);
-  background: #fbfcf8;
+  background: var(--paper-card);
 }
 
 .dialog-backdrop {
@@ -3652,7 +3651,7 @@ td {
 .dialog h2 {
   margin: 0 0 0;
   font-size: var(--text-xl);
-  font-family: "Noto Serif SC", serif;
+  font-family: var(--font-serif);
   font-weight: 600;
   line-height: 1.3;
 }
@@ -3767,42 +3766,6 @@ td {
 }
 
 /* Inkwash shell replacement: mirrors docs/architecture/ui-prototype/inkwash-full.html while keeping existing workbench views mounted. */
-:root {
-  --rice: #f5f1e8;
-  --rice-2: #efeadd;
-  --shell: #ebe5d4;
-  --shell-2: #e3dcc7;
-  --ink-deep: #1c1f24;
-  --ink-mid: #4a4d54;
-  --ink-light: #8a8a85;
-  --ink-mist: #b6b3a8;
-  --hair: rgba(28, 31, 36, 0.1);
-  --hair-2: rgba(28, 31, 36, 0.18);
-  --vermil: #a14242;
-  --tea: #6e7f5b;
-  --terra: #b87341;
-  --bg: var(--rice);
-  --panel: rgba(245, 241, 232, 0.72);
-  --panel-soft: rgba(28, 31, 36, 0.035);
-  --ink: var(--ink-deep);
-  --muted: var(--ink-light);
-  --line: var(--hair-2);
-  /* 07-15 手艺七律⑦用户拍 A:主动作色回一代石绿(主钮/选中/hover 全局一代化)。
-     Inkwash 壳的米纸底/宋体/朱红 danger 保留——那是拍过的「现状」氛围;黑与朱红退出「主动作/选中」语义。 */
-  --accent: #2a6b5e;
-  --accent-strong: #1b4f45;
-  --warning: var(--terra);
-  --warning-bg: rgba(184, 115, 65, 0.09);
-  --candidate: #546845;
-  --candidate-bg: rgba(110, 127, 91, 0.1);
-  --danger: var(--vermil);
-  --shadow: none;
-  --rail-left: 48px;
-  --rail-right: 58px;
-  --topbar-h: 46px;
-  --dock-h: 64px;
-}
-
 html,
 body,
 #root {
@@ -3813,8 +3776,8 @@ body {
   overflow: hidden;
   background: var(--rice);
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", "Songti SC", "Source Han Serif", Georgia, serif;
-  font-size: 13px;
+  font-family: var(--font-serif);
+  font-size: var(--text-md);
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
 }
@@ -3895,7 +3858,7 @@ textarea {
   align-items: center;
   gap: 8px;
   color: var(--ink-deep);
-  font-size: 13px;
+  font-size: var(--text-md);
   letter-spacing: 0.08em;
   white-space: nowrap;
 }
@@ -3908,7 +3871,7 @@ textarea {
   background: var(--vermil);
   box-shadow: 0 0 0 1px rgba(161, 66, 66, 0.4);
   color: var(--rice);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1;
   transform: rotate(-2deg);
 }
@@ -3924,7 +3887,7 @@ textarea {
   background: transparent;
   color: var(--ink-mid);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -3958,7 +3921,7 @@ textarea {
   margin: 0 auto;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 400;
 }
 
@@ -3995,8 +3958,8 @@ textarea {
 .search-box kbd {
   margin-left: 10px;
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
   font-weight: 400;
 }
 
@@ -4009,12 +3972,12 @@ textarea {
 .meta-text {
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .meta-text b {
   color: var(--ink-deep);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-weight: 500;
 }
 
@@ -4124,7 +4087,7 @@ textarea {
 }
 
 .nav-glyph {
-  font-size: 17px;
+  font-size: var(--text-xl);
 }
 
 .nav-label {
@@ -4137,7 +4100,7 @@ textarea {
   background: var(--rice);
   color: var(--ink-deep);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%);
@@ -4240,7 +4203,7 @@ textarea {
 }
 
 .rail-icon-button span {
-  font-size: 16px;
+  font-size: var(--text-lg);
 }
 
 .rail-mini-stats {
@@ -4248,8 +4211,8 @@ textarea {
   gap: 8px;
   margin-top: auto;
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
 }
 
 .rail-mini-stats span {
@@ -4298,7 +4261,7 @@ textarea {
   margin: 0 0 14px;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 500;
   letter-spacing: 0.32em;
   text-transform: uppercase;
@@ -4306,8 +4269,8 @@ textarea {
 
 .status-pane h2 span {
   color: var(--ink-mid);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
   letter-spacing: 0;
   text-transform: none;
 }
@@ -4328,14 +4291,14 @@ textarea {
   display: block;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .right-stat strong {
   display: block;
   color: var(--ink-deep);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 18px;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
   font-weight: 500;
 }
 
@@ -4355,7 +4318,7 @@ textarea {
 .secretary-brief-head h3 {
   margin: 2px 0 0;
   color: var(--ink-deep);
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 500;
 }
 
@@ -4365,8 +4328,8 @@ textarea {
   border: 1px solid var(--hair);
   background: rgba(255, 255, 255, 0.36);
   color: var(--ink-deep);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 16px;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
   text-align: center;
 }
 
@@ -4386,7 +4349,7 @@ textarea {
   display: block;
   overflow: hidden;
   color: var(--ink-light);
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4395,8 +4358,8 @@ textarea {
   display: block;
   margin-top: 3px;
   color: var(--ink-deep);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 15px;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
   font-weight: 500;
 }
 
@@ -4410,7 +4373,7 @@ textarea {
   padding: 4px 7px;
   border: 1px solid var(--hair);
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .secretary-list {
@@ -4422,14 +4385,14 @@ textarea {
 
 .secretary-list strong {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
 }
 
 .secretary-list span {
   overflow: hidden;
   color: var(--ink-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4444,7 +4407,7 @@ textarea {
 }
 .secretary-pending-board > strong {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
 }
 .secretary-pending-group {
@@ -4455,14 +4418,14 @@ textarea {
 }
 .secretary-pending-group-title {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .secretary-pending-entry {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-deep);
 }
 .secretary-pending-entry span {
@@ -4470,7 +4433,7 @@ textarea {
 }
 .secretary-pending-where {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .secretary-explain {
   display: flex;
@@ -4481,7 +4444,7 @@ textarea {
 }
 .secretary-explain-text {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-deep);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -4491,7 +4454,7 @@ textarea {
   margin: 12px 0 0;
   color: var(--vermil);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .ink-feed {
@@ -4541,7 +4504,7 @@ textarea {
   display: block;
   overflow: hidden;
   color: var(--ink-deep);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 400;
   text-overflow: ellipsis;
   transition: color 0.15s;
@@ -4594,7 +4557,7 @@ textarea {
 .right-project-group-head b {
   overflow: hidden;
   color: var(--ink-deep);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 500;
   text-overflow: ellipsis;
   transition: color 0.15s;
@@ -4605,8 +4568,8 @@ textarea {
   overflow: hidden;
   max-width: 44%;
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4620,8 +4583,8 @@ textarea {
   padding: 3px 6px;
   border: 1px solid var(--hair);
   color: var(--ink-mid);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
 }
 
 .right-project-group-preview {
@@ -4632,7 +4595,7 @@ textarea {
 .right-project-group-preview span {
   overflow: hidden;
   color: var(--ink-light);
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4662,7 +4625,7 @@ textarea {
   padding-right: 16px;
   color: var(--ink-mid);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 
@@ -4714,7 +4677,7 @@ textarea {
 
 .prompt {
   color: var(--vermil);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 .chip {
@@ -4725,7 +4688,7 @@ textarea {
   background: transparent;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 
@@ -4796,7 +4759,7 @@ textarea {
   margin: 0 0 6px;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.32em;
   text-transform: uppercase;
 }
@@ -4804,8 +4767,8 @@ textarea {
 .stage-head .title {
   margin: 0;
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", "Songti SC", "Source Han Serif", Georgia, serif;
-  font-size: 32px;
+  font-family: var(--font-serif);
+  font-size: var(--text-2xl);
   font-weight: 400;
   letter-spacing: 0.04em;
   line-height: 1.2;
@@ -4822,7 +4785,7 @@ textarea {
 }
 
 .home-page-head .title {
-  font-size: 20px;
+  font-size: var(--text-xl);
   letter-spacing: 0.08em;
   line-height: 1;
 }
@@ -4834,15 +4797,15 @@ textarea {
 .stage-head .meta {
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-align: right;
 }
 
 .stage-head .meta .big {
   margin-bottom: 2px;
   color: var(--ink-deep);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   letter-spacing: 0;
 }
 
@@ -4873,7 +4836,7 @@ textarea {
   margin-bottom: 8px;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.42em;
 }
 
@@ -4884,8 +4847,8 @@ textarea {
   background: transparent;
   color: var(--ink-deep);
   cursor: pointer;
-  font-family: "Noto Serif SC", "Songti SC", "Source Han Serif", Georgia, serif;
-  font-size: 22px;
+  font-family: var(--font-serif);
+  font-size: var(--text-xl);
   letter-spacing: 0.1em;
 }
 
@@ -4904,14 +4867,14 @@ textarea {
 }
 
 .node.center .node-mark .name {
-  font-size: 26px;
+  font-size: var(--text-2xl);
 }
 
 .node-mark .count {
   margin-left: 8px;
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   letter-spacing: 0;
 }
 
@@ -4931,7 +4894,7 @@ textarea {
   background: transparent;
   color: var(--ink-mid);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-align: left;
 }
 
@@ -4972,8 +4935,8 @@ textarea {
 
 .node-feed .row .x {
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
   letter-spacing: 0;
 }
 
@@ -4981,7 +4944,7 @@ textarea {
   padding-top: 10px;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.18em;
   text-align: center;
 }
@@ -5031,8 +4994,8 @@ textarea {
 .home-action-hero h1 {
   margin: 0;
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 30px;
+  font-family: var(--font-serif);
+  font-size: var(--text-2xl);
   font-weight: 400;
   letter-spacing: 0.04em;
   line-height: 1.25;
@@ -5072,15 +5035,15 @@ textarea {
 .home-section-head h2 {
   margin: 0;
   color: var(--ink-deep);
-  font-size: 18px;
+  font-size: var(--text-lg);
   font-weight: 500;
   line-height: 1.3;
 }
 
 .home-panel-head span {
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
 }
 
 .home-feed {
@@ -5140,7 +5103,7 @@ textarea {
 .home-feed-row em {
   color: var(--ink-light);
   font-style: normal;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .home-change-placeholder {
@@ -5185,8 +5148,8 @@ textarea {
 
 .home-entry-tile strong {
   color: var(--ink-deep);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 24px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
   font-weight: 500;
 }
 
@@ -5301,11 +5264,11 @@ textarea {
 .canvas-node-delete {
   align-self: flex-start;
   padding: 4px 11px;
-  border: 1px solid var(--danger, #a14242);
+  border: 1px solid var(--danger);
   border-radius: 999px;
   background: rgba(161, 66, 66, 0.08);
-  color: var(--danger, #a14242);
-  font-size: 11px;
+  color: var(--danger);
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 .canvas-node-delete:hover:not(:disabled) {
@@ -5326,8 +5289,8 @@ textarea {
   font-weight: 500;
 }
 .canvas-view .canvas-id {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   opacity: 0.6;
 }
 .canvas-view .canvas-body {
@@ -5354,18 +5317,18 @@ textarea {
   gap: 6px;
 }
 .canvas-view .canvas-side legend {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   padding: 0 4px;
 }
 .canvas-view .canvas-side button {
   padding: 6px 10px;
-  border: 1px solid #c8602b;
-  background: #fff3e6;
-  color: #2e2a25;
+  border: 1px solid var(--canvas-orange);
+  background: var(--canvas-orange-bg);
+  color: var(--canvas-ink);
   border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 .canvas-view .canvas-side button:disabled {
   opacity: 0.5;
@@ -5375,7 +5338,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .canvas-view .canvas-side input,
 .canvas-view .canvas-side select,
@@ -5384,7 +5347,7 @@ textarea {
   border: 1px solid #ccc;
   border-radius: 3px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -5409,13 +5372,13 @@ textarea {
 }
 .canvas-view .canvas-side .canvas-exec-details > summary {
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   opacity: 0.8;
   list-style: revert;
 }
 .canvas-view .canvas-hint {
-  font-size: 12px;
+  font-size: var(--text-sm);
   opacity: 0.6;
   margin: 0;
 }
@@ -5431,10 +5394,10 @@ textarea {
   align-items: center;
   gap: 6px;
   padding: 5px 9px;
-  border: 1px solid #c8c2b4;
+  border: 1px solid var(--canvas-line);
   background: #faf8f3;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .canvas-palette-dot {
   width: 8px;
@@ -5455,8 +5418,8 @@ textarea {
 }
 .canvas-view .canvas-side .canvas-custom-field-row button {
   padding: 2px 8px;
-  border-color: #b1493f;
-  background: #fbeceb;
+  border-color: var(--canvas-red);
+  background: var(--canvas-red-bg);
 }
 
 /* B · 成熟模式 list */
@@ -5485,14 +5448,14 @@ textarea {
   min-width: 0;
 }
 .canvas-template-item .ct-meta strong {
-  font-size: 12px;
+  font-size: var(--text-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .canvas-template-item .ct-meta span {
-  font-size: 10.5px;
-  color: var(--ink-light, #8a8275);
+  font-size: var(--text-2xs);
+  color: var(--ink-light);
 }
 .canvas-template-item .ct-actions {
   display: flex;
@@ -5501,8 +5464,8 @@ textarea {
 }
 .canvas-view .canvas-side .canvas-template-item .ct-delete {
   padding: 2px 8px;
-  border-color: #b1493f;
-  background: #fbeceb;
+  border-color: var(--canvas-red);
+  background: var(--canvas-red-bg);
 }
 
 /* C1 · run-this-node */
@@ -5515,8 +5478,8 @@ textarea {
   border-top: 1px solid rgba(54, 51, 44, 0.1);
 }
 .canvas-view .canvas-side .canvas-node-run-btn {
-  border-color: #5a6f4a;
-  background: #eef2e8;
+  border-color: var(--canvas-green);
+  background: var(--canvas-green-bg);
   font-weight: 600;
 }
 .canvas-view .canvas-side .canvas-node-run-btn:disabled {
@@ -5528,16 +5491,16 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .canvas-session-policy .csp-label {
-  color: var(--ink-light, #6b6457);
+  color: var(--ink-light);
 }
 .canvas-segmented {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
-  border: 1px solid #c8c2b4;
+  border: 1px solid var(--canvas-line);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -5548,12 +5511,12 @@ textarea {
   padding: 5px 8px;
 }
 .canvas-view .canvas-side .canvas-segmented .csp-seg.active {
-  background: #eef2e8;
-  border-color: #5a6f4a;
+  background: var(--canvas-green-bg);
+  border-color: var(--canvas-green);
   font-weight: 600;
 }
 .canvas-view .canvas-side .canvas-segmented .csp-seg + .csp-seg {
-  border-left: 1px solid #c8c2b4;
+  border-left: 1px solid var(--canvas-line);
 }
 
 /* scope 指示 + 绑定到项目 */
@@ -5567,12 +5530,12 @@ textarea {
 .canvas-scope-chip {
   padding: 2px 9px;
   border-radius: 999px;
-  font-size: 11px;
-  border: 1px solid #c8c2b4;
+  font-size: var(--text-xs);
+  border: 1px solid var(--canvas-line);
 }
 .canvas-scope-chip.project {
-  background: #eef2e8;
-  border-color: #5a6f4a;
+  background: var(--canvas-green-bg);
+  border-color: var(--canvas-green);
 }
 .canvas-scope-chip.experiment {
   background: #f7f1e6;
@@ -5583,7 +5546,7 @@ textarea {
   border: 1px solid #8a8275;
   background: #faf8f3;
   border-radius: 5px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 .canvas-scope-bind:disabled {
@@ -5602,7 +5565,7 @@ textarea {
   border-radius: 8px;
   background: #fffdf8;
   box-shadow: 0 1px 3px rgba(54, 51, 44, 0.12);
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-align: left;
 }
 .canvas-node-card.selected {
@@ -5617,16 +5580,16 @@ textarea {
 .canvas-node-card .cnc-kind {
   padding: 1px 7px;
   border-radius: 999px;
-  color: #fff;
-  font-size: 10.5px;
+  color: var(--panel-raised);
+  font-size: var(--text-2xs);
   font-weight: 600;
 }
 .canvas-node-card .cnc-status {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--ink-light, #6b6457);
-  font-size: 10.5px;
+  color: var(--ink-light);
+  font-size: var(--text-2xs);
 }
 .canvas-node-card .cnc-status-dot {
   width: 7px;
@@ -5634,8 +5597,8 @@ textarea {
   border-radius: 50%;
 }
 .canvas-node-card .cnc-name {
-  color: var(--ink-deep, #2e2a25);
-  font-size: 13px;
+  color: var(--ink-deep);
+  font-size: var(--text-md);
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
@@ -5652,7 +5615,7 @@ textarea {
 .canvas-node-card .cnc-fields dt {
   flex: none;
   width: 34px;
-  color: var(--ink-light, #8a8275);
+  color: var(--ink-light);
 }
 .canvas-node-card .cnc-fields dd {
   margin: 0;
@@ -5671,7 +5634,7 @@ textarea {
   gap: 9px;
   min-width: 0;
   padding: 10px;
-  border: 1px dashed var(--hair-2, #d8d3c5);
+  border: 1px dashed var(--hair-2);
   background: rgba(255, 255, 255, 0.38);
 }
 .canvas-load-fallback > .canvas-boundary-panel {
@@ -5688,14 +5651,14 @@ textarea {
   margin: 0;
 }
 .canvas-boundary-heading h3 {
-  color: var(--ink-deep, #2e2a25);
-  font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 15px;
+  color: var(--ink-deep);
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   font-weight: 400;
 }
 .canvas-boundary-heading p {
-  color: var(--ink-mid, #5b554b);
-  font-size: 12px;
+  color: var(--ink-mid);
+  font-size: var(--text-sm);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -5703,9 +5666,9 @@ textarea {
 .canvas-boundary-badges span {
   min-height: 22px;
   padding: 3px 7px;
-  border: 1px solid var(--hair, #d8d3c5);
-  color: var(--ink-mid, #5b554b);
-  font-size: 11px;
+  border: 1px solid var(--hair);
+  color: var(--ink-mid);
+  font-size: var(--text-xs);
   line-height: 1.25;
   white-space: nowrap;
 }
@@ -5727,15 +5690,15 @@ textarea {
 .canvas-boundary-list dt,
 .canvas-boundary-list dd {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 .canvas-boundary-list dt {
-  color: var(--ink-mid, #5b554b);
+  color: var(--ink-mid);
 }
 .canvas-boundary-list dd {
-  color: var(--ink-deep, #2e2a25);
+  color: var(--ink-deep);
 }
 .canvas-view .canvas-flow {
   flex: 1;
@@ -5791,21 +5754,21 @@ textarea {
 .canvas-fallback-node span {
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.32em;
   text-transform: uppercase;
 }
 
 .canvas-fallback-node strong {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 16px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   font-weight: 400;
 }
 
 .canvas-fallback-node em {
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-style: normal;
   line-height: 1.6;
   overflow-wrap: anywhere;
@@ -5842,15 +5805,15 @@ textarea {
   margin: 0 0 8px;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.32em;
   text-transform: uppercase;
 }
 .pg-head .pg-title {
   margin: 0;
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 26px;
+  font-family: var(--font-serif);
+  font-size: var(--text-2xl);
   font-weight: 400;
   letter-spacing: 0.12em;
 }
@@ -5858,13 +5821,13 @@ textarea {
   text-align: right;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.7;
 }
 .pg-head .pg-meta .big {
   color: var(--ink-deep);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
 }
 
 .sec-head {
@@ -5876,15 +5839,15 @@ textarea {
 .sec-head h2 {
   margin: 0;
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 18px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   font-weight: 400;
   letter-spacing: 0.1em;
 }
 .sec-head .sec-meta {
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
 }
 
 .soft-cards {
@@ -5930,7 +5893,7 @@ textarea {
 }
 
 .agent-session-center.embedded .pg-head .pg-title {
-  font-size: 22px;
+  font-size: var(--text-xl);
 }
 
 .soft-card .sc-h {
@@ -5941,14 +5904,14 @@ textarea {
 }
 .soft-card .sc-name {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 18px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   letter-spacing: 0.08em;
 }
 .soft-card .sc-meta {
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
 }
 .soft-card .sc-row {
   display: flex;
@@ -5956,7 +5919,7 @@ textarea {
   padding: 4px 0;
   border-bottom: 1px dashed var(--hair);
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .soft-card .sc-row:last-child {
   border-bottom: 0;
@@ -5967,8 +5930,8 @@ textarea {
 }
 .soft-card .sc-row .r {
   color: var(--ink-deep);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6005,8 +5968,8 @@ textarea {
 .adapter-card-head strong {
   display: block;
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 17px;
+  font-family: var(--font-serif);
+  font-size: var(--text-xl);
   font-weight: 400;
   letter-spacing: 0.08em;
 }
@@ -6014,7 +5977,7 @@ textarea {
 .adapter-card-head span,
 .adapter-boundary-list span {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -6031,7 +5994,7 @@ textarea {
   border-left: 1px solid var(--hair-2);
   background: rgba(245, 241, 232, 0.52);
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6066,7 +6029,7 @@ textarea {
 .adapter-capability-item strong,
 .adapter-capability-item em,
 .adapter-capability-item small {
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6103,14 +6066,14 @@ textarea {
 
 .adapter-empty-state span {
   color: var(--ink-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 700;
   line-height: 1.35;
 }
 
 .adapter-empty-state small {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -6132,7 +6095,7 @@ textarea {
   max-width: 960px;
   margin: 0;
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
 }
 
@@ -6166,8 +6129,8 @@ textarea {
 .provider-availability-card-head strong {
   display: block;
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 17px;
+  font-family: var(--font-serif);
+  font-size: var(--text-xl);
   font-weight: 400;
   letter-spacing: 0.08em;
 }
@@ -6176,7 +6139,7 @@ textarea {
 .provider-availability-card p,
 .provider-boundary-list span {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -6197,7 +6160,7 @@ textarea {
   border-left: 1px solid var(--hair-2);
   background: rgba(245, 241, 232, 0.52);
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6226,7 +6189,7 @@ textarea {
   max-width: 960px;
   margin: 0;
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
 }
 
@@ -6254,15 +6217,15 @@ textarea {
 .session-continuation-card-head strong {
   display: block;
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 17px;
+  font-family: var(--font-serif);
+  font-size: var(--text-xl);
   font-weight: 400;
   letter-spacing: 0.08em;
 }
 
 .session-continuation-card-head span {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -6302,7 +6265,7 @@ textarea {
 
 .session-continuation-main span {
   color: var(--ink-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 700;
   line-height: 1.3;
 }
@@ -6316,7 +6279,7 @@ textarea {
 .session-continuation-reasons span,
 .session-continuation-warnings span {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6357,7 +6320,7 @@ textarea {
   max-width: 960px;
   margin: 0;
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -6374,7 +6337,7 @@ textarea {
   border-left: 1px solid var(--hair-2);
   background: rgba(245, 241, 232, 0.52);
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6416,8 +6379,8 @@ textarea {
 .controlled-continuation-empty strong {
   display: block;
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 16px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   font-weight: 400;
   letter-spacing: 0.08em;
 }
@@ -6428,7 +6391,7 @@ textarea {
 .controlled-continuation-facts span,
 .controlled-continuation-warnings span {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6467,7 +6430,7 @@ textarea {
   max-width: 980px;
   margin: 0;
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -6484,7 +6447,7 @@ textarea {
   border-left: 1px solid var(--warning);
   background: rgba(245, 241, 232, 0.58);
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6526,7 +6489,7 @@ textarea {
 
 .h2-resume-authorization-item-head strong {
   color: var(--ink-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.3;
 }
 
@@ -6534,7 +6497,7 @@ textarea {
 .h2-resume-authorization-item small,
 .h2-resume-authorization-warnings span {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6577,7 +6540,7 @@ textarea {
   max-width: 980px;
   margin: 0;
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
 }
 
@@ -6593,7 +6556,7 @@ textarea {
   gap: 5px;
   min-width: 0;
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .codex-control-grid select,
@@ -6606,7 +6569,7 @@ textarea {
   background: rgba(255, 255, 255, 0.76);
   color: var(--ink-deep);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .codex-control-grid select,
@@ -6636,7 +6599,7 @@ textarea {
   border: 1px solid var(--hair);
   background: rgba(255, 255, 255, 0.45);
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
 }
 
@@ -6648,7 +6611,7 @@ textarea {
   max-width: 980px;
   margin: 0;
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -6665,7 +6628,7 @@ textarea {
   border-left: 1px solid var(--danger);
   background: rgba(245, 241, 232, 0.58);
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6703,7 +6666,7 @@ textarea {
 
 .h2-execution-decision-check-head strong {
   color: var(--ink-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.3;
 }
 
@@ -6712,7 +6675,7 @@ textarea {
 .h2-execution-decision-card span,
 .h2-execution-decision-warnings span {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6734,7 +6697,7 @@ textarea {
 
 .h2-execution-decision-card strong {
   color: var(--ink-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .h2-execution-decision-warnings {
@@ -6765,7 +6728,7 @@ textarea {
   max-width: 960px;
   margin: 0;
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -6783,7 +6746,7 @@ textarea {
   border-left: 1px solid var(--hair-2);
   background: rgba(245, 241, 232, 0.52);
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6813,8 +6776,8 @@ textarea {
 .runtime-attention-card-head strong {
   display: block;
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 16px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   font-weight: 400;
   letter-spacing: 0.08em;
 }
@@ -6822,7 +6785,7 @@ textarea {
 .runtime-session-summary-card span,
 .runtime-attention-card-head span {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6863,7 +6826,7 @@ textarea {
   max-width: 960px;
   margin: 0;
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
 }
 
@@ -6891,15 +6854,15 @@ textarea {
 .session-operation-card-head strong {
   display: block;
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 17px;
+  font-family: var(--font-serif);
+  font-size: var(--text-xl);
   font-weight: 400;
   letter-spacing: 0.08em;
 }
 
 .session-operation-card-head span {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -6936,7 +6899,7 @@ textarea {
 
 .session-operation-main span {
   color: var(--ink-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 700;
   line-height: 1.3;
 }
@@ -6946,7 +6909,7 @@ textarea {
 .session-operation-item small,
 .session-operation-flags span {
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -6987,14 +6950,14 @@ textarea {
 }
 .soft-group .sg-name {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 14px;
+  font-family: var(--font-serif);
+  font-size: var(--text-md);
   letter-spacing: 0.08em;
 }
 .soft-group .sg-sub {
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
 }
 
 .ptable {
@@ -7011,7 +6974,7 @@ textarea {
   background: transparent;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 500;
   letter-spacing: 0.24em;
   text-align: left;
@@ -7021,7 +6984,7 @@ textarea {
   padding: 9px 10px;
   border-bottom: 1px dashed var(--hair);
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   vertical-align: middle;
 }
 .ptable tbody tr:last-child td {
@@ -7041,8 +7004,8 @@ textarea {
 .ptable td .mono,
 .ptable td.mono {
   color: var(--ink-deep);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
 }
 
 .stat {
@@ -7050,7 +7013,7 @@ textarea {
   align-items: center;
   gap: 6px;
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .stat .d {
   width: 6px;
@@ -7075,7 +7038,7 @@ textarea {
   border: 1px solid var(--hair-2);
   color: var(--ink-mid);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
 }
 .tag.ok {
@@ -7128,7 +7091,7 @@ textarea {
   background: rgba(245, 241, 232, 0.5);
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .chat-turn {
@@ -7154,7 +7117,7 @@ textarea {
   list-style: none;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .chat-turn-process > summary::-webkit-details-marker {
   display: none;
@@ -7165,7 +7128,7 @@ textarea {
 .chat-turn-process > summary em {
   font-style: normal;
   color: rgba(54, 51, 44, 0.45);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .chat-turn-process[open] > summary {
   border-bottom: 1px solid rgba(54, 51, 44, 0.08);
@@ -7227,7 +7190,7 @@ textarea {
   gap: 10px;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0;
   text-transform: none;
 }
@@ -7238,30 +7201,30 @@ textarea {
 .codex-transcript-item .who strong {
   color: var(--ink-deep);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--text-sm);
+  font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
 }
 .codex-transcript-item .who time,
 .codex-status-item time {
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
   letter-spacing: 0;
   text-transform: none;
 }
 
 .codex-transcript-item .body {
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 13.5px;
+  font-size: var(--text-md);
   line-height: 1.72;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .codex-transcript-item.assistant .body {
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1.75;
 }
 
@@ -7271,7 +7234,7 @@ textarea {
   border-left: 2px solid rgba(99, 102, 95, 0.14);
   color: var(--ink-mid);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.55;
 }
 
@@ -7342,8 +7305,8 @@ textarea {
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.52);
   color: var(--ink-mid);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   white-space: pre-wrap;
 }
 
@@ -7366,8 +7329,8 @@ textarea {
   padding: 6px 8px;
   border-bottom: 1px solid var(--hair-2);
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
 }
 .chat-code-block button {
   padding: 0;
@@ -7385,8 +7348,8 @@ textarea {
   white-space: pre;
 }
 .chat-code-block code {
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
 }
 .codex-transcript-item .body.is-collapsed {
   max-height: 12.6em;
@@ -7399,7 +7362,7 @@ textarea {
   background: transparent;
   color: var(--accent);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 .chat-toolbar {
@@ -7413,7 +7376,7 @@ textarea {
   border-top: 1px solid rgba(54, 51, 44, 0.06);
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .chat-toolbar .counts {
   display: flex;
@@ -7422,8 +7385,8 @@ textarea {
 }
 .chat-toolbar .counts em {
   color: var(--ink-deep);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   font-style: normal;
 }
 .internal-events {
@@ -7435,7 +7398,7 @@ textarea {
   margin-bottom: 10px;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.32em;
   text-transform: uppercase;
 }
@@ -7471,15 +7434,15 @@ textarea {
   margin-bottom: 12px;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 500;
   letter-spacing: 0.32em;
   text-transform: uppercase;
 }
 .panel-h .count {
   color: var(--ink-mid);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
   letter-spacing: 0;
 }
 
@@ -7500,18 +7463,18 @@ textarea {
 }
 .card .c-title {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", serif;
-  font-size: 14px;
+  font-family: var(--font-serif);
+  font-size: var(--text-md);
   letter-spacing: 0.04em;
 }
 .card .c-meta {
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
 }
 .card .c-body {
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.7;
 }
 
@@ -7522,10 +7485,6 @@ textarea {
 }
 
 /* Source parity v2 refinements */
-:root {
-  --rail-right-expanded: 320px;
-}
-
 .app-shell.right-pane-open {
   grid-template-columns: var(--rail-left) minmax(0, 1fr) var(--rail-right-expanded);
 }
@@ -7538,7 +7497,7 @@ textarea {
 
 .switch-caret {
   color: var(--ink-light);
-  font-size: 10px;
+  font-size: var(--text-2xs);
 }
 
 .pending-review-button {
@@ -7639,7 +7598,7 @@ textarea {
   flex-wrap: wrap;
 }
 .secretary-board-head h2 {
-  font-size: 20px;
+  font-size: var(--text-xl);
   margin: 2px 0 4px;
 }
 .secretary-board-explain {
@@ -7656,7 +7615,7 @@ textarea {
 }
 .secretary-board-column {
   background: var(--panel-soft, rgba(28, 31, 36, 0.035));
-  border: 1px solid var(--line, #dbd7cf);
+  border: 1px solid var(--line);
   border-radius: 10px;
   padding: 12px;
   min-height: 0;
@@ -7684,12 +7643,12 @@ textarea {
   justify-content: space-between;
 }
 .secretary-board-column-head strong {
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 .secretary-board-column-head span {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-mid);
-  background: var(--panel-raised, #fff);
+  background: var(--panel-raised);
   border-radius: 9px;
   padding: 1px 8px;
 }
@@ -7698,20 +7657,20 @@ textarea {
   opacity: 0.7;
 }
 .secretary-board-card {
-  background: var(--panel-raised, #fff);
-  border: 1px solid var(--line, #dbd7cf);
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 9px 11px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 .secretary-board-card-title {
   font-weight: 500;
 }
 .secretary-board-card .muted {
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .secretary-board-card-foot {
   display: flex;
@@ -7721,13 +7680,13 @@ textarea {
   margin-top: 2px;
 }
 .secretary-board-where {
-  font-size: 11.5px;
-  color: var(--ink-light, #9a8f80);
+  font-size: var(--text-xs);
+  color: var(--ink-light);
 }
 .secretary-board-go {
   flex: none;
   padding: 2px 10px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .secretary-board-foot {
   flex: none;
@@ -7752,7 +7711,7 @@ textarea {
   background: transparent;
   color: var(--ink-light);
   cursor: pointer;
-  font-size: 18px;
+  font-size: var(--text-lg);
   letter-spacing: 0;
 }
 
@@ -7793,7 +7752,7 @@ textarea {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .run-title b {
@@ -7806,8 +7765,8 @@ textarea {
 .run-title .who {
   flex: 0 0 auto;
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
 }
 
 .bar {
@@ -7829,8 +7788,8 @@ textarea {
   display: flex;
   gap: 10px;
   color: var(--ink-light);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
 }
 
 .stage-pad {
@@ -7896,7 +7855,7 @@ textarea {
 
 .knowledge-document-item span {
   color: var(--ink-deep);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 700;
   line-height: 1.35;
 }
@@ -7905,7 +7864,7 @@ textarea {
 .knowledge-document-item em,
 .knowledge-document-item small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-style: normal;
   line-height: 1.4;
 }
@@ -7934,7 +7893,7 @@ textarea {
 
 .knowledge-action-row span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -7980,20 +7939,20 @@ textarea {
   margin-bottom: 6px;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.32em;
   text-transform: uppercase;
 }
 
 .stat-cell .val {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 16px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
 }
 
 .stat-cell .val.mono {
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 14px;
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
   letter-spacing: 0;
 }
 
@@ -8072,8 +8031,8 @@ textarea {
   height: 34px;
   border: 1px solid rgba(161, 66, 66, 0.42);
   color: var(--vermil);
-  font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 12px;
+  font-family: var(--font-serif);
+  font-size: var(--text-sm);
   letter-spacing: 0;
 }
 
@@ -8086,8 +8045,8 @@ textarea {
 
 .project-tile-main strong {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 15px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   font-weight: 400;
   line-height: 1.28;
   overflow-wrap: anywhere;
@@ -8105,13 +8064,13 @@ textarea {
 .project-tile-stats span {
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .project-tile-meta em {
   color: var(--ink-mid);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   font-style: normal;
 }
 
@@ -8124,7 +8083,7 @@ textarea {
 
 .project-tile-stats b {
   color: var(--ink-deep);
-  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-weight: 500;
 }
 
@@ -8235,7 +8194,7 @@ textarea {
   margin: 0;
   max-width: 220px;
   overflow: hidden;
-  font-size: 15px;
+  font-size: var(--text-lg);
   letter-spacing: 0.04em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8288,7 +8247,7 @@ textarea {
   display: none; /* note 收掉，靠 title 仍可读 */
 }
 .project-status-strip--pills .project-status-cell strong {
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 /* 4 入口在 HUD 里做成 tab pills，保持 onSelectTool 切换。 */
@@ -8359,15 +8318,15 @@ textarea {
 .project-workspace-title .pg-sub {
   margin: 0;
   color: var(--ink-light);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.28em;
 }
 
 .project-workspace-title h1 {
   margin: 0;
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 28px;
+  font-family: var(--font-serif);
+  font-size: var(--text-2xl);
   font-weight: 400;
   letter-spacing: 0.08em;
   overflow-wrap: anywhere;
@@ -8380,7 +8339,7 @@ textarea {
   gap: 8px;
   justify-content: flex-end;
   color: var(--ink-light);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .project-settings-menu {
@@ -8445,7 +8404,7 @@ textarea {
   overflow: hidden;
   color: var(--ink-light);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8456,8 +8415,8 @@ textarea {
   overflow: hidden;
   color: var(--ink-deep);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: var(--text-md);
+  font-weight: 600;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8516,11 +8475,11 @@ textarea {
 }
 .project-rule-status-bar .prsb-headline {
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--text-md);
   margin-right: 4px;
 }
 .project-rule-status-bar .prsb-pill {
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid var(--hair-2);
@@ -8528,22 +8487,22 @@ textarea {
   color: rgba(28, 31, 36, 0.72);
 }
 .project-rule-status-bar .prsb-pill.warning {
-  border-color: #c8993f;
-  color: #8a5a12;
-  background: #faf3e2;
+  border-color: var(--canvas-gold);
+  color: var(--canvas-brown);
+  background: var(--canvas-gold-bg);
 }
 .project-rule-status-bar .prsb-pill.runcheck.runnable {
-  border-color: #5a6f4a;
+  border-color: var(--canvas-green);
   color: #3f5235;
-  background: #eef2e8;
+  background: var(--canvas-green-bg);
 }
 .project-rule-status-bar .prsb-pill.runcheck.warning {
-  border-color: #c8993f;
-  color: #8a5a12;
-  background: #faf3e2;
+  border-color: var(--canvas-gold);
+  color: var(--canvas-brown);
+  background: var(--canvas-gold-bg);
 }
 .project-rule-status-bar .prsb-pill.runcheck.blocked {
-  border-color: #a14242;
+  border-color: var(--vermil);
   color: #7a2e2e;
   background: #f7e8e8;
 }
@@ -8653,7 +8612,7 @@ textarea {
   border-radius: 999px;
   background: rgba(245, 241, 232, 0.92);
   color: var(--ink-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -8684,7 +8643,7 @@ textarea {
   /* 浮在画布上的内容面板：必须有不透明纸面底，否则文字飘在画布上看不清（真机报「背景透明」）。 */
   padding: 12px;
   pointer-events: auto;
-  background: var(--rice, #f5f1e8);
+  background: var(--rice);
   border: 1px solid var(--hair-2);
   border-radius: 10px;
   box-shadow: 0 8px 28px rgba(28, 31, 36, 0.16);
@@ -8754,7 +8713,7 @@ textarea {
   border-radius: 6px;
 }
 .canvas-view-hud .canvas-engine-stage > .canvas-empty-guide strong {
-  font-size: 15px;
+  font-size: var(--text-lg);
   color: rgba(28, 31, 36, 0.78);
 }
 
@@ -8788,7 +8747,7 @@ textarea {
   align-items: stretch;
   gap: 5px;
   padding: 9px;
-  border: 1px solid var(--hair-2, #d8d3c5);
+  border: 1px solid var(--hair-2);
   border-radius: 12px;
   background: rgba(245, 241, 232, 0.95);
 }
@@ -8802,16 +8761,16 @@ textarea {
   border: 1px solid var(--hair, rgba(28, 31, 36, 0.1));
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.5);
-  color: var(--ink-mid, #4a4d54);
-  font-size: 12px;
+  color: var(--ink-mid);
+  font-size: var(--text-sm);
   font-weight: 500;
   text-align: left;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, transform 80ms ease;
 }
 .canvas-engine-hud .canvas-palette-chip:hover:not(:disabled) {
-  background: var(--rice-2, #efeadd);
-  border-color: var(--ink-mist, #b6b3a8);
+  background: var(--rice-2);
+  border-color: var(--ink-mist);
 }
 .canvas-engine-hud .canvas-palette-chip:active:not(:disabled) {
   transform: translateY(1px);
@@ -8835,7 +8794,7 @@ textarea {
   width: min(320px, 34vw);
   overflow: auto;
   padding: 10px 12px;
-  border: 1px solid var(--hair-2, #d8d3c5);
+  border: 1px solid var(--hair-2);
   border-radius: 8px;
   background: rgba(245, 241, 232, 0.96);
 }
@@ -8846,7 +8805,7 @@ textarea {
 }
 .canvas-engine-hud-right .cne-id {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--text-xs);
   opacity: 0.7;
   overflow-wrap: anywhere;
 }
@@ -8862,7 +8821,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   min-width: 0;
 }
 .canvas-engine-hud-right input,
@@ -8872,7 +8831,7 @@ textarea {
   border: 1px solid #ccc;
   border-radius: 3px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -8880,12 +8839,12 @@ textarea {
 }
 .canvas-engine-hud-right button {
   padding: 5px 9px;
-  border: 1px solid #c8602b;
-  background: #fff3e6;
-  color: #2e2a25;
+  border: 1px solid var(--canvas-orange);
+  background: var(--canvas-orange-bg);
+  color: var(--canvas-ink);
   border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .canvas-engine-hud-right button:disabled {
   opacity: 0.5;
@@ -8904,7 +8863,7 @@ textarea {
 .canvas-engine-hud-right .canvas-advanced-details > summary,
 .canvas-engine-hud-right .canvas-exec-details > summary {
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   opacity: 0.8;
   list-style: revert;
@@ -8916,8 +8875,8 @@ textarea {
   align-items: center;
 }
 .canvas-engine-hud-right .canvas-node-run-btn {
-  border-color: #5a6f4a;
-  background: #eef2e8;
+  border-color: var(--canvas-green);
+  background: var(--canvas-green-bg);
   font-weight: 600;
 }
 
@@ -8935,25 +8894,25 @@ textarea {
 .canvas-engine-hud-bottom .canvas-reset-confirm,
 .canvas-engine-hud-bottom .canvas-engine-more {
   padding: 5px 10px;
-  border: 1px solid #c8c2b4;
+  border: 1px solid var(--canvas-line);
   background: rgba(245, 241, 232, 0.95);
-  color: #2e2a25;
+  color: var(--canvas-ink);
   border-radius: 6px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .canvas-engine-hud-bottom > button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 .canvas-engine-hud-bottom .canvas-engine-run {
-  border-color: #5a6f4a;
-  background: #eef2e8;
+  border-color: var(--canvas-green);
+  background: var(--canvas-green-bg);
   font-weight: 600;
 }
 .canvas-engine-hud-bottom .canvas-engine-save {
-  border-color: #c8602b;
-  background: #fff3e6;
+  border-color: var(--canvas-orange);
+  background: var(--canvas-orange-bg);
 }
 /* 宿主塞进来的草案动作（提交 / 返回）：右推到底边动作条同一行末尾，与 ▶运行选中节点 并排。 */
 .canvas-engine-edit-actions {
@@ -8970,15 +8929,15 @@ textarea {
   cursor: default;
 }
 .canvas-engine-hud-bottom .canvas-reset-confirm-text {
-  font-size: 11px;
+  font-size: var(--text-xs);
   opacity: 0.8;
 }
 .canvas-engine-hud-bottom .canvas-reset-confirm button {
   padding: 3px 8px;
-  border: 1px solid #c8c2b4;
+  border: 1px solid var(--canvas-line);
   background: #faf8f3;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 /* 「更多」折叠：成熟模式 + 边界面板向上展开成浮层，不挤底边。 */
@@ -8989,7 +8948,7 @@ textarea {
 .canvas-engine-more > summary {
   padding: 5px 10px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   list-style: revert;
 }
 .canvas-engine-more[open] {
@@ -8997,7 +8956,7 @@ textarea {
   border-color: transparent;
 }
 .canvas-engine-more[open] > summary {
-  border: 1px solid #c8c2b4;
+  border: 1px solid var(--canvas-line);
   border-radius: 6px;
   background: rgba(245, 241, 232, 0.95);
 }
@@ -9010,7 +8969,7 @@ textarea {
   overflow: auto;
   margin: 0 0 6px;
   padding: 10px;
-  border: 1px solid var(--hair-2, #d8d3c5);
+  border: 1px solid var(--hair-2);
   border-radius: 8px;
   background: rgba(245, 241, 232, 0.98);
   box-shadow: 0 -6px 24px rgba(33, 31, 26, 0.12);
@@ -9025,7 +8984,7 @@ textarea {
   margin: 0 0 8px;
 }
 .canvas-engine-more legend {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   padding: 0 4px;
 }
@@ -9034,16 +8993,16 @@ textarea {
   border: 1px solid #ccc;
   border-radius: 3px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   box-sizing: border-box;
   width: 100%;
 }
 .canvas-engine-more button {
   padding: 5px 9px;
-  border: 1px solid #c8602b;
-  background: #fff3e6;
+  border: 1px solid var(--canvas-orange);
+  background: var(--canvas-orange-bg);
   border-radius: 4px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -9063,8 +9022,8 @@ textarea {
 }
 /* P3 详情抽屉切换按钮（顶边 HUD 内，沿用 secondary-button 基样）。 */
 .canvas-detail-toggle[aria-pressed="true"] {
-  background: #eef2e8;
-  border-color: #5a6f4a;
+  background: var(--canvas-green-bg);
+  border-color: var(--canvas-green);
 }
 
 .project-flow-stage {
@@ -9105,7 +9064,7 @@ textarea {
   border: 1px solid var(--hair);
   background: rgba(245, 241, 232, 0.84);
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.2;
 }
 
@@ -9146,7 +9105,7 @@ textarea {
   border: 1px solid var(--hair);
   background: rgba(251, 252, 248, 0.86);
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-style: normal;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -9192,7 +9151,7 @@ textarea {
 .project-canvas-static-node em,
 .project-canvas-static-node small {
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-style: normal;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -9200,7 +9159,7 @@ textarea {
 
 .project-canvas-static-node strong {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-serif);
   font-weight: 400;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -9256,7 +9215,7 @@ textarea {
   border-radius: 5px;
   background: transparent;
   color: var(--muted);
-  font-size: 16px;
+  font-size: var(--text-lg);
   line-height: 1;
   cursor: pointer;
 }
@@ -9331,7 +9290,7 @@ textarea {
   padding: 2px 6px;
   border: 1px solid var(--hair);
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   line-height: 1.2;
 }
@@ -9352,8 +9311,8 @@ textarea {
 
 .project-flow-node strong {
   color: var(--ink-deep);
-  font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 15px;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
   font-weight: 400;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -9361,7 +9320,7 @@ textarea {
 
 .project-flow-node em {
   color: var(--ink-mid);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-style: normal;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -9460,7 +9419,7 @@ textarea {
 }
 
 .canvas-view .canvas-head h2 {
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-serif);
   font-weight: 400;
   letter-spacing: 0.08em;
 }
@@ -9509,18 +9468,18 @@ textarea {
   border-radius: 6px;
 }
 .canvas-view .canvas-flow .canvas-empty-guide strong {
-  font-size: 15px;
+  font-size: var(--text-lg);
   color: rgba(28, 31, 36, 0.78);
 }
 .canvas-view .canvas-flow .canvas-empty-guide span {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   line-height: 1.55;
 }
 
 .react-flow__node {
   border-radius: 0 !important;
   box-shadow: none !important;
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-serif);
 }
 
 .react-flow__edge-path {
@@ -9582,46 +9541,94 @@ textarea {
   }
 }
 
+/* ===== G1 孤儿回迁（2026-07-20：样式原只在桌面皮，随桌面皮退役迁基座层；规则一行不改，除 .agent-boundary 白框按治平、:10435 回退按 §2.3 修正） ===== */
+.secretary-dock-trigger {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.secretary-float {
+  display: none;
+}
+
+.agent-boundary-details,
+.memory-advanced-details {
+  margin-bottom: 22px;
+  padding: 10px 14px;
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  background: var(--paper-card);
+}
+
+.agent-boundary-summary,
+.memory-advanced-summary {
+  cursor: pointer;
+  color: var(--ink-light);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.agent-view-root .agent-boundary-details {
+  margin: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.agent-view-root .agent-boundary-details[open] {
+  max-height: min(42vh, 420px);
+  overflow: auto;
+}
+
+/* 全局「显示开发者细节」开关：默认隐藏所有 agent-boundary-details 折叠。
+   用 display:none 而非条件渲染——renderToStaticMarkup 仍输出内容，离线断言照数得到。 */
+.hide-dev-detail .agent-boundary-details {
+  display: none;
+}
+
+/* 侧栏顶部开关本体样式 */
+.project-side-dev-detail-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--ink-light);
+  cursor: pointer;
+  user-select: none;
+}
+.project-side-dev-detail-toggle input {
+  cursor: pointer;
+}
+
+/* 批1·交货卡 pill 行(骨架:状态行=现有事实小徽章;复用 jiaoban-step-badge 徽章样式)。 */
+.jiaoban-done-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 2px 0 10px;
+}
+
+/* 批2·记忆中心列表卡选中态(点哪条详情看哪条)。 */
+.workflow-compact-item.is-selectable { cursor: pointer; }
+.workflow-compact-item.is-selectable:hover { border-color: var(--accent); }
+.workflow-compact-item.is-selected { border-color: var(--accent); background: var(--accent-bg); }
+
 /* UI redesign checkpoint: productize the shell without changing data semantics. */
 @media (min-width: 1181px) {
-  :root {
-    --ui-bg: #f6f2e9;
-    --ui-rail: #eee7d8;
-    --ui-rail-strong: #e5dcc8;
-    --ui-surface: #fffdf8;
-    --ui-surface-soft: #f8f3e9;
-    --ui-line: rgba(32, 35, 39, 0.14);
-    --ui-line-strong: rgba(32, 35, 39, 0.22);
-    --ui-text: #1e2226;
-    --ui-muted: #6c6d68;
-    --ui-accent: #9f3f34;
-    --ui-shadow: 0 18px 60px rgba(33, 31, 26, 0.08);
-  }
-
-  body {
-    background: var(--ui-bg);
-    color: var(--ui-text);
-  }
-
   .ink-shell {
     background:
       linear-gradient(180deg, rgba(255, 252, 245, 0.78), rgba(235, 228, 213, 0.92)),
-      var(--ui-rail);
+      var(--shell);
   }
 
   .ink-shell::after {
     opacity: 0.22;
-  }
-
-  .topbar {
-    border-bottom: 1px solid var(--ui-line);
-    background: rgba(255, 252, 245, 0.84);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
-  }
-
-  .sidebar {
-    border-right: 1px solid var(--ui-line);
-    background: var(--ui-rail);
   }
 
   .sidebar::before,
@@ -9631,102 +9638,10 @@ textarea {
     opacity: 0.35;
   }
 
-  .brand {
-    gap: 10px;
-  }
-
   .brand-mark {
     border-radius: 10px;
-    background: var(--ui-accent);
+    background: var(--vermil);
     box-shadow: 0 8px 24px rgba(159, 63, 52, 0.16);
-  }
-
-  .brand-name,
-  .nav-label,
-  .rail-icon-button::after {
-    font-family: "DM Sans", "Noto Sans SC", -apple-system, "PingFang SC", sans-serif;
-  }
-
-  .nav-section-label {
-    margin: 8px 2px 8px;
-    color: var(--ui-muted);
-    font-family: "DM Sans", "Noto Sans SC", -apple-system, "PingFang SC", sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-  }
-
-  .nav-divider {
-    height: 1px;
-    margin: 14px 0 10px;
-    background: var(--ui-line);
-  }
-
-  .nav-item {
-    color: var(--ui-muted);
-    transition:
-      background 0.16s ease,
-      color 0.16s ease,
-      transform 0.16s ease;
-  }
-
-  .nav-item:hover,
-  .nav-item:focus-visible {
-    color: var(--ui-text);
-    transform: translateX(2px);
-  }
-
-  .nav-item.active {
-    background: rgba(159, 63, 52, 0.10);
-    color: var(--ui-text);
-  }
-
-  .nav-item.active::before,
-  .rail-icon-button.active::before {
-    background: var(--ui-accent);
-  }
-
-  .stage {
-    background:
-      radial-gradient(800px 420px at 52% 5%, rgba(255, 255, 255, 0.58), transparent 70%),
-      linear-gradient(180deg, #fbf8f1 0%, var(--ui-bg) 100%);
-  }
-
-  .notice-panel {
-    margin-bottom: 28px;
-    border: 1px solid rgba(159, 63, 52, 0.18);
-    border-left: 4px solid var(--ui-accent);
-    border-radius: 14px;
-    background: rgba(255, 248, 239, 0.86);
-    color: #8d352d;
-  }
-
-  .status-rail {
-    border-left: 1px solid var(--ui-line);
-    background: var(--ui-rail);
-  }
-
-  .rail-icon-button {
-    border-radius: 10px;
-    color: var(--ui-muted);
-    transition:
-      background 0.16s ease,
-      color 0.16s ease,
-      transform 0.16s ease;
-  }
-
-  .rail-icon-button:hover,
-  .rail-icon-button:focus-visible,
-  .rail-icon-button.active {
-    background: rgba(159, 63, 52, 0.09);
-    color: var(--ui-text);
-    transform: translateX(-2px);
-  }
-
-  .rail-mini-stats {
-    width: 100%;
-    padding-top: 10px;
-    border-top: 1px dashed var(--ui-line);
   }
 
   .memory-center-panel,
@@ -9738,60 +9653,43 @@ textarea {
   .empty-state,
   .card,
   .panel {
-    border-color: var(--ui-line);
-    border-radius: 16px;
-    background: rgba(255, 253, 248, 0.82);
-    box-shadow: var(--ui-shadow);
+    border-color: var(--hair);
+    border-radius: var(--r-lg);
+    background: var(--paper-card);
+    box-shadow: none;
   }
 
   .muted,
   .small-note {
-    color: var(--ui-muted);
+    color: var(--ink-light);
   }
 
   .pg-head,
   .memory-center-hero,
   .knowledge-hero {
-    border-bottom-color: var(--ui-line);
+    border-bottom-color: var(--hair);
   }
 
   .pg-title,
   .agent-list-title,
   .project-workspace-title h1 {
-    color: var(--ui-text);
-  }
-
-  .agent-boundary-details,
-  .memory-advanced-details {
-    margin-bottom: 22px;
-    padding: 10px 14px;
-    border: 1px solid var(--ui-line);
-    border-radius: 14px;
-    background: rgba(255, 253, 248, 0.64);
-  }
-
-  .agent-boundary-summary,
-  .memory-advanced-summary {
-    cursor: pointer;
-    color: var(--ui-muted);
-    font-family: "DM Sans", "Noto Sans SC", -apple-system, "PingFang SC", sans-serif;
-    font-size: 13px;
-    font-weight: 700;
+    color: var(--ink-deep);
   }
 
   .dialog {
-    border-color: var(--ui-line-strong);
+    border-color: var(--hair-2);
     border-radius: 18px;
-    background: var(--ui-surface);
+    background: var(--panel-raised);
+    box-shadow: var(--shadow-lg);
   }
 
   .dialog-zone-what,
   .dialog-zone-actions {
-    background: var(--ui-surface);
+    background: var(--panel-raised);
   }
 
   .dialog-zone-details {
-    background: var(--ui-surface-soft);
+    background: var(--panel);
   }
 }
 
@@ -9913,8 +9811,8 @@ textarea {
     background: var(--vermil);
     box-shadow: 0 0 0 1px rgba(161, 66, 66, 0.4);
     color: var(--rice);
-    font-family: "Noto Serif SC", "Songti SC", serif;
-    font-size: 12px;
+    font-family: var(--font-serif);
+    font-size: var(--text-sm);
     transform: rotate(-2deg);
   }
 
@@ -9999,7 +9897,7 @@ textarea {
   .nav-glyph {
     width: auto;
     color: inherit;
-    font-size: 17px;
+    font-size: var(--text-xl);
     text-align: center;
   }
 
@@ -10013,18 +9911,12 @@ textarea {
     background: var(--rice);
     color: var(--ink-deep);
     font-family: -apple-system, "PingFang SC", sans-serif;
-    font-size: 11px;
+    font-size: var(--text-xs);
     opacity: 0;
     pointer-events: none;
     transform: translateY(-50%);
     transition: opacity 0.12s;
     white-space: nowrap;
-  }
-
-  .secretary-dock-trigger {
-    border: 0;
-    background: transparent;
-    cursor: pointer;
   }
 
   .nav-item:hover .nav-label,
@@ -10147,99 +10039,6 @@ textarea {
   .status-pane {
     padding: 18px 22px;
   }
-
-  .secretary-float {
-    display: none;
-  }
-}
-
-/* Step 2: home page follows the inkwash constellation prototype. */
-@media (min-width: 1181px) {
-  .home-ink-stage {
-    min-height: calc(100vh - var(--topbar-h) - 120px);
-  }
-
-  .home-ink-stage .stage-head {
-    top: 36px;
-    right: 56px;
-    left: 56px;
-  }
-
-  .home-ink-stage .home-page-head {
-    right: 0;
-    left: 0;
-  }
-
-  .home-ink-stage .stage-head:not(.home-page-head) .title {
-    font-size: 32px;
-    font-weight: 400;
-    letter-spacing: 0.04em;
-  }
-
-  .home-ink-stage .stage-head .meta {
-    max-width: 420px;
-  }
-
-  .home-ink-stage .node {
-    width: 220px;
-  }
-
-  .home-ink-stage .node.center {
-    width: 270px;
-  }
-
-  .home-ink-stage .n-project {
-    top: 34%;
-    left: 25%;
-  }
-
-  .home-ink-stage .n-agents {
-    top: 29%;
-    left: 69%;
-  }
-
-  .home-ink-stage .n-flow {
-    top: 55%;
-    left: 48%;
-  }
-
-  .home-ink-stage .n-skills {
-    top: 78%;
-    left: 24%;
-  }
-
-  .home-ink-stage .n-harness {
-    top: 78%;
-    left: 72%;
-  }
-
-  .home-node-action,
-  .home-node-more {
-    appearance: none;
-  }
-
-  .home-node-action:focus-visible,
-  .node-feed .row:focus-visible,
-  .home-node-more:focus-visible {
-    outline: 1px solid var(--accent);
-    outline-offset: 4px;
-  }
-
-  .node-feed .row {
-    min-height: 34px;
-  }
-
-  .home-node-more {
-    display: block;
-    width: 100%;
-    border: 0;
-    background: transparent;
-    cursor: pointer;
-  }
-
-  .home-node-more:hover {
-    color: var(--accent);
-  }
 }
 
 /* Desktop data cleanup: real Tauri data can be long, noisy and path-like.
@@ -10255,68 +10054,16 @@ textarea {
     margin: 0 56px 10px;
     padding: 7px 12px;
     border: 0;
-    border-bottom: 1px dashed rgba(161, 66, 66, 0.35);
+    border-bottom: 1px dashed var(--warning-border);
     border-radius: 0;
-    background: rgba(161, 66, 66, 0.035);
+    background: var(--warning-bg);
     box-shadow: none;
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
 
   .stage > .notice-panel strong,
   .stage > .notice-panel span {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .home-ink-stage {
-    min-height: calc(100vh - var(--topbar-h) - 96px);
-  }
-
-  .home-ink-stage .stage-head {
-    top: 28px;
-  }
-
-  .home-ink-stage .home-page-head {
-    right: 0;
-    left: 0;
-  }
-
-  .home-ink-stage .stage-head > div {
-    min-width: 0;
-  }
-
-  .home-ink-stage .stage-head .greet,
-  .home-ink-stage .stage-head:not(.home-page-head) .title,
-  .home-ink-stage .stage-head .meta,
-  .home-ink-stage .stage-head .meta .big {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .home-ink-stage .node {
-    width: 230px;
-  }
-
-  .home-ink-stage .node.center {
-    width: 280px;
-  }
-
-  .home-ink-stage .node-feed {
-    max-height: 142px;
-    overflow: hidden;
-  }
-
-  .home-ink-stage .node-feed .row {
-    min-height: 30px;
-    padding: 6px 4px;
-    grid-template-columns: 5px minmax(0, 1fr) max-content;
-  }
-
-  .home-ink-stage .node-feed .row .x {
-    max-width: 72px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -10380,8 +10127,8 @@ textarea {
     grid-template-columns: 240px minmax(0, 1fr);
     height: 100%;
     min-height: 0;
-    border-top: 1px solid var(--ui-line);
-    background: rgba(255, 253, 248, 0.42);
+    border-top: 1px solid var(--hair);
+    background: var(--paper-card);
   }
 
   .agent-view-root .agent-session-list,
@@ -10391,67 +10138,18 @@ textarea {
   }
 
   .agent-view-root .agent-session-list {
-    border-right: 1px solid var(--ui-line);
-    background: rgba(247, 241, 230, 0.78);
+    border-right: 1px solid var(--hair);
+    background: var(--panel);
   }
 
   .agent-view-root .agent-transcript-panel {
-    background: rgba(255, 253, 248, 0.32);
+    background: var(--paper-card);
   }
 
   .agent-view-root .chat-stream {
     padding-inline: clamp(22px, 3vw, 42px);
   }
-
-  .agent-view-root .agent-boundary-details {
-    margin: 0;
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
-
-  .agent-view-root .agent-boundary-details[open] {
-    max-height: min(42vh, 420px);
-    overflow: auto;
-  }
 }
-
-/* 全局「显示开发者细节」开关：默认隐藏所有 agent-boundary-details 折叠。
-   用 display:none 而非条件渲染——renderToStaticMarkup 仍输出内容，离线断言照数得到。 */
-.hide-dev-detail .agent-boundary-details {
-  display: none;
-}
-
-/* 侧栏顶部开关本体样式 */
-.project-side-dev-detail-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ui-muted, #6b6b6b);
-  cursor: pointer;
-  user-select: none;
-}
-.project-side-dev-detail-toggle input {
-  cursor: pointer;
-}
-
-/* 批1·交货卡 pill 行(骨架:状态行=现有事实小徽章;复用 jiaoban-step-badge 徽章样式)。 */
-.jiaoban-done-pills {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 2px 0 10px;
-}
-
-/* 批2·记忆中心列表卡选中态(点哪条详情看哪条)。 */
-.workflow-compact-item.is-selectable { cursor: pointer; }
-.workflow-compact-item.is-selectable:hover { border-color: var(--accent); }
-.workflow-compact-item.is-selected { border-color: var(--accent); background: var(--accent-bg); }
 
 /* ===== 设计系统基座(2026-07-15·定式组件 SpecPrimitives 配套;正本=DESIGN.md 信息规范) ===== */
 /* 七律⑤事实行定式(2026-07-16 对齐样板 .jiaoban-fact):标签灰左·值右·细虚线分隔。共享基座,全 App 事实行同式。 */
@@ -10509,7 +10207,7 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.home-stat-n.is-small { font-size: var(--text-base); padding-top: var(--space-1); }
+.home-stat-n.is-small { font-size: var(--text-md); padding-top: var(--space-1); }
 .home-stat-warn { color: var(--warning); }
 .home-stat-ok { color: var(--accent-strong); }
 .home-stat-idle { color: var(--muted); }
@@ -10545,7 +10243,7 @@ textarea {
   flex-shrink: 0;
   /* 七律③:小灰标 11.5px·600·muted;组内节拍。 */
   margin: 0 0 var(--space-2);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted);
 }
@@ -10579,7 +10277,7 @@ textarea {
   border-radius: 999px;
   background: var(--accent);
   color: var(--panel);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-style: normal;
   line-height: 14px;
   text-align: center;

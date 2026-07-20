@@ -3,7 +3,7 @@
 > 用得上的脚本索引。**动用或改造任何 `scripts/harness/` 脚本前先查这里**，避免重造已存在但没接线的工具。
 
 - 生成日期：2026-06-14（HG-1）｜数据源：[只读审计附录命中表](harness-script-audit-2026-06-14.md)（另见[上游源码包审计](harness-source-package-audit-2026-06-14.md)）
-- 范围：70 个顶层 `.js` + 14 个 `lib/*.js` = **84** 条。索引随包演进：HG-2 已把接通的 5 组（14 个脚本）从`未接`翻成`已接`、把 `capability-map` 翻成`退役`（文件留着）；HG-3 自测 `workbench-shape-gate.dedup.selftest.js` 与 C4 `checkpoint-audit.js` + `checkpoint-audit.selftest.js` 也登记在内；人话工程②（2026-07-20）新增 `workbench-shape-gate.machine-face.selftest.js` 与 `lib/machine-face-rule.js`。
+- 范围：71 个顶层 `.js` + 15 个 `lib/*.js` = **86** 条。索引随包演进：HG-2 已把接通的 5 组（14 个脚本）从`未接`翻成`已接`、把 `capability-map` 翻成`退役`（文件留着）；HG-3 自测 `workbench-shape-gate.dedup.selftest.js` 与 C4 `checkpoint-audit.js` + `checkpoint-audit.selftest.js` 也登记在内；人话工程②（2026-07-20）新增 `workbench-shape-gate.machine-face.selftest.js` 与 `lib/machine-face-rule.js`；G1 token 归真（2026-07-20）新增 `workbench-shape-gate.hardcoded-hex.selftest.js` 与 `lib/hardcoded-hex-rule.js`。
 
 ## 一句话判据
 
@@ -20,11 +20,11 @@
 | `已接` | 已接进 AGENTS.md 流程（手动调用点，hooks 仍关） | 用 |
 | `退役` / `退役候选` | 被取代/重复 | 别用；文件留着不删 |
 
-统计（HG-2 后；agentmem 退役 2026-06-14；人话工程② 2026-07-20 +2）：`承重` 2 ｜ `配套自测` 3（HG-3 + C4 + machine-face selftest）｜ `休眠` 11 ｜ `休眠·待定` 0 ｜ `未接` 42（含元工具）｜ `已接` 15（HG-2 五组 + C4 checkpoint-audit）｜ `退役` 10（capability-map + agentmem 簇 9）。合计 84。
+统计（HG-2 后；agentmem 退役 2026-06-14；人话工程②+G1 2026-07-20 各 +2）：`承重` 2 ｜ `配套自测` 4（HG-3 + C4 + machine-face + hardcoded-hex selftest）｜ `休眠` 11 ｜ `休眠·待定` 0 ｜ `未接` 42（含元工具）｜ `已接` 15（HG-2 五组 + C4 checkpoint-audit）｜ `退役` 10（capability-map + agentmem 簇 9）。合计 86。
 
 > 「怎么调」列统一省略前缀 `node scripts/harness/`；`--target .` 为常用默认。`lib/` 为内部库，被 `require`，不单独 CLI 调。37 个命令另可经 `node scripts/harness/harness.js <子命令>` 路由（`harness.js --help` 看全表）。
 
-## 顶层脚本（70）
+## 顶层脚本（71）
 
 | 脚本 | 干啥（一行） | 状态 | 怎么调 |
 | --- | --- | --- | --- |
@@ -97,9 +97,10 @@
 | verification-suite.js | 跑验证套件 | 未接 | `harness.js verify suite` |
 | workbench-shape-gate.dedup.selftest.js | HG-3 去重门自测（临时夹具验证 dup→warn、白名单→不报） | shape-gate 配套自测 | `workbench-shape-gate.dedup.selftest.js` |
 | workbench-shape-gate.machine-face.selftest.js | 人话工程②机器话上脸门自测（直渲→error、白名单→deferred、details 样板→不误伤、state 形→warn） | shape-gate 配套自测 | `workbench-shape-gate.machine-face.selftest.js` |
-| workbench-shape-gate.js | 产品形状/ratchet 门（HG-3 加去重 warning check；人话工程②加 machine_face_on_ui 规则·规则本体在 lib/machine-face-rule.js） | **承重**（审计 371 次） | `workbench-shape-gate.js --mode baseline\|check` |
+| workbench-shape-gate.hardcoded-hex.selftest.js | G1 裸 hex 门自测（裸 hex/回退位/转义→error、定义行/注释→不误伤、白名单→deferred） | shape-gate 配套自测 | `workbench-shape-gate.hardcoded-hex.selftest.js` |
+| workbench-shape-gate.js | 产品形状/ratchet 门（HG-3 去重 warning；人话工程② machine_face_on_ui；G1 hardcoded_hex_on_ui·规则本体在 lib/） | **承重**（审计 371 次） | `workbench-shape-gate.js --mode baseline\|check` |
 
-## 内部库 `lib/`（14，require-only）
+## 内部库 `lib/`（15，require-only）
 
 | 脚本 | 干啥（一行） | 状态 | 被谁调 |
 | --- | --- | --- | --- |
@@ -108,6 +109,7 @@
 | lib/config-loader.js | 加载 harness.config.json | 未接·元 | 几乎所有脚本 |
 | lib/context-pack.js | context-pack 核心逻辑 | 未接 | context-pack.js |
 | lib/evidence-audit.js | 证据审计核心逻辑 | 未接 | evidence-check/-freshness |
+| lib/hardcoded-hex-rule.js | hardcoded_hex_on_ui 规则本体+白名单（G1·拆出保 gate 500 软限） | 已接 | workbench-shape-gate.js |
 | lib/machine-face-rule.js | machine_face_on_ui 规则本体+defer 白名单（人话工程②·拆出保 gate 500 软限） | 已接 | workbench-shape-gate.js |
 | lib/manifest.js | 读写 .harness/manifest.json | 未接·元 | install/sync/managed-files-audit |
 | lib/memory-governance.js | 记忆治理核心逻辑 | 退役·agentmem | memory-* |

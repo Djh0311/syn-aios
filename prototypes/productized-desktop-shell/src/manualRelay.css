@@ -10,8 +10,8 @@
 .manual-relay-panel strong {
   color: var(--ink-deep);
   font-family: -apple-system, "PingFang SC", sans-serif;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--text-sm);
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -35,7 +35,7 @@
   overflow: auto;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.58);
-  font-size: 11px;
+  font-size: var(--text-xs);
   white-space: pre-wrap;
 }
 
@@ -57,6 +57,6 @@
 .manual-relay-receipt span {
   margin: 0;
   color: var(--ink-mid);
-  font-size: 11px;
+  font-size: var(--text-xs);
   overflow-wrap: anywhere;
 }
