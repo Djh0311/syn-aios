@@ -4,6 +4,8 @@
 
 阶段 2 出过三案(`../../docs/design/2026-07-14-stage2-direction-triptych.html`),用户拍板:**沿用现在 App 的风格原样**——`src/styles.css` 现有 token(暖米底 `--bg:#f3f0ea`、青绿 `--accent:#2a6b5e`、现有宋体/黑体用法、语义状态色系)全部不动。批 1-5 改造**只动信息结构,不动皮**。
 
+**三栏归真方向(2026-07-20 用户拍)**:设计方向=三栏归真,施工参照样张 `../design-mockups/jiaoban-redesign-specimen-v1.html`(token 归真+七律落地+栏间发丝线+索引降级为条目+批=石绿盖章·全 App 唯一重彩;手账概念版留档下一代);注意:`--bg:#f3f0ea` 在运行时已漂移,G1 包负责把实现定回本文拍板值。决策与拆包=`../../decisions/2026-07-20-jiaoban-design-direction-three-column-truth-restoration-v1.md`。
+
 ## 二、布局骨架:按三案样板采纳(用户拍)
 
 批 1-5 逐面改造以三案样板的信息结构为骨架:
