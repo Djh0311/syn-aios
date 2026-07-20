@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>项目手账 · 抛开现有设计的答法</title>
+<style>
+/* ============================================================
+   概念稿:项目手账(Project Journal)
+   前提:抛开三栏/卡片/面板体系,只认一件事——
+   一个项目 = 一本连续写下去的手账。
+   说话、方案、盖章、进度、口供,全是这一页上的段落;
+   页边留给目录、印章和批注。
+   ============================================================ */
+
+:root {
+  --bg:        #f3f0ea;
+  --paper-hi:  #f8f5ee;
+  --paper-in:  #ece7da;
+  --ink:       #2b2925;
+  --ink-mid:   #6b655a;
+  --ink-light: #8f887a;
+  --line:      rgba(43,41,37,.14);
+  --line-soft: rgba(43,41,37,.08);
+  --accent:      #2a6b5e;
+  --accent-deep: #1f5347;
+  --accent-wash: rgba(42,107,94,.09);
+  --vermil:      #a14242;
+  --warning:     #8a4010;
+  --warn-wash:   rgba(138,64,16,.08);
+  --serif: "Songti SC","STSong","Noto Serif SC",serif;
+  --sans:  -apple-system,"PingFang SC","Helvetica Neue",sans-serif;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { height:100%; }
+body {
+  background:var(--bg);
+  font-family:var(--sans);
+  font-size:13px; color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+}
+button { font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+
+.page {
+  height:100vh;
+  display:grid;
+  grid-template-columns:196px minmax(0,1fr) 150px;
+}
+
+/* ============ 左页边:目录(钉住) ============ */
+.toc {
+  border-right:1px solid var(--line-soft);
+  padding:22px 16px;
+  overflow-y:auto;
+}
+.toc .brand {
+  display:flex; align-items:center; gap:9px; margin-bottom:20px;
+}
+.toc .brand .seal-mini {
+  width:26px; height:26px; border-radius:7px;
+  background:var(--accent); color:var(--paper-hi);
+  font-family:var(--serif); font-size:13px; font-weight:600;
+  display:grid; place-items:center;
+}
+.toc .brand .name { font-family:var(--serif); font-size:14px; font-weight:600; }
+.toc .brand .sub { font-size:10.5px; color:var(--ink-light); }
+.toc .toc-label { font-size:11px; font-weight:600; color:var(--ink-light); letter-spacing:.05em; margin:14px 0 8px; }
+.toc a {
+  display:block; text-decoration:none; color:var(--ink-mid);
+  padding:6px 8px; border-radius:6px; border-left:2px solid transparent;
+  line-height:1.4;
+}
+.toc a:hover { background:var(--paper-hi); }
+.toc a.on { color:var(--ink); border-left-color:var(--accent); background:var(--paper-hi); }
+.toc a .d { display:block; font-size:10.5px; color:var(--ink-light); font-variant-numeric:tabular-nums; }
+.toc a.on .d { color:var(--accent); }
+
+/* ============ 手账本体 ============ */
+.journal { overflow-y:auto; min-width:0; }
+.sheet { max-width:660px; margin:0 auto; padding:34px 40px 120px; }
+
+.masthead { display:flex; align-items:baseline; gap:10px; margin-bottom:6px; }
+.masthead h1 { font-family:var(--serif); font-size:24px; font-weight:600; }
+.masthead .meta { color:var(--ink-light); font-size:11px; margin-left:auto; font-variant-numeric:tabular-nums; }
+.mastrule { border:none; border-top:1px solid var(--line); margin-bottom:26px; }
+
+/* 日期分节 */
+.day {
+  display:flex; align-items:center; gap:12px;
+  color:var(--ink-light); font-size:11px; letter-spacing:.08em;
+  margin:30px 0 18px;
+}
+.day::before,.day::after { content:""; flex:1; border-top:1px solid var(--line-soft); }
+
+/* 手账条目:一段一段往下写 */
+.entry { margin-bottom:22px; }
+
+/* 你说的话:缩进引文,不是气泡 */
+.said {
+  border-left:2px solid var(--line);
+  padding:2px 0 2px 14px;
+  color:var(--ink-mid);
+}
+.said .who { font-size:10.5px; color:var(--ink-light); margin-bottom:3px; font-variant-numeric:tabular-nums; }
+.said p { font-size:13px; line-height:1.7; }
+
+/* 主管的话:手账正文,宋体 */
+.reply { padding-left:14px; }
+.reply .who { font-size:10.5px; color:var(--ink-light); margin-bottom:4px; display:flex; align-items:center; gap:6px; font-variant-numeric:tabular-nums; }
+.reply .who::before { content:""; width:5px; height:5px; border-radius:50%; background:var(--accent); }
+.reply p {
+  font-family:var(--serif); font-size:15px; line-height:1.85;
+  color:var(--ink); text-wrap:pretty;
+}
+
+/* 方案:嵌进手账的一节,细框,不浮起 */
+.proposal {
+  margin:16px 0 6px 14px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:18px 20px;
+  background:var(--paper-hi);
+  position:relative;
+}
+.proposal .p-kicker { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.pill { font-size:11px; padding:2px 9px; border-radius:999px; font-weight:500; }
+.pill.wait { color:var(--warning); background:var(--warn-wash); }
+.pill.go { color:var(--accent); background:var(--accent-wash); }
+.proposal h2 { font-family:var(--serif); font-size:19px; font-weight:600; margin-bottom:14px; text-wrap:balance; }
+.p-sec { font-size:11px; font-weight:600; color:var(--ink-light); letter-spacing:.04em; margin:12px 0 6px; }
+.facts .fact {
+  display:flex; gap:12px; padding:5px 0;
+  border-bottom:1px dashed var(--line-soft);
+  font-size:12.5px;
+}
+.facts .fact:last-child { border-bottom:none; }
+.fact .k { color:var(--ink-light); flex:none; }
+.fact .v { margin-left:auto; text-align:right; font-variant-numeric:tabular-nums; }
+.checks { display:flex; flex-direction:column; gap:5px; font-size:12.5px; }
+.checks li { list-style:none; display:flex; gap:8px; line-height:1.6; }
+.checks li::before { content:""; width:4px; height:4px; border-radius:50%; background:var(--ink-light); flex:none; margin-top:7px; }
+.p-word { font-family:var(--serif); color:var(--ink-mid); font-size:14px; margin-top:12px; display:flex; gap:9px; }
+.p-word::before { content:""; width:3px; border-radius:2px; background:var(--accent); flex:none; }
+.p-actions { display:flex; align-items:center; gap:12px; margin-top:14px; }
+.btn-primary {
+  height:34px; padding:0 16px;
+  background:var(--accent); color:var(--paper-hi);
+  border-radius:8px; font-weight:600; font-size:12.5px;
+  transition:background .15s cubic-bezier(.23,1,.32,1), transform .1s;
+}
+.btn-primary:hover { background:var(--accent-deep); }
+.btn-primary:active { transform:scale(.97); }
+.p-actions .alt { font-size:11.5px; color:var(--ink-light); }
+.verso { margin:8px 0 0 14px; font-size:11.5px; color:var(--ink-light); }
+.verso button { color:var(--ink-mid); text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--line); }
+.verso button:hover { color:var(--accent-deep); text-decoration-color:var(--accent); }
+
+/* 已交货条目:收敛成一段摘要 */
+.closed {
+  border-left:2px solid var(--line-soft);
+  padding:4px 0 4px 14px;
+  color:var(--ink-mid);
+}
+.closed .g { font-family:var(--serif); font-size:14px; color:var(--ink); display:flex; align-items:center; gap:8px; }
+.closed .line { font-size:12px; margin-top:4px; line-height:1.7; }
+.closed .line b { color:var(--accent); font-weight:600; }
+
+/* 书写区:手账的下一行 */
+.writer {
+  margin-top:26px; padding-left:14px;
+}
+.writer .box {
+  background:var(--paper-in);
+  border:1px solid var(--line-soft);
+  border-radius:10px;
+  padding:12px 14px;
+  display:flex; align-items:center; gap:10px;
+  color:var(--ink-light);
+}
+.writer .box .ph { flex:1; }
+.writer .box .hint { font-size:10.5px; }
+
+/* ============ 右页边:批注与章 ============ */
+.margin {
+  border-left:1px solid var(--line-soft);
+  padding:22px 14px;
+  overflow-y:auto;
+  position:relative;
+}
+.margin .m-label { font-size:11px; font-weight:600; color:var(--ink-light); letter-spacing:.05em; margin-bottom:14px; }
+.note {
+  font-size:11px; color:var(--ink-mid); line-height:1.6;
+  padding:8px 10px; border-radius:8px;
+  background:var(--paper-hi); border:1px solid var(--line-soft);
+  margin-bottom:10px;
+}
+.note .t { color:var(--ink-light); font-size:10px; display:block; margin-top:4px; font-variant-numeric:tabular-nums; }
+.note.ok { border-left:2px solid var(--accent); }
+.note.flag { border-left:2px solid var(--warning); }
+
+/* 章:盖在右页边,指着方案 */
+.seal {
+  width:78px; height:78px; margin:10px auto 0;
+  border:2.5px solid var(--accent); border-radius:50%;
+  display:grid; place-items:center;
+  transform:rotate(-12deg);
+  color:var(--accent); mix-blend-mode:multiply;
+  opacity:0;
+}
+.seal::before { content:""; position:absolute; inset:4px; border:1px solid var(--accent); border-radius:50%; }
+.seal .in { text-align:center; line-height:1.25; }
+.seal .in b { font-family:var(--serif); font-size:16px; font-weight:600; letter-spacing:.18em; display:block; }
+.seal .in s { font-size:8.5px; letter-spacing:.08em; text-decoration:none; opacity:.85; display:block; margin-top:2px; }
+.stamped .seal { animation:stamp .3s cubic-bezier(.23,1,.32,1) forwards; }
+@keyframes stamp {
+  0% { opacity:0; transform:rotate(-12deg) scale(1.7); }
+  62% { opacity:.94; transform:rotate(-12deg) scale(.96); }
+  100% { opacity:.92; transform:rotate(-12deg) scale(1); }
+}
+.stamped .p-actions { display:none; }
+.p-done { display:none; margin-top:14px; font-size:12.5px; }
+.p-done .k { color:var(--ink-light); }
+.p-done .v { color:var(--accent); font-weight:600; }
+.stamped .p-done { display:flex; gap:10px; }
+@media (prefers-reduced-motion: reduce) { .stamped .seal { animation:none; opacity:.92; } }
+
+@media (max-width:1000px) {
+  .page { grid-template-columns:1fr; }
+  .toc,.margin { display:none; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- 左页边:目录 -->
+  <nav class="toc">
+    <div class="brand">
+      <div class="seal-mini">司</div>
+      <div>
+        <div class="name">小马里奥</div>
+        <div class="sub">项目手账</div>
+      </div>
+    </div>
+    <div class="toc-label">这一本里的事</div>
+    <a href="#e3" class="on">把标题改成小马里奥<span class="d">07-20 · 待你批准</span></a>
+    <a href="#e2">复制 index.html 副本<span class="d">07-18 · 已交货</span></a>
+    <a href="#e1">给游戏加一条操作说明<span class="d">07-17 · 打回重跑</span></a>
+    <a href="#e0">整理 README 开头<span class="d">07-16 · 已交货</span></a>
+  </nav>
+
+  <!-- 手账 -->
+  <main class="journal">
+    <div class="sheet">
+      <div class="masthead">
+        <h1>小马里奥 · 手账</h1>
+        <span class="meta">codex-workflow-mario-test · 共 17 单</span>
+      </div>
+      <hr class="mastrule">
+
+      <div class="day">7 月 18 日</div>
+
+      <div class="entry closed" id="e2">
+        <div class="g">复制 index.html 为 index.agent-copy.html <span class="pill go">已交货</span></div>
+        <div class="line">字节比对零差异,证据在账本。<b>你已认「属实」</b> · 经验没值得沉淀的,跳过。</div>
+      </div>
+
+      <div class="day">7 月 20 日</div>
+
+      <div class="entry said" id="e3">
+        <div class="who">你 · 14:12</div>
+        <p>我想给这个游戏里的标题改成小马里奥</p>
+      </div>
+
+      <div class="entry reply">
+        <div class="who">主管 · 14:12</div>
+        <p>看到了。index.html 里就一处标题「Super Mario」,改成「小马里奥」,其余一律不动。方案写在下边——</p>
+      </div>
+
+      <div class="entry">
+        <div class="proposal" id="proposal">
+          <div class="p-kicker"><span class="pill wait">待你批准</span></div>
+          <h2>把游戏标题改成「小马里奥」</h2>
+          <div class="p-sec">会动什么</div>
+          <div class="facts">
+            <div class="fact"><span class="k">改动文件</span><span class="v">index.html · 1 个</span></div>
+            <div class="fact"><span class="k">改动位置</span><span class="v">第 12 行 · 标题一处</span></div>
+            <div class="fact"><span class="k">不动的</span><span class="v">其它文件 · 其它行</span></div>
+          </div>
+          <div class="p-sec">怎么算做好</div>
+          <ul class="checks">
+            <li>打开游戏,标题显示「小马里奥」</li>
+            <li>除标题外,逐字节一致</li>
+          </ul>
+          <div class="p-word">就一处字,十几秒的事。你说了算。</div>
+          <div class="p-actions">
+            <button class="btn-primary" id="approve">允许并开始</button>
+            <span class="alt">要改的话,直接在下边写</span>
+          </div>
+          <div class="p-done"><span class="k">状态</span><span class="v">已开工 · 进度接着往下写</span></div>
+        </div>
+        <div class="verso">翻背面:<button>工序图</button> · <button>治理保证</button> · <button>怎么跑</button></div>
+      </div>
+
+      <div class="writer">
+        <div class="box">
+          <span class="ph">接着写…</span>
+          <span class="hint">Enter</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 右页边:批注 -->
+  <aside class="margin" id="margin">
+    <div class="m-label">页边</div>
+    <div class="note ok">「属实」——副本那单你认过。<span class="t">07-18</span></div>
+    <div class="note flag">黄牌:操作说明那单,worker 没有浏览器,验收是估的。<span class="t">07-17</span></div>
+    <div class="seal" id="seal"><div class="in"><b>已批准</b><s>SYN · 07-20</s></div></div>
+  </aside>
+
+</div>
+<script>
+document.getElementById('approve').addEventListener('click', function () {
+  document.getElementById('margin').classList.add('stamped');
+  document.getElementById('proposal').classList.add('stamped');
+});
+</script>
+</body>
+</html>

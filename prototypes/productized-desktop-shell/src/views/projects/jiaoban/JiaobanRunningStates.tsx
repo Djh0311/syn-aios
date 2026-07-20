@@ -7,6 +7,11 @@ import type {
 } from "../../../lib/types";
 import type { JiaobanPhase } from "../ProjectJiaobanPanel";
 import { JiaobanRawSessionLink } from "./jiaobanSessionParts";
+// 人话工程①(2026-07-20):humanizeChainProgress(含私有依赖 countDoneNodes)逐字迁 src/lib/humanize.ts;
+// import-back + re-export 保导入面(Panel 经本文件 re-export 链不变)。
+import { humanizeChainProgress } from "../../../lib/humanize";
+
+export { humanizeChainProgress };
 
 // 3. 干（人话进度）
 export function JiaobanRunningState({
@@ -124,23 +129,4 @@ export function isDirectorPlanningPhase(
   chainStatus: ProjectWorkflowChainStatus | null,
 ): boolean {
   return phase === "running" && (!chainStatus || chainStatus.nodes.length === 0);
-}
-
-// 链状态 → 「正在…第 x/y 步」。链事件还没出现的阶段（拿不到节点）= 主管还在拆任务，据实说清。
-export function humanizeChainProgress(
-  chainStatus: ProjectWorkflowChainStatus | null,
-  directorPlanningElapsedMinutes: number,
-): string {
-  if (!chainStatus || chainStatus.nodes.length === 0) {
-    return `主管正在拆任务 · 已 ${Math.max(0, directorPlanningElapsedMinutes)} 分钟`;
-  }
-  const total = chainStatus.nodes.length;
-  const done = countDoneNodes(chainStatus);
-  const current = Math.min(done + 1, total);
-  return `正在做第 ${current}/${total} 步…`;
-}
-
-function countDoneNodes(chainStatus: ProjectWorkflowChainStatus | null): number {
-  if (!chainStatus) return 0;
-  return chainStatus.nodes.filter((node) => /(finished|completed|done|succeeded|accepted)/i.test(node.state)).length;
 }

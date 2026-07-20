@@ -8,6 +8,10 @@ import type {
 } from "../../../lib/types";
 import type { JiaobanOrchestrationMode } from "../ProjectJiaobanPanel";
 import { JiaobanSessionPicker } from "./jiaobanSessionParts";
+// 人话工程①(2026-07-20):humanizeWriteRoots 逐字迁 src/lib/humanize.ts;import-back + re-export 保导入面。
+import { humanizeWriteRoots } from "../../../lib/humanize";
+
+export { humanizeWriteRoots };
 
 // 批（授权卡·定稿字段）
 // export 供离线 DOM 断言（fix9 诚实脸两态；renderToStaticMarkup 渲染·不平铺调用）。
@@ -382,13 +386,7 @@ function JiaobanWorksmap({
   );
 }
 
-// 人话优先(07-17 用户拍):界面默认只说「哪个目录」,完整路径收进「工程详情」。
-export function humanizeWriteRoots(roots: string[]): string {
-  const names = roots
-    .map((root) => root.replace(/\/+$/, "").split("/").pop() || root)
-    .filter(Boolean);
-  return names.length ? `就在「${names.join("、")}」目录里` : "";
-}
+// 人话工程①(2026-07-20):humanizeWriteRoots 逐字迁 src/lib/humanize.ts(顶部 import+re-export)。
 
 function extractTargetFiles(proposedSteps: string[]): string | null {
   const line = proposedSteps.find((step) => step.startsWith("目标文件："));

@@ -415,11 +415,9 @@ pub(crate) struct GlobalSupervisorReviewOutcome {
     pub(crate) warnings: Vec<String>,
 }
 
-/// 把 consult 错误翻成人话——A·收编（2026-07-09）：改调单一真源 `run_error_translation`
-/// （原逐字节重复的 humanize 已删·供给前缀语义不变、非供给错误现也翻人话）。不动 director retry 读法。
-fn humanize_consult_error(raw: &str) -> String {
-    crate::run_error_translation::humanize_error_for_display(raw)
-}
+/// consult 错误翻人话走单一真源 `run_error_translation`——A·收编（2026-07-09，原逐字节重复的
+/// humanize 已删·供给前缀语义不变、非供给错误现也翻人话）。人话工程①②(2026-07-20)删薄委托壳,
+/// 调用点直调 humanize_error_for_display。不动 director retry 读法。
 
 /// 核心（同步·可注入 consult 供单测 stub 计次）。
 /// 幂等（成本护栏）：同 (workflow_id, chain_started_at) 已有记录（**含 unavailable**）且 !force
@@ -527,7 +525,7 @@ where
         },
         Err(error) => GlobalSupervisorReviewRecord {
             status: "unavailable".to_string(),
-            unavailable_reason: Some(humanize_consult_error(&error)),
+            unavailable_reason: Some(crate::run_error_translation::humanize_error_for_display(&error)),
             ..base_record.clone()
         },
     };
@@ -840,7 +838,7 @@ where
         },
         Err(error) => GlobalSupervisorBoundaryReviewRecord {
             status: "unavailable".to_string(),
-            unavailable_reason: Some(humanize_consult_error(&error)),
+            unavailable_reason: Some(crate::run_error_translation::humanize_error_for_display(&error)),
             ..base_record.clone()
         },
     };

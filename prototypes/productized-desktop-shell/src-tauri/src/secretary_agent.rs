@@ -182,11 +182,9 @@ pub(crate) struct SecretaryExplainOutcome {
     pub(crate) reason: Option<String>,
 }
 
-// A·收编（2026-07-09）：consult 错误翻人话改调单一真源 `run_error_translation`（原逐字节重复的
-// humanize_consult_error 已删·供给前缀语义不变、非供给错误现也翻人话）。不动 director retry 读法。
-fn humanize_consult_error(raw: &str) -> String {
-    crate::run_error_translation::humanize_error_for_display(raw)
-}
+// A·收编（2026-07-09）：consult 错误翻人话走单一真源 `run_error_translation`（原逐字节重复的
+// humanize 已删·供给前缀语义不变、非供给错误现也翻人话）。人话工程①②(2026-07-20)删薄委托壳,
+// 调用点直调 humanize_error_for_display。不动 director retry 读法。
 
 /// 核心（consult 可注入·单测 stub 验输入 grounded）。**零持久化**：解释即抛，不落任何盘。
 pub(crate) fn run_secretary_explain_core<F>(
@@ -218,7 +216,7 @@ where
         Err(error) => SecretaryExplainOutcome {
             status: "unavailable".to_string(),
             explanation: None,
-            reason: Some(humanize_consult_error(&error)),
+            reason: Some(crate::run_error_translation::humanize_error_for_display(&error)),
         },
     }
 }

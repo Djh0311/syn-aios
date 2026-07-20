@@ -1,6 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/Badge";
 import { conversationTurns } from "../../lib/conversationTurns";
+import {
+  commandFromArguments,
+  firstLine,
+  friendlyLiveDetail,
+  friendlyLiveTitle,
+} from "../../lib/humanize";
 import type { CodexTranscript, CodexTranscriptEvent } from "../../lib/types";
 
 // Predictive older-page preload: begin loading the next older page while the
@@ -467,50 +473,11 @@ function statusDetailForEvent(event: CodexTranscriptEvent): string {
   return event.text ? firstLine(event.text) : "";
 }
 
-function friendlyLiveTitle(title: string): string {
-  const labels: Record<string, string> = {
-    "Codex 开始处理": "开始处理",
-    "Codex 正在回复": "正在回复",
-    "Codex 回复完成": "回复完成",
-    "Codex 完成": "完成",
-    "Codex 失败": "失败",
-    "对话已创建": "已创建对话",
-    "思考中": "正在思考",
-    "思考完成": "思考完成",
-    "正在运行命令": "正在运行命令",
-    "命令完成": "命令完成",
-    "正在调用工具": "正在调用工具",
-    "工具完成": "工具完成",
-    "工具输出": "工具输出",
-  };
-  return labels[title] ?? title;
-}
-
-function friendlyLiveDetail(event: CodexTranscriptEvent, liveStatus: string | null, liveEventType: string | null): string {
-  const command = commandFromArguments(event.arguments);
-  if (command) return command;
-  const stdout = event.stdout?.trim();
-  if (stdout) return firstLine(stdout);
-  const liveStatusLabel = liveStatus === "running" ? "运行中" : liveStatus === "completed" ? "已完成" : liveStatus === "failed" ? "失败" : "";
-  const eventTypeLabel = liveEventType ? liveEventType.replace("item.", "").replace("turn.", "") : "";
-  return [liveStatusLabel, eventTypeLabel].filter(Boolean).join(" · ");
-}
-
-function commandFromArguments(value: unknown): string {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
-  const record = value as Record<string, unknown>;
-  const cmd = record.cmd;
-  if (typeof cmd === "string") return cmd;
-  if (Array.isArray(cmd)) return cmd.map(String).join(" ");
-  return "";
-}
+// 人话工程①(2026-07-20):friendlyLiveTitle / friendlyLiveDetail 及其私有依赖
+// commandFromArguments / firstLine 逐字迁 src/lib/humanize.ts,顶部 import-back。
 
 function exitCodeIsSuccess(value: unknown): boolean {
   return value === 0 || value === "0";
-}
-
-function firstLine(text: string): string {
-  return text.split(/\r?\n/)[0]?.trim() ?? "";
 }
 
 function compactTimestamp(timestamp: string): string {

@@ -1,6 +1,7 @@
 // 交办·历届方案索引——由原工作历史栏演化而来，数据源与九态语义不变。
 // 宪法归属:修宪3号「话在左·物右侧双列」；本组件只控制右侧方案/交货实体，不再控制对话锚点。
 import type { RunHistoryEntry } from "../../../lib/types";
+import { historyErrorFamilyLabel, humanizeVerdict } from "../../../lib/humanize";
 import { formatProposalTime } from "./jiaobanTime";
 
 type HistoryVisual = { dot: string; toneClass: string; word: string };
@@ -42,27 +43,7 @@ function historyStateVisual(entry: RunHistoryEntry): HistoryVisual {
   }
 }
 
-// A·错误族 → 人话短标（前端映射·不露 family 机器键；未知族兜底「运行错误」）。
-function historyErrorFamilyLabel(family: string): string {
-  switch (family) {
-    case "provider_unavailable":
-      return "供给不可用";
-    case "network":
-      return "网络抽风";
-    case "timeout":
-      return "超时";
-    case "sandbox_denied":
-      return "权限/沙箱";
-    case "command_failed":
-      return "命令失败";
-    case "codex_subsystem":
-      return "codex 子系统";
-    case "readback_failed":
-      return "口供没读回";
-    default:
-      return "运行错误";
-  }
-}
+// 人话工程①(2026-07-20):historyErrorFamilyLabel 逐字迁 src/lib/humanize.ts,顶部 import-back。
 
 function matchesHistoryFilter(entry: RunHistoryEntry, filter: HistoryFilter): boolean {
   if (filter === "running") return entry.state === "running";
@@ -82,26 +63,7 @@ function formatProposalIndexDate(createdAtMs: number): string {
   return d.getFullYear() === new Date().getFullYear() ? monthDay : `${d.getFullYear()}-${monthDay}`;
 }
 
-// verdict 英文枚举 → 人话（词表死线）。
-function humanizeVerdict(v: string): string {
-  switch (v) {
-    case "pass":
-      return "通过";
-    case "needs_rework":
-      return "要返工";
-    case "needs_human_check":
-    case "human_verify":
-      return "建议你亲验";
-    case "looks_ok":
-      return "看着没问题";
-    case "mismatch":
-      return "对不上目标";
-    case "caution":
-      return "留个心";
-    default:
-      return v;
-  }
-}
+// 人话工程①(2026-07-20):humanizeVerdict 逐字迁 src/lib/humanize.ts,顶部 import-back。
 
 export function JiaobanProposalIndex({
   entries,

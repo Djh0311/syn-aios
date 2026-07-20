@@ -8,6 +8,7 @@ import {
   appendPendingUserMessage,
 } from "../../lib/conversationEngine";
 import { pathTail } from "../../lib/format";
+import { normalizeTranscriptError } from "../../lib/humanize";
 import {
   pollManualCodexRelayAttempt,
   runManualCodexRelayGuiDirect,
@@ -1007,80 +1008,8 @@ type NewSessionReaderProps = {
   manualRelayReceipt: ManualRelayReceipt | null;
 };
 
-type TranscriptErrorCategory = "data_missing" | "filesystem" | "parse" | "safety" | "system";
-
-type TranscriptErrorInfo = {
-  code: string;
-  category: TranscriptErrorCategory;
-  title: string;
-  message: string;
-};
-
-function normalizeTranscriptError(rawError: string): TranscriptErrorInfo {
-  const code = rawError.split(":")[0] || "unexpected_internal_error";
-  if (code === "session_not_found") {
-    return {
-      code,
-      category: "data_missing",
-      title: "会话不在当前目录中",
-      message: "sqlite 和兼容索引都没有找到该 thread，无法读取正文。",
-    };
-  }
-  if (code === "rollout_missing") {
-    return {
-      code,
-      category: "data_missing",
-      title: "没有可读回放记录",
-      message: "该会话目录存在，但对应的回放记录文件缺失或不是文件。",
-    };
-  }
-  if (code === "rollout_outside_allowed_dirs") {
-    return {
-      code,
-      category: "safety",
-      title: "路径被安全边界拒绝",
-      message: "回放记录路径不在 Codex 主目录的 sessions 或 archived_sessions 目录下。",
-    };
-  }
-  if (code === "filesystem_read_failed") {
-    return {
-      code,
-      category: "filesystem",
-      title: "文件读取失败",
-      message: "系统无法读取回放记录文件；请检查文件是否仍存在以及权限是否可读。",
-    };
-  }
-  if (code === "jsonl_parse_failed") {
-    return {
-      code,
-      category: "parse",
-      title: "回放记录格式无法解析",
-      message: "会话正文格式异常，当前无法安全展示。",
-    };
-  }
-  if (code === "sqlite_unavailable") {
-    return {
-      code,
-      category: "system",
-      title: "会话目录暂不可用",
-      message: "Codex sqlite 目录不可读，且没有可用的兼容索引条目。",
-    };
-  }
-  if (code === "transcript_reader_unavailable") {
-    return {
-      code,
-      category: "system",
-      title: "历史读取器不可用",
-      message: "旧会话记录读取器不可用；会话中心主路径不应依赖它。",
-    };
-  }
-  return {
-    code,
-    category: "system",
-    title: "读取失败",
-    message: "会话正文暂时无法读取。底层错误已归类为系统错误。",
-  };
-}
+// 人话工程①(2026-07-20):TranscriptErrorCategory / TranscriptErrorInfo / normalizeTranscriptError
+// 逐字迁 src/lib/humanize.ts,顶部 import-back,渲染字段(category/title/message/code)不变。
 
 function buildSyntheticTranscript({
   threadId,

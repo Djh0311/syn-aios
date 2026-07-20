@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交办页 · 重设计样张 v1</title>
+<style>
+/* ============================================================
+   交办页重设计样张 —— 一部真宪法
+   一刀：token 归真(单 :root·DESIGN.md 拍板原值·零桌面皮对抗)
+   二刀：七律落地(纸上放卡/虚线只占位/20px 网格/pill 单式/事实行定式)
+   签名：批=盖章(全 App 唯一重彩时刻)
+   ============================================================ */
+
+:root {
+  /* 纸与墨 —— DESIGN.md 拍板原值，死值复活 */
+  --bg:        #f3f0ea;   /* 暖米纸(拍板值,运行时曾被漂成 #f5f1e8/#f6f2e9) */
+  --paper-hi:  #f8f5ee;   /* 纸面提亮:用户气泡、hover */
+  --paper-in:  #ece7da;   /* 纸面凹陷:输入框(inset 比周围深,不更浅) */
+  --ink:       #2b2925;
+  --ink-mid:   #6b655a;
+  --ink-light: #8f887a;
+  --line:      rgba(43,41,37,.14);
+  --line-soft: rgba(43,41,37,.08);
+
+  /* 语义色 —— 全部走 token,零硬编码 */
+  --accent:      #2a6b5e;  /* 石绿:唯一主动作色 */
+  --accent-deep: #1f5347;  /* hover 深绿 */
+  --accent-wash: rgba(42,107,94,.09);
+  --vermil:      #a14242;  /* 朱砂:黄牌/危险专属,不做选中色 */
+  --warning:     #8a4010;  /* 黄牌批注 */
+  --warn-wash:   rgba(138,64,16,.08);
+
+  /* type scale —— 一套,真用(1.25 比,中文收紧) */
+  --t-caption: 11px;
+  --t-meta:    12px;
+  --t-body:    13px;
+  --t-h4:      15px;
+  --t-h3:      17px;
+  --t-h2:      22px;
+
+  /* 网格 —— 七律③ */
+  --pad-card: 20px;
+  --gap-group: 14px;
+
+  --r-card: 12px;
+  --r-in:    8px;   /* 同心:外 12 = 内 8 + padding 4 系 */
+  --r-pill: 999px;
+
+  --serif: "Songti SC","STSong","Noto Serif SC",serif;
+  --sans:  -apple-system,"PingFang SC","Helvetica Neue",sans-serif;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { height:100%; }
+body {
+  background:#e9e4d8;           /* 桌面:比纸深半档,衬出纸窗 */
+  font-family:var(--sans);
+  font-size:var(--t-body);
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column; align-items:center;
+  padding:28px 20px 20px; gap:14px;
+}
+button { font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+
+/* ============ 窗口 ============ */
+.window {
+  width:min(1440px,100%); height:min(880px,calc(100vh - 120px));
+  background:var(--bg);
+  border-radius:14px;
+  box-shadow:0 0 0 1px rgba(43,41,37,.10), 0 18px 50px -18px rgba(43,41,37,.28);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+
+/* ---- 顶栏:44px,薄 ---- */
+.topbar {
+  height:44px; flex:none;
+  display:flex; align-items:center; gap:12px;
+  padding:0 14px;
+  border-bottom:1px solid var(--line-soft);
+}
+.lights { display:flex; gap:7px; margin-right:2px; }
+.lights i { width:11px; height:11px; border-radius:50%; background:var(--line); display:block; }
+.brand-seal {
+  width:26px; height:26px; border-radius:7px;
+  background:var(--accent); color:var(--paper-hi);
+  font-family:var(--serif); font-size:13px; font-weight:600;
+  display:grid; place-items:center;
+}
+.topbar .proj { font-family:var(--serif); font-size:var(--t-h4); font-weight:600; }
+.topbar .crumb { color:var(--ink-light); font-size:var(--t-meta); }
+.topbar .spacer { flex:1; }
+.topbar .search {
+  width:200px; height:28px; border-radius:var(--r-in);
+  background:var(--paper-in); color:var(--ink-light);
+  display:flex; align-items:center; padding:0 10px; font-size:var(--t-meta);
+}
+.review-chip {
+  height:26px; padding:0 10px; border-radius:var(--r-pill);
+  font-size:var(--t-caption); color:var(--ink-mid);
+  border:1px solid var(--line-soft);
+  display:flex; align-items:center; gap:6px;
+}
+.review-chip b { font-variant-numeric:tabular-nums; color:var(--ink); }
+.health-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); }
+
+/* ---- 主体:左栏 rail + 三栏 ---- */
+.body { flex:1; display:flex; min-height:0; }
+
+.rail {
+  width:48px; flex:none;
+  border-right:1px solid var(--line-soft);
+  display:flex; flex-direction:column; align-items:center;
+  padding:10px 0; gap:4px;
+}
+.rail button {
+  width:34px; height:34px; border-radius:9px;
+  color:var(--ink-light); font-size:15px;
+  display:grid; place-items:center;
+  transition:background .15s cubic-bezier(.23,1,.32,1), color .15s;
+}
+.rail button:hover { background:var(--paper-hi); color:var(--ink); }
+.rail button.on { background:var(--accent-wash); color:var(--accent); }
+.rail .foot { margin-top:auto; }
+
+.columns {
+  flex:1; min-width:0;
+  display:grid;
+  grid-template-columns:minmax(340px,1fr) 236px 404px;
+  gap:0;
+  min-height:0;
+}
+.columns > .col { padding:14px; }
+.columns > .col:first-child { padding-left:14px; }
+.columns > .col + .col { border-left:1px solid var(--line-soft); }
+
+/* 栏通用:纸上放卡——一栏至多一个框,分组靠留白+小灰标 */
+.col { display:flex; flex-direction:column; min-height:0; min-width:0; }
+.col-head {
+  flex:none; display:flex; align-items:baseline; gap:8px;
+  padding:2px 2px 10px;
+}
+.col-head .label {
+  font-size:11.5px; font-weight:600; color:var(--ink-light);
+  letter-spacing:.04em;
+}
+.col-head .count { font-size:var(--t-caption); color:var(--ink-light); font-variant-numeric:tabular-nums; }
+.col-head .tail { margin-left:auto; font-size:var(--t-caption); color:var(--ink-light); }
+
+/* ============ 左:对话 ============ */
+.convo-scroll {
+  flex:1; min-height:0; overflow-y:auto;
+  padding:4px 6px 10px 2px;
+  display:flex; flex-direction:column; gap:var(--gap-group);
+}
+.msg { display:flex; flex-direction:column; gap:5px; max-width:88%; }
+.msg .who {
+  font-size:var(--t-caption); color:var(--ink-light);
+  display:flex; align-items:center; gap:6px;
+}
+.msg .who .t { font-variant-numeric:tabular-nums; }
+.msg.sup .who::before {
+  content:""; width:6px; height:6px; border-radius:50%;
+  background:var(--accent); flex:none;
+}
+.msg .text { line-height:1.65; text-wrap:pretty; }
+.msg.sup .text { font-family:var(--serif); font-size:var(--t-h4); }
+.msg.me { align-self:flex-end; align-items:flex-end; }
+.msg.me .text {
+  background:var(--paper-hi);
+  border:1px solid var(--line-soft);
+  border-radius:12px 12px 4px 12px;
+  padding:8px 12px;
+}
+/* 主管过程短讯:更轻一档 */
+.msg.sup .beat { color:var(--ink-mid); font-size:var(--t-body); font-family:var(--sans); }
+
+.composer {
+  flex:none; margin-top:10px;
+  background:var(--paper-in);
+  border:1px solid var(--line-soft);
+  border-radius:10px;
+  padding:11px 14px;
+  display:flex; align-items:center; gap:10px;
+}
+.composer .ph { color:var(--ink-light); flex:1; }
+.composer .hint { font-size:var(--t-caption); color:var(--ink-light); white-space:nowrap; }
+
+/* ============ 中:历届方案索引 ============ */
+.index-scroll {
+  flex:1; min-height:0; overflow-y:auto;
+  display:flex; flex-direction:column; gap:2px;
+  padding-right:2px;
+}
+.idx {
+  text-align:left;
+  border-radius:6px;
+  padding:8px 8px 7px 10px;
+  border-left:2px solid transparent;
+  background:none;
+  display:flex; flex-direction:column; gap:4px;
+  transition:background .15s cubic-bezier(.23,1,.32,1);
+}
+.idx:hover { background:var(--paper-hi); }
+.idx.on { background:var(--paper-hi); border-left-color:var(--accent); }
+.idx.on .goal { font-weight:600; }
+.idx .goal {
+  font-size:var(--t-body); line-height:1.45;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.idx .meta {
+  display:flex; align-items:center; gap:6px;
+  font-size:var(--t-caption); color:var(--ink-light);
+}
+.idx .meta .dot { width:7px; height:7px; border-radius:50%; flex:none; }
+.idx .meta .date { margin-left:auto; font-variant-numeric:tabular-nums; }
+.dot.wait { background:var(--warning); }
+.dot.done { background:var(--accent); }
+.dot.rework { background:var(--vermil); }
+.dot.old { background:var(--line); }
+.idx.old .goal { color:var(--ink-light); }
+/* 虚线只做占位 */
+.idx-more {
+  margin-top:6px; padding:10px;
+  border:1px dashed var(--line); border-radius:var(--r-in);
+  color:var(--ink-light); font-size:var(--t-caption); text-align:center;
+}
+
+/* ============ 右:方案卡(一栏一框) ============ */
+.card-scroll { flex:1; min-height:0; overflow-y:auto; padding-right:2px; }
+.card {
+  position:relative;
+  background:var(--paper-hi);
+  border:1px solid var(--line);
+  border-radius:var(--r-card);
+  padding:var(--pad-card);
+  display:flex; flex-direction:column; gap:var(--gap-group);
+  box-shadow:0 1px 2px rgba(43,41,37,.05);
+}
+.card .kicker {
+  display:flex; align-items:center; gap:8px;
+  font-size:11.5px; font-weight:600; color:var(--ink-light); letter-spacing:.04em;
+}
+/* pill 唯一定式:11px·2px 9px·全圆角·语义 token */
+.pill {
+  font-size:var(--t-caption);
+  padding:2px 9px; border-radius:var(--r-pill);
+  font-weight:500; white-space:nowrap;
+}
+.pill.wait { color:var(--warning); background:var(--warn-wash); }
+.pill.go   { color:var(--accent);  background:var(--accent-wash); }
+
+.card h1 {
+  font-family:var(--serif);
+  font-size:var(--t-h2); font-weight:600; line-height:1.35;
+  text-wrap:balance;
+}
+.sec-label {
+  font-size:11.5px; font-weight:600; color:var(--ink-light);
+  letter-spacing:.04em; margin-bottom:8px;
+}
+
+/* 事实行定式:标签灰左·值右对齐·细虚线分隔 */
+.facts { display:flex; flex-direction:column; }
+.fact {
+  display:flex; align-items:baseline; gap:12px;
+  padding:7px 0;
+  border-bottom:1px dashed var(--line-soft);
+}
+.fact:last-child { border-bottom:none; }
+.fact .k { color:var(--ink-light); flex:none; }
+.fact .v { margin-left:auto; text-align:right; font-variant-numeric:tabular-nums; }
+.fact .v.dim { color:var(--ink-mid); }
+
+/* 怎么算做好:人读条目直排 */
+.checks { display:flex; flex-direction:column; gap:7px; }
+.checks li {
+  list-style:none; display:flex; gap:9px; line-height:1.55;
+}
+.checks li::before {
+  content:""; width:4px; height:4px; border-radius:50%;
+  background:var(--ink-light); flex:none; margin-top:8px;
+}
+
+/* 主管一句:纸上一句,不带框 */
+.word {
+  font-family:var(--serif); font-size:var(--t-h4);
+  color:var(--ink-mid); line-height:1.6;
+  display:flex; gap:9px;
+}
+.word::before {
+  content:""; width:3px; border-radius:2px;
+  background:var(--accent); flex:none;
+}
+
+/* 动作行 */
+.actions { display:flex; align-items:center; gap:12px; padding-top:2px; }
+.btn-primary {
+  height:36px; padding:0 18px;
+  background:var(--accent); color:var(--paper-hi);
+  border-radius:var(--r-in);
+  font-size:var(--t-body); font-weight:600;
+  box-shadow:0 1px 2px rgba(31,83,71,.25);
+  transition:background .15s cubic-bezier(.23,1,.32,1), transform .1s;
+}
+.btn-primary:hover { background:var(--accent-deep); }
+.btn-primary:active { transform:scale(.97); }
+.actions .alt { font-size:var(--t-meta); color:var(--ink-light); }
+
+/* 已批状态(盖章后) */
+.done-line { display:none; align-items:baseline; gap:12px; padding:7px 0; }
+.done-line .k { color:var(--ink-light); }
+.done-line .v { margin-left:auto; color:var(--accent); font-weight:600; }
+.stamped .actions { display:none; }
+.stamped .done-line { display:flex; }
+
+/* ============ 签名:印章 ============ */
+.seal {
+  position:absolute; top:14px; right:16px;
+  width:76px; height:76px;
+  border:2.5px solid var(--accent);
+  border-radius:50%;
+  display:grid; place-items:center;
+  transform:rotate(-12deg);
+  color:var(--accent);
+  mix-blend-mode:multiply;
+  opacity:0;
+  pointer-events:none;
+}
+.seal::before {
+  content:""; position:absolute; inset:4px;
+  border:1px solid var(--accent); border-radius:50%;
+}
+.seal .in { text-align:center; line-height:1.25; }
+.seal .in b { font-family:var(--serif); font-size:16px; font-weight:600; letter-spacing:.18em; display:block; }
+.seal .in s { font-size:8.5px; letter-spacing:.08em; text-decoration:none; opacity:.85; display:block; margin-top:2px; }
+.stamped .seal {
+  animation:stamp .3s cubic-bezier(.23,1,.32,1) forwards;
+}
+@keyframes stamp {
+  0%   { opacity:0; transform:rotate(-12deg) scale(1.7); }
+  62%  { opacity:.94; transform:rotate(-12deg) scale(.96); }
+  100% { opacity:.92; transform:rotate(-12deg) scale(1); }
+}
+.stamped .card { animation:thud .3s cubic-bezier(.23,1,.32,1); }
+@keyframes thud {
+  0% { transform:scale(1); } 40% { transform:scale(.996); } 100% { transform:scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stamped .seal { animation:none; opacity:.92; }
+  .stamped .card { animation:none; }
+}
+
+/* ============ 577 纵排(S1C 拍板) ============ */
+@media (max-width:900px) {
+  body { padding:0; }
+  .window { height:100vh; border-radius:0; }
+  .columns { grid-template-columns:1fr; grid-template-rows:1.1fr .65fr 1fr; overflow:hidden; }
+  .columns > .col + .col { border-left:none; border-top:1px solid var(--line-soft); }
+  .rail { display:none; }
+  .topbar .search { display:none; }
+}
+
+/* ============ 样张脚注(窗外交底,非产品) ============ */
+.legend {
+  width:min(1440px,100%);
+  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+  color:var(--ink-mid); font-size:var(--t-caption);
+}
+.legend .sw { display:flex; align-items:center; gap:6px; }
+.legend .sw i { width:14px; height:14px; border-radius:4px; border:1px solid var(--line-soft); }
+.legend .sep { width:1px; height:14px; background:var(--line); }
+.legend b { color:var(--ink); font-weight:600; }
+</style>
+</head>
+<body>
+
+<div class="window">
+  <!-- 顶栏 -->
+  <div class="topbar">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <div class="brand-seal">司</div>
+    <div class="proj">小马里奥</div>
+    <div class="crumb">codex-workflow-mario-test · 交办</div>
+    <div class="spacer"></div>
+    <div class="search">搜索</div>
+    <div class="review-chip"><b>2</b> 待审</div>
+    <div class="health-dot" title="存储健康"></div>
+  </div>
+
+  <div class="body">
+    <!-- 左 rail -->
+    <nav class="rail">
+      <button title="首页">⌂</button>
+      <button class="on" title="项目">▣</button>
+      <button title="会话">◱</button>
+      <button title="记忆">✎</button>
+      <button class="foot" title="设置">⚙</button>
+    </nav>
+
+    <div class="columns">
+      <!-- 左:对话 -->
+      <section class="col">
+        <div class="col-head">
+          <span class="label">主管</span>
+          <span class="tail">今天</span>
+        </div>
+        <div class="convo-scroll">
+          <div class="msg me">
+            <div class="text">我想给这个游戏里的标题改成小马里奥</div>
+            <div class="who"><span class="t">14:12</span></div>
+          </div>
+          <div class="msg sup">
+            <div class="who">主管 <span class="t">14:12</span></div>
+            <div class="text">看到了。index.html 里就一处标题「Super Mario」,改成「小马里奥」,其余一律不动。要按这个出方案吗?</div>
+          </div>
+          <div class="msg me">
+            <div class="text">按这个出方案</div>
+            <div class="who"><span class="t">14:13</span></div>
+          </div>
+          <div class="msg sup">
+            <div class="who">主管 <span class="t">14:13</span></div>
+            <div class="beat">方案出了,在右边。</div>
+          </div>
+        </div>
+        <div class="composer">
+          <span class="ph">跟主管说…</span>
+          <span class="hint">Enter 发送</span>
+        </div>
+      </section>
+
+      <!-- 中:历届方案索引 -->
+      <section class="col">
+        <div class="col-head">
+          <span class="label">历届方案</span>
+          <span class="count">5</span>
+        </div>
+        <div class="index-scroll">
+          <button class="idx on">
+            <span class="goal">把标题改成小马里奥</span>
+            <span class="meta"><i class="dot wait"></i>待你批准<span class="date">07-20</span></span>
+          </button>
+          <button class="idx">
+            <span class="goal">复制 index.html 为 index.agent-copy.html</span>
+            <span class="meta"><i class="dot done"></i>已交货<span class="date">07-18</span></span>
+          </button>
+          <button class="idx">
+            <span class="goal">给游戏加一条操作说明</span>
+            <span class="meta"><i class="dot rework"></i>打回重跑<span class="date">07-17</span></span>
+          </button>
+          <button class="idx">
+            <span class="goal">整理 README 开头</span>
+            <span class="meta"><i class="dot done"></i>已交货<span class="date">07-16</span></span>
+          </button>
+          <button class="idx old">
+            <span class="goal">旧单 · 无方案记录</span>
+            <span class="meta"><i class="dot old"></i>只看事实<span class="date">07-15</span></span>
+          </button>
+          <div class="idx-more">更早的 12 单 ▸</div>
+        </div>
+      </section>
+
+      <!-- 右:方案卡 -->
+      <section class="col">
+        <div class="col-head">
+          <span class="label">方案</span>
+          <span class="tail"><button style="color:var(--ink-light);font-size:var(--t-caption)">工序图 · 治理 · 怎么跑</button></span>
+        </div>
+        <div class="card-scroll">
+          <article class="card" id="card">
+            <div class="seal" id="seal">
+              <div class="in"><b>已批准</b><s>SYN · 07-20</s></div>
+            </div>
+            <div class="kicker">方案 <span class="pill wait">待你批准</span></div>
+            <h1>把游戏标题改成「小马里奥」</h1>
+
+            <section>
+              <div class="sec-label">会动什么</div>
+              <div class="facts">
+                <div class="fact"><span class="k">改动文件</span><span class="v">index.html · 1 个</span></div>
+                <div class="fact"><span class="k">改动位置</span><span class="v">第 12 行 · 标题一处</span></div>
+                <div class="fact"><span class="k">写入范围</span><span class="v dim">就在「codex-workflow-mario-test」里</span></div>
+                <div class="fact"><span class="k">不动的</span><span class="v dim">其它文件 · 其它行</span></div>
+              </div>
+            </section>
+
+            <section>
+              <div class="sec-label">怎么算做好</div>
+              <ul class="checks">
+                <li>打开游戏,标题显示「小马里奥」</li>
+                <li>除标题外,逐字节一致</li>
+              </ul>
+            </section>
+
+            <div class="word">就一处字,十几秒的事。你说了算。</div>
+
+            <div class="actions">
+              <button class="btn-primary" id="approve">允许并开始</button>
+              <span class="alt">要改的话,直接在左边说</span>
+            </div>
+            <div class="done-line">
+              <span class="k">状态</span>
+              <span class="v">已开工 · 工序图逐格亮</span>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- 样张脚注:交底,不进产品 -->
+<div class="legend">
+  <span class="sw"><i style="background:#f3f0ea"></i>纸 #f3f0ea(拍板原值)</span>
+  <span class="sw"><i style="background:#2b2925"></i>墨</span>
+  <span class="sw"><i style="background:#2a6b5e"></i>石绿 · 唯一主动作</span>
+  <span class="sw"><i style="background:#a14242"></i>朱砂 · 只做黄牌</span>
+  <span class="sep"></span>
+  <span><b>点「允许并开始」看盖章</b> · 全 App 唯一重彩时刻</span>
+  <span class="sep"></span>
+  <span>栏间发丝线 · 虚线只占位 · pill 单式 · 事实行定式 · 宋体标题/黑体正文(这次写成规矩)</span>
+</div>
+
+<script>
+document.getElementById('approve').addEventListener('click', function () {
+  document.getElementById('card').classList.add('stamped');
+});
+</script>
+</body>
+</html>

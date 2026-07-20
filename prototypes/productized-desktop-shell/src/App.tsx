@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { renderActiveWorkbenchView } from "./components/ActiveWorkbenchView";
 import { RightDetailPanel } from "./components/RightDetailPanel";
 import { WorkbenchShell } from "./components/WorkbenchShell";
+import { humanizeNoticeMessage } from "./lib/humanize";
 import {
   adoptMemoryCandidateToFormalMemory,
   bootstrapProjectWorkflow,
@@ -780,9 +781,11 @@ export function App() {
   );
 }
 
+// 人话工程①②(2026-07-20):notice 错误串接 src/lib/humanize.ts 薄委托——命中已知族出人话,
+// 未命中原文逐字回退(显示串零变化)。覆盖 :175/:206/:281 及同族第四调用点 :630。
 function messageOf(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
+  if (error instanceof Error) return humanizeNoticeMessage(error.message);
+  return humanizeNoticeMessage(String(error));
 }
 
 function legacyProductCommandBlockedNotice(commandName: string) {

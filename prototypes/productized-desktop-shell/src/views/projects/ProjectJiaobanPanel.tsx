@@ -52,6 +52,12 @@ import {
   NEW_SESSION_CHOICE,
 } from "./jiaoban/jiaobanSessionParts";
 import { formatProposalTime, proposalAgeDays } from "./jiaoban/jiaobanTime";
+import {
+  humanizeAuthorizeError,
+  humanizePreviewError,
+  humanizeProviderUnavailable,
+  isAlreadyConfirmedRejection,
+} from "../../lib/humanize";
 import { summarizeProjectConsultationProposalStore } from "../../lib/projectConsultationProposal";
 import {
   applyProjectDirectorFailedAction,
@@ -269,12 +275,7 @@ type JiaobanPreviewCache = {
 };
 const jiaobanPreviewCacheByProposal = new Map<string, JiaobanPreviewCache>();
 
-// 预拆偶发早退（flaky·后端已自动重试一次仍可能空）→ 人话，优雅降级：不影响批。
-function humanizePreviewError(error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error ?? "");
-  if (/找不到方案|proposal/i.test(raw)) return "这份方案暂时读不到，右侧预演画布的工序图没画出来（可重试）。";
-  return "右侧预演画布的工序图没画出来（可重试）；不影响你批。";
-}
+// 人话工程①(2026-07-20):humanizePreviewError 逐字迁 src/lib/humanize.ts,顶部 import-back。
 
 // 阶段3拆巨石:时间工具迁 jiaoban/jiaobanTime.ts(原样零逻辑改动)。
 
@@ -1707,50 +1708,8 @@ export {
 // 授权生效 + 绑现有会话 + 自动推进；返回同形 outcome，组件按 stage 分支不变。人闸不省。
 // ============================================================
 
-// 判是不是合流命令对「已确认」方案的那一类干净拒（方案不是待用户确认状态）。
-// 命中 → 授权本还活着、不用重批，卡住脸该给[接着跑,不用重批]（而非引导重新出方案）。
-function isAlreadyConfirmedRejection(e: unknown): boolean {
-  const raw = e instanceof Error ? e.message : String(e);
-  return (
-    raw.includes("待用户确认") ||
-    raw.includes("PendingUserConfirmation") ||
-    raw.includes("不是「待") ||
-    raw.includes("方案不是待")
-  );
-}
-
-// fix8：供给类错误识别（codex 额度 / 订阅 / 登录 / 服务不可用）。姊妹后端包会带 codex_provider_unavailable:
-// 前缀 + 人话，直接取其人话；后端未落地前用兜底关键词匹配。返回 null = 不是供给类（交给别的 humanize）。
-function humanizeProviderUnavailable(e: unknown): string | null {
-  const raw = e instanceof Error ? e.message : String(e ?? "");
-  const marker = "codex_provider_unavailable";
-  if (raw.includes(marker)) {
-    const after = raw.split(marker)[1]?.replace(/^["'\s]*[:：]?["'\s]*/, "").trim();
-    return after && after.length > 0 ? after : "codex 额度 / 订阅 / 登录不可用——处理后点重试。";
-  }
-  if (/\b403\b|SUBSCRIPTION|quota|usage limit|\b401\b|unauthorized|consult_last_message_read_failed/i.test(raw)) {
-    return "codex 服务不可用（常见：额度用完 / 订阅过期 / 登录失效）——处理后点重试；若是网络抽风，重试一次通常就过。";
-  }
-  return null;
-}
-
-// 合流命令的报错翻人话。最要紧的一类：对「已确认」方案后端会拒（方案不是待用户确认状态）——
-// 那不是系统坏了，是这份方案已经批过、授权还活着，引导用户点[接着跑,不用重批]而非重批。
-function humanizeAuthorizeError(e: unknown): string {
-  // fix8：合流 / 接着跑撞供给死时，同用供给类人话（否则裸抛英文栈让人以为系统坏了）。
-  const provider = humanizeProviderUnavailable(e);
-  if (provider) return provider;
-  const raw = e instanceof Error ? e.message : String(e);
-  // 后端拒词：ProjectConsultationProposalStatus 不是 PendingUserConfirmation 时的那句。
-  // 这份已批过 → 不裸抛原始错误，翻成「已经批过了，点下面接着跑」。
-  if (isAlreadyConfirmedRejection(e)) {
-    return "这份方案已经批过了——不用重批，点下面「接着跑」，会从拆任务接着往下推进。";
-  }
-  if (raw.includes("找不到方案")) {
-    return "找不到这份方案了（可能已被新方案取代）。点「重新出方案」重新说一遍目标。";
-  }
-  return raw;
-}
+// 人话工程①(2026-07-20):isAlreadyConfirmedRejection / humanizeProviderUnavailable /
+// humanizeAuthorizeError 三函数逐字迁 src/lib/humanize.ts,顶部 import-back,导入面不变。
 
 // ============================================================
 // 人话化辅助（把后端结构翻成给用户看的话；主路径不出现节点 id / 链 id）
