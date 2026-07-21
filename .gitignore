@@ -29,3 +29,8 @@ prototypes/tauri-capability-probe/.tauri-cli/
 # Local harness runtime cache
 .harness/
 evidence/raw/2026-07-14-reseed/apply-backup/source-files/
+
+# 工具本地目录(不跟仓·AGENTS/交接纪律):截图与临时产物
+prototypes/productized-desktop-shell/output/
+.claude/
+.playwright-cli/

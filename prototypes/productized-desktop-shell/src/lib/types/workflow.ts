@@ -1715,6 +1715,7 @@ export type PathActionKind =
   | "record-k3-b1-manual-recovery-submission"
   | "request-k3-b1-renewed-risk-approval"
   | "record-operation-control-decision"
+  | "knowledge-vault-ai-write"
   | "offline-role-dispatch"
   | "offline-role-result-handoff"
   | "offline-director-review"
@@ -1802,6 +1803,12 @@ export type PendingAction = {
     readback_result_count?: number | null;
   };
   operationControlAction?: OperationControlDecisionRequest;
+  // L3 知识库第一片：AI 提议写 vault 笔记（用户允许那一下才落盘·source_summary 必填进审计）。
+  knowledgeVaultWrite?: {
+    note_title: string;
+    body: string;
+    source_summary: string;
+  };
   memoryCaptureEvent?: CaptureMemoryEventInput;
   offlineRoleDispatch?: OfflineRoleDispatchRequest;
   offlineRoleResultHandoff?: OfflineRoleResultHandoffRequest;

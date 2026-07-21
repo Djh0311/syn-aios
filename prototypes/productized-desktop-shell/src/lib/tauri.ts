@@ -766,6 +766,59 @@ export function recordOperationControlDecision(
   return invoke<WorkflowStateMutationResult>("record_operation_control_decision", { request });
 }
 
+// L3 知识库第一片：工作台自管 vault 五命令（AI 写入仅经 PermissionDialog 用户允许那一下调用）。
+export type KnowledgeVaultNoteSummary = {
+  slug: string;
+  title: string;
+  mtime_ms: number;
+  outlinks: string[];
+};
+export type KnowledgeVaultNote = {
+  slug: string;
+  title: string;
+  body: string;
+  mtime_ms: number;
+};
+export type KnowledgeVaultWriteResult = {
+  slug: string;
+  title: string;
+  audit_event_id: string;
+  created: boolean;
+};
+
+export function knowledgeVaultListNotes(): Promise<KnowledgeVaultNoteSummary[]> {
+  ensureTauriRuntime();
+  return invoke<KnowledgeVaultNoteSummary[]>("knowledge_vault_list_notes");
+}
+
+export function knowledgeVaultReadNote(slug: string): Promise<KnowledgeVaultNote> {
+  ensureTauriRuntime();
+  return invoke<KnowledgeVaultNote>("knowledge_vault_read_note", { slug });
+}
+
+export function knowledgeVaultCreateNote(title: string): Promise<KnowledgeVaultWriteResult> {
+  ensureTauriRuntime();
+  return invoke<KnowledgeVaultWriteResult>("knowledge_vault_create_note", { title });
+}
+
+export function knowledgeVaultWriteNote(slug: string, body: string): Promise<KnowledgeVaultWriteResult> {
+  ensureTauriRuntime();
+  return invoke<KnowledgeVaultWriteResult>("knowledge_vault_write_note", { slug, body });
+}
+
+export function knowledgeVaultAiWrite(request: {
+  note_title: string;
+  body: string;
+  source_summary: string;
+}): Promise<KnowledgeVaultWriteResult> {
+  ensureTauriRuntime();
+  return invoke<KnowledgeVaultWriteResult>("knowledge_vault_ai_write", {
+    noteTitle: request.note_title,
+    body: request.body,
+    sourceSummary: request.source_summary,
+  });
+}
+
 export function previewManualCodexRelay(
   request: ManualRelayPreviewInput,
 ): Promise<ManualRelayPreview> {

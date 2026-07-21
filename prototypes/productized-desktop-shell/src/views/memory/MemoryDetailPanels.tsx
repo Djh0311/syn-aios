@@ -1,5 +1,5 @@
 import type { FormalMemoryListItem, MemoryCandidateListItem } from "../../lib/memoryCenter";
-import type { FormalMemoryLifecycleOperationKind, MemoryCandidate, MemoryLintFinding } from "../../lib/types";
+import type { FormalMemoryLifecycleOperationKind, MemoryCandidate, MemoryLintFinding, PendingAction } from "../../lib/types";
 import { FactRow } from "../../components/SpecPrimitives";
 
 export function FormalMemoryDetail({
@@ -124,6 +124,27 @@ export function FormalMemoryDetail({
   );
 }
 
+// L3 知识库第一片：候选（AI 产物）→「存成知识库笔记」payload（用户允许那一下才落盘·§二.4）。
+function buildKnowledgeVaultWriteAction(item: MemoryCandidateListItem, sourceRefs?: MemoryCandidate["source_refs"]): PendingAction {
+  const sourceText = candidateSourceText(sourceRefs, item.source_summaries);
+  const noteTitle = item.claim.length > 40 ? `${item.claim.slice(0, 40)}…` : item.claim;
+  const bodyParts = [`# ${item.claim}`];
+  if (item.body) bodyParts.push(item.body);
+  bodyParts.push(`—— 存自记忆候选：${sourceText}`);
+  return {
+    kind: "knowledge-vault-ai-write",
+    label: "AI 想往知识库写一条笔记",
+    path: "knowledge-vault",
+    source: "Tauri 应用数据目录",
+    boundary: "只写工作台自管的 knowledge-vault 目录；AI 提议、你允许才落盘；不碰你的其他文件夹。",
+    knowledgeVaultWrite: {
+      note_title: noteTitle,
+      body: bodyParts.join("\n\n"),
+      source_summary: `记忆候选 ${item.candidate_key}（${sourceText}）`,
+    },
+  };
+}
+
 export function CandidateMemoryDetail({
   item,
   canConfirm = false,
@@ -136,6 +157,7 @@ export function CandidateMemoryDetail({
   onReject,
   hasOpenLintFinding = false,
   sourceRefs,
+  onRequestAction,
 }: {
   item: MemoryCandidateListItem;
   canConfirm?: boolean;
@@ -148,6 +170,7 @@ export function CandidateMemoryDetail({
   onReject?: () => void;
   hasOpenLintFinding?: boolean;
   sourceRefs?: MemoryCandidate["source_refs"];
+  onRequestAction?: (action: PendingAction) => void;
 }) {
   return (
     <article className="memory-detail-card fcard memory-detail-section" data-memory-detail-kind="candidate">
@@ -176,6 +199,15 @@ export function CandidateMemoryDetail({
         {canReject && onReject ? (
           <button className="secondary-button" type="button" onClick={onReject}>
             不要
+          </button>
+        ) : null}
+        {onRequestAction ? (
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => onRequestAction(buildKnowledgeVaultWriteAction(item, sourceRefs))}
+          >
+            存成知识库笔记
           </button>
         ) : null}
       </div>

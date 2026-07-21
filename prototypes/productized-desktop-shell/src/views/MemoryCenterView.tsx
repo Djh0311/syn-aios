@@ -759,6 +759,7 @@ export function MemoryCenterView({
                 onAdopt={onRequestAction && candidateProjectRoot ? requestCandidateAdoption : undefined}
                 onDiscard={onRequestAction && candidateProjectRoot ? () => requestCandidateDecision("candidate_discarded") : undefined}
                 onReject={onRequestAction && candidateProjectRoot ? () => requestCandidateDecision("candidate_rejected") : undefined}
+                onRequestAction={onRequestAction}
               />
             ) : null}
             {activeSelection?.kind === "lint" && primaryLintFinding ? (

@@ -417,6 +417,26 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
             </div>
           </>
         ) : null}
+        {action.kind === "knowledge-vault-ai-write" && action.knowledgeVaultWrite ? (
+          <>
+            <div className="permission-detail">
+              <span>笔记标题</span>
+              <strong>{action.knowledgeVaultWrite.note_title}</strong>
+            </div>
+            <div className="permission-detail">
+              <span>来源</span>
+              <strong>{action.knowledgeVaultWrite.source_summary}</strong>
+            </div>
+            <div className="permission-detail">
+              <span>全文预览</span>
+              <strong className="knowledge-vault-preview">{action.knowledgeVaultWrite.body}</strong>
+            </div>
+            <div className="permission-detail">
+              <span>边界</span>
+              <strong>该动作只会在你允许后写入工作台自管的 knowledge-vault 目录（md 文件）；不写正式记忆、不碰你的其他文件夹、不会自动写第二条。</strong>
+            </div>
+          </>
+        ) : null}
         {action.kind === "record-formal-memory-lifecycle-operation" && action.formalMemoryLifecycle ? (
           <>
             <div className="permission-detail">
@@ -1052,11 +1072,13 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
               : action.kind === "adopt-memory-candidate-to-formal-memory" ||
                 action.kind === "adopt-memory-candidates-to-formal-memory-batch"
               ? "中风险：会在确认后写正式记忆、版本和审计；候选不会自动正式化，批量也逐条走 M2 门。"
+              : action.kind === "knowledge-vault-ai-write"
+              ? "低风险：只写工作台自管的 knowledge-vault 目录；AI 提议、你允许才落盘；不写正式记忆、不碰其他文件夹。"
               : "低风险：只写工作台自己的状态文件。不启动 Codex 命令行，不发送真实执行指令，不写 /Users/yoyi/.codex。"}
           </p>
         <div className="dialog-actions">
           <button className="secondary-button" type="button" onClick={onCancel} disabled={busy}>
-            {realCodexBoundary ? "拒绝" : "取消"}
+            {realCodexBoundary ? "拒绝" : action.kind === "knowledge-vault-ai-write" ? "不要" : "取消"}
           </button>
           <button className="primary-button" type="button" onClick={onConfirm} disabled={busy}>
             {busy ? "执行中…" : confirmActionLabel(action.kind)}
@@ -1074,6 +1096,7 @@ function confirmActionLabel(kind: PendingAction["kind"]) {
   if (kind === "copy-task-preview") return "确认复制";
   if (kind === "run-project-workflow-automation-phase-a") return "确认生成编排记录";
   if (kind === "record-operation-control-decision") return "确认记录决策";
+  if (kind === "knowledge-vault-ai-write") return "允许写入";
   if (kind === "adopt-memory-candidate-to-formal-memory") return "确认采纳";
   if (kind === "adopt-memory-candidates-to-formal-memory-batch") return "确认批量采纳";
   if (

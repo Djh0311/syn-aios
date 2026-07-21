@@ -28,6 +28,10 @@ mod system_status_read_model;
 // 命令 query_audit_ledger_read_model 进 generate_handler!。
 mod audit_ledger_read_model;
 
+// L3 知识库第一片：工作台自管 vault（md 文件即真相·路径锁三例拒绝·AI 写入仅经用户确认闸）。
+// 5 命令（list/read/create/write/ai_write）进 generate_handler!。同上借道挂载，保持 lib.rs 0-diff。
+mod knowledge_vault;
+
 // A·运行错误人话翻译层（C6 观测补强·纯函数·无 tauri command）。供给类判据单一真源在此，
 // runner/run_history 委托到它。同 worker_report 借道挂载·保持 lib.rs 0-diff。
 mod run_error_translation;
@@ -152,6 +156,11 @@ macro_rules! workbench_command_handler {
             run_history_read_model::list_project_run_history,
             system_status_read_model::load_system_status_read_model,
             audit_ledger_read_model::query_audit_ledger_read_model,
+            knowledge_vault::knowledge_vault_list_notes,
+            knowledge_vault::knowledge_vault_read_note,
+            knowledge_vault::knowledge_vault_create_note,
+            knowledge_vault::knowledge_vault_write_note,
+            knowledge_vault::knowledge_vault_ai_write,
             list_project_workflows,
             submit_project_workflow_draft,
             get_project_workflow_nodes,

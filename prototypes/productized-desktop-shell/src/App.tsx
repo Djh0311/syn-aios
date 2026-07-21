@@ -59,6 +59,7 @@ import {
   runProjectWorkflowAutomationPhaseA,
   runMemoryLint,
   runPathAction,
+  knowledgeVaultAiWrite,
   updateTaskPackageDraftFields,
   updateWorkItemState,
   unbindWorkflowNodeCodexSession,
@@ -595,6 +596,14 @@ export function App() {
         setNotice(
           `${result.message} 审计 ${result.audit_event_id}；L3 不调用 runner、不停止/重启真实进程、不解锁 K3-B2。${memoryCaptureNotice}`,
         );
+      } else if (pendingAction.kind === "knowledge-vault-ai-write") {
+        // L3 知识库第一片：AI 提议写 vault——弹窗「允许写入」那一下走到这里才落盘（无常驻授权）。
+        const write = pendingAction.knowledgeVaultWrite;
+        if (!write) {
+          throw new Error("知识库写入缺少笔记内容");
+        }
+        const result = await knowledgeVaultAiWrite(write);
+        setNotice(`已写入知识库笔记「${result.title}」（AI 提议、你允许才落盘；已审计 ${result.audit_event_id}）。`);
       } else if (pendingAction.kind === "offline-role-dispatch") {
         if (!pendingAction.offlineRoleDispatch) {
           throw new Error("离线角色派发缺少派发块");

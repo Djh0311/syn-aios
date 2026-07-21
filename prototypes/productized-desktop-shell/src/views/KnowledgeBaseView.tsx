@@ -1,7 +1,17 @@
-import { Pill } from "../components/SpecPrimitives";
+import { useCallback, useEffect, useState } from "react";
+import { Pill, EmptyState } from "../components/SpecPrimitives";
 import { DetailLine } from "../components/WorkbenchPrimitives";
 import { deriveKnowledgeBaseSummary, type KnowledgeDocumentReadModel, type KnowledgeMemoryLink } from "../lib/knowledgeBase";
 import { deriveKnowledgeBasePageReadModelFromParts } from "../lib/pageSelectors";
+import { parseMarkdown, type MdBlock, type MdInline } from "../lib/knowledgeVault";
+import {
+  knowledgeVaultCreateNote,
+  knowledgeVaultListNotes,
+  knowledgeVaultReadNote,
+  knowledgeVaultWriteNote,
+  type KnowledgeVaultNote,
+  type KnowledgeVaultNoteSummary,
+} from "../lib/tauri";
 import type {
   FormalMemoryStoreV1,
   MemoryCaptureStoreV1,
@@ -150,6 +160,8 @@ export function KnowledgeBaseView({
         </section>
       </div>
 
+      <KnowledgeVaultNotesPanel />
+
       {summary.warnings.length ? (
         <div className="knowledge-warning-list" aria-label="知识库读模型警告">
           {summary.warnings.slice(0, 4).map((warning) => (
@@ -251,5 +263,357 @@ function StatCell({ label, value, helper }: { label: string; value: string; help
       <div className="val mono">{value}</div>
       <div className="memory-stat-helper">{helper}</div>
     </div>
+  );
+}
+
+// ── L3 知识库第一片：vault 笔记区（工作台自管目录·用户手编为主·AI 写入只走弹窗那一下） ──
+
+export type KnowledgeVaultCommands = {
+  listNotes: () => Promise<KnowledgeVaultNoteSummary[]>;
+  readNote: (slug: string) => Promise<KnowledgeVaultNote>;
+  createNote: (title: string) => Promise<{ slug: string; title: string }>;
+  writeNote: (slug: string, body: string) => Promise<unknown>;
+};
+
+const defaultVaultCommands: KnowledgeVaultCommands = {
+  listNotes: knowledgeVaultListNotes,
+  readNote: knowledgeVaultReadNote,
+  createNote: knowledgeVaultCreateNote,
+  writeNote: knowledgeVaultWriteNote,
+};
+
+// 容器（有 hooks·数据读写）。离线/SSR（无 window）不挂 hooks，渲染 loading 静态面——
+// 离线断言走下方零 hooks 的 KnowledgeVaultNotesView 本体（同 ProjectDetail 守卫先例）。
+export function KnowledgeVaultNotesPanel({ commands = defaultVaultCommands }: { commands?: KnowledgeVaultCommands }) {
+  if (typeof window === "undefined") {
+    return (
+      <section className="knowledge-base-panel knowledge-vault-notes" aria-label="知识库笔记">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">笔记</p>
+            <h3>知识库笔记</h3>
+          </div>
+        </div>
+        <p className="muted small-note">正在读取笔记…</p>
+      </section>
+    );
+  }
+  return <KnowledgeVaultNotesPanelInner commands={commands} />;
+}
+
+function KnowledgeVaultNotesPanelInner({ commands }: { commands: KnowledgeVaultCommands }) {
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "unavailable">("loading");
+  const [notes, setNotes] = useState<KnowledgeVaultNoteSummary[]>([]);
+  const [selected, setSelected] = useState<KnowledgeVaultNote | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [newTitle, setNewTitle] = useState<string | null>(null);
+  const [pendingLinkTitle, setPendingLinkTitle] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    try {
+      const list = await commands.listNotes();
+      setNotes(list);
+      setLoadState("ready");
+    } catch {
+      setLoadState("unavailable");
+    }
+  }, [commands]);
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const openNote = useCallback(
+    async (slug: string) => {
+      try {
+        const note = await commands.readNote(slug);
+        setSelected(note);
+        setEditing(false);
+        setDraft(note.body);
+      } catch {
+        setNotice("这条笔记没读到。");
+      }
+    },
+    [commands],
+  );
+
+  const createAndOpen = useCallback(
+    async (title: string) => {
+      try {
+        const created = await commands.createNote(title);
+        await reload();
+        const note = await commands.readNote(created.slug);
+        setSelected(note);
+        setDraft(note.body);
+        setEditing(true);
+        setNewTitle(null);
+        setPendingLinkTitle(null);
+        setNotice(null);
+      } catch {
+        setNotice("新建没成功。");
+      }
+    },
+    [commands, reload],
+  );
+
+  const openLink = useCallback(
+    (title: string) => {
+      const hit = notes.find((note) => note.title.trim().toLowerCase() === title.trim().toLowerCase());
+      if (hit) {
+        setPendingLinkTitle(null);
+        void openNote(hit.slug);
+      } else {
+        setPendingLinkTitle(title);
+      }
+    },
+    [notes, openNote],
+  );
+
+  return (
+    <KnowledgeVaultNotesView
+      loadState={loadState}
+      notes={notes}
+      selected={selected}
+      editing={editing}
+      draft={draft}
+      newTitle={newTitle}
+      pendingLinkTitle={pendingLinkTitle}
+      notice={notice}
+      onSelect={(slug) => void openNote(slug)}
+      onStartNew={() => setNewTitle("")}
+      onNewTitleChange={setNewTitle}
+      onCreateNew={() => {
+        if (newTitle?.trim()) void createAndOpen(newTitle.trim());
+      }}
+      onCancelNew={() => setNewTitle(null)}
+      onStartEdit={() => setEditing(true)}
+      onDraftChange={setDraft}
+      onSaveEdit={() => {
+        if (!selected) return;
+        void commands.writeNote(selected.slug, draft).then(async () => {
+          await reload();
+          const note = await commands.readNote(selected.slug);
+          setSelected(note);
+          setEditing(false);
+          setNotice("已保存。");
+        });
+      }}
+      onCancelEdit={() => {
+        setEditing(false);
+        if (selected) setDraft(selected.body);
+      }}
+      onOpenLink={openLink}
+      onCreateFromLink={() => {
+        if (pendingLinkTitle) void createAndOpen(pendingLinkTitle);
+      }}
+      onDismissLink={() => setPendingLinkTitle(null)}
+    />
+  );
+}
+
+export function KnowledgeVaultNotesView({
+  loadState,
+  notes,
+  selected,
+  editing,
+  draft,
+  newTitle,
+  pendingLinkTitle,
+  notice = null,
+  onSelect,
+  onStartNew,
+  onNewTitleChange,
+  onCreateNew,
+  onCancelNew,
+  onStartEdit,
+  onDraftChange,
+  onSaveEdit,
+  onCancelEdit,
+  onOpenLink,
+  onCreateFromLink,
+  onDismissLink,
+}: {
+  loadState: "loading" | "ready" | "unavailable";
+  notes: KnowledgeVaultNoteSummary[];
+  selected: KnowledgeVaultNote | null;
+  editing: boolean;
+  draft: string;
+  newTitle: string | null;
+  pendingLinkTitle: string | null;
+  notice?: string | null;
+  onSelect: (slug: string) => void;
+  onStartNew: () => void;
+  onNewTitleChange: (value: string) => void;
+  onCreateNew: () => void;
+  onCancelNew: () => void;
+  onStartEdit: () => void;
+  onDraftChange: (value: string) => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  onOpenLink: (title: string) => void;
+  onCreateFromLink: () => void;
+  onDismissLink: () => void;
+}) {
+  return (
+    <section className="knowledge-base-panel knowledge-vault-notes" aria-label="知识库笔记">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">笔记</p>
+          <h3>知识库笔记</h3>
+        </div>
+        <button className="secondary-button" type="button" onClick={onStartNew}>
+          新建笔记
+        </button>
+      </div>
+      <p className="muted small-note">笔记存在这台电脑工作台自管的 vault 里（md 文件）；不碰你的其他文件夹，不同步 Obsidian。</p>
+      {loadState === "loading" ? <p className="muted small-note">正在读取笔记…</p> : null}
+      {loadState === "unavailable" ? (
+        <EmptyState what="笔记只在桌面壳里能读写，这里读不到。" next="用 Tauri 桌面壳打开知识库就能建、看、改" />
+      ) : null}
+      {loadState === "ready" ? (
+        <div className="knowledge-vault-body">
+          <div className="knowledge-vault-list" aria-label="笔记列表">
+            {notes.map((note) => (
+              <button
+                className={`knowledge-vault-item${selected?.slug === note.slug ? " is-selected" : ""}`}
+                type="button"
+                key={note.slug}
+                onClick={() => onSelect(note.slug)}
+              >
+                <strong>{note.title}</strong>
+              </button>
+            ))}
+            {notes.length === 0 ? <EmptyState what="vault 里还没有笔记。" next="点「新建笔记」写第一条" /> : null}
+          </div>
+          <div className="knowledge-vault-main">
+            {newTitle !== null ? (
+              <div className="knowledge-vault-new" aria-label="新建笔记">
+                <input
+                  aria-label="笔记标题"
+                  value={newTitle}
+                  placeholder="笔记标题"
+                  onChange={(event) => onNewTitleChange(event.target.value)}
+                />
+                <button className="primary-button" type="button" onClick={onCreateNew} disabled={!newTitle.trim()}>
+                  创建
+                </button>
+                <button className="secondary-button" type="button" onClick={onCancelNew}>
+                  算了
+                </button>
+              </div>
+            ) : null}
+            {pendingLinkTitle ? (
+              <div className="knowledge-vault-new" aria-label="未命中双链">
+                <span>《{pendingLinkTitle}》还不存在。</span>
+                <button className="secondary-button" type="button" onClick={onCreateFromLink}>
+                  新建《{pendingLinkTitle}》
+                </button>
+                <button className="secondary-button" type="button" onClick={onDismissLink}>
+                  算了
+                </button>
+              </div>
+            ) : null}
+            {notice ? <p className="muted small-note">{notice}</p> : null}
+            {selected ? (
+              editing ? (
+                <div className="knowledge-vault-edit">
+                  <textarea
+                    aria-label="编辑笔记"
+                    value={draft}
+                    rows={14}
+                    onChange={(event) => onDraftChange(event.target.value)}
+                  />
+                  <div className="action-row">
+                    <button className="primary-button" type="button" onClick={onSaveEdit}>
+                      保存
+                    </button>
+                    <button className="secondary-button" type="button" onClick={onCancelEdit}>
+                      取消
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="knowledge-vault-read">
+                  <div className="action-row">
+                    <button className="secondary-button" type="button" onClick={onStartEdit}>
+                      编辑
+                    </button>
+                  </div>
+                  <MarkdownBlocks body={selected.body} onOpenLink={onOpenLink} />
+                </div>
+              )
+            ) : (
+              newTitle === null && <p className="muted small-note">点左边一条看内容；[[双方括号]]是笔记之间的链接。</p>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function MarkdownBlocks({ body, onOpenLink }: { body: string; onOpenLink: (title: string) => void }) {
+  const blocks = parseMarkdown(body);
+  return (
+    <div className="knowledge-vault-markdown">
+      {blocks.map((block, index) => (
+        <MarkdownBlock key={index} block={block} onOpenLink={onOpenLink} />
+      ))}
+    </div>
+  );
+}
+
+function MarkdownBlock({ block, onOpenLink }: { block: MdBlock; onOpenLink: (title: string) => void }) {
+  if (block.kind === "heading") {
+    const Tag = (`h${block.level}`) as "h1";
+    return (
+      <Tag className="knowledge-vault-heading">
+        <InlineSegments inlines={block.inlines} onOpenLink={onOpenLink} />
+      </Tag>
+    );
+  }
+  if (block.kind === "code_block") {
+    return <pre className="knowledge-vault-code">{block.text}</pre>;
+  }
+  if (block.kind === "list") {
+    const items = block.items.map((item, index) => (
+      <li key={index}>
+        <InlineSegments inlines={item} onOpenLink={onOpenLink} />
+      </li>
+    ));
+    return block.ordered ? <ol className="knowledge-vault-list-md">{items}</ol> : <ul className="knowledge-vault-list-md">{items}</ul>;
+  }
+  return (
+    <p>
+      <InlineSegments inlines={block.inlines} onOpenLink={onOpenLink} />
+    </p>
+  );
+}
+
+function InlineSegments({ inlines, onOpenLink }: { inlines: MdInline[]; onOpenLink: (title: string) => void }) {
+  return (
+    <>
+      {inlines.map((segment, index) => {
+        if (segment.kind === "bold") return <strong key={index}>{segment.text}</strong>;
+        if (segment.kind === "italic") return <em key={index}>{segment.text}</em>;
+        if (segment.kind === "code") return <code key={index}>{segment.text}</code>;
+        if (segment.kind === "wikilink") {
+          return (
+            <button className="knowledge-vault-wikilink" type="button" key={index} onClick={() => onOpenLink(segment.title)}>
+              {segment.title}
+            </button>
+          );
+        }
+        if (segment.kind === "link") {
+          return (
+            <a href={segment.url} target="_blank" rel="noreferrer" key={index}>
+              {segment.url}
+            </a>
+          );
+        }
+        return <span key={index}>{segment.text}</span>;
+      })}
+    </>
   );
 }
