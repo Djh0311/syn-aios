@@ -17,7 +17,8 @@ import { JiaobanNeedsReworkDisposal } from "./JiaobanBlockedStates";
 import { JiaobanRawSessionLink } from "./jiaobanSessionParts";
 
 // 定式扶正（G2）：step-badge 四 tone → spec-pill tone 查表（行 tone 类名不走此表）。
-const stepBadgePillTone = { green: "ok", yellow: "warn", red: "bad", gray: "plain" } as const;
+// G3 盖章时刻：yellow 出表——黄牌=朱砂页边批注（jiaoban-flag-note·无形），危险才有形章（bad）。
+const stepBadgePillTone = { green: "ok", red: "bad", gray: "plain" } as const;
 
 // 批1尾件·证据单一真源(用户 07-14 拍「交货证据该在交办页」):交办交货卡渲染主份,
 // 工作流页 C6 卡引同一组件(批5 退役它时删引用即可)。数据全空=零渲染,不占屏。
@@ -68,7 +69,11 @@ export function JiaobanAcceptanceEvidence({ derivedWorkflow }: { derivedWorkflow
                 <li key={gate.gate_id} className={`jiaoban-step-row tone-${tone}`}>
                   <span className="jiaoban-step-title">{gate.label}</span>
                   {gate.reason ? <span className="jiaoban-step-say">{gate.reason}</span> : null}
-                  <Pill tone={stepBadgePillTone[tone]}>{word}</Pill>
+                  {tone === "yellow" ? (
+                    <span className="jiaoban-flag-note">{word}</span>
+                  ) : (
+                    <Pill tone={stepBadgePillTone[tone]}>{word}</Pill>
+                  )}
                 </li>
               );
             })}
@@ -226,10 +231,13 @@ export function JiaobanStepReportList({
             {step.report_summary ? (
               <span className="jiaoban-step-say">{step.report_summary}</span>
             ) : null}
-            <Pill tone={stepBadgePillTone[flag.tone]}>
-              {flag.tone === "yellow" ? "⚠ " : ""}
-              {flag.badge}
-            </Pill>
+            {flag.tone === "yellow" ? (
+              <span className="jiaoban-flag-note">⚠ {flag.badge}</span>
+            ) : (
+              <Pill tone={stepBadgePillTone[flag.tone]}>
+                {flag.badge}
+              </Pill>
+            )}
             {flag.kind === "ok" && step.report_summary && onConfirmFact ? (
               confirmedTaskIds?.has(step.planned_task_id) ? (
                 <span className="jiaoban-fact-done">已沉淀 ✓</span>
@@ -424,10 +432,10 @@ export function JiaobanDoneState({
       </div>
       {/* 批1·骨架化(DESIGN.md §二):状态 pill 行=现有事实上脸,不造数据;只读单注升为 pill。 */}
       {isCompleted ? (
-        <PillRow>
+        <PillRow ariaLabel="这单概览">
           {chain ? <Pill tone="ok">完成 {chain.completed} 步</Pill> : null}
           {countYellowFlags(chain?.steps ?? []) > 0 ? (
-            <Pill tone="warn">⚠ {countYellowFlags(chain?.steps ?? [])} 项要看一眼</Pill>
+            <span className="jiaoban-flag-note">⚠ {countYellowFlags(chain?.steps ?? [])} 项要看一眼</span>
           ) : null}
           {isReadOnlyRun ? <Pill tone="plain">只读单·未改文件</Pill> : null}
         </PillRow>

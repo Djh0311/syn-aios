@@ -1,6 +1,7 @@
 // 交办·批态(五态之「批」)——阶段3拆巨石第六刀:自 ProjectJiaobanPanel.tsx 原样迁出,零逻辑改动。
 // 宪法归属:§一 批态(唯一问题=它要动什么·我敢不敢)。
 // P1-D 人闸收敛:说态卡 JiaobanSayState 已退场——phase="say" 由常驻框 new_goal 路由承载(修单3)。
+import { useEffect, useRef, useState } from "react";
 import type {
   GlobalSupervisorBoundaryReviewOutcome,
   ProjectConsultationProposal,
@@ -36,6 +37,7 @@ export function JiaobanAuthorizeState({
   boundaryOutcome,
   onBoundaryRetry,
   readOnly = false,
+  sealFresh,
 }: {
   proposal: ProjectConsultationProposal;
   proposalIsStale: boolean;
@@ -58,7 +60,26 @@ export function JiaobanAuthorizeState({
   onBoundaryRetry: () => void;
   // 既有方案在右区回看时只收起决策动作，不另造卡形。
   readOnly?: boolean;
+  // G3 盖章时刻:刚批首现放 stamp+thud 动效。缺省=内部探测(本会话 status 翻 user_confirmed 那一下);
+  // 显式布尔=强制(离线 DOM 断言与调用方直控)。
+  sealFresh?: boolean;
 }) {
+  // 刚批探测:组件在批的那一下仍挂在卡上,status 翻 user_confirmed 即 fresh 一次(0.5s 后落静态);
+  // 重进/刷新/历史查看挂载时 prev 已是 confirmed→静态。
+  const [autoFresh, setAutoFresh] = useState(false);
+  const prevStatusRef = useRef(proposal.status);
+  useEffect(() => {
+    if (proposal.status === "user_confirmed" && prevStatusRef.current !== "user_confirmed") {
+      setAutoFresh(true);
+    }
+    prevStatusRef.current = proposal.status;
+  }, [proposal.status]);
+  useEffect(() => {
+    if (!autoFresh) return;
+    const timer = setTimeout(() => setAutoFresh(false), 500);
+    return () => clearTimeout(timer);
+  }, [autoFresh]);
+  const isFresh = sealFresh ?? autoFresh;
   const targetFiles = extractTargetFiles(proposal.proposed_steps);
   const willWrite = proposal.scope_draft.allowed_write_roots.length > 0;
   const workerAcceptance = proposal.worker_acceptance_criteria ?? [];
@@ -78,7 +99,16 @@ export function JiaobanAuthorizeState({
   });
 
   return (
-    <div className="project-canvas-detail-card jiaoban-authorize" aria-label="方案">
+    <div className={`project-canvas-detail-card jiaoban-authorize${isFresh ? " is-fresh" : ""}`} aria-label="方案">
+      {/* G3 盖章时刻:批后常驻石绿圆章(样张逐值·全 App 唯一重彩);日期=updated_at_ms(批准态下=授权落账时刻)。 */}
+      {proposal.status === "user_confirmed" ? (
+        <div className={`jiaoban-seal${isFresh ? " is-fresh" : ""}`} aria-hidden="true">
+          <span className="in">
+            <b>已批准</b>
+            <s>SYN · {sealDateText(proposal.updated_at_ms)}</s>
+          </span>
+        </div>
+      ) : null}
 
       {/* 批态卡定式(hi-fi F·07-15 走查#2 捞回总包漏项):标题=一句目标;「会动什么」=事实行(标签左值右);
           「怎么算做好」=全部验收逐条编号(执行→Syn→主管顺排·一条一行)——治「分号拼长句一坨上脸」。 */}
@@ -376,6 +406,12 @@ function JiaobanWorksmap({
 }
 
 // 人话工程①(2026-07-20):humanizeWriteRoots 逐字迁 src/lib/humanize.ts(顶部 import+re-export)。
+
+// G3 章面日期:MM-DD 紧凑式(本地时·补零);formatProposalTime=YYYY-MM-DD HH:MM 过长,章面不用。
+function sealDateText(atMs: number): string {
+  const date = new Date(atMs);
+  return `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
 
 function extractTargetFiles(proposedSteps: string[]): string | null {
   const line = proposedSteps.find((step) => step.startsWith("目标文件："));

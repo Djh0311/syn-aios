@@ -1433,6 +1433,7 @@
    「怎么算做好」逐条编号——治「分号拼长句一坨上脸」。 */
 .jiaoban-plan-title {
   margin: 0;
+  padding-right: 92px;
   font-size: var(--text-lg);
   font-weight: 600;
   line-height: 1.5;
@@ -1530,9 +1531,88 @@
 /* 批卡整体节拍收紧(07-16 用户:间距还不够小)。 */
 .project-canvas-detail-card.jiaoban-authorize {
   gap: 8px;
+  position: relative;
 }
 .jiaoban-authorize .jiaoban-plan-body {
   gap: 8px;
+}
+/* G3 盖章时刻(2026-07-20 用户拍板·样张 jiaoban-redesign-specimen-v1.html §签名段逐值):
+   批准落石绿圆章(76px·-12°·multiply·已批准+SYN·MM-DD),批后常驻;is-fresh=刚批首现放
+   stamp+卡 thud(0.3s 同曲线),重进/历史=静态;reduced-motion 两动画全禁静态显。色=accent
+   石绿,朱砂不进章。 */
+.jiaoban-seal {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  width: 76px;
+  height: 76px;
+  border: 2.5px solid var(--accent);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  transform: rotate(-12deg);
+  color: var(--accent);
+  mix-blend-mode: multiply;
+  opacity: 0.92;
+  pointer-events: none;
+}
+.jiaoban-seal::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+}
+.jiaoban-seal .in {
+  text-align: center;
+  line-height: 1.25;
+}
+.jiaoban-seal .in b {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  display: block;
+}
+.jiaoban-seal .in s {
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  opacity: 0.85;
+  display: block;
+  margin-top: 2px;
+}
+.jiaoban-seal.is-fresh {
+  animation: stamp 0.3s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+@keyframes stamp {
+  0% { opacity: 0; transform: rotate(-12deg) scale(1.7); }
+  62% { opacity: 0.94; transform: rotate(-12deg) scale(0.96); }
+  100% { opacity: 0.92; transform: rotate(-12deg) scale(1); }
+}
+.jiaoban-authorize.is-fresh {
+  animation: thud 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes thud {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.996); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jiaoban-seal.is-fresh {
+    animation: none;
+    opacity: 0.92;
+  }
+  .jiaoban-authorize.is-fresh {
+    animation: none;
+  }
+}
+/* G3 黄牌批注(2026-07-20 用户拍板):交货卡 tone-yellow 三处=朱砂页边批注(无边无底小字);
+   分级语义=危险有形章(tone-red 仍 spec-pill bad)·黄牌无形批注。 */
+.jiaoban-flag-note {
+  color: var(--danger);
+  font-size: var(--text-xs);
+  white-space: nowrap;
 }
 /* 选择器带父级:压过 .jiaoban-merged-canvas-head > div 的 grid(否则 chips 被排成一列)。 */
 .jiaoban-merged-canvas-head > .jiaoban-canvas-view-tabs,

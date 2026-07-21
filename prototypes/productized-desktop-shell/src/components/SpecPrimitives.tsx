@@ -17,9 +17,13 @@ export function SegTitle({ children }: { children: ReactNode }) {
   return <p className="spec-seg-title">{children}</p>;
 }
 
-// pill 行+pill(状态概览:已交货/⚠N 项不符/全程 N 分钟)。
-export function PillRow({ children }: { children: ReactNode }) {
-  return <div className="spec-pill-row">{children}</div>;
+// pill 行+pill(状态概览:已交货/⚠N 项不符/全程 N 分钟)。ariaLabel 可选(G3 补回:交货卡概览行「这单概览」)。
+export function PillRow({ children, ariaLabel }: { children: ReactNode; ariaLabel?: string }) {
+  return (
+    <div className="spec-pill-row" aria-label={ariaLabel}>
+      {children}
+    </div>
+  );
 }
 export function Pill({
   tone = "plain",
