@@ -38,7 +38,6 @@ import {
   buildBootstrapProjectWorkflowAction,
   buildPermissionDecisionAction,
   buildUnbindNodeSessionAction,
-  expectedInitializeWorkflowStateAction,
 } from "./helpers/offlineWorkflowActionFixtures";
 import {
   runtimeAttentionFixture,
@@ -95,10 +94,8 @@ import { workerProtocolFixtureForAdapters } from "./helpers/offlineWorkerProtoco
 import { AgentSessionCenter, AgentView, ChatTranscript, filterAgentSessions } from "../src/views/AgentView";
 import { renderActiveWorkbenchView } from "../src/components/ActiveWorkbenchView";
 import { HomeView } from "../src/views/HomeView";
-import { RunningWorkflowsView } from "../src/views/RunningWorkflowsView";
 import { SettingsView } from "../src/views/SettingsView";
 import { PermissionDialog } from "../src/components/PermissionDialog";
-import { WorkflowStatePanel } from "../src/components/WorkflowStatePanel";
 import { deriveAgentAdapterDescriptors } from "../src/lib/adapterCapabilities";
 import { deriveProviderAvailabilitySummaries } from "../src/lib/providerAvailability";
 import {
@@ -384,26 +381,6 @@ function runRealExecutionProductCommandBoundaryScenario() {
   assert(developerPanelsText.includes("结果数：未知/不可用"), "PCR7 readback null 应显示未知 / 不可用");
   assert(!developerPanelsText.includes("H6 真实执行状态"), "PCR6 普通 UI 不应继续显示 H6 阶段标题");
 
-  const runningText = visibleText(
-    <RunningWorkflowsView
-      snapshot={snapshotWithProductCommands}
-      workflowState={workflowStateWithProjectWorkflow}
-      workflowStateLoading={false}
-      workflowStateError={null}
-      onReloadWorkflowState={() => {}}
-      onNavigate={() => {}}
-    />,
-  );
-  for (const expectedText of executionRunQueueTextFixtures.runningUnifiedExecutionExpectedTexts) {
-    assert(runningText.includes(expectedText), `PCR6 Running 统一执行链路缺少 ${expectedText}`);
-  }
-  for (const expectedText of executionRunQueueTextFixtures.runningAutomationExpectedTexts) {
-    assert(runningText.includes(expectedText), `K3 Running 自动编排摘要缺少 ${expectedText}`);
-  }
-  for (const expectedText of executionRunQueueTextFixtures.runningFailureBoundaryExpectedTexts) {
-    assert(runningText.includes(expectedText), `PCR7 Running 统一执行链路缺少 ${expectedText}`);
-  }
-
   const projectDetailText = visibleText(
     <ProjectDetail
       project={project}
@@ -480,18 +457,9 @@ function runRealExecutionProductCommandBoundaryScenario() {
     assert(rightPanelText.includes(expectedText), `PCR7 Right rail 统一执行链路缺少 ${expectedText}`);
   }
 
+  // G4 宿主迁移(预登记 M3)：combined 摘掉死视图 RunningWorkflowsView 半边，活面 AgentView 保留，forbidden 逐字平移。
   const combinedMarkup = renderToStaticMarkup(
-    <>
-      <AgentView sessions={[session]} realExecutionProductCommands={activeReadModel} onRequestAction={captureAction} />
-      <RunningWorkflowsView
-        snapshot={snapshotWithProductCommands}
-        workflowState={workflowStateWithProjectWorkflow}
-        workflowStateLoading={false}
-        workflowStateError={null}
-        onReloadWorkflowState={() => {}}
-        onNavigate={() => {}}
-      />
-    </>,
+    <AgentView sessions={[session]} realExecutionProductCommands={activeReadModel} onRequestAction={captureAction} />,
   );
   for (const forbiddenText of executionRunQueueTextFixtures.combinedMarkupForbiddenTexts) {
     assert(!combinedMarkup.includes(forbiddenText), `PCR6 UI 不应暴露 ${forbiddenText}`);
@@ -600,33 +568,22 @@ function runStageJRunQueueScenario() {
     assert(rightPanelText.includes(expectedText), `J4 Right rail 缺少 ${expectedText}`);
   }
 
+  // G4 宿主迁移(预登记 M4)：combined 摘掉死视图 RunningWorkflowsView 半边，活面 RightDetailPanel 保留，forbidden 逐字平移。
   const combinedMarkup = renderToStaticMarkup(
-    <>
-      <RunningWorkflowsView
-        snapshot={j4Snapshot}
-        workflowState={workflowStateWithProjectWorkflow}
-        workflowStateLoading={false}
-        workflowStateError={null}
-        memoryCaptureStore={memoryCaptureStore}
-        memoryCandidateStore={memoryCandidateStore}
-        onReloadWorkflowState={() => {}}
-        onNavigate={() => {}}
-      />
-      <RightDetailPanel
-        activePanel="running"
-        snapshot={j4Snapshot}
-        workflowState={workflowStateWithProjectWorkflow}
-        notice="offline notice"
-        error={false}
-        workflowStateError={null}
-        memoryCaptureStore={memoryCaptureStore}
-        memoryCandidateStore={memoryCandidateStore}
-        secretaryContext={secretaryContext}
-        onClose={() => {}}
-        onNavigate={() => {}}
-        onReloadWorkflowState={() => {}}
-      />
-    </>,
+    <RightDetailPanel
+      activePanel="running"
+      snapshot={j4Snapshot}
+      workflowState={workflowStateWithProjectWorkflow}
+      notice="offline notice"
+      error={false}
+      workflowStateError={null}
+      memoryCaptureStore={memoryCaptureStore}
+      memoryCandidateStore={memoryCandidateStore}
+      secretaryContext={secretaryContext}
+      onClose={() => {}}
+      onNavigate={() => {}}
+      onReloadWorkflowState={() => {}}
+    />,
   );
   for (const forbiddenText of executionRunQueueTextFixtures.stageJCombinedForbiddenTexts) {
     assert(!combinedMarkup.includes(forbiddenText), `K5 UI 不应出现误导文案：${forbiddenText}`);
@@ -2474,38 +2431,6 @@ function runShellScenario() {
     assert(!sourceEntryText.includes(forbiddenText), `四个占位入口页不应出现 ${forbiddenText}`);
   }
 
-  const runningWorkflowsText = visibleText(
-    <RunningWorkflowsView
-      snapshot={snapshot}
-      workflowState={workflowStateWithProjectWorkflow}
-      workflowStateLoading={false}
-      workflowStateError={null}
-      onReloadWorkflowState={() => {}}
-      onNavigate={(view) => visited.push(view)}
-    />,
-  );
-  for (const expectedText of shellTexts.runningWorkflowsExpectedTexts) {
-    assert(runningWorkflowsText.includes(expectedText), `运行中工作流页缺少 ${expectedText}`);
-  }
-
-  // 空数据 → 空画布 + 空状态文案，不得显示成 0 条成功结果或伪造自动执行。
-  const runningWorkflowsEmptyText = visibleText(
-    <RunningWorkflowsView
-      snapshot={snapshot}
-      workflowState={null}
-      workflowStateLoading={false}
-      workflowStateError={null}
-      onReloadWorkflowState={() => {}}
-      onNavigate={() => {}}
-    />,
-  );
-  for (const expectedText of shellTexts.runningWorkflowsEmptyExpectedTexts) {
-    assert(runningWorkflowsEmptyText.includes(expectedText), `运行中工作流空画布缺少 ${expectedText}`);
-  }
-  for (const forbiddenText of shellTexts.runningWorkflowsEmptyForbiddenTexts) {
-    assert(!runningWorkflowsEmptyText.includes(forbiddenText), `运行中工作流空画布不得出现 ${forbiddenText}`);
-  }
-
   const agentButton = findButtonByText(home, "打开智能体");
   assert(agentButton, "首页找不到智能体入口按钮");
   const openAgent = agentButton.props?.onClick;
@@ -3465,48 +3390,6 @@ function runShellScenario() {
   cancelSaveFieldsClick({ preventDefault() {}, stopPropagation() {} });
   assert(capturedAction === null, "取消保存字段不应保留待确认动作");
   assert(!saveFieldsConfirmed, "取消保存字段不应执行保存");
-
-  capturedAction = null;
-  let reloadRequested = false;
-  const statePanel = (
-    <WorkflowStatePanel
-      workflowState={workflowState}
-      loading={false}
-      error={null}
-      onReload={() => {
-        reloadRequested = true;
-      }}
-      onRequestAction={captureAction}
-    />
-  );
-  const stateText = visibleText(statePanel);
-  for (const expectedText of shellTexts.statePanelExpectedTexts) {
-    assert(stateText.includes(expectedText), `事实层面板缺少 ${expectedText}`);
-  }
-  const reloadButton = findButtonByText(statePanel, "重新读取事实层");
-  assert(reloadButton, "事实层面板缺少重新读取按钮");
-  const reload = reloadButton.props?.onClick;
-  assert(typeof reload === "function", "重新读取按钮没有 onClick");
-  reload({ preventDefault() {}, stopPropagation() {} });
-  assert(reloadRequested, "重新读取按钮没有触发回调");
-
-  const initButton = findButtonByText(statePanel, "初始化工作流事实层");
-  assert(initButton, "事实层面板缺少初始化按钮");
-  const init = initButton.props?.onClick;
-  assert(typeof init === "function", "初始化按钮没有 onClick");
-  init({ preventDefault() {}, stopPropagation() {} });
-  assertDeepEqual(
-    capturedAction,
-    expectedInitializeWorkflowStateAction(workflowState.path),
-    "初始化待确认动作不匹配",
-  );
-
-  const initDialogText = visibleText(
-    <PermissionDialog action={capturedAction} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
-  );
-  for (const expectedText of shellTexts.initDialogExpectedTexts) {
-    assert(initDialogText.includes(expectedText), `初始化确认弹层缺少 ${expectedText}`);
-  }
 
   const skillText = visibleText(<SkillsBoardView skills={[skill]} plugins={[plugin]} projects={[project]} />);
   for (const expectedText of shellTexts.skillExpectedTexts) {

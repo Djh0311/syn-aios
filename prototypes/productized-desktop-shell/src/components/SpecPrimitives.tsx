@@ -73,13 +73,3 @@ export function EmptyState({ what, next }: { what: string; next: string }) {
     </p>
   );
 }
-
-// 展开控件(统一「展开剩余 N 条…」;状态由父组件持有——保无 hooks 约定)。
-export function ExpandRest({ hidden, onShow }: { hidden: number; onShow: () => void }) {
-  if (hidden <= 0) return null;
-  return (
-    <button className="jiaoban-linklike spec-expand" type="button" onClick={onShow}>
-      展开剩余 {hidden} 条…
-    </button>
-  );
-}

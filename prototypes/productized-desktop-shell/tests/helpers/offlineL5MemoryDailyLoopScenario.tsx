@@ -1,55 +1,51 @@
 import React from "react";
 import { PermissionDialog } from "../../src/components/PermissionDialog";
+import { DailyMemoryCandidateInbox } from "../../src/components/DailyMemoryCandidateInbox";
+import { deriveDailyMemoryCandidateInbox } from "../../src/lib/memoryDailyLoop";
 import type { PendingAction, ProjectRecord, WorkbenchSnapshot, WorkflowStateSnapshot } from "../../src/lib/types";
-import { RunningWorkflowsView } from "../../src/views/RunningWorkflowsView";
 import { assert, findButtonByText, visibleText } from "./offlineInteractionTestUtils";
 import { memoryCenterCoreFixtures } from "./offlineMemoryCenterCoreFixtures";
 
+// G4 宿主迁移(2026-07-20·预登记 M1)：原宿主=RunningWorkflowsView(死视图整删)，
+// 迁移到被测组件本体 DailyMemoryCandidateInbox 直渲——断言逐条平移,覆盖不丢。
+// 尾块 operation control 按钮断言随死视图壳退役(预登记 R8·理由与替代覆盖在档)。
 export function runL5MemoryDailyLoopScenario({
-  snapshot,
-  workflowStateWithProjectWorkflow,
+  snapshot: _snapshot,
+  workflowStateWithProjectWorkflow: _workflowStateWithProjectWorkflow,
   project,
 }: {
   snapshot: WorkbenchSnapshot;
   workflowStateWithProjectWorkflow: WorkflowStateSnapshot;
   project: ProjectRecord;
 }) {
-  const { formalMemoryStore, memoryCaptureStore, memoryCandidateStore } = memoryCenterCoreFixtures();
-  const runningText = visibleText(
-    <RunningWorkflowsView
-      snapshot={snapshot}
-      workflowState={workflowStateWithProjectWorkflow}
-      workflowStateLoading={false}
-      workflowStateError={null}
-      memoryCaptureStore={memoryCaptureStore}
-      memoryCandidateStore={memoryCandidateStore}
-      formalMemoryStore={formalMemoryStore}
-      onReloadWorkflowState={() => {}}
-      onNavigate={() => {}}
+  const { formalMemoryStore, memoryCandidateStore } = memoryCenterCoreFixtures();
+  const inbox = deriveDailyMemoryCandidateInbox({ memoryCandidateStore });
+  const inboxText = visibleText(
+    <DailyMemoryCandidateInbox
+      inbox={inbox}
+      projectRoot={project.project_root}
+      candidateStoreRevision={memoryCandidateStore.revision ?? null}
+      formalStoreRevision={formalMemoryStore.revision ?? null}
     />,
   );
 
-  assert(runningText.includes("日常记忆候选收件箱"), "L5 运行页应有日常记忆候选收件箱");
-  assert(runningText.includes("1 条记忆候选待确认"), "L5 收件箱应显示待确认候选数量");
-  assert(runningText.includes("候选不是正式记忆，采纳前必须确认"), "L5 收件箱必须说明候选边界");
+  assert(inboxText.includes("日常记忆候选收件箱"), "L5 收件箱应有日常记忆候选收件箱");
+  assert(inboxText.includes("1 条记忆候选待确认"), "L5 收件箱应显示待确认候选数量");
+  assert(inboxText.includes("候选不是正式记忆，采纳前必须确认"), "L5 收件箱必须说明候选边界");
 
   const capturedActions: PendingAction[] = [];
-  const runningInbox = (
-    <RunningWorkflowsView
-      snapshot={snapshot}
-      workflowState={workflowStateWithProjectWorkflow}
-      workflowStateLoading={false}
-      workflowStateError={null}
-      memoryCaptureStore={memoryCaptureStore}
-      memoryCandidateStore={memoryCandidateStore}
-      formalMemoryStore={formalMemoryStore}
-      onReloadWorkflowState={() => {}}
-      onNavigate={() => {}}
+  const captureInbox = (candidateStore: typeof memoryCandidateStore) => (
+    <DailyMemoryCandidateInbox
+      inbox={deriveDailyMemoryCandidateInbox({ memoryCandidateStore: candidateStore })}
+      projectRoot={project.project_root}
+      candidateStoreRevision={candidateStore.revision ?? null}
+      formalStoreRevision={formalMemoryStore.revision ?? null}
       onRequestAction={(action) => {
         capturedActions.push(action);
       }}
     />
   );
+  const runningInbox = captureInbox(memoryCandidateStore);
   const adoptButton = findButtonByText(runningInbox, "采纳候选：候选需要确认要求和风险提示。");
   assert(adoptButton, "L5 收件箱应提供单条采纳按钮");
   const adoptClick = adoptButton.props?.onClick;
@@ -94,22 +90,7 @@ export function runL5MemoryDailyLoopScenario({
         : candidate,
     ),
   };
-  const reviewInbox = (
-    <RunningWorkflowsView
-      snapshot={snapshot}
-      workflowState={workflowStateWithProjectWorkflow}
-      workflowStateLoading={false}
-      workflowStateError={null}
-      memoryCaptureStore={memoryCaptureStore}
-      memoryCandidateStore={reviewCandidateStore}
-      formalMemoryStore={formalMemoryStore}
-      onReloadWorkflowState={() => {}}
-      onNavigate={() => {}}
-      onRequestAction={(action) => {
-        capturedActions.push(action);
-      }}
-    />
-  );
+  const reviewInbox = captureInbox(reviewCandidateStore);
   const rejectButton = findButtonByText(reviewInbox, "拒绝候选");
   assert(rejectButton, "L5 收件箱应提供拒绝候选入口");
   const rejectClick = rejectButton.props?.onClick;
@@ -118,16 +99,4 @@ export function runL5MemoryDailyLoopScenario({
   const rejectAction = capturedActions[0];
   assert(rejectAction?.kind === "record-memory-candidate-decision", "L5 拒绝候选必须复用候选决策路径");
   assert(rejectAction.memoryCandidateDecision?.requested_status === "candidate_rejected", "L5 拒绝候选应写 rejected 状态");
-
-  capturedActions.length = 0;
-  const operationButton = findButtonByText(runningInbox, "确认记录 恢复 决策");
-  assert(operationButton, "L5 应保留 L3 operation control 确认入口");
-  const operationClick = operationButton.props?.onClick;
-  assert(typeof operationClick === "function", "L5 operation control 按钮应有 onClick");
-  operationClick({ preventDefault() {}, stopPropagation() {} });
-  const operationAction = capturedActions[0];
-  assert(operationAction?.kind === "record-operation-control-decision", "L5 operation control action kind 不匹配");
-  assert(operationAction.memoryCaptureEvent?.source_type === "operation_control_decision", "L5 operation control 确认应携带 capture input");
-  assert(operationAction.memoryCaptureEvent?.candidate_policy === "candidate_allowed", "L5 operation control capture 应生成候选");
-  assert(operationAction.memoryCaptureEvent?.candidate?.requires_user_confirmation, "L5 operation control 候选应需要用户确认");
 }

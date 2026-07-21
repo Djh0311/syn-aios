@@ -18,8 +18,8 @@
    - 本体拆 `scripts/harness/lib/retired-style-family-rule.js`（照 machine-face-rule 形：scan+attach）；gate 本体 +3 行（require/挂载/打印），495→498 行 ≤500 软限。
    - 扫描面 src/** .tsx/.ts（字符串字面量面）+ .css（原始行跳注释）；两类 error：退休族再现（精确类名 jiaoban-fact〔不匹配 -btn/-done〕/memory-kv/settings-fact〔含 -grid〕/badge〔精确词界·不匹配 sc-badge 等复合名·badge-row 同属退休〕/jiaoban-step-badge/project-canvas-status-pill/prsb-pill/jiaoban-done-pills/running-status-pill〔仅 ts/tsx 引用面·styles.css 定义段留 G4〕+ 对 components/Badge 的 import）；spec-* 直连（tsx 字符串面含 spec-fact-row/-k/-v、spec-pill〔含各 tone·归一族去重〕、spec-pill-row、spec-seg-title、spec-list-row/-badge/-claim/-time、spec-empty、spec-expand、spec-bad，文件 ≠ SpecPrimitives.tsx；spec-scroll 不在列）。
    - 去重粒度 pattern|path（同族同文件取首命中行·计数进 detail.count）。
-   - **白名单 2 条（本档登记·不沉默豁免）**：
-     ① `running-status-pill|prototypes/productized-desktop-shell/src/views/RunningWorkflowsView.tsx`——死视图（1196 行）引用面，G4 整删时连带清；
+   - **白名单 2 条（本档登记·不沉默豁免；G4 核销①→1 条）**：
+     ① `running-status-pill|prototypes/productized-desktop-shell/src/views/RunningWorkflowsView.tsx`——死视图（1196 行）引用面，**G4 已整删·本条目随核销**；
      ② `spec-direct:spec-empty|prototypes/productized-desktop-shell/src/components/ActiveWorkbenchView.tsx`——:277 有意例外（想法箱空态文案「。」「；」混排与基座 what/next 拼接逐字对不上·不改基座·该处注释在档）。
    - 白名单纪律照 hex 先例：只减不增，不得为过关塞新违规。
 

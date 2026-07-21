@@ -109,39 +109,25 @@ try {
   const r4 = runGate(c4);
   check('css 退休族（badge/memory-kv·badge-row 并入 badge 族去重）-> exactly 2 retired_style_family', familyFindings(r4).length === 2, `got ${familyFindings(r4).length}`);
 
-  // Case 5: 白名单 2 条（running-status-pill 死视图引用面 + ActiveWorkbenchView spec-empty）→ 0 error、deferred 2。
+  // Case 5: 白名单（ActiveWorkbenchView spec-empty）→ 0 error、deferred 1；
+  // running-status-pill 白名单①已随 G4 死视图整删核销——再现即 error（核销实证）。
   const c5 = path.join(tmp, 'case-whitelisted');
   writeFile(
     c5,
     `${SRC_REL}/views/RunningWorkflowsView.tsx`,
-    [
-      'export function Foo({ items }: { items: { badge_id: string; tone: string; label: string }[] }) {',
-      '  return (',
-      '    <div>',
-      '      {items.map((badgeItem) => (',
-      '        <span className={`running-status-pill ${badgeItem.tone}`} key={badgeItem.badge_id}>',
-      '          {badgeItem.label}',
-      '        </span>',
-      '      ))}',
-      '      <span className="running-status-pill neutral">当前视图</span>',
-      '    </div>',
-      '  );',
-      '}',
-      ''
-    ].join('\n')
+    'export function Foo() {\n  return <span className="running-status-pill neutral">当前视图</span>;\n}\n'
   );
   writeFile(
     c5,
     `${SRC_REL}/components/ActiveWorkbenchView.tsx`,
     'export function Foo() {\n  return <p className="spec-empty muted small-note">想法箱是空的</p>;\n}\n'
   );
-  writeFile(c5, `${SRC_REL}/styles.css`, '.running-status-pill {\n  color: red;\n}\n');
   const r5 = runGate(c5);
-  check('白名单树 -> 0 retired_style_family error', familyFindings(r5).length === 0, `got ${familyFindings(r5).length}`);
-  check('白名单树 Status=pass', r5.summary.status === 'pass', `status=${r5.summary.status}`);
+  check('白名单核销后 running-status-pill 再现 -> exactly 1 retired_style_family error', familyFindings(r5).length === 1, `got ${familyFindings(r5).length}`);
+  check('核销条目命中 running-status-pill', familyFindings(r5)[0] && familyFindings(r5)[0].detail && familyFindings(r5)[0].detail.pattern === 'running-status-pill', JSON.stringify(familyFindings(r5).map((f) => f.detail && f.detail.pattern)));
   check(
-    '白名单 deferred=2（死视图 2 span 去重 1 + spec-empty 1；styles.css 定义段 tsOnly 不入账）',
-    r5.metrics.retired_style_family.deferred.length === 2,
+    '白名单 deferred=1（spec-empty 有意例外）',
+    r5.metrics.retired_style_family.deferred.length === 1 && r5.metrics.retired_style_family.deferred[0].pattern === 'spec-direct:spec-empty',
     `deferred=${JSON.stringify(r5.metrics.retired_style_family.deferred)}`
   );
 

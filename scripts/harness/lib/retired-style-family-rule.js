@@ -24,7 +24,7 @@ const RETIRED_FAMILY_PATTERNS = [
   { id: 'project-canvas-status-pill', re: /project-canvas-status-pill(?![\w-])/ },
   { id: 'prsb-pill', re: /prsb-pill(?![\w-])/ },
   { id: 'jiaoban-done-pills', re: /jiaoban-done-pills(?![\w-])/ },
-  // 死视图引用面（G4 整删时连带清）：只扫 ts/tsx——styles.css:287-308 定义段本包不动、挂账 G4。
+  // 死视图引用面族（RunningWorkflowsView G4 已整删·防再造）：只扫 ts/tsx。
   { id: 'running-status-pill', re: /running-status-pill(?![\w-])/, tsOnly: true }
 ];
 const BADGE_IMPORT_ID = 'badge-import';
@@ -33,10 +33,8 @@ const SPEC_DIRECT_RE = /spec-(?:fact-row|fact-k|fact-v|pill(?:-[\w-]+)?|seg-titl
 const STRING_LITERAL_RE = /(["'`])(?:(?!\1)[^\\]|\\.)*\1/g;
 const SPEC_PRIMITIVES_PATH = 'prototypes/productized-desktop-shell/src/components/SpecPrimitives.tsx';
 
-// 白名单 2 条（全登记 decisions·不沉默豁免）：
+// 白名单 1 条（全登记 decisions·不沉默豁免；G4 核销①——RunningWorkflowsView 已整删）：
 const RETIRED_STYLE_FAMILY_DEFER_WHITELIST = new Set([
-  // ① 死视图 RunningWorkflowsView 的 running-status-pill 引用面（死视图 1196 行·G4 整删时连带清）
-  'running-status-pill|prototypes/productized-desktop-shell/src/views/RunningWorkflowsView.tsx',
   // ② ActiveWorkbenchView.tsx:277 spec-empty 有意例外（想法箱空态文案「。」「；」混排与基座
   //   what/next 拼接逐字对不上·不改基座·该处注释在档）
   'spec-direct:spec-empty|prototypes/productized-desktop-shell/src/components/ActiveWorkbenchView.tsx'

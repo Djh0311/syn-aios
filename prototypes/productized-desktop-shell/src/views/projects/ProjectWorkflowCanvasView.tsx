@@ -881,10 +881,7 @@ export function ProjectWorkflowCanvasView({
   );
 }
 
-// D · 项目规则状态条（蓝图 §11.2）：把已派生的运行性 / 状态原因 / 全局徽标
-// （关注 / 权限 / 黑板）condense 成顶部一条；纯读派生数据，不补编、不触发执行。
-// 定式扶正（G2）：prsb-pill / canvas-status-pill tone → spec-pill tone 查表。
-const runcheckPillTone = { runnable: "ok", warning: "warn", blocked: "bad", unknown: "plain" } as const;
+// 定式扶正（G2）：canvas-status-pill tone → spec-pill tone 查表。
 const canvasBadgePillTone = {
   neutral: "plain",
   ready: "ok",
@@ -894,33 +891,6 @@ const canvasBadgePillTone = {
   blocked: "warn",
   failed: "warn",
 } as const;
-
-function ProjectRuleStatusBar({
-  canvasModel,
-  runCheckStatus,
-}: {
-  canvasModel: ProjectWorkflowCanvasReadModel;
-  runCheckStatus: WorkflowRunCheck["status"] | null;
-}) {
-  return (
-    <div className="project-rule-status-bar" aria-label="项目规则状态条">
-      <span className="prsb-headline">{canvasModel.status_reason.label}</span>
-      <Pill tone={runcheckPillTone[runCheckStatus ?? "unknown"]}>运行性：{runCheckStatusLabel(runCheckStatus)}</Pill>
-      {canvasModel.global_badges.map((badgeItem) => (
-        <Pill tone={canvasBadgePillTone[badgeItem.tone]} key={badgeItem.badge_id}>
-          {badgeItem.label}
-        </Pill>
-      ))}
-    </div>
-  );
-}
-
-function runCheckStatusLabel(status: WorkflowRunCheck["status"] | null) {
-  if (status === "runnable") return "可运行";
-  if (status === "warning") return "有警告";
-  if (status === "blocked") return "不可运行";
-  return "未知 / 不可用";
-}
 
 type ProjectCanvasFlowNodeData = {
   canvasNode: ProjectCanvasNode;

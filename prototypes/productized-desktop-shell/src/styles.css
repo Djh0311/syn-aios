@@ -284,30 +284,6 @@
   gap: 8px;
 }
 
-.running-status-pill {
-  min-height: 26px;
-  padding: 5px 9px;
-  border: 1px solid var(--hair);
-  background: rgba(245, 241, 232, 0.84);
-  color: var(--ink-mid);
-  font-size: var(--text-sm);
-  line-height: 1.2;
-}
-
-.running-status-pill.ready,
-.running-status-pill.accepted,
-.running-status-pill.running {
-  border-color: rgba(35, 108, 104, 0.35);
-  color: var(--accent-strong);
-}
-
-.running-status-pill.warning,
-.running-status-pill.blocked,
-.running-status-pill.failed {
-  border-color: rgba(155, 74, 24, 0.35);
-  color: var(--warning);
-}
-
 /* 阶段进度段带：横向分段，每阶段一小段，按状态着色。与连线互补（段带表进度）。 */
 .running-stage-band {
   display: flex;
@@ -1184,47 +1160,12 @@ button:disabled {
   color: var(--muted);
 }
 
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(140px, 1fr));
-  gap: 12px;
-}
-
-.metric-grid.compact-metrics {
-  grid-template-columns: repeat(2, minmax(180px, 1fr));
-}
-
-.metric,
 .panel,
 .item-card {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow);
-}
-
-.metric {
-  min-height: 118px;
-  padding: 16px;
-}
-
-.metric span {
-  color: var(--muted);
-  font-size: var(--text-md);
-}
-
-.metric strong {
-  display: block;
-  margin-top: 8px;
-  font-size: var(--text-2xl);
-  line-height: 1;
-}
-
-.metric small {
-  display: block;
-  margin-top: 10px;
-  color: var(--muted);
-  line-height: 1.35;
 }
 
 .content-grid {
@@ -3040,16 +2981,6 @@ button:disabled {
   background: var(--paper-card);
 }
 
-.workflow-state-panel {
-  display: grid;
-  gap: 12px;
-  margin-bottom: 14px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--paper-card);
-}
-
 .workflow-draft-panel {
   display: grid;
   gap: 12px;
@@ -3693,7 +3624,6 @@ td {
 }
 
 @media (max-width: 1180px) {
-  .metric-grid,
   .content-grid.four,
   .entry-grid,
   .agent-status-grid,
@@ -5141,7 +5071,6 @@ textarea {
   text-align: left;
 }
 
-.metric,
 .panel,
 .item-card,
 .entry-card,
@@ -5152,7 +5081,6 @@ textarea {
 .board-column,
 .project-list-pane,
 .project-detail-shell,
-.workflow-state-panel,
 .workflow-draft-card,
 .task-draft-item,
 .permission-dialog {
@@ -8426,22 +8354,6 @@ textarea {
   border-bottom: 1px dashed var(--hair-2);
 }
 
-/* D · 项目规则状态条（§11.2）：运行性 / 状态原因 / 全局徽标 condense 成一条。 */
-.project-rule-status-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--hair-2);
-  border-radius: 4px;
-  background: rgba(245, 241, 232, 0.7);
-}
-.project-rule-status-bar .prsb-headline {
-  font-weight: 600;
-  font-size: var(--text-md);
-  margin-right: 4px;
-}
 /* 实验画布「清空 / 新建画布」两步确认（行内换行排布）。 */
 .canvas-reset-confirm {
   display: inline-flex;
@@ -8523,7 +8435,6 @@ textarea {
 .canvas-hud > *,
 .canvas-hud button,
 .canvas-hud select,
-.canvas-hud .project-rule-status-bar,
 .canvas-hud .workflow-state-actions {
   pointer-events: auto;
 }
@@ -8552,11 +8463,6 @@ textarea {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-/* 顶边里的状态条压成紧凑 pill 组（不占整条横幅）。 */
-.canvas-hud-top .project-rule-status-bar {
-  padding: 4px 8px;
-  background: rgba(245, 241, 232, 0.92);
 }
 .canvas-hud-top .workflow-state-actions {
   margin-left: auto;
@@ -10055,7 +9961,7 @@ textarea {
 }
 
 /* ===== 设计系统基座(2026-07-15·定式组件 SpecPrimitives 配套;正本=DESIGN.md 信息规范) ===== */
-/* 七律⑤事实行定式(2026-07-16 对齐样板 .jiaoban-fact):标签灰左·值右·细虚线分隔。共享基座,全 App 事实行同式。 */
+/* 七律⑤事实行定式(2026-07-16 对齐 FactRow 定式):标签灰左·值右·细虚线分隔。共享基座,全 App 事实行同式。 */
 .spec-fact-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 5px 0; border-bottom: 1px dashed var(--hair); font-variant-numeric: tabular-nums; font-size: var(--text-sm); }
 .spec-fact-k { color: var(--muted); flex-shrink: 0; }
 .spec-fact-v { text-align: right; min-width: 0; word-break: break-all; }
@@ -10077,7 +9983,6 @@ textarea {
 .spec-list-claim { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .spec-list-time { font-size: var(--text-xs); color: var(--muted); flex-shrink: 0; }
 .spec-empty { line-height: 1.7; }
-.spec-expand { margin: 6px 0 0; }
 
 /* 壳固定布局基座:页面永不整体滚,滚动只在 .spec-scroll 容器内(布局总纲·用户拍)。 */
 .spec-fill { display: flex; flex-direction: column; min-height: 0; flex: 1; }

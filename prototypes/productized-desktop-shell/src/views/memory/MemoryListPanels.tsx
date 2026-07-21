@@ -46,37 +46,6 @@ export function FormalMemoryItem({
   );
 }
 
-export function CandidateMemoryItem({
-  item,
-  selected = false,
-  onSelect,
-}: {
-  item: MemoryCandidateListItem;
-  selected?: boolean;
-  onSelect?: () => void;
-}) {
-  return (
-    <div
-      className={`workflow-compact-item candidate-memory-item${selected ? " is-selected" : ""}${onSelect ? " is-selectable" : ""}`}
-      onClick={onSelect}
-      aria-pressed={onSelect ? selected : undefined}
-      role={onSelect ? "button" : undefined}
-    >
-      <div className="memory-item-topline">
-        <strong>{item.kind_label} / {item.status_label}</strong>
-        <Pill tone={badgePillTone[item.task_position.badge_tone]}>{item.task_position.label}</Pill>
-      </div>
-      <span>{item.claim}</span>
-      <em>{item.formal_memory_boundary}</em>
-      <em>{item.risk_summary}</em>
-      <em>{item.confirmation_summary}</em>
-      <em>{item.adoption_summary}</em>
-      <em>来源：{sourceText(item.source_summaries)}</em>
-      <em>{item.lint_summary}</em>
-    </div>
-  );
-}
-
 export function EntityCandidateItem({
   candidate,
   onConfirm,
