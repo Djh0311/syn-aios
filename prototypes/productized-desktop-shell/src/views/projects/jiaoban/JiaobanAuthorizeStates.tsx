@@ -5,10 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import type {
   GlobalSupervisorBoundaryReviewOutcome,
   ProjectConsultationProposal,
+  ProjectDirectorPreviewNodeSessionBinding,
   SessionRecord,
 } from "../../../lib/types";
 import type { JiaobanOrchestrationMode } from "../ProjectJiaobanPanel";
 import { JiaobanSessionPicker } from "./jiaobanSessionParts";
+import { previewNodeBinding, type JiaobanPreviewCanvasNode } from "./jiaobanPreviewCanvas";
 import { FactRow } from "../../../components/SpecPrimitives";
 // 人话工程①(2026-07-20):humanizeWriteRoots 逐字迁 src/lib/humanize.ts;import-back + re-export 保导入面。
 import { humanizeWriteRoots } from "../../../lib/humanize";
@@ -455,7 +457,7 @@ export function JiaobanGovernanceView({ proposal }: { proposal: ProjectConsultat
   );
 }
 
-// 「怎么跑」配置视图:预演开关/执行模式/预填对话——从批卡移来,读方案→批的流不再被配置打断。
+// 「怎么跑」配置视图:预演开关/执行模式/逐节点对话——从批卡移来,读方案→批的流不再被配置打断。
 export function JiaobanHowRunView({
   suggestWorkflow,
   worksmapSwitchOn,
@@ -465,9 +467,10 @@ export function JiaobanHowRunView({
   supervisorPilotDisabledReason,
   classicDisabledReason,
   disabled,
+  nodes,
+  bindings,
   sessions,
-  sessionChoice,
-  onSessionChoiceChange,
+  onBindingChange,
   onOpenAgentSession,
 }: {
   suggestWorkflow: boolean;
@@ -478,9 +481,10 @@ export function JiaobanHowRunView({
   supervisorPilotDisabledReason: string | null;
   classicDisabledReason: string | null;
   disabled: boolean;
+  nodes: JiaobanPreviewCanvasNode[];
+  bindings: ProjectDirectorPreviewNodeSessionBinding[];
   sessions: SessionRecord[];
-  sessionChoice: string | null;
-  onSessionChoiceChange: (value: string | null) => void;
+  onBindingChange: (previewNodeId: string, value: string | null) => void;
   onOpenAgentSession: (threadId: string) => void;
 }) {
   return (
@@ -497,13 +501,25 @@ export function JiaobanHowRunView({
         disabled={disabled}
         onChange={onOrchestrationModeChange}
       />
-      <JiaobanSessionPicker
-        sessions={sessions}
-        sessionChoice={sessionChoice}
-        onSessionChoiceChange={onSessionChoiceChange}
-        onOpenAgentSession={onOpenAgentSession}
-        label="给第一个预演节点预填对话"
-      />
+      <div className="jiaoban-howrun-sessions" aria-label="每步使用的对话">
+        {nodes.map((node, index) => {
+          const binding =
+            bindings.find((item) => item.preview_node_id === node.preview_node_id) ??
+            previewNodeBinding(node.preview_node_id, null);
+          return (
+            <JiaobanSessionPicker
+              key={node.preview_node_id}
+              sessions={sessions}
+              sessionChoice={binding.session_choice === "existing" ? binding.session_id ?? null : null}
+              onSessionChoiceChange={(value) => onBindingChange(node.preview_node_id, value)}
+              onOpenAgentSession={onOpenAgentSession}
+              label={`「${node.title}」用哪个对话`}
+              inputName={`jiaoban-howrun-session-${index}`}
+              newSessionText="新对话（默认）"
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }

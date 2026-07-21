@@ -113,13 +113,25 @@ function html(allowedWriteRoots: string[]): string {
       supervisorPilotDisabledReason={null}
       classicDisabledReason={null}
       disabled={false}
+      nodes={[
+        { preview_node_id: "step-1", title: "搭好页面骨架", depends_on: [] },
+        { preview_node_id: "step-2", title: "补上验收", depends_on: ["step-1"] },
+      ]}
+      bindings={[
+        { preview_node_id: "step-1", session_choice: "new" },
+        { preview_node_id: "step-2", session_choice: "new" },
+      ]}
       sessions={[]}
-      sessionChoice={null}
-      onSessionChoiceChange={noop}
+      onBindingChange={noop}
       onOpenAgentSession={noop}
     />,
   );
-  assert(out.includes("给第一个预演节点预填对话"), "怎么跑视图应承载预填对话");
+  assert(!out.includes("给第一个预演节点预填对话"), "整单级首节点预填语义应退场");
+  assert(
+    out.includes("「搭好页面骨架」用哪个对话") && out.includes("「补上验收」用哪个对话"),
+    "怎么跑视图应逐节点承载可选对话",
+  );
+  assert(out.includes("新对话（默认）"), "每个节点应默认新对话");
   assert(out.includes("按工作流来（在右侧预演画布看工序图）"), "怎么跑视图应承载预演开关");
   assert(out.includes("执行模式"), "怎么跑视图应承载执行模式单选");
 }

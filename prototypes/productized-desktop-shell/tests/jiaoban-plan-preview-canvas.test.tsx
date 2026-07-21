@@ -24,6 +24,7 @@ const previewCanvas = (
     waitingForPreview={false}
     previewError={null}
     previewWarnings={[]}
+    sessionBindingsEditable={false}
     onBindingChange={noop}
     onRetryPreview={noop}
     onOpenAgentSession={noop}
@@ -40,8 +41,8 @@ assert(output.includes("任务 · 预演"), "节点必须与运行态明确区�
 assert(output.includes("搭好页面骨架") && output.includes("补上验收"), "预演节点应展示任务标题");
 assert(output.includes("依赖：搭好页面骨架"), "依赖关系应在节点图中可见");
 assert(output.includes("新会话"), "每个节点默认新会话");
-assert(output.includes("<details"), "点击节点的可展开会话选择器应在 DOM 中");
-assert(output.includes("开个新的（为这单活新建一个对话）"), "复用现有会话选择器");
+assert(output.includes("<details"), "节点详情应保留");
+assert(!output.includes("开个新的（为这单活新建一个对话）"), "工序图只读结构，不应再出现挑会话入口");
 assert(!output.includes("preview-step-"), "画布不得暴露内部步骤编号");
 
 const simpleOutput = renderToStaticMarkup(
@@ -52,6 +53,7 @@ const simpleOutput = renderToStaticMarkup(
     waitingForPreview={false}
     previewError={null}
     previewWarnings={[]}
+    sessionBindingsEditable={false}
     onBindingChange={noop}
     onRetryPreview={noop}
     onOpenAgentSession={noop}
@@ -76,4 +78,4 @@ assert(
 );
 assert(!merged.includes("不应展示的运行态画布"), "授权期不能把运行态画布混进预演区");
 
-console.log("jiaoban-plan-preview-canvas: 预演节点、依赖、默认新会话和合一画布离线 DOM 断言全过");
+console.log("jiaoban-plan-preview-canvas: 预演节点、依赖、默认新会话和工序图只读语义离线 DOM 断言全过");

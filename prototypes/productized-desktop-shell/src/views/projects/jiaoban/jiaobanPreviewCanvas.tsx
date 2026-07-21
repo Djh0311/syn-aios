@@ -200,6 +200,7 @@ export function JiaobanPlanPreviewCanvas({
   previewError,
   previewWarnings,
   readOnly = false,
+  sessionBindingsEditable = !readOnly,
   runtimeNodeStates = null,
   focusedNodeId = null,
   focusActive = false,
@@ -214,6 +215,7 @@ export function JiaobanPlanPreviewCanvas({
   previewError: string | null;
   previewWarnings: string[];
   readOnly?: boolean;
+  sessionBindingsEditable?: boolean;
   runtimeNodeStates?: Record<string, JiaobanRuntimeNodeStateInfo> | null;
   focusedNodeId?: string | null;
   // P3-A：右区 graph tab 显示时才滚动/聚焦，避免隐藏的交货或方案视图抢焦点。
@@ -299,12 +301,14 @@ export function JiaobanPlanPreviewCanvas({
                   {runtimeNodeState?.detail ? <em>{runtimeNodeState.detail}</em> : null}
                   <small className={binding.session_choice === "existing" ? "is-existing" : ""}>{sessionLabel}</small>
                 </summary>
-                {readOnly ? (
+                {readOnly || !sessionBindingsEditable ? (
                   <div className="jiaoban-plan-preview-picker jiaoban-plan-preview-picker--readonly">
                     <p className="muted small-note">
                       {binding.session_choice === "existing"
                         ? `已绑定：${session?.title || binding.session_id || "现有对话"}`
-                        : "这一步使用新会话。"}
+                        : readOnly
+                          ? "这一步使用新会话。"
+                          : "默认使用新会话。"}
                     </p>
                     <JiaobanRawSessionLink
                       sessionChoice={binding.session_choice === "existing" ? binding.session_id ?? null : NEW_SESSION_CHOICE}

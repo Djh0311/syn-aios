@@ -228,6 +228,8 @@ type JiaobanRunCache = {
   runIsNewSession: boolean;
   // 方案a fix：会话选择跨重挂载保留（NEW_SESSION_CHOICE / thread_id / null=未定）。
   sessionChoice: string | null;
+  // P2-B：只恢复同一份方案的逐节点选择，换方案必须回到全部新对话。
+  previewProposalId: string | null;
   // M1：批前预演节点→会话选择。与任务绑定不同，它允许简单活使用虚拟步骤 id。
   previewSessionBindings: ProjectDirectorPreviewNodeSessionBinding[];
   // 运行/终态继续使用本轮已批的图，不能随方案 store 刷新退回旧 ReactFlow 视图。
@@ -255,6 +257,7 @@ function writeJiaobanRunCache(projectRoot: string, patch: Partial<JiaobanRunCach
     runStartedAtMs: null,
     runIsNewSession: false,
     sessionChoice: null,
+    previewProposalId: null,
     previewSessionBindings: [],
     runCanvasNodes: [],
     runCanvasBindings: [],
@@ -386,11 +389,14 @@ function ProjectJiaobanPanelBrowser({
   }, [projectWorkflow?.project_id]);
   // 「说」面顶部的上次停因摘要（重新出方案时带过来；空则不显示）。
   const [sayHint, setSayHint] = useState<string | null>(null);
-  // 「用哪个对话干」：默认选最近一条现有会话（下面 effect 里补默认；null 只在真无会话时保留）。
-  const [sessionChoice, setSessionChoiceState] = useState<string | null>(cached?.sessionChoice ?? null);
+  // P2-B：顶层字段只镜像第一个预演节点，产品默认永远是新对话，不再自动挑最近会话。
+  const [sessionChoice, setSessionChoiceState] = useState<string | null>(
+    cached?.sessionChoice ?? NEW_SESSION_CHOICE,
+  );
   const [previewSessionBindings, setPreviewSessionBindings] = useState<ProjectDirectorPreviewNodeSessionBinding[]>(
     cached?.previewSessionBindings ?? [],
   );
+  const previewProposalIdRef = useRef<string | null>(cached?.previewProposalId ?? null);
   const [runCanvasNodes, setRunCanvasNodes] = useState<JiaobanPreviewCanvasNode[]>(cached?.runCanvasNodes ?? []);
   const [runCanvasBindings, setRunCanvasBindings] = useState<ProjectDirectorPreviewNodeSessionBinding[]>(
     cached?.runCanvasBindings ?? [],
@@ -398,7 +404,6 @@ function ProjectJiaobanPanelBrowser({
   // 方案a fix：用户任何显式选择（新建/某条现有）都进缓存 → 重挂载不丢、默认效果不覆盖。
   function setSessionChoice(value: string | null) {
     setSessionChoiceState(value);
-    sessionDefaultedRef.current = true;
     writeJiaobanRunCache(projectRoot, { sessionChoice: value });
   }
   const [starting, setStarting] = useState(false);
@@ -466,10 +471,6 @@ function ProjectJiaobanPanelBrowser({
     return latestProposal && cached?.manualPhase !== "say" ? "proposal" : "graph";
   });
   const [focusedRuntimeNodeId, setFocusedRuntimeNodeId] = useState<string | null>(null);
-  // 批卡「怎么跑」入口一行的摘要(真值随右区视图里的控件走)。
-  const howRunSummary = `${orchestrationMode === "supervisor_pilot" ? "主管编排(试点)" : "经典状态机"} · ${
-    sessionChoice && sessionChoice !== NEW_SESSION_CHOICE ? "接现有对话" : "开个新对话"
-  } · 预演图${workflowSwitchOn ? "开" : "关"}`;
   const [previewTasks, setPreviewTasks] = useState<ProjectDirectorPlannedTask[] | null>(null);
   const [previewWarnings, setPreviewWarnings] = useState<string[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -480,16 +481,28 @@ function ProjectJiaobanPanelBrowser({
     () => previewCanvasNodesFor(latestProposal, previewTasks),
     [latestProposal, previewTasks],
   );
+  const previewStateMatchesProposal =
+    latestProposal?.proposal_id != null && previewProposalIdRef.current === latestProposal.proposal_id;
   const previewBindingsForCanvas = useMemo(
     () =>
       previewCanvasNodes.map((node, index) => {
-        const saved = previewSessionBindings.find(
-          (binding) => binding.preview_node_id === node.preview_node_id,
-        );
-        return saved ?? previewNodeBinding(node.preview_node_id, index === 0 ? sessionChoice : NEW_SESSION_CHOICE);
+        const saved = previewStateMatchesProposal
+          ? previewSessionBindings.find((binding) => binding.preview_node_id === node.preview_node_id)
+          : undefined;
+        const firstNodeChoice = previewStateMatchesProposal ? sessionChoice : NEW_SESSION_CHOICE;
+        return saved ?? previewNodeBinding(node.preview_node_id, index === 0 ? firstNodeChoice : NEW_SESSION_CHOICE);
       }),
-    [previewCanvasNodes, previewSessionBindings, sessionChoice],
+    [previewCanvasNodes, previewSessionBindings, previewStateMatchesProposal, sessionChoice],
   );
+  const existingPreviewBindingCount = previewBindingsForCanvas.filter(
+    (binding) => binding.session_choice === "existing",
+  ).length;
+  // 批卡只报运行方式摘要；具体会话选择统一留在右侧「怎么跑」。
+  const howRunSummary = `${orchestrationMode === "supervisor_pilot" ? "主管编排(试点)" : "经典状态机"} · ${
+    existingPreviewBindingCount > 0
+      ? `${existingPreviewBindingCount}/${previewBindingsForCanvas.length} 步接现有对话`
+      : "每步默认新对话"
+  } · 预演图${workflowSwitchOn ? "开" : "关"}`;
 
   function rememberRunCanvas(
     nodes = previewCanvasNodes,
@@ -517,7 +530,7 @@ function ProjectJiaobanPanelBrowser({
     }
   }
 
-  // 顶层选择仍保留，但它只是第一个预演节点的预填；改顶层时同步节点，绝不扩散到其余节点。
+  // 顶层兼容字段只镜像第一个预演节点，供现行批准协议使用；产品里不再提供整单级选择入口。
   useEffect(() => {
     const firstNode = previewCanvasNodes[0];
     if (!firstNode) return;
@@ -579,21 +592,6 @@ function ProjectJiaobanPanelBrowser({
     // 回落只会把用户引向一个假门；不可用原因由开始按钮/选择器上脸，fail-closed。
     if (supervisorPilotDisabledReason && !isStation3bProject) setOrchestrationMode("classic");
   }, [supervisorPilotDisabledReason, isStation3bProject]);
-
-  // 默认选最近一条现有会话（会话到齐后补；用户手动选过就不覆盖）。无可用会话保持 null → UI 给人话提示。
-  const sessionDefaultedRef = useRef(false);
-  useEffect(() => {
-    if (sessionDefaultedRef.current) return;
-    const latest = [...projectSessions].sort(
-      (a, b) => (b.updated_at_ms ?? 0) - (a.updated_at_ms ?? 0),
-    )[0];
-    if (latest) {
-      // 方案a fix：函数式「只填空位」——用户已选（含 NEW_SESSION_CHOICE）绝不覆盖（旧写法会把
-      // 显式的「开个新的」无声改回最新会话）。
-      setSessionChoiceState((prev) => prev ?? latest.thread_id);
-      sessionDefaultedRef.current = true;
-    }
-  }, [projectSessions]);
 
   // 主管试点进度来自它自己的 sidecar 账本。链读模型照旧可轮询，但不拿它猜主管状态。
   useEffect(() => {
@@ -799,17 +797,20 @@ function ProjectJiaobanPanelBrowser({
 
   // 换方案（新 proposal_id）→ 清上一份预拆展示态 + 关开关；新方案按需重新触发/命中缓存。
   useEffect(() => {
+    const proposalId = latestProposal?.proposal_id ?? null;
+    if (!proposalId || previewProposalIdRef.current === proposalId) return;
+    previewProposalIdRef.current = proposalId;
     setPreviewTasks(null);
     setPreviewWarnings([]);
     setPreviewError(null);
     setWorkflowSwitchOn(latestProposal?.suggest_workflow === true);
     // M1：每份待批方案从「新会话」起，不把上一单的 existing 悄悄继承给任何预演节点。
     setSessionChoiceState(NEW_SESSION_CHOICE);
-    sessionDefaultedRef.current = true;
     setPreviewSessionBindings([]);
     setRunCanvasNodes([]);
     setRunCanvasBindings([]);
     writeJiaobanRunCache(projectRoot, {
+      previewProposalId: proposalId,
       sessionChoice: NEW_SESSION_CHOICE,
       previewSessionBindings: [],
       runCanvasNodes: [],
@@ -1573,6 +1574,7 @@ function ProjectJiaobanPanelBrowser({
       previewError={runtimeCanvasPhase ? null : previewError}
       previewWarnings={runtimeCanvasPhase ? [] : previewWarnings}
       readOnly={runtimeCanvasPhase}
+      sessionBindingsEditable={false}
       runtimeNodeStates={runtimeNodeStates}
       focusedNodeId={focusedRuntimeNodeId} focusActive={canvasViewKey === "graph"}
       onBindingChange={updatePreviewSessionBinding}
@@ -1616,9 +1618,10 @@ function ProjectJiaobanPanelBrowser({
         supervisorPilotDisabledReason={supervisorPilotDisabledReason}
         classicDisabledReason={classicModeUnavailableReason(projectRoot)}
         disabled={starting}
+        nodes={previewCanvasNodes}
+        bindings={previewBindingsForCanvas}
         sessions={projectSessions}
-        sessionChoice={sessionChoice}
-        onSessionChoiceChange={setSessionChoice}
+        onBindingChange={updatePreviewSessionBinding}
         onOpenAgentSession={onOpenAgentSession}
       />
     ) : null,
