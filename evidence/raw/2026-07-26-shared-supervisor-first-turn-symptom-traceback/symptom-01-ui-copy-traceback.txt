@@ -1,0 +1,34 @@
+### 命令：grep -rn '主管这次没回上来' src src-tauri tests
+src/views/projects/jiaoban/useJiaobanConversationState.ts:37:const MESSAGE_RECORDED_NO_SUPERVISOR_REPLY = "消息已送到主管，但主管这次没回上来——可以再发一次。";
+src-tauri/src/supervisor_resident_oneshot_session.rs:2773:            message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
+src-tauri/src/supervisor_resident_oneshot_session.rs:2889:                    message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
+src-tauri/src/supervisor_resident_oneshot_session.rs:2950:                message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
+src-tauri/src/supervisor_resident_oneshot_session.rs:2968:            message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
+src-tauri/src/supervisor_resident_oneshot_session.rs:2990:            message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
+src-tauri/src/supervisor_resident_oneshot_tests.rs:1755:        "消息已送到主管，但主管这次没回上来——可以再发一次。"
+src-tauri/src/supervisor_resident_oneshot_tests.rs:1818:        "消息已送到主管，但主管这次没回上来——可以再发一次。"
+src-tauri/src/supervisor_resident_oneshot_tests.rs:2781:        "消息已送到主管，但主管这次没回上来——可以再发一次。"
+src-tauri/src/supervisor_resident_oneshot_tests.rs:2972:        "消息已送到主管，但主管这次没回上来——可以再发一次。"
+tests/jiaoban-conversation-center.test.tsx:595:    { clearDraft: true, messageError: "消息已送到主管，但主管这次没回上来——可以再发一次。" },
+
+### 命令：grep -rn 'message_recorded_supervisor_incomplete' src src-tauri tests
+src/views/projects/jiaoban/useJiaobanConversationState.ts:78:    case "message_recorded_supervisor_incomplete":
+src-tauri/src/supervisor_resident_oneshot_session.rs:2769:            status: "message_recorded_supervisor_incomplete".to_string(),
+src-tauri/src/supervisor_resident_oneshot_session.rs:2885:                    status: "message_recorded_supervisor_incomplete".to_string(),
+src-tauri/src/supervisor_resident_oneshot_session.rs:2946:                status: "message_recorded_supervisor_incomplete".to_string(),
+src-tauri/src/supervisor_resident_oneshot_session.rs:2964:            status: "message_recorded_supervisor_incomplete".to_string(),
+src-tauri/src/supervisor_resident_oneshot_session.rs:2986:            status: "message_recorded_supervisor_incomplete".to_string(),
+src-tauri/src/supervisor_resident_oneshot_tests.rs:1752:    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+src-tauri/src/supervisor_resident_oneshot_tests.rs:1815:    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+src-tauri/src/supervisor_resident_oneshot_tests.rs:2386:    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+src-tauri/src/supervisor_resident_oneshot_tests.rs:2452:    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+src-tauri/src/supervisor_resident_oneshot_tests.rs:2522:    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+src-tauri/src/supervisor_resident_oneshot_tests.rs:2778:    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+src-tauri/src/supervisor_resident_oneshot_tests.rs:2969:    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+src-tauri/src/supervisor_resident_oneshot_tests.rs:3012:    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+src-tauri/src/supervisor_resident_oneshot_tests.rs:3062:    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+src-tauri/src/supervisor_resident_oneshot_tests.rs:3128:        "message_recorded_supervisor_incomplete"
+src-tauri/src/supervisor_resident_oneshot_tests.rs:3132:        "message_recorded_supervisor_incomplete"
+src-tauri/src/supervisor_resident_oneshot_tests.rs:3155:        assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+src-tauri/src/supervisor_resident_oneshot_tests.rs:3232:    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+tests/jiaoban-conversation-center.test.tsx:590:    submit: async () => ({ status: "message_recorded_supervisor_incomplete" }),

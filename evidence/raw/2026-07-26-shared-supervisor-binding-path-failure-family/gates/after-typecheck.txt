@@ -1,0 +1,5 @@
+
+> codex-governance-workbench@0.1.0 typecheck
+> tsc --noEmit
+
+typecheck_exit=0

@@ -1,0 +1,1 @@
+shared-conversation-transport: profile-safe requests, new/existing session, independent receipts, Stop, and safe receipt filtering passed

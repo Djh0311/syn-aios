@@ -85,9 +85,6 @@ export type ConversationTransportReceipt = Readonly<{
   transport: ConversationReceiptLayer & Readonly<{
     attempt_id: string | null;
     binding_stage: SupervisorConversationBindingStage | null;
-    // B6：可选加法。`binding_stage` 回答「走到哪一步」，取值域与既有分支
-    // 一律不动；这一维回答「同一步里为什么」。缺席的存量回执仍然合法。
-    binding_failure_family?: string | null;
   }>;
   assistant_reply: ConversationReceiptLayer & Readonly<{
     text: string | null;
@@ -401,7 +398,6 @@ function safeConversationTransportReceipt(receipt: ConversationTransportReceipt)
       human_message: receipt.transport.human_message,
       attempt_id: receipt.transport.attempt_id,
       binding_stage: safeSupervisorBindingStage(receipt.transport.binding_stage),
-      binding_failure_family: safeBindingFailureFamily(receipt.transport.binding_failure_family),
     },
     assistant_reply: {
       status: receipt.assistant_reply.status,
@@ -422,15 +418,6 @@ function safeConversationTransportReceipt(receipt: ConversationTransportReceipt)
       human_message: receipt.canonical_mirror.human_message,
     },
   };
-}
-
-// The failure family is an open, backend-owned constant set, so it cannot be
-// gated by an enum the way `binding_stage` is.  It is still projected rather
-// than copied: only a bounded `binding_`-prefixed snake_case machine token
-// survives, so a raw backend error string or bridge payload can never reach
-// controller state or a shared transcript through this new field.
-function safeBindingFailureFamily(value: unknown): string | null {
-  return typeof value === "string" && /^binding_[a-z0-9_]{1,56}$/.test(value) ? value : null;
 }
 
 function safeSupervisorBindingStage(value: unknown): SupervisorConversationBindingStage | null {

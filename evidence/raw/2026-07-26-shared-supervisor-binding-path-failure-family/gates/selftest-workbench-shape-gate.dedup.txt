@@ -1,0 +1,10 @@
+PASS: dup fn sha256_hex outside utils/ -> exactly 1 dedup warning — got 1
+PASS: the warning is severity=warn (never error) — ["warn"]
+PASS: default-mode Status stays pass with a dedup warning — status=pass
+PASS: warning points at dup_probe.rs/sha256_hex — {"helper":"sha256_hex","file":"prototypes/productized-desktop-shell/src-tauri/src/dup_probe.rs","line":1}
+PASS: whitelisted sidecar_path -> 0 dedup warning — got 0
+PASS: whitelisted hit is recorded as deferred — deferred=1
+PASS: canonical fn under utils/ -> 0 dedup warning (exempt) — got 0
+PASS: clean tree -> 0 dedup warning — got 0
+
+Self-test: 8/8 checks passed

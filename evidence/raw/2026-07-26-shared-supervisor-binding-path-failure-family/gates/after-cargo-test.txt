@@ -1,0 +1,1452 @@
+   Compiling codex-governance-workbench v0.1.0 (/Users/yoyi/workspace/product-line/prototypes/productized-desktop-shell/src-tauri)
+warning: unused import: `SystemTime`
+   --> src/system_status_read_model.rs:229:21
+    |
+229 |     use std::time::{SystemTime, UNIX_EPOCH};
+    |                     ^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: type `supervisor_session_launcher::SupervisorResidentDeliveryDiagnosticStage` is more private than the item `resident_delivery_diagnostic_stages_for_test`
+    --> src/supervisor_resident_oneshot_session.rs:2360:1
+     |
+2360 | / pub(crate) fn resident_delivery_diagnostic_stages_for_test(
+2361 | | ) -> [SupervisorResidentDeliveryDiagnosticStage; 13] {
+     | |____________________________________________________^ function `resident_delivery_diagnostic_stages_for_test` is reachable at visibility `pub(crate)`
+     |
+note: but type `supervisor_session_launcher::SupervisorResidentDeliveryDiagnosticStage` is only usable at visibility `pub(self)`
+    --> src/supervisor_resident_oneshot_session.rs:63:1
+     |
+  63 | enum SupervisorResidentDeliveryDiagnosticStage {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = note: `#[warn(private_interfaces)]` on by default
+
+warning: type `supervisor_session_launcher::SupervisorResidentDeliveryDiagnosticStage` is more private than the item `resident_consult_failure_family_for_test`
+    --> src/supervisor_resident_oneshot_session.rs:2381:1
+     |
+2381 | / pub(crate) fn resident_consult_failure_family_for_test(
+2382 | |     stage: SupervisorResidentDeliveryDiagnosticStage,
+2383 | | ) -> &'static str {
+     | |_________________^ function `resident_consult_failure_family_for_test` is reachable at visibility `pub(crate)`
+     |
+note: but type `supervisor_session_launcher::SupervisorResidentDeliveryDiagnosticStage` is only usable at visibility `pub(self)`
+    --> src/supervisor_resident_oneshot_session.rs:63:1
+     |
+  63 | enum SupervisorResidentDeliveryDiagnosticStage {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `run_workflow_machine_for_index_at` is never used
+    --> src/commands.rs:6982:4
+     |
+6982 | fn run_workflow_machine_for_index_at(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `run_workflow_machine_at` is never used
+    --> src/workflow_execution_entrypoints.rs:1782:4
+     |
+1782 | fn run_workflow_machine_at(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CONSULTANT_V0_PROFILE` is never used
+   --> src/consultant_agent.rs:320:7
+    |
+320 | const CONSULTANT_V0_PROFILE: &str = r#"你是「项目咨询」。
+    |       ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `consultant_build_prompt` is never used
+   --> src/consultant_agent.rs:328:4
+    |
+328 | fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: multiple fields are never read
+  --> src/director_agent.rs:40:16
+   |
+39 | pub(crate) struct DirectorFinalMarkContext {
+   |                   ------------------------ fields in this struct
+40 |     pub(crate) project_root: String,
+   |                ^^^^^^^^^^^^
+41 |     pub(crate) workflow_id: String,
+   |                ^^^^^^^^^^^
+42 |     pub(crate) task_title: String,
+   |                ^^^^^^^^^^
+43 |     pub(crate) task_goal: String,
+   |                ^^^^^^^^^
+44 |     pub(crate) acceptance_criteria: Vec<String>,
+   |                ^^^^^^^^^^^^^^^^^^^
+45 |     pub(crate) report_status: Option<String>,
+   |                ^^^^^^^^^^^^^
+46 |     pub(crate) acceptance_status: String,
+   |                ^^^^^^^^^^^^^^^^^
+47 |     pub(crate) evidence_refs: Vec<String>,
+   |                ^^^^^^^^^^^^^
+48 |     pub(crate) direction_risks: Vec<String>,
+   |                ^^^^^^^^^^^^^^^
+49 |     pub(crate) yellow_reasons: Vec<String>,
+   |                ^^^^^^^^^^^^^^
+50 |     pub(crate) last_message_tail: String,
+   |                ^^^^^^^^^^^^^^^^^
+51 |     pub(crate) rework_budget_remaining: usize,
+   |                ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `DirectorFinalMarkContext` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: multiple fields are never read
+  --> src/director_agent.rs:68:16
+   |
+67 | pub(crate) struct DirectorWorkflowSummaryContext {
+   |                   ------------------------------ fields in this struct
+68 |     pub(crate) project_root: String,
+   |                ^^^^^^^^^^^^
+69 |     pub(crate) workflow_id: String,
+   |                ^^^^^^^^^^^
+70 |     pub(crate) chain_run_id: String,
+71 |     pub(crate) total: usize,
+   |                ^^^^^
+72 |     pub(crate) dispatched: usize,
+   |                ^^^^^^^^^^
+73 |     pub(crate) completed: usize,
+74 |     pub(crate) skipped: usize,
+   |                ^^^^^^^
+75 |     pub(crate) steps: Vec<DirectorChainStep>,
+   |                ^^^^^
+76 |     pub(crate) warnings: Vec<String>,
+   |                ^^^^^^^^
+   |
+   = note: `DirectorWorkflowSummaryContext` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: struct `CliDirectorAgent` is never constructed
+   --> src/director_agent.rs:461:19
+    |
+461 | pub(crate) struct CliDirectorAgent {
+    |                   ^^^^^^^^^^^^^^^^
+
+warning: struct `DirectorFinalMarkJson` is never constructed
+   --> src/director_agent.rs:561:8
+    |
+561 | struct DirectorFinalMarkJson {
+    |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `DirectorWorkflowSummaryJson` is never constructed
+   --> src/director_agent.rs:569:8
+    |
+569 | struct DirectorWorkflowSummaryJson {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `director_final_mark_prompt` is never used
+   --> src/director_agent.rs:580:4
+    |
+580 | fn director_final_mark_prompt(ctx: &DirectorFinalMarkContext) -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_director_final_mark` is never used
+   --> src/director_agent.rs:643:4
+    |
+643 | fn parse_director_final_mark(raw: &str) -> Result<DirectorFinalMark, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `director_workflow_summary_prompt` is never used
+   --> src/director_agent.rs:664:4
+    |
+664 | fn director_workflow_summary_prompt(ctx: &DirectorWorkflowSummaryContext) -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_director_workflow_summary` is never used
+   --> src/director_agent.rs:718:4
+    |
+718 | fn parse_director_workflow_summary(raw: &str) -> Result<DirectorWorkflowSummary, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_workflow_machine_start_state` is never used
+   --> src/control_core.rs:151:15
+    |
+151 | pub(crate) fn validate_workflow_machine_start_state(work_item_state: &str) -> Result<(), String> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_workflow_machine_final_state` is never used
+   --> src/control_core.rs:161:15
+    |
+161 | pub(crate) fn validate_workflow_machine_final_state(final_state: &str) -> Result<(), String> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `invalid_params` is never used
+  --> src/mcp/protocol.rs:69:12
+   |
+54 | impl JsonRpcError {
+   | ----------------- associated function in this implementation
+...
+69 |     pub fn invalid_params(detail: &str) -> Self {
+   |            ^^^^^^^^^^^^^^
+
+warning: struct `WorkflowMachineStubRunner` is never constructed
+     --> src/lib.rs:14594:12
+      |
+14594 |     struct WorkflowMachineStubRunner {
+      |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-governance-workbench` (lib test) generated 20 warnings (run `cargo fix --lib -p codex-governance-workbench --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 25.45s
+     Running unittests src/lib.rs (target/debug/deps/codex_governance_workbench_lib-907cd8208ec1739f)
+
+running 1255 tests
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_launcher_build_pins_home_initial_view_before_vite_loads_dotenv ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_launcher_receipt_distinguishes_config_fixture_and_ui_observation ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_launcher_seals_and_strictly_verifies_fresh_bundle_before_launch ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_launcher_records_pre_list_sigkill_diagnostics_fail_closed ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_normal_mode_stays_normal_and_non_debug_rejects_profile ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_accepts_only_the_exact_prepared_synthetic_fixture_layout ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_launcher_builds_a_fresh_app_bundle_for_sky_target_discovery ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_identity_and_fixed_relative_paths_are_exact ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_rejects_external_or_lexically_escaped_candidates_before_root_probe ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_static_startup_order_and_consumer_wiring_contract ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_process_state_is_immutable_and_uninitialized_getters_fail_closed ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_prelaunch_layout_and_exit_contract_fail_closed ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_rejects_expiry_and_nonempty_reuse ... ok
+test audit_ledger_read_model::tests::event_without_human_field_falls_back_to_event_type ... ok
+test audit_ledger_read_model::tests::orchestrator_result_summary_is_used_as_human_summary ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_requires_direct_canonical_temp_child_and_direct_manifest ... ok
+test audit_ledger_read_model::tests::supervisor_private_parameters_are_redacted_from_user_facing_raw_json ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_schema_purpose_and_extra_fields_fail_closed ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_rejects_symlinks_permissions_and_wrong_owner ... ok
+test codex_db::tests::is_no_project_cwd_matches_only_scratch_root_and_descendants ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_valid_manifest_resolves_every_app_owned_path_under_one_root ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_rejects_hardlinked_profile_and_fixture_files ... ok
+test codex_db::tests::read_threads_falls_back_to_sqlite_title_without_session_index ... ok
+test acceptance_runtime_profile_tests::acceptance_runtime_profile_rejects_non_synthetic_fixture_contents ... ok
+test codex_db::tests::detects_parent_session_id_column_from_fixture_schema_only ... ok
+test audit_ledger_read_model::tests::aggregates_main_store_audits_newest_first_with_human_summary ... ok
+test codex_db::tests::find_thread_by_id_sees_exec_thread_hidden_from_list ... ok
+test codex_db::tests::read_threads_collapses_documents_codex_into_no_project_bucket ... ok
+test codex_db::tests::read_threads_hides_subagent_source ... ok
+test codex_db::tests::truncate_display_title_collapses_long_first_message ... ok
+test codex_local_runner::tests::a_sandbox_family_agrees_with_existing_state_error_detector ... ok
+test audit_ledger_read_model::tests::broken_main_store_soft_lands_without_breaking_the_page ... ok
+test codex_db::tests::read_threads_page_can_target_archived_only ... ok
+test codex_local_runner::tests::codex_local_guard_allows_confirmed_structured_dry_run_only ... ok
+test codex_db::tests::read_threads_prefers_session_index_thread_name ... ok
+test codex_local_runner::tests::codex_local_guard_allows_new_session_noop_without_existing_session ... ok
+test codex_db::tests::read_threads_page_can_include_archived_for_explicit_archive_view ... ok
+test codex_local_runner::tests::codex_local_guard_blocks_new_session_without_work_item_binding ... ok
+test codex_local_runner::tests::codex_local_guard_blocks_path_escape_and_sensitive_readback_refs ... ok
+test codex_local_runner::tests::codex_local_guard_blocks_secret_paths_and_prompt_hash_gap ... ok
+test codex_local_runner::tests::fix8_classify_codex_provider_failure_hits_and_misses ... ok
+test codex_local_runner::tests::codex_local_guard_blocks_planned_adapter_duplicate_and_missing_confirmation ... ok
+test codex_local_runner::tests::h2_phase_a_noop_runner_records_no_real_execution ... ok
+test codex_local_runner::tests::h2_phase_a_runner_classifies_timeout_and_readback_failed_without_zero_results ... ok
+test codex_local_runner::tests::h2_phase_b_classifies_codex_state_readonly_without_zero_results ... ok
+test codex_local_runner::tests::h4_unknown_result_statuses_keep_result_count_null ... ok
+test codex_local_runner::tests::real_run_workflow_node_adapter ... ignored, spawns real codex in the fixed test project
+test codex_local_runner::tests::readonly_dispatch_argv_has_no_add_dir_when_task_package_allowed_write_is_missing ... ok
+test codex_local_runner::tests::same_prompt_consultations_use_distinct_last_message_paths ... ok
+test codex_local_runner::tests::h2_phase_b_fake_runner_keeps_failed_readback_count_unknown ... ok
+test codex_local_runner::tests::h2_phase_b_fake_runner_records_real_execution_flags_and_readback ... ok
+test codex_local_runner::tests::station4_workspace_write_dispatch_argv_has_exact_single_mario_add_dir ... ok
+test codex_db::tests::read_threads_page_searches_visible_threads_by_id_title_and_project ... ok
+test codex_transcript::tests::missing_rollout_is_classified ... ok
+test codex_transcript::tests::rollout_outside_allowed_dirs_is_rejected ... ok
+test codex_transcript::tests::encrypted_content_is_marked_and_not_output ... ok
+test codex_transcript::tests::bad_jsonl_line_records_warning_and_keeps_other_events ... ok
+test codex_transcript::tests::parses_user_assistant_tool_call_and_command_output ... ok
+test codex_transcript::tests::paged_transcript_tail_returns_recent_events_and_older_cursor_without_full_parse ... ok
+test codex_db::tests::read_threads_page_filters_archived_and_limits_rows ... ok
+test command_rollout_fallback_tests::station3b_and_station4_do_not_widen_s1_gate_or_legacy_seals ... ok
+test command_rollout_fallback_tests::p1_b_supervisor_message_is_not_a_blackboard_candidate ... ok
+test codex_transcript::tests::sensitive_like_content_gets_warning ... ok
+test command_rollout_fallback_tests::station3b_and_station4_real_execution_authorization_complete_scoping ... ok
+test command_rollout_fallback_tests::station3b_gate_only_unseals_exact_root_with_zero_write_roots ... ok
+test command_rollout_fallback_tests::station4_supervisor_authorization_shape_guard_keeps_3b_and_rejects_malformed_write_scope ... ok
+test command_rollout_fallback_tests::station4_write_gate_only_unseals_exact_root_with_single_matching_write_root ... ok
+test codex_transcript::tests::unknown_event_preserves_diagnostic_metadata ... ok
+test command_rollout_fallback_tests::workflow_engine_gate_seals_non_test_project_regardless_of_env ... ok
+test consultant_recall_tests::edit_scope_whitelist_keeps_only_two_exact_roots_and_downgrades_all_others ... ok
+test consultant_recall_tests::readonly_execution_scope_carries_user_literal_check_without_write_authority ... ok
+test command_rollout_fallback_tests::rollout_filename_fallback_finds_new_thread_before_sqlite_index_catches_up ... ok
+test consultant_recall_tests::readonly_execution_scope_rejects_model_invented_check ... ok
+test consultant_recall_tests::recall_active_project_records_ordered_and_filtered ... ok
+test consultant_recall_tests::recall_broken_sidecar_none_not_err ... ok
+test consultant_recall_tests::recall_none_when_no_active_match ... ok
+test command_rollout_fallback_tests::workbench_bound_merge_soft_lands_when_state_unreadable ... ok
+test conversation_transport_command_tests::binding_failure_families_are_pairwise_distinct_across_the_whole_path ... ok
+test conversation_transport_command_tests::binding_store_conflict_keeps_its_stage_but_no_longer_shares_construct_family ... ok
+test conversation_transport_command_tests::binding_failure_family_rides_the_receipt_and_is_omitted_when_absent ... ok
+test conversation_transport_command_tests::cleanup_pending_receipt_is_retryable_without_claiming_message_delivery ... ok
+test audit_ledger_read_model::tests::filter_and_pagination_report_filtered_total ... ok
+test command_rollout_fallback_tests::workbench_bound_merge_skips_later_pages ... ok
+test command_rollout_fallback_tests::workbench_bound_session_surfaces_but_unbound_noise_stays_hidden ... ok
+test consultant_recall_tests::load_project_context_does_not_self_recall ... ok
+test audit_ledger_read_model::tests::read_model_never_writes_workflow_state ... ok
+test conversation_transport_command_tests::natural_reply_does_not_settle_unobserved_structured_layers ... ok
+test conversation_transport_command_tests::cleanup_recovery_collision_uses_a_distinct_host_key_without_overwriting_owner ... ok
+test conversation_transport_command_tests::normalized_receipt_uses_frontend_statuses_and_omits_raw_summary ... ok
+test conversation_transport_command_tests::injected_supervisor_transport_return_activation_then_termination_failure_returns_neutral_safe_receipt ... ok
+test conversation_transport_command_tests::injected_supervisor_activation_failure_finishes_binding_and_returns_activate_stage ... ok
+test conversation_transport_command_tests::canonical_batch2_failure_preserves_completed_reply_and_reports_its_own_layer ... ok
+test conversation_transport_command_tests::injected_supervisor_transport_start_failure_finishes_binding_and_returns_transport_stage ... ok
+test conversation_transport_command_tests::completed_supervisor_receipt_mirrors_confirmed_conversation_once ... ok
+test conversation_transport_command_tests::request_rejects_client_selected_profile_role_and_capability_surface ... ok
+test conversation_transport_command_tests::supervisor_binding_start_failures_are_turn_scoped_safe_receipts ... ok
+test conversation_transport_command_tests::audit_failure_layer_does_not_erase_settled_tool_projection_or_reply ... ok
+test conversation_transport_command_tests::poisoned_registry_allows_only_host_owned_supervisor_recovery_routes ... ok
+test exec_process_registry::tests::durable_process_run_id_remains_traceable_when_prompt_ref_is_empty ... ok
+test exec_process_registry::tests::host_owned_supervisor_reaper_requires_exact_started_at_pgid_and_cmdline_hash ... ok
+test exec_process_registry::tests::legacy_registered_process_without_group_fields_stays_single_pid ... ok
+test exec_process_registry::tests::missing_pid_with_empty_ps_output_is_not_an_inspection_error ... ok
+test exec_process_registry::tests::pid_reuse_identity_mismatch_only_unregisters ... ok
+test exec_process_registry::tests::r0_host_owned_supervisor_registry_must_not_persist_relay_command_secrets ... ok
+test exec_process_registry::tests::registry_registers_and_unregisters_normal_completion ... ok
+test exec_process_registry::tests::startup_never_kills_an_unregistered_pid ... ok
+test exec_process_registry::tests::startup_reaps_only_a_registered_matching_orphan ... ok
+test exec_process_registry::tests::strict_manual_relay_registration_rejects_a_non_leader_pid ... ok
+test exec_process_registry::tests::strict_manual_relay_registration_requires_and_reaps_the_exact_process_group ... ok
+test exec_process_registry::tests::supervisor_exec_registration_is_fail_closed_and_reapable ... ok
+test exec_process_registry::tests::system_group_reaper_waits_for_a_descendant_after_its_leader_exits ... ok
+test fix9_tests::advice_only_active_authorization_advances_to_task_binding ... ok
+test codex_db::tests::read_threads_legacy_helper_still_reads_all_pages ... ok
+test fix9_tests::auto_advance_does_not_restore_pending_boundary_review_for_background_actor ... ok
+test fix9_tests::auto_advance_restores_confirmed_pending_boundary_review_on_continue_click ... ok
+test fix9_tests::director_prompt_renders_worker_toolbox_facts_without_injected_only_contradiction ... ok
+test fix9_tests::director_toolbox_lint_returns_bad_plan_for_one_bounded_replan ... ok
+test fix9_tests::advice_only_confirm_authorizes_readonly_and_advances_to_completion ... ok
+test fix9_tests::fix9_guard_does_not_touch_profile_backed_proposal ... ok
+test fix9_tests::p2a_confirm_with_graph_less_proposal_still_uses_director_plan_fallback ... ok
+test fix9_tests::p2a_proposal_with_poisoned_task_graph_rejected_at_proposal_time ... ok
+test conversation_transport_command_tests::outer_collision_keeps_safe_resources_until_a_trusted_retry_settles_them ... ok
+test fix9_tests::same_click_restore_is_idempotent_for_exact_active_authorization ... ok
+test fix9_tests::same_click_restore_only_classifies_plan_authorization_lock_as_transient ... ok
+test fix9_tests::same_click_restore_records_exact_summary_and_skips_second_write ... ok
+test fix9_tests::same_click_restore_requires_confirmed_unexpired_pending_boundary_review ... ok
+test fix9_tests::same_click_restore_requires_exact_current_proposal_and_authorization_ids ... ok
+test fix9_tests::p2a_confirm_with_task_graph_skips_lm_plan_straight_to_completion ... ok
+test formal_memory_lifecycle::tests::formal_memory_lifecycle_deprecate_and_archive_exclude_from_task_packet ... ok
+test formal_memory_lifecycle::tests::formal_memory_lifecycle_freeze_blocks_revise_until_unfreeze ... ok
+test formal_memory_lifecycle::tests::formal_memory_lifecycle_merge_is_explicit_and_versions_sources ... ok
+test formal_memory_lifecycle::tests::formal_memory_lifecycle_rejects_revision_conflict_and_damaged_json ... ok
+test formal_memory_lifecycle::tests::formal_memory_lifecycle_promote_and_demote_require_confirmation ... ok
+test formal_memory_lifecycle::tests::formal_memory_lifecycle_revise_creates_new_version_and_audit ... ok
+test global_supervisor_agent::tests::bad_reply_recorded_and_missing_round_not_recorded ... ok
+test global_supervisor_agent::tests::boundary_broken_or_missing_block_is_none ... ok
+test formal_memory_lifecycle::tests::formal_memory_lifecycle_split_keeps_source_and_creates_children ... ok
+test global_supervisor_agent::tests::boundary_core_ready_mismatch_idempotent_and_force ... ok
+test global_supervisor_agent::tests::boundary_missing_fields_default_and_normalize_conservative ... ok
+test global_supervisor_agent::tests::boundary_parses_valid_block ... ok
+test global_supervisor_agent::tests::boundary_load_input_and_prompt_grounded ... ok
+test global_supervisor_agent::tests::broken_or_missing_block_is_none ... ok
+test global_supervisor_agent::tests::global_supervisor_boundary_review_real_run ... ignored, B2 global supervisor boundary review: real read-only opinion on a pending proposal in the test project (user present, quota available)
+test global_supervisor_agent::tests::global_supervisor_review_real_run ... ignored, B1 global supervisor: real read-only review of the latest real chain round in the test project (user present, quota available)
+test codex_local_runner::tests::real_process_timeout_kills_and_reaps_mock_child ... ok
+test global_supervisor_agent::tests::load_input_keeps_late_current_report_and_uses_this_round_task_states ... ok
+test global_supervisor_agent::tests::load_input_scopes_reports_to_this_round ... ok
+test global_supervisor_agent::tests::boundary_provider_failure_humanized_and_missing_proposal_not_recorded ... ok
+test global_supervisor_agent::tests::missing_fields_default_and_normalize_conservative ... ok
+test global_supervisor_agent::tests::parses_valid_review_block ... ok
+test global_supervisor_agent::tests::idempotent_hit_skips_consult_and_force_reruns ... ok
+test global_supervisor_review_store::tests::boundary_missing_proposal_id_rejected ... ok
+test global_supervisor_agent::tests::load_input_uses_narrow_time_fallback_only_when_run_has_no_dispatch_ids ... ok
+test global_supervisor_review_store::tests::corrupted_sidecar_soft_lands_and_backup_preserves_corpse ... ok
+test global_supervisor_agent::tests::provider_failure_humanized_and_retryable ... ok
+test global_supervisor_review_store::tests::missing_idempotency_key_rejected ... ok
+test global_supervisor_review_store::tests::legacy_sidecar_without_boundary_fields_loads_soft ... ok
+test h5_project_dispatch_bridge::tests::h5_preview_blocks_diagnostics_and_missing_prompt_without_real_execution ... ok
+test fix9_tests::same_click_restore_failure_is_not_swallowed ... ok
+test h5_project_dispatch_bridge::tests::h5_preview_blocks_duplicate_active_attempt ... ok
+test h5_project_dispatch_bridge::tests::h5_preview_blocks_stale_memory_and_new_session_without_h3_b_authorization ... ok
+test global_supervisor_review_store::tests::boundary_roundtrip_and_leaves_b1_reviews_untouched ... ok
+test h5_project_dispatch_bridge::tests::h5_preview_builds_codex_request_without_real_execution ... ok
+test k3_b1_recovery::tests::l1_manual_exact_command_is_visible_without_prompt_body_or_workbench_execution ... ok
+test k3_b1_recovery::tests::l1_manual_submission_stays_pending_review_with_unknown_readback ... ok
+test k3_b1_recovery::tests::l1_recovery_boundaries_reject_sensitive_material_and_never_store_prompt_or_codex_home ... ok
+test k3_b1_recovery::tests::l1_recovery_model_covers_all_states_and_keeps_k3_b2_blocked_until_acceptance ... ok
+test h5_project_dispatch_bridge::tests::h5_preview_missing_allowed_write_stays_readonly_when_explicitly_readonly ... ok
+test h5_project_dispatch_bridge::tests::h5_preview_missing_or_empty_allowed_write_fails_closed ... ok
+test knowledge_index::tests::legacy_slug_is_not_a_nested_path_migration ... ok
+test knowledge_index::tests::n1_nested_relative_path_contract_starts_red ... ok
+test global_supervisor_review_store::tests::roundtrip_upsert_find_and_revision_bump ... ok
+test knowledge_index::tests::nested_paths_reject_escape_hidden_options_and_wildcards ... ok
+test knowledge_index::tests::resolver_rejects_ancestor_leaf_symlink_and_case_drift ... ok
+test knowledge_index::tests::n3_graph_projection_starts_red_with_validated_links_and_isolated_markdown ... ok
+test knowledge_index::tests::graph_projection_keeps_local_neighbors_and_rejects_scope_filter_and_focus_drift ... ok
+test knowledge_index::tests::scan_rejects_a_symlink_root_and_skips_symlink_entries_with_diagnostics ... ok
+test knowledge_index::tests::scan_classifies_canvas_and_bounded_attachments_without_parsing_them ... ok
+test knowledge_open_relay::tests::relay_wire_payload_rejects_extra_fields_and_invalid_values ... ok
+test knowledge_open_relay_tests::r0_host_relay_needs_matching_active_grant_and_exact_ui_ack_before_opened ... ok
+test knowledge_open_relay_tests::r0_host_relay_rejects_expiry_binding_mismatch_replay_and_oversize_frames ... ok
+test knowledge_open_relay_tests::r0_host_relay_rejects_starting_and_failed_bindings_before_dispatch ... ok
+test knowledge_open_relay_tests::r0_host_relay_rejects_wrong_ui_ack_and_dirty_navigation_without_opened ... ok
+test knowledge_open_relay_tests::r1_host_relay_rejects_acknowledgements_from_non_main_webviews ... ok
+test knowledge_index::tests::scan_rebuilds_frontmatter_links_backlinks_and_search ... ok
+test knowledge_index::tests::scan_skips_bad_utf8_frontmatter_and_oversize_files_with_bounded_diagnostics ... ok
+test knowledge_open_relay_tests::r1_raw_manual_receipt_is_closed_from_the_supervisor_pre_spawn_marker ... ok
+test knowledge_open_relay_tests::r3_host_relay_rejects_run_and_project_mismatch_before_ui_dispatch ... ok
+test knowledge_open_relay_tests::r1_raw_manual_receipt_cannot_bypass_a_registered_transport_attempt ... ok
+test knowledge_open_relay_tests::r3_host_relay_rejects_wrong_intent_and_replay_after_opened ... ok
+test knowledge_open_relay_tests::r3_host_relay_timeout_and_run_revocation_clear_pending_without_opened ... ok
+test knowledge_vault::knowledge_attachments::tests::attachment_read_never_accepts_a_non_attachment_path_or_leaks_a_source_path ... ok
+test knowledge_vault::knowledge_canvas::tests::canvas_allows_omitted_top_level_nodes_and_edges_but_rejects_non_arrays ... ok
+test knowledge_vault::knowledge_attachments::tests::import_is_file_bytes_only_and_rejects_unsafe_name_mime_size_or_overwrite_before_audit ... ok
+test knowledge_vault::knowledge_canvas::tests::canvas_read_reports_missing_references_but_write_requires_them ... ok
+test knowledge_vault::knowledge_canvas::tests::canvas_rejects_file_and_group_references_to_symlinks_or_directories ... ok
+test knowledge_vault::knowledge_canvas::tests::canvas_reference_policy_allows_only_supported_files_and_bounded_attachments ... ok
+test knowledge_vault::knowledge_canvas::tests::canvas_rejects_invalid_structure_ids_edges_coordinates_and_reference_escapes ... ok
+test knowledge_vault::knowledge_canvas::tests::canvas_rejects_oversize_invalid_utf8_and_bad_json_before_any_write ... ok
+test knowledge_vault::knowledge_canvas::tests::n4_standard_json_canvas_fixture_starts_red ... ok
+test knowledge_vault::knowledge_canvas::tests::canvas_create_write_are_atomic_cas_checked_audited_and_preserve_unknown_fields ... ok
+test knowledge_vault::tests::ai_write_requires_source_and_audits_actor ... ok
+test knowledge_vault::tests::fixed_root_cold_start_rejects_a_symlink_parent_before_creating_any_vault_child ... ok
+test knowledge_vault::tests::path_lock_rejects_absolute_path ... ok
+test knowledge_vault::tests::path_lock_rejects_parent_dir ... ok
+test knowledge_vault::tests::path_lock_rejects_symlink_escape ... ok
+test knowledge_vault::tests::slugify_keeps_cjk_and_strips_forbidden ... ok
+test knowledge_vault::knowledge_recovery::tests::manifest_is_rebuilt_from_the_vault_and_backup_restore_is_single_entry_cas ... ok
+test knowledge_vault::tests::workspace_cold_start_can_create_only_the_fixed_root_and_a_root_markdown ... ok
+test knowledge_vault::tests::create_list_read_edit_roundtrip ... ok
+test knowledge_vault::tests::write_rejects_external_change_without_overwrite_or_audit ... ok
+test m1_plan_preview_binding_tests::chain_result_stage_completed_only_without_stop_reason ... ok
+test m1_plan_preview_binding_tests::chain_result_stage_failed_for_fail_stop ... ok
+test m1_plan_preview_binding_tests::chain_result_stage_interrupted_for_user_stop ... ok
+test m1_plan_preview_binding_tests::chain_result_stage_waiting_decision_for_worker_help ... ok
+test m1_plan_preview_binding_tests::preview_session_mapping_prefers_id_then_sequence_and_defaults_mismatch_to_new ... ok
+test m1_plan_preview_binding_tests::toolbox_lint_rejects_incident_fake_read_file_and_shell_ban ... ok
+test m1_plan_preview_binding_tests::toolbox_lint_rejects_incident_injected_text_only_constraint ... ok
+test knowledge_vault::tests::workspace_write_markdown_updates_only_an_existing_nested_markdown_with_cas ... ok
+test manual_relay::conversation_transport::tests::safe_receipt_omits_raw_command_and_process_material ... ok
+test manual_relay::conversation_transport::tests::supervisor_mcp_args_are_exact_host_owned_value_pairs ... ok
+test knowledge_vault::tests::workspace_nested_create_move_rename_delete_are_conflict_checked_and_audited ... ok
+test manual_relay::conversation_transport::tests::supervisor_profile_plan_is_read_only_and_has_only_host_owned_mcp_overrides ... ok
+test manual_relay::conversation_transport::tests::supervisor_profile_rejects_any_expanded_write_root_or_bypass ... ok
+test manual_relay::conversation_transport::tests::supervisor_profile_rejects_equals_form_permission_expansion ... ok
+test manual_relay::conversation_transport::tests::supervisor_run_identity_is_deterministic_and_does_not_embed_source_ids ... ok
+test knowledge_index::tests::graph_projection_has_deterministic_node_and_edge_caps ... ok
+test conversation_transport_command_tests::outer_command_attempt_collision_reaps_running_safe_only_transport ... ok
+test conversation_transport_command_tests::outer_command_attempt_registry_unavailable_reaps_running_safe_only_transport ... ok
+test manual_relay::tests::manual_relay_b1_real_codex_runner_entry_requires_user_present_env ... ignored, B1 first true Codex relay requires user-present env authorization; do not run in implementation package
+test conversation_transport_command_tests::outer_registry_unavailable_keeps_a_host_recovery_route_until_trusted_stop ... ok
+test conversation_transport_command_tests::poll_activation_failure_with_persistent_cleanup_keeps_existing_host_recovery_route ... ok
+test conversation_transport_command_tests::terminal_start_activation_failure_with_persistent_cleanup_keeps_host_recovery_route ... ok
+test conversation_transport_command_tests::terminal_start_normalization_failure_reaps_running_safe_only_attempt ... ok
+test manual_relay::conversation_transport::tests::outer_safe_attempt_registration_failure_abort_clears_inner_and_manual_safe_only_state ... ok
+test manual_relay::tests::manual_relay_consumes_confirmation_once_and_receipt_records_contract_fields ... ok
+test manual_relay::conversation_transport::tests::supervisor_stop_error_after_settled_reverse_cleanup_removes_transport_record ... ok
+test manual_relay::conversation_transport::tests::supervisor_stop_error_keeps_transport_record_while_safe_only_cleanup_is_unsettled ... ok
+test manual_relay::tests::manual_relay_app_shutdown_kills_active_process_group_children ... ok
+test manual_relay::tests::manual_relay_b1_runner_entry_stop_kills_mock_process ... ok
+test manual_relay::tests::manual_relay_b1_runner_entry_uses_temp_fixture_defaults_with_mock_process ... ok
+test manual_relay::tests::manual_relay_blocks_hash_mismatch_and_duplicate ... ok
+test manual_relay::tests::manual_relay_confirmation_reservation_is_atomic_for_reentrant_submit ... ok
+test manual_relay::conversation_transport::tests::supervisor_outer_abort_accepts_settled_manual_cleanup_when_inner_record_removal_is_unavailable ... ok
+test manual_relay::tests::manual_relay_duplicate_scope_reservation_is_atomic_for_distinct_confirmations ... ok
+test manual_relay::tests::manual_relay_gui_direct_new_session_uses_unbound_exec_json_command ... ok
+test manual_relay::tests::manual_relay_gui_direct_parses_json_thread_events_for_reply_and_completion ... ok
+test manual_relay::tests::manual_relay_gui_direct_running_poll_parses_json_thread_events_for_reply_and_completion ... ok
+test manual_relay::tests::manual_relay_real_codex_requires_env_authorization ... ignored, real Codex relay is a separate user-present window; this gate proves env authorization is required
+test manual_relay::tests::manual_relay_gui_direct_running_poll_returns_live_thread_events_before_completion ... ok
+test manual_relay::tests::manual_relay_gui_direct_running_stop_kills_mock_process ... ok
+test manual_relay::tests::manual_relay_gui_direct_send_uses_bound_target_without_approval_bypass ... ok
+test manual_relay::tests::manual_relay_gui_direct_stop_kills_mock_process_group_children ... ok
+test manual_relay::tests::manual_relay_mock_codex_process_can_be_stopped_and_reaped ... ok
+test manual_relay::tests::manual_relay_mock_codex_process_writes_last_message_readback ... ok
+test manual_relay::tests::manual_relay_placeholder_process_can_be_stopped_and_reaped ... ok
+test manual_relay::tests::manual_relay_preview_keeps_payload_exact_and_structured_command_safe ... ok
+test manual_relay::tests::manual_relay_real_codex_env_gated_without_env_does_not_spawn ... ok
+test manual_relay::tests::manual_relay_run_consumes_confirmation_once_for_concurrent_submit ... ok
+test manual_relay::tests::manual_relay_stop_only_kills_current_attempt_and_dirty_tree_never_auto_rolls_back ... ok
+test manual_relay::tests::manual_relay_strict_run_requires_verified_paths ... ok
+test manual_relay::tests::manual_relay_terminal_thread_failure_reaps_process_without_waiting_for_exit ... ok
+test manual_relay::tests::raw_visibility_gate_serializes_pre_spawn_marker_with_raw_access ... ok
+test manual_relay::tests::raw_visibility_gate_serializes_pre_spawn_marker_with_raw_stop_access ... ok
+test manual_relay::tests::retained_supervisor_attempt_rejects_competing_non_safe_active_write ... ok
+test manual_relay::tests::supervisor_active_slot_collision_fails_before_child_spawn_and_preserves_owner ... ok
+test manual_relay::tests::supervisor_app_shutdown_persistent_cleanup_failure_retains_every_safe_handle_for_retry ... ok
+test manual_relay::tests::supervisor_app_shutdown_reaps_full_safe_only_fixture ... ok
+test manual_relay::tests::supervisor_final_active_slot_collision_rekeys_pending_child_and_preserves_old_owner ... ok
+test manual_relay::tests::supervisor_memory_capture_never_creates_capture_or_last_message_files_and_clears_on_terminal ... ok
+test manual_relay::tests::supervisor_memory_capture_redacts_cross_chunk_stdout_stderr_and_json_errors ... ok
+test manual_relay::tests::supervisor_memory_capture_total_limit_fails_closed_without_retaining_a_frame ... ok
+test mcp::capability_registry::tests::exact_capability_set_rejects_empty_duplicate_and_expansion ... ok
+test mcp::capability_registry::tests::legacy_resident_is_explicit_not_a_fallback_for_new_profile ... ok
+test mcp::capability_registry::tests::registry_names_and_handlers_are_unique ... ok
+test mcp::capability_registry::tests::supervisor_read_only_lists_the_five_exact_host_capabilities ... ok
+test mcp::commands::tests::mcp_canvas_start_and_tick_product_entries_are_blocked ... ok
+test mcp::orchestrator::tests::mcp_orchestrator_real_run_entries_are_sealed ... ok
+test mcp::supervisor_conversation_binding::tests::active_binding_expires_at_the_fixed_host_runtime_window ... ok
+test mcp::supervisor_conversation_binding::tests::active_binding_from_before_knowledge_capability_expansion_is_stale_and_rejected ... ok
+test mcp::supervisor_conversation_binding::tests::active_binding_rejects_an_added_knowledge_write_without_changing_its_lifecycle ... ok
+test mcp::supervisor_conversation_binding::tests::active_binding_rejects_knowledge_capability_when_project_context_mismatches ... ok
+test mcp::supervisor_conversation_binding::tests::binding_error_families_are_fixed_constants_and_pairwise_distinct ... ok
+test mcp::supervisor_conversation_binding::tests::binding_error_family_takes_variant_identity_without_payload ... ok
+test mcp::supervisor_conversation_binding::tests::binding_fails_closed_for_missing_thread_context_or_capability ... ok
+test mcp::supervisor_conversation_binding::tests::host_binding_is_exactly_supervisor_read_only_and_active_after_thread_observation ... ok
+test mcp::supervisor_conversation_binding::tests::only_host_observed_thread_may_activate_and_terminal_state_cannot_reopen ... ok
+test mcp::supervisor_conversation_binding::tests::root_is_normalized_before_identity_is_accepted ... ok
+test mcp::supervisor_orchestrator::knowledge_capabilities::tests::case_variant_symlink_and_oversize_notes_fail_closed ... ok
+test mcp::supervisor_orchestrator::knowledge_capabilities::tests::knowledge_open_requires_a_host_owned_relay_and_never_claims_opened_without_ack ... ok
+test mcp::supervisor_orchestrator::knowledge_capabilities::tests::knowledge_open_with_no_listener_fails_closed_and_leaves_notes_unchanged ... ok
+test mcp::supervisor_orchestrator::knowledge_capabilities::tests::nested_fixed_vault_read_search_and_cite_are_bounded_and_leave_notes_unchanged ... ok
+test mcp::supervisor_orchestrator::knowledge_capabilities::tests::schemas_and_runtime_arguments_reject_variants_wildcards_and_extra_fields ... ok
+test mcp::supervisor_orchestrator::supervisor_review_evidence::tests::final_mark_allows_covered_bound_reviewer_and_surfaces_conflicts ... ok
+test mcp::supervisor_orchestrator::supervisor_review_evidence::tests::final_mark_pass_rejects_incomplete_bound_reviewer_evidence ... ok
+test mcp::supervisor_orchestrator::supervisor_review_evidence::tests::final_mark_pass_rejects_markerless_zero_write_near_miss ... ok
+test mcp::supervisor_orchestrator::supervisor_review_evidence::tests::final_mark_pass_rejects_unbound_zero_write_near_miss ... ok
+test mcp::supervisor_orchestrator::supervisor_review_evidence::tests::final_mark_pass_rejects_writer_self_report_without_bound_reviewer ... ok
+test mcp::supervisor_orchestrator::supervisor_review_evidence::tests::gate_uses_launcher_byte_family_classifier_only ... ok
+test mcp::supervisor_orchestrator::supervisor_review_evidence::tests::station3b_zero_write_finalize_stays_unchanged_with_byte_family_checks ... ok
+test mcp::supervisor_orchestrator::tests::audit_projection_keeps_raw_readonly_review_evidence_in_existing_last_report ... ok
+test mcp::supervisor_orchestrator::tests::canonicalizes_model_work_item_typo_only_from_unique_authorized_prepared_dispatch ... ok
+test mcp::supervisor_orchestrator::tests::dispatch_worker_denies_bad_authorization_and_audits_success ... ok
+test mcp::supervisor_orchestrator::tests::dispatched_writer_and_bound_reviewer_raw_evidence_can_finalize_pass ... ok
+test mcp::supervisor_orchestrator::tests::failed_follow_up_invalidates_cached_report_and_inspect_refuses_stale_fallback ... ok
+test mcp::supervisor_orchestrator::tests::final_mark_denies_invalid_verdict_and_audits_success_without_chain_mutation ... ok
+test mcp::supervisor_orchestrator::tests::follow_up_denies_unknown_worker_and_audits_success ... ok
+test mcp::supervisor_orchestrator::tests::m5b_supervisor_orchestrator_db_primary_reserve_and_persist_bridge_then_restart_reconciles ... ok
+test mcp::supervisor_orchestrator::tests::m5b_supervisor_orchestrator_same_run_db_ahead_replays_after_projection_interruption ... ok
+test mcp::supervisor_orchestrator::tests::mock_end_to_end_dispatch_report_and_advisory_leave_chain_running ... ok
+test mcp::supervisor_orchestrator::tests::pilot_session_start_audits_actual_workbench_binary_and_build_id ... ok
+test mcp::supervisor_orchestrator::tests::raw_readonly_review_evidence_reaches_existing_supervisor_projection ... ok
+test mcp::supervisor_orchestrator::tests::read_key_file_denies_outside_root_and_audits_success ... ok
+test mcp::supervisor_orchestrator::tests::read_worker_report_denies_unknown_worker_and_audits_success ... ok
+test mcp::supervisor_orchestrator::tests::refuses_to_guess_work_item_when_authorized_prepared_dispatch_is_ambiguous ... ok
+test mcp::supervisor_orchestrator::tests::report_user_denies_empty_message_and_audits_success ... ok
+test mcp::supervisor_orchestrator::tests::s1_resident_submit_proposal_creates_only_pending_card_without_starting_chain ... ok
+test mcp::supervisor_orchestrator::tests::s1_resident_submit_proposal_rejects_toxic_task_graph_without_card_or_chain ... ok
+test mcp::supervisor_orchestrator::tests::s1_resident_submit_proposal_rejects_unknown_and_wrong_nested_fields_before_store ... ok
+test mcp::supervisor_orchestrator::tests::s1b_h2_r4e_audit_write_failure_does_not_mask_handler_outcome ... ok
+test mcp::supervisor_orchestrator::tests::s1b_h2_r4e_distinguishes_submit_handler_accepted_and_denied ... ok
+test mcp::supervisor_orchestrator::tests::s1b_h2_r4e_duplicate_tool_delivery_keeps_one_diagnostic_per_stage_and_one_card ... ok
+test mcp::supervisor_orchestrator::tests::s1b_h2_r4e_records_bound_tools_list_and_call_classification_without_raw_values ... ok
+test mcp::supervisor_orchestrator::tests::s1b_h2_resident_submit_proposal_audit_write_failure_never_returns_raw_detail ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_audit_failure_does_not_erase_persisted_tool_result ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_binding_has_one_server_side_toolface_and_denies_variants ... ok
+test manual_relay::tests::supervisor_pre_active_persistent_cleanup_retains_durable_safe_attempt_for_retry ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_db_primary_failure_does_not_project_or_publish_binding ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_db_primary_persists_starting_binding_on_existing_multi_session_store ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_injected_activation_failure_finishes_failed_in_db_and_json ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_injected_store_prepare_failure_is_staged_and_closed ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_injected_termination_failure_keeps_tools_closed_without_terminal_claim ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_injected_transport_failure_finishes_failed_in_db_and_json ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_prefix_without_persisted_binding_has_no_tools_and_cannot_call ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_real_copy_replay_persists_starting_binding_before_transport ... ignored, requires SHARED_SUPERVISOR_BINDING_AUDIT_COPY pointing to an approved private temporary copy
+test mcp::supervisor_orchestrator::tests::shared_supervisor_starting_binding_stays_unpublished_until_host_binds_thread ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_submit_proposal_is_idempotent_and_records_only_safe_settlement ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_tools_list_and_call_share_the_exact_knowledge_allowlist ... ok
+test mcp::supervisor_orchestrator::tests::stale_shared_active_binding_expires_and_cannot_publish_or_call_capability ... ok
+test mcp::supervisor_orchestrator::tests::shared_supervisor_json_projection_failure_stays_starting_and_unpublished ... ok
+test mcp::supervisor_orchestrator::tests::station3a_v3_raw_worker_return_is_strict_and_preserves_blocked_signal ... ok
+test mcp::supervisor_orchestrator::tests::station3a_v3_second_protocol_error_after_dispatch_keeps_prior_worker_truth ... ok
+test mcp::supervisor_orchestrator::tests::station3b_readonly_findings_reach_supervisor_projection ... ok
+test mcp::supervisor_orchestrator::tests::station4_worker_scope_accepts_only_3b_or_exact_station4_write_shape ... ok
+test mcp::supervisor_orchestrator::tests::supervisor_dispatch_fresh_session_gate_uses_history_and_exact_work_item_binding ... ok
+test mcp::supervisor_orchestrator::tests::supervisor_role_requires_explicit_quota_flags ... ok
+test mcp::supervisor_orchestrator::tests::wait_denies_unknown_worker_and_audits_success ... ok
+test mcp::tests::supervisor_relay_arguments_must_be_complete_and_nonduplicated ... ok
+test memory_capture_bus::tests::memory_capture_audit_only_writes_no_observation_or_candidate ... ok
+test memory_capture_bus::tests::memory_capture_candidate_allowed_creates_observation_and_candidate_only ... ok
+test memory_capture_bus::tests::memory_capture_corrupt_json_is_rejected_without_overwrite ... ok
+test memory_capture_bus::tests::memory_capture_duplicate_event_is_rejected_without_append ... ok
+test memory_capture_bus::tests::memory_capture_rejects_prompt_body_text ... ok
+test memory_capture_bus::tests::memory_capture_rejects_secret_candidate_path ... ok
+test memory_capture_bus::tests::memory_capture_revision_conflict_does_not_overwrite_store ... ok
+test memory_capture_bus::tests::operation_control_decision_can_be_captured_as_candidate_without_formal_memory ... ok
+test memory_consistency::tests::memory_consistency_reports_capture_missing_downstream_links ... ok
+test memory_daily_loop::tests::l5_best_effort_swallows_capture_failure ... ok
+test memory_daily_loop::tests::l5_daily_capture_creates_observation_and_candidate_without_formal_memory ... ok
+test memory_daily_loop::tests::l5_final_review_capture_input_is_candidate_allowed_desensitized ... ok
+test memory_daily_loop::tests::l5_operation_control_capture_input_is_candidate_allowed_with_source_refs ... ok
+test memory_daily_loop::tests::l5_plan_authorization_capture_input_is_candidate_allowed_desensitized ... ok
+test memory_daily_loop::tests::l5_worker_report_capture_input_is_candidate_allowed_desensitized ... ok
+test memory_daily_loop::tests::l5_worker_report_capture_lands_candidate_without_formal_memory ... ok
+test obsidian_integration::tests::fake_executable_proves_non_utf8_is_rejected ... ok
+test manual_relay::tests::supervisor_registration_and_stdin_failures_reap_child_and_leave_no_durable_sink ... ok
+test obsidian_integration::tests::optional_compatibility_status_is_nonblocking_and_minimal ... ok
+test obsidian_integration::tests::optional_compatibility_surface_exposes_no_external_control_handlers ... ok
+test obsidian_integration::tests::readiness_covers_all_six_states ... ok
+test obsidian_integration::tests::reject_path_option_and_query_injection_forms ... ok
+test obsidian_integration::tests::typed_cli_uses_fixed_argv_and_never_accepts_a_program_or_vault ... ok
+test obsidian_integration::tests::uri_builder_encodes_the_fixed_vault_path ... ok
+test operation_control::tests::l3_confirmed_recorded_is_a_recoverable_decision_not_success ... ok
+test operation_control::tests::l3_duplicate_and_blocked_operations_do_not_auto_route ... ok
+test operation_control::tests::l3_operation_contract_covers_four_controls_without_execution ... ok
+test operation_control::tests::l3_operation_decision_rejects_execution_claims_before_write ... ok
+test operation_control::tests::l3_operation_decision_writes_audit_without_real_execution_or_zero_readback ... ok
+test page_read_model::tests::page_read_model_inventory_freezes_r4_a1_contracts_only ... ok
+test page_read_model::tests::page_read_model_query_rejects_unknown_or_empty_page ... ok
+test page_read_model::tests::page_read_model_query_returns_selector_contract_for_known_page ... ok
+test page_read_model::tests::page_read_model_query_with_snapshot_keeps_non_batch_pages_contract_only ... ok
+test page_read_model::tests::page_read_model_query_with_snapshot_returns_payload_for_batch_one_pages ... ok
+test page_read_model::tests::page_read_model_schema_catalog_covers_workbench_snapshot_fields ... ok
+test page_read_model::tests::page_read_model_schema_catalog_defines_batch_one_six_pages ... ok
+test manual_relay::tests::supervisor_sentinel_temp_artifacts_are_byte_clean_before_cleanup ... ok
+test manual_relay::tests::supervisor_start_gate_rejects_reservation_while_shutdown_is_pending ... ok
+test plan_authorization_store::lock_retry_tests::store_lock_exhaustion_tells_user_to_retry_later ... ok
+test plan_authorization_store::lock_retry_tests::store_lock_retries_until_concurrent_writer_releases ... ok
+test plan_authorization_store::lock_retry_tests::store_lock_retries_when_incident_lock_file_is_removed_shortly_afterwards ... ok
+test obsidian_integration::tests::fake_executable_proves_nonzero_timeout_and_output_cap_are_closed ... ok
+test project_consultation_proposal_store::toolbox_lint_backstop_tests::clean_task_passes ... ok
+test project_consultation_proposal_store::toolbox_lint_backstop_tests::empty_tasks_pass ... ok
+test project_consultation_proposal_store::toolbox_lint_backstop_tests::task_forbidding_shell_is_rejected ... ok
+test project_consultation_proposal_store::toolbox_lint_backstop_tests::task_referencing_read_file_is_rejected ... ok
+test project_consultation_proposal_store::lock_retry_tests::store_lock_retries_until_concurrent_writer_releases ... ok
+test project_consultation_proposal_store::lock_retry_tests::store_lock_retries_when_incident_lock_file_is_removed_shortly_afterwards ... ok
+test project_workflow_automation::tests::j2_b_b1_bridge_rejects_non_user_confirmation_before_sidecars ... ok
+test project_workflow_automation::tests::j2_b_b1_bridge_rejects_wrong_prompt_hash_before_sidecars ... ok
+test project_workflow_automation::tests::j2_b_b1_real_mario_test_project_workflow_resume_probe_requires_env_authorization ... ignored, requires explicit J2-B B1 mario test project workflow real resume authorization
+test project_workflow_automation::tests::j2_b_b1_bridge_blocks_duplicate_phase_b_for_same_product_command ... ok
+test project_workflow_automation::tests::j2_b_b2_bridge_rejects_non_user_confirmation_before_sidecars ... ok
+test project_workflow_automation::tests::j2_b_b2_bridge_rejects_wrong_prompt_hash_before_sidecars ... ok
+test project_workflow_automation::tests::j2_b_b2_real_isolated_project_workflow_new_session_probe_requires_env_authorization ... ignored, requires explicit J2-B B2 isolated project workflow real new-session authorization
+test project_workflow_automation::tests::j2_b_b1_bridge_records_product_command_phase_b_with_fake_runner ... ok
+test project_workflow_automation::tests::j2a_missing_workflow_returns_blocked_plan_without_prompt_or_real_execution ... ok
+test project_workflow_automation::tests::j2_b_b2_bridge_records_product_command_new_session_phase_b_with_fake_runner ... ok
+test project_workflow_automation::tests::j2a_rejects_non_user_confirmation_before_writing_sidecars ... ok
+test project_workflow_automation::tests::k3_b1_real_mario_test_workflow_resume_requires_env_authorization ... ignored, requires explicit K3-B1 mario test workflow real resume authorization
+test project_consultation_proposal_store::lock_retry_tests::store_lock_exhaustion_tells_user_to_retry_later ... ok
+test project_workflow_automation::tests::k3_b2_real_isolated_workflow_new_session_requires_env_authorization ... ignored, requires explicit K3-B2 isolated workflow real new-session authorization
+test project_workflow_automation::tests::k3_b_bridge_rejects_wrong_hash_and_non_user_before_sidecars ... ok
+test project_workflow_automation::tests::k3_b1_bridge_builds_frozen_request_and_blocks_without_runtime_prompt ... ok
+test project_workflow_automation::tests::k3_b2_bridge_builds_new_session_manifest_guard_without_runner ... ok
+test project_workflow_automation::tests::j2a_duplicate_closed_loop_is_blocked_without_second_phase_a ... ok
+test project_workflow_automation::tests::k3_b_phase_a_duplicate_guard_blocks_same_product_command_without_runner ... ok
+test project_workflow_automation::tests::k3_level_a_generates_five_run_units_and_records_no_real_phase_a_closed_loop ... ok
+test quality_debt_tests::approved_graph_path_untouched ... ok
+test quality_debt_tests::c1_fresh_session_rejects_historical_native_thread_before_binding ... ok
+test manual_relay::tests::supervisor_stop_failure_retains_child_for_reverse_cleanup ... ok
+test quality_debt_tests::c1_materialize_target_session_id_into_artifact ... ok
+test quality_debt_tests::c1_session_creation_timing_real ... ignored, C1 timing: really create one 先生后绑 session in the test project and print elapsed (user present, quota available)
+test quality_debt_tests::c1_stub_session_factory_counts_and_distinct_threads ... ok
+test quality_debt_tests::collect_prior_completed_facts_double_delete_case ... ok
+test quality_debt_tests::c1_session_create_failure_is_loud_no_fallback ... ok
+test mcp::supervisor_orchestrator::tests::station3a_mcp_toolface_is_read_only_and_rejects_side_effect_names ... ok
+test quality_debt_tests::prompt_renders_memory_summary_when_filled ... ok
+test quality_debt_tests::stop_requested_blocks_auto_replan_decision ... ok
+test quality_debt_tests::supervisor_session_birth_uses_short_timeout_without_changing_classic_chain_budget ... ok
+test quality_debt_tests::prompt_renders_prior_facts_block_only_when_filled ... ok
+test quality_debt_tests::budget_one_no_loop_on_consecutive_timeouts ... ok
+test quality_debt_tests::worker_help_signal_stops_chain_at_waiting_decision_without_completing_task ... ok
+test real_execution_command::tests::high_impact_decision_requires_user_confirmation ... ok
+test real_execution_command::tests::j1_b_real_mario_test_codex_control_resume_probe_requires_env_authorization ... ignored, requires explicit J1-B mario test Codex Control real resume authorization
+test real_execution_command::tests::j1_codex_control_new_session_is_deferred_and_not_prepared ... ok
+test real_execution_command::tests::j1_codex_control_resume_preview_prepare_confirm_and_phase_a_stay_no_real_execution ... ok
+test quality_debt_tests::c1_auto_advance_new_conversation_path_creates_per_task_sessions ... ok
+test real_execution_command::tests::k2_execution_point_configs_freeze_task_package_fields_and_prompt_hashes ... ok
+test real_execution_command::tests::k2_n1_real_isolated_new_session_read_only_requires_env_authorization ... ignored, requires explicit K2-N1 real new-session/read-only authorization
+test real_execution_command::tests::k2_n2_real_isolated_new_session_workspace_write_requires_env_authorization ... ignored, requires explicit K2-N2 real new-session/workspace-write authorization
+test real_execution_command::tests::k2_r1_real_mario_test_resume_read_only_requires_env_authorization ... ignored, requires explicit K2-R1 real resume/read-only authorization
+test quality_debt_tests::c1_chain_creates_per_task_session_dispatches_with_it_and_materializes ... ok
+test real_execution_command::tests::k2_r2_real_mario_test_resume_workspace_write_requires_env_authorization ... ignored, requires explicit K2-R2 real resume/workspace-write authorization
+test real_execution_command::tests::legacy_and_mcp_boundaries_do_not_claim_h5_unified_execution ... ok
+test real_execution_command::tests::pcr1_preview_and_attempt_defaults_do_not_call_runner_or_codex ... ok
+test real_execution_command::tests::pcr1_readback_unknown_statuses_keep_null_result_count ... ok
+test real_execution_command::tests::pcr2_prepare_rejects_store_revision_conflict ... ok
+test real_execution_command::tests::pcr2_prepare_writes_product_command_sidecar_only_when_ready ... ok
+test real_execution_command::tests::pcr2_preview_blocks_diagnostics_degraded ... ok
+test real_execution_command::tests::pcr2_preview_blocks_duplicate_active ... ok
+test real_execution_command::tests::pcr2_preview_blocks_missing_memory_packet ... ok
+test real_execution_command::tests::pcr2_preview_blocks_stale_memory_packet ... ok
+test real_execution_command::tests::pcr2_preview_maps_h5_preview_without_real_execution ... ok
+test real_execution_command::tests::pcr2_readback_unknown_keeps_result_count_null ... ok
+test real_execution_command::tests::pcr3_confirm_requires_user_allowed_once_and_risk_acknowledgement ... ok
+test real_execution_command::tests::pcr3_duplicate_terminal_decision_and_blocked_preview_approval_do_not_write ... ok
+test real_execution_command::tests::k2_r1_resume_fake_runner_uses_product_command_chain_and_blocks_duplicate ... ok
+test real_execution_command::tests::pcr3_high_impact_approved_rejects_allowed_once_false ... ok
+test real_execution_command::tests::pcr3_high_impact_approved_rejects_empty_risk_acknowledgement ... ok
+test real_execution_command::tests::pcr3_high_impact_approved_rejects_project_director ... ok
+test real_execution_command::tests::pcr3_record_decision_writes_approved_decision_and_audit_ref ... ok
+test real_execution_command::tests::k2_new_session_fake_runner_covers_read_only_empty_roots_and_write_root_boundary ... ok
+test real_execution_command::tests::pcr3_revision_conflict_unknown_command_and_damaged_json_do_not_write ... ok
+test real_execution_command::tests::pcr3_rejected_and_request_changes_write_decision_without_runner_or_attempt ... ok
+test real_execution_command::tests::pcr4_phase_a_corrupt_runtime_log_preflight_does_not_write_partial_continuation ... ok
+test real_execution_command::tests::pcr4_phase_a_blocks_without_approved_user_decision_and_does_not_write ... ok
+test real_execution_command::tests::pcr7_failure_stop_retry_summary_covers_product_states_without_runner ... ok
+test real_execution_command::tests::pcr9_b1_real_mario_test_product_command_read_only_probe_requires_env_authorization ... ignored, requires explicit PCR9 B1 real product command read-only authorization
+test real_execution_command::tests::pcr9_b2_real_mario_test_product_command_write_probe_requires_env_authorization ... ignored, requires explicit PCR9 B2 real product command workspace-write authorization
+test real_execution_command::tests::pcr4_phase_a_noop_writes_trace_refs_without_real_codex ... ok
+test real_execution_command::tests::pcr4_phase_a_revision_conflict_blocked_preview_duplicate_and_corrupt_json_do_not_write ... ok
+test real_execution_command::tests::pcr9a_phase_b_fake_runner_writes_product_attempt_without_persisting_prompt_body ... ok
+test real_execution_command::tests::product_command_store_summary_keeps_legacy_and_runner_blocked ... ok
+test real_execution_command::tests::real_execution_gate_allows_runner_only_after_unified_boundary_passes ... ok
+test real_execution_command::tests::real_execution_gate_blocks_before_runner_for_level_a_cases ... ok
+test review_evidence_c4_tests::c4_only_allows_the_exact_station4_byte_review_empty_write_shape ... ok
+test run_error_translation::tests::codex_version_outdated_real_400_is_translated ... ok
+test run_error_translation::tests::humanize_for_display_matches_old_humanize_semantics ... ok
+test run_error_translation::tests::ordinary_upgrade_text_is_not_codex_version_outdated ... ok
+test run_error_translation::tests::provider_failure_human_matches_fix8_samples ... ok
+test run_error_translation::tests::seven_families_each_hit_and_carry_raw ... ok
+test run_error_translation::tests::state_db_readonly_is_sandbox_family ... ok
+test run_error_translation::tests::subsystem_beats_generic_command_failed ... ok
+test run_error_translation::tests::underscore_compacted_reason_recognized ... ok
+test run_error_translation::tests::unknown_falls_back_conservatively_with_raw ... ok
+test run_history_read_model::tests::boundary_verdict_exact_by_proposal_id ... ok
+test run_history_read_model::tests::confirmed_advice_only_is_advice_not_notrun ... ok
+test run_history_read_model::tests::corrupt_proposal_store_soft_lands ... ok
+test run_history_read_model::tests::delivered_with_and_without_review ... ok
+test run_history_read_model::tests::empty_project_empty_list ... ok
+test run_history_read_model::tests::failed_run_projects_translated_error_without_touching_state ... ok
+test run_history_read_model::tests::load_integration_assembles_from_real_stores ... ok
+test run_history_read_model::tests::non_blocked_runs_have_no_error ... ok
+test run_history_read_model::tests::order_limit_total ... ok
+test run_history_read_model::tests::project_chains_extracts_failure_raw_only_for_terminal_failures ... ok
+test run_history_read_model::tests::run_history_live_store_probe ... ignored, run-history: read-only probe of the live store (print per-run association for manual spot-check)
+test run_history_read_model::tests::six_states_each_covered ... ok
+test run_history_read_model::tests::stale_pending_note ... ok
+test run_history_read_model::tests::terminal_and_undecided_states ... ok
+test run_history_read_model::tests::time_window_ownership_and_ambiguity ... ok
+test runtime_log_store::tests::operation_decision_runtime_entry_records_status_without_process_control_or_sensitive_payloads ... ok
+test runtime_log_store::tests::runtime_log_store_redacts_runtime_records_and_keeps_audit_as_refs ... ok
+test real_execution_command::tests::pcr9a_phase_b_records_continuation_block_and_blocks_duplicate_attempt ... ok
+test runtime_session_attention::tests::runtime_session_attention_marks_guard_blocking ... ok
+test runtime_session_attention::tests::runtime_session_attention_distinguishes_stub_unavailable_from_zero_results ... ok
+test s1_freeform_supervisor_read_model_tests::s1_freeform_resident_messages_map_to_valid_ledger_and_nonadvancing_blackboard_entries ... ok
+test real_execution_command::tests::pcr9a_phase_b_blocks_product_gate_cases_without_runner_or_write ... ok
+test secretary_agent::tests::provider_failure_humanized_and_empty_stores_soft ... ok
+test session_continuation_store::tests::controlled_session_continuation_blocks_planned_adapter_or_guarded_preview ... ok
+test secretary_agent::tests::explain_prompt_grounded_from_disk_and_caution_excluded ... ok
+test session_continuation_store::tests::h2_phase_a_noop_runner_path_writes_attempt_and_audit_without_real_execution ... ok
+test session_continuation_store::tests::h2_phase_a_refuses_corrupt_runtime_log_without_continuation_write ... ok
+test session_continuation_store::tests::h2_phase_a_duplicate_running_attempt_is_blocked_without_runner_call ... ok
+test session_continuation_store::tests::h2_phase_b_real_mario_test_probe_requires_env_authorization ... ignored, requires explicit H2 Phase B real codex resume authorization
+test session_continuation_store::tests::h2_phase_b_blocks_prompt_hash_mismatch_before_runner ... ok
+test session_continuation_store::tests::h2_phase_b_user_rejected_does_not_call_runner ... ok
+test session_continuation_store::tests::h2_real_resume_preflight_blocks_missing_authorization_without_execution ... ok
+test session_continuation_store::tests::h2_phase_b_fake_runner_writes_attempt_audit_and_runtime_log ... ok
+test session_continuation_store::tests::h2_real_resume_preflight_complete_matrix_still_does_not_execute ... ok
+test session_continuation_store::tests::h3_b_real_new_session_fixture_probe_requires_env_authorization ... ignored, requires explicit H3-B real codex new-session authorization
+test session_continuation_store::tests::h3_b_blocks_prompt_hash_mismatch_before_runner ... ok
+test session_continuation_store::tests::h3_b_fake_runner_writes_new_session_attempt_audit_and_runtime_log ... ok
+test session_continuation_store::tests::h5_level_b1_real_mario_test_project_workflow_dispatch_requires_env_authorization ... ignored, requires explicit H5-Level-B1 real project workflow dispatch authorization
+test session_continuation_store::tests::h5_level_b2_real_mario_test_project_workflow_write_probe_requires_env_authorization ... ignored, requires explicit H5-Level-B2 real project workflow write-probe authorization
+test session_continuation_store::tests::session_continuation_store_atomic_write_and_stub_level_a_flags ... ok
+test session_continuation_store::tests::session_continuation_store_refuses_corrupt_json_without_overwrite ... ok
+test session_continuation_store::tests::session_continuation_store_revision_conflict_blocks_write ... ok
+test store_hygiene::tests::dry_run_reports_only_matches_and_writes_nothing ... ok
+test store_hygiene::tests::execute_is_idempotent ... ok
+test session_continuation_store::tests::h4_stale_cleanup_requires_revision_and_writes_audit_runtime_log_without_kill ... ok
+test store_hygiene::tests::paused_is_reversible_per_migration_table ... ok
+test session_continuation_store::tests::h4_duplicate_guard_blocks_same_session_scope_without_runner_call ... ok
+test store_hygiene::tests::project_root_filter_scopes_to_matching_workflow ... ok
+test store_hygiene::tests::execute_migrates_only_matches_to_paused_with_audit ... ok
+test supervisor_action_controller::tests::non_byte_legacy_dispatch_keeps_authorization_scope_without_task_write_field ... ok
+test supervisor_action_controller::tests::station3a_crash_after_revision_advancing_adapter_does_not_replay_worker ... ok
+test quality_debt_tests::non_timeout_failures_do_not_trigger_replan ... ok
+test supervisor_action_controller::tests::station3a_dispatch_uses_active_authorization_not_runner_internal_tool_name ... ok
+test supervisor_action_controller::tests::station3a_dispatch_is_single_flight_across_supervisor_runs ... ok
+test supervisor_action_controller::tests::station3a_rejects_authorization_snapshot_drift_after_dispatch ... ok
+test supervisor_action_controller::tests::station3a_replay_is_idempotent_and_protocol_errors_are_diagnosed ... ok
+test supervisor_action_controller::tests::station3a_fake_control_loop_records_each_authoritative_step_once ... ok
+test supervisor_action_controller::tests::station3a_report_cannot_impersonate_user_cancellation ... ok
+test supervisor_action_controller::tests::station3a_revision_drift_is_recorded_before_adapter_execution ... ok
+test supervisor_action_controller::tests::station3a_v3_worker_report_requires_legal_evidence_and_blocks_conservatively ... ok
+test supervisor_action_controller::tests::station3a_top_level_dispatch_fields_are_diagnosed_then_nested_target_dispatches_once ... ok
+test supervisor_action_controller::tests::station3b_reported_completed_carries_evidence_and_findings_to_supervisor ... ok
+test supervisor_action_controller::tests::station3b_write_order_without_findings_omits_findings_segment ... ok
+test supervisor_action_controller::tests::station3a_v3_dispatch_invalid_inspect_corrected_inspect_starts_one_worker ... ok
+test supervisor_action_controller::tests::station4_byte_checks_defer_pass_diagnostic_to_control_core_evidence_gate ... ok
+test supervisor_action_protocol::tests::station3a_protocol_accepts_each_frozen_action_shape ... ok
+test supervisor_action_protocol::tests::station3a_protocol_accepts_one_strict_dispatch_proposal ... ok
+test supervisor_action_protocol::tests::station3a_protocol_rejects_missing_target_and_unknown_kind ... ok
+test supervisor_action_protocol::tests::station3a_protocol_rejects_retired_request_user_decision_kind ... ok
+test supervisor_action_protocol::tests::station3a_protocol_rejects_text_unknown_fields_and_permission_claims ... ok
+test supervisor_action_protocol::tests::station3a_v3_protocol_rejects_nested_target_worker_id_for_inspection ... ok
+test supervisor_session_launcher::resident_session_tests::resident_consult_failure_families_cover_every_stage_without_collision ... ok
+test supervisor_session_launcher::resident_session_tests::resident_consult_families_including_diagnostic_append_suffix_are_pairwise_distinct ... ok
+test supervisor_session_launcher::resident_session_tests::resident_delivery_unknown_subfamilies_are_distinct_and_keep_the_legacy_prefix ... ok
+test supervisor_session_launcher::resident_session_tests::resident_failure_families_are_fixed_constants_and_pairwise_distinct ... ok
+test supervisor_session_launcher::resident_session_tests::resident_outcome_omits_failure_family_when_absent ... ok
+test supervisor_action_controller::tests::station4_dispatch_uses_exact_task_scope_and_keeps_review_provenance ... ok
+test supervisor_action_controller::tests::station3b_follow_up_invalidates_old_inspect_until_new_report_is_inspected ... ok
+test manual_relay::tests::supervisor_terminal_parse_and_overflow_failures_reap_full_safe_only_fixture ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_cleanup_failure_keeps_pid_visible_until_process_group_reconciliation ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h1_live_wrapper_preapproves_only_submit_proposal ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_failed_home_replacement_restores_the_prior_active_generation ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_config_drift_direct_preflight_home_error_is_sanitized ... ok
+test quality_debt_tests::timeout_triggers_one_auto_replan_with_facts_then_ran ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_config_drift_base_symlink_is_rejected_before_permission_mutation ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_first_thread_started_is_bound_before_real_submit_proposal_card_write ... ok
+test quality_debt_tests::timeout_replan_does_not_inherit_prior_task_session_mapping ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_first_turn_tool_waits_for_durable_binding_instead_of_racing_a_stale_thread ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_config_drift_quarantine_refuses_untrusted_archive_root ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_config_drift_quarantine_restores_old_active_when_fresh_create_fails ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_config_drift_initial_runner_failure_is_not_retried_or_injected ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_config_drift_quarantine_refuses_metadata_or_auth_mismatch ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_delivery_diagnostic_batch2_append_failure_preserves_recorded_business_outcome ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_delivery_diagnostic_preflight_home_failure_is_sanitized_and_message_scoped ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_config_drift_untrusted_preflight_never_archives_or_runs_the_old_resume ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_delivery_diagnostic_output_init_failure_has_no_spawn_or_registry_fact ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_error_without_completion_remains_hard_failure ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_config_drift_watchdog_silence_runs_the_replacement_initial_once ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_only_an_exact_legacy_private_config_migrates_to_the_single_tool_config ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_config_drift_quarantine_refuses_unsafe_active_or_private_files ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_delivery_diagnostic_prepared_lifecycle_failure_has_no_false_binding_or_registry ... ok
+test supervisor_action_controller::tests::m5a_db_primary_projects_supervisor_reservation_and_completion ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_resume_prebinding_cannot_replace_a_real_stdout_thread_started ... ok
+test manual_relay::tests::supervisor_terminal_parse_failure_with_persistent_cleanup_retains_full_safe_fixture ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_transient_error_then_completed_turn_keeps_the_conversation ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_r4e_tool_diagnostic_batch2_failure_preserves_recorded_injected_reply_and_human_result ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_turn_failed_remains_hard_failure_after_a_message ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_delivery_diagnostic_same_client_replay_does_not_duplicate_and_new_clients_remain_distinct ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_recoverable_non_tool_diagnostic_keeps_canonical_conversation_without_a_card ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_live_resume_tool_card_and_replacement_require_explicit_harness_authorization ... ignored, requires explicit user authorization, a real Codex account, and a prepared fixed-project workflow state
+test supervisor_session_launcher::resident_session_tests::s1b_h2_config_drift_quarantines_trusted_active_and_restarts_generation ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_public_resident_user_message_path_requires_the_canonical_answer_command ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_private_tool_arguments_do_not_enter_the_ordinary_supervisor_read_model ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_startup_marks_dead_prepared_turn_exited_without_destroying_binding ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_real_initial_and_resume_consume_only_the_private_submit_proposal_config ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_startup_marks_dead_running_turn_exited_without_destroying_binding ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_refuses_to_reuse_an_active_home_from_a_different_generation ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_transport_response_loss_reuses_the_canonical_turn_and_pending_card ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_startup_reaps_dead_virgin_prepared_turn_without_thread_binding ... ok
+test supervisor_session_launcher::tests::argv_requires_readonly_isolated_codex_home_no_bypass_and_test_project_lock ... ok
+test supervisor_session_launcher::tests::byte_review_stays_absent_for_nonbyte_checks_and_station3b_zero_write ... ok
+test supervisor_session_launcher::tests::canonical_supervisor_contract_document_contains_runtime_template ... ok
+test supervisor_session_launcher::tests::mock_spawn_registers_then_unregisters_with_existing_process_registry_lifecycle ... ok
+test supervisor_session_launcher::tests::opening_message_snapshot_contains_approved_contract_and_order_context ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_invalid_resume_recovery_never_returns_cli_raw_error_to_user ... ok
+test supervisor_session_launcher::tests::station3a_completed_inspection_must_advance_instead_of_repeating ... ok
+test supervisor_session_launcher::tests::station3a_opening_message_discloses_authorized_write_root ... ok
+test supervisor_session_launcher::tests::station3a_planned_task_id_is_unique_per_authorization_before_stable_id_truncation ... ok
+test supervisor_session_launcher::tests::station3a_requires_all_three_native_acceptance_roles ... ok
+test supervisor_session_launcher::tests::startup_orphan_sweep_cleans_registered_temporary_home ... ok
+test supervisor_session_launcher::tests::station3a_v3_protocol_correction_uses_the_original_action_shape ... ok
+test supervisor_session_launcher::tests::station3a_v5_worker_objective_uses_only_worker_acceptance ... ok
+test supervisor_session_launcher::tests::station3a_write_scope_accepts_only_exact_fixed_test_project_root ... ok
+test supervisor_session_launcher::tests::station3b_and_station4_write_scope_are_exact_and_supervisor_stays_readonly ... ok
+test supervisor_session_launcher::tests::station4_byte_check_builds_exact_writer_and_readonly_reviewer_shapes_and_prompt ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_process_group_cleanup_reaps_a_term_ignoring_descendant ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_watchdog_after_initial_thread_binding_retries_with_same_thread_resume ... ok
+test supervisor_session_launcher::tests::temporary_home_drop_cleans_after_unexpected_owner_release ... ok
+test supervisor_session_launcher::tests::station3a_two_format_errors_are_diagnosed_then_stop_waiting_user ... ok
+test system_status_read_model::tests::broken_workflow_state_soft_lands_with_warning ... ok
+test system_status_read_model::tests::gate_summary_is_derived_from_unseal_constants ... ok
+test supervisor_session_launcher::tests::temporary_home_is_private_mcp_only_and_unregister_cleans ... ok
+test system_status_read_model::tests::json_only_without_storage_mode_config_is_healthy_and_outside_observation_period ... ok
+test supervisor_session_launcher::tests::temporary_home_replaced_auth_emits_warning_and_removes_refresh ... ok
+test task_memory_packet_builder::tests::task_memory_packet_estimates_mixed_cjk_and_ascii_in_separate_buckets ... ok
+test system_status_read_model::tests::last_degradation_takes_latest_event_and_keeps_backend_human_reason ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_watchdog_retries_once_and_second_silence_returns_human_message ... ok
+test tests::auto_advance_authorized_role_loop_real_run ... ignored, P1 role-loop auto-advance: one command drives authorized auto-advance (real director LM + real worker codex chain) in the test project (user present)
+test tests::auto_advance_blocks_non_test_project ... ok
+test system_status_read_model::tests::observation_day_counts_from_latest_initialized_audit_with_reseed_day_as_day_one ... ok
+test tests::auto_advance_rejects_without_active_authorization ... ok
+test system_status_read_model::tests::read_model_never_writes_workflow_state ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_three_oneshot_turns_resume_same_thread_and_keep_project_private_home ... ok
+test tests::blackboard_candidate_decision_boundary_rejects_direct_promotion ... ok
+test tests::backend_agent_adapter_descriptor_is_stable_without_codex_signals ... ok
+test tests::blackboard_candidate_store_records_candidate_only_decisions ... ok
+test tests::bootstrap_project_workflow_backs_up_existing_state ... ok
+test tests::bootstrap_project_workflow_does_not_duplicate_existing_workflow ... ok
+test tests::bootstrap_project_workflow_rejects_non_index_project ... ok
+test tests::authorized_prepared_dispatch_needs_binding_without_executable_dispatch ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_h2_same_resident_message_replays_reuse_one_card_but_a_new_message_can_create_another ... ok
+test tests::bootstrap_project_workflow_initializes_missing_state ... ok
+test tests::authorized_prepared_dispatch_creates_memory_snapshot_and_remains_unexecuted_and_idempotent ... ok
+test supervisor_session_launcher::resident_session_tests::s1b_invalid_resume_rotates_home_and_rebuilds_facts ... ok
+test tests::auto_advance_stops_at_needs_binding_when_unbound ... ok
+test manual_relay::tests::supervisor_terminal_poll_sweeps_descendants_before_capture_finalization ... ok
+test manual_relay::tests::supervisor_usage_keys_are_allowlisted_and_unknown_keys_fail_closed ... ok
+test tests::c4a_director_final_mark_lm_unavailable_does_not_complete ... ok
+test tests::c4a_director_final_mark_yellow_report_rework_spends_budget_and_stops ... ok
+test tests::c4a_director_final_mark_green_report_completes_without_lm ... ok
+test tests::c4a_director_final_mark_yellow_report_uses_lm_pass ... ok
+test tests::auto_advance_runs_chain_when_authorized_and_bound ... ok
+test tests::candidate_sidecars_are_isolated_and_damaged_json_is_not_overwritten ... ok
+test tests::c4a_director_final_mark_rework_budget_exhausted_waits_for_human ... ok
+test tests::c4b_director_summary_unavailable_keeps_chain_completed_with_warning ... ok
+test tests::c4a_director_final_mark_preserves_worker_help_waiting_decision ... ok
+test tests::c4b_director_summary_creates_candidate_once_after_chain_completed ... ok
+test tests::compact_last_message_summary_preserves_workflow_machine_control_marker ... ok
+test tests::confirm_and_start_authorized_run_real_run ... ignored, 交办地基·刀1: one [允许并开始] command runs confirm→boundary→auth→bind→auto-advance (real LM + real worker) to proof (user present)
+test tests::canvas_run_temp_work_items_and_bindings_capped_per_node ... ok
+test tests::chain_does_not_retry_timeout ... ok
+test tests::c4c_failed_action_archive_uses_existing_failed_to_archived_transition ... ok
+test tests::confirm_and_start_new_session_real_run ... ignored, C1: confluence session_choice=new (unbound workflow, no needs_binding stall) births a real per-task codex session in-chain, binds it, resumes to proof — no S0 orphan (user present, test project)
+test tests::confirm_and_start_new_session_rejected_outside_test_project ... ok
+test tests::c4c_failed_action_rework_budget_exhausted_does_not_loop ... ok
+test tests::c4c_failed_action_rework_reuses_c4a_budget_and_reset ... ok
+test tests::confirm_and_start_rejects_non_pending_and_new_session ... ok
+test tests::consult_map_readonly_when_no_execution_scope ... ok
+test tests::consult_map_assembles_profile_and_keeps_consult_checks ... ok
+test tests::consult_map_write_scope_hardcoded_ignores_consult_paths ... ok
+test tests::director_completion_gate_requires_evidence_review_and_no_risk ... ok
+test tests::confirm_and_start_new_session_failure_audits_no_fallback ... ok
+test tests::dispatch_field_correction_rejects_missing_state_file ... ok
+test tests::dispatch_field_correction_keeps_empty_fields_missing ... ok
+test tests::dispatch_field_correction_rejects_missing_workflow_work_item_and_artifact ... ok
+test tests::dispatch_field_correction_rejects_non_index_project ... ok
+test tests::dispatch_readback_stats_failure_preserves_zero_zero_downgrade ... ok
+test tests::dispatch_readback_stats_falls_back_to_index_when_sqlite_unavailable ... ok
+test tests::chain_fail_stops_after_single_retry_on_persistent_early_exit ... ok
+test tests::dispatch_readback_stats_hits_safe_probe_target_in_text_and_stdout ... ok
+test tests::dispatch_readback_stats_reads_sqlite_only_native_rollout ... ok
+test tests::dispatch_readback_stats_reads_sqlite_when_index_unavailable ... ok
+test tests::dispatch_readback_stats_returns_zero_hits_when_target_missing ... ok
+test tests::experiment_node_dispatch_new_session_returns_clear_error ... ok
+test tests::existing_workflow_state_is_backed_up_before_initialize ... ok
+test tests::dispatch_field_correction_backs_up_writes_audit_keeps_path_and_rechecks_ready ... ok
+test tests::fix8_classify_codex_resume_failure_flags_provider ... ok
+test tests::formal_memory_context_accepts_matching_project_and_workflow ... ok
+test tests::formal_memory_context_keeps_existing_m1_guards ... ok
+test tests::formal_memory_context_rejects_mismatched_project_id ... ok
+test tests::c4c_failed_action_retry_requires_director_and_explicit_reopen ... ok
+test tests::formal_memory_context_rejects_mismatched_workflow_id ... ok
+test tests::formal_memory_context_rejects_missing_project_in_workflow_state ... ok
+test tests::c4c_failed_action_change_session_reuses_c1_create_bind_then_runs_single_task ... ok
+test tests::formal_memory_context_rejects_project_director_cross_project ... ok
+test tests::experiment_node_dispatch_creates_temp_work_item_and_dispatches ... ok
+test tests::formal_memory_store_rejects_candidate_status ... ok
+test tests::formal_memory_store_creates_record_version_and_audit ... ok
+test tests::formal_memory_store_damaged_json_is_not_overwritten ... ok
+test tests::formal_memory_store_rejects_missing_source_refs ... ok
+test tests::g2_diagnostic_summary_reports_degraded_store_without_repair ... ok
+test tests::formal_memory_store_revision_conflict_is_rejected ... ok
+test tests::formal_memory_store_keeps_candidate_store_separate ... ok
+test tests::experiment_node_dispatch_session_not_in_index_refused ... ok
+test tests::global_boundary_review_approved_activates_authorization_and_guard_still_checks_scope ... ok
+test tests::global_boundary_review_rejects_missing_user_confirmation ... ok
+test tests::global_boundary_review_rejects_proposal_authorization_mismatch ... ok
+test tests::confirm_and_start_auto_confirms_preview_node_bindings ... ok
+test tests::initializes_workflow_state_with_audit_event ... ok
+test tests::confirm_and_start_new_session_births_binds_and_advances ... ok
+test tests::global_boundary_review_rejects_incomplete_checklist_and_blocking_finding_for_approved ... ok
+test tests::global_final_result_review_rejects_missing_c2_and_c3_prerequisites ... ok
+test tests::chain_retries_once_on_early_exit_then_succeeds ... ok
+test tests::global_boundary_review_needs_changes_and_blocked_do_not_activate_authorization ... ok
+test tests::confirm_and_start_runs_from_pending_with_existing_session ... ok
+test tests::jiaoban_director_plan_no_retry_on_parse_error ... ok
+test tests::jiaoban_director_plan_no_retry_on_provider_unavailable ... ok
+test tests::jiaoban_director_plan_retries_once_on_consult_early_exit ... ok
+test tests::jiaoban_auto_advance_rejects_approved_graph_workflow_mismatch ... ok
+test tests::jiaoban_fix3_clamp_only_out_of_set_roles ... ok
+test tests::global_final_result_review_records_review_without_memory_or_user_acceptance ... ok
+test tests::jiaoban_director_plan_stops_after_second_failure ... ok
+test tests::jiaoban_fix3_clamp_in_preview_path ... ok
+test tests::global_final_result_review_rejects_wrong_actor ... ok
+test tests::failed_action_rejects_states_other_than_failed_needs_rework_or_waiting_decision ... ok
+test tests::jiaoban_fix3_confirm_pre_decision_reject_no_stopped_audit ... ok
+test tests::jiaoban_fix3_approved_out_of_set_role_not_clamped_blocked ... ok
+test tests::jiaoban_fix3_plan_failure_after_started_is_audited ... ok
+test tests::jiaoban_fix4_reconcile_only_touches_planned_ids ... ok
+test tests::jiaoban_fix5_fresh_running_dispatch_not_touched ... ok
+test tests::jiaoban_fix5_supersedes_stale_running_dispatch ... ok
+test tests::jiaoban_parse_consultation_suggest_workflow_backward_compat ... ok
+test tests::jiaoban_fix5_scope_only_touches_planned_node_running ... ok
+test tests::jiaoban_fix4_reconcile_skips_accepted_residue ... ok
+test tests::jiaoban_preview_pending_proposal_plans_with_deps_zero_writes ... ok
+test tests::jiaoban_preview_then_confirm_with_graph_real_run ... ignored, 交办·刀2 §4: preview (real LM graph, zero-write) → confirm_and_start with that approved graph (real worker) → proof + task-level nodes on canvas (user present)
+test tests::jiaoban_prepare_dangling_dep_warns_no_edge ... ok
+test tests::k3_b_tauri_command_guard_allows_no_real_harness_request ... ok
+test tests::k3_b_tauri_command_guard_rejects_runtime_prompt_body ... ok
+test tests::legacy_real_execution_entrypoints_are_blocked_for_product_routing ... ok
+test tests::jiaoban_fix3_clamp_unblocks_in_auto_advance ... ok
+test tests::jiaoban_prepare_writes_task_level_nodes_and_dep_edges ... ok
+test tests::jiaoban_preview_works_on_confirmed_proposal ... ok
+test tests::jiaoban_auto_advance_uses_approved_graph_skips_plan ... ok
+test tests::mature_pattern_preview_derives_candidates_and_memory_cluster_reports_readonly ... ok
+test tests::memory_candidate_adoption_project_director_low_risk_project_memory ... ok
+test tests::mature_pattern_user_confirmation_writes_formal_memory_and_task_packet_can_recall ... ok
+test tests::memory_candidate_adoption_rejects_already_adopted_candidate ... ok
+test tests::memory_candidate_adoption_rejects_context_binding_mismatch ... ok
+test tests::jiaoban_fix4_approved_still_resumes_stale_chain ... ok
+test tests::memory_candidate_adoption_rejects_rejected_or_discarded_candidate ... ok
+test tests::memory_candidate_adoption_rejects_cross_project_project_director ... ok
+test tests::memory_candidate_adoption_rejects_secret_without_blocked_export ... ok
+test tests::memory_candidate_adoption_rejects_user_preference_without_user ... ok
+test tests::memory_candidate_store_keeps_candidates_out_of_formal_memory ... ok
+test tests::jiaoban_fix4_replan_supersedes_stale_chain ... ok
+test tests::memory_candidate_rejection_does_not_create_formal_memory ... ok
+test tests::mature_pattern_reject_quarantine_revision_and_damaged_json_do_not_mutate_formal_memory ... ok
+test tests::memory_entity_relation_confirmed_causal_relation_explains_task_packet ... ok
+test tests::memory_entity_relation_preview_suggests_alias_and_similarity_candidates_readonly ... ok
+test tests::memory_entity_relation_llm_inferred_causal_relation_stays_candidate ... ok
+test tests::memory_entity_relation_damaged_json_and_revision_conflict_are_rejected ... ok
+test tests::memory_lint_damaged_json_is_not_overwritten ... ok
+test tests::memory_entity_relation_secret_relation_source_is_not_exported_to_task_packet ... ok
+test tests::jiaoban_fix5_approved_path_also_supersedes_stale_dispatch ... ok
+test tests::memory_cluster_report_and_unconfirmed_mature_pattern_do_not_enter_task_packet ... ok
+test tests::memory_lint_authority_superseded_does_not_mutate_formal_memory ... ok
+test tests::memory_lint_duplicate_claim_generates_finding ... ok
+test tests::memory_lint_blocks_conflicting_candidate_adoption ... ok
+test tests::memory_lint_revision_conflict_is_rejected ... ok
+test tests::memory_lint_maintenance_run_is_readonly_for_formal_memory ... ok
+test tests::missing_workflow_state_returns_empty_without_creating_file ... ok
+test tests::memory_lint_allows_non_conflicting_candidate_adoption ... ok
+test tests::jiaoban_fix5_replan_unblocks_after_superseding_stale_dispatch ... ok
+test tests::memory_lint_revoked_source_excludes_task_packet_memory ... ok
+test tests::memory_lint_open_blocking_finding_excludes_task_packet_memory ... ok
+test tests::memory_maintenance_run_reports_entity_drift_and_relation_revoked_readonly ... ok
+test tests::memory_maintenance_run_reports_source_secret_and_index_findings_readonly ... ok
+test tests::observation_candidate_creation_rejects_ignored ... ok
+test tests::observation_candidate_creation_project_director ... ok
+test tests::jiaoban_fix4_reconcile_stale_residue_unblocks_replan ... ok
+test tests::observation_candidate_creation_rejects_duplicate ... ok
+test tests::observation_context_binding_mismatch_rejected ... ok
+test tests::observation_candidate_creation_rejects_quarantined ... ok
+test tests::memory_maintenance_run_reports_mature_pattern_signal_without_promoting_memory ... ok
+test tests::observation_creation_rejects_missing_source_refs ... ok
+test tests::observation_creation_rejects_ordinary_chat_auto_capture ... ok
+test tests::p3_a_default_state_snapshot_derive_cost_probe ... ignored, reads the local default workflow state only to measure P3-A read-model derive cost
+test tests::observation_store_records_worker_report ... ok
+test tests::observation_candidate_does_not_create_formal_memory ... ok
+test tests::parse_consultation_proposal_execution_scope_backward_compat ... ok
+test tests::parses_transcript_reader_output ... ok
+test tests::path_whitelist_accepts_only_index_projects_and_rollouts ... ok
+test tests::plan_authorization_guard_authorizes_matching_active_scope ... ok
+test tests::plan_authorization_guard_blocks_revoked_paused_and_expired ... ok
+test tests::plan_authorization_guard_blocks_role_and_agent_escape ... ok
+test tests::plan_authorization_guard_blocks_write_scope_escape ... ok
+test tests::plan_authorization_guard_needs_review_before_user_and_global_approval ... ok
+test tests::plan_authorization_guard_needs_review_when_stop_condition_requires_user ... ok
+test tests::offline_role_dispatch_rejects_missing_ready_work_item ... ok
+test tests::plan_authorization_inspect_writes_auto_dispatch_scope_checked_audit ... ok
+test tests::offline_role_dispatch_rejects_duplicate_prepared_dispatch ... ok
+test tests::offline_role_orchestration_records_dispatch_handoff_and_review ... ok
+test tests::project_blackboard_derives_node_less_canonical_chain_process_messages_without_cross_workflow_leakage ... ok
+test tests::p3_a_mock_chain_failure_reconciles_one_run_interruption_message ... ok
+test tests::process_fact_duplicate_is_rejected_and_rework_does_not_write_observation ... ok
+test tests::project_consultation_proposal_confirm_creates_user_confirmed_authorization_not_active ... ok
+test tests::project_consultation_proposal_create_writes_revision_and_read_model ... ok
+test tests::project_blackboard_read_model_derives_candidates_without_state_promotion ... ok
+test tests::project_consultation_proposal_rejects_missing_required_fields ... ok
+test tests::project_consultation_proposal_confirm_reuses_interrupted_pending_authorization ... ok
+test tests::project_canvas_workflow_node_auto_runs_with_payload_session ... ok
+test tests::project_director_task_package_uses_v2_canonical_names_and_defaults ... ok
+test tests::project_consultation_proposal_rejects_repeated_confirmation ... ok
+test tests::project_director_process_fact_decision_rejects_wrong_actor_and_unsafe_facts ... ok
+test tests::project_consultation_proposal_request_changes_and_reject_do_not_create_authorization ... ok
+test tests::project_director_process_fact_confirmation_writes_recorded_observation_only ... ok
+test tests::project_workflow_chain_gate_seals_non_test_project ... ok
+test tests::project_director_task_plan_blocks_out_of_scope_planned_task ... ok
+test tests::project_director_task_plan_rejects_without_active_c3_authorization ... ok
+test tests::project_director_task_plan_rejects_proposal_authorization_mismatch ... ok
+test tests::needs_rework_archive_uses_existing_archived_transition ... ok
+test tests::needs_rework_rework_keeps_the_existing_rework_decision_without_spending_again ... ok
+test tests::p3_a_mock_chain_success_audits_reconcile_to_process_messages ... ok
+test tests::project_workflow_node_dispatch_refuses_when_work_item_not_ready ... ok
+test tests::provider_availability_summaries_cover_e3_boundary_matrix ... ok
+test tests::project_workflow_chain_honors_runaway_cap ... ok
+test tests::real_run_full_dispatch_resume ... ignored, spawns real codex through the full resume-based dispatch path
+test tests::real_task_package_file_generation_confirmation_v1 ... ignored, confirmation task only: writes one real product-line/tasks/*.md file and real workflow state
+test tests::project_workflow_chain_interrupts_at_node_boundary_on_stop_flag ... ok
+test tests::review_result_cannot_directly_complete_node ... ok
+test tests::project_workflow_node_dispatch_keeps_missing_task_package_write_scope_readonly ... ok
+test tests::project_workflow_node_dispatch_uses_task_package_and_dispatches ... ok
+test tests::project_workflow_chain_stops_on_first_node_failure ... ok
+test tests::run_project_consultation_is_readonly_no_dispatch ... ok
+test tests::require_active_authorization_ok_then_rejects_revoked ... ok
+test tests::s1_canvas_node_guard_blocked_excludes_authorization_reasons ... ok
+test tests::role_loop_rejects_unknown_workflow ... ok
+test tests::run_project_consultation_writes_pending_proposal_no_autoconfirm ... ok
+test tests::s1_gate_iron_law_path_lock_required_for_authorized ... ok
+test tests::s1_has_inflight_dispatch_counts_running_only ... ok
+test tests::s1_guard_blocks_prompt_with_secret_but_allows_clean ... ok
+test tests::s1_step3_real_run_through_gate ... ignored, S1-③: spawns real codex THROUGH the S1 gate (execute_project_workflow_node_at) in the test project
+test tests::s2_3_bypass_wrappers_path_lock_blocks_nontest_allows_test ... ok
+test tests::s2_3_real_run_role_loop_builds_proof_through_gate ... ignored, S2-3 §6: spawns real codex through the C-stage role loop + S1 gate in the test project
+test tests::role_loop_runs_on_non_default_project_workflow ... ok
+test tests::s1_step3_nontest_root_blocked_before_runner ... ok
+test tests::s3_diag_codex_reads_redteam_file ... ignored, S3 §2C diag: does tier-1 codex exec read project files on-demand (real codex)
+test tests::s1_gate_blocks_dispatch_when_node_has_inflight_running ... ok
+test tests::needs_rework_retry_keeps_already_reset_work_item_idempotent_then_runs ... ok
+test tests::s3_consultant_full_chain_stub_feeds_c1 ... ok
+test tests::needs_rework_change_session_reuses_c1_then_runs ... ok
+test tests::s2_3_role_loop_worker_blocked_at_nontest_root ... ok
+test tests::s3_director_chain_real_run ... ignored, S3 director-chain C1: real LM multi-step plan drives a real codex chain through the start-chain command request path (user present)
+test tests::s3_director_chain_real_run_interrupts_mid_chain ... ignored, S3 director-chain C1: real codex chain stopped mid-way via the real stop command (user present, timing-based, retry on flake)
+test tests::s3_director_chain_blocks_non_test_project ... ok
+test tests::project_workflow_chain_runs_all_nodes_to_completion ... ok
+test tests::project_workflow_chain_resumes_skipping_completed_nodes ... ok
+test tests::s2_3_role_loop_full_chain_through_gate_with_stub ... ok
+test tests::s3_director_dispatch_real_run ... ignored, S3 director-dispatch: real LM plan drives a real worker codex run in the test project (user present)
+test tests::reads_real_static_index_summary ... ok
+test tests::s3_director_parse_plan_extracts_tasks ... ok
+test tests::s3_director_chain_interrupts_at_task_boundary_on_stop ... ok
+test tests::s3_director_real_plan ... ignored, S3 director: real read-only LM decomposition of an authorized proposal (user present)
+test tests::s3_director_parse_plan_rejects_empty_or_bad ... ok
+test tests::s3_parse_consultation_proposal_extracts_json_block ... ok
+test tests::s3_parse_consultation_proposal_rejects_empty ... ok
+test tests::s3_director_dispatch_integration_stub ... ok
+test tests::s3_project_context_assembles_entry_doc_map_and_signal ... ok
+test tests::s3_readonly_consult_request_is_structurally_readonly ... ok
+test tests::session_continuation_guard_covers_e4_boundary_matrix ... ok
+test tests::session_operation_descriptors_cover_e2_boundary_matrix ... ok
+test tests::snapshot_keeps_metadata_without_session_body ... ok
+test tests::s3_project_context_degrades_when_no_entry_doc ... ok
+test tests::s3_director_prompt_requires_self_contained_tasks ... ok
+test tests::s3_director_chain_fail_stop_halts ... ok
+test tests::s3_director_stub_plans_valid_tasks_feed_prepare ... ok
+test tests::subagent_report_does_not_cross_project_help_fields_by_same_node ... ok
+test tests::subagent_report_does_not_infer_help_fields_from_dispatch_warnings ... ok
+test tests::subagent_report_projects_help_fields_from_worker_report_truth_source ... ok
+test tests::submit_project_workflow_draft_creates_new_workflow ... ok
+test tests::stop_project_workflow_chain_sets_flag_and_errors_when_none_running ... ok
+test tests::s3_director_chain_skips_non_prepared_tasks ... ok
+test tests::submit_project_workflow_draft_node_id_stable_across_reorder ... ok
+test tests::s3_director_chain_command_carries_approved_plan_and_serializes_outcome ... ok
+test tests::submit_project_workflow_draft_rejects_without_director ... ok
+test tests::s3_director_chain_command_status_reuse_reads_director_record ... ok
+test tests::submit_project_workflow_draft_not_blocked_by_canvas_run_work_items ... ok
+test tests::submit_project_workflow_draft_prunes_binding_of_removed_node ... ok
+test tests::s3_director_chain_rejects_duplicate_titles_and_warns_dangling_dep ... ok
+test tests::task_draft_rejects_missing_workflow_state ... ok
+test tests::submit_project_workflow_draft_updates_existing_workflow ... ok
+test tests::task_draft_backs_up_existing_state_before_write ... ok
+test tests::task_draft_creates_work_item_artifact_and_audit ... ok
+test tests::task_draft_does_not_duplicate_same_workflow_title ... ok
+test tests::supervisor_fresh_session_binding_records_control_core_provenance ... ok
+test tests::task_draft_rejects_non_index_project ... ok
+test tests::task_draft_rejects_project_without_workflow ... ok
+test tests::s3_director_chain_runs_all_prepared_tasks_topo ... ok
+test tests::task_memory_packet_excludes_candidates_as_unconfirmed ... ok
+test tests::stage_c_acceptance_summary_records_gates_and_deferred_items ... ok
+test tests::station4_temp_proposal_authorization_and_prepared_dispatch_keep_exact_mario_write_root ... ok
+test tests::task_memory_packet_excludes_not_relevant ... ok
+test tests::task_memory_packet_excludes_model_export_blocked ... ok
+test tests::task_memory_packet_excludes_observation_as_not_formal ... ok
+test tests::station3a_v5_materialized_worker_prompt_keeps_role_boundaries_and_blocked_contract ... ok
+test tests::task_memory_packet_excludes_permission_blocked ... ok
+test tests::task_memory_packet_excludes_token_limit ... ok
+test tests::task_memory_packet_includes_active_formal_memory ... ok
+test tests::task_memory_packet_preview_does_not_execute_worker ... ok
+test tests::task_memory_packet_excludes_inactive_formal_memories ... ok
+test tests::task_memory_packet_preview_is_readonly ... ok
+test tests::task_memory_injection_writes_snapshot_to_task_package_artifact ... ok
+test tests::task_memory_injection_blocks_readiness_when_required_snapshot_missing ... ok
+test tests::task_package_fields_update_rejects_missing_state_file ... ok
+test tests::task_memory_injection_marks_snapshot_stale_on_store_revision_change ... ok
+test tests::task_package_fields_update_rejects_missing_work_item ... ok
+test tests::task_package_fields_update_rejects_missing_task_package_artifact ... ok
+test tests::task_package_fields_update_keeps_empty_fields_as_missing_facts ... ok
+test tests::task_package_fields_update_rejects_non_index_project ... ok
+test tests::task_package_fields_update_rejects_missing_workflow ... ok
+test tests::task_package_dispatch_readiness_rejects_missing_fields ... ok
+test tests::task_package_file_generation_rejects_missing_state_file ... ok
+test tests::task_package_file_generation_rejects_missing_work_item ... ok
+test tests::task_memory_injection_excludes_lint_blocked_formal_memory ... ok
+test tests::task_package_dispatch_readiness_flags_polluted_generated_draft_as_not_ready ... ok
+test tests::task_memory_injection_markdown_and_dispatch_prompt_use_same_snapshot ... ok
+test tests::task_package_file_generation_rejects_missing_workflow ... ok
+test tests::task_package_file_generation_rejects_missing_task_package_artifact ... ok
+test tests::task_package_preview_rejects_missing_state_file ... ok
+test tests::task_package_file_generation_rejects_non_index_project ... ok
+test tests::task_package_preview_rejects_non_index_project ... ok
+test tests::task_package_preview_rejects_missing_work_item ... ok
+test tests::task_package_file_generation_keeps_missing_fields_as_placeholders ... ok
+test tests::task_package_preview_rejects_missing_workflow ... ok
+test tests::task_package_fields_update_writes_structured_fields_backup_and_audit ... ok
+test tests::task_package_dispatch_readiness_rejects_conflicting_generation_ban ... ok
+test tests::task_package_preview_uses_placeholders_for_missing_fields ... ok
+test tests::task_package_preview_renders_markdown_from_draft ... ok
+test tests::transcript_catalog_falls_back_to_index_when_sqlite_unavailable ... ok
+test tests::transcript_catalog_classifies_missing_sqlite_rollout ... ok
+test tests::transcript_catalog_main_path_does_not_need_python_reader ... ok
+test tests::transcript_catalog_page_reads_tail_and_older_from_sqlite_thread ... ok
+test tests::task_package_dispatch_readiness_can_be_ready_after_field_fix_and_file_generation ... ok
+test tests::transcript_reader_rejects_thread_outside_index ... ok
+test tests::task_package_file_generation_writes_file_updates_artifact_and_audit ... ok
+test tests::transcript_catalog_reads_sqlite_thread_not_in_index ... ok
+test tests::transcript_catalog_reads_sqlite_thread_without_index_catalog ... ok
+test tests::task_package_file_generation_uses_suffix_without_overwriting_existing_file ... ok
+test tests::task_package_blocks_missing_report_model_and_stale_after_edit ... ok
+test tests::transcript_catalog_rejects_sqlite_rollout_outside_allowed_dirs ... ok
+test tests::transcript_catalog_sqlite_overrides_stale_index_rollout_status ... ok
+test tests::workbench_snapshot_includes_backend_agent_adapter_descriptor ... ok
+test tests::workflow_audit_helper_preserves_permission_decision_fields ... ok
+test tests::workflow_audit_helper_preserves_work_item_state_changed_fields ... ok
+test tests::workflow_authorization_plan_authorization_guard_blocks_without_authorization ... ok
+test tests::workflow_binding_migration_counts_unresolvable_legacy_dispatch_reference ... ok
+test tests::work_item_state_update_rejects_non_index_project ... ok
+test tests::work_item_state_update_rejects_illegal_transition ... ok
+test tests::workflow_exception_ignores_dead_unresolved_direction_artifact_field ... ok
+test tests::workflow_interfaces_keep_conservative_boundaries ... ok
+test tests::work_item_state_update_advances_state_node_and_audit ... ok
+test tests::workflow_ledger_derives_summary_entries_without_tool_output_fulltext ... ok
+test tests::workflow_ledger_maps_chain_audit_entry_types_exactly ... ok
+test tests::workflow_ledger_scopes_chain_audits_without_changing_legacy_audit_filter ... ok
+test tests::workflow_ledger_validates_entry_type_without_panicking ... ok
+test tests::worker_structured_report_rejects_missing_evidence_and_ordinary_chat_source ... ok
+test tests::worker_structured_report_records_audit_without_observation_or_formal_memory ... ok
+test tests::workflow_node_dispatch_execute_rejects_user_reviewed_instruction_without_payload ... ok
+test tests::workflow_dispatch_director_review_rejects_invalid_state_and_dispatch ... ok
+test tests::workflow_dispatch_director_review_records_completed_dispatch ... ok
+test tests::task_session_binding_rejects_missing_extra_and_unavailable_existing_session ... ok
+test tests::workflow_node_dispatch_prepare_rejects_non_ready_work_item ... ok
+test tests::workflow_node_dispatch_execute_user_reviewed_instruction_uses_codex_options ... ok
+test tests::workflow_node_dispatch_user_reviewed_instruction_validates_permission_fields ... ok
+test tests::workflow_node_dispatch_execute_uses_stub_and_advances_to_review ... ok
+test tests::user_result_decision_requires_user_and_does_not_write_memory ... ok
+test tests::workflow_node_session_binding_ids_do_not_collide_on_long_work_item_prefixes ... ok
+test tests::workflow_node_session_binding_migration_repairs_duplicate_legacy_ids ... ok
+test tests::workflow_node_session_binding_rejects_non_index_session_and_missing_node ... ok
+test tests::workflow_node_state_transition_enforces_actor_boundaries ... ok
+test tests::workflow_node_dispatch_execute_without_stub_stats_uses_native_readback ... ok
+test tests::workflow_node_dispatch_started_marks_actual_dispatch_node_running ... ok
+test tests::workflow_node_session_binding_binds_rebinds_and_unbinds ... ok
+test tests::workflow_permission_decision_records_audit_through_control_core ... ok
+test tests::workflow_node_dispatch_prepare_requires_binding_and_safe_probe_prompt ... ok
+test tests::workflow_state_transition_enforces_confirmed_table ... ok
+test tests::workflow_node_dispatch_user_reviewed_failure_writes_control_and_attempt ... ok
+test utils::fs_ops::tests::fixture_dir_joins_stage_and_name ... ok
+test tests::workflow_run_check_blocks_missing_workflow_and_missing_required_fields ... ok
+test utils::fs_ops::tests::remove_file_if_exists_deletes_existing_file ... ok
+test utils::fs_ops::tests::remove_file_if_exists_keeps_other_io_errors ... ok
+test utils::fs_ops::tests::remove_file_if_exists_missing_file_is_ok ... ok
+test utils::hash::tests::hash_helpers_preserve_existing_lengths ... ok
+test utils::hash::tests::workbench_source_aggregate_hash_preserves_preflight_v1_contract ... ok
+test utils::normalization::tests::normalize_slash_lowercase_trims_slashes_and_lowercases ... ok
+test utils::normalization::tests::normalize_slash_lowercase_preserves_inner_whitespace ... ok
+test tests::workflow_node_dispatch_user_reviewed_timeout_writes_timed_out_attempt ... ok
+test utils::store_paths::tests::runtime_artifacts_are_outside_workflow_state_root_and_portable ... ok
+test tests::waiting_decision_archive_cancels_node_and_archives_chain_without_delivery ... ok
+test tests::workflow_node_dispatch_readback_restores_user_reviewed_instruction_payload ... ok
+test utils::store_paths::tests::runtime_artifact_directory_is_private ... ok
+test tests::workflow_state_store_helpers_preserve_write_and_backup_behavior ... ok
+test workbench_sqlite_apply::tests::sqlite_apply_importer_rejects_before_db_begin_without_creating_db ... ok
+test tests::workflow_run_check_allows_runnable_fixture_without_auto_filling_optional_refs ... ok
+test workbench_sqlite_apply::tests::sqlite_apply_importer_rejects_non_temp_db_path ... ok
+test workbench_sqlite_apply::tests::sqlite_apply_importer_rejects_conflicts_sensitive_and_corrupt_without_partial_rows ... ok
+test tests::workflow_task_package_read_model_derives_v1_objects_from_v0_state ... ok
+test tests::workflow_run_check_ignores_dead_unresolved_direction_artifact_field ... ok
+test workbench_sqlite_apply::tests::sqlite_insert_domain_record_unknown_kind_fails_closed ... ok
+test workbench_sqlite_dual_write::tests::sqlite_dual_write_before_db_apply_failure_creates_no_outputs ... ok
+test tests::task_session_binding_binds_existing_and_new_sessions_to_their_own_tasks ... ok
+test workbench_sqlite_apply::tests::sqlite_apply_importer_preserves_distinct_long_prefix_session_bindings ... ok
+test workbench_sqlite_apply::tests::sqlite_apply_importer_after_commit_injection_keeps_committed_rows ... ok
+test workbench_sqlite_dual_write::tests::sqlite_dual_write_after_db_before_projection_failure_keeps_db_without_projection ... ok
+test workbench_sqlite_apply::tests::sqlite_apply_importer_applies_valid_chain_and_reapply_is_idempotent ... ok
+test workbench_sqlite_dual_write::tests::sqlite_dual_write_after_manifest_commit_keeps_completed_manifest_and_reports_failure ... ok
+test workbench_sqlite_dual_write::tests::sqlite_dual_write_rejects_non_temp_projection_root ... ok
+test workbench_sqlite_apply::tests::sqlite_apply_export_uses_latest_batch_and_replaces_refreshed_root_meta ... ok
+test workbench_sqlite_apply::tests::sqlite_apply_export_m1_completeness_round_trips_new_sources ... ok
+test workbench_sqlite_dual_write::tests::sqlite_dual_write_before_manifest_commit_marks_incomplete_without_completed_manifest ... ok
+test workbench_sqlite_importer::tests::sqlite_importer_dry_run_accepts_contract_fixture_matrix_domains ... ok
+test workbench_sqlite_importer::tests::sqlite_importer_dry_run_classifies_corrupt_unknown_and_alias_sources ... ok
+test workbench_sqlite_importer::tests::sqlite_importer_dry_run_classifies_duplicate_and_revision_conflicts ... ok
+test workbench_sqlite_importer::tests::sqlite_importer_dry_run_rejects_sensitive_fixture ... ok
+test workbench_sqlite_importer::tests::sqlite_importer_dry_run_reports_valid_fixture_deterministically ... ok
+test workbench_sqlite_importer::tests::sqlite_importer_dry_run_second_pass_marks_same_hash_as_skipped ... ok
+test workbench_sqlite_importer::tests::sqlite_importer_sensitive_predicate_only_allows_numeric_token_count_keys ... ok
+test workbench_sqlite_observation_period::tests::r3_b3_observation_confirmed_paths_requires_env_authorization ... ignored, requires explicit R3 B3 observation authorization and confirmed paths
+test workbench_sqlite_dual_write::tests::sqlite_dual_write_projection_failure_cleans_partial_files_before_manifest ... ok
+test workbench_sqlite_dual_write::tests::sqlite_dual_write_projection_redacts_forbidden_sensitive_fields ... ok
+test workbench_sqlite_dual_write::tests::sqlite_dual_write_recovery_dry_run_reads_completed_manifest_without_mutating_files ... ok
+test workbench_sqlite_dual_write::tests::sqlite_dual_write_rehearsal_writes_projection_and_completed_manifest ... ok
+test workbench_sqlite_exporter::tests::sqlite_export_dry_run_projects_workflow_runtime_and_product_command_without_writes ... ok
+test workbench_sqlite_dual_write::tests::sqlite_dual_write_rehearsal_is_idempotent_for_same_fixture_and_projection_root ... ok
+test workbench_sqlite_exporter::tests::sqlite_export_dry_run_omits_forbidden_sensitive_fields ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_failure_before_sample_creates_no_outputs ... ok
+test workbench_sqlite_exporter::tests::sqlite_export_dry_run_uses_canonical_runtime_log_alias_policy ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_db_integrity_failure_is_degraded_and_has_no_stable_report ... ok
+test workbench_sqlite_apply::tests::sqlite_apply_importer_rolls_back_failure_injection_before_commit ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_failure_after_first_export_before_second_sample_creates_no_report ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_export_hash_mismatch_blocks_without_stable_report ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_drift_between_samples_blocks_without_stable_report ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_export_records_per_file_verification_fields ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_failure_after_rollback_selected_before_report_commit_creates_no_report ... ok
+test workbench_sqlite_observation_period::tests::sqlite_production_observation_db_unavailable_falls_back_degraded ... ok
+test workbench_sqlite_observation_period::tests::sqlite_production_observation_feature_flag_disabled_uses_fallback_without_db ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_incomplete_manifest_blocks_without_stable_report ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_missing_manifest_blocks_without_stable_report ... ok
+test workbench_sqlite_observation_period::tests::sqlite_production_observation_integrity_failure_falls_back_degraded ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_projection_corrupt_blocks_without_stable_report ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_projection_missing_blocks_without_stable_report ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_report_projection_and_manifest_omit_forbidden_sensitive_fields ... ok
+test workbench_sqlite_observation_period::tests::sqlite_production_observation_schema_mismatch_falls_back_degraded ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_rollback_verification_is_dry_run_only ... ok
+test workbench_sqlite_preflight::tests::r3_b0_hash_calibration_real_workbench_state_root_requires_env_authorization ... ignored, requires explicit R3 B0 hash calibration authorization and real workbench state root
+test workbench_sqlite_preflight::tests::sqlite_preflight_accepts_explicit_sidecar_list_and_denies_explicit_markers ... ok
+test workbench_sqlite_preflight::tests::sqlite_preflight_denied_dotfile_and_directory_block_before_ignore ... ok
+test workbench_sqlite_preflight::tests::sqlite_preflight_denied_sensitive_name_blocks_without_reading_body ... ok
+test workbench_sqlite_preflight::tests::sqlite_preflight_denies_codex_home_root ... ok
+test workbench_sqlite_preflight::tests::sqlite_preflight_denies_report_path_inside_source_root ... ok
+test workbench_sqlite_preflight::tests::sqlite_preflight_missing_optional_sidecars_are_warnings_not_blockers ... ok
+test workbench_sqlite_preflight::tests::sqlite_preflight_scans_valid_root_without_writing_production_flags ... ok
+test workbench_sqlite_preflight::tests::sqlite_preflight_source_root_hash_uses_canonical_aggregate_helper ... ok
+test workbench_sqlite_preflight::tests::sqlite_preflight_unknown_json_blocks_without_body_output ... ok
+test workbench_sqlite_preflight::tests::sqlite_preflight_v2_denied_name_precedence_over_runtime_ignore ... ok
+test workbench_sqlite_preflight::tests::sqlite_preflight_v2_live_root_readonly_scan ... ignored
+test workbench_sqlite_preflight::tests::sqlite_preflight_v2_runtime_transient_registry_ignored_not_blocking ... ok
+test workbench_sqlite_preflight::tests::sqlite_preflight_v2_unknown_json_still_fails_closed ... ok
+test workbench_sqlite_production_apply::tests::r3_b1_production_apply_confirmed_paths_requires_env_authorization ... ignored, requires explicit R3 B1 production apply authorization and confirmed paths
+test workbench_sqlite_production_apply::tests::sqlite_m3_live_snapshot_level_b_rehearsal_and_reconcile ... ignored, M3 live-snapshot rehearsal: needs WORKBENCH_M3_LIVE_ROOT (reads real live data)
+test workbench_sqlite_observation_period::tests::sqlite_observation_stable_verifies_two_samples_and_writes_report ... ok
+test workbench_sqlite_observation_period::tests::sqlite_observation_idempotent_rerun_keeps_stable_report_text ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_backup_manifest_failure_happens_before_db_create ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_db_initialize_failure_creates_no_completed_report ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_expected_hash_mismatches_block ... ok
+test workbench_sqlite_observation_period::tests::sqlite_production_observation_level_b_accepts_confirmed_non_temp_db_and_matches_fallback ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_import_rejected_corrupt_snapshot_creates_no_completed_report ... ok
+test workbench_sqlite_observation_period::tests::sqlite_production_observation_db_stable_success_verifies_two_samples ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_after_commit_failure_writes_failed_classified_report ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_level_a_still_rejects_non_temp_output_path ... ok
+test workbench_sqlite_observation_period::tests::sqlite_production_observation_level_b_rejects_invalid_confirmed_inputs ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_export_hash_mismatch_blocks_completed_report ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_level_b_rejects_denied_output_path_marker ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_level_b_rejects_output_inside_source_root ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_level_b_rejects_parent_dir_output_escape_into_source_root ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_level_b_rejects_unconfirmed_output_paths ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_level_b_rejects_unconfirmed_source_root ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_level_a_applies_temp_db_with_backup_and_report ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_preflight_blocked_creates_no_db_or_report ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_rejects_db_backup_report_and_rollback_inside_source_root ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_level_b_accepts_confirmed_root_and_paths ... ok
+test workbench_sqlite_read_cut::tests::r3_b2_limited_read_cut_confirmed_paths_requires_env_authorization ... ignored, requires explicit R3 B2 limited read-cut authorization and confirmed paths
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_after_fallback_before_report_commit_leaves_no_report ... ok
+test workbench_sqlite_observation_period::tests::sqlite_production_observation_sensitive_redaction_omits_forbidden_values ... ok
+test workbench_sqlite_observation_period::tests::sqlite_production_observation_idempotent_rerun_keeps_report_text ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_db_unavailable_fallback_is_degraded ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_transaction_rollback_before_commit_leaves_no_partial_rows ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_fallback_hash_mismatch_blocks_without_report ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_feature_flag_disabled_uses_fallback_without_db ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_level_b_missing_optional_sidecars_warns_not_fails ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_level_a_idempotent_rerun_is_deterministic ... ok
+test workbench_sqlite_production_apply::tests::sqlite_m3_synthetic_live_scale_level_b_round_trip ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_level_a_still_rejects_non_temp_db_path ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_db_hash_mismatch_blocks_without_report ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_db_authoritative_success ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_failures_before_report_commit_leave_no_completed_report ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_rejects_r3_a4_projection_root ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_integrity_failure_fallback_is_degraded ... ok
+test workbench_sqlite_observation_period::tests::sqlite_production_observation_mid_commit_failures_leave_no_stable_report ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_incomplete_manifest_blocks_without_report ... ok
+test workbench_sqlite_production_apply::tests::sqlite_production_missing_or_incomplete_rollback_manifest_blocks_completion ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_level_b_accepts_confirmed_non_temp_db_and_matches_fallback ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_missing_manifest_blocks_without_report ... ok
+test workbench_sqlite_read_cut::tests::sqlite_read_cut_failure_injection_before_db_read_creates_no_report ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_schema_mismatch_fallback_is_degraded ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_projection_hash_mismatch_blocks_without_report ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_level_b_rejects_invalid_confirmed_inputs ... ok
+test workbench_sqlite_read_cut::tests::sqlite_read_cut_db_authoritative_success_uses_db_projection_hash ... ok
+test workbench_sqlite_read_cut::tests::sqlite_limited_read_cut_sensitive_redaction_and_idempotent_report ... ok
+test workbench_sqlite_read_cut::tests::sqlite_read_cut_failure_after_db_read_before_verification_creates_no_report ... ok
+test workbench_sqlite_read_cut::tests::sqlite_read_cut_failure_after_fallback_before_report_commit_creates_no_report ... ok
+test workbench_sqlite_read_cut::tests::sqlite_read_cut_db_unavailable_uses_verified_json_projection_fallback ... ok
+test workbench_sqlite_read_cut::tests::sqlite_read_cut_incomplete_manifest_blocks_without_completed_report ... ok
+test workbench_sqlite_read_cut::tests::sqlite_read_cut_missing_manifest_blocks_without_completed_report ... ok
+test workbench_sqlite_read_cut::tests::sqlite_read_cut_projection_hash_mismatch_blocks_without_completed_report ... ok
+test workbench_sqlite_repository::tests::repository_has_no_tauri_command_and_db_primary_wiring_is_mode_guarded ... ok
+test workbench_sqlite_repository::tests::confirmed_repository_requires_exact_canonical_and_non_denied_path ... ok
+test workbench_sqlite_read_cut::tests::sqlite_read_cut_recovery_dry_run_does_not_restore_outputs ... ok
+test workbench_sqlite_read_cut::tests::sqlite_read_cut_idempotent_rerun_keeps_stable_report ... ok
+test workbench_sqlite_repository::tests::repository_configures_temp_db_with_wal_busy_foreign_keys_and_rejects_non_temp_paths ... ok
+test workbench_sqlite_read_cut::tests::sqlite_read_cut_report_and_projection_omit_forbidden_sensitive_fields ... ok
+test workbench_sqlite_read_cut::tests::sqlite_read_cut_schema_mismatch_fallback_is_degraded_not_db_success ... ok
+test workbench_sqlite_repository::tests::repository_unfinished_supervisor_action_recovers_to_waiting_without_replay ... ok
+test workbench_sqlite_repository::tests::subsequent_sidecar_state_apis_write_record_and_audit_together ... ok
+test workbench_sqlite_repository::tests::workflow_state_delta_materializes_missing_optional_arrays ... ok
+test workbench_sqlite_schema::tests::sqlite_schema_rejects_non_temp_paths ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_apply_rejected_corrupt_snapshot_blocks_report ... ok
+test workbench_sqlite_repository::tests::repository_six_row_mutations_are_immediate_constant_size_and_cas_is_mandatory ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_copy_interrupted_before_manifest_writes_no_report ... ok
+test workbench_sqlite_schema::tests::sqlite_schema_hardens_core_constraints_and_indexes ... ok
+test workbench_sqlite_repository::tests::workflow_state_delta_before_commit_has_no_partial_rows ... ok
+test workbench_sqlite_repository::tests::workflow_state_delta_rejects_removed_known_array ... ok
+test workbench_sqlite_schema::tests::sqlite_schema_initializes_temp_db_with_core_tables ... ok
+test workbench_sqlite_repository::tests::workflow_state_delta_upserts_all_batch1_tables_and_deletes_removed_rows ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_rejects_copy_destination_inside_source_root ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_rejects_denied_config_marker_even_when_custom_config_is_empty ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_rejects_report_path_inside_source_root ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_rejects_temp_db_path_inside_source_root ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_source_preflight_blocked_by_denied_file_before_copy ... ok
+test workbench_sqlite_stop_write::tests::r3_b4_stop_write_decision_confirmed_paths_requires_env_authorization ... ignored, requires explicit R3 B4 stop-write decision authorization and confirmed paths
+test workbench_sqlite_repository::tests::repository_concurrent_writers_keep_exact_rows_and_busy_retry_is_bounded ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_cleanup_failure_keeps_only_temp_artifacts_and_source_unchanged ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_export_hash_mismatch_blocks_report ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_incomplete_rollback_manifest_blocks_report ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_after_preconditions_before_report_commit_leaves_no_report ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_approve_without_level_b_evidence_blocks ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_level_a_copies_applies_exports_and_writes_report ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_missing_rollback_manifest_blocks_report ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_db_missing_blocks ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_denied_path_marker_blocks ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_db_hash_mismatch_blocks ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_level_a_still_rejects_non_temp_db_path ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_missing_supervisor_or_invalid_decision_blocks ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_fallback_hash_mismatch_blocks ... ok
+test workbench_sqlite_snapshot_apply::tests::sqlite_snapshot_level_a_idempotent_rerun_keeps_report_text_stable ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_prepare_only_not_ready_without_stop_write ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_level_b_confirmed_paths_ready_but_not_executed ... ok
+test workbench_sqlite_repository::tests::repository_failure_before_commit_leaves_all_six_flows_unchanged ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_level_b_hash_mismatch_blocks_without_report ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_level_b_rejects_non_confirmed_db_path ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_level_b_prepare_only_and_precondition_blocks ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_ready_but_not_executed_with_fixture_evidence ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_projection_hash_mismatch_blocks ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_rejected_by_supervisor_records_rejection ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_rollback_restore_performed_blocks ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_sensitive_redaction_and_idempotent_rerun ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_level_b_rejects_output_inside_source_or_db_or_projection ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_source_mutation_detected_blocks ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_observation_report_missing_or_mismatch_blocks ... ok
+test workbench_sqlite_stop_write::tests::sqlite_stop_write_rollback_manifest_missing_or_incomplete_blocks ... ok
+test workbench_sqlite_observation_period::tests::sqlite_production_observation_hash_projection_manifest_and_drift_failures_block ... ok
+test workbench_sqlite_storage_mode::tests::m5a_blocked_mode_degrades_all_six_product_flows_to_json_once_without_db_writes ... ok
+test workbench_sqlite_storage_mode::tests::m5a_db_ahead_replays_on_restart_and_json_ahead_degrades_to_json ... ok
+test workbench_sqlite_storage_mode::tests::m5a_db_primary_writes_five_product_flows_and_reconciles_without_lag ... ok
+test workbench_sqlite_storage_mode::tests::m5a_explicit_json_only_keeps_proposal_bytes_identical_to_missing_config ... ok
+test workbench_sqlite_storage_mode::tests::m5a_missing_malformed_or_mismatched_config_is_json_only ... ok
+test workbench_sqlite_storage_mode::tests::m5a_production_seed_shape_reconciles_legacy_hashes_and_audit_tables ... ok
+test workbench_sqlite_storage_mode::tests::m5a_projection_failure_blocks_db_writes_and_degrades_to_json ... ok
+test workbench_sqlite_storage_mode::tests::m5b_unordered_edge_and_artifact_divergence_fail_closed_as_hash_mismatch ... ok
+test workbench_sqlite_storage_mode::tests::m5a_reconciliation_is_read_only ... ok
+test workbench_sqlite_storage_mode::tests::m5a_storage_mode_change_requires_restart ... ok
+test workbench_sqlite_storage_mode::tests::m5b_batch2_bootstraps_second_project_through_db_primary_and_reconciles ... ok
+test workbench_sqlite_storage_mode::tests::m5b_batch2_bridge_commits_workflow_audit_before_json_projection ... ok
+test workbench_sqlite_storage_mode::tests::m5b_batch2_knowledge_vault_audit_projects_once_and_reconciles_after_restart ... ok
+test workbench_sqlite_storage_mode::tests::m5b_db_ahead_replays_full_workflow_projection_face ... ok
+test workbench_sqlite_storage_mode::tests::m5b_full_workflow_projection_face_is_seeded_and_reconciles ... ok
+test workbench_sqlite_storage_mode::tests::m5b_plan_authorization_inspect_db_primary_reconciles_after_restart ... ok
+test workbench_sqlite_transaction_acceptance::tests::sqlite_transaction_acceptance_classifies_after_commit_report_failure ... ok
+test workbench_sqlite_transaction_acceptance::tests::sqlite_transaction_acceptance_commits_memory_and_audit_in_one_transaction ... ok
+test workbench_sqlite_transaction_acceptance::tests::sqlite_transaction_acceptance_rejects_before_begin_without_creating_db ... ok
+test workbench_sqlite_transaction_acceptance::tests::sqlite_transaction_acceptance_rejects_non_temp_db_and_non_a13_fixture ... ok
+test workbench_sqlite_storage_mode::tests::m5b_supervisor_orchestrator_db_ahead_replays_sidecar_and_reconciles ... ok
+test worker_protocol::tests::worker_protocol_creates_handoff_candidate_only_after_real_readback ... ok
+test worker_protocol::tests::worker_protocol_derives_multi_worker_reviewer_and_recovery_lanes ... ok
+test worker_protocol::tests::worker_protocol_i5_blocks_planned_adapter_contract_without_runtime_model_or_location ... ok
+test worker_protocol::tests::worker_protocol_i5_cli_parity_requires_control_core_permission_and_audit ... ok
+test worker_protocol::tests::worker_protocol_i5_health_degraded_and_data_location_stay_readonly ... ok
+test worker_protocol::tests::worker_protocol_keeps_planned_adapter_risk_blocked_without_credentials ... ok
+test worker_protocol::tests::worker_protocol_maps_codex_local_without_executing ... ok
+test worker_protocol::tests::worker_protocol_preserves_unknown_readback_as_null_count ... ok
+test worker_report::tests::broken_json_is_none ... ok
+test worker_report::tests::consume_blocked_report_returns_help_signal_and_records_real_fields ... ok
+test worker_report::tests::consume_good_block_records_to_store ... ok
+test worker_report::tests::consume_no_block_soft_lands_without_write ... ok
+test worker_report::tests::consume_record_failure_warns_without_breaking ... ok
+test worker_report::tests::consume_suspected_help_without_valid_json_escalates_to_help_signal ... ok
+test worker_report::tests::goals_keep_objective_first_then_report_format_then_contract ... ok
+test worker_report::tests::missing_fields_default ... ok
+test worker_report::tests::no_block_is_none ... ok
+test worker_report::tests::parses_blocked_help_fields_with_defaults ... ok
+test worker_report::tests::parses_findings_for_readonly_report ... ok
+test worker_report::tests::parses_full_block ... ok
+test worker_report::tests::parses_machine_review_evidence_array ... ok
+test worker_report::tests::prose_around_block_ok ... ok
+test worker_report::tests::report_status_passthrough_three_states ... ok
+test worker_report::tests::station3b_regression_self_invented_fields_dropped_findings_kept ... ok
+test workflow_audit::tests::audit_event_identity_distinguishes_slug_fold_collisions ... ok
+test workflow_audit::tests::audit_event_identity_keeps_same_millisecond_batch_unique ... ok
+test workflow_audit::tests::audit_event_identity_uses_full_slug_and_documented_format ... ok
+test workflow_audit::tests::k3_b1_recovery_audit_event_records_choice_without_sensitive_payloads ... ok
+test workflow_audit::tests::operation_decision_audit_event_records_decision_without_execution_or_sensitive_payloads ... ok
+test workflow_chain_controller_topo_tests::isolated_nodes_keep_input_order ... ok
+test workflow_chain_controller_topo_tests::topological_order_detects_cycle ... ok
+test workflow_chain_controller_topo_tests::topological_order_ignores_edges_to_outside_nodes ... ok
+test workflow_chain_controller_topo_tests::topological_order_respects_edges_and_is_deterministic ... ok
+test workflow_state_store::tests::workflow_state_atomic_write_refuses_lock_busy_without_overwrite ... ok
+test workflow_state_store::tests::workflow_state_backup_retention_caps_daily_history ... ok
+test workflow_state_store::tests::workflow_state_backup_retention_keeps_recent_30_and_daily_one ... ok
+test workflow_state_store::tests::workflow_state_revision_conflict_refuses_write_without_overwrite ... ok
+test workflow_state_store::tests::workflow_state_stale_snapshot_is_rejected_without_lost_update ... ok
+test workflow_state_store::tests::workflow_state_write_validated_refuses_corrupt_existing_without_overwrite ... ok
+test workbench_sqlite_transaction_acceptance::tests::sqlite_transaction_acceptance_rolls_back_all_before_commit_failures ... ok
+test workbench_sqlite_storage_mode::tests::m5c_bcd_db_primary_temp_mock_e2e_hits_resume_and_new_session_then_reconciles ... ok
+test workbench_sqlite_storage_mode::tests::m5c_bcd_json_only_temp_mock_counterpart_creates_no_sqlite_db ... ok
+test workbench_sqlite_storage_mode::tests::m5c_global_supervisor_mode_off_keeps_json_only_and_creates_no_temp_db ... ok
+test workbench_sqlite_storage_mode::tests::m5c_global_supervisor_mode_on_writes_four_tables_then_db_leading_replays ... ok
+test workbench_sqlite_storage_mode::tests::m5c_global_supervisor_projection_failure_blocks_then_db_leading_replays ... ok
+test workbench_sqlite_storage_mode::tests::m5f1_auxiliary_degradation_failures_commit_original_candidate_once_for_both_batches ... ok
+test workbench_sqlite_storage_mode::tests::m5f1_blocked_json_only_commits_same_batch_workflow_write_with_one_degradation_audit ... ok
+test workbench_sqlite_storage_mode::tests::m5f1_blocked_json_only_never_rebases_over_external_revision_conflict ... ok
+
+test result: ok. 1210 passed; 0 failed; 45 ignored; 0 measured; 0 filtered out; finished in 66.05s
+
+test_exit=0

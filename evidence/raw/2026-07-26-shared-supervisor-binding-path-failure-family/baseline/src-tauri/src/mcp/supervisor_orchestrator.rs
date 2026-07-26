@@ -1088,10 +1088,6 @@ pub(crate) enum SupervisorConversationBindingEstablishmentError {
     BindingStorePrepare,
     BindingPersistDb,
     BindingProjectJson,
-    /// B4：`Update(_)` 的真实语义是「这个 run 已经绑给别的 turn，拒绝覆盖」，
-    /// 与「绑定构造不出来」完全是两回事。拆出来只为让 family 能分辨；
-    /// 对外的 `binding_stage` 仍映射回既有的 `BindingConstruct`，不改契约。
-    BindingStoreConflict,
 }
 
 fn establish_supervisor_conversation_turn_binding_store<R>(
@@ -1112,7 +1108,7 @@ fn establish_supervisor_conversation_turn_binding_store<R>(
                 SupervisorConversationBindingEstablishmentError::BindingStorePrepare
             }
             DbPrimaryStoreUpdateError::Update(_) => {
-                SupervisorConversationBindingEstablishmentError::BindingStoreConflict
+                SupervisorConversationBindingEstablishmentError::BindingConstruct
             }
             DbPrimaryStoreUpdateError::PersistDb(_) => {
                 SupervisorConversationBindingEstablishmentError::BindingPersistDb

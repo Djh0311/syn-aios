@@ -1,0 +1,15 @@
+PASS: CSS 裸 hex -> exactly 1 hardcoded_hex_on_ui — got 1
+PASS: finding severity=error — ["error"]
+PASS: check-mode Status=fail on new bare hex — status=fail
+PASS: finding points at styles.css/#aabbcc — {"hex":"#aabbcc","file":"prototypes/productized-desktop-shell/src/styles.css","line":2}
+PASS: token 定义行 -> 0 hardcoded_hex_on_ui — got 0
+PASS: 注释内 hex -> 0 hardcoded_hex_on_ui — got 0
+PASS: var() 回退位 hex -> exactly 1 hardcoded_hex_on_ui — got 1
+PASS: %23 转义形 -> exactly 1 hardcoded_hex_on_ui — got 1
+PASS: whitelisted hex -> 0 hardcoded_hex_on_ui — got 0
+PASS: whitelisted hit recorded as deferred — deferred=1
+PASS: whitelisted tree Status stays pass — status=pass
+PASS: TSX 内联裸 hex -> exactly 1 hardcoded_hex_on_ui — got 1
+PASS: clean tree -> 0 hardcoded_hex_on_ui — got 0
+
+Self-test: 13/13 checks passed

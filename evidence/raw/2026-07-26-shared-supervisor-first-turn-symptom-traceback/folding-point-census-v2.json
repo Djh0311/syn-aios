@@ -1,0 +1,165 @@
+{
+  "method": "v2：只剔真正的测试项/测试模块，单项 #[cfg(test)] 按花括号配对只剔一个 item",
+  "files": [
+    {
+      "file": "mcp/supervisor_conversation_binding.rs",
+      "totalLines": 800,
+      "skippedAsTest": 215,
+      "productionLines": 585,
+      "counts": {
+        "map_err(|_|": 0,
+        ".ok()": 0,
+        "unwrap_or": 2,
+        "let _ =": 0,
+        "Err(_)": 0,
+        ".is_err()": 0,
+        "unwrap()": 0
+      },
+      "foldingTotal": 2
+    },
+    {
+      "file": "manual_relay/conversation_transport.rs",
+      "totalLines": 1457,
+      "skippedAsTest": 556,
+      "productionLines": 901,
+      "counts": {
+        "map_err(|_|": 7,
+        ".ok()": 0,
+        "unwrap_or": 1,
+        "let _ =": 1,
+        "Err(_)": 1,
+        ".is_err()": 3,
+        "unwrap()": 0
+      },
+      "foldingTotal": 13
+    },
+    {
+      "file": "mcp/supervisor_orchestrator_db_primary.rs",
+      "totalLines": 370,
+      "skippedAsTest": 46,
+      "productionLines": 324,
+      "counts": {
+        "map_err(|_|": 0,
+        ".ok()": 0,
+        "unwrap_or": 1,
+        "let _ =": 0,
+        "Err(_)": 0,
+        ".is_err()": 0,
+        "unwrap()": 0
+      },
+      "foldingTotal": 1
+    },
+    {
+      "file": "mcp/supervisor_orchestrator_submit_proposal.rs",
+      "totalLines": 345,
+      "skippedAsTest": 0,
+      "productionLines": 345,
+      "counts": {
+        "map_err(|_|": 3,
+        ".ok()": 0,
+        "unwrap_or": 2,
+        "let _ =": 0,
+        "Err(_)": 1,
+        ".is_err()": 2,
+        "unwrap()": 0
+      },
+      "foldingTotal": 8
+    },
+    {
+      "file": "mcp/storage.rs",
+      "totalLines": 462,
+      "skippedAsTest": 0,
+      "productionLines": 462,
+      "counts": {
+        "map_err(|_|": 0,
+        ".ok()": 0,
+        "unwrap_or": 3,
+        "let _ =": 0,
+        "Err(_)": 1,
+        ".is_err()": 0,
+        "unwrap()": 3
+      },
+      "foldingTotal": 4
+    },
+    {
+      "file": "mcp/capability_registry.rs",
+      "totalLines": 504,
+      "skippedAsTest": 131,
+      "productionLines": 373,
+      "counts": {
+        "map_err(|_|": 0,
+        ".ok()": 0,
+        "unwrap_or": 0,
+        "let _ =": 0,
+        "Err(_)": 0,
+        ".is_err()": 0,
+        "unwrap()": 0
+      },
+      "foldingTotal": 0
+    },
+    {
+      "file": "mcp/supervisor_orchestrator.rs",
+      "totalLines": 3715,
+      "skippedAsTest": 899,
+      "productionLines": 2816,
+      "counts": {
+        "map_err(|_|": 8,
+        ".ok()": 2,
+        "unwrap_or": 21,
+        "let _ =": 6,
+        "Err(_)": 1,
+        ".is_err()": 0,
+        "unwrap()": 0
+      },
+      "foldingTotal": 38
+    },
+    {
+      "file": "commands.rs",
+      "totalLines": 6794,
+      "skippedAsTest": 1845,
+      "productionLines": 4949,
+      "counts": {
+        "map_err(|_|": 9,
+        ".ok()": 5,
+        "unwrap_or": 57,
+        "let _ =": 4,
+        "Err(_)": 14,
+        ".is_err()": 4,
+        "unwrap()": 0
+      },
+      "foldingTotal": 93
+    },
+    {
+      "file": "supervisor_resident_oneshot_session.rs",
+      "totalLines": 3382,
+      "skippedAsTest": 59,
+      "productionLines": 3323,
+      "counts": {
+        "map_err(|_|": 6,
+        ".ok()": 2,
+        "unwrap_or": 8,
+        "let _ =": 6,
+        "Err(_)": 0,
+        ".is_err()": 5,
+        "unwrap()": 0
+      },
+      "foldingTotal": 27
+    },
+    {
+      "file": "supervisor_session_launcher.rs",
+      "totalLines": 2990,
+      "skippedAsTest": 976,
+      "productionLines": 2014,
+      "counts": {
+        "map_err(|_|": 1,
+        ".ok()": 7,
+        "unwrap_or": 15,
+        "let _ =": 20,
+        "Err(_)": 0,
+        ".is_err()": 1,
+        "unwrap()": 0
+      },
+      "foldingTotal": 44
+    }
+  ]
+}

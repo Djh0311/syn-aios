@@ -1,0 +1,3631 @@
+warning: unused import: `Sha256`
+ --> src/project_workflow_automation.rs:2:20
+  |
+2 | use sha2::{Digest, Sha256};
+  |                    ^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `Sha256`
+  --> src/real_execution_command.rs:27:20
+   |
+27 | use sha2::{Digest, Sha256};
+   |                    ^^^^^^
+
+warning: unused import: `Sha256`
+  --> src/session_continuation_store.rs:23:20
+   |
+23 | use sha2::{Digest, Sha256};
+   |                    ^^^^^^
+
+warning: unused import: `CANONICAL_RUNTIME_LOG`
+ --> src/workbench_sqlite_preflight.rs:6:5
+  |
+6 |     CANONICAL_RUNTIME_LOG, LEGACY_RUNTIME_LOG_ALIAS, OPTIONAL_SIDECARS, PRIMARY_WORKFLOW_STATE,
+  |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `PathBuf`
+  --> src/workbench_sqlite_preflight.rs:12:23
+   |
+12 | use std::path::{Path, PathBuf};
+   |                       ^^^^^^^
+
+warning: unused import: `Digest`
+ --> src/project_workflow_automation.rs:2:12
+  |
+2 | use sha2::{Digest, Sha256};
+  |            ^^^^^^
+
+warning: unused import: `Digest`
+  --> src/real_execution_command.rs:27:12
+   |
+27 | use sha2::{Digest, Sha256};
+   |            ^^^^^^
+
+warning: unused import: `Digest`
+  --> src/session_continuation_store.rs:23:12
+   |
+23 | use sha2::{Digest, Sha256};
+   |            ^^^^^^
+
+warning: struct `CleanupSessionContinuationStaleAttemptInput` is never constructed
+   --> src/types.rs:954:8
+    |
+954 | struct CleanupSessionContinuationStaleAttemptInput {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `CleanupSessionContinuationStaleAttemptOutput` is never constructed
+   --> src/types.rs:962:8
+    |
+962 | struct CleanupSessionContinuationStaleAttemptOutput {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `FormalMemoryStoreSummary` is never constructed
+    --> src/types.rs:3934:8
+     |
+3934 | struct FormalMemoryStoreSummary {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `ObservationStoreSummary` is never constructed
+    --> src/types.rs:4152:8
+     |
+4152 | struct ObservationStoreSummary {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `MemoryLintStoreSummary` is never constructed
+    --> src/types.rs:4478:8
+     |
+4478 | struct MemoryLintStoreSummary {
+     |        ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `project_root` and `dispatch_id` are never read
+    --> src/types.rs:5172:5
+     |
+5171 | struct WorkflowNodeDispatchReadbackRequest {
+     |        ----------------------------------- fields in this struct
+5172 |     project_root: String,
+     |     ^^^^^^^^^^^^
+5173 |     dispatch_id: String,
+     |     ^^^^^^^^^^^
+
+warning: function `prepare_workflow_node_dispatch_for_index_at` is never used
+    --> src/commands.rs:5252:4
+     |
+5252 | fn prepare_workflow_node_dispatch_for_index_at(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `run_workflow_machine_for_index_at` is never used
+    --> src/commands.rs:6730:4
+     |
+6730 | fn run_workflow_machine_for_index_at(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `prepare_workflow_node_dispatch_at` is never used
+    --> src/workflow_run_dispatch_entrypoints.rs:1171:4
+     |
+1171 | fn prepare_workflow_node_dispatch_at(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `read_workflow_node_dispatch_result_at` is never used
+    --> src/workflow_run_dispatch_entrypoints.rs:1269:4
+     |
+1269 | fn read_workflow_node_dispatch_result_at(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_readback_dispatch` is never used
+    --> src/workflow_execution_entrypoints.rs:1054:4
+     |
+1054 | fn write_readback_dispatch(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `run_workflow_machine_at` is never used
+    --> src/workflow_execution_entrypoints.rs:1782:4
+     |
+1782 | fn run_workflow_machine_at(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `workflow_machine_final_acceptance` is never used
+    --> src/workflow_execution_entrypoints.rs:1798:4
+     |
+1798 | fn workflow_machine_final_acceptance(summary: &str) -> bool {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CONSULTANT_V0_PROFILE` is never used
+   --> src/consultant_agent.rs:320:7
+    |
+320 | const CONSULTANT_V0_PROFILE: &str = r#"你是「项目咨询」。
+    |       ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `consultant_build_prompt` is never used
+   --> src/consultant_agent.rs:328:4
+    |
+328 | fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `ConsultRiskJson` is never constructed
+   --> src/consultant_agent.rs:415:8
+    |
+415 | struct ConsultRiskJson {
+    |        ^^^^^^^^^^^^^^^
+
+warning: struct `ConsultExecutionScopeJson` is never constructed
+   --> src/consultant_agent.rs:425:8
+    |
+425 | struct ConsultExecutionScopeJson {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `ConsultTaskJson` is never constructed
+   --> src/consultant_agent.rs:439:8
+    |
+439 | struct ConsultTaskJson {
+    |        ^^^^^^^^^^^^^^^
+
+warning: struct `ConsultProposalJson` is never constructed
+   --> src/consultant_agent.rs:455:8
+    |
+455 | struct ConsultProposalJson {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_consultation_proposal` is never used
+   --> src/consultant_agent.rs:504:15
+    |
+504 | pub(crate) fn parse_consultation_proposal(raw: &str) -> Result<ConsultationProposal, String> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_consultation_proposal` is never used
+    --> src/consultant_agent.rs:1091:15
+     |
+1091 | pub(crate) fn write_consultation_proposal(
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `run_project_director_failed_action` is never used
+    --> src/director_agent.rs:1523:15
+     |
+1523 | pub(crate) fn run_project_director_failed_action(
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `run_director_task_chain_with_final_marker` is never used
+    --> src/director_agent.rs:2193:15
+     |
+2193 | pub(crate) fn run_director_task_chain_with_final_marker(
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `run_director_task_chain_with_markers` is never used
+    --> src/director_agent.rs:2222:15
+     |
+2222 | pub(crate) fn run_director_task_chain_with_markers(
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `run_auto_advance_authorized_role_loop` is never used
+    --> src/director_agent.rs:4149:4
+     |
+4149 | fn run_auto_advance_authorized_role_loop(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_codex_transcript` is never used
+   --> src/index_host_app_entrypoints.rs:164:4
+    |
+164 | fn parse_codex_transcript(value: &Value) -> Result<CodexTranscript, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_codex_transcript_event` is never used
+   --> src/index_host_app_entrypoints.rs:210:4
+    |
+210 | fn parse_codex_transcript_event(value: &Value) -> CodexTranscriptEvent {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `usize_map` is never used
+   --> src/index_host_app_entrypoints.rs:523:4
+    |
+523 | fn usize_map(value: Option<&Value>) -> BTreeMap<String, usize> {
+    |    ^^^^^^^^^
+
+warning: method `isolated_log_dir` is never used
+   --> src/acceptance_runtime_profile.rs:126:19
+    |
+ 91 | impl ProfileProcessState {
+    | ------------------------ method in this implementation
+...
+126 |     pub(crate) fn isolated_log_dir(&self) -> Result<Option<PathBuf>, String> {
+    |                   ^^^^^^^^^^^^^^^^
+
+warning: trait `CodexLocalRunner` is never used
+  --> src/codex_local_runner.rs:22:18
+   |
+22 | pub(crate) trait CodexLocalRunner {
+   |                  ^^^^^^^^^^^^^^^^
+
+warning: struct `FakeCodexLocalRunner` is never constructed
+  --> src/codex_local_runner.rs:87:19
+   |
+87 | pub(crate) struct FakeCodexLocalRunner;
+   |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `dry_run_attempt` is never used
+   --> src/codex_local_runner.rs:717:4
+    |
+717 | fn dry_run_attempt(
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `validate_workflow_machine_start_state` is never used
+   --> src/control_core.rs:151:15
+    |
+151 | pub(crate) fn validate_workflow_machine_start_state(work_item_state: &str) -> Result<(), String> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_workflow_machine_final_state` is never used
+   --> src/control_core.rs:161:15
+    |
+161 | pub(crate) fn validate_workflow_machine_final_state(final_state: &str) -> Result<(), String> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `summarize_store` is never used
+   --> src/formal_memory_store.rs:176:15
+    |
+176 | pub(crate) fn summarize_store(store: &FormalMemoryStoreV1) -> FormalMemoryStoreSummary {
+    |               ^^^^^^^^^^^^^^^
+
+warning: function `reserve_confirmation_once` is never used
+    --> src/manual_relay.rs:4207:4
+     |
+4207 | fn reserve_confirmation_once(confirmation_id: &str) -> Result<String, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `PROFILE_AGENT_CODEX_WORKSPACE_WRITE` is never used
+  --> src/mcp/capability_registry.rs:10:18
+   |
+10 | pub(crate) const PROFILE_AGENT_CODEX_WORKSPACE_WRITE: &str = "agent-codex-workspace-write";
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `tool_name` is never used
+  --> src/mcp/capability_registry.rs:35:25
+   |
+34 | impl CapabilityHandler {
+   | ---------------------- method in this implementation
+35 |     pub(crate) const fn tool_name(self) -> &'static str {
+   |                         ^^^^^^^^^
+
+warning: function `registry` is never used
+   --> src/mcp/capability_registry.rs:243:15
+    |
+243 | pub(crate) fn registry() -> &'static [CapabilityDefinition] {
+    |               ^^^^^^^^
+
+warning: associated function `invalid_params` is never used
+  --> src/mcp/protocol.rs:69:12
+   |
+54 | impl JsonRpcError {
+   | ----------------- associated function in this implementation
+...
+69 |     pub fn invalid_params(detail: &str) -> Self {
+   |            ^^^^^^^^^^^^^^
+
+warning: function `operation_control_decision_capture_input` is never used
+  --> src/memory_daily_loop.rs:30:15
+   |
+30 | pub(crate) fn operation_control_decision_capture_input(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `summarize_store` is never used
+   --> src/memory_lint_store.rs:166:15
+    |
+166 | pub(crate) fn summarize_store(store: &MemoryLintStoreV1) -> MemoryLintStoreSummary {
+    |               ^^^^^^^^^^^^^^^
+
+warning: function `summarize_store` is never used
+   --> src/observation_store.rs:236:15
+    |
+236 | pub(crate) fn summarize_store(store: &ObservationStoreV1) -> ObservationStoreSummary {
+    |               ^^^^^^^^^^^^^^^
+
+warning: function `count_status` is never used
+   --> src/observation_store.rs:647:4
+    |
+647 | fn count_status(statuses: &[ObservationStatus], status: ObservationStatus) -> usize {
+    |    ^^^^^^^^^^^^
+
+warning: constant `K2_R1_EXECUTION_POINT_ID` is never used
+  --> src/real_execution_command.rs:37:7
+   |
+37 | const K2_R1_EXECUTION_POINT_ID: &str = "stage-k-k2-r1-mario-test-resume-read-only";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_R2_EXECUTION_POINT_ID` is never used
+  --> src/real_execution_command.rs:38:7
+   |
+38 | const K2_R2_EXECUTION_POINT_ID: &str = "stage-k-k2-r2-mario-test-resume-workspace-write";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_N1_EXECUTION_POINT_ID` is never used
+  --> src/real_execution_command.rs:39:7
+   |
+39 | const K2_N1_EXECUTION_POINT_ID: &str = "stage-k-k2-n1-isolated-new-session-read-only";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_N2_EXECUTION_POINT_ID` is never used
+  --> src/real_execution_command.rs:40:7
+   |
+40 | const K2_N2_EXECUTION_POINT_ID: &str = "stage-k-k2-n2-isolated-new-session-workspace-write";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_MARIO_PROJECT_ROOT` is never used
+  --> src/real_execution_command.rs:41:7
+   |
+41 | const K2_MARIO_PROJECT_ROOT: &str = "/Users/yoyi/Documents/mario test";
+   |       ^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_MARIO_PROJECT_ID` is never used
+  --> src/real_execution_command.rs:42:7
+   |
+42 | const K2_MARIO_PROJECT_ID: &str = "project:users-yoyi-documents-mario-test";
+   |       ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_MARIO_WORKFLOW_ID` is never used
+  --> src/real_execution_command.rs:43:7
+   |
+43 | const K2_MARIO_WORKFLOW_ID: &str = "workflow:stage-k:k2:mario-test";
+   |       ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_ISOLATED_PROJECT_ROOT` is never used
+  --> src/real_execution_command.rs:44:7
+   |
+44 | const K2_ISOLATED_PROJECT_ROOT: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_ISOLATED_PROJECT_ID` is never used
+  --> src/real_execution_command.rs:46:7
+   |
+46 | const K2_ISOLATED_PROJECT_ID: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_ISOLATED_WORKFLOW_ID` is never used
+  --> src/real_execution_command.rs:48:7
+   |
+48 | const K2_ISOLATED_WORKFLOW_ID: &str = "workflow:stage-k:k2:isolated";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_R1_SESSION_ID` is never used
+  --> src/real_execution_command.rs:49:7
+   |
+49 | const K2_R1_SESSION_ID: &str = "019e798a-6ce5-76c3-b8ee-33bd0fda841f";
+   |       ^^^^^^^^^^^^^^^^
+
+warning: constant `K2_R2_SESSION_ID` is never used
+  --> src/real_execution_command.rs:50:7
+   |
+50 | const K2_R2_SESSION_ID: &str = "019e798a-ac37-7771-b982-e38084fcd22e";
+   |       ^^^^^^^^^^^^^^^^
+
+warning: constant `K2_R2_ALLOWED_WRITE_ROOT` is never used
+  --> src/real_execution_command.rs:51:7
+   |
+51 | const K2_R2_ALLOWED_WRITE_ROOT: &str = "/Users/yoyi/Documents/mario test/.workbench/stage-k/k2/";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_R2_ALLOWED_WRITE_PATH` is never used
+  --> src/real_execution_command.rs:52:7
+   |
+52 | const K2_R2_ALLOWED_WRITE_PATH: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_N2_ALLOWED_WRITE_ROOT` is never used
+  --> src/real_execution_command.rs:54:7
+   |
+54 | const K2_N2_ALLOWED_WRITE_ROOT: &str = "/Users/yoyi/workspace/product-line/test-fixtures/stage-k-isolated-project/.workbench/stage-k...
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_N2_ALLOWED_WRITE_PATH` is never used
+  --> src/real_execution_command.rs:55:7
+   |
+55 | const K2_N2_ALLOWED_WRITE_PATH: &str = "/Users/yoyi/workspace/product-line/test-fixtures/stage-k-isolated-project/.workbench/stage-k...
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_R1_PROMPT_HASH` is never used
+  --> src/real_execution_command.rs:56:7
+   |
+56 | const K2_R1_PROMPT_HASH: &str = "2dc6d059fe5373ba547da91bd2b28296ab0ec15450cb7264f26243a3bff86e1d";
+   |       ^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_R2_PROMPT_HASH` is never used
+  --> src/real_execution_command.rs:57:7
+   |
+57 | const K2_R2_PROMPT_HASH: &str = "03091a7bfc9e8a9b86bcc79f421f8b0ab982cd513cca7e1b8346afc709205c49";
+   |       ^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_N1_PROMPT_HASH` is never used
+  --> src/real_execution_command.rs:58:7
+   |
+58 | const K2_N1_PROMPT_HASH: &str = "b19d41bf5e37cd41af5630cd71241f729e576ed4409574b10594c56e2d359833";
+   |       ^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_N2_PROMPT_HASH` is never used
+  --> src/real_execution_command.rs:59:7
+   |
+59 | const K2_N2_PROMPT_HASH: &str = "3ff79f634ab4eaaf341878e62e0d8542d39b4c1d4f9cee67d69ba823849ebead";
+   |       ^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_R1_CANONICAL_PROMPT` is never used
+  --> src/real_execution_command.rs:60:7
+   |
+60 | const K2_R1_CANONICAL_PROMPT: &str = include_str!(
+   |       ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_R2_CANONICAL_PROMPT` is never used
+  --> src/real_execution_command.rs:63:7
+   |
+63 | const K2_R2_CANONICAL_PROMPT: &str = include_str!(
+   |       ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_N1_CANONICAL_PROMPT` is never used
+  --> src/real_execution_command.rs:66:7
+   |
+66 | const K2_N1_CANONICAL_PROMPT: &str = include_str!(
+   |       ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K2_N2_CANONICAL_PROMPT` is never used
+  --> src/real_execution_command.rs:69:7
+   |
+69 | const K2_N2_CANONICAL_PROMPT: &str = include_str!(
+   |       ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `K2ExecutionPointConfig` is never constructed
+  --> src/real_execution_command.rs:74:19
+   |
+74 | pub(crate) struct K2ExecutionPointConfig {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `k2_execution_point_config` is never used
+   --> src/real_execution_command.rs:278:15
+    |
+278 | pub(crate) fn k2_execution_point_config(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_k2_execution_point_config` is never used
+   --> src/real_execution_command.rs:437:15
+    |
+437 | pub(crate) fn validate_k2_execution_point_config(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `k2_prepare_input` is never used
+   --> src/real_execution_command.rs:482:15
+    |
+482 | pub(crate) fn k2_prepare_input(
+    |               ^^^^^^^^^^^^^^^^
+
+warning: function `k2_decision_input` is never used
+   --> src/real_execution_command.rs:498:15
+    |
+498 | pub(crate) fn k2_decision_input(
+    |               ^^^^^^^^^^^^^^^^^
+
+warning: function `k2_phase_a_input` is never used
+   --> src/real_execution_command.rs:518:15
+    |
+518 | pub(crate) fn k2_phase_a_input(
+    |               ^^^^^^^^^^^^^^^^
+
+warning: function `k2_resume_phase_b_input` is never used
+   --> src/real_execution_command.rs:534:15
+    |
+534 | pub(crate) fn k2_resume_phase_b_input(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `k2_new_session_phase_b_input` is never used
+   --> src/real_execution_command.rs:583:15
+    |
+583 | pub(crate) fn k2_new_session_phase_b_input(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `k2_codex_control_input` is never used
+   --> src/real_execution_command.rs:632:4
+    |
+632 | fn k2_codex_control_input(
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `k2_resume_authorization_from_request_and_continuation` is never used
+   --> src/real_execution_command.rs:664:4
+    |
+664 | fn k2_resume_authorization_from_request_and_continuation(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `k2_new_session_authorization_from_request_and_continuation` is never used
+   --> src/real_execution_command.rs:691:4
+    |
+691 | fn k2_new_session_authorization_from_request_and_continuation(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `k2_evidence_path` is never used
+   --> src/real_execution_command.rs:718:4
+    |
+718 | fn k2_evidence_path(workflow_state_path: &Path, config: &K2ExecutionPointConfig) -> String {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `k2_denied_paths` is never used
+   --> src/real_execution_command.rs:727:4
+    |
+727 | fn k2_denied_paths(extra: &str) -> Vec<String> {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `k2_mario_baseline_hash_fields` is never used
+   --> src/real_execution_command.rs:745:4
+    |
+745 | fn k2_mario_baseline_hash_fields() -> Vec<String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `pcr1_contract_preview` is never used
+    --> src/real_execution_command.rs:3857:15
+     |
+3857 | pub(crate) fn pcr1_contract_preview(
+     |               ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `pcr1_blocked_attempt` is never used
+    --> src/real_execution_command.rs:3935:15
+     |
+3935 | pub(crate) fn pcr1_blocked_attempt(
+     |               ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `pcr1_readback_boundary` is never used
+    --> src/real_execution_command.rs:3965:15
+     |
+3965 | pub(crate) fn pcr1_readback_boundary(
+     |               ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `pcr1_readback_result_count` is never used
+    --> src/real_execution_command.rs:3979:15
+     |
+3979 | pub(crate) fn pcr1_readback_result_count(
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `OperationDecisionRuntimeLogInput` is never constructed
+   --> src/runtime_log_store.rs:291:19
+    |
+291 | pub(crate) struct OperationDecisionRuntimeLogInput<'a> {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `operation_decision_runtime_entry` is never used
+   --> src/runtime_log_store.rs:301:15
+    |
+301 | pub(crate) fn operation_decision_runtime_entry(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `run_real_new_session_h3_b` is never used
+   --> src/session_continuation_store.rs:605:15
+    |
+605 | pub(crate) fn run_real_new_session_h3_b(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `cleanup_stale_attempt` is never used
+    --> src/session_continuation_store.rs:1537:15
+     |
+1537 | pub(crate) fn cleanup_stale_attempt(
+     |               ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `h3_b_last_message_path` is never used
+    --> src/session_continuation_store.rs:2572:4
+     |
+2572 | fn h3_b_last_message_path(
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `remove_file_if_exists` is never used
+ --> src/utils/fs_ops.rs:7:15
+  |
+7 | pub(crate) fn remove_file_if_exists(path: &Path) -> Result<(), String> {
+  |               ^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `WORKBENCH_SOURCE_AGGREGATE_HASH_ALGORITHM` is never used
+ --> src/utils/hash.rs:3:18
+  |
+3 | pub(crate) const WORKBENCH_SOURCE_AGGREGATE_HASH_ALGORITHM: &str =
+  |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `WorkbenchSourceAggregateHashEntry` is never constructed
+ --> src/utils/hash.rs:7:19
+  |
+7 | pub(crate) struct WorkbenchSourceAggregateHashEntry<'a> {
+  |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `workbench_source_aggregate_hash` is never used
+  --> src/utils/hash.rs:35:15
+   |
+35 | pub(crate) fn workbench_source_aggregate_hash<'a>(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `WORKBENCH_SQLITE_APPLY_IMPORTER_VERSION` is never used
+  --> src/workbench_sqlite_apply.rs:15:18
+   |
+15 | pub(crate) const WORKBENCH_SQLITE_APPLY_IMPORTER_VERSION: &str =
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `SqliteApplyFailurePoint` is never used
+  --> src/workbench_sqlite_apply.rs:19:17
+   |
+19 | pub(crate) enum SqliteApplyFailurePoint {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteApplyImportReport` is never constructed
+  --> src/workbench_sqlite_apply.rs:29:19
+   |
+29 | pub(crate) struct SqliteApplyImportReport {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `apply_fixture_dir_to_temp_db` is never used
+  --> src/workbench_sqlite_apply.rs:41:15
+   |
+41 | pub(crate) fn apply_fixture_dir_to_temp_db(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `apply_confirmed_workbench_state_root_to_confirmed_db` is never used
+  --> src/workbench_sqlite_apply.rs:57:15
+   |
+57 | pub(crate) fn apply_confirmed_workbench_state_root_to_confirmed_db(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `apply_source_root_to_db` is never used
+  --> src/workbench_sqlite_apply.rs:89:4
+   |
+89 | fn apply_source_root_to_db(
+   |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_allowed_temp_or_r3_fixture_db_path` is never used
+   --> src/workbench_sqlite_apply.rs:281:4
+    |
+281 | fn is_allowed_temp_or_r3_fixture_db_path(path: &Path) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `FixtureRecord` is never constructed
+   --> src/workbench_sqlite_apply.rs:294:8
+    |
+294 | struct FixtureRecord {
+    |        ^^^^^^^^^^^^^
+
+warning: function `load_fixture_values` is never used
+   --> src/workbench_sqlite_apply.rs:301:4
+    |
+301 | fn load_fixture_values(root: &Path) -> Result<Vec<(String, Value)>, String> {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `records_for_source` is never used
+   --> src/workbench_sqlite_apply.rs:319:4
+    |
+319 | fn records_for_source(source_name: &str, value: &Value) -> Vec<FixtureRecord> {
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `workflow_records` is never used
+   --> src/workbench_sqlite_apply.rs:558:4
+    |
+558 | fn workflow_records(value: &Value) -> Vec<FixtureRecord> {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `sidecar_records` is never used
+   --> src/workbench_sqlite_apply.rs:631:4
+    |
+631 | fn sidecar_records(value: &Value, specs: &[(&str, &str, &[&str])]) -> Vec<FixtureRecord> {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `record_from_value` is never used
+   --> src/workbench_sqlite_apply.rs:646:4
+    |
+646 | fn record_from_value(record_kind: &str, natural_key: &str, value: Value) -> FixtureRecord {
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `natural_key` is never used
+   --> src/workbench_sqlite_apply.rs:655:4
+    |
+655 | fn natural_key(value: &Value, keys: &[&str]) -> Option<String> {
+    |    ^^^^^^^^^^^
+
+warning: function `insert_domain_record` is never used
+   --> src/workbench_sqlite_apply.rs:661:4
+    |
+661 | fn insert_domain_record(
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `insert_simple` is never used
+    --> src/workbench_sqlite_apply.rs:1231:4
+     |
+1231 | fn insert_simple(
+     |    ^^^^^^^^^^^^^
+
+warning: function `source_kind_for_file` is never used
+    --> src/workbench_sqlite_apply.rs:1246:4
+     |
+1246 | fn source_kind_for_file(name: &str) -> &'static str {
+     |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `stable_sqlite_key` is never used
+    --> src/workbench_sqlite_apply.rs:1273:4
+     |
+1273 | fn stable_sqlite_key(record_kind: &str, natural_key: &str) -> String {
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `stable_hash` is never used
+    --> src/workbench_sqlite_apply.rs:1277:4
+     |
+1277 | fn stable_hash(text: &str) -> String {
+     |    ^^^^^^^^^^^
+
+warning: function `table_count` is never used
+    --> src/workbench_sqlite_apply.rs:1284:15
+     |
+1284 | pub(crate) fn table_count(db_path: &Path, table: &str) -> Result<i64, String> {
+     |               ^^^^^^^^^^^
+
+warning: enum `SqliteDualWriteFailurePoint` is never used
+  --> src/workbench_sqlite_dual_write.rs:12:17
+   |
+12 | pub(crate) enum SqliteDualWriteFailurePoint {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteDualWriteRehearsalReport` is never constructed
+  --> src/workbench_sqlite_dual_write.rs:21:19
+   |
+21 | pub(crate) struct SqliteDualWriteRehearsalReport {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteDualWriteProjectedFile` is never constructed
+  --> src/workbench_sqlite_dual_write.rs:35:19
+   |
+35 | pub(crate) struct SqliteDualWriteProjectedFile {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_fixture_dual_write` is never used
+  --> src/workbench_sqlite_dual_write.rs:41:15
+   |
+41 | pub(crate) fn rehearse_fixture_dual_write(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_fixture_root` is never used
+   --> src/workbench_sqlite_dual_write.rs:166:4
+    |
+166 | fn validate_fixture_root(path: &Path) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_temp_db_path` is never used
+   --> src/workbench_sqlite_dual_write.rs:181:4
+    |
+181 | fn validate_temp_db_path(path: &Path) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_projection_paths` is never used
+   --> src/workbench_sqlite_dual_write.rs:192:4
+    |
+192 | fn validate_projection_paths(projection_root: &Path, manifest_path: &Path) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_projected_file` is never used
+   --> src/workbench_sqlite_dual_write.rs:211:4
+    |
+211 | fn write_projected_file(root: &Path, file: &SqliteProjectedFile) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rollback_manifest_value` is never used
+   --> src/workbench_sqlite_dual_write.rs:219:4
+    |
+219 | fn rollback_manifest_value(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `db_row_counts` is never used
+   --> src/workbench_sqlite_dual_write.rs:258:4
+    |
+258 | fn db_row_counts(db_path: &Path) -> Result<BTreeMap<String, i64>, String> {
+    |    ^^^^^^^^^^^^^
+
+warning: function `write_json_file` is never used
+   --> src/workbench_sqlite_dual_write.rs:276:4
+    |
+276 | fn write_json_file(path: &Path, value: &Value) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `cleanup_projected_files` is never used
+   --> src/workbench_sqlite_dual_write.rs:287:4
+    |
+287 | fn cleanup_projected_files(root: &Path, files: &[SqliteProjectedFile]) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `clear_incomplete_markers` is never used
+   --> src/workbench_sqlite_dual_write.rs:294:4
+    |
+294 | fn clear_incomplete_markers(projection_root: &Path, manifest_path: &Path) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `temp_manifest_path` is never used
+   --> src/workbench_sqlite_dual_write.rs:300:4
+    |
+300 | fn temp_manifest_path(path: &Path) -> PathBuf {
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `manifest_r3_a3_fixture_root` is never used
+   --> src/workbench_sqlite_dual_write.rs:304:4
+    |
+304 | fn manifest_r3_a3_fixture_root() -> PathBuf {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `export_temp_db_to_json_dry_run` is never used
+  --> src/workbench_sqlite_exporter.rs:29:15
+   |
+29 | pub(crate) fn export_temp_db_to_json_dry_run(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `export_confirmed_db_to_json_dry_run` is never used
+  --> src/workbench_sqlite_exporter.rs:42:15
+   |
+42 | pub(crate) fn export_confirmed_db_to_json_dry_run(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `export_db_to_json_dry_run` is never used
+  --> src/workbench_sqlite_exporter.rs:63:4
+   |
+63 | fn export_db_to_json_dry_run(
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_allowed_temp_or_r3_fixture_db_path` is never used
+   --> src/workbench_sqlite_exporter.rs:188:4
+    |
+188 | fn is_allowed_temp_or_r3_fixture_db_path(path: &Path) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `projected_file` is never used
+   --> src/workbench_sqlite_exporter.rs:200:4
+    |
+200 | fn projected_file(path: &str, canonical: bool, projection: Value) -> SqliteProjectedFile {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `workflow_state_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:212:4
+    |
+212 | fn workflow_state_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `formal_memory_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:243:4
+    |
+243 | fn formal_memory_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `runtime_log_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:253:4
+    |
+253 | fn runtime_log_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `product_command_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:262:4
+    |
+262 | fn product_command_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `session_continuation_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:273:4
+    |
+273 | fn session_continuation_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `source_import_meta` is never used
+   --> src/workbench_sqlite_exporter.rs:286:4
+    |
+286 | fn source_import_meta(
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `memory_candidate_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:322:4
+    |
+322 | fn memory_candidate_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `memory_capture_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:332:4
+    |
+332 | fn memory_capture_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `observation_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:341:4
+    |
+341 | fn observation_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `plan_authorization_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:351:4
+    |
+351 | fn plan_authorization_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `project_proposal_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:361:4
+    |
+361 | fn project_proposal_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `memory_lint_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:372:4
+    |
+372 | fn memory_lint_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `memory_entity_relation_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:382:4
+    |
+382 | fn memory_entity_relation_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `mature_pattern_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:391:4
+    |
+391 | fn mature_pattern_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `blackboard_candidate_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:401:4
+    |
+401 | fn blackboard_candidate_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `supervisor_review_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:411:4
+    |
+411 | fn supervisor_review_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `supervisor_action_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:423:4
+    |
+423 | fn supervisor_action_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `supervisor_orchestrator_projection` is never used
+   --> src/workbench_sqlite_exporter.rs:432:4
+    |
+432 | fn supervisor_orchestrator_projection(connection: &Connection) -> Result<Value, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `record_json_array` is never used
+   --> src/workbench_sqlite_exporter.rs:442:4
+    |
+442 | fn record_json_array(connection: &Connection, table: &str) -> Result<Vec<Value>, String> {
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `runtime_summary_json_array` is never used
+   --> src/workbench_sqlite_exporter.rs:464:4
+    |
+464 | fn runtime_summary_json_array(connection: &Connection) -> Result<Vec<Value>, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `latest_workflow_state_meta` is never used
+   --> src/workbench_sqlite_exporter.rs:485:4
+    |
+485 | fn latest_workflow_state_meta(connection: &Connection) -> Result<Option<Value>, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `redact_export_value` is never used
+   --> src/workbench_sqlite_exporter.rs:514:4
+    |
+514 | fn redact_export_value(value: Value) -> Value {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_forbidden_export_key` is never used
+   --> src/workbench_sqlite_exporter.rs:534:4
+    |
+534 | fn is_forbidden_export_key(key: &str) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `projection_record_count` is never used
+   --> src/workbench_sqlite_exporter.rs:552:4
+    |
+552 | fn projection_record_count(value: &Value) -> usize {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `array_len` is never used
+   --> src/workbench_sqlite_exporter.rs:563:4
+    |
+563 | fn array_len(value: &Value, key: &str) -> usize {
+    |    ^^^^^^^^^
+
+warning: constant `WORKBENCH_SQLITE_IMPORTER_VERSION` is never used
+ --> src/workbench_sqlite_importer.rs:8:18
+  |
+8 | pub(crate) const WORKBENCH_SQLITE_IMPORTER_VERSION: &str = "workbench_sqlite_importer_dry_run_v0";
+  |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `PRIMARY_WORKFLOW_STATE` is never used
+ --> src/workbench_sqlite_importer.rs:9:18
+  |
+9 | pub(crate) const PRIMARY_WORKFLOW_STATE: &str = "workflow-state.v0.json";
+  |                  ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CANONICAL_RUNTIME_LOG` is never used
+  --> src/workbench_sqlite_importer.rs:10:18
+   |
+10 | pub(crate) const CANONICAL_RUNTIME_LOG: &str = "runtime-logs.v1.json";
+   |                  ^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEGACY_RUNTIME_LOG_ALIAS` is never used
+  --> src/workbench_sqlite_importer.rs:11:18
+   |
+11 | pub(crate) const LEGACY_RUNTIME_LOG_ALIAS: &str = "runtime-log.v1.json";
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `OPTIONAL_SIDECARS` is never used
+  --> src/workbench_sqlite_importer.rs:12:18
+   |
+12 | pub(crate) const OPTIONAL_SIDECARS: &[&str] = &[
+   |                  ^^^^^^^^^^^^^^^^^
+
+warning: constant `WORKFLOW_ARRAYS` is never used
+  --> src/workbench_sqlite_importer.rs:32:7
+   |
+32 | const WORKFLOW_ARRAYS: &[(&str, &[&str])] = &[
+   |       ^^^^^^^^^^^^^^^
+
+warning: constant `WORKFLOW_OPTIONAL_ARRAYS` is never used
+  --> src/workbench_sqlite_importer.rs:55:7
+   |
+55 | const WORKFLOW_OPTIONAL_ARRAYS: &[(&str, &[&str])] = &[
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SENSITIVE_KEY_PARTS` is never used
+  --> src/workbench_sqlite_importer.rs:62:7
+   |
+62 | const SENSITIVE_KEY_PARTS: &[&str] = &[
+   |       ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SENSITIVE_STRING_MARKERS` is never used
+  --> src/workbench_sqlite_importer.rs:74:7
+   |
+74 | const SENSITIVE_STRING_MARKERS: &[&str] = &[
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteImportDryRunReport` is never constructed
+  --> src/workbench_sqlite_importer.rs:82:19
+   |
+82 | pub(crate) struct SqliteImportDryRunReport {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteImportSourceReport` is never constructed
+  --> src/workbench_sqlite_importer.rs:98:19
+   |
+98 | pub(crate) struct SqliteImportSourceReport {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteImportRecordSummary` is never constructed
+   --> src/workbench_sqlite_importer.rs:110:19
+    |
+110 | pub(crate) struct SqliteImportRecordSummary {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteImportDryRunCounts` is never constructed
+   --> src/workbench_sqlite_importer.rs:119:19
+    |
+119 | pub(crate) struct SqliteImportDryRunCounts {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `RuntimeLogAliasReport` is never constructed
+   --> src/workbench_sqlite_importer.rs:132:19
+    |
+132 | pub(crate) struct RuntimeLogAliasReport {
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `dry_run_import_fixture_dir` is never used
+   --> src/workbench_sqlite_importer.rs:140:15
+    |
+140 | pub(crate) fn dry_run_import_fixture_dir(_root: &Path) -> Result<SqliteImportDryRunReport, String> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `dry_run_import_fixture_dir_with_previous` is never used
+   --> src/workbench_sqlite_importer.rs:144:15
+    |
+144 | pub(crate) fn dry_run_import_fixture_dir_with_previous(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `SourceRead` is never used
+   --> src/workbench_sqlite_importer.rs:309:6
+    |
+309 | enum SourceRead {
+    |      ^^^^^^^^^^
+
+warning: function `read_json_source` is never used
+   --> src/workbench_sqlite_importer.rs:314:4
+    |
+314 | fn read_json_source(path: &Path, name: &str) -> SourceRead {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `missing_optional_source` is never used
+   --> src/workbench_sqlite_importer.rs:380:4
+    |
+380 | fn missing_optional_source(name: &str, root: &Path) -> SqliteImportSourceReport {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_primary_workflow` is never used
+   --> src/workbench_sqlite_importer.rs:393:4
+    |
+393 | fn validate_primary_workflow(value: &Value) -> Vec<String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `collect_workflow_records` is never used
+   --> src/workbench_sqlite_importer.rs:409:4
+    |
+409 | fn collect_workflow_records(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `collect_sidecar_records` is never used
+   --> src/workbench_sqlite_importer.rs:437:4
+    |
+437 | fn collect_sidecar_records(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `collect_named_arrays` is never used
+   --> src/workbench_sqlite_importer.rs:823:4
+    |
+823 | fn collect_named_arrays(
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `collect_array_records` is never used
+   --> src/workbench_sqlite_importer.rs:849:4
+    |
+849 | fn collect_array_records(
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `collect_fallback_sidecar_record` is never used
+   --> src/workbench_sqlite_importer.rs:918:4
+    |
+918 | fn collect_fallback_sidecar_record(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `natural_key` is never used
+   --> src/workbench_sqlite_importer.rs:955:4
+    |
+955 | fn natural_key(value: &Value, keys: &[&str]) -> Option<String> {
+    |    ^^^^^^^^^^^
+
+warning: function `revision_conflict_marker` is never used
+   --> src/workbench_sqlite_importer.rs:961:4
+    |
+961 | fn revision_conflict_marker(value: &Value) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `contains_sensitive_value` is never used
+   --> src/workbench_sqlite_importer.rs:969:4
+    |
+969 | fn contains_sensitive_value(value: &Value) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `finalize_report` is never used
+   --> src/workbench_sqlite_importer.rs:994:4
+    |
+994 | fn finalize_report(
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `counts_for` is never used
+    --> src/workbench_sqlite_importer.rs:1038:4
+     |
+1038 | fn counts_for(
+     |    ^^^^^^^^^^
+
+warning: function `runtime_log_alias_report` is never used
+    --> src/workbench_sqlite_importer.rs:1089:4
+     |
+1089 | fn runtime_log_alias_report(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `source_root_hash` is never used
+    --> src/workbench_sqlite_importer.rs:1109:4
+     |
+1109 | fn source_root_hash(source_inventory: &[SqliteImportSourceReport]) -> String {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `source_kind_for_name` is never used
+    --> src/workbench_sqlite_importer.rs:1122:4
+     |
+1122 | fn source_kind_for_name(name: &str) -> &'static str {
+     |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `sorted_fixture_entries` is never used
+    --> src/workbench_sqlite_importer.rs:1178:4
+     |
+1178 | fn sorted_fixture_entries(root: &Path) -> Result<Vec<fs::DirEntry>, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEVEL_A` is never used
+  --> src/workbench_sqlite_observation_period.rs:16:7
+   |
+16 | const LEVEL_A: &str = "level_a_fixture";
+   |       ^^^^^^^
+
+warning: constant `LEVEL_B_WORKBENCH_OWNED_STATE` is never used
+  --> src/workbench_sqlite_observation_period.rs:17:7
+   |
+17 | const LEVEL_B_WORKBENCH_OWNED_STATE: &str = "level_b_workbench_owned_state";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `PRODUCTION_OBSERVATION_MODE` is never used
+  --> src/workbench_sqlite_observation_period.rs:18:7
+   |
+18 | const PRODUCTION_OBSERVATION_MODE: &str = "production_observation_export_verification";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `PRODUCTION_OBSERVATION_SCHEMA_VERSION` is never used
+  --> src/workbench_sqlite_observation_period.rs:19:7
+   |
+19 | const PRODUCTION_OBSERVATION_SCHEMA_VERSION: &str = "workbench_sqlite_production_observation.v1";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEVEL_A_OBSERVATION_MODE` is never used
+  --> src/workbench_sqlite_observation_period.rs:20:7
+   |
+20 | const LEVEL_A_OBSERVATION_MODE: &str = "level_a_fixture_temp";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `WORKFLOW_STATE_SUMMARY_READ_MODEL` is never used
+  --> src/workbench_sqlite_observation_period.rs:21:7
+   |
+21 | const WORKFLOW_STATE_SUMMARY_READ_MODEL: &str = "workflow_state_summary";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `DEFAULT_PRODUCTION_OBSERVATION_DENIED_PATH_MARKERS` is never used
+  --> src/workbench_sqlite_observation_period.rs:22:7
+   |
+22 | const DEFAULT_PRODUCTION_OBSERVATION_DENIED_PATH_MARKERS: &[&str] = &[
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `SqliteObservationFailurePoint` is never used
+  --> src/workbench_sqlite_observation_period.rs:40:17
+   |
+40 | pub(crate) enum SqliteObservationFailurePoint {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteObservationRehearsalReport` is never constructed
+  --> src/workbench_sqlite_observation_period.rs:54:19
+   |
+54 | pub(crate) struct SqliteObservationRehearsalReport {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteObservationSample` is never constructed
+  --> src/workbench_sqlite_observation_period.rs:71:19
+   |
+71 | pub(crate) struct SqliteObservationSample {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteObservationProjectedFile` is never constructed
+  --> src/workbench_sqlite_observation_period.rs:81:19
+   |
+81 | pub(crate) struct SqliteObservationProjectedFile {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteExportVerification` is never constructed
+  --> src/workbench_sqlite_observation_period.rs:89:19
+   |
+89 | pub(crate) struct SqliteExportVerification {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteObservationRollbackVerification` is never constructed
+   --> src/workbench_sqlite_observation_period.rs:100:19
+    |
+100 | pub(crate) struct SqliteObservationRollbackVerification {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `SqliteProductionObservationFailurePoint` is never used
+   --> src/workbench_sqlite_observation_period.rs:112:17
+    |
+112 | pub(crate) enum SqliteProductionObservationFailurePoint {
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteProductionObservationReport` is never constructed
+   --> src/workbench_sqlite_observation_period.rs:130:19
+    |
+130 | pub(crate) struct SqliteProductionObservationReport {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteProductionObservationSafetyFlags` is never constructed
+   --> src/workbench_sqlite_observation_period.rs:160:19
+    |
+160 | pub(crate) struct SqliteProductionObservationSafetyFlags {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated functions `for_db_success` and `for_fallback` are never used
+   --> src/workbench_sqlite_observation_period.rs:174:8
+    |
+173 | impl SqliteProductionObservationSafetyFlags {
+    | ------------------------------------------- associated functions in this implementation
+174 |     fn for_db_success() -> Self {
+    |        ^^^^^^^^^^^^^^
+...
+189 |     fn for_fallback() -> Self {
+    |        ^^^^^^^^^^^^
+
+warning: struct `ProductionObservationFallback` is never constructed
+   --> src/workbench_sqlite_observation_period.rs:205:8
+    |
+205 | struct ProductionObservationFallback {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `ProductionObservationDbRead` is never constructed
+   --> src/workbench_sqlite_observation_period.rs:213:8
+    |
+213 | struct ProductionObservationDbRead {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteObservationLevelBConfig` is never constructed
+   --> src/workbench_sqlite_observation_period.rs:223:19
+    |
+223 | pub(crate) struct SqliteObservationLevelBConfig {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_production_observation_level_a` is never used
+   --> src/workbench_sqlite_observation_period.rs:232:15
+    |
+232 | pub(crate) fn rehearse_production_observation_level_a(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_production_observation_level_b_workbench_owned_state` is never used
+   --> src/workbench_sqlite_observation_period.rs:273:15
+    |
+273 | pub(crate) fn rehearse_production_observation_level_b_workbench_owned_state(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_production_observation` is never used
+   --> src/workbench_sqlite_observation_period.rs:321:4
+    |
+321 | fn rehearse_production_observation(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_production_observation_mode` is never used
+   --> src/workbench_sqlite_observation_period.rs:523:4
+    |
+523 | fn validate_production_observation_mode(observation_mode: &str) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_production_observation_read_model` is never used
+   --> src/workbench_sqlite_observation_period.rs:532:4
+    |
+532 | fn validate_production_observation_read_model(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `effective_production_observation_denied_markers` is never used
+   --> src/workbench_sqlite_observation_period.rs:549:4
+    |
+549 | fn effective_production_observation_denied_markers(markers: &[String]) -> Vec<String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_production_observation_paths` is never used
+   --> src/workbench_sqlite_observation_period.rs:560:4
+    |
+560 | fn validate_production_observation_paths(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_level_b_production_observation_paths` is never used
+   --> src/workbench_sqlite_observation_period.rs:617:4
+    |
+617 | fn validate_level_b_production_observation_paths(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verified_production_observation_fallback` is never used
+   --> src/workbench_sqlite_observation_period.rs:688:4
+    |
+688 | fn verified_production_observation_fallback(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `read_production_observation_db` is never used
+   --> src/workbench_sqlite_observation_period.rs:742:4
+    |
+742 | fn read_production_observation_db(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `read_confirmed_production_observation_db` is never used
+   --> src/workbench_sqlite_observation_period.rs:759:4
+    |
+759 | fn read_confirmed_production_observation_db(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `read_production_observation_db_with` is never used
+   --> src/workbench_sqlite_observation_period.rs:777:4
+    |
+777 | fn read_production_observation_db_with(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_production_db_integrity` is never used
+   --> src/workbench_sqlite_observation_period.rs:856:4
+    |
+856 | fn verify_production_db_integrity(db_path: &Path) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `production_observation_report` is never used
+   --> src/workbench_sqlite_observation_period.rs:869:4
+    |
+869 | fn production_observation_report(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_production_observation_report` is never used
+   --> src/workbench_sqlite_observation_period.rs:923:4
+    |
+923 | fn write_production_observation_report(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_production_observation_rollback_manifest` is never used
+   --> src/workbench_sqlite_observation_period.rs:964:4
+    |
+964 | fn write_production_observation_rollback_manifest(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_production_observation_rollback_manifest` is never used
+   --> src/workbench_sqlite_observation_period.rs:995:4
+    |
+995 | fn verify_production_observation_rollback_manifest(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `production_observation_recovery_plan` is never used
+    --> src/workbench_sqlite_observation_period.rs:1038:4
+     |
+1038 | fn production_observation_recovery_plan(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `load_production_workflow_state_from_root` is never used
+    --> src/workbench_sqlite_observation_period.rs:1061:4
+     |
+1061 | fn load_production_workflow_state_from_root(root: &Path) -> Result<Value, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `workflow_state_summary` is never used
+    --> src/workbench_sqlite_observation_period.rs:1077:4
+     |
+1077 | fn workflow_state_summary(value: &Value) -> Result<Value, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `summary_counts` is never used
+    --> src/workbench_sqlite_observation_period.rs:1094:4
+     |
+1094 | fn summary_counts(summary: &Value) -> Result<BTreeMap<String, usize>, String> {
+     |    ^^^^^^^^^^^^^^
+
+warning: function `array_count` is never used
+    --> src/workbench_sqlite_observation_period.rs:1106:4
+     |
+1106 | fn array_count(value: &Value, key: &str) -> usize {
+     |    ^^^^^^^^^^^
+
+warning: function `record_counts_from_db_rows` is never used
+    --> src/workbench_sqlite_observation_period.rs:1110:4
+     |
+1110 | fn record_counts_from_db_rows(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `ensure_no_forbidden_production_value` is never used
+    --> src/workbench_sqlite_observation_period.rs:1123:4
+     |
+1123 | fn ensure_no_forbidden_production_value(value: &Value) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `production_observation_error` is never used
+    --> src/workbench_sqlite_observation_period.rs:1142:4
+     |
+1142 | fn production_observation_error(reason: String) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `reject_production_denied_path_markers` is never used
+    --> src/workbench_sqlite_observation_period.rs:1154:4
+     |
+1154 | fn reject_production_denied_path_markers(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `file_hash` is never used
+    --> src/workbench_sqlite_observation_period.rs:1171:4
+     |
+1171 | fn file_hash(path: &Path) -> Result<String, String> {
+     |    ^^^^^^^^^
+
+warning: function `dir_hash` is never used
+    --> src/workbench_sqlite_observation_period.rs:1181:4
+     |
+1181 | fn dir_hash(root: &Path) -> Result<String, String> {
+     |    ^^^^^^^^
+
+warning: function `path_hash` is never used
+    --> src/workbench_sqlite_observation_period.rs:1211:4
+     |
+1211 | fn path_hash(path: &Path) -> String {
+     |    ^^^^^^^^^
+
+warning: function `canonicalize_existing_or_parent_observation` is never used
+    --> src/workbench_sqlite_observation_period.rs:1215:4
+     |
+1215 | fn canonicalize_existing_or_parent_observation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `production_redaction_policy` is never used
+    --> src/workbench_sqlite_observation_period.rs:1256:4
+     |
+1256 | fn production_redaction_policy() -> Vec<String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `manifest_r3_a11_fixture_root` is never used
+    --> src/workbench_sqlite_observation_period.rs:1265:4
+     |
+1265 | fn manifest_r3_a11_fixture_root() -> PathBuf {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_fixture_observation_period` is never used
+    --> src/workbench_sqlite_observation_period.rs:1271:15
+     |
+1271 | pub(crate) fn rehearse_fixture_observation_period(
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `observation_sample` is never used
+    --> src/workbench_sqlite_observation_period.rs:1398:4
+     |
+1398 | fn observation_sample(
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `observation_sample_confirmed` is never used
+    --> src/workbench_sqlite_observation_period.rs:1408:4
+     |
+1408 | fn observation_sample_confirmed(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `observation_sample_from_manifest` is never used
+    --> src/workbench_sqlite_observation_period.rs:1423:4
+     |
+1423 | fn observation_sample_from_manifest(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_sample_stability` is never used
+    --> src/workbench_sqlite_observation_period.rs:1441:4
+     |
+1441 | fn verify_sample_stability(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_export_hashes` is never used
+    --> src/workbench_sqlite_observation_period.rs:1469:4
+     |
+1469 | fn verify_export_hashes(
+     |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `export_verification` is never used
+    --> src/workbench_sqlite_observation_period.rs:1488:4
+     |
+1488 | fn export_verification(
+     |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `observation_projected_files` is never used
+    --> src/workbench_sqlite_observation_period.rs:1511:4
+     |
+1511 | fn observation_projected_files(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `projection_hash` is never used
+    --> src/workbench_sqlite_observation_period.rs:1525:4
+     |
+1525 | fn projection_hash(files: &[SqliteObservationProjectedFile]) -> String {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `write_projection_files` is never used
+    --> src/workbench_sqlite_observation_period.rs:1529:4
+     |
+1529 | fn write_projection_files(db_path: &Path, projection_root: &Path) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_confirmed_projection_files` is never used
+    --> src/workbench_sqlite_observation_period.rs:1534:4
+     |
+1534 | fn write_confirmed_projection_files(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_projection_files_from_manifest` is never used
+    --> src/workbench_sqlite_observation_period.rs:1547:4
+     |
+1547 | fn write_projection_files_from_manifest(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_projected_file` is never used
+    --> src/workbench_sqlite_observation_period.rs:1567:4
+     |
+1567 | fn write_projected_file(root: &Path, file: &SqliteProjectedFile) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_projection_files` is never used
+    --> src/workbench_sqlite_observation_period.rs:1577:4
+     |
+1577 | fn verify_projection_files(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rollback_verification` is never used
+    --> src/workbench_sqlite_observation_period.rs:1612:4
+     |
+1612 | fn rollback_verification(projection_hash: &str) -> SqliteObservationRollbackVerification {
+     |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rollback_manifest_value` is never used
+    --> src/workbench_sqlite_observation_period.rs:1631:4
+     |
+1631 | fn rollback_manifest_value(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `commit_rollback_manifest` is never used
+    --> src/workbench_sqlite_observation_period.rs:1663:4
+     |
+1663 | fn commit_rollback_manifest(path: &Path, value: &Value) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_rollback_manifest` is never used
+    --> src/workbench_sqlite_observation_period.rs:1676:4
+     |
+1676 | fn verify_rollback_manifest(path: &Path) -> Result<Value, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_runtime_log_alias_policy` is never used
+    --> src/workbench_sqlite_observation_period.rs:1702:4
+     |
+1702 | fn verify_runtime_log_alias_policy(files: &[SqliteProjectedFile]) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_db_integrity` is never used
+    --> src/workbench_sqlite_observation_period.rs:1709:4
+     |
+1709 | fn verify_db_integrity(db_path: &Path) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `db_row_counts` is never used
+    --> src/workbench_sqlite_observation_period.rs:1738:4
+     |
+1738 | fn db_row_counts(db_path: &Path) -> Result<BTreeMap<String, i64>, String> {
+     |    ^^^^^^^^^^^^^
+
+warning: function `write_observation_report` is never used
+    --> src/workbench_sqlite_observation_period.rs:1758:4
+     |
+1758 | fn write_observation_report(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_json_file` is never used
+    --> src/workbench_sqlite_observation_period.rs:1776:4
+     |
+1776 | fn write_json_file(path: &Path, value: &Value) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `remove_legacy_runtime_log_alias` is never used
+    --> src/workbench_sqlite_observation_period.rs:1787:4
+     |
+1787 | fn remove_legacy_runtime_log_alias(projection_root: &Path) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `temp_manifest_path` is never used
+    --> src/workbench_sqlite_observation_period.rs:1791:4
+     |
+1791 | fn temp_manifest_path(path: &Path) -> PathBuf {
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_fixture_root` is never used
+    --> src/workbench_sqlite_observation_period.rs:1795:4
+     |
+1795 | fn validate_fixture_root(path: &Path) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_temp_db_path` is never used
+    --> src/workbench_sqlite_observation_period.rs:1810:4
+     |
+1810 | fn validate_temp_db_path(path: &Path) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_projection_paths` is never used
+    --> src/workbench_sqlite_observation_period.rs:1821:4
+     |
+1821 | fn validate_projection_paths(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `manifest_r3_a5_fixture_root` is never used
+    --> src/workbench_sqlite_observation_period.rs:1851:4
+     |
+1851 | fn manifest_r3_a5_fixture_root() -> PathBuf {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `DENIED_PATH_MARKERS` is never used
+  --> src/workbench_sqlite_preflight.rs:14:7
+   |
+14 | const DENIED_PATH_MARKERS: &[&str] = &[
+   |       ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `RUNTIME_TRANSIENT_IGNORED` is never used
+  --> src/workbench_sqlite_preflight.rs:32:7
+   |
+32 | const RUNTIME_TRANSIENT_IGNORED: &[&str] = &["exec-process-registry.v1.json"];
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteProductionPreflightConfig` is never constructed
+  --> src/workbench_sqlite_preflight.rs:35:19
+   |
+35 | pub(crate) struct SqliteProductionPreflightConfig {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteProductionPreflightReport` is never constructed
+  --> src/workbench_sqlite_preflight.rs:63:19
+   |
+63 | pub(crate) struct SqliteProductionPreflightReport {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqlitePreflightFileReport` is never constructed
+  --> src/workbench_sqlite_preflight.rs:84:19
+   |
+84 | pub(crate) struct SqlitePreflightFileReport {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqlitePreflightCounts` is never constructed
+  --> src/workbench_sqlite_preflight.rs:99:19
+   |
+99 | pub(crate) struct SqlitePreflightCounts {
+   |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqlitePreflightBackupReadiness` is never constructed
+   --> src/workbench_sqlite_preflight.rs:109:19
+    |
+109 | pub(crate) struct SqlitePreflightBackupReadiness {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqlitePreflightSidecarReadiness` is never constructed
+   --> src/workbench_sqlite_preflight.rs:118:19
+    |
+118 | pub(crate) struct SqlitePreflightSidecarReadiness {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `scan_workbench_state_root_preflight` is never used
+   --> src/workbench_sqlite_preflight.rs:124:15
+    |
+124 | pub(crate) fn scan_workbench_state_root_preflight(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `scan_workbench_state_root_preflight_with_config` is never used
+   --> src/workbench_sqlite_preflight.rs:135:15
+    |
+135 | pub(crate) fn scan_workbench_state_root_preflight_with_config(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `scan_file` is never used
+   --> src/workbench_sqlite_preflight.rs:272:4
+    |
+272 | fn scan_file(
+    |    ^^^^^^^^^
+
+warning: function `rejected_file` is never used
+   --> src/workbench_sqlite_preflight.rs:346:4
+    |
+346 | fn rejected_file(path_ref: String, size_bytes: u64, reason: &str) -> SqlitePreflightFileReport {
+    |    ^^^^^^^^^^^^^
+
+warning: function `validate_source_root` is never used
+   --> src/workbench_sqlite_preflight.rs:362:4
+    |
+362 | fn validate_source_root(path: &Path, denied_path_markers: &[String]) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_report_path` is never used
+   --> src/workbench_sqlite_preflight.rs:375:4
+    |
+375 | fn validate_report_path(
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `allowed_file_names` is never used
+   --> src/workbench_sqlite_preflight.rs:398:4
+    |
+398 | fn allowed_file_names(config: &SqliteProductionPreflightConfig) -> BTreeSet<String> {
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `effective_denied_path_markers` is never used
+   --> src/workbench_sqlite_preflight.rs:406:4
+    |
+406 | fn effective_denied_path_markers(config: &SqliteProductionPreflightConfig) -> Vec<String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `sidecar_readiness` is never used
+   --> src/workbench_sqlite_preflight.rs:415:4
+    |
+415 | fn sidecar_readiness(
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `scan_backup_readiness` is never used
+   --> src/workbench_sqlite_preflight.rs:434:4
+    |
+434 | fn scan_backup_readiness(
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_ignored_support_file` is never used
+   --> src/workbench_sqlite_preflight.rs:481:4
+    |
+481 | fn is_ignored_support_file(name: &str) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_workflow_state_backup` is never used
+   --> src/workbench_sqlite_preflight.rs:485:4
+    |
+485 | fn is_workflow_state_backup(name: &str) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `backup_timestamp` is never used
+   --> src/workbench_sqlite_preflight.rs:489:4
+    |
+489 | fn backup_timestamp(name: &str) -> Option<String> {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `path_ref` is never used
+   --> src/workbench_sqlite_preflight.rs:495:4
+    |
+495 | fn path_ref(source_root: &Path, path: &Path) -> Result<String, String> {
+    |    ^^^^^^^^
+
+warning: function `schema_version` is never used
+   --> src/workbench_sqlite_preflight.rs:501:4
+    |
+501 | fn schema_version(value: &Value) -> Option<String> {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `revision` is never used
+   --> src/workbench_sqlite_preflight.rs:508:4
+    |
+508 | fn revision(value: &Value) -> Option<i64> {
+    |    ^^^^^^^^
+
+warning: function `top_level_keys` is never used
+   --> src/workbench_sqlite_preflight.rs:512:4
+    |
+512 | fn top_level_keys(value: &Value) -> Vec<String> {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `record_count_estimate` is never used
+   --> src/workbench_sqlite_preflight.rs:519:4
+    |
+519 | fn record_count_estimate(value: &Value) -> usize {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `contains_forbidden_top_level_key` is never used
+   --> src/workbench_sqlite_preflight.rs:534:4
+    |
+534 | fn contains_forbidden_top_level_key(value: &Value, denied_path_markers: &[String]) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `source_root_hash` is never used
+   --> src/workbench_sqlite_preflight.rs:545:4
+    |
+545 | fn source_root_hash(files: &[SqlitePreflightFileReport]) -> String {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `denied_path_hit` is never used
+   --> src/workbench_sqlite_preflight.rs:553:4
+    |
+553 | fn denied_path_hit(path: &Path, denied_path_markers: &[String]) -> bool {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `denied_name_hit` is never used
+   --> src/workbench_sqlite_preflight.rs:560:4
+    |
+560 | fn denied_name_hit(name: &str, denied_path_markers: &[String]) -> bool {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `write_report` is never used
+   --> src/workbench_sqlite_preflight.rs:567:4
+    |
+567 | fn write_report(path: &Path, report: &SqliteProductionPreflightReport) -> Result<(), String> {
+    |    ^^^^^^^^^^^^
+
+warning: function `rejected_path_report` is never used
+   --> src/workbench_sqlite_preflight.rs:583:4
+    |
+583 | fn rejected_path_report(
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `runtime_transient_ignored_report` is never used
+   --> src/workbench_sqlite_preflight.rs:595:4
+    |
+595 | fn runtime_transient_ignored_report(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `MODE` is never used
+  --> src/workbench_sqlite_production_apply.rs:26:7
+   |
+26 | const MODE: &str = "production_apply";
+   |       ^^^^
+
+warning: constant `LEVEL_A` is never used
+  --> src/workbench_sqlite_production_apply.rs:27:7
+   |
+27 | const LEVEL_A: &str = "level_a_fixture";
+   |       ^^^^^^^
+
+warning: constant `LEVEL_B_WORKBENCH_OWNED_STATE` is never used
+  --> src/workbench_sqlite_production_apply.rs:28:7
+   |
+28 | const LEVEL_B_WORKBENCH_OWNED_STATE: &str = "level_b_workbench_owned_state";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `PRODUCTION_APPLY_SCHEMA_VERSION` is never used
+  --> src/workbench_sqlite_production_apply.rs:29:7
+   |
+29 | const PRODUCTION_APPLY_SCHEMA_VERSION: &str = "workbench_sqlite_production_apply.v1";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BACKUP_MANIFEST_NAME` is never used
+  --> src/workbench_sqlite_production_apply.rs:30:7
+   |
+30 | const BACKUP_MANIFEST_NAME: &str = "production-apply-backup-manifest.json";
+   |       ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `APPLY_MANIFEST_NAME` is never used
+  --> src/workbench_sqlite_production_apply.rs:31:7
+   |
+31 | const APPLY_MANIFEST_NAME: &str = "production-apply-manifest.json";
+   |       ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `EXPORT_MANIFEST_NAME` is never used
+  --> src/workbench_sqlite_production_apply.rs:32:7
+   |
+32 | const EXPORT_MANIFEST_NAME: &str = "production-apply-export-manifest.json";
+   |       ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BACKUP_SOURCE_DIR_NAME` is never used
+  --> src/workbench_sqlite_production_apply.rs:33:7
+   |
+33 | const BACKUP_SOURCE_DIR_NAME: &str = "source-files";
+   |       ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `DEFAULT_DENIED_PATH_MARKERS` is never used
+  --> src/workbench_sqlite_production_apply.rs:34:7
+   |
+34 | const DEFAULT_DENIED_PATH_MARKERS: &[&str] = &[
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `SqliteProductionApplyFailurePoint` is never used
+  --> src/workbench_sqlite_production_apply.rs:52:17
+   |
+52 | pub(crate) enum SqliteProductionApplyFailurePoint {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteProductionApplyConfig` is never constructed
+  --> src/workbench_sqlite_production_apply.rs:64:19
+   |
+64 | pub(crate) struct SqliteProductionApplyConfig {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteProductionApplyLevelBConfig` is never constructed
+  --> src/workbench_sqlite_production_apply.rs:91:19
+   |
+91 | pub(crate) struct SqliteProductionApplyLevelBConfig {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteProductionApplyReport` is never constructed
+   --> src/workbench_sqlite_production_apply.rs:101:19
+    |
+101 | pub(crate) struct SqliteProductionApplyReport {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteProductionSourceFileHash` is never constructed
+   --> src/workbench_sqlite_production_apply.rs:132:19
+    |
+132 | pub(crate) struct SqliteProductionSourceFileHash {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteProductionExportVerification` is never constructed
+   --> src/workbench_sqlite_production_apply.rs:140:19
+    |
+140 | pub(crate) struct SqliteProductionExportVerification {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteProductionProjectedFile` is never constructed
+   --> src/workbench_sqlite_production_apply.rs:151:19
+    |
+151 | pub(crate) struct SqliteProductionProjectedFile {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteProductionRollbackBoundary` is never constructed
+   --> src/workbench_sqlite_production_apply.rs:159:19
+    |
+159 | pub(crate) struct SqliteProductionRollbackBoundary {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteProductionSafetyFlags` is never constructed
+   --> src/workbench_sqlite_production_apply.rs:171:19
+    |
+171 | pub(crate) struct SqliteProductionSafetyFlags {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated functions `completed` and `failed_after_commit` are never used
+   --> src/workbench_sqlite_production_apply.rs:184:8
+    |
+183 | impl SqliteProductionSafetyFlags {
+    | -------------------------------- associated functions in this implementation
+184 |     fn completed() -> Self {
+    |        ^^^^^^^^^
+...
+198 |     fn failed_after_commit() -> Self {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_production_db_apply_level_a` is never used
+   --> src/workbench_sqlite_production_apply.rs:213:15
+    |
+213 | pub(crate) fn rehearse_production_db_apply_level_a(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_production_db_apply_level_b_workbench_owned_state` is never used
+   --> src/workbench_sqlite_production_apply.rs:240:15
+    |
+240 | pub(crate) fn rehearse_production_db_apply_level_b_workbench_owned_state(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_production_db_apply` is never used
+   --> src/workbench_sqlite_production_apply.rs:277:4
+    |
+277 | fn rehearse_production_db_apply(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `apply_failure_without_report` is never used
+   --> src/workbench_sqlite_production_apply.rs:517:4
+    |
+517 | fn apply_failure_without_report<T>(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `preflight_config` is never used
+   --> src/workbench_sqlite_production_apply.rs:535:4
+    |
+535 | fn preflight_config(
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `ensure_preflight_ready` is never used
+   --> src/workbench_sqlite_production_apply.rs:547:4
+    |
+547 | fn ensure_preflight_ready(report: &SqliteProductionPreflightReport) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_backup_manifest` is never used
+   --> src/workbench_sqlite_production_apply.rs:565:4
+    |
+565 | fn write_backup_manifest(
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `copy_source_files_to_backup` is never used
+   --> src/workbench_sqlite_production_apply.rs:594:4
+    |
+594 | fn copy_source_files_to_backup(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_apply_manifest` is never used
+   --> src/workbench_sqlite_production_apply.rs:639:4
+    |
+639 | fn write_apply_manifest(
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `export_verification` is never used
+   --> src/workbench_sqlite_production_apply.rs:662:4
+    |
+662 | fn export_verification(
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `export_verification_level_b` is never used
+   --> src/workbench_sqlite_production_apply.rs:672:4
+    |
+672 | fn export_verification_level_b(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `export_verification_from_manifest` is never used
+   --> src/workbench_sqlite_production_apply.rs:686:4
+    |
+686 | fn export_verification_from_manifest(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_export_hashes` is never used
+   --> src/workbench_sqlite_production_apply.rs:710:4
+    |
+710 | fn verify_export_hashes(verification: &SqliteProductionExportVerification) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_export_manifest` is never used
+   --> src/workbench_sqlite_production_apply.rs:724:4
+    |
+724 | fn write_export_manifest(
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rollback_boundary` is never used
+   --> src/workbench_sqlite_production_apply.rs:742:4
+    |
+742 | fn rollback_boundary() -> SqliteProductionRollbackBoundary {
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `write_rollback_manifest` is never used
+   --> src/workbench_sqlite_production_apply.rs:761:4
+    |
+761 | fn write_rollback_manifest(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_rollback_manifest` is never used
+   --> src/workbench_sqlite_production_apply.rs:783:4
+    |
+783 | fn verify_rollback_manifest(rollback_manifest_path: &Path) -> Result<String, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `source_file_hashes` is never used
+   --> src/workbench_sqlite_production_apply.rs:806:4
+    |
+806 | fn source_file_hashes(
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `source_record_counts` is never used
+   --> src/workbench_sqlite_production_apply.rs:837:4
+    |
+837 | fn source_record_counts(
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `record_count_estimate` is never used
+   --> src/workbench_sqlite_production_apply.rs:853:4
+    |
+853 | fn record_count_estimate(value: &Value) -> usize {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `production_projected_files` is never used
+   --> src/workbench_sqlite_production_apply.rs:868:4
+    |
+868 | fn production_projected_files(files: &[SqliteProjectedFile]) -> Vec<SqliteProductionProjectedFile> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `projection_hash` is never used
+   --> src/workbench_sqlite_production_apply.rs:880:4
+    |
+880 | fn projection_hash(files: &[SqliteProductionProjectedFile]) -> String {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `verify_runtime_log_alias_policy` is never used
+   --> src/workbench_sqlite_production_apply.rs:884:4
+    |
+884 | fn verify_runtime_log_alias_policy(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_db_integrity` is never used
+   --> src/workbench_sqlite_production_apply.rs:901:4
+    |
+901 | fn verify_db_integrity(production_db_path: &Path) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `db_row_counts` is never used
+   --> src/workbench_sqlite_production_apply.rs:918:4
+    |
+918 | fn db_row_counts(db_path: &Path) -> Result<BTreeMap<String, i64>, String> {
+    |    ^^^^^^^^^^^^^
+
+warning: function `validate_level_a_source_root` is never used
+   --> src/workbench_sqlite_production_apply.rs:939:4
+    |
+939 | fn validate_level_a_source_root(path: &Path, denied_path_markers: &[String]) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_level_a_output_paths` is never used
+   --> src/workbench_sqlite_production_apply.rs:963:4
+    |
+963 | fn validate_level_a_output_paths(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_level_b_source_root` is never used
+    --> src/workbench_sqlite_production_apply.rs:1013:4
+     |
+1013 | fn validate_level_b_source_root(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_level_b_output_paths` is never used
+    --> src/workbench_sqlite_production_apply.rs:1050:4
+     |
+1050 | fn validate_level_b_output_paths(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `require_clean_confirmed_output_path` is never used
+    --> src/workbench_sqlite_production_apply.rs:1134:4
+     |
+1134 | fn require_clean_confirmed_output_path(label: &str, path: &Path) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `canonical_existing_dir` is never used
+    --> src/workbench_sqlite_production_apply.rs:1149:4
+     |
+1149 | fn canonical_existing_dir(path: &Path, label: &str) -> Result<PathBuf, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `canonicalize_existing_or_parent` is never used
+    --> src/workbench_sqlite_production_apply.rs:1165:4
+     |
+1165 | fn canonicalize_existing_or_parent(path: &Path, label: &str) -> Result<PathBuf, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `effective_denied_path_markers` is never used
+    --> src/workbench_sqlite_production_apply.rs:1203:4
+     |
+1203 | fn effective_denied_path_markers(config: &SqliteProductionApplyConfig) -> Vec<String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `denied_path_hit` is never used
+    --> src/workbench_sqlite_production_apply.rs:1217:4
+     |
+1217 | fn denied_path_hit(path: &Path, denied_path_markers: &[String]) -> bool {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `corrupt_source_copy` is never used
+    --> src/workbench_sqlite_production_apply.rs:1224:4
+     |
+1224 | fn corrupt_source_copy(source_state_root: &Path) -> Result<PathBuf, String> {
+     |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_report` is never used
+    --> src/workbench_sqlite_production_apply.rs:1250:4
+     |
+1250 | fn write_report(
+     |    ^^^^^^^^^^^^
+
+warning: function `write_json_file` is never used
+    --> src/workbench_sqlite_production_apply.rs:1280:4
+     |
+1280 | fn write_json_file(path: &Path, value: &Value) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `reset_dir` is never used
+    --> src/workbench_sqlite_production_apply.rs:1291:4
+     |
+1291 | fn reset_dir(path: &Path) -> Result<(), String> {
+     |    ^^^^^^^^^
+
+warning: function `sorted_entries` is never used
+    --> src/workbench_sqlite_production_apply.rs:1300:4
+     |
+1300 | fn sorted_entries(root: &Path) -> Result<Vec<fs::DirEntry>, String> {
+     |    ^^^^^^^^^^^^^^
+
+warning: function `dir_manifest_hash` is never used
+    --> src/workbench_sqlite_production_apply.rs:1309:4
+     |
+1309 | fn dir_manifest_hash(root: &Path) -> Result<String, String> {
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `report_hash` is never used
+    --> src/workbench_sqlite_production_apply.rs:1331:4
+     |
+1331 | fn report_hash<T: Serialize>(value: &T) -> Result<String, String> {
+     |    ^^^^^^^^^^^
+
+warning: function `path_hash` is never used
+    --> src/workbench_sqlite_production_apply.rs:1337:4
+     |
+1337 | fn path_hash(path: &Path) -> String {
+     |    ^^^^^^^^^
+
+warning: function `manifest_r3_a9_fixture_root` is never used
+    --> src/workbench_sqlite_production_apply.rs:1341:4
+     |
+1341 | fn manifest_r3_a9_fixture_root() -> PathBuf {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEVEL_A` is never used
+  --> src/workbench_sqlite_read_cut.rs:16:7
+   |
+16 | const LEVEL_A: &str = "level_a_fixture";
+   |       ^^^^^^^
+
+warning: constant `LEVEL_B_WORKBENCH_OWNED_STATE` is never used
+  --> src/workbench_sqlite_read_cut.rs:17:7
+   |
+17 | const LEVEL_B_WORKBENCH_OWNED_STATE: &str = "level_b_workbench_owned_state";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LIMITED_READ_CUT_MODE` is never used
+  --> src/workbench_sqlite_read_cut.rs:18:7
+   |
+18 | const LIMITED_READ_CUT_MODE: &str = "limited_read_cut";
+   |       ^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LIMITED_READ_CUT_SCHEMA_VERSION` is never used
+  --> src/workbench_sqlite_read_cut.rs:19:7
+   |
+19 | const LIMITED_READ_CUT_SCHEMA_VERSION: &str = "workbench_sqlite_limited_read_cut.v1";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `WORKFLOW_STATE_SUMMARY_READ_MODEL` is never used
+  --> src/workbench_sqlite_read_cut.rs:20:7
+   |
+20 | const WORKFLOW_STATE_SUMMARY_READ_MODEL: &str = "workflow_state_summary";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `DEFAULT_LIMITED_READ_CUT_DENIED_PATH_MARKERS` is never used
+  --> src/workbench_sqlite_read_cut.rs:21:7
+   |
+21 | const DEFAULT_LIMITED_READ_CUT_DENIED_PATH_MARKERS: &[&str] = &[
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `SqliteReadCutFailurePoint` is never used
+  --> src/workbench_sqlite_read_cut.rs:39:17
+   |
+39 | pub(crate) enum SqliteReadCutFailurePoint {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteReadCutRehearsalReport` is never constructed
+  --> src/workbench_sqlite_read_cut.rs:51:19
+   |
+51 | pub(crate) struct SqliteReadCutRehearsalReport {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteReadCutProjectedFile` is never constructed
+  --> src/workbench_sqlite_read_cut.rs:73:19
+   |
+73 | pub(crate) struct SqliteReadCutProjectedFile {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteReadCutRecoveryDryRun` is never constructed
+  --> src/workbench_sqlite_read_cut.rs:80:19
+   |
+80 | pub(crate) struct SqliteReadCutRecoveryDryRun {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `SqliteLimitedReadCutFailurePoint` is never used
+  --> src/workbench_sqlite_read_cut.rs:91:17
+   |
+91 | pub(crate) enum SqliteLimitedReadCutFailurePoint {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteLimitedReadCutReport` is never constructed
+   --> src/workbench_sqlite_read_cut.rs:105:19
+    |
+105 | pub(crate) struct SqliteLimitedReadCutReport {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteLimitedReadCutLevelBConfig` is never constructed
+   --> src/workbench_sqlite_read_cut.rs:131:19
+    |
+131 | pub(crate) struct SqliteLimitedReadCutLevelBConfig {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteLimitedReadCutRecoveryDryRun` is never constructed
+   --> src/workbench_sqlite_read_cut.rs:141:19
+    |
+141 | pub(crate) struct SqliteLimitedReadCutRecoveryDryRun {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteLimitedReadCutSafetyFlags` is never constructed
+   --> src/workbench_sqlite_read_cut.rs:152:19
+    |
+152 | pub(crate) struct SqliteLimitedReadCutSafetyFlags {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated functions `for_db_success` and `for_fallback` are never used
+   --> src/workbench_sqlite_read_cut.rs:165:8
+    |
+164 | impl SqliteLimitedReadCutSafetyFlags {
+    | ------------------------------------ associated functions in this implementation
+165 |     fn for_db_success() -> Self {
+    |        ^^^^^^^^^^^^^^
+...
+179 |     fn for_fallback() -> Self {
+    |        ^^^^^^^^^^^^
+
+warning: function `rehearse_limited_read_cut_level_a` is never used
+   --> src/workbench_sqlite_read_cut.rs:194:15
+    |
+194 | pub(crate) fn rehearse_limited_read_cut_level_a(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_limited_read_cut_level_b_workbench_owned_state` is never used
+   --> src/workbench_sqlite_read_cut.rs:229:15
+    |
+229 | pub(crate) fn rehearse_limited_read_cut_level_b_workbench_owned_state(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_limited_read_cut` is never used
+   --> src/workbench_sqlite_read_cut.rs:275:4
+    |
+275 | fn rehearse_limited_read_cut(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_fixture_read_cut` is never used
+   --> src/workbench_sqlite_read_cut.rs:474:15
+    |
+474 | pub(crate) fn rehearse_fixture_read_cut(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `LimitedJsonFallback` is never constructed
+   --> src/workbench_sqlite_read_cut.rs:608:8
+    |
+608 | struct LimitedJsonFallback {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: struct `LimitedDbProjection` is never constructed
+   --> src/workbench_sqlite_read_cut.rs:615:8
+    |
+615 | struct LimitedDbProjection {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_limited_read_model` is never used
+   --> src/workbench_sqlite_read_cut.rs:620:4
+    |
+620 | fn validate_limited_read_model(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_limited_read_cut_paths` is never used
+   --> src/workbench_sqlite_read_cut.rs:637:4
+    |
+637 | fn validate_limited_read_cut_paths(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_level_b_limited_read_cut_paths` is never used
+   --> src/workbench_sqlite_read_cut.rs:684:4
+    |
+684 | fn validate_level_b_limited_read_cut_paths(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_level_b_existing_path` is never used
+   --> src/workbench_sqlite_read_cut.rs:742:4
+    |
+742 | fn validate_level_b_existing_path(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_level_b_work_dir` is never used
+   --> src/workbench_sqlite_read_cut.rs:798:4
+    |
+798 | fn validate_level_b_work_dir(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_level_b_output_path` is never used
+   --> src/workbench_sqlite_read_cut.rs:829:4
+    |
+829 | fn validate_level_b_output_path(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `require_clean_level_b_path` is never used
+   --> src/workbench_sqlite_read_cut.rs:894:4
+    |
+894 | fn require_clean_level_b_path(label: &str, path: &Path) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verified_limited_json_fallback` is never used
+   --> src/workbench_sqlite_read_cut.rs:907:4
+    |
+907 | fn verified_limited_json_fallback(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `read_limited_db_model` is never used
+   --> src/workbench_sqlite_read_cut.rs:950:4
+    |
+950 | fn read_limited_db_model(
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `read_limited_confirmed_db_model` is never used
+   --> src/workbench_sqlite_read_cut.rs:964:4
+    |
+964 | fn read_limited_confirmed_db_model(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `limited_db_projection_from_export` is never used
+   --> src/workbench_sqlite_read_cut.rs:982:4
+    |
+982 | fn limited_db_projection_from_export(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_limited_db_integrity` is never used
+    --> src/workbench_sqlite_read_cut.rs:1009:4
+     |
+1009 | fn verify_limited_db_integrity(db_path: &Path) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_limited_projection_paths` is never used
+    --> src/workbench_sqlite_read_cut.rs:1022:4
+     |
+1022 | fn validate_limited_projection_paths(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `limited_read_cut_report` is never used
+    --> src/workbench_sqlite_read_cut.rs:1052:4
+     |
+1052 | fn limited_read_cut_report(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_limited_read_cut_report` is never used
+    --> src/workbench_sqlite_read_cut.rs:1098:4
+     |
+1098 | fn write_limited_read_cut_report(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_limited_rollback_manifest` is never used
+    --> src/workbench_sqlite_read_cut.rs:1129:4
+     |
+1129 | fn write_limited_rollback_manifest(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_limited_rollback_manifest` is never used
+    --> src/workbench_sqlite_read_cut.rs:1150:4
+     |
+1150 | fn verify_limited_rollback_manifest(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `limited_recovery_plan` is never used
+    --> src/workbench_sqlite_read_cut.rs:1180:4
+     |
+1180 | fn limited_recovery_plan(_reason: &str) -> SqliteLimitedReadCutRecoveryDryRun {
+     |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `load_workflow_state_from_root` is never used
+    --> src/workbench_sqlite_read_cut.rs:1199:4
+     |
+1199 | fn load_workflow_state_from_root(root: &Path) -> Result<Value, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `workflow_state_summary` is never used
+    --> src/workbench_sqlite_read_cut.rs:1215:4
+     |
+1215 | fn workflow_state_summary(value: &Value) -> Result<Value, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `summary_counts` is never used
+    --> src/workbench_sqlite_read_cut.rs:1232:4
+     |
+1232 | fn summary_counts(summary: &Value) -> Result<BTreeMap<String, usize>, String> {
+     |    ^^^^^^^^^^^^^^
+
+warning: function `array_count` is never used
+    --> src/workbench_sqlite_read_cut.rs:1244:4
+     |
+1244 | fn array_count(value: &Value, key: &str) -> usize {
+     |    ^^^^^^^^^^^
+
+warning: function `ensure_no_forbidden_limited_value` is never used
+    --> src/workbench_sqlite_read_cut.rs:1248:4
+     |
+1248 | fn ensure_no_forbidden_limited_value(value: &Value) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `effective_limited_denied_markers` is never used
+    --> src/workbench_sqlite_read_cut.rs:1267:4
+     |
+1267 | fn effective_limited_denied_markers(markers: &[String]) -> Vec<String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `reject_denied_path_markers` is never used
+    --> src/workbench_sqlite_read_cut.rs:1278:4
+     |
+1278 | fn reject_denied_path_markers(path: &Path, denied_markers: &[String]) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `file_hash` is never used
+    --> src/workbench_sqlite_read_cut.rs:1292:4
+     |
+1292 | fn file_hash(path: &Path) -> Result<String, String> {
+     |    ^^^^^^^^^
+
+warning: function `dir_hash` is never used
+    --> src/workbench_sqlite_read_cut.rs:1302:4
+     |
+1302 | fn dir_hash(root: &Path) -> Result<String, String> {
+     |    ^^^^^^^^
+
+warning: function `path_hash` is never used
+    --> src/workbench_sqlite_read_cut.rs:1322:4
+     |
+1322 | fn path_hash(path: &Path) -> String {
+     |    ^^^^^^^^^
+
+warning: function `canonical_existing_dir_limited` is never used
+    --> src/workbench_sqlite_read_cut.rs:1326:4
+     |
+1326 | fn canonical_existing_dir_limited(path: &Path, label: &str) -> Result<PathBuf, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `canonicalize_existing_or_parent_limited` is never used
+    --> src/workbench_sqlite_read_cut.rs:1342:4
+     |
+1342 | fn canonicalize_existing_or_parent_limited(path: &Path, label: &str) -> Result<PathBuf, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `manifest_r3_a10_fixture_root` is never used
+    --> src/workbench_sqlite_read_cut.rs:1380:4
+     |
+1380 | fn manifest_r3_a10_fixture_root() -> PathBuf {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `DbReadOutcome` is never used
+    --> src/workbench_sqlite_read_cut.rs:1386:6
+     |
+1386 | enum DbReadOutcome {
+     |      ^^^^^^^^^^^^^
+
+warning: struct `JsonProjectionFallback` is never constructed
+    --> src/workbench_sqlite_read_cut.rs:1395:8
+     |
+1395 | struct JsonProjectionFallback {
+     |        ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `read_db_projection` is never used
+    --> src/workbench_sqlite_read_cut.rs:1400:4
+     |
+1400 | fn read_db_projection(db_path: &Path, projection_root: &Path) -> Result<DbReadOutcome, String> {
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_db_integrity` is never used
+    --> src/workbench_sqlite_read_cut.rs:1423:4
+     |
+1423 | fn verify_db_integrity(db_path: &Path) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `verified_json_projection_fallback` is never used
+    --> src/workbench_sqlite_read_cut.rs:1448:4
+     |
+1448 | fn verified_json_projection_fallback(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `load_completed_rollback_manifest` is never used
+    --> src/workbench_sqlite_read_cut.rs:1481:4
+     |
+1481 | fn load_completed_rollback_manifest(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `load_manifest_file` is never used
+    --> src/workbench_sqlite_read_cut.rs:1513:4
+     |
+1513 | fn load_manifest_file(path: &Path) -> Result<Value, String> {
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `manifest_hash` is never used
+    --> src/workbench_sqlite_read_cut.rs:1520:4
+     |
+1520 | fn manifest_hash(manifest: &Value) -> Result<String, String> {
+     |    ^^^^^^^^^^^^^
+
+warning: function `projected_files_from_export` is never used
+    --> src/workbench_sqlite_read_cut.rs:1528:4
+     |
+1528 | fn projected_files_from_export(files: &[SqliteProjectedFile]) -> Vec<SqliteReadCutProjectedFile> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `projected_file_from_manifest_entry` is never used
+    --> src/workbench_sqlite_read_cut.rs:1539:4
+     |
+1539 | fn projected_file_from_manifest_entry(value: &Value) -> Result<SqliteReadCutProjectedFile, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_projected_file_hash` is never used
+    --> src/workbench_sqlite_read_cut.rs:1559:4
+     |
+1559 | fn verify_projected_file_hash(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_projection_and_manifest_from_db` is never used
+    --> src/workbench_sqlite_read_cut.rs:1591:4
+     |
+1591 | fn write_projection_and_manifest_from_db(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_projected_file` is never used
+    --> src/workbench_sqlite_read_cut.rs:1633:4
+     |
+1633 | fn write_projected_file(root: &Path, file: &SqliteProjectedFile) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rollback_manifest_value` is never used
+    --> src/workbench_sqlite_read_cut.rs:1640:4
+     |
+1640 | fn rollback_manifest_value(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `temp_manifest_path` is never used
+    --> src/workbench_sqlite_read_cut.rs:1669:4
+     |
+1669 | fn temp_manifest_path(path: &Path) -> PathBuf {
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `db_row_counts` is never used
+    --> src/workbench_sqlite_read_cut.rs:1673:4
+     |
+1673 | fn db_row_counts(db_path: &Path) -> Result<BTreeMap<String, i64>, String> {
+     |    ^^^^^^^^^^^^^
+
+warning: function `recovery_plan` is never used
+    --> src/workbench_sqlite_read_cut.rs:1691:4
+     |
+1691 | fn recovery_plan(reason: &str) -> SqliteReadCutRecoveryDryRun {
+     |    ^^^^^^^^^^^^^
+
+warning: function `validate_fixture_root` is never used
+    --> src/workbench_sqlite_read_cut.rs:1708:4
+     |
+1708 | fn validate_fixture_root(path: &Path) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_temp_db_path` is never used
+    --> src/workbench_sqlite_read_cut.rs:1723:4
+     |
+1723 | fn validate_temp_db_path(path: &Path) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_projection_paths` is never used
+    --> src/workbench_sqlite_read_cut.rs:1734:4
+     |
+1734 | fn validate_projection_paths(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_report` is never used
+    --> src/workbench_sqlite_read_cut.rs:1764:4
+     |
+1764 | fn write_report(path: &Path, report: &SqliteReadCutRehearsalReport) -> Result<(), String> {
+     |    ^^^^^^^^^^^^
+
+warning: function `write_json_file` is never used
+    --> src/workbench_sqlite_read_cut.rs:1778:4
+     |
+1778 | fn write_json_file(path: &Path, value: &Value) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `redaction_policy` is never used
+    --> src/workbench_sqlite_read_cut.rs:1789:4
+     |
+1789 | fn redaction_policy() -> Vec<String> {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `manifest_r3_a4_fixture_root` is never used
+    --> src/workbench_sqlite_read_cut.rs:1798:4
+     |
+1798 | fn manifest_r3_a4_fixture_root() -> PathBuf {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SupervisorActionIdentity` is never constructed
+  --> src/workbench_sqlite_repository.rs:86:19
+   |
+86 | pub(crate) struct SupervisorActionIdentity<'a> {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `supervisor_action_idempotency_key` is never used
+   --> src/workbench_sqlite_repository.rs:127:15
+    |
+127 | pub(crate) fn supervisor_action_idempotency_key(identity: SupervisorActionIdentity<'_>) -> String {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `open_rehearsal` and `recover_reserved_supervisor_action_to_waiting` are never used
+   --> src/workbench_sqlite_repository.rs:143:19
+    |
+140 | impl WorkbenchSqliteRepository {
+    | ------------------------------ associated items in this implementation
+...
+143 |     pub(crate) fn open_rehearsal(path: &Path) -> Result<Self, String> {
+    |                   ^^^^^^^^^^^^^^
+...
+685 |     pub(crate) fn recover_reserved_supervisor_action_to_waiting(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `initialize_temp_workbench_sqlite_db` is never used
+   --> src/workbench_sqlite_schema.rs:164:15
+    |
+164 | pub(crate) fn initialize_temp_workbench_sqlite_db(path: &Path) -> Result<(), String> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_allowed_temp_or_fixture_path` is never used
+   --> src/workbench_sqlite_schema.rs:230:4
+    |
+230 | fn is_allowed_temp_or_fixture_path(path: &Path) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `manifest_fixture_root` is never used
+   --> src/workbench_sqlite_schema.rs:239:4
+    |
+239 | fn manifest_fixture_root() -> PathBuf {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `MODE` is never used
+  --> src/workbench_sqlite_snapshot_apply.rs:19:7
+   |
+19 | const MODE: &str = "copied_snapshot_apply";
+   |       ^^^^
+
+warning: constant `LEVEL_A` is never used
+  --> src/workbench_sqlite_snapshot_apply.rs:20:7
+   |
+20 | const LEVEL_A: &str = "level_a_fixture";
+   |       ^^^^^^^
+
+warning: constant `SNAPSHOT_APPLY_SCHEMA_VERSION` is never used
+  --> src/workbench_sqlite_snapshot_apply.rs:21:7
+   |
+21 | const SNAPSHOT_APPLY_SCHEMA_VERSION: &str = "workbench_sqlite_copied_snapshot_apply.v1";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `COPY_MANIFEST_NAME` is never used
+  --> src/workbench_sqlite_snapshot_apply.rs:22:7
+   |
+22 | const COPY_MANIFEST_NAME: &str = "copied-snapshot-manifest.json";
+   |       ^^^^^^^^^^^^^^^^^^
+
+warning: constant `ROLLBACK_MANIFEST_NAME` is never used
+  --> src/workbench_sqlite_snapshot_apply.rs:23:7
+   |
+23 | const ROLLBACK_MANIFEST_NAME: &str = "rollback-boundary-manifest.json";
+   |       ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `DEFAULT_DENIED_PATH_MARKERS` is never used
+  --> src/workbench_sqlite_snapshot_apply.rs:24:7
+   |
+24 | const DEFAULT_DENIED_PATH_MARKERS: &[&str] = &[
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `SqliteSnapshotApplyFailurePoint` is never used
+  --> src/workbench_sqlite_snapshot_apply.rs:41:17
+   |
+41 | pub(crate) enum SqliteSnapshotApplyFailurePoint {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteSnapshotApplyConfig` is never constructed
+  --> src/workbench_sqlite_snapshot_apply.rs:51:19
+   |
+51 | pub(crate) struct SqliteSnapshotApplyConfig {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteSnapshotApplyReport` is never constructed
+  --> src/workbench_sqlite_snapshot_apply.rs:76:19
+   |
+76 | pub(crate) struct SqliteSnapshotApplyReport {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteCopiedSnapshotFile` is never constructed
+   --> src/workbench_sqlite_snapshot_apply.rs:101:19
+    |
+101 | pub(crate) struct SqliteCopiedSnapshotFile {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteSnapshotPreflightSummary` is never constructed
+   --> src/workbench_sqlite_snapshot_apply.rs:111:19
+    |
+111 | pub(crate) struct SqliteSnapshotPreflightSummary {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteSnapshotApplySummary` is never constructed
+   --> src/workbench_sqlite_snapshot_apply.rs:123:19
+    |
+123 | pub(crate) struct SqliteSnapshotApplySummary {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteSnapshotExportVerification` is never constructed
+   --> src/workbench_sqlite_snapshot_apply.rs:135:19
+    |
+135 | pub(crate) struct SqliteSnapshotExportVerification {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteSnapshotProjectedFile` is never constructed
+   --> src/workbench_sqlite_snapshot_apply.rs:146:19
+    |
+146 | pub(crate) struct SqliteSnapshotProjectedFile {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteSnapshotRollbackBoundary` is never constructed
+   --> src/workbench_sqlite_snapshot_apply.rs:154:19
+    |
+154 | pub(crate) struct SqliteSnapshotRollbackBoundary {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteSnapshotSafetyFlags` is never constructed
+   --> src/workbench_sqlite_snapshot_apply.rs:167:19
+    |
+167 | pub(crate) struct SqliteSnapshotSafetyFlags {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_copied_snapshot_apply_level_a` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:191:15
+    |
+191 | pub(crate) fn rehearse_copied_snapshot_apply_level_a(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `preflight_config` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:343:4
+    |
+343 | fn preflight_config(
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `copy_snapshot_files` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:355:4
+    |
+355 | fn copy_snapshot_files(
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `copied_file_manifest_item` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:400:4
+    |
+400 | fn copied_file_manifest_item(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_copy_manifest` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:419:4
+    |
+419 | fn write_copy_manifest(
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `apply_summary` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:436:4
+    |
+436 | fn apply_summary(
+    |    ^^^^^^^^^^^^^
+
+warning: function `export_verification` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:452:4
+    |
+452 | fn export_verification(
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_export_hashes` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:479:4
+    |
+479 | fn verify_export_hashes(verification: &SqliteSnapshotExportVerification) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_export_projection` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:493:4
+    |
+493 | fn write_export_projection(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_projection_files` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:517:4
+    |
+517 | fn verify_projection_files(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rollback_boundary` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:549:4
+    |
+549 | fn rollback_boundary(
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `write_rollback_manifest` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:584:4
+    |
+584 | fn write_rollback_manifest(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_rollback_manifest` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:601:4
+    |
+601 | fn verify_rollback_manifest(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `snapshot_projected_files` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:626:4
+    |
+626 | fn snapshot_projected_files(files: &[SqliteProjectedFile]) -> Vec<SqliteSnapshotProjectedFile> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `projection_hash` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:638:4
+    |
+638 | fn projection_hash(files: &[SqliteSnapshotProjectedFile]) -> String {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `verify_runtime_log_alias_policy` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:642:4
+    |
+642 | fn verify_runtime_log_alias_policy(files: &[SqliteProjectedFile]) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `ensure_preflight_ready` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:652:4
+    |
+652 | fn ensure_preflight_ready(
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_level_a_source_snapshot_root` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:675:4
+    |
+675 | fn validate_level_a_source_snapshot_root(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_temp_roots` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:702:4
+    |
+702 | fn validate_temp_roots(
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `effective_denied_path_markers` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:754:4
+    |
+754 | fn effective_denied_path_markers(config: &SqliteSnapshotApplyConfig) -> Vec<String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `denied_path_hit` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:768:4
+    |
+768 | fn denied_path_hit(path: &Path, denied_path_markers: &[String]) -> bool {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `verify_db_integrity` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:775:4
+    |
+775 | fn verify_db_integrity(db_path: &Path) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `db_row_counts` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:804:4
+    |
+804 | fn db_row_counts(db_path: &Path) -> Result<BTreeMap<String, i64>, String> {
+    |    ^^^^^^^^^^^^^
+
+warning: function `dir_manifest_hash` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:824:4
+    |
+824 | fn dir_manifest_hash(root: &Path) -> Result<String, String> {
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `report_hash` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:846:4
+    |
+846 | fn report_hash<T: Serialize>(value: &T) -> Result<String, String> {
+    |    ^^^^^^^^^^^
+
+warning: function `path_hash` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:852:4
+    |
+852 | fn path_hash(path: &Path) -> String {
+    |    ^^^^^^^^^
+
+warning: function `rollback_manifest_path` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:856:4
+    |
+856 | fn rollback_manifest_path(temp_export_root: &Path) -> PathBuf {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_report` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:860:4
+    |
+860 | fn write_report(path: &Path, report: &SqliteSnapshotApplyReport) -> Result<(), String> {
+    |    ^^^^^^^^^^^^
+
+warning: function `write_json_file` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:877:4
+    |
+877 | fn write_json_file(path: &Path, value: &Value) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `reset_dir` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:888:4
+    |
+888 | fn reset_dir(path: &Path) -> Result<(), String> {
+    |    ^^^^^^^^^
+
+warning: function `sorted_entries` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:897:4
+    |
+897 | fn sorted_entries(root: &Path) -> Result<Vec<fs::DirEntry>, String> {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `manifest_r3_a8_fixture_root` is never used
+   --> src/workbench_sqlite_snapshot_apply.rs:906:4
+    |
+906 | fn manifest_r3_a8_fixture_root() -> PathBuf {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEVEL_A` is never used
+  --> src/workbench_sqlite_stop_write.rs:13:7
+   |
+13 | const LEVEL_A: &str = "level_a_fixture";
+   |       ^^^^^^^
+
+warning: constant `LEVEL_B_WORKBENCH_OWNED_STATE` is never used
+  --> src/workbench_sqlite_stop_write.rs:14:7
+   |
+14 | const LEVEL_B_WORKBENCH_OWNED_STATE: &str = "level_b_workbench_owned_state";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `MODE` is never used
+  --> src/workbench_sqlite_stop_write.rs:15:7
+   |
+15 | const MODE: &str = "stop_write_json_decision";
+   |       ^^^^
+
+warning: constant `DECISION_MODE` is never used
+  --> src/workbench_sqlite_stop_write.rs:16:7
+   |
+16 | const DECISION_MODE: &str = "level_a_fixture_stop_write_decision";
+   |       ^^^^^^^^^^^^^
+
+warning: constant `SCHEMA_VERSION` is never used
+  --> src/workbench_sqlite_stop_write.rs:17:7
+   |
+17 | const SCHEMA_VERSION: &str = "workbench_sqlite_stop_write_decision.v1";
+   |       ^^^^^^^^^^^^^^
+
+warning: constant `WORKFLOW_STATE_SUMMARY_READ_MODEL` is never used
+  --> src/workbench_sqlite_stop_write.rs:18:7
+   |
+18 | const WORKFLOW_STATE_SUMMARY_READ_MODEL: &str = "workflow_state_summary";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `DEFAULT_DENIED_PATH_MARKERS` is never used
+  --> src/workbench_sqlite_stop_write.rs:19:7
+   |
+19 | const DEFAULT_DENIED_PATH_MARKERS: &[&str] = &[
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `SqliteStopWriteFailurePoint` is never used
+  --> src/workbench_sqlite_stop_write.rs:37:17
+   |
+37 | pub(crate) enum SqliteStopWriteFailurePoint {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteStopWriteLevelBEvidence` is never constructed
+  --> src/workbench_sqlite_stop_write.rs:43:19
+   |
+43 | pub(crate) struct SqliteStopWriteLevelBEvidence {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `complete` is never used
+  --> src/workbench_sqlite_stop_write.rs:50:8
+   |
+49 | impl SqliteStopWriteLevelBEvidence {
+   | ---------------------------------- method in this implementation
+50 |     fn complete(&self) -> bool {
+   |        ^^^^^^^^
+
+warning: struct `SqliteStopWriteLevelBConfig` is never constructed
+  --> src/workbench_sqlite_stop_write.rs:58:19
+   |
+58 | pub(crate) struct SqliteStopWriteLevelBConfig {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteStopWriteDecisionReport` is never constructed
+  --> src/workbench_sqlite_stop_write.rs:69:19
+   |
+69 | pub(crate) struct SqliteStopWriteDecisionReport {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteStopWritePrecondition` is never constructed
+  --> src/workbench_sqlite_stop_write.rs:99:19
+   |
+99 | pub(crate) struct SqliteStopWritePrecondition {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteStopWriteRollbackDrill` is never constructed
+   --> src/workbench_sqlite_stop_write.rs:106:19
+    |
+106 | pub(crate) struct SqliteStopWriteRollbackDrill {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteStopWriteSafetyFlags` is never constructed
+   --> src/workbench_sqlite_stop_write.rs:118:19
+    |
+118 | pub(crate) struct SqliteStopWriteSafetyFlags {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `recorded` is never used
+   --> src/workbench_sqlite_stop_write.rs:133:8
+    |
+132 | impl SqliteStopWriteSafetyFlags {
+    | ------------------------------- associated function in this implementation
+133 |     fn recorded() -> Self {
+    |        ^^^^^^^^
+
+warning: struct `SqliteStopWriteSourceFileHash` is never constructed
+   --> src/workbench_sqlite_stop_write.rs:151:19
+    |
+151 | pub(crate) struct SqliteStopWriteSourceFileHash {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `StopWriteObservedInputs` is never constructed
+   --> src/workbench_sqlite_stop_write.rs:157:8
+    |
+157 | struct StopWriteObservedInputs {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_stop_write_decision_level_a` is never used
+   --> src/workbench_sqlite_stop_write.rs:170:15
+    |
+170 | pub(crate) fn rehearse_stop_write_decision_level_a(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_stop_write_decision_level_b_workbench_owned_state` is never used
+   --> src/workbench_sqlite_stop_write.rs:284:15
+    |
+284 | pub(crate) fn rehearse_stop_write_decision_level_b_workbench_owned_state(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_decision_mode` is never used
+   --> src/workbench_sqlite_stop_write.rs:411:4
+    |
+411 | fn validate_decision_mode(decision_mode: &str) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_supervisor_decision` is never used
+   --> src/workbench_sqlite_stop_write.rs:421:4
+    |
+421 | fn validate_supervisor_decision(decision: &str) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_decision_actor` is never used
+   --> src/workbench_sqlite_stop_write.rs:430:4
+    |
+430 | fn validate_decision_actor(actor: &str) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_read_model` is never used
+   --> src/workbench_sqlite_stop_write.rs:437:4
+    |
+437 | fn validate_read_model(
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_paths` is never used
+   --> src/workbench_sqlite_stop_write.rs:454:4
+    |
+454 | fn validate_paths(
+    |    ^^^^^^^^^^^^^^
+
+warning: function `validate_level_b_paths` is never used
+   --> src/workbench_sqlite_stop_write.rs:499:4
+    |
+499 | fn validate_level_b_paths(
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `observed_inputs` is never used
+   --> src/workbench_sqlite_stop_write.rs:664:4
+    |
+664 | fn observed_inputs(
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `observed_inputs_with_export` is never used
+   --> src/workbench_sqlite_stop_write.rs:683:4
+    |
+683 | fn observed_inputs_with_export(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `preconditions_level_b` is never used
+   --> src/workbench_sqlite_stop_write.rs:739:4
+    |
+739 | fn preconditions_level_b(
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `preconditions` is never used
+   --> src/workbench_sqlite_stop_write.rs:803:4
+    |
+803 | fn preconditions(
+    |    ^^^^^^^^^^^^^
+
+warning: function `condition` is never used
+   --> src/workbench_sqlite_stop_write.rs:872:4
+    |
+872 | fn condition(name: &str, satisfied: bool, detail: &str) -> SqliteStopWritePrecondition {
+    |    ^^^^^^^^^
+
+warning: function `rollback_drill` is never used
+   --> src/workbench_sqlite_stop_write.rs:880:4
+    |
+880 | fn rollback_drill() -> SqliteStopWriteRollbackDrill {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `write_level_b_rollback_manifest` is never used
+   --> src/workbench_sqlite_stop_write.rs:900:4
+    |
+900 | fn write_level_b_rollback_manifest(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `canonicalize_existing_or_parent_stop_write` is never used
+   --> src/workbench_sqlite_stop_write.rs:938:4
+    |
+938 | fn canonicalize_existing_or_parent_stop_write(path: &Path, label: &str) -> Result<PathBuf, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `reject_denied_path_markers` is never used
+   --> src/workbench_sqlite_stop_write.rs:976:4
+    |
+976 | fn reject_denied_path_markers(path: &Path, denied_markers: &[String]) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_report` is never used
+   --> src/workbench_sqlite_stop_write.rs:986:4
+    |
+986 | fn write_report(path: &Path, report: &SqliteStopWriteDecisionReport) -> Result<(), String> {
+    |    ^^^^^^^^^^^^
+
+warning: function `verify_rollback_manifest` is never used
+    --> src/workbench_sqlite_stop_write.rs:1016:4
+     |
+1016 | fn verify_rollback_manifest(path: &Path) -> Result<Option<String>, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `source_file_hashes` is never used
+    --> src/workbench_sqlite_stop_write.rs:1038:4
+     |
+1038 | fn source_file_hashes(root: &Path) -> Result<Vec<SqliteStopWriteSourceFileHash>, String> {
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `root_manifest_hash` is never used
+    --> src/workbench_sqlite_stop_write.rs:1060:4
+     |
+1060 | fn root_manifest_hash(root: &Path) -> Result<String, String> {
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `projected_file_counts` is never used
+    --> src/workbench_sqlite_stop_write.rs:1077:4
+     |
+1077 | fn projected_file_counts(
+     |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `optional_file_hash` is never used
+    --> src/workbench_sqlite_stop_write.rs:1087:4
+     |
+1087 | fn optional_file_hash(path: &Path) -> Result<Option<String>, String> {
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `file_hash` is never used
+    --> src/workbench_sqlite_stop_write.rs:1095:4
+     |
+1095 | fn file_hash(path: &Path) -> Result<String, String> {
+     |    ^^^^^^^^^
+
+warning: function `path_hash` is never used
+    --> src/workbench_sqlite_stop_write.rs:1101:4
+     |
+1101 | fn path_hash(path: &Path) -> String {
+     |    ^^^^^^^^^
+
+warning: function `sorted_entries` is never used
+    --> src/workbench_sqlite_stop_write.rs:1105:4
+     |
+1105 | fn sorted_entries(root: &Path) -> Result<Vec<fs::DirEntry>, String> {
+     |    ^^^^^^^^^^^^^^
+
+warning: function `write_json_file` is never used
+    --> src/workbench_sqlite_stop_write.rs:1114:4
+     |
+1114 | fn write_json_file(path: &Path, value: &Value) -> Result<(), String> {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `effective_denied_markers` is never used
+    --> src/workbench_sqlite_stop_write.rs:1125:4
+     |
+1125 | fn effective_denied_markers(markers: &[String]) -> Vec<String> {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `denied_path_hit` is never used
+    --> src/workbench_sqlite_stop_write.rs:1134:4
+     |
+1134 | fn denied_path_hit(path: &Path, markers: &[String]) -> bool {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `is_allowed_level_a_path` is never used
+    --> src/workbench_sqlite_stop_write.rs:1141:4
+     |
+1141 | fn is_allowed_level_a_path(path: &Path) -> bool {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `r3_a12_fixture_root` is never used
+    --> src/workbench_sqlite_stop_write.rs:1145:4
+     |
+1145 | fn r3_a12_fixture_root() -> PathBuf {
+     |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `do_not_claim` is never used
+    --> src/workbench_sqlite_stop_write.rs:1151:4
+     |
+1151 | fn do_not_claim() -> Vec<String> {
+     |    ^^^^^^^^^^^^
+
+warning: function `seed_db_from_json` is never used
+   --> src/workbench_sqlite_storage_mode_m5c.rs:217:15
+    |
+217 | pub(super) fn seed_db_from_json(
+    |               ^^^^^^^^^^^^^^^^^
+
+warning: constant `SCHEMA_VERSION` is never used
+ --> src/workbench_sqlite_transaction_acceptance.rs:9:7
+  |
+9 | const SCHEMA_VERSION: &str = "workbench_sqlite_transaction_acceptance.v1";
+  |       ^^^^^^^^^^^^^^
+
+warning: constant `MODE` is never used
+  --> src/workbench_sqlite_transaction_acceptance.rs:10:7
+   |
+10 | const MODE: &str = "level_a_fixture_transaction_acceptance";
+   |       ^^^^
+
+warning: constant `CANDIDATE_KEY` is never used
+  --> src/workbench_sqlite_transaction_acceptance.rs:11:7
+   |
+11 | const CANDIDATE_KEY: &str = "candidate:r3-a13:transaction";
+   |       ^^^^^^^^^^^^^
+
+warning: constant `MEMORY_ID` is never used
+  --> src/workbench_sqlite_transaction_acceptance.rs:12:7
+   |
+12 | const MEMORY_ID: &str = "memory:r3-a13:transaction";
+   |       ^^^^^^^^^
+
+warning: constant `VERSION_ID` is never used
+  --> src/workbench_sqlite_transaction_acceptance.rs:13:7
+   |
+13 | const VERSION_ID: &str = "memory-version:r3-a13:transaction:1";
+   |       ^^^^^^^^^^
+
+warning: constant `MEMORY_AUDIT_ID` is never used
+  --> src/workbench_sqlite_transaction_acceptance.rs:14:7
+   |
+14 | const MEMORY_AUDIT_ID: &str = "memory-audit:r3-a13:transaction:adopted";
+   |       ^^^^^^^^^^^^^^^
+
+warning: constant `WORKFLOW_AUDIT_ID` is never used
+  --> src/workbench_sqlite_transaction_acceptance.rs:15:7
+   |
+15 | const WORKFLOW_AUDIT_ID: &str = "audit:r3-a13:transaction:memory-adopted";
+   |       ^^^^^^^^^^^^^^^^^
+
+warning: enum `SqliteTransactionAcceptanceFailurePoint` is never used
+  --> src/workbench_sqlite_transaction_acceptance.rs:18:17
+   |
+18 | pub(crate) enum SqliteTransactionAcceptanceFailurePoint {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteTransactionAcceptanceReport` is never constructed
+  --> src/workbench_sqlite_transaction_acceptance.rs:29:19
+   |
+29 | pub(crate) struct SqliteTransactionAcceptanceReport {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteTransactionAcceptanceFlags` is never constructed
+  --> src/workbench_sqlite_transaction_acceptance.rs:51:19
+   |
+51 | pub(crate) struct SqliteTransactionAcceptanceFlags {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteTransactionRollbackAssurance` is never constructed
+  --> src/workbench_sqlite_transaction_acceptance.rs:67:19
+   |
+67 | pub(crate) struct SqliteTransactionRollbackAssurance {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `SqliteCutoverGapItem` is never constructed
+  --> src/workbench_sqlite_transaction_acceptance.rs:76:19
+   |
+76 | pub(crate) struct SqliteCutoverGapItem {
+   |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `rehearse_transaction_acceptance_level_a` is never used
+  --> src/workbench_sqlite_transaction_acceptance.rs:83:15
+   |
+83 | pub(crate) fn rehearse_transaction_acceptance_level_a(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `inject_before_commit_failure` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:242:4
+    |
+242 | fn inject_before_commit_failure(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `tracked_counts` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:253:4
+    |
+253 | fn tracked_counts(db_path: &Path) -> Result<BTreeMap<String, i64>, String> {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `validate_fixture_root` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:267:4
+    |
+267 | fn validate_fixture_root(path: &Path) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_temp_db_path` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:278:4
+    |
+278 | fn validate_temp_db_path(path: &Path) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `manifest_r3_a13_fixture_root` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:289:4
+    |
+289 | fn manifest_r3_a13_fixture_root() -> PathBuf {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `candidate_record_json` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:295:4
+    |
+295 | fn candidate_record_json() -> Value {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `formal_memory_record_json` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:305:4
+    |
+305 | fn formal_memory_record_json() -> Value {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `formal_memory_version_json` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:314:4
+    |
+314 | fn formal_memory_version_json() -> Value {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `memory_audit_json` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:323:4
+    |
+323 | fn memory_audit_json() -> Value {
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `workflow_audit_json` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:333:4
+    |
+333 | fn workflow_audit_json() -> Value {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `json_string` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:344:4
+    |
+344 | fn json_string(value: &Value) -> Result<String, String> {
+    |    ^^^^^^^^^^^
+
+warning: function `completed_flags` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:349:4
+    |
+349 | fn completed_flags() -> SqliteTransactionAcceptanceFlags {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `rollback_assurance` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:366:4
+    |
+366 | fn rollback_assurance(committed_but_report_failed: bool) -> SqliteTransactionRollbackAssurance {
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `cutover_gap_matrix` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:384:4
+    |
+384 | fn cutover_gap_matrix() -> Vec<SqliteCutoverGapItem> {
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `gap` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:455:4
+    |
+455 | fn gap(
+    |    ^^^
+
+warning: function `do_not_claim` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:469:4
+    |
+469 | fn do_not_claim() -> Vec<String> {
+    |    ^^^^^^^^^^^^
+
+warning: function `stable_hash` is never used
+   --> src/workbench_sqlite_transaction_acceptance.rs:481:4
+    |
+481 | fn stable_hash(text: &str) -> String {
+    |    ^^^^^^^^^^^
+
+warning: struct `K3B1RecoveryDecisionRecordedAudit` is never constructed
+  --> src/workflow_audit.rs:77:19
+   |
+77 | pub(crate) struct K3B1RecoveryDecisionRecordedAudit<'a> {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `k3_b1_recovery_decision_recorded` is never used
+  --> src/workflow_audit.rs:89:15
+   |
+89 | pub(crate) fn k3_b1_recovery_decision_recorded(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `K3_B1_RECOVERY_STATES` is never used
+   --> src/k3_b1_recovery.rs:120:18
+    |
+120 | pub(crate) const K3_B1_RECOVERY_STATES: [&str; 9] = [
+    |                  ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `recovery_state_blocks_k3_b2` is never used
+   --> src/k3_b1_recovery.rs:298:15
+    |
+298 | pub(crate) fn recovery_state_blocks_k3_b2(state: &str) -> bool {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `manual_submission_state_after_submit` is never used
+   --> src/k3_b1_recovery.rs:302:15
+    |
+302 | pub(crate) fn manual_submission_state_after_submit() -> &'static str {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `recovery_material_contains_forbidden_content` is never used
+   --> src/k3_b1_recovery.rs:306:15
+    |
+306 | pub(crate) fn recovery_material_contains_forbidden_content(text: &str) -> bool {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `consult_supervisor_resident_turn` is never used
+   --> src/supervisor_resident_oneshot_session.rs:933:15
+    |
+933 | pub(crate) fn consult_supervisor_resident_turn(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `prepare_supervisor_pilot_write_task_for_index` is never used
+   --> src/supervisor_session_launcher.rs:616:15
+    |
+616 | pub(crate) fn prepare_supervisor_pilot_write_task_for_index(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-governance-workbench` (lib) generated 598 warnings (run `cargo fix --lib -p codex-governance-workbench` to apply 5 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.61s

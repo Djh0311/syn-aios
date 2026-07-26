@@ -1,0 +1,205 @@
+   Compiling codex-governance-workbench v0.1.0 (/Users/yoyi/workspace/product-line/prototypes/productized-desktop-shell/src-tauri)
+error[E0425]: cannot find function `binding_error_variants_for_test` in module `mcp::supervisor_conversation_binding`
+    --> src/commands.rs:2073:60
+     |
+2073 |         for error in mcp::supervisor_conversation_binding::binding_error_variants_for_test() {
+     |                                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ not found in `mcp::supervisor_conversation_binding`
+
+warning: unused import: `SystemTime`
+   --> src/system_status_read_model.rs:229:21
+    |
+229 |     use std::time::{SystemTime, UNIX_EPOCH};
+    |                     ^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0433]: cannot find module or crate `binding_failure_family` in this scope
+    --> src/commands.rs:2066:13
+     |
+2066 |             binding_failure_family::PRECHECK_CONTEXT_UNRESOLVED,
+     |             ^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `binding_failure_family`
+     |
+     = help: if you wanted to use a crate named `binding_failure_family`, use `cargo add binding_failure_family` to add it to your `Cargo.toml`
+
+error[E0433]: cannot find module or crate `binding_failure_family` in this scope
+    --> src/commands.rs:2067:13
+     |
+2067 |             binding_failure_family::PRECHECK_PROJECT_ROOT_MISMATCH,
+     |             ^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `binding_failure_family`
+     |
+     = help: if you wanted to use a crate named `binding_failure_family`, use `cargo add binding_failure_family` to add it to your `Cargo.toml`
+
+error[E0433]: cannot find module or crate `binding_failure_family` in this scope
+    --> src/commands.rs:2068:13
+     |
+2068 |             binding_failure_family::PRECHECK_EXISTING_THREAD_REJECTED,
+     |             ^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `binding_failure_family`
+     |
+     = help: if you wanted to use a crate named `binding_failure_family`, use `cargo add binding_failure_family` to add it to your `Cargo.toml`
+
+error[E0433]: cannot find module or crate `binding_failure_family` in this scope
+    --> src/commands.rs:2069:13
+     |
+2069 |             binding_failure_family::PRECHECK_RUN_IDENTITY_UNAVAILABLE,
+     |             ^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `binding_failure_family`
+     |
+     = help: if you wanted to use a crate named `binding_failure_family`, use `cargo add binding_failure_family` to add it to your `Cargo.toml`
+
+error[E0599]: no variant or associated item named `BindingStoreConflict` found for enum `mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError` in the current scope
+    --> src/commands.rs:2083:92
+     |
+2083 |             mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingStoreConflict,
+     |                                                                                            ^^^^^^^^^^^^^^^^^^^^ variant or associated item not found in `mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError`
+     |
+    ::: src/mcp/supervisor_orchestrator.rs:1086:1
+     |
+1086 | pub(crate) enum SupervisorConversationBindingEstablishmentError {
+     | --------------------------------------------------------------- variant or associated item `BindingStoreConflict` not found for this enum
+
+error[E0425]: cannot find function `supervisor_binding_failure_family_for_establishment_error` in this scope
+    --> src/commands.rs:2085:27
+     |
+ 589 | / fn supervisor_binding_stage_for_establishment_error(
+ 590 | |     error: mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError,
+ 591 | | ) -> SupervisorConversationBindingStage {
+ 592 | |     match error {
+...    |
+ 606 | | }
+     | |_- similarly named function `supervisor_binding_stage_for_establishment_error` defined here
+...
+2085 |               families.push(supervisor_binding_failure_family_for_establishment_error(error));
+     |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+help: a function with a similar name exists
+     |
+2085 -             families.push(supervisor_binding_failure_family_for_establishment_error(error));
+2085 +             families.push(supervisor_binding_stage_for_establishment_error(error));
+     |
+
+error[E0433]: cannot find module or crate `binding_failure_family` in this scope
+    --> src/commands.rs:2090:13
+     |
+2090 |             binding_failure_family::ACTIVATE_REJECTED,
+     |             ^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `binding_failure_family`
+     |
+     = help: if you wanted to use a crate named `binding_failure_family`, use `cargo add binding_failure_family` to add it to your `Cargo.toml`
+
+error[E0433]: cannot find module or crate `binding_failure_family` in this scope
+    --> src/commands.rs:2091:13
+     |
+2091 |             binding_failure_family::TRANSPORT_START_FAILED,
+     |             ^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `binding_failure_family`
+     |
+     = help: if you wanted to use a crate named `binding_failure_family`, use `cargo add binding_failure_family` to add it to your `Cargo.toml`
+
+error[E0433]: cannot find module or crate `binding_failure_family` in this scope
+    --> src/commands.rs:2092:13
+     |
+2092 |             binding_failure_family::TERMINATE_UNCONFIRMED,
+     |             ^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `binding_failure_family`
+     |
+     = help: if you wanted to use a crate named `binding_failure_family`, use `cargo add binding_failure_family` to add it to your `Cargo.toml`
+
+error[E0599]: no variant or associated item named `BindingStoreConflict` found for enum `mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError` in the current scope
+    --> src/commands.rs:2120:69
+     |
+2120 |             supervisor_binding_stage_for_establishment_error(Error::BindingStoreConflict),
+     |                                                                     ^^^^^^^^^^^^^^^^^^^^ variant or associated item not found in `mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError`
+     |
+    ::: src/mcp/supervisor_orchestrator.rs:1086:1
+     |
+1086 | pub(crate) enum SupervisorConversationBindingEstablishmentError {
+     | --------------------------------------------------------------- variant or associated item `BindingStoreConflict` not found for this enum
+
+error[E0599]: no variant or associated item named `BindingStoreConflict` found for enum `mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError` in the current scope
+    --> src/commands.rs:2125:78
+     |
+2125 |             supervisor_binding_failure_family_for_establishment_error(Error::BindingStoreConflict),
+     |                                                                              ^^^^^^^^^^^^^^^^^^^^ variant or associated item not found in `mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError`
+     |
+    ::: src/mcp/supervisor_orchestrator.rs:1086:1
+     |
+1086 | pub(crate) enum SupervisorConversationBindingEstablishmentError {
+     | --------------------------------------------------------------- variant or associated item `BindingStoreConflict` not found for this enum
+
+error[E0425]: cannot find function `supervisor_binding_failure_family_for_establishment_error` in this scope
+    --> src/commands.rs:2125:13
+     |
+ 589 | / fn supervisor_binding_stage_for_establishment_error(
+ 590 | |     error: mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError,
+ 591 | | ) -> SupervisorConversationBindingStage {
+ 592 | |     match error {
+...    |
+ 606 | | }
+     | |_- similarly named function `supervisor_binding_stage_for_establishment_error` defined here
+...
+2125 |               supervisor_binding_failure_family_for_establishment_error(Error::BindingStoreConflict),
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+help: a function with a similar name exists
+     |
+2125 -             supervisor_binding_failure_family_for_establishment_error(Error::BindingStoreConflict),
+2125 +             supervisor_binding_stage_for_establishment_error(Error::BindingStoreConflict),
+     |
+
+error[E0425]: cannot find function `supervisor_binding_failure_family_for_establishment_error` in this scope
+    --> src/commands.rs:2126:13
+     |
+ 589 | / fn supervisor_binding_stage_for_establishment_error(
+ 590 | |     error: mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError,
+ 591 | | ) -> SupervisorConversationBindingStage {
+ 592 | |     match error {
+...    |
+ 606 | | }
+     | |_- similarly named function `supervisor_binding_stage_for_establishment_error` defined here
+...
+2126 |               supervisor_binding_failure_family_for_establishment_error(Error::BindingConstruct)
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+help: a function with a similar name exists
+     |
+2126 -             supervisor_binding_failure_family_for_establishment_error(Error::BindingConstruct)
+2126 +             supervisor_binding_stage_for_establishment_error(Error::BindingConstruct)
+     |
+
+error[E0433]: cannot find module or crate `binding_failure_family` in this scope
+    --> src/commands.rs:2136:13
+     |
+2136 |             binding_failure_family::PRECHECK_CONTEXT_UNRESOLVED,
+     |             ^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `binding_failure_family`
+     |
+     = help: if you wanted to use a crate named `binding_failure_family`, use `cargo add binding_failure_family` to add it to your `Cargo.toml`
+
+error[E0425]: cannot find function `supervisor_start_failure_receipt_with_family` in this scope
+    --> src/commands.rs:2133:23
+     |
+ 650 | / fn supervisor_start_failure_receipt(
+ 651 | |     turn_id: &str,
+ 652 | |     stage: SupervisorConversationBindingStage,
+ 653 | | ) -> ConversationTransportCommandReceipt {
+...    |
+ 683 | | }
+     | |_- similarly named function `supervisor_start_failure_receipt` defined here
+...
+2133 |           let receipt = supervisor_start_failure_receipt_with_family(
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+help: a function with a similar name exists
+     |
+2133 -         let receipt = supervisor_start_failure_receipt_with_family(
+2133 +         let receipt = supervisor_start_failure_receipt(
+     |
+
+error[E0433]: cannot find module or crate `binding_failure_family` in this scope
+    --> src/commands.rs:2140:18
+     |
+2140 |             Some(binding_failure_family::PRECHECK_CONTEXT_UNRESOLVED)
+     |                  ^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `binding_failure_family`
+     |
+     = help: if you wanted to use a crate named `binding_failure_family`, use `cargo add binding_failure_family` to add it to your `Cargo.toml`
+
+Some errors have detailed explanations: E0425, E0433, E0599.
+For more information about an error, try `rustc --explain E0425`.
+warning: `codex-governance-workbench` (lib test) generated 1 warning
+error: could not compile `codex-governance-workbench` (lib test) due to 17 previous errors; 1 warning emitted
+exit=101

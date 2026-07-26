@@ -1,0 +1,309 @@
+##### src-tauri/src/supervisor_resident_oneshot_session.rs
+--- evidence/raw/2026-07-26-shared-supervisor-failure-family-observability-retrofit/baseline/prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_session.rs	2026-07-22 22:30:59
++++ prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_session.rs	2026-07-27 03:57:23
+@@ -2298,7 +2298,95 @@
+     pub(crate) thread_id: Option<String>,
+     pub(crate) supervisor_reply: Option<String>,
+     pub(crate) message: String,
++    /// N2R 可观测性改造（A1）：只用于把"是哪一种失败"自报家门。
++    /// 纯加法——缺省 `None`、序列化时省略，既有消费者与既有存量记录仍合法。
++    /// 它不参与任何控制流判定，`status` / `message` / 用户可见文案一律不变。
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub(crate) failure_family: Option<String>,
++}
++
++/// 首句失败的稳定家族名。全部是固定字符串常量，不是格式化出来的自由文本，
++/// 且两两互不相等——这是"外部能不能分辨是哪一支失败"的唯一依据。
++pub(crate) mod resident_failure_family {
++    /// 幂等重放：找到 user_message_injected，但没有对应的 supervisor_message_recorded
++    pub(crate) const REPLY_MISSING_AFTER_INJECTION: &str = "resident_reply_missing_after_injection";
++    /// 幂等重放：client_request_id 命中已记录消息，但连 injected 事件都没有
++    pub(crate) const REPLAY_RECORDED_WITHOUT_INJECTION: &str = "replay_recorded_without_injection";
++    /// consult 成功，但 user_message_injected 事件写失败
++    pub(crate) const INJECTED_EVENT_APPEND_FAILED: &str = "injected_event_append_failed";
++    /// 全链成功，但 supervisor_message_recorded 事件写失败
++    pub(crate) const SUPERVISOR_REPLY_APPEND_FAILED: &str = "supervisor_reply_append_failed";
++}
++
++/// A4：首句 consult 失败时，把既有的 `stable_error_family()` 原样带出去。
++/// 13 个分支全部返回固定常量，禁止拼接自由文本。
++fn resident_consult_failure_family(
++    stage: SupervisorResidentDeliveryDiagnosticStage,
++) -> &'static str {
++    match stage {
++        SupervisorResidentDeliveryDiagnosticStage::PreflightReap => "consult_failed_preflight_reap",
++        SupervisorResidentDeliveryDiagnosticStage::PreflightSession => {
++            "consult_failed_preflight_session"
++        }
++        SupervisorResidentDeliveryDiagnosticStage::PreflightExecutable => {
++            "consult_failed_preflight_executable"
++        }
++        SupervisorResidentDeliveryDiagnosticStage::PreflightPlan => "consult_failed_preflight_plan",
++        SupervisorResidentDeliveryDiagnosticStage::PreflightHome => "consult_failed_preflight_home",
++        SupervisorResidentDeliveryDiagnosticStage::PreflightFacts => {
++            "consult_failed_preflight_facts"
++        }
++        SupervisorResidentDeliveryDiagnosticStage::RunnerOutputInit => {
++            "consult_failed_runner_output_init"
++        }
++        SupervisorResidentDeliveryDiagnosticStage::RunnerSpawn => "consult_failed_runner_spawn",
++        SupervisorResidentDeliveryDiagnosticStage::PreparedLifecycleWrite => {
++            "consult_failed_prepared_lifecycle_write"
++        }
++        SupervisorResidentDeliveryDiagnosticStage::RegistryRegistration => {
++            "consult_failed_registry_registration"
++        }
++        SupervisorResidentDeliveryDiagnosticStage::ThreadBinding => "consult_failed_thread_binding",
++        SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal => {
++            "consult_failed_runner_terminal"
++        }
++        SupervisorResidentDeliveryDiagnosticStage::Unknown => "consult_failed_unknown",
++    }
++}
++
++/// 只给测试用的窥视口：把 13 个相位与分类器暴露出去，好让 A9 断言
++/// 覆盖齐全性与两两不等，而不是靠肉眼核对常量表。
++#[cfg(test)]
++pub(crate) fn resident_delivery_diagnostic_stages_for_test(
++) -> [SupervisorResidentDeliveryDiagnosticStage; 13] {
++    use SupervisorResidentDeliveryDiagnosticStage as Stage;
++    [
++        Stage::PreflightReap,
++        Stage::PreflightSession,
++        Stage::PreflightExecutable,
++        Stage::PreflightPlan,
++        Stage::PreflightHome,
++        Stage::PreflightFacts,
++        Stage::RunnerOutputInit,
++        Stage::RunnerSpawn,
++        Stage::PreparedLifecycleWrite,
++        Stage::RegistryRegistration,
++        Stage::ThreadBinding,
++        Stage::RunnerTerminal,
++        Stage::Unknown,
++    ]
++}
++
++#[cfg(test)]
++pub(crate) fn resident_consult_failure_family_for_test(
++    stage: SupervisorResidentDeliveryDiagnosticStage,
++) -> &'static str {
++    resident_consult_failure_family(stage)
+ }
++
++/// A7：诊断写入自身失败时的后缀。诊断是下一次真机取证的抓手，
++/// 它自己失败了必须能被看见，不能再 `let _ =` 静默。
++const RESIDENT_DIAGNOSTIC_APPEND_FAILED_SUFFIX: &str = "__diagnostic_append_failed";
+ 
+ pub(crate) fn resident_conversation_lock() -> &'static Mutex<()> {
+     SUPERVISOR_RESIDENT_CONVERSATION_LOCK.get_or_init(|| Mutex::new(()))
+@@ -2771,6 +2859,9 @@
+             thread_id: resident_event_string(injected, "thread_id").map(str::to_string),
+             supervisor_reply: None,
+             message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
++            failure_family: Some(
++                resident_failure_family::REPLY_MISSING_AFTER_INJECTION.to_string(),
++            ),
+         }));
+     }
+     Ok(None)
+@@ -2801,6 +2892,8 @@
+         thread_id: Some(thread_id.to_string()),
+         supervisor_reply: Some(content.to_string()),
+         message: message.to_string(),
++        // 成功路径没有失败可自报，恒为 None。
++        failure_family: None,
+     }
+ }
+ 
+@@ -2887,6 +2980,9 @@
+                     thread_id: None,
+                     supervisor_reply: None,
+                     message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
++                    failure_family: Some(
++                        resident_failure_family::REPLAY_RECORDED_WITHOUT_INJECTION.to_string(),
++                    ),
+                 });
+             }
+             None => format!("user:{}", crate::unix_timestamp_nanos()),
+@@ -2919,6 +3015,7 @@
+             thread_id: None,
+             supervisor_reply: None,
+             message: "这句没送到主管——稍后再试一次。".to_string(),
++            failure_family: None,
+         });
+     }
+     let turn = match consult_supervisor_resident_with_parts(
+@@ -2934,20 +3031,31 @@
+     ) {
+         Ok(turn) => turn,
+         Err(failure) => {
+-            let _ = append_resident_delivery_diagnostic(
++            // A4：把既有的稳定分类原样带出（13 个固定常量之一），不是自由文本。
++            let consult_family = resident_consult_failure_family(failure.diagnostic_stage);
++            // A7：诊断写入是下一次真机取证的抓手，它自己失败了必须能被看见。
++            // 仍然不改控制流——失败只追加到 family 后缀上，不影响任何判定。
++            let diagnostic_appended = append_resident_delivery_diagnostic(
+                 workflow_state_path,
+                 &request.project_id,
+                 &request.workflow_id,
+                 &message_id,
+                 config,
+                 &failure,
+-            );
++            )
++            .is_ok();
++            let failure_family = if diagnostic_appended {
++                consult_family.to_string()
++            } else {
++                format!("{consult_family}{RESIDENT_DIAGNOSTIC_APPEND_FAILED_SUFFIX}")
++            };
+             return Ok(SupervisorResidentAnswerOutcome {
+                 status: "message_recorded_supervisor_incomplete".to_string(),
+                 reply_injected: false,
+                 thread_id: None,
+                 supervisor_reply: None,
+                 message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
++                failure_family: Some(failure_family),
+             });
+         }
+     };
+@@ -2966,6 +3074,9 @@
+             thread_id: Some(turn.thread_id),
+             supervisor_reply: None,
+             message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
++            failure_family: Some(
++                resident_failure_family::INJECTED_EVENT_APPEND_FAILED.to_string(),
++            ),
+         });
+     }
+     let proposal_outcome =
+@@ -2988,6 +3099,9 @@
+             thread_id: Some(turn.thread_id),
+             supervisor_reply: None,
+             message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
++            failure_family: Some(
++                resident_failure_family::SUPERVISOR_REPLY_APPEND_FAILED.to_string(),
++            ),
+         });
+     }
+     Ok(supervisor_resident_answer_outcome(
+##### src-tauri/src/supervisor_resident_oneshot_tests.rs
+--- evidence/raw/2026-07-26-shared-supervisor-failure-family-observability-retrofit/baseline/prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_tests.rs	2026-07-22 22:38:35
++++ prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_tests.rs	2026-07-27 03:55:16
+@@ -3524,5 +3524,115 @@
+             .as_deref()
+             .is_some_and(|reply| reply.contains(fact_marker)),
+         "replacement first turn must rebuild from the durable project facts, not an old transcript"
++    );
++}
++
++// ── N2R 可观测性改造 A9 ────────────────────────────────────────────────
++// 病灶：首句失败时五个完全不同的分支对外只有三种签名，`:2950`（首句没接上）
++// 与 `:2889`（重放找不到记录）逐字同形。下面锁住"每支有自己的名字，且两两不等"。
++// 这些断言在加 `failure_family` 之前无法编译（字段不存在），红证据见 evidence。
++
++#[test]
++fn resident_failure_families_are_fixed_constants_and_pairwise_distinct() {
++    use super::resident_failure_family as family;
++
++    let branch_families = [
++        family::REPLY_MISSING_AFTER_INJECTION,
++        family::REPLAY_RECORDED_WITHOUT_INJECTION,
++        family::INJECTED_EVENT_APPEND_FAILED,
++        family::SUPERVISOR_REPLY_APPEND_FAILED,
++    ];
++    // 两两不等——这是"外部能不能分辨"的唯一依据，不能靠肉眼看常量表。
++    for (left_index, left) in branch_families.iter().enumerate() {
++        assert!(
++            !left.trim().is_empty(),
++            "family 不得为空串：index {left_index}"
++        );
++        for (right_index, right) in branch_families.iter().enumerate() {
++            if left_index == right_index {
++                continue;
++            }
++            assert_ne!(
++                left, right,
++                "family 必须两两不等：index {left_index} 与 {right_index} 相同"
++            );
++        }
++    }
++}
++
++#[test]
++fn resident_consult_failure_families_cover_every_stage_without_collision() {
++    use super::{
++        resident_consult_failure_family_for_test, resident_delivery_diagnostic_stages_for_test,
++    };
++
++    let stages = resident_delivery_diagnostic_stages_for_test();
++    assert_eq!(stages.len(), 13, "诊断相位共 13 个，覆盖必须齐全");
++
++    let families: Vec<&'static str> = stages
++        .iter()
++        .copied()
++        .map(resident_consult_failure_family_for_test)
++        .collect();
++
++    for (left_index, left) in families.iter().enumerate() {
++        assert!(
++            left.starts_with("consult_failed_"),
++            "consult 家族必须带稳定前缀：{left}"
++        );
++        for (right_index, right) in families.iter().enumerate() {
++            if left_index == right_index {
++                continue;
++            }
++            assert_ne!(
++                left, right,
++                "consult 家族必须两两不等：{left_index} 与 {right_index}"
++            );
++        }
++    }
++
++    // 与分支家族也不得撞名——否则外部仍然分不清是哪一类失败。
++    use super::resident_failure_family as family;
++    for branch in [
++        family::REPLY_MISSING_AFTER_INJECTION,
++        family::REPLAY_RECORDED_WITHOUT_INJECTION,
++        family::INJECTED_EVENT_APPEND_FAILED,
++        family::SUPERVISOR_REPLY_APPEND_FAILED,
++    ] {
++        assert!(
++            !families.contains(&branch),
++            "分支家族 {branch} 与 consult 家族撞名"
++        );
++    }
++}
++
++#[test]
++fn resident_outcome_omits_failure_family_when_absent() {
++    use super::SupervisorResidentAnswerOutcome;
++
++    // 可选性：成功路径不带该字段，序列化后 JSON 里根本没有这个键，
++    // 既有消费者与既有存量记录形状不受影响。
++    let outcome = SupervisorResidentAnswerOutcome {
++        status: "message_sent".to_string(),
++        reply_injected: true,
++        thread_id: Some("thread:x".to_string()),
++        supervisor_reply: Some("ok".to_string()),
++        message: "用户消息已同 thread 注入；主管回复已写入项目对话。".to_string(),
++        failure_family: None,
++    };
++    let json = serde_json::to_value(&outcome).expect("outcome 可序列化");
++    assert!(
++        json.get("failure_family").is_none(),
++        "failure_family 为 None 时必须整键省略，实际={json}"
+     );
++
++    let with_family = SupervisorResidentAnswerOutcome {
++        failure_family: Some("resident_reply_missing_after_injection".to_string()),
++        ..outcome
++    };
++    let json = serde_json::to_value(&with_family).expect("outcome 可序列化");
++    assert_eq!(
++        json.get("failure_family").and_then(serde_json::Value::as_str),
++        Some("resident_reply_missing_after_injection")
++    );
+ }

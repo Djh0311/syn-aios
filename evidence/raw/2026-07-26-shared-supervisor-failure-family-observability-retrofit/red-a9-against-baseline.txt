@@ -1,0 +1,6 @@
+error[E0432]: unresolved import `super::resident_failure_family`
+error[E0432]: unresolved imports `super::resident_consult_failure_family_for_test`, `super::resident_delivery_diagnostic_stages_for_test`
+error[E0432]: unresolved import `super::resident_failure_family`
+error[E0560]: struct `SupervisorResidentAnswerOutcome` has no field named `failure_family`
+error[E0560]: struct `SupervisorResidentAnswerOutcome` has no field named `failure_family`
+error: could not compile `codex-governance-workbench` (lib test) due to 5 previous errors; 1 warning emitted

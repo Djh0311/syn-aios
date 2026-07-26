@@ -1,0 +1,15 @@
+PASS: 退休族 tsx 再现 8 族 -> exactly 8 retired_style_family — got 8
+PASS: finding severity=error — ["error","error","error","error","error","error","error","error"]
+PASS: check-mode Status=fail on retired family — status=fail
+PASS: 保留名/复合名 -> 0 retired_style_family — got 0
+PASS: 保留名树 Status=pass — status=pass
+PASS: Badge import 再现 -> exactly 1 retired_style_family — got 1
+PASS: css 退休族（badge/memory-kv·badge-row 并入 badge 族去重）-> exactly 2 retired_style_family — got 2
+PASS: 白名单核销后 running-status-pill 再现 -> exactly 1 retired_style_family error — got 1
+PASS: 核销条目命中 running-status-pill — ["running-status-pill"]
+PASS: 白名单 deferred=1（spec-empty 有意例外） — deferred=[{"pattern":"spec-direct:spec-empty","file":"prototypes/productized-desktop-shell/src/components/ActiveWorkbenchView.tsx","line":2,"count":1}]
+PASS: spec-* 直连 4 类（fact-row/pill-ok/seg-title/bad·spec-scroll 不算）-> exactly 4 retired_style_family — got ["spec-direct:spec-fact-row","spec-direct:spec-pill","spec-direct:spec-seg-title","spec-direct:spec-bad"]
+PASS: SpecPrimitives 本体零误伤 — ["prototypes/productized-desktop-shell/src/views/Foo.tsx","prototypes/productized-desktop-shell/src/views/Foo.tsx","prototypes/productized-desktop-shell/src/views/Foo.tsx","prototypes/productized-desktop-shell/src/views/Foo.tsx"]
+PASS: 干净树 -> 0 retired_style_family — got 0
+
+Self-test: 13/13 checks passed

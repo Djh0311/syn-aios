@@ -1,0 +1,845 @@
+--- evidence/raw/2026-07-26-shared-supervisor-binding-path-failure-family/baseline/src-tauri/src/mcp/supervisor_conversation_binding.rs	2026-07-23 14:18:31
++++ prototypes/productized-desktop-shell/src-tauri/src/mcp/supervisor_conversation_binding.rs	2026-07-27 04:27:28
+@@ -190,6 +190,54 @@
+             Self::Capability(error) => error.fmt(formatter),
+         }
+     }
++}
++
++impl ConversationTurnBindingError {
++    /// B1：12 个变体各一个固定常量，作为「这次绑定为什么被拒」的对外家族名。
++    /// 带负载的变体只取变体身份，负载仍旧只走既有 `Display`，不拼进 family——
++    /// family 要能被外部按值比较、进日志、进回执，拼上负载就不再是固定取值。
++    pub(crate) fn family(&self) -> &'static str {
++        match self {
++            Self::MissingField(_) => "binding_rejected_missing_field",
++            Self::InvalidProjectRoot => "binding_rejected_invalid_project_root",
++            Self::ProjectIdMismatch => "binding_rejected_project_id_mismatch",
++            Self::InvalidRunIdentity => "binding_rejected_invalid_run_identity",
++            Self::InvalidTimestamp => "binding_rejected_invalid_timestamp",
++            Self::InvalidRuntimeLimit => "binding_rejected_invalid_runtime_limit",
++            Self::RuntimeExpired => "binding_rejected_runtime_expired",
++            Self::InvalidLifecycleTransition { .. } => {
++                "binding_rejected_invalid_lifecycle_transition"
++            }
++            Self::InactiveLifecycle(_) => "binding_rejected_inactive_lifecycle",
++            Self::ThreadUnbound => "binding_rejected_thread_unbound",
++            Self::ContextMismatch(_) => "binding_rejected_context_mismatch",
++            Self::Capability(_) => "binding_rejected_capability",
++        }
++    }
++}
++
++/// 只给测试用的窥视口：把 12 个变体暴露出去，好让 B7 断言覆盖齐全性与
++/// 两两不等，而不是靠肉眼核对常量表。带负载的变体在这里刻意给出不同负载，
++/// 用来证明 family 只取变体身份。
++#[cfg(test)]
++pub(crate) fn binding_error_variants_for_test() -> [ConversationTurnBindingError; 12] {
++    [
++        ConversationTurnBindingError::MissingField("project_id"),
++        ConversationTurnBindingError::InvalidProjectRoot,
++        ConversationTurnBindingError::ProjectIdMismatch,
++        ConversationTurnBindingError::InvalidRunIdentity,
++        ConversationTurnBindingError::InvalidTimestamp,
++        ConversationTurnBindingError::InvalidRuntimeLimit,
++        ConversationTurnBindingError::RuntimeExpired,
++        ConversationTurnBindingError::InvalidLifecycleTransition {
++            from: ConversationTurnLifecycle::Active,
++            to: ConversationTurnLifecycle::Starting,
++        },
++        ConversationTurnBindingError::InactiveLifecycle(ConversationTurnLifecycle::Failed),
++        ConversationTurnBindingError::ThreadUnbound,
++        ConversationTurnBindingError::ContextMismatch("project_id"),
++        ConversationTurnBindingError::Capability(CapabilityAuthorizationError::InvalidAccessContext),
++    ]
+ }
+ 
+ impl std::error::Error for ConversationTurnBindingError {}
+@@ -796,5 +844,101 @@
+             binding.validate_for_capability_at(expectation(&project_id), "submit_proposal", 60_011),
+             Err(ConversationTurnBindingError::RuntimeExpired)
+         ));
++    }
++
++    // ── B7 合同断言 ────────────────────────────────────────────────────
++    // 病灶：`commands.rs:455` 用 `Err(_)` 把这 12 个变体整体丢弃，外部只看到
++    // 一个 `binding_construct`。下面锁住「每个变体有自己的名字、两两不等」，
++    // 这是外部能不能分辨的唯一依据，不能靠肉眼核对常量表。
++
++    #[test]
++    fn binding_error_families_are_fixed_constants_and_pairwise_distinct() {
++        let variants = binding_error_variants_for_test();
++        assert_eq!(variants.len(), 12, "binding 变体共 12 个，覆盖必须齐全");
++
++        // 12 个变体逐个锁死取值——改名即失败，外部才敢按值比较。
++        assert_eq!(
++            variants.iter().map(|error| error.family()).collect::<Vec<_>>(),
++            vec![
++                "binding_rejected_missing_field",
++                "binding_rejected_invalid_project_root",
++                "binding_rejected_project_id_mismatch",
++                "binding_rejected_invalid_run_identity",
++                "binding_rejected_invalid_timestamp",
++                "binding_rejected_invalid_runtime_limit",
++                "binding_rejected_runtime_expired",
++                "binding_rejected_invalid_lifecycle_transition",
++                "binding_rejected_inactive_lifecycle",
++                "binding_rejected_thread_unbound",
++                "binding_rejected_context_mismatch",
++                "binding_rejected_capability",
++            ]
++        );
++
++        let families: Vec<&'static str> = variants.iter().map(|error| error.family()).collect();
++        for (index, family) in families.iter().enumerate() {
++            assert!(
++                !family.trim().is_empty(),
++                "family 不得为空串：index {index}"
++            );
++        }
++        for (left_index, left) in families.iter().enumerate() {
++            for (right_index, right) in families.iter().enumerate() {
++                if left_index == right_index {
++                    continue;
++                }
++                assert_ne!(
++                    left, right,
++                    "family 必须两两不等：index {left_index} 与 {right_index} 相同"
++                );
++            }
++        }
+     }
++
++    #[test]
++    fn binding_error_family_takes_variant_identity_without_payload() {
++        // 同一变体、不同负载 ⇒ family 必须逐字相同（负载不得进 family）。
++        assert_eq!(
++            ConversationTurnBindingError::MissingField("project_id").family(),
++            ConversationTurnBindingError::MissingField("transport_attempt").family(),
++        );
++        assert_eq!(
++            ConversationTurnBindingError::ContextMismatch("project_id").family(),
++            ConversationTurnBindingError::ContextMismatch("run_id").family(),
++        );
++        assert_eq!(
++            ConversationTurnBindingError::InactiveLifecycle(ConversationTurnLifecycle::Failed)
++                .family(),
++            ConversationTurnBindingError::InactiveLifecycle(ConversationTurnLifecycle::Stopped)
++                .family(),
++        );
++        assert_eq!(
++            ConversationTurnBindingError::InvalidLifecycleTransition {
++                from: ConversationTurnLifecycle::Active,
++                to: ConversationTurnLifecycle::Starting,
++            }
++            .family(),
++            ConversationTurnBindingError::InvalidLifecycleTransition {
++                from: ConversationTurnLifecycle::Completed,
++                to: ConversationTurnLifecycle::Active,
++            }
++            .family(),
++        );
++
++        // 负载确实存在、且仍能通过既有 Display 拿到——family 不是把它吃掉了。
++        assert!(ConversationTurnBindingError::MissingField("project_id")
++            .to_string()
++            .contains("project_id"));
++
++        // family 本身必须是 ASCII snake_case 机器令牌，不得混进负载或人类文案。
++        for error in binding_error_variants_for_test() {
++            let family = error.family();
++            assert!(
++                family
++                    .bytes()
++                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'),
++                "family 必须是 ASCII snake_case 机器令牌：{family}"
++            );
++        }
++    }
+ }
+--- evidence/raw/2026-07-26-shared-supervisor-binding-path-failure-family/baseline/src-tauri/src/commands.rs	2026-07-23 23:09:34
++++ prototypes/productized-desktop-shell/src-tauri/src/commands.rs	2026-07-27 04:29:28
+@@ -191,6 +191,42 @@
+     human_message: Option<String>,
+     attempt_id: Option<String>,
+     binding_stage: Option<SupervisorConversationBindingStage>,
++    /// B5：可选加法。`binding_stage` 是既有对外契约、取值一个不动；这一维
++    /// 才用来分辨「同一个 stage 下到底是哪一种失败」。缺失即整键省略，
++    /// 存量消费者与存量记录形状不受影响。
++    #[serde(skip_serializing_if = "Option::is_none")]
++    binding_failure_family: Option<String>,
++}
++
++/// binding 路的固定家族名。与 `binding_stage` 分开取值域：stage 回答
++/// 「走到哪一步」，family 回答「这一步里为什么」。全部为固定常量，
++/// 禁止拼接自由文本或负载。
++mod binding_failure_family {
++    // B3：绑定建立**之前**的四处 precheck，原先共用一个 `binding_construct`。
++    pub(super) const PRECHECK_CONTEXT_UNRESOLVED: &str = "binding_precheck_context_unresolved";
++    pub(super) const PRECHECK_PROJECT_ROOT_MISMATCH: &str =
++        "binding_precheck_project_root_mismatch";
++    pub(super) const PRECHECK_EXISTING_THREAD_REJECTED: &str =
++        "binding_precheck_existing_thread_rejected";
++    pub(super) const PRECHECK_RUN_IDENTITY_UNAVAILABLE: &str =
++        "binding_precheck_run_identity_unavailable";
++
++    // B4：establishment 五个取值（store conflict 从 construct 里拆出）。
++    pub(super) const ESTABLISH_CONSTRUCT: &str = "binding_establish_construct";
++    pub(super) const ESTABLISH_STORE_PREPARE: &str = "binding_establish_store_prepare";
++    pub(super) const ESTABLISH_PERSIST_DB: &str = "binding_establish_persist_db";
++    pub(super) const ESTABLISH_PROJECT_JSON: &str = "binding_establish_project_json";
++    pub(super) const ESTABLISH_STORE_CONFLICT: &str = "binding_establish_store_conflict";
++
++    // 绑定建立之后的三个阶段：stage 本就一一对应，family 保持同样粒度，
++    // 好让「失败必有 family」成为一条无洞的规律。
++    pub(super) const ACTIVATE_REJECTED: &str = "binding_activate_rejected";
++    pub(super) const TRANSPORT_START_FAILED: &str = "binding_transport_start_failed";
++    pub(super) const TERMINATE_UNCONFIRMED: &str = "binding_terminate_unconfirmed";
++
++    /// 兜底：construct 阶段的每个站点都已显式给名，这个取值不应出现在
++    /// 任何真实回执里；留着只是为了让 stage→family 的默认映射是全函数。
++    pub(super) const CONSTRUCT_UNCLASSIFIED: &str = "binding_construct_unclassified";
+ }
+ 
+ #[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+@@ -398,16 +434,18 @@
+             let resolved = match resolve_supervisor_conversation_context(state, &request.context) {
+                 Ok(resolved) => resolved,
+                 Err(_) => {
+-                    return Ok(supervisor_start_failure_receipt(
++                    return Ok(supervisor_start_failure_receipt_with_family(
+                         &input.turn_id,
+                         SupervisorConversationBindingStage::BindingConstruct,
++                        binding_failure_family::PRECHECK_CONTEXT_UNRESOLVED,
+                     ));
+                 }
+             };
+             if target_project_root != resolved.project_root {
+-                return Ok(supervisor_start_failure_receipt(
++                return Ok(supervisor_start_failure_receipt_with_family(
+                     &input.turn_id,
+                     SupervisorConversationBindingStage::BindingConstruct,
++                    binding_failure_family::PRECHECK_PROJECT_ROOT_MISMATCH,
+                 ));
+             }
+             if let Some(existing_thread_id) = thread_id.as_deref() {
+@@ -418,9 +456,10 @@
+                 )
+                 .is_err()
+                 {
+-                    return Ok(supervisor_start_failure_receipt(
++                    return Ok(supervisor_start_failure_receipt_with_family(
+                         &input.turn_id,
+                         SupervisorConversationBindingStage::BindingConstruct,
++                        binding_failure_family::PRECHECK_EXISTING_THREAD_REJECTED,
+                     ));
+                 }
+             }
+@@ -431,9 +470,10 @@
+             ) {
+                 Ok(run_id) => run_id,
+                 Err(_) => {
+-                    return Ok(supervisor_start_failure_receipt(
++                    return Ok(supervisor_start_failure_receipt_with_family(
+                         &input.turn_id,
+                         SupervisorConversationBindingStage::BindingConstruct,
++                        binding_failure_family::PRECHECK_RUN_IDENTITY_UNAVAILABLE,
+                     ));
+                 }
+             };
+@@ -452,10 +492,14 @@
+                 },
+             ) {
+                 Ok(binding) => binding,
+-                Err(_) => {
+-                    return Ok(supervisor_start_failure_receipt(
++                // B2：原先是 `Err(_)`，12 个 typed 变体在这里被整体丢弃，
++                // 外部只剩一个 `binding_construct`。现在接住 typed error，
++                // 把它的固定 family 带进回执；stage 与文案一律不动。
++                Err(error) => {
++                    return Ok(supervisor_start_failure_receipt_with_family(
+                         &input.turn_id,
+                         SupervisorConversationBindingStage::BindingConstruct,
++                        error.family(),
+                     ));
+                 }
+             };
+@@ -465,9 +509,10 @@
+                     binding,
+                 )
+             {
+-                return Ok(supervisor_start_failure_receipt(
++                return Ok(supervisor_start_failure_receipt_with_family(
+                     &input.turn_id,
+                     supervisor_binding_stage_for_establishment_error(error),
++                    supervisor_binding_failure_family_for_establishment_error(error),
+                 ));
+             }
+ 
+@@ -602,9 +647,69 @@
+         mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingProjectJson => {
+             SupervisorConversationBindingStage::BindingProjectJson
+         }
++        // B4：conflict 是新拆出来的**语义**，不是新的对外阶段。stage 仍复用
++        // 既有的 `BindingConstruct`——`binding_stage` 的取值域一个不加、
++        // 前端既有分支与文案一个字不改；分辨全交给 family。
++        mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingStoreConflict => {
++            SupervisorConversationBindingStage::BindingConstruct
++        }
+     }
+ }
+ 
++/// B4：establishment 错误的 family。注意与上面的 stage 映射**分开**——
++/// `BindingStoreConflict` 的 stage 仍是既有的 `BindingConstruct`（对外契约
++/// 不动），只有 family 把它和真正的构造失败分开。
++fn supervisor_binding_failure_family_for_establishment_error(
++    error: mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError,
++) -> &'static str {
++    match error {
++        mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingConstruct => {
++            binding_failure_family::ESTABLISH_CONSTRUCT
++        }
++        mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingStorePrepare => {
++            binding_failure_family::ESTABLISH_STORE_PREPARE
++        }
++        mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingPersistDb => {
++            binding_failure_family::ESTABLISH_PERSIST_DB
++        }
++        mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingProjectJson => {
++            binding_failure_family::ESTABLISH_PROJECT_JSON
++        }
++        mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingStoreConflict => {
++            binding_failure_family::ESTABLISH_STORE_CONFLICT
++        }
++    }
++}
++
++/// stage→family 的默认映射，供没有更具体归因的站点使用。
++fn supervisor_binding_failure_family_for_stage(
++    stage: SupervisorConversationBindingStage,
++) -> &'static str {
++    match stage {
++        SupervisorConversationBindingStage::BindingConstruct => {
++            binding_failure_family::CONSTRUCT_UNCLASSIFIED
++        }
++        SupervisorConversationBindingStage::BindingStorePrepare => {
++            binding_failure_family::ESTABLISH_STORE_PREPARE
++        }
++        SupervisorConversationBindingStage::BindingPersistDb => {
++            binding_failure_family::ESTABLISH_PERSIST_DB
++        }
++        SupervisorConversationBindingStage::BindingProjectJson => {
++            binding_failure_family::ESTABLISH_PROJECT_JSON
++        }
++        SupervisorConversationBindingStage::BindingActivate => {
++            binding_failure_family::ACTIVATE_REJECTED
++        }
++        SupervisorConversationBindingStage::TransportStart => {
++            binding_failure_family::TRANSPORT_START_FAILED
++        }
++        SupervisorConversationBindingStage::BindingTerminate => {
++            binding_failure_family::TERMINATE_UNCONFIRMED
++        }
++    }
++}
++
+ fn supervisor_start_failure_after_binding_established(
+     config: &mcp::McpServerConfig,
+     turn_id: &str,
+@@ -651,6 +756,18 @@
+     turn_id: &str,
+     stage: SupervisorConversationBindingStage,
+ ) -> ConversationTransportCommandReceipt {
++    supervisor_start_failure_receipt_with_family(
++        turn_id,
++        stage,
++        supervisor_binding_failure_family_for_stage(stage),
++    )
++}
++
++fn supervisor_start_failure_receipt_with_family(
++    turn_id: &str,
++    stage: SupervisorConversationBindingStage,
++    family: &str,
++) -> ConversationTransportCommandReceipt {
+     ConversationTransportCommandReceipt {
+         conversation_id: None,
+         thread_id: None,
+@@ -660,6 +777,7 @@
+             human_message: Some(supervisor_start_failure_human_message(stage).to_string()),
+             attempt_id: None,
+             binding_stage: Some(stage),
++            binding_failure_family: Some(family.to_string()),
+         },
+         assistant_reply: ConversationTransportCommandAssistantLayer {
+             status: "not_requested".to_string(),
+@@ -1571,7 +1689,10 @@
+                 transport_human_message(transport_status)
+             },
+             attempt_id: nonempty_conversation_value(&receipt.transport.attempt_id),
++            // 这条是正常运输回执（含成功路径），不是 binding 失败收口：
++            // 既没有 stage 也没有 family，两者一起保持缺省。
+             binding_stage: None,
++            binding_failure_family: None,
+         },
+         assistant_reply: ConversationTransportCommandAssistantLayer {
+             status: assistant_status.to_string(),
+@@ -2047,6 +2168,137 @@
+             let receipt = supervisor_start_failure_receipt("turn:binding-failure", stage);
+             assert_eq!(receipt.transport.binding_stage, Some(stage));
+             assert_eq!(receipt.tool_action.status, "not_requested");
++        }
++    }
++
++    // ── B7 合同断言（binding 路）─────────────────────────────────────
++    // 病灶：`:455` 用 `Err(_)` 把 12 个 typed 变体整体丢弃，`:400/407/419/433`
++    // 四种不同原因共用同一个 `binding_construct` stage。stage 保持原样（对外
++    // 契约不动），新增的 `binding_failure_family` 才是能分辨的那一维。
++    // 这些断言在字段与分类器落地前**编译不过**（编译期红），见 evidence。
++
++    #[test]
++    fn binding_failure_families_are_pairwise_distinct_across_the_whole_path() {
++        let mut families: Vec<&'static str> = Vec::new();
++
++        // B3：四处 precheck 各有自己的名字（派发表写「三处」，实测为四处，
++        // 见 evidence §落点说明）。
++        families.extend_from_slice(&[
++            binding_failure_family::PRECHECK_CONTEXT_UNRESOLVED,
++            binding_failure_family::PRECHECK_PROJECT_ROOT_MISMATCH,
++            binding_failure_family::PRECHECK_EXISTING_THREAD_REJECTED,
++            binding_failure_family::PRECHECK_RUN_IDENTITY_UNAVAILABLE,
++        ]);
++
++        // B2：12 个 typed binding 变体，不再被 `Err(_)` 抹平。
++        for error in mcp::supervisor_conversation_binding::binding_error_variants_for_test() {
++            families.push(error.family());
++        }
++
++        // B4：establishment 五个取值，其中 store conflict 从 construct 里拆出来。
++        for error in [
++            mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingConstruct,
++            mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingStorePrepare,
++            mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingPersistDb,
++            mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingProjectJson,
++            mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingStoreConflict,
++        ] {
++            families.push(supervisor_binding_failure_family_for_establishment_error(error));
++        }
++
++        // 绑定建立之后的三个阶段各自的默认 family。
++        families.extend_from_slice(&[
++            binding_failure_family::ACTIVATE_REJECTED,
++            binding_failure_family::TRANSPORT_START_FAILED,
++            binding_failure_family::TERMINATE_UNCONFIRMED,
++        ]);
++
++        assert_eq!(families.len(), 24, "binding 路 family 取值共 24 个");
++        for (left_index, left) in families.iter().enumerate() {
++            assert!(
++                !left.trim().is_empty(),
++                "family 不得为空串：index {left_index}"
++            );
++            for (right_index, right) in families.iter().enumerate() {
++                if left_index == right_index {
++                    continue;
++                }
++                assert_ne!(
++                    left, right,
++                    "binding family 必须两两不等：{left_index} 与 {right_index} 相同"
++                );
++            }
++        }
++    }
++
++    #[test]
++    fn binding_store_conflict_keeps_its_stage_but_no_longer_shares_construct_family() {
++        use mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError as Error;
++
++        // B4：`Update(_)` 拆出的 conflict 语义**不改既有 stage 取值**——
++        // 对外仍是 `binding_construct`，前端既有分支与文案一个字不动。
++        assert_eq!(
++            supervisor_binding_stage_for_establishment_error(Error::BindingStoreConflict),
++            SupervisorConversationBindingStage::BindingConstruct
++        );
++        // 但 family 必须与真正的 construct 失败分得开，否则这次拆分等于没做。
++        assert_ne!(
++            supervisor_binding_failure_family_for_establishment_error(Error::BindingStoreConflict),
++            supervisor_binding_failure_family_for_establishment_error(Error::BindingConstruct)
++        );
++    }
++
++    #[test]
++    fn binding_failure_family_rides_the_receipt_and_is_omitted_when_absent() {
++        // 带 family 的失败回执：字段出现且逐字等于给定常量。
++        let receipt = supervisor_start_failure_receipt_with_family(
++            "turn:binding-failure",
++            SupervisorConversationBindingStage::BindingConstruct,
++            binding_failure_family::PRECHECK_CONTEXT_UNRESOLVED,
++        );
++        assert_eq!(
++            receipt.transport.binding_failure_family.as_deref(),
++            Some(binding_failure_family::PRECHECK_CONTEXT_UNRESOLVED)
++        );
++        // stage 仍是既有取值，未被 family 顶替。
++        assert_eq!(
++            receipt.transport.binding_stage,
++            Some(SupervisorConversationBindingStage::BindingConstruct)
++        );
++        // 既有 UI 文案逐字不变。
++        assert_eq!(
++            receipt.transport.human_message.as_deref(),
++            Some("主管对话绑定准备未完成；运输没有启动。")
++        );
++
++        // 可选性：字段为 None 时整键省略，存量消费者与存量记录形状不受影响。
++        let mut absent = receipt.clone();
++        absent.transport.binding_failure_family = None;
++        let json = serde_json::to_value(&absent).expect("serialize receipt");
++        assert!(
++            json["transport"].get("binding_failure_family").is_none(),
++            "binding_failure_family 为 None 时必须整键省略，实际={json}"
++        );
++
++        // 反序列化侧：缺该键的存量回执仍然合法（前端契约同形）。
++        let legacy = json!({
++            "status": "failed",
++            "human_message": "主管对话绑定准备未完成；运输没有启动。",
++            "attempt_id": null,
++            "binding_stage": "binding_construct"
++        });
++        assert!(
++            legacy.get("binding_failure_family").is_none(),
++            "存量回执本就没有该键，缺失必须仍然合法"
++        );
++
++        // 安全面不变：family 是机器令牌，回执里不得夹带路径/参数/环境。
++        let serialized = serde_json::to_string(&receipt).expect("serialize receipt");
++        for forbidden in ["argv", "stderr", "environment", "/Users/"] {
++            assert!(
++                !serialized.contains(forbidden),
++                "binding failure receipt must not retain {forbidden}"
++            );
+         }
+     }
+ 
+--- evidence/raw/2026-07-26-shared-supervisor-binding-path-failure-family/baseline/src-tauri/src/mcp/supervisor_orchestrator.rs	2026-07-23 15:35:10
++++ prototypes/productized-desktop-shell/src-tauri/src/mcp/supervisor_orchestrator.rs	2026-07-27 04:27:38
+@@ -1088,6 +1088,10 @@
+     BindingStorePrepare,
+     BindingPersistDb,
+     BindingProjectJson,
++    /// B4：`Update(_)` 的真实语义是「这个 run 已经绑给别的 turn，拒绝覆盖」，
++    /// 与「绑定构造不出来」完全是两回事。拆出来只为让 family 能分辨；
++    /// 对外的 `binding_stage` 仍映射回既有的 `BindingConstruct`，不改契约。
++    BindingStoreConflict,
+ }
+ 
+ fn establish_supervisor_conversation_turn_binding_store<R>(
+@@ -1108,7 +1112,7 @@
+                 SupervisorConversationBindingEstablishmentError::BindingStorePrepare
+             }
+             DbPrimaryStoreUpdateError::Update(_) => {
+-                SupervisorConversationBindingEstablishmentError::BindingConstruct
++                SupervisorConversationBindingEstablishmentError::BindingStoreConflict
+             }
+             DbPrimaryStoreUpdateError::PersistDb(_) => {
+                 SupervisorConversationBindingEstablishmentError::BindingPersistDb
+--- evidence/raw/2026-07-26-shared-supervisor-binding-path-failure-family/baseline/src/lib/conversationTransport.ts	2026-07-23 03:45:20
++++ prototypes/productized-desktop-shell/src/lib/conversationTransport.ts	2026-07-27 04:37:40
+@@ -85,6 +85,9 @@
+   transport: ConversationReceiptLayer & Readonly<{
+     attempt_id: string | null;
+     binding_stage: SupervisorConversationBindingStage | null;
++    // B6：可选加法。`binding_stage` 回答「走到哪一步」，取值域与既有分支
++    // 一律不动；这一维回答「同一步里为什么」。缺席的存量回执仍然合法。
++    binding_failure_family?: string | null;
+   }>;
+   assistant_reply: ConversationReceiptLayer & Readonly<{
+     text: string | null;
+@@ -398,6 +401,7 @@
+       human_message: receipt.transport.human_message,
+       attempt_id: receipt.transport.attempt_id,
+       binding_stage: safeSupervisorBindingStage(receipt.transport.binding_stage),
++      binding_failure_family: safeBindingFailureFamily(receipt.transport.binding_failure_family),
+     },
+     assistant_reply: {
+       status: receipt.assistant_reply.status,
+@@ -420,6 +424,15 @@
+   };
+ }
+ 
++// The failure family is an open, backend-owned constant set, so it cannot be
++// gated by an enum the way `binding_stage` is.  It is still projected rather
++// than copied: only a bounded `binding_`-prefixed snake_case machine token
++// survives, so a raw backend error string or bridge payload can never reach
++// controller state or a shared transcript through this new field.
++function safeBindingFailureFamily(value: unknown): string | null {
++  return typeof value === "string" && /^binding_[a-z0-9_]{1,56}$/.test(value) ? value : null;
++}
++
+ function safeSupervisorBindingStage(value: unknown): SupervisorConversationBindingStage | null {
+   switch (value) {
+     case "binding_construct":
+--- evidence/raw/2026-07-26-shared-supervisor-binding-path-failure-family/baseline/src-tauri/src/supervisor_resident_oneshot_session.rs	2026-07-27 03:57:23
++++ prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_session.rs	2026-07-27 04:33:47
+@@ -2388,6 +2388,31 @@
+ /// 它自己失败了必须能被看见，不能再 `let _ =` 静默。
+ const RESIDENT_DIAGNOSTIC_APPEND_FAILED_SUFFIX: &str = "__diagnostic_append_failed";
+ 
++/// A8*：`delivery_unknown` 的三个子 family。既有取值原样保留为前缀，
++/// 只在后面追加各自的身份——按 `starts_with` 消费的旧逻辑仍然命中，
++/// 按值比较的新逻辑才分得清是哪一处查询失败。
++/// 它们仍是 `Err(String)`，不是 outcome：错误类型、返回形状、控制流未动。
++/// 既有取值本身在生产路径上已不再单独出现（三处都改用子 family），
++/// 只有断言需要它来证明「子 family 仍以它为前缀」，故只在测试构建里保留。
++#[cfg(test)]
++const RESIDENT_DELIVERY_UNKNOWN_BASE: &str = "supervisor_resident_message_delivery_unknown";
++const RESIDENT_DELIVERY_UNKNOWN_REPLAY_LOOKUP: &str =
++    "supervisor_resident_message_delivery_unknown__replay_lookup";
++const RESIDENT_DELIVERY_UNKNOWN_REPLAY_REPLY_OUTCOME: &str =
++    "supervisor_resident_message_delivery_unknown__replay_reply_outcome";
++const RESIDENT_DELIVERY_UNKNOWN_RECORD_RECHECK: &str =
++    "supervisor_resident_message_delivery_unknown__record_recheck";
++
++#[cfg(test)]
++pub(crate) fn resident_delivery_unknown_families_for_test() -> [&'static str; 4] {
++    [
++        RESIDENT_DELIVERY_UNKNOWN_BASE,
++        RESIDENT_DELIVERY_UNKNOWN_REPLAY_LOOKUP,
++        RESIDENT_DELIVERY_UNKNOWN_REPLAY_REPLY_OUTCOME,
++        RESIDENT_DELIVERY_UNKNOWN_RECORD_RECHECK,
++    ]
++}
++
+ pub(crate) fn resident_conversation_lock() -> &'static Mutex<()> {
+     SUPERVISOR_RESIDENT_CONVERSATION_LOCK.get_or_init(|| Mutex::new(()))
+ }
+@@ -2957,7 +2982,11 @@
+             Some(client_request_id),
+             None,
+         )
+-        .map_err(|_| "supervisor_resident_message_delivery_unknown".to_string())?
++        // A8*：三处 `delivery_unknown` 原先逐字同形，外部分不出是「按
++        // client_request_id 查重放」失败、「查主管回复」失败，还是「补记后
++        // 复查」失败。这里只把子 family 追加到既有取值后面——错误类型仍是
++        // String、返回形状与控制流一个字节没动。
++        .map_err(|_| RESIDENT_DELIVERY_UNKNOWN_REPLAY_LOOKUP.to_string())?
+         {
+             Some((message_id, recorded_message_text)) => {
+                 if recorded_message_text != request.message_text {
+@@ -2970,7 +2999,7 @@
+                     &message_id,
+                     config,
+                 )
+-                .map_err(|_| "supervisor_resident_message_delivery_unknown".to_string())?
++                .map_err(|_| RESIDENT_DELIVERY_UNKNOWN_REPLAY_REPLY_OUTCOME.to_string())?
+                 {
+                     return Ok(outcome);
+                 }
+@@ -3006,7 +3035,7 @@
+             None,
+             Some(&message_id),
+         )
+-        .map_err(|_| "supervisor_resident_message_delivery_unknown".to_string())?
++        .map_err(|_| RESIDENT_DELIVERY_UNKNOWN_RECORD_RECHECK.to_string())?
+         .is_none()
+     {
+         return Ok(SupervisorResidentAnswerOutcome {
+--- evidence/raw/2026-07-26-shared-supervisor-binding-path-failure-family/baseline/src-tauri/src/supervisor_resident_oneshot_tests.rs	2026-07-27 03:55:16
++++ prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_tests.rs	2026-07-27 04:31:19
+@@ -3606,7 +3606,90 @@
+     }
+ }
+ 
++// ── A9b：补上 A9 的覆盖缺口 ───────────────────────────────────────────
++// A9 只断言了 13 个**基础** consult 家族两两不等，没有覆盖 A7 追加
++// `__diagnostic_append_failed` 后缀之后的另外 13 个。真机取证要靠这 26 个
++// 取值区分「consult 失败」与「consult 失败且诊断自己也没写进去」，
++// 少一半覆盖就等于这层区分没有被任何断言锁住。
+ #[test]
++fn resident_consult_families_including_diagnostic_append_suffix_are_pairwise_distinct() {
++    use super::{
++        resident_consult_failure_family_for_test, resident_delivery_diagnostic_stages_for_test,
++        RESIDENT_DIAGNOSTIC_APPEND_FAILED_SUFFIX,
++    };
++
++    let stages = resident_delivery_diagnostic_stages_for_test();
++    assert_eq!(stages.len(), 13, "诊断相位共 13 个，覆盖必须齐全");
++
++    // 后缀本身不得为空——否则带后缀与不带后缀的两组会逐字相同，
++    // 「诊断写入自己失败了」这件事就再也无法从 family 上看出来。
++    assert!(
++        !RESIDENT_DIAGNOSTIC_APPEND_FAILED_SUFFIX.trim().is_empty(),
++        "诊断追加失败后缀不得为空串"
++    );
++
++    let mut families: Vec<String> = Vec::with_capacity(26);
++    for stage in stages {
++        let base = resident_consult_failure_family_for_test(stage);
++        families.push(base.to_string());
++        families.push(format!("{base}{RESIDENT_DIAGNOSTIC_APPEND_FAILED_SUFFIX}"));
++    }
++    assert_eq!(families.len(), 26, "13 个相位 × 带/不带后缀 = 26 个取值");
++
++    for (left_index, left) in families.iter().enumerate() {
++        assert!(
++            !left.trim().is_empty(),
++            "family 不得为空串：index {left_index}"
++        );
++        for (right_index, right) in families.iter().enumerate() {
++            if left_index == right_index {
++                continue;
++            }
++            assert_ne!(
++                left, right,
++                "26 个 consult 家族必须两两不等：{left_index} 与 {right_index} 相同"
++            );
++        }
++    }
++}
++
++// ── A8*：三处 `delivery_unknown` 的子 family ──────────────────────────
++// 这三处返回的是 `Err(String)` 而不是 outcome，所以拿不到 `failure_family`
++// 那条通道。能做的只有一件事：让这三个错误取值本身分得开，且仍以既有取值
++// 为前缀（旧的 `starts_with` 消费方不受影响）。错误类型、返回形状、控制流
++// 一律未动——这是 A8* 能落地的全部边界。
++#[test]
++fn resident_delivery_unknown_subfamilies_are_distinct_and_keep_the_legacy_prefix() {
++    use super::resident_delivery_unknown_families_for_test;
++
++    let [base, replay_lookup, replay_reply_outcome, record_recheck] =
++        resident_delivery_unknown_families_for_test();
++
++    // 既有取值仍是三个子 family 的前缀——旧消费方按前缀仍然命中。
++    for subfamily in [replay_lookup, replay_reply_outcome, record_recheck] {
++        assert!(
++            subfamily.starts_with(base),
++            "子 family 必须保留既有取值作前缀：{subfamily}"
++        );
++        assert_ne!(subfamily, base, "子 family 必须比既有取值更具体：{subfamily}");
++    }
++
++    // 三处两两不等——否则这次拆分等于没做。
++    let subfamilies = [replay_lookup, replay_reply_outcome, record_recheck];
++    for (left_index, left) in subfamilies.iter().enumerate() {
++        for (right_index, right) in subfamilies.iter().enumerate() {
++            if left_index == right_index {
++                continue;
++            }
++            assert_ne!(
++                left, right,
++                "delivery_unknown 子 family 必须两两不等：{left_index} 与 {right_index}"
++            );
++        }
++    }
++}
++
++#[test]
+ fn resident_outcome_omits_failure_family_when_absent() {
+     use super::SupervisorResidentAnswerOutcome;
+ 
+--- evidence/raw/2026-07-26-shared-supervisor-binding-path-failure-family/baseline/tests/shared-conversation-transport.test.tsx	2026-07-23 03:45:21
++++ prototypes/productized-desktop-shell/tests/shared-conversation-transport.test.tsx	2026-07-27 04:37:02
+@@ -371,5 +371,102 @@
+   assert(!retainedReceiptJson.includes("untrusted-payload-must-not-render"), "共享 receipt/state 不得保留未知 bridge payload");
+   assert(!retainedReceiptJson.includes("untrusted-binding-stage"), "共享 receipt/state 只允许固定 binding 阶段枚举");
+ }
++
++// 5) B6：新增的 `binding_failure_family` 必须真的穿过 receipt 投影到达
++// controller state——否则后端 B1–B5 全落地了、前端这一段照样看不到。
++// 同时它不得成为一个新的任意字符串通道：不合规取值一律丢弃，
++// 既有 `binding_stage` 分支与用户可见文案一个字不动。
++{
++  const withFamily = (() => {
++    const base = receipt({
++      attempt_id: null,
++      conversation_id: null,
++      thread_id: null,
++      turn_id: "turn:binding-family",
++      transport_status: "failed",
++      assistant_status: "not_requested",
++      binding_stage: "binding_construct",
++    });
++    return Object.assign({}, base, {
++      transport: Object.assign({}, base.transport, {
++        binding_failure_family: "binding_rejected_thread_unbound",
++      }),
++    }) as ConversationTransportReceipt;
++  })();
++
++  const retained = mergeConversationTransportReceipts(null, withFamily);
++  assert(
++    retained.transport.binding_failure_family === "binding_rejected_thread_unbound",
++    "binding_failure_family 必须原样穿过 receipt 投影",
++  );
++  assert(
++    retained.transport.binding_stage === "binding_construct",
++    "既有 binding_stage 取值不得被 family 顶替",
++  );
+ 
++  // 不合规取值（后端 raw 错误串、越界 payload）一律丢弃，与既有
++  // `binding_stage` 的处理保持同一姿态。
++  for (const untrusted of [
++    "untrusted-binding-family",
++    "conversation_transport_supervisor_binding_persist_db_failed",
++    "主管对话绑定准备未完成",
++    42,
++    { nested: "payload" },
++  ]) {
++    const tainted = Object.assign({}, withFamily, {
++      transport: Object.assign({}, withFamily.transport, { binding_failure_family: untrusted }),
++    }) as unknown as ConversationTransportReceipt;
++    const projected = mergeConversationTransportReceipts(null, tainted);
++    assert(
++      projected.transport.binding_failure_family === null,
++      `不合规 family 必须丢弃：${JSON.stringify(untrusted)}`,
++    );
++  }
++
++  // 存量回执根本没有这个键——缺失仍然合法，且不得凭空造出取值。
++  const legacy = receipt({
++    attempt_id: null,
++    conversation_id: null,
++    thread_id: null,
++    turn_id: "turn:legacy-no-family",
++    transport_status: "failed",
++    assistant_status: "not_requested",
++    binding_stage: "binding_construct",
++  });
++  assert(
++    mergeConversationTransportReceipts(null, legacy).transport.binding_failure_family === null,
++    "缺失 binding_failure_family 的存量回执必须仍然合法",
++  );
++
++  // 用户可见文案逐字不变：family 只进诊断面，不进 UI 文案。
++  const controller = createConversationTransportController({
++    context: createSupervisorConversationTransportContext({
++      project_root: "/fixture/supervisor-project",
++      project_id: "project:fixture",
++      workflow_id: "workflow:fixture",
++    }),
++    client: {
++      async startNew() { return withFamily; },
++      async startExisting() { throw new Error("not used"); },
++      async poll() { throw new Error("not used"); },
++      async stop() { throw new Error("not used"); },
++    },
++    create_turn_id: () => "turn:binding-family",
++  });
++  const result = await controller.start({ mode: "new", user_text: "安全的测试消息" });
++  assert(
++    result.operation_error === "主管对话绑定准备未完成；运输没有启动。",
++    "新增 family 不得改动任何用户可见文案",
++  );
++  assertDeepEqual(
++    result.start_failure,
++    { turn_id: "turn:binding-family", stage: "binding_construct" },
++    "start_failure 形状不变——family 走 receipt，不挤进既有诊断出口",
++  );
++  assert(
++    result.receipt?.transport.binding_failure_family === "binding_rejected_thread_unbound",
++    "controller state 必须能读到 family，真机一次归因才有抓手",
++  );
++}
++
+ console.log("shared-conversation-transport: profile-safe requests, new/existing session, independent receipts, Stop, and safe receipt filtering passed");

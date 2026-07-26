@@ -1,0 +1,198 @@
+   Compiling codex-governance-workbench v0.1.0 (/Users/yoyi/workspace/product-line/prototypes/productized-desktop-shell/src-tauri)
+warning: unused import: `SystemTime`
+   --> src/system_status_read_model.rs:229:21
+    |
+229 |     use std::time::{SystemTime, UNIX_EPOCH};
+    |                     ^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: type `supervisor_session_launcher::SupervisorResidentDeliveryDiagnosticStage` is more private than the item `resident_delivery_diagnostic_stages_for_test`
+    --> src/supervisor_resident_oneshot_session.rs:2360:1
+     |
+2360 | / pub(crate) fn resident_delivery_diagnostic_stages_for_test(
+2361 | | ) -> [SupervisorResidentDeliveryDiagnosticStage; 13] {
+     | |____________________________________________________^ function `resident_delivery_diagnostic_stages_for_test` is reachable at visibility `pub(crate)`
+     |
+note: but type `supervisor_session_launcher::SupervisorResidentDeliveryDiagnosticStage` is only usable at visibility `pub(self)`
+    --> src/supervisor_resident_oneshot_session.rs:63:1
+     |
+  63 | enum SupervisorResidentDeliveryDiagnosticStage {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = note: `#[warn(private_interfaces)]` on by default
+
+warning: type `supervisor_session_launcher::SupervisorResidentDeliveryDiagnosticStage` is more private than the item `resident_consult_failure_family_for_test`
+    --> src/supervisor_resident_oneshot_session.rs:2381:1
+     |
+2381 | / pub(crate) fn resident_consult_failure_family_for_test(
+2382 | |     stage: SupervisorResidentDeliveryDiagnosticStage,
+2383 | | ) -> &'static str {
+     | |_________________^ function `resident_consult_failure_family_for_test` is reachable at visibility `pub(crate)`
+     |
+note: but type `supervisor_session_launcher::SupervisorResidentDeliveryDiagnosticStage` is only usable at visibility `pub(self)`
+    --> src/supervisor_resident_oneshot_session.rs:63:1
+     |
+  63 | enum SupervisorResidentDeliveryDiagnosticStage {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `run_workflow_machine_for_index_at` is never used
+    --> src/commands.rs:6730:4
+     |
+6730 | fn run_workflow_machine_for_index_at(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `run_workflow_machine_at` is never used
+    --> src/workflow_execution_entrypoints.rs:1782:4
+     |
+1782 | fn run_workflow_machine_at(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CONSULTANT_V0_PROFILE` is never used
+   --> src/consultant_agent.rs:320:7
+    |
+320 | const CONSULTANT_V0_PROFILE: &str = r#"你是「项目咨询」。
+    |       ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `consultant_build_prompt` is never used
+   --> src/consultant_agent.rs:328:4
+    |
+328 | fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: multiple fields are never read
+  --> src/director_agent.rs:40:16
+   |
+39 | pub(crate) struct DirectorFinalMarkContext {
+   |                   ------------------------ fields in this struct
+40 |     pub(crate) project_root: String,
+   |                ^^^^^^^^^^^^
+41 |     pub(crate) workflow_id: String,
+   |                ^^^^^^^^^^^
+42 |     pub(crate) task_title: String,
+   |                ^^^^^^^^^^
+43 |     pub(crate) task_goal: String,
+   |                ^^^^^^^^^
+44 |     pub(crate) acceptance_criteria: Vec<String>,
+   |                ^^^^^^^^^^^^^^^^^^^
+45 |     pub(crate) report_status: Option<String>,
+   |                ^^^^^^^^^^^^^
+46 |     pub(crate) acceptance_status: String,
+   |                ^^^^^^^^^^^^^^^^^
+47 |     pub(crate) evidence_refs: Vec<String>,
+   |                ^^^^^^^^^^^^^
+48 |     pub(crate) direction_risks: Vec<String>,
+   |                ^^^^^^^^^^^^^^^
+49 |     pub(crate) yellow_reasons: Vec<String>,
+   |                ^^^^^^^^^^^^^^
+50 |     pub(crate) last_message_tail: String,
+   |                ^^^^^^^^^^^^^^^^^
+51 |     pub(crate) rework_budget_remaining: usize,
+   |                ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `DirectorFinalMarkContext` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: multiple fields are never read
+  --> src/director_agent.rs:68:16
+   |
+67 | pub(crate) struct DirectorWorkflowSummaryContext {
+   |                   ------------------------------ fields in this struct
+68 |     pub(crate) project_root: String,
+   |                ^^^^^^^^^^^^
+69 |     pub(crate) workflow_id: String,
+   |                ^^^^^^^^^^^
+70 |     pub(crate) chain_run_id: String,
+71 |     pub(crate) total: usize,
+   |                ^^^^^
+72 |     pub(crate) dispatched: usize,
+   |                ^^^^^^^^^^
+73 |     pub(crate) completed: usize,
+74 |     pub(crate) skipped: usize,
+   |                ^^^^^^^
+75 |     pub(crate) steps: Vec<DirectorChainStep>,
+   |                ^^^^^
+76 |     pub(crate) warnings: Vec<String>,
+   |                ^^^^^^^^
+   |
+   = note: `DirectorWorkflowSummaryContext` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: struct `CliDirectorAgent` is never constructed
+   --> src/director_agent.rs:461:19
+    |
+461 | pub(crate) struct CliDirectorAgent {
+    |                   ^^^^^^^^^^^^^^^^
+
+warning: struct `DirectorFinalMarkJson` is never constructed
+   --> src/director_agent.rs:561:8
+    |
+561 | struct DirectorFinalMarkJson {
+    |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `DirectorWorkflowSummaryJson` is never constructed
+   --> src/director_agent.rs:569:8
+    |
+569 | struct DirectorWorkflowSummaryJson {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `director_final_mark_prompt` is never used
+   --> src/director_agent.rs:580:4
+    |
+580 | fn director_final_mark_prompt(ctx: &DirectorFinalMarkContext) -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_director_final_mark` is never used
+   --> src/director_agent.rs:643:4
+    |
+643 | fn parse_director_final_mark(raw: &str) -> Result<DirectorFinalMark, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `director_workflow_summary_prompt` is never used
+   --> src/director_agent.rs:664:4
+    |
+664 | fn director_workflow_summary_prompt(ctx: &DirectorWorkflowSummaryContext) -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_director_workflow_summary` is never used
+   --> src/director_agent.rs:718:4
+    |
+718 | fn parse_director_workflow_summary(raw: &str) -> Result<DirectorWorkflowSummary, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_workflow_machine_start_state` is never used
+   --> src/control_core.rs:151:15
+    |
+151 | pub(crate) fn validate_workflow_machine_start_state(work_item_state: &str) -> Result<(), String> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_workflow_machine_final_state` is never used
+   --> src/control_core.rs:161:15
+    |
+161 | pub(crate) fn validate_workflow_machine_final_state(final_state: &str) -> Result<(), String> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `invalid_params` is never used
+  --> src/mcp/protocol.rs:69:12
+   |
+54 | impl JsonRpcError {
+   | ----------------- associated function in this implementation
+...
+69 |     pub fn invalid_params(detail: &str) -> Self {
+   |            ^^^^^^^^^^^^^^
+
+warning: struct `WorkflowMachineStubRunner` is never constructed
+     --> src/lib.rs:14594:12
+      |
+14594 |     struct WorkflowMachineStubRunner {
+      |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-governance-workbench` (lib test) generated 20 warnings (run `cargo fix --lib -p codex-governance-workbench --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.46s
+     Running unittests src/lib.rs (target/debug/deps/codex_governance_workbench_lib-907cd8208ec1739f)
+
+running 1 test
+test supervisor_session_launcher::resident_session_tests::resident_consult_families_including_diagnostic_append_suffix_are_pairwise_distinct ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1250 filtered out; finished in 0.00s
+
+exit=0

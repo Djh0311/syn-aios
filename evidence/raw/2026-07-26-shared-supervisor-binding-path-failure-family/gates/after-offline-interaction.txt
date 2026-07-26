@@ -1,0 +1,39 @@
+
+> codex-governance-workbench@0.1.0 test:offline-interaction
+> node scripts/run-offline-interaction-test.mjs
+
+offline interaction tests passed: 15
+frontend-wiring-microbatch: W1/W2/W3 接线断言全过
+agent-session-row: 会话行双色点、状态词并入标题、可及名与按钮语义离线断言全过
+shared-conversation-transport: profile-safe requests, new/existing session, independent receipts, Stop, and safe receipt filtering passed
+report-on-face-yellow-flag: 7 组离线 DOM 断言全过
+report-fact-confirm-recall: 4 组离线 DOM 断言全过
+[boundary-opinion] all assertions passed
+raw-session-bridge: 4 组离线 DOM 断言全过
+global-supervisor-review-section: 6 组离线 DOM 断言全过
+advice-only-authorize-face: 3 组离线 DOM 断言全过
+secretary-pending-board: 4 组 derive 断言全过
+secretary-pending-board-face: 4 组离线 DOM 断言全过
+history-and-board: 7 组离线 DOM / 历届方案索引 / 旧单诚实兜底断言全过
+jiaoban-needs-rework-disposal: 主界面四选一离线 DOM 断言全过
+jiaoban-merged-layout: 6 组离线 DOM / 对话左·方案索引中·实体右 / 画布动态宽 / chrome 断言全过
+jiaoban-conversation-center: 5 组消息流/追问回答/幂等/等待态 + shared receipt 三层独立结算 + 2 组修单4分组折叠 + P3-A 过程短讯 离线 DOM 断言全过
+jiaoban-plan-preview-canvas: 预演节点、依赖、默认新会话和工序图只读语义离线 DOM 断言全过
+jiaoban-running-graph: 运行态同图、状态映射、只读节点和终态图离线 DOM 断言全过
+jiaoban-director-planning-progress: 拆任务分钟、人话和相位退出清理离线 DOM 断言全过
+jiaoban-chain-result-semantics: 四分、四脸、待决定四按钮、archived 真终态和卡住乙型回话框断言全过
+jiaoban-approval-seal-and-flag-note: 章显隐/日期/fresh 类 + 黄牌三处批注式 + aria-label 断言全过
+knowledge-vault-notes: Markdown 渲染/双链/编辑空态 + N0 可选兼容/固定操作/冲突重读/原生降级断言全过
+knowledge workbench shell static convergence contract passed; R3B 16 / 0; R3E 22 / 0
+obsidian integration typed client test passed
+knowledge-open relay UI contract tests passed
+native knowledge workspace N0 optional compatibility and N1/N2/N3/N4/N5 fixed client contract tests passed
+native knowledge graph static shell and typed handoff tests passed: 76
+native knowledge canvas static shell, typed calls, local JSON Canvas patches, R3C 14 / 0, and R3C-R1 4 / 0 contracts passed
+knowledge attachment/recovery static boundary and UI-preference tests passed
+jiaoban-page-content-cleanup: 七项交办内容清理离线 DOM 断言全过
+r4 page read model settings test passed
+r4 page read model query contract test passed
+r4 page read model runtime test passed
+r4 page selectors test passed
+offline_exit=0

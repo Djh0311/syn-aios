@@ -1,0 +1,20 @@
+PASS: {error.message} 直渲 -> exactly 1 machine_face_on_ui — got 1
+PASS: finding severity=error — ["error"]
+PASS: check-mode Status=fail on new direct render — status=fail
+PASS: finding points at Foo.tsx/jsx_error_message — {"pattern":"jsx_error_message","file":"prototypes/productized-desktop-shell/src/views/Foo.tsx","line":2}
+PASS: <pre>stderr: 形 -> exactly 1 machine_face_on_ui — got 1
+PASS: finding pattern=jsx_event_stderr_pre — {"pattern":"jsx_event_stderr_pre","file":"prototypes/productized-desktop-shell/src/views/Bar.tsx","line":2}
+PASS: whitelisted main.tsx 形 -> 0 machine_face_on_ui — got 0
+PASS: whitelisted hit recorded as deferred — deferred=1
+PASS: whitelisted tree Status stays pass — status=pass
+PASS: <details> raw_snippet 样板 -> 0 machine_face_on_ui — got 0
+PASS: <details> raw_snippet 样板 -> 0 machine_face_state_hint — got 0
+PASS: state 形 -> exactly 1 machine_face_state_hint — got 1
+PASS: state 形 severity=warn (never error) — ["warn"]
+PASS: state 形 Status stays pass (warn-only) — status=pass
+PASS: whitelisted state 形 -> 0 machine_face_state_hint — got 0
+PASS: whitelisted state hit recorded as deferred — deferred=1
+PASS: clean tree -> 0 machine_face_on_ui — got 0
+PASS: clean tree -> 0 machine_face_state_hint — got 0
+
+Self-test: 18/18 checks passed

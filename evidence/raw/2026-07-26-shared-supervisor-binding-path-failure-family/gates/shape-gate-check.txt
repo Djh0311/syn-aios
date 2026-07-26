@@ -1,0 +1,93 @@
+Workbench shape gate: /Users/yoyi/workspace/product-line
+Mode: check
+Workbench shape gate is read-only; it does not execute Codex, send prompts, read/write /Users/yoyi/.codex, start Tauri, or inspect secrets.
+Status: fail
+Errors: 17
+Warnings: 5
+Info: 5
+Git HEAD: a13599e13c8136c5b2dbff5b86aebe4b6cc8710a
+Ratchet policy: historical_lowest_closed_value
+
+Key metrics:
+- lib.rs: 14818 lines (prototypes/productized-desktop-shell/src-tauri/src/lib.rs)
+- real_execution_command.rs: 8762 lines (prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs)
+- ProjectsView.tsx: 371 lines (prototypes/productized-desktop-shell/src/views/ProjectsView.tsx)
+- AgentView.tsx: 217 lines (prototypes/productized-desktop-shell/src/views/AgentView.tsx)
+- types.rs: 5386 lines (prototypes/productized-desktop-shell/src-tauri/src/types.rs)
+- types.ts: 61 lines (prototypes/productized-desktop-shell/src/lib/types.ts)
+- styles.css: 12502 lines (prototypes/productized-desktop-shell/src/styles.css)
+- offline-permission-dialog.test.tsx: 3408 lines (prototypes/productized-desktop-shell/tests/offline-permission-dialog.test.tsx)
+- Tauri commands: 171 total; 0 in lib.rs
+- Sidecar JSON kinds: 20 detected; 5 unknown
+- Ratchet files: 12
+- Gate script lines: 498
+- Converged-helper dups outside utils/: 4 (12 deferred-whitelisted)
+- Machine-face on UI: 0 error-form, 0 state-form warns (9 deferred-whitelisted)
+- Hardcoded hex on UI: 0 violations (68 deferred-whitelisted)
+- Retired style family: 0 violations (1 deferred-whitelisted)
+
+Ratchet waterlines:
+- prototypes/productized-desktop-shell/src-tauri/src/lib.rs: 14818/5567 (increased)
+- prototypes/productized-desktop-shell/tests/offline-permission-dialog.test.tsx: 3408/3404 (increased)
+- prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs: 8762/8763 (decreased)
+- prototypes/productized-desktop-shell/src/styles.css: 12502/8464 (increased)
+- prototypes/productized-desktop-shell/src/views/ProjectsView.tsx: 371/378 (decreased)
+- prototypes/productized-desktop-shell/src-tauri/src/types.rs: 5386/5386 (same)
+- prototypes/productized-desktop-shell/src-tauri/src/session_continuation_store.rs: 5228/5237 (decreased)
+- prototypes/productized-desktop-shell/src/lib/types.ts: 61/4998 (decreased)
+- prototypes/productized-desktop-shell/src-tauri/src/project_workflow_automation.rs: 5059/5059 (same)
+- prototypes/productized-desktop-shell/src/views/AgentView.tsx: 217/285 (decreased)
+- prototypes/productized-desktop-shell/src-tauri/src/worker_protocol.rs: 2429/2429 (same)
+- prototypes/productized-desktop-shell/src/lib/projectCanvas.ts: 2115/2050 (increased)
+
+Sidecar JSON baseline:
+- blackboard-candidates.v1.json (allowed)
+- exec-process-registry.v1.json (unknown)
+- formal-memories.v1.json (allowed)
+- global-supervisor-reviews.v1.json (unknown)
+- memory-candidates.v1.json (allowed)
+- memory-capture-events.v1.json (allowed)
+- memory-entity-relations.v1.json (allowed)
+- memory-lint.v1.json (allowed)
+- memory-patterns.v1.json (allowed)
+- observations.v1.json (allowed)
+- plan-authorizations.v1.json (allowed)
+- project-proposals.v1.json (allowed)
+- real-execution-product-commands.v1.json (allowed)
+- runtime-log.v1.json (allowed)
+- runtime-logs.v1.json (allowed)
+- session-continuations.v1.json (allowed)
+- storage-mode.v1.json (allowed)
+- supervisor-action-control.v1.json (unknown)
+- supervisor-home.v1.json (unknown)
+- supervisor-orchestrator.v1.json (unknown)
+
+Findings:
+- [info] baseline_commits: R0 records both governance baseline and task-package start commit. {"r_preflight_baseline_commit":"ed01c6f281e3fd7a38548da948046e8366cc368d","r0_package_commit":"a40b7b56ab949cd26b145ba0eccf9f3921886ea0","current_head":"a13599e13c8136c5b2dbff5b86aebe4b6cc8710a"}
+- [error] ratchet_file_increased: A ratchet file is above its historical-low ratchet waterline. {"file":"prototypes/productized-desktop-shell/src-tauri/src/lib.rs","lines":14818,"waterline":5567,"delta":9251,"status":"increased"}
+- [error] ratchet_file_increased: A ratchet file is above its historical-low ratchet waterline. {"file":"prototypes/productized-desktop-shell/tests/offline-permission-dialog.test.tsx","lines":3408,"waterline":3404,"delta":4,"status":"increased"}
+- [info] ratchet_file_existing_debt: Existing oversized file is tracked as ratchet debt and must not grow. {"file":"prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs","lines":8762,"waterline":8763,"delta":-1,"status":"decreased"}
+- [error] ratchet_file_increased: A ratchet file is above its historical-low ratchet waterline. {"file":"prototypes/productized-desktop-shell/src/styles.css","lines":12502,"waterline":8464,"delta":4038,"status":"increased"}
+- [info] ratchet_file_existing_debt: Existing oversized file is tracked as ratchet debt and must not grow. {"file":"prototypes/productized-desktop-shell/src-tauri/src/types.rs","lines":5386,"waterline":5386,"delta":0,"status":"same"}
+- [info] ratchet_file_existing_debt: Existing oversized file is tracked as ratchet debt and must not grow. {"file":"prototypes/productized-desktop-shell/src-tauri/src/session_continuation_store.rs","lines":5228,"waterline":5237,"delta":-9,"status":"decreased"}
+- [info] ratchet_file_existing_debt: Existing oversized file is tracked as ratchet debt and must not grow. {"file":"prototypes/productized-desktop-shell/src-tauri/src/project_workflow_automation.rs","lines":5059,"waterline":5059,"delta":0,"status":"same"}
+- [error] ratchet_file_increased: A ratchet file is above its historical-low ratchet waterline. {"file":"prototypes/productized-desktop-shell/src/lib/projectCanvas.ts","lines":2115,"waterline":2050,"delta":65,"status":"increased"}
+- [error] file_over_limit_not_in_ratchet: A source file exceeds the new-file limit but is not in the R0 ratchet list. {"file":"prototypes/productized-desktop-shell/src-tauri/src/manual_relay.rs","ext":".rs","lines":8108,"limit":3000}
+- [error] file_over_limit_not_in_ratchet: A source file exceeds the new-file limit but is not in the R0 ratchet list. {"file":"prototypes/productized-desktop-shell/src-tauri/src/director_agent.rs","ext":".rs","lines":8078,"limit":3000}
+- [error] file_over_limit_not_in_ratchet: A source file exceeds the new-file limit but is not in the R0 ratchet list. {"file":"prototypes/productized-desktop-shell/src-tauri/src/commands.rs","ext":".rs","lines":7046,"limit":3000}
+- [error] file_over_limit_not_in_ratchet: A source file exceeds the new-file limit but is not in the R0 ratchet list. {"file":"prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_tests.rs","ext":".rs","lines":3721,"limit":3000}
+- [error] file_over_limit_not_in_ratchet: A source file exceeds the new-file limit but is not in the R0 ratchet list. {"file":"prototypes/productized-desktop-shell/src-tauri/src/mcp/supervisor_orchestrator.rs","ext":".rs","lines":3719,"limit":3000}
+- [error] file_over_limit_not_in_ratchet: A source file exceeds the new-file limit but is not in the R0 ratchet list. {"file":"prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_session.rs","ext":".rs","lines":3525,"limit":3000}
+- [error] file_over_limit_not_in_ratchet: A source file exceeds the new-file limit but is not in the R0 ratchet list. {"file":"prototypes/productized-desktop-shell/src/lib/types/workflow.ts","ext":".ts","lines":2202,"limit":2000}
+- [error] file_over_limit_not_in_ratchet: A source file exceeds the new-file limit but is not in the R0 ratchet list. {"file":"prototypes/productized-desktop-shell/src/lib/tauri.ts","ext":".ts","lines":2008,"limit":2000}
+- [warn] tauri_command_total_increased: Tauri command total increased; confirm task package shape impact and non-lib.rs placement. {"current":171,"baseline":97}
+- [error] unknown_sidecar_json_kind: Detected sidecar JSON kind is not in the R0 allowed baseline; new sidecars require user confirmation and a decision record. {"name":"exec-process-registry.v1.json","locations":["prototypes/productized-desktop-shell/src-tauri/src/exec_process_registry.rs","prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_tests.rs","prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_preflight.rs","prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_production_apply.rs"]}
+- [error] unknown_sidecar_json_kind: Detected sidecar JSON kind is not in the R0 allowed baseline; new sidecars require user confirmation and a decision record. {"name":"global-supervisor-reviews.v1.json","locations":["prototypes/productized-desktop-shell/src-tauri/src/global_supervisor_review_store.rs","prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_apply.rs","prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_exporter.rs","prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_importer.rs"]}
+- [error] unknown_sidecar_json_kind: Detected sidecar JSON kind is not in the R0 allowed baseline; new sidecars require user confirmation and a decision record. {"name":"supervisor-action-control.v1.json","locations":["prototypes/productized-desktop-shell/src-tauri/src/supervisor_action_controller.rs","prototypes/productized-desktop-shell/src-tauri/src/supervisor_session_launcher.rs","prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_apply.rs","prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_exporter.rs","prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_importer.rs","prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_storage_mode.rs"]}
+- [error] unknown_sidecar_json_kind: Detected sidecar JSON kind is not in the R0 allowed baseline; new sidecars require user confirmation and a decision record. {"name":"supervisor-home.v1.json","locations":["prototypes/productized-desktop-shell/src-tauri/src/supervisor_session_launcher.rs"]}
+- [error] unknown_sidecar_json_kind: Detected sidecar JSON kind is not in the R0 allowed baseline; new sidecars require user confirmation and a decision record. {"name":"supervisor-orchestrator.v1.json","locations":["prototypes/productized-desktop-shell/src-tauri/src/mcp/supervisor_conversation_transport_tests.rs","prototypes/productized-desktop-shell/src-tauri/src/mcp/supervisor_orchestrator.rs","prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_tests.rs","prototypes/productized-desktop-shell/src-tauri/src/supervisor_session_launcher.rs","prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_apply.rs","prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_exporter.rs","prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_importer.rs"]}
+- [warn] converged_helper_redefined: A converged helper is redefined outside src-tauri/src/utils/; converge it into utils/ or add it to DEDUP_DEFER_WHITELIST with a reason. Warning only; does not block. {"helper":"sidecar_path","file":"prototypes/productized-desktop-shell/src-tauri/src/exec_process_registry.rs","line":570}
+- [warn] converged_helper_redefined: A converged helper is redefined outside src-tauri/src/utils/; converge it into utils/ or add it to DEDUP_DEFER_WHITELIST with a reason. Warning only; does not block. {"helper":"sidecar_path","file":"prototypes/productized-desktop-shell/src-tauri/src/global_supervisor_review_store.rs","line":190}
+- [warn] converged_helper_redefined: A converged helper is redefined outside src-tauri/src/utils/; converge it into utils/ or add it to DEDUP_DEFER_WHITELIST with a reason. Warning only; does not block. {"helper":"sidecar_path","file":"prototypes/productized-desktop-shell/src-tauri/src/mcp/supervisor_orchestrator.rs","line":2041}
+- [warn] converged_helper_redefined: A converged helper is redefined outside src-tauri/src/utils/; converge it into utils/ or add it to DEDUP_DEFER_WHITELIST with a reason. Warning only; does not block. {"helper":"sidecar_path","file":"prototypes/productized-desktop-shell/src-tauri/src/supervisor_action_controller.rs","line":1621}
+check_exit=1

@@ -1,0 +1,47 @@
+PASS: good package -> verdict PASS
+PASS: good: commits_reachable PASS
+PASS: good: tree_clean PASS
+PASS: good: review_status PASS (CLEAR)
+PASS: good: current_md_refs PASS
+PASS: good: files_within_allow PASS (parsed docs/**)
+PASS: good: evidence_hash_format NA (no --record, zero regression)
+PASS: forged absent commit -> verdict FAIL
+PASS: forged absent commit -> commits_reachable FAIL
+PASS: forged absent commit -> marked MISSING
+PASS: dirty tree -> verdict FAIL
+PASS: dirty tree -> tree_clean FAIL
+PASS: dirty tree + --allow-dirty -> tree_clean not FAIL
+PASS: out-of-bounds file -> files_within_allow FAIL
+PASS: out-of-bounds file -> names src/secret.rs
+PASS: review without STATUS -> review_status FAIL
+PASS: review without STATUS -> verdict FAIL
+PASS: hash 6a: clean record -> evidence_hash_format PASS (zero false positives) — {"files_checked":1,"hash_fields_checked":12}
+PASS: hash 6a: clean record -> verdict PASS
+PASS: hash 6b: 59-char hash -> evidence_hash_format FAIL
+PASS: hash 6b: detail names the field + reason not_64_lowercase_hex
+PASS: hash 6b: -> verdict FAIL
+PASS: hash 6c: uppercase 64-hex -> evidence_hash_format FAIL
+PASS: hash 6c: -> verdict FAIL
+PASS: hash 6d: multi --record with one bad -> evidence_hash_format FAIL
+PASS: current null -> NOT_APPLICABLE
+PASS: current null -> exit 0 — 0
+PASS: current null -> does not scan historical tasks directory
+PASS: current advisory missing existing/forbidden -> warnings — [{"code":"ALIGNMENT_FIELD_MISSING","field":"existing_before_new","path":"tasks/current-important-task.md"},{"code":"ALIGNMENT_FIELD_MISSING","field":"forbidden_alternatives","path":"tasks/current-important-task.md"}]
+PASS: current advisory missing fields -> exit 0 — 0
+PASS: current strict missing existing/forbidden -> FAIL — {"target":"/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/ckpt-audit-current-Pyv0Ix","mode":"current","boundary":"Checks only the declared alignment fields, referenced plan path/heading, and Code Map IDs. It does not prove semantic correctness, code completion, real execution, or product acceptance.","status":"STRICT_ALIGNMENT_ERRORS","verdict":"STRICT_ALIGNMENT_ERRORS","currentImportantTask":{"path":"tasks/current-important-task.md","mode":"strict"},"fields":{"authority_chain":"AUTHORITY.md -> decisions/current-decision.md","plan_anchor":"docs/plans/current-plan.md#phase-4","existing_before_new":"","capabilities_touched":"conversation-transport.agent-manual-relay","forbidden_alternatives":""},"warnings":[],"errors":[{"code":"ALIGNMENT_FIELD_MISSING","field":"existing_before_new","path":"tasks/current-important-task.md"},{"code":"ALIGNMENT_FIELD_MISSING","field":"forbidden_alternatives","path":"tasks/current-important-task.md"}],"alignmentBlockFound":true,"capabilityIds":[{"id":"conversation-transport.agent-manual-relay","field":"capabilities_touched"}]}
+PASS: current strict missing fields -> exit 1 — 1
+PASS: current complete fields -> FIELDS_PRESENT — {"target":"/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/ckpt-audit-current-3bSW6s","mode":"current","boundary":"Checks only the declared alignment fields, referenced plan path/heading, and Code Map IDs. It does not prove semantic correctness, code completion, real execution, or product acceptance.","status":"FIELDS_PRESENT","verdict":"FIELDS_PRESENT","currentImportantTask":{"path":"tasks/current-important-task.md","mode":"advisory"},"fields":{"authority_chain":"AUTHORITY.md -> decisions/current-decision.md","plan_anchor":"docs/plans/current-plan.md#phase-4","existing_before_new":"复用 `conversation-transport.agent-manual-relay`。","capabilities_touched":"conversation-transport.agent-manual-relay","forbidden_alternatives":"resident/private-home 旧路线。"},"warnings":[],"errors":[],"alignmentBlockFound":true,"capabilityIds":[{"id":"conversation-transport.agent-manual-relay","field":"capabilities_touched"},{"id":"conversation-transport.agent-manual-relay","field":"existing_before_new"}]}
+PASS: current complete fields -> exit 0 — 0
+PASS: current complete fields -> retains explicit package path
+PASS: current complete fields -> boundary rejects completion inference — Checks only the declared alignment fields, referenced plan path/heading, and Code Map IDs. It does not prove semantic correctness, code completion, real execution, or product acceptance.
+PASS: current percent-encoded Chinese plan anchor -> FIELDS_PRESENT — {"target":"/var/folders/nj/y6s1fvl936xgfwg20w08sk6r0000gn/T/ckpt-audit-current-4QTWRS","mode":"current","boundary":"Checks only the declared alignment fields, referenced plan path/heading, and Code Map IDs. It does not prove semantic correctness, code completion, real execution, or product acceptance.","status":"FIELDS_PRESENT","verdict":"FIELDS_PRESENT","currentImportantTask":{"path":"tasks/current-important-task.md","mode":"advisory"},"fields":{"authority_chain":"AUTHORITY.md -> decisions/current-decision.md","plan_anchor":"docs/plans/current-plan.md#%E5%BD%93%E5%89%8D%E4%B8%B2%E8%A1%8C%E7%BA%BF%C2%B7%E5%85%B1%E4%BA%AB%20transport%20%E4%B8%8E%E7%BB%9F%E4%B8%80%20MCP%20%E8%83%BD%E5%8A%9B%E5%B1%82%EF%BC%8807-22%20%E9%87%8D%E6%8E%92%EF%BC%89","existing_before_new":"复用 `conversation-transport.agent-manual-relay`。","capabilities_touched":"conversation-transport.agent-manual-relay","forbidden_alternatives":"resident/private-home 旧路线。"},"warnings":[],"errors":[],"alignmentBlockFound":true,"capabilityIds":[{"id":"conversation-transport.agent-manual-relay","field":"capabilities_touched"},{"id":"conversation-transport.agent-manual-relay","field":"existing_before_new"}]}
+PASS: current missing plan anchor file -> warning
+PASS: current unknown capability IDs -> warnings — [{"code":"PLAN_ANCHOR_FILE_MISSING","path":"docs/plans/missing-plan.md","anchor":"phase-4"},{"code":"MAP_CAPABILITY_NOT_FOUND","id":"unknown-domain.missing-capability","field":"capabilities_touched"},{"code":"MAP_CAPABILITY_NOT_FOUND","id":"unknown-domain.missing-reuse","field":"existing_before_new"}]
+PASS: current missing plan anchor heading -> warning
+PASS: current legacy capability -> warning
+PASS: current needs-confirmation capability -> warning
+PASS: current legacy/needs -> preserves declared IDs without replacement
+PASS: capabilities_touched none without explanation -> warning
+PASS: capabilities_touched none with explanation -> FIELDS_PRESENT
+
+Self-test: 45/45 checks passed

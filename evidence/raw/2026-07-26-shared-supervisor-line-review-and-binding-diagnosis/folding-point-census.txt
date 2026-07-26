@@ -1,0 +1,11 @@
+# 折叠点机械普查（生产路径，已剔除 #[cfg(test)] 之后的正文）
+# 列：map_err(|_| / .ok() / unwrap_or / let _ = / Err(_) / .is_err()
+
+mcp/supervisor_conversation_binding.rs           0     0     2     0     0     0
+manual_relay/conversation_transport.rs           3     0     1     1     1     2
+mcp/supervisor_orchestrator_db_primary.rs        0     0     0     0     0     0
+mcp/supervisor_orchestrator_submit_proposal.rs   3     0     2     0     1     2
+mcp/storage.rs                                   0     0     3     0     1     0
+mcp/capability_registry.rs                       0     0     0     0     0     0
+mcp/supervisor_orchestrator.rs                   8     0     5     4     1     0
+commands.rs                                      6     3     3     0     7     3

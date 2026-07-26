@@ -2388,31 +2388,6 @@ pub(crate) fn resident_consult_failure_family_for_test(
 /// 它自己失败了必须能被看见，不能再 `let _ =` 静默。
 const RESIDENT_DIAGNOSTIC_APPEND_FAILED_SUFFIX: &str = "__diagnostic_append_failed";
 
-/// A8*：`delivery_unknown` 的三个子 family。既有取值原样保留为前缀，
-/// 只在后面追加各自的身份——按 `starts_with` 消费的旧逻辑仍然命中，
-/// 按值比较的新逻辑才分得清是哪一处查询失败。
-/// 它们仍是 `Err(String)`，不是 outcome：错误类型、返回形状、控制流未动。
-/// 既有取值本身在生产路径上已不再单独出现（三处都改用子 family），
-/// 只有断言需要它来证明「子 family 仍以它为前缀」，故只在测试构建里保留。
-#[cfg(test)]
-const RESIDENT_DELIVERY_UNKNOWN_BASE: &str = "supervisor_resident_message_delivery_unknown";
-const RESIDENT_DELIVERY_UNKNOWN_REPLAY_LOOKUP: &str =
-    "supervisor_resident_message_delivery_unknown__replay_lookup";
-const RESIDENT_DELIVERY_UNKNOWN_REPLAY_REPLY_OUTCOME: &str =
-    "supervisor_resident_message_delivery_unknown__replay_reply_outcome";
-const RESIDENT_DELIVERY_UNKNOWN_RECORD_RECHECK: &str =
-    "supervisor_resident_message_delivery_unknown__record_recheck";
-
-#[cfg(test)]
-pub(crate) fn resident_delivery_unknown_families_for_test() -> [&'static str; 4] {
-    [
-        RESIDENT_DELIVERY_UNKNOWN_BASE,
-        RESIDENT_DELIVERY_UNKNOWN_REPLAY_LOOKUP,
-        RESIDENT_DELIVERY_UNKNOWN_REPLAY_REPLY_OUTCOME,
-        RESIDENT_DELIVERY_UNKNOWN_RECORD_RECHECK,
-    ]
-}
-
 pub(crate) fn resident_conversation_lock() -> &'static Mutex<()> {
     SUPERVISOR_RESIDENT_CONVERSATION_LOCK.get_or_init(|| Mutex::new(()))
 }
@@ -2982,11 +2957,7 @@ fn submit_supervisor_resident_answer_with_parts(
             Some(client_request_id),
             None,
         )
-        // A8*：三处 `delivery_unknown` 原先逐字同形，外部分不出是「按
-        // client_request_id 查重放」失败、「查主管回复」失败，还是「补记后
-        // 复查」失败。这里只把子 family 追加到既有取值后面——错误类型仍是
-        // String、返回形状与控制流一个字节没动。
-        .map_err(|_| RESIDENT_DELIVERY_UNKNOWN_REPLAY_LOOKUP.to_string())?
+        .map_err(|_| "supervisor_resident_message_delivery_unknown".to_string())?
         {
             Some((message_id, recorded_message_text)) => {
                 if recorded_message_text != request.message_text {
@@ -2999,7 +2970,7 @@ fn submit_supervisor_resident_answer_with_parts(
                     &message_id,
                     config,
                 )
-                .map_err(|_| RESIDENT_DELIVERY_UNKNOWN_REPLAY_REPLY_OUTCOME.to_string())?
+                .map_err(|_| "supervisor_resident_message_delivery_unknown".to_string())?
                 {
                     return Ok(outcome);
                 }
@@ -3035,7 +3006,7 @@ fn submit_supervisor_resident_answer_with_parts(
             None,
             Some(&message_id),
         )
-        .map_err(|_| RESIDENT_DELIVERY_UNKNOWN_RECORD_RECHECK.to_string())?
+        .map_err(|_| "supervisor_resident_message_delivery_unknown".to_string())?
         .is_none()
     {
         return Ok(SupervisorResidentAnswerOutcome {

@@ -1,0 +1,11 @@
+/Users/yoyi/workspace/product-line/prototypes/productized-desktop-shell/tests/helpers/offlineInteractionTestUtils.tsx:81
+    throw new Error(message);
+          ^
+
+
+Error: binding_failure_family 必须原样穿过 receipt 投影
+    at assert (/Users/yoyi/workspace/product-line/prototypes/productized-desktop-shell/tests/helpers/offlineInteractionTestUtils.tsx:81:11)
+    at <anonymous> (/Users/yoyi/workspace/product-line/prototypes/productized-desktop-shell/tests/shared-conversation-transport.test.tsx:398:3)
+
+Node.js v23.11.0
+exit=1

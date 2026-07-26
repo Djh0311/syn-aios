@@ -1,0 +1,42 @@
+### 前端调 submit_supervisor_resident_answer 的地方
+src/lib/tauri.ts:1903:  return invoke<SupervisorResidentAnswerOutcome>("submit_supervisor_resident_answer", { request });
+
+### 前端调 transport / binding 那条路的命令
+src/lib/tauri.ts:1744:  return invoke<ConversationTransportReceipt>("start_supervisor_conversation_transport", {
+
+### 交办页 composer 提交时调的是什么
+src/views/projects/jiaoban/useJiaobanConversationState.ts:43:// The shared transport below is the production send path; this helper no
+src/views/projects/jiaoban/useJiaobanConversationState.ts:56:    // A transport-level rejection cannot prove the canonical append did not
+src/views/projects/jiaoban/useJiaobanConversationState.ts:97:// caller cannot turn Jiaoban into a profile-selectable transport surface.
+src/views/projects/jiaoban/useJiaobanConversationState.ts:102:    throw new Error("conversation_transport_supervisor_context_required");
+src/views/projects/jiaoban/useJiaobanConversationState.ts:158:  const transportContext = useMemo(
+src/views/projects/jiaoban/useJiaobanConversationState.ts:169:  const transportController = useMemo<ConversationTransportController | null>(
+src/views/projects/jiaoban/useJiaobanConversationState.ts:171:      transportContext
+src/views/projects/jiaoban/useJiaobanConversationState.ts:173:            context: transportContext,
+src/views/projects/jiaoban/useJiaobanConversationState.ts:179:    [transportContext],
+src/views/projects/jiaoban/useJiaobanConversationState.ts:181:  const [transportState, setTransportState] = useState<ConversationTransportState | null>(
+src/views/projects/jiaoban/useJiaobanConversationState.ts:182:    () => transportController?.getState() ?? null,
+src/views/projects/jiaoban/useJiaobanConversationState.ts:190:      session: transportState?.session ?? { conversation_id: null, thread_id: null },
+src/views/projects/jiaoban/useJiaobanConversationState.ts:194:      transcript_events: transportState?.transcript_events ?? cached?.transcript_events ?? [],
+src/views/projects/jiaoban/useJiaobanConversationState.ts:199:    transportState?.session.conversation_id,
+src/views/projects/jiaoban/useJiaobanConversationState.ts:200:    transportState?.session.thread_id,
+### tauri.ts:1903 那个包装函数叫什么、谁调它
+// 由主管 MCP 工具落库，批准仍在右侧方案卡。
+export function submitSupervisorResidentAnswer(
+  request: SubmitSupervisorResidentAnswerRequest,
+): Promise<SupervisorResidentAnswerOutcome> {
+  ensureTauriRuntime();
+  return invoke<SupervisorResidentAnswerOutcome>("submit_supervisor_resident_answer", { request });
+}
+
+--- 调用点 ---
+(空=前端无人调，该路只能由别的表面进入)
+
+### 交办页 composer 实际发送用的是哪个
+### 补搜：raw command 名在整个前端（防止我又只搜了包装函数名）
+src/lib/tauri.ts:1903:  return invoke<SupervisorResidentAnswerOutcome>("submit_supervisor_resident_answer", { request });
+
+### 补搜：有没有动态 invoke（变量拼命令名）
+(空=无动态 invoke)
+
+### 交办页 composer 的实际发送调用

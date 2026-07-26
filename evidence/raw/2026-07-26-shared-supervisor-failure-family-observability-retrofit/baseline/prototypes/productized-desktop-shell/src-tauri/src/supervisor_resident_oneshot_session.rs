@@ -2298,119 +2298,6 @@ pub(crate) struct SupervisorResidentAnswerOutcome {
     pub(crate) thread_id: Option<String>,
     pub(crate) supervisor_reply: Option<String>,
     pub(crate) message: String,
-    /// N2R 可观测性改造（A1）：只用于把"是哪一种失败"自报家门。
-    /// 纯加法——缺省 `None`、序列化时省略，既有消费者与既有存量记录仍合法。
-    /// 它不参与任何控制流判定，`status` / `message` / 用户可见文案一律不变。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) failure_family: Option<String>,
-}
-
-/// 首句失败的稳定家族名。全部是固定字符串常量，不是格式化出来的自由文本，
-/// 且两两互不相等——这是"外部能不能分辨是哪一支失败"的唯一依据。
-pub(crate) mod resident_failure_family {
-    /// 幂等重放：找到 user_message_injected，但没有对应的 supervisor_message_recorded
-    pub(crate) const REPLY_MISSING_AFTER_INJECTION: &str = "resident_reply_missing_after_injection";
-    /// 幂等重放：client_request_id 命中已记录消息，但连 injected 事件都没有
-    pub(crate) const REPLAY_RECORDED_WITHOUT_INJECTION: &str = "replay_recorded_without_injection";
-    /// consult 成功，但 user_message_injected 事件写失败
-    pub(crate) const INJECTED_EVENT_APPEND_FAILED: &str = "injected_event_append_failed";
-    /// 全链成功，但 supervisor_message_recorded 事件写失败
-    pub(crate) const SUPERVISOR_REPLY_APPEND_FAILED: &str = "supervisor_reply_append_failed";
-}
-
-/// A4：首句 consult 失败时，把既有的 `stable_error_family()` 原样带出去。
-/// 13 个分支全部返回固定常量，禁止拼接自由文本。
-fn resident_consult_failure_family(
-    stage: SupervisorResidentDeliveryDiagnosticStage,
-) -> &'static str {
-    match stage {
-        SupervisorResidentDeliveryDiagnosticStage::PreflightReap => "consult_failed_preflight_reap",
-        SupervisorResidentDeliveryDiagnosticStage::PreflightSession => {
-            "consult_failed_preflight_session"
-        }
-        SupervisorResidentDeliveryDiagnosticStage::PreflightExecutable => {
-            "consult_failed_preflight_executable"
-        }
-        SupervisorResidentDeliveryDiagnosticStage::PreflightPlan => "consult_failed_preflight_plan",
-        SupervisorResidentDeliveryDiagnosticStage::PreflightHome => "consult_failed_preflight_home",
-        SupervisorResidentDeliveryDiagnosticStage::PreflightFacts => {
-            "consult_failed_preflight_facts"
-        }
-        SupervisorResidentDeliveryDiagnosticStage::RunnerOutputInit => {
-            "consult_failed_runner_output_init"
-        }
-        SupervisorResidentDeliveryDiagnosticStage::RunnerSpawn => "consult_failed_runner_spawn",
-        SupervisorResidentDeliveryDiagnosticStage::PreparedLifecycleWrite => {
-            "consult_failed_prepared_lifecycle_write"
-        }
-        SupervisorResidentDeliveryDiagnosticStage::RegistryRegistration => {
-            "consult_failed_registry_registration"
-        }
-        SupervisorResidentDeliveryDiagnosticStage::ThreadBinding => "consult_failed_thread_binding",
-        SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal => {
-            "consult_failed_runner_terminal"
-        }
-        SupervisorResidentDeliveryDiagnosticStage::Unknown => "consult_failed_unknown",
-    }
-}
-
-/// 只给测试用的窥视口：把 13 个相位与分类器暴露出去，好让 A9 断言
-/// 覆盖齐全性与两两不等，而不是靠肉眼核对常量表。
-#[cfg(test)]
-pub(crate) fn resident_delivery_diagnostic_stages_for_test(
-) -> [SupervisorResidentDeliveryDiagnosticStage; 13] {
-    use SupervisorResidentDeliveryDiagnosticStage as Stage;
-    [
-        Stage::PreflightReap,
-        Stage::PreflightSession,
-        Stage::PreflightExecutable,
-        Stage::PreflightPlan,
-        Stage::PreflightHome,
-        Stage::PreflightFacts,
-        Stage::RunnerOutputInit,
-        Stage::RunnerSpawn,
-        Stage::PreparedLifecycleWrite,
-        Stage::RegistryRegistration,
-        Stage::ThreadBinding,
-        Stage::RunnerTerminal,
-        Stage::Unknown,
-    ]
-}
-
-#[cfg(test)]
-pub(crate) fn resident_consult_failure_family_for_test(
-    stage: SupervisorResidentDeliveryDiagnosticStage,
-) -> &'static str {
-    resident_consult_failure_family(stage)
-}
-
-/// A7：诊断写入自身失败时的后缀。诊断是下一次真机取证的抓手，
-/// 它自己失败了必须能被看见，不能再 `let _ =` 静默。
-const RESIDENT_DIAGNOSTIC_APPEND_FAILED_SUFFIX: &str = "__diagnostic_append_failed";
-
-/// A8*：`delivery_unknown` 的三个子 family。既有取值原样保留为前缀，
-/// 只在后面追加各自的身份——按 `starts_with` 消费的旧逻辑仍然命中，
-/// 按值比较的新逻辑才分得清是哪一处查询失败。
-/// 它们仍是 `Err(String)`，不是 outcome：错误类型、返回形状、控制流未动。
-/// 既有取值本身在生产路径上已不再单独出现（三处都改用子 family），
-/// 只有断言需要它来证明「子 family 仍以它为前缀」，故只在测试构建里保留。
-#[cfg(test)]
-const RESIDENT_DELIVERY_UNKNOWN_BASE: &str = "supervisor_resident_message_delivery_unknown";
-const RESIDENT_DELIVERY_UNKNOWN_REPLAY_LOOKUP: &str =
-    "supervisor_resident_message_delivery_unknown__replay_lookup";
-const RESIDENT_DELIVERY_UNKNOWN_REPLAY_REPLY_OUTCOME: &str =
-    "supervisor_resident_message_delivery_unknown__replay_reply_outcome";
-const RESIDENT_DELIVERY_UNKNOWN_RECORD_RECHECK: &str =
-    "supervisor_resident_message_delivery_unknown__record_recheck";
-
-#[cfg(test)]
-pub(crate) fn resident_delivery_unknown_families_for_test() -> [&'static str; 4] {
-    [
-        RESIDENT_DELIVERY_UNKNOWN_BASE,
-        RESIDENT_DELIVERY_UNKNOWN_REPLAY_LOOKUP,
-        RESIDENT_DELIVERY_UNKNOWN_REPLAY_REPLY_OUTCOME,
-        RESIDENT_DELIVERY_UNKNOWN_RECORD_RECHECK,
-    ]
 }
 
 pub(crate) fn resident_conversation_lock() -> &'static Mutex<()> {
@@ -2884,9 +2771,6 @@ fn recorded_resident_reply_outcome(
             thread_id: resident_event_string(injected, "thread_id").map(str::to_string),
             supervisor_reply: None,
             message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
-            failure_family: Some(
-                resident_failure_family::REPLY_MISSING_AFTER_INJECTION.to_string(),
-            ),
         }));
     }
     Ok(None)
@@ -2917,8 +2801,6 @@ fn supervisor_resident_answer_outcome(
         thread_id: Some(thread_id.to_string()),
         supervisor_reply: Some(content.to_string()),
         message: message.to_string(),
-        // 成功路径没有失败可自报，恒为 None。
-        failure_family: None,
     }
 }
 
@@ -2982,11 +2864,7 @@ fn submit_supervisor_resident_answer_with_parts(
             Some(client_request_id),
             None,
         )
-        // A8*：三处 `delivery_unknown` 原先逐字同形，外部分不出是「按
-        // client_request_id 查重放」失败、「查主管回复」失败，还是「补记后
-        // 复查」失败。这里只把子 family 追加到既有取值后面——错误类型仍是
-        // String、返回形状与控制流一个字节没动。
-        .map_err(|_| RESIDENT_DELIVERY_UNKNOWN_REPLAY_LOOKUP.to_string())?
+        .map_err(|_| "supervisor_resident_message_delivery_unknown".to_string())?
         {
             Some((message_id, recorded_message_text)) => {
                 if recorded_message_text != request.message_text {
@@ -2999,7 +2877,7 @@ fn submit_supervisor_resident_answer_with_parts(
                     &message_id,
                     config,
                 )
-                .map_err(|_| RESIDENT_DELIVERY_UNKNOWN_REPLAY_REPLY_OUTCOME.to_string())?
+                .map_err(|_| "supervisor_resident_message_delivery_unknown".to_string())?
                 {
                     return Ok(outcome);
                 }
@@ -3009,9 +2887,6 @@ fn submit_supervisor_resident_answer_with_parts(
                     thread_id: None,
                     supervisor_reply: None,
                     message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
-                    failure_family: Some(
-                        resident_failure_family::REPLAY_RECORDED_WITHOUT_INJECTION.to_string(),
-                    ),
                 });
             }
             None => format!("user:{}", crate::unix_timestamp_nanos()),
@@ -3035,7 +2910,7 @@ fn submit_supervisor_resident_answer_with_parts(
             None,
             Some(&message_id),
         )
-        .map_err(|_| RESIDENT_DELIVERY_UNKNOWN_RECORD_RECHECK.to_string())?
+        .map_err(|_| "supervisor_resident_message_delivery_unknown".to_string())?
         .is_none()
     {
         return Ok(SupervisorResidentAnswerOutcome {
@@ -3044,7 +2919,6 @@ fn submit_supervisor_resident_answer_with_parts(
             thread_id: None,
             supervisor_reply: None,
             message: "这句没送到主管——稍后再试一次。".to_string(),
-            failure_family: None,
         });
     }
     let turn = match consult_supervisor_resident_with_parts(
@@ -3060,31 +2934,20 @@ fn submit_supervisor_resident_answer_with_parts(
     ) {
         Ok(turn) => turn,
         Err(failure) => {
-            // A4：把既有的稳定分类原样带出（13 个固定常量之一），不是自由文本。
-            let consult_family = resident_consult_failure_family(failure.diagnostic_stage);
-            // A7：诊断写入是下一次真机取证的抓手，它自己失败了必须能被看见。
-            // 仍然不改控制流——失败只追加到 family 后缀上，不影响任何判定。
-            let diagnostic_appended = append_resident_delivery_diagnostic(
+            let _ = append_resident_delivery_diagnostic(
                 workflow_state_path,
                 &request.project_id,
                 &request.workflow_id,
                 &message_id,
                 config,
                 &failure,
-            )
-            .is_ok();
-            let failure_family = if diagnostic_appended {
-                consult_family.to_string()
-            } else {
-                format!("{consult_family}{RESIDENT_DIAGNOSTIC_APPEND_FAILED_SUFFIX}")
-            };
+            );
             return Ok(SupervisorResidentAnswerOutcome {
                 status: "message_recorded_supervisor_incomplete".to_string(),
                 reply_injected: false,
                 thread_id: None,
                 supervisor_reply: None,
                 message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
-                failure_family: Some(failure_family),
             });
         }
     };
@@ -3103,9 +2966,6 @@ fn submit_supervisor_resident_answer_with_parts(
             thread_id: Some(turn.thread_id),
             supervisor_reply: None,
             message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
-            failure_family: Some(
-                resident_failure_family::INJECTED_EVENT_APPEND_FAILED.to_string(),
-            ),
         });
     }
     let proposal_outcome =
@@ -3128,9 +2988,6 @@ fn submit_supervisor_resident_answer_with_parts(
             thread_id: Some(turn.thread_id),
             supervisor_reply: None,
             message: "消息已送到主管，但主管这次没回上来——可以再发一次。".to_string(),
-            failure_family: Some(
-                resident_failure_family::SUPERVISOR_REPLY_APPEND_FAILED.to_string(),
-            ),
         });
     }
     Ok(supervisor_resident_answer_outcome(
