@@ -32,6 +32,19 @@ mod audit_ledger_read_model;
 // 5 命令（list/read/create/write/ai_write）进 generate_handler!。同上借道挂载，保持 lib.rs 0-diff。
 mod knowledge_vault;
 
+// L3 Syn 原生知识工作区 N1：固定 vault 的可重建索引与 typed snapshot/read/search 命令。
+// 文件真相仍只在 knowledge_vault 的 Markdown/Canvas/附件目录中，不落第二索引文件。
+mod knowledge_index;
+
+// L3 N6：host-owned、短期的 knowledge_open dispatch/ack relay；只在内存承载
+// 已验证 Markdown 的 intent，不能成为 vault、binding 或 workflow 的第二真相源。
+mod knowledge_open_relay;
+#[cfg(test)]
+mod knowledge_open_relay_tests;
+
+// L3 可选 Obsidian 兼容层：固定官方 App/CLI/URI 桥；不接受前端传来的 binary、vault 或任意子命令。
+mod obsidian_integration;
+
 // A·运行错误人话翻译层（C6 观测补强·纯函数·无 tauri command）。供给类判据单一真源在此，
 // runner/run_history 委托到它。同 worker_report 借道挂载·保持 lib.rs 0-diff。
 mod run_error_translation;
@@ -54,6 +67,10 @@ macro_rules! workbench_command_handler {
             run_manual_codex_relay_gui_direct_new_session,
             stop_manual_codex_relay_attempt,
             poll_manual_codex_relay_attempt,
+            start_agent_conversation_transport,
+            start_supervisor_conversation_transport,
+            poll_conversation_transport_attempt,
+            stop_conversation_transport_attempt,
             load_codex_session_transcript,
             load_codex_session_transcript_page,
             load_codex_session_page,
@@ -161,6 +178,32 @@ macro_rules! workbench_command_handler {
             knowledge_vault::knowledge_vault_create_note,
             knowledge_vault::knowledge_vault_write_note,
             knowledge_vault::knowledge_vault_ai_write,
+            knowledge_index::knowledge_workspace_snapshot,
+            knowledge_index::knowledge_workspace_vault_manifest,
+            knowledge_index::knowledge_workspace_search,
+            knowledge_index::knowledge_workspace_graph,
+            knowledge_index::knowledge_workspace_read_markdown,
+            knowledge_open_relay::acknowledge_knowledge_open_relay_intent,
+            knowledge_vault::knowledge_workspace_create_directory,
+            knowledge_vault::knowledge_workspace_create_markdown,
+            knowledge_vault::knowledge_workspace_write_markdown,
+            knowledge_vault::knowledge_canvas::knowledge_workspace_read_canvas,
+            knowledge_vault::knowledge_canvas::knowledge_workspace_create_canvas,
+            knowledge_vault::knowledge_canvas::knowledge_workspace_write_canvas,
+            knowledge_vault::knowledge_attachments::knowledge_workspace_import_attachment,
+            knowledge_vault::knowledge_attachments::knowledge_workspace_read_attachment,
+            knowledge_vault::knowledge_recovery::knowledge_workspace_create_recovery_backup,
+            knowledge_vault::knowledge_recovery::knowledge_workspace_list_recovery_backups,
+            knowledge_vault::knowledge_recovery::knowledge_workspace_restore_recovery_backup,
+            knowledge_vault::knowledge_workspace_move_entry,
+            knowledge_vault::knowledge_workspace_rename_entry,
+            knowledge_vault::knowledge_workspace_delete_entry,
+            obsidian_integration::obsidian_integration_status,
+            obsidian_integration::obsidian_integration_open_vault,
+            obsidian_integration::obsidian_integration_open_note,
+            obsidian_integration::obsidian_integration_open_search,
+            obsidian_integration::obsidian_integration_read_note,
+            obsidian_integration::obsidian_integration_search_notes,
             list_project_workflows,
             submit_project_workflow_draft,
             get_project_workflow_nodes,

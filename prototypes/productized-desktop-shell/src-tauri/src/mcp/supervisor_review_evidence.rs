@@ -466,6 +466,7 @@ mod tests {
                         max_follow_ups_per_worker: 2,
                         max_runtime_minutes: 30,
                     }),
+                    knowledge_open_relay: None,
                 },
             };
             fixture.write_active_authorization(allowed_write_roots, allowed_checks);

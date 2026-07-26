@@ -105,8 +105,9 @@ pub(crate) fn classify_run_error(raw: &str) -> RunErrorHuman {
     if classify_provider_failure_human(trimmed).is_some() {
         return RunErrorHuman {
             family: "provider_unavailable".to_string(),
-            human: "codex 供给不可用（订阅/额度/登录类，非网络抽风）——请检查订阅/额度/登录，别空重试。"
-                .to_string(),
+            human:
+                "codex 供给不可用（订阅/额度/登录类，非网络抽风）——请检查订阅/额度/登录，别空重试。"
+                    .to_string(),
             raw_snippet,
         };
     }
@@ -122,7 +123,8 @@ pub(crate) fn classify_run_error(raw: &str) -> RunErrorHuman {
     if has("timed out") || has("timeout") {
         return RunErrorHuman {
             family: "timeout".to_string(),
-            human: "这一步超时被中止了（一般是活太大）；系统可能已自动打回主管拆细重来。".to_string(),
+            human: "这一步超时被中止了（一般是活太大）；系统可能已自动打回主管拆细重来。"
+                .to_string(),
             raw_snippet,
         };
     }
@@ -197,7 +199,8 @@ mod tests {
     #[test]
     fn humanize_for_display_matches_old_humanize_semantics() {
         // 供给类前缀 → 剥前缀取内嵌人话（同 secretary/global 老测试）。
-        let out = humanize_error_for_display("codex_provider_unavailable:codex 额度用完了，明天再试");
+        let out =
+            humanize_error_for_display("codex_provider_unavailable:codex 额度用完了，明天再试");
         assert!(out.contains("额度用完"), "取内嵌人话：{out}");
         assert!(!out.contains("codex_provider_unavailable:"), "前缀剥掉");
         assert_eq!(
@@ -208,7 +211,9 @@ mod tests {
         let raw = "some totally novel error blorp";
         assert_eq!(humanize_error_for_display(raw), raw, "unknown 回退原文");
         // 可识别的非供给错误 → 翻人话（改进·比老 humanize 原样透传更好）。
-        assert!(humanize_error_for_display("consult_last_message_read_failed: gone").contains("口供"));
+        assert!(
+            humanize_error_for_display("consult_last_message_read_failed: gone").contains("口供")
+        );
     }
 
     // 供给类判据搬家后**不回归**（与 fix8_classify_codex_provider_failure_hits_and_misses 同样本）。
@@ -223,10 +228,15 @@ mod tests {
             "subscription_not_found",
             "Reconnecting... 5/5 then gave up",
         ] {
-            assert!(classify_provider_failure_human(sample).is_some(), "应命中：{sample}");
+            assert!(
+                classify_provider_failure_human(sample).is_some(),
+                "应命中：{sample}"
+            );
         }
         assert!(classify_provider_failure_human("").is_none());
-        assert!(classify_provider_failure_human("thread 'main' panicked at foo.rs line 12").is_none());
+        assert!(
+            classify_provider_failure_human("thread 'main' panicked at foo.rs line 12").is_none()
+        );
         assert!(classify_provider_failure_human("Reconnecting... 1/5").is_none());
     }
 
@@ -259,20 +269,47 @@ mod tests {
     #[test]
     fn seven_families_each_hit_and_carry_raw() {
         let cases: [(&str, &str); 7] = [
-            ("unexpected status 403 SUBSCRIPTION_NOT_FOUND", "provider_unavailable"),
+            (
+                "unexpected status 403 SUBSCRIPTION_NOT_FOUND",
+                "provider_unavailable",
+            ),
             ("Reconnecting... 2/5 stream disconnected", "network"),
             ("worker dispatch TIMED OUT after 600s", "timeout"),
-            ("attempt to write a readonly database (state db)", "sandbox_denied"),
-            ("codex_exec_resume_exit_code_1 exit nonzero", "command_failed"),
-            ("codex_memories_write::phase2::job: failed to claim job (no such table: jobs)", "codex_subsystem"),
-            ("consult_last_message_read_failed: file gone", "readback_failed"),
+            (
+                "attempt to write a readonly database (state db)",
+                "sandbox_denied",
+            ),
+            (
+                "codex_exec_resume_exit_code_1 exit nonzero",
+                "command_failed",
+            ),
+            (
+                "codex_memories_write::phase2::job: failed to claim job (no such table: jobs)",
+                "codex_subsystem",
+            ),
+            (
+                "consult_last_message_read_failed: file gone",
+                "readback_failed",
+            ),
         ];
         for (raw, family) in cases {
             let out = classify_run_error(raw);
             assert_eq!(out.family, family, "raw={raw}");
             assert!(!out.human.trim().is_empty(), "human 非空：{raw}");
-            assert!(!out.raw_snippet.trim().is_empty(), "raw_snippet 必带原文：{raw}");
-            assert!(raw.to_lowercase().contains(&out.raw_snippet.to_lowercase().chars().take(10).collect::<String>()), "raw_snippet 是原文片段");
+            assert!(
+                !out.raw_snippet.trim().is_empty(),
+                "raw_snippet 必带原文：{raw}"
+            );
+            assert!(
+                raw.to_lowercase().contains(
+                    &out.raw_snippet
+                        .to_lowercase()
+                        .chars()
+                        .take(10)
+                        .collect::<String>()
+                ),
+                "raw_snippet 是原文片段"
+            );
         }
         // 大小写不敏感：全大写超时也命中。
         assert_eq!(classify_run_error("FATAL: TIMEOUT").family, "timeout");
@@ -298,7 +335,11 @@ mod tests {
         let raw = "totally novel gibberish blorp 42";
         let out = classify_run_error(raw);
         assert_eq!(out.family, "unknown");
-        assert!(out.human.contains("未识别"), "保守人话·不装懂：{}", out.human);
+        assert!(
+            out.human.contains("未识别"),
+            "保守人话·不装懂：{}",
+            out.human
+        );
         assert!(out.raw_snippet.contains("blorp"), "原文必带");
         // 空输入也不炸、也 unknown。
         assert_eq!(classify_run_error("   ").family, "unknown");
@@ -313,7 +354,11 @@ mod tests {
             "state db permission denied",
             "state_5.sqlite read-only",
         ] {
-            assert_eq!(classify_run_error(raw).family, "sandbox_denied", "raw={raw}");
+            assert_eq!(
+                classify_run_error(raw).family,
+                "sandbox_denied",
+                "raw={raw}"
+            );
         }
     }
 }

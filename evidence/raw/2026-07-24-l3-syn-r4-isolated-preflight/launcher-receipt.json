@@ -1,0 +1,31 @@
+{
+  "schema_version": "syn_r4_isolated_preflight_receipt.v1",
+  "run_hash": "7a159e7e08c7e3efc0dcc790f219c1f4d304252d970e30db8214cf753e076f3b",
+  "resolved_root_containment": {
+    "app_data": true,
+    "canvas": true,
+    "codex_db": true,
+    "index": true,
+    "logs": true,
+    "project": true,
+    "recovery_backups": true,
+    "tasks": true,
+    "vault": true,
+    "workflow_state": true
+  },
+  "synthetic_identity_hash": "68156e7379b7a3df635cc0cf4f71897a024508aab893edcf64c9296248b6932f",
+  "session_source": "IndexOnly",
+  "build": {
+    "exit_code": 0,
+    "launched": true,
+    "signal": null
+  },
+  "syn": {
+    "exit_code": null,
+    "launched": true,
+    "signal": "SIGTERM"
+  },
+  "failure_stage": "isolated_syn",
+  "environment_unchanged": true,
+  "home_initial_view_verified": true
+}

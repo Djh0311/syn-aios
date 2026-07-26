@@ -271,6 +271,73 @@ impl SupervisorResidentOneShotRunner for MockOneShotRunner {
     }
 }
 
+struct FixtureOutputInitFailureRunner {
+    raw_marker: String,
+    calls: AtomicUsize,
+}
+
+impl SupervisorResidentOneShotRunner for FixtureOutputInitFailureRunner {
+    fn run(
+        &self,
+        plan: &SupervisorResidentOneShotPlan,
+        home: &SupervisorResidentHome,
+        on_turn_prepared: &mut dyn FnMut(u32) -> Result<(), String>,
+        on_thread_started: &mut dyn FnMut(&str, u32) -> Result<(), String>,
+    ) -> Result<SupervisorResidentTurn, SupervisorResidentOneShotFailure> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let blocked_parent = home.root().join(&self.raw_marker);
+        fs::write(&blocked_parent, "fixture output parent is a file").map_err(|error| {
+            SupervisorResidentOneShotFailure::Protocol(format!(
+                "fixture_output_init_setup_failed:{error}"
+            ))
+        })?;
+        let mut failed_plan = plan.clone();
+        failed_plan.command_plan.stderr_path = blocked_parent.join("step-0.stderr.txt");
+        run_real_supervisor_resident_oneshot(
+            &failed_plan,
+            home,
+            on_turn_prepared,
+            on_thread_started,
+        )
+    }
+}
+
+struct FixturePreparedLifecycleFailureRunner {
+    program: String,
+    raw_marker: String,
+    child_started: AtomicUsize,
+}
+
+impl SupervisorResidentOneShotRunner for FixturePreparedLifecycleFailureRunner {
+    fn run(
+        &self,
+        plan: &SupervisorResidentOneShotPlan,
+        home: &SupervisorResidentHome,
+        _on_turn_prepared: &mut dyn FnMut(u32) -> Result<(), String>,
+        _on_thread_started: &mut dyn FnMut(&str, u32) -> Result<(), String>,
+    ) -> Result<SupervisorResidentTurn, SupervisorResidentOneShotFailure> {
+        let mut failed_plan = plan.clone();
+        failed_plan.command_plan.program = self.program.clone();
+        failed_plan.command_plan.current_dir = failed_plan
+            .workflow_state_path
+            .parent()
+            .expect("fixture workflow state parent")
+            .display()
+            .to_string();
+        let mut fail_prepared_after_child_start = |pid: u32| {
+            self.child_started.store(pid as usize, Ordering::SeqCst);
+            Err(self.raw_marker.clone())
+        };
+        let mut no_binding_after_failed_prepare = |_thread_id: &str, _pid: u32| Ok(());
+        run_real_supervisor_resident_oneshot(
+            &failed_plan,
+            home,
+            &mut fail_prepared_after_child_start,
+            &mut no_binding_after_failed_prepare,
+        )
+    }
+}
+
 struct FirstTurnBindingRaceRunner {
     config: McpServerConfig,
 }
@@ -372,6 +439,7 @@ fn resident_fixture_manager(root: &Path) -> SupervisorResidentHomeManager {
     SupervisorResidentHomeManager {
         base: root.join("private-resident-home"),
         auth_source,
+        fail_create_active_after_staging: false,
     }
 }
 
@@ -487,6 +555,123 @@ fn write_owner_only_test_config(path: &Path, text: &str) {
     }
 }
 
+fn write_owner_only_test_file(path: &Path, bytes: &[u8]) {
+    fs::write(path, bytes).expect("write test resident private file");
+    #[cfg(unix)]
+    {
+        let mut permissions = fs::metadata(path)
+            .expect("inspect test resident private file")
+            .permissions();
+        permissions.set_mode(0o600);
+        fs::set_permissions(path, permissions).expect("make test resident private file owner-only");
+    }
+}
+
+#[cfg(unix)]
+fn set_test_mode(path: &Path, mode: u32) {
+    let mut permissions = fs::metadata(path)
+        .expect("inspect fixture permissions")
+        .permissions();
+    permissions.set_mode(mode);
+    fs::set_permissions(path, permissions).expect("set fixture permissions");
+}
+
+fn config_drift_quarantine_fixture(
+    label: &str,
+) -> (
+    PathBuf,
+    SupervisorResidentHomeManager,
+    McpServerConfig,
+    SupervisorCommandPlan,
+    String,
+) {
+    let (state_path, _workflow_id, root) = resident_fixture(label);
+    let manager = resident_fixture_manager(&root);
+    let config = resident_fixture_config(&state_path);
+    let executable = std::env::current_exe().expect("locate fixture workbench executable");
+    let initial_plan = build_supervisor_resident_command_plan(
+        crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+        &state_path,
+        &resident_run_id(crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT),
+        1,
+        &executable,
+        None,
+    )
+    .expect("build trusted first-generation command plan");
+    let active = manager
+        .ensure_active(&initial_plan, &config, 1)
+        .expect("create trusted first-generation private home");
+    let config_path = active.root().join(SUPERVISOR_TEMP_HOME_CONFIG);
+    let drifted_config = format!(
+        "{}\n[fixture_unknown_config_drift]\nvalue = true\n",
+        fs::read_to_string(&config_path).expect("read trusted fixture config")
+    );
+    write_owner_only_test_config(&config_path, &drifted_config);
+    let replacement_plan = build_supervisor_resident_command_plan(
+        crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
+        &state_path,
+        &resident_run_id(crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT),
+        2,
+        &executable,
+        None,
+    )
+    .expect("build replacement command plan");
+    (root, manager, config, replacement_plan, drifted_config)
+}
+
+fn assert_config_drift_quarantine_rejected(
+    manager: &SupervisorResidentHomeManager,
+    plan: &SupervisorCommandPlan,
+    config: &McpServerConfig,
+) {
+    let active = manager.active_path();
+    let active_before = fs::symlink_metadata(&active).expect("inspect refused active home");
+    assert!(
+        manager
+            .quarantine_config_drift_active(plan, config, 1, 2)
+            .is_err(),
+        "an untrusted home must not enter config-drift quarantine"
+    );
+    let active_after = fs::symlink_metadata(&active).expect("active home remains after refusal");
+    assert_eq!(
+        active_after.file_type().is_dir(),
+        active_before.file_type().is_dir(),
+        "refusal must leave the active home in place"
+    );
+    assert_eq!(
+        active_after.file_type().is_symlink(),
+        active_before.file_type().is_symlink(),
+        "refusal must not replace the active home"
+    );
+    assert!(
+        fs::symlink_metadata(manager.base.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE)).is_err(),
+        "a rejected home must not create an archive"
+    );
+    assert!(
+        fs::read_dir(&manager.base)
+            .expect("read fixture home base")
+            .all(|entry| {
+                !entry
+                    .expect("read fixture home base entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".active-staging-")
+            }),
+        "a rejected home must not create staging"
+    );
+}
+
+fn config_drift_quarantine_refusal_case<F>(label: &str, mutate: F)
+where
+    F: FnOnce(&mut SupervisorResidentHomeManager, &McpServerConfig),
+{
+    let (root, mut manager, config, replacement_plan, _drifted_config) =
+        config_drift_quarantine_fixture(label);
+    mutate(&mut manager, &config);
+    assert_config_drift_quarantine_rejected(&manager, &replacement_plan, &config);
+    fixture_cleanup(&root);
+}
+
 fn resident_request(workflow_id: &str, message: &str) -> SubmitSupervisorResidentAnswerRequest {
     SubmitSupervisorResidentAnswerRequest {
         project_id: crate::project_id(crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT),
@@ -517,6 +702,131 @@ fn resident_supervisor_audit_events(state_path: &Path) -> Vec<Value> {
         .as_array()
         .expect("supervisor audit events")
         .clone()
+}
+
+fn resident_delivery_diagnostics_for_message(state_path: &Path, message_id: &str) -> Vec<Value> {
+    resident_canonical_events(state_path)
+        .expect("canonical resident events")
+        .into_iter()
+        .filter(|event| {
+            event["event_type"] == "supervisor_resident_delivery_diagnostic_recorded"
+                && event["message_id"] == message_id
+        })
+        .collect()
+}
+
+fn resident_recorded_message_id_for_client(
+    state_path: &Path,
+    client_request_id: Option<&str>,
+) -> String {
+    resident_canonical_events(state_path)
+        .expect("canonical resident events")
+        .into_iter()
+        .find(|event| {
+            event["event_type"] == SUPERVISOR_RESIDENT_USER_MESSAGE_RECORDED_EVENT
+                && match client_request_id {
+                    Some(client_request_id) => event["client_request_id"] == client_request_id,
+                    None => true,
+                }
+        })
+        .and_then(|event| event["message_id"].as_str().map(str::to_string))
+        .expect("recorded canonical user message id")
+}
+
+fn assert_sanitized_delivery_diagnostic(
+    state_path: &Path,
+    workflow_id: &str,
+    message_id: &str,
+    expected_stage: &str,
+    expected_family: &str,
+    raw_marker: &str,
+) {
+    let diagnostics = resident_delivery_diagnostics_for_message(state_path, message_id);
+    assert_eq!(
+        diagnostics.len(),
+        1,
+        "one failed recorded message has exactly one canonical diagnostic"
+    );
+    let diagnostic = &diagnostics[0];
+    assert_eq!(diagnostic["stage"], expected_stage);
+    assert_eq!(diagnostic["stable_error_family"], expected_family);
+    assert_eq!(diagnostic["message_id"], message_id);
+    assert_eq!(diagnostic["workflow_id"], workflow_id);
+    assert!(diagnostic["run_id"].as_str().is_some());
+    assert!(diagnostic["generation"].as_u64().is_some());
+    assert!(diagnostic["thread_id"].is_null());
+    assert!(diagnostic["event_id"].as_str().is_some());
+    assert!(
+        !diagnostic["target_ref"]
+            .as_str()
+            .expect("internal diagnostic target ref")
+            .contains(workflow_id),
+        "internal diagnostic must not be projected into the user workflow ledger"
+    );
+    let fields = diagnostic
+        .as_object()
+        .expect("diagnostic object")
+        .keys()
+        .map(String::as_str)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        fields,
+        std::collections::BTreeSet::from([
+            "created_at",
+            "event_id",
+            "event_type",
+            "generation",
+            "message_id",
+            "project_id",
+            "run_id",
+            "stable_error_family",
+            "stage",
+            "target_ref",
+            "workflow_id",
+        ]),
+        "diagnostic has only the safe canonical schema plus the required audit key"
+    );
+    let canonical_text = fs::read_to_string(state_path).expect("read canonical workflow state");
+    assert!(
+        !canonical_text.contains(raw_marker),
+        "raw failure detail must not enter canonical JSON"
+    );
+    let canonical_events = resident_canonical_events(state_path).expect("canonical events");
+    let ledger_entries =
+        crate::derive_workflow_ledger_entries(workflow_id, &canonical_events, &[], &[], &[]);
+    let diagnostic_event_id = diagnostic["event_id"]
+        .as_str()
+        .expect("diagnostic event id");
+    assert!(
+        ledger_entries
+            .iter()
+            .all(|entry| entry.ledger_entry_id != diagnostic_event_id),
+        "internal diagnostic must not change the user workflow ledger"
+    );
+}
+
+fn assert_no_message_injection_or_reply(state_path: &Path, message_id: &str) {
+    let events = resident_canonical_events(state_path).expect("canonical resident events");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| {
+                event["event_type"] == SUPERVISOR_RESIDENT_USER_MESSAGE_INJECTED_EVENT
+                    && event["message_id"] == message_id
+            })
+            .count(),
+        0
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| {
+                event["event_type"] == SUPERVISOR_RESIDENT_SUPERVISOR_MESSAGE_RECORDED_EVENT
+                    && event["reply_to_message_id"] == message_id
+            })
+            .count(),
+        0
+    );
 }
 
 fn fixture_cleanup(root: &Path) {
@@ -679,8 +989,10 @@ fn s1b_h2_turn_failed_remains_hard_failure_after_a_message() {
     .expect_err("turn.failed must remain terminal even after an agent message");
     assert!(matches!(
         error,
-        SupervisorResidentOneShotFailure::Protocol(detail)
-            if detail == "supervisor_resident_turn_failed:fixture hard failure"
+        SupervisorResidentOneShotFailure::Classified {
+            diagnostic_stage: SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+            detail,
+        } if detail == "supervisor_resident_turn_failed:fixture hard failure"
     ));
 }
 
@@ -699,8 +1011,10 @@ fn s1b_h2_error_without_completion_remains_hard_failure() {
     .expect_err("error without turn.completed must not become success");
     assert!(matches!(
         error,
-        SupervisorResidentOneShotFailure::Protocol(detail)
-            if detail == "supervisor_resident_turn_completed_event_missing"
+        SupervisorResidentOneShotFailure::Classified {
+            diagnostic_stage: SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+            detail,
+        } if detail == "supervisor_resident_turn_completed_event_missing"
     ));
 }
 
@@ -718,8 +1032,10 @@ fn s1b_h2_resume_prebinding_cannot_replace_a_real_stdout_thread_started() {
     .expect_err("a pre-registered resume thread is not stdout completion evidence");
     assert!(matches!(
         error,
-        SupervisorResidentOneShotFailure::Protocol(detail)
-            if detail == "supervisor_resident_thread_started_event_missing"
+        SupervisorResidentOneShotFailure::Classified {
+            diagnostic_stage: SupervisorResidentDeliveryDiagnosticStage::ThreadBinding,
+            detail,
+        } if detail == "supervisor_resident_thread_started_event_missing"
     ));
 }
 
@@ -972,6 +1288,10 @@ fn s1b_h2_only_an_exact_legacy_private_config_migrates_to_the_single_tool_config
         fs::read_to_string(&config_path).expect("read rejected drift bytes"),
         drifted,
         "fail-closed validation must not overwrite an unrecognized private config"
+    );
+    assert!(
+        fs::symlink_metadata(manager.base.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE)).is_err(),
+        "expected and exact legacy configs must never enter config-drift quarantine"
     );
     fixture_cleanup(&root);
 }
@@ -1566,6 +1886,688 @@ fn s1b_startup_reaps_dead_virgin_prepared_turn_without_thread_binding() {
 }
 
 #[test]
+fn s1b_h2_config_drift_quarantines_trusted_active_and_restarts_generation() {
+    let (state_path, workflow_id, root) = resident_fixture("config-drift-quarantine");
+    let manager = resident_fixture_manager(&root);
+    let config = resident_fixture_config(&state_path);
+    let chain_before: Value =
+        serde_json::from_slice::<Value>(&fs::read(&state_path).expect("workflow state"))
+            .expect("workflow JSON")["workflow_chain_runs"]
+            .clone();
+    let hook_config = config.clone();
+    let hook_turn = Arc::new(AtomicUsize::new(0));
+    let hook_turn_for_closure = Arc::clone(&hook_turn);
+    let hook = Arc::new(move || {
+        // The first binding is the old generation. Only the replacement
+        // initial turn may exercise the preserved H2 submit_proposal grant.
+        if hook_turn_for_closure.fetch_add(1, Ordering::SeqCst) != 1 {
+            return Ok(());
+        }
+        let response = supervisor_orchestrator::call_tool(
+            &hook_config,
+            json!({"name": "submit_proposal", "arguments": valid_submit_proposal_arguments()}),
+        )?;
+        let receipt: Value = serde_json::from_str(
+            response["content"][0]["text"]
+                .as_str()
+                .ok_or_else(|| "config-drift proposal receipt missing".to_string())?,
+        )
+        .map_err(|error| format!("config-drift proposal receipt malformed:{error}"))?;
+        if receipt["status"] != "proposal_created_pending_user_confirmation" {
+            return Err("config-drift proposal was not a pending card".to_string());
+        }
+        Ok(())
+    });
+    let runner = MockOneShotRunner::new(vec![
+        MockOneShotOutcome::Turn {
+            thread_id: "thread-s1b-config-drift-old".to_string(),
+            content: "保留 CONFIG_DRIFT_FACT。".to_string(),
+        },
+        MockOneShotOutcome::Turn {
+            thread_id: "thread-s1b-config-drift-new".to_string(),
+            content: "隔离后的新 generation 首轮已完成。".to_string(),
+        },
+        MockOneShotOutcome::Turn {
+            thread_id: "thread-s1b-config-drift-new".to_string(),
+            content: "新 generation 的后续回合已续接。".to_string(),
+        },
+    ])
+    .with_after_bind(hook);
+
+    let initial = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &resident_request(&workflow_id, "先建立将被隔离的旧 generation。"),
+        &config,
+    )
+    .expect("first generation");
+    assert_eq!(
+        initial.thread_id.as_deref(),
+        Some("thread-s1b-config-drift-old")
+    );
+
+    let active = manager.active_path();
+    let config_path = active.join(SUPERVISOR_TEMP_HOME_CONFIG);
+    let private_marker = "R1_CONFIG_DRIFT_PRIVATE_SENTINEL";
+    let drifted_config = format!(
+        "{}\n[fixture_unknown_config_drift]\nmarker = \"{private_marker}\"\n",
+        fs::read_to_string(&config_path).expect("read current resident config")
+    );
+    write_owner_only_test_config(&config_path, &drifted_config);
+    let old_plan = runner
+        .plans
+        .lock()
+        .expect("old generation command plan")
+        .first()
+        .expect("one old generation plan")
+        .command_plan
+        .clone();
+    assert!(matches!(
+        manager.ensure_active_or_config_drift(&old_plan, &config, 1),
+        Err(SupervisorResidentEnsureActiveError::ConfigDrift)
+    ));
+
+    let replacement = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &resident_request(&workflow_id, "当前消息必须从隔离后的新 generation 开始。"),
+        &config,
+    )
+    .expect("config drift quarantines the trusted old generation");
+    let follow_up = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &resident_request(&workflow_id, "请续接隔离后的新 generation。"),
+        &config,
+    )
+    .expect("follow-up resumes the replacement generation");
+
+    assert_eq!(
+        replacement.thread_id.as_deref(),
+        Some("thread-s1b-config-drift-new")
+    );
+    assert_eq!(follow_up.thread_id, replacement.thread_id);
+    let plans = runner.plans.lock().expect("recorded plans");
+    assert_eq!(plans.len(), 3);
+    assert!(
+        !plans[1].command_plan.argv.iter().any(|arg| arg == "resume"),
+        "the config-drift message must never attempt the old resume"
+    );
+    assert!(plans[1].prompt.contains("换代/首轮核心事实"));
+    assert!(plans[1].prompt.contains("CONFIG_DRIFT_FACT"));
+    assert!(
+        plans[2].command_plan.argv.iter().any(|arg| arg == "resume")
+            && plans[2].expected_thread_id.as_deref() == Some("thread-s1b-config-drift-new"),
+        "the following message must resume only the replacement thread"
+    );
+    let replacement_plan = plans[1].command_plan.clone();
+    drop(plans);
+
+    let archive_root = manager.base.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE);
+    let archived = fs::read_dir(&archive_root)
+        .expect("old active is quarantined")
+        .next()
+        .expect("one quarantined generation")
+        .expect("read quarantined generation")
+        .path();
+    assert_eq!(
+        fs::read_to_string(archived.join(SUPERVISOR_TEMP_HOME_CONFIG))
+            .expect("read quarantined unknown config"),
+        drifted_config,
+        "quarantine must preserve unknown config bytes without migration"
+    );
+    assert_eq!(
+        fs::read_to_string(active.join(SUPERVISOR_TEMP_HOME_CONFIG))
+            .expect("read replacement config"),
+        supervisor_resident_mcp_config_toml(&replacement_plan)
+            .expect("render exact replacement config")
+    );
+    let metadata: SupervisorResidentHomeMetadata = serde_json::from_slice(
+        &fs::read(active.join(SUPERVISOR_RESIDENT_HOME_METADATA))
+            .expect("read replacement metadata"),
+    )
+    .expect("parse replacement metadata");
+    assert_eq!(metadata.generation, 2);
+    let session = supervisor_orchestrator::load_resident_session(&config)
+        .expect("load replacement session")
+        .expect("replacement session");
+    assert_eq!(session.thread_id, "thread-s1b-config-drift-new");
+    assert_eq!(session.generation, 2);
+    assert_eq!(runner.hook_calls.load(Ordering::SeqCst), 3);
+    assert_eq!(hook_turn.load(Ordering::SeqCst), 3);
+    let proposal_store = crate::project_consultation_proposal_store::load_store(
+        &state_path,
+        crate::unix_timestamp_ms(),
+    )
+    .expect("config-drift proposal store");
+    assert_eq!(proposal_store.proposals.len(), 1);
+    assert_eq!(
+        proposal_store.proposals[0].status,
+        crate::ProjectConsultationProposalStatus::PendingUserConfirmation
+    );
+    let workflow_after: Value =
+        serde_json::from_slice(&fs::read(&state_path).expect("workflow after replacement"))
+            .expect("workflow JSON after replacement");
+    assert_eq!(workflow_after["workflow_chain_runs"], chain_before);
+    let ordinary_read_model = serde_json::to_string(
+        &resident_canonical_events(&state_path).expect("canonical resident events"),
+    )
+    .expect("serialize ordinary resident read model");
+    let audit_read_model = serde_json::to_string(&resident_supervisor_audit_events(&state_path))
+        .expect("serialize resident audit read model");
+    assert!(!ordinary_read_model.contains(private_marker));
+    assert!(!audit_read_model.contains(private_marker));
+    fixture_cleanup(&root);
+}
+
+#[cfg(unix)]
+#[test]
+fn s1b_h2_config_drift_quarantine_refuses_unsafe_active_or_private_files() {
+    config_drift_quarantine_refusal_case("config-drift-malformed", |manager, _config| {
+        write_owner_only_test_config(
+            &manager.active_path().join(SUPERVISOR_TEMP_HOME_CONFIG),
+            "fixture = [",
+        );
+    });
+    config_drift_quarantine_refusal_case("config-drift-missing", |manager, _config| {
+        fs::remove_file(manager.active_path().join(SUPERVISOR_TEMP_HOME_CONFIG))
+            .expect("remove fixture config");
+    });
+    config_drift_quarantine_refusal_case("config-drift-config-symlink", |manager, _config| {
+        let active = manager.active_path();
+        let config_path = active.join(SUPERVISOR_TEMP_HOME_CONFIG);
+        let target = manager.base.join("fixture-config-target");
+        write_owner_only_test_file(&target, b"fixture config target");
+        fs::remove_file(&config_path).expect("remove fixture config before symlink");
+        std::os::unix::fs::symlink(&target, &config_path).expect("create fixture config symlink");
+    });
+    config_drift_quarantine_refusal_case("config-drift-metadata-symlink", |manager, _config| {
+        let active = manager.active_path();
+        let metadata_path = active.join(SUPERVISOR_RESIDENT_HOME_METADATA);
+        let target = manager.base.join("fixture-metadata-target");
+        write_owner_only_test_file(&target, b"{}");
+        fs::remove_file(&metadata_path).expect("remove fixture metadata before symlink");
+        std::os::unix::fs::symlink(&target, &metadata_path)
+            .expect("create fixture metadata symlink");
+    });
+    config_drift_quarantine_refusal_case("config-drift-config-permissions", |manager, _config| {
+        set_test_mode(
+            &manager.active_path().join(SUPERVISOR_TEMP_HOME_CONFIG),
+            0o640,
+        );
+    });
+    config_drift_quarantine_refusal_case(
+        "config-drift-metadata-permissions",
+        |manager, _config| {
+            set_test_mode(
+                &manager
+                    .active_path()
+                    .join(SUPERVISOR_RESIDENT_HOME_METADATA),
+                0o640,
+            );
+        },
+    );
+    config_drift_quarantine_refusal_case("config-drift-active-permissions", |manager, _config| {
+        set_test_mode(&manager.active_path(), 0o755);
+    });
+    config_drift_quarantine_refusal_case("config-drift-config-unreadable", |manager, _config| {
+        set_test_mode(
+            &manager.active_path().join(SUPERVISOR_TEMP_HOME_CONFIG),
+            0o000,
+        );
+    });
+    config_drift_quarantine_refusal_case("config-drift-active-symlink", |manager, _config| {
+        let active = manager.active_path();
+        let parked = manager.base.join("fixture-active-parked");
+        fs::rename(&active, &parked).expect("park fixture active home");
+        std::os::unix::fs::symlink(&parked, &active).expect("create fixture active symlink");
+    });
+}
+
+#[cfg(unix)]
+#[test]
+fn s1b_h2_config_drift_quarantine_refuses_metadata_or_auth_mismatch() {
+    config_drift_quarantine_refusal_case("config-drift-metadata-run", |manager, _config| {
+        let metadata_path = manager
+            .active_path()
+            .join(SUPERVISOR_RESIDENT_HOME_METADATA);
+        let mut metadata: SupervisorResidentHomeMetadata =
+            serde_json::from_slice(&fs::read(&metadata_path).expect("read fixture metadata"))
+                .expect("parse fixture metadata");
+        metadata.run_id = "fixture-wrong-run".to_string();
+        write_owner_only_test_file(
+            &metadata_path,
+            &serde_json::to_vec(&metadata).expect("serialize mismatched run metadata"),
+        );
+    });
+    config_drift_quarantine_refusal_case("config-drift-metadata-workflow", |manager, _config| {
+        let metadata_path = manager
+            .active_path()
+            .join(SUPERVISOR_RESIDENT_HOME_METADATA);
+        let mut metadata: SupervisorResidentHomeMetadata =
+            serde_json::from_slice(&fs::read(&metadata_path).expect("read fixture metadata"))
+                .expect("parse fixture metadata");
+        metadata.workflow_state_path = PathBuf::from("fixture-wrong-workflow-state");
+        write_owner_only_test_file(
+            &metadata_path,
+            &serde_json::to_vec(&metadata).expect("serialize mismatched workflow metadata"),
+        );
+    });
+    config_drift_quarantine_refusal_case("config-drift-metadata-generation", |manager, _config| {
+        let metadata_path = manager
+            .active_path()
+            .join(SUPERVISOR_RESIDENT_HOME_METADATA);
+        let mut metadata: SupervisorResidentHomeMetadata =
+            serde_json::from_slice(&fs::read(&metadata_path).expect("read fixture metadata"))
+                .expect("parse fixture metadata");
+        metadata.generation = 2;
+        write_owner_only_test_file(
+            &metadata_path,
+            &serde_json::to_vec(&metadata).expect("serialize mismatched generation metadata"),
+        );
+    });
+    config_drift_quarantine_refusal_case("config-drift-auth-regular", |manager, _config| {
+        let auth_path = manager.active_path().join(SUPERVISOR_TEMP_HOME_AUTH);
+        fs::remove_file(&auth_path).expect("remove fixture auth symlink");
+        write_owner_only_test_file(&auth_path, b"fixture auth copy");
+    });
+    config_drift_quarantine_refusal_case("config-drift-auth-mismatch", |manager, _config| {
+        let auth_path = manager.active_path().join(SUPERVISOR_TEMP_HOME_AUTH);
+        let target = manager.base.join("fixture-wrong-auth-source");
+        write_owner_only_test_file(&target, b"fixture wrong auth source");
+        fs::remove_file(&auth_path).expect("remove fixture auth symlink");
+        std::os::unix::fs::symlink(&target, &auth_path).expect("create mismatched auth symlink");
+    });
+    config_drift_quarantine_refusal_case("config-drift-auth-source-symlink", |manager, _config| {
+        let target = manager.base.join("fixture-auth-source-target");
+        fs::rename(&manager.auth_source, &target).expect("park fixture auth source");
+        std::os::unix::fs::symlink(&target, &manager.auth_source)
+            .expect("create fixture auth-source symlink");
+    });
+}
+
+#[cfg(unix)]
+#[test]
+fn s1b_h2_config_drift_quarantine_refuses_untrusted_archive_root() {
+    let (root, manager, config, replacement_plan, drifted_config) =
+        config_drift_quarantine_fixture("config-drift-archive-permissions");
+    let active = manager.active_path();
+    let archive_root = manager.base.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE);
+    fs::create_dir(&archive_root).expect("create fixture archive root");
+    set_test_mode(&archive_root, 0o755);
+    assert!(
+        manager
+            .quarantine_config_drift_active(&replacement_plan, &config, 1, 2)
+            .is_err(),
+        "a non-owner-only archive root must reject config-drift quarantine"
+    );
+    assert!(active.is_dir());
+    assert_eq!(
+        fs::read_to_string(active.join(SUPERVISOR_TEMP_HOME_CONFIG))
+            .expect("read active config after archive-root refusal"),
+        drifted_config
+    );
+    assert!(fs::read_dir(&archive_root)
+        .expect("read refused archive root")
+        .next()
+        .is_none());
+    fixture_cleanup(&root);
+
+    let (root, manager, config, replacement_plan, drifted_config) =
+        config_drift_quarantine_fixture("config-drift-archive-symlink");
+    let active = manager.active_path();
+    let archive_root = manager.base.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE);
+    let archive_target = manager.base.join("fixture-archive-target");
+    fs::create_dir(&archive_target).expect("create fixture archive target");
+    std::os::unix::fs::symlink(&archive_target, &archive_root)
+        .expect("create fixture archive symlink");
+    assert!(
+        manager
+            .quarantine_config_drift_active(&replacement_plan, &config, 1, 2)
+            .is_err(),
+        "a symlink archive root must reject config-drift quarantine"
+    );
+    assert!(active.is_dir());
+    assert_eq!(
+        fs::read_to_string(active.join(SUPERVISOR_TEMP_HOME_CONFIG))
+            .expect("read active config after archive symlink refusal"),
+        drifted_config
+    );
+    assert!(fs::read_dir(&archive_target)
+        .expect("read fixture archive target")
+        .next()
+        .is_none());
+    fixture_cleanup(&root);
+}
+
+#[cfg(unix)]
+#[test]
+fn s1b_h2_config_drift_base_symlink_is_rejected_before_permission_mutation() {
+    let (root, manager, config, replacement_plan, _drifted_config) =
+        config_drift_quarantine_fixture("config-drift-base-symlink");
+    let base = manager.base.clone();
+    let parked = root.join("fixture-base-parked");
+    fs::rename(&base, &parked).expect("park fixture home base");
+    set_test_mode(&parked, 0o755);
+    let mode_before = fs::metadata(&parked)
+        .expect("inspect parked base permissions")
+        .permissions()
+        .mode()
+        & 0o777;
+    std::os::unix::fs::symlink(&parked, &base).expect("create fixture base symlink");
+
+    assert!(matches!(
+        manager.ensure_active_or_config_drift(&replacement_plan, &config, 1),
+        Err(SupervisorResidentEnsureActiveError::Other(_))
+    ));
+    let mode_after = fs::metadata(&parked)
+        .expect("inspect parked base after refusal")
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode_after, mode_before);
+    assert!(fs::symlink_metadata(&base)
+        .expect("inspect refused base")
+        .file_type()
+        .is_symlink());
+    assert!(
+        fs::symlink_metadata(parked.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE)).is_err(),
+        "a rejected base must not create an archive"
+    );
+    fixture_cleanup(&root);
+
+    let (root, manager, config, replacement_plan, _drifted_config) =
+        config_drift_quarantine_fixture("config-drift-base-permissions");
+    set_test_mode(&manager.base, 0o755);
+    let mode_before = fs::metadata(&manager.base)
+        .expect("inspect non-owner-only base permissions")
+        .permissions()
+        .mode()
+        & 0o777;
+    assert!(matches!(
+        manager.ensure_active_or_config_drift(&replacement_plan, &config, 1),
+        Err(SupervisorResidentEnsureActiveError::Other(_))
+    ));
+    let mode_after = fs::metadata(&manager.base)
+        .expect("inspect non-owner-only base after refusal")
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode_after, mode_before);
+    assert!(
+        fs::symlink_metadata(manager.base.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE)).is_err(),
+        "a non-owner-only base must not create an archive"
+    );
+    fixture_cleanup(&root);
+}
+
+#[test]
+fn s1b_h2_config_drift_quarantine_restores_old_active_when_fresh_create_fails() {
+    let (root, mut manager, config, replacement_plan, drifted_config) =
+        config_drift_quarantine_fixture("config-drift-create-rollback");
+    manager.fail_create_active_after_staging = true;
+    let active = manager.active_path();
+
+    assert!(
+        manager
+            .quarantine_config_drift_active(&replacement_plan, &config, 1, 2)
+            .is_err(),
+        "a fresh-home create failure must stop the config-drift replacement"
+    );
+    assert!(
+        active.is_dir(),
+        "the original active home is restored after fresh-home create failure"
+    );
+    assert_eq!(
+        fs::read_to_string(active.join(SUPERVISOR_TEMP_HOME_CONFIG))
+            .expect("read restored unknown config"),
+        drifted_config,
+        "rollback must preserve unknown config bytes exactly"
+    );
+    let archive_root = manager.base.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE);
+    assert!(
+        fs::read_dir(&archive_root)
+            .expect("read empty rollback archive")
+            .next()
+            .is_none(),
+        "rollback must not leave a second active generation in archive"
+    );
+    assert!(
+        fs::read_dir(&manager.base)
+            .expect("read fixture home base after rollback")
+            .all(|entry| {
+                !entry
+                    .expect("read fixture home base entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".active-staging-")
+            }),
+        "rollback fixture must not leave staging behind"
+    );
+    fixture_cleanup(&root);
+}
+
+#[test]
+fn s1b_h2_config_drift_untrusted_preflight_never_archives_or_runs_the_old_resume() {
+    let (state_path, workflow_id, root) = resident_fixture("config-drift-untrusted-preflight");
+    let manager = resident_fixture_manager(&root);
+    let config = resident_fixture_config(&state_path);
+    let runner = MockOneShotRunner::new(vec![MockOneShotOutcome::Turn {
+        thread_id: "thread-s1b-config-drift-untrusted".to_string(),
+        content: "旧 generation 已建立。".to_string(),
+    }]);
+    submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &resident_request(&workflow_id, "先建立可拒绝的旧 generation。"),
+        &config,
+    )
+    .expect("trusted first generation");
+    let active = manager.active_path();
+    let config_path = active.join(SUPERVISOR_TEMP_HOME_CONFIG);
+    let private_marker = "R1_CONFIG_DRIFT_UNTRUSTED_PRIVATE_SENTINEL";
+    write_owner_only_test_config(&config_path, &format!("fixture = [\"{private_marker}\""));
+    let mut request = resident_request(&workflow_id, "这个不可信 home 必须保持关闭。 ");
+    request.client_request_id = Some("c6d5b4a3-9210-4f8e-b7d6-a5c4b3d2e1f0".to_string());
+
+    let outcome = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &request,
+        &config,
+    )
+    .expect("untrusted preflight returns a sanitized user outcome");
+
+    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+    assert!(!outcome.message.contains(private_marker));
+    assert_eq!(runner.plans.lock().expect("recorded plans").len(), 1);
+    assert!(active.is_dir());
+    assert_eq!(
+        fs::read_to_string(&config_path).expect("read rejected config bytes"),
+        format!("fixture = [\"{private_marker}\"")
+    );
+    assert!(
+        fs::symlink_metadata(manager.base.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE)).is_err(),
+        "unsafe preflight must not archive the active home"
+    );
+    let message_id =
+        resident_recorded_message_id_for_client(&state_path, request.client_request_id.as_deref());
+    assert_no_message_injection_or_reply(&state_path, &message_id);
+    assert_sanitized_delivery_diagnostic(
+        &state_path,
+        &workflow_id,
+        &message_id,
+        "preflight",
+        "preflight_home",
+        private_marker,
+    );
+    fixture_cleanup(&root);
+}
+
+#[test]
+fn s1b_h2_config_drift_initial_runner_failure_is_not_retried_or_injected() {
+    let (state_path, workflow_id, root) = resident_fixture("config-drift-initial-runner-failure");
+    let manager = resident_fixture_manager(&root);
+    let config = resident_fixture_config(&state_path);
+    let private_marker = "R1_CONFIG_DRIFT_INITIAL_PRIVATE_FAILURE";
+    let runner = MockOneShotRunner::new(vec![
+        MockOneShotOutcome::Turn {
+            thread_id: "thread-s1b-config-drift-runner-old".to_string(),
+            content: "旧 generation 已建立。".to_string(),
+        },
+        MockOneShotOutcome::Protocol(private_marker.to_string()),
+    ]);
+    submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &resident_request(&workflow_id, "先建立会被隔离的旧 generation。"),
+        &config,
+    )
+    .expect("trusted first generation");
+    let active = manager.active_path();
+    let config_path = active.join(SUPERVISOR_TEMP_HOME_CONFIG);
+    let drifted_config = format!(
+        "{}\n[fixture_unknown_config_drift]\nvalue = true\n",
+        fs::read_to_string(&config_path).expect("read trusted config")
+    );
+    write_owner_only_test_config(&config_path, &drifted_config);
+    let mut request = resident_request(&workflow_id, "隔离后的 initial 失败不得重试或伪造回复。 ");
+    request.client_request_id = Some("f0e1d2c3-b4a5-4698-87f6-e5d4c3b2a190".to_string());
+
+    let outcome = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &request,
+        &config,
+    )
+    .expect("initial runner failure returns a sanitized user outcome");
+
+    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+    assert!(!outcome.message.contains(private_marker));
+    let plans = runner.plans.lock().expect("recorded plans");
+    assert_eq!(plans.len(), 2, "failed replacement initial is not retried");
+    assert!(
+        !plans[1].command_plan.argv.iter().any(|arg| arg == "resume"),
+        "the failed replacement remains one initial invocation"
+    );
+    drop(plans);
+    let archive_root = manager.base.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE);
+    assert_eq!(
+        fs::read_dir(&archive_root)
+            .expect("read config-drift archive")
+            .count(),
+        1,
+        "the old home is quarantined once even when the new initial runner fails"
+    );
+    let message_id =
+        resident_recorded_message_id_for_client(&state_path, request.client_request_id.as_deref());
+    assert_no_message_injection_or_reply(&state_path, &message_id);
+    assert_sanitized_delivery_diagnostic(
+        &state_path,
+        &workflow_id,
+        &message_id,
+        "unknown",
+        "unknown",
+        private_marker,
+    );
+    fixture_cleanup(&root);
+}
+
+#[test]
+fn s1b_h2_config_drift_watchdog_silence_runs_the_replacement_initial_once() {
+    let (state_path, workflow_id, root) = resident_fixture("config-drift-watchdog-once");
+    let manager = resident_fixture_manager(&root);
+    let config = resident_fixture_config(&state_path);
+    let runner = MockOneShotRunner::new(vec![
+        MockOneShotOutcome::Turn {
+            thread_id: "thread-s1b-config-drift-watchdog-old".to_string(),
+            content: "旧 generation 已建立。".to_string(),
+        },
+        MockOneShotOutcome::WatchdogSilence,
+    ]);
+    submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &resident_request(&workflow_id, "先建立会被隔离的旧 generation。"),
+        &config,
+    )
+    .expect("trusted first generation");
+    let active = manager.active_path();
+    let config_path = active.join(SUPERVISOR_TEMP_HOME_CONFIG);
+    let drifted_config = format!(
+        "{}\n[fixture_unknown_config_drift]\nvalue = true\n",
+        fs::read_to_string(&config_path).expect("read trusted config")
+    );
+    write_owner_only_test_config(&config_path, &drifted_config);
+    let mut request = resident_request(&workflow_id, "隔离后的 initial 只能执行一次。 ");
+    request.client_request_id = Some("f2e1d0c9-b8a7-46f5-94e3-d2c1b0a99887".to_string());
+
+    let outcome = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &request,
+        &config,
+    )
+    .expect("watchdog silence returns a sanitized user outcome");
+
+    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+    let plans = runner.plans.lock().expect("recorded plans");
+    assert_eq!(
+        plans.len(),
+        2,
+        "replacement initial must not be watchdog-retried"
+    );
+    assert!(
+        !plans[1].command_plan.argv.iter().any(|arg| arg == "resume"),
+        "the sole replacement invocation remains initial"
+    );
+    drop(plans);
+    let archive_root = manager.base.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE);
+    assert_eq!(
+        fs::read_dir(&archive_root)
+            .expect("read config-drift archive")
+            .count(),
+        1
+    );
+    let message_id =
+        resident_recorded_message_id_for_client(&state_path, request.client_request_id.as_deref());
+    assert_no_message_injection_or_reply(&state_path, &message_id);
+    assert_sanitized_delivery_diagnostic(
+        &state_path,
+        &workflow_id,
+        &message_id,
+        "runner",
+        "runner_terminal",
+        "R1_CONFIG_DRIFT_WATCHDOG_PRIVATE_SENTINEL",
+    );
+    fixture_cleanup(&root);
+}
+
+#[test]
+fn s1b_h2_config_drift_direct_preflight_home_error_is_sanitized() {
+    let private_marker = "R1_CONFIG_DRIFT_DIRECT_PRIVATE_SENTINEL";
+    let error = supervisor_resident_direct_consult_error(SupervisorResidentConsultFailure {
+        diagnostic_stage: SupervisorResidentDeliveryDiagnosticStage::PreflightHome,
+        raw_detail: format!("fixture direct preflight detail {private_marker}"),
+        generation: Some(1),
+        thread_id: Some("fixture-private-thread-identity".to_string()),
+    });
+
+    assert_eq!(error, SUPERVISOR_RESIDENT_HUMAN_RETRY_MESSAGE);
+    assert!(!error.contains(private_marker));
+    assert!(!error.contains("fixture-private-thread-identity"));
+}
+
+#[test]
 fn s1b_invalid_resume_rotates_home_and_rebuilds_facts() {
     let (state_path, workflow_id, root) = resident_fixture("resume-rejected-replacement");
     let manager = resident_fixture_manager(&root);
@@ -1941,6 +2943,417 @@ fn s1b_startup_marks_dead_prepared_turn_exited_without_destroying_binding() {
     assert_eq!(session.thread_id, "thread-s1b-stale-prepared");
     assert_eq!(session.host_pid, 0);
     assert_eq!(session.launch_status, "resident_exited");
+    fixture_cleanup(&root);
+}
+
+#[test]
+fn s1b_h2_delivery_diagnostic_preflight_home_failure_is_sanitized_and_message_scoped() {
+    let (state_path, workflow_id, root) = resident_fixture("r3b-preflight-home");
+    let raw_marker = "R3B_PREFLIGHT_HOME_PRIVATE_PATH_SENTINEL";
+    let mut manager = resident_fixture_manager(&root);
+    manager.auth_source = root.join(raw_marker);
+    let config = resident_fixture_config(&state_path);
+    let runner = MockOneShotRunner::new(vec![MockOneShotOutcome::Protocol(
+        "runner must not start after home preflight failure".to_string(),
+    )]);
+
+    let outcome = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &resident_request(&workflow_id, "请继续自然说明当前方案。"),
+        &config,
+    )
+    .expect("recorded user message keeps the existing incomplete outcome");
+
+    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+    assert_eq!(
+        outcome.message,
+        "消息已送到主管，但主管这次没回上来——可以再发一次。"
+    );
+    assert_eq!(
+        runner.plans.lock().expect("mock plans").len(),
+        0,
+        "home preflight failure must not start the runner"
+    );
+    let message_id = resident_recorded_message_id_for_client(&state_path, None);
+    assert_no_message_injection_or_reply(&state_path, &message_id);
+    assert_sanitized_delivery_diagnostic(
+        &state_path,
+        &workflow_id,
+        &message_id,
+        "preflight",
+        "preflight_home",
+        raw_marker,
+    );
+    fixture_cleanup(&root);
+}
+
+#[test]
+fn s1b_h2_delivery_diagnostic_output_init_failure_has_no_spawn_or_registry_fact() {
+    let (state_path, workflow_id, root) = resident_fixture("r3b-output-init");
+    let raw_marker = "R3B_OUTPUT_INIT_PRIVATE_PATH_SENTINEL";
+    let manager = resident_fixture_manager(&root);
+    let config = resident_fixture_config(&state_path);
+    let runner = FixtureOutputInitFailureRunner {
+        raw_marker: raw_marker.to_string(),
+        calls: AtomicUsize::new(0),
+    };
+
+    let outcome = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &resident_request(&workflow_id, "请继续这一段自然对话。"),
+        &config,
+    )
+    .expect("recorded user message keeps the existing incomplete outcome");
+
+    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+    assert_eq!(runner.calls.load(Ordering::SeqCst), 1);
+    let message_id = resident_recorded_message_id_for_client(&state_path, None);
+    assert_no_message_injection_or_reply(&state_path, &message_id);
+    assert_sanitized_delivery_diagnostic(
+        &state_path,
+        &workflow_id,
+        &message_id,
+        "runner",
+        "runner_output_init",
+        raw_marker,
+    );
+    let registry_path = state_path
+        .parent()
+        .expect("fixture state parent")
+        .join("exec-process-registry.v1.json");
+    assert!(
+        !registry_path.exists(),
+        "output initialization failure must not create a process registry fact"
+    );
+    let audit_events = resident_supervisor_audit_events(&state_path);
+    assert!(audit_events.iter().all(|event| {
+        event["event_type"] != "supervisor_resident_turn_prepared"
+            && event["event_type"] != "supervisor_resident_session_created"
+    }));
+    fixture_cleanup(&root);
+}
+
+#[test]
+fn s1b_h2_delivery_diagnostic_prepared_lifecycle_failure_has_no_false_binding_or_registry() {
+    let (state_path, workflow_id, root) = resident_fixture("r3b-prepared-lifecycle");
+    let raw_marker = "R3B_PREPARED_LIFECYCLE_PRIVATE_ERROR_SENTINEL";
+    let manager = resident_fixture_manager(&root);
+    let config = resident_fixture_config(&state_path);
+    let fake_codex = resident_real_config_consuming_codex_script(&root);
+    let runner = FixturePreparedLifecycleFailureRunner {
+        program: fake_codex.display().to_string(),
+        raw_marker: raw_marker.to_string(),
+        child_started: AtomicUsize::new(0),
+    };
+
+    let outcome = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &resident_request(&workflow_id, "请继续这一段主管自然对话。"),
+        &config,
+    )
+    .expect("recorded user message keeps the existing incomplete outcome");
+
+    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+    assert_ne!(
+        runner.child_started.load(Ordering::SeqCst),
+        0,
+        "the child must have started before the prepared lifecycle callback failed"
+    );
+    let message_id = resident_recorded_message_id_for_client(&state_path, None);
+    assert_no_message_injection_or_reply(&state_path, &message_id);
+    assert_sanitized_delivery_diagnostic(
+        &state_path,
+        &workflow_id,
+        &message_id,
+        "runner",
+        "prepared_lifecycle_write",
+        raw_marker,
+    );
+    let registry_path = state_path
+        .parent()
+        .expect("fixture state parent")
+        .join("exec-process-registry.v1.json");
+    assert!(
+        !registry_path.exists(),
+        "a rejected prepared lifecycle write must not register the child"
+    );
+    let audit_events = resident_supervisor_audit_events(&state_path);
+    assert!(audit_events.iter().all(|event| {
+        event["event_type"] != "supervisor_resident_turn_prepared"
+            && event["event_type"] != "supervisor_resident_session_created"
+            && event["event_type"] != "supervisor_resident_session_reused"
+            && event["event_type"] != "supervisor_resident_session_replaced"
+    }));
+    fixture_cleanup(&root);
+}
+
+#[test]
+fn s1b_h2_delivery_diagnostic_same_client_replay_does_not_duplicate_and_new_clients_remain_distinct(
+) {
+    let (state_path, workflow_id, root) = resident_fixture("r3b-client-idempotency");
+    let manager = resident_fixture_manager(&root);
+    let config = resident_fixture_config(&state_path);
+    let runner = MockOneShotRunner::new(vec![
+        MockOneShotOutcome::Protocol("R3B_CLIENT_ONE_PRIVATE_ERROR".to_string()),
+        MockOneShotOutcome::Protocol("R3B_CLIENT_TWO_PRIVATE_ERROR".to_string()),
+        MockOneShotOutcome::Protocol("R3B_CLIENT_THREE_PRIVATE_ERROR".to_string()),
+    ]);
+    let mut first = resident_request(&workflow_id, "请继续同一段自然对话。");
+    first.client_request_id = Some("0a1b2c3d-4e5f-4a6b-8c9d-0e1f2a3b4c5d".to_string());
+
+    let first_outcome = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &first,
+        &config,
+    )
+    .expect("first recorded message is incomplete");
+    let replay_outcome = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &first,
+        &config,
+    )
+    .expect("same client request is reconciled without another turn");
+    assert_eq!(
+        first_outcome.status,
+        "message_recorded_supervisor_incomplete"
+    );
+    assert_eq!(
+        replay_outcome.status,
+        "message_recorded_supervisor_incomplete"
+    );
+
+    for (client_request_id, message) in [
+        (
+            "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+            "这是第二个独立用户动作。",
+        ),
+        (
+            "2a3b4c5d-6e7f-4a8b-8c9d-0e1f2a3b4c5d",
+            "这是第三个独立用户动作。",
+        ),
+    ] {
+        let mut request = resident_request(&workflow_id, message);
+        request.client_request_id = Some(client_request_id.to_string());
+        let outcome = submit_supervisor_resident_answer_with_parts(
+            &runner,
+            &manager,
+            &state_path,
+            &request,
+            &config,
+        )
+        .expect("each independent recorded user action remains incomplete");
+        assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+    }
+
+    let events = resident_canonical_events(&state_path).expect("canonical resident events");
+    let recorded = events
+        .iter()
+        .filter(|event| {
+            event["event_type"] == SUPERVISOR_RESIDENT_USER_MESSAGE_RECORDED_EVENT
+                && event["client_request_id"].is_string()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        recorded.len(),
+        3,
+        "three distinct client actions stay distinct"
+    );
+    let diagnostic_count = events
+        .iter()
+        .filter(|event| event["event_type"] == "supervisor_resident_delivery_diagnostic_recorded")
+        .count();
+    assert_eq!(
+        diagnostic_count, 3,
+        "same-client replay does not duplicate its diagnostic, while new clients receive one each"
+    );
+    for (client_request_id, raw_marker) in [
+        (
+            "0a1b2c3d-4e5f-4a6b-8c9d-0e1f2a3b4c5d",
+            "R3B_CLIENT_ONE_PRIVATE_ERROR",
+        ),
+        (
+            "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+            "R3B_CLIENT_TWO_PRIVATE_ERROR",
+        ),
+        (
+            "2a3b4c5d-6e7f-4a8b-8c9d-0e1f2a3b4c5d",
+            "R3B_CLIENT_THREE_PRIVATE_ERROR",
+        ),
+    ] {
+        let message_id =
+            resident_recorded_message_id_for_client(&state_path, Some(client_request_id));
+        assert_sanitized_delivery_diagnostic(
+            &state_path,
+            &workflow_id,
+            &message_id,
+            "unknown",
+            "unknown",
+            raw_marker,
+        );
+    }
+    assert_eq!(
+        runner.plans.lock().expect("mock plans").len(),
+        3,
+        "same-client replay must not rerun consult"
+    );
+    fixture_cleanup(&root);
+}
+
+#[test]
+fn s1b_h2_delivery_diagnostic_batch2_append_failure_preserves_recorded_business_outcome() {
+    let (state_path, workflow_id, root) = resident_fixture("r3b-diagnostic-append-failure");
+    let manager = resident_fixture_manager(&root);
+    let config = resident_fixture_config(&state_path);
+    let runner = MockOneShotRunner::new(vec![MockOneShotOutcome::Protocol(
+        "R3B_DIAGNOSTIC_SOURCE_FAILURE_SENTINEL".to_string(),
+    )]);
+    let append_failure_marker = "supervisor_resident_test_diagnostic_batch2_failure";
+    let append_failure_guard = force_supervisor_resident_diagnostic_batch2_failure();
+
+    let outcome = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &resident_request(&workflow_id, "请保留这条已记录的自然对话。"),
+        &config,
+    )
+    .expect("diagnostic write failure must preserve the existing incomplete outcome");
+
+    assert_eq!(outcome.status, "message_recorded_supervisor_incomplete");
+    assert_eq!(
+        supervisor_resident_diagnostic_batch2_attempts(),
+        1,
+        "diagnostic append failure must not retry, reread, or rebase"
+    );
+    let message_id = resident_recorded_message_id_for_client(&state_path, None);
+    assert_no_message_injection_or_reply(&state_path, &message_id);
+    assert!(
+        resident_delivery_diagnostics_for_message(&state_path, &message_id).is_empty(),
+        "a failed best-effort append must not leave a partial diagnostic"
+    );
+    let canonical_text = fs::read_to_string(&state_path).expect("read canonical workflow state");
+    assert!(
+        !canonical_text.contains(append_failure_marker),
+        "diagnostic append failure detail must not enter canonical JSON"
+    );
+    assert_eq!(
+        runner.plans.lock().expect("mock plans").len(),
+        1,
+        "diagnostic append failure must not rerun consult"
+    );
+    drop(append_failure_guard);
+    fixture_cleanup(&root);
+}
+
+#[test]
+fn s1b_h2_r4e_tool_diagnostic_batch2_failure_preserves_recorded_injected_reply_and_human_result() {
+    let (state_path, workflow_id, root) = resident_fixture("r4e-tool-diagnostic-append-failure");
+    let manager = resident_fixture_manager(&root);
+    let config = resident_fixture_config(&state_path);
+    let chain_before: Value =
+        serde_json::from_slice::<Value>(&fs::read(&state_path).expect("workflow state"))
+            .expect("workflow JSON")["workflow_chain_runs"]
+            .clone();
+    let hook_config = config.clone();
+    let hook = Arc::new(move || {
+        let toolface = supervisor_orchestrator::list_tools(&hook_config);
+        let submit_visible = toolface["tools"]
+            .as_array()
+            .is_some_and(|tools| tools.iter().any(|tool| tool["name"] == "submit_proposal"));
+        submit_visible
+            .then_some(())
+            .ok_or_else(|| "resident tools/list lost submit_proposal".to_string())
+    });
+    let runner = MockOneShotRunner::new(vec![MockOneShotOutcome::Turn {
+        thread_id: "thread-r4e-tool-diagnostic-failure".to_string(),
+        content: "主管已继续自然对话。".to_string(),
+    }])
+    .with_after_bind(hook);
+    let failure_guard = force_supervisor_resident_diagnostic_batch2_failure();
+
+    let outcome = submit_supervisor_resident_answer_with_parts(
+        &runner,
+        &manager,
+        &state_path,
+        &resident_request(&workflow_id, "请继续这段已经建立的自然对话。"),
+        &config,
+    )
+    .expect("best-effort R4E diagnostic failure must preserve the completed conversation");
+
+    assert_eq!(outcome.status, "message_sent");
+    assert_eq!(
+        outcome.message,
+        "用户消息已同 thread 注入；主管回复已写入项目对话。"
+    );
+    assert_eq!(runner.hook_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        supervisor_resident_diagnostic_batch2_attempts(),
+        1,
+        "failed R4E diagnostic append must not retry, rebase, or open another write path"
+    );
+    let message_id = resident_recorded_message_id_for_client(&state_path, None);
+    let events = resident_canonical_events(&state_path).expect("canonical resident events");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| {
+                event["event_type"] == SUPERVISOR_RESIDENT_USER_MESSAGE_INJECTED_EVENT
+                    && event["message_id"] == message_id
+            })
+            .count(),
+        1,
+        "existing injected fact survives a diagnostic append failure"
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| {
+                event["event_type"] == SUPERVISOR_RESIDENT_SUPERVISOR_MESSAGE_RECORDED_EVENT
+                    && event["reply_to_message_id"] == message_id
+            })
+            .count(),
+        1,
+        "existing natural reply survives a diagnostic append failure"
+    );
+    assert!(
+        events.iter().all(|event| {
+            event["event_type"] != "supervisor_resident_tool_invocation_diagnostic_recorded"
+        }),
+        "a failed best-effort append must not leave a partial R4E diagnostic"
+    );
+    assert_eq!(
+        serde_json::from_slice::<Value>(&fs::read(&state_path).expect("workflow state"))
+            .expect("workflow JSON")["workflow_chain_runs"],
+        chain_before,
+        "R4E diagnostic failure must not advance the chain"
+    );
+    assert_eq!(
+        crate::project_consultation_proposal_store::load_store(
+            &state_path,
+            crate::unix_timestamp_ms()
+        )
+        .expect("proposal store")
+        .proposals
+        .len(),
+        0,
+        "R4E tools/list diagnostic failure must not create a proposal card"
+    );
+    assert_eq!(
+        runner.plans.lock().expect("mock plans").len(),
+        1,
+        "R4E diagnostic failure must not rerun the resident turn"
+    );
+    drop(failure_guard);
     fixture_cleanup(&root);
 }
 

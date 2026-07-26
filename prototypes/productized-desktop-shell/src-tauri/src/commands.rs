@@ -89,6 +89,7 @@ fn run_manual_codex_relay_gui_direct_new_session(
 fn stop_manual_codex_relay_attempt(
     request: manual_relay::ManualRelayStopInput,
 ) -> Result<manual_relay::ManualRelayReceipt, String> {
+    reject_raw_managed_conversation_transport_attempt(&request.relay_attempt_id)?;
     manual_relay::stop_manual_relay_attempt(request, &unix_timestamp_string())
 }
 
@@ -96,7 +97,2937 @@ fn stop_manual_codex_relay_attempt(
 fn poll_manual_codex_relay_attempt(
     request: manual_relay::ManualRelayPollInput,
 ) -> Result<manual_relay::ManualRelayReceipt, String> {
+    reject_raw_managed_conversation_transport_attempt(&request.relay_attempt_id)?;
     manual_relay::poll_manual_relay_attempt(request, &unix_timestamp_string())
+}
+
+// Shared Conversation Transport -------------------------------------------------
+//
+// The Tauri surface deliberately contains only conversation/session material.
+// Profiles, sandbox/write scope, approval, MCP endpoint, capability set, and
+// supervisor role are selected by the fixed server command below; they are
+// never deserialized from a page request.
+const CONVERSATION_TRANSPORT_SERVER_ACTOR: &str = "desktop_shared_conversation_transport";
+const SUPERVISOR_CONVERSATION_MAX_ACTIVE_WORKERS: usize = 1;
+const SUPERVISOR_CONVERSATION_MAX_FOLLOW_UPS_PER_WORKER: usize = 0;
+const SUPERVISOR_CONVERSATION_MAX_RUNTIME_MINUTES: i64 =
+    mcp::supervisor_conversation_binding::SUPERVISOR_CONVERSATION_MAX_RUNTIME_MINUTES;
+const SHARED_CONVERSATION_USER_EVENT: &str = "supervisor_resident_user_message_recorded";
+const SHARED_CONVERSATION_ASSISTANT_EVENT: &str = "supervisor_resident_supervisor_message_recorded";
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConversationTransportStartRequest {
+    context: ConversationTransportContextRequest,
+    mode: ConversationTransportStartMode,
+    #[serde(default)]
+    conversation_id: Option<String>,
+    #[serde(default)]
+    thread_id: Option<String>,
+    turn_id: String,
+    user_text: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConversationTransportContextRequest {
+    project_root: String,
+    #[serde(default)]
+    project_id: Option<String>,
+    #[serde(default)]
+    workflow_id: Option<String>,
+}
+
+/// This is deliberately not deserializable.  A page chooses neither profile
+/// nor its permission shape: the separately registered Tauri command fixes it
+/// before this common core sees the request.
+#[derive(Clone, Copy)]
+enum ConversationTransportHostProfile {
+    AgentWorkspaceWrite,
+    SupervisorReadOnly,
+}
+
+impl ConversationTransportHostProfile {
+    fn profile_id(self) -> &'static str {
+        match self {
+            Self::AgentWorkspaceWrite => {
+                manual_relay::conversation_transport::AGENT_CODEX_WORKSPACE_WRITE_PROFILE_ID
+            }
+            Self::SupervisorReadOnly => {
+                manual_relay::conversation_transport::SUPERVISOR_READ_ONLY_PROFILE_ID
+            }
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum ConversationTransportStartMode {
+    New,
+    Existing,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConversationTransportAttemptRequest {
+    attempt_id: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+struct ConversationTransportCommandReceipt {
+    conversation_id: Option<String>,
+    thread_id: Option<String>,
+    turn_id: String,
+    transport: ConversationTransportCommandTransportLayer,
+    assistant_reply: ConversationTransportCommandAssistantLayer,
+    tool_action: ConversationTransportCommandLayer,
+    read_model_projection: ConversationTransportCommandLayer,
+    canonical_mirror: ConversationTransportCommandLayer,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+struct ConversationTransportCommandTransportLayer {
+    status: String,
+    human_message: Option<String>,
+    attempt_id: Option<String>,
+    binding_stage: Option<SupervisorConversationBindingStage>,
+}
+
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum SupervisorConversationBindingStage {
+    BindingConstruct,
+    BindingStorePrepare,
+    BindingPersistDb,
+    BindingProjectJson,
+    BindingActivate,
+    TransportStart,
+    BindingTerminate,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+struct ConversationTransportCommandAssistantLayer {
+    status: String,
+    human_message: Option<String>,
+    text: Option<String>,
+    assistant_item_id: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+struct ConversationTransportCommandLayer {
+    status: String,
+    human_message: Option<String>,
+}
+
+#[derive(Clone)]
+enum ConversationTransportCommandAttemptProfile {
+    Agent,
+    Supervisor(SupervisorConversationAttemptBinding),
+}
+
+#[derive(Clone)]
+struct SupervisorConversationAttemptBinding {
+    config: mcp::McpServerConfig,
+    active: bool,
+}
+
+#[derive(Clone)]
+struct ConversationTransportCommandAttempt {
+    // The command-facing attempt id is normally also the inner relay id.  A
+    // rare outer-map collision instead receives a host-generated recovery id
+    // so the existing owner is never overwritten; this field keeps the
+    // trusted inner cleanup target private to the host map.
+    relay_attempt_id: String,
+    host_owned_cleanup_recovery: bool,
+    conversation_id: String,
+    turn_id: String,
+    profile: ConversationTransportCommandAttemptProfile,
+}
+
+struct ResolvedSupervisorConversationContext {
+    project_id: String,
+    project_root: String,
+    workflow_id: String,
+    workflow_state_path: PathBuf,
+}
+
+static CONVERSATION_TRANSPORT_COMMAND_ATTEMPTS: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::BTreeMap<String, ConversationTransportCommandAttempt>>,
+> = std::sync::OnceLock::new();
+
+fn conversation_transport_command_attempts() -> &'static std::sync::Mutex<
+    std::collections::BTreeMap<String, ConversationTransportCommandAttempt>,
+> {
+    CONVERSATION_TRANSPORT_COMMAND_ATTEMPTS
+        .get_or_init(|| std::sync::Mutex::new(std::collections::BTreeMap::new()))
+}
+
+/// A poisoned command registry remains fail-closed for every ordinary route.
+/// The sole exception is the host-generated supervisor cleanup recovery entry:
+/// it was created only after a protected child already needed trusted cleanup,
+/// so abandoning it would make that cleanup unreachable.  This helper keeps
+/// the exception narrow and testable without relaxing Agent or normal
+/// Supervisor attempts.
+fn lock_conversation_transport_command_attempts_for_run<'a>(
+    registry: &'a std::sync::Mutex<
+        std::collections::BTreeMap<String, ConversationTransportCommandAttempt>,
+    >,
+    attempt_id: &str,
+) -> Result<
+    std::sync::MutexGuard<
+        'a,
+        std::collections::BTreeMap<String, ConversationTransportCommandAttempt>,
+    >,
+    String,
+> {
+    match registry.lock() {
+        Ok(attempts) => Ok(attempts),
+        Err(poisoned) => {
+            let attempts = poisoned.into_inner();
+            let is_host_owned_supervisor_recovery =
+                attempts.get(attempt_id).is_some_and(|attempt| {
+                    attempt.host_owned_cleanup_recovery
+                        && matches!(
+                            &attempt.profile,
+                            ConversationTransportCommandAttemptProfile::Supervisor(_)
+                        )
+                });
+            if is_host_owned_supervisor_recovery {
+                Ok(attempts)
+            } else {
+                Err("conversation_transport_attempt_registry_unavailable".to_string())
+            }
+        }
+    }
+}
+
+/// Conversation transports return a deliberately redacted receipt.  Once an
+/// attempt is host-registered, the generic manual-relay endpoints must not
+/// expose the underlying command plan back to a page.
+pub(crate) fn reject_raw_managed_conversation_transport_attempt(
+    relay_attempt_id: &str,
+) -> Result<(), String> {
+    let registered_by_transport = match conversation_transport_command_attempts().lock() {
+        Ok(attempts) => attempts.contains_key(relay_attempt_id),
+        Err(_) => true,
+    };
+    if registered_by_transport {
+        Err("manual_relay_managed_conversation_attempt_protected".to_string())
+    } else {
+        // The safe-only marker is established before child spawn, whereas the
+        // command-level map is intentionally registered later.  Drop the
+        // outer lock before consulting it so the two guards cannot deadlock.
+        manual_relay::reject_raw_safe_only_manual_relay_attempt(relay_attempt_id)
+    }
+}
+
+#[tauri::command]
+fn start_agent_conversation_transport(
+    request: ConversationTransportStartRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<ConversationTransportCommandReceipt, String> {
+    start_conversation_transport_for_host_profile(
+        request,
+        &state,
+        ConversationTransportHostProfile::AgentWorkspaceWrite,
+        None,
+    )
+}
+
+#[tauri::command]
+fn start_supervisor_conversation_transport(
+    request: ConversationTransportStartRequest,
+    state: tauri::State<'_, AppState>,
+    knowledge_open_relay: tauri::State<'_, crate::knowledge_open_relay::KnowledgeOpenRelayState>,
+) -> Result<ConversationTransportCommandReceipt, String> {
+    start_conversation_transport_for_host_profile(
+        request,
+        &state,
+        ConversationTransportHostProfile::SupervisorReadOnly,
+        Some(&knowledge_open_relay),
+    )
+}
+
+fn start_conversation_transport_for_host_profile(
+    request: ConversationTransportStartRequest,
+    state: &AppState,
+    profile: ConversationTransportHostProfile,
+    knowledge_open_relay: Option<&crate::knowledge_open_relay::KnowledgeOpenRelayState>,
+) -> Result<ConversationTransportCommandReceipt, String> {
+    let timestamp = unix_timestamp_string();
+    let mode = request.mode;
+    let target_project_root = canonical_conversation_project_root(&request.context.project_root)?;
+    let (conversation_id, thread_id) = normalize_conversation_start_binding(
+        &request,
+        mode,
+        profile.profile_id(),
+        &target_project_root,
+    )?;
+    let input = manual_relay::conversation_transport::ConversationTransportStartInput {
+        conversation_id: conversation_id.clone(),
+        turn_id: require_conversation_identifier(&request.turn_id, "turn_id")?,
+        original_user_text: require_conversation_user_text(&request.user_text)?,
+        target_project_root: target_project_root.clone(),
+        target_cwd: target_project_root.clone(),
+        target_session_id: thread_id.clone(),
+        new_session: mode == ConversationTransportStartMode::New,
+        requested_by: CONVERSATION_TRANSPORT_SERVER_ACTOR.to_string(),
+    };
+
+    match profile {
+        ConversationTransportHostProfile::AgentWorkspaceWrite => {
+            reject_agent_only_context_expansion(&request.context)?;
+            let receipt = manual_relay::conversation_transport::start_agent_conversation_transport(
+                input, &timestamp,
+            )
+            .map_err(|_| "conversation_transport_start_failed".to_string())?;
+            let response = normalize_conversation_transport_receipt(&receipt, None);
+            register_conversation_transport_attempt_if_pending(
+                &response,
+                ConversationTransportCommandAttempt {
+                    relay_attempt_id: receipt.transport.attempt_id.clone(),
+                    host_owned_cleanup_recovery: false,
+                    conversation_id,
+                    turn_id: receipt.turn_id,
+                    profile: ConversationTransportCommandAttemptProfile::Agent,
+                },
+            )?;
+            Ok(response)
+        }
+        ConversationTransportHostProfile::SupervisorReadOnly => {
+            let resolved = match resolve_supervisor_conversation_context(state, &request.context) {
+                Ok(resolved) => resolved,
+                Err(_) => {
+                    return Ok(supervisor_start_failure_receipt(
+                        &input.turn_id,
+                        SupervisorConversationBindingStage::BindingConstruct,
+                    ));
+                }
+            };
+            if target_project_root != resolved.project_root {
+                return Ok(supervisor_start_failure_receipt(
+                    &input.turn_id,
+                    SupervisorConversationBindingStage::BindingConstruct,
+                ));
+            }
+            if let Some(existing_thread_id) = thread_id.as_deref() {
+                if verify_supervisor_existing_thread(
+                    state,
+                    existing_thread_id,
+                    &resolved.project_root,
+                )
+                .is_err()
+                {
+                    return Ok(supervisor_start_failure_receipt(
+                        &input.turn_id,
+                        SupervisorConversationBindingStage::BindingConstruct,
+                    ));
+                }
+            }
+
+            let run_id = match manual_relay::conversation_transport::supervisor_run_id_for(
+                &conversation_id,
+                &input.turn_id,
+            ) {
+                Ok(run_id) => run_id,
+                Err(_) => {
+                    return Ok(supervisor_start_failure_receipt(
+                        &input.turn_id,
+                        SupervisorConversationBindingStage::BindingConstruct,
+                    ));
+                }
+            };
+            let base_config = supervisor_conversation_mcp_config(&resolved, &run_id);
+            let binding = match mcp::supervisor_conversation_binding::ConversationTurnBinding::establish_supervisor_read_only(
+                mcp::supervisor_conversation_binding::SupervisorConversationTurnInput {
+                    project_id: resolved.project_id.clone(),
+                    project_root: resolved.project_root.clone(),
+                    workflow_id: resolved.workflow_id.clone(),
+                    turn_id: input.turn_id.clone(),
+                    transport_attempt: 1,
+                    run_id: run_id.clone(),
+                    user_message_snapshot: input.original_user_text.clone(),
+                    created_at_ms: unix_timestamp_ms(),
+                    max_runtime_minutes: SUPERVISOR_CONVERSATION_MAX_RUNTIME_MINUTES,
+                },
+            ) {
+                Ok(binding) => binding,
+                Err(_) => {
+                    return Ok(supervisor_start_failure_receipt(
+                        &input.turn_id,
+                        SupervisorConversationBindingStage::BindingConstruct,
+                    ));
+                }
+            };
+            if let Err(error) =
+                mcp::supervisor_orchestrator::establish_supervisor_conversation_turn_binding(
+                    &base_config,
+                    binding,
+                )
+            {
+                return Ok(supervisor_start_failure_receipt(
+                    &input.turn_id,
+                    supervisor_binding_stage_for_establishment_error(error),
+                ));
+            }
+
+            let mut binding_active = false;
+            if let Some(existing_thread_id) = thread_id.as_deref() {
+                if mcp::supervisor_orchestrator::activate_supervisor_conversation_turn_binding(
+                    &base_config,
+                    existing_thread_id,
+                )
+                .is_err()
+                {
+                    return Ok(supervisor_start_failure_after_binding_established(
+                        &base_config,
+                        &input.turn_id,
+                        SupervisorConversationBindingStage::BindingActivate,
+                    ));
+                }
+                binding_active = true;
+            }
+
+            let relay = match knowledge_open_relay {
+                Some(relay) => relay,
+                None => {
+                    return Ok(supervisor_start_failure_after_binding_established(
+                        &base_config,
+                        &input.turn_id,
+                        SupervisorConversationBindingStage::TransportStart,
+                    ));
+                }
+            };
+            let relay_config = match relay.issue_grant(
+                &base_config,
+                crate::knowledge_open_relay::RelayBindingIdentity::new(
+                    &run_id,
+                    &input.turn_id,
+                    &resolved.project_id,
+                ),
+            ) {
+                Ok(relay_config) => relay_config,
+                Err(_) => {
+                    return Ok(supervisor_start_failure_after_binding_established(
+                        &base_config,
+                        &input.turn_id,
+                        SupervisorConversationBindingStage::TransportStart,
+                    ));
+                }
+            };
+            let mut config = base_config;
+            config.knowledge_open_relay = Some(relay_config.clone());
+            let mut supervisor_binding = SupervisorConversationAttemptBinding {
+                config: config.clone(),
+                active: binding_active,
+            };
+
+            let host = manual_relay::conversation_transport::SupervisorConversationHostContext {
+                project_id: resolved.project_id,
+                project_root: resolved.project_root,
+                workflow_id: resolved.workflow_id,
+                run_id,
+                workflow_state_path: resolved.workflow_state_path.display().to_string(),
+                max_active_workers: SUPERVISOR_CONVERSATION_MAX_ACTIVE_WORKERS,
+                max_follow_ups_per_worker: SUPERVISOR_CONVERSATION_MAX_FOLLOW_UPS_PER_WORKER,
+                max_runtime_minutes: SUPERVISOR_CONVERSATION_MAX_RUNTIME_MINUTES,
+                knowledge_open_relay: relay_config,
+            };
+            let failure_turn_id = input.turn_id.clone();
+            let receipt = match start_supervisor_transport_after_binding_established(
+                &config,
+                &failure_turn_id,
+                || {
+                    manual_relay::conversation_transport::start_supervisor_conversation_transport(
+                        input, host, &timestamp,
+                    )
+                },
+            ) {
+                Ok(receipt) => receipt,
+                Err(failure_receipt) => {
+                    relay.revoke_run(&config.run_id);
+                    return Ok(failure_receipt);
+                }
+            };
+            let underlying_attempt_id = receipt.transport.attempt_id.clone();
+            let mut response =
+                normalize_supervisor_conversation_receipt(&receipt, &mut supervisor_binding);
+            let attempt = ConversationTransportCommandAttempt {
+                relay_attempt_id: underlying_attempt_id.clone(),
+                host_owned_cleanup_recovery: false,
+                conversation_id,
+                turn_id: receipt.turn_id.clone(),
+                profile: ConversationTransportCommandAttemptProfile::Supervisor(supervisor_binding),
+            };
+            if conversation_transport_receipt_is_terminal(&response) {
+                relay.revoke_run(&config.run_id);
+                cleanup_running_supervisor_transport_after_terminal_normalization_or_retain(
+                    &receipt,
+                    &mut response,
+                    attempt.clone(),
+                    &underlying_attempt_id,
+                    &timestamp,
+                )?;
+                if !conversation_transport_receipt_is_terminal(&response) {
+                    return Ok(response);
+                }
+            }
+            if let Err(error) = register_supervisor_conversation_transport_attempt_or_cleanup(
+                &mut response,
+                attempt,
+                &underlying_attempt_id,
+                &timestamp,
+            ) {
+                relay.revoke_run(&config.run_id);
+                return Err(error);
+            }
+            Ok(response)
+        }
+    }
+}
+
+fn supervisor_binding_stage_for_establishment_error(
+    error: mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError,
+) -> SupervisorConversationBindingStage {
+    match error {
+        mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingConstruct => {
+            SupervisorConversationBindingStage::BindingConstruct
+        }
+        mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingStorePrepare => {
+            SupervisorConversationBindingStage::BindingStorePrepare
+        }
+        mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingPersistDb => {
+            SupervisorConversationBindingStage::BindingPersistDb
+        }
+        mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingProjectJson => {
+            SupervisorConversationBindingStage::BindingProjectJson
+        }
+    }
+}
+
+fn supervisor_start_failure_after_binding_established(
+    config: &mcp::McpServerConfig,
+    turn_id: &str,
+    stage: SupervisorConversationBindingStage,
+) -> ConversationTransportCommandReceipt {
+    let expected = mcp::supervisor_conversation_binding::ConversationTurnLifecycle::Failed;
+    let terminated = finish_supervisor_conversation_binding(config, expected).is_ok()
+        && mcp::supervisor_orchestrator::supervisor_conversation_turn_binding_lifecycle(config)
+            .is_ok_and(|lifecycle| lifecycle == expected);
+    if !terminated {
+        mcp::supervisor_orchestrator::close_supervisor_conversation_tools_for_failed_or_unconfirmed_terminal(config);
+    }
+    supervisor_start_failure_receipt(
+        turn_id,
+        if terminated {
+            stage
+        } else {
+            SupervisorConversationBindingStage::BindingTerminate
+        },
+    )
+}
+
+fn start_supervisor_transport_after_binding_established(
+    config: &mcp::McpServerConfig,
+    turn_id: &str,
+    start: impl FnOnce() -> Result<
+        manual_relay::conversation_transport::ConversationTransportReceipt,
+        String,
+    >,
+) -> Result<
+    manual_relay::conversation_transport::ConversationTransportReceipt,
+    ConversationTransportCommandReceipt,
+> {
+    start().map_err(|_| {
+        supervisor_start_failure_after_binding_established(
+            config,
+            turn_id,
+            SupervisorConversationBindingStage::TransportStart,
+        )
+    })
+}
+
+fn supervisor_start_failure_receipt(
+    turn_id: &str,
+    stage: SupervisorConversationBindingStage,
+) -> ConversationTransportCommandReceipt {
+    ConversationTransportCommandReceipt {
+        conversation_id: None,
+        thread_id: None,
+        turn_id: turn_id.to_string(),
+        transport: ConversationTransportCommandTransportLayer {
+            status: "failed".to_string(),
+            human_message: Some(supervisor_start_failure_human_message(stage).to_string()),
+            attempt_id: None,
+            binding_stage: Some(stage),
+        },
+        assistant_reply: ConversationTransportCommandAssistantLayer {
+            status: "not_requested".to_string(),
+            human_message: None,
+            text: None,
+            assistant_item_id: None,
+        },
+        tool_action: ConversationTransportCommandLayer {
+            status: "not_requested".to_string(),
+            human_message: None,
+        },
+        read_model_projection: ConversationTransportCommandLayer {
+            status: "not_requested".to_string(),
+            human_message: None,
+        },
+        canonical_mirror: ConversationTransportCommandLayer {
+            status: "not_requested".to_string(),
+            human_message: None,
+        },
+    }
+}
+
+fn supervisor_start_failure_human_message(
+    stage: SupervisorConversationBindingStage,
+) -> &'static str {
+    match stage {
+        SupervisorConversationBindingStage::BindingConstruct => {
+            "主管对话绑定准备未完成；运输没有启动。"
+        }
+        SupervisorConversationBindingStage::BindingStorePrepare => {
+            "主管对话绑定存储未准备完成；运输没有启动。"
+        }
+        SupervisorConversationBindingStage::BindingPersistDb => {
+            "主管对话绑定没有写入主存储；运输没有启动。"
+        }
+        SupervisorConversationBindingStage::BindingProjectJson => {
+            "主管对话绑定兼容投影未完成；运输没有启动。"
+        }
+        SupervisorConversationBindingStage::BindingActivate => {
+            "主管对话绑定未能激活；工具继续关闭。"
+        }
+        SupervisorConversationBindingStage::TransportStart => "主管对话运输没有启动。",
+        SupervisorConversationBindingStage::BindingTerminate => "绑定终结未确认；工具继续关闭。",
+    }
+}
+
+#[tauri::command]
+fn poll_conversation_transport_attempt(
+    request: ConversationTransportAttemptRequest,
+    knowledge_open_relay: tauri::State<'_, crate::knowledge_open_relay::KnowledgeOpenRelayState>,
+) -> Result<ConversationTransportCommandReceipt, String> {
+    run_conversation_transport_attempt(request, false, &knowledge_open_relay)
+}
+
+#[tauri::command]
+fn stop_conversation_transport_attempt(
+    request: ConversationTransportAttemptRequest,
+    knowledge_open_relay: tauri::State<'_, crate::knowledge_open_relay::KnowledgeOpenRelayState>,
+) -> Result<ConversationTransportCommandReceipt, String> {
+    run_conversation_transport_attempt(request, true, &knowledge_open_relay)
+}
+
+fn run_conversation_transport_attempt(
+    request: ConversationTransportAttemptRequest,
+    stop: bool,
+    knowledge_open_relay: &crate::knowledge_open_relay::KnowledgeOpenRelayState,
+) -> Result<ConversationTransportCommandReceipt, String> {
+    let attempt_id = require_conversation_identifier(&request.attempt_id, "attempt_id")?;
+    let timestamp = unix_timestamp_string();
+    let mut attempts = lock_conversation_transport_command_attempts_for_run(
+        conversation_transport_command_attempts(),
+        &attempt_id,
+    )?;
+    let (input, supervisor_run_id) = {
+        let attempt = attempts
+            .get_mut(&attempt_id)
+            .ok_or_else(|| "conversation_transport_attempt_not_found".to_string())?;
+        let supervisor_run_id = match &attempt.profile {
+            ConversationTransportCommandAttemptProfile::Supervisor(binding) => {
+                Some(binding.config.run_id.clone())
+            }
+            ConversationTransportCommandAttemptProfile::Agent => None,
+        };
+        (
+            manual_relay::conversation_transport::ConversationTransportAttemptInput {
+                conversation_id: attempt.conversation_id.clone(),
+                turn_id: attempt.turn_id.clone(),
+                attempt_id: attempt.relay_attempt_id.clone(),
+                requested_by: CONVERSATION_TRANSPORT_SERVER_ACTOR.to_string(),
+            },
+            supervisor_run_id,
+        )
+    };
+    let underlying_attempt_id = input.attempt_id.clone();
+    let transport_result = if stop {
+        manual_relay::conversation_transport::stop_conversation_transport_attempt(input, &timestamp)
+    } else {
+        manual_relay::conversation_transport::poll_conversation_transport_attempt(input, &timestamp)
+    };
+    let receipt = match transport_result {
+        Ok(receipt) => receipt,
+        Err(_) if supervisor_run_id.is_some() => {
+            // A retained outer supervisor entry is a host-owned recovery
+            // handle, including the rare inner-record collision/poison path.
+            // Use only the safe-only abort here; generic manual relay routes
+            // remain protected from the first pre-spawn marker onward.
+            if manual_relay::conversation_transport::
+                abort_supervisor_conversation_transport_attempt(&underlying_attempt_id, &timestamp)
+                .is_ok()
+            {
+                attempts.remove(&attempt_id);
+                drop(attempts);
+                if let Some(run_id) = supervisor_run_id {
+                    knowledge_open_relay.revoke_run(&run_id);
+                }
+            } else if let Some(attempt) = attempts.get_mut(&attempt_id) {
+                // The caller already holds this command-facing id.  Keep it
+                // reachable across a later poison so only the trusted host
+                // route can retry the still-protected supervisor cleanup.
+                attempt.host_owned_cleanup_recovery = true;
+            }
+            return Err(if stop {
+                "conversation_transport_stop_failed".to_string()
+            } else {
+                "conversation_transport_poll_failed".to_string()
+            });
+        }
+        Err(_) => {
+            return Err(if stop {
+                "conversation_transport_stop_failed".to_string()
+            } else {
+                "conversation_transport_poll_failed".to_string()
+            });
+        }
+    };
+    let attempt = attempts
+        .get_mut(&attempt_id)
+        .ok_or_else(|| "conversation_transport_attempt_not_found".to_string())?;
+    let (response, relay_run_id) = match &mut attempt.profile {
+        ConversationTransportCommandAttemptProfile::Agent => (
+            normalize_conversation_transport_receipt(&receipt, None),
+            None,
+        ),
+        ConversationTransportCommandAttemptProfile::Supervisor(binding) => (
+            normalize_supervisor_conversation_receipt(&receipt, binding),
+            Some(binding.config.run_id.clone()),
+        ),
+    };
+    let terminal = conversation_transport_receipt_is_terminal(&response);
+    let mut response = response;
+    if !terminal {
+        // A host-generated recovery key must remain the public retry handle;
+        // never hand its private inner relay id back to the caller on a
+        // non-terminal poll.
+        response.transport.attempt_id = Some(attempt_id.clone());
+    }
+    if terminal
+        && cleanup_running_supervisor_transport_after_terminal_normalization(
+            &receipt, &response, &timestamp,
+        )
+        .is_err()
+    {
+        let attempt = attempts
+            .get_mut(&attempt_id)
+            .ok_or_else(|| "conversation_transport_attempt_not_found".to_string())?;
+        retain_existing_supervisor_conversation_transport_cleanup_route(
+            &mut response,
+            &attempt_id,
+            attempt,
+        )?;
+        drop(attempts);
+        if let Some(run_id) = relay_run_id {
+            knowledge_open_relay.revoke_run(&run_id);
+        }
+        return Ok(response);
+    }
+    if terminal {
+        attempts.remove(&attempt_id);
+    }
+    drop(attempts);
+    if terminal {
+        if let Some(run_id) = relay_run_id {
+            knowledge_open_relay.revoke_run(&run_id);
+        }
+    }
+    Ok(response)
+}
+
+fn normalize_conversation_start_binding(
+    request: &ConversationTransportStartRequest,
+    mode: ConversationTransportStartMode,
+    profile_id: &str,
+    project_root: &str,
+) -> Result<(String, Option<String>), String> {
+    let turn_id = require_conversation_identifier(&request.turn_id, "turn_id")?;
+    match mode {
+        ConversationTransportStartMode::New => {
+            if request.conversation_id.is_some() || request.thread_id.is_some() {
+                return Err("conversation_transport_new_session_binding_forbidden".to_string());
+            }
+            Ok((
+                format!(
+                    "conversation:{}",
+                    utils::hash::sha256_hex(&format!("{profile_id}\n{project_root}\n{turn_id}"))
+                ),
+                None,
+            ))
+        }
+        ConversationTransportStartMode::Existing => Ok((
+            require_conversation_identifier_option(
+                request.conversation_id.as_deref(),
+                "conversation_id",
+            )?,
+            Some(require_conversation_identifier_option(
+                request.thread_id.as_deref(),
+                "thread_id",
+            )?),
+        )),
+    }
+}
+
+fn reject_agent_only_context_expansion(
+    context: &ConversationTransportContextRequest,
+) -> Result<(), String> {
+    if context.project_id.is_some() || context.workflow_id.is_some() {
+        return Err("conversation_transport_agent_context_expansion_forbidden".to_string());
+    }
+    Ok(())
+}
+
+fn resolve_supervisor_conversation_context(
+    state: &AppState,
+    context: &ConversationTransportContextRequest,
+) -> Result<ResolvedSupervisorConversationContext, String> {
+    let project_root = canonical_conversation_project_root(&context.project_root)?;
+    let expected_project_id = project_id(&project_root);
+    if let Some(project_id) = context.project_id.as_deref() {
+        if require_conversation_identifier(project_id, "project_id")? != expected_project_id {
+            return Err("conversation_transport_supervisor_project_id_mismatch".to_string());
+        }
+    }
+    let index = read_index(state)
+        .map_err(|_| "conversation_transport_project_index_unavailable".to_string())?;
+    if !indexed_project_root_matches(&index, &project_root) {
+        return Err("conversation_transport_supervisor_project_not_indexed".to_string());
+    }
+    let workflow_id =
+        require_conversation_identifier_option(context.workflow_id.as_deref(), "workflow_id")?;
+    let workflow_state_path = fs::canonicalize(&state.workflow_state_path)
+        .map_err(|_| "conversation_transport_workflow_state_unavailable".to_string())?;
+    if !workflow_state_path.is_file() {
+        return Err("conversation_transport_workflow_state_unavailable".to_string());
+    }
+    let workflow_state = read_workflow_state_value(&workflow_state_path)
+        .map_err(|_| "conversation_transport_workflow_state_unavailable".to_string())?;
+    let belongs_to_project = workflow_state
+        .get("workflows")
+        .and_then(Value::as_array)
+        .is_some_and(|workflows| {
+            workflows.iter().any(|workflow| {
+                workflow.get("workflow_id").and_then(Value::as_str) == Some(workflow_id.as_str())
+                    && workflow.get("project_id").and_then(Value::as_str)
+                        == Some(expected_project_id.as_str())
+            })
+        });
+    if !belongs_to_project {
+        return Err("conversation_transport_supervisor_workflow_ownership_mismatch".to_string());
+    }
+    Ok(ResolvedSupervisorConversationContext {
+        project_id: expected_project_id,
+        project_root,
+        workflow_id,
+        workflow_state_path,
+    })
+}
+
+fn indexed_project_root_matches(index: &Value, project_root: &str) -> bool {
+    index
+        .get("projects")
+        .and_then(Value::as_array)
+        .is_some_and(|projects| {
+            projects.iter().any(|project| {
+                project
+                    .get("project_root")
+                    .and_then(Value::as_str)
+                    .and_then(|root| canonical_conversation_project_root(root).ok())
+                    .as_deref()
+                    == Some(project_root)
+            })
+        })
+}
+
+fn verify_supervisor_existing_thread(
+    state: &AppState,
+    thread_id: &str,
+    project_root: &str,
+) -> Result<(), String> {
+    let index = read_index(state)
+        .map_err(|_| "conversation_transport_project_index_unavailable".to_string())?;
+    let matches = index
+        .get("threads")
+        .and_then(Value::as_array)
+        .and_then(|threads| {
+            threads.iter().find(|thread| {
+                thread.get("thread_id").and_then(Value::as_str) == Some(thread_id)
+                    && thread
+                        .get("project_root")
+                        .and_then(Value::as_str)
+                        .and_then(|root| canonical_conversation_project_root(root).ok())
+                        .as_deref()
+                        == Some(project_root)
+            })
+        })
+        .is_some();
+    if matches {
+        Ok(())
+    } else {
+        Err("conversation_transport_supervisor_thread_not_host_observed".to_string())
+    }
+}
+
+fn supervisor_conversation_mcp_config(
+    context: &ResolvedSupervisorConversationContext,
+    run_id: &str,
+) -> mcp::McpServerConfig {
+    mcp::McpServerConfig {
+        role: mcp::McpRole::SupervisorOrchestrator,
+        run_id: run_id.to_string(),
+        node_id: None,
+        supervisor_workflow_state_path: Some(context.workflow_state_path.clone()),
+        supervisor_quota_limits: Some(mcp::SupervisorQuotaLimits {
+            max_active_workers: SUPERVISOR_CONVERSATION_MAX_ACTIVE_WORKERS,
+            max_follow_ups_per_worker: SUPERVISOR_CONVERSATION_MAX_FOLLOW_UPS_PER_WORKER,
+            max_runtime_minutes: SUPERVISOR_CONVERSATION_MAX_RUNTIME_MINUTES,
+        }),
+        knowledge_open_relay: None,
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    // A deterministic poison-equivalent keeps this shared registry usable by
+    // parallel tests while covering the exact lock-error cleanup branch.
+    static CONVERSATION_TRANSPORT_COMMAND_ATTEMPT_REGISTRY_UNAVAILABLE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+struct ConversationTransportCommandAttemptRegistryUnavailableGuard;
+
+#[cfg(test)]
+impl Drop for ConversationTransportCommandAttemptRegistryUnavailableGuard {
+    fn drop(&mut self) {
+        CONVERSATION_TRANSPORT_COMMAND_ATTEMPT_REGISTRY_UNAVAILABLE
+            .with(|failure| failure.set(false));
+    }
+}
+
+#[cfg(test)]
+fn force_conversation_transport_command_attempt_registry_unavailable(
+) -> ConversationTransportCommandAttemptRegistryUnavailableGuard {
+    CONVERSATION_TRANSPORT_COMMAND_ATTEMPT_REGISTRY_UNAVAILABLE.with(|failure| failure.set(true));
+    ConversationTransportCommandAttemptRegistryUnavailableGuard
+}
+
+fn register_conversation_transport_attempt_if_pending(
+    receipt: &ConversationTransportCommandReceipt,
+    attempt: ConversationTransportCommandAttempt,
+) -> Result<(), String> {
+    if receipt.transport.status != "pending" {
+        return Ok(());
+    }
+    let attempt_id = receipt
+        .transport
+        .attempt_id
+        .as_deref()
+        .ok_or_else(|| "conversation_transport_attempt_id_missing".to_string())?;
+    #[cfg(test)]
+    if CONVERSATION_TRANSPORT_COMMAND_ATTEMPT_REGISTRY_UNAVAILABLE.with(std::cell::Cell::get) {
+        return Err("conversation_transport_attempt_registry_unavailable".to_string());
+    }
+    let mut attempts = conversation_transport_command_attempts()
+        .lock()
+        .map_err(|_| "conversation_transport_attempt_registry_unavailable".to_string())?;
+    if attempts.contains_key(attempt_id) {
+        return Err("conversation_transport_attempt_id_collision".to_string());
+    }
+    attempts.insert(attempt_id.to_string(), attempt);
+    Ok(())
+}
+
+/// The outer command registry is intentionally registered after the inner
+/// safe-only transport.  A collision must therefore settle the inner attempt
+/// before this caller returns an error.  If that settlement itself cannot
+/// complete, install a distinct host-owned recovery entry so a later trusted
+/// stop/poll still has a route to the protected child without replacing an
+/// unrelated owner that happened to use the same outer id.
+fn register_supervisor_conversation_transport_attempt_or_cleanup(
+    receipt: &mut ConversationTransportCommandReceipt,
+    attempt: ConversationTransportCommandAttempt,
+    underlying_attempt_id: &str,
+    timestamp: &str,
+) -> Result<(), String> {
+    match register_conversation_transport_attempt_if_pending(receipt, attempt.clone()) {
+        Ok(()) => Ok(()),
+        Err(error) => match manual_relay::conversation_transport::
+            abort_supervisor_conversation_transport_attempt(underlying_attempt_id, timestamp)
+        {
+            Ok(()) => Err(error),
+            Err(_) => retain_supervisor_conversation_transport_cleanup_route(
+                receipt,
+                attempt,
+                underlying_attempt_id,
+            ),
+        },
+    }
+}
+
+/// This path is reached only after a host-selected supervisor start already
+/// installed the safe-only marker and its first trusted cleanup failed.  It
+/// deliberately bypasses the ordinary collision/poison error so that the
+/// pending attempt remains reachable from the existing host command map.  It
+/// never creates a generic/raw route, and a host-generated recovery id keeps
+/// an existing owner under the original outer id intact.
+fn retain_supervisor_conversation_transport_cleanup_route(
+    receipt: &mut ConversationTransportCommandReceipt,
+    mut attempt: ConversationTransportCommandAttempt,
+    underlying_attempt_id: &str,
+) -> Result<(), String> {
+    let recovery_base = supervisor_cleanup_recovery_attempt_id(underlying_attempt_id, &attempt)?;
+    attempt.relay_attempt_id = underlying_attempt_id.to_string();
+    attempt.host_owned_cleanup_recovery = true;
+    let mut attempts = conversation_transport_command_attempts()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut collision_index = 0usize;
+    let recovery_attempt_id = loop {
+        let candidate = if collision_index == 0 {
+            recovery_base.clone()
+        } else {
+            format!("{recovery_base}:{collision_index}")
+        };
+        match attempts.get(&candidate) {
+            None => {
+                attempts.insert(candidate.clone(), attempt.clone());
+                break candidate;
+            }
+            Some(existing)
+                if existing.host_owned_cleanup_recovery
+                    && existing.relay_attempt_id == underlying_attempt_id
+                    && same_supervisor_conversation_attempt(existing, &attempt) =>
+            {
+                break candidate;
+            }
+            Some(_) => {
+                collision_index = collision_index.checked_add(1).ok_or_else(|| {
+                    "conversation_transport_cleanup_recovery_unavailable".to_string()
+                })?;
+            }
+        }
+    };
+    drop(attempts);
+    set_supervisor_cleanup_pending_receipt(receipt, recovery_attempt_id);
+    Ok(())
+}
+
+/// The route already belongs to this supervisor command, so a cleanup retry
+/// need not create a second public id.  Marking this exact entry as
+/// host-owned is nevertheless essential: should the outer mutex later be
+/// poisoned, ordinary entries stay fail-closed while this sole safe cleanup
+/// route remains reachable.
+fn retain_existing_supervisor_conversation_transport_cleanup_route(
+    receipt: &mut ConversationTransportCommandReceipt,
+    command_attempt_id: &str,
+    attempt: &mut ConversationTransportCommandAttempt,
+) -> Result<(), String> {
+    if !matches!(
+        &attempt.profile,
+        ConversationTransportCommandAttemptProfile::Supervisor(_)
+    ) {
+        return Err("conversation_transport_cleanup_recovery_profile_invalid".to_string());
+    }
+    attempt.host_owned_cleanup_recovery = true;
+    set_supervisor_cleanup_pending_receipt(receipt, command_attempt_id.to_string());
+    Ok(())
+}
+
+/// This receipt is emitted only after the host has both failed to settle the
+/// child and retained a trusted retry route.  It must never claim delivery or
+/// expose the private inner relay attempt id.
+fn set_supervisor_cleanup_pending_receipt(
+    receipt: &mut ConversationTransportCommandReceipt,
+    command_attempt_id: String,
+) {
+    receipt.transport.status = "pending".to_string();
+    receipt.transport.attempt_id = Some(command_attempt_id);
+    receipt.transport.human_message = Some("安全清理中，未确认消息已送达。".to_string());
+    receipt.assistant_reply.status = "not_requested".to_string();
+    receipt.assistant_reply.human_message = None;
+    receipt.assistant_reply.text = None;
+}
+
+fn supervisor_cleanup_recovery_attempt_id(
+    underlying_attempt_id: &str,
+    attempt: &ConversationTransportCommandAttempt,
+) -> Result<String, String> {
+    let ConversationTransportCommandAttemptProfile::Supervisor(binding) = &attempt.profile else {
+        return Err("conversation_transport_cleanup_recovery_profile_invalid".to_string());
+    };
+    let identity = utils::hash::sha256_hex(&format!(
+        "supervisor_cleanup_recovery_v1\n{underlying_attempt_id}\n{}\n{}\n{}",
+        binding.config.run_id, attempt.conversation_id, attempt.turn_id
+    ));
+    Ok(format!("supervisor-cleanup-retry:{}", &identity[..24]))
+}
+
+fn same_supervisor_conversation_attempt(
+    left: &ConversationTransportCommandAttempt,
+    right: &ConversationTransportCommandAttempt,
+) -> bool {
+    matches!(
+        (&left.profile, &right.profile),
+        (
+            ConversationTransportCommandAttemptProfile::Supervisor(left_binding),
+            ConversationTransportCommandAttemptProfile::Supervisor(right_binding),
+        ) if left_binding.config.run_id == right_binding.config.run_id
+            && left.conversation_id == right.conversation_id
+            && left.turn_id == right.turn_id
+    )
+}
+
+/// A running supervisor transport can become terminal while its safe receipt
+/// is normalized (for example, when trusted binding activation fails).  It
+/// was spawned under the safe-only marker, so only the trusted transport
+/// cleanup may settle it; a raw endpoint must never become its escape hatch.
+fn cleanup_running_supervisor_transport_after_terminal_normalization(
+    raw_receipt: &manual_relay::conversation_transport::ConversationTransportReceipt,
+    response: &ConversationTransportCommandReceipt,
+    timestamp: &str,
+) -> Result<(), String> {
+    if raw_receipt.lifecycle != "running" || !conversation_transport_receipt_is_terminal(response) {
+        return Ok(());
+    }
+    manual_relay::conversation_transport::abort_supervisor_conversation_transport_attempt(
+        &raw_receipt.transport.attempt_id,
+        timestamp,
+    )
+    .map_err(|_| "conversation_transport_start_cleanup_failed".to_string())
+}
+
+/// A binding-normalization failure can turn a raw running transport into a
+/// terminal safe receipt.  If its first trusted abort cannot settle, retain a
+/// distinct host-only route rather than returning an unreachable protected
+/// child.  The caller returns the now-pending receipt and must not revoke the
+/// route itself.
+fn cleanup_running_supervisor_transport_after_terminal_normalization_or_retain(
+    raw_receipt: &manual_relay::conversation_transport::ConversationTransportReceipt,
+    response: &mut ConversationTransportCommandReceipt,
+    attempt: ConversationTransportCommandAttempt,
+    underlying_attempt_id: &str,
+    timestamp: &str,
+) -> Result<(), String> {
+    match cleanup_running_supervisor_transport_after_terminal_normalization(
+        raw_receipt,
+        response,
+        timestamp,
+    ) {
+        Ok(()) => Ok(()),
+        Err(_) => retain_supervisor_conversation_transport_cleanup_route(
+            response,
+            attempt,
+            underlying_attempt_id,
+        ),
+    }
+}
+
+fn normalize_supervisor_conversation_receipt(
+    receipt: &manual_relay::conversation_transport::ConversationTransportReceipt,
+    binding: &mut SupervisorConversationAttemptBinding,
+) -> ConversationTransportCommandReceipt {
+    let mut tool_override = None;
+    if let Some(thread_id) = receipt.thread_id.as_deref() {
+        if !binding.active {
+            if mcp::supervisor_orchestrator::activate_supervisor_conversation_turn_binding(
+                &binding.config,
+                thread_id,
+            )
+            .is_ok()
+            {
+                binding.active = true;
+            } else {
+                return supervisor_start_failure_after_binding_established(
+                    &binding.config,
+                    &receipt.turn_id,
+                    SupervisorConversationBindingStage::BindingActivate,
+                );
+            }
+        }
+    }
+    if let Some(lifecycle) = supervisor_terminal_lifecycle(receipt) {
+        if finish_supervisor_conversation_binding(&binding.config, lifecycle).is_err() {
+            tool_override = Some(supervisor_binding_failure_layer());
+        }
+    }
+    let mut normalized = normalize_conversation_transport_receipt(receipt, tool_override.clone());
+    if tool_override.is_none() {
+        apply_supervisor_observed_capability_layers(&mut normalized, &binding.config);
+        apply_supervisor_canonical_mirror_layer(&mut normalized, receipt, &binding.config);
+    }
+    normalized
+}
+
+/// Only the server-side MCP dispatcher can settle these layers.  A natural
+/// reply, a thread event, or a frontend request must never manufacture a tool
+/// success.  Proposal creation returns only after its existing DB-primary and
+/// JSON compatibility projection has completed, so that one trusted outcome
+/// can safely unlock the corresponding read-model refresh.
+fn apply_supervisor_observed_capability_layers(
+    receipt: &mut ConversationTransportCommandReceipt,
+    config: &mcp::McpServerConfig,
+) {
+    use mcp::supervisor_conversation_binding::ConversationCapabilityOutcome;
+
+    match mcp::supervisor_orchestrator::supervisor_conversation_capability_outcome(
+        config,
+        "submit_proposal",
+    ) {
+        Ok(Some(ConversationCapabilityOutcome::Succeeded)) => {
+            receipt.tool_action = ConversationTransportCommandLayer {
+                status: "succeeded".to_string(),
+                human_message: Some("方案已落为待用户确认卡；尚未批准，工作流未推进。".to_string()),
+            };
+            receipt.read_model_projection = ConversationTransportCommandLayer {
+                status: "succeeded".to_string(),
+                human_message: Some("方案卡读模型已完成兼容投影。".to_string()),
+            };
+        }
+        Ok(Some(ConversationCapabilityOutcome::Failed)) => {
+            receipt.tool_action = ConversationTransportCommandLayer {
+                status: "failed".to_string(),
+                human_message: Some("主管方案卡没有生成；自然回复不受影响。".to_string()),
+            };
+        }
+        Ok(Some(ConversationCapabilityOutcome::NotRequested)) | Ok(None) => {}
+        Err(_) => receipt.tool_action = supervisor_binding_failure_layer(),
+    }
+
+    match mcp::supervisor_orchestrator::supervisor_conversation_capability_audit_outcome(
+        config,
+        "submit_proposal",
+    ) {
+        Ok(Some(ConversationCapabilityOutcome::Failed)) => {
+            receipt.canonical_mirror = ConversationTransportCommandLayer {
+                status: "failed".to_string(),
+                human_message: Some(
+                    "工具审计未完整写入；已成立的方案卡和自然回复不受影响。".to_string(),
+                ),
+            };
+        }
+        Ok(Some(ConversationCapabilityOutcome::Succeeded))
+        | Ok(Some(ConversationCapabilityOutcome::NotRequested))
+        | Ok(None) => {}
+        Err(_) => {
+            receipt.canonical_mirror = ConversationTransportCommandLayer {
+                status: "failed".to_string(),
+                human_message: Some("工具审计结算状态不可用；自然回复不受影响。".to_string()),
+            };
+        }
+    }
+}
+
+fn apply_supervisor_canonical_mirror_layer(
+    normalized: &mut ConversationTransportCommandReceipt,
+    receipt: &manual_relay::conversation_transport::ConversationTransportReceipt,
+    config: &mcp::McpServerConfig,
+) {
+    if receipt.lifecycle != "completed"
+        || normalize_conversation_layer_status(&receipt.assistant_reply.status) != "succeeded"
+    {
+        return;
+    }
+    match mirror_completed_supervisor_conversation(config, receipt) {
+        Ok(()) if normalized.canonical_mirror.status != "failed" => {
+            normalized.canonical_mirror = ConversationTransportCommandLayer {
+                status: "succeeded".to_string(),
+                human_message: Some("已确认的本回合对话事实已完成兼容镜像。".to_string()),
+            };
+        }
+        Ok(()) => {}
+        Err(_) => {
+            normalized.canonical_mirror = ConversationTransportCommandLayer {
+                status: "failed".to_string(),
+                human_message: Some("事实镜像未刷新；自然回复仍可用。".to_string()),
+            };
+        }
+    }
+}
+
+fn mirror_completed_supervisor_conversation(
+    config: &mcp::McpServerConfig,
+    receipt: &manual_relay::conversation_transport::ConversationTransportReceipt,
+) -> Result<(), String> {
+    use mcp::supervisor_conversation_binding::{
+        ConversationCapabilityOutcome, ConversationTurnLifecycle,
+    };
+
+    let binding = mcp::supervisor_orchestrator::supervisor_conversation_binding_snapshot(config)?
+        .ok_or_else(|| "shared_conversation_canonical_binding_missing".to_string())?;
+    if binding.lifecycle != ConversationTurnLifecycle::Completed
+        || binding.turn_id != receipt.turn_id
+        || binding.thread_id.as_deref() != receipt.thread_id.as_deref()
+    {
+        return Err("shared_conversation_canonical_binding_mismatch".to_string());
+    }
+    let assistant_text = receipt
+        .assistant_reply
+        .text
+        .as_deref()
+        .filter(|text| !text.trim().is_empty())
+        .ok_or_else(|| "shared_conversation_canonical_reply_missing".to_string())?;
+    let thread_id = binding
+        .thread_id
+        .as_deref()
+        .ok_or_else(|| "shared_conversation_canonical_thread_missing".to_string())?;
+    let proposal_outcome = match binding
+        .capability_outcome("submit_proposal")
+        .map_err(|error| error.to_string())?
+    {
+        ConversationCapabilityOutcome::Succeeded => "materialized",
+        ConversationCapabilityOutcome::Failed => "tool_failed",
+        ConversationCapabilityOutcome::NotRequested => "not_requested",
+    };
+    let workflow_state_path = config
+        .supervisor_workflow_state_path
+        .as_deref()
+        .ok_or_else(|| "shared_conversation_canonical_workflow_state_missing".to_string())?;
+    let mut value = read_workflow_state_value(workflow_state_path)?;
+    let events = array_mut(&mut value, "audit_events")?;
+    let identity = utils::hash::sha256_hex(&format!(
+        "{}\n{}\n{}",
+        binding.project_id, binding.workflow_id, binding.turn_id
+    ));
+    let user_message_id = format!("shared-user:{identity}");
+    let assistant_message_id = format!("shared-supervisor:{identity}");
+    let created_at = unix_timestamp_string();
+    let user_event = json!({
+        "event_id": format!("shared-conversation-message:user:{identity}"),
+        "event_type": SHARED_CONVERSATION_USER_EVENT,
+        "target_ref": format!("{}:resident-message:{}", binding.workflow_id, user_message_id),
+        "project_id": binding.project_id,
+        "workflow_id": binding.workflow_id,
+        "message_id": user_message_id,
+        "turn_id": binding.turn_id,
+        "message_text": binding.user_message_snapshot(),
+        "actor_ref": "user",
+        // Compatibility spelling retained for the existing workflow read model;
+        // it does not route this turn back through the paused resident transport.
+        "source_kind": "supervisor_resident_user_message",
+        "permission_level": "read_only_conversation",
+        "created_at": created_at,
+        "reason": binding.user_message_snapshot(),
+    });
+    let assistant_event = json!({
+        "event_id": format!("shared-conversation-message:supervisor:{identity}"),
+        "event_type": SHARED_CONVERSATION_ASSISTANT_EVENT,
+        "target_ref": format!("{}:resident-message:{}", binding.workflow_id, assistant_message_id),
+        "project_id": binding.project_id,
+        "workflow_id": binding.workflow_id,
+        "message_id": assistant_message_id,
+        "reply_to_message_id": user_message_id,
+        "turn_id": binding.turn_id,
+        "thread_id": thread_id,
+        "message_text": assistant_text,
+        "proposal_outcome": proposal_outcome,
+        "actor_ref": "supervisor_resident",
+        "source_kind": "supervisor_resident_supervisor_message",
+        "permission_level": "read_only_conversation",
+        "created_at": created_at,
+        "reason": assistant_text,
+    });
+    let user_added = append_shared_conversation_canonical_event(events, user_event)?;
+    let assistant_added = append_shared_conversation_canonical_event(events, assistant_event)?;
+    if !user_added && !assistant_added {
+        return Ok(());
+    }
+    write_shared_conversation_canonical_batch2(workflow_state_path, &value)
+}
+
+fn append_shared_conversation_canonical_event(
+    events: &mut Vec<Value>,
+    candidate: Value,
+) -> Result<bool, String> {
+    let event_id = candidate
+        .get("event_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "shared_conversation_canonical_event_id_missing".to_string())?;
+    let existing = events.iter().find(|event| {
+        event.get("event_id").and_then(Value::as_str) == Some(event_id)
+            || (event.get("event_type") == candidate.get("event_type")
+                && event.get("project_id") == candidate.get("project_id")
+                && event.get("workflow_id") == candidate.get("workflow_id")
+                && event.get("message_id") == candidate.get("message_id"))
+    });
+    if let Some(existing) = existing {
+        for key in [
+            "event_type",
+            "target_ref",
+            "project_id",
+            "workflow_id",
+            "message_id",
+            "reply_to_message_id",
+            "turn_id",
+            "thread_id",
+            "message_text",
+            "proposal_outcome",
+            "actor_ref",
+            "source_kind",
+            "permission_level",
+        ] {
+            if existing.get(key) != candidate.get(key) {
+                return Err("shared_conversation_canonical_identity_conflict".to_string());
+            }
+        }
+        return Ok(false);
+    }
+    events.push(candidate);
+    Ok(true)
+}
+
+#[cfg(test)]
+thread_local! {
+    static SHARED_CONVERSATION_CANONICAL_BATCH2_FAILURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+struct SharedConversationCanonicalBatch2FailureGuard;
+
+#[cfg(test)]
+impl Drop for SharedConversationCanonicalBatch2FailureGuard {
+    fn drop(&mut self) {
+        SHARED_CONVERSATION_CANONICAL_BATCH2_FAILURE.with(|failure| failure.set(false));
+    }
+}
+
+#[cfg(test)]
+fn force_shared_conversation_canonical_batch2_failure(
+) -> SharedConversationCanonicalBatch2FailureGuard {
+    SHARED_CONVERSATION_CANONICAL_BATCH2_FAILURE.with(|failure| failure.set(true));
+    SharedConversationCanonicalBatch2FailureGuard
+}
+
+fn write_shared_conversation_canonical_batch2(
+    workflow_state_path: &Path,
+    value: &Value,
+) -> Result<(), String> {
+    #[cfg(test)]
+    if SHARED_CONVERSATION_CANONICAL_BATCH2_FAILURE.with(std::cell::Cell::get) {
+        return Err("shared_conversation_canonical_batch2_test_failure".to_string());
+    }
+    write_m5b_batch2_workflow_state(
+        workflow_state_path,
+        "shared_conversation_canonical_mirrored",
+        value,
+    )
+}
+
+fn finish_supervisor_conversation_binding(
+    config: &mcp::McpServerConfig,
+    lifecycle: mcp::supervisor_conversation_binding::ConversationTurnLifecycle,
+) -> Result<(), String> {
+    mcp::supervisor_orchestrator::finish_supervisor_conversation_turn_binding(config, lifecycle)
+}
+
+fn supervisor_terminal_lifecycle(
+    receipt: &manual_relay::conversation_transport::ConversationTransportReceipt,
+) -> Option<mcp::supervisor_conversation_binding::ConversationTurnLifecycle> {
+    match receipt.lifecycle.as_str() {
+        "completed" => {
+            Some(mcp::supervisor_conversation_binding::ConversationTurnLifecycle::Completed)
+        }
+        "failed" => Some(mcp::supervisor_conversation_binding::ConversationTurnLifecycle::Failed),
+        "stopped" => Some(mcp::supervisor_conversation_binding::ConversationTurnLifecycle::Stopped),
+        _ => None,
+    }
+}
+
+fn normalize_conversation_transport_receipt(
+    receipt: &manual_relay::conversation_transport::ConversationTransportReceipt,
+    tool_override: Option<ConversationTransportCommandLayer>,
+) -> ConversationTransportCommandReceipt {
+    let cleanup_pending = receipt.lifecycle == "cleanup_pending";
+    let transport_status = normalize_conversation_transport_status(&receipt.lifecycle);
+    let assistant_status = if cleanup_pending {
+        "not_requested"
+    } else {
+        normalize_conversation_layer_status(&receipt.assistant_reply.status)
+    };
+    ConversationTransportCommandReceipt {
+        conversation_id: nonempty_conversation_value(&receipt.conversation_id),
+        thread_id: receipt
+            .thread_id
+            .as_deref()
+            .and_then(nonempty_conversation_value),
+        turn_id: receipt.turn_id.clone(),
+        transport: ConversationTransportCommandTransportLayer {
+            status: transport_status.to_string(),
+            human_message: if cleanup_pending {
+                Some("安全清理中，未确认消息已送达。".to_string())
+            } else {
+                transport_human_message(transport_status)
+            },
+            attempt_id: nonempty_conversation_value(&receipt.transport.attempt_id),
+            binding_stage: None,
+        },
+        assistant_reply: ConversationTransportCommandAssistantLayer {
+            status: assistant_status.to_string(),
+            human_message: assistant_human_message(assistant_status),
+            text: (!cleanup_pending)
+                .then(|| receipt.assistant_reply.text.clone())
+                .flatten(),
+            assistant_item_id: None,
+        },
+        // A natural-language reply and its transport lifecycle are not evidence that
+        // an MCP tool, read-model projection, or canonical mirror settled. The
+        // transport core currently reports those layers as `not_requested` until a
+        // host-owned observation is available, and this command must preserve that
+        // boundary rather than infer success from the reply.
+        tool_action: tool_override.unwrap_or_else(|| {
+            normalize_generic_conversation_layer(
+                &receipt.tool_action,
+                ConversationReceiptLayerKind::Tool,
+            )
+        }),
+        read_model_projection: normalize_generic_conversation_layer(
+            &receipt.read_model_projection,
+            ConversationReceiptLayerKind::Projection,
+        ),
+        canonical_mirror: normalize_generic_conversation_layer(
+            &receipt.canonical_mirror,
+            ConversationReceiptLayerKind::Canonical,
+        ),
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ConversationReceiptLayerKind {
+    Tool,
+    Projection,
+    Canonical,
+}
+
+fn normalize_generic_conversation_layer(
+    layer: &manual_relay::conversation_transport::ConversationLayerReceipt,
+    kind: ConversationReceiptLayerKind,
+) -> ConversationTransportCommandLayer {
+    let status = normalize_conversation_layer_status(&layer.status);
+    ConversationTransportCommandLayer {
+        status: status.to_string(),
+        human_message: generic_layer_human_message(kind, status),
+    }
+}
+
+fn supervisor_binding_failure_layer() -> ConversationTransportCommandLayer {
+    ConversationTransportCommandLayer {
+        status: "failed".to_string(),
+        human_message: Some("主管工具暂不可用；自然回复不受影响。".to_string()),
+    }
+}
+
+fn normalize_conversation_transport_status(value: &str) -> &'static str {
+    match value {
+        "starting" | "running" | "pending" | "cleanup_pending" => "pending",
+        "completed" | "succeeded" => "succeeded",
+        "stopped" => "stopped",
+        "not_requested" | "not_started" => "not_requested",
+        _ => "failed",
+    }
+}
+
+fn normalize_conversation_layer_status(value: &str) -> &'static str {
+    match value {
+        "pending" | "starting" | "running" => "pending",
+        "available" | "completed" | "succeeded" => "succeeded",
+        "stopped" => "stopped",
+        "not_requested" | "not_started" => "not_requested",
+        _ => "failed",
+    }
+}
+
+fn transport_human_message(status: &str) -> Option<String> {
+    match status {
+        "pending" => Some("消息已提交，正在等待回复。".to_string()),
+        "failed" => Some("对话运输未完成。".to_string()),
+        "stopped" => Some("对话已停止。".to_string()),
+        _ => None,
+    }
+}
+
+fn assistant_human_message(status: &str) -> Option<String> {
+    match status {
+        "pending" => Some("正在等待助手回复。".to_string()),
+        "failed" => Some("未收到可展示的助手回复。".to_string()),
+        "stopped" => Some("对话已停止，未形成完整回复。".to_string()),
+        _ => None,
+    }
+}
+
+fn generic_layer_human_message(kind: ConversationReceiptLayerKind, status: &str) -> Option<String> {
+    match (kind, status) {
+        (_, "not_requested") => None,
+        (ConversationReceiptLayerKind::Tool, "pending") => Some("结构化动作仍在结算。".to_string()),
+        (ConversationReceiptLayerKind::Tool, "succeeded") => Some("结构化动作已完成。".to_string()),
+        (ConversationReceiptLayerKind::Tool, "failed") => {
+            Some("结构化动作未完成；自然回复不受影响。".to_string())
+        }
+        (ConversationReceiptLayerKind::Tool, "stopped") => Some("结构化动作已停止。".to_string()),
+        (ConversationReceiptLayerKind::Projection, "failed") => {
+            Some("读模型未刷新；对话回复仍可用。".to_string())
+        }
+        (ConversationReceiptLayerKind::Canonical, "failed") => {
+            Some("事实镜像未刷新；对话回复仍可用。".to_string())
+        }
+        (_, "pending") => Some("仍在结算。".to_string()),
+        (_, "succeeded") => Some("已完成。".to_string()),
+        (_, "stopped") => Some("已停止。".to_string()),
+        _ => Some("未完成。".to_string()),
+    }
+}
+
+fn conversation_transport_receipt_is_terminal(
+    receipt: &ConversationTransportCommandReceipt,
+) -> bool {
+    matches!(
+        receipt.transport.status.as_str(),
+        "succeeded" | "failed" | "stopped"
+    )
+}
+
+fn canonical_conversation_project_root(value: &str) -> Result<String, String> {
+    let candidate = value.trim();
+    if candidate.is_empty() {
+        return Err("conversation_transport_project_root_required".to_string());
+    }
+    let canonical = fs::canonicalize(candidate)
+        .map_err(|_| "conversation_transport_project_root_unverified".to_string())?;
+    if !canonical.is_dir() {
+        return Err("conversation_transport_project_root_unverified".to_string());
+    }
+    Ok(canonical.display().to_string())
+}
+
+fn require_conversation_user_text(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("conversation_transport_user_text_required".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+fn require_conversation_identifier(value: &str, label: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed != value {
+        return Err(format!("conversation_transport_{label}_required"));
+    }
+    Ok(value.to_string())
+}
+
+fn require_conversation_identifier_option(
+    value: Option<&str>,
+    label: &str,
+) -> Result<String, String> {
+    value
+        .ok_or_else(|| format!("conversation_transport_{label}_required"))
+        .and_then(|value| require_conversation_identifier(value, label))
+}
+
+fn nonempty_conversation_value(value: &str) -> Option<String> {
+    (!value.trim().is_empty()).then(|| value.to_string())
+}
+
+#[cfg(test)]
+mod conversation_transport_command_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static CANONICAL_FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+    struct SupervisorCanonicalFixture {
+        root: PathBuf,
+        state_path: PathBuf,
+        config: mcp::McpServerConfig,
+        binding: SupervisorConversationAttemptBinding,
+    }
+
+    impl SupervisorCanonicalFixture {
+        fn new() -> Self {
+            Self::with_active_binding(true)
+        }
+
+        fn starting() -> Self {
+            Self::with_active_binding(false)
+        }
+
+        fn with_active_binding(active: bool) -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "shared-supervisor-canonical-{}-{}",
+                std::process::id(),
+                CANONICAL_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::create_dir_all(&root).expect("canonical fixture project root");
+            let state_path = root.join("workflow-state.json");
+            let project_root = root.display().to_string();
+            let project_id = project_id(&project_root);
+            let workflow_id = "workflow:shared-supervisor-canonical";
+            let mut state = initial_workflow_state_json(
+                "2026-07-23T00:00:00Z",
+                "audit:fixture:init",
+                false,
+                &state_path,
+            );
+            state["projects"] = json!([{
+                "project_id": project_id,
+                "project_root": project_root
+            }]);
+            state["workflows"] = json!([{
+                "workflow_id": workflow_id,
+                "project_id": project_id
+            }]);
+            fs::write(
+                &state_path,
+                serde_json::to_vec(&state).expect("canonical fixture state json"),
+            )
+            .expect("canonical fixture state");
+
+            let config = mcp::McpServerConfig {
+                role: mcp::McpRole::SupervisorOrchestrator,
+                run_id: "supervisor-conversation:canonical-fixture".to_string(),
+                node_id: None,
+                supervisor_workflow_state_path: Some(state_path.clone()),
+                supervisor_quota_limits: Some(mcp::SupervisorQuotaLimits {
+                    max_active_workers: SUPERVISOR_CONVERSATION_MAX_ACTIVE_WORKERS,
+                    max_follow_ups_per_worker: SUPERVISOR_CONVERSATION_MAX_FOLLOW_UPS_PER_WORKER,
+                    max_runtime_minutes: SUPERVISOR_CONVERSATION_MAX_RUNTIME_MINUTES,
+                }),
+                knowledge_open_relay: None,
+            };
+            let trusted = mcp::supervisor_conversation_binding::ConversationTurnBinding::establish_supervisor_read_only(
+                mcp::supervisor_conversation_binding::SupervisorConversationTurnInput {
+                    project_id,
+                    project_root,
+                    workflow_id: workflow_id.to_string(),
+                    turn_id: "turn:fixture".to_string(),
+                    transport_attempt: 1,
+                    run_id: config.run_id.clone(),
+                    user_message_snapshot: "trusted user message".to_string(),
+                    created_at_ms: unix_timestamp_ms(),
+                    max_runtime_minutes: SUPERVISOR_CONVERSATION_MAX_RUNTIME_MINUTES,
+                },
+            )
+            .expect("canonical fixture trusted binding");
+            mcp::supervisor_orchestrator::establish_supervisor_conversation_turn_binding(
+                &config, trusted,
+            )
+            .expect("persist canonical fixture binding");
+            if active {
+                mcp::supervisor_orchestrator::activate_supervisor_conversation_turn_binding(
+                    &config,
+                    "thread:fixture",
+                )
+                .expect("activate canonical fixture binding");
+            }
+            Self {
+                root,
+                state_path,
+                config: config.clone(),
+                binding: SupervisorConversationAttemptBinding { config, active },
+            }
+        }
+
+        fn canonical_events(&self) -> Vec<Value> {
+            read_workflow_state_value(&self.state_path)
+                .expect("read canonical fixture state")
+                .get("audit_events")
+                .and_then(Value::as_array)
+                .expect("canonical fixture audit events")
+                .clone()
+        }
+    }
+
+    impl Drop for SupervisorCanonicalFixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn raw_receipt(
+        lifecycle: &str,
+        assistant_status: &str,
+        tool_status: &str,
+    ) -> manual_relay::conversation_transport::ConversationTransportReceipt {
+        manual_relay::conversation_transport::ConversationTransportReceipt {
+            profile_id: "supervisor-read-only".to_string(),
+            conversation_id: "conversation:fixture".to_string(),
+            thread_id: Some("thread:fixture".to_string()),
+            turn_id: "turn:fixture".to_string(),
+            lifecycle: lifecycle.to_string(),
+            transport: manual_relay::conversation_transport::ConversationTransportLayerReceipt {
+                status: lifecycle.to_string(),
+                attempt_id: "attempt:fixture".to_string(),
+                started_at: "2026-07-23T00:00:00Z".to_string(),
+                ended_at: None,
+            },
+            assistant_reply:
+                manual_relay::conversation_transport::ConversationAssistantReplyReceipt {
+                    status: assistant_status.to_string(),
+                    text: Some("safe reply".to_string()),
+                },
+            tool_action: manual_relay::conversation_transport::ConversationLayerReceipt {
+                status: tool_status.to_string(),
+                summary: Some("must not reach the UI".to_string()),
+            },
+            read_model_projection: manual_relay::conversation_transport::ConversationLayerReceipt {
+                status: "not_started".to_string(),
+                summary: Some("private projection detail".to_string()),
+            },
+            canonical_mirror: manual_relay::conversation_transport::ConversationLayerReceipt {
+                status: "not_started".to_string(),
+                summary: Some("private canonical detail".to_string()),
+            },
+        }
+    }
+
+    #[test]
+    fn normalized_receipt_uses_frontend_statuses_and_omits_raw_summary() {
+        let normalized = normalize_conversation_transport_receipt(
+            &raw_receipt("running", "available", "failed"),
+            None,
+        );
+        assert_eq!(normalized.transport.status, "pending");
+        assert_eq!(normalized.assistant_reply.status, "succeeded");
+        assert_eq!(normalized.tool_action.status, "failed");
+        assert_eq!(normalized.read_model_projection.status, "not_requested");
+        let serialized = serde_json::to_string(&normalized).expect("serialize normalized receipt");
+        assert!(!serialized.contains("must not reach the UI"));
+        assert!(!serialized.contains("private projection detail"));
+        assert!(!serialized.contains("private canonical detail"));
+        assert!(!serialized.contains("started_at"));
+    }
+
+    #[test]
+    fn cleanup_pending_receipt_is_retryable_without_claiming_message_delivery() {
+        let normalized = normalize_conversation_transport_receipt(
+            &raw_receipt("cleanup_pending", "available", "not_requested"),
+            None,
+        );
+        assert_eq!(normalized.transport.status, "pending");
+        assert_eq!(
+            normalized.transport.human_message.as_deref(),
+            Some("安全清理中，未确认消息已送达。")
+        );
+        assert!(!conversation_transport_receipt_is_terminal(&normalized));
+        assert_eq!(normalized.assistant_reply.status, "not_requested");
+        assert!(normalized.assistant_reply.text.is_none());
+        let serialized = serde_json::to_string(&normalized).expect("serialize cleanup receipt");
+        assert!(!serialized.contains("消息已提交"));
+        assert!(!serialized.contains("safe reply"));
+    }
+
+    #[test]
+    fn poisoned_registry_allows_only_host_owned_supervisor_recovery_routes() {
+        let fixture = SupervisorCanonicalFixture::new();
+        let recovery_id = "supervisor-cleanup-retry:poison-fixture".to_string();
+        let normal_supervisor_id = "supervisor-normal:poison-fixture".to_string();
+        let agent_id = "agent:poison-fixture".to_string();
+        let registry = std::sync::Mutex::new(std::collections::BTreeMap::from([
+            (
+                recovery_id.clone(),
+                ConversationTransportCommandAttempt {
+                    relay_attempt_id: "manual-relay:poison-recovery".to_string(),
+                    host_owned_cleanup_recovery: true,
+                    conversation_id: "conversation:poison-recovery".to_string(),
+                    turn_id: "turn:poison-recovery".to_string(),
+                    profile: ConversationTransportCommandAttemptProfile::Supervisor(
+                        fixture.binding.clone(),
+                    ),
+                },
+            ),
+            (
+                normal_supervisor_id.clone(),
+                ConversationTransportCommandAttempt {
+                    relay_attempt_id: "manual-relay:poison-normal".to_string(),
+                    host_owned_cleanup_recovery: false,
+                    conversation_id: "conversation:poison-normal".to_string(),
+                    turn_id: "turn:poison-normal".to_string(),
+                    profile: ConversationTransportCommandAttemptProfile::Supervisor(
+                        fixture.binding.clone(),
+                    ),
+                },
+            ),
+            (
+                agent_id.clone(),
+                ConversationTransportCommandAttempt {
+                    relay_attempt_id: "manual-relay:poison-agent".to_string(),
+                    host_owned_cleanup_recovery: false,
+                    conversation_id: "conversation:poison-agent".to_string(),
+                    turn_id: "turn:poison-agent".to_string(),
+                    profile: ConversationTransportCommandAttemptProfile::Agent,
+                },
+            ),
+        ]));
+        let poison_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = registry.lock().expect("fixture registry lock");
+            panic!("fixture poisons the command-attempt mutex");
+        }));
+        assert!(poison_result.is_err());
+
+        let recovery =
+            lock_conversation_transport_command_attempts_for_run(&registry, &recovery_id).expect(
+                "only the host-owned supervisor recovery route may recover a poisoned lock",
+            );
+        assert_eq!(
+            recovery
+                .get(&recovery_id)
+                .expect("recovery route remains present")
+                .relay_attempt_id,
+            "manual-relay:poison-recovery"
+        );
+        drop(recovery);
+        for id in [&normal_supervisor_id, &agent_id] {
+            match lock_conversation_transport_command_attempts_for_run(&registry, id) {
+                Ok(_) => panic!("ordinary route must remain fail-closed after poison"),
+                Err(error) => {
+                    assert_eq!(error, "conversation_transport_attempt_registry_unavailable")
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn supervisor_binding_start_failures_are_turn_scoped_safe_receipts() {
+        let cases = [
+            (
+                mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingConstruct,
+                SupervisorConversationBindingStage::BindingConstruct,
+            ),
+            (
+                mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingStorePrepare,
+                SupervisorConversationBindingStage::BindingStorePrepare,
+            ),
+            (
+                mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingPersistDb,
+                SupervisorConversationBindingStage::BindingPersistDb,
+            ),
+            (
+                mcp::supervisor_orchestrator::SupervisorConversationBindingEstablishmentError::BindingProjectJson,
+                SupervisorConversationBindingStage::BindingProjectJson,
+            ),
+        ];
+        for (error, stage) in cases {
+            assert_eq!(
+                supervisor_binding_stage_for_establishment_error(error),
+                stage
+            );
+            let receipt = supervisor_start_failure_receipt("turn:binding-failure", stage);
+            assert_eq!(receipt.conversation_id, None);
+            assert_eq!(receipt.thread_id, None);
+            assert_eq!(receipt.transport.status, "failed");
+            assert_eq!(receipt.transport.attempt_id, None);
+            assert_eq!(receipt.transport.binding_stage, Some(stage));
+            assert_eq!(receipt.assistant_reply.status, "not_requested");
+            assert_eq!(receipt.tool_action.status, "not_requested");
+            let serialized =
+                serde_json::to_string(&receipt).expect("serialize safe binding failure receipt");
+            for forbidden in ["argv", "stderr", "environment", "/Users/"] {
+                assert!(
+                    !serialized.contains(forbidden),
+                    "binding failure receipt must not retain {forbidden}"
+                );
+            }
+        }
+        for stage in [
+            SupervisorConversationBindingStage::BindingActivate,
+            SupervisorConversationBindingStage::TransportStart,
+            SupervisorConversationBindingStage::BindingTerminate,
+        ] {
+            let receipt = supervisor_start_failure_receipt("turn:binding-failure", stage);
+            assert_eq!(receipt.transport.binding_stage, Some(stage));
+            assert_eq!(receipt.tool_action.status, "not_requested");
+        }
+    }
+
+    fn assert_supervisor_tools_closed(config: &mcp::McpServerConfig) {
+        assert!(
+            mcp::supervisor_orchestrator::list_tools(config)["tools"]
+                .as_array()
+                .expect("tool list is an array")
+                .is_empty(),
+            "failed or unconfirmed transport must not publish tools"
+        );
+        mcp::supervisor_orchestrator::call_tool(
+            config,
+            json!({"name": "submit_proposal", "arguments": {}}),
+        )
+        .expect_err("failed or unconfirmed transport must reject tools/call");
+    }
+
+    #[test]
+    fn injected_supervisor_activation_failure_finishes_binding_and_returns_activate_stage() {
+        let mut fixture = SupervisorCanonicalFixture::starting();
+        let failure = mcp::supervisor_orchestrator::force_supervisor_conversation_binding_lifecycle_test_failure(
+            mcp::supervisor_orchestrator::SupervisorConversationBindingLifecycleTestFailure::Activate,
+        );
+        let receipt = normalize_supervisor_conversation_receipt(
+            &raw_receipt("running", "available", "not_requested"),
+            &mut fixture.binding,
+        );
+        drop(failure);
+
+        assert_eq!(
+            receipt.transport.binding_stage,
+            Some(SupervisorConversationBindingStage::BindingActivate)
+        );
+        assert_eq!(receipt.conversation_id, None);
+        assert_eq!(receipt.thread_id, None);
+        assert_eq!(receipt.tool_action.status, "not_requested");
+        assert_eq!(
+            mcp::supervisor_orchestrator::supervisor_conversation_turn_binding_lifecycle(
+                &fixture.config,
+            )
+            .expect("activation failure must have a persisted terminal lifecycle"),
+            mcp::supervisor_conversation_binding::ConversationTurnLifecycle::Failed
+        );
+        assert_supervisor_tools_closed(&fixture.config);
+    }
+
+    #[test]
+    fn terminal_start_normalization_failure_reaps_running_safe_only_attempt() {
+        let _manual_relay_guard = crate::manual_relay::manual_relay_test_guard_for_shared_state();
+        let attempt_id = format!(
+            "supervisor-normalization-terminal-cleanup:{}",
+            std::process::id()
+        );
+        crate::manual_relay::install_safe_only_fixture_attempt_for_test(&attempt_id)
+            .expect("fixture installs the safe-only attempt before normalization");
+        let mut raw = raw_receipt("running", "available", "not_requested");
+        raw.transport.attempt_id = attempt_id.clone();
+        let mut fixture = SupervisorCanonicalFixture::starting();
+        let failure = mcp::supervisor_orchestrator::force_supervisor_conversation_binding_lifecycle_test_failure(
+            mcp::supervisor_orchestrator::SupervisorConversationBindingLifecycleTestFailure::Activate,
+        );
+        let response = normalize_supervisor_conversation_receipt(&raw, &mut fixture.binding);
+        drop(failure);
+
+        assert!(conversation_transport_receipt_is_terminal(&response));
+        cleanup_running_supervisor_transport_after_terminal_normalization(
+            &raw,
+            &response,
+            "2026-07-23T00:00:00Z",
+        )
+        .expect("terminal normalization must reap its running safe-only attempt");
+        assert!(crate::manual_relay::safe_only_fixture_attempt_is_cleared_for_test(&attempt_id));
+    }
+
+    #[test]
+    fn terminal_start_activation_failure_with_persistent_cleanup_keeps_host_recovery_route() {
+        let _manual_relay_guard = crate::manual_relay::manual_relay_test_guard_for_shared_state();
+        let attempt_id = format!(
+            "supervisor-terminal-start-persistent-cleanup:{}:{}:{}",
+            std::process::id(),
+            crate::unix_timestamp_nanos(),
+            CANONICAL_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+        );
+        let cleanup_fixture =
+            crate::manual_relay::install_safe_only_supervisor_cleanup_fixture_for_test(&attempt_id)
+                .expect("fixture installs child, durable registration, and bounded capture");
+        cleanup_fixture
+            .wait_until_child_ready()
+            .expect("fixture background child must run before terminal cleanup");
+        crate::manual_relay::conversation_transport::
+            install_supervisor_attempt_record_for_outer_cleanup_test(&attempt_id)
+                .expect("fixture installs the inner safe transport record");
+        let mut raw = raw_receipt("running", "available", "not_requested");
+        raw.transport.attempt_id = attempt_id.clone();
+        let mut fixture = SupervisorCanonicalFixture::starting();
+        let activation_failure = mcp::supervisor_orchestrator::force_supervisor_conversation_binding_lifecycle_test_failure(
+            mcp::supervisor_orchestrator::SupervisorConversationBindingLifecycleTestFailure::Activate,
+        );
+        let mut response = normalize_supervisor_conversation_receipt(&raw, &mut fixture.binding);
+        drop(activation_failure);
+        let attempt = ConversationTransportCommandAttempt {
+            relay_attempt_id: attempt_id.clone(),
+            host_owned_cleanup_recovery: false,
+            conversation_id: "conversation:outer-cleanup-fixture".to_string(),
+            turn_id: "turn:outer-cleanup-fixture".to_string(),
+            profile: ConversationTransportCommandAttemptProfile::Supervisor(
+                fixture.binding.clone(),
+            ),
+        };
+
+        let cleanup_result = {
+            let _child_stop_failures =
+                crate::manual_relay::force_manual_relay_child_stop_test_failures_for_test(3);
+            cleanup_running_supervisor_transport_after_terminal_normalization_or_retain(
+                &raw,
+                &mut response,
+                attempt,
+                &attempt_id,
+                "2026-07-23T00:00:00Z",
+            )
+        };
+        assert!(
+            cleanup_result.is_ok(),
+            "persistent terminal cleanup must retain a host recovery route"
+        );
+        let recovery_attempt_id = response
+            .transport
+            .attempt_id
+            .clone()
+            .expect("cleanup-pending receipt must expose only the host recovery route");
+        assert_ne!(recovery_attempt_id, attempt_id);
+        assert_eq!(response.transport.status, "pending");
+        assert_eq!(
+            response.transport.human_message.as_deref(),
+            Some("安全清理中，未确认消息已送达。")
+        );
+        assert_eq!(response.assistant_reply.status, "not_requested");
+        assert!(response.assistant_reply.text.is_none());
+        assert!(
+            cleanup_fixture
+                .is_retained_for_trusted_retry()
+                .expect("fixture retention state remains readable"),
+            "the child, durable registration, active state, marker, confirmation, and capture must remain paired"
+        );
+        {
+            let attempts = conversation_transport_command_attempts()
+                .lock()
+                .expect("outer registry lock");
+            let recovery = attempts
+                .get(&recovery_attempt_id)
+                .expect("persistent cleanup must install a host recovery route");
+            assert!(recovery.host_owned_cleanup_recovery);
+            assert_eq!(recovery.relay_attempt_id, attempt_id);
+        }
+
+        let relay = crate::knowledge_open_relay::KnowledgeOpenRelayState::new();
+        let stopped = run_conversation_transport_attempt(
+            ConversationTransportAttemptRequest {
+                attempt_id: recovery_attempt_id.clone(),
+            },
+            true,
+            &relay,
+        )
+        .expect("the recovery route must settle the protected attempt");
+        assert_eq!(stopped.transport.status, "stopped");
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        assert!(
+            cleanup_fixture
+                .is_fully_cleared()
+                .expect("fixture cleanup state remains readable"),
+            "trusted stop must clear every retained resource"
+        );
+        assert!(crate::manual_relay::conversation_transport::
+            supervisor_attempt_record_is_cleared_for_outer_cleanup_test(&attempt_id));
+        assert!(
+            !conversation_transport_command_attempts()
+                .lock()
+                .expect("outer registry lock")
+                .contains_key(&recovery_attempt_id),
+            "the settled recovery route must remove itself"
+        );
+    }
+
+    #[test]
+    fn poll_activation_failure_with_persistent_cleanup_keeps_existing_host_recovery_route() {
+        let _manual_relay_guard = crate::manual_relay::manual_relay_test_guard_for_shared_state();
+        let attempt_id = format!(
+            "supervisor-poll-normalization-persistent-cleanup:{}:{}:{}",
+            std::process::id(),
+            crate::unix_timestamp_nanos(),
+            CANONICAL_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+        );
+        let cleanup_fixture =
+            crate::manual_relay::install_safe_only_supervisor_cleanup_fixture_for_test(&attempt_id)
+                .expect("fixture installs child, durable registration, and bounded capture");
+        cleanup_fixture
+            .wait_until_child_ready()
+            .expect("fixture background child must run before poll cleanup");
+        crate::manual_relay::set_safe_only_fixture_thread_id_for_test(
+            &attempt_id,
+            "thread:fixture",
+        )
+        .expect("fixture records a host-observed thread id");
+        crate::manual_relay::conversation_transport::
+            install_supervisor_attempt_record_for_outer_cleanup_test(&attempt_id)
+                .expect("fixture installs the inner safe transport record");
+        let fixture = SupervisorCanonicalFixture::starting();
+        conversation_transport_command_attempts()
+            .lock()
+            .expect("outer registry lock")
+            .insert(
+                attempt_id.clone(),
+                ConversationTransportCommandAttempt {
+                    relay_attempt_id: attempt_id.clone(),
+                    host_owned_cleanup_recovery: false,
+                    conversation_id: "conversation:outer-cleanup-fixture".to_string(),
+                    turn_id: "turn:outer-cleanup-fixture".to_string(),
+                    profile: ConversationTransportCommandAttemptProfile::Supervisor(
+                        fixture.binding.clone(),
+                    ),
+                },
+            );
+        let relay = crate::knowledge_open_relay::KnowledgeOpenRelayState::new();
+        let response = {
+            let _activation_failure = mcp::supervisor_orchestrator::force_supervisor_conversation_binding_lifecycle_test_failure(
+                mcp::supervisor_orchestrator::SupervisorConversationBindingLifecycleTestFailure::Activate,
+            );
+            let _child_stop_failures =
+                crate::manual_relay::force_manual_relay_child_stop_test_failures_for_test(3);
+            run_conversation_transport_attempt(
+                ConversationTransportAttemptRequest {
+                    attempt_id: attempt_id.clone(),
+                },
+                false,
+                &relay,
+            )
+            .expect(
+                "activation failure with persistent cleanup must retain the existing host route",
+            )
+        };
+        let host_route_retained = response.transport.status == "pending"
+            && response.transport.attempt_id.as_deref() == Some(attempt_id.as_str())
+            && conversation_transport_command_attempts()
+                .lock()
+                .expect("outer registry lock")
+                .get(&attempt_id)
+                .is_some_and(|attempt| attempt.host_owned_cleanup_recovery);
+        if host_route_retained {
+            let stopped = run_conversation_transport_attempt(
+                ConversationTransportAttemptRequest {
+                    attempt_id: attempt_id.clone(),
+                },
+                true,
+                &relay,
+            )
+            .expect("the retained host route must settle the protected attempt");
+            assert_eq!(stopped.transport.status, "stopped");
+        } else {
+            let _ = crate::manual_relay::conversation_transport::
+                abort_supervisor_conversation_transport_attempt(
+                    &attempt_id,
+                    "2026-07-23T00:00:02Z",
+                );
+            conversation_transport_command_attempts()
+                .lock()
+                .expect("outer registry lock")
+                .remove(&attempt_id);
+        }
+        assert!(
+            host_route_retained,
+            "poll normalization must not discard the only trusted cleanup route"
+        );
+        assert_eq!(
+            response.transport.human_message.as_deref(),
+            Some("安全清理中，未确认消息已送达。")
+        );
+        assert_eq!(response.assistant_reply.status, "not_requested");
+        assert!(response.assistant_reply.text.is_none());
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        assert!(
+            cleanup_fixture
+                .is_fully_cleared()
+                .expect("fixture cleanup state remains readable"),
+            "trusted stop must clear every resource retained by poll normalization"
+        );
+        assert!(crate::manual_relay::conversation_transport::
+            supervisor_attempt_record_is_cleared_for_outer_cleanup_test(&attempt_id));
+    }
+
+    #[test]
+    fn outer_command_attempt_collision_reaps_running_safe_only_transport() {
+        let _manual_relay_guard = crate::manual_relay::manual_relay_test_guard_for_shared_state();
+        let attempt_id = format!(
+            "supervisor-outer-command-collision:{}:{}:{}",
+            std::process::id(),
+            crate::unix_timestamp_nanos(),
+            CANONICAL_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+        );
+        let cleanup_fixture =
+            crate::manual_relay::install_safe_only_supervisor_cleanup_fixture_for_test(&attempt_id)
+                .expect("fixture installs child, durable registration, and bounded capture");
+        cleanup_fixture
+            .wait_until_child_ready()
+            .expect("fixture background child must be running before outer cleanup");
+        crate::manual_relay::conversation_transport::
+            install_supervisor_attempt_record_for_outer_cleanup_test(&attempt_id)
+            .expect("fixture installs the inner safe transport record");
+        let mut response = normalize_conversation_transport_receipt(
+            &raw_receipt("running", "available", "not_requested"),
+            None,
+        );
+        response.transport.attempt_id = Some(attempt_id.clone());
+        let fixture = SupervisorCanonicalFixture::new();
+        conversation_transport_command_attempts()
+            .lock()
+            .expect("outer registry lock")
+            .insert(
+                attempt_id.clone(),
+                ConversationTransportCommandAttempt {
+                    relay_attempt_id: attempt_id.clone(),
+                    host_owned_cleanup_recovery: false,
+                    conversation_id: "conversation:existing".to_string(),
+                    turn_id: "turn:existing".to_string(),
+                    profile: ConversationTransportCommandAttemptProfile::Agent,
+                },
+            );
+
+        let error = register_supervisor_conversation_transport_attempt_or_cleanup(
+            &mut response,
+            ConversationTransportCommandAttempt {
+                relay_attempt_id: attempt_id.clone(),
+                host_owned_cleanup_recovery: false,
+                conversation_id: "conversation:new".to_string(),
+                turn_id: "turn:new".to_string(),
+                profile: ConversationTransportCommandAttemptProfile::Supervisor(
+                    fixture.binding.clone(),
+                ),
+            },
+            &attempt_id,
+            "2026-07-23T00:00:00Z",
+        )
+        .expect_err("outer collision must reject the second command attempt");
+        conversation_transport_command_attempts()
+            .lock()
+            .expect("outer registry lock")
+            .remove(&attempt_id);
+
+        assert_eq!(error, "conversation_transport_attempt_id_collision");
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        assert!(
+            cleanup_fixture
+                .is_fully_cleared()
+                .expect("fixture cleanup state remains readable"),
+            "outer collision must clear child group, durable registration, active/protected state, and capture"
+        );
+        assert!(crate::manual_relay::conversation_transport::
+            supervisor_attempt_record_is_cleared_for_outer_cleanup_test(&attempt_id));
+    }
+
+    #[test]
+    fn outer_command_attempt_registry_unavailable_reaps_running_safe_only_transport() {
+        let _manual_relay_guard = crate::manual_relay::manual_relay_test_guard_for_shared_state();
+        let attempt_id = format!(
+            "supervisor-outer-command-unavailable:{}:{}:{}",
+            std::process::id(),
+            crate::unix_timestamp_nanos(),
+            CANONICAL_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+        );
+        let cleanup_fixture =
+            crate::manual_relay::install_safe_only_supervisor_cleanup_fixture_for_test(&attempt_id)
+                .expect("fixture installs child, durable registration, and bounded capture");
+        cleanup_fixture
+            .wait_until_child_ready()
+            .expect("fixture background child must be running before outer cleanup");
+        crate::manual_relay::conversation_transport::
+            install_supervisor_attempt_record_for_outer_cleanup_test(&attempt_id)
+            .expect("fixture installs the inner safe transport record");
+        let mut response = normalize_conversation_transport_receipt(
+            &raw_receipt("running", "available", "not_requested"),
+            None,
+        );
+        response.transport.attempt_id = Some(attempt_id.clone());
+        let fixture = SupervisorCanonicalFixture::new();
+
+        let error = {
+            let _registry_unavailable =
+                force_conversation_transport_command_attempt_registry_unavailable();
+            register_supervisor_conversation_transport_attempt_or_cleanup(
+                &mut response,
+                ConversationTransportCommandAttempt {
+                    relay_attempt_id: attempt_id.clone(),
+                    host_owned_cleanup_recovery: false,
+                    conversation_id: "conversation:new".to_string(),
+                    turn_id: "turn:new".to_string(),
+                    profile: ConversationTransportCommandAttemptProfile::Supervisor(
+                        fixture.binding.clone(),
+                    ),
+                },
+                &attempt_id,
+                "2026-07-23T00:00:00Z",
+            )
+        }
+        .expect_err("outer registry unavailable must reject and clean up the safe transport");
+
+        assert_eq!(error, "conversation_transport_attempt_registry_unavailable");
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        assert!(
+            cleanup_fixture
+                .is_fully_cleared()
+                .expect("fixture cleanup state remains readable"),
+            "outer unavailable branch must clear child group, durable registration, active/protected state, and capture"
+        );
+        assert!(crate::manual_relay::conversation_transport::
+            supervisor_attempt_record_is_cleared_for_outer_cleanup_test(&attempt_id));
+    }
+
+    #[test]
+    fn cleanup_recovery_collision_uses_a_distinct_host_key_without_overwriting_owner() {
+        let fixture = SupervisorCanonicalFixture::new();
+        let underlying_attempt_id = format!(
+            "supervisor-cleanup-recovery-collision:{}:{}:{}",
+            std::process::id(),
+            crate::unix_timestamp_nanos(),
+            CANONICAL_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+        );
+        let attempt = ConversationTransportCommandAttempt {
+            relay_attempt_id: underlying_attempt_id.clone(),
+            host_owned_cleanup_recovery: false,
+            conversation_id: "conversation:recovery-collision".to_string(),
+            turn_id: "turn:recovery-collision".to_string(),
+            profile: ConversationTransportCommandAttemptProfile::Supervisor(
+                fixture.binding.clone(),
+            ),
+        };
+        let occupied_recovery_id =
+            supervisor_cleanup_recovery_attempt_id(&underlying_attempt_id, &attempt)
+                .expect("supervisor fixture derives a deterministic base recovery id");
+        conversation_transport_command_attempts()
+            .lock()
+            .expect("outer registry lock")
+            .insert(
+                occupied_recovery_id.clone(),
+                ConversationTransportCommandAttempt {
+                    relay_attempt_id: "agent-owner-must-survive".to_string(),
+                    host_owned_cleanup_recovery: false,
+                    conversation_id: "conversation:existing-owner".to_string(),
+                    turn_id: "turn:existing-owner".to_string(),
+                    profile: ConversationTransportCommandAttemptProfile::Agent,
+                },
+            );
+        let mut response = normalize_conversation_transport_receipt(
+            &raw_receipt("running", "available", "not_requested"),
+            None,
+        );
+        response.transport.attempt_id = Some(underlying_attempt_id.clone());
+        let result = retain_supervisor_conversation_transport_cleanup_route(
+            &mut response,
+            attempt,
+            &underlying_attempt_id,
+        );
+        let recovery_attempt_id = response.transport.attempt_id.clone();
+        let (existing_owner_preserved, recovery_installed) = {
+            let mut attempts = conversation_transport_command_attempts()
+                .lock()
+                .expect("outer registry lock");
+            let existing_owner_preserved =
+                attempts.get(&occupied_recovery_id).is_some_and(|existing| {
+                    matches!(
+                        &existing.profile,
+                        ConversationTransportCommandAttemptProfile::Agent
+                    ) && existing.relay_attempt_id == "agent-owner-must-survive"
+                });
+            let recovery_installed = recovery_attempt_id.as_ref().is_some_and(|recovery_id| {
+                recovery_id != &occupied_recovery_id
+                    && attempts.get(recovery_id).is_some_and(|recovery| {
+                        recovery.host_owned_cleanup_recovery
+                            && recovery.relay_attempt_id == underlying_attempt_id
+                            && matches!(
+                                &recovery.profile,
+                                ConversationTransportCommandAttemptProfile::Supervisor(_)
+                            )
+                    })
+            });
+            attempts.remove(&occupied_recovery_id);
+            if let Some(recovery_id) = recovery_attempt_id.as_deref() {
+                attempts.remove(recovery_id);
+            }
+            (existing_owner_preserved, recovery_installed)
+        };
+        assert!(
+            result.is_ok(),
+            "an occupied deterministic recovery id must not strand protected cleanup"
+        );
+        assert!(
+            existing_owner_preserved,
+            "the existing owner must remain untouched"
+        );
+        assert!(
+            recovery_installed,
+            "the host must allocate a distinct supervisor-only recovery route"
+        );
+    }
+
+    #[test]
+    fn outer_registry_unavailable_keeps_a_host_recovery_route_until_trusted_stop() {
+        let _manual_relay_guard = crate::manual_relay::manual_relay_test_guard_for_shared_state();
+        let attempt_id = format!(
+            "supervisor-outer-command-unavailable-persistent-stop-failure:{}:{}:{}",
+            std::process::id(),
+            crate::unix_timestamp_nanos(),
+            CANONICAL_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+        );
+        let cleanup_fixture =
+            crate::manual_relay::install_safe_only_supervisor_cleanup_fixture_for_test(&attempt_id)
+                .expect("fixture installs child, durable registration, and bounded capture");
+        cleanup_fixture
+            .wait_until_child_ready()
+            .expect("fixture background child must be running before outer cleanup");
+        crate::manual_relay::conversation_transport::
+            install_supervisor_attempt_record_for_outer_cleanup_test(&attempt_id)
+            .expect("fixture installs the inner safe transport record");
+        let mut response = normalize_conversation_transport_receipt(
+            &raw_receipt("running", "available", "not_requested"),
+            None,
+        );
+        response.transport.attempt_id = Some(attempt_id.clone());
+        let fixture = SupervisorCanonicalFixture::new();
+
+        {
+            let _registry_unavailable =
+                force_conversation_transport_command_attempt_registry_unavailable();
+            let _child_stop_failures =
+                crate::manual_relay::force_manual_relay_child_stop_test_failures_for_test(3);
+            register_supervisor_conversation_transport_attempt_or_cleanup(
+                &mut response,
+                ConversationTransportCommandAttempt {
+                    relay_attempt_id: attempt_id.clone(),
+                    host_owned_cleanup_recovery: false,
+                    conversation_id: "conversation:outer-cleanup-fixture".to_string(),
+                    turn_id: "turn:outer-cleanup-fixture".to_string(),
+                    profile: ConversationTransportCommandAttemptProfile::Supervisor(
+                        fixture.binding.clone(),
+                    ),
+                },
+                &attempt_id,
+                "2026-07-23T00:00:00Z",
+            )
+            .expect("unavailable outer registry must retain a host recovery route when cleanup is pending");
+        }
+        let recovery_attempt_id = response
+            .transport
+            .attempt_id
+            .clone()
+            .expect("safe recovery response has a host route");
+        assert_ne!(recovery_attempt_id, attempt_id);
+        assert_eq!(
+            response.transport.human_message.as_deref(),
+            Some("安全清理中，未确认消息已送达。")
+        );
+        assert!(
+            cleanup_fixture
+                .is_retained_for_trusted_retry()
+                .expect("fixture retention state remains readable"),
+            "unavailable outer registration must retain every protected cleanup handle"
+        );
+        {
+            let attempts = conversation_transport_command_attempts()
+                .lock()
+                .expect("outer registry lock");
+            let recovery = attempts
+                .get(&recovery_attempt_id)
+                .expect("unavailable outer registration created a host recovery route");
+            assert!(recovery.host_owned_cleanup_recovery);
+            assert_eq!(recovery.relay_attempt_id, attempt_id);
+        }
+
+        let relay = crate::knowledge_open_relay::KnowledgeOpenRelayState::new();
+        let receipt = run_conversation_transport_attempt(
+            ConversationTransportAttemptRequest {
+                attempt_id: recovery_attempt_id.clone(),
+            },
+            true,
+            &relay,
+        )
+        .expect("the host recovery route must settle the unavailable-registration attempt");
+        assert_eq!(receipt.transport.status, "stopped");
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        assert!(
+            cleanup_fixture
+                .is_fully_cleared()
+                .expect("fixture cleanup state remains readable"),
+            "trusted stop must clear child group, durable registration, active/protected state, confirmation, and capture"
+        );
+        assert!(crate::manual_relay::conversation_transport::
+            supervisor_attempt_record_is_cleared_for_outer_cleanup_test(&attempt_id));
+        assert!(
+            !conversation_transport_command_attempts()
+                .lock()
+                .expect("outer registry lock")
+                .contains_key(&recovery_attempt_id),
+            "the completed recovery route must remove itself"
+        );
+    }
+
+    #[test]
+    fn outer_collision_keeps_safe_resources_until_a_trusted_retry_settles_them() {
+        let _manual_relay_guard = crate::manual_relay::manual_relay_test_guard_for_shared_state();
+        let attempt_id = format!(
+            "supervisor-outer-command-persistent-stop-failure:{}:{}:{}",
+            std::process::id(),
+            crate::unix_timestamp_nanos(),
+            CANONICAL_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+        );
+        let cleanup_fixture =
+            crate::manual_relay::install_safe_only_supervisor_cleanup_fixture_for_test(&attempt_id)
+                .expect("fixture installs child, durable registration, and bounded capture");
+        cleanup_fixture
+            .wait_until_child_ready()
+            .expect("fixture background child must be running before outer cleanup");
+        crate::manual_relay::conversation_transport::
+            install_supervisor_attempt_record_for_outer_cleanup_test(&attempt_id)
+                .expect("fixture installs the inner safe transport record");
+        let mut response = normalize_conversation_transport_receipt(
+            &raw_receipt("running", "available", "not_requested"),
+            None,
+        );
+        response.transport.attempt_id = Some(attempt_id.clone());
+        let fixture = SupervisorCanonicalFixture::new();
+        conversation_transport_command_attempts()
+            .lock()
+            .expect("outer registry lock")
+            .insert(
+                attempt_id.clone(),
+                ConversationTransportCommandAttempt {
+                    relay_attempt_id: attempt_id.clone(),
+                    host_owned_cleanup_recovery: false,
+                    conversation_id: "conversation:existing".to_string(),
+                    turn_id: "turn:existing".to_string(),
+                    profile: ConversationTransportCommandAttemptProfile::Agent,
+                },
+            );
+
+        {
+            let _failure =
+                crate::manual_relay::force_manual_relay_child_stop_test_failures_for_test(3);
+            register_supervisor_conversation_transport_attempt_or_cleanup(
+                &mut response,
+                ConversationTransportCommandAttempt {
+                    relay_attempt_id: attempt_id.clone(),
+                    host_owned_cleanup_recovery: false,
+                    conversation_id: "conversation:outer-cleanup-fixture".to_string(),
+                    turn_id: "turn:outer-cleanup-fixture".to_string(),
+                    profile: ConversationTransportCommandAttemptProfile::Supervisor(
+                        fixture.binding.clone(),
+                    ),
+                },
+                &attempt_id,
+                "2026-07-23T00:00:00Z",
+            )
+            .expect("persistent child-stop failure must retain a host-owned recovery route");
+        }
+        let recovery_attempt_id = response
+            .transport
+            .attempt_id
+            .clone()
+            .expect("safe recovery response has a host route");
+        assert_ne!(recovery_attempt_id, attempt_id);
+        assert_eq!(response.transport.status, "pending");
+        assert_eq!(
+            response.transport.human_message.as_deref(),
+            Some("安全清理中，未确认消息已送达。")
+        );
+        assert_eq!(response.assistant_reply.status, "not_requested");
+        assert!(response.assistant_reply.text.is_none());
+        {
+            let attempts = conversation_transport_command_attempts()
+                .lock()
+                .expect("outer registry lock");
+            let existing = attempts
+                .get(&attempt_id)
+                .expect("collision must preserve the existing owner");
+            assert!(matches!(
+                &existing.profile,
+                ConversationTransportCommandAttemptProfile::Agent
+            ));
+            let recovery = attempts
+                .get(&recovery_attempt_id)
+                .expect("persistent cleanup has a distinct host recovery route");
+            assert!(recovery.host_owned_cleanup_recovery);
+            assert_eq!(recovery.relay_attempt_id, attempt_id);
+            assert!(matches!(
+                &recovery.profile,
+                ConversationTransportCommandAttemptProfile::Supervisor(_)
+            ));
+        }
+        assert!(
+            cleanup_fixture
+                .is_retained_for_trusted_retry()
+                .expect("fixture retention state remains readable"),
+            "child, durable entry, active attempt, safe marker, confirmation, and cleared capture must remain paired for trusted retry"
+        );
+        assert!(
+            !crate::manual_relay::conversation_transport::
+                supervisor_attempt_record_is_cleared_for_outer_cleanup_test(&attempt_id),
+            "inner transport record must remain paired with the protected manual attempt"
+        );
+        for result in [
+            crate::manual_relay::poll_manual_relay_attempt(
+                manual_relay::ManualRelayPollInput {
+                    relay_attempt_id: attempt_id.clone(),
+                    requested_by: "raw-test".to_string(),
+                },
+                "2026-07-23T00:00:01Z",
+            ),
+            crate::manual_relay::stop_manual_relay_attempt(
+                manual_relay::ManualRelayStopInput {
+                    relay_attempt_id: attempt_id.clone(),
+                    requested_by: "raw-test".to_string(),
+                },
+                "2026-07-23T00:00:01Z",
+            ),
+        ] {
+            assert_eq!(
+                result.expect_err("raw endpoint must remain protected while cleanup is pending"),
+                "manual_relay_managed_conversation_attempt_protected"
+            );
+        }
+
+        let relay = crate::knowledge_open_relay::KnowledgeOpenRelayState::new();
+        let receipt = run_conversation_transport_attempt(
+            ConversationTransportAttemptRequest {
+                attempt_id: recovery_attempt_id.clone(),
+            },
+            true,
+            &relay,
+        )
+        .expect("the host recovery route must settle the protected attempt");
+        assert_eq!(receipt.transport.status, "stopped");
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        assert!(
+            cleanup_fixture
+                .is_fully_cleared()
+                .expect("fixture cleanup state remains readable"),
+            "trusted retry must clear child group, durable registration, active/protected state, confirmation, and capture"
+        );
+        assert!(crate::manual_relay::conversation_transport::
+            supervisor_attempt_record_is_cleared_for_outer_cleanup_test(&attempt_id));
+        let mut attempts = conversation_transport_command_attempts()
+            .lock()
+            .expect("outer registry lock");
+        assert!(
+            !attempts.contains_key(&recovery_attempt_id),
+            "the completed recovery route must remove only itself"
+        );
+        assert!(
+            attempts.contains_key(&attempt_id),
+            "the pre-existing Agent owner must remain untouched"
+        );
+        attempts.remove(&attempt_id);
+    }
+
+    #[test]
+    fn injected_supervisor_transport_start_failure_finishes_binding_and_returns_transport_stage() {
+        let fixture = SupervisorCanonicalFixture::new();
+        let receipt = match start_supervisor_transport_after_binding_established(
+            &fixture.config,
+            "turn:fixture",
+            || Err("injected_transport_start_failure".to_string()),
+        ) {
+            Err(receipt) => receipt,
+            Ok(_) => panic!("injected transport startup failure must not return a receipt"),
+        };
+
+        assert_eq!(
+            receipt.transport.binding_stage,
+            Some(SupervisorConversationBindingStage::TransportStart)
+        );
+        assert_eq!(receipt.transport.status, "failed");
+        assert_eq!(receipt.tool_action.status, "not_requested");
+        assert_eq!(
+            mcp::supervisor_orchestrator::supervisor_conversation_turn_binding_lifecycle(
+                &fixture.config,
+            )
+            .expect("transport failure must have a persisted terminal lifecycle"),
+            mcp::supervisor_conversation_binding::ConversationTurnLifecycle::Failed
+        );
+        assert_supervisor_tools_closed(&fixture.config);
+    }
+
+    #[test]
+    fn injected_supervisor_transport_return_activation_then_termination_failure_returns_neutral_safe_receipt(
+    ) {
+        let mut fixture = SupervisorCanonicalFixture::starting();
+        let activation_failure = mcp::supervisor_orchestrator::force_supervisor_conversation_binding_lifecycle_test_failure(
+            mcp::supervisor_orchestrator::SupervisorConversationBindingLifecycleTestFailure::Activate,
+        );
+        let termination_failure = mcp::supervisor_orchestrator::force_supervisor_conversation_binding_lifecycle_test_failure(
+            mcp::supervisor_orchestrator::SupervisorConversationBindingLifecycleTestFailure::Finish,
+        );
+        let receipt = normalize_supervisor_conversation_receipt(
+            &raw_receipt("running", "available", "not_requested"),
+            &mut fixture.binding,
+        );
+        drop(termination_failure);
+        drop(activation_failure);
+
+        assert_eq!(
+            receipt.transport.binding_stage,
+            Some(SupervisorConversationBindingStage::BindingTerminate)
+        );
+        assert_eq!(
+            receipt.transport.human_message.as_deref(),
+            Some("绑定终结未确认；工具继续关闭。")
+        );
+        assert!(
+            !receipt
+                .transport
+                .human_message
+                .as_deref()
+                .expect("binding termination receipt has a safe message")
+                .contains("运输"),
+            "termination-unconfirmed receipt must not infer transport state"
+        );
+        assert_eq!(receipt.conversation_id, None);
+        assert_eq!(receipt.thread_id, None);
+        assert_eq!(receipt.tool_action.status, "not_requested");
+        assert_eq!(
+            mcp::supervisor_orchestrator::supervisor_conversation_turn_binding_lifecycle(
+                &fixture.config,
+            )
+            .expect("failed terminal write leaves the prior lifecycle observable"),
+            mcp::supervisor_conversation_binding::ConversationTurnLifecycle::Starting
+        );
+        assert_supervisor_tools_closed(&fixture.config);
+    }
+
+    #[test]
+    fn natural_reply_does_not_settle_unobserved_structured_layers() {
+        let normalized = normalize_conversation_transport_receipt(
+            &raw_receipt("completed", "available", "not_requested"),
+            None,
+        );
+        assert_eq!(normalized.transport.status, "succeeded");
+        assert_eq!(normalized.assistant_reply.status, "succeeded");
+        assert_eq!(normalized.tool_action.status, "not_requested");
+        assert_eq!(normalized.read_model_projection.status, "not_requested");
+        assert_eq!(normalized.canonical_mirror.status, "not_requested");
+    }
+
+    #[test]
+    fn completed_supervisor_receipt_mirrors_confirmed_conversation_once() {
+        let mut fixture = SupervisorCanonicalFixture::new();
+        let receipt = raw_receipt("completed", "available", "not_requested");
+
+        let normalized = normalize_supervisor_conversation_receipt(&receipt, &mut fixture.binding);
+        assert_eq!(normalized.assistant_reply.status, "succeeded");
+        assert_eq!(normalized.canonical_mirror.status, "succeeded");
+
+        let events = fixture.canonical_events();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event["event_type"] == "supervisor_resident_user_message_recorded")
+                .count(),
+            1
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event["event_type"]
+                    == "supervisor_resident_supervisor_message_recorded")
+                .count(),
+            1
+        );
+
+        mirror_completed_supervisor_conversation(&fixture.config, &receipt)
+            .expect("technical retry must be idempotent");
+        assert_eq!(
+            fixture.canonical_events().len(),
+            events.len(),
+            "a terminal receipt retry must not duplicate canonical facts"
+        );
+    }
+
+    #[test]
+    fn canonical_batch2_failure_preserves_completed_reply_and_reports_its_own_layer() {
+        let mut fixture = SupervisorCanonicalFixture::new();
+        let receipt = raw_receipt("completed", "available", "not_requested");
+        let _guard = force_shared_conversation_canonical_batch2_failure();
+
+        let normalized = normalize_supervisor_conversation_receipt(&receipt, &mut fixture.binding);
+
+        assert_eq!(normalized.transport.status, "succeeded");
+        assert_eq!(normalized.assistant_reply.status, "succeeded");
+        assert_eq!(
+            normalized.assistant_reply.text.as_deref(),
+            Some("safe reply")
+        );
+        assert_eq!(normalized.canonical_mirror.status, "failed");
+        assert!(fixture.canonical_events().iter().all(|event| {
+            !matches!(
+                event["event_type"].as_str(),
+                Some("supervisor_resident_user_message_recorded")
+                    | Some("supervisor_resident_supervisor_message_recorded")
+            )
+        }));
+    }
+
+    #[test]
+    fn audit_failure_layer_does_not_erase_settled_tool_projection_or_reply() {
+        use mcp::supervisor_conversation_binding::ConversationCapabilityOutcome;
+
+        let mut fixture = SupervisorCanonicalFixture::new();
+        mcp::supervisor_orchestrator::record_supervisor_conversation_capability_outcome(
+            &fixture.config,
+            "submit_proposal",
+            ConversationCapabilityOutcome::Succeeded,
+        )
+        .expect("record fixture tool outcome");
+        mcp::supervisor_orchestrator::record_supervisor_conversation_capability_audit_outcome(
+            &fixture.config,
+            "submit_proposal",
+            ConversationCapabilityOutcome::Failed,
+        )
+        .expect("record fixture audit outcome");
+
+        let normalized = normalize_supervisor_conversation_receipt(
+            &raw_receipt("completed", "available", "not_requested"),
+            &mut fixture.binding,
+        );
+
+        assert_eq!(normalized.transport.status, "succeeded");
+        assert_eq!(normalized.assistant_reply.status, "succeeded");
+        assert_eq!(normalized.tool_action.status, "succeeded");
+        assert_eq!(normalized.read_model_projection.status, "succeeded");
+        assert_eq!(normalized.canonical_mirror.status, "failed");
+    }
+
+    #[test]
+    fn request_rejects_client_selected_profile_role_and_capability_surface() {
+        let profile_error = serde_json::from_value::<ConversationTransportStartRequest>(json!({
+            "context": {
+                "profile_id": "supervisor-read-only",
+                "project_root": "/tmp/project",
+                "workflow_id": "workflow:fixture"
+            },
+            "mode": "new",
+            "conversation_id": null,
+            "thread_id": null,
+            "turn_id": "turn:fixture",
+            "user_text": "hello"
+        }));
+        assert!(profile_error.is_err());
+        let role_error = serde_json::from_value::<ConversationTransportStartRequest>(json!({
+            "context": {
+                "project_root": "/tmp/project",
+                "workflow_id": "workflow:fixture",
+                "role": "project_supervisor"
+            },
+            "mode": "new",
+            "conversation_id": null,
+            "thread_id": null,
+            "turn_id": "turn:fixture",
+            "user_text": "hello"
+        }));
+        assert!(role_error.is_err());
+        let capability_error = serde_json::from_value::<ConversationTransportStartRequest>(json!({
+            "context": {
+                "project_root": "/tmp/project",
+                "workflow_id": "workflow:fixture",
+                "capabilities": ["submit_proposal"]
+            },
+            "mode": "new",
+            "conversation_id": null,
+            "thread_id": null,
+            "turn_id": "turn:fixture",
+            "user_text": "hello"
+        }));
+        assert!(capability_error.is_err());
+    }
 }
 
 #[tauri::command]

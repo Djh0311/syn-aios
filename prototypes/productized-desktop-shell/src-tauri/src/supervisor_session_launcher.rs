@@ -440,6 +440,7 @@ pub(crate) fn load_supervisor_pilot_read_model(
         node_id: None,
         supervisor_workflow_state_path: Some(state.workflow_state_path.clone()),
         supervisor_quota_limits: None,
+        knowledge_open_relay: None,
     };
     let read_model = supervisor_orchestrator::load_pilot_read_model(&config)?;
     if read_model.project_root != request.project_root
@@ -1084,7 +1085,8 @@ fn assemble_opening_message(context: &SupervisorLaunchContext) -> String {
         .unwrap_or_else(|| "无（只读单可直接调查，也可按需派只读 worker）".to_string());
     let review_evidence_discipline = supervisor_pilot_review_evidence_discipline(context);
     let worker_acceptance = supervisor_acceptance_list(&context.worker_acceptance_criteria);
-    let control_core_acceptance = supervisor_acceptance_list(&context.control_core_acceptance_criteria);
+    let control_core_acceptance =
+        supervisor_acceptance_list(&context.control_core_acceptance_criteria);
     let supervisor_acceptance = supervisor_acceptance_list(&context.supervisor_acceptance_criteria);
     format!(
         "{SUPERVISOR_CONTRACT_TEMPLATE}\n\n===== 本单上下文（已批准，来自工作台正本）=====\n契约正本：{CONTRACT_CANONICAL_SOURCE}\n用户原始需求快照（逐字保留）：\n{}\n\n用户目标（方案提炼）：{}\n已批方案摘要：{}\nWorker 验收（只由 worker 完成）：\n{}\n控制核心验收（不得下放给 worker）：\n{}\n主管验收（不得下放给 worker）：\n{}\n授权范围：\n- 授权段：{}\n- 项目根：{}\n- 可读根：{}\n- 可写根：{}\n- 可用工具：{}\n- 可用检查：{}\n- 停止条件：{}\n- 主管配额：并发 {}，每 worker 追问 {}，总时长 {} 分钟\n任务包现状：{}\n本单可派任务：{}{review_evidence_discipline}\n\n现在只输出第一个 `SupervisorActionProposalV1` JSON。若要派 worker，必须使用上方完整嵌套 `target` 结构；Syn 会从正本派生 allowed_write，不能由你填写。\n",
@@ -1245,7 +1247,8 @@ fn assemble_next_step_message(
         Some(SupervisorActionKind::Finalize { .. }) if result.status == "completed" => {
             "终标建议已经落账。禁止重复 finalize；下一步应提议 report_user。".to_string()
         }
-        _ => "上一步动作已由 Syn 处理；不要把已完成动作当成未执行，请依据权威结果推进到新的动作。".to_string(),
+        _ => "上一步动作已由 Syn 处理；不要把已完成动作当成未执行，请依据权威结果推进到新的动作。"
+            .to_string(),
     };
     let review_evidence_discipline = supervisor_pilot_review_evidence_discipline(context);
     format!(
@@ -1336,11 +1339,8 @@ fn supervisor_output_paths(
     workflow_state_path: &Path,
     run_id: &str,
 ) -> Result<(PathBuf, PathBuf), String> {
-    let parent = crate::utils::store_paths::runtime_artifact_dir(
-        workflow_state_path,
-        "supervisor",
-        run_id,
-    )?;
+    let parent =
+        crate::utils::store_paths::runtime_artifact_dir(workflow_state_path, "supervisor", run_id)?;
     Ok((
         parent.join("step-0.last-message.txt"),
         parent.join("step-0.stderr.txt"),
@@ -1499,6 +1499,7 @@ impl SupervisorTemporaryHome {
                 node_id: None,
                 supervisor_workflow_state_path: Some(metadata.workflow_state_path),
                 supervisor_quota_limits: None,
+                knowledge_open_relay: None,
             },
             cleanup_done: Mutex::new(false),
         }
@@ -1733,6 +1734,7 @@ fn supervisor_config(
         node_id: None,
         supervisor_workflow_state_path: Some(workflow_state_path.to_path_buf()),
         supervisor_quota_limits: Some(quota_limits),
+        knowledge_open_relay: None,
     }
 }
 
@@ -1803,7 +1805,10 @@ fn spawn_supervisor_session_with(
 
 fn workbench_build_identifier(executable: &Path) -> String {
     let metadata = fs::metadata(executable).ok();
-    let byte_len = metadata.as_ref().map(|value| value.len()).unwrap_or_default();
+    let byte_len = metadata
+        .as_ref()
+        .map(|value| value.len())
+        .unwrap_or_default();
     let modified_seconds = metadata
         .and_then(|value| value.modified().ok())
         .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
@@ -1915,9 +1920,7 @@ fn run_supervisor_action_loop(
         let format_error = parsed_proposal.is_err();
         let terminal_action = parsed_proposal
             .as_ref()
-            .map(|proposal| {
-                matches!(&proposal.action, SupervisorActionKind::ReportUser { .. })
-            })
+            .map(|proposal| matches!(&proposal.action, SupervisorActionKind::ReportUser { .. }))
             .unwrap_or(false);
         let result = match execute_supervisor_last_message(&runtime, &last_message, &adapter) {
             Ok(result) => result,
@@ -1950,7 +1953,9 @@ fn run_supervisor_action_loop(
             false
         };
         action_count += 1;
-        if matches!(result.status.as_str(), "waiting_user" | "report_invalid") && !may_correct_format_once {
+        if matches!(result.status.as_str(), "waiting_user" | "report_invalid")
+            && !may_correct_format_once
+        {
             let waiting_reason = if result.status == "report_invalid" {
                 format!("worker 回程格式无效，等待用户决定：{}", result.summary)
             } else {
@@ -2350,7 +2355,8 @@ mod tests {
     fn station3a_v5_worker_objective_uses_only_worker_acceptance() {
         let criteria = vec![
             "创建 station3a-control-core-proof-v5.txt。".to_string(),
-            "精确写入 UTF-8 内容 station3a control core proof v5 passed!，不得添加末尾换行。".to_string(),
+            "精确写入 UTF-8 内容 station3a control core proof v5 passed!，不得添加末尾换行。"
+                .to_string(),
             "回读目标文件。".to_string(),
             "验证内容、39 bytes 与无末尾换行。".to_string(),
             "返回执行证据。".to_string(),
@@ -2370,7 +2376,10 @@ mod tests {
             "主管终标",
             "检查 UI 入口",
         ] {
-            assert!(!first.contains(forbidden), "worker objective leaked: {forbidden}");
+            assert!(
+                !first.contains(forbidden),
+                "worker objective leaked: {forbidden}"
+            );
         }
         for criterion in criteria {
             assert!(first.contains(&criterion));
@@ -2467,8 +2476,8 @@ mod tests {
             first_registration,
         );
 
-        let read_model =
-            supervisor_orchestrator::load_pilot_read_model(&config).expect("protocol retry read model");
+        let read_model = supervisor_orchestrator::load_pilot_read_model(&config)
+            .expect("protocol retry read model");
         assert_eq!(read_model.launch_status, "waiting_user");
         assert_eq!(
             read_model.termination_reason,
@@ -2552,11 +2561,11 @@ mod tests {
         let station4_root = crate::STATION_4_WRITE_PROJECT_ROOT;
         assert_eq!(station3b_root, station4_root, "同根但不是同一授权语义");
         assert!(ensure_supervisor_pilot_write_scope(station3b_root, &[]).is_ok());
-        assert!(ensure_supervisor_pilot_write_scope(station4_root, &[station4_root.to_string()]).is_ok());
-        for write_root in [
-            crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT,
-            "/tmp/anything",
-        ] {
+        assert!(
+            ensure_supervisor_pilot_write_scope(station4_root, &[station4_root.to_string()])
+                .is_ok()
+        );
+        for write_root in [crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT, "/tmp/anything"] {
             assert!(
                 ensure_supervisor_pilot_write_scope(station3b_root, &[write_root.to_string()])
                     .is_err(),
@@ -2619,7 +2628,11 @@ mod tests {
             Path::new("/tmp/workbench"),
         )
         .expect("站 4 主管计划仍应可组装为只读计划");
-        assert!(argv_contains_pair(&station4_plan.argv, "--sandbox", "read-only"));
+        assert!(argv_contains_pair(
+            &station4_plan.argv,
+            "--sandbox",
+            "read-only"
+        ));
         assert!(
             !station4_plan
                 .argv

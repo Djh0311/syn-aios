@@ -61,6 +61,11 @@ struct SessionIndexRow {
 }
 
 pub fn default_state_db_path() -> PathBuf {
+    if let Some(paths) = crate::acceptance_runtime_profile::active_paths()
+        .expect("acceptance runtime profile must resolve before Codex DB path use")
+    {
+        return paths.codex_db_path;
+    }
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/"));

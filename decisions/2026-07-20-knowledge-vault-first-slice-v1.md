@@ -1,6 +1,7 @@
 # 决策：知识库第一片——独立 vault + 浏览手编 + [[双链]] + AI 写入闸 v1
 
 日期：2026-07-20
+状态：**主体继续有效；“DB-primary 观察期/bridge 私有不可达/test-only writer”挂账已由 `decisions/2026-07-21-knowledge-vault-audit-production-write-path-v1.md` 纠偏取代。**
 任务包：`tasks/2026-07-20-knowledge-vault-first-slice-package-v1.md`（轻档含 Rust）
 上位拍板：`handoffs/2026-07-18-stage3-open-memory-ui-and-knowledge-base-handoff-v1.md` §二.2（独立 vault·不碰用户现有 Obsidian 库+浏览/手编为主+AI 写入=用户允许那一下+md 渲染/编辑/[[双链]]）
 

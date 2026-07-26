@@ -148,67 +148,43 @@
   },
   "preWork": {
     "recommendedChecks": [
-      "node scripts/harness/harness-doctor.js --target .",
-      "node scripts/harness/config-check.js --target .",
-      "node scripts/harness/capability-scan.js --target .",
-      "node scripts/harness/skill-recommend.js --text \"Task title or request\"",
-      "node scripts/harness/verification-plan.js --target .",
-      "node scripts/harness/mcp-doctor.js --target .",
-      "node scripts/harness/git-gate.js --target .",
-      "node scripts/harness/ci-gate.js --target .",
-      "node scripts/harness/managed-files-audit.js --target .",
-      "node scripts/harness/runtime-docs-diff.js --target .",
-      "node scripts/harness/stale-control-check.js --target .",
-      "node scripts/harness/status-snapshot.js --target .",
-      "node scripts/harness/guard-state-files.js --target ."
+      "node scripts/harness/project-context.js --target ."
     ],
-    "strictPathRecommendedChecks": [
-      "node scripts/harness/config-check.js --target . --strict",
-      "node scripts/harness/verification-plan.js --target . --strict",
-      "node scripts/harness/installed-health.js --target . --strict",
-      "node scripts/harness/guard-state-files.js --target . --strict"
-    ]
+    "strictPathRecommendedChecks": []
   },
   "preCompletion": {
     "recommendedChecks": [
       "node scripts/harness/rules-lint.js .",
-      "node scripts/harness/capability-scan.js --target .",
-      "node scripts/harness/verification-runner.js --target . --command-key test",
-      "node scripts/harness/mcp-doctor.js --target .",
-      "node scripts/harness/ui-verify.js --target .",
-      "node scripts/harness/evidence-freshness.js --target .",
-      "node scripts/harness/evidence-retention.js --target .",
-      "node scripts/harness/browser-evidence-check.js --target .",
-      "node scripts/harness/git-gate.js --target .",
-      "node scripts/harness/ci-gate.js --target .",
-      "node scripts/harness/managed-files-audit.js --target .",
-      "node scripts/harness/runtime-docs-diff.js --target .",
-      "node scripts/harness/stale-control-check.js --target .",
-      "node scripts/harness/status-snapshot.js --target .",
-      "node scripts/harness/guard-state-files.js --target .",
-      "node scripts/harness/evidence-check.js --target .",
-      "node scripts/harness/mistake-check.js --target .",
-      "node scripts/harness/harness-doctor.js --target ."
+      "node scripts/harness/config-check.js --target . --strict"
     ],
-    "strictPathRecommendedChecks": [
-      "node scripts/harness/rules-lint.js .",
-      "node scripts/harness/verification-runner.js --target . --command-key test --strict",
-      "node scripts/harness/capability-scan.js --target . --strict",
-      "node scripts/harness/mcp-doctor.js --target . --strict",
-      "node scripts/harness/ui-verify.js --target . --strict",
-      "node scripts/harness/evidence-freshness.js --target . --strict",
-      "node scripts/harness/evidence-retention.js --target .",
-      "node scripts/harness/browser-evidence-check.js --target . --strict",
-      "node scripts/harness/git-gate.js --target . --strict",
-      "node scripts/harness/ci-gate.js --target . --strict",
-      "node scripts/harness/managed-files-audit.js --target . --strict",
-      "node scripts/harness/runtime-docs-diff.js --target . --strict",
-      "node scripts/harness/stale-control-check.js --target . --strict",
-      "node scripts/harness/status-snapshot.js --target . --strict",
-      "node scripts/harness/guard-state-files.js --target . --strict",
-      "node scripts/harness/evidence-check.js --target . --strict",
-      "node scripts/harness/mistake-check.js --target . --strict",
-      "node scripts/harness/installed-health.js --target . --strict"
+    "strictPathRecommendedChecks": []
+  },
+  "activeBoundary": {
+    "mechanical": [
+      "commit-msg catch:",
+      "config-schema",
+      "config-check",
+      "config-policy",
+      "shape"
+    ],
+    "reportingOnly": [
+      "context",
+      "checkpoint"
+    ],
+    "explicitTool": [
+      "context diagnostic",
+      "map query",
+      "map overlay",
+      "map check",
+      "stage-k",
+      "doctor"
+    ],
+    "legacyIgnored": [
+      "memory",
+      "task/evidence lifecycle",
+      "runtime-doc init",
+      "managed Hook/CI init",
+      "legacy capability scan"
     ]
   },
   "autoRisk": {
@@ -231,10 +207,10 @@
     "preCompletionIsAggregateCheck": true,
     "preCompletionDoesNotReplaceFreshVerification": true,
     "requiredBeforeStrictCompletion": [
-      "Create a task evidence archive with evidence-new --write.",
-      "Run the relevant real verification command with verification-runner --write.",
-      "For UI work, record real browser evidence with Chrome DevTools MCP, the Codex in-app Browser, Playwright, or the project E2E runner.",
-      "Run pre-completion --strict after fresh evidence exists."
+      "Run the real verification command that is specific to the change; this config does not choose it for you.",
+      "For UI work, record real browser, Tauri smoke, or an explicit evidence gap.",
+      "Keep code completion, focused verification, real App acceptance, and user confirmation distinct.",
+      "Do not treat pre-completion as a substitute for tests, build, UI verification, or real App acceptance."
     ],
     "uiVerifyMode": "HTTP-only reachability evidence; not a substitute for browser console, interaction, screenshot, or network inspection."
   },

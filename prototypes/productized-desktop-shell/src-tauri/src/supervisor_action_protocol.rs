@@ -118,10 +118,20 @@ pub(crate) fn parse_supervisor_action_proposal(
 
 fn allowed_fields_for(kind: &str) -> &'static [&'static str] {
     match kind {
-        "dispatch_worker" => &["schema_version", "kind", "target", "reason", "expected_result"],
-        "inspect_worker" | "wait_worker" => {
-            &["schema_version", "kind", "worker_id", "reason", "expected_result"]
-        }
+        "dispatch_worker" => &[
+            "schema_version",
+            "kind",
+            "target",
+            "reason",
+            "expected_result",
+        ],
+        "inspect_worker" | "wait_worker" => &[
+            "schema_version",
+            "kind",
+            "worker_id",
+            "reason",
+            "expected_result",
+        ],
         "follow_up_worker" => &[
             "schema_version",
             "kind",
@@ -130,8 +140,20 @@ fn allowed_fields_for(kind: &str) -> &'static [&'static str] {
             "reason",
             "expected_result",
         ],
-        "finalize" => &["schema_version", "kind", "verdict", "reason", "expected_result"],
-        "report_user" => &["schema_version", "kind", "message", "reason", "expected_result"],
+        "finalize" => &[
+            "schema_version",
+            "kind",
+            "verdict",
+            "reason",
+            "expected_result",
+        ],
+        "report_user" => &[
+            "schema_version",
+            "kind",
+            "message",
+            "reason",
+            "expected_result",
+        ],
         _ => &[],
     }
 }
@@ -155,10 +177,7 @@ fn reject_unknown_fields<'a>(
     }
 }
 
-fn required_string(
-    object: &serde_json::Map<String, Value>,
-    field: &str,
-) -> Result<String, String> {
+fn required_string(object: &serde_json::Map<String, Value>, field: &str) -> Result<String, String> {
     object
         .get(field)
         .and_then(Value::as_str)
@@ -233,7 +252,10 @@ mod tests {
             format!("主管说明：{}", dispatch()),
             format!("{}\n补充说明", dispatch()),
             dispatch().replace("\n        }", ",\"allowed_write\":[\"/tmp\"]\n        }"),
-            dispatch().replace("\n        }", ",\"authorization_id\":\"self-approved\"\n        }"),
+            dispatch().replace(
+                "\n        }",
+                ",\"authorization_id\":\"self-approved\"\n        }",
+            ),
             dispatch().replace("\n        }", ",\"project_root\":\"/tmp\"\n        }"),
             dispatch().replace("\n        }", ",\"bypass\":true\n        }"),
             dispatch().replace(
@@ -292,7 +314,8 @@ mod tests {
           "reason":"读取回程",
           "expected_result":"获得证据"
         }"#;
-        let error = parse_supervisor_action_proposal(invalid).expect_err("nested worker target must fail");
+        let error =
+            parse_supervisor_action_proposal(invalid).expect_err("nested worker target must fail");
         assert!(error.contains("target"), "unexpected error: {error}");
     }
 }

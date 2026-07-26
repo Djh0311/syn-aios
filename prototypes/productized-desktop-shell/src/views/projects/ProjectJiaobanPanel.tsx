@@ -426,6 +426,8 @@ function ProjectJiaobanPanelBrowser({
   const {
     messageBusy,
     messageErrors,
+    receiptLayerErrors,
+    transportTranscript,
     makeConversationComposer,
     setComposerDraft: setConversationComposerDraft,
   } = useJiaobanConversationState({
@@ -433,10 +435,11 @@ function ProjectJiaobanPanelBrowser({
     workflowState,
     projectRoot,
     onProposalStoreRefresh,
+    onWorkflowStateReadRefresh,
   });
-  const residentMessageBusyKey = messageBusy ? "resident-message" : null;
+  const transportMessageBusyKey = messageBusy ? "conversation-transport" : null;
   const consultLoading = messageBusy;
-  const consultError = messageErrors["resident-message"] ?? null;
+  const consultError = messageErrors["conversation-transport"] ?? null;
 
   const refreshWorkflowStateReadModelAfterSuccessfulChainAction = useJiaobanRunningReadRefresh({
     manualPhase,
@@ -787,7 +790,7 @@ function ProjectJiaobanPanelBrowser({
 
   // ---- 动作 ----
 
-  // 常驻输入框在所有状态都只调用 submit_supervisor_resident_answer。卡上的“按我说的改”复用
+  // 常驻输入框在所有状态都走 shared conversation transport。卡上的“按我说的改”复用
   // 同一草稿和同一提交，不再存在“目标→直接出方案”的第二条路线。
   const conversationComposer = makeConversationComposer({ isTestProject });
 
@@ -1339,6 +1342,7 @@ function ProjectJiaobanPanelBrowser({
   const conversationStarted =
     consultLoading ||
     Boolean(consultError) ||
+    transportTranscript.length > 0 ||
     supervisorConversationEntries.length > 0 ||
     latestProposal != null ||
     phase !== "say";
@@ -1431,7 +1435,7 @@ function ProjectJiaobanPanelBrowser({
   );
   // A3·视口停最新：当前单可见内容(条数/相位/等待态)变了就滚回底部,逻辑本体在会话 hook 里。
   useConversationAutoScroll(
-    `${supervisorConversationEntries.length}:${timelineUserTurns.length}:${artifactNotices.length}:${phase}:${consultLoading}:${residentMessageBusyKey ?? ""}`,
+    `${supervisorConversationEntries.length}:${transportTranscript.length}:${timelineUserTurns.length}:${artifactNotices.length}:${phase}:${consultLoading}:${transportMessageBusyKey ?? ""}`,
   );
   const currentDeliveryCard = phase === "done" ? (
     <JiaobanDoneState
@@ -1535,8 +1539,10 @@ function ProjectJiaobanPanelBrowser({
           phaseKind={conversationPhaseKind}
           phaseContent={phase === "blocked" ? phaseContent : null}
           consultLoading={consultLoading}
-          messageBusyKey={residentMessageBusyKey}
+          messageBusyKey={transportMessageBusyKey}
           messageErrors={messageErrors}
+          transportTranscript={transportTranscript}
+          receiptLayerErrors={receiptLayerErrors}
           onSupervisorProcessActivate={(entry) => {
             setSelectedHistoryId(null);
             setFocusedRuntimeNodeId(supervisorProcessFocusedNodeId(entry));

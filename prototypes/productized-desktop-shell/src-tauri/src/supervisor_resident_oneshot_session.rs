@@ -53,6 +53,111 @@ enum SupervisorResidentOneShotFailure {
     WatchdogSilence,
     CleanupFailed(String),
     Protocol(String),
+    Classified {
+        diagnostic_stage: SupervisorResidentDeliveryDiagnosticStage,
+        detail: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SupervisorResidentDeliveryDiagnosticStage {
+    PreflightReap,
+    PreflightSession,
+    PreflightExecutable,
+    PreflightPlan,
+    PreflightHome,
+    PreflightFacts,
+    RunnerOutputInit,
+    RunnerSpawn,
+    PreparedLifecycleWrite,
+    RegistryRegistration,
+    ThreadBinding,
+    RunnerTerminal,
+    Unknown,
+}
+
+impl SupervisorResidentDeliveryDiagnosticStage {
+    fn stage(self) -> &'static str {
+        match self {
+            Self::PreflightReap
+            | Self::PreflightSession
+            | Self::PreflightExecutable
+            | Self::PreflightPlan
+            | Self::PreflightHome
+            | Self::PreflightFacts => "preflight",
+            Self::RunnerOutputInit
+            | Self::RunnerSpawn
+            | Self::PreparedLifecycleWrite
+            | Self::RegistryRegistration
+            | Self::ThreadBinding
+            | Self::RunnerTerminal => "runner",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    fn stable_error_family(self) -> &'static str {
+        match self {
+            Self::PreflightReap => "preflight_reap",
+            Self::PreflightSession => "preflight_session",
+            Self::PreflightExecutable => "preflight_executable",
+            Self::PreflightPlan => "preflight_plan",
+            Self::PreflightHome => "preflight_home",
+            Self::PreflightFacts => "preflight_facts",
+            Self::RunnerOutputInit => "runner_output_init",
+            Self::RunnerSpawn => "runner_spawn",
+            Self::PreparedLifecycleWrite => "prepared_lifecycle_write",
+            Self::RegistryRegistration => "registry_registration",
+            Self::ThreadBinding => "thread_binding",
+            Self::RunnerTerminal => "runner_terminal",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+struct SupervisorResidentConsultFailure {
+    diagnostic_stage: SupervisorResidentDeliveryDiagnosticStage,
+    raw_detail: String,
+    generation: Option<u64>,
+    thread_id: Option<String>,
+}
+
+impl SupervisorResidentConsultFailure {
+    fn preflight(
+        diagnostic_stage: SupervisorResidentDeliveryDiagnosticStage,
+        raw_detail: String,
+        generation: Option<u64>,
+        thread_id: Option<&str>,
+    ) -> Self {
+        Self {
+            diagnostic_stage,
+            raw_detail,
+            generation,
+            thread_id: thread_id.map(str::to_string),
+        }
+    }
+
+    fn runner(
+        failure: SupervisorResidentOneShotFailure,
+        generation: u64,
+        thread_id: Option<&str>,
+    ) -> Self {
+        let diagnostic_stage = failure.delivery_diagnostic_stage();
+        Self {
+            diagnostic_stage,
+            raw_detail: failure.into_error(),
+            generation: Some(generation),
+            thread_id: thread_id.map(str::to_string),
+        }
+    }
+
+    fn into_error(self) -> String {
+        self.raw_detail
+    }
+
+    fn with_human_retry(mut self) -> Self {
+        self.raw_detail = SUPERVISOR_RESIDENT_HUMAN_RETRY_MESSAGE.to_string();
+        self
+    }
 }
 
 impl SupervisorResidentOneShotFailure {
@@ -66,8 +171,33 @@ impl SupervisorResidentOneShotFailure {
                 SUPERVISOR_RESIDENT_HUMAN_RETRY_MESSAGE.to_string()
             }
             Self::CleanupFailed(detail) | Self::Protocol(detail) => detail,
+            Self::Classified { detail, .. } => detail,
             Self::WatchdogSilence => "supervisor_resident_watchdog_silence".to_string(),
         }
+    }
+
+    fn delivery_diagnostic_stage(&self) -> SupervisorResidentDeliveryDiagnosticStage {
+        match self {
+            Self::Classified {
+                diagnostic_stage, ..
+            } => *diagnostic_stage,
+            Self::WatchdogSilence | Self::CleanupFailed(_) => {
+                SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal
+            }
+            Self::ThreadInvalid(_) | Self::InvalidResume { .. } | Self::Protocol(_) => {
+                SupervisorResidentDeliveryDiagnosticStage::Unknown
+            }
+        }
+    }
+}
+
+fn supervisor_resident_classified_failure(
+    diagnostic_stage: SupervisorResidentDeliveryDiagnosticStage,
+    detail: impl Into<String>,
+) -> SupervisorResidentOneShotFailure {
+    SupervisorResidentOneShotFailure::Classified {
+        diagnostic_stage,
+        detail: detail.into(),
     }
 }
 
@@ -95,6 +225,36 @@ impl SupervisorResidentOneShotRunner for RealSupervisorResidentOneShotRunner {
     }
 }
 
+struct SupervisorResidentInitialOnlyRunner<'a> {
+    runner: &'a dyn SupervisorResidentOneShotRunner,
+}
+
+impl SupervisorResidentOneShotRunner for SupervisorResidentInitialOnlyRunner<'_> {
+    fn run(
+        &self,
+        plan: &SupervisorResidentOneShotPlan,
+        home: &SupervisorResidentHome,
+        on_turn_prepared: &mut dyn FnMut(u32) -> Result<(), String>,
+        on_thread_started: &mut dyn FnMut(&str, u32) -> Result<(), String>,
+    ) -> Result<SupervisorResidentTurn, SupervisorResidentOneShotFailure> {
+        self.runner
+            .run(plan, home, on_turn_prepared, on_thread_started)
+            .map_err(|failure| match failure {
+                // R1 must execute the replacement initial once. Preserve the
+                // existing watchdog implementation for every other path, but
+                // turn its retry signal into this branch's terminal human
+                // failure before the watchdog loop can invoke a second turn.
+                SupervisorResidentOneShotFailure::WatchdogSilence => {
+                    supervisor_resident_classified_failure(
+                        SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+                        SUPERVISOR_RESIDENT_HUMAN_RETRY_MESSAGE,
+                    )
+                }
+                failure => failure,
+            })
+    }
+}
+
 #[derive(Clone, Debug)]
 struct SupervisorResidentHome {
     root: PathBuf,
@@ -110,6 +270,8 @@ impl SupervisorResidentHome {
 struct SupervisorResidentHomeManager {
     base: PathBuf,
     auth_source: PathBuf,
+    #[cfg(test)]
+    fail_create_active_after_staging: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -117,6 +279,30 @@ struct SupervisorResidentHomeMetadata {
     run_id: String,
     workflow_state_path: PathBuf,
     generation: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SupervisorResidentActiveHomeConfig {
+    Expected,
+    ExactLegacy,
+    ConfigDrift,
+}
+
+#[derive(Debug)]
+enum SupervisorResidentEnsureActiveError {
+    ConfigDrift,
+    Other(String),
+}
+
+impl SupervisorResidentEnsureActiveError {
+    fn into_error(self) -> String {
+        match self {
+            Self::ConfigDrift => {
+                "项目主管私有 CODEX_HOME MCP 白名单与当前受控计划不一致，已拒绝复用".to_string()
+            }
+            Self::Other(error) => error,
+        }
+    }
 }
 
 impl SupervisorResidentHomeManager {
@@ -128,11 +314,63 @@ impl SupervisorResidentHomeManager {
                 run_id,
             )?,
             auth_source: default_codex_auth_path()?,
+            #[cfg(test)]
+            fail_create_active_after_staging: false,
         })
     }
 
     fn active_path(&self) -> PathBuf {
         self.base.join(SUPERVISOR_RESIDENT_HOME_ACTIVE)
+    }
+
+    fn ensure_controlled_base(&self) -> Result<(), String> {
+        match fs::symlink_metadata(&self.base) {
+            Ok(_) => self.validate_controlled_base(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                fs::create_dir_all(&self.base).map_err(|error| {
+                    format!(
+                        "创建项目主管私有 CODEX_HOME 根目录失败 {}：{error}",
+                        self.base.display()
+                    )
+                })?;
+                let metadata = fs::symlink_metadata(&self.base).map_err(|error| {
+                    format!(
+                        "读取项目主管私有 CODEX_HOME 根目录失败 {}：{error}",
+                        self.base.display()
+                    )
+                })?;
+                if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+                    return Err(
+                        "项目主管私有 CODEX_HOME 根目录不是受控目录，已拒绝复用".to_string()
+                    );
+                }
+                restrict_private_dir(&self.base)?;
+                self.validate_controlled_base()
+            }
+            Err(error) => Err(format!(
+                "读取项目主管私有 CODEX_HOME 根目录失败 {}：{error}",
+                self.base.display()
+            )),
+        }
+    }
+
+    fn validate_controlled_base(&self) -> Result<(), String> {
+        let metadata = fs::symlink_metadata(&self.base).map_err(|error| {
+            format!(
+                "读取项目主管私有 CODEX_HOME 根目录失败 {}：{error}",
+                self.base.display()
+            )
+        })?;
+        if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+            return Err("项目主管私有 CODEX_HOME 根目录不是受控目录，已拒绝复用".to_string());
+        }
+        #[cfg(unix)]
+        if metadata.permissions().mode() & 0o077 != 0 {
+            return Err(
+                "项目主管私有 CODEX_HOME 根目录权限不属于 owner-only，已拒绝复用".to_string(),
+            );
+        }
+        Ok(())
     }
 
     fn ensure_active(
@@ -141,19 +379,44 @@ impl SupervisorResidentHomeManager {
         config: &McpServerConfig,
         generation: u64,
     ) -> Result<SupervisorResidentHome, String> {
-        fs::create_dir_all(&self.base).map_err(|error| {
-            format!(
-                "创建项目主管私有 CODEX_HOME 根目录失败 {}：{error}",
-                self.base.display()
-            )
-        })?;
-        restrict_private_dir(&self.base)?;
+        self.ensure_active_or_config_drift(plan, config, generation)
+            .map_err(SupervisorResidentEnsureActiveError::into_error)
+    }
+
+    fn ensure_active_or_config_drift(
+        &self,
+        plan: &SupervisorCommandPlan,
+        config: &McpServerConfig,
+        generation: u64,
+    ) -> Result<SupervisorResidentHome, SupervisorResidentEnsureActiveError> {
+        self.ensure_controlled_base()
+            .map_err(SupervisorResidentEnsureActiveError::Other)?;
         let active = self.active_path();
-        if active.exists() {
-            self.validate_existing_active(&active, plan, config, Some(generation))?;
-            return Ok(SupervisorResidentHome { root: active });
+        match fs::symlink_metadata(&active) {
+            Ok(_) => match self
+                .validate_existing_active(&active, plan, config, Some(generation))
+                .map_err(SupervisorResidentEnsureActiveError::Other)?
+            {
+                SupervisorResidentActiveHomeConfig::Expected => {
+                    Ok(SupervisorResidentHome { root: active })
+                }
+                SupervisorResidentActiveHomeConfig::ExactLegacy => {
+                    self.migrate_exact_legacy_config(&active, plan)
+                        .map_err(SupervisorResidentEnsureActiveError::Other)?;
+                    Ok(SupervisorResidentHome { root: active })
+                }
+                SupervisorResidentActiveHomeConfig::ConfigDrift => {
+                    Err(SupervisorResidentEnsureActiveError::ConfigDrift)
+                }
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => self
+                .create_active(plan, config, generation)
+                .map_err(SupervisorResidentEnsureActiveError::Other),
+            Err(error) => Err(SupervisorResidentEnsureActiveError::Other(format!(
+                "读取项目主管私有 CODEX_HOME 失败 {}：{error}",
+                active.display()
+            ))),
         }
-        self.create_active(plan, config, generation)
     }
 
     fn replace_active(
@@ -170,13 +433,30 @@ impl SupervisorResidentHomeManager {
         })?;
         restrict_private_dir(&self.base)?;
         let active = self.active_path();
-        if !active.exists() {
-            return Ok((
-                self.create_active(plan, config, generation)?,
-                self.base.clone(),
-            ));
+        match fs::symlink_metadata(&active) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok((
+                    self.create_active(plan, config, generation)?,
+                    self.base.clone(),
+                ));
+            }
+            Err(error) => {
+                return Err(format!(
+                    "读取项目主管私有 CODEX_HOME 失败 {}：{error}",
+                    active.display()
+                ));
+            }
+            Ok(_) => {}
         }
-        self.validate_existing_active(&active, plan, config, generation.checked_sub(1))?;
+        match self.validate_existing_active(&active, plan, config, generation.checked_sub(1))? {
+            SupervisorResidentActiveHomeConfig::Expected => {}
+            SupervisorResidentActiveHomeConfig::ExactLegacy => {
+                self.migrate_exact_legacy_config(&active, plan)?;
+            }
+            SupervisorResidentActiveHomeConfig::ConfigDrift => {
+                return Err(SupervisorResidentEnsureActiveError::ConfigDrift.into_error());
+            }
+        }
         let archive_root = self.base.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE);
         fs::create_dir_all(&archive_root).map_err(|error| {
             format!(
@@ -212,6 +492,127 @@ impl SupervisorResidentHomeManager {
         }
     }
 
+    fn quarantine_config_drift_active(
+        &self,
+        plan: &SupervisorCommandPlan,
+        config: &McpServerConfig,
+        old_generation: u64,
+        generation: u64,
+    ) -> Result<(SupervisorResidentHome, PathBuf), String> {
+        let expected_generation = old_generation
+            .checked_add(1)
+            .ok_or_else(|| "项目主管私有 home generation 溢出，已拒绝隔离换代".to_string())?;
+        if old_generation == 0 || generation != expected_generation {
+            return Err("项目主管私有 home generation 不满足精确换代，已拒绝隔离".to_string());
+        }
+        self.validate_controlled_base()?;
+        let active = self.active_path();
+        match fs::symlink_metadata(&active) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err("项目主管私有 CODEX_HOME 不存在，已拒绝隔离换代".to_string());
+            }
+            Err(error) => {
+                return Err(format!(
+                    "读取项目主管私有 CODEX_HOME 失败 {}：{error}",
+                    active.display()
+                ));
+            }
+        }
+        if self.validate_existing_active(&active, plan, config, Some(old_generation))?
+            != SupervisorResidentActiveHomeConfig::ConfigDrift
+        {
+            return Err(
+                "项目主管私有 CODEX_HOME 当前不是 config_drift，已拒绝隔离换代".to_string(),
+            );
+        }
+        let archive_root = self.prepare_config_drift_archive_root()?;
+        let archive = archive_root.join(format!(
+            "generation-{old_generation}-{}",
+            crate::unix_timestamp_nanos()
+        ));
+        match fs::symlink_metadata(&archive) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Ok(_) => {
+                return Err("项目主管私有 home 隔离目标已存在，已拒绝换代".to_string());
+            }
+            Err(error) => {
+                return Err(format!(
+                    "读取项目主管私有 home 隔离目标失败 {}：{error}",
+                    archive.display()
+                ));
+            }
+        }
+        fs::rename(&active, &archive).map_err(|error| {
+            format!(
+                "隔离项目主管未知 MCP 配置 home 失败 {}：{error}",
+                active.display()
+            )
+        })?;
+        match self.create_active(plan, config, generation) {
+            Ok(home) => Ok((home, archive)),
+            Err(error) => {
+                // The untrusted config is never opened for migration: the
+                // complete old directory is restored if the fresh staging
+                // home cannot be promoted.
+                if let Err(restore_error) = fs::rename(&archive, &active) {
+                    return Err(format!(
+                        "项目主管私有 home 隔离换代失败且旧 home 恢复失败：{error}; {restore_error}"
+                    ));
+                }
+                Err(error)
+            }
+        }
+    }
+
+    fn prepare_config_drift_archive_root(&self) -> Result<PathBuf, String> {
+        let archive_root = self.base.join(SUPERVISOR_RESIDENT_HOME_ARCHIVE);
+        let created = match fs::symlink_metadata(&archive_root) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                fs::create_dir(&archive_root).map_err(|error| {
+                    format!(
+                        "创建项目主管私有 home 隔离目录失败 {}：{error}",
+                        archive_root.display()
+                    )
+                })?;
+                true
+            }
+            Err(error) => {
+                return Err(format!(
+                    "读取项目主管私有 home 隔离目录失败 {}：{error}",
+                    archive_root.display()
+                ));
+            }
+            Ok(_) => false,
+        };
+        if created {
+            let metadata = fs::symlink_metadata(&archive_root).map_err(|error| {
+                format!(
+                    "读取项目主管私有 home 隔离目录失败 {}：{error}",
+                    archive_root.display()
+                )
+            })?;
+            if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+                return Err("项目主管私有 home 隔离目录不是受控目录，已拒绝换代".to_string());
+            }
+            restrict_private_dir(&archive_root)?;
+        }
+        let metadata = fs::symlink_metadata(&archive_root).map_err(|error| {
+            format!(
+                "读取项目主管私有 home 隔离目录失败 {}：{error}",
+                archive_root.display()
+            )
+        })?;
+        if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+            return Err("项目主管私有 home 隔离目录不是受控目录，已拒绝换代".to_string());
+        }
+        #[cfg(unix)]
+        if metadata.permissions().mode() & 0o077 != 0 {
+            return Err("项目主管私有 home 隔离目录权限不属于 owner-only，已拒绝换代".to_string());
+        }
+        Ok(archive_root)
+    }
+
     fn create_active(
         &self,
         plan: &SupervisorCommandPlan,
@@ -219,11 +620,20 @@ impl SupervisorResidentHomeManager {
         generation: u64,
     ) -> Result<SupervisorResidentHome, String> {
         let active = self.active_path();
-        if active.exists() {
-            return Err(format!(
-                "项目主管私有 CODEX_HOME 已存在，拒绝覆盖 {}",
-                active.display()
-            ));
+        match fs::symlink_metadata(&active) {
+            Ok(_) => {
+                return Err(format!(
+                    "项目主管私有 CODEX_HOME 已存在，拒绝覆盖 {}",
+                    active.display()
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "读取项目主管私有 CODEX_HOME 失败 {}：{error}",
+                    active.display()
+                ));
+            }
         }
         // A partially initialized whitelist/auth home must never become active.
         // If creation fails during replacement, the old active home can then be
@@ -232,14 +642,41 @@ impl SupervisorResidentHomeManager {
             ".active-staging-{generation}-{}",
             crate::unix_timestamp_nanos()
         ));
-        self.create_home_at(&staging, plan, config, generation)?;
-        fs::rename(&staging, &active).map_err(|error| {
-            format!(
+        if let Err(error) = self.create_home_at(&staging, plan, config, generation) {
+            self.remove_staging_home(&staging)?;
+            return Err(error);
+        }
+        #[cfg(test)]
+        if self.fail_create_active_after_staging {
+            self.remove_staging_home(&staging)?;
+            return Err("fixture_config_drift_create_active_after_staging_failure".to_string());
+        }
+        if let Err(error) = fs::rename(&staging, &active) {
+            self.remove_staging_home(&staging)?;
+            return Err(format!(
                 "提升项目主管私有 CODEX_HOME 失败 {}：{error}",
                 active.display()
-            )
-        })?;
+            ));
+        }
         Ok(SupervisorResidentHome { root: active })
+    }
+
+    fn remove_staging_home(&self, staging: &Path) -> Result<(), String> {
+        match fs::symlink_metadata(staging) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!(
+                "读取项目主管临时 home 失败 {}：{error}",
+                staging.display()
+            )),
+            Ok(metadata) => {
+                if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+                    return Err("项目主管临时 home 不是受控目录，拒绝清理".to_string());
+                }
+                fs::remove_dir_all(staging).map_err(|error| {
+                    format!("清理项目主管临时 home 失败 {}：{error}", staging.display())
+                })
+            }
+        }
     }
 
     fn create_home_at(
@@ -249,15 +686,7 @@ impl SupervisorResidentHomeManager {
         config: &McpServerConfig,
         generation: u64,
     ) -> Result<(), String> {
-        let auth_metadata = fs::metadata(&self.auth_source).map_err(|error| {
-            format!(
-                "项目主管需要读取既有 ~/.codex/auth.json 作为符号链接来源，但当前不可用 {}：{error}",
-                self.auth_source.display()
-            )
-        })?;
-        if !auth_metadata.is_file() {
-            return Err("项目主管拒绝使用非普通文件的 ~/.codex/auth.json".to_string());
-        }
+        self.validate_default_auth_source()?;
         fs::create_dir(home).map_err(|error| {
             format!(
                 "创建项目主管私有 CODEX_HOME 失败 {}：{error}",
@@ -289,7 +718,7 @@ impl SupervisorResidentHomeManager {
         plan: &SupervisorCommandPlan,
         config: &McpServerConfig,
         expected_generation: Option<u64>,
-    ) -> Result<(), String> {
+    ) -> Result<SupervisorResidentActiveHomeConfig, String> {
         let metadata = fs::symlink_metadata(active).map_err(|error| {
             format!(
                 "读取项目主管私有 CODEX_HOME 失败 {}：{error}",
@@ -308,17 +737,20 @@ impl SupervisorResidentHomeManager {
         let config_path = active.join(SUPERVISOR_TEMP_HOME_CONFIG);
         let home_metadata = active.join(SUPERVISOR_RESIDENT_HOME_METADATA);
         let auth = active.join(SUPERVISOR_TEMP_HOME_AUTH);
-        if !config_path.is_file() || !home_metadata.is_file() {
-            return Err("项目主管私有 CODEX_HOME 缺白名单配置或元数据，已拒绝复用".to_string());
-        }
-        #[cfg(unix)]
         for private_file in [&config_path, &home_metadata] {
-            let metadata = fs::metadata(private_file).map_err(|error| {
+            let metadata = fs::symlink_metadata(private_file).map_err(|error| {
                 format!(
                     "读取项目主管私有文件失败 {}：{error}",
                     private_file.display()
                 )
             })?;
+            if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "项目主管私有文件不是受控普通文件，已拒绝复用 {}",
+                    private_file.display()
+                ));
+            }
+            #[cfg(unix)]
             if metadata.permissions().mode() & 0o077 != 0 {
                 return Err(format!(
                     "项目主管私有文件权限不属于 owner-only，已拒绝复用 {}",
@@ -340,12 +772,13 @@ impl SupervisorResidentHomeManager {
             .map_err(|error| format!("项目主管预期 MCP 白名单格式损坏：{error}"))?;
         let legacy_config: toml::Value = toml::from_str(&legacy_config)
             .map_err(|error| format!("项目主管旧版 MCP 白名单格式损坏：{error}"))?;
-        let needs_legacy_config_migration = actual_config == legacy_config;
-        if actual_config != expected_config && !needs_legacy_config_migration {
-            return Err(
-                "项目主管私有 CODEX_HOME MCP 白名单与当前受控计划不一致，已拒绝复用".to_string(),
-            );
-        }
+        let config_state = if actual_config == expected_config {
+            SupervisorResidentActiveHomeConfig::Expected
+        } else if actual_config == legacy_config {
+            SupervisorResidentActiveHomeConfig::ExactLegacy
+        } else {
+            SupervisorResidentActiveHomeConfig::ConfigDrift
+        };
         let home_metadata_bytes = fs::read(&home_metadata).map_err(|error| {
             format!(
                 "读取项目主管私有 home 元数据失败 {}：{error}",
@@ -385,16 +818,36 @@ impl SupervisorResidentHomeManager {
         {
             return Err("项目主管 auth.json 未指向既有认证文件，拒绝复用".to_string());
         }
-        if needs_legacy_config_migration {
-            // An exact, already-validated resident config from before H2 may
-            // gain the one explicitly authorized tool.  Any other drift was
-            // rejected above, so this cannot become a generic config rewrite.
-            replace_private_resident_config(
-                &config_path,
-                &supervisor_resident_mcp_config_toml(plan)?,
-            )?;
+        self.validate_default_auth_source()?;
+        Ok(config_state)
+    }
+
+    fn validate_default_auth_source(&self) -> Result<(), String> {
+        let auth_source_metadata = fs::symlink_metadata(&self.auth_source).map_err(|error| {
+            format!(
+                "读取项目主管默认 auth.json 失败 {}：{error}",
+                self.auth_source.display()
+            )
+        })?;
+        if !auth_source_metadata.file_type().is_file()
+            || auth_source_metadata.file_type().is_symlink()
+        {
+            return Err("项目主管默认 auth.json 不是受控普通文件，拒绝复用".to_string());
         }
         Ok(())
+    }
+
+    fn migrate_exact_legacy_config(
+        &self,
+        active: &Path,
+        plan: &SupervisorCommandPlan,
+    ) -> Result<(), String> {
+        // The preceding typed validation established this is the closed,
+        // exact legacy form. Any other parsed configuration remains drift.
+        replace_private_resident_config(
+            &active.join(SUPERVISOR_TEMP_HOME_CONFIG),
+            &supervisor_resident_mcp_config_toml(plan)?,
+        )
     }
 }
 
@@ -539,6 +992,15 @@ fn consult_supervisor_resident_with(
         &config,
         None,
     )
+    .map_err(supervisor_resident_direct_consult_error)
+}
+
+fn supervisor_resident_direct_consult_error(failure: SupervisorResidentConsultFailure) -> String {
+    if failure.diagnostic_stage == SupervisorResidentDeliveryDiagnosticStage::PreflightHome {
+        SUPERVISOR_RESIDENT_HUMAN_RETRY_MESSAGE.to_string()
+    } else {
+        failure.into_error()
+    }
 }
 
 fn consult_supervisor_resident_with_parts(
@@ -551,31 +1013,174 @@ fn consult_supervisor_resident_with_parts(
     prompt_kind: &str,
     config: &McpServerConfig,
     active_user_message_id: Option<&str>,
-) -> Result<SupervisorResidentTurn, String> {
+) -> Result<SupervisorResidentTurn, SupervisorResidentConsultFailure> {
     // A failed TERM/KILL sweep is not a completed turn.  Reconcile its exact
     // process group before accepting another user message; if it is still
     // present, fail closed rather than spawning a second supervisor turn.
-    reap_supervisor_resident_stale_sessions_at(workflow_state_path)?;
-    if let Some(session) = supervisor_orchestrator::load_resident_turn_for_reconciliation(config)? {
+    reap_supervisor_resident_stale_sessions_at(workflow_state_path).map_err(|error| {
+        SupervisorResidentConsultFailure::preflight(
+            SupervisorResidentDeliveryDiagnosticStage::PreflightReap,
+            error,
+            None,
+            None,
+        )
+    })?;
+    if let Some(session) = supervisor_orchestrator::load_resident_turn_for_reconciliation(config)
+        .map_err(|error| {
+            SupervisorResidentConsultFailure::preflight(
+                SupervisorResidentDeliveryDiagnosticStage::PreflightSession,
+                error,
+                None,
+                None,
+            )
+        })?
+    {
         if session.launch_status == "resident_turn_cleanup_failed" {
-            return Err(format!(
-                "主管上一次回合的进程组尚未确认清理（pid={}）；已拒绝并发续聊，请重启工作台后重试。",
-                session.host_pid
+            return Err(SupervisorResidentConsultFailure::preflight(
+                SupervisorResidentDeliveryDiagnosticStage::PreflightReap,
+                format!(
+                    "主管上一次回合的进程组尚未确认清理（pid={}）；已拒绝并发续聊，请重启工作台后重试。",
+                    session.host_pid
+                ),
+                None,
+                None,
             ));
         }
     }
-    let persisted = supervisor_orchestrator::load_resident_session(config)?;
-    let executable = resident_workbench_executable()?;
+    let persisted = supervisor_orchestrator::load_resident_session(config).map_err(|error| {
+        SupervisorResidentConsultFailure::preflight(
+            SupervisorResidentDeliveryDiagnosticStage::PreflightSession,
+            error,
+            None,
+            None,
+        )
+    })?;
+    let executable = resident_workbench_executable().map_err(|error| {
+        SupervisorResidentConsultFailure::preflight(
+            SupervisorResidentDeliveryDiagnosticStage::PreflightExecutable,
+            error,
+            None,
+            None,
+        )
+    })?;
     if let Some(session) = persisted.filter(|session| !session.thread_id.trim().is_empty()) {
+        let generation = session.generation.max(1);
         let command_plan = build_supervisor_resident_command_plan(
             project_root,
             workflow_state_path,
             &config.run_id,
-            session.generation.max(1),
+            generation,
             &executable,
             Some(&session.thread_id),
-        )?;
-        let home = home_manager.ensure_active(&command_plan, config, session.generation.max(1))?;
+        )
+        .map_err(|error| {
+            SupervisorResidentConsultFailure::preflight(
+                SupervisorResidentDeliveryDiagnosticStage::PreflightPlan,
+                error,
+                Some(generation),
+                Some(&session.thread_id),
+            )
+        })?;
+        let home =
+            match home_manager.ensure_active_or_config_drift(&command_plan, config, generation) {
+                Ok(home) => home,
+                Err(SupervisorResidentEnsureActiveError::ConfigDrift) => {
+                    // This is a closed, typed preflight leaf. The old resume plan
+                    // has not reached the runner, and the quarantine method will
+                    // re-validate every trusted-home condition before rename.
+                    return (|| -> Result<SupervisorResidentTurn, SupervisorResidentConsultFailure> {
+                    let replacement_generation = session.generation.checked_add(1).ok_or_else(|| {
+                        SupervisorResidentConsultFailure::preflight(
+                            SupervisorResidentDeliveryDiagnosticStage::PreflightHome,
+                            "项目主管私有 home generation 溢出，已拒绝隔离换代".to_string(),
+                            Some(session.generation),
+                            None,
+                        )
+                    })?;
+                    let replacement_plan = build_supervisor_resident_command_plan(
+                        project_root,
+                        workflow_state_path,
+                        &config.run_id,
+                        replacement_generation,
+                        &executable,
+                        None,
+                    )
+                    .map_err(|error| {
+                        SupervisorResidentConsultFailure::preflight(
+                            SupervisorResidentDeliveryDiagnosticStage::PreflightPlan,
+                            error,
+                            Some(replacement_generation),
+                            None,
+                        )
+                    })?;
+                    let (replacement_home, _archive) = home_manager
+                        .quarantine_config_drift_active(
+                            &replacement_plan,
+                            config,
+                            session.generation,
+                            replacement_generation,
+                        )
+                        .map_err(|error| {
+                            SupervisorResidentConsultFailure::preflight(
+                                SupervisorResidentDeliveryDiagnosticStage::PreflightHome,
+                                error,
+                                Some(replacement_generation),
+                                None,
+                            )
+                        })?;
+                    let facts =
+                        resident_rebuild_facts(workflow_state_path, project_root, workflow_id)
+                            .map_err(|error| {
+                                SupervisorResidentConsultFailure::preflight(
+                                    SupervisorResidentDeliveryDiagnosticStage::PreflightFacts,
+                                    error,
+                                    Some(replacement_generation),
+                                    None,
+                                )
+                            })?;
+                    let replacement_turn = SupervisorResidentOneShotPlan {
+                        command_plan: replacement_plan,
+                        prompt: format!(
+                            "{facts}\n\n===== 当前项目主管请求（{prompt_kind}）=====\n{prompt}"
+                        ),
+                        expected_thread_id: None,
+                        workflow_state_path: workflow_state_path.to_path_buf(),
+                        run_id: config.run_id.clone(),
+                    };
+                    let replacement_runner = SupervisorResidentInitialOnlyRunner { runner };
+                    run_supervisor_resident_with_watchdog_retry(
+                        &replacement_runner,
+                        &replacement_turn,
+                        &replacement_home,
+                        config,
+                        project_root,
+                        workflow_id,
+                        prompt_kind,
+                        active_user_message_id,
+                        replacement_generation,
+                        SupervisorResidentLaunch::Replaced {
+                            reason: "config_drift".to_string(),
+                        },
+                    )
+                    .map_err(|error| {
+                        SupervisorResidentConsultFailure::runner(
+                            error,
+                            replacement_generation,
+                            None,
+                        )
+                    })
+                })()
+                .map_err(SupervisorResidentConsultFailure::with_human_retry);
+                }
+                Err(error) => {
+                    return Err(SupervisorResidentConsultFailure::preflight(
+                        SupervisorResidentDeliveryDiagnosticStage::PreflightHome,
+                        error.into_error(),
+                        Some(generation),
+                        None,
+                    ));
+                }
+            };
         let plan = SupervisorResidentOneShotPlan {
             command_plan,
             prompt: prompt.to_string(),
@@ -592,7 +1197,7 @@ fn consult_supervisor_resident_with_parts(
             workflow_id,
             prompt_kind,
             active_user_message_id,
-            session.generation.max(1),
+            generation,
             SupervisorResidentLaunch::Reused,
         ) {
             Err(error) if error.is_invalid_resume() => {
@@ -600,7 +1205,7 @@ fn consult_supervisor_resident_with_parts(
                 // archive the former project home, rebuild facts, and make one
                 // fresh initial exec.  The recovery call is deliberately not
                 // matched again, so it cannot recurse.
-                (|| {
+                (|| -> Result<SupervisorResidentTurn, SupervisorResidentConsultFailure> {
                     let generation = session.generation.saturating_add(1).max(1);
                     let replacement_plan = build_supervisor_resident_command_plan(
                         project_root,
@@ -609,11 +1214,35 @@ fn consult_supervisor_resident_with_parts(
                         generation,
                         &executable,
                         None,
-                    )?;
-                    let (replacement_home, _archive) =
-                        home_manager.replace_active(&replacement_plan, config, generation)?;
+                    )
+                    .map_err(|error| {
+                        SupervisorResidentConsultFailure::preflight(
+                            SupervisorResidentDeliveryDiagnosticStage::PreflightPlan,
+                            error,
+                            Some(generation),
+                            None,
+                        )
+                    })?;
+                    let (replacement_home, _archive) = home_manager
+                        .replace_active(&replacement_plan, config, generation)
+                        .map_err(|error| {
+                            SupervisorResidentConsultFailure::preflight(
+                                SupervisorResidentDeliveryDiagnosticStage::PreflightHome,
+                                error,
+                                Some(generation),
+                                None,
+                            )
+                        })?;
                     let facts =
-                        resident_rebuild_facts(workflow_state_path, project_root, workflow_id)?;
+                        resident_rebuild_facts(workflow_state_path, project_root, workflow_id)
+                            .map_err(|error| {
+                                SupervisorResidentConsultFailure::preflight(
+                                    SupervisorResidentDeliveryDiagnosticStage::PreflightFacts,
+                                    error,
+                                    Some(generation),
+                                    None,
+                                )
+                            })?;
                     let opening = format!(
                         "{facts}\n\n===== 当前项目主管请求（{prompt_kind}）=====\n{prompt}"
                     );
@@ -638,12 +1267,18 @@ fn consult_supervisor_resident_with_parts(
                             reason: "invalid_resume".to_string(),
                         },
                     )
-                    .map_err(SupervisorResidentOneShotFailure::into_error)
+                    .map_err(|error| {
+                        SupervisorResidentConsultFailure::runner(error, generation, None)
+                    })
                 })()
-                .map_err(|_| SUPERVISOR_RESIDENT_HUMAN_RETRY_MESSAGE.to_string())
+                .map_err(SupervisorResidentConsultFailure::with_human_retry)
             }
             Ok(turn) => Ok(turn),
-            Err(error) => Err(error.into_error()),
+            Err(error) => Err(SupervisorResidentConsultFailure::runner(
+                error,
+                generation,
+                Some(&session.thread_id),
+            )),
         }
     } else {
         let generation = 1;
@@ -654,9 +1289,34 @@ fn consult_supervisor_resident_with_parts(
             generation,
             &executable,
             None,
-        )?;
-        let home = home_manager.ensure_active(&command_plan, config, generation)?;
-        let facts = resident_rebuild_facts(workflow_state_path, project_root, workflow_id)?;
+        )
+        .map_err(|error| {
+            SupervisorResidentConsultFailure::preflight(
+                SupervisorResidentDeliveryDiagnosticStage::PreflightPlan,
+                error,
+                Some(generation),
+                None,
+            )
+        })?;
+        let home = home_manager
+            .ensure_active(&command_plan, config, generation)
+            .map_err(|error| {
+                SupervisorResidentConsultFailure::preflight(
+                    SupervisorResidentDeliveryDiagnosticStage::PreflightHome,
+                    error,
+                    Some(generation),
+                    None,
+                )
+            })?;
+        let facts = resident_rebuild_facts(workflow_state_path, project_root, workflow_id)
+            .map_err(|error| {
+                SupervisorResidentConsultFailure::preflight(
+                    SupervisorResidentDeliveryDiagnosticStage::PreflightFacts,
+                    error,
+                    Some(generation),
+                    None,
+                )
+            })?;
         let plan = SupervisorResidentOneShotPlan {
             command_plan,
             prompt: format!("{facts}\n\n===== 当前项目主管请求（{prompt_kind}）=====\n{prompt}"),
@@ -676,7 +1336,7 @@ fn consult_supervisor_resident_with_parts(
             generation,
             SupervisorResidentLaunch::Created,
         )
-        .map_err(SupervisorResidentOneShotFailure::into_error)
+        .map_err(|error| SupervisorResidentConsultFailure::runner(error, generation, None))
     }
 }
 
@@ -772,12 +1432,16 @@ fn run_supervisor_resident_with_watchdog_retry(
                         config,
                         "thread_binding_missing_after_oneshot",
                     ) {
-                        return Err(SupervisorResidentOneShotFailure::Protocol(format!(
-                            "supervisor_resident_thread_binding_missing_after_oneshot; supervisor_resident_lifecycle_exit_failed:{error}"
-                        )));
+                        return Err(supervisor_resident_classified_failure(
+                            SupervisorResidentDeliveryDiagnosticStage::ThreadBinding,
+                            format!(
+                                "supervisor_resident_thread_binding_missing_after_oneshot; supervisor_resident_lifecycle_exit_failed:{error}"
+                            ),
+                        ));
                     }
-                    return Err(SupervisorResidentOneShotFailure::Protocol(
-                        "supervisor_resident_thread_binding_missing_after_oneshot".to_string(),
+                    return Err(supervisor_resident_classified_failure(
+                        SupervisorResidentDeliveryDiagnosticStage::ThreadBinding,
+                        "supervisor_resident_thread_binding_missing_after_oneshot",
                     ));
                 }
                 if let (Some(message_id), Some(raw_detail)) = (
@@ -788,9 +1452,10 @@ fn run_supervisor_resident_with_watchdog_retry(
                         config, message_id, raw_detail,
                     )
                     .map_err(|error| {
-                        SupervisorResidentOneShotFailure::Protocol(format!(
-                            "supervisor_resident_recoverable_error_audit_failed:{error}"
-                        ))
+                        supervisor_resident_classified_failure(
+                            SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+                            format!("supervisor_resident_recoverable_error_audit_failed:{error}"),
+                        )
                     })?;
                 }
                 if let Err(error) = supervisor_orchestrator::record_resident_consult_merged(
@@ -802,9 +1467,10 @@ fn run_supervisor_resident_with_watchdog_retry(
                 .and_then(|_| {
                     supervisor_orchestrator::record_resident_turn_exited(config, "turn_completed")
                 }) {
-                    return Err(SupervisorResidentOneShotFailure::Protocol(format!(
-                        "supervisor_resident_audit_failed:{error}"
-                    )));
+                    return Err(supervisor_resident_classified_failure(
+                        SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+                        format!("supervisor_resident_audit_failed:{error}"),
+                    ));
                 }
                 return Ok(turn);
             }
@@ -813,9 +1479,12 @@ fn run_supervisor_resident_with_watchdog_retry(
                     config,
                     "watchdog_silence_retrying_once",
                 ) {
-                    return Err(SupervisorResidentOneShotFailure::Protocol(format!(
-                        "supervisor_resident_watchdog_silence; supervisor_resident_lifecycle_exit_failed:{error}"
-                    )));
+                    return Err(supervisor_resident_classified_failure(
+                        SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+                        format!(
+                            "supervisor_resident_watchdog_silence; supervisor_resident_lifecycle_exit_failed:{error}"
+                        ),
+                    ));
                 }
                 // If initial `exec` reached `thread.started` before becoming
                 // silent, the retry must continue that exact thread rather
@@ -836,21 +1505,28 @@ fn run_supervisor_resident_with_watchdog_retry(
                     config,
                     "watchdog_silence_retry_exhausted",
                 ) {
-                    return Err(SupervisorResidentOneShotFailure::Protocol(format!(
-                        "{SUPERVISOR_RESIDENT_HUMAN_RETRY_MESSAGE}; supervisor_resident_lifecycle_exit_failed:{error}"
-                    )));
+                    return Err(supervisor_resident_classified_failure(
+                        SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+                        format!(
+                            "{SUPERVISOR_RESIDENT_HUMAN_RETRY_MESSAGE}; supervisor_resident_lifecycle_exit_failed:{error}"
+                        ),
+                    ));
                 }
-                return Err(SupervisorResidentOneShotFailure::Protocol(
-                    SUPERVISOR_RESIDENT_HUMAN_RETRY_MESSAGE.to_string(),
+                return Err(supervisor_resident_classified_failure(
+                    SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+                    SUPERVISOR_RESIDENT_HUMAN_RETRY_MESSAGE,
                 ));
             }
             Err(SupervisorResidentOneShotFailure::CleanupFailed(detail)) => {
                 if let Err(lifecycle_error) =
                     supervisor_orchestrator::record_resident_turn_cleanup_failed(config, &detail)
                 {
-                    return Err(SupervisorResidentOneShotFailure::Protocol(format!(
-                        "{detail}; supervisor_resident_cleanup_lifecycle_failed:{lifecycle_error}"
-                    )));
+                    return Err(supervisor_resident_classified_failure(
+                        SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+                        format!(
+                            "{detail}; supervisor_resident_cleanup_lifecycle_failed:{lifecycle_error}"
+                        ),
+                    ));
                 }
                 return Err(SupervisorResidentOneShotFailure::CleanupFailed(detail));
             }
@@ -866,7 +1542,8 @@ fn run_supervisor_resident_with_watchdog_retry(
                 let reason = match &error {
                     SupervisorResidentOneShotFailure::ThreadInvalid(_)
                     | SupervisorResidentOneShotFailure::InvalidResume { .. } => "invalid_resume",
-                    SupervisorResidentOneShotFailure::Protocol(_) => "turn_failed",
+                    SupervisorResidentOneShotFailure::Protocol(_)
+                    | SupervisorResidentOneShotFailure::Classified { .. } => "turn_failed",
                     SupervisorResidentOneShotFailure::WatchdogSilence
                     | SupervisorResidentOneShotFailure::CleanupFailed(_) => unreachable!(),
                 };
@@ -878,10 +1555,14 @@ fn run_supervisor_resident_with_watchdog_retry(
                             SUPERVISOR_RESIDENT_HUMAN_RETRY_MESSAGE.to_string(),
                         ));
                     }
-                    return Err(SupervisorResidentOneShotFailure::Protocol(format!(
-                        "{}; supervisor_resident_lifecycle_exit_failed:{lifecycle_error}",
-                        error.into_error()
-                    )));
+                    let diagnostic_stage = error.delivery_diagnostic_stage();
+                    return Err(supervisor_resident_classified_failure(
+                        diagnostic_stage,
+                        format!(
+                            "{}; supervisor_resident_lifecycle_exit_failed:{lifecycle_error}",
+                            error.into_error()
+                        ),
+                    ));
                 }
                 return Err(error);
             }
@@ -904,7 +1585,12 @@ fn resume_supervisor_resident_retry_plan(
         &previous.command_plan.supervisor_mcp_command,
         Some(thread_id),
     )
-    .map_err(SupervisorResidentOneShotFailure::Protocol)?;
+    .map_err(|error| {
+        supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::PreflightPlan,
+            error,
+        )
+    })?;
     Ok(SupervisorResidentOneShotPlan {
         command_plan,
         prompt: previous.prompt.clone(),
@@ -922,32 +1608,45 @@ fn run_real_supervisor_resident_oneshot(
 ) -> Result<SupervisorResidentTurn, SupervisorResidentOneShotFailure> {
     let command_plan = &plan.command_plan;
     let output_dir = command_plan.stderr_path.parent().ok_or_else(|| {
-        SupervisorResidentOneShotFailure::Protocol(
-            "supervisor_resident_stderr_parent_missing".to_string(),
+        supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerOutputInit,
+            "supervisor_resident_stderr_parent_missing",
         )
     })?;
     fs::create_dir_all(output_dir).map_err(|error| {
-        SupervisorResidentOneShotFailure::Protocol(format!(
-            "supervisor_resident_output_dir_create_failed:{error}"
-        ))
+        supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerOutputInit,
+            format!("supervisor_resident_output_dir_create_failed:{error}"),
+        )
     })?;
-    restrict_private_dir(output_dir).map_err(SupervisorResidentOneShotFailure::Protocol)?;
+    restrict_private_dir(output_dir).map_err(|error| {
+        supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerOutputInit,
+            error,
+        )
+    })?;
     match fs::remove_file(&command_plan.last_message_path) {
         Ok(()) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => {
-            return Err(SupervisorResidentOneShotFailure::Protocol(format!(
-                "supervisor_resident_last_message_reset_failed:{error}"
-            )));
+            return Err(supervisor_resident_classified_failure(
+                SupervisorResidentDeliveryDiagnosticStage::RunnerOutputInit,
+                format!("supervisor_resident_last_message_reset_failed:{error}"),
+            ));
         }
     }
     let stderr_file = fs::File::create(&command_plan.stderr_path).map_err(|error| {
-        SupervisorResidentOneShotFailure::Protocol(format!(
-            "supervisor_resident_stderr_create_failed:{error}"
-        ))
+        supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerOutputInit,
+            format!("supervisor_resident_stderr_create_failed:{error}"),
+        )
     })?;
-    restrict_private_file(&command_plan.stderr_path)
-        .map_err(SupervisorResidentOneShotFailure::Protocol)?;
+    restrict_private_file(&command_plan.stderr_path).map_err(|error| {
+        supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerOutputInit,
+            error,
+        )
+    })?;
     let mut command = Command::new(&command_plan.program);
     command
         .args(&command_plan.argv)
@@ -959,18 +1658,23 @@ fn run_real_supervisor_resident_oneshot(
     #[cfg(unix)]
     command.process_group(0);
     let mut child = command.spawn().map_err(|error| {
-        SupervisorResidentOneShotFailure::Protocol(format!(
-            "supervisor_resident_oneshot_spawn_failed:{error}"
-        ))
+        supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerSpawn,
+            format!("supervisor_resident_oneshot_spawn_failed:{error}"),
+        )
     })?;
     let pid = child.id();
     if let Err(error) = on_turn_prepared(pid) {
         if let Err(cleanup_error) = stop_supervisor_resident_process_group(&mut child) {
-            return Err(SupervisorResidentOneShotFailure::Protocol(format!(
-                "{error}; process_group_cleanup_failed:{cleanup_error}"
-            )));
+            return Err(supervisor_resident_classified_failure(
+                SupervisorResidentDeliveryDiagnosticStage::PreparedLifecycleWrite,
+                format!("{error}; process_group_cleanup_failed:{cleanup_error}"),
+            ));
         }
-        return Err(SupervisorResidentOneShotFailure::Protocol(error));
+        return Err(supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::PreparedLifecycleWrite,
+            error,
+        ));
     }
     let registration = match crate::exec_process_registry::register_supervisor_oneshot_process_group(
         &plan.workflow_state_path,
@@ -985,9 +1689,10 @@ fn run_real_supervisor_resident_oneshot(
                     cleanup_error,
                 ));
             }
-            return Err(SupervisorResidentOneShotFailure::Protocol(format!(
-                "supervisor_resident_process_registration_failed:{error}"
-            )));
+            return Err(supervisor_resident_classified_failure(
+                SupervisorResidentDeliveryDiagnosticStage::RegistryRegistration,
+                format!("supervisor_resident_process_registration_failed:{error}"),
+            ));
         }
     };
     let mut bound_thread = None;
@@ -998,7 +1703,10 @@ fn run_real_supervisor_resident_oneshot(
             {
                 return Err(cleanup_failed(error, cleanup_error));
             }
-            return Err(SupervisorResidentOneShotFailure::Protocol(error));
+            return Err(supervisor_resident_classified_failure(
+                SupervisorResidentDeliveryDiagnosticStage::ThreadBinding,
+                error,
+            ));
         }
         bound_thread = Some(expected_thread_id.to_string());
     }
@@ -1013,8 +1721,9 @@ fn run_real_supervisor_resident_oneshot(
                     cleanup_error,
                 ));
             }
-            return Err(SupervisorResidentOneShotFailure::Protocol(
-                "supervisor_resident_stdout_unavailable".to_string(),
+            return Err(supervisor_resident_classified_failure(
+                SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+                "supervisor_resident_stdout_unavailable",
             ));
         }
     };
@@ -1042,8 +1751,9 @@ fn run_real_supervisor_resident_oneshot(
                     cleanup_error,
                 ));
             }
-            return Err(SupervisorResidentOneShotFailure::Protocol(
-                "supervisor_resident_stdin_unavailable".to_string(),
+            return Err(supervisor_resident_classified_failure(
+                SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+                "supervisor_resident_stdin_unavailable",
             ));
         }
     };
@@ -1060,9 +1770,10 @@ fn run_real_supervisor_resident_oneshot(
                 cleanup_error,
             ));
         }
-        return Err(SupervisorResidentOneShotFailure::Protocol(format!(
-            "supervisor_resident_stdin_write_failed:{error}"
-        )));
+        return Err(supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+            format!("supervisor_resident_stdin_write_failed:{error}"),
+        ));
     }
     drop(stdin);
 
@@ -1118,7 +1829,10 @@ fn run_real_supervisor_resident_oneshot(
                 {
                     return Err(cleanup_failed(error, cleanup_error));
                 }
-                return Err(SupervisorResidentOneShotFailure::Protocol(error));
+                return Err(supervisor_resident_classified_failure(
+                    SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+                    error,
+                ));
             }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {}
@@ -1155,9 +1869,10 @@ fn run_real_supervisor_resident_oneshot(
                         cleanup_error,
                     ));
                 }
-                return Err(SupervisorResidentOneShotFailure::Protocol(format!(
-                    "supervisor_resident_process_wait_failed:{error}"
-                )));
+                return Err(supervisor_resident_classified_failure(
+                    SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+                    format!("supervisor_resident_process_wait_failed:{error}"),
+                ));
             }
         }
     };
@@ -1210,28 +1925,33 @@ fn finalize_supervisor_resident_turn(
         return Err(classify_supervisor_resident_failure(error));
     }
     if !status_success {
-        return Err(SupervisorResidentOneShotFailure::Protocol(format!(
-            "supervisor_resident_oneshot_exit_failed:{exit_code}"
-        )));
+        return Err(supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+            format!("supervisor_resident_oneshot_exit_failed:{exit_code}"),
+        ));
     }
     if !turn_completed {
-        return Err(SupervisorResidentOneShotFailure::Protocol(
-            "supervisor_resident_turn_completed_event_missing".to_string(),
+        return Err(supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+            "supervisor_resident_turn_completed_event_missing",
         ));
     }
     if !thread_started_event_seen {
-        return Err(SupervisorResidentOneShotFailure::Protocol(
-            "supervisor_resident_thread_started_event_missing".to_string(),
+        return Err(supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::ThreadBinding,
+            "supervisor_resident_thread_started_event_missing",
         ));
     }
     let thread_id = bound_thread.ok_or_else(|| {
-        SupervisorResidentOneShotFailure::Protocol(
-            "supervisor_resident_thread_started_event_missing".to_string(),
+        supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::ThreadBinding,
+            "supervisor_resident_thread_started_event_missing",
         )
     })?;
     let content = last_message.or(assistant_message).ok_or_else(|| {
-        SupervisorResidentOneShotFailure::Protocol(
-            "supervisor_resident_assistant_message_missing".to_string(),
+        supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+            "supervisor_resident_assistant_message_missing",
         )
     })?;
     Ok(SupervisorResidentTurn {
@@ -1266,7 +1986,12 @@ fn drain_supervisor_resident_events(
                 thread_started_event_seen,
                 on_thread_started,
             )?,
-            Ok(Err(error)) => return Err(SupervisorResidentOneShotFailure::Protocol(error)),
+            Ok(Err(error)) => {
+                return Err(supervisor_resident_classified_failure(
+                    SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+                    error,
+                ))
+            }
             Err(mpsc::TryRecvError::Empty | mpsc::TryRecvError::Disconnected) => return Ok(()),
         }
     }
@@ -1285,13 +2010,15 @@ fn apply_supervisor_resident_json_event(
     on_thread_started: &mut dyn FnMut(&str, u32) -> Result<(), String>,
 ) -> Result<(), SupervisorResidentOneShotFailure> {
     let value: Value = serde_json::from_str(line).map_err(|error| {
-        SupervisorResidentOneShotFailure::Protocol(format!(
-            "supervisor_resident_stdout_json_invalid:{error}"
-        ))
+        supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+            format!("supervisor_resident_stdout_json_invalid:{error}"),
+        )
     })?;
     let event_type = value.get("type").and_then(Value::as_str).ok_or_else(|| {
-        SupervisorResidentOneShotFailure::Protocol(
-            "supervisor_resident_stdout_event_type_missing".to_string(),
+        supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+            "supervisor_resident_stdout_event_type_missing",
         )
     })?;
     match event_type {
@@ -1301,19 +2028,25 @@ fn apply_supervisor_resident_json_event(
                 .and_then(Value::as_str)
                 .filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| {
-                    SupervisorResidentOneShotFailure::Protocol(
-                        "supervisor_resident_thread_started_id_missing".to_string(),
+                    supervisor_resident_classified_failure(
+                        SupervisorResidentDeliveryDiagnosticStage::ThreadBinding,
+                        "supervisor_resident_thread_started_id_missing",
                     )
                 })?;
             if let Some(current) = bound_thread.as_deref() {
                 if current != thread_id {
-                    return Err(SupervisorResidentOneShotFailure::Protocol(
-                        "supervisor_resident_multiple_thread_ids_in_one_turn".to_string(),
+                    return Err(supervisor_resident_classified_failure(
+                        SupervisorResidentDeliveryDiagnosticStage::ThreadBinding,
+                        "supervisor_resident_multiple_thread_ids_in_one_turn",
                     ));
                 }
             } else {
-                on_thread_started(thread_id, pid)
-                    .map_err(SupervisorResidentOneShotFailure::Protocol)?;
+                on_thread_started(thread_id, pid).map_err(|error| {
+                    supervisor_resident_classified_failure(
+                        SupervisorResidentDeliveryDiagnosticStage::ThreadBinding,
+                        error,
+                    )
+                })?;
                 *bound_thread = Some(thread_id.to_string());
             }
             *thread_started_event_seen = true;
@@ -1349,9 +2082,10 @@ fn classify_supervisor_resident_failure(detail: String) -> SupervisorResidentOne
     if resident_thread_invalid(&detail) {
         SupervisorResidentOneShotFailure::ThreadInvalid(detail)
     } else {
-        SupervisorResidentOneShotFailure::Protocol(format!(
-            "supervisor_resident_turn_failed:{detail}"
-        ))
+        supervisor_resident_classified_failure(
+            SupervisorResidentDeliveryDiagnosticStage::RunnerTerminal,
+            format!("supervisor_resident_turn_failed:{detail}"),
+        )
     }
 }
 
@@ -1421,7 +2155,8 @@ fn record_invalid_resume_failure(
         }
         SupervisorResidentOneShotFailure::WatchdogSilence
         | SupervisorResidentOneShotFailure::CleanupFailed(_)
-        | SupervisorResidentOneShotFailure::Protocol(_) => Ok(()),
+        | SupervisorResidentOneShotFailure::Protocol(_)
+        | SupervisorResidentOneShotFailure::Classified { .. } => Ok(()),
     }
 }
 
@@ -1542,6 +2277,10 @@ const SUPERVISOR_RESIDENT_USER_MESSAGE_INJECTED_EVENT: &str =
     "supervisor_resident_user_message_injected";
 const SUPERVISOR_RESIDENT_SUPERVISOR_MESSAGE_RECORDED_EVENT: &str =
     "supervisor_resident_supervisor_message_recorded";
+const SUPERVISOR_RESIDENT_DELIVERY_DIAGNOSTIC_RECORDED_EVENT: &str =
+    "supervisor_resident_delivery_diagnostic_recorded";
+pub(crate) const SUPERVISOR_RESIDENT_TOOL_INVOCATION_DIAGNOSTIC_RECORDED_EVENT: &str =
+    "supervisor_resident_tool_invocation_diagnostic_recorded";
 
 #[derive(serde::Deserialize)]
 pub(crate) struct SubmitSupervisorResidentAnswerRequest {
@@ -1620,6 +2359,12 @@ fn resident_message_target_ref(workflow_id: &str, message_id: &str) -> String {
     format!("{workflow_id}:resident-message:{message_id}")
 }
 
+fn resident_delivery_diagnostic_target_ref(message_id: &str) -> String {
+    // This internal fact must not satisfy the existing workflow-ledger target
+    // filter.  The workflow id remains an explicit audit field below.
+    format!("supervisor-resident-delivery-diagnostic:{message_id}")
+}
+
 fn append_resident_message_canonical_event(
     workflow_state_path: &Path,
     event: Value,
@@ -1628,6 +2373,210 @@ fn append_resident_message_canonical_event(
     let mut value = crate::read_workflow_state_value(workflow_state_path)?;
     crate::array_mut(&mut value, "audit_events")?.push(event);
     crate::write_m5b_batch2_workflow_state(workflow_state_path, phase, &value)
+}
+
+#[cfg(test)]
+thread_local! {
+    static SUPERVISOR_RESIDENT_DIAGNOSTIC_BATCH2_FAILURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static SUPERVISOR_RESIDENT_DIAGNOSTIC_BATCH2_ATTEMPTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+struct SupervisorResidentDiagnosticBatch2FailureGuard;
+
+#[cfg(test)]
+impl Drop for SupervisorResidentDiagnosticBatch2FailureGuard {
+    fn drop(&mut self) {
+        SUPERVISOR_RESIDENT_DIAGNOSTIC_BATCH2_FAILURE.with(|failure| failure.set(false));
+    }
+}
+
+#[cfg(test)]
+fn force_supervisor_resident_diagnostic_batch2_failure(
+) -> SupervisorResidentDiagnosticBatch2FailureGuard {
+    SUPERVISOR_RESIDENT_DIAGNOSTIC_BATCH2_ATTEMPTS.with(|attempts| attempts.set(0));
+    SUPERVISOR_RESIDENT_DIAGNOSTIC_BATCH2_FAILURE.with(|failure| failure.set(true));
+    SupervisorResidentDiagnosticBatch2FailureGuard
+}
+
+#[cfg(test)]
+fn supervisor_resident_diagnostic_batch2_attempts() -> usize {
+    SUPERVISOR_RESIDENT_DIAGNOSTIC_BATCH2_ATTEMPTS.with(std::cell::Cell::get)
+}
+
+fn write_resident_diagnostic_batch2(
+    workflow_state_path: &Path,
+    phase: &str,
+    value: &Value,
+) -> Result<(), String> {
+    #[cfg(test)]
+    if SUPERVISOR_RESIDENT_DIAGNOSTIC_BATCH2_FAILURE.with(std::cell::Cell::get) {
+        SUPERVISOR_RESIDENT_DIAGNOSTIC_BATCH2_ATTEMPTS
+            .with(|attempts| attempts.set(attempts.get().saturating_add(1)));
+        return Err("supervisor_resident_test_diagnostic_batch2_failure".to_string());
+    }
+    crate::write_m5b_batch2_workflow_state(workflow_state_path, phase, value)
+}
+
+fn resident_tool_diagnostic_capability(value: Option<bool>) -> Value {
+    value
+        .map(Value::Bool)
+        .unwrap_or_else(|| Value::String("not_observed".to_string()))
+}
+
+pub(crate) fn append_resident_tool_invocation_diagnostic(
+    config: &McpServerConfig,
+    session: &supervisor_orchestrator::SupervisorResidentSessionState,
+    stage: &str,
+    invocation: &str,
+    submit_proposal_visible: Option<bool>,
+    other_tool_visible: Option<bool>,
+    only_submit_preapproved: Option<bool>,
+    handler_status: &str,
+    audit_status: &str,
+) -> Result<(), String> {
+    if !matches!(
+        stage,
+        "tools_list_served"
+            | "tools_call_received"
+            | "submit_handler_entered"
+            | "submit_handler_finished"
+            | "tool_audit_boundary"
+    ) || !matches!(invocation, "submit_proposal" | "other_tool" | "none")
+        || !matches!(
+            handler_status,
+            "entered" | "accepted" | "denied" | "audit_write_failed" | "not_observed"
+        )
+        || !matches!(
+            audit_status,
+            "entered" | "accepted" | "denied" | "audit_write_failed" | "not_observed"
+        )
+    {
+        return Err("supervisor_resident_tool_diagnostic_enum_invalid".to_string());
+    }
+    if session.launch_status != "resident_turn_running"
+        || session.host_pid == 0
+        || session.generation == 0
+        || session.project_id.trim().is_empty()
+        || session.project_root.trim().is_empty()
+        || session.workflow_id.trim().is_empty()
+        || session.thread_id.trim().is_empty()
+        || session.active_message_id.trim().is_empty()
+        || session.project_id != crate::project_id(&session.project_root)
+    {
+        return Err("supervisor_resident_tool_diagnostic_binding_invalid".to_string());
+    }
+    let workflow_state_path = config
+        .supervisor_workflow_state_path
+        .as_deref()
+        .ok_or_else(|| "supervisor_resident_tool_diagnostic_workflow_state_missing".to_string())?;
+    let mut value = crate::read_workflow_state_value(workflow_state_path)?;
+    let events = crate::array_mut(&mut value, "audit_events")?;
+    let recorded_exists = events.iter().any(|event| {
+        resident_event_string(event, "event_type")
+            == Some(SUPERVISOR_RESIDENT_USER_MESSAGE_RECORDED_EVENT)
+            && resident_event_string(event, "project_id") == Some(session.project_id.as_str())
+            && resident_event_string(event, "workflow_id") == Some(session.workflow_id.as_str())
+            && resident_event_string(event, "message_id")
+                == Some(session.active_message_id.as_str())
+            && resident_event_string(event, "actor_ref") == Some("user")
+            && resident_event_string(event, "source_kind")
+                == Some("supervisor_resident_user_message")
+    });
+    if !recorded_exists {
+        return Err("supervisor_resident_tool_diagnostic_recorded_message_missing".to_string());
+    }
+    if events.iter().any(|event| {
+        resident_event_string(event, "event_type")
+            == Some(SUPERVISOR_RESIDENT_TOOL_INVOCATION_DIAGNOSTIC_RECORDED_EVENT)
+            && resident_event_string(event, "message_id")
+                == Some(session.active_message_id.as_str())
+            && resident_event_string(event, "stage") == Some(stage)
+            && resident_event_string(event, "invocation") == Some(invocation)
+    }) {
+        return Ok(());
+    }
+    let identity_digest = crate::utils::hash::short_hash(&format!(
+        "supervisor-resident-tool-diagnostic:{}:{stage}:{invocation}",
+        session.active_message_id
+    ));
+    events.push(json!({
+        "event_id": format!("supervisor-resident-tool-diagnostic:{identity_digest}"),
+        "event_type": SUPERVISOR_RESIDENT_TOOL_INVOCATION_DIAGNOSTIC_RECORDED_EVENT,
+        "target_ref": format!("supervisor-resident-tool-diagnostic:{identity_digest}"),
+        "message_id": session.active_message_id,
+        "stage": stage,
+        "submit_proposal_visible": resident_tool_diagnostic_capability(submit_proposal_visible),
+        "other_tool_visible": resident_tool_diagnostic_capability(other_tool_visible),
+        "only_submit_preapproved": resident_tool_diagnostic_capability(only_submit_preapproved),
+        "invocation": invocation,
+        "handler_status": handler_status,
+        "audit_status": audit_status,
+        "generation": session.generation,
+        "run_digest": crate::utils::hash::short_hash(&config.run_id),
+        "thread_digest": crate::utils::hash::short_hash(&session.thread_id),
+    }));
+    write_resident_diagnostic_batch2(
+        workflow_state_path,
+        SUPERVISOR_RESIDENT_TOOL_INVOCATION_DIAGNOSTIC_RECORDED_EVENT,
+        &value,
+    )
+}
+
+fn append_resident_delivery_diagnostic(
+    workflow_state_path: &Path,
+    project_id: &str,
+    workflow_id: &str,
+    message_id: &str,
+    config: &McpServerConfig,
+    failure: &SupervisorResidentConsultFailure,
+) -> Result<(), String> {
+    let mut value = crate::read_workflow_state_value(workflow_state_path)?;
+    let events = crate::array_mut(&mut value, "audit_events")?;
+    let recorded_exists = events.iter().any(|event| {
+        is_recorded_resident_user_message(event, project_id, workflow_id)
+            && resident_event_string(event, "message_id") == Some(message_id)
+    });
+    if !recorded_exists {
+        return Err("supervisor_resident_delivery_diagnostic_recorded_message_missing".to_string());
+    }
+    let diagnostic_exists = events.iter().any(|event| {
+        resident_event_string(event, "event_type")
+            == Some(SUPERVISOR_RESIDENT_DELIVERY_DIAGNOSTIC_RECORDED_EVENT)
+            && resident_event_string(event, "project_id") == Some(project_id)
+            && resident_event_string(event, "workflow_id") == Some(workflow_id)
+            && resident_event_string(event, "message_id") == Some(message_id)
+    });
+    if diagnostic_exists {
+        return Ok(());
+    }
+    let mut event = json!({
+        "event_id": format!(
+            "supervisor-resident-delivery-diagnostic:{}",
+            crate::stable_id(&format!("{project_id}:{workflow_id}:{message_id}")),
+        ),
+        "event_type": SUPERVISOR_RESIDENT_DELIVERY_DIAGNOSTIC_RECORDED_EVENT,
+        "target_ref": resident_delivery_diagnostic_target_ref(message_id),
+        "project_id": project_id,
+        "workflow_id": workflow_id,
+        "message_id": message_id,
+        "run_id": config.run_id,
+        "stage": failure.diagnostic_stage.stage(),
+        "stable_error_family": failure.diagnostic_stage.stable_error_family(),
+        "created_at": crate::unix_timestamp_string(),
+    });
+    if let Some(generation) = failure.generation {
+        event["generation"] = Value::from(generation);
+    }
+    if let Some(thread_id) = failure.thread_id.as_deref() {
+        event["thread_id"] = Value::from(thread_id);
+    }
+    events.push(event);
+    write_resident_diagnostic_batch2(
+        workflow_state_path,
+        "supervisor_resident_delivery_diagnostic_recorded",
+        &value,
+    )
 }
 
 fn append_resident_user_message_recorded(
@@ -1984,7 +2933,15 @@ fn submit_supervisor_resident_answer_with_parts(
         Some(&message_id),
     ) {
         Ok(turn) => turn,
-        Err(_) => {
+        Err(failure) => {
+            let _ = append_resident_delivery_diagnostic(
+                workflow_state_path,
+                &request.project_id,
+                &request.workflow_id,
+                &message_id,
+                config,
+                &failure,
+            );
             return Ok(SupervisorResidentAnswerOutcome {
                 status: "message_recorded_supervisor_incomplete".to_string(),
                 reply_injected: false,

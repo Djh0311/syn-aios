@@ -1,3 +1,13 @@
+use tauri::Manager;
+
+const ACCEPTANCE_RUNTIME_PROFILE_INITIALIZATION_EXIT_CODE: i32 = 78;
+const ACCEPTANCE_APP_STATE_INITIALIZATION_EXIT_CODE: i32 = 79;
+
+fn exit_acceptance_startup_failure(exit_code: i32) -> ! {
+    eprintln!("验收 runtime profile 启动失败");
+    std::process::exit(exit_code);
+}
+
 fn software_key_of_session(session: &SessionRecord) -> String {
     let key = session
         .thread_source
@@ -22,7 +32,10 @@ fn load_sessions_from_sqlite_or_index(index: &Value) -> (Vec<SessionRecord>, Vec
     let db_path = codex_db::default_state_db_path();
     match codex_db::read_threads(&db_path) {
         Ok(rows) => {
-            let sessions = rows.into_iter().map(session_record_from_codex_thread).collect();
+            let sessions = rows
+                .into_iter()
+                .map(session_record_from_codex_thread)
+                .collect();
             (sessions, Vec::new())
         }
         Err(err) => (
@@ -581,43 +594,89 @@ fn run_open(_args: &[&str]) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let state = AppState::new();
+    let acceptance_profile_requested = std::env::var_os("SYN_R4_ACCEPTANCE_PROFILE").is_some();
+    if let Err(error) = crate::acceptance_runtime_profile::initialize_from_env() {
+        if acceptance_profile_requested {
+            exit_acceptance_startup_failure(ACCEPTANCE_RUNTIME_PROFILE_INITIALIZATION_EXIT_CODE);
+        }
+        eprintln!("验收 runtime profile 初始化失败：{error}");
+        return;
+    }
+    let state = match AppState::try_new() {
+        Ok(state) => state,
+        Err(error) => {
+            if acceptance_profile_requested {
+                exit_acceptance_startup_failure(ACCEPTANCE_APP_STATE_INITIALIZATION_EXIT_CODE);
+            }
+            eprintln!("验收 runtime profile 路径解析失败：{error}");
+            return;
+        }
+    };
     if let Err(error) =
         crate::migrate_legacy_workflow_node_session_binding_ids_at(&state.workflow_state_path)
     {
         eprintln!("工作流 binding_id 迁移未完成：{error}");
     }
-    if let Err(error) = crate::exec_process_registry::reap_registered_orphans(&state.workflow_state_path) {
+    if let Err(error) =
+        crate::exec_process_registry::reap_registered_orphans(&state.workflow_state_path)
+    {
         eprintln!("执行进程遗留回收未完成：{error}");
     }
-    if let Err(error) = crate::supervisor_session_launcher::reap_supervisor_resident_stale_sessions_at(
-        &state.workflow_state_path,
-    ) {
+    if let Err(error) =
+        crate::supervisor_session_launcher::reap_supervisor_resident_stale_sessions_at(
+            &state.workflow_state_path,
+        )
+    {
         eprintln!("主管一次一发会话陈账对账未完成：{error}");
     }
-    if let Err(error) = crate::workbench_sqlite_storage_mode::initialize_for_startup(
-        &state.workflow_state_path,
-    ) {
+    if let Err(error) =
+        crate::workbench_sqlite_storage_mode::initialize_for_startup(&state.workflow_state_path)
+    {
         eprintln!("DB 主写模式启动对账未通过：{error}");
     }
     let app = tauri::Builder::default()
         .manage(state)
         .manage(mcp::orchestrator::OrchestratorState::new())
+        .manage(crate::knowledge_open_relay::KnowledgeOpenRelayState::new())
         .invoke_handler(workbench_command_handler!())
         .setup(|app| {
+            let isolated_profile_active = crate::acceptance_runtime_profile::active_paths()
+                .map_err(std::io::Error::other)?
+                .is_some();
+            if !isolated_profile_active {
+                app.state::<crate::knowledge_open_relay::KnowledgeOpenRelayState>()
+                    .start(app.handle().clone())
+                    .map_err(std::io::Error::other)?;
+            }
             if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
+                let log_plugin = match crate::acceptance_runtime_profile::isolated_log_dir()
+                    .map_err(std::io::Error::other)?
+                {
+                    Some(path) => tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .clear_targets()
+                        .target(tauri_plugin_log::Target::new(
+                            tauri_plugin_log::TargetKind::Folder {
+                                path,
+                                file_name: Some("syn-r4-isolated".into()),
+                            },
+                        ))
+                        .build(),
+                    None => tauri_plugin_log::Builder::default()
                         .level(log::LevelFilter::Info)
                         .build(),
-                )?;
+                };
+                app.handle().plugin(log_plugin)?;
             }
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
-    app.run(|_, event| {
+    app.run(|app_handle, event| {
         if matches!(event, tauri::RunEvent::Exit) {
+            app_handle
+                .state::<crate::knowledge_open_relay::KnowledgeOpenRelayState>()
+                .shutdown();
             if let Err(error) = crate::manual_relay::stop_all_active_manual_relay_attempts() {
                 eprintln!("手动中转进程退出清理未完成：{error}");
             }

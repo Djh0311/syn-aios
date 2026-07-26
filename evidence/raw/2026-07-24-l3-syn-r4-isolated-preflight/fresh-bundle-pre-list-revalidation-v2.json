@@ -1,0 +1,34 @@
+{
+  "schema_version": "syn_r4_fresh_bundle_pre_list_revalidation.v1",
+  "run_hash": "1de33b09efb296c30b27439dfc37c978951d5d79455335bbcb8f24a9bc23f3eb",
+  "launcher_sha256": "8ac98cec6ad931d121487ff84573dc1ba6f606984a7862fc5dad2adfe105b6a3",
+  "test_contract_sha256": "fde75f802018f000172fbf7a4deb1a131c60517b18a29e47e43604dfa3f6b77c",
+  "fresh_bundle_ready_envelope_observed": true,
+  "bundle_seal_and_strict_verification_completed_before_ready": true,
+  "observed_running_elapsed_seconds_at_least": 90,
+  "sigkill_observed": false,
+  "ui_enumeration_attempted": false,
+  "ui_observation_created": false,
+  "computer_use_invoked": false,
+  "gate0_entered": false,
+  "supervisor_message_sent": false,
+  "codex_cli_or_mcp_started": false,
+  "tool_call_attempted": false,
+  "controlled_termination": {
+    "signal": "SIGINT",
+    "launcher_child_kill_attempted": false,
+    "launcher_parent_signal_observed": true,
+    "child_exit_and_close_observed": true
+  },
+  "launcher_receipt": {
+    "file_name": "launcher-receipt-v7.json",
+    "sha256": "efab175b4a946427109b42cbfad29c86d78bbf47607bd27eb08cfd8cc62223ed",
+    "byte_identical_to_isolated_root_original": true
+  },
+  "post_run": {
+    "known_child_absent": true,
+    "scoped_syn_cargo_tauri_vite_residue_absent": true,
+    "port_5173_listener_absent": true,
+    "unrelated_processes_untouched": true
+  }
+}

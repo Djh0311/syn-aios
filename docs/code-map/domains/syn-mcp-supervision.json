@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "domain": "syn-mcp-supervision",
+  "coverage": "seed-partial",
+  "capabilities": [
+    {
+      "id": "syn-mcp-supervision.tracked-supervisor-orchestrator",
+      "domain": "syn-mcp-supervision",
+      "name": "Tracked MCP supervisor orchestrator surface",
+      "status": "needs-confirmation",
+      "coverage": "seed-partial",
+      "canonical": null,
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/mod.rs",
+          "symbol": "run_mcp_server_cli",
+          "kind": "Rust CLI entry"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/supervisor_orchestrator.rs",
+          "symbol": "call_tool",
+          "kind": "MCP tool dispatcher"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/mod.rs",
+          "symbol": "McpRole",
+          "kind": "Rust public enum"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/mod.rs",
+          "symbol": "McpServerConfig",
+          "kind": "Rust public struct"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/supervisor_orchestrator.rs",
+          "symbol": "list_tools",
+          "kind": "Rust public function"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/supervisor_orchestrator.rs",
+          "symbol": "call_tool",
+          "kind": "Rust public function"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/supervisor_session_launcher.rs",
+          "symbol": "supervisor session launcher",
+          "kind": "tracked consumer candidate"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/mod.rs",
+          "symbol": "McpServerConfig",
+          "kind": "MCP configuration"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/supervisor_orchestrator.rs",
+          "symbol": "list_tools/call_tool",
+          "kind": "MCP tool contract"
+        }
+      ],
+      "tests": [],
+      "related": [],
+      "knownDuplicates": [],
+      "keywords": [
+        "Syn",
+        "MCP",
+        "supervision",
+        "supervisor",
+        "orchestrator",
+        "list_tools",
+        "call_tool"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    }
+  ]
+}

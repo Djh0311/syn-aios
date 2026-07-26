@@ -6,16 +6,28 @@ fn resident_submit_proposal_config(fixture: &Fixture) -> McpServerConfig {
     fs::write(
         &fixture.state_path,
         serde_json::to_vec(&json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "revision": 0,
+            "updated_at": "r4e-resident-submit-proposal-fixture",
             "projects": [{
                 "project_id": project_id,
                 "display_name": "S1 resident proposal fixture",
                 "root_path": PROJECT
             }],
+            "agent_adapters": [],
             "workflows": [{
                 "workflow_id": WORKFLOW,
                 "project_id": crate::project_id(PROJECT),
                 "state": "draft"
             }],
+            "nodes": [],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "capabilities": [],
+            "harness_resources": [],
             "workflow_chain_runs": [],
             "audit_events": [{
                 "event_type": "supervisor_resident_user_message_recorded",
@@ -374,4 +386,314 @@ fn station3a_mcp_toolface_is_read_only_and_rejects_side_effect_names() {
             "{rejected} must not be an MCP action"
         );
     }
+}
+
+const R4E_TOOL_DIAGNOSTIC_EVENT: &str =
+    "supervisor_resident_tool_invocation_diagnostic_recorded";
+
+fn r4e_tool_diagnostics(fixture: &Fixture) -> Vec<Value> {
+    serde_json::from_slice::<Value>(&fs::read(&fixture.state_path).expect("workflow state"))
+        .expect("workflow JSON")["audit_events"]
+        .as_array()
+        .expect("workflow audit events")
+        .iter()
+        .filter(|event| event["event_type"] == R4E_TOOL_DIAGNOSTIC_EVENT)
+        .cloned()
+        .collect()
+}
+
+fn r4e_tool_diagnostic(
+    fixture: &Fixture,
+    stage: &str,
+    invocation: &str,
+) -> Value {
+    let matches = r4e_tool_diagnostics(fixture)
+        .into_iter()
+        .filter(|event| event["stage"] == stage && event["invocation"] == invocation)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        matches.len(),
+        1,
+        "each message/stage/invocation diagnostic must be idempotent"
+    );
+    matches.into_iter().next().expect("one diagnostic")
+}
+
+fn assert_r4e_tool_diagnostic_is_sanitized(event: &Value, forbidden: &[&str]) {
+    let keys = event
+        .as_object()
+        .expect("diagnostic event object")
+        .keys()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        keys,
+        BTreeSet::from([
+            "audit_status",
+            "event_id",
+            "event_type",
+            "generation",
+            "handler_status",
+            "invocation",
+            "message_id",
+            "only_submit_preapproved",
+            "other_tool_visible",
+            "run_digest",
+            "stage",
+            "submit_proposal_visible",
+            "target_ref",
+            "thread_digest",
+        ]),
+        "the new canonical fact must contain only its fixed safe schema"
+    );
+    for forbidden_key in [
+        "project_id",
+        "workflow_id",
+        "run_id",
+        "thread_id",
+        "name",
+        "arguments",
+        "detail",
+        "error",
+        "stderr",
+    ] {
+        assert!(
+            event.get(forbidden_key).is_none(),
+            "diagnostic must not persist {forbidden_key}"
+        );
+    }
+    let text = serde_json::to_string(event).expect("serialize sanitized diagnostic");
+    for value in forbidden {
+        assert!(
+            !text.contains(value),
+            "diagnostic must not contain private marker {value}"
+        );
+    }
+    assert_eq!(
+        event["run_digest"].as_str().map(str::len),
+        Some(16),
+        "run association is a short digest"
+    );
+    assert_eq!(
+        event["thread_digest"].as_str().map(str::len),
+        Some(16),
+        "thread association is a short digest"
+    );
+}
+
+#[test]
+fn s1b_h2_r4e_records_bound_tools_list_and_call_classification_without_raw_values() {
+    let fixture = Fixture::new();
+    let config = resident_submit_proposal_config(&fixture);
+    let toolface = list_tools(&config);
+    let tool_names = toolface["tools"]
+        .as_array()
+        .expect("resident tools array")
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        tool_names,
+        BTreeSet::from([
+            "read_key_file",
+            "read_worker_report",
+            "submit_proposal",
+            "wait_for_worker",
+        ]),
+        "R4E must not alter the existing resident tool surface"
+    );
+
+    let list = r4e_tool_diagnostic(&fixture, "tools_list_served", "none");
+    assert_eq!(list["submit_proposal_visible"], true);
+    assert_eq!(list["other_tool_visible"], true);
+    assert_eq!(list["only_submit_preapproved"], true);
+    assert_eq!(list["handler_status"], "not_observed");
+    assert_eq!(list["audit_status"], "not_observed");
+
+    let _ = call_tool_with_invoker(
+        &config,
+        json!({
+            "name": "read_worker_report",
+            "arguments": {"worker_id": "R4E_PRIVATE_OTHER_TOOL_ARGUMENT"}
+        }),
+        &FakeInvoker,
+    )
+    .expect_err("fixture has no worker report");
+    let other_call = r4e_tool_diagnostic(&fixture, "tools_call_received", "other_tool");
+    assert_eq!(other_call["submit_proposal_visible"], "not_observed");
+    assert_eq!(other_call["other_tool_visible"], "not_observed");
+    assert_eq!(other_call["only_submit_preapproved"], "not_observed");
+    assert_r4e_tool_diagnostic_is_sanitized(
+        &list,
+        &[
+            "supervisor-resident:s1-submit-proposal-fixture",
+            "thread-s1-submit-proposal",
+            "R4E_PRIVATE_OTHER_TOOL_ARGUMENT",
+            "read_worker_report",
+        ],
+    );
+    assert_r4e_tool_diagnostic_is_sanitized(
+        &other_call,
+        &[
+            "supervisor-resident:s1-submit-proposal-fixture",
+            "thread-s1-submit-proposal",
+            "R4E_PRIVATE_OTHER_TOOL_ARGUMENT",
+            "read_worker_report",
+        ],
+    );
+}
+
+#[test]
+fn s1b_h2_r4e_distinguishes_submit_handler_accepted_and_denied() {
+    let accepted_fixture = Fixture::new();
+    let accepted_config = resident_submit_proposal_config(&accepted_fixture);
+    let chain_before = workflow_chain_runs_for(&accepted_fixture);
+    let mut accepted_arguments = valid_submit_proposal_arguments();
+    accepted_arguments["user_goal"] = json!("R4E_PRIVATE_SUBMIT_ARGUMENT");
+    call_tool_with_invoker(
+        &accepted_config,
+        json!({"name": "submit_proposal", "arguments": accepted_arguments}),
+        &FakeInvoker,
+    )
+    .expect("valid submit must retain the existing pending-card behavior");
+    let submit_call =
+        r4e_tool_diagnostic(&accepted_fixture, "tools_call_received", "submit_proposal");
+    let entered = r4e_tool_diagnostic(&accepted_fixture, "submit_handler_entered", "submit_proposal");
+    let finished = r4e_tool_diagnostic(
+        &accepted_fixture,
+        "submit_handler_finished",
+        "submit_proposal",
+    );
+    let audit = r4e_tool_diagnostic(&accepted_fixture, "tool_audit_boundary", "submit_proposal");
+    assert_eq!(submit_call["handler_status"], "not_observed");
+    assert_r4e_tool_diagnostic_is_sanitized(
+        &submit_call,
+        &[
+            "R4E_PRIVATE_SUBMIT_ARGUMENT",
+            "supervisor-resident:s1-submit-proposal-fixture",
+        ],
+    );
+    assert_eq!(entered["handler_status"], "entered");
+    assert_eq!(finished["handler_status"], "accepted");
+    assert_eq!(audit["handler_status"], "accepted");
+    assert_eq!(audit["audit_status"], "accepted");
+    assert_eq!(proposal_store_for(&accepted_fixture).proposals.len(), 1);
+    assert_eq!(workflow_chain_runs_for(&accepted_fixture), chain_before);
+
+    let denied_fixture = Fixture::new();
+    let denied_config = resident_submit_proposal_config(&denied_fixture);
+    let denied_chain_before = workflow_chain_runs_for(&denied_fixture);
+    let denied = call_tool_with_invoker(
+        &denied_config,
+        json!({"name": "submit_proposal", "arguments": {"R4E_PRIVATE_ARGUMENT": true}}),
+        &FakeInvoker,
+    )
+    .expect_err("invalid submit must remain denied");
+    assert_eq!(denied, "方案卡没有生成；详细诊断已保留。");
+    let denied_finished = r4e_tool_diagnostic(
+        &denied_fixture,
+        "submit_handler_finished",
+        "submit_proposal",
+    );
+    assert_eq!(denied_finished["handler_status"], "denied");
+    assert_eq!(proposal_store_for(&denied_fixture).proposals.len(), 0);
+    assert_eq!(workflow_chain_runs_for(&denied_fixture), denied_chain_before);
+    assert_r4e_tool_diagnostic_is_sanitized(
+        &denied_finished,
+        &["R4E_PRIVATE_ARGUMENT", "supervisor-resident:s1-submit-proposal-fixture"],
+    );
+}
+
+#[test]
+fn s1b_h2_r4e_audit_write_failure_does_not_mask_handler_outcome() {
+    let accepted_fixture = Fixture::new();
+    let accepted_config = resident_submit_proposal_config(&accepted_fixture);
+    let accepted_chain_before = workflow_chain_runs_for(&accepted_fixture);
+    let accepted_guard = force_supervisor_resident_tool_audit_failure();
+    let accepted_error = call_tool_with_invoker(
+        &accepted_config,
+        json!({"name": "submit_proposal", "arguments": valid_submit_proposal_arguments()}),
+        &FakeInvoker,
+    )
+    .expect_err("injected audit failure must keep existing stable caller language");
+    drop(accepted_guard);
+    assert_eq!(accepted_error, "方案已落卡，但工具审计未完成。");
+    assert_eq!(proposal_store_for(&accepted_fixture).proposals.len(), 1);
+    assert_eq!(workflow_chain_runs_for(&accepted_fixture), accepted_chain_before);
+    assert_eq!(
+        r4e_tool_diagnostic(
+            &accepted_fixture,
+            "submit_handler_finished",
+            "submit_proposal",
+        )["handler_status"],
+        "accepted"
+    );
+    assert_eq!(
+        r4e_tool_diagnostic(
+            &accepted_fixture,
+            "tool_audit_boundary",
+            "submit_proposal",
+        )["audit_status"],
+        "audit_write_failed"
+    );
+
+    let denied_fixture = Fixture::new();
+    let denied_config = resident_submit_proposal_config(&denied_fixture);
+    let denied_guard = force_supervisor_resident_tool_audit_failure();
+    let denied_error = call_tool_with_invoker(
+        &denied_config,
+        json!({"name": "submit_proposal", "arguments": {"R4E_AUDIT_PRIVATE_ARGUMENT": true}}),
+        &FakeInvoker,
+    )
+    .expect_err("denied handler plus audit failure must retain stable language");
+    drop(denied_guard);
+    assert_eq!(denied_error, "方案卡没有生成；内部审计未完成。");
+    assert_eq!(proposal_store_for(&denied_fixture).proposals.len(), 0);
+    assert_eq!(
+        r4e_tool_diagnostic(
+            &denied_fixture,
+            "submit_handler_finished",
+            "submit_proposal",
+        )["handler_status"],
+        "denied"
+    );
+    assert_eq!(
+        r4e_tool_diagnostic(
+            &denied_fixture,
+            "tool_audit_boundary",
+            "submit_proposal",
+        )["audit_status"],
+        "audit_write_failed"
+    );
+}
+
+#[test]
+fn s1b_h2_r4e_duplicate_tool_delivery_keeps_one_diagnostic_per_stage_and_one_card() {
+    let fixture = Fixture::new();
+    let config = resident_submit_proposal_config(&fixture);
+    let chain_before = workflow_chain_runs_for(&fixture);
+    for _ in 0..2 {
+        let _ = list_tools(&config);
+        call_tool_with_invoker(
+            &config,
+            json!({"name": "submit_proposal", "arguments": valid_submit_proposal_arguments()}),
+            &FakeInvoker,
+        )
+        .expect("technical retry must retain existing proposal idempotency");
+    }
+    let diagnostics = r4e_tool_diagnostics(&fixture);
+    assert_eq!(diagnostics.len(), 5);
+    let keys = diagnostics
+        .iter()
+        .map(|event| {
+            (
+                event["message_id"].as_str().expect("message join").to_string(),
+                event["stage"].as_str().expect("stage").to_string(),
+                event["invocation"].as_str().expect("invocation").to_string(),
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(keys.len(), diagnostics.len());
+    assert_eq!(proposal_store_for(&fixture).proposals.len(), 1);
+    assert_eq!(workflow_chain_runs_for(&fixture), chain_before);
 }

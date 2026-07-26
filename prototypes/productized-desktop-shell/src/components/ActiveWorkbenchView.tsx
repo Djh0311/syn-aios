@@ -32,6 +32,7 @@ import type {
 } from "../lib/types";
 import { devNavItems, type NavigateHandler, type NavigationFocus, type ViewKey } from "../lib/workbenchNavigation";
 import type { SecretaryContext } from "../lib/secretaryReadModel";
+import type { KnowledgeOpenRelayIntent, KnowledgeOpenRelayOutcome } from "../lib/knowledgeOpenRelay";
 import { AgentView } from "../views/AgentView";
 import { AuditLedgerView } from "../views/AuditLedgerView";
 import { CanvasViewWithProvider } from "../views/CanvasView";
@@ -73,6 +74,11 @@ export type ActiveWorkbenchViewProps = {
   browserPreviewData?: BrowserPreviewData;
   onRequestAction: (action: PendingAction) => void;
   onNavigate: NavigateHandler;
+  // A host-owned `knowledge_open` may only request the native view's exact
+  // Markdown intent.  This remains optional so existing static/offline callers
+  // keep their hook-free surfaces.
+  knowledgeOpenIntent?: KnowledgeOpenRelayIntent | null;
+  onKnowledgeOpenIntentOutcome?: (intent: KnowledgeOpenRelayIntent, outcome: KnowledgeOpenRelayOutcome) => Promise<boolean>;
   // ④「点击带上下文直达」：导航第二参带来的焦点（跳哪一页 + 落在哪一条）。
   // 可选=只切页不选行，既有调用点零破坏。
   navigationFocus?: NavigationFocus | null;
@@ -97,6 +103,8 @@ export function renderActiveWorkbenchView({
   systemStatus = null,
   onRequestAction,
   onNavigate,
+  knowledgeOpenIntent,
+  onKnowledgeOpenIntentOutcome,
   navigationFocus,
   secretaryContext,
   workflowState,
@@ -357,6 +365,8 @@ export function renderActiveWorkbenchView({
         memoryCandidateStore={memoryCandidateStore}
         hasRealSnapshot={hasRealSnapshot}
         onRequestAction={onRequestAction}
+        knowledgeOpenIntent={knowledgeOpenIntent}
+        onKnowledgeOpenIntentOutcome={onKnowledgeOpenIntentOutcome}
       />
     );
   }

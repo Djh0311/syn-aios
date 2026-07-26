@@ -149,6 +149,88 @@ function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+const activeBoundaryKeys = ['mechanical', 'reportingOnly', 'explicitTool', 'legacyIgnored'];
+
+function inspectActiveBoundary(value) {
+  const details = {
+    present: value !== undefined,
+    keys: isObject(value) ? Object.keys(value) : [],
+    missingKeys: [],
+    unknownKeys: [],
+    invalidTypes: [],
+    crossCategoryDuplicates: [],
+    values: Object.fromEntries(activeBoundaryKeys.map((key) => [key, []]))
+  };
+
+  if (!isObject(value)) {
+    details.invalidTypes.push('activeBoundary');
+    return details;
+  }
+
+  details.missingKeys = activeBoundaryKeys.filter((key) => !Object.prototype.hasOwnProperty.call(value, key));
+  details.unknownKeys = details.keys.filter((key) => !activeBoundaryKeys.includes(key));
+  const owners = new Map();
+  for (const key of activeBoundaryKeys) {
+    const entries = value[key];
+    if (!Array.isArray(entries) || !entries.every((entry) => typeof entry === 'string')) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) details.invalidTypes.push(`activeBoundary.${key}`);
+      continue;
+    }
+    details.values[key] = entries;
+    for (const entry of entries) {
+      const owner = owners.get(entry);
+      if (owner && owner !== key) details.crossCategoryDuplicates.push(entry);
+      else owners.set(entry, key);
+    }
+  }
+  details.crossCategoryDuplicates = [...new Set(details.crossCategoryDuplicates)];
+  return details;
+}
+
+function checkActiveBoundary(report, boundary, gates, declaredGates) {
+  const details = inspectActiveBoundary(boundary);
+  report.details.activeBoundary = details;
+  if (details.invalidTypes.includes('activeBoundary')) {
+    add(report, 'fail', '[ACTIVE_BOUNDARY_INVALID_TYPE] activeBoundary must be an object with the four boundary categories');
+    return details;
+  }
+  if (details.missingKeys.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_MISSING_KEY] activeBoundary missing key(s): ${details.missingKeys.join(', ')}`);
+  }
+  if (details.unknownKeys.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_UNKNOWN_KEY] activeBoundary has unsupported key(s): ${details.unknownKeys.join(', ')}`);
+  }
+  if (details.invalidTypes.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_INVALID_TYPE] activeBoundary categories must be string arrays: ${details.invalidTypes.join(', ')}`);
+  }
+  if (details.crossCategoryDuplicates.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_CROSS_CATEGORY_DUPLICATE] activeBoundary entries appear in multiple categories: ${details.crossCategoryDuplicates.join(', ')}`);
+  }
+
+  const derivedHardGateIds = Array.isArray(gates && gates.hard) ? gates.hard.map((gate) => gate.id) : [];
+  const declaredHardGateIds = isObject(declaredGates) && Array.isArray(declaredGates.hard)
+    ? declaredGates.hard.filter((gate) => typeof gate === 'string')
+    : [];
+  const hardGateIds = new Set([...derivedHardGateIds, ...declaredHardGateIds]);
+  details.declaredHardGateIds = declaredHardGateIds;
+  const nonMechanicalHardGates = ['reportingOnly', 'explicitTool']
+    .flatMap((key) => details.values[key])
+    .filter((entry) => hardGateIds.has(entry));
+  details.nonMechanicalHardGates = [...new Set(nonMechanicalHardGates)];
+  if (details.nonMechanicalHardGates.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_NON_MECHANICAL_HARD_GATE] reportingOnly/explicitTool entries cannot be hard gates: ${details.nonMechanicalHardGates.join(', ')}`);
+  }
+
+  if (details.missingKeys.length === 0
+    && details.unknownKeys.length === 0
+    && details.invalidTypes.length === 0
+    && details.crossCategoryDuplicates.length === 0
+    && details.nonMechanicalHardGates.length === 0) {
+    add(report, 'pass', 'activeBoundary has exactly four disjoint categories and does not promote reporting/explicit tools');
+  }
+  return details;
+}
+
 function mergeObject(base, override) {
   const result = Object.assign({}, base);
   if (!isObject(override)) return result;
@@ -289,7 +371,8 @@ function buildReport(args) {
     details: {
       configPath: null,
       effectivePolicy: null,
-      gates: null
+      gates: null,
+      activeBoundary: null
     }
   };
 
@@ -310,6 +393,9 @@ function buildReport(args) {
   const normalized = normalizePolicy(config.data);
   report.details.effectivePolicy = normalized.policy;
   report.details.gates = gateSummary(normalized.policy);
+  if (config.data && isObject(config.data)) checkActiveBoundary(report, config.data.activeBoundary, report.details.gates, config.data.gates);
+  else if (config.path) checkActiveBoundary(report, undefined, report.details.gates, undefined);
+  else add(report, 'warn', 'activeBoundary is unavailable without a harness config');
   if (normalized.usedDefault) add(report, 'warn', 'Config policy object missing; using balanced defaults');
   if (normalized.invalidMode) add(report, 'warn', 'Config policy mode invalid; using balanced defaults');
   else add(report, 'pass', `Policy mode: ${normalized.policy.mode}`);

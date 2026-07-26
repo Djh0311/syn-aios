@@ -1,12 +1,12 @@
 # 方向正本:对话优先改造——大方向与执行计划 v1
 
-日期:2026-07-16 · 07-19 原则补充 · 状态:**已拍**(用户过目「可以」·决策记录 `decisions/2026-07-16-conversation-first-direction-ratified-v1.md`；自由对话+工具落物修正=`decisions/2026-07-18-conversation-substrate-correction-freeform-supervisor-plus-tools-v1.md`；包级拆解与旧待办收敛=**总执行计划(唯一计划入口)`docs/plans/2026-07-16-master-execution-plan-conversation-first-v1.md`**) · 源起:07-16 根因对谈全场(真单实测:一条 cp 走了 ≥12 次决定、>24 小时、卡 4 次,含 worker 向用户索要方案里已写明的授权)。
+日期:2026-07-16 · 07-19 原则补充 · 07-22 transport/MCP 架构纠偏 · 状态:**已拍**(用户过目「可以」·决策记录 `decisions/2026-07-16-conversation-first-direction-ratified-v1.md`；自由对话+工具落物修正=`decisions/2026-07-18-conversation-substrate-correction-freeform-supervisor-plus-tools-v1.md`；共享 transport 与统一 MCP 能力层修正=`decisions/2026-07-22-shared-conversation-transport-and-syn-mcp-capability-plane-v1.md`；包级拆解与旧待办收敛=**总执行计划(唯一计划入口)`docs/plans/2026-07-16-master-execution-plan-conversation-first-v1.md`**) · 源起:07-16 根因对谈全场(真单实测:一条 cp 走了 ≥12 次决定、>24 小时、卡 4 次,含 worker 向用户索要方案里已写明的授权)。
 
 ## 〇、一句话
 
 把 Syn 的用法从「表单+状态机+一串确认」换成「你和项目主管的一条长期对话」;智能全部外租给会 MCP 的脑子(现在=codex,以后任何 agent 含 Claude 同插即用),Syn 自己=**传递+审计+机器闸**;人闸收敛到三下(干吧/对的/记住)。
 
-07-19 补充：**对话只负责自然交流；结构化实物经 MCP；Syn 是路由/权限/校验/幂等/审计/权威事实核心；卡片只是投影。**信息在 Syn 与 Codex/其他 agent 间自然流转，工具结果回原 thread，用户不搬话，工具失败不吞对话。普通聊天、MCP 动作、用户执行授权三层分开；只有用户点方案卡才执行。
+07-19 补充：**对话只负责自然交流；结构化实物经 MCP；Syn 是路由/权限/校验/幂等/审计/权威事实核心；卡片只是投影。**信息在 Syn 与 Codex/其他 agent 间自然流转，工具结果回原 thread，用户不搬话，工具失败不吞对话。普通聊天、MCP 动作、用户执行授权三层分开；只有用户点方案卡才执行。07-22 再纠偏：当前真实 direct transport 只有 Codex；先复用并扩充现有对话底座，交办页主用，智能体页次要 / 待定；“所有 agent 通用”是 adapter 合同目标，不是已完成能力。
 
 ## 一、场景版(定稿判据:改完之后新单长这样)
 
@@ -23,10 +23,11 @@
 2. **Syn 定位**:传递+审计记录+机器执行闸;智能在模型不在流程。
 3. **角色表**:项目主管=项目内唯一对话面(每项目一个;**换人成本低**而非不换人——事实在核心账本,底层会话可换代);工人后台一单一雇;全局主管意见留证不聊天;秘书=用户私人助理(跨项目提醒/记忆整理),不进项目;控制核心=制度非人。
 4. **交互**:项目一条长期对话;一单三下;小单默认从简(07-13 两轴「默认单 agent」拍板长进主管判断,不再靠流程规定)。
-5. **接口方针:MCP = Syn 能力总插座**。发挥 Syn 全部能力=往窗口挂工具(问用户/派工/记忆/知识库/账本/技能),每个工具有闸有账;**所有 agent 通用,换脑子不换窗口**;agent 层议题搁置(用户:「考虑不清楚的事」)。
+5. **接口方针:MCP = Syn 能力总插座**。发挥 Syn 全部能力=往窗口挂工具(问用户/派工/记忆/知识库/账本/技能),每个工具有闸有账;**目标为所有 agent 通用,换脑子不换窗口**，当前真实 adapter 仅 Codex;agent 层议题搁置(用户:「考虑不清楚的事」)。
 6. **单向阀诊断**:现状主流程=塞纸条(单向+一次性),本周三案同源(问题埋方案正文/主管空任务列表/工人结尾索授权);主管试点 MCP 线已证双向可行(协议 7 动作含 RequestUserDecision)。
 7. 「交办页冻结」(07-16 早)作废,由本方向取代。
 8. **07-18～19 底座修正**:对话流只放你/主管的自然语言；方案/交货等实体只在右区卡出现，由主管调用 Syn MCP 生成。该修正覆盖本文后续仍写着“卡=消息”的 07-16 原始措辞。
+9. **07-22 transport/MCP 修正**:停止把 resident/private-home 链继续当交办主运输；复用并允许扩充现有 Codex Conversation Transport，新增不可放宽的 `supervisor-read-only` profile。MCP 是整个 Syn 的统一 capability plane，必须有服务端 registry/role allowlist；内部已有控制动作不等于已公开 MCP 能力。
 
 ## 三、三根大梁
 
@@ -59,11 +60,11 @@
 
 小单(mario cp 级):说 1–2 句话、点头 ≤3 下、说完到交货分钟级、零死卡(卡住=主管一句人话+你能回话续跑,不算死卡)。每单收口落三数(点头次数/分钟/卡点)进 CURRENT。
 
-## 七、技术底座(2026-07-16 原始基线；当前实现状态以总执行计划 / CURRENT 为准)
+## 七、技术底座(2026-07-16 原始基线；07-22 阶段 A 已重新核对)
 
-- **已有**:`src-tauri/src/mcp/` 模块;主管试点 7 动作协议(DispatchWorker/Inspect/FollowUp/Wait/Finalize/ReportUser/**RequestUserDecision**);launcher 建会话+temp HOME 插 MCP(`mcp_servers` 写入 config);worker 线 resume+回读管道;「所批即所跑」引擎路;transcript 旁听(会话库直读);方案 schema。
-- **要建（原始）**:中栏对话 UI;主管会话项目级生命周期;消息↔核心事实映射(消息=候选,升级走核心闸);咨询旧路退役。以上大部已收口；07-19 当前缺口是 S1B-H2 的真实产品单工具可达、对话/工具/卡片/授权分结果与诚实失败出口。
-- **选型留待阶段一包**:驱动方式=shell `resume` vs `codex mcp-server`/`app-server`(实验性),按稳定性挑。
+- **可复用底座**:智能体页已有 Codex existing/new session、JSONL/thread event、poll、Stop、进程组清理、readback 与 transcript event mapping；`codex_local_runner` 已有结构性 `read-only + 空写根`构造；交办页已有对话布局、proposal/workflow 联合刷新、Pending 卡与批准后 chain。
+- **现有限制**:智能体页 direct send 只对 Codex 开放且强制 `workspace-write + 项目根写根`，状态机内嵌页面；交办页仍走 resident 专用命令。当前 MCP `tools/list` 只有三个只读工具，resident run 才追加 `submit_proposal`；其余主管控制动作是 host-only，未形成统一 capability registry。
+- **要建**:profile-driven 共享 Conversation Transport；固定 `supervisor-read-only` profile；project/workflow/turn 可信绑定；server-side MCP capability registry/allowlist；对话/工具/投影/canonical 分层 receipt。交办页为第一主消费面，智能体页不再作为本阶段产品验收阻塞项。
 
 ## 八、风险与对策
 
@@ -71,12 +72,13 @@
 
 ## 九、执行顺序
 
-07-16 原始第 0～3 步已执行；当前唯一顺序以总执行计划为准：
+07-16 原始第 0～3 步及 resident 诊断线保留为历史；当前唯一顺序以总执行计划为准：
 
-1. **S1B-H2**：真实主管只精确放行/预批准 `submit_proposal`，修对话不吞与诚实回话；真实 App 到一张 Pending 卡即停。
-2. **底1真机首单**：用户点 H2 已落卡，允许起链并验三数。
-3. **底2**：把同一自然流合同扩到 worker 求助、主管代答、reviewer/终标与交货收尾。
-4. **知识库第一片 → P2-B**；记忆积累、DB 观察期继续并行；agent 层照旧搁置。
+1. **共享 transport 实施包冻结**：明确 adapter/profile/session/turn/capability/receipt 合同、写入面与离线验收；不得复制 transport、放宽主管权限或新增私有 MCP/sidecar。
+2. **离线实现与回归**：抽取并允许扩充现有 Conversation Transport，接 `supervisor-read-only` 与服务端 MCP allowlist；交办页接线，智能体页只守编译和基本不误伤。
+3. **另包真实 App 验收**：离线全绿后，用户在场验证普通对话、同 thread 第二句、`submit_proposal`、Pending 卡、工具失败不吞对话、chain/项目不动。
+4. **底1/底2 重排**：替代 transport 验收通过后，底1从用户点卡继续，底2再扩 worker 求助与交货收尾。旧 S1B-H2/R4F-R1 resident live 线退出当前排期。
+5. **知识库第一片 → P2-B（已完成）**：知识库首片与 P2-B 已收口，07-21 audit production write 纠偏也已完成；记忆积累、DB 观察期继续并行，agent 层照旧搁置。
 
 ## 十、与蓝图对账(2026-07-16 补读全卷后逐条核)
 
@@ -86,8 +88,9 @@
 
 **三处摩擦及处置(非冲突)**:①§14"不是聊天软件"=反对无治理闲聊定位;本方向每句话产候选、留审计、升级过闸,为该句正解;②§7 秘书"帮用户把想法转为建议方案"=项目外捋想法、捋完交办给项目主管;项目内对话=主管——分工留缝待秘书兑现时细化;③真正需修订的是施工期 UI 宪法(07-14 交互宪法部分条款、交办页冻结令),按修宪流程处置,逐条清单=阶段一包附件。
 
-## 十一、MCP 承载力评估(四层合一,MCP 只补缺的那块)
+## 十一、MCP 承载力评估(07-22 按真实工具面纠偏)
 
-- **MCP 扛(回合内主动)**:主管中途查/派/问 Syn——本职场景,主管试点 7 动作已真跑;每次调用=可拦/可配额/可记账的点(SupervisorQuotaLimits 已有);数据走 JSON,大文件传路径。
-- **MCP 不扛,现成机制补**:①等人/等工=工具返回"已转交"→回合结束→**Syn 以 resume 唤醒主管续聊**(发条模式:Syn 是发条,主管是表;worker 线同款管道在用);②自然对话自由文本，结构化产物在 MCP 工具参数口做 schema 校验；③旁听审计=transcript 直读(现成);④开工配置=temp HOME/沙箱工牌制服(现成)。
-- **实现期实测项(阶段一选型)**:codex MCP 客户端工程细节——工具调用超时上限/长回合稳定性/并发 stdio 子进程数;载不动的备胎=文件信箱/黑板轮询(蓝图 §5.4 自带概念)。定级:选型题,非方向题。
+- **当前事实**:主管控制核心内部已有 dispatch/inspect/follow-up/wait/finalize/report 等动作并有真实运行证据，但这些动作并未全部进入公开 MCP `tools/list`；当前公开面是三个只读工具，resident run 额外有 `submit_proposal`。因此“内部实现存在”不能写成“统一 MCP 能力已可用”。
+- **MCP 应扛**:回合内结构化动作、结构化结果、角色能力授权、schema、幂等和审计；工具结果回同一 thread。每项能力必须经单一 registry 和 server-side `tools/list`/`tools/call` 双重 allowlist 才算接入。
+- **MCP 不扛**:自然对话自由文本、长等待调度、transcript 读取和用户执行批准。等待/唤醒继续由 Syn transport/session 生命周期负责；卡片批准继续走既有人闸。
+- **实现期实测项**:Codex MCP 客户端工具调用超时、长回合稳定性、并发 stdio 子进程数，以及其他 agent adapter 的实际连接协议。载不动的备胎只能复用既有黑板/read model，不得另建交办私有信箱或 sidecar。

@@ -2,9 +2,15 @@
 // wikilink 命中/未命中 + 编辑保存 + 空态（包 §三.9/§十.4·2026-07-20）。
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server.browser";
-import { KnowledgeVaultNotesView } from "../src/views/KnowledgeBaseView";
+import {
+  isKnowledgeVaultWriteConflict,
+  KnowledgeVaultNotesView,
+  ObsidianIntegrationView,
+} from "../src/views/KnowledgeBaseView";
+import { NativeKnowledgeWorkspace } from "../src/views/knowledge/NativeKnowledgeWorkspace";
 import { extractWikilinks, parseMarkdown } from "../src/lib/knowledgeVault";
 import type { KnowledgeVaultNote, KnowledgeVaultNoteSummary } from "../src/lib/tauri";
+import type { ObsidianIntegrationStatusSnapshot } from "../src/lib/obsidianIntegration";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -92,7 +98,13 @@ function assertDeep(actual: unknown, expected: unknown, message: string) {
 // 5) wikilink 命中=打开该笔记（大小写不敏感）；未命中=出「新建《标题》」且用户点建才建。
 const noteA: KnowledgeVaultNoteSummary = { slug: "alpha", title: "Alpha", mtime_ms: 1, outlinks: [] };
 const noteB: KnowledgeVaultNoteSummary = { slug: "beta", title: "Beta", mtime_ms: 2, outlinks: ["Alpha"] };
-const selectedB: KnowledgeVaultNote = { slug: "beta", title: "Beta", body: "# Beta\n\n回链 [[Alpha]] 与 [[Gamma]]。", mtime_ms: 2 };
+const selectedB: KnowledgeVaultNote = {
+  slug: "beta",
+  title: "Beta",
+  body: "# Beta\n\n回链 [[Alpha]] 与 [[Gamma]]。",
+  mtime_ms: 2,
+  content_hash: "beta-hash",
+};
 
 {
   const opened: string[] = [];
@@ -193,7 +205,7 @@ function findWikilinkButtons(root: React.ReactNode): { props: { onClick: () => v
     <KnowledgeVaultNotesView
       loadState="ready"
       notes={[noteA]}
-      selected={{ slug: "alpha", title: "Alpha", body: "旧文", mtime_ms: 1 }}
+      selected={{ slug: "alpha", title: "Alpha", body: "旧文", mtime_ms: 1, content_hash: "alpha-hash" }}
       editing
       draft="旧文"
       newTitle={null}
@@ -300,4 +312,174 @@ function findButtonByText(root: React.ReactNode, text: string): { props: { onCli
   assert(unavailable.includes("读不到"), "unavailable 必须说明读不到");
 }
 
-console.log("knowledge-vault-notes: 渲染器语法/逐字/XSS/wikilink 两态/编辑保存/空态断言全过");
+// 9) N0：Obsidian 只保留为可选兼容层。状态、固定外部打开、失败提示与冲突重读
+// 都是纯 view / 注入回调，不启动 App、CLI 或 vault；Syn Markdown 编辑始终可用。
+function obsidianStatus(status: ObsidianIntegrationStatusSnapshot["status"]): ObsidianIntegrationStatusSnapshot {
+  return {
+    status,
+    message: null,
+    app_version: status === "ready" ? "1.12.7" : null,
+    cli_version: status === "ready" ? "1.12.7" : null,
+    vault_label: "Syn 自管 Markdown vault",
+  };
+}
+
+const obsidianViewCallbacks = {
+  refresh: 0,
+  openVault: 0,
+  openNote: 0,
+  openSearch: 0,
+  searchQueries: [] as string[],
+  reloadSelected: 0,
+};
+
+const obsidianViewBase = {
+  selectedNote: { slug: "alpha", title: "Alpha" },
+  notice: null,
+  searchQuery: "release notes",
+  busyAction: null,
+  onRefresh: () => {
+    obsidianViewCallbacks.refresh += 1;
+  },
+  onOpenVault: () => {
+    obsidianViewCallbacks.openVault += 1;
+  },
+  onOpenNote: () => {
+    obsidianViewCallbacks.openNote += 1;
+  },
+  onSearchQueryChange: (value: string) => {
+    obsidianViewCallbacks.searchQueries.push(value);
+  },
+  onOpenSearch: () => {
+    obsidianViewCallbacks.openSearch += 1;
+  },
+};
+
+for (const [status, expectedText] of [
+  ["not_installed", "尚未安装官方 Obsidian"],
+  ["installed", "已安装 Obsidian，正在检测连接"],
+  ["app_not_running", "Obsidian 未运行"],
+  ["cli_not_enabled", "Obsidian CLI 未启用"],
+  ["ready", "已连接 Obsidian"],
+  ["incompatible", "Obsidian 版本不兼容"],
+] as const) {
+  const markup = renderToStaticMarkup(
+    <ObsidianIntegrationView loadState="ready" status={obsidianStatus(status)} {...obsidianViewBase} />,
+  );
+  assert(markup.includes(expectedText), `O3 状态卡缺少六态文案：${expectedText}`);
+  assert(!markup.includes("伴随"), "N0 兼容层不得保留已停止的伴随窗口措辞");
+}
+
+{
+  const readyView = (
+    <ObsidianIntegrationView loadState="ready" status={obsidianStatus("ready")} {...obsidianViewBase} />
+  );
+  findButtonByText(readyView, "刷新连接状态").props.onClick();
+  findButtonByText(readyView, "在官方 Obsidian 中打开 Syn vault").props.onClick();
+  findButtonByText(readyView, "在 Obsidian 中打开《Alpha》").props.onClick();
+  findButtonByText(readyView, "在 Obsidian 中搜索").props.onClick();
+  assert(obsidianViewCallbacks.refresh === 1, "O3 手动刷新必须走注入回调一次");
+  assert(obsidianViewCallbacks.openVault === 1, "O3 打开 vault 必须走固定操作回调一次");
+  assert(obsidianViewCallbacks.openNote === 1, "O3 打开当前笔记必须走固定操作回调一次");
+  assert(obsidianViewCallbacks.openSearch === 1, "O3 搜索必须走固定操作回调一次");
+}
+
+{
+  const failedAction = renderToStaticMarkup(
+    <ObsidianIntegrationView
+      loadState="ready"
+      status={obsidianStatus("app_not_running")}
+      {...obsidianViewBase}
+      notice="Obsidian 未运行；请先正常打开应用后重试。"
+    />,
+  );
+  assert(failedAction.includes("请先正常打开应用后重试"), "O3 命令失败必须给出可执行的人话提示");
+  assert(!failedAction.includes("/Applications/"), "O3 命令失败不应暴露本机路径");
+}
+
+{
+  const conflictView = (
+    <KnowledgeVaultNotesView
+      loadState="ready"
+      notes={[noteA]}
+      selected={{ slug: "alpha", title: "Alpha", body: "旧文", mtime_ms: 1, content_hash: "alpha-hash" }}
+      editing
+      draft="本地草稿"
+      newTitle={null}
+      pendingLinkTitle={null}
+      notice="笔记已在另一窗口或外部程序修改，请先重新读取后再保存。"
+      needsReload
+      onReloadSelected={() => {
+        obsidianViewCallbacks.reloadSelected += 1;
+      }}
+      onSelect={noop}
+      onStartNew={noop}
+      onNewTitleChange={noop}
+      onCreateNew={noop}
+      onCancelNew={noop}
+      onStartEdit={noop}
+      onDraftChange={noop}
+      onSaveEdit={noop}
+      onCancelEdit={noop}
+      onOpenLink={noop}
+      onCreateFromLink={noop}
+      onDismissLink={noop}
+    />
+  );
+  const conflictMarkup = renderToStaticMarkup(conflictView);
+  assert(conflictMarkup.includes("外部改动已被保护"), "O3 冲突必须明确阻止静默覆盖");
+  findButtonByText(conflictView, "重新读取").props.onClick();
+  assert(obsidianViewCallbacks.reloadSelected === 1, "O3 冲突必须提供明确的重读动作");
+  assert(isKnowledgeVaultWriteConflict(new Error("knowledge_vault_conflict: stale")), "O3 必须识别稳定冲突码");
+  assert(!isKnowledgeVaultWriteConflict(new Error("ordinary failure")), "O3 不得把普通失败误说成冲突");
+}
+
+{
+  const unavailableButNativeMarkdown = renderToStaticMarkup(
+    <>
+      <ObsidianIntegrationView loadState="ready" status={obsidianStatus("not_installed")} {...obsidianViewBase} />
+      <KnowledgeVaultNotesView
+        loadState="ready"
+        notes={[noteA]}
+        selected={{ slug: "alpha", title: "Alpha", body: "原生 Markdown 仍可编辑", mtime_ms: 1, content_hash: "alpha-hash" }}
+        editing={false}
+        draft=""
+        newTitle={null}
+        pendingLinkTitle={null}
+        onSelect={noop}
+        onStartNew={noop}
+        onNewTitleChange={noop}
+        onCreateNew={noop}
+        onCancelNew={noop}
+        onStartEdit={noop}
+        onDraftChange={noop}
+        onSaveEdit={noop}
+        onCancelEdit={noop}
+        onOpenLink={noop}
+        onCreateFromLink={noop}
+        onDismissLink={noop}
+      />
+    </>,
+  );
+  assert(unavailableButNativeMarkdown.includes("尚未安装官方 Obsidian"), "N0 兼容层必须如实显示 Obsidian 不可用");
+  assert(unavailableButNativeMarkdown.includes("原生 Markdown 仍可编辑"), "N0 不可用时不能回归 Syn Markdown 阅读");
+  assert(unavailableButNativeMarkdown.includes("编辑"), "N0 不可用时不能禁用 Syn Markdown 编辑入口");
+}
+
+// 10) N2 red-first：Syn 原生工作区的静态壳必须先覆盖树、编辑/预览、标签页、分栏、
+// 快速打开、命令面板和保留草稿的冲突恢复；它不依赖 Obsidian 是否安装。
+{
+  const nativeWorkspaceMarkup = renderToStaticMarkup(<NativeKnowledgeWorkspace />);
+  assert(nativeWorkspaceMarkup.includes("Syn 原生工作区"), "N2 工作区必须以 Syn 原生入口命名");
+  assert(nativeWorkspaceMarkup.includes("文件与目录"), "N2 静态工作区必须提供已验证文件树位置");
+  assert(nativeWorkspaceMarkup.includes("Markdown 源码"), "N2 静态工作区必须提供 Markdown 编辑区");
+  assert(nativeWorkspaceMarkup.includes("渲染预览"), "N2 静态工作区必须提供安全预览入口");
+  assert(nativeWorkspaceMarkup.includes("标签页"), "N2 静态工作区必须说明多标签页位置");
+  assert(nativeWorkspaceMarkup.includes("分栏阅读"), "N2 静态工作区必须说明编辑/预览分栏位置");
+  assert(nativeWorkspaceMarkup.includes("快速打开"), "N2 静态工作区必须提供快速打开入口");
+  assert(nativeWorkspaceMarkup.includes("Syn 命令"), "N2 静态工作区必须提供 Syn 自有命令面板");
+  assert(nativeWorkspaceMarkup.includes("保留本地草稿"), "N2 冲突必须明确保留本地草稿并重读，不得静默覆盖");
+  assert(nativeWorkspaceMarkup.includes("无需安装 Obsidian"), "N2 原生编辑壳不得以前置外部 Obsidian");
+}
+
+console.log("knowledge-vault-notes: Markdown 渲染/双链/编辑空态 + N0 可选兼容/固定操作/冲突重读/原生降级断言全过");

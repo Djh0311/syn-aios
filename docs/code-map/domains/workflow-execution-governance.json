@@ -1,0 +1,422 @@
+{
+  "schemaVersion": 1,
+  "domain": "workflow-execution-governance",
+  "coverage": "verified-partial",
+  "capabilities": [
+    {
+      "id": "workflow-execution-governance.proposal-authorization-guard",
+      "domain": "workflow-execution-governance",
+      "name": "Proposal and plan authorization guard",
+      "status": "active",
+      "coverage": "verified-partial",
+      "canonical": {
+        "path": "prototypes/productized-desktop-shell/src-tauri/src/plan_authorization_store.rs",
+        "symbol": "inspect_auto_dispatch_authorization",
+        "kind": "Rust store guard"
+      },
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "createPlanAuthorization",
+          "kind": "Tauri client command"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/project_consultation_proposal_store.rs",
+          "symbol": "create_proposal",
+          "kind": "Rust proposal entry"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "createPlanAuthorization",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "inspectAutoDispatchAuthorization",
+          "kind": "TS export"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/projects/ProjectJiaobanPanel.tsx",
+          "symbol": "ProjectJiaobanPanel",
+          "kind": "project UI"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/plan_authorization_store.rs",
+          "symbol": "plan-authorizations.v1.json",
+          "kind": "sidecar state"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/project_consultation_proposal_store.rs",
+          "symbol": "project-proposals.v1.json",
+          "kind": "sidecar state"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/control_core.rs",
+          "symbol": "validate_dispatch_prepare",
+          "kind": "dispatch transition guard"
+        }
+      ],
+      "tests": [
+        {
+          "path": "prototypes/productized-desktop-shell/tests/jiaoban-approval-seal-and-flag-note.test.tsx",
+          "symbol": "jiaoban approval seal and flag note",
+          "kind": "frontend test"
+        }
+      ],
+      "related": [
+        {
+          "id": "workflow-execution-governance.workflow-state-dispatch-review",
+          "relationship": "authorization gates dispatch review"
+        }
+      ],
+      "knownDuplicates": [],
+      "keywords": [
+        "proposal",
+        "authorization",
+        "plan authorization",
+        "auto dispatch",
+        "审批",
+        "授权"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    },
+    {
+      "id": "workflow-execution-governance.workflow-state-dispatch-review",
+      "domain": "workflow-execution-governance",
+      "name": "Workflow state dispatch and review",
+      "status": "active",
+      "coverage": "verified-partial",
+      "canonical": {
+        "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_run_dispatch_entrypoints.rs",
+        "symbol": "prepare_workflow_node_dispatch_at",
+        "kind": "Rust dispatch entrypoint"
+      },
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "inspectWorkflowRunCheck",
+          "kind": "Tauri client command"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_execution_entrypoints.rs",
+          "symbol": "prepare_offline_role_dispatch_at",
+          "kind": "Rust execution entrypoint"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "inspectWorkflowRunCheck",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "prepareOfflineRoleDispatch",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "recordWorkflowDispatchDirectorReview",
+          "kind": "TS export"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/projects/ProjectWorkflowExecutionPanels.tsx",
+          "symbol": "ProjectWorkflowExecutionPanels",
+          "kind": "workflow UI"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_state_lifecycle_task_package.rs",
+          "symbol": "workflow-state.v0.json",
+          "kind": "workflow state"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/control_core.rs",
+          "symbol": "validate_dispatch_start",
+          "kind": "transition contract"
+        }
+      ],
+      "tests": [],
+      "related": [
+        {
+          "id": "workflow-execution-governance.proposal-authorization-guard",
+          "relationship": "dispatch is gated by proposal authorization"
+        },
+        {
+          "id": "persistence-canonical-state.workflow-state-json-validated-write",
+          "relationship": "dispatch writes validated workflow state"
+        }
+      ],
+      "knownDuplicates": [],
+      "keywords": [
+        "workflow dispatch",
+        "workflow state",
+        "review",
+        "offline role dispatch",
+        "任务派发",
+        "工作流"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    },
+    {
+      "id": "workflow-execution-governance.legacy-real-workflow-execution",
+      "domain": "workflow-execution-governance",
+      "name": "Legacy workflow execution boundary",
+      "status": "legacy",
+      "coverage": "verified-partial",
+      "canonical": {
+        "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+        "symbol": "legacy_product_command_boundary_spec",
+        "kind": "legacy Rust boundary"
+      },
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+          "symbol": "run_workflow_machine",
+          "kind": "blocked legacy Tauri command"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_execution_entrypoints.rs",
+          "symbol": "run_workflow_machine_at",
+          "kind": "blocked legacy workflow entrypoint"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/lib.rs",
+          "symbol": "run_workflow_machine_cli",
+          "kind": "blocked legacy CLI"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+          "symbol": "legacy_product_command_boundary_spec",
+          "kind": "Rust crate-visible function"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+          "symbol": "legacy_product_command_blocked_message",
+          "kind": "Rust crate-visible function"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_execution_entrypoints.rs",
+          "symbol": "run_workflow_machine_at",
+          "kind": "legacy blocked workflow consumer"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+          "symbol": "ProductCommandBoundarySpec",
+          "kind": "legacy boundary descriptor"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+          "symbol": "legacy_product_command_boundary_spec",
+          "kind": "legacy product-command boundary"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+          "symbol": "legacy_product_command_blocked_message",
+          "kind": "blocked legacy boundary"
+        }
+      ],
+      "tests": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+          "symbol": "legacy_and_mcp_boundaries_do_not_claim_h5_unified_execution",
+          "kind": "inline Rust test"
+        }
+      ],
+      "related": [
+        {
+          "id": "workflow-execution-governance.guarded-real-execution-product-command",
+          "relationship": "separate legacy workflow boundary from guarded product command; do not merge or default-route"
+        }
+      ],
+      "knownDuplicates": [],
+      "keywords": [
+        "legacy workflow execution",
+        "legacy real execution",
+        "legacy_product_command_boundary_spec",
+        "legacy_product_command_blocked_message",
+        "run_workflow_machine",
+        "__run_workflow_machine_real",
+        "历史工作流执行"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    },
+    {
+      "id": "workflow-execution-governance.guarded-real-execution-product-command",
+      "domain": "workflow-execution-governance",
+      "name": "Guarded real-execution product command",
+      "status": "active",
+      "coverage": "verified-partial",
+      "canonical": {
+        "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+        "symbol": "prepare_real_execution_product_command_at",
+        "kind": "guarded Rust product command"
+      },
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+          "symbol": "preview_real_execution_product_command",
+          "kind": "guarded Tauri command"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+          "symbol": "prepare_real_execution_product_command",
+          "kind": "guarded Tauri command"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+          "symbol": "record_real_execution_product_command_decision",
+          "kind": "guarded Tauri command"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+          "symbol": "confirm_real_execution_product_command",
+          "kind": "guarded Tauri command"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+          "symbol": "run_real_execution_product_command_phase_a",
+          "kind": "guarded Tauri command"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+          "symbol": "run_real_execution_product_command_phase_b",
+          "kind": "guarded Tauri command"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+          "symbol": "run_real_execution_product_command_new_session_phase_b",
+          "kind": "guarded Tauri command"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+          "symbol": "prepare_real_execution_product_command_at",
+          "kind": "Rust crate-visible function"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "previewRealExecutionProductCommand",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "prepareRealExecutionProductCommand",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "recordRealExecutionProductCommandDecision",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "confirmRealExecutionProductCommand",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "runRealExecutionProductCommandPhaseA",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "runRealExecutionProductCommandPhaseB",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "runRealExecutionProductCommandNewSessionPhaseB",
+          "kind": "TS export"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/agent/AgentExecutionPanels.tsx",
+          "symbol": "CodexControlEntryPanel",
+          "kind": "guarded product UI"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/types.rs",
+          "symbol": "RealExecutionProductCommandStore",
+          "kind": "product command store"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+          "symbol": "real_execution_product_command_sidecar_path",
+          "kind": "sidecar state owner"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+          "symbol": "decide_real_execution_command",
+          "kind": "active code capability only; current plan, user authorization, and safety gates still govern real execution"
+        }
+      ],
+      "tests": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+          "symbol": "pcr2_preview_maps_h5_preview_without_real_execution",
+          "kind": "inline Rust test"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+          "symbol": "pcr2_prepare_writes_product_command_sidecar_only_when_ready",
+          "kind": "inline Rust test"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+          "symbol": "j1_codex_control_resume_preview_prepare_confirm_and_phase_a_stay_no_real_execution",
+          "kind": "inline Rust test"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/tests/offline-permission-dialog.test.tsx",
+          "symbol": "runRealExecutionProductCommandBoundaryScenario",
+          "kind": "frontend boundary test"
+        }
+      ],
+      "related": [
+        {
+          "id": "workflow-execution-governance.legacy-real-workflow-execution",
+          "relationship": "separate guarded product command from legacy workflow boundary; do not merge or default-route"
+        }
+      ],
+      "knownDuplicates": [],
+      "keywords": [
+        "real execution",
+        "product command",
+        "prepareRealExecutionProductCommand",
+        "prepare_real_execution_product_command_at",
+        "受控真实执行产品命令",
+        "active code capability",
+        "real-run authorization"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    }
+  ]
+}

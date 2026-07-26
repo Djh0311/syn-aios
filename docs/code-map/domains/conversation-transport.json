@@ -1,0 +1,288 @@
+{
+  "schemaVersion": 1,
+  "domain": "conversation-transport",
+  "coverage": "verified-partial",
+  "capabilities": [
+    {
+      "id": "conversation-transport.agent-manual-relay",
+      "domain": "conversation-transport",
+      "name": "Agent Session Center manual conversation relay and readback",
+      "status": "active",
+      "coverage": "verified-partial",
+      "canonical": {
+        "path": "prototypes/productized-desktop-shell/src/views/agent/AgentConversationShell.tsx",
+        "symbol": "AgentSessionCenter",
+        "kind": "TSX export"
+      },
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/AgentView.tsx",
+          "symbol": "AgentView",
+          "kind": "page entry"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "runManualCodexRelayGuiDirect",
+          "kind": "Tauri client command"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+          "symbol": "run_manual_codex_relay_gui_direct",
+          "kind": "Tauri command"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/agent/AgentConversationShell.tsx",
+          "symbol": "AgentSessionCenter",
+          "kind": "TSX export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "pollManualCodexRelayAttempt",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "stopManualCodexRelayAttempt",
+          "kind": "TS export"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/AgentView.tsx",
+          "symbol": "AgentView",
+          "kind": "page consumer"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/agent/AgentConversationShell.tsx",
+          "symbol": "manualRelayReceipt",
+          "kind": "local receipt and poll state"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/manual_relay.rs",
+          "symbol": "ManualRelayReceipt",
+          "kind": "Rust receipt state"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/manual_relay.rs",
+          "symbol": "manual_once",
+          "kind": "single-attempt relay contract"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/conversationEngine.ts",
+          "symbol": "buildManualRelayLiveTranscriptEvents",
+          "kind": "event mapping"
+        }
+      ],
+      "tests": [
+        {
+          "path": "prototypes/productized-desktop-shell/tests/helpers/offlineConversationEngineScenario.tsx",
+          "symbol": "offlineConversationEngineScenario",
+          "kind": "offline scenario"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/tests/helpers/offlineAgentSessionShellPaginationScenario.tsx",
+          "symbol": "offlineAgentSessionShellPaginationScenario",
+          "kind": "offline scenario"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/tests/offline-permission-dialog.test.tsx",
+          "symbol": "offline permission dialog",
+          "kind": "offline test"
+        }
+      ],
+      "related": [
+        {
+          "id": "conversation-transport.codex-session-readback",
+          "relationship": "uses readback pagination"
+        }
+      ],
+      "knownDuplicates": [
+        {
+          "id": "conversation-transport.legacy-resident-private-home",
+          "relationship": "legacy route; do not make default or build a third transport"
+        }
+      ],
+      "keywords": [
+        "交办会话",
+        "conversation transport",
+        "Agent conversation",
+        "会话底座",
+        "Agent Session Center",
+        "AgentSessionCenter",
+        "existing",
+        "new",
+        "event mapping",
+        "事件映射",
+        "poll",
+        "轮询",
+        "Stop",
+        "停止",
+        "readback",
+        "Agent conversation readback",
+        "回读",
+        "manual relay"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    },
+    {
+      "id": "conversation-transport.codex-session-readback",
+      "domain": "conversation-transport",
+      "name": "Codex session transcript readback and pagination",
+      "status": "active",
+      "coverage": "verified-partial",
+      "canonical": {
+        "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+        "symbol": "loadCodexSessionTranscript",
+        "kind": "TS export"
+      },
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/agent/AgentConversationShell.tsx",
+          "symbol": "AgentSessionCenter",
+          "kind": "conversation UI"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "loadCodexSessionTranscript",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "loadCodexSessionTranscriptPage",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "loadCodexSessionPage",
+          "kind": "TS export"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/agent/AgentConversationShell.tsx",
+          "symbol": "AgentSessionCenter",
+          "kind": "conversation UI"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/agent/AgentConversationShell.tsx",
+          "symbol": "CodexTranscript",
+          "kind": "local transcript state"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/conversationEngine.ts",
+          "symbol": "mergeOlderTranscriptPage",
+          "kind": "pagination merge"
+        }
+      ],
+      "tests": [
+        {
+          "path": "prototypes/productized-desktop-shell/tests/helpers/offlineAgentSessionShellPaginationScenario.tsx",
+          "symbol": "offlineAgentSessionShellPaginationScenario",
+          "kind": "offline scenario"
+        }
+      ],
+      "related": [
+        {
+          "id": "conversation-transport.agent-manual-relay",
+          "relationship": "readback used by active manual relay"
+        }
+      ],
+      "knownDuplicates": [],
+      "keywords": [
+        "readback",
+        "回读",
+        "transcript",
+        "conversation transcript",
+        "pagination",
+        "loadCodexSessionTranscript"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    },
+    {
+      "id": "conversation-transport.legacy-resident-private-home",
+      "domain": "conversation-transport",
+      "name": "Resident and private-home conversation route",
+      "status": "legacy",
+      "coverage": "verified-partial",
+      "canonical": {
+        "path": "prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_session.rs",
+        "symbol": "supervisor resident one-shot session",
+        "kind": "historical Rust route"
+      },
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/projects/jiaoban/JiaobanConversation.tsx",
+          "symbol": "JiaobanConversation",
+          "kind": "historical UI"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/projects/ProjectJiaobanPanel.tsx",
+          "symbol": "ProjectJiaobanPanel",
+          "kind": "historical panel"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+          "symbol": "submitSupervisorResidentAnswer",
+          "kind": "TS export"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/projects/jiaoban/useJiaobanConversationState.ts",
+          "symbol": "useJiaobanConversationState",
+          "kind": "historical state hook"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_session.rs",
+          "symbol": "resident one-shot session",
+          "kind": "historical session state"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_session.rs",
+          "symbol": "resident/private-home historical route",
+          "kind": "not a dispatch target"
+        }
+      ],
+      "tests": [],
+      "related": [
+        {
+          "id": "conversation-transport.agent-manual-relay",
+          "relationship": "historical reference; active route is separate"
+        }
+      ],
+      "knownDuplicates": [
+        {
+          "id": "conversation-transport.agent-manual-relay",
+          "relationship": "do not re-dispatch resident/private-home or build a third transport"
+        }
+      ],
+      "keywords": [
+        "resident",
+        "private-home",
+        "private home",
+        "resident answer",
+        "历史路线",
+        "legacy conversation"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    }
+  ]
+}

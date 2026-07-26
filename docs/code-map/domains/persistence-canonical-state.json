@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "domain": "persistence-canonical-state",
+  "coverage": "seed-partial",
+  "capabilities": [
+    {
+      "id": "persistence-canonical-state.workflow-state-json-validated-write",
+      "domain": "persistence-canonical-state",
+      "name": "Workflow-state validated JSON write",
+      "status": "active",
+      "coverage": "verified-partial",
+      "canonical": {
+        "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_state_store.rs",
+        "symbol": "write_validated",
+        "kind": "Rust validated write"
+      },
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_state_json_helpers.rs",
+          "symbol": "write_validated_workflow_state",
+          "kind": "workflow JSON helper"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_state_store.rs",
+          "symbol": "write_validated",
+          "kind": "Rust crate-visible function"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_state_store.rs",
+          "symbol": "read_value",
+          "kind": "Rust crate-visible function"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_execution_entrypoints.rs",
+          "symbol": "write_prepared_dispatch",
+          "kind": "workflow execution consumer"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_run_dispatch_entrypoints.rs",
+          "symbol": "prepare_workflow_node_dispatch_at",
+          "kind": "workflow dispatch consumer"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_state_store.rs",
+          "symbol": "workflow state JSON",
+          "kind": "validated persistence"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_state_json_helpers.rs",
+          "symbol": "validate_workflow_state",
+          "kind": "validation contract"
+        }
+      ],
+      "tests": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_state_store.rs",
+          "symbol": "workflow_state_write_validated_refuses_corrupt_existing_without_overwrite",
+          "kind": "inline Rust test"
+        }
+      ],
+      "related": [
+        {
+          "id": "workflow-execution-governance.workflow-state-dispatch-review",
+          "relationship": "canonical validated persistence for dispatch state"
+        }
+      ],
+      "knownDuplicates": [],
+      "keywords": [
+        "workflow state",
+        "JSON",
+        "validated write",
+        "write_validated",
+        "canonical state",
+        "持久化"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    },
+    {
+      "id": "persistence-canonical-state.db-primary-json-projection",
+      "domain": "persistence-canonical-state",
+      "name": "DB-primary and JSON projection wiring",
+      "status": "needs-confirmation",
+      "coverage": "seed-partial",
+      "canonical": null,
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_db_primary_wiring.rs",
+          "symbol": "workflow DB-primary wiring",
+          "kind": "tracked wiring"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_storage_mode.rs",
+          "symbol": "workbench SQLite storage mode",
+          "kind": "tracked storage selector"
+        }
+      ],
+      "publicSymbols": [],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_repository.rs",
+          "symbol": "workbench SQLite repository",
+          "kind": "repository implementation"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_storage_mode_m5f1.rs",
+          "symbol": "M5F1 storage mode",
+          "kind": "tracked configuration mechanism"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_db_primary_wiring.rs",
+          "symbol": "DB-primary projection",
+          "kind": "tracked mechanism only"
+        }
+      ],
+      "tests": [],
+      "related": [
+        {
+          "id": "persistence-canonical-state.workflow-state-json-validated-write",
+          "relationship": "current runtime DB-primary selection requires separate confirmation"
+        }
+      ],
+      "knownDuplicates": [],
+      "keywords": [
+        "DB primary",
+        "SQLite",
+        "projection",
+        "storage mode",
+        "needs confirmation",
+        "数据库主存"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    }
+  ]
+}

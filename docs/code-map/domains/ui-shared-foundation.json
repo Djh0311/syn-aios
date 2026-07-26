@@ -1,0 +1,310 @@
+{
+  "schemaVersion": 1,
+  "domain": "ui-shared-foundation",
+  "coverage": "verified-partial",
+  "capabilities": [
+    {
+      "id": "ui-shared-foundation.spec-primitives",
+      "domain": "ui-shared-foundation",
+      "name": "Shared specification UI primitives",
+      "status": "active",
+      "coverage": "verified-partial",
+      "canonical": {
+        "path": "prototypes/productized-desktop-shell/src/components/SpecPrimitives.tsx",
+        "symbol": "FactRow",
+        "kind": "TSX export"
+      },
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/App.tsx",
+          "symbol": "App",
+          "kind": "application composition"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/SpecPrimitives.tsx",
+          "symbol": "FactRow",
+          "kind": "TSX export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/SpecPrimitives.tsx",
+          "symbol": "SegTitle",
+          "kind": "TSX export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/SpecPrimitives.tsx",
+          "symbol": "PillRow",
+          "kind": "TSX export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/SpecPrimitives.tsx",
+          "symbol": "Pill",
+          "kind": "TSX export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/SpecPrimitives.tsx",
+          "symbol": "ListRow",
+          "kind": "TSX export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/SpecPrimitives.tsx",
+          "symbol": "EmptyState",
+          "kind": "TSX export"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/HomeView.tsx",
+          "symbol": "HomeView",
+          "kind": "page consumer"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/projects/ProjectJiaobanPanel.tsx",
+          "symbol": "ProjectJiaobanPanel",
+          "kind": "page consumer"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/projects/ProjectWorkflowExecutionPanels.tsx",
+          "symbol": "ProjectWorkflowExecutionPanels",
+          "kind": "page consumer"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/SpecPrimitives.tsx",
+          "symbol": "render-only primitives",
+          "kind": "no independent persistent state"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/SpecPrimitives.tsx",
+          "symbol": "FactRow/SegTitle/PillRow/Pill/ListRow/EmptyState",
+          "kind": "shared visual contract"
+        }
+      ],
+      "tests": [
+        {
+          "path": "scripts/harness/workbench-shape-gate.retired-style-family.selftest.js",
+          "symbol": "retired style family selftest",
+          "kind": "harness selftest"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/tests/jiaoban-approval-seal-and-flag-note.test.tsx",
+          "symbol": "jiaoban approval seal and flag note",
+          "kind": "frontend test"
+        }
+      ],
+      "related": [
+        {
+          "id": "ui-shared-foundation.detail-line",
+          "relationship": "complementary shared display primitive"
+        }
+      ],
+      "knownDuplicates": [],
+      "keywords": [
+        "SpecPrimitives",
+        "FactRow",
+        "Pill",
+        "EmptyState",
+        "shared UI",
+        "共享组件"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    },
+    {
+      "id": "ui-shared-foundation.workbench-shell-navigation",
+      "domain": "ui-shared-foundation",
+      "name": "Workbench shell and navigation foundation",
+      "status": "active",
+      "coverage": "verified-partial",
+      "canonical": {
+        "path": "prototypes/productized-desktop-shell/src/components/WorkbenchShell.tsx",
+        "symbol": "WorkbenchShell",
+        "kind": "TSX export"
+      },
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/main.tsx",
+          "symbol": "main",
+          "kind": "frontend entry"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/App.tsx",
+          "symbol": "App",
+          "kind": "application composition"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/WorkbenchShell.tsx",
+          "symbol": "WorkbenchShell",
+          "kind": "TSX export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/workbenchNavigation.ts",
+          "symbol": "navItems",
+          "kind": "TS export"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/workbenchNavigation.ts",
+          "symbol": "workspaceRailItems",
+          "kind": "TS export"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/App.tsx",
+          "symbol": "App",
+          "kind": "application consumer"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/App.tsx",
+          "symbol": "App",
+          "kind": "shell integration state"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/lib/workbenchNavigation.ts",
+          "symbol": "primaryNavGroups",
+          "kind": "navigation contract"
+        }
+      ],
+      "tests": [
+        {
+          "path": "prototypes/productized-desktop-shell/tests/frontend-wiring-microbatch.test.tsx",
+          "symbol": "frontend wiring microbatch",
+          "kind": "frontend test"
+        }
+      ],
+      "related": [],
+      "knownDuplicates": [],
+      "keywords": [
+        "WorkbenchShell",
+        "navigation",
+        "workspace rail",
+        "应用壳",
+        "导航"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    },
+    {
+      "id": "ui-shared-foundation.detail-line",
+      "domain": "ui-shared-foundation",
+      "name": "Shared detail-line display primitive",
+      "status": "active",
+      "coverage": "verified-partial",
+      "canonical": {
+        "path": "prototypes/productized-desktop-shell/src/components/WorkbenchPrimitives.tsx",
+        "symbol": "DetailLine",
+        "kind": "TSX export"
+      },
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/App.tsx",
+          "symbol": "App",
+          "kind": "application composition"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/WorkbenchPrimitives.tsx",
+          "symbol": "DetailLine",
+          "kind": "TSX export"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/views/projects/ProjectJiaobanPanel.tsx",
+          "symbol": "ProjectJiaobanPanel",
+          "kind": "page consumer"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/WorkbenchPrimitives.tsx",
+          "symbol": "DetailLine",
+          "kind": "render-only primitive"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/WorkbenchPrimitives.tsx",
+          "symbol": "DetailLine",
+          "kind": "label/value presentation contract"
+        }
+      ],
+      "tests": [],
+      "related": [
+        {
+          "id": "ui-shared-foundation.spec-primitives",
+          "relationship": "complementary shared display primitive"
+        }
+      ],
+      "knownDuplicates": [],
+      "keywords": [
+        "DetailLine",
+        "detail line",
+        "shared UI",
+        "详情行"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    },
+    {
+      "id": "ui-shared-foundation.summary-tile",
+      "domain": "ui-shared-foundation",
+      "name": "Summary tile declaration without tracked consumer proof",
+      "status": "needs-confirmation",
+      "coverage": "seed-partial",
+      "canonical": null,
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/WorkbenchPrimitives.tsx",
+          "symbol": "SummaryTile",
+          "kind": "tracked declaration"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/WorkbenchPrimitives.tsx",
+          "symbol": "SummaryTile",
+          "kind": "TSX export"
+        }
+      ],
+      "consumers": [],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/WorkbenchPrimitives.tsx",
+          "symbol": "SummaryTile",
+          "kind": "render-only declaration"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src/components/WorkbenchPrimitives.tsx",
+          "symbol": "SummaryTile",
+          "kind": "unconfirmed consumer contract"
+        }
+      ],
+      "tests": [],
+      "related": [
+        {
+          "id": "ui-shared-foundation.detail-line",
+          "relationship": "co-located primitive; current consumer evidence absent"
+        }
+      ],
+      "knownDuplicates": [],
+      "keywords": [
+        "SummaryTile",
+        "summary tile",
+        "needs confirmation",
+        "摘要卡片"
+      ],
+      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    }
+  ]
+}

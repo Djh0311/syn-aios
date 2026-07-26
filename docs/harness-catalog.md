@@ -1,140 +1,125 @@
-# Harness 脚本索引（scripts/harness/）
+# Harness 目录（当前工作树）
 
-> 用得上的脚本索引。**动用或改造任何 `scripts/harness/` 脚本前先查这里**，避免重造已存在但没接线的工具。
+> 这是开发 Harness 的导航与 consumer 边界，不是任务完成、业务测试、真实 App 验收或产品授权的证明。脚本默认由人显式调用；先查本页和当前 `AGENTS.md`，再决定是否运行。
 
-- 生成日期：2026-06-14（HG-1）｜数据源：[只读审计附录命中表](harness-script-audit-2026-06-14.md)（另见[上游源码包审计](harness-source-package-audit-2026-06-14.md)）
-- 范围：71 个顶层 `.js` + 16 个 `lib/*.js` = **87** 条。索引随包演进：HG-2 已把接通的 5 组（14 个脚本）从`未接`翻成`已接`、把 `capability-map` 翻成`退役`（文件留着）；HG-3 自测 `workbench-shape-gate.dedup.selftest.js` 与 C4 `checkpoint-audit.js` + `checkpoint-audit.selftest.js` 也登记在内；人话工程②（2026-07-20）新增 `workbench-shape-gate.machine-face.selftest.js` 与 `lib/machine-face-rule.js`；G1 token 归真（2026-07-20）新增 `workbench-shape-gate.hardcoded-hex.selftest.js` 与 `lib/hardcoded-hex-rule.js`；G2 定式扶正（2026-07-20）新增 `workbench-shape-gate.retired-style-family.selftest.js` 与 `lib/retired-style-family-rule.js`。
+## 当前清单
 
-## 一句话判据
+当前工作树共有 **100** 个 Harness 文件：**93 JS、5 JSON、2 Swift**。
 
-> 随手点一个脚本，看它这一行的**状态**：`承重`=放心用；`休眠`=本阶段别依赖（换阶段/开开关才用，别删）；`未接`=能力在但没接线（可补的缺口，接了再用）；`已接`=已进流程可用；`退役`=被取代别用（文件留着）。
+- 顶层 JS：77（含 `harness-phase5.test.js`）
+- `lib/` 内部 JS：16（只被其他 Harness 脚本 `require`，不是独立 CLI）
+- `eval/cases/` JSON：5
+- Stage K Swift 探针：2
 
-## 状态 = 桶 + 接没接 + 该不该用
+此前“87 个脚本”的数字是历史盘点，不能当作当前清单。Git tracked 文件数与工作树清单不同：本页按当前真实工作树列出，不把已有未提交的短路由或 Code Map 工具伪装成已提交 canonical。
 
-| 状态 | 含义（桶） | 该不该用 |
+### 顶层 JS（77）
+
+```text
+browser-evidence-check.js          capability-map.js                 capability-scan.js
+checkpoint-audit.js                checkpoint-audit.selftest.js      ci-gate.js
+ci-init.js                         ci-validate.js                    codebase-map.js
+codebase-map.test.js               config-check.js                   config-init.js
+config-migrate.js                  config-policy.js                  config-schema.js
+context-pack.js                    eval-runner.js                    evidence-check.js
+evidence-command.js                evidence-compact.js               evidence-freshness.js
+evidence-index.js                  evidence-new.js                   evidence-query.js
+evidence-retention.js              fixture-check.js                  git-gate.js
+guard-state-files.js               harness-doctor.js                 harness-phase5.test.js
+harness.js                         hook-install.js                   hook-uninstall.js
+install-harness.js                 installed-health.js               managed-files-audit.js
+mcp-doctor.js                      memory-agentmemory-query.js       memory-agentmemory-save.js
+memory-candidate-lint.js           memory-candidate-new.js           memory-maintenance.js
+memory-review.js                   memory-stale-check.js              mistake-check.js
+mistake-new.js                     mistake-query.js                  pre-completion.js
+pre-work.js                        project-context.js                project-context.test.js
+project-profile.js                 rules-lint.js                     runtime-docs-diff.js
+runtime-docs-init.js               security-scan.js                  self-test.js
+skill-recommend.js                 stage-k-architecture-gate.js      stale-control-check.js
+status-snapshot.js                 sync-harness.js                   task-finish.js
+task-package-lint.js               task-package-new.js               task-risk.js
+task-start.js                      task-status.js                    ui-verify.js
+verification-plan.js               verification-runner.js            verification-suite.js
+workbench-shape-gate.dedup.selftest.js
+workbench-shape-gate.hardcoded-hex.selftest.js
+workbench-shape-gate.js
+workbench-shape-gate.machine-face.selftest.js
+workbench-shape-gate.retired-style-family.selftest.js
+```
+
+### 内部库、数据与遗留探针
+
+```text
+lib/agentmemory-client.js          lib/check-runner.js               lib/config-loader.js
+lib/context-pack.js                lib/evidence-audit.js             lib/hardcoded-hex-rule.js
+lib/machine-face-rule.js           lib/manifest.js                   lib/memory-governance.js
+lib/mistake-retrieval.js           lib/project-kind.js               lib/retired-style-family-rule.js
+lib/risk-classifier.js             lib/security.js                   lib/skill-index.js
+lib/task-package-schema.js
+
+eval/cases/context-pack.json       eval/cases/memory-governance.json
+eval/cases/mistake-retrieval.json  eval/cases/security/prompt-injection.json
+eval/cases/skill-recommend.json
+
+stage-k-cgevent-click.swift        stage-k-screencapturekit-window-capture.swift
+```
+
+八个仅存在于历史资料的名字——`ad-policy-check.js`、`agent-entrypoint-check.js`、`duplicate-code-check.js`、`harness-observation-installed-lifecycle.test.js`、`harness-observation.js`、`lib.js`、`predev-check.js`、`scope-check.js`——不是当前文件；不要为它们补空壳。
+
+## Active boundary
+
+`harness.config.json` 和 example 都使用相同的四分类。每项只能属于一个分类；`reportingOnly` 与 `explicitTool` 不能被配置升级成 hard gate。
+
+| 分类 | 当前含义 | 当前入口 / 例子 |
 | --- | --- | --- |
-| `承重` | 几乎每包都跑 | 用 |
-| `休眠` | 被 config/阶段关掉（hooks/CI/UI/MCP） | 本阶段别依赖；**别删**，换阶段会用 |
-| `休眠·待定` | （已清空 2026-06-14：agentmem 簇经用户决定转 `退役`，见特别标注） | — |
-| `未接` | 装好从没接上电（能力在、没 wire 进 hook/CI/流程） | 可补的缺口；接线后可用。后缀 `HG-2①②③④⑩`=本轮接线目标；`元`=只服务 harness 自身、采用后才谈得上 |
-| `已接` | 已接进 AGENTS.md 流程（手动调用点，hooks 仍关） | 用 |
-| `退役` / `退役候选` | 被取代/重复 | 别用；文件留着不删 |
+| `mechanical` | 有明确退出码的窄结构或安全检查 | `commit-msg catch:`、config schema/check/policy、shape |
+| `reportingOnly` | 提供导航或报告，不自动阻塞 | `context`、`checkpoint` |
+| `explicitTool` | 任务或阶段需要时人工调用 | `context diagnostic`、Code Map、Stage K、doctor |
+| `legacyIgnored` | 保留兼容但不再默认展示或推荐 | memory、task/evidence lifecycle、runtime-doc init、managed Hook/CI init、旧 capability scan |
 
-统计（HG-2 后；agentmem 退役 2026-06-14；人话工程②+G1 2026-07-20 各 +2、G2 +2）：`承重` 2 ｜ `配套自测` 5（HG-3 + C4 + machine-face + hardcoded-hex + retired-style-family selftest）｜ `休眠` 11 ｜ `休眠·待定` 0 ｜ `未接` 42（含元工具）｜ `已接` 16（HG-2 五组 + C4 checkpoint-audit + lib/retired-style-family-rule）｜ `退役` 10（capability-map + agentmem 簇 9）。合计 87。
+`preWork` 现在只推荐短路由；`preCompletion` 只推荐窄 config 检查（example 另保留 `rules-lint`，因为安装包自测依赖它的 source-package skip）。这些推荐不代替任务相关测试、build、UI 或真实 App 验收。
 
-> 「怎么调」列统一省略前缀 `node scripts/harness/`；`--target .` 为常用默认。`lib/` 为内部库，被 `require`，不单独 CLI 调。37 个命令另可经 `node scripts/harness/harness.js <子命令>` 路由（`harness.js --help` 看全表）。
+## 根 CLI
 
-## 顶层脚本（71）
+默认 `node scripts/harness/harness.js --help` 只展示以下 **9** 个入口：
 
-| 脚本 | 干啥（一行） | 状态 | 怎么调 |
-| --- | --- | --- | --- |
-| browser-evidence-check.js | 校验 UI 完成是否带真实浏览器证据（route/interaction/console/network/截图） | 休眠 | `browser-evidence-check.js --target .` |
-| capability-map.js | 扫项目可用工具/命令能力，输出能力图 | **退役**·被 capability-scan 取代（HG-2 ⑩；文件留着不删） | `harness.js capabilities` |
-| capability-scan.js | 扫项目能力信号（preWork 用） | 已接·HG-2⑩ | `capability-scan.js --target .` |
-| checkpoint-audit.js | 拿 git 实物核完成报告：声称的 commit/复核 STATUS/写入边界/CURRENT.md 逐条对账，对不上标红、假报告 fail（只验机械事实，判断仍是人的活） | 已接·C4 | `checkpoint-audit.js --package <slug>` |
-| checkpoint-audit.selftest.js | C4 自测（临时 git 仓验证 好包→pass、假报告→fail） | 配套自测 | `checkpoint-audit.selftest.js` |
-| ci-gate.js | CI 内跑的聚合门 | 休眠（CI 关） | `ci-gate.js --target .` |
-| ci-init.js | 从模板初始化 CI 配置 | 休眠（CI 关） | `harness.js init ci` |
-| ci-validate.js | 校验 CI 配置 | 休眠（CI 关） | `ci-validate.js --target .` |
-| config-check.js | 校验 harness.config.json 形状/一致性 | 已接·HG-2④ | `config-check.js --target .` |
-| config-init.js | 从 example 生成项目 config（`--preset auto/advisory/balanced/strict`） | 未接·元 | `harness.js init config` |
-| config-migrate.js | 迁移 config schema 版本 | 未接·元 | `config-migrate.js --target .` |
-| config-policy.js | 查看/校验 policy 配置 | 已接·HG-2④ | `harness.js policy` |
-| config-schema.js | config 的 schema 定义/校验（源码包当 typecheck） | 未接·元 | `config-schema.js --target .` |
-| context-pack.js | 为 Strict 恢复打包任务相关运行文档切片 | 未接 | `context-pack.js --target . --task-id <id> --slug <slug>` |
-| eval-runner.js | 跑 harness eval 用例（security/skill-recommend/...） | 未接·元 | `harness.js eval --suite smoke` |
-| evidence-check.js | 校验证据归档完整性 | 已接·HG-2③ | `evidence-check.js --target .` |
-| evidence-command.js | 把命令输出写成证据条目 | 未接 | `evidence-command.js --target .` |
-| evidence-compact.js | 压缩超大命令输出证据 | 未接 | `harness.js evidence compact` |
-| evidence-freshness.js | 查证据是否过期（maxAgeHours） | 已接·HG-2③ | `evidence-freshness.js --target .` |
-| evidence-index.js | 给证据归档建索引 | 已接·HG-2③ | `harness.js evidence index` |
-| evidence-new.js | 新建证据归档条目 | 已接·HG-2③ | `harness.js evidence new` |
-| evidence-query.js | 查询证据归档 | 已接·HG-2③ | `harness.js evidence query` |
-| evidence-retention.js | 规划/执行证据归档保留 | 未接 | `harness.js evidence retention` |
-| fixture-check.js | 校验测试夹具（源码包当 build） | 未接·元 | `fixture-check.js` |
-| git-gate.js | git 状态/受保护路径门（hooks 内用） | 休眠（hooks 关） | `git-gate.js --target .` |
-| guard-state-files.js | 守卫受保护状态文件（CURRENT.md/evidence/...） | 已接·HG-2① | `guard-state-files.js --target .` |
-| harness-doctor.js | 聚合只读诊断门（planning/status/evidence 分离） | 未接·元 | `harness.js doctor --target . --strict` |
-| harness.js | 统一子命令路由器 + `bin` 入口 | 未接·元 | `harness.js --help` |
-| hook-install.js | 安装托管 git hooks | 休眠（hooks 关） | `harness.js init hooks` |
-| hook-uninstall.js | 卸载托管 git hooks | 休眠（hooks 关） | `hook-uninstall.js --target .` |
-| install-harness.js | 把 harness 安装进目标项目（不拷 package.json） | 未接·元 | `install-harness.js --target <dir>` |
-| installed-health.js | 检查已安装 harness 的健康/漂移 | 未接·元 | `installed-health.js --target .` |
-| managed-files-audit.js | 审计 manifest 托管文件是否被本地改动 | 未接·元 | `managed-files-audit.js --target .` |
-| mcp-doctor.js | 检查 MCP 工具可用性/健康 | 休眠（本阶段无 MCP） | `mcp-doctor.js --target .` |
-| memory-agentmemory-query.js | 经治理包装查询 agentmemory | 退役·agentmem | `harness.js memory agentmemory query` |
-| memory-agentmemory-save.js | 把批准的记忆写入 agentmemory | 退役·agentmem | `harness.js memory agentmemory save` |
-| memory-candidate-lint.js | lint 治理记忆候选 | 退役·agentmem | `harness.js memory candidate lint` |
-| memory-candidate-new.js | 新建治理记忆候选 | 退役·agentmem | `harness.js memory candidate new` |
-| memory-maintenance.js | 记忆 lint/staleness/后端健康聚合 | 退役·agentmem | `harness.js memory maintenance` |
-| memory-review.js | 复核/改记忆候选状态 | 退役·agentmem | `harness.js memory review` |
-| memory-stale-check.js | 查记忆候选过期 | 退役·agentmem | `harness.js memory stale-check` |
-| mistake-check.js | 查错误账本里相关历史失败 | 已接·HG-2② | `mistake-check.js --target .` |
-| mistake-new.js | 新建错误账本条目 | 已接·HG-2② | `mistake-new.js --target .` |
-| mistake-query.js | 查询错误账本 | 已接·HG-2② | `harness.js mistake query` |
-| pre-completion.js | 完成前聚合检查（hooks 内/手动） | 休眠（hooks 关） | `harness.js pre-completion --target .` |
-| pre-work.js | 开工前就绪聚合检查 | 休眠（hooks 关） | `harness.js pre-work --target . --strict` |
-| project-profile.js | 探测项目画像信号 | 未接·元 | `harness.js profile` |
-| rules-lint.js | lint AGENTS/规则文档（源码包当 lint） | 未接·元 | `rules-lint.js .` |
-| runtime-docs-diff.js | 对比运行文档与模板差异 | 未接·元 | `runtime-docs-diff.js --target .` |
-| runtime-docs-init.js | 从模板初始化运行文档 | 未接·元 | `harness.js init docs` |
-| security-scan.js | 扫文本/文件的注入与密钥模式 | 未接 | `harness.js security scan --file <f> --source issue` |
-| self-test.js | harness 自测套件（325 断言，源码包当 test） | 未接·元 | `self-test.js` |
-| skill-recommend.js | 按任务文本推荐必读 skill | 未接 | `harness.js skill recommend` |
-| stage-k-architecture-gate.js | stage-K 架构门 | **承重**（审计 21 次） | `stage-k-architecture-gate.js --target .` |
-| stale-control-check.js | 查控制文件是否过期 | 已接·HG-2① | `stale-control-check.js --target .` |
-| status-snapshot.js | 输出项目状态快照 | 已接·HG-2① | `status-snapshot.js --target .` |
-| sync-harness.js | 同步已安装项目的规则更新 | 未接·元 | `sync-harness.js --target <dir>` |
-| task-finish.js | 收尾任务记录 | 未接 | `harness.js task finish` |
-| task-package-lint.js | lint 结构化任务包 | 未接 | `harness.js task package lint` |
-| task-package-new.js | 创建结构化任务包 | 未接 | `harness.js task package new` |
-| task-risk.js | 推荐项目预设与任务路径 | 未接 | `harness.js task risk` |
-| task-start.js | 开始任务记录 | 未接 | `harness.js task start` |
-| task-status.js | 报告任务状态 | 未接 | `harness.js task status` |
-| ui-verify.js | UI 验证（浏览器证据口径） | 休眠（本阶段离线测试） | `ui-verify.js --target .` |
-| verification-plan.js | 规划验证命令 | 未接 | `harness.js verify plan` |
-| verification-runner.js | 跑单条验证命令 | 未接 | `harness.js verify run` |
-| verification-suite.js | 跑验证套件 | 未接 | `harness.js verify suite` |
-| workbench-shape-gate.dedup.selftest.js | HG-3 去重门自测（临时夹具验证 dup→warn、白名单→不报） | shape-gate 配套自测 | `workbench-shape-gate.dedup.selftest.js` |
-| workbench-shape-gate.machine-face.selftest.js | 人话工程②机器话上脸门自测（直渲→error、白名单→deferred、details 样板→不误伤、state 形→warn） | shape-gate 配套自测 | `workbench-shape-gate.machine-face.selftest.js` |
-| workbench-shape-gate.hardcoded-hex.selftest.js | G1 裸 hex 门自测（裸 hex/回退位/转义→error、定义行/注释→不误伤、白名单→deferred） | shape-gate 配套自测 | `workbench-shape-gate.hardcoded-hex.selftest.js` |
-| workbench-shape-gate.retired-style-family.selftest.js | G2 退休式族门自测（退休族/spec-* 直连→error、复合名/保留名→不误伤、白名单→deferred、SpecPrimitives 本体→不误伤） | shape-gate 配套自测 | `workbench-shape-gate.retired-style-family.selftest.js` |
-| workbench-shape-gate.js | 产品形状/ratchet 门（HG-3 去重 warning；人话工程② machine_face_on_ui；G1 hardcoded_hex_on_ui·规则本体在 lib/） | **承重**（审计 371 次） | `workbench-shape-gate.js --mode baseline\|check` |
+| 命令 | 固定转发 |
+| --- | --- |
+| `context` | `project-context.js` |
+| `context diagnostic` | `project-context.js --diagnostic` |
+| `map query` | `codebase-map.js query` |
+| `map overlay` | `codebase-map.js overlay` |
+| `map check` | `codebase-map.js check` |
+| `checkpoint` | `checkpoint-audit.js --current` |
+| `shape` | `workbench-shape-gate.js` |
+| `stage-k` | `stage-k-architecture-gate.js` |
+| `doctor` | `harness-doctor.js` |
 
-## 内部库 `lib/`（15，require-only）
+其余参数会原样转给目标工具；多词命令采用最长匹配，因此 `context diagnostic` 不会被 `context` 吞掉。`maintenance` 不在默认入口：它属于后续维护审计边界，不能用已退役的 `memory-maintenance.js` 冒充。
 
-| 脚本 | 干啥（一行） | 状态 | 被谁调 |
-| --- | --- | --- | --- |
-| lib/agentmemory-client.js | agentmemory HTTP 客户端 | 退役·agentmem | memory-agentmemory-* |
-| lib/check-runner.js | 检查执行器（聚合门共用） | 未接·元 | doctor/pre-work/pre-completion |
-| lib/config-loader.js | 加载 harness.config.json | 未接·元 | 几乎所有脚本 |
-| lib/context-pack.js | context-pack 核心逻辑 | 未接 | context-pack.js |
-| lib/evidence-audit.js | 证据审计核心逻辑 | 未接 | evidence-check/-freshness |
-| lib/hardcoded-hex-rule.js | hardcoded_hex_on_ui 规则本体+白名单（G1·拆出保 gate 500 软限） | 已接 | workbench-shape-gate.js |
-| lib/machine-face-rule.js | machine_face_on_ui 规则本体+defer 白名单（人话工程②·拆出保 gate 500 软限） | 已接 | workbench-shape-gate.js |
-| lib/retired-style-family-rule.js | retired_style_family 规则本体+defer 白名单 2 条（G2 定式扶正·拆出保 gate 500 软限） | 已接 | workbench-shape-gate.js |
-| lib/manifest.js | 读写 .harness/manifest.json | 未接·元 | install/sync/managed-files-audit |
-| lib/memory-governance.js | 记忆治理核心逻辑 | 退役·agentmem | memory-* |
-| lib/mistake-retrieval.js | 错误账本检索核心逻辑 | 未接 | mistake-check/-query |
-| lib/project-kind.js | 探测项目类型 | 未接·元 | project-profile/risk |
-| lib/risk-classifier.js | 风险分类器 | 未接·元 | task-risk |
-| lib/security.js | 注入/密钥扫描核心逻辑 | 未接 | security-scan |
-| lib/skill-index.js | skill 索引/匹配 | 未接 | skill-recommend |
-| lib/task-package-schema.js | 任务包 schema | 未接 | task-package-new/-lint |
+`node scripts/harness/harness.js --legacy` 展示 **34** 个隐藏兼容入口；它们仍可直接调用，路由不向 JSON stdout 加入 deprecation 文本：
 
-## 特别标注（本包不替用户决定）
+```text
+pre-work, pre-completion
+init config, init docs, init hooks, init ci
+profile, policy, mistake query
+memory candidate new, memory candidate lint, memory review, memory stale-check,
+memory maintenance, memory agentmemory query, memory agentmemory save
+task start, task finish, task status, task risk, task package new, task package lint
+evidence new, evidence retention, evidence compact, evidence index, evidence query
+skill recommend, security scan, eval
+verify plan, verify run, verify suite
+capabilities
+```
 
-- **agentmemory 9 件**（memory-agentmemory-query/-save、memory-candidate-new/-lint、memory-review、memory-stale-check、memory-maintenance、lib/agentmemory-client、lib/memory-governance）：**`退役`（用户已决定 2026-06-14）**。config `memoryIntegration.enabled=false`，产品已改走 Claude 文件记忆 + `handoffs/`。**文件留着不删**。AgentMemory 项目的设计点（自动观察层、生命周期钩子、raw→语义压缩、混合召回、session replay）**已吸收进 `docs/memory-layer-design-v1.md §3.5`**——退役的是没接线的集成脚本，不是那些点子。
-- **capability-map.js**：`退役`（HG-2 ⑩ 已落实）。与 `capability-scan.js` 目标重复（都扫项目能力，arg 解析近乎雷同）；`capability-scan` 已接进 pre-work 调用点并取代它。**文件留着不删**，仅在本索引与 AGENTS.md 标退役。
+`doctor` 已在默认九项中，故不重复计为 legacy。保留这些兼容入口不等于推荐新工作走旧 lifecycle。
 
-## 维护约定
+## Consumer 事实
 
-- 接线/退役状态变化时，更新对应行的`状态`列，并在统计行同步计数。
-- 真要删脚本前：先确认它在本表是 `退役`，且无其他脚本 `require` 它（查 `lib/` 表的"被谁调"）。
+- **真实自动接线**：Git `core.hooksPath=.githooks`，唯一 Hook 为 `.githooks/commit-msg`，只机械检查 commit message 是否含 `catch:`。它不调用 Harness CLI、config、Code Map 或文档检查。
+- **未启用模板**：`templates/hooks/**`、`templates/ci/**` 仅模板；当前没有实际 CI workflow，且 config 为 `hooks.enabled=false`、`ci.required=false`。
+- **显式 / 内部调用**：`pre-work`、`pre-completion` 与 `doctor` 只有被人工调用时才聚合；`self-test` 和 `lib/**` 的引用是兼容回归或内部依赖，不是自动接线。
+- **AgentMemory**：`memoryIntegration.enabled=false`。相关命令、库和模板作为兼容/历史材料保留，不形成当前默认流程。
+- **Code Map 与短路由**：它们是当前人工导航工具，不进入 Hook，也不替代源码核对、业务验证或真实运行验收。
 
-## 补录(2026-07-14 L2 盘点)
-
-| 脚本 | 功能 | 状态 |
-|---|---|---|
-| `scripts/harness/stage-k-cgevent-click.swift` | K 阶段真机点击探针(CGEvent) | 遗留探针·零消费·未接 |
-| `scripts/harness/stage-k-screencapturekit-window-capture.swift` | K 阶段窗口截图探针(ScreenCaptureKit) | 遗留探针·零消费·未接 |
+本轮不删除任何 Harness 文件，也不修改 `.githooks/**`、业务代码、真实 store 或运行数据。

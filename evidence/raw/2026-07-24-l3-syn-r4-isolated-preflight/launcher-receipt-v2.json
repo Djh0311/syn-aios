@@ -1,0 +1,39 @@
+{
+  "schema_version": "syn_r4_isolated_preflight_receipt.v2",
+  "run_hash": "020ecfb478b9f8a321ce20d2534e9295340207347df10e4ee96e33e92392febb",
+  "declared_fixture_path_containment": {
+    "app_data": true,
+    "canvas": true,
+    "codex_db": true,
+    "index": true,
+    "logs": true,
+    "project": true,
+    "recovery_backups": true,
+    "tasks": true,
+    "vault": true,
+    "workflow_state": true
+  },
+  "fixture_path_containment_provenance": "launcher_declared_fixture_path_projection",
+  "fixture_synthetic_identity_hash": "8a20ab1c9083bf5a019b5fb147c2fe732acfc43b8d173a25268c2e3b0d1ba4e9",
+  "profile_declared_session_source": "IndexOnly",
+  "build": {
+    "exit_code": 0,
+    "launched": true,
+    "signal": null
+  },
+  "syn": {
+    "exit_code": 0,
+    "launched": true,
+    "signal": null
+  },
+  "syn_exit_disposition": "normal_exit",
+  "ui_inspection_attempted": false,
+  "ui_inspection_completed": false,
+  "synthetic_home_verified": false,
+  "screenshot_saved": false,
+  "ui_inspection_failure_family": "not_observed_by_launcher",
+  "ui_inspection_provenance": "launcher_pending_ui_observation",
+  "failure_stage": "ui_inspection",
+  "environment_unchanged": true,
+  "home_initial_view_config_pinned": true
+}

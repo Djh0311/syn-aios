@@ -1,0 +1,12 @@
+{
+  "schema_version": "syn_r4_process_scoped_termination_metadata.v1",
+  "source": "macos_unified_log_process_scoped_fault_or_error_projection",
+  "scope": {
+    "target": "launcher_final_syn_child",
+    "time_window_seconds": 70,
+    "raw_records_persisted": false
+  },
+  "result": "matching_record_present",
+  "attribution": "unknown",
+  "interpretation_boundary": "a matching process-scoped fault-or-error record does not identify a SIGKILL sender"
+}

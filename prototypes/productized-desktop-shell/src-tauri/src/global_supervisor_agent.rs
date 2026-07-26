@@ -525,7 +525,9 @@ where
         },
         Err(error) => GlobalSupervisorReviewRecord {
             status: "unavailable".to_string(),
-            unavailable_reason: Some(crate::run_error_translation::humanize_error_for_display(&error)),
+            unavailable_reason: Some(crate::run_error_translation::humanize_error_for_display(
+                &error,
+            )),
             ..base_record.clone()
         },
     };
@@ -838,7 +840,9 @@ where
         },
         Err(error) => GlobalSupervisorBoundaryReviewRecord {
             status: "unavailable".to_string(),
-            unavailable_reason: Some(crate::run_error_translation::humanize_error_for_display(&error)),
+            unavailable_reason: Some(crate::run_error_translation::humanize_error_for_display(
+                &error,
+            )),
             ..base_record.clone()
         },
     };
@@ -1109,7 +1113,8 @@ mod tests {
         let dir = tmp_dir("round-scope-fallback");
         let path = write_round_scope_regression_fixture_state(&dir, "/p/root");
         let mut state: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&path).expect("read state")).expect("parse state");
+            serde_json::from_str(&fs::read_to_string(&path).expect("read state"))
+                .expect("parse state");
         for node in state["workflow_chain_runs"][0]["nodes"]
             .as_array_mut()
             .expect("run nodes")
@@ -1128,8 +1133,11 @@ mod tests {
                 "executed_what": "超过容差", "changed_what": "/t/late.txt",
                 "acceptance_status": "reported_completed", "evidence_refs": [], "open_issues": []
             }));
-        fs::write(&path, serde_json::to_string_pretty(&state).expect("serialize state"))
-            .expect("write state");
+        fs::write(
+            &path,
+            serde_json::to_string_pretty(&state).expect("serialize state"),
+        )
+        .expect("write state");
 
         let input = load_review_input(&path, "/p/root", "wf-1", "1000").expect("输入应组出来");
 

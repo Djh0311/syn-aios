@@ -3,8 +3,19 @@
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const commands = [
-  ['doctor', 'harness-doctor.js', 'Run the aggregate harness diagnostic gate.'],
+const defaultCommands = [
+  ['context', 'project-context.js', 'Read the current short route.', []],
+  ['context diagnostic', 'project-context.js', 'Read the short route with diagnostics.', ['--diagnostic']],
+  ['map query', 'codebase-map.js', 'Query the partial Code Map.', ['query']],
+  ['map overlay', 'codebase-map.js', 'Report uncommitted Code Map overlays.', ['overlay']],
+  ['map check', 'codebase-map.js', 'Check the partial Code Map.', ['check']],
+  ['checkpoint', 'checkpoint-audit.js', 'Check the explicitly bound important work item.', ['--current']],
+  ['shape', 'workbench-shape-gate.js', 'Run the workbench shape gate explicitly.', []],
+  ['stage-k', 'stage-k-architecture-gate.js', 'Run the Stage K architecture gate explicitly.', []],
+  ['doctor', 'harness-doctor.js', 'Run the explicit manual harness diagnostic.', []]
+];
+
+const compatibilityCommands = [
   ['pre-work', 'pre-work.js', 'Run pre-work readiness checks.'],
   ['pre-completion', 'pre-completion.js', 'Run pre-completion checks.'],
   ['init config', 'config-init.js', 'Initialize harness config.'],
@@ -18,8 +29,8 @@ const commands = [
   ['memory candidate lint', 'memory-candidate-lint.js', 'Lint governed memory candidates.'],
   ['memory review', 'memory-review.js', 'Review or change governed memory candidate status.'],
   ['memory stale-check', 'memory-stale-check.js', 'Check governed memory candidates for staleness.'],
-  ['memory maintenance', 'memory-maintenance.js', 'Run governed memory lint, staleness, and backend health checks.'],
-  ['memory agentmemory query', 'memory-agentmemory-query.js', 'Query agentmemory through the harness governance wrapper.'],
+  ['memory maintenance', 'memory-maintenance.js', 'Run governed memory maintenance.'],
+  ['memory agentmemory query', 'memory-agentmemory-query.js', 'Query agentmemory through the governance wrapper.'],
   ['memory agentmemory save', 'memory-agentmemory-save.js', 'Save approved governed memory to agentmemory.'],
   ['task start', 'task-start.js', 'Start a task record.'],
   ['task finish', 'task-finish.js', 'Finish a task record.'],
@@ -41,31 +52,62 @@ const commands = [
   ['capabilities', 'capability-map.js', 'Map local agent/tool capabilities.']
 ];
 
+const commands = [...defaultCommands, ...compatibilityCommands].map(([alias, script, description, prefixArgs = []], index) => ({
+  alias,
+  script,
+  description,
+  prefixArgs,
+  index
+}));
+
+const commandsBySpecificity = commands.slice().sort((left, right) => {
+  const tokenDifference = right.alias.split(' ').length - left.alias.split(' ').length;
+  return tokenDifference || left.index - right.index;
+});
+
+function printCommandList(commandsToPrint) {
+  for (const command of commandsToPrint) {
+    console.log(`  ${command.alias.padEnd(30)} ${command.description} (${command.script})`);
+  }
+}
+
 function printHelp() {
   console.log('Usage: node scripts/harness/harness.js <command> [args]');
   console.log('');
-  console.log('Commands:');
-  for (const [alias, script, description] of commands) {
-    console.log(`  ${alias.padEnd(17)} ${description} (${script})`);
-  }
+  console.log('Current manual entrypoints:');
+  printCommandList(commands.slice(0, defaultCommands.length));
   console.log('');
   console.log('Examples:');
-  console.log('  node scripts/harness/harness.js doctor --target . --json');
-  console.log('  node scripts/harness/harness.js init docs --target /path/to/project');
+  console.log('  node scripts/harness/harness.js context --target .');
+  console.log('  node scripts/harness/harness.js map query --target . --query "conversation transport"');
+  console.log('');
+  console.log('Use --legacy to list hidden compatibility commands.');
+}
+
+function printLegacyHelp() {
+  console.log('Compatibility commands (hidden from default help):');
+  console.log('They remain directly callable with their existing arguments and exit codes.');
+  printCommandList(commands.slice(defaultCommands.length));
 }
 
 function isHelp(argv) {
   return argv.length === 0 || argv[0] === '--help' || argv[0] === '-h';
 }
 
+function isLegacyHelp(argv) {
+  return argv.length === 1 && argv[0] === '--legacy'
+    || argv.length === 2 && argv.includes('--legacy') && (argv.includes('--help') || argv.includes('-h'));
+}
+
 function matchCommand(argv) {
-  for (const [alias, script] of commands) {
-    const parts = alias.split(' ');
+  for (const command of commandsBySpecificity) {
+    const parts = command.alias.split(' ');
     const matches = parts.every((part, index) => argv[index] === part);
     if (matches) {
       return {
-        alias,
-        script,
+        alias: command.alias,
+        script: command.script,
+        prefixArgs: command.prefixArgs,
         rest: argv.slice(parts.length)
       };
     }
@@ -75,6 +117,10 @@ function matchCommand(argv) {
 
 function main() {
   const argv = process.argv.slice(2);
+  if (isLegacyHelp(argv)) {
+    printLegacyHelp();
+    return 0;
+  }
   if (isHelp(argv)) {
     printHelp();
     return 0;
@@ -89,7 +135,7 @@ function main() {
   }
 
   const scriptPath = path.join(__dirname, match.script);
-  const result = spawnSync(process.execPath, [scriptPath, ...match.rest], {
+  const result = spawnSync(process.execPath, [scriptPath, ...match.prefixArgs, ...match.rest], {
     cwd: process.cwd(),
     stdio: 'inherit'
   });

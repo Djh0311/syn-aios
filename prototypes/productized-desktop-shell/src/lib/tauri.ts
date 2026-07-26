@@ -1,4 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
+import {
+  knowledgeOpenRelayAckRequest,
+  type KnowledgeOpenRelayIntent,
+  type KnowledgeOpenRelayOutcome,
+} from "./knowledgeOpenRelay";
+import {
+  AGENT_CODEX_WORKSPACE_WRITE_PROFILE,
+  SUPERVISOR_READ_ONLY_PROFILE,
+  type AgentConversationTransportContext,
+  type ConversationTransportAttemptRequest,
+  type ConversationTransportExistingStartRequest,
+  type ConversationTransportNewStartRequest,
+  type ConversationTransportReceipt,
+  type SupervisorConversationTransportContext,
+} from "./conversationTransport";
 import type { PageReadModelQueryInput, PageReadModelQueryResult } from "./pageReadModel";
 import type {
   AdoptMemoryCandidateInput,
@@ -778,6 +793,7 @@ export type KnowledgeVaultNote = {
   title: string;
   body: string;
   mtime_ms: number;
+  content_hash: string;
 };
 export type KnowledgeVaultWriteResult = {
   slug: string;
@@ -801,9 +817,19 @@ export function knowledgeVaultCreateNote(title: string): Promise<KnowledgeVaultW
   return invoke<KnowledgeVaultWriteResult>("knowledge_vault_create_note", { title });
 }
 
-export function knowledgeVaultWriteNote(slug: string, body: string): Promise<KnowledgeVaultWriteResult> {
+export function knowledgeVaultWriteNote(
+  slug: string,
+  body: string,
+  expectedMtimeMs: number,
+  expectedContentHash: string,
+): Promise<KnowledgeVaultWriteResult> {
   ensureTauriRuntime();
-  return invoke<KnowledgeVaultWriteResult>("knowledge_vault_write_note", { slug, body });
+  return invoke<KnowledgeVaultWriteResult>("knowledge_vault_write_note", {
+    slug,
+    body,
+    expectedMtimeMs,
+    expectedContentHash,
+  });
 }
 
 export function knowledgeVaultAiWrite(request: {
@@ -817,6 +843,816 @@ export function knowledgeVaultAiWrite(request: {
     body: request.body,
     sourceSummary: request.source_summary,
   });
+}
+
+// R2 host-owned relay acknowledgement: this is deliberately a single fixed
+// command and exact intent payload.  It does not expose a route, command,
+// vault root, or a generic invoke surface to the knowledge UI.
+export const KNOWLEDGE_OPEN_RELAY_TAURI_COMMANDS = {
+  acknowledge: "acknowledge_knowledge_open_relay_intent",
+} as const;
+
+export function acknowledgeKnowledgeOpenRelayIntent(
+  intent: KnowledgeOpenRelayIntent,
+  outcome: KnowledgeOpenRelayOutcome,
+): Promise<void> {
+  ensureTauriRuntime();
+  return invoke<void>(KNOWLEDGE_OPEN_RELAY_TAURI_COMMANDS.acknowledge, {
+    request: knowledgeOpenRelayAckRequest(intent, outcome),
+  });
+}
+
+// N1-N5 Syn 原生知识工作区：前端只能调用这组固定 host command。固定 vault 根、
+// 路径解析、CAS、审计和文件系统操作全部留在 Rust；这里不暴露泛型 command/root/shell
+// 入口。测试可以注入 recorder，但生产调用仍只经过同一份固定命令表。
+export const KNOWLEDGE_WORKSPACE_TAURI_COMMANDS = {
+  snapshot: "knowledge_workspace_snapshot",
+  vault_manifest: "knowledge_workspace_vault_manifest",
+  search: "knowledge_workspace_search",
+  graph: "knowledge_workspace_graph",
+  read_markdown: "knowledge_workspace_read_markdown",
+  read_canvas: "knowledge_workspace_read_canvas",
+  create_directory: "knowledge_workspace_create_directory",
+  create_markdown: "knowledge_workspace_create_markdown",
+  write_markdown: "knowledge_workspace_write_markdown",
+  create_canvas: "knowledge_workspace_create_canvas",
+  write_canvas: "knowledge_workspace_write_canvas",
+  import_attachment: "knowledge_workspace_import_attachment",
+  read_attachment: "knowledge_workspace_read_attachment",
+  create_recovery_backup: "knowledge_workspace_create_recovery_backup",
+  list_recovery_backups: "knowledge_workspace_list_recovery_backups",
+  restore_recovery_backup: "knowledge_workspace_restore_recovery_backup",
+  move_entry: "knowledge_workspace_move_entry",
+  rename_entry: "knowledge_workspace_rename_entry",
+  delete_entry: "knowledge_workspace_delete_entry",
+} as const;
+
+export type KnowledgeWorkspaceInvokeName =
+  (typeof KNOWLEDGE_WORKSPACE_TAURI_COMMANDS)[keyof typeof KNOWLEDGE_WORKSPACE_TAURI_COMMANDS];
+
+export type KnowledgeWorkspaceEntryKind = "directory" | "markdown" | "canvas" | "attachment";
+
+export type KnowledgeWorkspaceEntry = Readonly<{
+  relative_path: string;
+  parent_path: string | null;
+  kind: KnowledgeWorkspaceEntryKind;
+  title: string | null;
+  tags: ReadonlyArray<string>;
+  aliases: ReadonlyArray<string>;
+  properties: Readonly<Record<string, string>>;
+  mtime_ms: number;
+  size_bytes: number;
+  outlinks: ReadonlyArray<string>;
+  backlinks: ReadonlyArray<string>;
+}>;
+
+export type KnowledgeWorkspaceTag = Readonly<{
+  tag: string;
+  note_count: number;
+}>;
+
+export type KnowledgeWorkspaceDiagnostic = Readonly<{
+  code: string;
+  relative_path: string | null;
+  message: string;
+}>;
+
+export type KnowledgeWorkspaceSnapshot = Readonly<{
+  entries: ReadonlyArray<KnowledgeWorkspaceEntry>;
+  tags: ReadonlyArray<KnowledgeWorkspaceTag>;
+  diagnostics: ReadonlyArray<KnowledgeWorkspaceDiagnostic>;
+}>;
+
+// N5 manifest 仍是从固定 vault 即时重建的只读投影；它不携带正文、附件 bytes、根路径
+// 或任意文件句柄。具体内容只由下方的固定 read/backup 命令读取。
+export type KnowledgeWorkspaceVaultManifestEntry = Readonly<{
+  relative_path: string;
+  kind: KnowledgeWorkspaceEntryKind;
+  mtime_ms: number;
+  size_bytes: number;
+}>;
+
+export type KnowledgeWorkspaceVaultManifest = Readonly<{
+  entries: ReadonlyArray<KnowledgeWorkspaceVaultManifestEntry>;
+  diagnostics: ReadonlyArray<KnowledgeWorkspaceDiagnostic>;
+}>;
+
+export type KnowledgeWorkspaceSearchResult = Readonly<{
+  relative_path: string;
+  title: string;
+  snippet: string;
+  tags: ReadonlyArray<string>;
+  mtime_ms: number;
+}>;
+
+export type KnowledgeWorkspaceSearchResponse = Readonly<{
+  query: string;
+  results: ReadonlyArray<KnowledgeWorkspaceSearchResult>;
+  diagnostics: ReadonlyArray<KnowledgeWorkspaceDiagnostic>;
+}>;
+
+// N3 图谱只描述可重建的 Markdown 关系投影。`id` 与 `relative_path` 都是同一个已
+// 验证的 vault 相对路径，可直接作为 React Flow 节点 id；绝不接受 URI、root 或布局状态。
+export type KnowledgeWorkspaceGraphScope = "global" | "local";
+
+export type KnowledgeWorkspaceGraphOptions = Readonly<{
+  scope: KnowledgeWorkspaceGraphScope;
+  focusRelativePath?: string;
+  query?: string;
+  tag?: string;
+}>;
+
+export type KnowledgeWorkspaceGraphNode = Readonly<{
+  id: string;
+  relative_path: string;
+  title: string;
+  tags: ReadonlyArray<string>;
+}>;
+
+export type KnowledgeWorkspaceGraphEdge = Readonly<{
+  id: string;
+  source: string;
+  target: string;
+}>;
+
+export type KnowledgeWorkspaceGraphResponse = Readonly<{
+  scope: KnowledgeWorkspaceGraphScope;
+  focus_relative_path: string | null;
+  query: string | null;
+  tag: string | null;
+  nodes: ReadonlyArray<KnowledgeWorkspaceGraphNode>;
+  edges: ReadonlyArray<KnowledgeWorkspaceGraphEdge>;
+  diagnostics: ReadonlyArray<KnowledgeWorkspaceDiagnostic>;
+  truncated: boolean;
+}>;
+
+export type KnowledgeWorkspaceMarkdownDocument = Readonly<{
+  relative_path: string;
+  title: string;
+  body: string;
+  tags: ReadonlyArray<string>;
+  aliases: ReadonlyArray<string>;
+  properties: Readonly<Record<string, string>>;
+  outlinks: ReadonlyArray<string>;
+  backlinks: ReadonlyArray<string>;
+  mtime_ms: number;
+  content_hash: string;
+}>;
+
+// N4 JSON Canvas 使用自己的 JSON 值合同，不复用工作流 CanvasDefinition。这个值仅能
+// 经过固定 `read/create/write_canvas` 命令进入 Syn 自管 vault，不能携带文件根或动作。
+export type JsonCanvasPrimitive = string | number | boolean | null;
+export type JsonCanvasValue = JsonCanvasPrimitive | ReadonlyArray<JsonCanvasValue> | JsonCanvasObject;
+export interface JsonCanvasObject {
+  readonly [key: string]: JsonCanvasValue;
+}
+
+export type KnowledgeWorkspaceCanvasDiagnostic = Readonly<{
+  code: string;
+  node_id: string | null;
+  reference: string | null;
+  message: string;
+}>;
+
+export type KnowledgeWorkspaceCanvasDocument = Readonly<{
+  relative_path: string;
+  document: JsonCanvasObject;
+  mtime_ms: number;
+  content_hash: string;
+  diagnostics: ReadonlyArray<KnowledgeWorkspaceCanvasDiagnostic>;
+}>;
+
+export type KnowledgeWorkspaceAttachmentMimeType =
+  | "image/png"
+  | "image/jpeg"
+  | "image/gif"
+  | "image/webp"
+  | "application/pdf"
+  | "text/plain"
+  | "text/csv";
+
+// Attachment bytes only cross the typed host boundary as browser File bytes. No source path,
+// URL, vault root or arbitrary filesystem handle is accepted or returned.
+export type KnowledgeWorkspaceAttachment = Readonly<{
+  relative_path: string;
+  mime_type: KnowledgeWorkspaceAttachmentMimeType;
+  bytes: ReadonlyArray<number>;
+  mtime_ms: number;
+  content_hash: string;
+  size_bytes: number;
+}>;
+
+export type KnowledgeWorkspaceAttachmentImportResult = Readonly<{
+  relative_path: string;
+  mime_type: KnowledgeWorkspaceAttachmentMimeType;
+  mtime_ms: number;
+  content_hash: string;
+  size_bytes: number;
+  audit_event_id: string;
+}>;
+
+export type KnowledgeWorkspaceRecoveryKind = "markdown" | "canvas" | "attachment";
+
+export type KnowledgeWorkspaceRecoveryBackup = Readonly<{
+  backup_id: string;
+  relative_path: string;
+  kind: KnowledgeWorkspaceRecoveryKind;
+  size_bytes: number;
+  content_hash: string;
+  created_at_ms: number;
+  audit_event_id: string;
+}>;
+
+export type KnowledgeWorkspaceRecoveryBackupSummary = Readonly<{
+  backup_id: string;
+  relative_path: string;
+  kind: KnowledgeWorkspaceRecoveryKind;
+  size_bytes: number;
+  content_hash: string;
+  created_at_ms: number;
+}>;
+
+export type KnowledgeWorkspaceRecoveryRestoreResult = Readonly<{
+  backup_id: string;
+  relative_path: string;
+  mtime_ms: number;
+  content_hash: string;
+  audit_event_id: string;
+}>;
+
+export type KnowledgeWorkspaceMutationOperation =
+  | "directory_created"
+  | "markdown_created"
+  | "markdown_updated"
+  | "canvas_created"
+  | "canvas_updated"
+  | "markdown_moved"
+  | "markdown_renamed"
+  | "markdown_deleted";
+
+export type KnowledgeWorkspaceMutationResult = Readonly<{
+  operation: KnowledgeWorkspaceMutationOperation;
+  relative_path: string;
+  source_relative_path: string | null;
+  mtime_ms: number | null;
+  content_hash: string | null;
+  audit_event_id: string;
+}>;
+
+type KnowledgeWorkspaceSearchArgs = Readonly<{ query: string }>;
+type KnowledgeWorkspaceGraphArgs = Readonly<{
+  scope: KnowledgeWorkspaceGraphScope;
+  focusRelativePath?: string;
+  query?: string;
+  tag?: string;
+}>;
+type KnowledgeWorkspaceReadMarkdownArgs = Readonly<{ relativePath: string }>;
+type KnowledgeWorkspaceReadCanvasArgs = Readonly<{ relativePath: string }>;
+type KnowledgeWorkspaceImportAttachmentArgs = Readonly<{
+  bytes: ReadonlyArray<number>;
+  displayName: string;
+  mimeType: KnowledgeWorkspaceAttachmentMimeType;
+}>;
+type KnowledgeWorkspaceReadAttachmentArgs = Readonly<{ relativePath: string }>;
+type KnowledgeWorkspaceCreateDirectoryArgs = Readonly<{ relativePath: string }>;
+type KnowledgeWorkspaceCreateMarkdownArgs = Readonly<{ relativePath: string; body: string }>;
+type KnowledgeWorkspaceWriteMarkdownArgs = Readonly<{
+  relativePath: string;
+  body: string;
+  expectedMtimeMs: number;
+  expectedContentHash: string;
+}>;
+type KnowledgeWorkspaceCreateCanvasArgs = Readonly<{
+  relativePath: string;
+  document: JsonCanvasObject;
+}>;
+type KnowledgeWorkspaceWriteCanvasArgs = Readonly<{
+  relativePath: string;
+  document: JsonCanvasObject;
+  expectedMtimeMs: number;
+  expectedContentHash: string;
+}>;
+type KnowledgeWorkspaceMoveEntryArgs = Readonly<{
+  from: string;
+  to: string;
+  expectedMtimeMs: number;
+  expectedContentHash: string;
+}>;
+type KnowledgeWorkspaceRenameEntryArgs = KnowledgeWorkspaceMoveEntryArgs;
+type KnowledgeWorkspaceDeleteEntryArgs = Readonly<{
+  relativePath: string;
+  expectedMtimeMs: number;
+  expectedContentHash: string;
+}>;
+type KnowledgeWorkspaceCreateRecoveryBackupArgs = Readonly<{
+  relativePath: string;
+  expectedMtimeMs: number;
+  expectedContentHash: string;
+}>;
+type KnowledgeWorkspaceRestoreRecoveryBackupArgs = Readonly<{
+  backupId: string;
+  expectedMtimeMs: number;
+  expectedContentHash: string;
+}>;
+
+export type KnowledgeWorkspaceInvokeArgs =
+  | KnowledgeWorkspaceSearchArgs
+  | KnowledgeWorkspaceGraphArgs
+  | KnowledgeWorkspaceReadMarkdownArgs
+  | KnowledgeWorkspaceReadCanvasArgs
+  | KnowledgeWorkspaceImportAttachmentArgs
+  | KnowledgeWorkspaceReadAttachmentArgs
+  | KnowledgeWorkspaceCreateDirectoryArgs
+  | KnowledgeWorkspaceCreateMarkdownArgs
+  | KnowledgeWorkspaceWriteMarkdownArgs
+  | KnowledgeWorkspaceCreateCanvasArgs
+  | KnowledgeWorkspaceWriteCanvasArgs
+  | KnowledgeWorkspaceMoveEntryArgs
+  | KnowledgeWorkspaceRenameEntryArgs
+  | KnowledgeWorkspaceDeleteEntryArgs
+  | KnowledgeWorkspaceCreateRecoveryBackupArgs
+  | KnowledgeWorkspaceRestoreRecoveryBackupArgs;
+
+export type KnowledgeWorkspaceInvoke = <T>(
+  command: KnowledgeWorkspaceInvokeName,
+  args?: KnowledgeWorkspaceInvokeArgs,
+) => Promise<T>;
+
+export type KnowledgeWorkspaceClient = Readonly<{
+  snapshot: () => Promise<KnowledgeWorkspaceSnapshot>;
+  vaultManifest: () => Promise<KnowledgeWorkspaceVaultManifest>;
+  search: (query: string) => Promise<KnowledgeWorkspaceSearchResponse>;
+  graph: (options: KnowledgeWorkspaceGraphOptions) => Promise<KnowledgeWorkspaceGraphResponse>;
+  readMarkdown: (relativePath: string) => Promise<KnowledgeWorkspaceMarkdownDocument>;
+  readCanvas: (relativePath: string) => Promise<KnowledgeWorkspaceCanvasDocument>;
+  importAttachment: (
+    bytes: Uint8Array,
+    displayName: string,
+    mimeType: KnowledgeWorkspaceAttachmentMimeType,
+  ) => Promise<KnowledgeWorkspaceAttachmentImportResult>;
+  readAttachment: (relativePath: string) => Promise<KnowledgeWorkspaceAttachment>;
+  createRecoveryBackup: (
+    relativePath: string,
+    expectedMtimeMs: number,
+    expectedContentHash: string,
+  ) => Promise<KnowledgeWorkspaceRecoveryBackup>;
+  listRecoveryBackups: () => Promise<ReadonlyArray<KnowledgeWorkspaceRecoveryBackupSummary>>;
+  restoreRecoveryBackup: (
+    backupId: string,
+    expectedMtimeMs: number,
+    expectedContentHash: string,
+  ) => Promise<KnowledgeWorkspaceRecoveryRestoreResult>;
+  createDirectory: (relativePath: string) => Promise<KnowledgeWorkspaceMutationResult>;
+  createMarkdown: (relativePath: string, body: string) => Promise<KnowledgeWorkspaceMutationResult>;
+  writeMarkdown: (
+    relativePath: string,
+    body: string,
+    expectedMtimeMs: number,
+    expectedContentHash: string,
+  ) => Promise<KnowledgeWorkspaceMutationResult>;
+  createCanvas: (
+    relativePath: string,
+    document: JsonCanvasObject,
+  ) => Promise<KnowledgeWorkspaceMutationResult>;
+  writeCanvas: (
+    relativePath: string,
+    document: JsonCanvasObject,
+    expectedMtimeMs: number,
+    expectedContentHash: string,
+  ) => Promise<KnowledgeWorkspaceMutationResult>;
+  moveEntry: (
+    from: string,
+    to: string,
+    expectedMtimeMs: number,
+    expectedContentHash: string,
+  ) => Promise<KnowledgeWorkspaceMutationResult>;
+  renameEntry: (
+    from: string,
+    to: string,
+    expectedMtimeMs: number,
+    expectedContentHash: string,
+  ) => Promise<KnowledgeWorkspaceMutationResult>;
+  deleteEntry: (
+    relativePath: string,
+    expectedMtimeMs: number,
+    expectedContentHash: string,
+  ) => Promise<KnowledgeWorkspaceMutationResult>;
+}>;
+
+const MAX_KNOWLEDGE_WORKSPACE_PATH_BYTES = 512;
+const MAX_KNOWLEDGE_WORKSPACE_PATH_SEGMENTS = 32;
+const MAX_KNOWLEDGE_WORKSPACE_SEGMENT_CHARS = 128;
+const MAX_KNOWLEDGE_WORKSPACE_MARKDOWN_BYTES = 64 * 1024;
+const MAX_KNOWLEDGE_WORKSPACE_CANVAS_BYTES = 256 * 1024;
+const MAX_KNOWLEDGE_WORKSPACE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_KNOWLEDGE_WORKSPACE_SEARCH_BYTES = 256;
+const MAX_KNOWLEDGE_WORKSPACE_GRAPH_TAG_CHARS = 256;
+const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
+const UNSAFE_WORKSPACE_SEGMENT_PATTERN = /[\\/:*?\[\]{}'"=|<>]/u;
+const UNSAFE_WORKSPACE_GRAPH_TAG_PATTERN = /[\[\]{}|>]/u;
+const CONTROL_CHARACTER_PATTERN = /\p{Cc}/u;
+const KNOWLEDGE_WORKSPACE_ATTACHMENT_MIME_BY_EXTENSION = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+  txt: "text/plain",
+  csv: "text/csv",
+} as const satisfies Readonly<Record<string, KnowledgeWorkspaceAttachmentMimeType>>;
+const RECOVERY_BACKUP_ID_PATTERN = /^[a-f0-9]{32}$/;
+
+export function createKnowledgeWorkspaceClient(
+  invokeCommand: KnowledgeWorkspaceInvoke = invokeKnowledgeWorkspace,
+): KnowledgeWorkspaceClient {
+  return Object.freeze({
+    snapshot: () => invokeCommand<KnowledgeWorkspaceSnapshot>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.snapshot),
+    vaultManifest: () =>
+      invokeCommand<KnowledgeWorkspaceVaultManifest>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.vault_manifest),
+    search: async (query) =>
+      invokeCommand<KnowledgeWorkspaceSearchResponse>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.search, {
+        query: safeWorkspaceSearchQuery(query),
+      }),
+    graph: async (options) =>
+      invokeCommand<KnowledgeWorkspaceGraphResponse>(
+        KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.graph,
+        safeWorkspaceGraphOptions(options),
+      ),
+    readMarkdown: async (relativePath) =>
+      invokeCommand<KnowledgeWorkspaceMarkdownDocument>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.read_markdown, {
+        relativePath: safeWorkspaceMarkdownPath(relativePath),
+      }),
+    readCanvas: async (relativePath) =>
+      invokeCommand<KnowledgeWorkspaceCanvasDocument>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.read_canvas, {
+        relativePath: safeWorkspaceCanvasPath(relativePath),
+      }),
+    importAttachment: async (bytes, displayName, mimeType) =>
+      invokeCommand<KnowledgeWorkspaceAttachmentImportResult>(
+        KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.import_attachment,
+        safeWorkspaceAttachmentImport(bytes, displayName, mimeType),
+      ),
+    readAttachment: async (relativePath) =>
+      invokeCommand<KnowledgeWorkspaceAttachment>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.read_attachment, {
+        relativePath: safeWorkspaceAttachmentPath(relativePath),
+      }),
+    createRecoveryBackup: async (relativePath, expectedMtimeMs, expectedContentHash) =>
+      invokeCommand<KnowledgeWorkspaceRecoveryBackup>(
+        KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.create_recovery_backup,
+        {
+          relativePath: safeWorkspaceRecoverablePath(relativePath),
+          expectedMtimeMs: safeWorkspaceMtime(expectedMtimeMs),
+          expectedContentHash: safeWorkspaceContentHash(expectedContentHash),
+        },
+      ),
+    listRecoveryBackups: () =>
+      invokeCommand<ReadonlyArray<KnowledgeWorkspaceRecoveryBackupSummary>>(
+        KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.list_recovery_backups,
+      ),
+    restoreRecoveryBackup: async (backupId, expectedMtimeMs, expectedContentHash) =>
+      invokeCommand<KnowledgeWorkspaceRecoveryRestoreResult>(
+        KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.restore_recovery_backup,
+        {
+          backupId: safeWorkspaceRecoveryBackupId(backupId),
+          expectedMtimeMs: safeWorkspaceMtime(expectedMtimeMs),
+          expectedContentHash: safeWorkspaceContentHash(expectedContentHash),
+        },
+      ),
+    createDirectory: async (relativePath) =>
+      invokeCommand<KnowledgeWorkspaceMutationResult>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.create_directory, {
+        relativePath: safeWorkspaceRelativePath(relativePath),
+      }),
+    createMarkdown: async (relativePath, body) =>
+      invokeCommand<KnowledgeWorkspaceMutationResult>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.create_markdown, {
+        relativePath: safeWorkspaceMarkdownPath(relativePath),
+        body: safeWorkspaceMarkdownBody(body),
+      }),
+    writeMarkdown: async (relativePath, body, expectedMtimeMs, expectedContentHash) =>
+      invokeCommand<KnowledgeWorkspaceMutationResult>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.write_markdown, {
+        relativePath: safeWorkspaceMarkdownPath(relativePath),
+        body: safeWorkspaceMarkdownBody(body),
+        expectedMtimeMs: safeWorkspaceMtime(expectedMtimeMs),
+        expectedContentHash: safeWorkspaceContentHash(expectedContentHash),
+      }),
+    createCanvas: async (relativePath, document) =>
+      invokeCommand<KnowledgeWorkspaceMutationResult>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.create_canvas, {
+        relativePath: safeWorkspaceCanvasPath(relativePath),
+        document: safeWorkspaceCanvasDocument(document),
+      }),
+    writeCanvas: async (relativePath, document, expectedMtimeMs, expectedContentHash) =>
+      invokeCommand<KnowledgeWorkspaceMutationResult>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.write_canvas, {
+        relativePath: safeWorkspaceCanvasPath(relativePath),
+        document: safeWorkspaceCanvasDocument(document),
+        expectedMtimeMs: safeWorkspaceMtime(expectedMtimeMs),
+        expectedContentHash: safeWorkspaceContentHash(expectedContentHash),
+      }),
+    moveEntry: async (from, to, expectedMtimeMs, expectedContentHash) =>
+      invokeCommand<KnowledgeWorkspaceMutationResult>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.move_entry, {
+        from: safeWorkspaceMarkdownPath(from),
+        to: safeWorkspaceMarkdownPath(to),
+        expectedMtimeMs: safeWorkspaceMtime(expectedMtimeMs),
+        expectedContentHash: safeWorkspaceContentHash(expectedContentHash),
+      }),
+    renameEntry: async (from, to, expectedMtimeMs, expectedContentHash) =>
+      invokeCommand<KnowledgeWorkspaceMutationResult>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.rename_entry, {
+        from: safeWorkspaceMarkdownPath(from),
+        to: safeWorkspaceMarkdownPath(to),
+        expectedMtimeMs: safeWorkspaceMtime(expectedMtimeMs),
+        expectedContentHash: safeWorkspaceContentHash(expectedContentHash),
+      }),
+    deleteEntry: async (relativePath, expectedMtimeMs, expectedContentHash) =>
+      invokeCommand<KnowledgeWorkspaceMutationResult>(KNOWLEDGE_WORKSPACE_TAURI_COMMANDS.delete_entry, {
+        relativePath: safeWorkspaceMarkdownPath(relativePath),
+        expectedMtimeMs: safeWorkspaceMtime(expectedMtimeMs),
+        expectedContentHash: safeWorkspaceContentHash(expectedContentHash),
+      }),
+  });
+}
+
+// Production singleton. The injectable factory above is the only testing seam;
+// it cannot accept a different command name, vault root, arbitrary filesystem target or shell action.
+export const knowledgeWorkspace = createKnowledgeWorkspaceClient();
+
+function invokeKnowledgeWorkspace<T>(
+  command: KnowledgeWorkspaceInvokeName,
+  args?: KnowledgeWorkspaceInvokeArgs,
+): Promise<T> {
+  ensureTauriRuntime();
+  return args === undefined ? invoke<T>(command) : invoke<T>(command, args);
+}
+
+function safeWorkspaceRelativePath(relativePath: string): string {
+  if (
+    typeof relativePath !== "string"
+    || relativePath.length === 0
+    || utf8ByteLength(relativePath) > MAX_KNOWLEDGE_WORKSPACE_PATH_BYTES
+    || relativePath.includes("\\")
+    || relativePath.startsWith("/")
+  ) {
+    throw new Error("knowledge_workspace_invalid_path");
+  }
+  const segments = relativePath.split("/");
+  if (segments.length === 0 || segments.length > MAX_KNOWLEDGE_WORKSPACE_PATH_SEGMENTS) {
+    throw new Error("knowledge_workspace_invalid_path");
+  }
+  for (const segment of segments) {
+    if (
+      segment.length === 0
+      || segment === "."
+      || segment === ".."
+      || segment.startsWith(".")
+      || segment.startsWith("-")
+      || segment.includes("--")
+      || Array.from(segment).length > MAX_KNOWLEDGE_WORKSPACE_SEGMENT_CHARS
+      || CONTROL_CHARACTER_PATTERN.test(segment)
+      || UNSAFE_WORKSPACE_SEGMENT_PATTERN.test(segment)
+    ) {
+      throw new Error("knowledge_workspace_invalid_path");
+    }
+  }
+  return relativePath;
+}
+
+function safeWorkspaceMarkdownPath(relativePath: string): string {
+  const safePath = safeWorkspaceRelativePath(relativePath);
+  const fileName = safePath.split("/").at(-1) ?? "";
+  if (!fileName.endsWith(".md") || fileName.length <= ".md".length) {
+    throw new Error("knowledge_workspace_markdown_only");
+  }
+  return safePath;
+}
+
+function safeWorkspaceCanvasPath(relativePath: string): string {
+  const safePath = safeWorkspaceRelativePath(relativePath);
+  const fileName = safePath.split("/").at(-1) ?? "";
+  if (!fileName.endsWith(".canvas") || fileName.length <= ".canvas".length) {
+    throw new Error("knowledge_workspace_canvas_only");
+  }
+  return safePath;
+}
+
+function safeWorkspaceAttachmentImport(
+  bytes: Uint8Array,
+  displayName: string,
+  mimeType: KnowledgeWorkspaceAttachmentMimeType,
+): KnowledgeWorkspaceImportAttachmentArgs {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength > MAX_KNOWLEDGE_WORKSPACE_ATTACHMENT_BYTES) {
+    throw new Error("knowledge_workspace_attachment_too_large");
+  }
+  const safeDisplayName = safeWorkspaceAttachmentDisplayName(displayName);
+  const expectedMimeType = attachmentMimeTypeForPath(`attachments/${safeDisplayName}`);
+  if (mimeType !== expectedMimeType) {
+    throw new Error("knowledge_workspace_attachment_invalid_mime_type");
+  }
+  return {
+    bytes: Array.from(bytes),
+    displayName: safeDisplayName,
+    mimeType,
+  };
+}
+
+function safeWorkspaceAttachmentPath(relativePath: string): string {
+  const safePath = safeWorkspaceRelativePath(relativePath);
+  if (!safePath.startsWith("attachments/")) {
+    throw new Error("knowledge_workspace_attachment_only");
+  }
+  attachmentMimeTypeForPath(safePath);
+  return safePath;
+}
+
+function safeWorkspaceAttachmentDisplayName(displayName: string): string {
+  if (typeof displayName !== "string" || displayName.includes("/") || displayName.includes("\\")) {
+    throw new Error("knowledge_workspace_attachment_invalid_display_name");
+  }
+  const safePath = safeWorkspaceRelativePath(`attachments/${displayName}`);
+  if (safePath !== `attachments/${displayName}` || safePath.split("/").length !== 2) {
+    throw new Error("knowledge_workspace_attachment_invalid_display_name");
+  }
+  attachmentMimeTypeForPath(safePath);
+  return displayName;
+}
+
+function attachmentMimeTypeForPath(relativePath: string): KnowledgeWorkspaceAttachmentMimeType {
+  const fileName = relativePath.split("/").at(-1) ?? "";
+  const separator = fileName.lastIndexOf(".");
+  const extension = separator > 0 ? fileName.slice(separator + 1) : "";
+  const mimeType = KNOWLEDGE_WORKSPACE_ATTACHMENT_MIME_BY_EXTENSION[
+    extension as keyof typeof KNOWLEDGE_WORKSPACE_ATTACHMENT_MIME_BY_EXTENSION
+  ];
+  if (mimeType === undefined) {
+    throw new Error("knowledge_workspace_attachment_type_not_allowed");
+  }
+  return mimeType;
+}
+
+function safeWorkspaceRecoverablePath(relativePath: string): string {
+  const safePath = safeWorkspaceRelativePath(relativePath);
+  if (safePath.startsWith("attachments/")) {
+    return safeWorkspaceAttachmentPath(safePath);
+  }
+  if (safePath.endsWith(".md")) {
+    return safeWorkspaceMarkdownPath(safePath);
+  }
+  if (safePath.endsWith(".canvas")) {
+    return safeWorkspaceCanvasPath(safePath);
+  }
+  throw new Error("knowledge_workspace_recovery_unsupported_entry");
+}
+
+function safeWorkspaceRecoveryBackupId(backupId: string): string {
+  if (typeof backupId !== "string" || !RECOVERY_BACKUP_ID_PATTERN.test(backupId)) {
+    throw new Error("knowledge_workspace_backup_invalid_id");
+  }
+  return backupId;
+}
+
+function safeWorkspaceCanvasDocument(document: JsonCanvasObject): JsonCanvasObject {
+  if (!isJsonCanvasObject(document) || !isJsonCanvasValue(document, new Set<object>())) {
+    throw new Error("knowledge_workspace_canvas_invalid_json");
+  }
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(document);
+  } catch {
+    throw new Error("knowledge_workspace_canvas_invalid_json");
+  }
+  if (utf8ByteLength(serialized) > MAX_KNOWLEDGE_WORKSPACE_CANVAS_BYTES) {
+    throw new Error("knowledge_workspace_canvas_too_large");
+  }
+  try {
+    const parsed: unknown = JSON.parse(serialized);
+    if (!isJsonCanvasObject(parsed)) {
+      throw new Error("knowledge_workspace_canvas_invalid_json");
+    }
+    return parsed;
+  } catch {
+    throw new Error("knowledge_workspace_canvas_invalid_json");
+  }
+}
+
+function isJsonCanvasObject(value: unknown): value is JsonCanvasObject {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isJsonCanvasValue(value: unknown, ancestors: Set<object>): value is JsonCanvasValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return true;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  if (typeof value !== "object" || value === null || ancestors.has(value)) {
+    return false;
+  }
+  if (!Array.isArray(value) && !isJsonCanvasObject(value)) {
+    return false;
+  }
+  ancestors.add(value);
+  const children = Array.isArray(value) ? value : Object.values(value);
+  const valid = children.every((child) => isJsonCanvasValue(child, ancestors));
+  ancestors.delete(value);
+  return valid;
+}
+
+function safeWorkspaceSearchQuery(query: string): string {
+  if (typeof query !== "string") {
+    throw new Error("knowledge_workspace_invalid_search_query");
+  }
+  const normalized = query.trim();
+  if (
+    normalized.length === 0
+    || utf8ByteLength(normalized) > MAX_KNOWLEDGE_WORKSPACE_SEARCH_BYTES
+    || CONTROL_CHARACTER_PATTERN.test(normalized)
+  ) {
+    throw new Error("knowledge_workspace_invalid_search_query");
+  }
+  return normalized;
+}
+
+function safeWorkspaceGraphOptions(
+  options: KnowledgeWorkspaceGraphOptions,
+): KnowledgeWorkspaceGraphArgs {
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new Error("knowledge_workspace_invalid_graph_request");
+  }
+  const rawOptions = options as Readonly<Record<string, unknown>>;
+  for (const key of Object.keys(rawOptions)) {
+    if (key !== "scope" && key !== "focusRelativePath" && key !== "query" && key !== "tag") {
+      throw new Error("knowledge_workspace_invalid_graph_request");
+    }
+  }
+  if (rawOptions.scope !== "global" && rawOptions.scope !== "local") {
+    throw new Error("knowledge_workspace_invalid_graph_scope");
+  }
+  const scope = rawOptions.scope;
+  const focusRelativePath = rawOptions.focusRelativePath;
+  if (scope === "global" && focusRelativePath !== undefined) {
+    throw new Error("knowledge_workspace_invalid_graph_focus");
+  }
+  let safeFocusRelativePath: string | undefined;
+  if (scope === "local") {
+    if (typeof focusRelativePath !== "string") {
+      throw new Error("knowledge_workspace_invalid_graph_focus");
+    }
+    safeFocusRelativePath = safeWorkspaceMarkdownPath(focusRelativePath);
+  }
+  const query = rawOptions.query;
+  if (query !== undefined && typeof query !== "string") {
+    throw new Error("knowledge_workspace_invalid_search_query");
+  }
+  const tag = rawOptions.tag;
+  if (tag !== undefined && typeof tag !== "string") {
+    throw new Error("knowledge_workspace_invalid_graph_tag");
+  }
+  return {
+    scope,
+    ...(safeFocusRelativePath === undefined ? {} : { focusRelativePath: safeFocusRelativePath }),
+    ...(query === undefined ? {} : { query: safeWorkspaceSearchQuery(query) }),
+    ...(tag === undefined ? {} : { tag: safeWorkspaceGraphTag(tag) }),
+  };
+}
+
+function safeWorkspaceGraphTag(tag: string): string {
+  const normalized = tag.trim();
+  if (
+    normalized.length === 0
+    || utf8ByteLength(normalized) > MAX_KNOWLEDGE_WORKSPACE_SEARCH_BYTES
+    || Array.from(normalized).length > MAX_KNOWLEDGE_WORKSPACE_GRAPH_TAG_CHARS
+    || CONTROL_CHARACTER_PATTERN.test(normalized)
+    || UNSAFE_WORKSPACE_GRAPH_TAG_PATTERN.test(normalized)
+  ) {
+    throw new Error("knowledge_workspace_invalid_graph_tag");
+  }
+  return normalized;
+}
+
+function safeWorkspaceMarkdownBody(body: string): string {
+  if (typeof body !== "string" || utf8ByteLength(body) > MAX_KNOWLEDGE_WORKSPACE_MARKDOWN_BYTES) {
+    throw new Error("knowledge_workspace_markdown_too_large");
+  }
+  return body;
+}
+
+function safeWorkspaceMtime(expectedMtimeMs: number): number {
+  if (!Number.isSafeInteger(expectedMtimeMs) || expectedMtimeMs < 0) {
+    throw new Error("knowledge_workspace_invalid_mtime");
+  }
+  return expectedMtimeMs;
+}
+
+function safeWorkspaceContentHash(expectedContentHash: string): string {
+  if (typeof expectedContentHash !== "string" || !SHA256_HEX_PATTERN.test(expectedContentHash)) {
+    throw new Error("knowledge_workspace_invalid_content_hash");
+  }
+  return expectedContentHash;
+}
+
+function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }
 
 export function previewManualCodexRelay(
@@ -838,6 +1674,94 @@ export function runManualCodexRelayOnce(
 ): Promise<ManualRelayReceipt> {
   ensureTauriRuntime();
   return invoke<ManualRelayReceipt>("run_manual_codex_relay_once", { request });
+}
+
+// Shared Conversation Transport -------------------------------------------------
+//
+// The profile remains a local controller contract so each page can select only
+// its own fixed endpoint. It is deliberately removed before invoke: sandbox,
+// write roots, approval, MCP endpoint, and capabilities are never Tauri input.
+type ConversationTransportStartRequestForContext<TContext> =
+  | (Omit<ConversationTransportNewStartRequest, "context"> & Readonly<{ context: TContext }>)
+  | (Omit<ConversationTransportExistingStartRequest, "context"> & Readonly<{ context: TContext }>);
+
+export type AgentCodexConversationTransportStartRequest =
+  ConversationTransportStartRequestForContext<AgentConversationTransportContext>;
+
+export type SupervisorCodexConversationTransportStartRequest =
+  ConversationTransportStartRequestForContext<SupervisorConversationTransportContext>;
+
+type ConversationTransportInvokeContext = Readonly<{
+  project_root: string;
+  project_id?: string;
+  workflow_id?: string;
+}>;
+
+type ConversationTransportInvokeStartRequest = Readonly<{
+  context: ConversationTransportInvokeContext;
+  mode: "new" | "existing";
+  conversation_id: string | null;
+  thread_id: string | null;
+  turn_id: string;
+  user_text: string;
+}>;
+
+function conversationTransportInvokeRequest(
+  request: AgentCodexConversationTransportStartRequest | SupervisorCodexConversationTransportStartRequest,
+  context: ConversationTransportInvokeContext,
+): ConversationTransportInvokeStartRequest & Readonly<{ context: ConversationTransportInvokeContext }> {
+  return {
+    context,
+    mode: request.mode,
+    conversation_id: request.conversation_id,
+    thread_id: request.thread_id,
+    turn_id: request.turn_id,
+    user_text: request.user_text,
+  };
+}
+
+export function startAgentCodexConversationTransport(
+  request: AgentCodexConversationTransportStartRequest,
+): Promise<ConversationTransportReceipt> {
+  if (request.context.profile_id !== AGENT_CODEX_WORKSPACE_WRITE_PROFILE) {
+    return Promise.reject(new Error("conversation_transport_agent_profile_required"));
+  }
+  ensureTauriRuntime();
+  return invoke<ConversationTransportReceipt>("start_agent_conversation_transport", {
+    request: conversationTransportInvokeRequest(request, {
+      project_root: request.context.project_root,
+    }),
+  });
+}
+
+export function startSupervisorCodexConversationTransport(
+  request: SupervisorCodexConversationTransportStartRequest,
+): Promise<ConversationTransportReceipt> {
+  if (request.context.profile_id !== SUPERVISOR_READ_ONLY_PROFILE) {
+    return Promise.reject(new Error("conversation_transport_supervisor_profile_required"));
+  }
+  ensureTauriRuntime();
+  return invoke<ConversationTransportReceipt>("start_supervisor_conversation_transport", {
+    request: conversationTransportInvokeRequest(request, {
+      project_root: request.context.project_root,
+      project_id: request.context.project_id,
+      workflow_id: request.context.workflow_id,
+    }),
+  });
+}
+
+export function pollCodexConversationTransportAttempt(
+  request: ConversationTransportAttemptRequest,
+): Promise<ConversationTransportReceipt> {
+  ensureTauriRuntime();
+  return invoke<ConversationTransportReceipt>("poll_conversation_transport_attempt", { request });
+}
+
+export function stopCodexConversationTransportAttempt(
+  request: ConversationTransportAttemptRequest,
+): Promise<ConversationTransportReceipt> {
+  ensureTauriRuntime();
+  return invoke<ConversationTransportReceipt>("stop_conversation_transport_attempt", { request });
 }
 
 export function runManualCodexRelayGuiDirect(

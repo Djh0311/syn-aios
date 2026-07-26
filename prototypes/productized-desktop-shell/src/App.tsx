@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { renderActiveWorkbenchView } from "./components/ActiveWorkbenchView";
 import { RightDetailPanel } from "./components/RightDetailPanel";
 import { WorkbenchShell } from "./components/WorkbenchShell";
@@ -60,10 +61,18 @@ import {
   runMemoryLint,
   runPathAction,
   knowledgeVaultAiWrite,
+  acknowledgeKnowledgeOpenRelayIntent as acknowledgeKnowledgeOpenRelayIntentAtHost,
   updateTaskPackageDraftFields,
   updateWorkItemState,
   unbindWorkflowNodeCodexSession,
 } from "./lib/tauri";
+import {
+  KNOWLEDGE_OPEN_RELAY_EVENT_NAME,
+  parseKnowledgeOpenRelayIntent,
+  sameKnowledgeOpenRelayIntent,
+  type KnowledgeOpenRelayIntent,
+  type KnowledgeOpenRelayOutcome,
+} from "./lib/knowledgeOpenRelay";
 import type { SystemStatusReadModel } from "./lib/tauri";
 import {
   browserPreviewSessionPage,
@@ -104,6 +113,7 @@ function stageKInitialView(): ViewKey {
 export function App() {
   const [snapshot, setSnapshot] = useState<WorkbenchSnapshot | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>(() => stageKInitialView());
+  const [knowledgeOpenIntent, setKnowledgeOpenIntent] = useState<KnowledgeOpenRelayIntent | null>(null);
   // ④「点击带上下文直达」:导航焦点与 activeView 同一次更新落地——跳哪一页 + 落在哪一条。
   // 不带 focus 的导航把它清空,免得旧焦点粘在下一页上。
   const [navigationFocus, setNavigationFocus] = useState<NavigationFocus | null>(null);
@@ -148,6 +158,51 @@ export function App() {
       }
     });
   }, []);
+
+  // R2: the desktop host owns the relay listener and emits only a validated
+  // Markdown intent.  Browser preview never subscribes, and this handler
+  // cannot select a route, command, root, or arbitrary file target.
+  useEffect(() => {
+    if (browserPreviewEnabled || !("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let stopListening: (() => void) | null = null;
+    void listen<unknown>(KNOWLEDGE_OPEN_RELAY_EVENT_NAME, (event) => {
+      const intent = parseKnowledgeOpenRelayIntent(event.payload);
+      if (!intent) return;
+      navigate("knowledge");
+      setKnowledgeOpenIntent(intent);
+    })
+      .then((stop) => {
+        if (disposed) {
+          stop();
+        } else {
+          stopListening = stop;
+        }
+      })
+      .catch(() => {
+        // A listener failure leaves the host request without an acknowledgement;
+        // it must time out fail-closed instead of being replaced by a local path.
+      });
+    return () => {
+      disposed = true;
+      stopListening?.();
+    };
+  }, [navigate]);
+
+  const acknowledgeKnowledgeOpenIntent = useCallback(
+    async (intent: KnowledgeOpenRelayIntent, outcome: KnowledgeOpenRelayOutcome): Promise<boolean> => {
+      try {
+        await acknowledgeKnowledgeOpenRelayIntentAtHost(intent, outcome);
+        setKnowledgeOpenIntent((current) => (sameKnowledgeOpenRelayIntent(current, intent) ? null : current));
+        return true;
+      } catch {
+        // Keep the matching intent in memory until the host acknowledges it.
+        // This prevents a local failure from looking like a completed open.
+        return false;
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     void reload();
@@ -603,6 +658,7 @@ export function App() {
           throw new Error("知识库写入缺少笔记内容");
         }
         const result = await knowledgeVaultAiWrite(write);
+        window.dispatchEvent(new Event("syn-knowledge-vault-saved"));
         setNotice(`已写入知识库笔记「${result.title}」（AI 提议、你允许才落盘；已审计 ${result.audit_event_id}）。`);
       } else if (pendingAction.kind === "offline-role-dispatch") {
         if (!pendingAction.offlineRoleDispatch) {
@@ -737,6 +793,8 @@ export function App() {
           systemStatus,
           onRequestAction: setPendingAction,
           onNavigate: navigate,
+          knowledgeOpenIntent,
+          onKnowledgeOpenIntentOutcome: acknowledgeKnowledgeOpenIntent,
           navigationFocus,
           secretaryContext,
           workflowState,

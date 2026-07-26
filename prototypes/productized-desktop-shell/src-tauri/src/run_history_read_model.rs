@@ -814,7 +814,13 @@ mod tests {
     // A·§4 接线：失败链 → entry.error 投影出 {人话/原文/族}；state/state_note 逐字节不变（呈现纯增·不驱动）。
     #[test]
     fn failed_run_projects_translated_error_without_touching_state() {
-        let proposals = vec![proposal("p-fail", "wf", ProposalStatusLite::Confirmed, false, 1_000)];
+        let proposals = vec![proposal(
+            "p-fail",
+            "wf",
+            ProposalStatusLite::Confirmed,
+            false,
+            1_000,
+        )];
         // 失败链带子系统原始错误（07-08 活证据形态）。
         let chains = vec![chain_with_error(
             "wf",
@@ -824,15 +830,30 @@ mod tests {
             1,
             Some("codex_memories_write::phase2::job: failed to claim job (no such table: jobs)"),
         )];
-        let (entries, _) = assemble(&proposals, &chains, &HashMap::new(), &HashMap::new(), NOW, 50);
+        let (entries, _) = assemble(
+            &proposals,
+            &chains,
+            &HashMap::new(),
+            &HashMap::new(),
+            NOW,
+            50,
+        );
         let entry = find(&entries, "p-fail");
         // 成败呈现字段不变（延续既有 blocked 语义·A 不驱动）。
         assert_eq!(entry.state, "blocked");
-        assert!(entry.state_note.contains("跑挂了"), "state_note 不变：{}", entry.state_note);
+        assert!(
+            entry.state_note.contains("跑挂了"),
+            "state_note 不变：{}",
+            entry.state_note
+        );
         // A 新增诊断字段：翻成人话 + 带原文 + 族。
         let error = entry.error.as_ref().expect("失败单应有翻译错误");
         assert_eq!(error.family, "codex_subsystem", "no such table → 子系统族");
-        assert!(error.human.contains("子系统"), "人话不是裸错误：{}", error.human);
+        assert!(
+            error.human.contains("子系统"),
+            "人话不是裸错误：{}",
+            error.human
+        );
         assert!(!error.human.contains("no such table"), "默认脸不灌原文");
         assert!(error.raw_snippet.contains("no such table"), "下钻原文保留");
     }
@@ -849,7 +870,14 @@ mod tests {
             // 跑中链即便带 failure_raw（防御性），completed/running 也不抠——这里直接给 running。
             chain_with_error("wf2", 2_500, "running", 0, 2, None),
         ];
-        let (entries, _) = assemble(&proposals, &chains, &HashMap::new(), &HashMap::new(), NOW, 50);
+        let (entries, _) = assemble(
+            &proposals,
+            &chains,
+            &HashMap::new(),
+            &HashMap::new(),
+            NOW,
+            50,
+        );
         assert!(find(&entries, "p-done").error.is_none(), "交货单无 error");
         assert!(find(&entries, "p-run").error.is_none(), "跑中单无 error");
     }
@@ -874,11 +902,20 @@ mod tests {
             ]
         });
         let chains = project_chains(&value, "proj", None);
-        let failed = chains.iter().find(|c| c.workflow_id == "wf").expect("failed 链在");
+        let failed = chains
+            .iter()
+            .find(|c| c.workflow_id == "wf")
+            .expect("failed 链在");
         let raw = failed.failure_raw.as_deref().expect("失败链抠出原料");
         assert!(raw.contains("worker 派发未完成"), "含节点 message");
-        assert!(raw.contains("readonly database"), "含 dispatch failure_reason（更丰富原文）");
-        let done = chains.iter().find(|c| c.workflow_id == "wf2").expect("完成链在");
+        assert!(
+            raw.contains("readonly database"),
+            "含 dispatch failure_reason（更丰富原文）"
+        );
+        let done = chains
+            .iter()
+            .find(|c| c.workflow_id == "wf2")
+            .expect("完成链在");
         assert!(done.failure_raw.is_none(), "completed 不抠 failure_raw");
     }
 

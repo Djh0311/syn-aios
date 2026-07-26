@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test:offline-interaction": "node scripts/run-offline-interaction-test.mjs",
+    "r4:isolated-preflight": "node scripts/run-r4-isolated-app-preflight.mjs",
     "tauri:dev": "../tauri-capability-probe/.tauri-cli/bin/cargo-tauri dev"
   },
   "dependencies": {

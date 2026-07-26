@@ -155,43 +155,42 @@
   },
   "preWork": {
     "recommendedChecks": [
-      "node scripts/harness/config-check.js --target .",
-      "node scripts/harness/capability-scan.js --target .",
-      "node scripts/harness/verification-plan.js --target .",
-      "node scripts/harness/mcp-doctor.js --target .",
-      "node scripts/harness/status-snapshot.js --target .",
-      "node scripts/harness/guard-state-files.js --target .",
-      "node scripts/harness/mistake-check.js --target ."
+      "node scripts/harness/project-context.js --target ."
     ],
-    "strictPathRecommendedChecks": [
-      "node scripts/harness/config-check.js --target . --strict",
-      "node scripts/harness/verification-plan.js --target . --strict",
-      "node scripts/harness/status-snapshot.js --target . --strict",
-      "node scripts/harness/guard-state-files.js --target . --strict",
-      "node scripts/harness/mistake-check.js --target . --strict"
-    ]
+    "strictPathRecommendedChecks": []
   },
   "preCompletion": {
     "recommendedChecks": [
-      "node scripts/harness/config-check.js --target .",
-      "node scripts/harness/capability-scan.js --target .",
-      "node scripts/harness/verification-plan.js --target .",
-      "node scripts/harness/status-snapshot.js --target .",
-      "node scripts/harness/guard-state-files.js --target .",
-      "node scripts/harness/evidence-check.js --target .",
-      "node scripts/harness/evidence-freshness.js --target .",
-      "node scripts/harness/browser-evidence-check.js --target .",
-      "node scripts/harness/mistake-check.js --target ."
+      "node scripts/harness/config-check.js --target . --strict"
     ],
-    "strictPathRecommendedChecks": [
-      "node scripts/harness/config-check.js --target . --strict",
-      "node scripts/harness/verification-plan.js --target . --strict",
-      "node scripts/harness/status-snapshot.js --target . --strict",
-      "node scripts/harness/guard-state-files.js --target . --strict",
-      "node scripts/harness/evidence-check.js --target . --strict",
-      "node scripts/harness/evidence-freshness.js --target . --strict",
-      "node scripts/harness/browser-evidence-check.js --target . --strict",
-      "node scripts/harness/mistake-check.js --target . --strict"
+    "strictPathRecommendedChecks": []
+  },
+  "activeBoundary": {
+    "mechanical": [
+      "commit-msg catch:",
+      "config-schema",
+      "config-check",
+      "config-policy",
+      "shape"
+    ],
+    "reportingOnly": [
+      "context",
+      "checkpoint"
+    ],
+    "explicitTool": [
+      "context diagnostic",
+      "map query",
+      "map overlay",
+      "map check",
+      "stage-k",
+      "doctor"
+    ],
+    "legacyIgnored": [
+      "memory",
+      "task/evidence lifecycle",
+      "runtime-doc init",
+      "managed Hook/CI init",
+      "legacy capability scan"
     ]
   },
   "completionProtocol": {

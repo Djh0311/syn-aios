@@ -1,0 +1,55 @@
+{
+  "schema_version": "syn_r4_manual_dev_isolated_profile_control.v1",
+  "run_hash": "c4ceed12d23e9a4ce981dfdc65d954c28e568712526919465b2e7fdf1db5009d",
+  "launch_chain": "cargo_tauri_dev_with_dynamic_local_dev_config",
+  "isolated_profile_injected": true,
+  "prelaunch_root_contract": {
+    "exact_six_entries": true,
+    "logs_empty": true
+  },
+  "runtime_observation": {
+    "app_launch_line_observed": true,
+    "storage_mode": "json_only",
+    "storage_mode_reason_family": "isolated_storage_mode_config_missing",
+    "storage_mode_path_within_isolated_root": true,
+    "cargo_tauri_alive": true,
+    "vite_alive": true,
+    "syn_alive": true,
+    "syn_parent_is_cargo_tauri": true,
+    "syn_and_cargo_tauri_same_process_group": true,
+    "stable_for_at_least_seconds": 60
+  },
+  "binary_comparison": {
+    "dev_binary_sha256": "5cb03670a4ca6c6228e76baca2955d8c5a0dd4640003b548d4ca9360625eb156",
+    "fresh_bundle_binary_sha256": "00e87932a7d7d9f8f9e1390ada690c345e86a35ec6e34af65063ebcfaef75424",
+    "byte_identical": false,
+    "architecture_match": true,
+    "architecture": "arm64",
+    "dev_strict_code_signature_verification": "valid",
+    "fresh_bundle_strict_code_signature_verification": "invalid_missing_declared_resource_seal",
+    "fresh_bundle_ignore_resources_code_signature_verification": "valid"
+  },
+  "termination": {
+    "method": "ctrl_c",
+    "cargo_tauri_remaining": false,
+    "vite_remaining": false,
+    "syn_remaining": false,
+    "dev_port_remaining": false
+  },
+  "dynamic_tauri_config_cleanup": {
+    "exit_trap_ran": false,
+    "retained_after_exec": true,
+    "verified_single_generated_file": true,
+    "removed_exactly_after_detection": true
+  },
+  "ui_actions_performed": false,
+  "computer_use_called": false,
+  "gate_0_entered": false,
+  "codex_cli_or_mcp_started": false,
+  "tools_list_called": false,
+  "knowledge_tool_called": false,
+  "raw_process_ids_persisted": false,
+  "raw_command_persisted": false,
+  "raw_environment_persisted": false,
+  "absolute_paths_persisted": false
+}

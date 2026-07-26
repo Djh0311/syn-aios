@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, io::Write};
+mod acceptance_runtime_profile;
+#[cfg(test)]
+mod acceptance_runtime_profile_tests;
 mod blackboard_candidate_store;
 pub mod codex_db;
 mod codex_local_runner;
@@ -82,12 +85,23 @@ struct AllowedPaths {
 }
 impl AppState {
     fn new() -> Self {
+        Self::try_new().expect("acceptance runtime profile must resolve before AppState")
+    }
+
+    fn try_new() -> Result<Self, String> {
+        if let Some(paths) = acceptance_runtime_profile::active_paths()? {
+            return Ok(Self {
+                index_path: paths.index_path,
+                tasks_path: paths.tasks_path,
+                workflow_state_path: paths.workflow_state_path,
+            });
+        }
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        Self {
+        Ok(Self {
             index_path: manifest_dir.join("../../index-kernel/codex-index.json"),
             tasks_path: manifest_dir.join("../../tasks/README.md"),
             workflow_state_path: default_workflow_state_path(),
-        }
+        })
     }
 }
 
@@ -1322,6 +1336,11 @@ fn atomic_write_json(path: &Path, value: &Value) -> Result<(), String> {
 }
 
 fn default_workflow_state_path() -> PathBuf {
+    if let Some(paths) = acceptance_runtime_profile::active_paths()
+        .expect("acceptance runtime profile must resolve before workflow path use")
+    {
+        return paths.workflow_state_path;
+    }
     let home = std::env::var("HOME").unwrap_or_else(|_| "/Users/yoyi".to_string());
     PathBuf::from(home)
     .join("Library/Application Support/CodexGovernanceWorkbench/workflow-state/workflow-state.v0.json")
@@ -1354,12 +1373,12 @@ fn unix_timestamp_nanos() -> u128 {
 }
 
 fn build_snapshot(state: &AppState, index: &Value, tasks_text: &str) -> WorkbenchSnapshot {
-    build_snapshot_with_session_source(
-        state,
-        index,
-        tasks_text,
-        SessionSourceMode::RealWithSqliteFallback,
-    )
+    build_snapshot_with_session_source(state, index, tasks_text, session_source_mode_for_process())
+}
+
+fn session_source_mode_for_process() -> SessionSourceMode {
+    acceptance_runtime_profile::session_source_mode_for_process()
+        .expect("acceptance runtime profile must resolve before session source use")
 }
 
 fn build_snapshot_with_session_source(
@@ -5608,6 +5627,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 max_follow_ups_per_worker: 2,
                 max_runtime_minutes: 30,
             }),
+            knowledge_open_relay: None,
         };
         let dispatch_input = mcp::supervisor_orchestrator::DispatchInput {
             project_root: test_root.to_string(),
@@ -8483,16 +8503,22 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             !outcome.task_session_binding_required,
             "P1-D 后不应再停逐任务绑定面板"
         );
-        assert_eq!(outcome.prepared_count, 2, "StubDirector 拆的两项任务都应真正 prepare");
+        assert_eq!(
+            outcome.prepared_count, 2,
+            "StubDirector 拆的两项任务都应真正 prepare"
+        );
         let bindings = read_json_file(&path)["workflow_node_session_bindings"]
             .as_array()
             .cloned()
             .unwrap_or_default();
         assert_eq!(bindings.len(), 2, "两项任务应各自留下绑定记录");
         assert!(
-            bindings.iter().all(|binding| optional_string_from(binding, "native_thread_id")
-                .as_deref()
-                == Some(fresh_thread_id)),
+            bindings
+                .iter()
+                .all(
+                    |binding| optional_string_from(binding, "native_thread_id").as_deref()
+                        == Some(fresh_thread_id)
+                ),
             "必须绑到 C1 现生的新会话，不是顶层旧 existing 会话：{bindings:?}"
         );
         let _ = fs::remove_dir_all(dir);
@@ -8616,10 +8642,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "task-session-binding-validation-auth-user",
         )
         .expect("confirm");
-        let authorization = confirmed
-            .plan_authorization
-            .clone()
-            .expect("authorization");
+        let authorization = confirmed.plan_authorization.clone().expect("authorization");
         let revision = confirmed
             .plan_authorization_store_revision
             .expect("revision");
@@ -8789,10 +8812,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             "task-session-binding-per-task-auth-user",
         )
         .expect("confirm");
-        let authorization = confirmed
-            .plan_authorization
-            .clone()
-            .expect("authorization");
+        let authorization = confirmed.plan_authorization.clone().expect("authorization");
         let revision = confirmed
             .plan_authorization_store_revision
             .expect("revision");
@@ -9118,7 +9138,10 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         );
         // P1-D §A4 mock E2E：批准一下→自动经绑定/prepare/dispatch 到跑，中间零用户停点；
         // 打印完整审计序列核实物（授权→prepare→dispatch 各笔在、语义真）。
-        let audit_events = state["audit_events"].as_array().cloned().unwrap_or_default();
+        let audit_events = state["audit_events"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
         println!("[P1-D_MOCK_E2E] 审计序列(共 {} 笔)：", audit_events.len());
         for event in &audit_events {
             println!(
@@ -9143,7 +9166,8 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             .filter(|event| {
                 matches!(
                     optional_string_from(event, "event_type").as_deref(),
-                    Some("workflow_node_dispatch_prepared") | Some("workflow_node_dispatch_started")
+                    Some("workflow_node_dispatch_prepared")
+                        | Some("workflow_node_dispatch_started")
                 )
             })
             .collect();

@@ -1,5 +1,7 @@
 # 2026-07-09 Codebase Capability Map v2
 
+> **Historical / superseded as the default navigation entry (2026-07-23):** this static v2 map is retained as historical input. Use the partial structured map at [code-map/README.md](code-map/README.md) and `node scripts/harness/codebase-map.js query --target . --query "..."` for current capability navigation; verify source and tests before treating any entry as fact.
+
 > **主导线核对（2026-07-10·抽查非穷举·当索引用别当圣经）**:便宜模型 codex 产、主导线抽查过——0 禁词✓、概念反查索引填得实✓、真角色来自文件注释✓。**⚠️ 8 处判定**:#1 错误人话翻译 `humanize_consult_error`×2(secretary+global_supervisor)= **真重复**(逐字节·已亲核·归 C6 收编消除);概念6 `record_global_final_result_review_at` 撞 director 终标 = **误报**(前者=全局主管跑后复核·后者=director 每任务终标·**不同角色·C4a 没重造**·已亲核);其余 ⚠️(phaseA/B、两会话创建路、h4 边界、append_chain_audit vs workflow_audit、review-store vs auth-store)= **候选·多半两语境各干各、非字节重复·待细看不急**。**已知漏**:概念4「先生后绑」漏了真源 `director_agent.rs:create_and_bind_task_session`(+`ManualRelayJiaobanNewSessionCreator`)——用时补上。**用法**:写"加新能力"包前查此索引定位现有实现;⚠️/漏说明它是**便宜模型索引不是权威真相**,关键处仍主导线 grep 复核。取代 `docs/2026-07-09-codebase-capability-map-v1.md`(骨架版)。
 
 ## 说明

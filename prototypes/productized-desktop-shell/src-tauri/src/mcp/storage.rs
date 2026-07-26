@@ -170,6 +170,11 @@ pub struct CanvasAuditEvent {
 // ---------- paths ----------
 
 pub fn canvas_v1_root() -> PathBuf {
+    if let Some(paths) = crate::acceptance_runtime_profile::active_paths()
+        .expect("acceptance runtime profile must resolve before Canvas path use")
+    {
+        return paths.canvas_root;
+    }
     let home = std::env::var("HOME").unwrap_or_else(|_| "/Users/yoyi".to_string());
     PathBuf::from(home).join("Library/Application Support/CodexGovernanceWorkbench/canvas-v1")
 }

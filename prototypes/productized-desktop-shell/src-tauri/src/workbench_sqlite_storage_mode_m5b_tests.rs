@@ -156,6 +156,69 @@ fn m5b_supervisor_orchestrator_db_ahead_replays_sidecar_and_reconciles() {
     assert!(report.is_green(), "{report:?}");
 }
 
+#[test]
+fn m5b_batch2_knowledge_vault_audit_projects_once_and_reconciles_after_restart() {
+    let _serial = test_lock().lock().expect("storage mode test lock");
+    let fixture = db_primary_fixture("m5b-knowledge-vault-audit");
+    let mut candidate = crate::read_workflow_state_value(&fixture.state_path)
+        .expect("read DB-primary workflow state");
+    let expected_revision = candidate["revision"]
+        .as_i64()
+        .expect("workflow state revision");
+    let event_id = "audit:m5b:knowledge-vault";
+    append_workflow_state_row(
+        &mut candidate,
+        "audit_events",
+        json!({
+            "event_id": event_id,
+            "event_type": "knowledge_vault_note_created",
+            "target_ref": "m5b-knowledge-vault-note",
+            "actor_ref": "user_manual_edit",
+            "source_kind": "knowledge_vault",
+            "permission_level": "user_confirmed_write",
+            "created_at": "1700000000700",
+            "reason": "exercise knowledge-vault Batch 2 DB-primary projection"
+        }),
+    );
+    crate::write_m5b_batch2_workflow_state(
+        &fixture.state_path,
+        "knowledge_vault_audit",
+        &candidate,
+    )
+    .expect("knowledge-vault audit writes DB then JSON projection");
+
+    let persisted = crate::read_workflow_state_value(&fixture.state_path)
+        .expect("read projected workflow state");
+    assert_eq!(persisted["revision"].as_i64(), Some(expected_revision + 1));
+    assert_eq!(
+        persisted["audit_events"]
+            .as_array()
+            .expect("workflow audit array")
+            .iter()
+            .filter(|event| event["event_id"] == event_id)
+            .count(),
+        1,
+        "JSON projection must contain the knowledge-vault audit exactly once"
+    );
+    let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .expect("open DB-primary audit table");
+    let db_audit_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM workflow_audit_events WHERE event_id = ?1",
+            params![event_id],
+            |row| row.get(0),
+        )
+        .expect("query projected knowledge-vault audit");
+    assert_eq!(db_audit_count, 1, "DB projection must contain the knowledge-vault audit once");
+
+    clear_storage_mode_cache_for_tests();
+    initialize_for_startup(&fixture.state_path)
+        .expect("restart reconciliation after knowledge-vault audit");
+    let report = reconcile_db_vs_json(&fixture.config)
+        .expect("reconcile knowledge-vault audit after restart");
+    assert!(report.is_green(), "{report:?}");
+}
+
 fn m5f1_workflow_audit(event_id: &str, event_type: &str) -> Value {
     json!({
         "event_id": event_id,

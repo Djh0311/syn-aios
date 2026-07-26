@@ -1,4 +1,7 @@
-use super::{load_resident_session, workflow_state_path, McpServerConfig};
+use super::{
+    active_supervisor_conversation_binding, is_shared_supervisor_conversation_run,
+    load_resident_session, workflow_state_path, McpServerConfig,
+};
 use serde_json::{json, Value};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -19,7 +22,9 @@ pub(super) fn error_summary_for_read_model(
     name: &str,
     error: &str,
 ) -> String {
-    if name == "submit_proposal" && is_resident_supervisor_run(config) {
+    if name == "submit_proposal"
+        && (is_resident_supervisor_run(config) || is_shared_supervisor_conversation_run(config))
+    {
         "denied: 主管本回合的方案卡没有生成；已保留私有诊断。".to_string()
     } else {
         format!(
@@ -46,7 +51,9 @@ pub(super) fn audit_write_failure_for_caller(
     result_status: &str,
     raw_error: String,
 ) -> String {
-    if name == "submit_proposal" && is_resident_supervisor_run(config) {
+    if name == "submit_proposal"
+        && (is_resident_supervisor_run(config) || is_shared_supervisor_conversation_run(config))
+    {
         if result_status == "accepted" {
             "方案已落卡，但工具审计未完成。".to_string()
         } else {
@@ -131,6 +138,20 @@ pub(super) fn input_schema() -> Value {
 }
 
 pub(super) fn submit(config: &McpServerConfig, arguments: &Value) -> Result<Value, String> {
+    match active_supervisor_conversation_binding(config, "submit_proposal") {
+        Ok(Some(binding)) => {
+            return submit_for_bound_shared_conversation_turn(config, arguments, &binding)
+        }
+        Ok(None) if is_shared_supervisor_conversation_run(config) => {
+            return Err(
+                "submit_proposal 已拒绝：主管对话缺少可信 conversation turn binding。".to_string(),
+            );
+        }
+        Err(error) if is_shared_supervisor_conversation_run(config) => {
+            return Err(format!("submit_proposal 已拒绝：{error}"));
+        }
+        Ok(None) | Err(_) => {}
+    }
     if !is_resident_supervisor_run(config) {
         return Err(
             "submit_proposal 只允许项目常驻主管私有会话调用，当前会话未获授权。".to_string(),
@@ -153,9 +174,29 @@ pub(super) fn submit(config: &McpServerConfig, arguments: &Value) -> Result<Valu
     if session.project_id != crate::project_id(&session.project_root) {
         return Err("submit_proposal 已拒绝：常驻主管项目身份与项目根不一致。".to_string());
     }
+    super::record_resident_tool_invocation_diagnostic(
+        config,
+        "submit_handler_entered",
+        "submit_proposal",
+        None,
+        None,
+        None,
+        "entered",
+        "not_observed",
+    );
     let proposal = match submit_for_bound_resident_user_turn(config, arguments, &session) {
         Ok(proposal) => proposal,
         Err(error) => {
+            super::record_resident_tool_invocation_diagnostic(
+                config,
+                "submit_handler_finished",
+                "submit_proposal",
+                None,
+                None,
+                None,
+                "denied",
+                "not_observed",
+            );
             if super::record_resident_active_proposal_outcome(
                 config,
                 &session.active_message_id,
@@ -169,6 +210,16 @@ pub(super) fn submit(config: &McpServerConfig, arguments: &Value) -> Result<Valu
             return Err("方案卡没有生成；详细诊断已保留。".to_string());
         }
     };
+    super::record_resident_tool_invocation_diagnostic(
+        config,
+        "submit_handler_finished",
+        "submit_proposal",
+        None,
+        None,
+        None,
+        "accepted",
+        "not_observed",
+    );
     if super::record_resident_active_proposal_outcome(
         config,
         &session.active_message_id,
@@ -184,6 +235,40 @@ pub(super) fn submit(config: &McpServerConfig, arguments: &Value) -> Result<Valu
     Ok(json!({
         "status": "proposal_created_pending_user_confirmation",
         "proposal_id": proposal_json.get("proposal_id").cloned().unwrap_or(Value::Null),
+        "message": "方案已落为待用户确认卡；尚未批准，工作流未推进。"
+    }))
+}
+
+fn submit_for_bound_shared_conversation_turn(
+    config: &McpServerConfig,
+    arguments: &Value,
+    binding: &super::ConversationTurnBinding,
+) -> Result<Value, String> {
+    let mut proposal = crate::parse_supervisor_submit_proposal_arguments(arguments)
+        .map_err(|error| format!("方案参数不合法，未落卡：{error}"))?;
+    // `user_goal` is presentation content only.  The persisted Pending card
+    // always uses the host-observed turn snapshot, never an MCP argument.
+    proposal.user_goal = binding.user_message_snapshot().to_string();
+    let idempotency_key = crate::utils::hash::sha256_hex(&binding.proposal_idempotency_material());
+    // Reuse the existing resident-turn idempotency writer unchanged.  Its
+    // actor-id spelling is a storage compatibility key, not the capability
+    // authorization identity; authorization above remains the exact shared
+    // `supervisor-read-only` binding.
+    let proposal = crate::write_consultation_proposal_for_resident_turn(
+        workflow_state_path(config)?,
+        &proposal,
+        &binding.project_root,
+        binding.user_message_snapshot(),
+        &format!("supervisor-resident:{idempotency_key}"),
+        &idempotency_key,
+    )
+    .map_err(|error| format!("方案未落卡：{error}"))?;
+    let proposal_json = serde_json::to_value(&proposal)
+        .map_err(|_| "方案已落卡，但工具回执未完成。".to_string())?;
+    Ok(json!({
+        "status": "proposal_created_pending_user_confirmation",
+        "proposal_id": proposal_json.get("proposal_id").cloned().unwrap_or(Value::Null),
+        "thread_id": binding.thread_id,
         "message": "方案已落为待用户确认卡；尚未批准，工作流未推进。"
     }))
 }

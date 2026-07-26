@@ -1,6 +1,13 @@
 // Station 1 supervisor MCP role. It owns an isolated sidecar and never writes workflow chain state.
 
-use super::{McpServerConfig, SupervisorQuotaLimits};
+use super::{
+    capability_registry::{self, CapabilityAccess, CapabilityHandler, CapabilitySchema},
+    supervisor_conversation_binding::{
+        ConversationCapabilityOutcome, ConversationTurnBinding, ConversationTurnBindingExpectation,
+        ConversationTurnLifecycle,
+    },
+    McpServerConfig, SupervisorQuotaLimits,
+};
 use crate::CodexResumeRunner;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -11,6 +18,8 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[path = "knowledge_capabilities.rs"]
+pub(crate) mod knowledge_capabilities;
 #[path = "supervisor_orchestrator_submit_proposal.rs"]
 mod supervisor_orchestrator_submit_proposal;
 #[path = "supervisor_review_evidence.rs"]
@@ -22,6 +31,56 @@ const LOCK_NAME: &str = ".supervisor-orchestrator.v1.lock";
 const LOCK_RETRY_COUNT: usize = 5;
 const LOCK_RETRY_DELAY: Duration = Duration::from_millis(100);
 const ACTOR: &str = "supervisor_orchestrator";
+
+// A terminal write can fail after an existing-thread binding was activated.
+// Keep that run's MCP surface closed in this process until a newly established
+// durable binding explicitly clears the guard; the guard never claims that a
+// durable terminal transition succeeded.
+static SUPERVISOR_CONVERSATION_FAILURE_CLOSURES: std::sync::OnceLock<
+    std::sync::Mutex<BTreeSet<String>>,
+> = std::sync::OnceLock::new();
+
+fn supervisor_conversation_failure_closures() -> &'static std::sync::Mutex<BTreeSet<String>> {
+    SUPERVISOR_CONVERSATION_FAILURE_CLOSURES.get_or_init(|| std::sync::Mutex::new(BTreeSet::new()))
+}
+
+fn supervisor_conversation_failure_closure_key(config: &McpServerConfig) -> String {
+    format!(
+        "{}\n{}",
+        config
+            .supervisor_workflow_state_path
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
+        config.run_id
+    )
+}
+
+pub(crate) fn close_supervisor_conversation_tools_for_failed_or_unconfirmed_terminal(
+    config: &McpServerConfig,
+) {
+    if !is_shared_supervisor_conversation_run(config) {
+        return;
+    }
+    if let Ok(mut closed) = supervisor_conversation_failure_closures().lock() {
+        closed.insert(supervisor_conversation_failure_closure_key(config));
+    }
+}
+
+fn clear_supervisor_conversation_tools_for_new_binding(config: &McpServerConfig) {
+    if let Ok(mut closed) = supervisor_conversation_failure_closures().lock() {
+        closed.remove(&supervisor_conversation_failure_closure_key(config));
+    }
+}
+
+fn supervisor_conversation_tools_closed_for_failed_or_unconfirmed_terminal(
+    config: &McpServerConfig,
+) -> bool {
+    supervisor_conversation_failure_closures()
+        .lock()
+        .map(|closed| closed.contains(&supervisor_conversation_failure_closure_key(config)))
+        .unwrap_or(true)
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 struct SupervisorStore {
@@ -82,6 +141,11 @@ struct SupervisorSession {
     resident_active_message_id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     resident_active_proposal_outcome: String,
+    // Shared Conversation Transport stores its trusted supervisor turn on the
+    // existing DB-primary session record.  This is deliberately not a new
+    // sidecar or schema source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    conversation_turn_binding: Option<ConversationTurnBinding>,
     #[serde(default)]
     workers: Vec<SupervisorWorker>,
     #[serde(default)]
@@ -732,38 +796,93 @@ pub(crate) fn abandon_fresh_task_binding(
 }
 
 pub fn list_tools(config: &McpServerConfig) -> Value {
-    let mut tools = vec![
-        tool_def(
-            "read_worker_report",
-            "只读投影 worker 结构化口供",
-            json!({
-                "type": "object", "properties": {"worker_id": {"type": "string"}}, "required": ["worker_id"], "additionalProperties": false
-            }),
+    // `tools/list` and `tools/call` share capability_access_for_config + the
+    // registry's exact authorization; a shared supervisor run without a
+    // durable host binding sees no tools rather than falling back to legacy.
+    let tools = capability_access_for_config(config)
+        .and_then(|(profile_id, role)| {
+            capability_registry::list_allowed_capabilities(CapabilityAccess::new(
+                &profile_id,
+                &role,
+            ))
+            .map_err(|error| error.to_string())
+        })
+        .map(|definitions| {
+            definitions
+                .into_iter()
+                .map(capability_tool_def)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let submit_proposal_visible = tools
+        .iter()
+        .any(|tool| tool.get("name").and_then(Value::as_str) == Some("submit_proposal"));
+    let other_tool_visible = tools
+        .iter()
+        .any(|tool| tool.get("name").and_then(Value::as_str) != Some("submit_proposal"));
+    record_resident_tool_invocation_diagnostic(
+        config,
+        "tools_list_served",
+        "none",
+        Some(submit_proposal_visible),
+        Some(other_tool_visible),
+        Some(
+            submit_proposal_visible
+                && supervisor_orchestrator_submit_proposal::is_resident_supervisor_run(config),
         ),
-        tool_def(
-            "wait_for_worker",
-            "读取 worker 当前状态，不管理或终止进程",
-            json!({
-                "type": "object", "properties": {"worker_id": {"type": "string"}}, "required": ["worker_id"], "additionalProperties": false
-            }),
-        ),
-        tool_def(
-            "read_key_file",
-            "在授权允许读取根内读取关键文本文件",
-            json!({
-                "type": "object", "properties": {"project_root": {"type": "string"}, "workflow_id": {"type": "string"}, "authorization_id": {"type": "string"}, "path": {"type": "string"}}, "required": ["project_root", "workflow_id", "authorization_id", "path"], "additionalProperties": false
-            }),
-        ),
-    ];
-    // tools/list is display-only; tools/call requires the durable resident binding before it writes.
+        "not_observed",
+        "not_observed",
+    );
+    json!({"tools": tools})
+}
+
+fn capability_access_for_config(config: &McpServerConfig) -> Result<(String, String), String> {
+    if is_shared_supervisor_conversation_run(config) {
+        if supervisor_conversation_tools_closed_for_failed_or_unconfirmed_terminal(config) {
+            return Err("主管对话运输失败或终结未确认，工具继续关闭。".to_string());
+        }
+        // A shared run may never inherit the resident or control-plane tool
+        // face.  Missing, inactive, thread-unbound, or mismatched bindings
+        // fail before both list and call authorization.
+        let binding = active_supervisor_conversation_binding(config, "submit_proposal")?
+            .ok_or_else(|| {
+                "主管对话 MCP 未找到可信 conversation turn binding，已拒绝。".to_string()
+            })?;
+        return Ok((binding.profile_id, binding.role));
+    }
     if supervisor_orchestrator_submit_proposal::is_resident_supervisor_run(config) {
-        tools.push(tool_def(
-            "submit_proposal",
-            "将已达成共识的终版方案落为待用户确认卡；不会自动推进工作流",
-            supervisor_orchestrator_submit_proposal::input_schema(),
+        return Ok((
+            capability_registry::PROFILE_SUPERVISOR_RESIDENT_LEGACY.to_string(),
+            capability_registry::ROLE_PROJECT_SUPERVISOR.to_string(),
         ));
     }
-    json!({"tools": tools})
+    Ok((
+        capability_registry::PROFILE_SUPERVISOR_ORCHESTRATOR_LEGACY.to_string(),
+        capability_registry::ROLE_SUPERVISOR_ORCHESTRATOR.to_string(),
+    ))
+}
+
+fn is_shared_supervisor_conversation_run(config: &McpServerConfig) -> bool {
+    config
+        .run_id
+        .starts_with(super::supervisor_conversation_binding::SUPERVISOR_CONVERSATION_RUN_ID_PREFIX)
+}
+
+fn capability_tool_def(definition: &capability_registry::CapabilityDefinition) -> Value {
+    let schema = match definition.schema {
+        CapabilitySchema::WorkerId => json!({
+            "type": "object", "properties": {"worker_id": {"type": "string"}}, "required": ["worker_id"], "additionalProperties": false
+        }),
+        CapabilitySchema::ReadKeyFile => json!({
+            "type": "object", "properties": {"project_root": {"type": "string"}, "workflow_id": {"type": "string"}, "authorization_id": {"type": "string"}, "path": {"type": "string"}}, "required": ["project_root", "workflow_id", "authorization_id", "path"], "additionalProperties": false
+        }),
+        CapabilitySchema::SubmitProposal => supervisor_orchestrator_submit_proposal::input_schema(),
+        CapabilitySchema::KnowledgeSearch => knowledge_capabilities::search_input_schema(),
+        CapabilitySchema::KnowledgeRead => knowledge_capabilities::read_input_schema(),
+        CapabilitySchema::KnowledgeOpen => knowledge_capabilities::open_input_schema(),
+        CapabilitySchema::KnowledgeCite => knowledge_capabilities::cite_input_schema(),
+    };
+    tool_def(definition.name, definition.description, schema)
 }
 
 pub fn call_tool(config: &McpServerConfig, params: Value) -> Result<Value, String> {
@@ -775,31 +894,538 @@ fn call_tool_with_invoker(
     params: Value,
     _invoker: &dyn WorkerInvoker,
 ) -> Result<Value, String> {
-    let name = require_string(&params, "name")?;
+    // Capability names are security identities, not display strings.  Do not
+    // reuse the general string extractor here: its whitespace trimming would
+    // silently turn a caller-supplied variant into an authorized tool.
+    let name = require_exact_tool_name(&params)?;
+    let invocation = if name == "submit_proposal" {
+        "submit_proposal"
+    } else {
+        "other_tool"
+    };
+    record_resident_tool_invocation_diagnostic(
+        config,
+        "tools_call_received",
+        invocation,
+        None,
+        None,
+        None,
+        "not_observed",
+        "not_observed",
+    );
     let arguments = params
         .get("arguments")
         .cloned()
         .unwrap_or(Value::Object(Default::default()));
-    let result = match name.as_str() {
-        "read_worker_report" => read_worker_report(config, &arguments),
-        "wait_for_worker" => wait_for_worker(config, &arguments),
-        "read_key_file" => read_key_file(config, &arguments),
-        "submit_proposal" => supervisor_orchestrator_submit_proposal::submit(config, &arguments),
-        _ => Err(format!("主管编排角色不认识工具：{name}")),
+    let (profile_id, role) = capability_access_for_config(config)?;
+    let capability =
+        capability_registry::authorize(CapabilityAccess::new(&profile_id, &role), &name)
+            .map_err(|error| error.to_string())?;
+    let result = match capability.handler {
+        CapabilityHandler::ReadWorkerReport => read_worker_report(config, &arguments),
+        CapabilityHandler::WaitForWorker => wait_for_worker(config, &arguments),
+        CapabilityHandler::ReadKeyFile => read_key_file(config, &arguments),
+        CapabilityHandler::SubmitProposal => {
+            supervisor_orchestrator_submit_proposal::submit(config, &arguments)
+        }
+        CapabilityHandler::KnowledgeSearch => knowledge_capabilities::search(&arguments),
+        CapabilityHandler::KnowledgeRead => knowledge_capabilities::read(&arguments),
+        CapabilityHandler::KnowledgeOpen => knowledge_capabilities::open(config, &arguments),
+        CapabilityHandler::KnowledgeCite => knowledge_capabilities::cite(&arguments),
     };
-    let result_summary =
-        supervisor_orchestrator_submit_proposal::tool_result_summary(config, &name, &result);
+    let result_summary = tool_result_summary_for_capability(config, &name, &result);
     let result_status = if result.is_ok() { "accepted" } else { "denied" };
-    append_audit(
+    let shared_capability = is_shared_supervisor_conversation_run(config);
+    if shared_capability {
+        let outcome = if result.is_ok() {
+            ConversationCapabilityOutcome::Succeeded
+        } else {
+            ConversationCapabilityOutcome::Failed
+        };
+        // The existing proposal writer has already settled at this point.  Do
+        // not make its result contingent on the separate audit append below.
+        let _ = record_supervisor_conversation_capability_outcome(config, &name, outcome);
+    }
+    let audit = append_audit(
         config,
         &name,
-        &parameter_summary(&arguments),
+        &parameter_summary_for_capability(config, &arguments),
         &result_summary,
         result_status,
-    )?;
+    );
+    record_resident_tool_invocation_diagnostic(
+        config,
+        "tool_audit_boundary",
+        invocation,
+        None,
+        None,
+        None,
+        if invocation == "submit_proposal" {
+            result_status
+        } else {
+            "not_observed"
+        },
+        if audit.is_ok() {
+            "accepted"
+        } else {
+            "audit_write_failed"
+        },
+    );
+    if shared_capability {
+        let audit_outcome = if audit.is_ok() {
+            ConversationCapabilityOutcome::Succeeded
+        } else {
+            ConversationCapabilityOutcome::Failed
+        };
+        let _ =
+            record_supervisor_conversation_capability_audit_outcome(config, &name, audit_outcome);
+    } else {
+        audit?;
+    }
     result
         .map(tool_result)
         .map_err(|error| crate::run_error_translation::humanize_error_for_display(&error))
+}
+
+fn tool_result_summary_for_capability(
+    config: &McpServerConfig,
+    name: &str,
+    result: &Result<Value, String>,
+) -> String {
+    if is_shared_supervisor_conversation_run(config) && is_read_only_knowledge_capability(name) {
+        return if result.is_ok() {
+            format!("{name}: fixed-vault read-only result delivered")
+        } else {
+            format!("{name}: read-only request denied")
+        };
+    }
+    supervisor_orchestrator_submit_proposal::tool_result_summary(config, name, result)
+}
+
+fn is_read_only_knowledge_capability(name: &str) -> bool {
+    matches!(
+        name,
+        "knowledge_search" | "knowledge_read" | "knowledge_open" | "knowledge_cite"
+    )
+}
+
+fn record_resident_tool_invocation_diagnostic(
+    config: &McpServerConfig,
+    stage: &str,
+    invocation: &str,
+    submit_proposal_visible: Option<bool>,
+    other_tool_visible: Option<bool>,
+    only_submit_preapproved: Option<bool>,
+    handler_status: &str,
+    audit_status: &str,
+) {
+    if !supervisor_orchestrator_submit_proposal::is_resident_supervisor_run(config) {
+        return;
+    }
+    let Ok(Some(session)) = load_resident_session(config) else {
+        return;
+    };
+    let _ = crate::supervisor_session_launcher::append_resident_tool_invocation_diagnostic(
+        config,
+        &session,
+        stage,
+        invocation,
+        submit_proposal_visible,
+        other_tool_visible,
+        only_submit_preapproved,
+        handler_status,
+        audit_status,
+    );
+}
+
+/// Persist the host-created shared supervisor turn on the existing session
+/// record.  `update_store` retains the current DB-primary write plus JSON
+/// compatibility projection; this function never creates a second store.
+pub(crate) fn establish_supervisor_conversation_turn_binding(
+    config: &McpServerConfig,
+    binding: ConversationTurnBinding,
+) -> Result<(), SupervisorConversationBindingEstablishmentError> {
+    if !is_shared_supervisor_conversation_run(config) || binding.run_id != config.run_id {
+        return Err(SupervisorConversationBindingEstablishmentError::BindingConstruct);
+    }
+    if binding.profile_id != capability_registry::PROFILE_SUPERVISOR_READ_ONLY
+        || binding.role != capability_registry::ROLE_PROJECT_SUPERVISOR
+        || binding.lifecycle != ConversationTurnLifecycle::Starting
+        || binding.project_id != crate::project_id(&binding.project_root)
+    {
+        return Err(SupervisorConversationBindingEstablishmentError::BindingConstruct);
+    }
+    capability_registry::validate_exact_capability_set(
+        CapabilityAccess::new(&binding.profile_id, &binding.role),
+        &binding.allowed_capabilities,
+    )
+    .map_err(|_| SupervisorConversationBindingEstablishmentError::BindingConstruct)?;
+
+    establish_supervisor_conversation_turn_binding_store(config, |store| {
+        let session = session_mut(store, &config.run_id);
+        if let Some(existing) = &session.conversation_turn_binding {
+            if existing == &binding {
+                return Ok(());
+            }
+            return Err("主管对话 run 已绑定其他 turn，已拒绝覆盖。".to_string());
+        }
+        session.project_root = binding.project_root.clone();
+        session.workflow_id = binding.workflow_id.clone();
+        session.launch_status = "conversation_turn_starting".to_string();
+        session.started_at_ms = binding.created_at_ms;
+        session.ended_at_ms = None;
+        session.termination_reason.clear();
+        session.conversation_turn_binding = Some(binding);
+        Ok(())
+    })?;
+    clear_supervisor_conversation_tools_for_new_binding(config);
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SupervisorConversationBindingEstablishmentError {
+    BindingConstruct,
+    BindingStorePrepare,
+    BindingPersistDb,
+    BindingProjectJson,
+}
+
+fn establish_supervisor_conversation_turn_binding_store<R>(
+    config: &McpServerConfig,
+    update: impl FnOnce(&mut SupervisorStore) -> Result<R, String>,
+) -> Result<R, SupervisorConversationBindingEstablishmentError> {
+    let workflow_state_path = workflow_state_path(config)
+        .map_err(|_| SupervisorConversationBindingEstablishmentError::BindingStorePrepare)?;
+    match crate::workbench_sqlite_storage_mode::primary_repository_for_write(workflow_state_path) {
+        Ok(Some(repository)) => update_store_db_primary(
+            config,
+            "establish-supervisor-conversation-turn",
+            repository,
+            update,
+        )
+        .map_err(|error| match error {
+            DbPrimaryStoreUpdateError::Store(_) => {
+                SupervisorConversationBindingEstablishmentError::BindingStorePrepare
+            }
+            DbPrimaryStoreUpdateError::Update(_) => {
+                SupervisorConversationBindingEstablishmentError::BindingConstruct
+            }
+            DbPrimaryStoreUpdateError::PersistDb(_) => {
+                SupervisorConversationBindingEstablishmentError::BindingPersistDb
+            }
+            DbPrimaryStoreUpdateError::ProjectJson(_) => {
+                SupervisorConversationBindingEstablishmentError::BindingProjectJson
+            }
+        }),
+        Ok(None) => establish_supervisor_conversation_turn_binding_json_only(config, update),
+        Err(_) => Err(SupervisorConversationBindingEstablishmentError::BindingStorePrepare),
+    }
+}
+
+fn establish_supervisor_conversation_turn_binding_json_only<R>(
+    config: &McpServerConfig,
+    update: impl FnOnce(&mut SupervisorStore) -> Result<R, String>,
+) -> Result<R, SupervisorConversationBindingEstablishmentError> {
+    let sidecar = sidecar_path(config)
+        .map_err(|_| SupervisorConversationBindingEstablishmentError::BindingStorePrepare)?;
+    let parent = sidecar
+        .parent()
+        .ok_or(SupervisorConversationBindingEstablishmentError::BindingStorePrepare)?;
+    fs::create_dir_all(parent)
+        .map_err(|_| SupervisorConversationBindingEstablishmentError::BindingStorePrepare)?;
+    let _lock = StoreLock::acquire(
+        &parent.join(LOCK_NAME),
+        "establish-supervisor-conversation-turn",
+    )
+    .map_err(|_| SupervisorConversationBindingEstablishmentError::BindingStorePrepare)?;
+    let mut store = load_store(config)
+        .map_err(|_| SupervisorConversationBindingEstablishmentError::BindingStorePrepare)?;
+    let result = update(&mut store)
+        .map_err(|_| SupervisorConversationBindingEstablishmentError::BindingConstruct)?;
+    store.revision += 1;
+    store.updated_at_ms = now_ms();
+    write_store_atomic(&sidecar, &store, "establish-supervisor-conversation-turn")
+        .map_err(|_| SupervisorConversationBindingEstablishmentError::BindingProjectJson)?;
+    Ok(result)
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SupervisorConversationBindingLifecycleTestFailure {
+    Activate,
+    Finish,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SUPERVISOR_CONVERSATION_BINDING_LIFECYCLE_TEST_FAILURES: std::cell::Cell<u8> = const {
+        std::cell::Cell::new(0)
+    };
+}
+
+#[cfg(test)]
+pub(crate) struct SupervisorConversationBindingLifecycleTestFailureGuard {
+    failure: SupervisorConversationBindingLifecycleTestFailure,
+}
+
+#[cfg(test)]
+fn supervisor_conversation_binding_lifecycle_test_failure_bit(
+    failure: SupervisorConversationBindingLifecycleTestFailure,
+) -> u8 {
+    match failure {
+        SupervisorConversationBindingLifecycleTestFailure::Activate => 1,
+        SupervisorConversationBindingLifecycleTestFailure::Finish => 2,
+    }
+}
+
+#[cfg(test)]
+impl Drop for SupervisorConversationBindingLifecycleTestFailureGuard {
+    fn drop(&mut self) {
+        let bit = supervisor_conversation_binding_lifecycle_test_failure_bit(self.failure);
+        SUPERVISOR_CONVERSATION_BINDING_LIFECYCLE_TEST_FAILURES
+            .with(|failures| failures.set(failures.get() & !bit));
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn force_supervisor_conversation_binding_lifecycle_test_failure(
+    failure: SupervisorConversationBindingLifecycleTestFailure,
+) -> SupervisorConversationBindingLifecycleTestFailureGuard {
+    let bit = supervisor_conversation_binding_lifecycle_test_failure_bit(failure);
+    SUPERVISOR_CONVERSATION_BINDING_LIFECYCLE_TEST_FAILURES
+        .with(|failures| failures.set(failures.get() | bit));
+    SupervisorConversationBindingLifecycleTestFailureGuard { failure }
+}
+
+#[cfg(test)]
+fn supervisor_conversation_binding_lifecycle_test_failure_is(
+    failure: SupervisorConversationBindingLifecycleTestFailure,
+) -> bool {
+    let bit = supervisor_conversation_binding_lifecycle_test_failure_bit(failure);
+    SUPERVISOR_CONVERSATION_BINDING_LIFECYCLE_TEST_FAILURES
+        .with(|failures| failures.get() & bit != 0)
+}
+
+/// Only the host's observed `thread.started` (or an existing selected thread)
+/// can advance a shared turn to active.  MCP calls have no route to invoke it.
+pub(crate) fn activate_supervisor_conversation_turn_binding(
+    config: &McpServerConfig,
+    thread_id: &str,
+) -> Result<(), String> {
+    #[cfg(test)]
+    if supervisor_conversation_binding_lifecycle_test_failure_is(
+        SupervisorConversationBindingLifecycleTestFailure::Activate,
+    ) {
+        return Err("shared_supervisor_binding_test_activate_failure".to_string());
+    }
+    update_store(config, "activate-supervisor-conversation-turn", |store| {
+        let session = session_mut(store, &config.run_id);
+        let binding = session
+            .conversation_turn_binding
+            .as_mut()
+            .ok_or_else(|| "主管对话可信 binding 缺失，已拒绝激活。".to_string())?;
+        binding
+            .activate_with_host_observed_thread(thread_id, now_ms())
+            .map_err(|error| error.to_string())?;
+        session.launch_status = "conversation_turn_running".to_string();
+        Ok(())
+    })
+}
+
+/// Host receipt terminal state closes the durable binding.  A terminal turn
+/// cannot reopen, and no terminal transition creates a chain or worker.
+pub(crate) fn finish_supervisor_conversation_turn_binding(
+    config: &McpServerConfig,
+    lifecycle: ConversationTurnLifecycle,
+) -> Result<(), String> {
+    close_supervisor_conversation_tools_for_failed_or_unconfirmed_terminal(config);
+    #[cfg(test)]
+    if supervisor_conversation_binding_lifecycle_test_failure_is(
+        SupervisorConversationBindingLifecycleTestFailure::Finish,
+    ) {
+        return Err("shared_supervisor_binding_test_finish_failure".to_string());
+    }
+    let result = update_store(config, "finish-supervisor-conversation-turn", |store| {
+        let session = session_mut(store, &config.run_id);
+        let binding = session
+            .conversation_turn_binding
+            .as_mut()
+            .ok_or_else(|| "主管对话可信 binding 缺失，已拒绝结算。".to_string())?;
+        binding
+            .mark_terminal(lifecycle, now_ms())
+            .map_err(|error| error.to_string())?;
+        session.launch_status = "conversation_turn_finished".to_string();
+        session.ended_at_ms = Some(now_ms());
+        session.termination_reason = format!("conversation_turn_{:?}", lifecycle).to_lowercase();
+        Ok(())
+    });
+    if result.is_ok() {
+        clear_supervisor_conversation_tools_for_new_binding(config);
+    }
+    result
+}
+
+pub(crate) fn supervisor_conversation_turn_binding_lifecycle(
+    config: &McpServerConfig,
+) -> Result<ConversationTurnLifecycle, String> {
+    let store = load_store(config)?;
+    let session = session(&store, &config.run_id)
+        .ok_or_else(|| "主管对话可信 binding 缺失，无法确认终结。".to_string())?;
+    let binding = session
+        .conversation_turn_binding
+        .as_ref()
+        .ok_or_else(|| "主管对话可信 binding 缺失，无法确认终结。".to_string())?;
+    Ok(binding.lifecycle)
+}
+
+/// The MCP dispatcher records only a three-state, trusted handler settlement
+/// fact. No model payload or raw tool output is persisted for receipt use.
+pub(crate) fn record_supervisor_conversation_capability_outcome(
+    config: &McpServerConfig,
+    capability_name: &str,
+    outcome: ConversationCapabilityOutcome,
+) -> Result<(), String> {
+    if !is_shared_supervisor_conversation_run(config) {
+        return Err("主管对话 capability 结算不属于共享只读 profile，已拒绝。".to_string());
+    }
+    update_store(
+        config,
+        "settle-supervisor-conversation-capability",
+        |store| {
+            let session = session_mut(store, &config.run_id);
+            let binding = session
+                .conversation_turn_binding
+                .as_mut()
+                .ok_or_else(|| "主管对话可信 binding 缺失，无法结算 capability。".to_string())?;
+            binding
+                .record_capability_outcome(capability_name, outcome, now_ms())
+                .map_err(|error| error.to_string())
+        },
+    )
+}
+
+pub(crate) fn record_supervisor_conversation_capability_audit_outcome(
+    config: &McpServerConfig,
+    capability_name: &str,
+    outcome: ConversationCapabilityOutcome,
+) -> Result<(), String> {
+    if !is_shared_supervisor_conversation_run(config) {
+        return Err("主管对话 capability 审计结算不属于共享只读 profile，已拒绝。".to_string());
+    }
+    update_store(
+        config,
+        "settle-supervisor-conversation-capability-audit",
+        |store| {
+            let session = session_mut(store, &config.run_id);
+            let binding = session.conversation_turn_binding.as_mut().ok_or_else(|| {
+                "主管对话可信 binding 缺失，无法结算 capability 审计。".to_string()
+            })?;
+            binding
+                .record_capability_audit_outcome(capability_name, outcome, now_ms())
+                .map_err(|error| error.to_string())
+        },
+    )
+}
+
+/// Read the safely settled status for the one exact capability after a
+/// transport receipt.  This deliberately works after terminal close so the
+/// final poll can retain an established proposal outcome.
+pub(crate) fn supervisor_conversation_capability_outcome(
+    config: &McpServerConfig,
+    capability_name: &str,
+) -> Result<Option<ConversationCapabilityOutcome>, String> {
+    if !is_shared_supervisor_conversation_run(config) {
+        return Ok(None);
+    }
+    let Some(binding) = stored_supervisor_conversation_binding_for_allowlist(config)? else {
+        return Ok(None);
+    };
+    binding
+        .capability_outcome(capability_name)
+        .map(Some)
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn supervisor_conversation_capability_audit_outcome(
+    config: &McpServerConfig,
+    capability_name: &str,
+) -> Result<Option<ConversationCapabilityOutcome>, String> {
+    if !is_shared_supervisor_conversation_run(config) {
+        return Ok(None);
+    }
+    let Some(binding) = stored_supervisor_conversation_binding_for_allowlist(config)? else {
+        return Ok(None);
+    };
+    binding
+        .capability_audit_outcome(capability_name)
+        .map(Some)
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn supervisor_conversation_binding_snapshot(
+    config: &McpServerConfig,
+) -> Result<Option<ConversationTurnBinding>, String> {
+    if !is_shared_supervisor_conversation_run(config) {
+        return Ok(None);
+    }
+    stored_supervisor_conversation_binding_for_allowlist(config)
+}
+
+/// Read and validate the one shared profile binding immediately before both
+/// `tools/list` and `tools/call`.  The expectation comes from the persisted
+/// host session fields, not from MCP arguments or model output.
+pub(crate) fn active_supervisor_conversation_binding(
+    config: &McpServerConfig,
+    capability_name: &str,
+) -> Result<Option<ConversationTurnBinding>, String> {
+    let store = load_store(config)?;
+    let Some(session) = session(&store, &config.run_id) else {
+        return Ok(None);
+    };
+    let Some(binding) = stored_supervisor_conversation_binding_for_allowlist(config)? else {
+        return Ok(None);
+    };
+    let expected_project_id = crate::project_id(&session.project_root);
+    binding
+        .validate_for_capability_at(
+            ConversationTurnBindingExpectation {
+                project_id: &expected_project_id,
+                project_root: &session.project_root,
+                workflow_id: &session.workflow_id,
+                run_id: &config.run_id,
+            },
+            capability_name,
+            now_ms(),
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(Some(binding))
+}
+
+fn stored_supervisor_conversation_binding_for_allowlist(
+    config: &McpServerConfig,
+) -> Result<Option<ConversationTurnBinding>, String> {
+    let store = load_store(config)?;
+    let Some(session) = session(&store, &config.run_id) else {
+        return Ok(None);
+    };
+    let Some(binding) = session.conversation_turn_binding.clone() else {
+        return Ok(None);
+    };
+    if binding.run_id != config.run_id
+        || binding.project_root != session.project_root
+        || binding.workflow_id != session.workflow_id
+        || binding.project_id != crate::project_id(&session.project_root)
+        || binding.profile_id != capability_registry::PROFILE_SUPERVISOR_READ_ONLY
+        || binding.role != capability_registry::ROLE_PROJECT_SUPERVISOR
+    {
+        return Err("主管对话可信 binding 与宿主 session 不一致，已拒绝。".to_string());
+    }
+    capability_registry::validate_exact_capability_set(
+        CapabilityAccess::new(&binding.profile_id, &binding.role),
+        &binding.allowed_capabilities,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(Some(binding))
 }
 
 // Side-effecting actions bypass MCP tools/call and remain host-only behind existing guarded entrypoints.
@@ -1367,6 +1993,17 @@ fn require_string(value: &Value, key: &str) -> Result<String, String> {
         .ok_or_else(|| format!("缺少非空字段 {key}"))
 }
 
+fn require_exact_tool_name(value: &Value) -> Result<String, String> {
+    let name = value
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "缺少非空字段 name".to_string())?;
+    if name.is_empty() || name.trim() != name {
+        return Err("MCP tool 名必须是无空白变体的精确注册名，已拒绝。".to_string());
+    }
+    Ok(name.to_string())
+}
+
 fn require_string_array(value: &Value, key: &str) -> Result<Vec<String>, String> {
     let items = value
         .get(key)
@@ -1452,7 +2089,8 @@ fn update_store<R>(
     if let Some(repository) =
         crate::workbench_sqlite_storage_mode::primary_repository_for_write(workflow_state_path)?
     {
-        return update_store_db_primary(config, write_id, repository, update);
+        return update_store_db_primary(config, write_id, repository, update)
+            .map_err(DbPrimaryStoreUpdateError::into_message);
     }
 
     let sidecar = sidecar_path(config)?;
@@ -2146,6 +2784,44 @@ fn deny_sensitive_file(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
+thread_local! {
+    static SUPERVISOR_RESIDENT_TOOL_AUDIT_FAILURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static SHARED_SUPERVISOR_TOOL_AUDIT_FAILURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+struct SupervisorResidentToolAuditFailureGuard;
+
+#[cfg(test)]
+impl Drop for SupervisorResidentToolAuditFailureGuard {
+    fn drop(&mut self) {
+        SUPERVISOR_RESIDENT_TOOL_AUDIT_FAILURE.with(|failure| failure.set(false));
+    }
+}
+
+#[cfg(test)]
+fn force_supervisor_resident_tool_audit_failure() -> SupervisorResidentToolAuditFailureGuard {
+    SUPERVISOR_RESIDENT_TOOL_AUDIT_FAILURE.with(|failure| failure.set(true));
+    SupervisorResidentToolAuditFailureGuard
+}
+
+#[cfg(test)]
+struct SharedSupervisorToolAuditFailureGuard;
+
+#[cfg(test)]
+impl Drop for SharedSupervisorToolAuditFailureGuard {
+    fn drop(&mut self) {
+        SHARED_SUPERVISOR_TOOL_AUDIT_FAILURE.with(|failure| failure.set(false));
+    }
+}
+
+#[cfg(test)]
+fn force_shared_supervisor_tool_audit_failure() -> SharedSupervisorToolAuditFailureGuard {
+    SHARED_SUPERVISOR_TOOL_AUDIT_FAILURE.with(|failure| failure.set(true));
+    SharedSupervisorToolAuditFailureGuard
+}
+
 fn append_audit(
     config: &McpServerConfig,
     tool: &str,
@@ -2153,6 +2829,32 @@ fn append_audit(
     result_summary: &str,
     result_status: &str,
 ) -> Result<(), String> {
+    #[cfg(test)]
+    if supervisor_orchestrator_submit_proposal::is_resident_supervisor_run(config)
+        && SUPERVISOR_RESIDENT_TOOL_AUDIT_FAILURE.with(std::cell::Cell::get)
+    {
+        return Err(
+            supervisor_orchestrator_submit_proposal::audit_write_failure_for_caller(
+                config,
+                tool,
+                result_status,
+                "supervisor_resident_tool_audit_test_failure".to_string(),
+            ),
+        );
+    }
+    #[cfg(test)]
+    if is_shared_supervisor_conversation_run(config)
+        && SHARED_SUPERVISOR_TOOL_AUDIT_FAILURE.with(std::cell::Cell::get)
+    {
+        return Err(
+            supervisor_orchestrator_submit_proposal::audit_write_failure_for_caller(
+                config,
+                tool,
+                result_status,
+                "shared_supervisor_tool_audit_test_failure".to_string(),
+            ),
+        );
+    }
     let created_at_ms = now_ms();
     update_store(config, "append-tool-audit", |store| {
         store.audit_events.push(SupervisorAuditEvent {
@@ -2193,6 +2895,17 @@ fn parameter_summary(arguments: &Value) -> String {
         compact = format!("{}; prompt_full_summary={}", compact, prompt);
     }
     compact
+}
+
+fn parameter_summary_for_capability(config: &McpServerConfig, arguments: &Value) -> String {
+    if is_shared_supervisor_conversation_run(config) {
+        // The supervisor transport's public/read-model-adjacent audit must not
+        // carry raw structured tool arguments.  The handler receives the
+        // schema-validated value; its user-message source remains the trusted
+        // turn binding instead of these arguments.
+        return "shared_supervisor_arguments_redacted".to_string();
+    }
+    parameter_summary(arguments)
 }
 
 fn summary_of_value(value: &Value) -> String {
@@ -2342,6 +3055,7 @@ mod tests {
                         max_follow_ups_per_worker: 2,
                         max_runtime_minutes: 30,
                     }),
+                    knowledge_open_relay: None,
                 },
             };
             fixture.write_active_authorization();
@@ -2997,4 +3711,5 @@ mod tests {
     include!("supervisor_review_evidence_e2e_tests.rs");
     include!("supervisor_orchestrator_m5b_tests.rs");
     include!("supervisor_orchestrator_s1_tests.rs");
+    include!("supervisor_conversation_transport_tests.rs");
 }

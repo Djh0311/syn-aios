@@ -8,10 +8,12 @@
 //
 // 当前阶段：skeleton + identity routing。所有工具调用先返回占位错误，第 3/4 步逐个填实。
 
+pub(crate) mod capability_registry;
 pub mod commands;
 pub mod orchestrator;
 mod protocol;
 pub mod storage;
+pub(crate) mod supervisor_conversation_binding;
 pub(crate) mod supervisor_orchestrator;
 mod tools;
 
@@ -40,6 +42,10 @@ pub struct McpServerConfig {
     pub node_id: Option<String>,
     pub supervisor_workflow_state_path: Option<PathBuf>,
     pub supervisor_quota_limits: Option<SupervisorQuotaLimits>,
+    /// Host-issued, child-only relay details for one `knowledge_open` turn.
+    /// This is never sourced from a tool argument or frontend request.
+    pub(crate) knowledge_open_relay:
+        Option<crate::knowledge_open_relay::KnowledgeOpenRelayMcpConfig>,
 }
 
 pub fn run_mcp_server_cli(args: Vec<String>) -> Result<(), String> {
@@ -82,6 +88,10 @@ fn parse_args(args: &[String]) -> Result<McpServerConfig, String> {
     let mut max_active_workers: Option<usize> = None;
     let mut max_follow_ups_per_worker: Option<usize> = None;
     let mut max_runtime_minutes: Option<i64> = None;
+    let mut knowledge_open_relay_endpoint: Option<String> = None;
+    let mut knowledge_open_relay_grant: Option<String> = None;
+    let mut knowledge_open_relay_turn_id: Option<String> = None;
+    let mut knowledge_open_relay_project_id: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         let key = args[i].as_str();
@@ -135,6 +145,39 @@ fn parse_args(args: &[String]) -> Result<McpServerConfig, String> {
                 );
                 i += 2;
             }
+            "--knowledge-open-relay-endpoint" => {
+                if knowledge_open_relay_endpoint.is_some() {
+                    return Err("knowledge_open relay 参数不可重复".to_string());
+                }
+                knowledge_open_relay_endpoint =
+                    Some(val.ok_or_else(|| "--knowledge-open-relay-endpoint 缺少值".to_string())?);
+                i += 2;
+            }
+            "--knowledge-open-relay-grant" => {
+                if knowledge_open_relay_grant.is_some() {
+                    return Err("knowledge_open relay 参数不可重复".to_string());
+                }
+                knowledge_open_relay_grant =
+                    Some(val.ok_or_else(|| "--knowledge-open-relay-grant 缺少值".to_string())?);
+                i += 2;
+            }
+            "--knowledge-open-relay-turn-id" => {
+                if knowledge_open_relay_turn_id.is_some() {
+                    return Err("knowledge_open relay 参数不可重复".to_string());
+                }
+                knowledge_open_relay_turn_id =
+                    Some(val.ok_or_else(|| "--knowledge-open-relay-turn-id 缺少值".to_string())?);
+                i += 2;
+            }
+            "--knowledge-open-relay-project-id" => {
+                if knowledge_open_relay_project_id.is_some() {
+                    return Err("knowledge_open relay 参数不可重复".to_string());
+                }
+                knowledge_open_relay_project_id = Some(
+                    val.ok_or_else(|| "--knowledge-open-relay-project-id 缺少值".to_string())?,
+                );
+                i += 2;
+            }
             other => return Err(format!("不认识的参数: {other}")),
         }
     }
@@ -143,6 +186,15 @@ fn parse_args(args: &[String]) -> Result<McpServerConfig, String> {
     if role == McpRole::Subagent && node_id.is_none() {
         return Err("子 agent 模式必须提供 --node-id".to_string());
     }
+    let relay_argument_count = [
+        knowledge_open_relay_endpoint.is_some(),
+        knowledge_open_relay_grant.is_some(),
+        knowledge_open_relay_turn_id.is_some(),
+        knowledge_open_relay_project_id.is_some(),
+    ]
+    .into_iter()
+    .filter(|present| *present)
+    .count();
     let supervisor_quota_limits = if role == McpRole::SupervisorOrchestrator {
         let limits = SupervisorQuotaLimits {
             max_active_workers: max_active_workers
@@ -164,10 +216,23 @@ fn parse_args(args: &[String]) -> Result<McpServerConfig, String> {
             || max_active_workers.is_some()
             || max_follow_ups_per_worker.is_some()
             || max_runtime_minutes.is_some()
+            || relay_argument_count > 0
         {
             return Err("主管编排参数只允许 --role supervisor_orchestrator 使用".to_string());
         }
         None
+    };
+    let knowledge_open_relay = match relay_argument_count {
+        0 => None,
+        4 if role == McpRole::SupervisorOrchestrator => Some(
+            crate::knowledge_open_relay::KnowledgeOpenRelayMcpConfig::from_mcp_arguments(
+                knowledge_open_relay_endpoint.expect("count checked"),
+                knowledge_open_relay_grant.expect("count checked"),
+                knowledge_open_relay_turn_id.expect("count checked"),
+                knowledge_open_relay_project_id.expect("count checked"),
+            )?,
+        ),
+        _ => return Err("knowledge_open relay 参数必须由宿主完整成组提供".to_string()),
     };
     Ok(McpServerConfig {
         role,
@@ -175,6 +240,7 @@ fn parse_args(args: &[String]) -> Result<McpServerConfig, String> {
         node_id,
         supervisor_workflow_state_path,
         supervisor_quota_limits,
+        knowledge_open_relay,
     })
 }
 
@@ -218,4 +284,65 @@ fn handle_request(config: &McpServerConfig, req: JsonRpcRequest) -> Option<JsonR
         Ok(value) => JsonRpcResponse::ok(id, value),
         Err(err) => JsonRpcResponse::error(id, err),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn supervisor_relay_args() -> Vec<String> {
+        [
+            "--role",
+            "supervisor_orchestrator",
+            "--run-id",
+            "supervisor-conversation:relay-test",
+            "--workflow-state-path",
+            "/tmp/syn-relay-workflow-state.json",
+            "--max-active-workers",
+            "1",
+            "--max-follow-ups-per-worker",
+            "0",
+            "--max-runtime-minutes",
+            "1",
+            "--knowledge-open-relay-endpoint",
+            "/tmp/syn-knowledge-open-relay-test.sock",
+            "--knowledge-open-relay-grant",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "--knowledge-open-relay-turn-id",
+            "turn:relay-test",
+            "--knowledge-open-relay-project-id",
+            "project:relay-test",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
+    }
+
+    #[test]
+    fn supervisor_relay_arguments_must_be_complete_and_nonduplicated() {
+        assert!(parse_args(&supervisor_relay_args()).is_ok());
+
+        for (flag, value) in [
+            (
+                "--knowledge-open-relay-endpoint",
+                "/tmp/syn-knowledge-open-relay-overwrite.sock",
+            ),
+            (
+                "--knowledge-open-relay-grant",
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            ),
+            ("--knowledge-open-relay-turn-id", "turn:relay-overwrite"),
+            (
+                "--knowledge-open-relay-project-id",
+                "project:relay-overwrite",
+            ),
+        ] {
+            let mut arguments = supervisor_relay_args();
+            arguments.extend([flag.to_string(), value.to_string()]);
+            assert!(
+                parse_args(&arguments).is_err(),
+                "duplicate {flag} must fail closed instead of replacing host-issued relay input"
+            );
+        }
+    }
 }

@@ -96,6 +96,83 @@ function isStringArray(value) {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
+const activeBoundaryKeys = ['mechanical', 'reportingOnly', 'explicitTool', 'legacyIgnored'];
+
+function inspectActiveBoundary(value) {
+  const details = {
+    present: value !== undefined,
+    keys: isPlainObject(value) ? Object.keys(value) : [],
+    missingKeys: [],
+    unknownKeys: [],
+    invalidTypes: [],
+    crossCategoryDuplicates: [],
+    values: Object.fromEntries(activeBoundaryKeys.map((key) => [key, []]))
+  };
+
+  if (!isPlainObject(value)) {
+    details.invalidTypes.push('activeBoundary');
+    return details;
+  }
+
+  details.missingKeys = activeBoundaryKeys.filter((key) => !Object.prototype.hasOwnProperty.call(value, key));
+  details.unknownKeys = details.keys.filter((key) => !activeBoundaryKeys.includes(key));
+  const owners = new Map();
+  for (const key of activeBoundaryKeys) {
+    const entries = value[key];
+    if (!isStringArray(entries)) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) details.invalidTypes.push(`activeBoundary.${key}`);
+      continue;
+    }
+    details.values[key] = entries;
+    for (const entry of entries) {
+      const owner = owners.get(entry);
+      if (owner && owner !== key) details.crossCategoryDuplicates.push(entry);
+      else owners.set(entry, key);
+    }
+  }
+  details.crossCategoryDuplicates = [...new Set(details.crossCategoryDuplicates)];
+  return details;
+}
+
+function checkActiveBoundary(report, details, boundary, gates) {
+  const boundaryDetails = inspectActiveBoundary(boundary);
+  details.activeBoundary = boundaryDetails;
+  if (boundaryDetails.invalidTypes.includes('activeBoundary')) {
+    add(report, 'fail', '[ACTIVE_BOUNDARY_INVALID_TYPE] activeBoundary must be an object with the four boundary categories');
+    return boundaryDetails;
+  }
+  if (boundaryDetails.missingKeys.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_MISSING_KEY] activeBoundary missing key(s): ${boundaryDetails.missingKeys.join(', ')}`);
+  }
+  if (boundaryDetails.unknownKeys.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_UNKNOWN_KEY] activeBoundary has unsupported key(s): ${boundaryDetails.unknownKeys.join(', ')}`);
+  }
+  if (boundaryDetails.invalidTypes.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_INVALID_TYPE] activeBoundary categories must be string arrays: ${boundaryDetails.invalidTypes.join(', ')}`);
+  }
+  if (boundaryDetails.crossCategoryDuplicates.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_CROSS_CATEGORY_DUPLICATE] activeBoundary entries appear in multiple categories: ${boundaryDetails.crossCategoryDuplicates.join(', ')}`);
+  }
+
+  const hardGateIds = new Set(Array.isArray(gates && gates.hard) ? gates.hard : []);
+  const nonMechanicalHardGates = ['reportingOnly', 'explicitTool']
+    .flatMap((key) => boundaryDetails.values[key])
+    .filter((entry) => hardGateIds.has(entry));
+  boundaryDetails.nonMechanicalHardGates = [...new Set(nonMechanicalHardGates)];
+  if (boundaryDetails.nonMechanicalHardGates.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_NON_MECHANICAL_HARD_GATE] reportingOnly/explicitTool entries cannot be hard gates: ${boundaryDetails.nonMechanicalHardGates.join(', ')}`);
+  }
+
+  if (boundaryDetails.missingKeys.length === 0
+    && boundaryDetails.unknownKeys.length === 0
+    && boundaryDetails.invalidTypes.length === 0
+    && boundaryDetails.crossCategoryDuplicates.length === 0
+    && boundaryDetails.nonMechanicalHardGates.length === 0) {
+    add(report, 'pass', 'activeBoundary has exactly four disjoint categories and no non-mechanical hard gate');
+  }
+  return boundaryDetails;
+}
+
 function checkObject(report, data, key) {
   if (isPlainObject(data[key])) {
     add(report, 'pass', `Config object present: ${key}`);
@@ -355,7 +432,8 @@ function buildReport(args) {
       arrays: {},
       commands: null,
       recommendedCommands: {},
-      uiTargets: []
+      uiTargets: [],
+      activeBoundary: null
     }
   };
 
@@ -403,6 +481,7 @@ function buildReport(args) {
   if (objectOk.tools) checkTools(report, report.details, data.tools);
   checkPolicy(report, report.details, data.policy);
   if (objectOk.gates) checkGates(report, report.details, data.gates);
+  checkActiveBoundary(report, report.details, data.activeBoundary, data.gates);
   if (objectOk.preWork) checkRecommendedCommands(report, report.details, args.target, 'preWork', data.preWork);
   if (objectOk.preCompletion) checkRecommendedCommands(report, report.details, args.target, 'preCompletion', data.preCompletion);
   checkMemoryIntegration(report, report.details, data.memoryIntegration);

@@ -19,6 +19,15 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const STATUS_TOKENS = ['CLEAR_WITH_P2', 'CLEAR', 'FINDINGS'];
+const CURRENT_CONTEXT_PATH = 'docs/project-context.json';
+const ALIGNMENT_FIELDS = [
+  'authority_chain',
+  'plan_anchor',
+  'existing_before_new',
+  'capabilities_touched',
+  'forbidden_alternatives',
+];
+const CURRENT_ALIGNMENT_BOUNDARY = 'Checks only the declared alignment fields, referenced plan path/heading, and Code Map IDs. It does not prove semantic correctness, code completion, real execution, or product acceptance.';
 
 function parseArgs(argv) {
   const args = {
@@ -32,7 +41,8 @@ function parseArgs(argv) {
     allowDirty: false,
     skipGates: false,
     json: false,
-    record: null
+    record: null,
+    current: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -46,11 +56,15 @@ function parseArgs(argv) {
     else if (a === '--allow-dirty') args.allowDirty = true;
     else if (a === '--skip-gates') args.skipGates = true;
     else if (a === '--record') args.record = argv[++i];
+    else if (a === '--current') args.current = true;
     else if (a === '--json') args.json = true;
     else if (a === '--help' || a === '-h') { printHelp(); process.exit(0); }
     else throw new Error(`Unknown argument: ${a}`);
   }
-  if (!args.package && !args.commit) {
+  if (args.current && (args.package || args.commit || args.taskCommit || args.checkpointCommit || args.review || args.allow || args.record)) {
+    throw new Error('--current cannot be combined with completion-claim arguments.');
+  }
+  if (!args.current && !args.package && !args.commit) {
     throw new Error('Provide --package <slug> or --commit <sha> (or both). See --help.');
   }
   args.target = path.resolve(args.target);
@@ -58,11 +72,14 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: node scripts/harness/checkpoint-audit.js (--package <slug> | --commit <sha>) [options]
+  console.log(`Usage: node scripts/harness/checkpoint-audit.js (--package <slug> | --commit <sha> | --current) [options]
 
 Verifies a completion report's CLAIMS against git/file ground truth (mechanical only).
 
 Options:
+  --current               Audit only the explicitly bound current important task in docs/project-context.json.
+                          No binding returns NOT_APPLICABLE; this never scans tasks/* or uses taskPackage.
+                          Only currentImportantTask.mode: "strict" marks a user-frozen strict execution entry.
   --package <slug>        Resolve claims from CURRENT.md block + tasks/*<slug>*.md + evidence review file.
   --commit <sha>          Impl commit to audit (overrides/ supplements the parsed one).
   --task-commit <sha>     Claimed task-package commit (else parsed from CURRENT.md).
@@ -92,6 +109,12 @@ function git(target, gitArgs) {
 
 function readIf(file) {
   try { return fs.readFileSync(file, 'utf8'); } catch (_e) { return null; }
+}
+
+function isSafeRelativePath(value) {
+  if (typeof value !== 'string' || !value || /[\0\\\r\n]/.test(value) || path.isAbsolute(value)) return false;
+  const segments = value.split('/');
+  return segments.every((segment) => segment && segment !== '.' && segment !== '..');
 }
 
 function globToRegExp(glob) {
@@ -309,6 +332,224 @@ function checkEvidenceHashFormat(target, recordPaths) {
   return { id: 'evidence_hash_format', status: 'pass', detail: { files_checked: recordPaths.length, hash_fields_checked: fieldsChecked } };
 }
 
+// --- current important-task alignment ----------------------------------------
+
+function parseJsonText(text) {
+  try { return { value: JSON.parse(text) }; }
+  catch (_e) { return { error: 'invalid_json' }; }
+}
+
+function readCurrentImportantTaskBinding(target) {
+  const contextText = readIf(path.join(target, CURRENT_CONTEXT_PATH));
+  if (contextText === null) return { applicable: false, reason: 'NO_CURRENT_IMPORTANT_TASK_PACKAGE' };
+  const parsed = parseJsonText(contextText);
+  if (parsed.error || !parsed.value || typeof parsed.value !== 'object' || Array.isArray(parsed.value)) {
+    return { applicable: true, issue: { code: 'CURRENT_IMPORTANT_TASK_CONTEXT_INVALID', path: CURRENT_CONTEXT_PATH } };
+  }
+  const checkpoint = parsed.value.checkpoint;
+  const current = checkpoint && typeof checkpoint === 'object' && !Array.isArray(checkpoint)
+    ? checkpoint.currentImportantTask
+    : null;
+  if (current === null || current === undefined) return { applicable: false, reason: 'NO_CURRENT_IMPORTANT_TASK_PACKAGE' };
+  if (!current || typeof current !== 'object' || Array.isArray(current)) {
+    return { applicable: true, issue: { code: 'CURRENT_IMPORTANT_TASK_BINDING_INVALID', path: CURRENT_CONTEXT_PATH } };
+  }
+  if (!isSafeRelativePath(current.path) || !/^tasks\/.+\.md$/.test(current.path)) {
+    return {
+      applicable: true,
+      issue: { code: 'CURRENT_IMPORTANT_TASK_PATH_INVALID', path: current.path || null, contextPath: CURRENT_CONTEXT_PATH },
+      mode: current.mode === 'strict' ? 'strict' : 'advisory',
+    };
+  }
+  return {
+    applicable: true,
+    binding: { path: current.path, mode: current.mode === 'strict' ? 'strict' : 'advisory' },
+  };
+}
+
+function parseAuthorityPlanAlignment(taskText) {
+  const heading = /^##[ \t]+Authority and plan alignment[ \t]*$/im.exec(taskText);
+  const fields = Object.fromEntries(ALIGNMENT_FIELDS.map((field) => [field, null]));
+  if (!heading) return { found: false, fields };
+  const afterHeading = taskText.slice(heading.index + heading[0].length);
+  const nextHeading = afterHeading.search(/^##\s+/m);
+  const section = nextHeading >= 0 ? afterHeading.slice(0, nextHeading) : afterHeading;
+  for (const field of ALIGNMENT_FIELDS) {
+    const line = new RegExp(`^[ \\t]*[-*][ \\t]+${field}:[ \\t]*(.*)$`, 'mi').exec(section);
+    fields[field] = line ? line[1].trim() : null;
+  }
+  return { found: true, fields };
+}
+
+function normalizeHeading(value) {
+  let decoded = value;
+  try { decoded = decodeURIComponent(value); } catch (_e) { /* keep raw anchor */ }
+  return decoded
+    .normalize('NFKC')
+    .replace(/^#+/, '')
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function parsePlanAnchor(value) {
+  if (typeof value !== 'string') return null;
+  const link = /\]\(([^)]+)\)/.exec(value);
+  const direct = /(?:^|[\s`])([^\s`]+\.md#[^\s`]+)/.exec(value);
+  const target = link ? link[1] : direct ? direct[1] : null;
+  if (!target) return null;
+  const hashAt = target.indexOf('#');
+  if (hashAt <= 0 || hashAt === target.length - 1) return null;
+  const planPath = target.slice(0, hashAt);
+  const anchor = target.slice(hashAt + 1);
+  if (!isSafeRelativePath(planPath) || !anchor || !normalizeHeading(anchor)) return null;
+  return { path: planPath, anchor };
+}
+
+function planHasHeading(text, anchor) {
+  const expected = normalizeHeading(anchor);
+  return text.split(/\r?\n/).some((line) => {
+    const match = /^#{1,6}\s+(.+?)\s*#*\s*$/.exec(line);
+    return !!match && normalizeHeading(match[1]) === expected;
+  });
+}
+
+function loadCodeMapCapabilities(target) {
+  const indexRel = 'docs/code-map/index.json';
+  const indexText = readIf(path.join(target, indexRel));
+  if (indexText === null) return { issue: { code: 'CODE_MAP_UNAVAILABLE', path: indexRel } };
+  const indexParsed = parseJsonText(indexText);
+  if (indexParsed.error || !Array.isArray(indexParsed.value.domains)) {
+    return { issue: { code: 'CODE_MAP_UNAVAILABLE', path: indexRel } };
+  }
+  const capabilities = new Map();
+  for (const domain of indexParsed.value.domains) {
+    if (!domain || !isSafeRelativePath(domain.path)) {
+      return { issue: { code: 'CODE_MAP_UNAVAILABLE', path: indexRel } };
+    }
+    const domainText = readIf(path.join(target, domain.path));
+    const domainParsed = domainText === null ? { error: 'unreadable' } : parseJsonText(domainText);
+    if (domainParsed.error || !Array.isArray(domainParsed.value.capabilities)) {
+      return { issue: { code: 'CODE_MAP_UNAVAILABLE', path: domain.path } };
+    }
+    for (const capability of domainParsed.value.capabilities) {
+      if (capability && typeof capability.id === 'string' && typeof capability.status === 'string') {
+        capabilities.set(capability.id, capability.status);
+      }
+    }
+  }
+  return { capabilities };
+}
+
+function mapIdsIn(value) {
+  if (typeof value !== 'string') return [];
+  return Array.from(new Set(value.match(/\b[a-z][a-z0-9-]*\.[a-z0-9-]+\b/g) || []));
+}
+
+function isNoneWithExplanation(value) {
+  if (typeof value !== 'string' || !/^none(?:\s|$)/i.test(value)) return null;
+  const explanation = value.slice(4).replace(/^[\s:—-]+/, '').trim();
+  return { explained: explanation.length > 0, explanation };
+}
+
+function currentReport(target, binding, status, fields, warnings, errors, extra = {}) {
+  return {
+    target,
+    mode: 'current',
+    boundary: CURRENT_ALIGNMENT_BOUNDARY,
+    status,
+    verdict: status,
+    currentImportantTask: binding ? { path: binding.path, mode: binding.mode } : null,
+    fields,
+    warnings,
+    errors,
+    ...extra,
+  };
+}
+
+function auditCurrentAlignment(args) {
+  const bindingResult = readCurrentImportantTaskBinding(args.target);
+  if (!bindingResult.applicable) {
+    return currentReport(args.target, null, 'NOT_APPLICABLE', {}, [], [], { reason: bindingResult.reason });
+  }
+
+  const binding = bindingResult.binding || { path: null, mode: bindingResult.mode || 'advisory' };
+  const warnings = [];
+  const errors = [];
+  const requiredIssues = [];
+  const add = (issue, required = false) => {
+    if (required) requiredIssues.push(issue);
+    if (required && binding.mode === 'strict') errors.push(issue);
+    else warnings.push(issue);
+  };
+
+  if (bindingResult.issue) {
+    add(bindingResult.issue, true);
+    return currentReport(args.target, binding, errors.length ? 'STRICT_ALIGNMENT_ERRORS' : 'FIELDS_INCOMPLETE', {}, warnings, errors);
+  }
+
+  const taskText = readIf(path.join(args.target, binding.path));
+  if (taskText === null) {
+    add({ code: 'CURRENT_IMPORTANT_TASK_PACKAGE_MISSING', path: binding.path }, true);
+    return currentReport(args.target, binding, errors.length ? 'STRICT_ALIGNMENT_ERRORS' : 'FIELDS_INCOMPLETE', {}, warnings, errors);
+  }
+
+  const alignment = parseAuthorityPlanAlignment(taskText);
+  if (!alignment.found) add({ code: 'ALIGNMENT_BLOCK_MISSING', path: binding.path }, true);
+  for (const field of ALIGNMENT_FIELDS) {
+    if (!alignment.fields[field]) add({ code: 'ALIGNMENT_FIELD_MISSING', field, path: binding.path }, true);
+  }
+
+  const planAnchor = alignment.fields.plan_anchor ? parsePlanAnchor(alignment.fields.plan_anchor) : null;
+  if (alignment.fields.plan_anchor) {
+    if (!planAnchor) {
+      add({ code: 'PLAN_ANCHOR_INVALID', field: 'plan_anchor', value: alignment.fields.plan_anchor }, false);
+    } else {
+      const planText = readIf(path.join(args.target, planAnchor.path));
+      if (planText === null) add({ code: 'PLAN_ANCHOR_FILE_MISSING', path: planAnchor.path, anchor: planAnchor.anchor }, false);
+      else if (!planHasHeading(planText, planAnchor.anchor)) add({ code: 'PLAN_ANCHOR_HEADING_MISSING', path: planAnchor.path, anchor: planAnchor.anchor }, false);
+    }
+  }
+
+  const capabilitiesValue = alignment.fields.capabilities_touched;
+  const none = isNoneWithExplanation(capabilitiesValue);
+  if (none && !none.explained) add({ code: 'CAPABILITIES_TOUCHED_NONE_NEEDS_EXPLANATION', field: 'capabilities_touched' }, true);
+
+  const touchedIds = none ? [] : mapIdsIn(capabilitiesValue);
+  if (capabilitiesValue && !none && touchedIds.length === 0) {
+    add({ code: 'CAPABILITY_MAP_ID_MISSING', field: 'capabilities_touched', value: capabilitiesValue }, false);
+  }
+  const reusedIds = mapIdsIn(alignment.fields.existing_before_new);
+  if (alignment.fields.existing_before_new && /(?:\breuse\b|复用)/i.test(alignment.fields.existing_before_new) && reusedIds.length === 0) {
+    add({ code: 'EXISTING_BEFORE_NEW_MAP_ID_MISSING', field: 'existing_before_new' }, false);
+  }
+
+  const declaredIds = [
+    ...touchedIds.map((id) => ({ id, field: 'capabilities_touched' })),
+    ...reusedIds.map((id) => ({ id, field: 'existing_before_new' })),
+  ];
+  if (declaredIds.length) {
+    const loadedMap = loadCodeMapCapabilities(args.target);
+    if (loadedMap.issue) add(loadedMap.issue, false);
+    else {
+      for (const { id, field } of declaredIds) {
+        const status = loadedMap.capabilities.get(id);
+        if (!status) add({ code: 'MAP_CAPABILITY_NOT_FOUND', id, field }, false);
+        else if (status === 'legacy') add({ code: 'MAP_CAPABILITY_LEGACY', id, field, status }, false);
+        else if (status === 'needs-confirmation') add({ code: 'MAP_CAPABILITY_NEEDS_CONFIRMATION', id, field, status }, false);
+      }
+    }
+  }
+
+  const fieldsPresent = requiredIssues.length === 0;
+  const status = errors.length ? 'STRICT_ALIGNMENT_ERRORS' : fieldsPresent ? 'FIELDS_PRESENT' : 'FIELDS_INCOMPLETE';
+  return currentReport(args.target, binding, status, alignment.fields, warnings, errors, {
+    alignmentBlockFound: alignment.found,
+    capabilityIds: declaredIds.map(({ id, field }) => ({ id, field })),
+  });
+}
+
 function audit(args) {
   const slug = args.package;
   const cmPara = slug ? currentMdParagraphForSlug(args.target, slug) : null;
@@ -372,12 +613,28 @@ function printReport(r) {
   console.log(`VERDICT: ${r.verdict}${r.failed_checks.length ? ` (failed: ${r.failed_checks.join(', ')})` : ''}`);
 }
 
+function printCurrentReport(r) {
+  console.log(`checkpoint-audit current: ${r.target}`);
+  console.log(`Status: ${r.status}`);
+  console.log(`Boundary: ${r.boundary}`);
+  if (r.reason) console.log(`Reason: ${r.reason}`);
+  if (r.currentImportantTask) {
+    console.log(`Current important task: ${r.currentImportantTask.path} (${r.currentImportantTask.mode})`);
+  }
+  for (const [field, value] of Object.entries(r.fields || {})) {
+    console.log(`- ${field}: ${value || '(missing)'}`);
+  }
+  for (const warning of r.warnings || []) console.log(`- [WARN] ${warning.code}: ${JSON.stringify(warning)}`);
+  for (const error of r.errors || []) console.log(`- [FAIL] ${error.code}: ${JSON.stringify(error)}`);
+}
+
 try {
   const args = parseArgs(process.argv.slice(2));
-  const report = audit(args);
+  const report = args.current ? auditCurrentAlignment(args) : audit(args);
   if (args.json) console.log(JSON.stringify(report, null, 2));
+  else if (args.current) printCurrentReport(report);
   else printReport(report);
-  process.exit(report.verdict === 'PASS' ? 0 : 1);
+  process.exit(args.current ? (report.errors.length ? 1 : 0) : (report.verdict === 'PASS' ? 0 : 1));
 } catch (error) {
   console.error(`ERROR: ${error.message}`);
   process.exit(2);

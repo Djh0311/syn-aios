@@ -1,0 +1,1951 @@
+{
+  "phase": "post-implementation-green",
+  "fixture": "synthetic-only",
+  "scope": "D1 骨架对照 / D2 正文字号 / D3 活动栏悬停提示",
+  "notRealApp": "NOT_REAL_APP：只跑合成夹具，不进真实 App / store / vault",
+  "r0Reference": {
+    "activityRailWidth": 42,
+    "leftSidebarExpanded": 288,
+    "rightSidebar": 185,
+    "centralStatusHeight": 26,
+    "centralChrome": 74,
+    "bodyFontSize": 16
+  },
+  "redChromeBaseline": {
+    "activityButton": 10,
+    "leftTree": 13,
+    "leftSidebarTab": 11,
+    "centralTab": 13,
+    "rightSectionSummary": 10,
+    "rightSectionBody": 13,
+    "rightHeader": 11,
+    "statusBar": 10
+  },
+  "outcome": "GREEN_ALL_ASSERTIONS_PASSED",
+  "assertions": 73,
+  "failed": 0,
+  "failures": [],
+  "readAllowlist": [
+    "knowledge_workspace_snapshot",
+    "knowledge_workspace_graph",
+    "knowledge_workspace_read_markdown",
+    "knowledge_workspace_search",
+    "knowledge_workspace_read_canvas"
+  ],
+  "measurements": {
+    "D1": {
+      "900": {
+        "collapsed": {
+          "leftHidden": "true",
+          "rightHidden": "true"
+        },
+        "activityWidth": 42,
+        "overflow": {
+          "documentElement": {
+            "clientWidth": 900,
+            "scrollWidth": 900,
+            "overflowsHorizontally": false
+          },
+          "body": {
+            "clientWidth": 900,
+            "scrollWidth": 900,
+            "overflowsHorizontally": false
+          },
+          "shell": {
+            "clientWidth": 898,
+            "scrollWidth": 898,
+            "overflowsHorizontally": false
+          },
+          "central": {
+            "clientWidth": 856,
+            "scrollWidth": 856,
+            "overflowsHorizontally": false
+          },
+          "activeGroupPanel": {
+            "clientWidth": 856,
+            "scrollWidth": 856,
+            "overflowsHorizontally": false
+          },
+          "left": {
+            "clientWidth": 0,
+            "scrollWidth": 0,
+            "overflowsHorizontally": false
+          },
+          "right": {
+            "clientWidth": 0,
+            "scrollWidth": 0,
+            "overflowsHorizontally": false
+          }
+        },
+        "readingBody": {
+          "fontSize": 16,
+          "lineHeightRatio": 1.7
+        },
+        "note": "本档只作不回归，不做 R0 对照"
+      },
+      "1180": {
+        "shellGridColumns": "42px 260px 656px 220px",
+        "activityWidth": 42,
+        "leftWidth": 260,
+        "centralWidth": 656,
+        "rightWidth": 220,
+        "statusHeight": 26,
+        "groupHeaderHeight": 36,
+        "documentHeadHeight": 96.19,
+        "centralChromeTotal": 132.19,
+        "centralChromeR0": 74,
+        "centralChromeVerdict": "超出参照带（未修：所需 selector 不在 §4.2 白名单）",
+        "leftFooterPresent": false,
+        "ratio": {
+          "left": 260,
+          "central": 656,
+          "right": 220,
+          "order": true
+        },
+        "truncated": [],
+        "overflow": {
+          "documentElement": {
+            "clientWidth": 1180,
+            "scrollWidth": 1180,
+            "overflowsHorizontally": false
+          },
+          "body": {
+            "clientWidth": 1180,
+            "scrollWidth": 1180,
+            "overflowsHorizontally": false
+          },
+          "shell": {
+            "clientWidth": 1178,
+            "scrollWidth": 1178,
+            "overflowsHorizontally": false
+          },
+          "central": {
+            "clientWidth": 656,
+            "scrollWidth": 656,
+            "overflowsHorizontally": false
+          },
+          "activeGroupPanel": {
+            "clientWidth": 656,
+            "scrollWidth": 656,
+            "overflowsHorizontally": false
+          },
+          "left": {
+            "clientWidth": 259,
+            "scrollWidth": 259,
+            "overflowsHorizontally": false
+          },
+          "right": {
+            "clientWidth": 219,
+            "scrollWidth": 219,
+            "overflowsHorizontally": false
+          }
+        }
+      },
+      "1440": {
+        "shellGridColumns": "42px 288px 868px 240px",
+        "activityWidth": 42,
+        "leftWidth": 288,
+        "centralWidth": 868,
+        "rightWidth": 240,
+        "statusHeight": 26,
+        "groupHeaderHeight": 36,
+        "documentHeadHeight": 96.19,
+        "centralChromeTotal": 132.19,
+        "centralChromeR0": 74,
+        "centralChromeVerdict": "超出参照带（未修：所需 selector 不在 §4.2 白名单）",
+        "leftFooterPresent": false,
+        "ratio": {
+          "left": 288,
+          "central": 868,
+          "right": 240,
+          "order": true
+        },
+        "truncated": [],
+        "overflow": {
+          "documentElement": {
+            "clientWidth": 1440,
+            "scrollWidth": 1440,
+            "overflowsHorizontally": false
+          },
+          "body": {
+            "clientWidth": 1440,
+            "scrollWidth": 1440,
+            "overflowsHorizontally": false
+          },
+          "shell": {
+            "clientWidth": 1438,
+            "scrollWidth": 1438,
+            "overflowsHorizontally": false
+          },
+          "central": {
+            "clientWidth": 868,
+            "scrollWidth": 868,
+            "overflowsHorizontally": false
+          },
+          "activeGroupPanel": {
+            "clientWidth": 868,
+            "scrollWidth": 868,
+            "overflowsHorizontally": false
+          },
+          "left": {
+            "clientWidth": 287,
+            "scrollWidth": 287,
+            "overflowsHorizontally": false
+          },
+          "right": {
+            "clientWidth": 239,
+            "scrollWidth": 239,
+            "overflowsHorizontally": false
+          }
+        }
+      },
+      "split1180": {
+        "groups": 2,
+        "separator": {
+          "width": 5,
+          "height": 732,
+          "borderTopWidth": "0px",
+          "borderRightWidth": "1px",
+          "borderBottomWidth": "0px",
+          "borderLeftWidth": "1px"
+        },
+        "overflow": {
+          "documentElement": {
+            "clientWidth": 1180,
+            "scrollWidth": 1180,
+            "overflowsHorizontally": false
+          },
+          "body": {
+            "clientWidth": 1180,
+            "scrollWidth": 1180,
+            "overflowsHorizontally": false
+          },
+          "shell": {
+            "clientWidth": 1178,
+            "scrollWidth": 1178,
+            "overflowsHorizontally": false
+          },
+          "central": {
+            "clientWidth": 656,
+            "scrollWidth": 656,
+            "overflowsHorizontally": false
+          },
+          "activeGroupPanel": {
+            "clientWidth": 326,
+            "scrollWidth": 326,
+            "overflowsHorizontally": false
+          },
+          "left": {
+            "clientWidth": 259,
+            "scrollWidth": 259,
+            "overflowsHorizontally": false
+          },
+          "right": {
+            "clientWidth": 219,
+            "scrollWidth": 219,
+            "overflowsHorizontally": false
+          }
+        },
+        "graphNodeTitle": {
+          "fontSize": 12,
+          "lineHeightRatio": 1.2
+        },
+        "readingBody": null,
+        "editorTextarea": {
+          "fontSize": 16,
+          "lineHeightRatio": 1.65
+        },
+        "arrangementNote": "分栏后点开关系图会顶掉本组阅读面；仍在场的 Markdown 正文面是另一组的编辑面"
+      }
+    },
+    "D2": {
+      "1180": {
+        "readingBody": {
+          "fontSize": 16,
+          "lineHeightRatio": 1.7
+        },
+        "readingParagraph": {
+          "fontSize": 16,
+          "lineHeightRatio": 1.7
+        },
+        "readingHeading": {
+          "fontSize": 32,
+          "lineHeightRatio": 1.7
+        },
+        "readingListItem": null,
+        "readingPre": null,
+        "readingInlineCode": null,
+        "chromeBefore": {
+          "activityButton": 10,
+          "leftTree": 13,
+          "leftSidebarTab": 11,
+          "centralTab": 13,
+          "rightSectionSummary": 10,
+          "rightSectionBody": 13,
+          "rightHeader": 11,
+          "statusBar": 10
+        },
+        "chromeAfter": {
+          "activityButton": 10,
+          "leftTree": 13,
+          "leftSidebarTab": 11,
+          "centralTab": 13,
+          "rightSectionSummary": 10,
+          "rightSectionBody": 13,
+          "rightHeader": 11,
+          "statusBar": 10,
+          "graphNodeTitle": null
+        }
+      },
+      "1440": {
+        "readingBody": {
+          "fontSize": 16,
+          "lineHeightRatio": 1.7
+        },
+        "readingParagraph": {
+          "fontSize": 16,
+          "lineHeightRatio": 1.7
+        },
+        "readingHeading": {
+          "fontSize": 32,
+          "lineHeightRatio": 1.7
+        },
+        "readingListItem": null,
+        "readingPre": null,
+        "readingInlineCode": null,
+        "chromeBefore": {
+          "activityButton": 10,
+          "leftTree": 13,
+          "leftSidebarTab": 11,
+          "centralTab": 13,
+          "rightSectionSummary": 10,
+          "rightSectionBody": 13,
+          "rightHeader": 11,
+          "statusBar": 10
+        },
+        "chromeAfter": {
+          "activityButton": 10,
+          "leftTree": 13,
+          "leftSidebarTab": 11,
+          "centralTab": 13,
+          "rightSectionSummary": 10,
+          "rightSectionBody": 13,
+          "rightHeader": 11,
+          "statusBar": 10,
+          "graphNodeTitle": null
+        }
+      },
+      "editing": {
+        "fontSize": 16,
+        "lineHeightRatio": 1.65,
+        "editing": {
+          "focused": true,
+          "selectionStart": 76,
+          "valueEndsWithTyped": true,
+          "saveButtonPresent": true,
+          "saveButtonDisabled": false,
+          "statusText": "archive/visual-entry-01.mdMarkdown 源码主标签组 · 1 组已保存 / 本地草稿字数 264isolated synthetic browser baseline"
+        }
+      }
+    },
+    "D3": {
+      "rail": [
+        {
+          "ariaLabel": "文件",
+          "title": "文件",
+          "same": true,
+          "ariaPressed": "true"
+        },
+        {
+          "ariaLabel": "搜索",
+          "title": "搜索",
+          "same": true,
+          "ariaPressed": "false"
+        },
+        {
+          "ariaLabel": "关系图",
+          "title": "关系图",
+          "same": true,
+          "ariaPressed": "false"
+        },
+        {
+          "ariaLabel": "Canvas",
+          "title": "Canvas",
+          "same": true,
+          "ariaPressed": "false"
+        },
+        {
+          "ariaLabel": "Syn 命令",
+          "title": "Syn 命令",
+          "same": true,
+          "ariaPressed": null
+        },
+        {
+          "ariaLabel": "设置与维护",
+          "title": "设置与维护",
+          "same": true,
+          "ariaPressed": "false"
+        },
+        {
+          "ariaLabel": "来源",
+          "title": "来源",
+          "same": true,
+          "ariaPressed": "false"
+        },
+        {
+          "ariaLabel": "切换右侧上下文",
+          "title": "切换右侧上下文",
+          "same": true,
+          "ariaPressed": "true"
+        }
+      ],
+      "accessibleNamesFromAxTree": [
+        {
+          "name": "文件",
+          "effectiveSource": "aria-label",
+          "allSources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "superseded": false
+            },
+            {
+              "type": "attribute",
+              "attribute": "title",
+              "superseded": true
+            }
+          ]
+        },
+        {
+          "name": "搜索",
+          "effectiveSource": "aria-label",
+          "allSources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "superseded": false
+            },
+            {
+              "type": "attribute",
+              "attribute": "title",
+              "superseded": true
+            }
+          ]
+        },
+        {
+          "name": "关系图",
+          "effectiveSource": "aria-label",
+          "allSources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "superseded": false
+            },
+            {
+              "type": "attribute",
+              "attribute": "title",
+              "superseded": true
+            }
+          ]
+        },
+        {
+          "name": "Canvas",
+          "effectiveSource": "aria-label",
+          "allSources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "superseded": false
+            },
+            {
+              "type": "attribute",
+              "attribute": "title",
+              "superseded": true
+            }
+          ]
+        },
+        {
+          "name": "Syn 命令",
+          "effectiveSource": "aria-label",
+          "allSources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "superseded": false
+            },
+            {
+              "type": "attribute",
+              "attribute": "title",
+              "superseded": true
+            }
+          ]
+        },
+        {
+          "name": "设置与维护",
+          "effectiveSource": "aria-label",
+          "allSources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "superseded": false
+            },
+            {
+              "type": "attribute",
+              "attribute": "title",
+              "superseded": true
+            }
+          ]
+        },
+        {
+          "name": "来源",
+          "effectiveSource": "aria-label",
+          "allSources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "superseded": false
+            },
+            {
+              "type": "attribute",
+              "attribute": "title",
+              "superseded": true
+            }
+          ]
+        },
+        {
+          "name": "切换右侧上下文",
+          "effectiveSource": "aria-label",
+          "allSources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "superseded": false
+            },
+            {
+              "type": "attribute",
+              "attribute": "title",
+              "superseded": true
+            }
+          ]
+        }
+      ],
+      "hovered": {
+        "title": "关系图",
+        "ariaLabel": "关系图"
+      },
+      "keyboard": {
+        "searchPanelOpen": true,
+        "activeAriaLabel": "搜索"
+      }
+    }
+  },
+  "contexts": [
+    {
+      "name": "1440-final-alignment",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "assertions": [
+        {
+          "name": "1440 D1: 活动栏宽 = 42（定值）",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 中央底部状态区高 = 26（定值）",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 左栏展开宽落在 220–288 带内",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 右栏宽落在 185–240 带内",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 侧栏秩序为「中央最宽 > 左 > 右」",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 零文字截断",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 阅读正文 computed font-size = 16px",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 阅读正文行高比落在 1.5–1.8",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: chrome 各级字号与改前逐项相同",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 内联 code 不得与正文倒挂",
+          "passed": true
+        },
+        {
+          "name": "1440-final-alignment: command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "1440-final-alignment: 写/未知 command 为 0",
+          "passed": true
+        },
+        {
+          "name": "1440-final-alignment: mount 前 localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "1440-final-alignment: localStorage 只含既有可丢弃 UI chrome 偏好",
+          "passed": true
+        },
+        {
+          "name": "1440-final-alignment: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "skeleton": {
+          "shellGridColumns": "42px 288px 868px 240px",
+          "activity": {
+            "width": 42,
+            "height": 898,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "1px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "left": {
+            "width": 288,
+            "height": 872,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "1px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "central": {
+            "width": 868,
+            "height": 872,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "right": {
+            "width": 240,
+            "height": 872,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "1px"
+          },
+          "status": {
+            "width": 1396,
+            "height": 26,
+            "borderTopWidth": "1px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "groupHeader": {
+            "width": 868,
+            "height": 36,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "1px",
+            "borderLeftWidth": "0px"
+          },
+          "documentHead": {
+            "width": 868,
+            "height": 96.19,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "separator": null,
+          "leftFooterPresent": false,
+          "centralChromeTotal": 132.19,
+          "ratio": {
+            "left": 288,
+            "central": 868,
+            "right": 240,
+            "order": true
+          },
+          "truncated": [],
+          "overflow": {
+            "documentElement": {
+              "clientWidth": 1440,
+              "scrollWidth": 1440,
+              "overflowsHorizontally": false
+            },
+            "body": {
+              "clientWidth": 1440,
+              "scrollWidth": 1440,
+              "overflowsHorizontally": false
+            },
+            "shell": {
+              "clientWidth": 1438,
+              "scrollWidth": 1438,
+              "overflowsHorizontally": false
+            },
+            "central": {
+              "clientWidth": 868,
+              "scrollWidth": 868,
+              "overflowsHorizontally": false
+            },
+            "activeGroupPanel": {
+              "clientWidth": 868,
+              "scrollWidth": 868,
+              "overflowsHorizontally": false
+            },
+            "left": {
+              "clientWidth": 287,
+              "scrollWidth": 287,
+              "overflowsHorizontally": false
+            },
+            "right": {
+              "clientWidth": 239,
+              "scrollWidth": 239,
+              "overflowsHorizontally": false
+            }
+          }
+        },
+        "typography": {
+          "readingBody": {
+            "fontSize": 16,
+            "lineHeightRatio": 1.7
+          },
+          "readingParagraph": {
+            "fontSize": 16,
+            "lineHeightRatio": 1.7
+          },
+          "readingHeading": {
+            "fontSize": 32,
+            "lineHeightRatio": 1.7
+          },
+          "readingListItem": null,
+          "readingPre": null,
+          "readingInlineCode": null,
+          "editorTextarea": null,
+          "chrome": {
+            "activityButton": {
+              "fontSize": 10,
+              "lineHeightRatio": 1.2
+            },
+            "leftTree": {
+              "fontSize": 13,
+              "lineHeightRatio": 1.65
+            },
+            "leftSidebarTab": {
+              "fontSize": 11,
+              "lineHeightRatio": 1.65
+            },
+            "centralTab": {
+              "fontSize": 13,
+              "lineHeightRatio": 1.65
+            },
+            "rightSectionSummary": {
+              "fontSize": 10,
+              "lineHeightRatio": 1.65
+            },
+            "rightSectionBody": {
+              "fontSize": 13,
+              "lineHeightRatio": 1.65
+            },
+            "rightHeader": {
+              "fontSize": 11,
+              "lineHeightRatio": 1.65
+            },
+            "statusBar": {
+              "fontSize": 10,
+              "lineHeightRatio": 1.65
+            },
+            "graphNodeTitle": null
+          }
+        }
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "archive/visual-entry-01.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:archive/visual-entry-01.md",
+                      "kind": "markdown",
+                      "relativePath": "archive/visual-entry-01.md",
+                      "projection": "preview"
+                    }
+                  ],
+                  "activeTabId": "markdown:archive/visual-entry-01.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "1180-final-alignment",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "assertions": [
+        {
+          "name": "1180 D1: 活动栏宽 = 42（定值）",
+          "passed": true
+        },
+        {
+          "name": "1180 D1: 中央底部状态区高 = 26（定值）",
+          "passed": true
+        },
+        {
+          "name": "1180 D1: 左栏展开宽落在 220–288 带内",
+          "passed": true
+        },
+        {
+          "name": "1180 D1: 右栏宽落在 185–240 带内",
+          "passed": true
+        },
+        {
+          "name": "1180 D1: 侧栏秩序为「中央最宽 > 左 > 右」",
+          "passed": true
+        },
+        {
+          "name": "1180 D1: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "1180 D1: 零文字截断",
+          "passed": true
+        },
+        {
+          "name": "1180 D2: 阅读正文 computed font-size = 16px",
+          "passed": true
+        },
+        {
+          "name": "1180 D2: 阅读正文行高比落在 1.5–1.8",
+          "passed": true
+        },
+        {
+          "name": "1180 D2: chrome 各级字号与改前逐项相同",
+          "passed": true
+        },
+        {
+          "name": "1180 D2: 内联 code 不得与正文倒挂",
+          "passed": true
+        },
+        {
+          "name": "1180-final-alignment: command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "1180-final-alignment: 写/未知 command 为 0",
+          "passed": true
+        },
+        {
+          "name": "1180-final-alignment: mount 前 localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "1180-final-alignment: localStorage 只含既有可丢弃 UI chrome 偏好",
+          "passed": true
+        },
+        {
+          "name": "1180-final-alignment: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "skeleton": {
+          "shellGridColumns": "42px 260px 656px 220px",
+          "activity": {
+            "width": 42,
+            "height": 758,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "1px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "left": {
+            "width": 260,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "1px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "central": {
+            "width": 656,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "right": {
+            "width": 220,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "1px"
+          },
+          "status": {
+            "width": 1136,
+            "height": 26,
+            "borderTopWidth": "1px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "groupHeader": {
+            "width": 656,
+            "height": 36,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "1px",
+            "borderLeftWidth": "0px"
+          },
+          "documentHead": {
+            "width": 656,
+            "height": 96.19,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "separator": null,
+          "leftFooterPresent": false,
+          "centralChromeTotal": 132.19,
+          "ratio": {
+            "left": 260,
+            "central": 656,
+            "right": 220,
+            "order": true
+          },
+          "truncated": [],
+          "overflow": {
+            "documentElement": {
+              "clientWidth": 1180,
+              "scrollWidth": 1180,
+              "overflowsHorizontally": false
+            },
+            "body": {
+              "clientWidth": 1180,
+              "scrollWidth": 1180,
+              "overflowsHorizontally": false
+            },
+            "shell": {
+              "clientWidth": 1178,
+              "scrollWidth": 1178,
+              "overflowsHorizontally": false
+            },
+            "central": {
+              "clientWidth": 656,
+              "scrollWidth": 656,
+              "overflowsHorizontally": false
+            },
+            "activeGroupPanel": {
+              "clientWidth": 656,
+              "scrollWidth": 656,
+              "overflowsHorizontally": false
+            },
+            "left": {
+              "clientWidth": 259,
+              "scrollWidth": 259,
+              "overflowsHorizontally": false
+            },
+            "right": {
+              "clientWidth": 219,
+              "scrollWidth": 219,
+              "overflowsHorizontally": false
+            }
+          }
+        },
+        "typography": {
+          "readingBody": {
+            "fontSize": 16,
+            "lineHeightRatio": 1.7
+          },
+          "readingParagraph": {
+            "fontSize": 16,
+            "lineHeightRatio": 1.7
+          },
+          "readingHeading": {
+            "fontSize": 32,
+            "lineHeightRatio": 1.7
+          },
+          "readingListItem": null,
+          "readingPre": null,
+          "readingInlineCode": null,
+          "editorTextarea": null,
+          "chrome": {
+            "activityButton": {
+              "fontSize": 10,
+              "lineHeightRatio": 1.2
+            },
+            "leftTree": {
+              "fontSize": 13,
+              "lineHeightRatio": 1.65
+            },
+            "leftSidebarTab": {
+              "fontSize": 11,
+              "lineHeightRatio": 1.65
+            },
+            "centralTab": {
+              "fontSize": 13,
+              "lineHeightRatio": 1.65
+            },
+            "rightSectionSummary": {
+              "fontSize": 10,
+              "lineHeightRatio": 1.65
+            },
+            "rightSectionBody": {
+              "fontSize": 13,
+              "lineHeightRatio": 1.65
+            },
+            "rightHeader": {
+              "fontSize": 11,
+              "lineHeightRatio": 1.65
+            },
+            "statusBar": {
+              "fontSize": 10,
+              "lineHeightRatio": 1.65
+            },
+            "graphNodeTitle": null
+          }
+        }
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "archive/visual-entry-01.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:archive/visual-entry-01.md",
+                      "kind": "markdown",
+                      "relativePath": "archive/visual-entry-01.md",
+                      "projection": "preview"
+                    }
+                  ],
+                  "activeTabId": "markdown:archive/visual-entry-01.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "1440-editing",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "assertions": [
+        {
+          "name": "1440 D2: 编辑正文 computed font-size = 16px",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 编辑正文行高比落在 1.5–1.8",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 提字号后光标仍可用、键入生效",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 保存/草稿语义未变（保存按钮在、状态栏仍报草稿态）",
+          "passed": true
+        },
+        {
+          "name": "1440 编辑态: 零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "1440-editing: command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "1440-editing: 写/未知 command 为 0",
+          "passed": true
+        },
+        {
+          "name": "1440-editing: mount 前 localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "1440-editing: localStorage 只含既有可丢弃 UI chrome 偏好",
+          "passed": true
+        },
+        {
+          "name": "1440-editing: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "typography": {
+          "readingBody": null,
+          "readingParagraph": null,
+          "readingHeading": null,
+          "readingListItem": null,
+          "readingPre": null,
+          "readingInlineCode": null,
+          "editorTextarea": {
+            "fontSize": 16,
+            "lineHeightRatio": 1.65
+          },
+          "chrome": {
+            "activityButton": {
+              "fontSize": 10,
+              "lineHeightRatio": 1.2
+            },
+            "leftTree": {
+              "fontSize": 13,
+              "lineHeightRatio": 1.65
+            },
+            "leftSidebarTab": {
+              "fontSize": 11,
+              "lineHeightRatio": 1.65
+            },
+            "centralTab": {
+              "fontSize": 13,
+              "lineHeightRatio": 1.65
+            },
+            "rightSectionSummary": {
+              "fontSize": 10,
+              "lineHeightRatio": 1.65
+            },
+            "rightSectionBody": {
+              "fontSize": 13,
+              "lineHeightRatio": 1.65
+            },
+            "rightHeader": {
+              "fontSize": 11,
+              "lineHeightRatio": 1.65
+            },
+            "statusBar": {
+              "fontSize": 10,
+              "lineHeightRatio": 1.65
+            },
+            "graphNodeTitle": null
+          }
+        },
+        "editing": {
+          "focused": true,
+          "selectionStart": 76,
+          "valueEndsWithTyped": true,
+          "saveButtonPresent": true,
+          "saveButtonDisabled": false,
+          "statusText": "archive/visual-entry-01.mdMarkdown 源码主标签组 · 1 组已保存 / 本地草稿字数 264isolated synthetic browser baseline"
+        }
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 3,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "archive/visual-entry-01.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:archive/visual-entry-01.md",
+                      "kind": "markdown",
+                      "relativePath": "archive/visual-entry-01.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:archive/visual-entry-01.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "1440-activity-tooltip",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "assertions": [
+        {
+          "name": "D3: 8 个入口 title 与 aria-label 逐字同值",
+          "passed": true
+        },
+        {
+          "name": "D3: title 值即八个既有可访问名称，顺序不变",
+          "passed": true
+        },
+        {
+          "name": "D3: 浏览器算出的可访问名称逐字等于 aria-label，且生效来源就是 aria-label",
+          "passed": true
+        },
+        {
+          "name": "D3: title 只作附加来源，被 aria-label 压过而不是叠加（无双读）",
+          "passed": true
+        },
+        {
+          "name": "D3: svg 仍 aria-hidden / focusable=false 且内部无 <title>",
+          "passed": true
+        },
+        {
+          "name": "D3: aria-pressed 行为零变化（初始 2 按下 / 5 未按下 / Syn 命令无该属性）",
+          "passed": true
+        },
+        {
+          "name": "D3: 键盘 Enter 激活路径未变",
+          "passed": true
+        },
+        {
+          "name": "1440-activity-tooltip: command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "1440-activity-tooltip: 写/未知 command 为 0",
+          "passed": true
+        },
+        {
+          "name": "1440-activity-tooltip: mount 前 localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "1440-activity-tooltip: localStorage 只含既有可丢弃 UI chrome 偏好",
+          "passed": true
+        },
+        {
+          "name": "1440-activity-tooltip: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "rail": [
+          {
+            "ariaLabel": "文件",
+            "title": "文件",
+            "ariaPressed": "true",
+            "svgTitleCount": 0,
+            "iconAriaHidden": "true",
+            "iconFocusable": "false"
+          },
+          {
+            "ariaLabel": "搜索",
+            "title": "搜索",
+            "ariaPressed": "false",
+            "svgTitleCount": 0,
+            "iconAriaHidden": "true",
+            "iconFocusable": "false"
+          },
+          {
+            "ariaLabel": "关系图",
+            "title": "关系图",
+            "ariaPressed": "false",
+            "svgTitleCount": 0,
+            "iconAriaHidden": "true",
+            "iconFocusable": "false"
+          },
+          {
+            "ariaLabel": "Canvas",
+            "title": "Canvas",
+            "ariaPressed": "false",
+            "svgTitleCount": 0,
+            "iconAriaHidden": "true",
+            "iconFocusable": "false"
+          },
+          {
+            "ariaLabel": "Syn 命令",
+            "title": "Syn 命令",
+            "ariaPressed": null,
+            "svgTitleCount": 0,
+            "iconAriaHidden": "true",
+            "iconFocusable": "false"
+          },
+          {
+            "ariaLabel": "设置与维护",
+            "title": "设置与维护",
+            "ariaPressed": "false",
+            "svgTitleCount": 0,
+            "iconAriaHidden": "true",
+            "iconFocusable": "false"
+          },
+          {
+            "ariaLabel": "来源",
+            "title": "来源",
+            "ariaPressed": "false",
+            "svgTitleCount": 0,
+            "iconAriaHidden": "true",
+            "iconFocusable": "false"
+          },
+          {
+            "ariaLabel": "切换右侧上下文",
+            "title": "切换右侧上下文",
+            "ariaPressed": "true",
+            "svgTitleCount": 0,
+            "iconAriaHidden": "true",
+            "iconFocusable": "false"
+          }
+        ],
+        "axNames": [
+          "文件",
+          "搜索",
+          "关系图",
+          "Canvas",
+          "Syn 命令",
+          "设置与维护",
+          "来源",
+          "切换右侧上下文",
+          "折叠右侧栏",
+          "折叠左侧栏",
+          "MD 合成知识条目 08",
+          "MD 合成知识条目 09",
+          "MD 合成知识条目 10",
+          "MD 合成知识条目 11",
+          "MD 合成知识条目 12",
+          "MD 合成知识条目 13",
+          "MD 合成知识条目 14",
+          "MD 合成知识条目 15",
+          "MD 合成知识条目 16",
+          "MD 合成知识条目 17",
+          "MD 合成知识条目 18",
+          "MD 合成知识条目 19",
+          "MD 合成知识条目 20",
+          "MD 合成知识条目 21",
+          "MD 合成知识条目 22",
+          "MD 合成知识条目 23",
+          "MD 合成知识条目 24",
+          "MD 合成知识条目 25",
+          "MD 合成知识条目 26",
+          "MD 合成知识条目 27",
+          "MD 合成知识条目 28",
+          "MD 合成知识条目 29",
+          "MD 合成知识条目 30",
+          "MD 合成知识条目 31",
+          "MD 合成知识条目 32",
+          "MD 合成知识条目 33",
+          "MD 合成知识条目 34",
+          "MD 合成知识条目 35",
+          "MD 合成知识条目 36",
+          "MD 合成知识条目 37",
+          "MD 合成知识条目 38",
+          "MD 合成知识条目 39",
+          "MD 合成知识条目 40",
+          "MD 合成知识条目 41",
+          "MD 合成知识条目 03",
+          "MD 合成知识条目 02",
+          "MD 视觉基线工作台",
+          "MD 合成知识条目 04",
+          "MD 合成知识条目 06",
+          "MD 合成知识条目 05",
+          "MD 合成知识条目 07",
+          "属性",
+          "反向引用",
+          "来源上下文",
+          "在主标签组中快速打开",
+          "向右分栏",
+          "刷新工作区"
+        ],
+        "hovered": {
+          "title": "关系图",
+          "ariaLabel": "关系图"
+        },
+        "keyboard": {
+          "searchPanelOpen": true,
+          "activeAriaLabel": "搜索"
+        }
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 1,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [],
+                  "activeTabId": null
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "1180-split-after-typography",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "assertions": [
+        {
+          "name": "1180 分栏: 真实两个标签组",
+          "passed": true
+        },
+        {
+          "name": "1180 分栏: 提字号后仍零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "1180 分栏: 分隔器为单像素 hairline（无双线/粗边）",
+          "passed": true
+        },
+        {
+          "name": "1180 分栏: Graph 节点标题字号未被正文档影响（仍 12px）",
+          "passed": true
+        },
+        {
+          "name": "1180 分栏: 仍在场的 Markdown 正文面仍 16px",
+          "passed": true
+        },
+        {
+          "name": "1180-split-after-typography: command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "1180-split-after-typography: 写/未知 command 为 0",
+          "passed": true
+        },
+        {
+          "name": "1180-split-after-typography: mount 前 localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "1180-split-after-typography: localStorage 只含既有可丢弃 UI chrome 偏好",
+          "passed": true
+        },
+        {
+          "name": "1180-split-after-typography: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "skeleton": {
+          "shellGridColumns": "42px 260px 656px 220px",
+          "activity": {
+            "width": 42,
+            "height": 758,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "1px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "left": {
+            "width": 260,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "1px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "central": {
+            "width": 656,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "right": {
+            "width": 220,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "1px"
+          },
+          "status": {
+            "width": 1136,
+            "height": 26,
+            "borderTopWidth": "1px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "groupHeader": {
+            "width": 325,
+            "height": 36,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "1px",
+            "borderLeftWidth": "0px"
+          },
+          "documentHead": null,
+          "separator": {
+            "width": 5,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "1px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "1px"
+          },
+          "leftFooterPresent": false,
+          "centralChromeTotal": 36,
+          "ratio": {
+            "left": 260,
+            "central": 656,
+            "right": 220,
+            "order": true
+          },
+          "truncated": [
+            {
+              "text": "范围",
+              "clientWidth": 1,
+              "scrollWidth": 26,
+              "className": "sr-only"
+            }
+          ],
+          "overflow": {
+            "documentElement": {
+              "clientWidth": 1180,
+              "scrollWidth": 1180,
+              "overflowsHorizontally": false
+            },
+            "body": {
+              "clientWidth": 1180,
+              "scrollWidth": 1180,
+              "overflowsHorizontally": false
+            },
+            "shell": {
+              "clientWidth": 1178,
+              "scrollWidth": 1178,
+              "overflowsHorizontally": false
+            },
+            "central": {
+              "clientWidth": 656,
+              "scrollWidth": 656,
+              "overflowsHorizontally": false
+            },
+            "activeGroupPanel": {
+              "clientWidth": 326,
+              "scrollWidth": 326,
+              "overflowsHorizontally": false
+            },
+            "left": {
+              "clientWidth": 259,
+              "scrollWidth": 259,
+              "overflowsHorizontally": false
+            },
+            "right": {
+              "clientWidth": 219,
+              "scrollWidth": 219,
+              "overflowsHorizontally": false
+            }
+          }
+        },
+        "typography": {
+          "readingBody": null,
+          "readingParagraph": null,
+          "readingHeading": null,
+          "readingListItem": null,
+          "readingPre": null,
+          "readingInlineCode": null,
+          "editorTextarea": {
+            "fontSize": 16,
+            "lineHeightRatio": 1.65
+          },
+          "chrome": {
+            "activityButton": {
+              "fontSize": 10,
+              "lineHeightRatio": 1.2
+            },
+            "leftTree": {
+              "fontSize": 13,
+              "lineHeightRatio": 1.65
+            },
+            "leftSidebarTab": {
+              "fontSize": 11,
+              "lineHeightRatio": 1.65
+            },
+            "centralTab": {
+              "fontSize": 13,
+              "lineHeightRatio": 1.65
+            },
+            "rightSectionSummary": {
+              "fontSize": 10,
+              "lineHeightRatio": 1.65
+            },
+            "rightSectionBody": {
+              "fontSize": 13,
+              "lineHeightRatio": 1.65
+            },
+            "rightHeader": {
+              "fontSize": 11,
+              "lineHeightRatio": 1.65
+            },
+            "statusBar": {
+              "fontSize": 10,
+              "lineHeightRatio": 1.65
+            },
+            "graphNodeTitle": {
+              "fontSize": 12,
+              "lineHeightRatio": 1.2
+            }
+          }
+        },
+        "groups": 2
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 6,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "archive/visual-entry-01.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:archive/visual-entry-01.md",
+                      "kind": "markdown",
+                      "relativePath": "archive/visual-entry-01.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:archive/visual-entry-01.md"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:archive/visual-entry-01.md",
+                      "kind": "markdown",
+                      "relativePath": "archive/visual-entry-01.md",
+                      "projection": "preview"
+                    },
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "900-no-regression",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "assertions": [
+        {
+          "name": "900 不回归: 真实折叠组合",
+          "passed": true
+        },
+        {
+          "name": "900 不回归: 折叠态零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "900 不回归: 活动栏仍 42px",
+          "passed": true
+        },
+        {
+          "name": "900 不回归: 正文仍 16px",
+          "passed": true
+        },
+        {
+          "name": "900-no-regression: command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "900-no-regression: 写/未知 command 为 0",
+          "passed": true
+        },
+        {
+          "name": "900-no-regression: mount 前 localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "900-no-regression: localStorage 只含既有可丢弃 UI chrome 偏好",
+          "passed": true
+        },
+        {
+          "name": "900-no-regression: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "skeleton": {
+          "shellGridColumns": "42px 0px 856px 0px",
+          "activity": {
+            "width": 42,
+            "height": 758,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "1px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "left": {
+            "width": 0,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "central": {
+            "width": 856,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "right": {
+            "width": 0,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "status": {
+            "width": 856,
+            "height": 26,
+            "borderTopWidth": "1px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "groupHeader": {
+            "width": 856,
+            "height": 36,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "1px",
+            "borderLeftWidth": "0px"
+          },
+          "documentHead": {
+            "width": 856,
+            "height": 96.19,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "separator": null,
+          "leftFooterPresent": false,
+          "centralChromeTotal": 132.19,
+          "ratio": {
+            "left": 0,
+            "central": 856,
+            "right": 0,
+            "order": false
+          },
+          "truncated": [
+            {
+              "text": "visual-entry-01",
+              "clientWidth": 46,
+              "scrollWidth": 66,
+              "className": ""
+            }
+          ],
+          "overflow": {
+            "documentElement": {
+              "clientWidth": 900,
+              "scrollWidth": 900,
+              "overflowsHorizontally": false
+            },
+            "body": {
+              "clientWidth": 900,
+              "scrollWidth": 900,
+              "overflowsHorizontally": false
+            },
+            "shell": {
+              "clientWidth": 898,
+              "scrollWidth": 898,
+              "overflowsHorizontally": false
+            },
+            "central": {
+              "clientWidth": 856,
+              "scrollWidth": 856,
+              "overflowsHorizontally": false
+            },
+            "activeGroupPanel": {
+              "clientWidth": 856,
+              "scrollWidth": 856,
+              "overflowsHorizontally": false
+            },
+            "left": {
+              "clientWidth": 0,
+              "scrollWidth": 0,
+              "overflowsHorizontally": false
+            },
+            "right": {
+              "clientWidth": 0,
+              "scrollWidth": 0,
+              "overflowsHorizontally": false
+            }
+          }
+        },
+        "collapsed": {
+          "leftHidden": "true",
+          "rightHidden": "true"
+        }
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "archive/visual-entry-01.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:archive/visual-entry-01.md",
+                      "kind": "markdown",
+                      "relativePath": "archive/visual-entry-01.md",
+                      "projection": "preview"
+                    }
+                  ],
+                  "activeTabId": "markdown:archive/visual-entry-01.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    }
+  ]
+}

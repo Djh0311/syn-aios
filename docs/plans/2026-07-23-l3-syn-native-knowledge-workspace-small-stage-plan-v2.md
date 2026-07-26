@@ -2,7 +2,7 @@
 
 - 初始日期：2026-07-23
 - 界面路线修订：2026-07-25
-- 状态：**N0-N5 既有离线能力已收口；N2R-R0 真实参考已冻结；R1、R2、R3A、R3B、经 R3C-R1 修正后的 R3C、R3D 与 R3E（活动栏 ribbon / 右栏层级 / Graph 规模化）的 synthetic 范围均已获指导接受；R2 差距矩阵已全收，下一段是 R4 最终视觉对照；N6 真实 App 验收继续 HOLD**
+- 状态：**N0-N5 既有离线能力已收口；N2R 视觉线 R0→R4 全部收官（R4 已获指导接受，中央 chrome 为用户拍板的有意分歧）；下一段不再是视觉包，而是①代码入库②isolated UI discovery→UI 先行门→Gate 0；N6 真实 App 验收继续 HOLD**
 - 决策：`decisions/2026-07-23-l3-syn-native-knowledge-workspace-route-v2.md`
 - R0 参考：`docs/design/2026-07-25-l3-obsidian-core-desktop-reference-and-migration-r0-v1.md`
 - 原开发包：`tasks/2026-07-23-l3-syn-native-knowledge-workspace-development-package-v2.md`
@@ -24,7 +24,7 @@
 | N3 图谱 | 全局/局部关系图、筛选、从节点打开笔记 | 离线已完成 |
 | N4 JSON Canvas | `.canvas` 读写、节点/连线、冲突保护 | 离线已完成 |
 | N5 附件与恢复 | 受限附件、工作区恢复、备份/恢复和外部变更刷新 | 离线已完成 |
-| N2R 高保真单壳返工 | 冻结参考，消除双容器，将既有能力迁入唯一桌面工作台 | **R0 完成；R1/R2/R3A/R3B/R3C/R3D/R3E synthetic 接受；R3 全收，下一段 R4** |
+| N2R 高保真单壳返工 | 冻结参考，消除双容器，将既有能力迁入唯一桌面工作台 | **R0→R4 全收（synthetic 范围）；中央 chrome 为已拍板的有意分歧；视觉线收官** |
 | N6 AI/MCP 与验收 | 主管只读 search/read/open/cite、确认式 AI 写、全闭环真机验收 | HOLD |
 
 N2R 不重做 N1-N5 的后端能力。它先于新的 UI discovery、Gate 0 和十二项真实 App 验收完成。
@@ -174,6 +174,16 @@ R3 的精确写入面只能由 R2 的 P0/P1/P2 差距矩阵形成，不得在 R2
 - 不出现卡片仪表盘、全宽模块堆叠、重复标题区或多个竞争主面板；
 - 基准窗口和紧凑窗口均无重叠、截断或外层滚动。
 
+**R4 已于 2026-07-26 施工并收口**（`tasks/2026-07-26-l3-syn-n2r-r4-final-visual-alignment-and-icon-tooltip-package-v1.md`）。三维度：D1 骨架逐项对照 R0 实测几何；D2 正文按用户拍板提到 `16 px`（新增 `--text-body` 专用档，既有七档字号一字未改，chrome 文字保持密集档）；D3 活动栏加与 `aria-label` 同值的 `title` 悬停提示，并把 R3E 那条"整条禁止 title"的合同改写为"必须同值"。执行线回交 green `6 contexts / 73 assertions / 0 failed`、回归锁六个 runner（R3B 90/0、R3C 131/0、R3C-R1 73/0、R3D 修正版 75/0；R3E 3 条与 R3D 原件 1 条均为已归因的预期翻面）。
+
+指导线独立复核：拷 runner 自跑 `73/0` 且与执行线 JSON 深度 diff 零差异；`shasum -c` 校验基线副本 3/3 后自行 diff（`styles.css` 仅 `+8/-2`）；17 个代码冻结件与 6 个冻结 runner 全 MATCH（含 R3D 验收原件）；全部门禁自跑同结果；**自写 CDP 探针**确认八个按钮的可访问名称来源仍是 `aria-label`（`title` 标为 superseded，不双读不顶替）；自开笔记复测中央 chrome `36 + 96.19 = 132.19`。
+
+**唯一超标项：中央 chrome 高 `132.19` vs 参照 `74`。** 执行线因该 selector 不在白名单而停手上交（行为正确），但其自评 `PASS（有保留）` 未被指导线采纳——`73/0` 的断言集合里没有任何一条覆盖该维度（见账本 07-26 两行）。经指导线把差距定位与修复代价提交后，**用户裁定接受为有意分歧**，落 `decisions/2026-07-26-central-document-head-band-divergence-v1.md`。
+
+指导结论：**`ACCEPTED_R4_D2_BODY_TYPOGRAPHY` / `ACCEPTED_R4_D3_ICON_TOOLTIP` / `ACCEPTED_R4_D1_SKELETON_WITH_RATIFIED_DIVERGENCE`（synthetic）/ `NOT_REAL_APP_ACCEPTED`**。
+
+**N2R 视觉线到此收官**，收官口径固定为"骨架七项在参照带内 + 中央 chrome 为已记档的有意分歧"，**不得**表述为完整 R0 通过、像素级对齐或 1:1。下一段不再是视觉包，而是：① 代码入库（知识前端与后端至今全部未提交，需先复核后端与其他线 diff）；② 之后才是 isolated Home-only UI discovery → UI 先行门 → Gate 0 与十二项真实验收。
+
 ## 6. N3：知识关系图
 
 - 复用 `@xyflow/react`，不新增第二图框架。
@@ -256,7 +266,8 @@ R3 的精确写入面只能由 R2 的 P0/P1/P2 差距矩阵形成，不得在 R2
 7. N2R-R3C Canvas-first（含 R3C-R1 回焦窄返工，已获指导接受）；
 8. N2R-R3D Graph 关系舞台收敛（已获指导接受，仅 synthetic 范围；环形布局规模外行为记账待办）；
 9. N2R-R3E 活动栏 ribbon + 右栏层级 + Graph 布局规模化（合并包，已获指导接受，仅 synthetic 范围；活动栏悬停提示与同心环不表达团块两项留作 R4 输入）；
-10. N2R-R3 完成并经离线/浏览器验收后，再做 R4 最终视觉对照；
+10. N2R-R4 最终视觉对照 + 活动栏悬停提示（**已获指导接受**；中央 chrome 为已拍板有意分歧）；
+10a. **代码入库**：知识前端与后端（含未跟踪的 `knowledge_index.rs`）自 07-20 起全部未提交，需先复核后端与其他线 diff 再显式列文件提交——排在任何真机动作之前；
 11. 用户另行授权一次 isolated Home-only UI discovery；
 12. UI 先行门；
 13. 用户另行授权 Gate 0 与原十二项；

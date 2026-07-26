@@ -216,7 +216,9 @@ where
         Err(error) => SecretaryExplainOutcome {
             status: "unavailable".to_string(),
             explanation: None,
-            reason: Some(crate::run_error_translation::humanize_error_for_display(&error)),
+            reason: Some(crate::run_error_translation::humanize_error_for_display(
+                &error,
+            )),
         },
     }
 }

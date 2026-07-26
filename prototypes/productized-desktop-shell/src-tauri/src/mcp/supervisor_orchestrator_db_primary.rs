@@ -119,6 +119,61 @@ pub(crate) fn replay_db_primary_projection(
     Ok(changes as usize)
 }
 
+#[derive(Debug)]
+enum DbPrimaryStoreUpdateError {
+    Store(String),
+    Update(String),
+    PersistDb(String),
+    ProjectJson(String),
+}
+
+impl DbPrimaryStoreUpdateError {
+    fn into_message(self) -> String {
+        match self {
+            Self::Store(message)
+            | Self::Update(message)
+            | Self::PersistDb(message)
+            | Self::ProjectJson(message) => message,
+        }
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DbPrimaryTestFailure {
+    StorePrepare,
+    PersistDb,
+    ProjectJson,
+}
+
+#[cfg(test)]
+thread_local! {
+    static DB_PRIMARY_TEST_FAILURE: std::cell::Cell<Option<DbPrimaryTestFailure>> = const {
+        std::cell::Cell::new(None)
+    };
+}
+
+#[cfg(test)]
+struct DbPrimaryTestFailureGuard;
+
+#[cfg(test)]
+impl Drop for DbPrimaryTestFailureGuard {
+    fn drop(&mut self) {
+        DB_PRIMARY_TEST_FAILURE.with(|failure| failure.set(None));
+    }
+}
+
+#[cfg(test)]
+fn force_db_primary_test_failure(failure: DbPrimaryTestFailure) -> DbPrimaryTestFailureGuard {
+    DB_PRIMARY_TEST_FAILURE.with(|current| current.set(Some(failure)));
+    DbPrimaryTestFailureGuard
+}
+
+#[cfg(test)]
+fn db_primary_test_failure_is(failure: DbPrimaryTestFailure) -> bool {
+    DB_PRIMARY_TEST_FAILURE.with(|current| current.get() == Some(failure))
+}
+
 // M5-B keeps the JSON-only writer in the parent module intact. In DB-primary mode, every
 // supervisor-store mutation first records its one-session delta and newly appended audit events
 // in the existing SQLite tables, then projects the complete sidecar under the same lock.
@@ -127,46 +182,77 @@ fn update_store_db_primary<R>(
     write_id: &str,
     repository: crate::workbench_sqlite_repository::WorkbenchSqliteRepository,
     update: impl FnOnce(&mut SupervisorStore) -> Result<R, String>,
-) -> Result<R, String> {
-    let workflow_state_path = workflow_state_path(config)?;
-    let sidecar = sidecar_path(config)?;
-    let parent = sidecar
-        .parent()
-        .ok_or_else(|| "主管编排 sidecar 没有父目录".to_string())?;
+) -> Result<R, DbPrimaryStoreUpdateError> {
+    let workflow_state_path =
+        workflow_state_path(config).map_err(DbPrimaryStoreUpdateError::Store)?;
+    let sidecar = sidecar_path(config).map_err(DbPrimaryStoreUpdateError::Store)?;
+    let parent = sidecar.parent().ok_or_else(|| {
+        DbPrimaryStoreUpdateError::Store("主管编排 sidecar 没有父目录".to_string())
+    })?;
     fs::create_dir_all(parent).map_err(|error| {
-        format!(
+        DbPrimaryStoreUpdateError::Store(format!(
             "创建主管编排 sidecar 目录失败 {}：{error}",
             parent.display()
-        )
+        ))
     })?;
-    let _lock = StoreLock::acquire(&parent.join(LOCK_NAME), write_id)?;
-    let mut store = load_store(config)?;
+    let _lock = StoreLock::acquire(&parent.join(LOCK_NAME), write_id)
+        .map_err(DbPrimaryStoreUpdateError::Store)?;
+    #[cfg(test)]
+    if db_primary_test_failure_is(DbPrimaryTestFailure::StorePrepare) {
+        return Err(DbPrimaryStoreUpdateError::Store(
+            "shared_supervisor_binding_test_store_prepare_failure".to_string(),
+        ));
+    }
+    let mut store = load_store(config).map_err(DbPrimaryStoreUpdateError::Store)?;
     let before = store.clone();
-    let result = update(&mut store)?;
-    stamp_changed_supervisor_session(&before, &mut store, now_ms())?;
+    let result = update(&mut store).map_err(DbPrimaryStoreUpdateError::Update)?;
+    stamp_changed_supervisor_session(&before, &mut store, now_ms())
+        .map_err(DbPrimaryStoreUpdateError::Store)?;
     store.revision += 1;
     store.updated_at_ms = now_ms();
 
-    let changed_session = changed_supervisor_session(&before, &store)?;
-    let appended_audits = appended_supervisor_audits(&before, &store)?;
+    let changed_session =
+        changed_supervisor_session(&before, &store).map_err(DbPrimaryStoreUpdateError::Store)?;
+    let appended_audits =
+        appended_supervisor_audits(&before, &store).map_err(DbPrimaryStoreUpdateError::Store)?;
     let session_value = changed_session
         .as_ref()
         .map(serde_json::to_value)
         .transpose()
-        .map_err(|error| format!("序列化主管编排 DB 主写 session 失败：{error}"))?;
+        .map_err(|error| {
+            DbPrimaryStoreUpdateError::Store(format!(
+                "序列化主管编排 DB 主写 session 失败：{error}"
+            ))
+        })?;
     let audit_values = appended_audits
         .iter()
         .map(|audit| {
-            serde_json::to_value(audit)
-                .map_err(|error| format!("序列化主管编排 DB 主写审计失败：{error}"))
+            serde_json::to_value(audit).map_err(|error| {
+                DbPrimaryStoreUpdateError::Store(format!("序列化主管编排 DB 主写审计失败：{error}"))
+            })
         })
         .collect::<Result<Vec<_>, _>>()?;
-    repository.record_supervisor_orchestrator_delta(session_value.as_ref(), &audit_values, None)?;
+    #[cfg(test)]
+    if db_primary_test_failure_is(DbPrimaryTestFailure::PersistDb) {
+        return Err(DbPrimaryStoreUpdateError::PersistDb(
+            "shared_supervisor_binding_test_persist_db_failure".to_string(),
+        ));
+    }
+    repository
+        .record_supervisor_orchestrator_delta(session_value.as_ref(), &audit_values, None)
+        .map_err(DbPrimaryStoreUpdateError::PersistDb)?;
     crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
         workflow_state_path,
         "supervisor_orchestrator",
-        || write_store_atomic(&sidecar, &store, write_id),
-    )?;
+        || {
+            #[cfg(test)]
+            if db_primary_test_failure_is(DbPrimaryTestFailure::ProjectJson) {
+                return Err("shared_supervisor_binding_test_project_json_failure".to_string());
+            }
+            write_store_atomic(&sidecar, &store, write_id)
+        },
+    )
+    .map_err(DbPrimaryStoreUpdateError::ProjectJson)?;
     Ok(result)
 }
 

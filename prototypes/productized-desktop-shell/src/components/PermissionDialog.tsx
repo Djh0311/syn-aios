@@ -381,7 +381,7 @@ export function PermissionDialog({ action, busy, onCancel, onConfirm }: Permissi
             </div>
             <div className="permission-detail">
               <span>边界</span>
-              <strong>该动作只会在你确认后写入 memory-candidates.v1.json；只生成候选，不写正式记忆；未执行 Obsidian 原生同步。</strong>
+              <strong>该动作只会在你确认后写入 memory-candidates.v1.json；只生成候选，不写正式记忆；知识库材料仍需经候选与用户确认。</strong>
             </div>
           </>
         ) : null}

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -13,6 +13,8 @@ const SIDECAR_NAME: &str = "exec-process-registry.v1.json";
 const LOCK_NAME: &str = ".exec-process-registry.v1.lock";
 const REAP_WAIT_ATTEMPTS: usize = 20;
 const REAP_WAIT_INTERVAL: Duration = Duration::from_millis(100);
+const HOST_OWNED_SUPERVISOR_CONVERSATION_CMDLINE_SUMMARY: &str =
+    "host_owned_supervisor_conversation_process";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct RegisteredProcess {
@@ -20,6 +22,8 @@ struct RegisteredProcess {
     run_id: String,
     started_at: String,
     cmdline_summary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    observed_cmdline_sha256: Option<String>,
     #[serde(default)]
     process_group: bool,
     #[serde(default)]
@@ -47,6 +51,7 @@ struct ExecProcessRegistryStore {
 struct ObservedProcess {
     started_at: String,
     cmdline: String,
+    cmdline_raw_bytes: Vec<u8>,
     process_group_id: Option<u32>,
 }
 
@@ -63,13 +68,14 @@ impl ProcessOperations for SystemProcessOperations {
         let Some(started_at) = started_at else {
             return Ok(None);
         };
-        let cmdline = ps_field(pid, "command")?
+        let (cmdline, cmdline_raw_bytes) = ps_command_field(pid)?
             .ok_or_else(|| format!("读取 PID {pid} 命令行失败：进程在两次核验之间退出"))?;
         let process_group_id =
             ps_field(pid, "pgid")?.and_then(|value| value.trim().parse::<u32>().ok());
         Ok(Some(ObservedProcess {
             started_at,
             cmdline,
+            cmdline_raw_bytes,
             process_group_id,
         }))
     }
@@ -86,16 +92,41 @@ impl ProcessOperations for SystemProcessOperations {
             .status()
             .map_err(|error| format!("回收执行目标 {target} 时无法发送终止信号：{error}"))?;
         if !status.success() {
+            if process_group && process_group_is_empty(pid)? {
+                return Ok(());
+            }
             return Err(format!("回收执行目标 {target} 时终止信号返回 {status}"));
         }
         for _ in 0..REAP_WAIT_ATTEMPTS {
-            if self.inspect(pid)?.is_none() {
+            if process_group {
+                if process_group_is_empty(pid)? {
+                    return Ok(());
+                }
+            } else if self.inspect(pid)?.is_none() {
                 return Ok(());
             }
             thread::sleep(REAP_WAIT_INTERVAL);
         }
-        Err(format!("回收 PID {pid} 后仍未退出"))
+        Err(if process_group {
+            format!("回收进程组 {pid} 后仍未退出")
+        } else {
+            format!("回收 PID {pid} 后仍未退出")
+        })
     }
+}
+
+/// Callers reach this only after the strict `started_at + PGID + full command
+/// hash` identity check.  A group entry is not considered reclaimed merely
+/// because its leader has exited: descendants can outlive that leader.
+fn process_group_is_empty(process_group_id: u32) -> Result<bool, String> {
+    let status = Command::new("/bin/kill")
+        .arg("-0")
+        .arg(format!("-{process_group_id}"))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| format!("核验进程组 {process_group_id} 是否退出时失败：{error}"))?;
+    Ok(!status.success())
 }
 
 /// runner 成功 spawn 后的登记护栏。正常路径显式注销；提前返回时 Drop 同样清理登记。
@@ -116,6 +147,19 @@ impl DurableProcessRegistration {
             return Ok(());
         };
         unregister_entry(&self.workflow_state_path, &entry)
+    }
+
+    /// Preserve the entry if sidecar removal itself fails so the strict orphan
+    /// reaper can still recover it later.  Manual relay failure closure uses
+    /// this instead of consuming the durable identity before it is known to
+    /// have been removed.
+    pub(crate) fn unregister_preserving_on_error(&mut self) -> Result<(), String> {
+        let Some(entry) = self.entry.as_ref() else {
+            return Ok(());
+        };
+        unregister_entry(&self.workflow_state_path, entry)?;
+        self.entry.take();
+        Ok(())
     }
 }
 
@@ -184,6 +228,58 @@ pub(crate) fn register_manual_relay_process_group(
         "manual relay",
         &SystemProcessOperations,
     )
+}
+
+/// Host-owned supervisor conversation processes carry a child-only MCP argv.
+/// Persist only a fixed descriptor and the full observed command identity hash;
+/// the raw argv must never become sidecar text.
+pub(crate) fn register_host_owned_supervisor_conversation_process_group(
+    workflow_state_path: &Path,
+    run_id: &str,
+    pid: u32,
+) -> Result<DurableProcessRegistration, String> {
+    register_host_owned_supervisor_conversation_process_group_with(
+        workflow_state_path,
+        run_id,
+        pid,
+        &SystemProcessOperations,
+    )
+}
+
+/// Test-only durable entry for relay cleanup tests.  It intentionally bypasses
+/// live `ps` inspection while still exercising the real sidecar write and the
+/// real `DurableProcessRegistration::unregister` path against a caller-owned
+/// temporary workflow-state location.
+#[cfg(test)]
+pub(crate) fn register_temporary_durable_process_for_cleanup_test(
+    workflow_state_path: &Path,
+    run_id: &str,
+    pid: u32,
+) -> Result<DurableProcessRegistration, String> {
+    let entry = RegisteredProcess {
+        pid,
+        run_id: run_id.to_string(),
+        started_at: "test-temporary-durable-registration".to_string(),
+        cmdline_summary: HOST_OWNED_SUPERVISOR_CONVERSATION_CMDLINE_SUMMARY.to_string(),
+        observed_cmdline_sha256: Some(crate::utils::hash::sha256_hex(
+            "test-temporary-durable-registration",
+        )),
+        process_group: true,
+        process_group_id: Some(pid),
+    };
+    register_entry(workflow_state_path, entry.clone())?;
+    Ok(DurableProcessRegistration {
+        workflow_state_path: workflow_state_path.to_path_buf(),
+        entry: Some(entry),
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn temporary_durable_process_registry_is_empty_for_cleanup_test(
+    workflow_state_path: &Path,
+) -> Result<bool, String> {
+    let sidecar = sidecar_path(workflow_state_path)?;
+    Ok(load_store(&sidecar)?.entries.is_empty())
 }
 
 /// local runner 与 manual relay 共用严格进程组登记：只有刚 spawn、身份可核验且
@@ -264,6 +360,45 @@ fn register_codex_process_group_with(
         run_id: run_id.to_string(),
         started_at: observed.started_at,
         cmdline_summary: observed.cmdline,
+        observed_cmdline_sha256: None,
+        process_group: true,
+        process_group_id: Some(pid),
+    };
+    register_entry(workflow_state_path, entry.clone())?;
+    Ok(DurableProcessRegistration {
+        workflow_state_path: workflow_state_path.to_path_buf(),
+        entry: Some(entry),
+    })
+}
+
+fn register_host_owned_supervisor_conversation_process_group_with(
+    workflow_state_path: &Path,
+    run_id: &str,
+    pid: u32,
+    operations: &dyn ProcessOperations,
+) -> Result<DurableProcessRegistration, String> {
+    let observed = operations
+        .inspect(pid)?
+        .ok_or_else(|| format!("host-owned supervisor conversation PID {pid} 在登记前已退出"))?;
+    if !is_workbench_codex_exec(&observed.cmdline) {
+        return Err(format!(
+            "host-owned supervisor conversation PID {pid} 不是可识别的 codex exec"
+        ));
+    }
+    if observed.process_group_id != Some(pid) {
+        return Err(format!(
+            "host-owned supervisor conversation PID {pid} 不是已核验的进程组组长（pgid={:?}）",
+            observed.process_group_id
+        ));
+    }
+    let entry = RegisteredProcess {
+        pid,
+        run_id: run_id.to_string(),
+        started_at: observed.started_at,
+        cmdline_summary: HOST_OWNED_SUPERVISOR_CONVERSATION_CMDLINE_SUMMARY.to_string(),
+        observed_cmdline_sha256: Some(crate::utils::hash::sha256_hex_bytes(
+            &observed.cmdline_raw_bytes,
+        )),
         process_group: true,
         process_group_id: Some(pid),
     };
@@ -281,11 +416,17 @@ fn register_spawned_process_for(
     process_group: bool,
     operations: &dyn ProcessOperations,
 ) -> ProcessRegistration {
-    register_spawned_process_for_checked(workflow_state_path, run_id, pid, process_group, operations)
-        .unwrap_or_else(|_| ProcessRegistration {
-            workflow_state_path: workflow_state_path.to_path_buf(),
-            entry: None,
-        })
+    register_spawned_process_for_checked(
+        workflow_state_path,
+        run_id,
+        pid,
+        process_group,
+        operations,
+    )
+    .unwrap_or_else(|_| ProcessRegistration {
+        workflow_state_path: workflow_state_path.to_path_buf(),
+        entry: None,
+    })
 }
 
 fn register_spawned_process_for_checked(
@@ -300,13 +441,16 @@ fn register_spawned_process_for_checked(
         .inspect(pid)?
         .ok_or_else(|| format!("supervisor spawned PID {pid} 在登记前已退出"))?;
     if !is_workbench_supervisor_process(&observed.cmdline) {
-        return Err(format!("supervisor spawned PID {pid} 不是可识别的 codex exec"));
+        return Err(format!(
+            "supervisor spawned PID {pid} 不是可识别的 codex exec"
+        ));
     }
     let entry = RegisteredProcess {
         pid,
         run_id: run_id.to_string(),
         started_at: observed.started_at,
         cmdline_summary: observed.cmdline,
+        observed_cmdline_sha256: None,
         process_group,
         process_group_id: process_group.then_some(pid),
     };
@@ -515,6 +659,34 @@ fn ps_field(pid: u32, field: &str) -> Result<Option<String>, String> {
     )
 }
 
+fn ps_command_field(pid: u32) -> Result<Option<(String, Vec<u8>)>, String> {
+    let output = Command::new("/bin/ps")
+        .arg("-p")
+        .arg(pid.to_string())
+        .arg("-o")
+        .arg("command=")
+        .output()
+        .map_err(|error| format!("读取 PID {pid} 的 command 失败：{error}"))?;
+    let Some(mut raw_bytes) = classify_ps_field_output_bytes(
+        pid,
+        "command",
+        output.status.success(),
+        &output.stdout,
+        &output.stderr,
+    )?
+    else {
+        return Ok(None);
+    };
+    if raw_bytes.last() == Some(&b'\n') {
+        raw_bytes.pop();
+        if raw_bytes.last() == Some(&b'\r') {
+            raw_bytes.pop();
+        }
+    }
+    let cmdline = String::from_utf8_lossy(&raw_bytes).into_owned();
+    Ok((!cmdline.is_empty()).then_some((cmdline, raw_bytes)))
+}
+
 fn classify_ps_field_output(
     pid: u32,
     field: &str,
@@ -522,6 +694,21 @@ fn classify_ps_field_output(
     stdout: &[u8],
     stderr: &[u8],
 ) -> Result<Option<String>, String> {
+    let value = classify_ps_field_output_bytes(pid, field, success, stdout, stderr)?;
+    let value = value
+        .as_deref()
+        .map(String::from_utf8_lossy)
+        .map(|value| value.trim().to_string());
+    Ok(value.filter(|value| !value.is_empty()))
+}
+
+fn classify_ps_field_output_bytes(
+    pid: u32,
+    field: &str,
+    success: bool,
+    stdout: &[u8],
+    stderr: &[u8],
+) -> Result<Option<Vec<u8>>, String> {
     if !success {
         let stderr = String::from_utf8_lossy(stderr);
         if (stdout.is_empty() && stderr.trim().is_empty())
@@ -532,8 +719,7 @@ fn classify_ps_field_output(
         }
         return Err(format!("读取 PID {pid} 的 {field} 失败：{}", stderr.trim()));
     }
-    let value = String::from_utf8_lossy(stdout).trim().to_string();
-    Ok((!value.is_empty()).then_some(value))
+    Ok((!stdout.is_empty()).then_some(stdout.to_vec()))
 }
 
 fn is_workbench_codex_exec(cmdline: &str) -> bool {
@@ -548,9 +734,22 @@ fn is_workbench_supervisor_process(cmdline: &str) -> bool {
 }
 
 fn same_process(entry: &RegisteredProcess, observed: &ObservedProcess) -> bool {
-    entry.started_at == observed.started_at
-        && entry.cmdline_summary == observed.cmdline
+    if entry.started_at != observed.started_at {
+        return false;
+    }
+    if let Some(expected_hash) = entry.observed_cmdline_sha256.as_deref() {
+        return entry.process_group
+            && entry.process_group_id == Some(entry.pid)
+            && observed.process_group_id == Some(entry.pid)
+            && valid_sha256_hex(expected_hash)
+            && crate::utils::hash::sha256_hex_bytes(&observed.cmdline_raw_bytes) == expected_hash;
+    }
+    entry.cmdline_summary == observed.cmdline
         && (!entry.process_group || entry.process_group_id == observed.process_group_id)
+}
+
+fn valid_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn registry_audit(event_type: &str, entry: &RegisteredProcess, reason: &str) -> RegistryAuditEvent {
@@ -640,17 +839,32 @@ mod tests {
             run_id: "new_session:consult-readonly:abc".to_string(),
             started_at: "Fri Jul 10 21:49:12 2026".to_string(),
             cmdline_summary: "/tmp/codex exec -C /tmp/test --sandbox read-only".to_string(),
+            observed_cmdline_sha256: None,
             process_group: false,
             process_group_id: None,
         }
     }
 
-    fn observed_for(entry: &RegisteredProcess) -> ObservedProcess {
+    fn observed_process(
+        started_at: &str,
+        cmdline: impl Into<String>,
+        process_group_id: Option<u32>,
+    ) -> ObservedProcess {
+        let cmdline = cmdline.into();
         ObservedProcess {
-            started_at: entry.started_at.clone(),
-            cmdline: entry.cmdline_summary.clone(),
-            process_group_id: entry.process_group_id,
+            started_at: started_at.to_string(),
+            cmdline_raw_bytes: cmdline.as_bytes().to_vec(),
+            cmdline,
+            process_group_id,
         }
+    }
+
+    fn observed_for(entry: &RegisteredProcess) -> ObservedProcess {
+        observed_process(
+            &entry.started_at,
+            entry.cmdline_summary.clone(),
+            entry.process_group_id,
+        )
     }
 
     #[test]
@@ -694,11 +908,11 @@ mod tests {
     fn supervisor_exec_registration_is_fail_closed_and_reapable() {
         let path = test_workflow_state_path("supervisor-exec");
         let pid = 43;
-        let observed = ObservedProcess {
-            started_at: "Fri Jul 17 10:00:00 2026".to_string(),
-            cmdline: "/tmp/codex exec --json".to_string(),
-            process_group_id: Some(pid),
-        };
+        let observed = observed_process(
+            "Fri Jul 17 10:00:00 2026",
+            "/tmp/codex exec --json",
+            Some(pid),
+        );
         let processes = FakeProcessOperations::with_process(pid, observed);
         let registration = register_codex_process_group_with(
             &path,
@@ -724,11 +938,11 @@ mod tests {
 
         let arbitrary = FakeProcessOperations::with_process(
             44,
-            ObservedProcess {
-                started_at: "Fri Jul 17 10:00:01 2026".to_string(),
-                cmdline: "/tmp/not-codex resident-helper".to_string(),
-                process_group_id: Some(44),
-            },
+            observed_process(
+                "Fri Jul 17 10:00:01 2026",
+                "/tmp/not-codex resident-helper",
+                Some(44),
+            ),
         );
         let error = match register_codex_process_group_with(
             &path,
@@ -798,6 +1012,41 @@ mod tests {
         let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn system_group_reaper_waits_for_a_descendant_after_its_leader_exits() {
+        use std::os::unix::process::CommandExt;
+
+        let mut command = Command::new("/bin/sh");
+        command
+            .arg("-c")
+            .arg("( trap '' TERM; sleep 30 ) &\nexit 0\n")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0);
+        let mut child = command.spawn().expect("isolated process group starts");
+        let process_group_id = child.id();
+        std::thread::sleep(Duration::from_millis(100));
+
+        let result = SystemProcessOperations.kill_and_wait(process_group_id, true);
+        // Keep the isolated local fixture recoverable even if the assertion
+        // below changes or the reaper implementation regresses.
+        let _ = Command::new("/bin/kill")
+            .arg("-KILL")
+            .arg(format!("-{process_group_id}"))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        let _ = child.wait();
+
+        result.expect("group reaper must wait until the leader's descendant is gone");
+        assert!(
+            process_group_is_empty(process_group_id).expect("process-group probe succeeds"),
+            "leader exit alone must not count as a reaped process group"
+        );
+    }
+
     #[test]
     fn strict_manual_relay_registration_rejects_a_non_leader_pid() {
         let path = test_workflow_state_path("manual-relay-not-leader");
@@ -821,6 +1070,125 @@ mod tests {
     }
 
     #[test]
+    fn r0_host_owned_supervisor_registry_must_not_persist_relay_command_secrets() {
+        let path = test_workflow_state_path("r0-supervisor-secret-sink");
+        let pid = 55;
+        let endpoint = "relay-endpoint-sentinel";
+        let grant = "relay-grant-sentinel";
+        let relay_path = "/private/tmp/relay-path-sentinel.sock";
+        let raw_cmdline = format!(
+            "/tmp/codex exec -c mcp_servers.supervisor_orchestrator.args=[\"--knowledge-open-relay-endpoint\",\"{endpoint}\",\"--knowledge-open-relay-grant\",\"{grant}\",\"{relay_path}\"]"
+        );
+        let processes = FakeProcessOperations::with_process(
+            pid,
+            observed_process("Fri Jul 17 10:00:02 2026", raw_cmdline.clone(), Some(pid)),
+        );
+
+        let registration = register_host_owned_supervisor_conversation_process_group_with(
+            &path,
+            "supervisor-conversation:test",
+            pid,
+            &processes,
+        )
+        .expect("fixture codex exec must register");
+        let sidecar_text = fs::read_to_string(sidecar_path(&path).unwrap()).unwrap();
+
+        assert!(
+            !sidecar_text.contains(endpoint),
+            "R0 red contract: endpoint must never enter the durable registry"
+        );
+        assert!(!sidecar_text.contains(grant));
+        assert!(!sidecar_text.contains(relay_path));
+        assert!(!sidecar_text.contains("mcp_servers.supervisor_orchestrator.args"));
+        assert!(!sidecar_text.contains(&raw_cmdline));
+        let stored = load_store(&sidecar_path(&path).unwrap()).unwrap();
+        assert_eq!(
+            stored.entries[0].cmdline_summary,
+            HOST_OWNED_SUPERVISOR_CONVERSATION_CMDLINE_SUMMARY
+        );
+        let hash = stored.entries[0]
+            .observed_cmdline_sha256
+            .as_deref()
+            .expect("host-owned registration must persist a command identity hash");
+        assert_eq!(
+            hash,
+            crate::utils::hash::sha256_hex_bytes(raw_cmdline.as_bytes())
+        );
+        assert!(hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit()));
+
+        registration.unregister().unwrap();
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn host_owned_supervisor_reaper_requires_exact_started_at_pgid_and_cmdline_hash() {
+        let raw_cmdline = "/tmp/codex exec -c mcp_servers.supervisor_orchestrator.args=[\"relay-endpoint-sentinel\",\"relay-grant-sentinel\"]";
+        for (name, observed, should_reap) in [
+            (
+                "exact",
+                observed_process("Fri Jul 17 10:00:03 2026", raw_cmdline, Some(56)),
+                true,
+            ),
+            (
+                "started-at-mismatch",
+                observed_process("Fri Jul 17 10:00:04 2026", raw_cmdline, Some(56)),
+                false,
+            ),
+            (
+                "pgid-mismatch",
+                observed_process("Fri Jul 17 10:00:03 2026", raw_cmdline, Some(7)),
+                false,
+            ),
+            (
+                "cmdline-hash-mismatch",
+                observed_process(
+                    "Fri Jul 17 10:00:03 2026",
+                    "/tmp/codex exec -c mcp_servers.supervisor_orchestrator.args=[\"different\"]",
+                    Some(56),
+                ),
+                false,
+            ),
+        ] {
+            let path = test_workflow_state_path(&format!("host-owned-reap-{name}"));
+            let registration = register_host_owned_supervisor_conversation_process_group_with(
+                &path,
+                "supervisor-conversation:test",
+                56,
+                &FakeProcessOperations::with_process(
+                    56,
+                    observed_process("Fri Jul 17 10:00:03 2026", raw_cmdline, Some(56)),
+                ),
+            )
+            .expect("fixture registration");
+            drop(registration);
+            let processes = FakeProcessOperations::with_process(56, observed);
+
+            assert_eq!(
+                reap_registered_orphans_with(&path, &processes).unwrap(),
+                usize::from(should_reap),
+                "{name}"
+            );
+            assert_eq!(
+                *processes.killed.borrow(),
+                if should_reap {
+                    vec![(56, true)]
+                } else {
+                    vec![]
+                },
+                "{name}"
+            );
+            assert!(
+                load_store(&sidecar_path(&path).unwrap())
+                    .unwrap()
+                    .entries
+                    .is_empty(),
+                "mismatch entries must only be unregistered"
+            );
+            let _ = fs::remove_dir_all(path.parent().unwrap());
+        }
+    }
+
+    #[test]
     fn legacy_registered_process_without_group_fields_stays_single_pid() {
         let legacy: RegisteredProcess = serde_json::from_value(serde_json::json!({
             "pid": 54,
@@ -831,6 +1199,7 @@ mod tests {
         .unwrap();
         assert!(!legacy.process_group);
         assert_eq!(legacy.process_group_id, None);
+        assert_eq!(legacy.observed_cmdline_sha256, None);
     }
 
     #[test]
@@ -858,11 +1227,11 @@ mod tests {
         register_entry(&path, registered.clone()).expect("register");
         let processes = FakeProcessOperations::with_process(
             88,
-            ObservedProcess {
-                started_at: "Sat Jul 11 09:54:09 2026".to_string(),
-                cmdline: registered.cmdline_summary.clone(),
-                process_group_id: None,
-            },
+            observed_process(
+                "Sat Jul 11 09:54:09 2026",
+                registered.cmdline_summary.clone(),
+                None,
+            ),
         );
 
         assert_eq!(reap_registered_orphans_with(&path, &processes).unwrap(), 0);

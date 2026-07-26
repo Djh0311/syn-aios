@@ -1923,7 +1923,7 @@ function runKnowledgeBaseBoundaryScenario() {
   assert(summary.documents[0].task_reference_summary.reference_count === 1, "知识库文档应统计任务包知识引用");
   assert(summary.documents[0].candidate_draft.input.source_refs[0].source_type === "knowledge_doc", "候选草案来源必须是 knowledge_doc");
   assert(summary.documents[0].candidate_draft.input.generated_from === "knowledge_summary", "知识资料候选必须走 knowledge_summary 来源类型");
-  assert(summary.obsidian_boundary.native_sync_status === "未执行 Obsidian 原生同步", "M8 只能显示 Obsidian-compatible 占位");
+  assert(summary.obsidian_boundary.native_sync_status.includes("Syn 原生") && summary.obsidian_boundary.native_sync_status.includes("可选"), "L3 知识库读模型必须把 Syn 原生工作区与可选兼容边界说清楚");
 
   capturedAction = null;
   const knowledgeView = (

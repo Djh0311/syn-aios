@@ -64,9 +64,12 @@ export type KnowledgeDocumentReadModel = {
 };
 
 export type ObsidianCompatibleBoundarySummary = {
-  label: "Obsidian-compatible 占位";
-  native_sync_status: "未执行 Obsidian 原生同步";
-  vault_scan_status: "未自动扫描 vault";
+  // Keep this legacy read-model shape stable for the existing page selector.
+  // The product boundary is Syn-native; Obsidian is only an optional external
+  // Markdown/Canvas compatibility target.
+  label: string;
+  native_sync_status: string;
+  vault_scan_status: string;
   display_text: string;
   forbidden_text: string;
 };
@@ -129,10 +132,10 @@ export function deriveKnowledgeBaseSummary({
     recent_capture_events: captureEvents.slice(0, 4).map(buildKnowledgeMemoryCaptureSummary),
     documents,
     obsidian_boundary: {
-      label: "Obsidian-compatible 占位",
-      native_sync_status: "未执行 Obsidian 原生同步",
-      vault_scan_status: "未自动扫描 vault",
-      display_text: "Obsidian-compatible 占位：可兼容 markdown / vault 风格来源引用；未执行 Obsidian 原生同步；未自动扫描 vault。",
+      label: "Syn 原生知识工作区",
+      native_sync_status: "Syn 原生 Markdown 工作区可独立使用；官方 Obsidian 仅为可选外部打开",
+      vault_scan_status: "仅访问 Syn 自管 vault",
+      display_text: "Syn 以自管 Markdown vault 为知识真相源；官方 Obsidian 仅可按用户动作打开同一份兼容文件。",
       forbidden_text: "知识库资料和知识命中不能绕过候选、正式记忆、来源、版本、审计和权限治理。",
     },
     warnings: [...warnings],

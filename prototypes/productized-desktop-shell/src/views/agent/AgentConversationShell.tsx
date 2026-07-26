@@ -1,19 +1,23 @@
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { deriveAgentsPageReadModelFromParts } from "../../lib/pageSelectors";
+import { appendPendingUserMessage } from "../../lib/conversationEngine";
 import {
-  buildManualRelayAssistantMessage,
-  buildManualRelayLiveTranscriptEvents,
-  buildManualRelayOptimisticUserMessage,
-  appendPendingUserMessage,
-} from "../../lib/conversationEngine";
+  AGENT_CODEX_WORKSPACE_WRITE_PROFILE,
+  createAgentConversationTransportContext,
+  createConversationTransportController,
+  failedConversationReceiptLayers,
+  type ConversationTransportClient,
+  type ConversationTransportController,
+  type ConversationTransportReceipt,
+  type ConversationTransportState,
+} from "../../lib/conversationTransport";
 import { pathTail } from "../../lib/format";
 import { normalizeTranscriptError } from "../../lib/humanize";
 import {
-  pollManualCodexRelayAttempt,
-  runManualCodexRelayGuiDirect,
-  runManualCodexRelayGuiDirectNewSession,
-  stopManualCodexRelayAttempt,
+  pollCodexConversationTransportAttempt,
+  startAgentCodexConversationTransport,
+  stopCodexConversationTransportAttempt,
 } from "../../lib/tauri";
 import type {
   AgentAdapterDescriptor,
@@ -35,7 +39,7 @@ import type {
   WorkerProtocolReadModel,
   WorkflowStateSnapshot,
 } from "../../lib/types";
-import { AgentChatComposer, MANUAL_RELAY_SANDBOX, type AgentConversationSendMode } from "./AgentChatComposer";
+import { AgentChatComposer, type AgentConversationSendMode } from "./AgentChatComposer";
 import { manualRelayReasonLabel } from "./agentLabels";
 import {
   AgentSessionList,
@@ -148,6 +152,59 @@ export function deriveRelayBindingState(selectedSession: SessionRecord | null): 
   };
 }
 
+const agentConversationTransportClient: ConversationTransportClient = Object.freeze({
+  startNew: (request) => startAgentConversationTransportRequest(request),
+  startExisting: (request) => startAgentConversationTransportRequest(request),
+  poll: (request) => pollCodexConversationTransportAttempt(request),
+  stop: (request) => stopCodexConversationTransportAttempt(request),
+});
+
+function startAgentConversationTransportRequest(
+  request: Parameters<ConversationTransportClient["startNew"]>[0] | Parameters<ConversationTransportClient["startExisting"]>[0],
+): Promise<ConversationTransportReceipt> {
+  if (request.context.profile_id !== AGENT_CODEX_WORKSPACE_WRITE_PROFILE) {
+    return Promise.reject(new Error("conversation_transport_agent_profile_required"));
+  }
+  return startAgentCodexConversationTransport({ ...request, context: request.context });
+}
+
+function agentConversationIdForThread(threadId: string): string {
+  return `agent:${threadId}`;
+}
+
+function manualRelayStatusForConversationTransport(
+  status: ConversationTransportReceipt["transport"]["status"],
+): string {
+  if (status === "pending") return "running";
+  if (status === "succeeded") return "completed";
+  return status;
+}
+
+type AgentComposerConversationTransportPresentation = Readonly<
+  Pick<ManualRelayReceipt, "relay_attempt_id" | "started_at" | "status" | "live_events">
+>;
+
+// AgentChatComposer intentionally remains outside this package's write surface
+// and still accepts the historic ManualRelayReceipt type. This compatibility
+// value is consumed only by that component's status/Stop affordance. It has no
+// command, argv, tool, path, environment, or identity payload beyond the safe
+// transport attempt identifier; the full shared receipt never enters the old
+// raw relay diagnostics path below.
+function composerPresentationReceiptFromConversationTransport({
+  receipt,
+  startedAt,
+}: {
+  receipt: ConversationTransportReceipt;
+  startedAt: string;
+}): AgentComposerConversationTransportPresentation {
+  return Object.freeze({
+    relay_attempt_id: receipt.transport.attempt_id ?? `conversation-transport:${receipt.turn_id}`,
+    started_at: startedAt,
+    status: manualRelayStatusForConversationTransport(receipt.transport.status),
+    live_events: [],
+  });
+}
+
 export type AgentSessionCenterProps = {
   sessions: SessionRecord[];
   selectedThreadId: string | null;
@@ -244,17 +301,21 @@ export function AgentSessionCenter({
   const [readFilter, setReadFilter] = useState<SessionReadFilter>(initialReadFilter);
   const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(() => new Set());
   const [draftPrompt, setDraftPrompt] = useState("");
-  const [lastSubmittedNewSessionPrompt, setLastSubmittedNewSessionPrompt] = useState("");
   const [pendingUserMessages, setPendingUserMessages] = useState<CodexTranscriptEvent[]>([]);
   const [k2PreviewError, setK2PreviewError] = useState<string | null>(null);
   const [manualRelayPreview, setManualRelayPreview] = useState<ManualRelayPreview | null>(null);
-  const [manualRelayReceipt, setManualRelayReceipt] = useState<ManualRelayReceipt | null>(null);
+  const [manualRelayReceipt, setManualRelayReceipt] = useState<AgentComposerConversationTransportPresentation | null>(null);
+  const [conversationTransportReceipt, setConversationTransportReceipt] = useState<ConversationTransportReceipt | null>(null);
   const [manualRelayError, setManualRelayError] = useState<string | null>(null);
   const [manualRelayPollFailureCount, setManualRelayPollFailureCount] = useState(0);
   const [manualRelayPollingPaused, setManualRelayPollingPaused] = useState(false);
   const [manualRelayTimedOutLocally, setManualRelayTimedOutLocally] = useState(false);
   const [manualRelayBusy, setManualRelayBusy] = useState(false);
   const manualRelayPollFailureCountRef = useRef(0);
+  const conversationTransportControllerRef = useRef<ConversationTransportController | null>(null);
+  const conversationTransportUnsubscribeRef = useRef<(() => void) | null>(null);
+  const conversationTransportNewSessionRef = useRef(false);
+  const conversationTransportStartedAtRef = useRef("");
   const [developerOpen, setDeveloperOpen] = useState(false);
   const [sendMode, setSendMode] = useState<AgentConversationSendMode>("existing_session");
   const [sessionListWidth, setSessionListWidth] = useState<number>(() => {
@@ -353,6 +414,59 @@ export function AgentSessionCenter({
         : "请选择项目"
       : relayDirectSendBlockedReason;
 
+  function disposeConversationTransportController() {
+    conversationTransportUnsubscribeRef.current?.();
+    conversationTransportUnsubscribeRef.current = null;
+    conversationTransportControllerRef.current = null;
+  }
+
+  function syncConversationTransportState(next: ConversationTransportState) {
+    setConversationTransportReceipt(next.receipt);
+    setManualRelayReceipt(
+      next.receipt
+        ? composerPresentationReceiptFromConversationTransport({
+            receipt: next.receipt,
+            startedAt: conversationTransportStartedAtRef.current || new Date().toISOString(),
+          })
+        : null,
+    );
+    setManualRelayBusy(next.input_locked);
+    setManualRelayError(next.operation_error);
+    setPendingUserMessages([...next.transcript_events]);
+  }
+
+  function createAgentConversationTransport({
+    projectRoot,
+    newSession,
+    targetSessionId,
+  }: {
+    projectRoot: string;
+    newSession: boolean;
+    targetSessionId: string | null;
+  }): ConversationTransportController {
+    disposeConversationTransportController();
+    conversationTransportNewSessionRef.current = newSession;
+    conversationTransportStartedAtRef.current = new Date().toISOString();
+    const controller = createConversationTransportController({
+      context: createAgentConversationTransportContext({ project_root: projectRoot }),
+      client: agentConversationTransportClient,
+      initial_session: newSession
+        ? { conversation_id: null, thread_id: null }
+        : {
+            // SessionRecord is a read-model record and only exposes thread_id.
+            // This client correlation key never carries authority; the server
+            // derives the fixed agent profile while thread_id remains the
+            // actual session target.
+            conversation_id: agentConversationIdForThread(targetSessionId ?? ""),
+            thread_id: targetSessionId,
+          },
+    });
+    conversationTransportControllerRef.current = controller;
+    conversationTransportUnsubscribeRef.current = controller.subscribe(syncConversationTransportState);
+    syncConversationTransportState(controller.getState());
+    return controller;
+  }
+
   useEffect(() => {
     if (sendMode !== "existing_session" || !selectedSession) return;
     setSelectedProjectRoot((selectedSession.project_root ?? "").trim());
@@ -361,14 +475,18 @@ export function AgentSessionCenter({
   const scopedSessionCount = sessions.length;
   const filteredOutCount = scopedSessionCount - visibleSessions.length;
   useEffect(() => {
+    disposeConversationTransportController();
     setK2PreviewError(null);
     setManualRelayPreview(null);
     setManualRelayReceipt(null);
+    setConversationTransportReceipt(null);
     setManualRelayError(null);
+    setManualRelayBusy(false);
     manualRelayPollFailureCountRef.current = 0;
     setManualRelayPollFailureCount(0);
     setManualRelayPollingPaused(false);
     setManualRelayTimedOutLocally(false);
+    return () => disposeConversationTransportController();
   }, [selectedProjectRoot, selectedSession?.thread_id, sendMode]);
 
   useEffect(() => {
@@ -378,77 +496,61 @@ export function AgentSessionCenter({
   useEffect(() => {
     if (!manualRelayReceipt || manualRelayReceipt.status !== "running") return;
     if (manualRelayPollingPaused) return;
+    const controller = conversationTransportControllerRef.current;
+    if (!controller) return;
     let cancelled = false;
     let timer: ReturnType<typeof window.setTimeout> | null = null;
     let timeoutTimer: ReturnType<typeof window.setTimeout> | null = null;
-    const relayAttemptId = manualRelayReceipt.relay_attempt_id;
-    const existingThreadId = selectedSession?.thread_id ?? null;
-    const isNewSessionAttempt = manualRelayReceipt.target.new_session;
-    if (!existingThreadId && !isNewSessionAttempt) return;
+    const isNewSessionAttempt = conversationTransportNewSessionRef.current;
+    const registerNewThreadIfAvailable = (next: ConversationTransportState) => {
+      if (!isNewSessionAttempt || next.input_locked) return;
+      const newThreadId = next.session.thread_id;
+      if (!newThreadId) return;
+      handleSearchQueryChange(newThreadId);
+      void onNewSessionThreadStarted?.(newThreadId);
+    };
     const timeoutAfterMs = Math.max(0, MANUAL_RELAY_FRONTEND_TIMEOUT_MS - manualRelayAttemptAgeMs(manualRelayReceipt));
     const requestStopForTimeout = async () => {
       if (cancelled) return;
       setManualRelayTimedOutLocally(true);
       setManualRelayBusy(true);
       setManualRelayError("Codex 运行超过 10 分钟，已尝试停止并解锁输入。");
-      try {
-        const receipt = await stopManualCodexRelayAttempt({
-          relay_attempt_id: relayAttemptId,
-          requested_by: "frontend-timeout",
-        });
-        if (cancelled) return;
-        setManualRelayReceipt(receipt);
-      } catch (error) {
-        if (cancelled) return;
+      const next = await controller.stop();
+      if (cancelled) return;
+      if (next.operation_error) {
         setManualRelayPollingPaused(true);
-        setManualRelayReceipt((receipt) =>
-          receipt?.relay_attempt_id === relayAttemptId ? { ...receipt, status: "frontend_timeout" } : receipt,
-        );
-        setManualRelayError(`Codex 运行超过 10 分钟，自动停止失败：${messageOf(error)}。你可以重新发送或手动处理。`);
-      } finally {
-        if (!cancelled) setManualRelayBusy(false);
+        setManualRelayError(`Codex 运行超过 10 分钟，自动停止失败：${next.operation_error}`);
+        return;
       }
+      registerNewThreadIfAvailable(next);
     };
     timeoutTimer = window.setTimeout(() => {
       void requestStopForTimeout();
     }, timeoutAfterMs);
     const poll = async () => {
-      try {
-        const receipt = await pollManualCodexRelayAttempt({
-          relay_attempt_id: relayAttemptId,
-          requested_by: "user",
-        });
-        if (cancelled) return;
-        manualRelayPollFailureCountRef.current = 0;
-        setManualRelayPollFailureCount(0);
-        setManualRelayError(null);
-        setManualRelayReceipt(receipt);
-        if (receipt.status === "running") {
-          timer = window.setTimeout(poll, MANUAL_RELAY_POLL_INITIAL_DELAY_MS);
-          return;
-        }
-        if (isNewSessionAttempt) {
-          const newThreadId = receipt.thread_event_summary.thread_id;
-          if (newThreadId) {
-            handleSearchQueryChange(newThreadId);
-            void onNewSessionThreadStarted?.(newThreadId);
-          }
-          return;
-        }
-        if (existingThreadId) appendManualRelayAssistantMessage(receipt, existingThreadId);
-      } catch (error) {
-        if (cancelled) return;
+      const next = await controller.poll();
+      if (cancelled) return;
+      if (next.operation_error) {
         const decision = nextManualRelayPollFailureDecision(manualRelayPollFailureCountRef.current);
         manualRelayPollFailureCountRef.current = decision.nextFailureCount;
         setManualRelayPollFailureCount(decision.nextFailureCount);
         if (decision.shouldRetry) {
-          setManualRelayError(`状态刷新失败，${Math.round(decision.nextDelayMs / 1000)} 秒后重试：${messageOf(error)}`);
+          setManualRelayError(`状态刷新失败，${Math.round(decision.nextDelayMs / 1000)} 秒后重试。`);
           timer = window.setTimeout(poll, decision.nextDelayMs);
           return;
         }
         setManualRelayPollingPaused(true);
-        setManualRelayError(`状态刷新连续失败，已暂停轮询。可点“恢复轮询”或 Stop。最后错误：${messageOf(error)}`);
+        setManualRelayError("状态刷新连续失败，已暂停轮询。可点“恢复轮询”或 Stop。");
+        return;
       }
+      manualRelayPollFailureCountRef.current = 0;
+      setManualRelayPollFailureCount(0);
+      setManualRelayError(null);
+      if (next.input_locked && next.active_attempt_id) {
+        timer = window.setTimeout(poll, MANUAL_RELAY_POLL_INITIAL_DELAY_MS);
+        return;
+      }
+      registerNewThreadIfAvailable(next);
     };
     timer = window.setTimeout(poll, MANUAL_RELAY_POLL_INITIAL_DELAY_MS);
     return () => {
@@ -461,17 +563,17 @@ export function AgentSessionCenter({
     manualRelayReceipt?.relay_attempt_id,
     manualRelayReceipt?.started_at,
     manualRelayReceipt?.status,
-    manualRelayReceipt?.target.new_session,
-    selectedSession?.thread_id,
   ]);
 
   function handleChangeK2Draft(value: string) {
     setDraftPrompt(value);
-    if (sendMode === "new_session") setLastSubmittedNewSessionPrompt("");
+    disposeConversationTransportController();
     setK2PreviewError(null);
     setManualRelayPreview(null);
     setManualRelayReceipt(null);
+    setConversationTransportReceipt(null);
     setManualRelayError(null);
+    setManualRelayBusy(false);
     manualRelayPollFailureCountRef.current = 0;
     setManualRelayPollFailureCount(0);
     setManualRelayPollingPaused(false);
@@ -486,118 +588,65 @@ export function AgentSessionCenter({
     setManualRelayError(null);
   }
 
-  function appendManualRelayAssistantMessage(receipt: ManualRelayReceipt, threadId: string) {
-    if (!receipt.assistant_message_text) return;
-    const assistantMessage = buildManualRelayAssistantMessage({
-      text: receipt.assistant_message_text,
-      threadId,
-      relayAttemptId: receipt.relay_attempt_id,
-      assistantItemId: receipt.thread_event_summary.assistant_item_id,
-      promptSha256: receipt.effective_prompt_sha256,
-      usage: receipt.thread_event_summary.usage,
-    });
-    setPendingUserMessages((messages) => {
-      const alreadyAppended = messages.some(
-        (message) =>
-          message.event_type === "assistant_message" &&
-          message.metadata?.relay_attempt_id === receipt.relay_attempt_id,
-      );
-      return alreadyAppended ? messages : [...messages, assistantMessage];
-    });
-  }
-
   async function handleSubmitConversationDraft() {
     if (manualRelayBusy || manualRelayReceipt?.status === "running") return;
     const prompt = draftPrompt;
     if (!prompt) return;
     if (!prompt.trim()) return;
-    if (sendMode === "new_session") {
-      if (!newSessionTargetProjectRoot) return;
-      setLastSubmittedNewSessionPrompt(prompt);
-      setManualRelayBusy(true);
-      setK2PreviewError(null);
-      setManualRelayError(null);
-      setManualRelayReceipt(null);
-      manualRelayPollFailureCountRef.current = 0;
-      setManualRelayPollFailureCount(0);
-      setManualRelayPollingPaused(false);
-      setManualRelayTimedOutLocally(false);
-      try {
-        const receipt = await runManualCodexRelayGuiDirectNewSession({
-          original_user_text: prompt,
-          target_project_root: newSessionTargetProjectRoot,
-          target_cwd: newSessionTargetProjectRoot,
-          // composer 上「将以 X 写入 Y」引的是同一个常量，防脸上写的和真发的漂移。
-          sandbox: MANUAL_RELAY_SANDBOX,
-          allowed_write_roots: [newSessionTargetProjectRoot],
-          requested_by: "user",
-        });
-        setManualRelayReceipt(receipt);
-        const newThreadId = receipt.thread_event_summary.thread_id;
-        if (newThreadId) {
-          handleSearchQueryChange(newThreadId);
-          void onNewSessionThreadStarted?.(newThreadId);
-        }
-        setDraftPrompt("");
-      } catch (error) {
-        setManualRelayError(messageOf(error));
-      } finally {
-        setManualRelayBusy(false);
-      }
-      return;
-    }
-    if (!selectedSession || !relayTargetProjectRoot) return;
+    const newSession = sendMode === "new_session";
+    const targetProjectRoot = newSession ? newSessionTargetProjectRoot : relayTargetProjectRoot;
+    const targetSessionId = newSession ? null : selectedSession?.thread_id ?? null;
+    if (!targetProjectRoot || (!newSession && !targetSessionId)) return;
     setManualRelayBusy(true);
     setK2PreviewError(null);
     setManualRelayError(null);
     setManualRelayReceipt(null);
+    setConversationTransportReceipt(null);
     manualRelayPollFailureCountRef.current = 0;
     setManualRelayPollFailureCount(0);
     setManualRelayPollingPaused(false);
     setManualRelayTimedOutLocally(false);
-    const optimisticUserMessage = buildManualRelayOptimisticUserMessage({
-      prompt,
-      threadId: selectedSession.thread_id,
-      targetProjectRoot: relayTargetProjectRoot,
-      targetSessionId: selectedSession.thread_id,
-    });
-    setPendingUserMessages((messages) => [...messages, optimisticUserMessage]);
     try {
-      const receipt = await runManualCodexRelayGuiDirect({
-        original_user_text: prompt,
-        target_project_root: relayTargetProjectRoot,
-        target_cwd: relayTargetProjectRoot,
-        target_session_id: selectedSession.thread_id,
-        // 同上：与 composer 的写根/沙箱行同源。
-        sandbox: MANUAL_RELAY_SANDBOX,
-        allowed_write_roots: [relayTargetProjectRoot],
-        requested_by: "user",
+      const controller = createAgentConversationTransport({
+        projectRoot: targetProjectRoot,
+        newSession,
+        targetSessionId,
       });
-      setManualRelayReceipt(receipt);
-      appendManualRelayAssistantMessage(receipt, selectedSession.thread_id);
-      setDraftPrompt("");
-    } catch (error) {
-      setManualRelayError(messageOf(error));
-    } finally {
+      const next = newSession
+        ? await controller.start({ mode: "new", user_text: prompt })
+        : await controller.start({
+            mode: "existing",
+            user_text: prompt,
+            // SessionRecord has no durable conversation key; this local
+            // correlation value is never server-side authority.
+            conversation_id: agentConversationIdForThread(targetSessionId ?? ""),
+            thread_id: targetSessionId ?? "",
+          });
+      if (next.lifecycle !== "failed") setDraftPrompt("");
+      if (newSession && !next.input_locked && next.session.thread_id) {
+        handleSearchQueryChange(next.session.thread_id);
+        void onNewSessionThreadStarted?.(next.session.thread_id);
+      }
+    } catch {
       setManualRelayBusy(false);
+      setManualRelayError("对话运输初始化失败。");
     }
   }
 
   async function handleStopManualRelayAttempt() {
-    if (!manualRelayReceipt?.relay_attempt_id) return;
+    const controller = conversationTransportControllerRef.current;
+    if (!manualRelayReceipt?.relay_attempt_id || !controller) return;
     setManualRelayBusy(true);
     setManualRelayError(null);
     setManualRelayPollingPaused(false);
-    try {
-      const receipt = await stopManualCodexRelayAttempt({
-        relay_attempt_id: manualRelayReceipt.relay_attempt_id,
-        requested_by: "user",
-      });
-      setManualRelayReceipt(receipt);
-    } catch (error) {
-      setManualRelayError(messageOf(error));
-    } finally {
-      setManualRelayBusy(false);
+    const next = await controller.stop();
+    if (next.operation_error) {
+      setManualRelayError(next.operation_error);
+      return;
+    }
+    if (conversationTransportNewSessionRef.current && !next.input_locked && next.session.thread_id) {
+      handleSearchQueryChange(next.session.thread_id);
+      void onNewSessionThreadStarted?.(next.session.thread_id);
     }
   }
 
@@ -637,96 +686,25 @@ export function AgentSessionCenter({
   const transcriptWithPendingMessages = useMemo(() => {
     const selectedTranscript = transcript?.thread_id === selectedSession?.thread_id ? transcript : null;
     if (!selectedTranscript || !selectedSession) return null;
-    const manualRelayReceiptLiveEvents = manualRelayReceipt?.live_events ?? [];
-    const manualRelayLiveEvents =
-      manualRelayReceipt?.relay_attempt_id &&
-      manualRelayReceiptLiveEvents.length > 0 &&
-      (manualRelayReceipt.target.new_session
-        ? manualRelayReceipt.thread_event_summary.thread_id === selectedSession?.thread_id
-        : selectedSession?.thread_id === manualRelayReceipt.target.target_session_id)
-        ? buildManualRelayLiveTranscriptEvents({
-            liveEvents: manualRelayReceiptLiveEvents,
-            threadId: selectedSession.thread_id,
-            relayAttemptId: manualRelayReceipt.relay_attempt_id,
-            includeAssistant: manualRelayReceipt.status === "running" || !manualRelayReceipt.assistant_message_text,
-          })
-        : [];
     return pendingUserMessages.reduce(
       (currentTranscript, message) => appendPendingUserMessage(currentTranscript, message),
-      manualRelayLiveEvents.reduce(
-        (currentTranscript, message) => appendPendingUserMessage(currentTranscript, message),
-        selectedTranscript,
-      ),
+      selectedTranscript,
     );
-  }, [
-    manualRelayReceipt?.assistant_message_text,
-    manualRelayReceipt?.live_events,
-    manualRelayReceipt?.relay_attempt_id,
-    manualRelayReceipt?.status,
-    manualRelayReceipt?.target.new_session,
-    manualRelayReceipt?.target.target_session_id,
-    manualRelayReceipt?.thread_event_summary.thread_id,
-    pendingUserMessages,
-    selectedSession?.thread_id,
-    transcript,
-  ]);
+  }, [pendingUserMessages, selectedSession?.thread_id, transcript]);
 
   const newSessionDraftTranscript = useMemo(() => {
     if (sendMode !== "new_session") return null;
-    const threadId = manualRelayReceipt?.thread_event_summary.thread_id ?? "new-session-draft";
-    const events: CodexTranscriptEvent[] = [];
-    const promptText = lastSubmittedNewSessionPrompt;
-    if (promptText.trim()) {
-      events.push(
-        buildManualRelayOptimisticUserMessage({
-          prompt: promptText,
-          threadId,
-          targetProjectRoot: newSessionTargetProjectRoot,
-          targetSessionId: null,
-        }),
-      );
-    }
-    if (manualRelayReceipt?.relay_attempt_id && manualRelayReceipt.live_events.length > 0) {
-      events.push(
-        ...buildManualRelayLiveTranscriptEvents({
-          liveEvents: manualRelayReceipt.live_events,
-          threadId,
-          relayAttemptId: manualRelayReceipt.relay_attempt_id,
-          includeAssistant: manualRelayReceipt.status === "running" || !manualRelayReceipt.assistant_message_text,
-        }),
-      );
-    }
-    if (manualRelayReceipt?.relay_attempt_id && manualRelayReceipt.assistant_message_text) {
-      events.push(
-        buildManualRelayAssistantMessage({
-          text: manualRelayReceipt.assistant_message_text,
-          threadId,
-          relayAttemptId: manualRelayReceipt.relay_attempt_id,
-          assistantItemId: manualRelayReceipt.thread_event_summary.assistant_item_id,
-          promptSha256: manualRelayReceipt.effective_prompt_sha256,
-          usage: manualRelayReceipt.thread_event_summary.usage,
-        }),
-      );
-    }
+    const threadId = conversationTransportReceipt?.thread_id ?? "new-session-draft";
     return buildSyntheticTranscript({
       threadId,
       projectRoot: newSessionTargetProjectRoot,
-      events,
+      events: [...pendingUserMessages],
       title: "新对话草稿",
     });
   }, [
-    lastSubmittedNewSessionPrompt,
-    manualRelayReceipt?.assistant_message_text,
-    manualRelayReceipt?.effective_prompt_sha256,
-    manualRelayReceipt?.live_events,
-    manualRelayReceipt?.prompt_sent,
-    manualRelayReceipt?.relay_attempt_id,
-    manualRelayReceipt?.status,
-    manualRelayReceipt?.target.new_session,
-    manualRelayReceipt?.thread_event_summary.assistant_item_id,
-    manualRelayReceipt?.thread_event_summary.thread_id,
-    manualRelayReceipt?.thread_event_summary.usage,
+    conversationTransportReceipt?.thread_id,
     newSessionTargetProjectRoot,
+    pendingUserMessages,
     sendMode,
   ]);
 
@@ -779,7 +757,7 @@ export function AgentSessionCenter({
           <div className="agent-chat-workspace">
             {sendMode === "new_session" ? (
               <NewSessionReader
-                manualRelayReceipt={manualRelayReceipt}
+                conversationTransportReceipt={conversationTransportReceipt}
                 projectRoot={newSessionTargetProjectRoot}
                 transcript={newSessionDraftTranscript}
               />
@@ -806,7 +784,10 @@ export function AgentSessionCenter({
               manualRelayBusy={manualRelayBusy}
               manualRelayError={manualRelayError}
               manualRelayPollingPaused={manualRelayPollingPaused}
-              manualRelayReceipt={manualRelayReceipt}
+              // AgentChatComposer is legacy and outside the whitelist. This is
+              // the sole compatibility cast; the value carries only the four
+              // status/Stop fields declared above and never enters diagnostics.
+              manualRelayReceipt={manualRelayReceipt as unknown as ManualRelayReceipt | null}
               manualRelayTimedOutLocally={manualRelayTimedOutLocally}
               projectOptions={projectOptions}
               relayDirectSendBlockedReason={activeRelayDirectSendBlockedReason}
@@ -830,7 +811,7 @@ export function AgentSessionCenter({
           配的「查看开发者详情」按钮就指向这里(onOpenDeveloperDetails → setDeveloperOpen(true))。
           宪法 §四.3：不可用必须给人话原因 + 可达的诊断入口。删了它 = 阻断时用户只剩一句人话、无处下钻。
           它只在真有 relay 预览/回执/错误时出现，不是常驻的机器信息入口，与「废除开发者详情折叠」不冲突。 */}
-      {manualRelayPreview || manualRelayReceipt || manualRelayError ? (
+      {manualRelayPreview || conversationTransportReceipt || manualRelayError ? (
         <details
           className="agent-boundary-details"
           open={developerOpen}
@@ -840,7 +821,8 @@ export function AgentSessionCenter({
           <AgentManualRelayDeveloperDetails
             manualRelayError={manualRelayError}
             manualRelayPreview={manualRelayPreview}
-            manualRelayReceipt={manualRelayReceipt}
+            manualRelayReceipt={null}
+            conversationTransportReceipt={conversationTransportReceipt}
           />
         </details>
       ) : null}
@@ -861,12 +843,20 @@ export function AgentManualRelayDeveloperDetails({
   manualRelayError,
   manualRelayPreview,
   manualRelayReceipt,
+  conversationTransportReceipt = null,
 }: {
   manualRelayError: string | null;
   manualRelayPreview: ManualRelayPreview | null;
   manualRelayReceipt: ManualRelayReceipt | null;
+  conversationTransportReceipt?: ConversationTransportReceipt | null;
 }) {
-  if (!manualRelayError && !manualRelayPreview && !manualRelayReceipt) return null;
+  if (!manualRelayError && !manualRelayPreview && !manualRelayReceipt && !conversationTransportReceipt) return null;
+  if (conversationTransportReceipt) {
+    return <AgentConversationTransportDeveloperDetails
+      error={manualRelayError}
+      receipt={conversationTransportReceipt}
+    />;
+  }
   const envelope = manualRelayPreview?.envelope ?? null;
   const guard = manualRelayPreview?.guard ?? null;
   const receiptTarget = manualRelayReceipt?.target ?? null;
@@ -990,6 +980,52 @@ export function AgentManualRelayDeveloperDetails({
   );
 }
 
+function AgentConversationTransportDeveloperDetails({
+  error,
+  receipt,
+}: {
+  error: string | null;
+  receipt: ConversationTransportReceipt;
+}) {
+  const layers = [
+    ["transport", receipt.transport],
+    ["assistant_reply", receipt.assistant_reply],
+    ["tool_action", receipt.tool_action],
+    ["read_model_projection", receipt.read_model_projection],
+    ["canonical_mirror", receipt.canonical_mirror],
+  ] as const;
+  const failures = failedConversationReceiptLayers(receipt);
+  return (
+    <section className="manual-relay-panel" data-send-mode="conversation_transport" aria-label="共享对话运输诊断">
+      <div>
+        <strong>共享对话运输诊断</strong>
+        <p>仅显示安全分层状态和用户可见说明；不包含命令、工具参数、输出、路径或环境信息。</p>
+      </div>
+      {error ? (
+        <div className="manual-relay-preview">
+          <strong>状态说明</strong>
+          <pre>{error}</pre>
+        </div>
+      ) : null}
+      <div className="manual-relay-receipt">
+        {layers.map(([name, layer]) => (
+          <span key={name}>
+            {name}: {layer.status}
+            {layer.human_message ? ` · ${layer.human_message}` : ""}
+          </span>
+        ))}
+      </div>
+      {failures.length ? (
+        <div className="manual-relay-receipt">
+          {failures.map((failure) => (
+            <span key={failure.layer}>{failure.layer}: {failure.human_message}</span>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 
 type SessionReaderProps = {
   session: SessionRecord;
@@ -1005,7 +1041,7 @@ type SessionReaderProps = {
 type NewSessionReaderProps = {
   projectRoot: string;
   transcript: CodexTranscript | null;
-  manualRelayReceipt: ManualRelayReceipt | null;
+  conversationTransportReceipt: ConversationTransportReceipt | null;
 };
 
 // 人话工程①(2026-07-20):TranscriptErrorCategory / TranscriptErrorInfo / normalizeTranscriptError
@@ -1078,10 +1114,13 @@ function summarizeTranscriptEvents(events: CodexTranscriptEvent[]): CodexTranscr
   };
 }
 
-function NewSessionReader({ projectRoot, transcript, manualRelayReceipt }: NewSessionReaderProps) {
-  const createdThreadId = manualRelayReceipt?.thread_event_summary.thread_id ?? null;
-  const running = manualRelayReceipt?.status === "running";
-  const failed = !!manualRelayReceipt && manualRelayReceipt.status !== "running" && !createdThreadId;
+function NewSessionReader({ projectRoot, transcript, conversationTransportReceipt }: NewSessionReaderProps) {
+  const createdThreadId = conversationTransportReceipt?.thread_id ?? null;
+  const running = conversationTransportReceipt?.transport.status === "pending";
+  const failed =
+    !!conversationTransportReceipt &&
+    conversationTransportReceipt.transport.status !== "pending" &&
+    !createdThreadId;
   return (
     <section className="session-reader new-session-reader">
       <header className="session-reader-head">

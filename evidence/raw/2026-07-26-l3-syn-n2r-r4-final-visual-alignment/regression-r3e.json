@@ -1,0 +1,3718 @@
+{
+  "phase": "post-implementation-green",
+  "fixture": "synthetic-only",
+  "scope": "D1 活动栏 ribbon / D2 右栏三区折叠 / D3 Graph 布局规模化",
+  "notRealApp": "NOT_REAL_APP：只跑合成夹具，不进入真实 App / store / vault",
+  "outcome": "GREEN_HAS_FAILURES",
+  "assertions": 126,
+  "failed": 3,
+  "failures": [
+    {
+      "context": "01-1440-activity-ribbon",
+      "name": "1440 D1: 图标 aria-hidden + focusable=false + currentColor，且不用 title 替代名称",
+      "detail": {
+        "icons": [
+          {
+            "ariaLabel": "文件",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "文件"
+          },
+          {
+            "ariaLabel": "搜索",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "搜索"
+          },
+          {
+            "ariaLabel": "关系图",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "关系图"
+          },
+          {
+            "ariaLabel": "Canvas",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "Canvas"
+          },
+          {
+            "ariaLabel": "Syn 命令",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "Syn 命令"
+          },
+          {
+            "ariaLabel": "设置与维护",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "设置与维护"
+          },
+          {
+            "ariaLabel": "来源",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "来源"
+          },
+          {
+            "ariaLabel": "切换右侧上下文",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "切换右侧上下文"
+          }
+        ]
+      }
+    },
+    {
+      "context": "02-900-activity-ribbon-narrow",
+      "name": "900 D1: 图标 aria-hidden + focusable=false + currentColor，且不用 title 替代名称",
+      "detail": {
+        "icons": [
+          {
+            "ariaLabel": "文件",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "文件"
+          },
+          {
+            "ariaLabel": "搜索",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "搜索"
+          },
+          {
+            "ariaLabel": "关系图",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "关系图"
+          },
+          {
+            "ariaLabel": "Canvas",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "Canvas"
+          },
+          {
+            "ariaLabel": "Syn 命令",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "Syn 命令"
+          },
+          {
+            "ariaLabel": "设置与维护",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "设置与维护"
+          },
+          {
+            "ariaLabel": "来源",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "来源"
+          },
+          {
+            "ariaLabel": "切换右侧上下文",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "切换右侧上下文"
+          }
+        ]
+      }
+    },
+    {
+      "context": "08-900-reduced-motion",
+      "name": "900 reduced-motion D1: 图标 aria-hidden + focusable=false + currentColor，且不用 title 替代名称",
+      "detail": {
+        "icons": [
+          {
+            "ariaLabel": "文件",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "文件"
+          },
+          {
+            "ariaLabel": "搜索",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "搜索"
+          },
+          {
+            "ariaLabel": "关系图",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "关系图"
+          },
+          {
+            "ariaLabel": "Canvas",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "Canvas"
+          },
+          {
+            "ariaLabel": "Syn 命令",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "Syn 命令"
+          },
+          {
+            "ariaLabel": "设置与维护",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "设置与维护"
+          },
+          {
+            "ariaLabel": "来源",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "来源"
+          },
+          {
+            "ariaLabel": "切换右侧上下文",
+            "iconAriaHidden": "true",
+            "iconFocusable": "false",
+            "iconStroke": "currentColor",
+            "title": "切换右侧上下文"
+          }
+        ]
+      }
+    }
+  ],
+  "readAllowlist": [
+    "knowledge_workspace_snapshot",
+    "knowledge_workspace_graph",
+    "knowledge_workspace_read_markdown",
+    "knowledge_workspace_search",
+    "knowledge_workspace_read_canvas"
+  ],
+  "measurements": {
+    "D1": {
+      "900": {
+        "railWidth": 42,
+        "totalTextLineBoxes": 0,
+        "wrappedButtons": [],
+        "perButton": [
+          {
+            "ariaLabel": "文件",
+            "bounds": {
+              "x": 5,
+              "y": 7,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true
+          },
+          {
+            "ariaLabel": "搜索",
+            "bounds": {
+              "x": 5,
+              "y": 45,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true
+          },
+          {
+            "ariaLabel": "关系图",
+            "bounds": {
+              "x": 5,
+              "y": 83,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true
+          },
+          {
+            "ariaLabel": "Canvas",
+            "bounds": {
+              "x": 5,
+              "y": 121,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true
+          },
+          {
+            "ariaLabel": "Syn 命令",
+            "bounds": {
+              "x": 5,
+              "y": 159,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true
+          },
+          {
+            "ariaLabel": "设置与维护",
+            "bounds": {
+              "x": 5,
+              "y": 197,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true
+          },
+          {
+            "ariaLabel": "来源",
+            "bounds": {
+              "x": 5,
+              "y": 235,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true
+          },
+          {
+            "ariaLabel": "切换右侧上下文",
+            "bounds": {
+              "x": 5,
+              "y": 273,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true
+          }
+        ],
+        "panelRestore": {
+          "rightCollapsed": true,
+          "rightRestored": true,
+          "leftCollapsed": true,
+          "leftRestoredToSearch": {
+            "expanded": true,
+            "hasSearchPanel": true
+          },
+          "canvasOpened": true
+        }
+      },
+      "1440": {
+        "railWidth": 42,
+        "buttonCount": 8,
+        "svgCountTotal": 8,
+        "totalTextLineBoxes": 0,
+        "accessibleNames": [
+          "文件",
+          "搜索",
+          "关系图",
+          "Canvas",
+          "Syn 命令",
+          "设置与维护",
+          "来源",
+          "切换右侧上下文"
+        ],
+        "perButton": [
+          {
+            "ariaLabel": "文件",
+            "bounds": {
+              "x": 5,
+              "y": 7,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true,
+            "ariaPressed": "true"
+          },
+          {
+            "ariaLabel": "搜索",
+            "bounds": {
+              "x": 5,
+              "y": 45,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true,
+            "ariaPressed": "false"
+          },
+          {
+            "ariaLabel": "关系图",
+            "bounds": {
+              "x": 5,
+              "y": 83,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true,
+            "ariaPressed": "false"
+          },
+          {
+            "ariaLabel": "Canvas",
+            "bounds": {
+              "x": 5,
+              "y": 121,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true,
+            "ariaPressed": "false"
+          },
+          {
+            "ariaLabel": "Syn 命令",
+            "bounds": {
+              "x": 5,
+              "y": 159,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true,
+            "ariaPressed": null
+          },
+          {
+            "ariaLabel": "设置与维护",
+            "bounds": {
+              "x": 5,
+              "y": 197,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true,
+            "ariaPressed": "false"
+          },
+          {
+            "ariaLabel": "来源",
+            "bounds": {
+              "x": 5,
+              "y": 235,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true,
+            "ariaPressed": "false"
+          },
+          {
+            "ariaLabel": "切换右侧上下文",
+            "bounds": {
+              "x": 5,
+              "y": 273,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "textLineBoxes": 0,
+            "hitTargetOk": true,
+            "ariaPressed": "true"
+          }
+        ],
+        "focusRing": {
+          "matchesFocusVisible": true,
+          "outlineWidth": "2px",
+          "outlineStyle": "solid",
+          "activeAriaLabel": "搜索"
+        }
+      }
+    },
+    "D2": {
+      "900": {
+        "expandedRightScroll": {
+          "clientHeight": 732,
+          "scrollHeight": 1276,
+          "clientWidth": 199,
+          "scrollWidth": 199
+        },
+        "collapsedRightScroll": {
+          "clientHeight": 732,
+          "scrollHeight": 732,
+          "clientWidth": 199,
+          "scrollWidth": 199
+        },
+        "collapsedSource": {
+          "title": "来源上下文",
+          "summaryText": "来源上下文",
+          "badge": null,
+          "ariaExpanded": "false",
+          "ariaControls": "_r_2_-body",
+          "bodyId": "_r_2_-body",
+          "controlsResolves": true,
+          "bodyHidden": true,
+          "bodyDisplay": "none",
+          "bodyTabbableCount": 0,
+          "summaryBounds": {
+            "x": 700,
+            "y": 250.66,
+            "width": 199,
+            "height": 32.5
+          },
+          "bodyBounds": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          }
+        },
+        "expandedTitles": [
+          "属性",
+          "反向引用"
+        ],
+        "emptyStateText": true
+      },
+      "1440": {
+        "headerText": "属性 / 反向引用 / 来源上下文",
+        "sectionTitles": [
+          "属性",
+          "反向引用",
+          "来源上下文"
+        ],
+        "expandedTitles": [
+          "属性",
+          "反向引用",
+          "来源上下文"
+        ],
+        "sourceContext": {
+          "itemCount": 28,
+          "firstItem": "上下文量尺 01",
+          "lastItem": "上下文量尺 28",
+          "insideProductContainer": true
+        },
+        "rightScroll": {
+          "clientHeight": 872,
+          "scrollHeight": 1239,
+          "clientWidth": 239,
+          "scrollWidth": 239
+        },
+        "rightBounds": {
+          "x": 1199,
+          "y": 1,
+          "width": 240,
+          "height": 872
+        },
+        "perSection": [
+          {
+            "title": "属性",
+            "collapsed": {
+              "title": "属性",
+              "summaryText": "属性",
+              "badge": null,
+              "ariaExpanded": "false",
+              "ariaControls": "_r_0_-body",
+              "bodyId": "_r_0_-body",
+              "controlsResolves": true,
+              "bodyHidden": true,
+              "bodyDisplay": "none",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 46.14,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+              }
+            },
+            "expanded": {
+              "title": "属性",
+              "summaryText": "属性",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_0_-body",
+              "bodyId": "_r_0_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 46.14,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 1200,
+                "y": 90.64,
+                "width": 239,
+                "height": 47.69
+              }
+            }
+          },
+          {
+            "title": "反向引用",
+            "collapsed": {
+              "title": "反向引用",
+              "summaryText": "反向引用",
+              "badge": null,
+              "ariaExpanded": "false",
+              "ariaControls": "_r_1_-body",
+              "bodyId": "_r_1_-body",
+              "controlsResolves": true,
+              "bodyHidden": true,
+              "bodyDisplay": "none",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 139.33,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+              }
+            },
+            "expanded": {
+              "title": "反向引用",
+              "summaryText": "反向引用",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_1_-body",
+              "bodyId": "_r_1_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 139.33,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 1200,
+                "y": 183.83,
+                "width": 239,
+                "height": 28.84
+              }
+            }
+          },
+          {
+            "title": "来源上下文",
+            "collapsed": {
+              "title": "来源上下文",
+              "summaryText": "来源上下文",
+              "badge": null,
+              "ariaExpanded": "false",
+              "ariaControls": "_r_2_-body",
+              "bodyId": "_r_2_-body",
+              "controlsResolves": true,
+              "bodyHidden": true,
+              "bodyDisplay": "none",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 213.67,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+              }
+            },
+            "expanded": {
+              "title": "来源上下文",
+              "summaryText": "来源上下文",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_2_-body",
+              "bodyId": "_r_2_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 213.67,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 1200,
+                "y": 246.17,
+                "width": 239,
+                "height": 994.13
+              }
+            }
+          }
+        ],
+        "tabTarget": {
+          "title": "反向引用",
+          "className": "native-context-summary",
+          "text": "反向引用"
+        }
+      },
+      "reducedMotion": {
+        "expandedTitles": [
+          "属性",
+          "反向引用"
+        ],
+        "rightScroll": {
+          "clientHeight": 732,
+          "scrollHeight": 732,
+          "clientWidth": 199,
+          "scrollWidth": 199
+        },
+        "motionScanned": 105,
+        "animatedCount": 0
+      }
+    },
+    "D3": {
+      "n6": {
+        "fitViewZoom": 1,
+        "fitViewNodeBox": {
+          "width": 136,
+          "height": 40
+        },
+        "fitViewMeets28": true,
+        "fitViewTitleVisible": true,
+        "fitViewTitleClipped": false,
+        "fitViewZoomTier": "readable",
+        "fitViewIntersectingPairs": 0,
+        "fitViewNodesInsideStage": 6,
+        "stageBounds": {
+          "x": 331,
+          "y": 79,
+          "width": 868,
+          "height": 794
+        },
+        "nodeCount": 6,
+        "edgeCount": 5,
+        "readableZoom": 1,
+        "readableZoomClicks": 0,
+        "readableNodeBox": {
+          "width": 136,
+          "height": 40
+        },
+        "readableTitleVisible": true,
+        "readableZoomTier": "readable",
+        "readableIntersectingPairs": 0,
+        "ariaLabelCount": 6,
+        "firstNodeAriaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+        "zoomSteps": [
+          {
+            "click": 0,
+            "zoom": 1,
+            "nodeBox": {
+              "width": 136,
+              "height": 40
+            },
+            "titleVisible": true
+          }
+        ],
+        "overviewOnly": false,
+        "scaleScenarioLimitation": null
+      },
+      "n40": {
+        "fitViewZoom": 0.4955,
+        "fitViewNodeBox": {
+          "width": 67.39,
+          "height": 19.82
+        },
+        "fitViewMeets28": false,
+        "fitViewTitleVisible": false,
+        "fitViewTitleClipped": false,
+        "fitViewZoomTier": "compact",
+        "fitViewIntersectingPairs": 0,
+        "fitViewNodesInsideStage": 40,
+        "stageBounds": {
+          "x": 331,
+          "y": 79,
+          "width": 868,
+          "height": 794
+        },
+        "nodeCount": 40,
+        "edgeCount": 39,
+        "readableZoom": 0.7135,
+        "readableZoomClicks": 2,
+        "readableNodeBox": {
+          "width": 97.04,
+          "height": 28.54
+        },
+        "readableTitleVisible": true,
+        "readableZoomTier": "readable",
+        "readableIntersectingPairs": 0,
+        "ariaLabelCount": 40,
+        "firstNodeAriaLabel": "打开笔记：规模节点 001。路径 scale/synthetic-001.md。 标签 #visual-baseline、#synthetic。",
+        "zoomSteps": [
+          {
+            "click": 0,
+            "zoom": 0.4955,
+            "nodeBox": {
+              "width": 67.39,
+              "height": 19.82
+            },
+            "titleVisible": false
+          },
+          {
+            "click": 1,
+            "zoom": 0.5946,
+            "nodeBox": {
+              "width": 80.87,
+              "height": 23.78
+            },
+            "titleVisible": false
+          },
+          {
+            "click": 2,
+            "zoom": 0.7135,
+            "nodeBox": {
+              "width": 97.04,
+              "height": 28.54
+            },
+            "titleVisible": true
+          }
+        ],
+        "overviewOnly": true,
+        "scaleScenarioLimitation": "规模场景只量布局：生成节点不激活、不断言可读性"
+      },
+      "n512": {
+        "fitViewZoom": 0.1557,
+        "fitViewNodeBox": {
+          "width": 21.17,
+          "height": 6.23
+        },
+        "fitViewMeets28": false,
+        "fitViewTitleVisible": false,
+        "fitViewTitleClipped": false,
+        "fitViewZoomTier": "compact",
+        "fitViewIntersectingPairs": 0,
+        "fitViewNodesInsideStage": 512,
+        "stageBounds": {
+          "x": 331,
+          "y": 79,
+          "width": 868,
+          "height": 794
+        },
+        "nodeCount": 512,
+        "edgeCount": 511,
+        "readableZoom": 0.8033,
+        "readableZoomClicks": 9,
+        "readableNodeBox": {
+          "width": 109.25,
+          "height": 32.13
+        },
+        "readableTitleVisible": true,
+        "readableZoomTier": "readable",
+        "readableIntersectingPairs": 0,
+        "ariaLabelCount": 512,
+        "firstNodeAriaLabel": "打开笔记：规模节点 001。路径 scale/synthetic-001.md。 标签 #visual-baseline、#synthetic。",
+        "zoomSteps": [
+          {
+            "click": 0,
+            "zoom": 0.1557,
+            "nodeBox": {
+              "width": 21.17,
+              "height": 6.23
+            },
+            "titleVisible": false
+          },
+          {
+            "click": 1,
+            "zoom": 0.1868,
+            "nodeBox": {
+              "width": 25.41,
+              "height": 7.47
+            },
+            "titleVisible": false
+          },
+          {
+            "click": 2,
+            "zoom": 0.2242,
+            "nodeBox": {
+              "width": 30.49,
+              "height": 8.97
+            },
+            "titleVisible": false
+          },
+          {
+            "click": 3,
+            "zoom": 0.269,
+            "nodeBox": {
+              "width": 36.59,
+              "height": 10.76
+            },
+            "titleVisible": false
+          },
+          {
+            "click": 4,
+            "zoom": 0.3228,
+            "nodeBox": {
+              "width": 43.91,
+              "height": 12.91
+            },
+            "titleVisible": false
+          },
+          {
+            "click": 5,
+            "zoom": 0.3874,
+            "nodeBox": {
+              "width": 52.69,
+              "height": 15.5
+            },
+            "titleVisible": false
+          },
+          {
+            "click": 6,
+            "zoom": 0.4649,
+            "nodeBox": {
+              "width": 63.23,
+              "height": 18.6
+            },
+            "titleVisible": false
+          },
+          {
+            "click": 7,
+            "zoom": 0.5579,
+            "nodeBox": {
+              "width": 75.87,
+              "height": 22.31
+            },
+            "titleVisible": false
+          },
+          {
+            "click": 8,
+            "zoom": 0.6694,
+            "nodeBox": {
+              "width": 91.04,
+              "height": 26.78
+            },
+            "titleVisible": false
+          },
+          {
+            "click": 9,
+            "zoom": 0.8033,
+            "nodeBox": {
+              "width": 109.25,
+              "height": 32.13
+            },
+            "titleVisible": true
+          }
+        ],
+        "overviewOnly": true,
+        "scaleScenarioLimitation": "规模场景只量布局：生成节点不激活、不断言可读性"
+      }
+    }
+  },
+  "contexts": [
+    {
+      "name": "01-1440-activity-ribbon",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scenario": null,
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "1440 D1: 八个入口可访问名称逐字相符",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 活动栏宽度稳定在 36-48px",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 八入口零断行",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 每个按钮 scrollHeight/scrollWidth 未溢出",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 每个入口 hit target ≥ 28×28",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 每个入口恰好一枚 inline SVG",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 图标 aria-hidden + focusable=false + currentColor，且不用 title 替代名称",
+          "passed": false,
+          "detail": {
+            "icons": [
+              {
+                "ariaLabel": "文件",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "文件"
+              },
+              {
+                "ariaLabel": "搜索",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "搜索"
+              },
+              {
+                "ariaLabel": "关系图",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "关系图"
+              },
+              {
+                "ariaLabel": "Canvas",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Canvas"
+              },
+              {
+                "ariaLabel": "Syn 命令",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Syn 命令"
+              },
+              {
+                "ariaLabel": "设置与维护",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "设置与维护"
+              },
+              {
+                "ariaLabel": "来源",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "来源"
+              },
+              {
+                "ariaLabel": "切换右侧上下文",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "切换右侧上下文"
+              }
+            ]
+          }
+        },
+        {
+          "name": "1440 D1: aria-pressed 只出现在既有有状态入口",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 活动栏整体无横向/纵向 overflow",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: :focus-visible 有可见 outline",
+          "passed": true
+        },
+        {
+          "name": "1440 D1: 点开关系图后 aria-pressed 与真实状态一致",
+          "passed": true
+        },
+        {
+          "name": "01-1440-activity-ribbon: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "01-1440-activity-ribbon: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "name": "01-1440-activity-ribbon: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "01-1440-activity-ribbon: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "name": "01-1440-activity-ribbon: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "01-1440-activity-ribbon: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "rail": {
+          "railWidth": 42,
+          "railBounds": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 898
+          },
+          "railScroll": {
+            "clientWidth": 41,
+            "scrollWidth": 41,
+            "clientHeight": 898,
+            "scrollHeight": 898
+          },
+          "buttonCount": 8,
+          "svgCountTotal": 8,
+          "buttons": [
+            {
+              "ariaLabel": "文件",
+              "visibleText": "",
+              "ariaPressed": "true",
+              "title": "文件",
+              "className": "native-activity-button is-active",
+              "bounds": {
+                "x": 5,
+                "y": 7,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "搜索",
+              "visibleText": "",
+              "ariaPressed": "false",
+              "title": "搜索",
+              "className": "native-activity-button",
+              "bounds": {
+                "x": 5,
+                "y": 45,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "关系图",
+              "visibleText": "",
+              "ariaPressed": "false",
+              "title": "关系图",
+              "className": "native-activity-button",
+              "bounds": {
+                "x": 5,
+                "y": 83,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "Canvas",
+              "visibleText": "",
+              "ariaPressed": "false",
+              "title": "Canvas",
+              "className": "native-activity-button",
+              "bounds": {
+                "x": 5,
+                "y": 121,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "Syn 命令",
+              "visibleText": "",
+              "ariaPressed": null,
+              "title": "Syn 命令",
+              "className": "native-activity-button",
+              "bounds": {
+                "x": 5,
+                "y": 159,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "设置与维护",
+              "visibleText": "",
+              "ariaPressed": "false",
+              "title": "设置与维护",
+              "className": "native-activity-button",
+              "bounds": {
+                "x": 5,
+                "y": 197,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "来源",
+              "visibleText": "",
+              "ariaPressed": "false",
+              "title": "来源",
+              "className": "native-activity-button",
+              "bounds": {
+                "x": 5,
+                "y": 235,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "切换右侧上下文",
+              "visibleText": "",
+              "ariaPressed": "true",
+              "title": "切换右侧上下文",
+              "className": "native-activity-button is-active",
+              "bounds": {
+                "x": 5,
+                "y": 273,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            }
+          ],
+          "accessibleNames": [
+            "文件",
+            "搜索",
+            "关系图",
+            "Canvas",
+            "Syn 命令",
+            "设置与维护",
+            "来源",
+            "切换右侧上下文"
+          ],
+          "accessibleNamesMatchExpected": true,
+          "wrappedButtons": [],
+          "totalTextLineBoxes": 0,
+          "pressedNames": [
+            "文件",
+            "切换右侧上下文"
+          ],
+          "buttonsWithoutPressed": [
+            "Syn 命令"
+          ]
+        },
+        "focusRing": {
+          "matchesFocusVisible": true,
+          "outlineWidth": "2px",
+          "outlineStyle": "solid",
+          "activeAriaLabel": "搜索"
+        },
+        "pressedAfterGraph": [
+          "文件",
+          "关系图",
+          "切换右侧上下文"
+        ]
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 898,
+            "clientWidth": 1438,
+            "scrollHeight": 898,
+            "scrollWidth": 1438,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 872,
+            "clientWidth": 868,
+            "scrollHeight": 872,
+            "scrollWidth": 868,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 834,
+            "clientWidth": 868,
+            "scrollHeight": 834,
+            "scrollWidth": 868,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "02-900-activity-ribbon-narrow",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "scenario": null,
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "900 D1: 八个入口可访问名称逐字相符",
+          "passed": true
+        },
+        {
+          "name": "900 D1: 活动栏宽度稳定在 36-48px",
+          "passed": true
+        },
+        {
+          "name": "900 D1: 八入口零断行",
+          "passed": true
+        },
+        {
+          "name": "900 D1: 每个按钮 scrollHeight/scrollWidth 未溢出",
+          "passed": true
+        },
+        {
+          "name": "900 D1: 每个入口 hit target ≥ 28×28",
+          "passed": true
+        },
+        {
+          "name": "900 D1: 每个入口恰好一枚 inline SVG",
+          "passed": true
+        },
+        {
+          "name": "900 D1: 图标 aria-hidden + focusable=false + currentColor，且不用 title 替代名称",
+          "passed": false,
+          "detail": {
+            "icons": [
+              {
+                "ariaLabel": "文件",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "文件"
+              },
+              {
+                "ariaLabel": "搜索",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "搜索"
+              },
+              {
+                "ariaLabel": "关系图",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "关系图"
+              },
+              {
+                "ariaLabel": "Canvas",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Canvas"
+              },
+              {
+                "ariaLabel": "Syn 命令",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Syn 命令"
+              },
+              {
+                "ariaLabel": "设置与维护",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "设置与维护"
+              },
+              {
+                "ariaLabel": "来源",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "来源"
+              },
+              {
+                "ariaLabel": "切换右侧上下文",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "切换右侧上下文"
+              }
+            ]
+          }
+        },
+        {
+          "name": "900 D1: aria-pressed 只出现在既有有状态入口",
+          "passed": true
+        },
+        {
+          "name": "900 D1: 活动栏整体无横向/纵向 overflow",
+          "passed": true
+        },
+        {
+          "name": "900 D1: 上下文入口可折叠并恢复右栏",
+          "passed": true
+        },
+        {
+          "name": "900 D1: 折叠左栏后活动栏入口仍能恢复对应面板",
+          "passed": true
+        },
+        {
+          "name": "900 D1: Canvas 入口仍打开 Canvas 面板",
+          "passed": true
+        },
+        {
+          "name": "02-900-activity-ribbon-narrow: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "02-900-activity-ribbon-narrow: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "name": "02-900-activity-ribbon-narrow: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "02-900-activity-ribbon-narrow: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "name": "02-900-activity-ribbon-narrow: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "02-900-activity-ribbon-narrow: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "rail": {
+          "railWidth": 42,
+          "railBounds": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "railScroll": {
+            "clientWidth": 41,
+            "scrollWidth": 41,
+            "clientHeight": 758,
+            "scrollHeight": 758
+          },
+          "buttonCount": 8,
+          "svgCountTotal": 8,
+          "buttons": [
+            {
+              "ariaLabel": "文件",
+              "visibleText": "",
+              "ariaPressed": "true",
+              "title": "文件",
+              "className": "native-activity-button is-active",
+              "bounds": {
+                "x": 5,
+                "y": 7,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "搜索",
+              "visibleText": "",
+              "ariaPressed": "false",
+              "title": "搜索",
+              "className": "native-activity-button",
+              "bounds": {
+                "x": 5,
+                "y": 45,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "关系图",
+              "visibleText": "",
+              "ariaPressed": "false",
+              "title": "关系图",
+              "className": "native-activity-button",
+              "bounds": {
+                "x": 5,
+                "y": 83,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "Canvas",
+              "visibleText": "",
+              "ariaPressed": "false",
+              "title": "Canvas",
+              "className": "native-activity-button",
+              "bounds": {
+                "x": 5,
+                "y": 121,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "Syn 命令",
+              "visibleText": "",
+              "ariaPressed": null,
+              "title": "Syn 命令",
+              "className": "native-activity-button",
+              "bounds": {
+                "x": 5,
+                "y": 159,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "设置与维护",
+              "visibleText": "",
+              "ariaPressed": "false",
+              "title": "设置与维护",
+              "className": "native-activity-button",
+              "bounds": {
+                "x": 5,
+                "y": 197,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "来源",
+              "visibleText": "",
+              "ariaPressed": "false",
+              "title": "来源",
+              "className": "native-activity-button",
+              "bounds": {
+                "x": 5,
+                "y": 235,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            },
+            {
+              "ariaLabel": "切换右侧上下文",
+              "visibleText": "",
+              "ariaPressed": "true",
+              "title": "切换右侧上下文",
+              "className": "native-activity-button is-active",
+              "bounds": {
+                "x": 5,
+                "y": 273,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "textLineBoxes": 0,
+              "wrapped": false,
+              "noScrollOverflow": true,
+              "hitTargetOk": true,
+              "svgCount": 1,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false",
+              "iconStroke": "currentColor",
+              "iconTabbable": false
+            }
+          ],
+          "accessibleNames": [
+            "文件",
+            "搜索",
+            "关系图",
+            "Canvas",
+            "Syn 命令",
+            "设置与维护",
+            "来源",
+            "切换右侧上下文"
+          ],
+          "accessibleNamesMatchExpected": true,
+          "wrappedButtons": [],
+          "totalTextLineBoxes": 0,
+          "pressedNames": [
+            "文件",
+            "切换右侧上下文"
+          ],
+          "buttonsWithoutPressed": [
+            "Syn 命令"
+          ]
+        },
+        "rightCollapsed": true,
+        "rightRestored": true,
+        "leftCollapsed": true,
+        "leftRestoredToSearch": {
+          "expanded": true,
+          "hasSearchPanel": true
+        },
+        "canvasOpened": true
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 2
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 436,
+            "scrollHeight": 732,
+            "scrollWidth": 436,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 436,
+            "scrollHeight": 694,
+            "scrollWidth": 436,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "03-1440-right-context-sections",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scenario": null,
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "1440 D2: 右栏恰好三个稳定区块",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 每区都有 aria-expanded 明确的折叠控件且 aria-controls 可解析",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 默认展开集合固定为三区全展开",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 右栏标题不再声明大纲，右栏全文零命中",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 注入的 SyntheticSourceContext 被产品侧容器包住且内容逐字保留",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 未选择文件的空态文案仍在",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 「属性」折叠后 aria-expanded=false、内容 display:none 且退出 Tab 路径",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 「属性」重新展开后 aria-expanded=true 且内容回到 Tab 路径",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 「反向引用」折叠后 aria-expanded=false、内容 display:none 且退出 Tab 路径",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 「反向引用」重新展开后 aria-expanded=true 且内容回到 Tab 路径",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 「来源上下文」折叠后 aria-expanded=false、内容 display:none 且退出 Tab 路径",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 「来源上下文」重新展开后 aria-expanded=true 且内容回到 Tab 路径",
+          "passed": true
+        },
+        {
+          "name": "1440 D2: 折叠区块的内容真的不在 Tab 路径上",
+          "passed": true
+        },
+        {
+          "name": "03-1440-right-context-sections: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "03-1440-right-context-sections: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "name": "03-1440-right-context-sections: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "03-1440-right-context-sections: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "name": "03-1440-right-context-sections: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "03-1440-right-context-sections: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "initial": {
+          "headerText": "属性 / 反向引用 / 来源上下文",
+          "headerDeclaresOutline": false,
+          "rightTextDeclaresOutline": false,
+          "sectionCount": 3,
+          "sections": [
+            {
+              "title": "属性",
+              "summaryText": "属性",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_0_-body",
+              "bodyId": "_r_0_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 46.14,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 1200,
+                "y": 90.64,
+                "width": 239,
+                "height": 47.69
+              }
+            },
+            {
+              "title": "反向引用",
+              "summaryText": "反向引用",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_1_-body",
+              "bodyId": "_r_1_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 139.33,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 1200,
+                "y": 183.83,
+                "width": 239,
+                "height": 28.84
+              }
+            },
+            {
+              "title": "来源上下文",
+              "summaryText": "来源上下文",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_2_-body",
+              "bodyId": "_r_2_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 213.67,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 1200,
+                "y": 246.17,
+                "width": 239,
+                "height": 994.13
+              }
+            }
+          ],
+          "sectionTitles": [
+            "属性",
+            "反向引用",
+            "来源上下文"
+          ],
+          "sectionsWithCollapseControl": 3,
+          "expandedTitles": [
+            "属性",
+            "反向引用",
+            "来源上下文"
+          ],
+          "sourceContextPresent": true,
+          "sourceContextInsideProductContainer": true,
+          "sourceContextItemCount": 28,
+          "sourceContextFirstItem": "上下文量尺 01",
+          "sourceContextLastItem": "上下文量尺 28",
+          "sourceContextHeading": "尚未选择合成笔记",
+          "emptyStateText": true,
+          "rightBounds": {
+            "x": 1199,
+            "y": 1,
+            "width": 240,
+            "height": 872
+          },
+          "rightScroll": {
+            "clientHeight": 872,
+            "scrollHeight": 1239,
+            "clientWidth": 239,
+            "scrollWidth": 239
+          },
+          "rightTabbableCount": 4
+        },
+        "perSection": [
+          {
+            "title": "属性",
+            "collapsed": {
+              "title": "属性",
+              "summaryText": "属性",
+              "badge": null,
+              "ariaExpanded": "false",
+              "ariaControls": "_r_0_-body",
+              "bodyId": "_r_0_-body",
+              "controlsResolves": true,
+              "bodyHidden": true,
+              "bodyDisplay": "none",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 46.14,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+              }
+            },
+            "expanded": {
+              "title": "属性",
+              "summaryText": "属性",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_0_-body",
+              "bodyId": "_r_0_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 46.14,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 1200,
+                "y": 90.64,
+                "width": 239,
+                "height": 47.69
+              }
+            }
+          },
+          {
+            "title": "反向引用",
+            "collapsed": {
+              "title": "反向引用",
+              "summaryText": "反向引用",
+              "badge": null,
+              "ariaExpanded": "false",
+              "ariaControls": "_r_1_-body",
+              "bodyId": "_r_1_-body",
+              "controlsResolves": true,
+              "bodyHidden": true,
+              "bodyDisplay": "none",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 139.33,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+              }
+            },
+            "expanded": {
+              "title": "反向引用",
+              "summaryText": "反向引用",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_1_-body",
+              "bodyId": "_r_1_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 139.33,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 1200,
+                "y": 183.83,
+                "width": 239,
+                "height": 28.84
+              }
+            }
+          },
+          {
+            "title": "来源上下文",
+            "collapsed": {
+              "title": "来源上下文",
+              "summaryText": "来源上下文",
+              "badge": null,
+              "ariaExpanded": "false",
+              "ariaControls": "_r_2_-body",
+              "bodyId": "_r_2_-body",
+              "controlsResolves": true,
+              "bodyHidden": true,
+              "bodyDisplay": "none",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 213.67,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+              }
+            },
+            "expanded": {
+              "title": "来源上下文",
+              "summaryText": "来源上下文",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_2_-body",
+              "bodyId": "_r_2_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 213.67,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 1200,
+                "y": 246.17,
+                "width": 239,
+                "height": 994.13
+              }
+            }
+          }
+        ],
+        "tabTarget": {
+          "title": "反向引用",
+          "className": "native-context-summary",
+          "text": "反向引用"
+        },
+        "final": {
+          "headerText": "属性 / 反向引用 / 来源上下文",
+          "headerDeclaresOutline": false,
+          "rightTextDeclaresOutline": false,
+          "sectionCount": 3,
+          "sections": [
+            {
+              "title": "属性",
+              "summaryText": "属性",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_0_-body",
+              "bodyId": "_r_0_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 46.14,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 1200,
+                "y": 90.64,
+                "width": 239,
+                "height": 47.69
+              }
+            },
+            {
+              "title": "反向引用",
+              "summaryText": "反向引用",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_1_-body",
+              "bodyId": "_r_1_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 139.33,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 1200,
+                "y": 183.83,
+                "width": 239,
+                "height": 28.84
+              }
+            },
+            {
+              "title": "来源上下文",
+              "summaryText": "来源上下文",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_2_-body",
+              "bodyId": "_r_2_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 1200,
+                "y": 213.67,
+                "width": 239,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 1200,
+                "y": 246.17,
+                "width": 239,
+                "height": 994.13
+              }
+            }
+          ],
+          "sectionTitles": [
+            "属性",
+            "反向引用",
+            "来源上下文"
+          ],
+          "sectionsWithCollapseControl": 3,
+          "expandedTitles": [
+            "属性",
+            "反向引用",
+            "来源上下文"
+          ],
+          "sourceContextPresent": true,
+          "sourceContextInsideProductContainer": true,
+          "sourceContextItemCount": 28,
+          "sourceContextFirstItem": "上下文量尺 01",
+          "sourceContextLastItem": "上下文量尺 28",
+          "sourceContextHeading": "尚未选择合成笔记",
+          "emptyStateText": true,
+          "rightBounds": {
+            "x": 1199,
+            "y": 1,
+            "width": 240,
+            "height": 872
+          },
+          "rightScroll": {
+            "clientHeight": 872,
+            "scrollHeight": 1239,
+            "clientWidth": 239,
+            "scrollWidth": 239
+          },
+          "rightTabbableCount": 4
+        }
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 1,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [],
+                  "activeTabId": null
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 898,
+            "clientWidth": 1438,
+            "scrollHeight": 898,
+            "scrollWidth": 1438,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 872,
+            "clientWidth": 868,
+            "scrollHeight": 872,
+            "scrollWidth": 868,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": null,
+          "overlay": null
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "04-900-right-context-collapsed",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "scenario": null,
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "900 D2: 双栏展开时右栏零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "900 D2: 纵向滚动限制在右栏容器内",
+          "passed": true
+        },
+        {
+          "name": "900 D2: 空态文案在窄宽下仍可见",
+          "passed": true
+        },
+        {
+          "name": "900 D2: 三区块在窄宽下仍稳定",
+          "passed": true
+        },
+        {
+          "name": "900 D2: 折叠来源上下文后内容退出 Tab/AT 路径，其余两区仍在",
+          "passed": true
+        },
+        {
+          "name": "900 D2: 折叠后右栏仍零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "04-900-right-context-collapsed: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "04-900-right-context-collapsed: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "name": "04-900-right-context-collapsed: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "04-900-right-context-collapsed: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "name": "04-900-right-context-collapsed: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "04-900-right-context-collapsed: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "expanded": {
+          "headerText": "属性 / 反向引用 / 来源上下文",
+          "headerDeclaresOutline": false,
+          "rightTextDeclaresOutline": false,
+          "sectionCount": 3,
+          "sections": [
+            {
+              "title": "属性",
+              "summaryText": "属性",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_0_-body",
+              "bodyId": "_r_0_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 700,
+                "y": 64.28,
+                "width": 199,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 700,
+                "y": 108.78,
+                "width": 199,
+                "height": 47.69
+              }
+            },
+            {
+              "title": "反向引用",
+              "summaryText": "反向引用",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_1_-body",
+              "bodyId": "_r_1_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 700,
+                "y": 157.47,
+                "width": 199,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 700,
+                "y": 201.97,
+                "width": 199,
+                "height": 47.69
+              }
+            },
+            {
+              "title": "来源上下文",
+              "summaryText": "来源上下文",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_2_-body",
+              "bodyId": "_r_2_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 700,
+                "y": 250.66,
+                "width": 199,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 700,
+                "y": 283.16,
+                "width": 199,
+                "height": 994.13
+              }
+            }
+          ],
+          "sectionTitles": [
+            "属性",
+            "反向引用",
+            "来源上下文"
+          ],
+          "sectionsWithCollapseControl": 3,
+          "expandedTitles": [
+            "属性",
+            "反向引用",
+            "来源上下文"
+          ],
+          "sourceContextPresent": true,
+          "sourceContextInsideProductContainer": true,
+          "sourceContextItemCount": 28,
+          "sourceContextFirstItem": "上下文量尺 01",
+          "sourceContextLastItem": "上下文量尺 28",
+          "sourceContextHeading": "尚未选择合成笔记",
+          "emptyStateText": true,
+          "rightBounds": {
+            "x": 699,
+            "y": 1,
+            "width": 200,
+            "height": 732
+          },
+          "rightScroll": {
+            "clientHeight": 732,
+            "scrollHeight": 1276,
+            "clientWidth": 199,
+            "scrollWidth": 199
+          },
+          "rightTabbableCount": 4
+        },
+        "collapsed": {
+          "headerText": "属性 / 反向引用 / 来源上下文",
+          "headerDeclaresOutline": false,
+          "rightTextDeclaresOutline": false,
+          "sectionCount": 3,
+          "sections": [
+            {
+              "title": "属性",
+              "summaryText": "属性",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_0_-body",
+              "bodyId": "_r_0_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 700,
+                "y": 64.28,
+                "width": 199,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 700,
+                "y": 108.78,
+                "width": 199,
+                "height": 47.69
+              }
+            },
+            {
+              "title": "反向引用",
+              "summaryText": "反向引用",
+              "badge": null,
+              "ariaExpanded": "true",
+              "ariaControls": "_r_1_-body",
+              "bodyId": "_r_1_-body",
+              "controlsResolves": true,
+              "bodyHidden": false,
+              "bodyDisplay": "block",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 700,
+                "y": 157.47,
+                "width": 199,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 700,
+                "y": 201.97,
+                "width": 199,
+                "height": 47.69
+              }
+            },
+            {
+              "title": "来源上下文",
+              "summaryText": "来源上下文",
+              "badge": null,
+              "ariaExpanded": "false",
+              "ariaControls": "_r_2_-body",
+              "bodyId": "_r_2_-body",
+              "controlsResolves": true,
+              "bodyHidden": true,
+              "bodyDisplay": "none",
+              "bodyTabbableCount": 0,
+              "summaryBounds": {
+                "x": 700,
+                "y": 250.66,
+                "width": 199,
+                "height": 32.5
+              },
+              "bodyBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+              }
+            }
+          ],
+          "sectionTitles": [
+            "属性",
+            "反向引用",
+            "来源上下文"
+          ],
+          "sectionsWithCollapseControl": 3,
+          "expandedTitles": [
+            "属性",
+            "反向引用"
+          ],
+          "sourceContextPresent": true,
+          "sourceContextInsideProductContainer": true,
+          "sourceContextItemCount": 28,
+          "sourceContextFirstItem": "上下文量尺 01",
+          "sourceContextLastItem": "上下文量尺 28",
+          "sourceContextHeading": "尚未选择合成笔记",
+          "emptyStateText": true,
+          "rightBounds": {
+            "x": 699,
+            "y": 1,
+            "width": 200,
+            "height": 732
+          },
+          "rightScroll": {
+            "clientHeight": 732,
+            "scrollHeight": 732,
+            "clientWidth": 199,
+            "scrollWidth": 199
+          },
+          "rightTabbableCount": 4
+        }
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 1,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [],
+                  "activeTabId": null
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 436,
+            "scrollHeight": 732,
+            "scrollWidth": 436,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": null,
+          "overlay": null
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "graph-n6",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scenario": null,
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "D3 n=6: DOM 节点数与投影一致",
+          "passed": true
+        },
+        {
+          "name": "D3 n=6: fitView 后零节点矩形相交",
+          "passed": true
+        },
+        {
+          "name": "D3 n=6: fitView 后全部节点 bounds 在舞台内",
+          "passed": true
+        },
+        {
+          "name": "D3 n=6: 任何缩放下 aria-label 完整",
+          "passed": true
+        },
+        {
+          "name": "D3 n=6: fitView 即达标缩放（节点可点、标题可见、未被裁切）",
+          "passed": true
+        },
+        {
+          "name": "D3 n=6: 6 节点 / 5 边全可见（R3D 不变量不回归）",
+          "passed": true
+        },
+        {
+          "name": "D3 n=6: 节点盒仍是 136×40",
+          "passed": true
+        },
+        {
+          "name": "D3 n=6: 放大到 readableZoom 后节点盒 ≥ 28×28",
+          "passed": true
+        },
+        {
+          "name": "D3 n=6: readableZoom 下仍零相交",
+          "passed": true
+        },
+        {
+          "name": "D3 n=6: readableZoom 下 aria-label 仍完整",
+          "passed": true
+        },
+        {
+          "name": "graph-n6: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "graph-n6: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "name": "graph-n6: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "graph-n6: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "name": "graph-n6: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "graph-n6: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "fitView": {
+          "nodeCount": 6,
+          "edgeCount": 5,
+          "zoom": 1,
+          "zoomTier": "readable",
+          "stageNodeCountAttribute": "6",
+          "intersectingPairs": 0,
+          "examples": [],
+          "stageBounds": {
+            "x": 331,
+            "y": 79,
+            "width": 868,
+            "height": 794
+          },
+          "nodesInsideStage": 6,
+          "nodeBoxSample": [
+            {
+              "id": "notes/visual-baseline.md",
+              "x": 697,
+              "y": 294,
+              "right": 833,
+              "bottom": 334,
+              "width": 136,
+              "height": 40
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "x": 837,
+              "y": 375,
+              "right": 973,
+              "bottom": 415,
+              "width": 136,
+              "height": 40
+            },
+            {
+              "id": "notes/focus-return.md",
+              "x": 837,
+              "y": 537,
+              "right": 973,
+              "bottom": 577,
+              "width": 136,
+              "height": 40
+            }
+          ],
+          "measuredNodeBox": {
+            "width": 136,
+            "height": 40
+          },
+          "ariaLabelCount": 6,
+          "firstNodeAriaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+          "titleElementCount": 6,
+          "titleVisible": true,
+          "titleClipped": false,
+          "nodeButtonDisabledCount": 0
+        },
+        "readable": {
+          "reached": true,
+          "readableZoom": 1,
+          "clicks": 0
+        }
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 898,
+            "clientWidth": 1438,
+            "scrollHeight": 898,
+            "scrollWidth": 1438,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 872,
+            "clientWidth": 868,
+            "scrollHeight": 872,
+            "scrollWidth": 868,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 834,
+            "clientWidth": 868,
+            "scrollHeight": 834,
+            "scrollWidth": 868,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "graph-n40",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scenario": "graph-scale-40",
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "D3 n=40: DOM 节点数与投影一致",
+          "passed": true
+        },
+        {
+          "name": "D3 n=40: fitView 后零节点矩形相交",
+          "passed": true
+        },
+        {
+          "name": "D3 n=40: fitView 后全部节点 bounds 在舞台内",
+          "passed": true
+        },
+        {
+          "name": "D3 n=40: 任何缩放下 aria-label 完整",
+          "passed": true
+        },
+        {
+          "name": "D3 n=40: 放大到 readableZoom 后节点盒 ≥ 28×28",
+          "passed": true
+        },
+        {
+          "name": "D3 n=40: readableZoom 下仍零相交",
+          "passed": true
+        },
+        {
+          "name": "D3 n=40: readableZoom 下 aria-label 仍完整",
+          "passed": true
+        },
+        {
+          "name": "graph-n40: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "graph-n40: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "name": "graph-n40: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "graph-n40: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "name": "graph-n40: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "graph-n40: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "fitView": {
+          "nodeCount": 40,
+          "edgeCount": 39,
+          "zoom": 0.4955,
+          "zoomTier": "compact",
+          "stageNodeCountAttribute": "40",
+          "intersectingPairs": 0,
+          "examples": [],
+          "stageBounds": {
+            "x": 331,
+            "y": 79,
+            "width": 868,
+            "height": 794
+          },
+          "nodesInsideStage": 40,
+          "nodeBoxSample": [
+            {
+              "id": "scale/synthetic-001.md",
+              "x": 731.31,
+              "y": 385.82,
+              "right": 798.69,
+              "bottom": 405.64,
+              "width": 67.39,
+              "height": 19.82
+            },
+            {
+              "id": "scale/synthetic-002.md",
+              "x": 800.68,
+              "y": 425.95,
+              "right": 868.07,
+              "bottom": 445.77,
+              "width": 67.39,
+              "height": 19.82
+            },
+            {
+              "id": "scale/synthetic-003.md",
+              "x": 800.68,
+              "y": 506.23,
+              "right": 868.07,
+              "bottom": 526.05,
+              "width": 67.39,
+              "height": 19.82
+            }
+          ],
+          "measuredNodeBox": {
+            "width": 67.39,
+            "height": 19.82
+          },
+          "ariaLabelCount": 40,
+          "firstNodeAriaLabel": "打开笔记：规模节点 001。路径 scale/synthetic-001.md。 标签 #visual-baseline、#synthetic。",
+          "titleElementCount": 40,
+          "titleVisible": false,
+          "titleClipped": false,
+          "nodeButtonDisabledCount": 0
+        },
+        "readable": {
+          "reached": true,
+          "readableZoom": 0.7135,
+          "clicks": 2
+        }
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 898,
+            "clientWidth": 1438,
+            "scrollHeight": 898,
+            "scrollWidth": 1438,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 872,
+            "clientWidth": 868,
+            "scrollHeight": 872,
+            "scrollWidth": 868,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 834,
+            "clientWidth": 868,
+            "scrollHeight": 834,
+            "scrollWidth": 868,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "graph-n512",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scenario": "graph-scale-512",
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "D3 n=512: DOM 节点数与投影一致",
+          "passed": true
+        },
+        {
+          "name": "D3 n=512: fitView 后零节点矩形相交",
+          "passed": true
+        },
+        {
+          "name": "D3 n=512: fitView 后全部节点 bounds 在舞台内",
+          "passed": true
+        },
+        {
+          "name": "D3 n=512: 任何缩放下 aria-label 完整",
+          "passed": true
+        },
+        {
+          "name": "D3 n=512: 放大到 readableZoom 后节点盒 ≥ 28×28",
+          "passed": true
+        },
+        {
+          "name": "D3 n=512: readableZoom 下仍零相交",
+          "passed": true
+        },
+        {
+          "name": "D3 n=512: readableZoom 下 aria-label 仍完整",
+          "passed": true
+        },
+        {
+          "name": "graph-n512: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "graph-n512: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "name": "graph-n512: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "graph-n512: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "name": "graph-n512: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "graph-n512: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "fitView": {
+          "nodeCount": 512,
+          "edgeCount": 511,
+          "zoom": 0.1557,
+          "zoomTier": "compact",
+          "stageNodeCountAttribute": "512",
+          "intersectingPairs": 0,
+          "examples": [],
+          "stageBounds": {
+            "x": 331,
+            "y": 79,
+            "width": 868,
+            "height": 794
+          },
+          "nodesInsideStage": 512,
+          "nodeBoxSample": [
+            {
+              "id": "scale/synthetic-001.md",
+              "x": 754.41,
+              "y": 447.66,
+              "right": 775.59,
+              "bottom": 453.89,
+              "width": 21.17,
+              "height": 6.23
+            },
+            {
+              "id": "scale/synthetic-002.md",
+              "x": 776.21,
+              "y": 460.28,
+              "right": 797.38,
+              "bottom": 466.5,
+              "width": 21.17,
+              "height": 6.23
+            },
+            {
+              "id": "scale/synthetic-003.md",
+              "x": 776.21,
+              "y": 485.5,
+              "right": 797.38,
+              "bottom": 491.72,
+              "width": 21.17,
+              "height": 6.23
+            }
+          ],
+          "measuredNodeBox": {
+            "width": 21.17,
+            "height": 6.23
+          },
+          "ariaLabelCount": 512,
+          "firstNodeAriaLabel": "打开笔记：规模节点 001。路径 scale/synthetic-001.md。 标签 #visual-baseline、#synthetic。",
+          "titleElementCount": 512,
+          "titleVisible": false,
+          "titleClipped": false,
+          "nodeButtonDisabledCount": 0
+        },
+        "readable": {
+          "reached": true,
+          "readableZoom": 0.8033,
+          "clicks": 9
+        }
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 898,
+            "clientWidth": 1438,
+            "scrollHeight": 898,
+            "scrollWidth": 1438,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 872,
+            "clientWidth": 868,
+            "scrollHeight": 872,
+            "scrollWidth": 868,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 834,
+            "clientWidth": 868,
+            "scrollHeight": 834,
+            "scrollWidth": 868,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "08-900-reduced-motion",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "scenario": null,
+      "reducedMotion": "reduce",
+      "assertions": [
+        {
+          "name": "900 reduced-motion D1: 八个入口可访问名称逐字相符",
+          "passed": true
+        },
+        {
+          "name": "900 reduced-motion D1: 活动栏宽度稳定在 36-48px",
+          "passed": true
+        },
+        {
+          "name": "900 reduced-motion D1: 八入口零断行",
+          "passed": true
+        },
+        {
+          "name": "900 reduced-motion D1: 每个按钮 scrollHeight/scrollWidth 未溢出",
+          "passed": true
+        },
+        {
+          "name": "900 reduced-motion D1: 每个入口 hit target ≥ 28×28",
+          "passed": true
+        },
+        {
+          "name": "900 reduced-motion D1: 每个入口恰好一枚 inline SVG",
+          "passed": true
+        },
+        {
+          "name": "900 reduced-motion D1: 图标 aria-hidden + focusable=false + currentColor，且不用 title 替代名称",
+          "passed": false,
+          "detail": {
+            "icons": [
+              {
+                "ariaLabel": "文件",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "文件"
+              },
+              {
+                "ariaLabel": "搜索",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "搜索"
+              },
+              {
+                "ariaLabel": "关系图",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "关系图"
+              },
+              {
+                "ariaLabel": "Canvas",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Canvas"
+              },
+              {
+                "ariaLabel": "Syn 命令",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Syn 命令"
+              },
+              {
+                "ariaLabel": "设置与维护",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "设置与维护"
+              },
+              {
+                "ariaLabel": "来源",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "来源"
+              },
+              {
+                "ariaLabel": "切换右侧上下文",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "切换右侧上下文"
+              }
+            ]
+          }
+        },
+        {
+          "name": "900 reduced-motion D1: aria-pressed 只出现在既有有状态入口",
+          "passed": true
+        },
+        {
+          "name": "900 reduced-motion D1: 活动栏整体无横向/纵向 overflow",
+          "passed": true
+        },
+        {
+          "name": "900 reduced-motion: ribbon + 右栏折叠 + Graph 均零新增动画",
+          "passed": true
+        },
+        {
+          "name": "900 reduced-motion: 折叠态与 Graph 均无横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "900 reduced-motion: Graph 仍零相交",
+          "passed": true
+        },
+        {
+          "name": "08-900-reduced-motion: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "name": "08-900-reduced-motion: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "name": "08-900-reduced-motion: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "name": "08-900-reduced-motion: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "name": "08-900-reduced-motion: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "name": "08-900-reduced-motion: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "rail": {
+          "railWidth": 42
+        },
+        "motion": {
+          "scanned": 105,
+          "animated": []
+        },
+        "right": {
+          "clientHeight": 732,
+          "scrollHeight": 732,
+          "clientWidth": 199,
+          "scrollWidth": 199
+        },
+        "graph": {
+          "intersectingPairs": 0
+        }
+      },
+      "audit": {
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 436,
+            "scrollHeight": 732,
+            "scrollWidth": 436,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 436,
+            "scrollHeight": 694,
+            "scrollWidth": 436,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    }
+  ]
+}

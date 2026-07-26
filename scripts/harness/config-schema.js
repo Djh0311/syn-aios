@@ -16,6 +16,7 @@ const expectedTopLevelKeys = [
   'gates',
   'preWork',
   'preCompletion',
+  'activeBoundary',
   'autoRisk',
   'completionProtocol',
   'memoryIntegration',
@@ -24,8 +25,13 @@ const expectedTopLevelKeys = [
 ];
 
 const optionalTopLevelKeys = [
-  'memoryIntegration'
+  'memoryIntegration',
+  'autoRisk',
+  'verificationRunner',
+  'taskLifecycle'
 ];
+
+const activeBoundaryKeys = ['mechanical', 'reportingOnly', 'explicitTool', 'legacyIgnored'];
 
 const requiredTopLevelObjects = [
   'project',
@@ -79,6 +85,67 @@ function readJson(filePath) {
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function inspectActiveBoundary(value) {
+  const details = {
+    present: value !== undefined,
+    keys: isPlainObject(value) ? Object.keys(value) : [],
+    missingKeys: [],
+    unknownKeys: [],
+    invalidTypes: [],
+    crossCategoryDuplicates: [],
+    values: Object.fromEntries(activeBoundaryKeys.map((key) => [key, []]))
+  };
+
+  if (!isPlainObject(value)) {
+    details.invalidTypes.push('activeBoundary');
+    return details;
+  }
+
+  details.missingKeys = activeBoundaryKeys.filter((key) => !Object.prototype.hasOwnProperty.call(value, key));
+  details.unknownKeys = details.keys.filter((key) => !activeBoundaryKeys.includes(key));
+  const owners = new Map();
+  for (const key of activeBoundaryKeys) {
+    const entries = value[key];
+    if (!Array.isArray(entries) || !entries.every((entry) => typeof entry === 'string')) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) details.invalidTypes.push(`activeBoundary.${key}`);
+      continue;
+    }
+    details.values[key] = entries;
+    for (const entry of entries) {
+      const owner = owners.get(entry);
+      if (owner && owner !== key) details.crossCategoryDuplicates.push(entry);
+      else owners.set(entry, key);
+    }
+  }
+  details.crossCategoryDuplicates = [...new Set(details.crossCategoryDuplicates)];
+  return details;
+}
+
+function checkActiveBoundary(report, value) {
+  const details = inspectActiveBoundary(value);
+  report.details.activeBoundary = details;
+  if (details.invalidTypes.includes('activeBoundary')) {
+    add(report, 'fail', '[ACTIVE_BOUNDARY_INVALID_TYPE] activeBoundary must be an object with the four boundary categories');
+    return details;
+  }
+  if (details.missingKeys.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_MISSING_KEY] activeBoundary missing key(s): ${details.missingKeys.join(', ')}`);
+  }
+  if (details.unknownKeys.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_UNKNOWN_KEY] activeBoundary has unsupported key(s): ${details.unknownKeys.join(', ')}`);
+  }
+  if (details.invalidTypes.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_INVALID_TYPE] activeBoundary categories must be string arrays: ${details.invalidTypes.join(', ')}`);
+  }
+  if (details.crossCategoryDuplicates.length > 0) {
+    add(report, 'fail', `[ACTIVE_BOUNDARY_CROSS_CATEGORY_DUPLICATE] activeBoundary entries appear in multiple categories: ${details.crossCategoryDuplicates.join(', ')}`);
+  }
+  if (details.missingKeys.length === 0 && details.unknownKeys.length === 0 && details.invalidTypes.length === 0 && details.crossCategoryDuplicates.length === 0) {
+    add(report, 'pass', 'activeBoundary has exactly four disjoint string-array categories');
+  }
+  return details;
 }
 
 function loadConfig(args) {
@@ -147,7 +214,8 @@ function buildReport(args) {
       schemaVersion: null,
       latestKnownSchemaVersion: 1,
       topLevel: null,
-      policy: null
+      policy: null,
+      activeBoundary: null
     }
   };
 
@@ -197,7 +265,7 @@ function buildReport(args) {
   else add(report, args.strict ? 'fail' : 'warn', `Expected top-level key(s) missing: ${topLevel.missing.join(', ')}`);
 
   if (topLevel.optionalMissing.length === 0) add(report, 'pass', 'No optional top-level keys are missing');
-  else add(report, 'warn', `Optional top-level key(s) missing: ${topLevel.optionalMissing.join(', ')}`);
+  else add(report, 'pass', `Optional compatibility key(s) absent: ${topLevel.optionalMissing.join(', ')}`);
 
   if (topLevel.unknown.length === 0) add(report, 'pass', 'No unknown top-level keys found');
   else add(report, args.strict ? 'fail' : 'warn', `Unknown top-level key(s): ${topLevel.unknown.join(', ')}`);
@@ -208,6 +276,8 @@ function buildReport(args) {
   const missingPolicySections = policy.sections.filter((entry) => !entry.present).map((entry) => entry.key);
   if (missingPolicySections.length === 0) add(report, 'pass', 'policy sections are present');
   else add(report, args.strict ? 'fail' : 'warn', `policy section(s) missing or invalid: ${missingPolicySections.join(', ')}`);
+
+  checkActiveBoundary(report, data.activeBoundary);
 
   return report;
 }

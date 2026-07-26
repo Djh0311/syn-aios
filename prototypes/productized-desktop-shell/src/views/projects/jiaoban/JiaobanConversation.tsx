@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type {
   BlackboardEntry,
+  CodexTranscriptEvent,
   WorkflowStateSnapshot,
 } from "../../../lib/types";
 
@@ -29,6 +30,11 @@ export type JiaobanConversationArtifactNotice = {
   placement?: "after_timeline";
   onActivate: () => void;
 };
+
+export type JiaobanConversationReceiptLayerError = Readonly<{
+  layer: "transport" | "assistant_reply" | "tool_action" | "read_model_projection" | "canonical_mirror";
+  human_message: string;
+}>;
 
 // P3-A：链事件仍是黑板只读派生；用 source ref 的结构化身份区分过程短讯，绝不靠标题或 reason 猜。
 // 后端的 source_id 保留 audit event id，中心只消费已确定性人话的 summary。
@@ -134,6 +140,11 @@ type JiaobanConversationStreamProps = {
   // Unified user-message state; it has no question_id route or proposal semantics.
   messageBusyKey: string | null;
   messageErrors: Readonly<Record<string, string>>;
+  // Shared transport is the live conversation source.  Canonical entries stay
+  // available as historical/read-model fallback, but are not required before a
+  // new natural-language turn can appear.
+  transportTranscript?: readonly CodexTranscriptEvent[];
+  receiptLayerErrors?: readonly JiaobanConversationReceiptLayerError[];
   // P3-A：过程短讯只把用户带到右区既有工序图；回调不写事实，也不接通 P3-B 回话。
   onSupervisorProcessActivate?: (entry: BlackboardEntry) => void;
 };
@@ -237,6 +248,7 @@ export function JiaobanConversationComposer({
   error = null,
   onDraftChange,
   onSubmit,
+  onStop,
 }: {
   route: JiaobanComposerRoute;
   draft: string;
@@ -244,6 +256,7 @@ export function JiaobanConversationComposer({
   error?: string | null;
   onDraftChange: (value: string) => void;
   onSubmit: () => void;
+  onStop?: () => void;
 }) {
   const disabled = route.kind === "disabled" || busy;
   const canSend = !disabled && Boolean(draft.trim());
@@ -271,6 +284,11 @@ export function JiaobanConversationComposer({
           }
         }}
       />
+      {busy && onStop ? (
+        <button type="button" onClick={onStop} aria-label="停止主管对话">
+          停止
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -285,6 +303,24 @@ function conversationSpeaker(entry: BlackboardEntry): "user" | "supervisor" {
   if (isSupervisorResidentSupervisorMessage(entry)) return "supervisor";
   // 旧 P1-B 历史没有新 source identity；不靠 title 反推用户身份，保守按主管记录呈现。
   return "supervisor";
+}
+
+type SharedTransportConversationMessage = Readonly<{
+  event: CodexTranscriptEvent;
+  speaker: "user" | "supervisor";
+  text: string;
+}>;
+
+function sharedTransportConversationMessage(event: CodexTranscriptEvent): SharedTransportConversationMessage | null {
+  const text = event.text?.trim() ?? "";
+  if (!text) return null;
+  if (event.event_type === "user_message") return { event, speaker: "user", text };
+  if (event.event_type === "assistant_message") return { event, speaker: "supervisor", text };
+  return null;
+}
+
+function conversationMessageFingerprint(speaker: "user" | "supervisor", text: string): string {
+  return `${speaker}:${text}`;
 }
 
 function phaseMessageLabel(kind: JiaobanConversationPhaseKind): string | null {
@@ -358,6 +394,8 @@ export function JiaobanConversationStream({
   consultLoading,
   messageBusyKey,
   messageErrors,
+  transportTranscript = [],
+  receiptLayerErrors = [],
   onSupervisorProcessActivate,
 }: JiaobanConversationStreamProps) {
   const messageError = Object.values(messageErrors).find((value) => Boolean(value.trim())) ?? null;
@@ -365,11 +403,32 @@ export function JiaobanConversationStream({
   const showPhaseContent = phaseContent != null && !supervisorThinking;
   const phaseLabel = phaseMessageLabel(phaseKind);
   const timelineItems: ConversationTimelineItem[] = [];
+  // The controller already reduces receipts to user/assistant text.  The view
+  // repeats that narrow allowlist and never reads event metadata, tool fields,
+  // stdout/stderr, argv, or path-like diagnostics.
+  const sharedMessages = transportTranscript
+    .map(sharedTransportConversationMessage)
+    .filter((message): message is SharedTransportConversationMessage => message != null);
+  const sharedMessageCounts = new Map<string, number>();
+  for (const message of sharedMessages) {
+    const fingerprint = conversationMessageFingerprint(message.speaker, message.text);
+    sharedMessageCounts.set(fingerprint, (sharedMessageCounts.get(fingerprint) ?? 0) + 1);
+  }
 
   for (const [sourceIndex, entry] of entries.entries()) {
     const process = isSupervisorProcess(entry);
     const speaker = conversationSpeaker(entry);
     const copy = messageText(entry);
+    // Once canonical/read-model catches up with a live shared turn, the shared
+    // transcript remains primary and the mirror does not duplicate it on face.
+    if (!process) {
+      const fingerprint = conversationMessageFingerprint(speaker, copy);
+      const sharedCount = sharedMessageCounts.get(fingerprint) ?? 0;
+      if (sharedCount > 0) {
+        sharedMessageCounts.set(fingerprint, sharedCount - 1);
+        continue;
+      }
+    }
     const content = process ? (
       <article
         key={entry.entry_id}
@@ -415,12 +474,32 @@ export function JiaobanConversationStream({
     });
   }
 
+  for (const [transportIndex, message] of sharedMessages.entries()) {
+    timelineItems.push({
+      createdAtMs: createdAtSortValue(message.event.timestamp),
+      afterTimeline: false,
+      tieRank: 1,
+      sourceIndex: entries.length + transportIndex,
+      content: (
+        <article
+          key={message.event.event_id}
+          className={`jiaoban-conversation-message ${message.speaker === "user" ? "is-user" : "is-supervisor"}`}
+          data-message-kind={message.speaker}
+          data-conversation-source="shared-transport"
+        >
+          <p className="jiaoban-plan-seg">{message.speaker === "user" ? "你" : "项目主管"}</p>
+          <p className="jiaoban-conversation-copy">{message.text}</p>
+        </article>
+      ),
+    });
+  }
+
   for (const [turnIndex, turn] of userTurns.entries()) {
     timelineItems.push({
       createdAtMs: createdAtSortValue(turn.createdAtMs),
       afterTimeline: false,
       tieRank: 0,
-      sourceIndex: entries.length + turnIndex,
+      sourceIndex: entries.length + sharedMessages.length + turnIndex,
       content: (
         <article key={turn.id} className="jiaoban-conversation-message is-user" data-message-kind="user">
           <p className="jiaoban-plan-seg">你</p>
@@ -435,7 +514,7 @@ export function JiaobanConversationStream({
       createdAtMs: createdAtSortValue(notice.createdAtMs),
       afterTimeline: notice.placement === "after_timeline",
       tieRank: notice.kind === "proposal" ? 2 : 3,
-      sourceIndex: entries.length + userTurns.length + noticeIndex,
+      sourceIndex: entries.length + sharedMessages.length + userTurns.length + noticeIndex,
       content: (
         <article
           key={notice.id}
@@ -513,6 +592,19 @@ export function JiaobanConversationStream({
           </p>
         </article>
       ) : null}
+
+      {receiptLayerErrors.map((error) => (
+        <article
+          key={`${error.layer}:${error.human_message}`}
+          className="jiaoban-conversation-message is-supervisor"
+          data-message-kind="receipt-error"
+          data-receipt-layer={error.layer}
+        >
+          <p className="jiaoban-consult-error" role="alert">
+            {error.human_message}
+          </p>
+        </article>
+      ))}
 
       {supervisorThinking ? (
         <article className="jiaoban-conversation-message is-supervisor" data-message-kind="waiting">

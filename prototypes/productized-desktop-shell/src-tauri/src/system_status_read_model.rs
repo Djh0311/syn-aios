@@ -93,7 +93,8 @@ pub(crate) fn load_system_status_read_model_at(
         };
 
     let storage_healthy = if configured_db_primary {
-        match crate::workbench_sqlite_storage_mode::db_primary_health_snapshot(workflow_state_path) {
+        match crate::workbench_sqlite_storage_mode::db_primary_health_snapshot(workflow_state_path)
+        {
             Some(Ok(())) => true,
             Some(Err(reason)) => {
                 warnings.push(format!(
@@ -118,13 +119,12 @@ pub(crate) fn load_system_status_read_model_at(
             .and_then(serde_json::Value::as_array)
             .cloned()
             .unwrap_or_else(|| {
-                warnings.push("主 store 没有 audit_events 数组，观察期与降级信息读不到。".to_string());
+                warnings
+                    .push("主 store 没有 audit_events 数组，观察期与降级信息读不到。".to_string());
                 Vec::new()
             }),
         Err(error) => {
-            warnings.push(format!(
-                "主 store 读不了，观察期与降级信息读不到：{error}"
-            ));
+            warnings.push(format!("主 store 读不了，观察期与降级信息读不到：{error}"));
             Vec::new()
         }
     };
@@ -176,9 +176,8 @@ fn gate_summary() -> String {
 /// 观察期第 N 天：切换当天 = 第 1 天。时钟回拨/审计时间在未来 → 保守报第 1 天 + warning。
 fn observation_day_from(started_at_ms: i64, now_ms: i64, warnings: &mut Vec<String>) -> u32 {
     if now_ms < started_at_ms {
-        warnings.push(
-            "观察期起点比当前时间还晚（时钟回拨或审计时间异常），按第 1 天报。".to_string(),
-        );
+        warnings
+            .push("观察期起点比当前时间还晚（时钟回拨或审计时间异常），按第 1 天报。".to_string());
         return 1;
     }
     let days = (now_ms - started_at_ms) / DAY_MS;
@@ -361,10 +360,17 @@ mod tests {
         );
 
         let same_day = load_system_status_read_model_at(&state_path, CUTOVER_MS + DAY + 3_600_000);
-        assert_eq!(same_day.observation_day, 1, "重开当天 = 第 1 天（按最早那条算会错成第 2 天）");
+        assert_eq!(
+            same_day.observation_day, 1,
+            "重开当天 = 第 1 天（按最早那条算会错成第 2 天）"
+        );
 
-        let two_days_later = load_system_status_read_model_at(&state_path, CUTOVER_MS + DAY + 2 * DAY);
-        assert_eq!(two_days_later.observation_day, 3, "重开后跨 2 整天 = 第 3 天");
+        let two_days_later =
+            load_system_status_read_model_at(&state_path, CUTOVER_MS + DAY + 2 * DAY);
+        assert_eq!(
+            two_days_later.observation_day, 3,
+            "重开后跨 2 整天 = 第 3 天"
+        );
     }
 
     // 降级：取**最晚**一条 degraded 事件，reason 原样上脸（后端已写成人话·读模型不再包一层）。
@@ -393,7 +399,11 @@ mod tests {
         let model = load_system_status_read_model_at(&state_path, CUTOVER_MS + 2 * DAY);
 
         let degradation = model.last_degradation.expect("应报最近一次降级");
-        assert_eq!(degradation.at_ms, CUTOVER_MS + DAY, "要最晚那条·不是数组末条");
+        assert_eq!(
+            degradation.at_ms,
+            CUTOVER_MS + DAY,
+            "要最晚那条·不是数组末条"
+        );
         assert!(
             degradation.reason_human.contains("数据无损"),
             "后端人话应原样透出：{}",
@@ -409,7 +419,10 @@ mod tests {
             summary.contains(crate::STATION_4_WRITE_PROJECT_ROOT),
             "闸摘要要点名写解封项目：{summary}"
         );
-        assert!(summary.contains("仅此项目"), "要说清只解封了一个项目：{summary}");
+        assert!(
+            summary.contains("仅此项目"),
+            "要说清只解封了一个项目：{summary}"
+        );
     }
 
     // 读模型的命门：**不许写盘**。
@@ -433,7 +446,11 @@ mod tests {
         let _ = load_system_status_read_model_at(&state_path, CUTOVER_MS + DAY);
         let _ = load_system_status_read_model_at(&state_path, CUTOVER_MS + DAY);
 
-        assert_eq!(before, mtime(&state_path), "读模型纯只读·不许写 workflow state");
+        assert_eq!(
+            before,
+            mtime(&state_path),
+            "读模型纯只读·不许写 workflow state"
+        );
     }
 
     // 主 store 坏了：软着陆——出 warnings、不 panic、不 Err 断首页。
@@ -452,7 +469,10 @@ mod tests {
 
         assert_eq!(model.observation_day, 0);
         assert!(
-            model.warnings.iter().any(|warning| warning.contains("主 store 读不了")),
+            model
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("主 store 读不了")),
             "坏 store 要有人话报备：{:?}",
             model.warnings
         );

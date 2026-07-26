@@ -1,0 +1,986 @@
+{
+  "phase": "pre-implementation-red",
+  "fixture": "synthetic-only",
+  "purpose": "R4 D1 骨架 / D2 正文字号 / D3 悬停提示的现状反例",
+  "r0Reference": {
+    "activityRailWidth": 42,
+    "leftSidebarExpanded": 288,
+    "rightSidebar": 185,
+    "centralStatusHeight": 26,
+    "integratedTopBar": 39,
+    "viewToolbar": 35,
+    "leftFooterVault": 41,
+    "bodyFontSize": 16
+  },
+  "outcome": "RED_ESTABLISHED",
+  "assertions": 18,
+  "failed": 8,
+  "redFindings": [
+    {
+      "viewport": "1440",
+      "skeleton": {
+        "shellGridColumns": "42px 288px 868px 240px",
+        "shellGridRows": "872px 26px",
+        "activityWidth": 42,
+        "leftWidth": 288,
+        "centralWidth": 868,
+        "rightWidth": 240,
+        "statusHeight": 26,
+        "groupHeaderHeight": 36,
+        "viewToolbarHeight": 96.19,
+        "centralChromeTotal": 132.19,
+        "leftFooterPresent": false,
+        "separatorBorders": null,
+        "ratio": {
+          "left": 288,
+          "central": 868,
+          "right": 240
+        }
+      },
+      "typography": {
+        "readingBody": {
+          "fontSize": 12,
+          "lineHeight": 20.4,
+          "lineHeightRatio": 1.7,
+          "fontFamily": "Songti SC"
+        },
+        "readingParagraph": {
+          "fontSize": 12,
+          "lineHeight": 20.4,
+          "lineHeightRatio": 1.7,
+          "fontFamily": "Songti SC"
+        },
+        "readingHeading": {
+          "fontSize": 24,
+          "lineHeight": 40.8,
+          "lineHeightRatio": 1.7,
+          "fontFamily": "Songti SC"
+        },
+        "readingPre": null,
+        "editorTextarea": {
+          "fontSize": 12,
+          "lineHeight": 19.8,
+          "lineHeightRatio": 1.65,
+          "fontFamily": "SF Mono"
+        },
+        "chrome": {
+          "activityButton": {
+            "fontSize": 10,
+            "lineHeight": 12,
+            "lineHeightRatio": 1.2,
+            "fontFamily": "Songti SC"
+          },
+          "leftTree": {
+            "fontSize": 13,
+            "lineHeight": 21.45,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "leftSidebarTab": {
+            "fontSize": 11,
+            "lineHeight": 18.15,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "centralTab": {
+            "fontSize": 13,
+            "lineHeight": 21.45,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "rightSectionSummary": {
+            "fontSize": 10,
+            "lineHeight": 16.5,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "rightSectionBody": {
+            "fontSize": 13,
+            "lineHeight": 21.45,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "rightHeader": {
+            "fontSize": 11,
+            "lineHeight": 18.15,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "statusBar": {
+            "fontSize": 10,
+            "lineHeight": 16.5,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "graphNodeTitle": null
+        }
+      },
+      "tooltip": {
+        "buttonCount": 8,
+        "titleCount": 0,
+        "svgTitleTotal": 0
+      }
+    },
+    {
+      "viewport": "1180",
+      "skeleton": {
+        "shellGridColumns": "42px 260px 656px 220px",
+        "shellGridRows": "732px 26px",
+        "activityWidth": 42,
+        "leftWidth": 260,
+        "centralWidth": 656,
+        "rightWidth": 220,
+        "statusHeight": 26,
+        "groupHeaderHeight": 36,
+        "viewToolbarHeight": 96.19,
+        "centralChromeTotal": 132.19,
+        "leftFooterPresent": false,
+        "separatorBorders": null,
+        "ratio": {
+          "left": 260,
+          "central": 656,
+          "right": 220
+        }
+      },
+      "typography": {
+        "readingBody": {
+          "fontSize": 12,
+          "lineHeight": 20.4,
+          "lineHeightRatio": 1.7,
+          "fontFamily": "Songti SC"
+        },
+        "readingParagraph": {
+          "fontSize": 12,
+          "lineHeight": 20.4,
+          "lineHeightRatio": 1.7,
+          "fontFamily": "Songti SC"
+        },
+        "readingHeading": {
+          "fontSize": 24,
+          "lineHeight": 40.8,
+          "lineHeightRatio": 1.7,
+          "fontFamily": "Songti SC"
+        },
+        "readingPre": null,
+        "editorTextarea": {
+          "fontSize": 12,
+          "lineHeight": 19.8,
+          "lineHeightRatio": 1.65,
+          "fontFamily": "SF Mono"
+        },
+        "chrome": {
+          "activityButton": {
+            "fontSize": 10,
+            "lineHeight": 12,
+            "lineHeightRatio": 1.2,
+            "fontFamily": "Songti SC"
+          },
+          "leftTree": {
+            "fontSize": 13,
+            "lineHeight": 21.45,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "leftSidebarTab": {
+            "fontSize": 11,
+            "lineHeight": 18.15,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "centralTab": {
+            "fontSize": 13,
+            "lineHeight": 21.45,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "rightSectionSummary": {
+            "fontSize": 10,
+            "lineHeight": 16.5,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "rightSectionBody": {
+            "fontSize": 13,
+            "lineHeight": 21.45,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "rightHeader": {
+            "fontSize": 11,
+            "lineHeight": 18.15,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "statusBar": {
+            "fontSize": 10,
+            "lineHeight": 16.5,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "Songti SC"
+          },
+          "graphNodeTitle": null
+        }
+      },
+      "tooltip": {
+        "buttonCount": 8,
+        "titleCount": 0,
+        "svgTitleTotal": 0
+      }
+    }
+  ],
+  "contexts": [
+    {
+      "name": "red-1440-skeleton-and-typography",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "assertions": [
+        {
+          "name": "RED D2 1440: 阅读正文 computed font-size = 16px（现状应失败）",
+          "passed": false,
+          "detail": {
+            "readingBody": {
+              "fontSize": 12,
+              "lineHeight": 20.4,
+              "lineHeightRatio": 1.7,
+              "fontFamily": "Songti SC"
+            }
+          }
+        },
+        {
+          "name": "RED D2 1440: 编辑正文 computed font-size = 16px（现状应失败）",
+          "passed": false,
+          "detail": {
+            "editorTextarea": {
+              "fontSize": 12,
+              "lineHeight": 19.8,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "SF Mono"
+            }
+          }
+        },
+        {
+          "name": "RED D3 1440: 活动栏 8 个按钮各有 title（现状应失败）",
+          "passed": false,
+          "detail": {
+            "titleCount": 0,
+            "buttonCount": 8
+          }
+        },
+        {
+          "name": "RED D1 1440: 活动栏宽 = 42",
+          "passed": true
+        },
+        {
+          "name": "RED D1 1440: 中央底部状态区高 = 26",
+          "passed": true
+        },
+        {
+          "name": "RED D1 1440: 右栏宽在 185–240 带内",
+          "passed": true
+        },
+        {
+          "name": "RED D1 1440: 左栏展开宽在 220–288 带内",
+          "passed": true
+        },
+        {
+          "name": "RED D1 1440: 中央 chrome 总高在 74±10",
+          "passed": false,
+          "detail": {
+            "measured": 132.19,
+            "r0": "39+35=74"
+          }
+        },
+        {
+          "name": "RED D1 1440: 各层零横向 overflow",
+          "passed": true
+        }
+      ],
+      "failures": [
+        {
+          "name": "RED D2 1440: 阅读正文 computed font-size = 16px（现状应失败）",
+          "detail": {
+            "readingBody": {
+              "fontSize": 12,
+              "lineHeight": 20.4,
+              "lineHeightRatio": 1.7,
+              "fontFamily": "Songti SC"
+            }
+          }
+        },
+        {
+          "name": "RED D2 1440: 编辑正文 computed font-size = 16px（现状应失败）",
+          "detail": {
+            "editorTextarea": {
+              "fontSize": 12,
+              "lineHeight": 19.8,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "SF Mono"
+            }
+          }
+        },
+        {
+          "name": "RED D3 1440: 活动栏 8 个按钮各有 title（现状应失败）",
+          "detail": {
+            "titleCount": 0,
+            "buttonCount": 8
+          }
+        },
+        {
+          "name": "RED D1 1440: 中央 chrome 总高在 74±10",
+          "detail": {
+            "measured": 132.19,
+            "r0": "39+35=74"
+          }
+        }
+      ],
+      "evidence": {
+        "skeleton": {
+          "shellGridColumns": "42px 288px 868px 240px",
+          "shellGridRows": "872px 26px",
+          "activity": {
+            "width": 42,
+            "height": 898,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "1px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "left": {
+            "width": 288,
+            "height": 872,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "1px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "central": {
+            "width": 868,
+            "height": 872,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "right": {
+            "width": 240,
+            "height": 872,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "1px"
+          },
+          "status": {
+            "width": 1396,
+            "height": 26,
+            "borderTopWidth": "1px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "groupHeader": {
+            "width": 868,
+            "height": 36,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "1px",
+            "borderLeftWidth": "0px"
+          },
+          "viewToolbar": {
+            "width": 868,
+            "height": 96.19,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "separator": null,
+          "leftFooter": null,
+          "centralChromeTotal": 132.19,
+          "ratio": {
+            "left": 288,
+            "central": 868,
+            "right": 240
+          },
+          "overflow": {
+            "documentElement": {
+              "clientWidth": 1440,
+              "scrollWidth": 1440,
+              "clientHeight": 900,
+              "scrollHeight": 900,
+              "overflowsHorizontally": false
+            },
+            "body": {
+              "clientWidth": 1440,
+              "scrollWidth": 1440,
+              "clientHeight": 900,
+              "scrollHeight": 900,
+              "overflowsHorizontally": false
+            },
+            "shell": {
+              "clientWidth": 1438,
+              "scrollWidth": 1438,
+              "clientHeight": 898,
+              "scrollHeight": 898,
+              "overflowsHorizontally": false
+            },
+            "central": {
+              "clientWidth": 868,
+              "scrollWidth": 868,
+              "clientHeight": 872,
+              "scrollHeight": 872,
+              "overflowsHorizontally": false
+            },
+            "activeGroupPanel": {
+              "clientWidth": 868,
+              "scrollWidth": 868,
+              "clientHeight": 834,
+              "scrollHeight": 2739,
+              "overflowsHorizontally": false
+            },
+            "right": {
+              "clientWidth": 239,
+              "scrollWidth": 239,
+              "clientHeight": 872,
+              "scrollHeight": 1406,
+              "overflowsHorizontally": false
+            },
+            "left": {
+              "clientWidth": 287,
+              "scrollWidth": 287,
+              "clientHeight": 872,
+              "scrollHeight": 872,
+              "overflowsHorizontally": false
+            }
+          }
+        },
+        "typography": {
+          "readingBody": {
+            "fontSize": 12,
+            "lineHeight": 20.4,
+            "lineHeightRatio": 1.7,
+            "fontFamily": "Songti SC"
+          },
+          "readingParagraph": {
+            "fontSize": 12,
+            "lineHeight": 20.4,
+            "lineHeightRatio": 1.7,
+            "fontFamily": "Songti SC"
+          },
+          "readingHeading": {
+            "fontSize": 24,
+            "lineHeight": 40.8,
+            "lineHeightRatio": 1.7,
+            "fontFamily": "Songti SC"
+          },
+          "readingPre": null,
+          "editorTextarea": {
+            "fontSize": 12,
+            "lineHeight": 19.8,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "SF Mono"
+          },
+          "chrome": {
+            "activityButton": {
+              "fontSize": 10,
+              "lineHeight": 12,
+              "lineHeightRatio": 1.2,
+              "fontFamily": "Songti SC"
+            },
+            "leftTree": {
+              "fontSize": 13,
+              "lineHeight": 21.45,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "leftSidebarTab": {
+              "fontSize": 11,
+              "lineHeight": 18.15,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "centralTab": {
+              "fontSize": 13,
+              "lineHeight": 21.45,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "rightSectionSummary": {
+              "fontSize": 10,
+              "lineHeight": 16.5,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "rightSectionBody": {
+              "fontSize": 13,
+              "lineHeight": 21.45,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "rightHeader": {
+              "fontSize": 11,
+              "lineHeight": 18.15,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "statusBar": {
+              "fontSize": 10,
+              "lineHeight": 16.5,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "graphNodeTitle": null
+          }
+        },
+        "tooltip": {
+          "buttonCount": 8,
+          "titleCount": 0,
+          "svgTitleTotal": 0,
+          "buttons": [
+            {
+              "ariaLabel": "文件",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "搜索",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "关系图",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "Canvas",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "Syn 命令",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "设置与维护",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "来源",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "切换右侧上下文",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            }
+          ]
+        }
+      },
+      "audit": {
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "red-1180-skeleton-and-typography",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "assertions": [
+        {
+          "name": "RED D2 1180: 阅读正文 computed font-size = 16px（现状应失败）",
+          "passed": false,
+          "detail": {
+            "readingBody": {
+              "fontSize": 12,
+              "lineHeight": 20.4,
+              "lineHeightRatio": 1.7,
+              "fontFamily": "Songti SC"
+            }
+          }
+        },
+        {
+          "name": "RED D2 1180: 编辑正文 computed font-size = 16px（现状应失败）",
+          "passed": false,
+          "detail": {
+            "editorTextarea": {
+              "fontSize": 12,
+              "lineHeight": 19.8,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "SF Mono"
+            }
+          }
+        },
+        {
+          "name": "RED D3 1180: 活动栏 8 个按钮各有 title（现状应失败）",
+          "passed": false,
+          "detail": {
+            "titleCount": 0,
+            "buttonCount": 8
+          }
+        },
+        {
+          "name": "RED D1 1180: 活动栏宽 = 42",
+          "passed": true
+        },
+        {
+          "name": "RED D1 1180: 中央底部状态区高 = 26",
+          "passed": true
+        },
+        {
+          "name": "RED D1 1180: 右栏宽在 185–240 带内",
+          "passed": true
+        },
+        {
+          "name": "RED D1 1180: 左栏展开宽在 220–288 带内",
+          "passed": true
+        },
+        {
+          "name": "RED D1 1180: 中央 chrome 总高在 74±10",
+          "passed": false,
+          "detail": {
+            "measured": 132.19,
+            "r0": "39+35=74"
+          }
+        },
+        {
+          "name": "RED D1 1180: 各层零横向 overflow",
+          "passed": true
+        }
+      ],
+      "failures": [
+        {
+          "name": "RED D2 1180: 阅读正文 computed font-size = 16px（现状应失败）",
+          "detail": {
+            "readingBody": {
+              "fontSize": 12,
+              "lineHeight": 20.4,
+              "lineHeightRatio": 1.7,
+              "fontFamily": "Songti SC"
+            }
+          }
+        },
+        {
+          "name": "RED D2 1180: 编辑正文 computed font-size = 16px（现状应失败）",
+          "detail": {
+            "editorTextarea": {
+              "fontSize": 12,
+              "lineHeight": 19.8,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "SF Mono"
+            }
+          }
+        },
+        {
+          "name": "RED D3 1180: 活动栏 8 个按钮各有 title（现状应失败）",
+          "detail": {
+            "titleCount": 0,
+            "buttonCount": 8
+          }
+        },
+        {
+          "name": "RED D1 1180: 中央 chrome 总高在 74±10",
+          "detail": {
+            "measured": 132.19,
+            "r0": "39+35=74"
+          }
+        }
+      ],
+      "evidence": {
+        "skeleton": {
+          "shellGridColumns": "42px 260px 656px 220px",
+          "shellGridRows": "732px 26px",
+          "activity": {
+            "width": 42,
+            "height": 758,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "1px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "left": {
+            "width": 260,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "1px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "central": {
+            "width": 656,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "right": {
+            "width": 220,
+            "height": 732,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "1px"
+          },
+          "status": {
+            "width": 1136,
+            "height": 26,
+            "borderTopWidth": "1px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "groupHeader": {
+            "width": 656,
+            "height": 36,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "1px",
+            "borderLeftWidth": "0px"
+          },
+          "viewToolbar": {
+            "width": 656,
+            "height": 96.19,
+            "borderTopWidth": "0px",
+            "borderRightWidth": "0px",
+            "borderBottomWidth": "0px",
+            "borderLeftWidth": "0px"
+          },
+          "separator": null,
+          "leftFooter": null,
+          "centralChromeTotal": 132.19,
+          "ratio": {
+            "left": 260,
+            "central": 656,
+            "right": 220
+          },
+          "overflow": {
+            "documentElement": {
+              "clientWidth": 1180,
+              "scrollWidth": 1180,
+              "clientHeight": 760,
+              "scrollHeight": 760,
+              "overflowsHorizontally": false
+            },
+            "body": {
+              "clientWidth": 1180,
+              "scrollWidth": 1180,
+              "clientHeight": 760,
+              "scrollHeight": 760,
+              "overflowsHorizontally": false
+            },
+            "shell": {
+              "clientWidth": 1178,
+              "scrollWidth": 1178,
+              "clientHeight": 758,
+              "scrollHeight": 758,
+              "overflowsHorizontally": false
+            },
+            "central": {
+              "clientWidth": 656,
+              "scrollWidth": 656,
+              "clientHeight": 732,
+              "scrollHeight": 732,
+              "overflowsHorizontally": false
+            },
+            "activeGroupPanel": {
+              "clientWidth": 656,
+              "scrollWidth": 656,
+              "clientHeight": 694,
+              "scrollHeight": 3473,
+              "overflowsHorizontally": false
+            },
+            "right": {
+              "clientWidth": 219,
+              "scrollWidth": 219,
+              "clientHeight": 732,
+              "scrollHeight": 1406,
+              "overflowsHorizontally": false
+            },
+            "left": {
+              "clientWidth": 259,
+              "scrollWidth": 259,
+              "clientHeight": 732,
+              "scrollHeight": 732,
+              "overflowsHorizontally": false
+            }
+          }
+        },
+        "typography": {
+          "readingBody": {
+            "fontSize": 12,
+            "lineHeight": 20.4,
+            "lineHeightRatio": 1.7,
+            "fontFamily": "Songti SC"
+          },
+          "readingParagraph": {
+            "fontSize": 12,
+            "lineHeight": 20.4,
+            "lineHeightRatio": 1.7,
+            "fontFamily": "Songti SC"
+          },
+          "readingHeading": {
+            "fontSize": 24,
+            "lineHeight": 40.8,
+            "lineHeightRatio": 1.7,
+            "fontFamily": "Songti SC"
+          },
+          "readingPre": null,
+          "editorTextarea": {
+            "fontSize": 12,
+            "lineHeight": 19.8,
+            "lineHeightRatio": 1.65,
+            "fontFamily": "SF Mono"
+          },
+          "chrome": {
+            "activityButton": {
+              "fontSize": 10,
+              "lineHeight": 12,
+              "lineHeightRatio": 1.2,
+              "fontFamily": "Songti SC"
+            },
+            "leftTree": {
+              "fontSize": 13,
+              "lineHeight": 21.45,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "leftSidebarTab": {
+              "fontSize": 11,
+              "lineHeight": 18.15,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "centralTab": {
+              "fontSize": 13,
+              "lineHeight": 21.45,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "rightSectionSummary": {
+              "fontSize": 10,
+              "lineHeight": 16.5,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "rightSectionBody": {
+              "fontSize": 13,
+              "lineHeight": 21.45,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "rightHeader": {
+              "fontSize": 11,
+              "lineHeight": 18.15,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "statusBar": {
+              "fontSize": 10,
+              "lineHeight": 16.5,
+              "lineHeightRatio": 1.65,
+              "fontFamily": "Songti SC"
+            },
+            "graphNodeTitle": null
+          }
+        },
+        "tooltip": {
+          "buttonCount": 8,
+          "titleCount": 0,
+          "svgTitleTotal": 0,
+          "buttons": [
+            {
+              "ariaLabel": "文件",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "搜索",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "关系图",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "Canvas",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "Syn 命令",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "设置与维护",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "来源",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            },
+            {
+              "ariaLabel": "切换右侧上下文",
+              "title": null,
+              "svgTitleCount": 0,
+              "iconAriaHidden": "true",
+              "iconFocusable": "false"
+            }
+          ]
+        }
+      },
+      "audit": {
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    }
+  ]
+}

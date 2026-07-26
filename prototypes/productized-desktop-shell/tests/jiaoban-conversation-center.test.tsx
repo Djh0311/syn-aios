@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server.browser";
 import type {
   BlackboardEntry,
+  CodexTranscriptEvent,
   ProjectWorkflowSummary,
   RunHistoryEntry,
   WorkflowStateSnapshot,
@@ -27,6 +28,11 @@ import {
   reconcileResidentMessageSubmission,
   useJiaobanConversationState,
 } from "../src/views/projects/jiaoban/useJiaobanConversationState";
+import {
+  failedConversationReceiptLayers,
+  mergeConversationTransportReceipts,
+} from "../src/lib/conversationTransport";
+import type { ConversationTransportReceipt } from "../src/lib/conversationTransport";
 import {
   assert,
   assertDeepEqual,
@@ -652,6 +658,162 @@ function ComposerRouteProbe({ phase, isTestProject = true }: { phase: JiaobanPha
   assertDeepEqual(rejectedSubmitRefreshCount, 1, "运输层拒绝也应尝试一次 canonical/proposal 重读");
 }
 
+// 4c) v1 shared receipt 是纯数据合同：结构化后置失败各自说人话，且绝不能吞已成立的主管自然回复。
+// 这里不调用 resident/tauri/store，也不触发方案或 chain。
+{
+  const establishedReply: ConversationTransportReceipt = {
+    conversation_id: "conversation:jiaoban:fixture",
+    thread_id: "thread:jiaoban:fixture",
+    turn_id: "turn:jiaoban:fixture",
+    transport: {
+      status: "succeeded",
+      attempt_id: null,
+      binding_stage: null,
+      human_message: null,
+    },
+    assistant_reply: {
+      status: "succeeded",
+      text: "我已经看过了，先给你一个自然回复。",
+      assistant_item_id: "assistant:jiaoban:fixture",
+      human_message: null,
+    },
+    tool_action: { status: "not_requested", human_message: null },
+    read_model_projection: { status: "not_requested", human_message: null },
+    canonical_mirror: { status: "not_requested", human_message: null },
+  };
+  const receiptFailures: ReadonlyArray<Readonly<{
+    layer: "tool_action" | "read_model_projection" | "canonical_mirror";
+    humanMessage: string;
+    incoming: ConversationTransportReceipt;
+  }>> = [
+    {
+      layer: "tool_action",
+      humanMessage: "主管已回复，但这次方案动作没有完成。",
+      incoming: {
+        ...establishedReply,
+        assistant_reply: { status: "not_requested", text: null, assistant_item_id: null, human_message: null },
+        tool_action: { status: "failed", human_message: "主管已回复，但这次方案动作没有完成。" },
+      },
+    },
+    {
+      layer: "read_model_projection",
+      humanMessage: "主管已回复，右侧方案状态还在刷新。",
+      incoming: {
+        ...establishedReply,
+        assistant_reply: { status: "not_requested", text: null, assistant_item_id: null, human_message: null },
+        tool_action: { status: "succeeded", human_message: null },
+        read_model_projection: { status: "failed", human_message: "主管已回复，右侧方案状态还在刷新。" },
+      },
+    },
+    {
+      layer: "canonical_mirror",
+      humanMessage: "主管已回复，事实镜像还在刷新。",
+      incoming: {
+        ...establishedReply,
+        assistant_reply: { status: "not_requested", text: null, assistant_item_id: null, human_message: null },
+        tool_action: { status: "succeeded", human_message: null },
+        read_model_projection: { status: "succeeded", human_message: null },
+        canonical_mirror: { status: "failed", human_message: "主管已回复，事实镜像还在刷新。" },
+      },
+    },
+  ];
+
+  for (const fixture of receiptFailures) {
+    const settled = mergeConversationTransportReceipts(establishedReply, fixture.incoming);
+    assertDeepEqual(
+      settled.assistant_reply,
+      establishedReply.assistant_reply,
+      `${fixture.layer} 失败不得吞掉已成立的主管自然回复`,
+    );
+    assertDeepEqual(
+      failedConversationReceiptLayers(settled),
+      [{ layer: fixture.layer, human_message: fixture.humanMessage }],
+      `${fixture.layer} 必须单独结算为自己的可理解错误`,
+    );
+    assert(
+      !fixture.humanMessage.includes("没送到主管"),
+      `${fixture.layer} 的后置失败不得改写成发送失败`,
+    );
+  }
+}
+
+// 4d) 交办面以 shared transport 的安全文本为主；canonical 仅作事实镜像回退，不能重复
+// 已显示的自然回复。receipt 层错误与 Stop 只走人话/控制面，不接触事件的 metadata。
+{
+  const transportTranscript: CodexTranscriptEvent[] = [
+    {
+      event_id: "conversation-transport-user:fixture",
+      timestamp: "2026-07-23T01:00:00.000Z",
+      event_type: "user_message",
+      actor: "user",
+      role: "user",
+      text: "请先给我自然回复。",
+      metadata: { ignored_detail: "metadata-must-not-render" },
+      warnings: [],
+    },
+    {
+      event_id: "conversation-transport-assistant:fixture",
+      timestamp: "2026-07-23T01:00:01.000Z",
+      event_type: "assistant_message",
+      actor: "assistant",
+      role: "assistant",
+      text: "共享主管自然回复。",
+      metadata: { ignored_detail: "metadata-must-not-render" },
+      warnings: [],
+    },
+  ];
+  const sharedMarkup = renderToStaticMarkup(
+    stream({
+      entries: [supervisorEntry({
+        entry_id: "blackboard:supervisor:shared-mirror",
+        summary: "共享主管自然回复。",
+        created_at: "2026-07-23T01:00:01.000Z",
+      })],
+      transportTranscript,
+      receiptLayerErrors: [{
+        layer: "read_model_projection",
+        human_message: "主管已经回复，右侧状态还在刷新。",
+      }],
+    }),
+  );
+  assert(
+    sharedMarkup.includes('data-conversation-source="shared-transport"') && sharedMarkup.includes("请先给我自然回复。"),
+    "shared transport 的用户/主管文本必须可在 canonical 镜像前直接呈现",
+  );
+  assert(
+    (sharedMarkup.match(/共享主管自然回复。/g) ?? []).length === 1,
+    "canonical 追上后不得把同一句共享主管回复重复渲染",
+  );
+  assert(
+    sharedMarkup.includes('data-receipt-layer="read_model_projection"') && sharedMarkup.includes("右侧状态还在刷新"),
+    "projection 失败必须以独立 receipt 人话上脸",
+  );
+  assert(!sharedMarkup.includes("metadata-must-not-render"), "shared transcript UI 不得读取或暴露事件 metadata");
+
+  let stopCount = 0;
+  const busyComposer = (
+    <JiaobanConversationComposer
+      route={{ kind: "message" }}
+      draft="仍在处理"
+      busy
+      onDraftChange={noop}
+      onSubmit={noop}
+      onStop={() => {
+        stopCount += 1;
+      }}
+    />
+  );
+  const stopButton = findElement(
+    busyComposer,
+    (element) => element.type === "button" && element.props?.["aria-label"] === "停止主管对话",
+  );
+  assert(stopButton && visibleText(stopButton) === "停止", "输入锁定时必须提供 Stop 控制");
+  const onStop = stopButton.props?.onClick as (() => void) | undefined;
+  assert(onStop, "Stop 控制必须连接 transport stop 回调");
+  onStop();
+  assert(stopCount === 1, "Stop 控制只应发出一次 stop 请求");
+}
+
 // 5) 提交期间的「主管在看」仍是人话等待态，但不会吞掉已落 canonical 的过程/对话消息。
 {
   const tree = stream({
@@ -970,5 +1132,5 @@ function ComposerRouteProbe({ phase, isTestProject = true }: { phase: JiaobanPha
 }
 
 console.log(
-  "jiaoban-conversation-center: 5 组消息流/追问回答/幂等/等待态 + 2 组修单4分组折叠 + P3-A 过程短讯 离线 DOM 断言全过",
+  "jiaoban-conversation-center: 5 组消息流/追问回答/幂等/等待态 + shared receipt 三层独立结算 + 2 组修单4分组折叠 + P3-A 过程短讯 离线 DOM 断言全过",
 );

@@ -1,5 +1,7 @@
 # 会话交接：知识库第一片落地（蓝图 L3 首片）· 两 catch 立案 · H2 仍待额度（2026-07-20 夜）
 
+> 状态：**历史交接，已由 `handoffs/2026-07-22-knowledge-vault-production-write-path-status-sync-v1.md` 取代。** 其中“P2-B 下一步”和“vault audit bridge 私有不可达”的判断均已过期：P2-B 已由 `e9ad7f3` 收口，audit 已按 07-21 决策接入 Batch 2 production writer。
+
 > 接棒人=新一代**总指导**（主导线）。读序：`CURRENT.md` → 本文 → 总执行计划 `docs/plans/2026-07-16-master-execution-plan-conversation-first-v1.md`。规则正本 `AGENTS.md`；主导线=唯一 commit 权（问一次）、核实物不信自报、对接用户；执行线吃包不 commit。
 > 本会话主线 commit：`b9f7e34`（知识库第一片）。工作树干净，全部未 push。上代交接（同日 G2→G4 视觉线全收）：`handoffs/2026-07-20-g2-g4-visual-line-complete-and-knowledge-base-next-handoff-v1.md`。
 

@@ -1607,6 +1607,7 @@ fn mcp_config(runtime: &SupervisorActionRuntime) -> McpServerConfig {
         node_id: None,
         supervisor_workflow_state_path: Some(runtime.workflow_state_path.clone()),
         supervisor_quota_limits: Some(runtime.quota_limits),
+        knowledge_open_relay: None,
     }
 }
 

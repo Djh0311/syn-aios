@@ -1,0 +1,2198 @@
+{
+  "purpose": "§5.4 回归锁：六个冻结 runner 拷到仓外临时目录运行的逐 assertion 结果",
+  "runners": [
+    {
+      "runner": "R3B tab-groups-split",
+      "note": "（首跑 1 抖动，复跑 4 次全过）",
+      "outcome": "PASS",
+      "reportedAssertions": 90,
+      "reportedFailed": 0,
+      "reportedFailures": [],
+      "perAssertionCaptured": 0,
+      "perAssertion": []
+    },
+    {
+      "runner": "R3C canvas-first",
+      "note": "",
+      "outcome": "PASS",
+      "reportedAssertions": 131,
+      "reportedFailed": 0,
+      "reportedFailures": [],
+      "perAssertionCaptured": 0,
+      "perAssertion": []
+    },
+    {
+      "runner": "R3C-R1 focus-return",
+      "note": "",
+      "outcome": "PASS",
+      "reportedAssertions": 73,
+      "reportedFailed": 0,
+      "reportedFailures": [],
+      "perAssertionCaptured": 73,
+      "perAssertion": [
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome Escape: first focus enters the file panel",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome Escape: actual opener exposes expanded controls linked to the live panel",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome Escape: file panel remains one contained absolute Canvas surface",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome Escape: closing removes panel controls from DOM Tab and accessibility paths",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome Escape: activeElement is the exact clicked opener DOM identity",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome explicit close: first focus enters the file panel",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome explicit close: actual opener exposes expanded controls linked to the live panel",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome explicit close: file panel remains one contained absolute Canvas surface",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome explicit close: closing removes panel controls from DOM Tab and accessibility paths",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome explicit close: activeElement is the exact clicked opener DOM identity",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome toggle close: first focus enters the file panel",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome toggle close: actual opener exposes expanded controls linked to the live panel",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome toggle close: file panel remains one contained absolute Canvas surface",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome toggle close: closing removes panel controls from DOM Tab and accessibility paths",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "chrome toggle close: activeElement is the exact clicked opener DOM identity",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "01-1180-chrome-opener-cancel-paths: localStorage is empty before mount",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "01-1180-chrome-opener-cancel-paths: exact read allowlist and observed calls stay read-only",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "01-1180-chrome-opener-cancel-paths: write unknown external console and page-error counts are all zero",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "01-1180-chrome-opener-cancel-paths: localStorage contains only disposable R3B chrome preference",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "01-1180-chrome-opener-cancel-paths: document body shell group and Canvas have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "01-1180-chrome-opener-cancel-paths",
+          "name": "01-1180-chrome-opener-cancel-paths: frozen R3C Canvas geometry and internal tools remain intact",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "empty Escape: first focus enters the file panel",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "empty Escape: actual opener exposes expanded controls linked to the live panel",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "empty Escape: file panel remains one contained absolute Canvas surface",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "empty Escape: closing removes panel controls from DOM Tab and accessibility paths",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "empty Escape: activeElement is the exact clicked opener DOM identity",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "empty explicit close: first focus enters the file panel",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "empty explicit close: actual opener exposes expanded controls linked to the live panel",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "empty explicit close: file panel remains one contained absolute Canvas surface",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "empty explicit close: closing removes panel controls from DOM Tab and accessibility paths",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "empty explicit close: activeElement is the exact clicked opener DOM identity",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "02-1180-empty-opener-cancel-paths: localStorage is empty before mount",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "02-1180-empty-opener-cancel-paths: exact read allowlist and observed calls stay read-only",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "02-1180-empty-opener-cancel-paths: write unknown external console and page-error counts are all zero",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "02-1180-empty-opener-cancel-paths: localStorage contains only disposable R3B chrome preference",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "02-1180-empty-opener-cancel-paths: document body shell group and Canvas have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "02-1180-empty-opener-cancel-paths",
+          "name": "02-1180-empty-opener-cancel-paths: frozen R3C Canvas geometry and internal tools remain intact",
+          "passed": true
+        },
+        {
+          "context": "03-1180-chrome-opener-selection",
+          "name": "chrome selection: first focus enters the file panel",
+          "passed": true
+        },
+        {
+          "context": "03-1180-chrome-opener-selection",
+          "name": "chrome selection: actual opener exposes expanded controls linked to the live panel",
+          "passed": true
+        },
+        {
+          "context": "03-1180-chrome-opener-selection",
+          "name": "chrome selection: file panel remains one contained absolute Canvas surface",
+          "passed": true
+        },
+        {
+          "context": "03-1180-chrome-opener-selection",
+          "name": "chrome selection: successful selection unloads the panel and loads one Canvas",
+          "passed": true
+        },
+        {
+          "context": "03-1180-chrome-opener-selection",
+          "name": "chrome selection: successful selection focuses the connected continuous stage",
+          "passed": true
+        },
+        {
+          "context": "03-1180-chrome-opener-selection",
+          "name": "chrome selection: successful selection performs one allowed Canvas read and no write",
+          "passed": true
+        },
+        {
+          "context": "03-1180-chrome-opener-selection",
+          "name": "03-1180-chrome-opener-selection: localStorage is empty before mount",
+          "passed": true
+        },
+        {
+          "context": "03-1180-chrome-opener-selection",
+          "name": "03-1180-chrome-opener-selection: exact read allowlist and observed calls stay read-only",
+          "passed": true
+        },
+        {
+          "context": "03-1180-chrome-opener-selection",
+          "name": "03-1180-chrome-opener-selection: write unknown external console and page-error counts are all zero",
+          "passed": true
+        },
+        {
+          "context": "03-1180-chrome-opener-selection",
+          "name": "03-1180-chrome-opener-selection: localStorage contains only disposable R3B chrome preference",
+          "passed": true
+        },
+        {
+          "context": "03-1180-chrome-opener-selection",
+          "name": "03-1180-chrome-opener-selection: document body shell group and Canvas have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "03-1180-chrome-opener-selection",
+          "name": "03-1180-chrome-opener-selection: frozen R3C Canvas geometry and internal tools remain intact",
+          "passed": true
+        },
+        {
+          "context": "04-1180-empty-opener-selection",
+          "name": "empty selection: first focus enters the file panel",
+          "passed": true
+        },
+        {
+          "context": "04-1180-empty-opener-selection",
+          "name": "empty selection: actual opener exposes expanded controls linked to the live panel",
+          "passed": true
+        },
+        {
+          "context": "04-1180-empty-opener-selection",
+          "name": "empty selection: file panel remains one contained absolute Canvas surface",
+          "passed": true
+        },
+        {
+          "context": "04-1180-empty-opener-selection",
+          "name": "empty selection: successful selection unloads the panel and loads one Canvas",
+          "passed": true
+        },
+        {
+          "context": "04-1180-empty-opener-selection",
+          "name": "empty selection: successful selection focuses the connected continuous stage",
+          "passed": true
+        },
+        {
+          "context": "04-1180-empty-opener-selection",
+          "name": "empty selection: successful selection performs one allowed Canvas read and no write",
+          "passed": true
+        },
+        {
+          "context": "04-1180-empty-opener-selection",
+          "name": "04-1180-empty-opener-selection: localStorage is empty before mount",
+          "passed": true
+        },
+        {
+          "context": "04-1180-empty-opener-selection",
+          "name": "04-1180-empty-opener-selection: exact read allowlist and observed calls stay read-only",
+          "passed": true
+        },
+        {
+          "context": "04-1180-empty-opener-selection",
+          "name": "04-1180-empty-opener-selection: write unknown external console and page-error counts are all zero",
+          "passed": true
+        },
+        {
+          "context": "04-1180-empty-opener-selection",
+          "name": "04-1180-empty-opener-selection: localStorage contains only disposable R3B chrome preference",
+          "passed": true
+        },
+        {
+          "context": "04-1180-empty-opener-selection",
+          "name": "04-1180-empty-opener-selection: document body shell group and Canvas have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "04-1180-empty-opener-selection",
+          "name": "04-1180-empty-opener-selection: frozen R3C Canvas geometry and internal tools remain intact",
+          "passed": true
+        },
+        {
+          "context": "05-900-reduced-motion-empty-opener-escape",
+          "name": "900 reduced-motion media query is active",
+          "passed": true
+        },
+        {
+          "context": "05-900-reduced-motion-empty-opener-escape",
+          "name": "900 reduced-motion empty Escape: first focus enters the file panel",
+          "passed": true
+        },
+        {
+          "context": "05-900-reduced-motion-empty-opener-escape",
+          "name": "900 reduced-motion empty Escape: actual opener exposes expanded controls linked to the live panel",
+          "passed": true
+        },
+        {
+          "context": "05-900-reduced-motion-empty-opener-escape",
+          "name": "900 reduced-motion empty Escape: file panel remains one contained absolute Canvas surface",
+          "passed": true
+        },
+        {
+          "context": "05-900-reduced-motion-empty-opener-escape",
+          "name": "900 reduced-motion empty Escape: closing removes panel controls from DOM Tab and accessibility paths",
+          "passed": true
+        },
+        {
+          "context": "05-900-reduced-motion-empty-opener-escape",
+          "name": "900 reduced-motion empty Escape: activeElement is the exact clicked opener DOM identity",
+          "passed": true
+        },
+        {
+          "context": "05-900-reduced-motion-empty-opener-escape",
+          "name": "05-900-reduced-motion-empty-opener-escape: localStorage is empty before mount",
+          "passed": true
+        },
+        {
+          "context": "05-900-reduced-motion-empty-opener-escape",
+          "name": "05-900-reduced-motion-empty-opener-escape: exact read allowlist and observed calls stay read-only",
+          "passed": true
+        },
+        {
+          "context": "05-900-reduced-motion-empty-opener-escape",
+          "name": "05-900-reduced-motion-empty-opener-escape: write unknown external console and page-error counts are all zero",
+          "passed": true
+        },
+        {
+          "context": "05-900-reduced-motion-empty-opener-escape",
+          "name": "05-900-reduced-motion-empty-opener-escape: localStorage contains only disposable R3B chrome preference",
+          "passed": true
+        },
+        {
+          "context": "05-900-reduced-motion-empty-opener-escape",
+          "name": "05-900-reduced-motion-empty-opener-escape: document body shell group and Canvas have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "05-900-reduced-motion-empty-opener-escape",
+          "name": "05-900-reduced-motion-empty-opener-escape: frozen R3C Canvas geometry and internal tools remain intact",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "runner": "R3E activity-rail/right-context/graph-scale",
+      "note": "（3 条同一断言按 §0.1 口径修订有意翻面）",
+      "outcome": "GREEN_HAS_FAILURES",
+      "reportedAssertions": 126,
+      "reportedFailed": 3,
+      "reportedFailures": [
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "1440 D1: 图标 aria-hidden + focusable=false + currentColor，且不用 title 替代名称",
+          "detail": {
+            "icons": [
+              {
+                "ariaLabel": "文件",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "文件"
+              },
+              {
+                "ariaLabel": "搜索",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "搜索"
+              },
+              {
+                "ariaLabel": "关系图",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "关系图"
+              },
+              {
+                "ariaLabel": "Canvas",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Canvas"
+              },
+              {
+                "ariaLabel": "Syn 命令",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Syn 命令"
+              },
+              {
+                "ariaLabel": "设置与维护",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "设置与维护"
+              },
+              {
+                "ariaLabel": "来源",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "来源"
+              },
+              {
+                "ariaLabel": "切换右侧上下文",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "切换右侧上下文"
+              }
+            ]
+          }
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: 图标 aria-hidden + focusable=false + currentColor，且不用 title 替代名称",
+          "detail": {
+            "icons": [
+              {
+                "ariaLabel": "文件",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "文件"
+              },
+              {
+                "ariaLabel": "搜索",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "搜索"
+              },
+              {
+                "ariaLabel": "关系图",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "关系图"
+              },
+              {
+                "ariaLabel": "Canvas",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Canvas"
+              },
+              {
+                "ariaLabel": "Syn 命令",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Syn 命令"
+              },
+              {
+                "ariaLabel": "设置与维护",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "设置与维护"
+              },
+              {
+                "ariaLabel": "来源",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "来源"
+              },
+              {
+                "ariaLabel": "切换右侧上下文",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "切换右侧上下文"
+              }
+            ]
+          }
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion D1: 图标 aria-hidden + focusable=false + currentColor，且不用 title 替代名称",
+          "detail": {
+            "icons": [
+              {
+                "ariaLabel": "文件",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "文件"
+              },
+              {
+                "ariaLabel": "搜索",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "搜索"
+              },
+              {
+                "ariaLabel": "关系图",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "关系图"
+              },
+              {
+                "ariaLabel": "Canvas",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Canvas"
+              },
+              {
+                "ariaLabel": "Syn 命令",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Syn 命令"
+              },
+              {
+                "ariaLabel": "设置与维护",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "设置与维护"
+              },
+              {
+                "ariaLabel": "来源",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "来源"
+              },
+              {
+                "ariaLabel": "切换右侧上下文",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "切换右侧上下文"
+              }
+            ]
+          }
+        }
+      ],
+      "perAssertionCaptured": 126,
+      "perAssertion": [
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "1440 D1: 八个入口可访问名称逐字相符",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "1440 D1: 活动栏宽度稳定在 36-48px",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "1440 D1: 八入口零断行",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "1440 D1: 每个按钮 scrollHeight/scrollWidth 未溢出",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "1440 D1: 每个入口 hit target ≥ 28×28",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "1440 D1: 每个入口恰好一枚 inline SVG",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "1440 D1: 图标 aria-hidden + focusable=false + currentColor，且不用 title 替代名称",
+          "passed": false,
+          "detail": {
+            "icons": [
+              {
+                "ariaLabel": "文件",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "文件"
+              },
+              {
+                "ariaLabel": "搜索",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "搜索"
+              },
+              {
+                "ariaLabel": "关系图",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "关系图"
+              },
+              {
+                "ariaLabel": "Canvas",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Canvas"
+              },
+              {
+                "ariaLabel": "Syn 命令",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Syn 命令"
+              },
+              {
+                "ariaLabel": "设置与维护",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "设置与维护"
+              },
+              {
+                "ariaLabel": "来源",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "来源"
+              },
+              {
+                "ariaLabel": "切换右侧上下文",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "切换右侧上下文"
+              }
+            ]
+          }
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "1440 D1: aria-pressed 只出现在既有有状态入口",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "1440 D1: 活动栏整体无横向/纵向 overflow",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "1440 D1: :focus-visible 有可见 outline",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "1440 D1: 点开关系图后 aria-pressed 与真实状态一致",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "01-1440-activity-ribbon: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "01-1440-activity-ribbon: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "01-1440-activity-ribbon: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "01-1440-activity-ribbon: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "01-1440-activity-ribbon: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "context": "01-1440-activity-ribbon",
+          "name": "01-1440-activity-ribbon: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: 八个入口可访问名称逐字相符",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: 活动栏宽度稳定在 36-48px",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: 八入口零断行",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: 每个按钮 scrollHeight/scrollWidth 未溢出",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: 每个入口 hit target ≥ 28×28",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: 每个入口恰好一枚 inline SVG",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: 图标 aria-hidden + focusable=false + currentColor，且不用 title 替代名称",
+          "passed": false,
+          "detail": {
+            "icons": [
+              {
+                "ariaLabel": "文件",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "文件"
+              },
+              {
+                "ariaLabel": "搜索",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "搜索"
+              },
+              {
+                "ariaLabel": "关系图",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "关系图"
+              },
+              {
+                "ariaLabel": "Canvas",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Canvas"
+              },
+              {
+                "ariaLabel": "Syn 命令",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Syn 命令"
+              },
+              {
+                "ariaLabel": "设置与维护",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "设置与维护"
+              },
+              {
+                "ariaLabel": "来源",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "来源"
+              },
+              {
+                "ariaLabel": "切换右侧上下文",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "切换右侧上下文"
+              }
+            ]
+          }
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: aria-pressed 只出现在既有有状态入口",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: 活动栏整体无横向/纵向 overflow",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: 上下文入口可折叠并恢复右栏",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: 折叠左栏后活动栏入口仍能恢复对应面板",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "900 D1: Canvas 入口仍打开 Canvas 面板",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "02-900-activity-ribbon-narrow: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "02-900-activity-ribbon-narrow: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "02-900-activity-ribbon-narrow: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "02-900-activity-ribbon-narrow: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "02-900-activity-ribbon-narrow: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "context": "02-900-activity-ribbon-narrow",
+          "name": "02-900-activity-ribbon-narrow: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 右栏恰好三个稳定区块",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 每区都有 aria-expanded 明确的折叠控件且 aria-controls 可解析",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 默认展开集合固定为三区全展开",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 右栏标题不再声明大纲，右栏全文零命中",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 注入的 SyntheticSourceContext 被产品侧容器包住且内容逐字保留",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 未选择文件的空态文案仍在",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 「属性」折叠后 aria-expanded=false、内容 display:none 且退出 Tab 路径",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 「属性」重新展开后 aria-expanded=true 且内容回到 Tab 路径",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 「反向引用」折叠后 aria-expanded=false、内容 display:none 且退出 Tab 路径",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 「反向引用」重新展开后 aria-expanded=true 且内容回到 Tab 路径",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 「来源上下文」折叠后 aria-expanded=false、内容 display:none 且退出 Tab 路径",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 「来源上下文」重新展开后 aria-expanded=true 且内容回到 Tab 路径",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "1440 D2: 折叠区块的内容真的不在 Tab 路径上",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "03-1440-right-context-sections: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "03-1440-right-context-sections: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "03-1440-right-context-sections: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "03-1440-right-context-sections: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "03-1440-right-context-sections: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "context": "03-1440-right-context-sections",
+          "name": "03-1440-right-context-sections: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        },
+        {
+          "context": "04-900-right-context-collapsed",
+          "name": "900 D2: 双栏展开时右栏零横向 overflow",
+          "passed": true
+        },
+        {
+          "context": "04-900-right-context-collapsed",
+          "name": "900 D2: 纵向滚动限制在右栏容器内",
+          "passed": true
+        },
+        {
+          "context": "04-900-right-context-collapsed",
+          "name": "900 D2: 空态文案在窄宽下仍可见",
+          "passed": true
+        },
+        {
+          "context": "04-900-right-context-collapsed",
+          "name": "900 D2: 三区块在窄宽下仍稳定",
+          "passed": true
+        },
+        {
+          "context": "04-900-right-context-collapsed",
+          "name": "900 D2: 折叠来源上下文后内容退出 Tab/AT 路径，其余两区仍在",
+          "passed": true
+        },
+        {
+          "context": "04-900-right-context-collapsed",
+          "name": "900 D2: 折叠后右栏仍零横向 overflow",
+          "passed": true
+        },
+        {
+          "context": "04-900-right-context-collapsed",
+          "name": "04-900-right-context-collapsed: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "context": "04-900-right-context-collapsed",
+          "name": "04-900-right-context-collapsed: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "context": "04-900-right-context-collapsed",
+          "name": "04-900-right-context-collapsed: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "context": "04-900-right-context-collapsed",
+          "name": "04-900-right-context-collapsed: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "context": "04-900-right-context-collapsed",
+          "name": "04-900-right-context-collapsed: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "context": "04-900-right-context-collapsed",
+          "name": "04-900-right-context-collapsed: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "D3 n=6: DOM 节点数与投影一致",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "D3 n=6: fitView 后零节点矩形相交",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "D3 n=6: fitView 后全部节点 bounds 在舞台内",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "D3 n=6: 任何缩放下 aria-label 完整",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "D3 n=6: fitView 即达标缩放（节点可点、标题可见、未被裁切）",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "D3 n=6: 6 节点 / 5 边全可见（R3D 不变量不回归）",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "D3 n=6: 节点盒仍是 136×40",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "D3 n=6: 放大到 readableZoom 后节点盒 ≥ 28×28",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "D3 n=6: readableZoom 下仍零相交",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "D3 n=6: readableZoom 下 aria-label 仍完整",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "graph-n6: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "graph-n6: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "graph-n6: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "graph-n6: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "graph-n6: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "context": "graph-n6",
+          "name": "graph-n6: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "D3 n=40: DOM 节点数与投影一致",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "D3 n=40: fitView 后零节点矩形相交",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "D3 n=40: fitView 后全部节点 bounds 在舞台内",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "D3 n=40: 任何缩放下 aria-label 完整",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "D3 n=40: 放大到 readableZoom 后节点盒 ≥ 28×28",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "D3 n=40: readableZoom 下仍零相交",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "D3 n=40: readableZoom 下 aria-label 仍完整",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "graph-n40: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "graph-n40: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "graph-n40: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "graph-n40: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "graph-n40: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "context": "graph-n40",
+          "name": "graph-n40: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "D3 n=512: DOM 节点数与投影一致",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "D3 n=512: fitView 后零节点矩形相交",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "D3 n=512: fitView 后全部节点 bounds 在舞台内",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "D3 n=512: 任何缩放下 aria-label 完整",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "D3 n=512: 放大到 readableZoom 后节点盒 ≥ 28×28",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "D3 n=512: readableZoom 下仍零相交",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "D3 n=512: readableZoom 下 aria-label 仍完整",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "graph-n512: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "graph-n512: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "graph-n512: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "graph-n512: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "graph-n512: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "context": "graph-n512",
+          "name": "graph-n512: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion D1: 八个入口可访问名称逐字相符",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion D1: 活动栏宽度稳定在 36-48px",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion D1: 八入口零断行",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion D1: 每个按钮 scrollHeight/scrollWidth 未溢出",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion D1: 每个入口 hit target ≥ 28×28",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion D1: 每个入口恰好一枚 inline SVG",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion D1: 图标 aria-hidden + focusable=false + currentColor，且不用 title 替代名称",
+          "passed": false,
+          "detail": {
+            "icons": [
+              {
+                "ariaLabel": "文件",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "文件"
+              },
+              {
+                "ariaLabel": "搜索",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "搜索"
+              },
+              {
+                "ariaLabel": "关系图",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "关系图"
+              },
+              {
+                "ariaLabel": "Canvas",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Canvas"
+              },
+              {
+                "ariaLabel": "Syn 命令",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "Syn 命令"
+              },
+              {
+                "ariaLabel": "设置与维护",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "设置与维护"
+              },
+              {
+                "ariaLabel": "来源",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "来源"
+              },
+              {
+                "ariaLabel": "切换右侧上下文",
+                "iconAriaHidden": "true",
+                "iconFocusable": "false",
+                "iconStroke": "currentColor",
+                "title": "切换右侧上下文"
+              }
+            ]
+          }
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion D1: aria-pressed 只出现在既有有状态入口",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion D1: 活动栏整体无横向/纵向 overflow",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion: ribbon + 右栏折叠 + Graph 均零新增动画",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion: 折叠态与 Graph 均无横向 overflow",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "900 reduced-motion: Graph 仍零相交",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "08-900-reduced-motion: 观察到的 command 全在精确 read allowlist 内",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "08-900-reduced-motion: 写/未知 command 计数为 0",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "08-900-reduced-motion: mount 前目标 origin localStorage 为空",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "08-900-reduced-motion: localStorage 只允许既有可丢弃 UI chrome 偏好键",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "08-900-reduced-motion: 各层零横向 overflow",
+          "passed": true
+        },
+        {
+          "context": "08-900-reduced-motion",
+          "name": "08-900-reduced-motion: 外部请求 / console error / page error 三项零值",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "runner": "R3D graph-convergence（验收原件）",
+      "note": "（已知取样竞态，按 R3E §6 归因，不得再改该文件）",
+      "outcome": "NEEDS_R3D_REWORK",
+      "reportedAssertions": 75,
+      "reportedFailed": 1,
+      "reportedFailures": [
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "reduced-motion Escape still returns to the actual opener",
+          "detail": {
+            "returnedFocus": false
+          }
+        }
+      ],
+      "perAssertionCaptured": 75,
+      "perAssertion": [
+        {
+          "context": "01-1440-global-graph",
+          "name": "01-1440-global-graph: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "Graph root directly fills the active group without card chrome",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "Graph has no repeated internal h2 or explanation",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "default chrome is compact and detailed filters are closed",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "1440 ReactFlow owns at least 74 percent of the Graph root",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "all projected nodes are lightweight 144 by 48 or smaller",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "nodes keep only the readable title visible",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "nodes have no card shadow coarse left accent or clipped title",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "all six nodes and five visible edges match and fit the returned projection",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "01-1440-global-graph: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "01-1440-global-graph: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "01-1440-global-graph: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "01-1440-global-graph: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "02-1180-filter-disclosure: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "filter opener exposes stable expanded and controls semantics",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "opening disclosure naturally focuses the first query input",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "query tag local-focus and explicit actions are present on demand",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "filter disclosure remains fully inside the Graph root",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "Escape closes the disclosure and returns to this actual opener",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "explicit close returns to the same actual opener",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "02-1180-filter-disclosure: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "02-1180-filter-disclosure: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "02-1180-filter-disclosure: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "02-1180-filter-disclosure: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "03-1180-local-graph: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "global and local scope have real pressed state",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "local update sends one exact lower-camel graph payload",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "applied local focus is represented without persistent detail controls",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "frozen response remains a complete six-node five-edge projection",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "successful apply closes and returns to the actual filter opener",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "03-1180-local-graph: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "03-1180-local-graph: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "03-1180-local-graph: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "03-1180-local-graph: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "04a-1180-click-activation",
+          "name": "04a-1180-click-activation: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "04a-1180-click-activation",
+          "name": "click activates exactly one typed Markdown read",
+          "passed": true
+        },
+        {
+          "context": "04a-1180-click-activation",
+          "name": "04a-1180-click-activation: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "04a-1180-click-activation",
+          "name": "04a-1180-click-activation: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "04a-1180-click-activation",
+          "name": "04a-1180-click-activation: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "04a-1180-click-activation",
+          "name": "04a-1180-click-activation: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "04b-1180-enter-activation: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "Enter activates exactly one typed Markdown read",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "Enter reaches the node by natural Tab order",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "04b-1180-enter-activation: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "04b-1180-enter-activation: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "04b-1180-enter-activation: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "04b-1180-enter-activation: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "04c-1180-space-activation: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "Space activates exactly one typed Markdown read",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "Space reaches the node by natural Tab order",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "Space activation does not scroll body or document",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "04c-1180-space-activation: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "04c-1180-space-activation: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "04c-1180-space-activation: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "04c-1180-space-activation: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "05-900-keyboard-focus-and-selected: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "900 starts with both sidebars expanded",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "Tab naturally reaches a native Graph node action",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "keyboard focus has a visible focus indicator",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "focus selects the real ReactFlow wrapper and changes its descendant style",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "900 ReactFlow owns at least 68 percent and nodes remain readable and contained",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "Shift+Tab naturally leaves the Graph node action",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "05-900-keyboard-focus-and-selected: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "05-900-keyboard-focus-and-selected: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "05-900-keyboard-focus-and-selected: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "05-900-keyboard-focus-and-selected: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "06-900-reduced-motion-collapsed: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "reduced-motion scenario uses a real collapsed sidebar combination",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "collapsed 900 disclosure stays within Graph and flow keeps at least 68 percent",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "Graph adds no animation under reduced motion",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "reduced-motion Escape still returns to the actual opener",
+          "passed": false,
+          "detail": {
+            "returnedFocus": false
+          }
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "06-900-reduced-motion-collapsed: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "06-900-reduced-motion-collapsed: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "06-900-reduced-motion-collapsed: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "06-900-reduced-motion-collapsed: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "runner": "R3D graph-convergence（R3E 修正版）",
+      "note": "",
+      "outcome": "PASS_SYNTHETIC_GRAPH_EVIDENCE",
+      "reportedAssertions": 75,
+      "reportedFailed": 0,
+      "reportedFailures": [],
+      "perAssertionCaptured": 75,
+      "perAssertion": [
+        {
+          "context": "01-1440-global-graph",
+          "name": "01-1440-global-graph: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "Graph root directly fills the active group without card chrome",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "Graph has no repeated internal h2 or explanation",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "default chrome is compact and detailed filters are closed",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "1440 ReactFlow owns at least 74 percent of the Graph root",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "all projected nodes are lightweight 144 by 48 or smaller",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "nodes keep only the readable title visible",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "nodes have no card shadow coarse left accent or clipped title",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "all six nodes and five visible edges match and fit the returned projection",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "01-1440-global-graph: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "01-1440-global-graph: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "01-1440-global-graph: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "01-1440-global-graph",
+          "name": "01-1440-global-graph: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "02-1180-filter-disclosure: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "filter opener exposes stable expanded and controls semantics",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "opening disclosure naturally focuses the first query input",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "query tag local-focus and explicit actions are present on demand",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "filter disclosure remains fully inside the Graph root",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "Escape closes the disclosure and returns to this actual opener",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "explicit close returns to the same actual opener",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "02-1180-filter-disclosure: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "02-1180-filter-disclosure: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "02-1180-filter-disclosure: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "02-1180-filter-disclosure",
+          "name": "02-1180-filter-disclosure: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "03-1180-local-graph: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "global and local scope have real pressed state",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "local update sends one exact lower-camel graph payload",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "applied local focus is represented without persistent detail controls",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "frozen response remains a complete six-node five-edge projection",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "successful apply closes and returns to the actual filter opener",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "03-1180-local-graph: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "03-1180-local-graph: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "03-1180-local-graph: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "03-1180-local-graph",
+          "name": "03-1180-local-graph: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "04a-1180-click-activation",
+          "name": "04a-1180-click-activation: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "04a-1180-click-activation",
+          "name": "click activates exactly one typed Markdown read",
+          "passed": true
+        },
+        {
+          "context": "04a-1180-click-activation",
+          "name": "04a-1180-click-activation: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "04a-1180-click-activation",
+          "name": "04a-1180-click-activation: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "04a-1180-click-activation",
+          "name": "04a-1180-click-activation: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "04a-1180-click-activation",
+          "name": "04a-1180-click-activation: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "04b-1180-enter-activation: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "Enter activates exactly one typed Markdown read",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "Enter reaches the node by natural Tab order",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "04b-1180-enter-activation: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "04b-1180-enter-activation: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "04b-1180-enter-activation: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "04b-1180-enter-activation",
+          "name": "04b-1180-enter-activation: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "04c-1180-space-activation: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "Space activates exactly one typed Markdown read",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "Space reaches the node by natural Tab order",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "Space activation does not scroll body or document",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "04c-1180-space-activation: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "04c-1180-space-activation: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "04c-1180-space-activation: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "04c-1180-space-activation",
+          "name": "04c-1180-space-activation: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "05-900-keyboard-focus-and-selected: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "900 starts with both sidebars expanded",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "Tab naturally reaches a native Graph node action",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "keyboard focus has a visible focus indicator",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "focus selects the real ReactFlow wrapper and changes its descendant style",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "900 ReactFlow owns at least 68 percent and nodes remain readable and contained",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "Shift+Tab naturally leaves the Graph node action",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "05-900-keyboard-focus-and-selected: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "05-900-keyboard-focus-and-selected: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "05-900-keyboard-focus-and-selected: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "05-900-keyboard-focus-and-selected",
+          "name": "05-900-keyboard-focus-and-selected: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "06-900-reduced-motion-collapsed: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "reduced-motion scenario uses a real collapsed sidebar combination",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "collapsed 900 disclosure stays within Graph and flow keeps at least 68 percent",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "Graph adds no animation under reduced motion",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "reduced-motion Escape still returns to the actual opener",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "06-900-reduced-motion-collapsed: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "06-900-reduced-motion-collapsed: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "06-900-reduced-motion-collapsed: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "context": "06-900-reduced-motion-collapsed",
+          "name": "06-900-reduced-motion-collapsed: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        }
+      ]
+    }
+  ]
+}

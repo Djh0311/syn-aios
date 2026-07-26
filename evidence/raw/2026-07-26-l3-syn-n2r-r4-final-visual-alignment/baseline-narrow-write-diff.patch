@@ -1,0 +1,162 @@
+########## src/styles.css
+--- evidence/raw/2026-07-26-l3-syn-n2r-r4-final-visual-alignment/baseline/prototypes/productized-desktop-shell/src/styles.css	2026-07-26 19:22:16
++++ prototypes/productized-desktop-shell/src/styles.css	2026-07-26 22:33:53
+@@ -83,6 +83,10 @@
+   --text-lg: 15px;
+   --text-xl: 17px;
+   --text-2xl: 22px;
++  /* N2R-R4 D2：知识工作台的「阅读/编辑正文」专用档，对齐 R0 参照的 16px 正文。
++     只新增、不改上面任何既有取值；只允许阅读渲染面与编辑输入面引用，
++     侧栏/标签/状态栏等 chrome 一律继续用上面的密集档。 */
++  --text-body: 16px;
+ 
+   /* ── 字体族正典（宋=标题与主管正文 / 黑=chrome·标签·meta / 等宽=数字·代码·路径）── */
+   --font-serif: "Songti SC", "STSong", serif;
+@@ -8177,6 +8181,7 @@
+   color: var(--ink-light);
+   font-size: var(--text-xs);
+ }
++/* N2R-R4 D2：编辑正文输入面与阅读态同档 16px。行高 1.65 仍在 1.5–1.8 带内。 */
+ .native-workspace-source textarea {
+   width: 100%;
+   min-height: 250px;
+@@ -8188,18 +8193,19 @@
+   background: var(--rice);
+   color: var(--ink);
+   font-family: var(--font-mono);
+-  font-size: var(--text-sm);
++  font-size: var(--text-body);
+   line-height: 1.65;
+ }
+ .native-workspace-preview {
+   min-height: 250px;
+ }
++/* N2R-R4 D2：阅读正文提到 R0 参照的 16px。行高保持 1.7（落在 1.5–1.8 带内）。 */
+ .native-workspace-markdown {
+   min-height: 0;
+   padding: 4px 2px 8px;
+   color: var(--ink);
+   font-family: var(--font-serif);
+-  font-size: var(--text-sm);
++  font-size: var(--text-body);
+   line-height: 1.7;
+ }
+ .native-workspace-markdown h1,
+
+########## src/views/knowledge/KnowledgeActivityRail.tsx
+--- evidence/raw/2026-07-26-l3-syn-n2r-r4-final-visual-alignment/baseline/prototypes/productized-desktop-shell/src/views/knowledge/KnowledgeActivityRail.tsx	2026-07-26 20:44:56
++++ prototypes/productized-desktop-shell/src/views/knowledge/KnowledgeActivityRail.tsx	2026-07-26 22:34:07
+@@ -6,8 +6,12 @@
+ // 原样传入，本组件不持有任何业务状态，也不知道自己点开的是哪个面板。
+ //
+ // 图标一律是本仓自绘的极简几何路径，取 currentColor，不引入任何图标库、字体
+-// 图标或第三方资产；svg 一律 aria-hidden，可访问名称只由 button 的 aria-label
+-// 承担，绝不靠 title 提示替代。
++// 图标或第三方资产；svg 一律 aria-hidden，svg 内部不放 <title>。
++//
++// N2R-R4 D3 口径修订：按钮**附加**原生 `title` 悬停提示，取值与 `aria-label`
++// 逐字相同。这是给鼠标用户的补充，不是替代——可访问名称仍只来自 `aria-label`
++// （ARIA 名称计算里 aria-label 优先于 title，不会双读）。收掉文字标签之后，
++// 纯图标对鼠标用户不可自解释，这条提示是必要的补偿。
+ 
+ export type KnowledgeActivityRailIcon =
+   | "files"
+@@ -37,6 +41,7 @@
+           className={`native-activity-button${item.active ? " is-active" : ""}`}
+           type="button"
+           aria-label={item.label}
++          title={item.label}
+           aria-pressed={item.active}
+           data-activity-entry={item.icon}
+           onClick={item.onSelect}
+
+########## tests/knowledge-workbench-shell.test.tsx
+--- evidence/raw/2026-07-26-l3-syn-n2r-r4-final-visual-alignment/baseline/prototypes/productized-desktop-shell/tests/knowledge-workbench-shell.test.tsx	2026-07-26 19:08:23
++++ prototypes/productized-desktop-shell/tests/knowledge-workbench-shell.test.tsx	2026-07-26 22:34:41
+@@ -736,12 +736,23 @@
+     && !browserActivityMarkup.includes(">上下文</button>"),
+   "R3E D1 活动栏不得再把入口名称作为按钮可见文字渲染",
+ );
++// N2R-R4 D3 口径修订：R3E 曾整条禁止 title；用户拍板改为「允许附加、不得替代」。
++// 图标仍是纯装饰，svg 内部 <title> 继续禁止；button 的 title 必须与 aria-label 同值。
++const r4RailTitles = orderedAttributeValues(browserActivityMarkup, "title");
+ assertR3eContract(
+   () => count(browserActivityMarkup, 'aria-hidden="true"') === 8
+     && count(browserActivityMarkup, 'focusable="false"') === 8
+-    && !browserActivityMarkup.includes("<title")
+-    && !browserActivityMarkup.includes("title="),
+-  "R3E D1 图标必须是纯装饰：aria-hidden + focusable=false，且不得用 title 提示替代可访问名称",
++    && !browserActivityMarkup.includes("<title"),
++  "R3E D1 图标必须是纯装饰：aria-hidden + focusable=false，svg 内部不得放 <title>",
++);
++assertR3eContract(
++  () => r4RailTitles.length === 8 && JSON.stringify(r4RailTitles) === JSON.stringify(browserActivityNames),
++  `R4 D3 八个入口必须各带一个 title，且与同一按钮的 aria-label 逐字同值；actual=${JSON.stringify(r4RailTitles)}`,
++);
++assertR3eContract(
++  () => JSON.stringify(orderedAttributeValues(staticActivityMarkup, "title"))
++    === JSON.stringify(orderedAttributeValues(staticActivityMarkup, "aria-label")),
++  "R4 D3 SSR 静态壳的 title 也必须与 aria-label 同值",
+ );
+ assertR3eContract(
+   () => count(browserActivityMarkup, 'aria-pressed="true"') === 2
+@@ -815,6 +826,58 @@
+   "R3E D3 低缩放隐藏标题必须由 Graph 专属组合 selector 表达",
+ );
+ 
++// ---------------------------------------------------------------------------
++// N2R-R4 D2：正文另立专用尺寸，chrome 各级字号一律不动。
++// 量尺主证据在浏览器；这里只锁静态可判的部分。
++// ---------------------------------------------------------------------------
++assertR3eContract(
++  () => /--text-body:\s*16px/.test(stylesheet),
++  "R4 D2 必须新增正文专用尺寸 --text-body: 16px",
++);
++assertR3eContract(
++  () => [
++    ["--text-2xs", "10px"],
++    ["--text-xs", "11px"],
++    ["--text-sm", "12px"],
++    ["--text-md", "13px"],
++    ["--text-lg", "15px"],
++    ["--text-xl", "17px"],
++    ["--text-2xl", "22px"],
++  ].every(([token, value]) => new RegExp(`${token}:\\s*${value}`).test(stylesheet)),
++  "R4 D2 既有 --text-* 取值一个都不许改",
++);
++assertR3eContract(
++  () => {
++    const block = (selector: string): string => {
++      const start = stylesheet.indexOf(`${selector} {`);
++      if (start < 0) return "";
++      return stylesheet.slice(start, stylesheet.indexOf("}", start));
++    };
++    return block(".native-workspace-markdown").includes("var(--text-body)")
++      && block(".native-workspace-source textarea").includes("var(--text-body)");
++  },
++  "R4 D2 阅读渲染面与编辑输入面必须都引用 --text-body",
++);
++assertR3eContract(
++  () => {
++    // chrome 族一律不许引用正文档
++    const chromeSelectors = [
++      ".syn-knowledge-shell__activity button",
++      ".syn-knowledge-sidebar-tabs--right",
++      ".native-context-summary",
++      ".native-context-body",
++      ".syn-knowledge-shell__status",
++      ".native-graph-node-button strong",
++    ];
++    return chromeSelectors.every((selector) => {
++      const start = stylesheet.indexOf(`${selector} {`);
++      if (start < 0) return true;
++      return !stylesheet.slice(start, stylesheet.indexOf("}", start)).includes("--text-body");
++    });
++  },
++  "R4 D2 chrome 族（活动栏 / 右栏 / 状态栏 / Graph 节点标题）不得引用正文专用尺寸",
++);
++
+ if (failures.length) {
+   throw new Error(
+     `[knowledge-workbench-shell] R3B ${r3bAssertionCount} 项 / ${r3bFailures.length} 失败；R3E ${r3eAssertionCount} 项 / ${r3eFailures.length} 失败；全部失败 ${failures.length}：${failures.join("；")}`,
+
