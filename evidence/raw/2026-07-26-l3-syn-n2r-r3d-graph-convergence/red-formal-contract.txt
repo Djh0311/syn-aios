@@ -1,0 +1,6 @@
+phase=pre-implementation-red-first
+command=./node_modules/.bin/esbuild tests/knowledge-graph.test.tsx --bundle --platform=node --format=esm --target=node22 --outfile=/private/tmp/n2r-r3d-knowledge-graph-test.mjs
+build_exit=0
+command=node /private/tmp/n2r-r3d-knowledge-graph-test.mjs
+test_exit=1
+failure=[knowledge-graph] 中央标签已表达关系图，静态壳不得重复大标题

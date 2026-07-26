@@ -1,0 +1,28 @@
+{
+  "phase": "pre-implementation-red-first",
+  "fixture": "offline-pure-contract",
+  "command": "node /private/tmp/n2r-r3b-knowledge-workbench-shell-red.mjs",
+  "build_command": "node_modules/.bin/esbuild tests/knowledge-workbench-shell.test.tsx --bundle --platform=node --format=esm --target=node22 --jsx=automatic --outfile=/private/tmp/n2r-r3b-knowledge-workbench-shell-red.mjs",
+  "exit_code": 1,
+  "assertions": 16,
+  "failed": 16,
+  "outcome": "EXPECTED_RED",
+  "failure_categories": [
+    "single-group state and active tab",
+    "same-draft source-preview split projection",
+    "split ratio and merge retention",
+    "third-group and non-finite-ratio fail-closed",
+    "Markdown tab deduplication",
+    "close-neighbor and deterministic focus",
+    "last-tab empty state and group-tool focus",
+    "Graph Canvas Maintenance singleton group tabs",
+    "Meta-T and Control-Tab shortcut routing",
+    "separator keyboard ratio bounds",
+    "v1 preference migration",
+    "invalid v2 preference normalization",
+    "dirty conflict transition protection",
+    "storage fail-soft",
+    "legacy global-tab and internal-split DOM retirement",
+    "real group tablist and non-tab quick-open tool"
+  ]
+}

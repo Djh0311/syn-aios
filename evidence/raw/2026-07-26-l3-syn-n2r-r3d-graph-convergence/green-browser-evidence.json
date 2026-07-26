@@ -1,0 +1,4220 @@
+{
+  "phase": "post-implementation-green",
+  "fixture": "synthetic-only",
+  "fixtureGraphResponseContract": "frozen global projection for every graph request",
+  "outcome": "PASS_SYNTHETIC_GRAPH_EVIDENCE",
+  "assertions": 75,
+  "failed": 0,
+  "failures": [],
+  "contexts": [
+    {
+      "name": "01-1440-global-graph",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "01-1440-global-graph: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "name": "Graph root directly fills the active group without card chrome",
+          "passed": true
+        },
+        {
+          "name": "Graph has no repeated internal h2 or explanation",
+          "passed": true
+        },
+        {
+          "name": "default chrome is compact and detailed filters are closed",
+          "passed": true
+        },
+        {
+          "name": "1440 ReactFlow owns at least 74 percent of the Graph root",
+          "passed": true
+        },
+        {
+          "name": "all projected nodes are lightweight 144 by 48 or smaller",
+          "passed": true
+        },
+        {
+          "name": "nodes keep only the readable title visible",
+          "passed": true
+        },
+        {
+          "name": "nodes have no card shadow coarse left accent or clipped title",
+          "passed": true
+        },
+        {
+          "name": "all six nodes and five visible edges match and fit the returned projection",
+          "passed": true
+        },
+        {
+          "name": "01-1440-global-graph: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "name": "01-1440-global-graph: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "name": "01-1440-global-graph: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "name": "01-1440-global-graph: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "graphState": {
+          "rootBounds": {
+            "x": 331,
+            "y": 39,
+            "right": 1199,
+            "bottom": 873,
+            "width": 868,
+            "height": 834
+          },
+          "rootStyle": {
+            "borderTopWidth": "0px",
+            "borderLeftWidth": "0px",
+            "borderRadius": "0px",
+            "boxShadow": "none",
+            "marginTop": "0px",
+            "marginBottom": "0px",
+            "backgroundColor": "rgb(255, 255, 255)"
+          },
+          "repeatedHeadingCount": 0,
+          "repeatedExplanationCount": 0,
+          "persistentFilterControlCount": 0,
+          "filterDisclosureOpenerCount": 1,
+          "filterDisclosureCount": 0,
+          "openerAriaExpanded": "false",
+          "openerAriaControls": "native-graph-filter-_r_0_",
+          "chromeBounds": {
+            "x": 331,
+            "y": 39,
+            "right": 1199,
+            "bottom": 79,
+            "width": 868,
+            "height": 40
+          },
+          "flowBounds": {
+            "x": 331,
+            "y": 79,
+            "right": 1199,
+            "bottom": 873,
+            "width": 868,
+            "height": 794
+          },
+          "viewportBounds": {
+            "x": 587,
+            "y": 296,
+            "right": 1455,
+            "bottom": 1090,
+            "width": 868,
+            "height": 794
+          },
+          "flowHeightRatio": 0.9520383693045563,
+          "disclosureBounds": null,
+          "disclosureControls": [],
+          "disclosureInsideRoot": null,
+          "nodeCount": 6,
+          "edgeCount": 5,
+          "nodes": [
+            {
+              "id": "notes/visual-baseline.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 697,
+                "y": 296,
+                "right": 833,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 697,
+                "y": 296,
+                "right": 833,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 697,
+                "y": 296,
+                "right": 833,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "视觉基线工作台",
+              "buttonVisibleText": "视觉基线工作台",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 792,
+                "y": 376,
+                "right": 928,
+                "bottom": 416,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 792,
+                "y": 376,
+                "right": 928,
+                "bottom": 416,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 792,
+                "y": 376,
+                "right": 928,
+                "bottom": 416,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 02。路径 notes/layout-convergence.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 02",
+              "buttonVisibleText": "合成知识条目 02",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "notes/focus-return.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 792,
+                "y": 536,
+                "right": 928,
+                "bottom": 576,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 792,
+                "y": 536,
+                "right": 928,
+                "bottom": 576,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 792,
+                "y": 536,
+                "right": 928,
+                "bottom": 576,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 03。路径 notes/focus-return.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 03",
+              "buttonVisibleText": "合成知识条目 03",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/graph-projection.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 697,
+                "y": 616,
+                "right": 833,
+                "bottom": 656,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 697,
+                "y": 616,
+                "right": 833,
+                "bottom": 656,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 697,
+                "y": 616,
+                "right": 833,
+                "bottom": 656,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 04。路径 research/graph-projection.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 04",
+              "buttonVisibleText": "合成知识条目 04",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/scroll-audit.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 602,
+                "y": 536,
+                "right": 738,
+                "bottom": 576,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 602,
+                "y": 536,
+                "right": 738,
+                "bottom": 576,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 602,
+                "y": 536,
+                "right": 738,
+                "bottom": 576,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 05。路径 research/scroll-audit.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 05",
+              "buttonVisibleText": "合成知识条目 05",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/overlay-safety.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 602,
+                "y": 376,
+                "right": 738,
+                "bottom": 416,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 602,
+                "y": 376,
+                "right": 738,
+                "bottom": 416,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 602,
+                "y": 376,
+                "right": 738,
+                "bottom": 416,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 06。路径 research/overlay-safety.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 06",
+              "buttonVisibleText": "合成知识条目 06",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            }
+          ],
+          "edges": [
+            {
+              "id": "visual-layout",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 92.785
+            },
+            {
+              "id": "layout-focus",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 213.925
+            },
+            {
+              "id": "focus-graph",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 250.138
+            },
+            {
+              "id": "graph-scroll",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 250.138
+            },
+            {
+              "id": "scroll-overlay",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 213.925
+            }
+          ],
+          "maxNodeWidth": 136,
+          "maxNodeHeight": 40,
+          "visibleMetadataCount": 0,
+          "shadowCount": 0,
+          "coarseLeftBorderCount": 0,
+          "allNodesInsideFlow": true,
+          "allEdgesVisible": true,
+          "overflow": {
+            "root": {
+              "clientWidth": 868,
+              "scrollWidth": 868
+            },
+            "surface": {
+              "clientWidth": 868,
+              "scrollWidth": 868
+            },
+            "flow": {
+              "clientWidth": 868,
+              "scrollWidth": 1124
+            },
+            "activeGroup": {
+              "clientWidth": 868,
+              "scrollWidth": 868
+            }
+          }
+        }
+      },
+      "audit": {
+        "taskReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_snapshot"
+        ],
+        "fixtureGlobalReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "callsStayInsideTaskAllowlist": true,
+        "prohibitedSearchOrCanvasCalls": 0,
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "fixtureValues": {
+            "documentElement": {
+              "clientHeight": 900,
+              "clientWidth": 1440,
+              "scrollHeight": 900,
+              "scrollWidth": 1440,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 900,
+              "clientWidth": 1440,
+              "scrollHeight": 900,
+              "scrollWidth": 1440,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 898,
+              "clientWidth": 1438,
+              "scrollHeight": 898,
+              "scrollWidth": 1438,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 834,
+              "clientWidth": 868,
+              "scrollHeight": 834,
+              "scrollWidth": 868,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "graphValues": {
+            "root": {
+              "clientWidth": 868,
+              "scrollWidth": 868
+            },
+            "surface": {
+              "clientWidth": 868,
+              "scrollWidth": 868
+            },
+            "flow": {
+              "clientWidth": 868,
+              "scrollWidth": 1124
+            },
+            "activeGroup": {
+              "clientWidth": 868,
+              "scrollWidth": 868
+            }
+          },
+          "note": "ReactFlow's internal transformed canvas scrollWidth is recorded but is not a document, shell, active-group, or Graph-root overflow layer",
+          "ok": true
+        },
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "02-1180-filter-disclosure",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "02-1180-filter-disclosure: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "name": "filter opener exposes stable expanded and controls semantics",
+          "passed": true
+        },
+        {
+          "name": "opening disclosure naturally focuses the first query input",
+          "passed": true
+        },
+        {
+          "name": "query tag local-focus and explicit actions are present on demand",
+          "passed": true
+        },
+        {
+          "name": "filter disclosure remains fully inside the Graph root",
+          "passed": true
+        },
+        {
+          "name": "Escape closes the disclosure and returns to this actual opener",
+          "passed": true
+        },
+        {
+          "name": "explicit close returns to the same actual opener",
+          "passed": true
+        },
+        {
+          "name": "02-1180-filter-disclosure: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "name": "02-1180-filter-disclosure: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "name": "02-1180-filter-disclosure: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "name": "02-1180-filter-disclosure: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "graphState": {
+          "rootBounds": {
+            "x": 303,
+            "y": 39,
+            "right": 959,
+            "bottom": 733,
+            "width": 656,
+            "height": 694
+          },
+          "rootStyle": {
+            "borderTopWidth": "0px",
+            "borderLeftWidth": "0px",
+            "borderRadius": "0px",
+            "boxShadow": "none",
+            "marginTop": "0px",
+            "marginBottom": "0px",
+            "backgroundColor": "rgb(255, 255, 255)"
+          },
+          "repeatedHeadingCount": 0,
+          "repeatedExplanationCount": 0,
+          "persistentFilterControlCount": 0,
+          "filterDisclosureOpenerCount": 1,
+          "filterDisclosureCount": 0,
+          "openerAriaExpanded": "false",
+          "openerAriaControls": "native-graph-filter-_r_0_",
+          "chromeBounds": {
+            "x": 303,
+            "y": 39,
+            "right": 959,
+            "bottom": 79,
+            "width": 656,
+            "height": 40
+          },
+          "flowBounds": {
+            "x": 303,
+            "y": 79,
+            "right": 959,
+            "bottom": 733,
+            "width": 656,
+            "height": 654
+          },
+          "viewportBounds": {
+            "x": 453,
+            "y": 226,
+            "right": 1109,
+            "bottom": 880,
+            "width": 656,
+            "height": 654
+          },
+          "flowHeightRatio": 0.9423631123919308,
+          "disclosureBounds": null,
+          "disclosureControls": [],
+          "disclosureInsideRoot": null,
+          "nodeCount": 6,
+          "edgeCount": 5,
+          "nodes": [
+            {
+              "id": "notes/visual-baseline.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 563,
+                "y": 226,
+                "right": 699,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 563,
+                "y": 226,
+                "right": 699,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 563,
+                "y": 226,
+                "right": 699,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "视觉基线工作台",
+              "buttonVisibleText": "视觉基线工作台",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 658,
+                "y": 306,
+                "right": 794,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 658,
+                "y": 306,
+                "right": 794,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 658,
+                "y": 306,
+                "right": 794,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 02。路径 notes/layout-convergence.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 02",
+              "buttonVisibleText": "合成知识条目 02",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "notes/focus-return.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 658,
+                "y": 466,
+                "right": 794,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 658,
+                "y": 466,
+                "right": 794,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 658,
+                "y": 466,
+                "right": 794,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 03。路径 notes/focus-return.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 03",
+              "buttonVisibleText": "合成知识条目 03",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/graph-projection.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 563,
+                "y": 546,
+                "right": 699,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 563,
+                "y": 546,
+                "right": 699,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 563,
+                "y": 546,
+                "right": 699,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 04。路径 research/graph-projection.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 04",
+              "buttonVisibleText": "合成知识条目 04",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/scroll-audit.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 468,
+                "y": 466,
+                "right": 604,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 468,
+                "y": 466,
+                "right": 604,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 468,
+                "y": 466,
+                "right": 604,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 05。路径 research/scroll-audit.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 05",
+              "buttonVisibleText": "合成知识条目 05",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/overlay-safety.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 468,
+                "y": 306,
+                "right": 604,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 468,
+                "y": 306,
+                "right": 604,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 468,
+                "y": 306,
+                "right": 604,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 06。路径 research/overlay-safety.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 06",
+              "buttonVisibleText": "合成知识条目 06",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            }
+          ],
+          "edges": [
+            {
+              "id": "visual-layout",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 92.785
+            },
+            {
+              "id": "layout-focus",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 213.925
+            },
+            {
+              "id": "focus-graph",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 250.138
+            },
+            {
+              "id": "graph-scroll",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 250.138
+            },
+            {
+              "id": "scroll-overlay",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 213.925
+            }
+          ],
+          "maxNodeWidth": 136,
+          "maxNodeHeight": 40,
+          "visibleMetadataCount": 0,
+          "shadowCount": 0,
+          "coarseLeftBorderCount": 0,
+          "allNodesInsideFlow": true,
+          "allEdgesVisible": true,
+          "overflow": {
+            "root": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            },
+            "surface": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            },
+            "flow": {
+              "clientWidth": 656,
+              "scrollWidth": 806
+            },
+            "activeGroup": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            }
+          }
+        },
+        "openState": {
+          "rootBounds": {
+            "x": 303,
+            "y": 39,
+            "right": 959,
+            "bottom": 733,
+            "width": 656,
+            "height": 694
+          },
+          "rootStyle": {
+            "borderTopWidth": "0px",
+            "borderLeftWidth": "0px",
+            "borderRadius": "0px",
+            "boxShadow": "none",
+            "marginTop": "0px",
+            "marginBottom": "0px",
+            "backgroundColor": "rgb(255, 255, 255)"
+          },
+          "repeatedHeadingCount": 0,
+          "repeatedExplanationCount": 0,
+          "persistentFilterControlCount": 0,
+          "filterDisclosureOpenerCount": 1,
+          "filterDisclosureCount": 1,
+          "openerAriaExpanded": "true",
+          "openerAriaControls": "native-graph-filter-_r_0_",
+          "chromeBounds": {
+            "x": 303,
+            "y": 39,
+            "right": 959,
+            "bottom": 79,
+            "width": 656,
+            "height": 40
+          },
+          "flowBounds": {
+            "x": 303,
+            "y": 79,
+            "right": 959,
+            "bottom": 733,
+            "width": 656,
+            "height": 654
+          },
+          "viewportBounds": {
+            "x": 453,
+            "y": 226,
+            "right": 1109,
+            "bottom": 880,
+            "width": 656,
+            "height": 654
+          },
+          "flowHeightRatio": 0.9423631123919308,
+          "disclosureBounds": {
+            "x": 431,
+            "y": 79,
+            "right": 951,
+            "bottom": 252.281,
+            "width": 520,
+            "height": 173.281
+          },
+          "disclosureControls": [
+            {
+              "tag": "input",
+              "label": "关系图文字筛选",
+              "bounds": {
+                "x": 442,
+                "y": 110.141,
+                "right": 687,
+                "bottom": 142.141,
+                "width": 245,
+                "height": 32
+              }
+            },
+            {
+              "tag": "input",
+              "label": "关系图标签筛选",
+              "bounds": {
+                "x": 695,
+                "y": 110.141,
+                "right": 940,
+                "bottom": 142.141,
+                "width": 245,
+                "height": 32
+              }
+            },
+            {
+              "tag": "select",
+              "label": "关系图局部焦点",
+              "bounds": {
+                "x": 442,
+                "y": 171.281,
+                "right": 940,
+                "bottom": 203.281,
+                "width": 498,
+                "height": 32
+              }
+            },
+            {
+              "tag": "button",
+              "label": "应用",
+              "bounds": {
+                "x": 860,
+                "y": 211.281,
+                "right": 898,
+                "bottom": 241.281,
+                "width": 38,
+                "height": 30
+              }
+            },
+            {
+              "tag": "button",
+              "label": "关闭",
+              "bounds": {
+                "x": 902,
+                "y": 211.281,
+                "right": 940,
+                "bottom": 241.281,
+                "width": 38,
+                "height": 30
+              }
+            }
+          ],
+          "disclosureInsideRoot": true,
+          "nodeCount": 6,
+          "edgeCount": 5,
+          "nodes": [
+            {
+              "id": "notes/visual-baseline.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 563,
+                "y": 226,
+                "right": 699,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 563,
+                "y": 226,
+                "right": 699,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 563,
+                "y": 226,
+                "right": 699,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "视觉基线工作台",
+              "buttonVisibleText": "视觉基线工作台",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 658,
+                "y": 306,
+                "right": 794,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 658,
+                "y": 306,
+                "right": 794,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 658,
+                "y": 306,
+                "right": 794,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 02。路径 notes/layout-convergence.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 02",
+              "buttonVisibleText": "合成知识条目 02",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "notes/focus-return.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 658,
+                "y": 466,
+                "right": 794,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 658,
+                "y": 466,
+                "right": 794,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 658,
+                "y": 466,
+                "right": 794,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 03。路径 notes/focus-return.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 03",
+              "buttonVisibleText": "合成知识条目 03",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/graph-projection.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 563,
+                "y": 546,
+                "right": 699,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 563,
+                "y": 546,
+                "right": 699,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 563,
+                "y": 546,
+                "right": 699,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 04。路径 research/graph-projection.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 04",
+              "buttonVisibleText": "合成知识条目 04",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/scroll-audit.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 468,
+                "y": 466,
+                "right": 604,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 468,
+                "y": 466,
+                "right": 604,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 468,
+                "y": 466,
+                "right": 604,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 05。路径 research/scroll-audit.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 05",
+              "buttonVisibleText": "合成知识条目 05",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/overlay-safety.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 468,
+                "y": 306,
+                "right": 604,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 468,
+                "y": 306,
+                "right": 604,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 468,
+                "y": 306,
+                "right": 604,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 06。路径 research/overlay-safety.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 06",
+              "buttonVisibleText": "合成知识条目 06",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            }
+          ],
+          "edges": [
+            {
+              "id": "visual-layout",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 92.785
+            },
+            {
+              "id": "layout-focus",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 213.925
+            },
+            {
+              "id": "focus-graph",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 250.138
+            },
+            {
+              "id": "graph-scroll",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 250.138
+            },
+            {
+              "id": "scroll-overlay",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 213.925
+            }
+          ],
+          "maxNodeWidth": 136,
+          "maxNodeHeight": 40,
+          "visibleMetadataCount": 0,
+          "shadowCount": 0,
+          "coarseLeftBorderCount": 0,
+          "allNodesInsideFlow": true,
+          "allEdgesVisible": true,
+          "overflow": {
+            "root": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            },
+            "surface": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            },
+            "flow": {
+              "clientWidth": 656,
+              "scrollWidth": 806
+            },
+            "activeGroup": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            }
+          }
+        },
+        "openFocus": {
+          "tag": "input",
+          "ariaLabel": "关系图文字筛选",
+          "type": null,
+          "dataGraphNodeAction": false,
+          "nodeId": null,
+          "wrapperSelected": false,
+          "outlineStyle": null,
+          "outlineWidth": null,
+          "outlineColor": null,
+          "buttonBackground": null,
+          "buttonBorderColor": null,
+          "wrapperBackground": null,
+          "bodyScrollTop": 0,
+          "documentScrollTop": 0
+        },
+        "escapedToActualOpener": true,
+        "closeReturnedToActualOpener": true
+      },
+      "audit": {
+        "taskReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_snapshot"
+        ],
+        "fixtureGlobalReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "callsStayInsideTaskAllowlist": true,
+        "prohibitedSearchOrCanvasCalls": 0,
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "fixtureValues": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "graphValues": {
+            "root": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            },
+            "surface": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            },
+            "flow": {
+              "clientWidth": 656,
+              "scrollWidth": 806
+            },
+            "activeGroup": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            }
+          },
+          "note": "ReactFlow's internal transformed canvas scrollWidth is recorded but is not a document, shell, active-group, or Graph-root overflow layer",
+          "ok": true
+        },
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "03-1180-local-graph",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "03-1180-local-graph: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "name": "global and local scope have real pressed state",
+          "passed": true
+        },
+        {
+          "name": "local update sends one exact lower-camel graph payload",
+          "passed": true
+        },
+        {
+          "name": "applied local focus is represented without persistent detail controls",
+          "passed": true
+        },
+        {
+          "name": "frozen response remains a complete six-node five-edge projection",
+          "passed": true
+        },
+        {
+          "name": "successful apply closes and returns to the actual filter opener",
+          "passed": true
+        },
+        {
+          "name": "03-1180-local-graph: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "name": "03-1180-local-graph: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "name": "03-1180-local-graph: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "name": "03-1180-local-graph: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "graphState": {
+          "rootBounds": {
+            "x": 303,
+            "y": 39,
+            "right": 959,
+            "bottom": 733,
+            "width": 656,
+            "height": 694
+          },
+          "rootStyle": {
+            "borderTopWidth": "0px",
+            "borderLeftWidth": "0px",
+            "borderRadius": "0px",
+            "boxShadow": "none",
+            "marginTop": "0px",
+            "marginBottom": "0px",
+            "backgroundColor": "rgb(255, 255, 255)"
+          },
+          "repeatedHeadingCount": 0,
+          "repeatedExplanationCount": 0,
+          "persistentFilterControlCount": 0,
+          "filterDisclosureOpenerCount": 1,
+          "filterDisclosureCount": 0,
+          "openerAriaExpanded": "false",
+          "openerAriaControls": "native-graph-filter-_r_0_",
+          "chromeBounds": {
+            "x": 303,
+            "y": 39,
+            "right": 959,
+            "bottom": 79,
+            "width": 656,
+            "height": 40
+          },
+          "flowBounds": {
+            "x": 303,
+            "y": 79,
+            "right": 959,
+            "bottom": 733,
+            "width": 656,
+            "height": 654
+          },
+          "viewportBounds": {
+            "x": 453,
+            "y": 226,
+            "right": 1109,
+            "bottom": 880,
+            "width": 656,
+            "height": 654
+          },
+          "flowHeightRatio": 0.9423631123919308,
+          "disclosureBounds": null,
+          "disclosureControls": [],
+          "disclosureInsideRoot": null,
+          "nodeCount": 6,
+          "edgeCount": 5,
+          "nodes": [
+            {
+              "id": "notes/visual-baseline.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 563,
+                "y": 226,
+                "right": 699,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 563,
+                "y": 226,
+                "right": 699,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 563,
+                "y": 226,
+                "right": 699,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": "page",
+              "title": "视觉基线工作台",
+              "buttonVisibleText": "视觉基线工作台",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgb(234, 244, 241)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgb(42, 107, 94)",
+              "buttonBackground": "rgb(234, 244, 241)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 658,
+                "y": 306,
+                "right": 794,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 658,
+                "y": 306,
+                "right": 794,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 658,
+                "y": 306,
+                "right": 794,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 02。路径 notes/layout-convergence.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 02",
+              "buttonVisibleText": "合成知识条目 02",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "notes/focus-return.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 658,
+                "y": 466,
+                "right": 794,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 658,
+                "y": 466,
+                "right": 794,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 658,
+                "y": 466,
+                "right": 794,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 03。路径 notes/focus-return.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 03",
+              "buttonVisibleText": "合成知识条目 03",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/graph-projection.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 563,
+                "y": 546,
+                "right": 699,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 563,
+                "y": 546,
+                "right": 699,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 563,
+                "y": 546,
+                "right": 699,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 04。路径 research/graph-projection.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 04",
+              "buttonVisibleText": "合成知识条目 04",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/scroll-audit.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 468,
+                "y": 466,
+                "right": 604,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 468,
+                "y": 466,
+                "right": 604,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 468,
+                "y": 466,
+                "right": 604,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 05。路径 research/scroll-audit.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 05",
+              "buttonVisibleText": "合成知识条目 05",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/overlay-safety.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 468,
+                "y": 306,
+                "right": 604,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 468,
+                "y": 306,
+                "right": 604,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 468,
+                "y": 306,
+                "right": 604,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 06。路径 research/overlay-safety.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 06",
+              "buttonVisibleText": "合成知识条目 06",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            }
+          ],
+          "edges": [
+            {
+              "id": "visual-layout",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 92.785
+            },
+            {
+              "id": "layout-focus",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 213.925
+            },
+            {
+              "id": "focus-graph",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 250.138
+            },
+            {
+              "id": "graph-scroll",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 250.138
+            },
+            {
+              "id": "scroll-overlay",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 213.925
+            }
+          ],
+          "maxNodeWidth": 136,
+          "maxNodeHeight": 40,
+          "visibleMetadataCount": 0,
+          "shadowCount": 0,
+          "coarseLeftBorderCount": 0,
+          "allNodesInsideFlow": true,
+          "allEdgesVisible": true,
+          "overflow": {
+            "root": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            },
+            "surface": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            },
+            "flow": {
+              "clientWidth": 656,
+              "scrollWidth": 806
+            },
+            "activeGroup": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            }
+          }
+        },
+        "graphInvokes": [
+          {
+            "command": "knowledge_workspace_graph",
+            "payload": {
+              "scope": "local",
+              "focusRelativePath": "notes/visual-baseline.md",
+              "query": "合成",
+              "tag": "synthetic"
+            }
+          }
+        ],
+        "expectedPayload": {
+          "scope": "local",
+          "focusRelativePath": "notes/visual-baseline.md",
+          "query": "合成",
+          "tag": "synthetic"
+        },
+        "frozenFixtureResponseScope": "global",
+        "selectedUiScope": "local",
+        "returnedFocus": true
+      },
+      "audit": {
+        "taskReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_snapshot"
+        ],
+        "fixtureGlobalReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 2,
+          "knowledge_workspace_snapshot": 1
+        },
+        "callsStayInsideTaskAllowlist": true,
+        "prohibitedSearchOrCanvasCalls": 0,
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "fixtureValues": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "graphValues": {
+            "root": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            },
+            "surface": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            },
+            "flow": {
+              "clientWidth": 656,
+              "scrollWidth": 806
+            },
+            "activeGroup": {
+              "clientWidth": 656,
+              "scrollWidth": 656
+            }
+          },
+          "note": "ReactFlow's internal transformed canvas scrollWidth is recorded but is not a document, shell, active-group, or Graph-root overflow layer",
+          "ok": true
+        },
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "04a-1180-click-activation",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "04a-1180-click-activation: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "name": "click activates exactly one typed Markdown read",
+          "passed": true
+        },
+        {
+          "name": "04a-1180-click-activation: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "name": "04a-1180-click-activation: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "name": "04a-1180-click-activation: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "name": "04a-1180-click-activation: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "method": "click",
+        "relativePath": "notes/visual-baseline.md",
+        "command": "knowledge_workspace_read_markdown",
+        "beforeReadCount": 0,
+        "afterReadCount": 1,
+        "readCountDelta": 1,
+        "selectedSourcePath": "notes/visual-baseline.md",
+        "tabResult": null,
+        "focusBefore": {
+          "tag": "button",
+          "ariaLabel": "关系图",
+          "type": "button",
+          "dataGraphNodeAction": false,
+          "nodeId": null,
+          "wrapperSelected": false,
+          "outlineStyle": null,
+          "outlineWidth": null,
+          "outlineColor": null,
+          "buttonBackground": null,
+          "buttonBorderColor": null,
+          "wrapperBackground": null,
+          "bodyScrollTop": 0,
+          "documentScrollTop": 0
+        },
+        "scrollBefore": {
+          "body": 0,
+          "document": 0
+        },
+        "scrollAfter": {
+          "body": 0,
+          "document": 0
+        }
+      },
+      "audit": {
+        "taskReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_snapshot"
+        ],
+        "fixtureGlobalReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "callsStayInsideTaskAllowlist": true,
+        "prohibitedSearchOrCanvasCalls": 0,
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    },
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "fixtureValues": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 441,
+              "clientWidth": 656,
+              "scrollHeight": 441,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "graphValues": {},
+          "note": "ReactFlow's internal transformed canvas scrollWidth is recorded but is not a document, shell, active-group, or Graph-root overflow layer",
+          "ok": true
+        },
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "04b-1180-enter-activation",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "04b-1180-enter-activation: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "name": "Enter activates exactly one typed Markdown read",
+          "passed": true
+        },
+        {
+          "name": "Enter reaches the node by natural Tab order",
+          "passed": true
+        },
+        {
+          "name": "04b-1180-enter-activation: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "name": "04b-1180-enter-activation: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "name": "04b-1180-enter-activation: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "name": "04b-1180-enter-activation: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "method": "Enter",
+        "relativePath": "notes/visual-baseline.md",
+        "command": "knowledge_workspace_read_markdown",
+        "beforeReadCount": 0,
+        "afterReadCount": 1,
+        "readCountDelta": 1,
+        "selectedSourcePath": "notes/visual-baseline.md",
+        "tabResult": {
+          "reached": true,
+          "tabs": 9,
+          "path": [
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": "关闭 关系图",
+              "text": "×"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": "在主标签组中快速打开",
+              "text": "+"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": "刷新工作区",
+              "text": "刷新"
+            },
+            {
+              "matched": false,
+              "tag": "section",
+              "ariaLabel": null,
+              "text": "范围全局局部6 笔记 · 5 关系筛选刷新视觉基线工作台合成知识条目 02合成知识条目 03合成知识条目 04合成知识条目 05合成知识条目 06Press e"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": null,
+              "text": "全局"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": null,
+              "text": "局部"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": null,
+              "text": "筛选"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": "刷新关系图",
+              "text": "刷新"
+            },
+            {
+              "matched": true,
+              "tag": "button",
+              "ariaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+              "text": "视觉基线工作台"
+            }
+          ]
+        },
+        "focusBefore": {
+          "tag": "button",
+          "ariaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+          "type": "button",
+          "dataGraphNodeAction": true,
+          "nodeId": "notes/visual-baseline.md",
+          "wrapperSelected": true,
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "outlineColor": "rgb(42, 107, 94)",
+          "buttonBackground": "rgb(234, 244, 241)",
+          "buttonBorderColor": "rgb(42, 107, 94)",
+          "wrapperBackground": "rgba(0, 0, 0, 0)",
+          "bodyScrollTop": 0,
+          "documentScrollTop": 0
+        },
+        "scrollBefore": {
+          "body": 0,
+          "document": 0
+        },
+        "scrollAfter": {
+          "body": 0,
+          "document": 0
+        }
+      },
+      "audit": {
+        "taskReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_snapshot"
+        ],
+        "fixtureGlobalReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "callsStayInsideTaskAllowlist": true,
+        "prohibitedSearchOrCanvasCalls": 0,
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    },
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "fixtureValues": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 441,
+              "clientWidth": 656,
+              "scrollHeight": 441,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "graphValues": {},
+          "note": "ReactFlow's internal transformed canvas scrollWidth is recorded but is not a document, shell, active-group, or Graph-root overflow layer",
+          "ok": true
+        },
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "04c-1180-space-activation",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "04c-1180-space-activation: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "name": "Space activates exactly one typed Markdown read",
+          "passed": true
+        },
+        {
+          "name": "Space reaches the node by natural Tab order",
+          "passed": true
+        },
+        {
+          "name": "Space activation does not scroll body or document",
+          "passed": true
+        },
+        {
+          "name": "04c-1180-space-activation: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "name": "04c-1180-space-activation: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "name": "04c-1180-space-activation: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "name": "04c-1180-space-activation: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "method": "Space",
+        "relativePath": "notes/visual-baseline.md",
+        "command": "knowledge_workspace_read_markdown",
+        "beforeReadCount": 0,
+        "afterReadCount": 1,
+        "readCountDelta": 1,
+        "selectedSourcePath": "notes/visual-baseline.md",
+        "tabResult": {
+          "reached": true,
+          "tabs": 9,
+          "path": [
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": "关闭 关系图",
+              "text": "×"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": "在主标签组中快速打开",
+              "text": "+"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": "刷新工作区",
+              "text": "刷新"
+            },
+            {
+              "matched": false,
+              "tag": "section",
+              "ariaLabel": null,
+              "text": "范围全局局部6 笔记 · 5 关系筛选刷新视觉基线工作台合成知识条目 02合成知识条目 03合成知识条目 04合成知识条目 05合成知识条目 06Press e"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": null,
+              "text": "全局"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": null,
+              "text": "局部"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": null,
+              "text": "筛选"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": "刷新关系图",
+              "text": "刷新"
+            },
+            {
+              "matched": true,
+              "tag": "button",
+              "ariaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+              "text": "视觉基线工作台"
+            }
+          ]
+        },
+        "focusBefore": {
+          "tag": "button",
+          "ariaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+          "type": "button",
+          "dataGraphNodeAction": true,
+          "nodeId": "notes/visual-baseline.md",
+          "wrapperSelected": true,
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "outlineColor": "rgb(42, 107, 94)",
+          "buttonBackground": "rgb(234, 244, 241)",
+          "buttonBorderColor": "rgb(42, 107, 94)",
+          "wrapperBackground": "rgba(0, 0, 0, 0)",
+          "bodyScrollTop": 0,
+          "documentScrollTop": 0
+        },
+        "scrollBefore": {
+          "body": 0,
+          "document": 0
+        },
+        "scrollAfter": {
+          "body": 0,
+          "document": 0
+        }
+      },
+      "audit": {
+        "taskReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_snapshot"
+        ],
+        "fixtureGlobalReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "callsStayInsideTaskAllowlist": true,
+        "prohibitedSearchOrCanvasCalls": 0,
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    },
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "fixtureValues": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 441,
+              "clientWidth": 656,
+              "scrollHeight": 441,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "graphValues": {},
+          "note": "ReactFlow's internal transformed canvas scrollWidth is recorded but is not a document, shell, active-group, or Graph-root overflow layer",
+          "ok": true
+        },
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "05-900-keyboard-focus-and-selected",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "reducedMotion": "no-preference",
+      "assertions": [
+        {
+          "name": "05-900-keyboard-focus-and-selected: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "name": "900 starts with both sidebars expanded",
+          "passed": true
+        },
+        {
+          "name": "Tab naturally reaches a native Graph node action",
+          "passed": true
+        },
+        {
+          "name": "keyboard focus has a visible focus indicator",
+          "passed": true
+        },
+        {
+          "name": "focus selects the real ReactFlow wrapper and changes its descendant style",
+          "passed": true
+        },
+        {
+          "name": "900 ReactFlow owns at least 68 percent and nodes remain readable and contained",
+          "passed": true
+        },
+        {
+          "name": "Shift+Tab naturally leaves the Graph node action",
+          "passed": true
+        },
+        {
+          "name": "05-900-keyboard-focus-and-selected: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "name": "05-900-keyboard-focus-and-selected: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "name": "05-900-keyboard-focus-and-selected: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "name": "05-900-keyboard-focus-and-selected: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "graphState": {
+          "rootBounds": {
+            "x": 263,
+            "y": 39,
+            "right": 699,
+            "bottom": 733,
+            "width": 436,
+            "height": 694
+          },
+          "rootStyle": {
+            "borderTopWidth": "0px",
+            "borderLeftWidth": "0px",
+            "borderRadius": "0px",
+            "boxShadow": "none",
+            "marginTop": "0px",
+            "marginBottom": "0px",
+            "backgroundColor": "rgb(255, 255, 255)"
+          },
+          "repeatedHeadingCount": 0,
+          "repeatedExplanationCount": 0,
+          "persistentFilterControlCount": 0,
+          "filterDisclosureOpenerCount": 1,
+          "filterDisclosureCount": 0,
+          "openerAriaExpanded": "false",
+          "openerAriaControls": "native-graph-filter-_r_0_",
+          "chromeBounds": {
+            "x": 263,
+            "y": 39,
+            "right": 699,
+            "bottom": 79,
+            "width": 436,
+            "height": 40
+          },
+          "flowBounds": {
+            "x": 263,
+            "y": 79,
+            "right": 699,
+            "bottom": 733,
+            "width": 436,
+            "height": 654
+          },
+          "viewportBounds": {
+            "x": 303,
+            "y": 226,
+            "right": 739,
+            "bottom": 880,
+            "width": 436,
+            "height": 654
+          },
+          "flowHeightRatio": 0.9423631123919308,
+          "disclosureBounds": null,
+          "disclosureControls": [],
+          "disclosureInsideRoot": null,
+          "nodeCount": 6,
+          "edgeCount": 5,
+          "nodes": [
+            {
+              "id": "notes/visual-baseline.md",
+              "selected": true,
+              "wrapperBounds": {
+                "x": 413,
+                "y": 226,
+                "right": 549,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 413,
+                "y": 226,
+                "right": 549,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 413,
+                "y": 226,
+                "right": 549,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "视觉基线工作台",
+              "buttonVisibleText": "视觉基线工作台",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgb(234, 244, 241)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgb(42, 107, 94)",
+              "buttonBackground": "rgb(234, 244, 241)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 508,
+                "y": 306,
+                "right": 644,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 508,
+                "y": 306,
+                "right": 644,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 508,
+                "y": 306,
+                "right": 644,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 02。路径 notes/layout-convergence.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 02",
+              "buttonVisibleText": "合成知识条目 02",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "notes/focus-return.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 508,
+                "y": 466,
+                "right": 644,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 508,
+                "y": 466,
+                "right": 644,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 508,
+                "y": 466,
+                "right": 644,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 03。路径 notes/focus-return.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 03",
+              "buttonVisibleText": "合成知识条目 03",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/graph-projection.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 413,
+                "y": 546,
+                "right": 549,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 413,
+                "y": 546,
+                "right": 549,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 413,
+                "y": 546,
+                "right": 549,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 04。路径 research/graph-projection.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 04",
+              "buttonVisibleText": "合成知识条目 04",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/scroll-audit.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 318,
+                "y": 466,
+                "right": 454,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 318,
+                "y": 466,
+                "right": 454,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 318,
+                "y": 466,
+                "right": 454,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 05。路径 research/scroll-audit.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 05",
+              "buttonVisibleText": "合成知识条目 05",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/overlay-safety.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 318,
+                "y": 306,
+                "right": 454,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 318,
+                "y": 306,
+                "right": 454,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 318,
+                "y": 306,
+                "right": 454,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 06。路径 research/overlay-safety.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 06",
+              "buttonVisibleText": "合成知识条目 06",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            }
+          ],
+          "edges": [
+            {
+              "id": "visual-layout",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 92.785
+            },
+            {
+              "id": "layout-focus",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 213.925
+            },
+            {
+              "id": "focus-graph",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 250.138
+            },
+            {
+              "id": "graph-scroll",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 250.138
+            },
+            {
+              "id": "scroll-overlay",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 213.925
+            }
+          ],
+          "maxNodeWidth": 136,
+          "maxNodeHeight": 40,
+          "visibleMetadataCount": 0,
+          "shadowCount": 0,
+          "coarseLeftBorderCount": 0,
+          "allNodesInsideFlow": true,
+          "allEdgesVisible": true,
+          "overflow": {
+            "root": {
+              "clientWidth": 436,
+              "scrollWidth": 436
+            },
+            "surface": {
+              "clientWidth": 436,
+              "scrollWidth": 436
+            },
+            "flow": {
+              "clientWidth": 436,
+              "scrollWidth": 476
+            },
+            "activeGroup": {
+              "clientWidth": 436,
+              "scrollWidth": 436
+            }
+          }
+        },
+        "sidebars": {
+          "leftHidden": "false",
+          "rightHidden": "false"
+        },
+        "tabResult": {
+          "reached": true,
+          "tabs": 9,
+          "path": [
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": "关闭 关系图",
+              "text": "×"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": "在主标签组中快速打开",
+              "text": "+"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": "刷新工作区",
+              "text": "刷新"
+            },
+            {
+              "matched": false,
+              "tag": "section",
+              "ariaLabel": null,
+              "text": "范围全局局部6 笔记 · 5 关系筛选刷新视觉基线工作台合成知识条目 02合成知识条目 03合成知识条目 04合成知识条目 05合成知识条目 06Press e"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": null,
+              "text": "全局"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": null,
+              "text": "局部"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": null,
+              "text": "筛选"
+            },
+            {
+              "matched": false,
+              "tag": "button",
+              "ariaLabel": "刷新关系图",
+              "text": "刷新"
+            },
+            {
+              "matched": true,
+              "tag": "button",
+              "ariaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+              "text": "视觉基线工作台"
+            }
+          ]
+        },
+        "focused": {
+          "tag": "button",
+          "ariaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+          "type": "button",
+          "dataGraphNodeAction": true,
+          "nodeId": "notes/visual-baseline.md",
+          "wrapperSelected": true,
+          "outlineStyle": "solid",
+          "outlineWidth": "2px",
+          "outlineColor": "rgb(42, 107, 94)",
+          "buttonBackground": "rgb(234, 244, 241)",
+          "buttonBorderColor": "rgb(42, 107, 94)",
+          "wrapperBackground": "rgba(0, 0, 0, 0)",
+          "bodyScrollTop": 0,
+          "documentScrollTop": 0
+        },
+        "selectionState": {
+          "selectedId": "notes/visual-baseline.md",
+          "selectedBackground": "rgb(234, 244, 241)",
+          "selectedBorderColor": "rgb(42, 107, 94)",
+          "unselectedBackground": "rgb(255, 255, 255)",
+          "unselectedBorderColor": "rgba(28, 31, 36, 0.18)"
+        },
+        "shiftTabLeftNode": true
+      },
+      "audit": {
+        "taskReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_snapshot"
+        ],
+        "fixtureGlobalReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "callsStayInsideTaskAllowlist": true,
+        "prohibitedSearchOrCanvasCalls": 0,
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "fixtureValues": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 900,
+              "scrollHeight": 760,
+              "scrollWidth": 900,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 900,
+              "scrollHeight": 760,
+              "scrollWidth": 900,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 898,
+              "scrollHeight": 758,
+              "scrollWidth": 898,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 694,
+              "clientWidth": 436,
+              "scrollHeight": 694,
+              "scrollWidth": 436,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "graphValues": {
+            "root": {
+              "clientWidth": 436,
+              "scrollWidth": 436
+            },
+            "surface": {
+              "clientWidth": 436,
+              "scrollWidth": 436
+            },
+            "flow": {
+              "clientWidth": 436,
+              "scrollWidth": 476
+            },
+            "activeGroup": {
+              "clientWidth": 436,
+              "scrollWidth": 436
+            }
+          },
+          "note": "ReactFlow's internal transformed canvas scrollWidth is recorded but is not a document, shell, active-group, or Graph-root overflow layer",
+          "ok": true
+        },
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "06-900-reduced-motion-collapsed",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "reducedMotion": "reduce",
+      "assertions": [
+        {
+          "name": "06-900-reduced-motion-collapsed: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "name": "reduced-motion scenario uses a real collapsed sidebar combination",
+          "passed": true
+        },
+        {
+          "name": "collapsed 900 disclosure stays within Graph and flow keeps at least 68 percent",
+          "passed": true
+        },
+        {
+          "name": "Graph adds no animation under reduced motion",
+          "passed": true
+        },
+        {
+          "name": "reduced-motion Escape still returns to the actual opener",
+          "passed": true
+        },
+        {
+          "name": "06-900-reduced-motion-collapsed: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "name": "06-900-reduced-motion-collapsed: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "name": "06-900-reduced-motion-collapsed: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "name": "06-900-reduced-motion-collapsed: document shell active group and Graph have no horizontal overflow",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "graphState": {
+          "rootBounds": {
+            "x": 43,
+            "y": 39,
+            "right": 899,
+            "bottom": 733,
+            "width": 856,
+            "height": 694
+          },
+          "rootStyle": {
+            "borderTopWidth": "0px",
+            "borderLeftWidth": "0px",
+            "borderRadius": "0px",
+            "boxShadow": "none",
+            "marginTop": "0px",
+            "marginBottom": "0px",
+            "backgroundColor": "rgb(255, 255, 255)"
+          },
+          "repeatedHeadingCount": 0,
+          "repeatedExplanationCount": 0,
+          "persistentFilterControlCount": 0,
+          "filterDisclosureOpenerCount": 1,
+          "filterDisclosureCount": 1,
+          "openerAriaExpanded": "true",
+          "openerAriaControls": "native-graph-filter-_r_0_",
+          "chromeBounds": {
+            "x": 43,
+            "y": 39,
+            "right": 899,
+            "bottom": 79,
+            "width": 856,
+            "height": 40
+          },
+          "flowBounds": {
+            "x": 43,
+            "y": 79,
+            "right": 899,
+            "bottom": 733,
+            "width": 856,
+            "height": 654
+          },
+          "viewportBounds": {
+            "x": 83,
+            "y": 226,
+            "right": 939,
+            "bottom": 880,
+            "width": 856,
+            "height": 654
+          },
+          "flowHeightRatio": 0.9423631123919308,
+          "disclosureBounds": {
+            "x": 371,
+            "y": 79,
+            "right": 891,
+            "bottom": 252.281,
+            "width": 520,
+            "height": 173.281
+          },
+          "disclosureControls": [
+            {
+              "tag": "input",
+              "label": "关系图文字筛选",
+              "bounds": {
+                "x": 382,
+                "y": 110.141,
+                "right": 627,
+                "bottom": 142.141,
+                "width": 245,
+                "height": 32
+              }
+            },
+            {
+              "tag": "input",
+              "label": "关系图标签筛选",
+              "bounds": {
+                "x": 635,
+                "y": 110.141,
+                "right": 880,
+                "bottom": 142.141,
+                "width": 245,
+                "height": 32
+              }
+            },
+            {
+              "tag": "select",
+              "label": "关系图局部焦点",
+              "bounds": {
+                "x": 382,
+                "y": 171.281,
+                "right": 880,
+                "bottom": 203.281,
+                "width": 498,
+                "height": 32
+              }
+            },
+            {
+              "tag": "button",
+              "label": "应用",
+              "bounds": {
+                "x": 800,
+                "y": 211.281,
+                "right": 838,
+                "bottom": 241.281,
+                "width": 38,
+                "height": 30
+              }
+            },
+            {
+              "tag": "button",
+              "label": "关闭",
+              "bounds": {
+                "x": 842,
+                "y": 211.281,
+                "right": 880,
+                "bottom": 241.281,
+                "width": 38,
+                "height": 30
+              }
+            }
+          ],
+          "disclosureInsideRoot": true,
+          "nodeCount": 6,
+          "edgeCount": 5,
+          "nodes": [
+            {
+              "id": "notes/visual-baseline.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 193,
+                "y": 226,
+                "right": 329,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 193,
+                "y": 226,
+                "right": 329,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 193,
+                "y": 226,
+                "right": 329,
+                "bottom": 266,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "视觉基线工作台",
+              "buttonVisibleText": "视觉基线工作台",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 288,
+                "y": 306,
+                "right": 424,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 288,
+                "y": 306,
+                "right": 424,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 288,
+                "y": 306,
+                "right": 424,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 02。路径 notes/layout-convergence.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 02",
+              "buttonVisibleText": "合成知识条目 02",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "notes/focus-return.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 288,
+                "y": 466,
+                "right": 424,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 288,
+                "y": 466,
+                "right": 424,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 288,
+                "y": 466,
+                "right": 424,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 03。路径 notes/focus-return.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 03",
+              "buttonVisibleText": "合成知识条目 03",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/graph-projection.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 193,
+                "y": 546,
+                "right": 329,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 193,
+                "y": 546,
+                "right": 329,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 193,
+                "y": 546,
+                "right": 329,
+                "bottom": 586,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 04。路径 research/graph-projection.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 04",
+              "buttonVisibleText": "合成知识条目 04",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/scroll-audit.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 98,
+                "y": 466,
+                "right": 234,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 98,
+                "y": 466,
+                "right": 234,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 98,
+                "y": 466,
+                "right": 234,
+                "bottom": 506,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 05。路径 research/scroll-audit.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 05",
+              "buttonVisibleText": "合成知识条目 05",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            },
+            {
+              "id": "research/overlay-safety.md",
+              "selected": false,
+              "wrapperBounds": {
+                "x": 98,
+                "y": 306,
+                "right": 234,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "nodeBounds": {
+                "x": 98,
+                "y": 306,
+                "right": 234,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonBounds": {
+                "x": 98,
+                "y": 306,
+                "right": 234,
+                "bottom": 346,
+                "width": 136,
+                "height": 40
+              },
+              "buttonTag": "button",
+              "buttonType": "button",
+              "ariaLabel": "打开笔记：合成知识条目 06。路径 research/overlay-safety.md。 标签 #visual-baseline、#synthetic。",
+              "ariaCurrent": null,
+              "title": "合成知识条目 06",
+              "buttonVisibleText": "合成知识条目 06",
+              "visibleMetadata": [],
+              "nodeBoxShadow": "none",
+              "nodeBorderLeftWidth": "0px",
+              "nodeBackground": "rgba(0, 0, 0, 0)",
+              "buttonBoxShadow": "none",
+              "buttonBorderLeftWidth": "1px",
+              "buttonBorderColor": "rgba(28, 31, 36, 0.18)",
+              "buttonBackground": "rgb(255, 255, 255)",
+              "titleFontSize": "12px",
+              "titleClipped": false,
+              "insideFlow": true
+            }
+          ],
+          "edges": [
+            {
+              "id": "visual-layout",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 92.785
+            },
+            {
+              "id": "layout-focus",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 213.925
+            },
+            {
+              "id": "focus-graph",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 250.138
+            },
+            {
+              "id": "graph-scroll",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 250.138
+            },
+            {
+              "id": "scroll-overlay",
+              "stroke": "rgb(110, 127, 91)",
+              "strokeWidth": "1.1px",
+              "opacity": "0.72",
+              "pathLength": 213.925
+            }
+          ],
+          "maxNodeWidth": 136,
+          "maxNodeHeight": 40,
+          "visibleMetadataCount": 0,
+          "shadowCount": 0,
+          "coarseLeftBorderCount": 0,
+          "allNodesInsideFlow": true,
+          "allEdgesVisible": true,
+          "overflow": {
+            "root": {
+              "clientWidth": 856,
+              "scrollWidth": 856
+            },
+            "surface": {
+              "clientWidth": 856,
+              "scrollWidth": 856
+            },
+            "flow": {
+              "clientWidth": 856,
+              "scrollWidth": 896
+            },
+            "activeGroup": {
+              "clientWidth": 856,
+              "scrollWidth": 856
+            }
+          }
+        },
+        "reducedMotionState": [
+          {
+            "className": "native-graph-filter-disclosure",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          },
+          {
+            "className": "native-graph-node",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          },
+          {
+            "className": "native-graph-node-button",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          },
+          {
+            "className": "native-graph-node",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          },
+          {
+            "className": "native-graph-node-button",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          },
+          {
+            "className": "native-graph-node",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          },
+          {
+            "className": "native-graph-node-button",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          },
+          {
+            "className": "native-graph-node",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          },
+          {
+            "className": "native-graph-node-button",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          },
+          {
+            "className": "native-graph-node",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          },
+          {
+            "className": "native-graph-node-button",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          },
+          {
+            "className": "native-graph-node",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          },
+          {
+            "className": "native-graph-node-button",
+            "animationName": "none",
+            "animationDuration": "0s",
+            "transitionDuration": "0s"
+          }
+        ],
+        "collapsed": {
+          "leftHidden": "true",
+          "rightHidden": "true"
+        },
+        "returnedFocus": true
+      },
+      "audit": {
+        "taskReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_snapshot"
+        ],
+        "fixtureGlobalReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "callsStayInsideTaskAllowlist": true,
+        "prohibitedSearchOrCanvasCalls": 0,
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "fixtureValues": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 900,
+              "scrollHeight": 760,
+              "scrollWidth": 900,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 900,
+              "scrollHeight": 760,
+              "scrollWidth": 900,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 898,
+              "scrollHeight": 758,
+              "scrollWidth": 898,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 694,
+              "clientWidth": 856,
+              "scrollHeight": 694,
+              "scrollWidth": 856,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "graphValues": {
+            "root": {
+              "clientWidth": 856,
+              "scrollWidth": 856
+            },
+            "surface": {
+              "clientWidth": 856,
+              "scrollWidth": 856
+            },
+            "flow": {
+              "clientWidth": 856,
+              "scrollWidth": 896
+            },
+            "activeGroup": {
+              "clientWidth": 856,
+              "scrollWidth": 856
+            }
+          },
+          "note": "ReactFlow's internal transformed canvas scrollWidth is recorded but is not a document, shell, active-group, or Graph-root overflow layer",
+          "ok": true
+        },
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    }
+  ],
+  "screenshots": [
+    "01-1440-global-graph.png",
+    "02-1180-filter-disclosure.png",
+    "03-1180-local-graph.png",
+    "04-900-keyboard-focus.png"
+  ],
+  "taskReadAllowlist": [
+    "knowledge_workspace_graph",
+    "knowledge_workspace_read_markdown",
+    "knowledge_workspace_snapshot"
+  ],
+  "repeatedActivation": {
+    "methods": [
+      "click",
+      "Enter",
+      "Space"
+    ],
+    "readCount": 3,
+    "paths": [
+      "notes/visual-baseline.md",
+      "notes/visual-baseline.md",
+      "notes/visual-baseline.md"
+    ],
+    "sameBackendRelativePath": true,
+    "note": "each modality used a fresh context so the existing parent tab selection could not suppress a first typed read; the formal sequence helper contract separately proves monotonic repeated requests"
+  },
+  "commandTotals": {
+    "knowledge_workspace_graph": 9,
+    "knowledge_workspace_snapshot": 8,
+    "knowledge_workspace_read_markdown": 3
+  },
+  "zeroTotals": {
+    "write": 0,
+    "unknown": 0,
+    "external": 0,
+    "console": 0,
+    "pageError": 0
+  }
+}

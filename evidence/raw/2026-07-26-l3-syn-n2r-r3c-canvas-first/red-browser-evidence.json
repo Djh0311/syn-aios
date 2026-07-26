@@ -1,0 +1,375 @@
+{
+  "phase": "pre-implementation-red-first",
+  "fixture": "synthetic-only",
+  "viewport": {
+    "width": 1180,
+    "height": 760
+  },
+  "assertions": 14,
+  "failed": 9,
+  "failures": [
+    {
+      "name": "legacy three-column browser grid is retired",
+      "detail": {
+        "observed": 1
+      }
+    },
+    {
+      "name": "page-level Canvas header is retired",
+      "detail": {
+        "observed": 1
+      }
+    },
+    {
+      "name": "file catalog is closed and absent by default",
+      "detail": {
+        "observed": 1
+      }
+    },
+    {
+      "name": "legacy full-row toolbar is retired",
+      "detail": {
+        "observed": 1
+      }
+    },
+    {
+      "name": "empty inspector is absent by default",
+      "detail": {
+        "observed": 1
+      }
+    },
+    {
+      "name": "compact chrome exists",
+      "detail": {
+        "observed": 0
+      }
+    },
+    {
+      "name": "file trigger exposes collapsed ARIA state",
+      "detail": {
+        "observed": null
+      }
+    },
+    {
+      "name": "continuous stage exists and owns at least 75 percent of Canvas height",
+      "detail": {
+        "continuousStage": 0,
+        "stageRatio": 0.7240213717151892
+      }
+    },
+    {
+      "name": "node tools float inside the Canvas stage",
+      "detail": {
+        "observed": false
+      }
+    }
+  ],
+  "screenshot": "red-1180-canvas-three-column.png",
+  "observed": {
+    "rootCount": 1,
+    "rootBounds": {
+      "x": 303,
+      "y": 39,
+      "width": 656,
+      "height": 573
+    },
+    "stageBounds": {
+      "x": 483,
+      "y": 197,
+      "width": 440,
+      "height": 415
+    },
+    "stageRatio": 0.7240213717151892,
+    "legacyBrowserGrid": 1,
+    "pageHeader": 1,
+    "permanentCatalog": 1,
+    "permanentToolbar": 1,
+    "emptyInspector": 1,
+    "compactChrome": 0,
+    "fileTrigger": null,
+    "continuousStage": 0,
+    "floatingToolsInsideStage": false,
+    "panelMetric": {
+      "clientWidth": 656,
+      "scrollWidth": 656
+    },
+    "localStorageEmptyBeforeMount": true,
+    "metrics": {
+      "fixture": {
+        "dataOrigin": "synthetic-only",
+        "localStorageEmptyBeforeMount": true,
+        "scenario": "initial"
+      },
+      "bounds": {
+        "activity": {
+          "x": 1,
+          "y": 1,
+          "width": 42,
+          "height": 758
+        },
+        "left": {
+          "x": 43,
+          "y": 1,
+          "width": 260,
+          "height": 732
+        },
+        "central": {
+          "x": 303,
+          "y": 1,
+          "width": 656,
+          "height": 732
+        },
+        "right": {
+          "x": 959,
+          "y": 1,
+          "width": 220,
+          "height": 732
+        },
+        "status": {
+          "x": 43,
+          "y": 733,
+          "width": 1136,
+          "height": 26
+        }
+      },
+      "regions": {
+        "activity": {
+          "bounds": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "ariaHidden": null,
+          "inert": false,
+          "interactiveChildren": 8,
+          "scroll": {
+            "clientHeight": 758,
+            "clientWidth": 41,
+            "scrollHeight": 758,
+            "scrollWidth": 41,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "left": {
+          "bounds": {
+            "x": 43,
+            "y": 1,
+            "width": 260,
+            "height": 732
+          },
+          "ariaHidden": "false",
+          "inert": false,
+          "interactiveChildren": 45,
+          "scroll": {
+            "clientHeight": 732,
+            "clientWidth": 259,
+            "scrollHeight": 732,
+            "scrollWidth": 259,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "central": {
+          "bounds": {
+            "x": 303,
+            "y": 1,
+            "width": 656,
+            "height": 732
+          },
+          "ariaHidden": null,
+          "inert": false,
+          "interactiveChildren": 14,
+          "scroll": {
+            "clientHeight": 732,
+            "clientWidth": 656,
+            "scrollHeight": 732,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "right": {
+          "bounds": {
+            "x": 959,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "ariaHidden": "false",
+          "inert": false,
+          "interactiveChildren": 1,
+          "scroll": {
+            "clientHeight": 732,
+            "clientWidth": 219,
+            "scrollHeight": 1162,
+            "scrollWidth": 219,
+            "canScrollY": true,
+            "movedOnProbe": true
+          }
+        },
+        "status": {
+          "bounds": {
+            "x": 43,
+            "y": 733,
+            "width": 1136,
+            "height": 26
+          },
+          "ariaHidden": null,
+          "inert": false,
+          "interactiveChildren": 0,
+          "scroll": {
+            "clientHeight": 25,
+            "clientWidth": 1136,
+            "scrollHeight": 25,
+            "scrollWidth": 1136,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        }
+      },
+      "overflow": {
+        "documentElement": {
+          "clientHeight": 760,
+          "clientWidth": 1180,
+          "scrollHeight": 760,
+          "scrollWidth": 1180,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "body": {
+          "clientHeight": 760,
+          "clientWidth": 1180,
+          "scrollHeight": 760,
+          "scrollWidth": 1180,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "shell": {
+          "clientHeight": 758,
+          "clientWidth": 1178,
+          "scrollHeight": 758,
+          "scrollWidth": 1178,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "centralSurface": {
+          "clientHeight": 732,
+          "clientWidth": 656,
+          "scrollHeight": 732,
+          "scrollWidth": 656,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "activeGroupPanel": {
+          "clientHeight": 573,
+          "clientWidth": 656,
+          "scrollHeight": 573,
+          "scrollWidth": 656,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "overlay": null
+      },
+      "central": {
+        "groupCount": 1,
+        "tablistCount": 1,
+        "textareaCount": 0,
+        "saveActionCount": 0,
+        "groups": [
+          {
+            "id": "knowledge-group-primary",
+            "active": true,
+            "bounds": {
+              "x": 303,
+              "y": 1,
+              "width": 656,
+              "height": 611
+            },
+            "tablistCount": 1,
+            "tabCount": 1,
+            "tabs": [
+              {
+                "id": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                "controls": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                "controlsExists": true,
+                "selected": "true",
+                "tabIndex": 0,
+                "ariaLabel": "Canvas",
+                "title": "Canvas",
+                "text": "Canvas"
+              }
+            ],
+            "activeTabId": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+            "panelId": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+            "panelLabelledBy": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+            "panelContainsGraph": false,
+            "panelContainsCanvas": true,
+            "scroll": {
+              "clientHeight": 573,
+              "clientWidth": 656,
+              "scrollHeight": 573,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        ],
+        "separator": null
+      },
+      "focus": {
+        "tag": "button",
+        "id": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+        "ariaLabel": "Canvas",
+        "role": "tab",
+        "region": "central"
+      },
+      "localStorage": {
+        "emptyBeforeMount": true,
+        "writeCount": 2,
+        "keys": [
+          "syn-native-knowledge-workspace-ui-v1"
+        ],
+        "latestKey": "syn-native-knowledge-workspace-ui-v1",
+        "latestNormalizedContent": {
+          "version": 2,
+          "selectedRelativePath": null,
+          "centralState": {
+            "groups": [
+              {
+                "id": "knowledge-group-primary",
+                "tabs": [
+                  {
+                    "id": "surface:canvas",
+                    "kind": "surface",
+                    "surface": "canvas"
+                  }
+                ],
+                "activeTabId": "surface:canvas"
+              }
+            ],
+            "activeGroupId": "knowledge-group-primary",
+            "splitRatio": 50
+          }
+        }
+      },
+      "mock": {
+        "allowedReadCommands": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "unrecognizedCommandNames": []
+      }
+    }
+  },
+  "outcome": "EXPECTED_RED"
+}

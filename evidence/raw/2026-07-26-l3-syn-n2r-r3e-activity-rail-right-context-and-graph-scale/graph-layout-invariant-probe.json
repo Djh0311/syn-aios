@@ -1,0 +1,773 @@
+{
+  "phase": "pure-function-invariant",
+  "nodeBox": {
+    "width": 136,
+    "height": 40
+  },
+  "requiredMinCenterDistance": 160,
+  "readableZoom": 0.7,
+  "checkedTotals": [
+    {
+      "total": 1,
+      "minCenterDistance": null,
+      "meetsPitch": true,
+      "ringCount": 0,
+      "rings": [],
+      "layoutRadius": 0,
+      "layoutExtent": {
+        "width": 136,
+        "height": 40
+      },
+      "minZoom": 0.35
+    },
+    {
+      "total": 2,
+      "minCenterDistance": 162,
+      "meetsPitch": true,
+      "ringCount": 1,
+      "rings": [
+        {
+          "radius": 81,
+          "count": 2
+        }
+      ],
+      "layoutRadius": 81,
+      "layoutExtent": {
+        "width": 298,
+        "height": 202
+      },
+      "minZoom": 0.35
+    },
+    {
+      "total": 3,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 1,
+      "rings": [
+        {
+          "radius": 93.53,
+          "count": 3
+        }
+      ],
+      "layoutRadius": 93.53,
+      "layoutExtent": {
+        "width": 323.06,
+        "height": 227.06
+      },
+      "minZoom": 0.35
+    },
+    {
+      "total": 5,
+      "minCenterDistance": 161.82,
+      "meetsPitch": true,
+      "ringCount": 1,
+      "rings": [
+        {
+          "radius": 137.81,
+          "count": 5
+        }
+      ],
+      "layoutRadius": 137.81,
+      "layoutExtent": {
+        "width": 411.61,
+        "height": 315.61
+      },
+      "minZoom": 0.35
+    },
+    {
+      "total": 6,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 1,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        }
+      ],
+      "layoutRadius": 162,
+      "layoutExtent": {
+        "width": 460,
+        "height": 364
+      },
+      "minZoom": 0.35
+    },
+    {
+      "total": 7,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 2,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 1
+        }
+      ],
+      "layoutRadius": 324,
+      "layoutExtent": {
+        "width": 784,
+        "height": 688
+      },
+      "minZoom": 0.35
+    },
+    {
+      "total": 8,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 2,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 2
+        }
+      ],
+      "layoutRadius": 324,
+      "layoutExtent": {
+        "width": 784,
+        "height": 688
+      },
+      "minZoom": 0.35
+    },
+    {
+      "total": 12,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 2,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 6
+        }
+      ],
+      "layoutRadius": 324,
+      "layoutExtent": {
+        "width": 784,
+        "height": 688
+      },
+      "minZoom": 0.35
+    },
+    {
+      "total": 13,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 2,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 7
+        }
+      ],
+      "layoutRadius": 324,
+      "layoutExtent": {
+        "width": 784,
+        "height": 688
+      },
+      "minZoom": 0.35
+    },
+    {
+      "total": 20,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 3,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 2
+        }
+      ],
+      "layoutRadius": 486,
+      "layoutExtent": {
+        "width": 1108,
+        "height": 1012
+      },
+      "minZoom": 0.35
+    },
+    {
+      "total": 37,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 4,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 18
+        },
+        {
+          "radius": 648,
+          "count": 1
+        }
+      ],
+      "layoutRadius": 648,
+      "layoutExtent": {
+        "width": 1432,
+        "height": 1336
+      },
+      "minZoom": 0.2695
+    },
+    {
+      "total": 40,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 4,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 18
+        },
+        {
+          "radius": 648,
+          "count": 4
+        }
+      ],
+      "layoutRadius": 648,
+      "layoutExtent": {
+        "width": 1432,
+        "height": 1336
+      },
+      "minZoom": 0.2695
+    },
+    {
+      "total": 41,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 4,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 18
+        },
+        {
+          "radius": 648,
+          "count": 5
+        }
+      ],
+      "layoutRadius": 648,
+      "layoutExtent": {
+        "width": 1432,
+        "height": 1336
+      },
+      "minZoom": 0.2695
+    },
+    {
+      "total": 61,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 4,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 18
+        },
+        {
+          "radius": 648,
+          "count": 25
+        }
+      ],
+      "layoutRadius": 648,
+      "layoutExtent": {
+        "width": 1432,
+        "height": 1336
+      },
+      "minZoom": 0.2695
+    },
+    {
+      "total": 100,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 6,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 18
+        },
+        {
+          "radius": 648,
+          "count": 25
+        },
+        {
+          "radius": 810,
+          "count": 31
+        },
+        {
+          "radius": 972,
+          "count": 8
+        }
+      ],
+      "layoutRadius": 972,
+      "layoutExtent": {
+        "width": 2080,
+        "height": 1984
+      },
+      "minZoom": 0.1815
+    },
+    {
+      "total": 129,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 6,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 18
+        },
+        {
+          "radius": 648,
+          "count": 25
+        },
+        {
+          "radius": 810,
+          "count": 31
+        },
+        {
+          "radius": 972,
+          "count": 37
+        }
+      ],
+      "layoutRadius": 972,
+      "layoutExtent": {
+        "width": 2080,
+        "height": 1984
+      },
+      "minZoom": 0.1815
+    },
+    {
+      "total": 222,
+      "minCenterDistance": 161.74,
+      "meetsPitch": true,
+      "ringCount": 8,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 18
+        },
+        {
+          "radius": 648,
+          "count": 25
+        },
+        {
+          "radius": 810,
+          "count": 31
+        },
+        {
+          "radius": 972,
+          "count": 37
+        },
+        {
+          "radius": 1134,
+          "count": 43
+        },
+        {
+          "radius": 1296,
+          "count": 50
+        }
+      ],
+      "layoutRadius": 1296,
+      "layoutExtent": {
+        "width": 2728,
+        "height": 2632
+      },
+      "minZoom": 0.1368
+    },
+    {
+      "total": 341,
+      "minCenterDistance": 161.25,
+      "meetsPitch": true,
+      "ringCount": 11,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 18
+        },
+        {
+          "radius": 648,
+          "count": 25
+        },
+        {
+          "radius": 810,
+          "count": 31
+        },
+        {
+          "radius": 972,
+          "count": 37
+        },
+        {
+          "radius": 1134,
+          "count": 43
+        },
+        {
+          "radius": 1296,
+          "count": 50
+        },
+        {
+          "radius": 1458,
+          "count": 56
+        },
+        {
+          "radius": 1620,
+          "count": 62
+        },
+        {
+          "radius": 1782,
+          "count": 1
+        }
+      ],
+      "layoutRadius": 1782,
+      "layoutExtent": {
+        "width": 3700,
+        "height": 3604
+      },
+      "minZoom": 0.0999
+    },
+    {
+      "total": 484,
+      "minCenterDistance": 161.25,
+      "meetsPitch": true,
+      "ringCount": 12,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 18
+        },
+        {
+          "radius": 648,
+          "count": 25
+        },
+        {
+          "radius": 810,
+          "count": 31
+        },
+        {
+          "radius": 972,
+          "count": 37
+        },
+        {
+          "radius": 1134,
+          "count": 43
+        },
+        {
+          "radius": 1296,
+          "count": 50
+        },
+        {
+          "radius": 1458,
+          "count": 56
+        },
+        {
+          "radius": 1620,
+          "count": 62
+        },
+        {
+          "radius": 1782,
+          "count": 69
+        },
+        {
+          "radius": 1944,
+          "count": 75
+        }
+      ],
+      "layoutRadius": 1944,
+      "layoutExtent": {
+        "width": 4024,
+        "height": 3928
+      },
+      "minZoom": 0.0916
+    },
+    {
+      "total": 485,
+      "minCenterDistance": 161.25,
+      "meetsPitch": true,
+      "ringCount": 13,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 18
+        },
+        {
+          "radius": 648,
+          "count": 25
+        },
+        {
+          "radius": 810,
+          "count": 31
+        },
+        {
+          "radius": 972,
+          "count": 37
+        },
+        {
+          "radius": 1134,
+          "count": 43
+        },
+        {
+          "radius": 1296,
+          "count": 50
+        },
+        {
+          "radius": 1458,
+          "count": 56
+        },
+        {
+          "radius": 1620,
+          "count": 62
+        },
+        {
+          "radius": 1782,
+          "count": 69
+        },
+        {
+          "radius": 1944,
+          "count": 75
+        },
+        {
+          "radius": 2106,
+          "count": 1
+        }
+      ],
+      "layoutRadius": 2106,
+      "layoutExtent": {
+        "width": 4348,
+        "height": 4252
+      },
+      "minZoom": 0.0847
+    },
+    {
+      "total": 511,
+      "minCenterDistance": 161.25,
+      "meetsPitch": true,
+      "ringCount": 13,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 18
+        },
+        {
+          "radius": 648,
+          "count": 25
+        },
+        {
+          "radius": 810,
+          "count": 31
+        },
+        {
+          "radius": 972,
+          "count": 37
+        },
+        {
+          "radius": 1134,
+          "count": 43
+        },
+        {
+          "radius": 1296,
+          "count": 50
+        },
+        {
+          "radius": 1458,
+          "count": 56
+        },
+        {
+          "radius": 1620,
+          "count": 62
+        },
+        {
+          "radius": 1782,
+          "count": 69
+        },
+        {
+          "radius": 1944,
+          "count": 75
+        },
+        {
+          "radius": 2106,
+          "count": 27
+        }
+      ],
+      "layoutRadius": 2106,
+      "layoutExtent": {
+        "width": 4348,
+        "height": 4252
+      },
+      "minZoom": 0.0847
+    },
+    {
+      "total": 512,
+      "minCenterDistance": 161.25,
+      "meetsPitch": true,
+      "ringCount": 13,
+      "rings": [
+        {
+          "radius": 162,
+          "count": 6
+        },
+        {
+          "radius": 324,
+          "count": 12
+        },
+        {
+          "radius": 486,
+          "count": 18
+        },
+        {
+          "radius": 648,
+          "count": 25
+        },
+        {
+          "radius": 810,
+          "count": 31
+        },
+        {
+          "radius": 972,
+          "count": 37
+        },
+        {
+          "radius": 1134,
+          "count": 43
+        },
+        {
+          "radius": 1296,
+          "count": 50
+        },
+        {
+          "radius": 1458,
+          "count": 56
+        },
+        {
+          "radius": 1620,
+          "count": 62
+        },
+        {
+          "radius": 1782,
+          "count": 69
+        },
+        {
+          "radius": 1944,
+          "count": 75
+        },
+        {
+          "radius": 2106,
+          "count": 28
+        }
+      ],
+      "layoutRadius": 2106,
+      "layoutExtent": {
+        "width": 4348,
+        "height": 4252
+      },
+      "minZoom": 0.0847
+    }
+  ],
+  "determinismChecked": 365,
+  "failures": [],
+  "outcome": "PASS_PURE_FUNCTION_INVARIANT"
+}

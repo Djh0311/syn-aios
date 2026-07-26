@@ -1,0 +1,507 @@
+{
+  "phase": "pre-implementation-red-contract",
+  "fixture": "synthetic-only",
+  "assertions": 20,
+  "failed": 17,
+  "passNames": [
+    "900×760 both-expanded has no horizontal overflow",
+    "900×760 left-collapsed has no horizontal overflow",
+    "all red-contract contexts stayed fresh, synthetic, zero-write, and error-free"
+  ],
+  "failures": [
+    {
+      "name": "900×760 right-collapsed has horizontal overflow",
+      "detail": {
+        "document": {
+          "clientHeight": 760,
+          "clientWidth": 900,
+          "scrollHeight": 760,
+          "scrollWidth": 900,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "body": {
+          "clientHeight": 760,
+          "clientWidth": 900,
+          "scrollHeight": 760,
+          "scrollWidth": 900,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "shell": {
+          "clientHeight": 758,
+          "clientWidth": 898,
+          "scrollHeight": 758,
+          "scrollWidth": 899,
+          "canScrollY": false,
+          "movedOnProbe": false
+        }
+      }
+    },
+    {
+      "name": "900×760 both-collapsed has horizontal overflow",
+      "detail": {
+        "document": {
+          "clientHeight": 760,
+          "clientWidth": 900,
+          "scrollHeight": 760,
+          "scrollWidth": 900,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "body": {
+          "clientHeight": 760,
+          "clientWidth": 900,
+          "scrollHeight": 760,
+          "scrollWidth": 900,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "shell": {
+          "clientHeight": 758,
+          "clientWidth": 898,
+          "scrollHeight": 758,
+          "scrollWidth": 899,
+          "canScrollY": false,
+          "movedOnProbe": false
+        }
+      }
+    },
+    {
+      "name": "left Search lacks its required in-place combobox",
+      "detail": {
+        "inputs": 0,
+        "listboxes": 0,
+        "options": 0
+      }
+    },
+    {
+      "name": "left Search lacks its required result listbox",
+      "detail": {
+        "inputs": 0,
+        "listboxes": 0,
+        "options": 0
+      }
+    },
+    {
+      "name": "quick-open lacks combobox contract",
+      "detail": {
+        "comboboxes": 0,
+        "listboxes": 0,
+        "options": 0,
+        "current": 0,
+        "hints": 0
+      }
+    },
+    {
+      "name": "quick-open lacks listbox contract",
+      "detail": {
+        "comboboxes": 0,
+        "listboxes": 0,
+        "options": 0,
+        "current": 0,
+        "hints": 0
+      }
+    },
+    {
+      "name": "quick-open lacks result options after synthetic query",
+      "detail": {
+        "comboboxes": 0,
+        "listboxes": 0,
+        "options": 0,
+        "current": 0,
+        "hints": 0
+      }
+    },
+    {
+      "name": "quick-open lacks exactly one current option",
+      "detail": {
+        "comboboxes": 0,
+        "listboxes": 0,
+        "options": 0,
+        "current": 0,
+        "hints": 0
+      }
+    },
+    {
+      "name": "quick-open lacks visible keyboard hints",
+      "detail": {
+        "comboboxes": 0,
+        "listboxes": 0,
+        "options": 0,
+        "current": 0,
+        "hints": 0
+      }
+    },
+    {
+      "name": "command lacks filter combobox",
+      "detail": {
+        "comboboxes": 0,
+        "listboxes": 0,
+        "options": 0,
+        "current": 0,
+        "hints": 0
+      }
+    },
+    {
+      "name": "command lacks command listbox",
+      "detail": {
+        "comboboxes": 0,
+        "listboxes": 0,
+        "options": 0,
+        "current": 0,
+        "hints": 0
+      }
+    },
+    {
+      "name": "command lacks existing new Markdown/new directory command entries",
+      "detail": {
+        "comboboxes": 0,
+        "listboxes": 0,
+        "options": 0,
+        "current": 0,
+        "hints": 0
+      }
+    },
+    {
+      "name": "command lacks exactly one current option",
+      "detail": {
+        "comboboxes": 0,
+        "listboxes": 0,
+        "options": 0,
+        "current": 0,
+        "hints": 0
+      }
+    },
+    {
+      "name": "command lacks visible keyboard hints",
+      "detail": {
+        "comboboxes": 0,
+        "listboxes": 0,
+        "options": 0,
+        "current": 0,
+        "hints": 0
+      }
+    },
+    {
+      "name": "shortcut Meta+o did not route to quick-open",
+      "detail": {
+        "observed": null
+      }
+    },
+    {
+      "name": "shortcut Meta+p did not route to command",
+      "detail": {
+        "observed": null
+      }
+    },
+    {
+      "name": "shortcut Meta+Shift+f did not route to left-search",
+      "detail": {
+        "observed": "false"
+      }
+    }
+  ],
+  "overflowRows": [
+    {
+      "scenario": "both-expanded",
+      "ok": true,
+      "values": {
+        "document": {
+          "clientHeight": 760,
+          "clientWidth": 900,
+          "scrollHeight": 760,
+          "scrollWidth": 900,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "body": {
+          "clientHeight": 760,
+          "clientWidth": 900,
+          "scrollHeight": 760,
+          "scrollWidth": 900,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "shell": {
+          "clientHeight": 758,
+          "clientWidth": 898,
+          "scrollHeight": 758,
+          "scrollWidth": 898,
+          "canScrollY": false,
+          "movedOnProbe": false
+        }
+      }
+    },
+    {
+      "scenario": "left-collapsed",
+      "ok": true,
+      "values": {
+        "document": {
+          "clientHeight": 760,
+          "clientWidth": 900,
+          "scrollHeight": 760,
+          "scrollWidth": 900,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "body": {
+          "clientHeight": 760,
+          "clientWidth": 900,
+          "scrollHeight": 760,
+          "scrollWidth": 900,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "shell": {
+          "clientHeight": 758,
+          "clientWidth": 898,
+          "scrollHeight": 758,
+          "scrollWidth": 898,
+          "canScrollY": false,
+          "movedOnProbe": false
+        }
+      }
+    },
+    {
+      "scenario": "right-collapsed",
+      "ok": false,
+      "values": {
+        "document": {
+          "clientHeight": 760,
+          "clientWidth": 900,
+          "scrollHeight": 760,
+          "scrollWidth": 900,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "body": {
+          "clientHeight": 760,
+          "clientWidth": 900,
+          "scrollHeight": 760,
+          "scrollWidth": 900,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "shell": {
+          "clientHeight": 758,
+          "clientWidth": 898,
+          "scrollHeight": 758,
+          "scrollWidth": 899,
+          "canScrollY": false,
+          "movedOnProbe": false
+        }
+      }
+    },
+    {
+      "scenario": "both-collapsed",
+      "ok": false,
+      "values": {
+        "document": {
+          "clientHeight": 760,
+          "clientWidth": 900,
+          "scrollHeight": 760,
+          "scrollWidth": 900,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "body": {
+          "clientHeight": 760,
+          "clientWidth": 900,
+          "scrollHeight": 760,
+          "scrollWidth": 900,
+          "canScrollY": false,
+          "movedOnProbe": false
+        },
+        "shell": {
+          "clientHeight": 758,
+          "clientWidth": 898,
+          "scrollHeight": 758,
+          "scrollWidth": 899,
+          "canScrollY": false,
+          "movedOnProbe": false
+        }
+      }
+    }
+  ],
+  "contextAudits": [
+    {
+      "name": "overflow-both-expanded",
+      "localStorageEmptyBeforeMount": true,
+      "mock": {
+        "allowedReadCommands": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "unrecognizedCommandNames": []
+      },
+      "externalRequests": [],
+      "consoleErrors": [],
+      "pageErrors": []
+    },
+    {
+      "name": "overflow-left-collapsed",
+      "localStorageEmptyBeforeMount": true,
+      "mock": {
+        "allowedReadCommands": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "unrecognizedCommandNames": []
+      },
+      "externalRequests": [],
+      "consoleErrors": [],
+      "pageErrors": []
+    },
+    {
+      "name": "overflow-right-collapsed",
+      "localStorageEmptyBeforeMount": true,
+      "mock": {
+        "allowedReadCommands": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "unrecognizedCommandNames": []
+      },
+      "externalRequests": [],
+      "consoleErrors": [],
+      "pageErrors": []
+    },
+    {
+      "name": "overflow-both-collapsed",
+      "localStorageEmptyBeforeMount": true,
+      "mock": {
+        "allowedReadCommands": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "unrecognizedCommandNames": []
+      },
+      "externalRequests": [],
+      "consoleErrors": [],
+      "pageErrors": []
+    },
+    {
+      "name": "left-search",
+      "localStorageEmptyBeforeMount": true,
+      "mock": {
+        "allowedReadCommands": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "unrecognizedCommandNames": []
+      },
+      "externalRequests": [],
+      "consoleErrors": [],
+      "pageErrors": []
+    },
+    {
+      "name": "quick-open",
+      "localStorageEmptyBeforeMount": true,
+      "mock": {
+        "allowedReadCommands": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_search": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "unrecognizedCommandNames": []
+      },
+      "externalRequests": [],
+      "consoleErrors": [],
+      "pageErrors": []
+    },
+    {
+      "name": "command",
+      "localStorageEmptyBeforeMount": true,
+      "mock": {
+        "allowedReadCommands": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "unrecognizedCommandNames": []
+      },
+      "externalRequests": [],
+      "consoleErrors": [],
+      "pageErrors": []
+    },
+    {
+      "name": "shortcuts",
+      "localStorageEmptyBeforeMount": true,
+      "mock": {
+        "allowedReadCommands": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "unrecognizedCommandNames": []
+      },
+      "externalRequests": [],
+      "consoleErrors": [],
+      "pageErrors": []
+    }
+  ],
+  "outcome": "EXPECTED_RED"
+}

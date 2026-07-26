@@ -1,0 +1,4425 @@
+{
+  "phase": "pre-implementation-red-first",
+  "fixture": "synthetic-only",
+  "outcome": "EXPECTED_RED",
+  "assertions": 35,
+  "failed": 17,
+  "failures": [
+    {
+      "context": "01-1440-current-card-array",
+      "name": "Graph does not repeat a large internal heading or explanation",
+      "detail": {
+        "rootBounds": {
+          "x": 331,
+          "y": 39,
+          "width": 868,
+          "height": 601.125
+        },
+        "rootStyle": {
+          "borderTopWidth": "0px",
+          "borderLeftWidth": "0px",
+          "borderRadius": "0px",
+          "boxShadow": "none",
+          "marginTop": "0px",
+          "marginBottom": "0px"
+        },
+        "repeatedHeadingCount": 1,
+        "repeatedExplanationCount": 1,
+        "persistentFilterControlCount": 3,
+        "filterDisclosureOpenerCount": 0,
+        "filterDisclosureCount": 0,
+        "chromeBounds": {
+          "x": 331,
+          "y": 142.188,
+          "width": 868,
+          "height": 77.938
+        },
+        "flowBounds": {
+          "x": 331,
+          "y": 255.266,
+          "width": 868,
+          "height": 384.859
+        },
+        "flowHeightRatio": 0.6402312331045955,
+        "nodeCount": 6,
+        "edgeCount": 5,
+        "nodes": [
+          {
+            "id": "notes/visual-baseline.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 397,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 397,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "视觉基线工作台",
+            "visiblePath": "notes/visual-baseline.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "notes/layout-convergence.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 660.976,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 660.976,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 02",
+            "visiblePath": "notes/layout-convergence.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "notes/focus-return.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 924.951,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 924.951,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 03",
+            "visiblePath": "notes/focus-return.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/graph-projection.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 397,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 397,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 04",
+            "visiblePath": "research/graph-projection.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/scroll-audit.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 660.976,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 660.976,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 05",
+            "visiblePath": "research/scroll-audit.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/overlay-safety.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 924.951,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 924.951,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 06",
+            "visiblePath": "research/overlay-safety.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          }
+        ],
+        "maxNodeWidth": 208.049,
+        "maxNodeHeight": 94.447,
+        "visiblePathCount": 6,
+        "visibleTagOrIsolatedCount": 6,
+        "cardShadowCount": 6,
+        "coarseLeftBorderCount": 6
+      }
+    },
+    {
+      "context": "01-1440-current-card-array",
+      "name": "query tag and local-focus controls are absent from the default surface",
+      "detail": {
+        "rootBounds": {
+          "x": 331,
+          "y": 39,
+          "width": 868,
+          "height": 601.125
+        },
+        "rootStyle": {
+          "borderTopWidth": "0px",
+          "borderLeftWidth": "0px",
+          "borderRadius": "0px",
+          "boxShadow": "none",
+          "marginTop": "0px",
+          "marginBottom": "0px"
+        },
+        "repeatedHeadingCount": 1,
+        "repeatedExplanationCount": 1,
+        "persistentFilterControlCount": 3,
+        "filterDisclosureOpenerCount": 0,
+        "filterDisclosureCount": 0,
+        "chromeBounds": {
+          "x": 331,
+          "y": 142.188,
+          "width": 868,
+          "height": 77.938
+        },
+        "flowBounds": {
+          "x": 331,
+          "y": 255.266,
+          "width": 868,
+          "height": 384.859
+        },
+        "flowHeightRatio": 0.6402312331045955,
+        "nodeCount": 6,
+        "edgeCount": 5,
+        "nodes": [
+          {
+            "id": "notes/visual-baseline.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 397,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 397,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "视觉基线工作台",
+            "visiblePath": "notes/visual-baseline.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "notes/layout-convergence.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 660.976,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 660.976,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 02",
+            "visiblePath": "notes/layout-convergence.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "notes/focus-return.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 924.951,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 924.951,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 03",
+            "visiblePath": "notes/focus-return.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/graph-projection.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 397,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 397,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 04",
+            "visiblePath": "research/graph-projection.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/scroll-audit.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 660.976,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 660.976,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 05",
+            "visiblePath": "research/scroll-audit.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/overlay-safety.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 924.951,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 924.951,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 06",
+            "visiblePath": "research/overlay-safety.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          }
+        ],
+        "maxNodeWidth": 208.049,
+        "maxNodeHeight": 94.447,
+        "visiblePathCount": 6,
+        "visibleTagOrIsolatedCount": 6,
+        "cardShadowCount": 6,
+        "coarseLeftBorderCount": 6
+      }
+    },
+    {
+      "context": "01-1440-current-card-array",
+      "name": "default compact chrome is no taller than 44px",
+      "detail": {
+        "x": 331,
+        "y": 142.188,
+        "width": 868,
+        "height": 77.938
+      }
+    },
+    {
+      "context": "01-1440-current-card-array",
+      "name": "ReactFlow owns at least 74 percent of the Graph root",
+      "detail": {
+        "rootBounds": {
+          "x": 331,
+          "y": 39,
+          "width": 868,
+          "height": 601.125
+        },
+        "rootStyle": {
+          "borderTopWidth": "0px",
+          "borderLeftWidth": "0px",
+          "borderRadius": "0px",
+          "boxShadow": "none",
+          "marginTop": "0px",
+          "marginBottom": "0px"
+        },
+        "repeatedHeadingCount": 1,
+        "repeatedExplanationCount": 1,
+        "persistentFilterControlCount": 3,
+        "filterDisclosureOpenerCount": 0,
+        "filterDisclosureCount": 0,
+        "chromeBounds": {
+          "x": 331,
+          "y": 142.188,
+          "width": 868,
+          "height": 77.938
+        },
+        "flowBounds": {
+          "x": 331,
+          "y": 255.266,
+          "width": 868,
+          "height": 384.859
+        },
+        "flowHeightRatio": 0.6402312331045955,
+        "nodeCount": 6,
+        "edgeCount": 5,
+        "nodes": [
+          {
+            "id": "notes/visual-baseline.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 397,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 397,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "视觉基线工作台",
+            "visiblePath": "notes/visual-baseline.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "notes/layout-convergence.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 660.976,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 660.976,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 02",
+            "visiblePath": "notes/layout-convergence.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "notes/focus-return.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 924.951,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 924.951,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 03",
+            "visiblePath": "notes/focus-return.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/graph-projection.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 397,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 397,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 04",
+            "visiblePath": "research/graph-projection.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/scroll-audit.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 660.976,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 660.976,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 05",
+            "visiblePath": "research/scroll-audit.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/overlay-safety.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 924.951,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 924.951,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 06",
+            "visiblePath": "research/overlay-safety.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          }
+        ],
+        "maxNodeWidth": 208.049,
+        "maxNodeHeight": 94.447,
+        "visiblePathCount": 6,
+        "visibleTagOrIsolatedCount": 6,
+        "cardShadowCount": 6,
+        "coarseLeftBorderCount": 6
+      }
+    },
+    {
+      "context": "01-1440-current-card-array",
+      "name": "all Graph nodes are at most 144px wide",
+      "detail": {
+        "rootBounds": {
+          "x": 331,
+          "y": 39,
+          "width": 868,
+          "height": 601.125
+        },
+        "rootStyle": {
+          "borderTopWidth": "0px",
+          "borderLeftWidth": "0px",
+          "borderRadius": "0px",
+          "boxShadow": "none",
+          "marginTop": "0px",
+          "marginBottom": "0px"
+        },
+        "repeatedHeadingCount": 1,
+        "repeatedExplanationCount": 1,
+        "persistentFilterControlCount": 3,
+        "filterDisclosureOpenerCount": 0,
+        "filterDisclosureCount": 0,
+        "chromeBounds": {
+          "x": 331,
+          "y": 142.188,
+          "width": 868,
+          "height": 77.938
+        },
+        "flowBounds": {
+          "x": 331,
+          "y": 255.266,
+          "width": 868,
+          "height": 384.859
+        },
+        "flowHeightRatio": 0.6402312331045955,
+        "nodeCount": 6,
+        "edgeCount": 5,
+        "nodes": [
+          {
+            "id": "notes/visual-baseline.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 397,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 397,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "视觉基线工作台",
+            "visiblePath": "notes/visual-baseline.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "notes/layout-convergence.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 660.976,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 660.976,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 02",
+            "visiblePath": "notes/layout-convergence.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "notes/focus-return.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 924.951,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 924.951,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 03",
+            "visiblePath": "notes/focus-return.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/graph-projection.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 397,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 397,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 04",
+            "visiblePath": "research/graph-projection.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/scroll-audit.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 660.976,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 660.976,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 05",
+            "visiblePath": "research/scroll-audit.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/overlay-safety.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 924.951,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 924.951,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 06",
+            "visiblePath": "research/overlay-safety.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          }
+        ],
+        "maxNodeWidth": 208.049,
+        "maxNodeHeight": 94.447,
+        "visiblePathCount": 6,
+        "visibleTagOrIsolatedCount": 6,
+        "cardShadowCount": 6,
+        "coarseLeftBorderCount": 6
+      }
+    },
+    {
+      "context": "01-1440-current-card-array",
+      "name": "all Graph nodes are at most 48px high",
+      "detail": {
+        "rootBounds": {
+          "x": 331,
+          "y": 39,
+          "width": 868,
+          "height": 601.125
+        },
+        "rootStyle": {
+          "borderTopWidth": "0px",
+          "borderLeftWidth": "0px",
+          "borderRadius": "0px",
+          "boxShadow": "none",
+          "marginTop": "0px",
+          "marginBottom": "0px"
+        },
+        "repeatedHeadingCount": 1,
+        "repeatedExplanationCount": 1,
+        "persistentFilterControlCount": 3,
+        "filterDisclosureOpenerCount": 0,
+        "filterDisclosureCount": 0,
+        "chromeBounds": {
+          "x": 331,
+          "y": 142.188,
+          "width": 868,
+          "height": 77.938
+        },
+        "flowBounds": {
+          "x": 331,
+          "y": 255.266,
+          "width": 868,
+          "height": 384.859
+        },
+        "flowHeightRatio": 0.6402312331045955,
+        "nodeCount": 6,
+        "edgeCount": 5,
+        "nodes": [
+          {
+            "id": "notes/visual-baseline.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 397,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 397,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "视觉基线工作台",
+            "visiblePath": "notes/visual-baseline.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "notes/layout-convergence.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 660.976,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 660.976,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 02",
+            "visiblePath": "notes/layout-convergence.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "notes/focus-return.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 924.951,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 924.951,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 03",
+            "visiblePath": "notes/focus-return.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/graph-projection.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 397,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 397,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 04",
+            "visiblePath": "research/graph-projection.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/scroll-audit.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 660.976,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 660.976,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 05",
+            "visiblePath": "research/scroll-audit.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/overlay-safety.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 924.951,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 924.951,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 06",
+            "visiblePath": "research/overlay-safety.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          }
+        ],
+        "maxNodeWidth": 208.049,
+        "maxNodeHeight": 94.447,
+        "visiblePathCount": 6,
+        "visibleTagOrIsolatedCount": 6,
+        "cardShadowCount": 6,
+        "coarseLeftBorderCount": 6
+      }
+    },
+    {
+      "context": "01-1440-current-card-array",
+      "name": "vault-relative paths are not persistent visible node metadata",
+      "detail": [
+        {
+          "id": "notes/visual-baseline.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 397,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 397,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "视觉基线工作台",
+          "visiblePath": "notes/visual-baseline.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "notes/layout-convergence.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 660.976,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 660.976,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 02",
+          "visiblePath": "notes/layout-convergence.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "notes/focus-return.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 924.951,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 924.951,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 03",
+          "visiblePath": "notes/focus-return.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "research/graph-projection.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 397,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 397,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 04",
+          "visiblePath": "research/graph-projection.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "research/scroll-audit.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 660.976,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 660.976,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 05",
+          "visiblePath": "research/scroll-audit.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "research/overlay-safety.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 924.951,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 924.951,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 06",
+          "visiblePath": "research/overlay-safety.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        }
+      ]
+    },
+    {
+      "context": "01-1440-current-card-array",
+      "name": "tags and isolated-note words are not persistent visible node metadata",
+      "detail": [
+        {
+          "id": "notes/visual-baseline.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 397,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 397,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "视觉基线工作台",
+          "visiblePath": "notes/visual-baseline.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "notes/layout-convergence.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 660.976,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 660.976,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 02",
+          "visiblePath": "notes/layout-convergence.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "notes/focus-return.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 924.951,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 924.951,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 03",
+          "visiblePath": "notes/focus-return.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "research/graph-projection.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 397,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 397,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 04",
+          "visiblePath": "research/graph-projection.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "research/scroll-audit.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 660.976,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 660.976,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 05",
+          "visiblePath": "research/scroll-audit.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "research/overlay-safety.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 924.951,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 924.951,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 06",
+          "visiblePath": "research/overlay-safety.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        }
+      ]
+    },
+    {
+      "context": "01-1440-current-card-array",
+      "name": "Graph nodes have no card shadow or coarse left accent border",
+      "detail": [
+        {
+          "id": "notes/visual-baseline.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 397,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 397,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "视觉基线工作台",
+          "visiblePath": "notes/visual-baseline.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "notes/layout-convergence.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 660.976,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 660.976,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 02",
+          "visiblePath": "notes/layout-convergence.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "notes/focus-return.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 924.951,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 924.951,
+            "y": 321.37,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 03",
+          "visiblePath": "notes/focus-return.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "research/graph-projection.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 397,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 397,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 04",
+          "visiblePath": "research/graph-projection.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "research/scroll-audit.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 660.976,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 660.976,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 05",
+          "visiblePath": "research/scroll-audit.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        },
+        {
+          "id": "research/overlay-safety.md",
+          "wrapperRole": "group",
+          "wrapperAriaLabel": null,
+          "wrapperBounds": {
+            "x": 924.951,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "cardBounds": {
+            "x": 924.951,
+            "y": 480.203,
+            "width": 208.049,
+            "height": 94.447
+          },
+          "title": "合成知识条目 06",
+          "visiblePath": "research/overlay-safety.md",
+          "visibleTag": "#visual-baseline · #synthetic",
+          "visibleIsolated": null,
+          "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "borderLeftWidth": "2px",
+          "borderLeftColor": "rgb(110, 127, 91)",
+          "backgroundColor": "rgb(243, 240, 234)"
+        }
+      ]
+    },
+    {
+      "context": "01-1440-current-card-array",
+      "name": "a filter disclosure with an actual opener exists",
+      "detail": {
+        "rootBounds": {
+          "x": 331,
+          "y": 39,
+          "width": 868,
+          "height": 601.125
+        },
+        "rootStyle": {
+          "borderTopWidth": "0px",
+          "borderLeftWidth": "0px",
+          "borderRadius": "0px",
+          "boxShadow": "none",
+          "marginTop": "0px",
+          "marginBottom": "0px"
+        },
+        "repeatedHeadingCount": 1,
+        "repeatedExplanationCount": 1,
+        "persistentFilterControlCount": 3,
+        "filterDisclosureOpenerCount": 0,
+        "filterDisclosureCount": 0,
+        "chromeBounds": {
+          "x": 331,
+          "y": 142.188,
+          "width": 868,
+          "height": 77.938
+        },
+        "flowBounds": {
+          "x": 331,
+          "y": 255.266,
+          "width": 868,
+          "height": 384.859
+        },
+        "flowHeightRatio": 0.6402312331045955,
+        "nodeCount": 6,
+        "edgeCount": 5,
+        "nodes": [
+          {
+            "id": "notes/visual-baseline.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 397,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 397,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "视觉基线工作台",
+            "visiblePath": "notes/visual-baseline.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "notes/layout-convergence.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 660.976,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 660.976,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 02",
+            "visiblePath": "notes/layout-convergence.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "notes/focus-return.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 924.951,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 924.951,
+              "y": 321.37,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 03",
+            "visiblePath": "notes/focus-return.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/graph-projection.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 397,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 397,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 04",
+            "visiblePath": "research/graph-projection.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/scroll-audit.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 660.976,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 660.976,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 05",
+            "visiblePath": "research/scroll-audit.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          },
+          {
+            "id": "research/overlay-safety.md",
+            "wrapperRole": "group",
+            "wrapperAriaLabel": null,
+            "wrapperBounds": {
+              "x": 924.951,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "cardBounds": {
+              "x": 924.951,
+              "y": 480.203,
+              "width": 208.049,
+              "height": 94.447
+            },
+            "title": "合成知识条目 06",
+            "visiblePath": "research/overlay-safety.md",
+            "visibleTag": "#visual-baseline · #synthetic",
+            "visibleIsolated": null,
+            "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "borderLeftWidth": "2px",
+            "borderLeftColor": "rgb(110, 127, 91)",
+            "backgroundColor": "rgb(243, 240, 234)"
+          }
+        ],
+        "maxNodeWidth": 208.049,
+        "maxNodeHeight": 94.447,
+        "visiblePathCount": 6,
+        "visibleTagOrIsolatedCount": 6,
+        "cardShadowCount": 6,
+        "coarseLeftBorderCount": 6
+      }
+    },
+    {
+      "context": "02-1180-current-keyboard-and-selection",
+      "name": "focused Graph node has button or link equivalent semantics",
+      "detail": {
+        "activeTag": "div",
+        "role": "group",
+        "ariaLabel": null,
+        "dataId": "notes/visual-baseline.md",
+        "selected": false,
+        "outlineStyle": "none",
+        "outlineWidth": "3px",
+        "cardBackground": "rgb(243, 240, 234)",
+        "cardBorderColor": "rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgb(110, 127, 91)",
+        "cardBoxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+        "activeGroupScrollTop": 0,
+        "bodyScrollTop": 0,
+        "documentScrollTop": 0
+      }
+    },
+    {
+      "context": "02-1180-current-keyboard-and-selection",
+      "name": "keyboard-focused Graph node has a visible focus indicator",
+      "detail": {
+        "activeTag": "div",
+        "role": "group",
+        "ariaLabel": null,
+        "dataId": "notes/visual-baseline.md",
+        "selected": false,
+        "outlineStyle": "none",
+        "outlineWidth": "3px",
+        "cardBackground": "rgb(243, 240, 234)",
+        "cardBorderColor": "rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgb(110, 127, 91)",
+        "cardBoxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+        "activeGroupScrollTop": 0,
+        "bodyScrollTop": 0,
+        "documentScrollTop": 0
+      }
+    },
+    {
+      "context": "02-1180-current-keyboard-and-selection",
+      "name": "selected style changes on the real selected ReactFlow wrapper",
+      "detail": {
+        "before": {
+          "activeTag": "div",
+          "role": "group",
+          "ariaLabel": null,
+          "dataId": "notes/visual-baseline.md",
+          "selected": false,
+          "outlineStyle": "none",
+          "outlineWidth": "3px",
+          "cardBackground": "rgb(243, 240, 234)",
+          "cardBorderColor": "rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgb(110, 127, 91)",
+          "cardBoxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "activeGroupScrollTop": 0,
+          "bodyScrollTop": 0,
+          "documentScrollTop": 0
+        },
+        "afterEnter": {
+          "activeTag": "div",
+          "role": "group",
+          "ariaLabel": null,
+          "dataId": "notes/visual-baseline.md",
+          "selected": false,
+          "outlineStyle": "none",
+          "outlineWidth": "3px",
+          "cardBackground": "rgb(243, 240, 234)",
+          "cardBorderColor": "rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgb(110, 127, 91)",
+          "cardBoxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "activeGroupScrollTop": 0,
+          "bodyScrollTop": 0,
+          "documentScrollTop": 0
+        }
+      }
+    },
+    {
+      "context": "02-1180-current-keyboard-and-selection",
+      "name": "Enter produces exactly one typed Markdown open",
+      "detail": {
+        "beforeInvokes": [],
+        "enterInvokes": []
+      }
+    },
+    {
+      "context": "02-1180-current-keyboard-and-selection",
+      "name": "Space produces exactly one typed Markdown open",
+      "detail": {
+        "enterInvokes": [],
+        "spaceInvokes": []
+      }
+    },
+    {
+      "context": "03-1180-current-click-handoff",
+      "name": "mouse click still performs exactly one typed Markdown open",
+      "detail": {
+        "nodeState": {
+          "id": "notes/visual-baseline.md",
+          "title": "视觉基线工作台",
+          "relativePath": "notes/visual-baseline.md"
+        },
+        "invokes": []
+      }
+    },
+    {
+      "context": "03-1180-current-click-handoff",
+      "name": "click handoff uses the projected relative path payload",
+      "detail": {
+        "nodeState": {
+          "id": "notes/visual-baseline.md",
+          "title": "视觉基线工作台",
+          "relativePath": "notes/visual-baseline.md"
+        },
+        "reads": []
+      }
+    }
+  ],
+  "contexts": [
+    {
+      "name": "01-1440-current-card-array",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "assertions": [
+        {
+          "name": "01-1440-current-card-array: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "name": "Graph does not repeat a large internal heading or explanation",
+          "passed": false,
+          "detail": {
+            "rootBounds": {
+              "x": 331,
+              "y": 39,
+              "width": 868,
+              "height": 601.125
+            },
+            "rootStyle": {
+              "borderTopWidth": "0px",
+              "borderLeftWidth": "0px",
+              "borderRadius": "0px",
+              "boxShadow": "none",
+              "marginTop": "0px",
+              "marginBottom": "0px"
+            },
+            "repeatedHeadingCount": 1,
+            "repeatedExplanationCount": 1,
+            "persistentFilterControlCount": 3,
+            "filterDisclosureOpenerCount": 0,
+            "filterDisclosureCount": 0,
+            "chromeBounds": {
+              "x": 331,
+              "y": 142.188,
+              "width": 868,
+              "height": 77.938
+            },
+            "flowBounds": {
+              "x": 331,
+              "y": 255.266,
+              "width": 868,
+              "height": 384.859
+            },
+            "flowHeightRatio": 0.6402312331045955,
+            "nodeCount": 6,
+            "edgeCount": 5,
+            "nodes": [
+              {
+                "id": "notes/visual-baseline.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 397,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 397,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "视觉基线工作台",
+                "visiblePath": "notes/visual-baseline.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "notes/layout-convergence.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 660.976,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 660.976,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 02",
+                "visiblePath": "notes/layout-convergence.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "notes/focus-return.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 924.951,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 924.951,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 03",
+                "visiblePath": "notes/focus-return.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/graph-projection.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 397,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 397,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 04",
+                "visiblePath": "research/graph-projection.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/scroll-audit.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 660.976,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 660.976,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 05",
+                "visiblePath": "research/scroll-audit.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/overlay-safety.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 924.951,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 924.951,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 06",
+                "visiblePath": "research/overlay-safety.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              }
+            ],
+            "maxNodeWidth": 208.049,
+            "maxNodeHeight": 94.447,
+            "visiblePathCount": 6,
+            "visibleTagOrIsolatedCount": 6,
+            "cardShadowCount": 6,
+            "coarseLeftBorderCount": 6
+          }
+        },
+        {
+          "name": "query tag and local-focus controls are absent from the default surface",
+          "passed": false,
+          "detail": {
+            "rootBounds": {
+              "x": 331,
+              "y": 39,
+              "width": 868,
+              "height": 601.125
+            },
+            "rootStyle": {
+              "borderTopWidth": "0px",
+              "borderLeftWidth": "0px",
+              "borderRadius": "0px",
+              "boxShadow": "none",
+              "marginTop": "0px",
+              "marginBottom": "0px"
+            },
+            "repeatedHeadingCount": 1,
+            "repeatedExplanationCount": 1,
+            "persistentFilterControlCount": 3,
+            "filterDisclosureOpenerCount": 0,
+            "filterDisclosureCount": 0,
+            "chromeBounds": {
+              "x": 331,
+              "y": 142.188,
+              "width": 868,
+              "height": 77.938
+            },
+            "flowBounds": {
+              "x": 331,
+              "y": 255.266,
+              "width": 868,
+              "height": 384.859
+            },
+            "flowHeightRatio": 0.6402312331045955,
+            "nodeCount": 6,
+            "edgeCount": 5,
+            "nodes": [
+              {
+                "id": "notes/visual-baseline.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 397,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 397,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "视觉基线工作台",
+                "visiblePath": "notes/visual-baseline.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "notes/layout-convergence.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 660.976,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 660.976,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 02",
+                "visiblePath": "notes/layout-convergence.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "notes/focus-return.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 924.951,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 924.951,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 03",
+                "visiblePath": "notes/focus-return.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/graph-projection.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 397,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 397,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 04",
+                "visiblePath": "research/graph-projection.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/scroll-audit.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 660.976,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 660.976,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 05",
+                "visiblePath": "research/scroll-audit.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/overlay-safety.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 924.951,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 924.951,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 06",
+                "visiblePath": "research/overlay-safety.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              }
+            ],
+            "maxNodeWidth": 208.049,
+            "maxNodeHeight": 94.447,
+            "visiblePathCount": 6,
+            "visibleTagOrIsolatedCount": 6,
+            "cardShadowCount": 6,
+            "coarseLeftBorderCount": 6
+          }
+        },
+        {
+          "name": "default compact chrome is no taller than 44px",
+          "passed": false,
+          "detail": {
+            "x": 331,
+            "y": 142.188,
+            "width": 868,
+            "height": 77.938
+          }
+        },
+        {
+          "name": "ReactFlow owns at least 74 percent of the Graph root",
+          "passed": false,
+          "detail": {
+            "rootBounds": {
+              "x": 331,
+              "y": 39,
+              "width": 868,
+              "height": 601.125
+            },
+            "rootStyle": {
+              "borderTopWidth": "0px",
+              "borderLeftWidth": "0px",
+              "borderRadius": "0px",
+              "boxShadow": "none",
+              "marginTop": "0px",
+              "marginBottom": "0px"
+            },
+            "repeatedHeadingCount": 1,
+            "repeatedExplanationCount": 1,
+            "persistentFilterControlCount": 3,
+            "filterDisclosureOpenerCount": 0,
+            "filterDisclosureCount": 0,
+            "chromeBounds": {
+              "x": 331,
+              "y": 142.188,
+              "width": 868,
+              "height": 77.938
+            },
+            "flowBounds": {
+              "x": 331,
+              "y": 255.266,
+              "width": 868,
+              "height": 384.859
+            },
+            "flowHeightRatio": 0.6402312331045955,
+            "nodeCount": 6,
+            "edgeCount": 5,
+            "nodes": [
+              {
+                "id": "notes/visual-baseline.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 397,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 397,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "视觉基线工作台",
+                "visiblePath": "notes/visual-baseline.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "notes/layout-convergence.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 660.976,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 660.976,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 02",
+                "visiblePath": "notes/layout-convergence.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "notes/focus-return.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 924.951,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 924.951,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 03",
+                "visiblePath": "notes/focus-return.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/graph-projection.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 397,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 397,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 04",
+                "visiblePath": "research/graph-projection.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/scroll-audit.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 660.976,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 660.976,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 05",
+                "visiblePath": "research/scroll-audit.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/overlay-safety.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 924.951,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 924.951,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 06",
+                "visiblePath": "research/overlay-safety.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              }
+            ],
+            "maxNodeWidth": 208.049,
+            "maxNodeHeight": 94.447,
+            "visiblePathCount": 6,
+            "visibleTagOrIsolatedCount": 6,
+            "cardShadowCount": 6,
+            "coarseLeftBorderCount": 6
+          }
+        },
+        {
+          "name": "all Graph nodes are at most 144px wide",
+          "passed": false,
+          "detail": {
+            "rootBounds": {
+              "x": 331,
+              "y": 39,
+              "width": 868,
+              "height": 601.125
+            },
+            "rootStyle": {
+              "borderTopWidth": "0px",
+              "borderLeftWidth": "0px",
+              "borderRadius": "0px",
+              "boxShadow": "none",
+              "marginTop": "0px",
+              "marginBottom": "0px"
+            },
+            "repeatedHeadingCount": 1,
+            "repeatedExplanationCount": 1,
+            "persistentFilterControlCount": 3,
+            "filterDisclosureOpenerCount": 0,
+            "filterDisclosureCount": 0,
+            "chromeBounds": {
+              "x": 331,
+              "y": 142.188,
+              "width": 868,
+              "height": 77.938
+            },
+            "flowBounds": {
+              "x": 331,
+              "y": 255.266,
+              "width": 868,
+              "height": 384.859
+            },
+            "flowHeightRatio": 0.6402312331045955,
+            "nodeCount": 6,
+            "edgeCount": 5,
+            "nodes": [
+              {
+                "id": "notes/visual-baseline.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 397,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 397,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "视觉基线工作台",
+                "visiblePath": "notes/visual-baseline.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "notes/layout-convergence.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 660.976,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 660.976,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 02",
+                "visiblePath": "notes/layout-convergence.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "notes/focus-return.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 924.951,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 924.951,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 03",
+                "visiblePath": "notes/focus-return.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/graph-projection.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 397,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 397,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 04",
+                "visiblePath": "research/graph-projection.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/scroll-audit.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 660.976,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 660.976,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 05",
+                "visiblePath": "research/scroll-audit.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/overlay-safety.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 924.951,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 924.951,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 06",
+                "visiblePath": "research/overlay-safety.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              }
+            ],
+            "maxNodeWidth": 208.049,
+            "maxNodeHeight": 94.447,
+            "visiblePathCount": 6,
+            "visibleTagOrIsolatedCount": 6,
+            "cardShadowCount": 6,
+            "coarseLeftBorderCount": 6
+          }
+        },
+        {
+          "name": "all Graph nodes are at most 48px high",
+          "passed": false,
+          "detail": {
+            "rootBounds": {
+              "x": 331,
+              "y": 39,
+              "width": 868,
+              "height": 601.125
+            },
+            "rootStyle": {
+              "borderTopWidth": "0px",
+              "borderLeftWidth": "0px",
+              "borderRadius": "0px",
+              "boxShadow": "none",
+              "marginTop": "0px",
+              "marginBottom": "0px"
+            },
+            "repeatedHeadingCount": 1,
+            "repeatedExplanationCount": 1,
+            "persistentFilterControlCount": 3,
+            "filterDisclosureOpenerCount": 0,
+            "filterDisclosureCount": 0,
+            "chromeBounds": {
+              "x": 331,
+              "y": 142.188,
+              "width": 868,
+              "height": 77.938
+            },
+            "flowBounds": {
+              "x": 331,
+              "y": 255.266,
+              "width": 868,
+              "height": 384.859
+            },
+            "flowHeightRatio": 0.6402312331045955,
+            "nodeCount": 6,
+            "edgeCount": 5,
+            "nodes": [
+              {
+                "id": "notes/visual-baseline.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 397,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 397,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "视觉基线工作台",
+                "visiblePath": "notes/visual-baseline.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "notes/layout-convergence.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 660.976,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 660.976,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 02",
+                "visiblePath": "notes/layout-convergence.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "notes/focus-return.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 924.951,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 924.951,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 03",
+                "visiblePath": "notes/focus-return.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/graph-projection.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 397,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 397,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 04",
+                "visiblePath": "research/graph-projection.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/scroll-audit.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 660.976,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 660.976,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 05",
+                "visiblePath": "research/scroll-audit.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/overlay-safety.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 924.951,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 924.951,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 06",
+                "visiblePath": "research/overlay-safety.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              }
+            ],
+            "maxNodeWidth": 208.049,
+            "maxNodeHeight": 94.447,
+            "visiblePathCount": 6,
+            "visibleTagOrIsolatedCount": 6,
+            "cardShadowCount": 6,
+            "coarseLeftBorderCount": 6
+          }
+        },
+        {
+          "name": "vault-relative paths are not persistent visible node metadata",
+          "passed": false,
+          "detail": [
+            {
+              "id": "notes/visual-baseline.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 397,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 397,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "视觉基线工作台",
+              "visiblePath": "notes/visual-baseline.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 660.976,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 660.976,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 02",
+              "visiblePath": "notes/layout-convergence.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "notes/focus-return.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 924.951,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 924.951,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 03",
+              "visiblePath": "notes/focus-return.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/graph-projection.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 397,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 397,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 04",
+              "visiblePath": "research/graph-projection.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/scroll-audit.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 660.976,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 660.976,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 05",
+              "visiblePath": "research/scroll-audit.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/overlay-safety.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 924.951,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 924.951,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 06",
+              "visiblePath": "research/overlay-safety.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            }
+          ]
+        },
+        {
+          "name": "tags and isolated-note words are not persistent visible node metadata",
+          "passed": false,
+          "detail": [
+            {
+              "id": "notes/visual-baseline.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 397,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 397,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "视觉基线工作台",
+              "visiblePath": "notes/visual-baseline.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 660.976,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 660.976,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 02",
+              "visiblePath": "notes/layout-convergence.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "notes/focus-return.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 924.951,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 924.951,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 03",
+              "visiblePath": "notes/focus-return.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/graph-projection.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 397,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 397,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 04",
+              "visiblePath": "research/graph-projection.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/scroll-audit.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 660.976,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 660.976,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 05",
+              "visiblePath": "research/scroll-audit.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/overlay-safety.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 924.951,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 924.951,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 06",
+              "visiblePath": "research/overlay-safety.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            }
+          ]
+        },
+        {
+          "name": "Graph nodes have no card shadow or coarse left accent border",
+          "passed": false,
+          "detail": [
+            {
+              "id": "notes/visual-baseline.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 397,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 397,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "视觉基线工作台",
+              "visiblePath": "notes/visual-baseline.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 660.976,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 660.976,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 02",
+              "visiblePath": "notes/layout-convergence.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "notes/focus-return.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 924.951,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 924.951,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 03",
+              "visiblePath": "notes/focus-return.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/graph-projection.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 397,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 397,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 04",
+              "visiblePath": "research/graph-projection.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/scroll-audit.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 660.976,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 660.976,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 05",
+              "visiblePath": "research/scroll-audit.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/overlay-safety.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 924.951,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 924.951,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 06",
+              "visiblePath": "research/overlay-safety.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            }
+          ]
+        },
+        {
+          "name": "DOM node and edge counts match the frozen synthetic projection",
+          "passed": true
+        },
+        {
+          "name": "a filter disclosure with an actual opener exists",
+          "passed": false,
+          "detail": {
+            "rootBounds": {
+              "x": 331,
+              "y": 39,
+              "width": 868,
+              "height": 601.125
+            },
+            "rootStyle": {
+              "borderTopWidth": "0px",
+              "borderLeftWidth": "0px",
+              "borderRadius": "0px",
+              "boxShadow": "none",
+              "marginTop": "0px",
+              "marginBottom": "0px"
+            },
+            "repeatedHeadingCount": 1,
+            "repeatedExplanationCount": 1,
+            "persistentFilterControlCount": 3,
+            "filterDisclosureOpenerCount": 0,
+            "filterDisclosureCount": 0,
+            "chromeBounds": {
+              "x": 331,
+              "y": 142.188,
+              "width": 868,
+              "height": 77.938
+            },
+            "flowBounds": {
+              "x": 331,
+              "y": 255.266,
+              "width": 868,
+              "height": 384.859
+            },
+            "flowHeightRatio": 0.6402312331045955,
+            "nodeCount": 6,
+            "edgeCount": 5,
+            "nodes": [
+              {
+                "id": "notes/visual-baseline.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 397,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 397,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "视觉基线工作台",
+                "visiblePath": "notes/visual-baseline.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "notes/layout-convergence.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 660.976,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 660.976,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 02",
+                "visiblePath": "notes/layout-convergence.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "notes/focus-return.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 924.951,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 924.951,
+                  "y": 321.37,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 03",
+                "visiblePath": "notes/focus-return.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/graph-projection.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 397,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 397,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 04",
+                "visiblePath": "research/graph-projection.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/scroll-audit.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 660.976,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 660.976,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 05",
+                "visiblePath": "research/scroll-audit.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              },
+              {
+                "id": "research/overlay-safety.md",
+                "wrapperRole": "group",
+                "wrapperAriaLabel": null,
+                "wrapperBounds": {
+                  "x": 924.951,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "cardBounds": {
+                  "x": 924.951,
+                  "y": 480.203,
+                  "width": 208.049,
+                  "height": 94.447
+                },
+                "title": "合成知识条目 06",
+                "visiblePath": "research/overlay-safety.md",
+                "visibleTag": "#visual-baseline · #synthetic",
+                "visibleIsolated": null,
+                "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+                "borderLeftWidth": "2px",
+                "borderLeftColor": "rgb(110, 127, 91)",
+                "backgroundColor": "rgb(243, 240, 234)"
+              }
+            ],
+            "maxNodeWidth": 208.049,
+            "maxNodeHeight": 94.447,
+            "visiblePathCount": 6,
+            "visibleTagOrIsolatedCount": 6,
+            "cardShadowCount": 6,
+            "coarseLeftBorderCount": 6
+          }
+        },
+        {
+          "name": "01-1440-current-card-array: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "name": "01-1440-current-card-array: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "name": "01-1440-current-card-array: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "name": "01-1440-current-card-array: shell and active Graph group have no horizontal overflow",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "graphState": {
+          "rootBounds": {
+            "x": 331,
+            "y": 39,
+            "width": 868,
+            "height": 601.125
+          },
+          "rootStyle": {
+            "borderTopWidth": "0px",
+            "borderLeftWidth": "0px",
+            "borderRadius": "0px",
+            "boxShadow": "none",
+            "marginTop": "0px",
+            "marginBottom": "0px"
+          },
+          "repeatedHeadingCount": 1,
+          "repeatedExplanationCount": 1,
+          "persistentFilterControlCount": 3,
+          "filterDisclosureOpenerCount": 0,
+          "filterDisclosureCount": 0,
+          "chromeBounds": {
+            "x": 331,
+            "y": 142.188,
+            "width": 868,
+            "height": 77.938
+          },
+          "flowBounds": {
+            "x": 331,
+            "y": 255.266,
+            "width": 868,
+            "height": 384.859
+          },
+          "flowHeightRatio": 0.6402312331045955,
+          "nodeCount": 6,
+          "edgeCount": 5,
+          "nodes": [
+            {
+              "id": "notes/visual-baseline.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 397,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 397,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "视觉基线工作台",
+              "visiblePath": "notes/visual-baseline.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 660.976,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 660.976,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 02",
+              "visiblePath": "notes/layout-convergence.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "notes/focus-return.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 924.951,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 924.951,
+                "y": 321.37,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 03",
+              "visiblePath": "notes/focus-return.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/graph-projection.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 397,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 397,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 04",
+              "visiblePath": "research/graph-projection.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/scroll-audit.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 660.976,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 660.976,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 05",
+              "visiblePath": "research/scroll-audit.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/overlay-safety.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 924.951,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "cardBounds": {
+                "x": 924.951,
+                "y": 480.203,
+                "width": 208.049,
+                "height": 94.447
+              },
+              "title": "合成知识条目 06",
+              "visiblePath": "research/overlay-safety.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            }
+          ],
+          "maxNodeWidth": 208.049,
+          "maxNodeHeight": 94.447,
+          "visiblePathCount": 6,
+          "visibleTagOrIsolatedCount": 6,
+          "cardShadowCount": 6,
+          "coarseLeftBorderCount": 6
+        }
+      },
+      "audit": {
+        "taskReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_snapshot"
+        ],
+        "fixtureGlobalReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "callsStayInsideTaskAllowlist": true,
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "values": {
+            "documentElement": {
+              "clientHeight": 900,
+              "clientWidth": 1440,
+              "scrollHeight": 900,
+              "scrollWidth": 1440,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 900,
+              "clientWidth": 1440,
+              "scrollHeight": 900,
+              "scrollWidth": 1440,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 898,
+              "clientWidth": 1438,
+              "scrollHeight": 898,
+              "scrollWidth": 1438,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 601,
+              "clientWidth": 868,
+              "scrollHeight": 601,
+              "scrollWidth": 868,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "graph": {
+            "x": 331,
+            "y": 39,
+            "width": 868,
+            "height": 601.125
+          },
+          "ok": true
+        },
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "02-1180-current-keyboard-and-selection",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "assertions": [
+        {
+          "name": "02-1180-current-keyboard-and-selection: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "name": "Tab naturally reaches a Graph node",
+          "passed": true
+        },
+        {
+          "name": "focused Graph node has button or link equivalent semantics",
+          "passed": false,
+          "detail": {
+            "activeTag": "div",
+            "role": "group",
+            "ariaLabel": null,
+            "dataId": "notes/visual-baseline.md",
+            "selected": false,
+            "outlineStyle": "none",
+            "outlineWidth": "3px",
+            "cardBackground": "rgb(243, 240, 234)",
+            "cardBorderColor": "rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgb(110, 127, 91)",
+            "cardBoxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "activeGroupScrollTop": 0,
+            "bodyScrollTop": 0,
+            "documentScrollTop": 0
+          }
+        },
+        {
+          "name": "keyboard-focused Graph node has a visible focus indicator",
+          "passed": false,
+          "detail": {
+            "activeTag": "div",
+            "role": "group",
+            "ariaLabel": null,
+            "dataId": "notes/visual-baseline.md",
+            "selected": false,
+            "outlineStyle": "none",
+            "outlineWidth": "3px",
+            "cardBackground": "rgb(243, 240, 234)",
+            "cardBorderColor": "rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgb(110, 127, 91)",
+            "cardBoxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+            "activeGroupScrollTop": 0,
+            "bodyScrollTop": 0,
+            "documentScrollTop": 0
+          }
+        },
+        {
+          "name": "selected style changes on the real selected ReactFlow wrapper",
+          "passed": false,
+          "detail": {
+            "before": {
+              "activeTag": "div",
+              "role": "group",
+              "ariaLabel": null,
+              "dataId": "notes/visual-baseline.md",
+              "selected": false,
+              "outlineStyle": "none",
+              "outlineWidth": "3px",
+              "cardBackground": "rgb(243, 240, 234)",
+              "cardBorderColor": "rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgb(110, 127, 91)",
+              "cardBoxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "activeGroupScrollTop": 0,
+              "bodyScrollTop": 0,
+              "documentScrollTop": 0
+            },
+            "afterEnter": {
+              "activeTag": "div",
+              "role": "group",
+              "ariaLabel": null,
+              "dataId": "notes/visual-baseline.md",
+              "selected": false,
+              "outlineStyle": "none",
+              "outlineWidth": "3px",
+              "cardBackground": "rgb(243, 240, 234)",
+              "cardBorderColor": "rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgb(110, 127, 91)",
+              "cardBoxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "activeGroupScrollTop": 0,
+              "bodyScrollTop": 0,
+              "documentScrollTop": 0
+            }
+          }
+        },
+        {
+          "name": "Enter produces exactly one typed Markdown open",
+          "passed": false,
+          "detail": {
+            "beforeInvokes": [],
+            "enterInvokes": []
+          }
+        },
+        {
+          "name": "Space produces exactly one typed Markdown open",
+          "passed": false,
+          "detail": {
+            "enterInvokes": [],
+            "spaceInvokes": []
+          }
+        },
+        {
+          "name": "Space does not scroll the page or active group",
+          "passed": true
+        },
+        {
+          "name": "02-1180-current-keyboard-and-selection: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "name": "02-1180-current-keyboard-and-selection: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "name": "02-1180-current-keyboard-and-selection: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "name": "02-1180-current-keyboard-and-selection: shell and active Graph group have no horizontal overflow",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "graphState": {
+          "rootBounds": {
+            "x": 303,
+            "y": 39,
+            "width": 656,
+            "height": 628.75
+          },
+          "rootStyle": {
+            "borderTopWidth": "0px",
+            "borderLeftWidth": "0px",
+            "borderRadius": "0px",
+            "boxShadow": "none",
+            "marginTop": "0px",
+            "marginBottom": "0px"
+          },
+          "repeatedHeadingCount": 1,
+          "repeatedExplanationCount": 1,
+          "persistentFilterControlCount": 3,
+          "filterDisclosureOpenerCount": 0,
+          "filterDisclosureCount": 0,
+          "chromeBounds": {
+            "x": 303,
+            "y": 142.188,
+            "width": 656,
+            "height": 105.563
+          },
+          "flowBounds": {
+            "x": 303,
+            "y": 282.891,
+            "width": 656,
+            "height": 384.859
+          },
+          "flowHeightRatio": 0.6121017892644135,
+          "nodeCount": 6,
+          "edgeCount": 5,
+          "nodes": [
+            {
+              "id": "notes/visual-baseline.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 353,
+                "y": 379.907,
+                "width": 157.167,
+                "height": 71.348
+              },
+              "cardBounds": {
+                "x": 353,
+                "y": 379.907,
+                "width": 157.167,
+                "height": 71.348
+              },
+              "title": "视觉基线工作台",
+              "visiblePath": "notes/visual-baseline.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 552.416,
+                "y": 379.907,
+                "width": 157.167,
+                "height": 71.348
+              },
+              "cardBounds": {
+                "x": 552.416,
+                "y": 379.907,
+                "width": 157.167,
+                "height": 71.348
+              },
+              "title": "合成知识条目 02",
+              "visiblePath": "notes/layout-convergence.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "notes/focus-return.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 751.833,
+                "y": 379.907,
+                "width": 157.167,
+                "height": 71.348
+              },
+              "cardBounds": {
+                "x": 751.833,
+                "y": 379.907,
+                "width": 157.167,
+                "height": 71.348
+              },
+              "title": "合成知识条目 03",
+              "visiblePath": "notes/focus-return.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/graph-projection.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 353,
+                "y": 499.895,
+                "width": 157.167,
+                "height": 71.348
+              },
+              "cardBounds": {
+                "x": 353,
+                "y": 499.895,
+                "width": 157.167,
+                "height": 71.348
+              },
+              "title": "合成知识条目 04",
+              "visiblePath": "research/graph-projection.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/scroll-audit.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 552.416,
+                "y": 499.895,
+                "width": 157.167,
+                "height": 71.348
+              },
+              "cardBounds": {
+                "x": 552.416,
+                "y": 499.895,
+                "width": 157.167,
+                "height": 71.348
+              },
+              "title": "合成知识条目 05",
+              "visiblePath": "research/scroll-audit.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            },
+            {
+              "id": "research/overlay-safety.md",
+              "wrapperRole": "group",
+              "wrapperAriaLabel": null,
+              "wrapperBounds": {
+                "x": 751.833,
+                "y": 499.895,
+                "width": 157.167,
+                "height": 71.348
+              },
+              "cardBounds": {
+                "x": 751.833,
+                "y": 499.895,
+                "width": 157.167,
+                "height": 71.348
+              },
+              "title": "合成知识条目 06",
+              "visiblePath": "research/overlay-safety.md",
+              "visibleTag": "#visual-baseline · #synthetic",
+              "visibleIsolated": null,
+              "boxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+              "borderLeftWidth": "2px",
+              "borderLeftColor": "rgb(110, 127, 91)",
+              "backgroundColor": "rgb(243, 240, 234)"
+            }
+          ],
+          "maxNodeWidth": 157.167,
+          "maxNodeHeight": 71.348,
+          "visiblePathCount": 6,
+          "visibleTagOrIsolatedCount": 6,
+          "cardShadowCount": 6,
+          "coarseLeftBorderCount": 6
+        },
+        "tabResult": {
+          "reached": true,
+          "tabs": 11
+        },
+        "before": {
+          "activeTag": "div",
+          "role": "group",
+          "ariaLabel": null,
+          "dataId": "notes/visual-baseline.md",
+          "selected": false,
+          "outlineStyle": "none",
+          "outlineWidth": "3px",
+          "cardBackground": "rgb(243, 240, 234)",
+          "cardBorderColor": "rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgb(110, 127, 91)",
+          "cardBoxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "activeGroupScrollTop": 0,
+          "bodyScrollTop": 0,
+          "documentScrollTop": 0
+        },
+        "afterEnter": {
+          "activeTag": "div",
+          "role": "group",
+          "ariaLabel": null,
+          "dataId": "notes/visual-baseline.md",
+          "selected": false,
+          "outlineStyle": "none",
+          "outlineWidth": "3px",
+          "cardBackground": "rgb(243, 240, 234)",
+          "cardBorderColor": "rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgb(110, 127, 91)",
+          "cardBoxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "activeGroupScrollTop": 0,
+          "bodyScrollTop": 0,
+          "documentScrollTop": 0
+        },
+        "afterSpace": {
+          "activeTag": "div",
+          "role": "group",
+          "ariaLabel": null,
+          "dataId": "notes/visual-baseline.md",
+          "selected": false,
+          "outlineStyle": "none",
+          "outlineWidth": "3px",
+          "cardBackground": "rgb(243, 240, 234)",
+          "cardBorderColor": "rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgba(28, 31, 36, 0.18) rgb(110, 127, 91)",
+          "cardBoxShadow": "rgba(26, 28, 26, 0.06) 0px 1px 2px 0px",
+          "activeGroupScrollTop": 0,
+          "bodyScrollTop": 0,
+          "documentScrollTop": 0
+        },
+        "observedInvokes": []
+      },
+      "audit": {
+        "taskReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_snapshot"
+        ],
+        "fixtureGlobalReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "callsStayInsideTaskAllowlist": true,
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "values": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 629,
+              "clientWidth": 656,
+              "scrollHeight": 629,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "graph": {
+            "x": 303,
+            "y": 39,
+            "width": 656,
+            "height": 628.75
+          },
+          "ok": true
+        },
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "03-1180-current-click-handoff",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "assertions": [
+        {
+          "name": "03-1180-current-click-handoff: mount starts with empty localStorage",
+          "passed": true
+        },
+        {
+          "name": "mouse click still performs exactly one typed Markdown open",
+          "passed": false,
+          "detail": {
+            "nodeState": {
+              "id": "notes/visual-baseline.md",
+              "title": "视觉基线工作台",
+              "relativePath": "notes/visual-baseline.md"
+            },
+            "invokes": []
+          }
+        },
+        {
+          "name": "click handoff uses the projected relative path payload",
+          "passed": false,
+          "detail": {
+            "nodeState": {
+              "id": "notes/visual-baseline.md",
+              "title": "视觉基线工作台",
+              "relativePath": "notes/visual-baseline.md"
+            },
+            "reads": []
+          }
+        },
+        {
+          "name": "03-1180-current-click-handoff: observed commands stay inside exact R3D read allowlist",
+          "passed": true
+        },
+        {
+          "name": "03-1180-current-click-handoff: write unknown external console and page-error counts are zero",
+          "passed": true
+        },
+        {
+          "name": "03-1180-current-click-handoff: localStorage contains only disposable workbench chrome",
+          "passed": true
+        },
+        {
+          "name": "03-1180-current-click-handoff: shell and active Graph group have no horizontal overflow",
+          "passed": true
+        }
+      ],
+      "evidence": {
+        "nodeState": {
+          "id": "notes/visual-baseline.md",
+          "title": "视觉基线工作台",
+          "relativePath": "notes/visual-baseline.md"
+        },
+        "observedInvokes": []
+      },
+      "audit": {
+        "taskReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_snapshot"
+        ],
+        "fixtureGlobalReadAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "callsStayInsideTaskAllowlist": true,
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    },
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "overflow": {
+          "values": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 441,
+              "clientWidth": 656,
+              "scrollHeight": 441,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "graph": null,
+          "ok": true
+        },
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    }
+  ],
+  "screenshot": "red-1440-card-array.png",
+  "taskReadAllowlist": [
+    "knowledge_workspace_graph",
+    "knowledge_workspace_read_markdown",
+    "knowledge_workspace_snapshot"
+  ]
+}

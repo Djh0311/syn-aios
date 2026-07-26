@@ -1,0 +1,105 @@
+{
+  "elements": {
+    "central": {
+      "bounds": {
+        "x": 303,
+        "y": 1,
+        "width": 656,
+        "height": 732
+      },
+      "position": "static",
+      "zIndex": "auto",
+      "overflow": "auto",
+      "pointerEvents": "auto"
+    },
+    "group": {
+      "bounds": {
+        "x": 303,
+        "y": 1,
+        "width": 656,
+        "height": 732
+      },
+      "position": "static",
+      "zIndex": "auto",
+      "overflow": "hidden",
+      "pointerEvents": "auto"
+    },
+    "panelHost": {
+      "bounds": {
+        "x": 303,
+        "y": 39,
+        "width": 656,
+        "height": 694
+      },
+      "position": "static",
+      "zIndex": "auto",
+      "overflow": "hidden",
+      "pointerEvents": "auto"
+    },
+    "root": {
+      "bounds": {
+        "x": 303,
+        "y": 39,
+        "width": 656,
+        "height": 694
+      },
+      "position": "static",
+      "zIndex": "auto",
+      "overflow": "hidden",
+      "pointerEvents": "auto"
+    },
+    "chrome": {
+      "bounds": {
+        "x": 303,
+        "y": 39,
+        "width": 656,
+        "height": 40
+      },
+      "position": "static",
+      "zIndex": "8",
+      "overflow": "visible",
+      "pointerEvents": "auto"
+    },
+    "workspace": {
+      "bounds": {
+        "x": 303,
+        "y": 79,
+        "width": 656,
+        "height": 654
+      },
+      "position": "relative",
+      "zIndex": "auto",
+      "overflow": "hidden",
+      "pointerEvents": "auto"
+    },
+    "filePanel": {
+      "bounds": {
+        "x": 311,
+        "y": 87,
+        "width": 320,
+        "height": 230.65625
+      },
+      "position": "absolute",
+      "zIndex": "7",
+      "overflow": "auto",
+      "pointerEvents": "auto"
+    },
+    "entry": {
+      "bounds": {
+        "x": 324,
+        "y": 162.234375,
+        "width": 294,
+        "height": 32.140625
+      },
+      "position": "static",
+      "zIndex": "auto",
+      "overflow": "hidden",
+      "pointerEvents": "auto"
+    }
+  },
+  "hit": {
+    "tag": "button",
+    "className": "",
+    "text": "canvas/visual-baseline.canvas"
+  }
+}

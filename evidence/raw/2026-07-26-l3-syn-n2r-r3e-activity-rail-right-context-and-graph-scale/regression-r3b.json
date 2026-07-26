@@ -1,0 +1,2995 @@
+{
+  "phase": "post-implementation-synthetic-browser-evidence",
+  "fixture": "synthetic-only",
+  "assertions": 90,
+  "failed": 0,
+  "failures": [],
+  "contexts": [
+    {
+      "name": "01-1440-markdown-source-preview",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "evidence": {
+        "screenshot": "01-1440-markdown-source-preview.png",
+        "sharedDraftMarkerVisible": true
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "preview"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "01-1440-markdown-source-preview"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 898
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 288,
+            "height": 872
+          },
+          "central": {
+            "x": 331,
+            "y": 1,
+            "width": 868,
+            "height": 872
+          },
+          "right": {
+            "x": 1199,
+            "y": 1,
+            "width": 240,
+            "height": 872
+          },
+          "status": {
+            "x": 43,
+            "y": 873,
+            "width": 1396,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 898
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 898,
+              "clientWidth": 41,
+              "scrollHeight": 898,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 288,
+              "height": 872
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 872,
+              "clientWidth": 287,
+              "scrollHeight": 872,
+              "scrollWidth": 287,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 331,
+              "y": 1,
+              "width": 868,
+              "height": 872
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 17,
+            "scroll": {
+              "clientHeight": 872,
+              "clientWidth": 868,
+              "scrollHeight": 872,
+              "scrollWidth": 868,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 1199,
+              "y": 1,
+              "width": 240,
+              "height": 872
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 6,
+            "scroll": {
+              "clientHeight": 872,
+              "clientWidth": 239,
+              "scrollHeight": 1408,
+              "scrollWidth": 239,
+              "canScrollY": true,
+              "movedOnProbe": true
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 873,
+              "width": 1396,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 1396,
+              "scrollHeight": 25,
+              "scrollWidth": 1396,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 898,
+            "clientWidth": 1438,
+            "scrollHeight": 898,
+            "scrollWidth": 1438,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 872,
+            "clientWidth": 868,
+            "scrollHeight": 872,
+            "scrollWidth": 868,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 834,
+            "clientWidth": 432,
+            "scrollHeight": 3488,
+            "scrollWidth": 432,
+            "canScrollY": true,
+            "movedOnProbe": true
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 2,
+          "tablistCount": 2,
+          "textareaCount": 1,
+          "saveActionCount": 1,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": false,
+              "bounds": {
+                "x": 331,
+                "y": 1,
+                "width": 431,
+                "height": 872
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "notes/visual-baseline.md，Markdown 源码，未保存",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline●"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelId": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 834,
+                "clientWidth": 431,
+                "scrollHeight": 834,
+                "scrollWidth": 431,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            {
+              "id": "knowledge-group-secondary",
+              "active": true,
+              "bounds": {
+                "x": 767,
+                "y": 1,
+                "width": 432,
+                "height": 872
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "notes/visual-baseline.md，渲染预览，未保存",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline●"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelId": "knowledge-panel-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 834,
+                "clientWidth": 432,
+                "scrollHeight": 3488,
+                "scrollWidth": 432,
+                "canScrollY": true,
+                "movedOnProbe": true
+              }
+            }
+          ],
+          "separator": {
+            "bounds": {
+              "x": 762,
+              "y": 1,
+              "width": 5,
+              "height": 872
+            },
+            "min": "30",
+            "max": "70",
+            "now": "50",
+            "orientation": "vertical"
+          }
+        },
+        "canvas": {
+          "rootCount": 0,
+          "reactFlowCount": 0,
+          "chrome": {
+            "count": 0,
+            "bounds": null,
+            "currentPathLabel": null,
+            "status": null
+          },
+          "root": {
+            "bounds": null,
+            "horizontalOverflow": null,
+            "scroll": null
+          },
+          "stage": {
+            "bounds": null,
+            "heightRatio": null,
+            "horizontalOverflow": null,
+            "ariaLabel": null
+          },
+          "fileTrigger": {
+            "expanded": null,
+            "controls": null,
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 0,
+            "bounds": null,
+            "withinStage": null,
+            "ariaLabel": null
+          }
+        },
+        "focus": {
+          "tag": "textarea",
+          "id": "",
+          "ariaLabel": "Markdown 源码：notes/visual-baseline.md",
+          "role": null,
+          "region": "central"
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "preview"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_read_markdown": 1,
+            "knowledge_workspace_snapshot": 1
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 900,
+            "clientWidth": 1440,
+            "scrollHeight": 900,
+            "scrollWidth": 1440,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 898,
+            "clientWidth": 1438,
+            "scrollHeight": 898,
+            "scrollWidth": 1438,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    },
+    {
+      "name": "02-1180-markdown-graph",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "evidence": {
+        "screenshot": "02-1180-markdown-graph.png"
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 5,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "preview"
+                    },
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "02-1180-markdown-graph"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 260,
+            "height": 732
+          },
+          "central": {
+            "x": 303,
+            "y": 1,
+            "width": 656,
+            "height": 732
+          },
+          "right": {
+            "x": 959,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 1136,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 260,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 259,
+              "scrollHeight": 732,
+              "scrollWidth": 259,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 303,
+              "y": 1,
+              "width": 656,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 32,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 656,
+              "scrollHeight": 732,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 959,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 6,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 219,
+              "scrollHeight": 1408,
+              "scrollWidth": 219,
+              "canScrollY": true,
+              "movedOnProbe": true
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 1136,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 1136,
+              "scrollHeight": 25,
+              "scrollWidth": 1136,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 656,
+            "scrollHeight": 732,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 326,
+            "scrollHeight": 694,
+            "scrollWidth": 326,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 2,
+          "tablistCount": 2,
+          "textareaCount": 1,
+          "saveActionCount": 1,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": false,
+              "bounds": {
+                "x": 303,
+                "y": 1,
+                "width": 325,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "notes/visual-baseline.md，Markdown 源码",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelId": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 325,
+                "scrollHeight": 694,
+                "scrollWidth": 325,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            {
+              "id": "knowledge-group-secondary",
+              "active": true,
+              "bounds": {
+                "x": 633,
+                "y": 1,
+                "width": 326,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 2,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "false",
+                  "tabIndex": -1,
+                  "ariaLabel": "notes/visual-baseline.md，渲染预览",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                },
+                {
+                  "id": "knowledge-tab-knowledge-group-secondary-surface_3Agraph",
+                  "controls": "knowledge-panel-knowledge-group-secondary-surface_3Agraph",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "关系图",
+                  "title": "关系图",
+                  "text": "关系图"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-secondary-surface_3Agraph",
+              "panelId": "knowledge-panel-knowledge-group-secondary-surface_3Agraph",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-secondary-surface_3Agraph",
+              "panelContainsGraph": true,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 326,
+                "scrollHeight": 694,
+                "scrollWidth": 326,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            }
+          ],
+          "separator": {
+            "bounds": {
+              "x": 628,
+              "y": 1,
+              "width": 5,
+              "height": 732
+            },
+            "min": "30",
+            "max": "70",
+            "now": "50",
+            "orientation": "vertical"
+          }
+        },
+        "canvas": {
+          "rootCount": 0,
+          "reactFlowCount": 0,
+          "chrome": {
+            "count": 0,
+            "bounds": null,
+            "currentPathLabel": null,
+            "status": null
+          },
+          "root": {
+            "bounds": null,
+            "horizontalOverflow": null,
+            "scroll": null
+          },
+          "stage": {
+            "bounds": null,
+            "heightRatio": null,
+            "horizontalOverflow": null,
+            "ariaLabel": null
+          },
+          "fileTrigger": {
+            "expanded": null,
+            "controls": null,
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 0,
+            "bounds": null,
+            "withinStage": null,
+            "ariaLabel": null
+          }
+        },
+        "focus": {
+          "tag": "button",
+          "id": "knowledge-tab-knowledge-group-secondary-surface_3Agraph",
+          "ariaLabel": "关系图",
+          "role": "tab",
+          "region": "central"
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 5,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "preview"
+                    },
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_graph": 1,
+            "knowledge_workspace_read_markdown": 1,
+            "knowledge_workspace_snapshot": 1
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    },
+    {
+      "name": "03-900-double-sidebar-split",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "evidence": {
+        "screenshot": "03-900-double-sidebar-split.png",
+        "sidebarState": "expanded"
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "preview"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "03-900-double-sidebar-split"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "central": {
+            "x": 263,
+            "y": 1,
+            "width": 436,
+            "height": 732
+          },
+          "right": {
+            "x": 699,
+            "y": 1,
+            "width": 200,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 856,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 219,
+              "scrollHeight": 732,
+              "scrollWidth": 219,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 263,
+              "y": 1,
+              "width": 436,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 17,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 436,
+              "scrollHeight": 732,
+              "scrollWidth": 436,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 699,
+              "y": 1,
+              "width": 200,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 6,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 199,
+              "scrollHeight": 1404,
+              "scrollWidth": 199,
+              "canScrollY": true,
+              "movedOnProbe": true
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 856,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 856,
+              "scrollHeight": 25,
+              "scrollWidth": 856,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 436,
+            "scrollHeight": 732,
+            "scrollWidth": 436,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 216,
+            "scrollHeight": 5719,
+            "scrollWidth": 216,
+            "canScrollY": true,
+            "movedOnProbe": true
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 2,
+          "tablistCount": 2,
+          "textareaCount": 1,
+          "saveActionCount": 1,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": false,
+              "bounds": {
+                "x": 263,
+                "y": 1,
+                "width": 215,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "notes/visual-baseline.md，Markdown 源码",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelId": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 215,
+                "scrollHeight": 694,
+                "scrollWidth": 215,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            {
+              "id": "knowledge-group-secondary",
+              "active": true,
+              "bounds": {
+                "x": 483,
+                "y": 1,
+                "width": 216,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "notes/visual-baseline.md，渲染预览",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelId": "knowledge-panel-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 216,
+                "scrollHeight": 5719,
+                "scrollWidth": 216,
+                "canScrollY": true,
+                "movedOnProbe": true
+              }
+            }
+          ],
+          "separator": {
+            "bounds": {
+              "x": 478,
+              "y": 1,
+              "width": 5,
+              "height": 732
+            },
+            "min": "30",
+            "max": "70",
+            "now": "50",
+            "orientation": "vertical"
+          }
+        },
+        "canvas": {
+          "rootCount": 0,
+          "reactFlowCount": 0,
+          "chrome": {
+            "count": 0,
+            "bounds": null,
+            "currentPathLabel": null,
+            "status": null
+          },
+          "root": {
+            "bounds": null,
+            "horizontalOverflow": null,
+            "scroll": null
+          },
+          "stage": {
+            "bounds": null,
+            "heightRatio": null,
+            "horizontalOverflow": null,
+            "ariaLabel": null
+          },
+          "fileTrigger": {
+            "expanded": null,
+            "controls": null,
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 0,
+            "bounds": null,
+            "withinStage": null,
+            "ariaLabel": null
+          }
+        },
+        "focus": {
+          "tag": "button",
+          "id": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+          "ariaLabel": "notes/visual-baseline.md，渲染预览",
+          "role": "tab",
+          "region": "central"
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "preview"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_read_markdown": 1,
+            "knowledge_workspace_snapshot": 1
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    },
+    {
+      "name": "04-900-right-collapsed-split",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "evidence": {
+        "screenshot": "04-900-right-collapsed-split.png",
+        "sidebarState": "right-collapsed"
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "preview"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "04-900-right-collapsed-split"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "central": {
+            "x": 263,
+            "y": 1,
+            "width": 636,
+            "height": 732
+          },
+          "right": {
+            "x": 899,
+            "y": 1,
+            "width": 0,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 856,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 219,
+              "scrollHeight": 732,
+              "scrollWidth": 219,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 263,
+              "y": 1,
+              "width": 636,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 17,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 636,
+              "scrollHeight": 732,
+              "scrollWidth": 636,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 899,
+              "y": 1,
+              "width": 0,
+              "height": 732
+            },
+            "ariaHidden": "true",
+            "inert": true,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 0,
+              "scrollHeight": 732,
+              "scrollWidth": 0,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 856,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 856,
+              "scrollHeight": 25,
+              "scrollWidth": 856,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 636,
+            "scrollHeight": 732,
+            "scrollWidth": 636,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 316,
+            "scrollHeight": 4212,
+            "scrollWidth": 316,
+            "canScrollY": true,
+            "movedOnProbe": true
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 2,
+          "tablistCount": 2,
+          "textareaCount": 1,
+          "saveActionCount": 1,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": false,
+              "bounds": {
+                "x": 263,
+                "y": 1,
+                "width": 315,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "notes/visual-baseline.md，Markdown 源码",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelId": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 315,
+                "scrollHeight": 694,
+                "scrollWidth": 315,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            {
+              "id": "knowledge-group-secondary",
+              "active": true,
+              "bounds": {
+                "x": 583,
+                "y": 1,
+                "width": 316,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "notes/visual-baseline.md，渲染预览",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelId": "knowledge-panel-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 316,
+                "scrollHeight": 4212,
+                "scrollWidth": 316,
+                "canScrollY": true,
+                "movedOnProbe": true
+              }
+            }
+          ],
+          "separator": {
+            "bounds": {
+              "x": 578,
+              "y": 1,
+              "width": 5,
+              "height": 732
+            },
+            "min": "30",
+            "max": "70",
+            "now": "50",
+            "orientation": "vertical"
+          }
+        },
+        "canvas": {
+          "rootCount": 0,
+          "reactFlowCount": 0,
+          "chrome": {
+            "count": 0,
+            "bounds": null,
+            "currentPathLabel": null,
+            "status": null
+          },
+          "root": {
+            "bounds": null,
+            "horizontalOverflow": null,
+            "scroll": null
+          },
+          "stage": {
+            "bounds": null,
+            "heightRatio": null,
+            "horizontalOverflow": null,
+            "ariaLabel": null
+          },
+          "fileTrigger": {
+            "expanded": null,
+            "controls": null,
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 0,
+            "bounds": null,
+            "withinStage": null,
+            "ariaLabel": null
+          }
+        },
+        "focus": {
+          "tag": "button",
+          "id": "",
+          "ariaLabel": "切换右侧上下文",
+          "role": null,
+          "region": "activity"
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "preview"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_read_markdown": 1,
+            "knowledge_workspace_snapshot": 1
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    },
+    {
+      "name": "05-900-both-collapsed-split",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "evidence": {
+        "screenshot": "05-900-both-collapsed-split.png",
+        "sidebarState": "both-collapsed"
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "preview"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "05-900-both-collapsed-split"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 0,
+            "height": 732
+          },
+          "central": {
+            "x": 43,
+            "y": 1,
+            "width": 856,
+            "height": 732
+          },
+          "right": {
+            "x": 899,
+            "y": 1,
+            "width": 0,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 856,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 0,
+              "height": 732
+            },
+            "ariaHidden": "true",
+            "inert": true,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 0,
+              "scrollHeight": 732,
+              "scrollWidth": 0,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 856,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 17,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 856,
+              "scrollHeight": 732,
+              "scrollWidth": 856,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 899,
+              "y": 1,
+              "width": 0,
+              "height": 732
+            },
+            "ariaHidden": "true",
+            "inert": true,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 0,
+              "scrollHeight": 732,
+              "scrollWidth": 0,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 856,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 856,
+              "scrollHeight": 25,
+              "scrollWidth": 856,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 856,
+            "scrollHeight": 732,
+            "scrollWidth": 856,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 426,
+            "scrollHeight": 3457,
+            "scrollWidth": 426,
+            "canScrollY": true,
+            "movedOnProbe": true
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 2,
+          "tablistCount": 2,
+          "textareaCount": 1,
+          "saveActionCount": 1,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": false,
+              "bounds": {
+                "x": 43,
+                "y": 1,
+                "width": 425,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "notes/visual-baseline.md，Markdown 源码",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelId": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 425,
+                "scrollHeight": 694,
+                "scrollWidth": 425,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            {
+              "id": "knowledge-group-secondary",
+              "active": true,
+              "bounds": {
+                "x": 473,
+                "y": 1,
+                "width": 426,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "notes/visual-baseline.md，渲染预览",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelId": "knowledge-panel-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 426,
+                "scrollHeight": 3457,
+                "scrollWidth": 426,
+                "canScrollY": true,
+                "movedOnProbe": true
+              }
+            }
+          ],
+          "separator": {
+            "bounds": {
+              "x": 468,
+              "y": 1,
+              "width": 5,
+              "height": 732
+            },
+            "min": "30",
+            "max": "70",
+            "now": "50",
+            "orientation": "vertical"
+          }
+        },
+        "canvas": {
+          "rootCount": 0,
+          "reactFlowCount": 0,
+          "chrome": {
+            "count": 0,
+            "bounds": null,
+            "currentPathLabel": null,
+            "status": null
+          },
+          "root": {
+            "bounds": null,
+            "horizontalOverflow": null,
+            "scroll": null
+          },
+          "stage": {
+            "bounds": null,
+            "heightRatio": null,
+            "horizontalOverflow": null,
+            "ariaLabel": null
+          },
+          "fileTrigger": {
+            "expanded": null,
+            "controls": null,
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 0,
+            "bounds": null,
+            "withinStage": null,
+            "ariaLabel": null
+          }
+        },
+        "focus": {
+          "tag": "button",
+          "id": "",
+          "ariaLabel": "切换右侧上下文",
+          "role": null,
+          "region": "activity"
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 4,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "preview"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/visual-baseline.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_read_markdown": 1,
+            "knowledge_workspace_snapshot": 1
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    },
+    {
+      "name": "06-1180-resize-merge-shortcuts-dirty",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "evidence": {
+        "screenshots": [
+          "06-1180-split-ratio-60.png",
+          "07-1180-merged-single-group.png",
+          "08-1180-quick-open-second-tab.png",
+          "09-1180-dirty-close-rejected.png"
+        ],
+        "ratio": {
+          "bounds": {
+            "x": 694,
+            "y": 1,
+            "width": 5,
+            "height": 732
+          },
+          "min": "30",
+          "max": "70",
+          "now": "60",
+          "orientation": "vertical"
+        },
+        "afterMerge": {
+          "groupCount": 1,
+          "textareaCount": 1,
+          "focusedRole": "tab",
+          "focusedAriaLabel": "notes/visual-baseline.md，Markdown 源码"
+        },
+        "afterQuickOpen": {
+          "tabCount": 2,
+          "focusedRole": "tab",
+          "focusedAriaLabel": "notes/layout-convergence.md，Markdown 源码"
+        },
+        "afterNextCycle": {
+          "focusedRole": "tab",
+          "focusedAriaLabel": "notes/visual-baseline.md，Markdown 源码"
+        },
+        "dirtyState": {
+          "tabStillPresent": true,
+          "textareaValue": "# 合成知识条目 02\n\n这份 Markdown 只在 N2R-R3B 的 fresh browser context 中存在。\n\n## 合成段落 1\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-1。\n\n## 合成段落 2\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-2。\n\n## 合成段落 3\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-3。\n\n## 合成段落 4\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-4。\n\n## 合成段落 5\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-5。\n\n## 合成段落 6\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-6。\n\n## 合成段落 7\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-7。\n\n## 合成段落 8\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-8。\n\n## 合成段落 9\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-9。\n\n## 合成段落 10\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-10。\n\n## 合成段落 11\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-11。\n\n## 合成段落 12\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-12。\n\n## 合成段落 13\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-13。\n\n## 合成段落 14\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-14。\n\n## 合成段落 15\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-15。\n\n## 合成段落 16\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-16。\n\n## 合成段落 17\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-17。\n\n## 合成段落 18\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-18。\n\n## 合成段落 19\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-19。\n\n## 合成段落 20\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-20。\n\n## 合成段落 21\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-21。\n\n## 合成段落 22\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-22。\n\n## 合成段落 23\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-23。\n\n## 合成段落 24\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-24。\n\n## 合成段落 25\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-25。\n\n## 合成段落 26\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-26。\n\n## 合成段落 27\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-27。\n\n## 合成段落 28\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-28。\n\n## 合成段落 29\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-29。\n\n## 合成段落 30\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-30。\n\n## 合成段落 31\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-31。\n\n## 合成段落 32\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-32。\n\n## 合成段落 33\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-33。\n\n## 合成段落 34\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-34。\n\n## 合成段落 35\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-35。\n\n## 合成段落 36\n这是一段只用于隔离浏览器视觉量尺的合成知识内容。它描述工作台布局、焦点和滚动，不包含真实 vault、用户数据或外部路径。 编号 2-36。\n\nR3B-DIRTY-MARKER",
+          "noticeVisible": true,
+          "focusedRole": null
+        }
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 16,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/layout-convergence.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    },
+                    {
+                      "id": "markdown:notes/layout-convergence.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/layout-convergence.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/layout-convergence.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 60
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_markdown": 4,
+          "knowledge_workspace_search": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "06-1180-resize-merge-shortcuts-dirty"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 260,
+            "height": 732
+          },
+          "central": {
+            "x": 303,
+            "y": 1,
+            "width": 656,
+            "height": 732
+          },
+          "right": {
+            "x": 959,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 1136,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 260,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 259,
+              "scrollHeight": 732,
+              "scrollWidth": 259,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 303,
+              "y": 1,
+              "width": 656,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 13,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 656,
+              "scrollHeight": 732,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 959,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 5,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 219,
+              "scrollHeight": 1406,
+              "scrollWidth": 219,
+              "canScrollY": true,
+              "movedOnProbe": true
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 1136,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 1136,
+              "scrollHeight": 25,
+              "scrollWidth": 1136,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 656,
+            "scrollHeight": 732,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 441,
+            "clientWidth": 656,
+            "scrollHeight": 441,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 1,
+          "tablistCount": 1,
+          "textareaCount": 1,
+          "saveActionCount": 1,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": true,
+              "bounds": {
+                "x": 303,
+                "y": 1,
+                "width": 656,
+                "height": 479
+              },
+              "tablistCount": 1,
+              "tabCount": 2,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "false",
+                  "tabIndex": -1,
+                  "ariaLabel": "notes/visual-baseline.md，Markdown 源码",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                },
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Flayout-convergence.md",
+                  "controls": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Flayout-convergence.md",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "notes/layout-convergence.md，Markdown 源码，未保存",
+                  "title": "notes/layout-convergence.md",
+                  "text": "layout-convergence●"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Flayout-convergence.md",
+              "panelId": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Flayout-convergence.md",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Flayout-convergence.md",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 441,
+                "clientWidth": 656,
+                "scrollHeight": 441,
+                "scrollWidth": 656,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            }
+          ],
+          "separator": null
+        },
+        "canvas": {
+          "rootCount": 0,
+          "reactFlowCount": 0,
+          "chrome": {
+            "count": 0,
+            "bounds": null,
+            "currentPathLabel": null,
+            "status": null
+          },
+          "root": {
+            "bounds": null,
+            "horizontalOverflow": null,
+            "scroll": null
+          },
+          "stage": {
+            "bounds": null,
+            "heightRatio": null,
+            "horizontalOverflow": null,
+            "ariaLabel": null
+          },
+          "fileTrigger": {
+            "expanded": null,
+            "controls": null,
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 0,
+            "bounds": null,
+            "withinStage": null,
+            "ariaLabel": null
+          }
+        },
+        "focus": {
+          "tag": "button",
+          "id": "",
+          "ariaLabel": "关闭 notes/layout-convergence.md",
+          "role": null,
+          "region": "central"
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 16,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/layout-convergence.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    },
+                    {
+                      "id": "markdown:notes/layout-convergence.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/layout-convergence.md",
+                      "projection": "source"
+                    }
+                  ],
+                  "activeTabId": "markdown:notes/layout-convergence.md"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 60
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_read_markdown": 4,
+            "knowledge_workspace_search": 1,
+            "knowledge_workspace_snapshot": 1
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    }
+  ],
+  "screenshots": [
+    "01-1440-markdown-source-preview.png",
+    "02-1180-markdown-graph.png",
+    "03-900-double-sidebar-split.png",
+    "04-900-right-collapsed-split.png",
+    "05-900-both-collapsed-split.png",
+    "06-1180-split-ratio-60.png",
+    "07-1180-merged-single-group.png",
+    "08-1180-quick-open-second-tab.png",
+    "09-1180-dirty-close-rejected.png"
+  ],
+  "outcome": "PASS"
+}

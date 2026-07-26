@@ -1,0 +1,153 @@
+{
+  "phase": "pre-implementation-red-pure-function",
+  "source": "evidence baseline 副本（派发 SHA-256 c9151ffaf0ba406956ea2fd3ef40ff8d737d684578ecb263469eacea668dd781）",
+  "claim": "改动前半轴恒为 110/160、与 total 无关：节点数一增，最小中心距就掉到节点盒宽以下",
+  "nodeWidth": 136,
+  "samples": [
+    {
+      "total": 6,
+      "minCenterDistance": 124.2,
+      "belowNodeWidth": true,
+      "worstPair": [
+        0,
+        1
+      ],
+      "worstPairPoints": [
+        {
+          "x": 110,
+          "y": 0
+        },
+        {
+          "x": 205,
+          "y": 80
+        }
+      ],
+      "duplicateCoordinateCount": 0,
+      "layoutExtent": {
+        "width": 190,
+        "height": 320
+      }
+    },
+    {
+      "total": 7,
+      "minCenterDistance": 96,
+      "belowNodeWidth": true,
+      "worstPair": [
+        3,
+        4
+      ],
+      "worstPairPoints": [
+        {
+          "x": 158,
+          "y": 304
+        },
+        {
+          "x": 62,
+          "y": 304
+        }
+      ],
+      "duplicateCoordinateCount": 0,
+      "layoutExtent": {
+        "width": 214,
+        "height": 304
+      }
+    },
+    {
+      "total": 12,
+      "minCenterDistance": 58.87,
+      "belowNodeWidth": true,
+      "worstPair": [
+        0,
+        1
+      ],
+      "worstPairPoints": [
+        {
+          "x": 110,
+          "y": 0
+        },
+        {
+          "x": 165,
+          "y": 21
+        }
+      ],
+      "duplicateCoordinateCount": 0,
+      "layoutExtent": {
+        "width": 220,
+        "height": 320
+      }
+    },
+    {
+      "total": 40,
+      "minCenterDistance": 17.12,
+      "belowNodeWidth": true,
+      "worstPair": [
+        0,
+        1
+      ],
+      "worstPairPoints": [
+        {
+          "x": 110,
+          "y": 0
+        },
+        {
+          "x": 127,
+          "y": 2
+        }
+      ],
+      "duplicateCoordinateCount": 0,
+      "layoutExtent": {
+        "width": 220,
+        "height": 320
+      }
+    },
+    {
+      "total": 100,
+      "minCenterDistance": 6.32,
+      "belowNodeWidth": true,
+      "worstPair": [
+        3,
+        4
+      ],
+      "worstPairPoints": [
+        {
+          "x": 131,
+          "y": 3
+        },
+        {
+          "x": 137,
+          "y": 5
+        }
+      ],
+      "duplicateCoordinateCount": 0,
+      "layoutExtent": {
+        "width": 220,
+        "height": 320
+      }
+    },
+    {
+      "total": 512,
+      "minCenterDistance": 1,
+      "belowNodeWidth": true,
+      "worstPair": [
+        0,
+        1
+      ],
+      "worstPairPoints": [
+        {
+          "x": 110,
+          "y": 0
+        },
+        {
+          "x": 111,
+          "y": 0
+        }
+      ],
+      "duplicateCoordinateCount": 0,
+      "layoutExtent": {
+        "width": 220,
+        "height": 320
+      }
+    }
+  ],
+  "outcome": "RED_ESTABLISHED"
+}

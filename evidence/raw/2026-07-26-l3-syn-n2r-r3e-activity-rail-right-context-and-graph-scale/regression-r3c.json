@@ -1,0 +1,4966 @@
+{
+  "phase": "post-implementation-synthetic-browser-evidence",
+  "fixture": "synthetic-only",
+  "assertions": 131,
+  "failed": 0,
+  "failures": [],
+  "contexts": [
+    {
+      "name": "01-1180-canvas-continuous",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "reducedMotion": "no-preference",
+      "evidence": {
+        "screenshot": "01-1180-canvas-continuous.png",
+        "canvas": {
+          "rootCount": 1,
+          "reactFlowCount": 1,
+          "chrome": {
+            "count": 1,
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 40
+            },
+            "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+            "status": "saved"
+          },
+          "root": {
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 694
+            },
+            "horizontalOverflow": false,
+            "scroll": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "stage": {
+            "bounds": {
+              "x": 303,
+              "y": 79,
+              "width": 656,
+              "height": 654
+            },
+            "heightRatio": 0.9423631123919308,
+            "horizontalOverflow": false,
+            "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+          },
+          "fileTrigger": {
+            "expanded": "false",
+            "controls": "native-canvas-file-panel",
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 1,
+            "bounds": {
+              "x": 551,
+              "y": 685,
+              "width": 160,
+              "height": 38
+            },
+            "withinStage": true,
+            "ariaLabel": "Canvas 节点工具"
+          }
+        }
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_canvas": 1,
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "visualComparison": {
+        "r0_04": {
+          "result": "GAP",
+          "difference": "连续 Canvas 与内嵌控件已收敛，但此图是单组，没有 R0 04 的右组 Graph 构图。"
+        },
+        "r0_08": {
+          "result": "GAP",
+          "difference": "左右侧栏均展开，没有 R0 08 的左栏折叠状态。"
+        }
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "01-1180-canvas-continuous"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 260,
+            "height": 732
+          },
+          "central": {
+            "x": 303,
+            "y": 1,
+            "width": 656,
+            "height": 732
+          },
+          "right": {
+            "x": 959,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 1136,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 260,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 259,
+              "scrollHeight": 732,
+              "scrollWidth": 259,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 303,
+              "y": 1,
+              "width": 656,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 21,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 656,
+              "scrollHeight": 732,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 959,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 4,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 219,
+              "scrollHeight": 1258,
+              "scrollWidth": 219,
+              "canScrollY": true,
+              "movedOnProbe": true
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 1136,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 1136,
+              "scrollHeight": 25,
+              "scrollWidth": 1136,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 656,
+            "scrollHeight": 732,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 656,
+            "scrollHeight": 694,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 1,
+          "tablistCount": 1,
+          "textareaCount": 0,
+          "saveActionCount": 0,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": true,
+              "bounds": {
+                "x": 303,
+                "y": 1,
+                "width": 656,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                  "controls": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "Canvas",
+                  "title": "Canvas",
+                  "text": "Canvas"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelId": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": true,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 656,
+                "scrollHeight": 694,
+                "scrollWidth": 656,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            }
+          ],
+          "separator": null
+        },
+        "canvas": {
+          "rootCount": 1,
+          "reactFlowCount": 1,
+          "chrome": {
+            "count": 1,
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 40
+            },
+            "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+            "status": "saved"
+          },
+          "root": {
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 694
+            },
+            "horizontalOverflow": false,
+            "scroll": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "stage": {
+            "bounds": {
+              "x": 303,
+              "y": 79,
+              "width": 656,
+              "height": 654
+            },
+            "heightRatio": 0.9423631123919308,
+            "horizontalOverflow": false,
+            "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+          },
+          "fileTrigger": {
+            "expanded": "false",
+            "controls": "native-canvas-file-panel",
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 1,
+            "bounds": {
+              "x": 551,
+              "y": 685,
+              "width": 160,
+              "height": 38
+            },
+            "withinStage": true,
+            "ariaLabel": "Canvas 节点工具"
+          }
+        },
+        "focus": {
+          "tag": "div",
+          "id": "",
+          "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas",
+          "role": null,
+          "region": "central"
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_read_canvas": 1,
+            "knowledge_workspace_snapshot": 2
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 656,
+            "scrollHeight": 694,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "groupPanel1": {
+            "clientHeight": 694,
+            "clientWidth": 656,
+            "scrollHeight": 694,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    },
+    {
+      "name": "02-1180-file-panel-focus-escape",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "reducedMotion": "no-preference",
+      "evidence": {
+        "screenshots": [
+          "02-1180-file-panel-open.png",
+          "03-1180-file-panel-escaped.png"
+        ],
+        "open": {
+          "canvas": {
+            "rootCount": 1,
+            "reactFlowCount": 1,
+            "chrome": {
+              "count": 1,
+              "bounds": {
+                "x": 303,
+                "y": 39,
+                "width": 656,
+                "height": 40
+              },
+              "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+              "status": "saved"
+            },
+            "root": {
+              "bounds": {
+                "x": 303,
+                "y": 39,
+                "width": 656,
+                "height": 694
+              },
+              "horizontalOverflow": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 656,
+                "scrollHeight": 694,
+                "scrollWidth": 656,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "stage": {
+              "bounds": {
+                "x": 303,
+                "y": 79,
+                "width": 656,
+                "height": 654
+              },
+              "heightRatio": 0.9423631123919308,
+              "horizontalOverflow": false,
+              "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+            },
+            "fileTrigger": {
+              "expanded": "true",
+              "controls": "native-canvas-file-panel",
+              "controlsExists": true
+            },
+            "filePanel": {
+              "count": 1,
+              "bounds": {
+                "x": 311,
+                "y": 87,
+                "width": 320,
+                "height": 231
+              },
+              "withinRoot": true,
+              "position": "absolute",
+              "interactiveChildren": 5
+            },
+            "inspector": {
+              "count": 0,
+              "bounds": null,
+              "withinRoot": null,
+              "position": null,
+              "interactiveChildren": 0
+            },
+            "selectedNode": {
+              "id": null,
+              "controls": null,
+              "controlsExists": false,
+              "expanded": null
+            },
+            "floatingTools": {
+              "count": 1,
+              "bounds": {
+                "x": 551,
+                "y": 685,
+                "width": 160,
+                "height": 38
+              },
+              "withinStage": true,
+              "ariaLabel": "Canvas 节点工具"
+            }
+          },
+          "focus": {
+            "insidePanel": true,
+            "tag": "button",
+            "title": "canvas/visual-baseline.canvas",
+            "ariaLabel": null
+          }
+        },
+        "closed": {
+          "canvas": {
+            "rootCount": 1,
+            "reactFlowCount": 1,
+            "chrome": {
+              "count": 1,
+              "bounds": {
+                "x": 303,
+                "y": 39,
+                "width": 656,
+                "height": 40
+              },
+              "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+              "status": "saved"
+            },
+            "root": {
+              "bounds": {
+                "x": 303,
+                "y": 39,
+                "width": 656,
+                "height": 694
+              },
+              "horizontalOverflow": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 656,
+                "scrollHeight": 694,
+                "scrollWidth": 656,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "stage": {
+              "bounds": {
+                "x": 303,
+                "y": 79,
+                "width": 656,
+                "height": 654
+              },
+              "heightRatio": 0.9423631123919308,
+              "horizontalOverflow": false,
+              "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+            },
+            "fileTrigger": {
+              "expanded": "false",
+              "controls": "native-canvas-file-panel",
+              "controlsExists": false
+            },
+            "filePanel": {
+              "count": 0,
+              "bounds": null,
+              "withinRoot": null,
+              "position": null,
+              "interactiveChildren": 0
+            },
+            "inspector": {
+              "count": 0,
+              "bounds": null,
+              "withinRoot": null,
+              "position": null,
+              "interactiveChildren": 0
+            },
+            "selectedNode": {
+              "id": null,
+              "controls": null,
+              "controlsExists": false,
+              "expanded": null
+            },
+            "floatingTools": {
+              "count": 1,
+              "bounds": {
+                "x": 551,
+                "y": 685,
+                "width": 160,
+                "height": 38
+              },
+              "withinStage": true,
+              "ariaLabel": "Canvas 节点工具"
+            }
+          },
+          "returnedToTrigger": true
+        }
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_canvas": 1,
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "visualComparison": {
+        "r0_04": {
+          "result": "GAP",
+          "difference": "按需文件面板符合冻结检查点，但 R0 04 没有对应的 Canvas 内浮层状态。"
+        },
+        "r0_08": {
+          "result": "GAP",
+          "difference": "焦点/Escape 图不对应 R0 08 的侧栏折叠构图。"
+        }
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "02-1180-file-panel-focus-escape"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 260,
+            "height": 732
+          },
+          "central": {
+            "x": 303,
+            "y": 1,
+            "width": 656,
+            "height": 732
+          },
+          "right": {
+            "x": 959,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 1136,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 260,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 259,
+              "scrollHeight": 732,
+              "scrollWidth": 259,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 303,
+              "y": 1,
+              "width": 656,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 21,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 656,
+              "scrollHeight": 732,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 959,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 4,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 219,
+              "scrollHeight": 1258,
+              "scrollWidth": 219,
+              "canScrollY": true,
+              "movedOnProbe": true
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 1136,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 1136,
+              "scrollHeight": 25,
+              "scrollWidth": 1136,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 656,
+            "scrollHeight": 732,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 656,
+            "scrollHeight": 694,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 1,
+          "tablistCount": 1,
+          "textareaCount": 0,
+          "saveActionCount": 0,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": true,
+              "bounds": {
+                "x": 303,
+                "y": 1,
+                "width": 656,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                  "controls": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "Canvas",
+                  "title": "Canvas",
+                  "text": "Canvas"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelId": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": true,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 656,
+                "scrollHeight": 694,
+                "scrollWidth": 656,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            }
+          ],
+          "separator": null
+        },
+        "canvas": {
+          "rootCount": 1,
+          "reactFlowCount": 1,
+          "chrome": {
+            "count": 1,
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 40
+            },
+            "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+            "status": "saved"
+          },
+          "root": {
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 694
+            },
+            "horizontalOverflow": false,
+            "scroll": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "stage": {
+            "bounds": {
+              "x": 303,
+              "y": 79,
+              "width": 656,
+              "height": 654
+            },
+            "heightRatio": 0.9423631123919308,
+            "horizontalOverflow": false,
+            "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+          },
+          "fileTrigger": {
+            "expanded": "false",
+            "controls": "native-canvas-file-panel",
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 1,
+            "bounds": {
+              "x": 551,
+              "y": 685,
+              "width": 160,
+              "height": 38
+            },
+            "withinStage": true,
+            "ariaLabel": "Canvas 节点工具"
+          }
+        },
+        "focus": {
+          "tag": "button",
+          "id": "",
+          "ariaLabel": null,
+          "role": null,
+          "region": "central"
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_read_canvas": 1,
+            "knowledge_workspace_snapshot": 2
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 656,
+            "scrollHeight": 694,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "groupPanel1": {
+            "clientHeight": 694,
+            "clientWidth": 656,
+            "scrollHeight": 694,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    },
+    {
+      "name": "03-1180-node-inspector-focus",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "reducedMotion": "no-preference",
+      "evidence": {
+        "screenshots": [
+          "04-1180-node-inspector-open.png",
+          "05-1180-node-inspector-closed.png"
+        ],
+        "open": {
+          "rootCount": 1,
+          "reactFlowCount": 1,
+          "chrome": {
+            "count": 1,
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 40
+            },
+            "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+            "status": "saved"
+          },
+          "root": {
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 694
+            },
+            "horizontalOverflow": false,
+            "scroll": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "stage": {
+            "bounds": {
+              "x": 303,
+              "y": 79,
+              "width": 656,
+              "height": 654
+            },
+            "heightRatio": 0.9423631123919308,
+            "horizontalOverflow": false,
+            "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+          },
+          "fileTrigger": {
+            "expanded": "false",
+            "controls": "native-canvas-file-panel",
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 1,
+            "bounds": {
+              "x": 651,
+              "y": 87,
+              "width": 300,
+              "height": 490
+            },
+            "withinRoot": true,
+            "position": "absolute",
+            "interactiveChildren": 9
+          },
+          "selectedNode": {
+            "id": "baseline",
+            "controls": "native-canvas-node-inspector",
+            "controlsExists": true,
+            "expanded": "true"
+          },
+          "floatingTools": {
+            "count": 1,
+            "bounds": {
+              "x": 551,
+              "y": 685,
+              "width": 160,
+              "height": 38
+            },
+            "withinStage": true,
+            "ariaLabel": "Canvas 节点工具"
+          }
+        },
+        "closed": {
+          "canvas": {
+            "rootCount": 1,
+            "reactFlowCount": 1,
+            "chrome": {
+              "count": 1,
+              "bounds": {
+                "x": 303,
+                "y": 39,
+                "width": 656,
+                "height": 40
+              },
+              "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+              "status": "saved"
+            },
+            "root": {
+              "bounds": {
+                "x": 303,
+                "y": 39,
+                "width": 656,
+                "height": 694
+              },
+              "horizontalOverflow": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 656,
+                "scrollHeight": 694,
+                "scrollWidth": 656,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "stage": {
+              "bounds": {
+                "x": 303,
+                "y": 79,
+                "width": 656,
+                "height": 654
+              },
+              "heightRatio": 0.9423631123919308,
+              "horizontalOverflow": false,
+              "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+            },
+            "fileTrigger": {
+              "expanded": "false",
+              "controls": "native-canvas-file-panel",
+              "controlsExists": false
+            },
+            "filePanel": {
+              "count": 0,
+              "bounds": null,
+              "withinRoot": null,
+              "position": null,
+              "interactiveChildren": 0
+            },
+            "inspector": {
+              "count": 0,
+              "bounds": null,
+              "withinRoot": null,
+              "position": null,
+              "interactiveChildren": 0
+            },
+            "selectedNode": {
+              "id": null,
+              "controls": null,
+              "controlsExists": false,
+              "expanded": null
+            },
+            "floatingTools": {
+              "count": 1,
+              "bounds": {
+                "x": 551,
+                "y": 685,
+                "width": 160,
+                "height": 38
+              },
+              "withinStage": true,
+              "ariaLabel": "Canvas 节点工具"
+            }
+          },
+          "focusAfterClose": {
+            "tag": "div",
+            "nodeId": null,
+            "isStage": true,
+            "isBody": false
+          }
+        }
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_canvas": 1,
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "visualComparison": {
+        "r0_04": {
+          "result": "GAP",
+          "difference": "selection inspector 局限在 Canvas 根内，但 R0 04 的右侧是全局链接上下文，不是节点字段面板。"
+        },
+        "r0_08": {
+          "result": "GAP",
+          "difference": "节点检查图没有复现 R0 08 的左栏折叠构图。"
+        }
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "03-1180-node-inspector-focus"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 260,
+            "height": 732
+          },
+          "central": {
+            "x": 303,
+            "y": 1,
+            "width": 656,
+            "height": 732
+          },
+          "right": {
+            "x": 959,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 1136,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 260,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 259,
+              "scrollHeight": 732,
+              "scrollWidth": 259,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 303,
+              "y": 1,
+              "width": 656,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 21,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 656,
+              "scrollHeight": 732,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 959,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 4,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 219,
+              "scrollHeight": 1258,
+              "scrollWidth": 219,
+              "canScrollY": true,
+              "movedOnProbe": true
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 1136,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 1136,
+              "scrollHeight": 25,
+              "scrollWidth": 1136,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 656,
+            "scrollHeight": 732,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 656,
+            "scrollHeight": 694,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 1,
+          "tablistCount": 1,
+          "textareaCount": 0,
+          "saveActionCount": 0,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": true,
+              "bounds": {
+                "x": 303,
+                "y": 1,
+                "width": 656,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                  "controls": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "Canvas",
+                  "title": "Canvas",
+                  "text": "Canvas"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelId": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": true,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 656,
+                "scrollHeight": 694,
+                "scrollWidth": 656,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            }
+          ],
+          "separator": null
+        },
+        "canvas": {
+          "rootCount": 1,
+          "reactFlowCount": 1,
+          "chrome": {
+            "count": 1,
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 40
+            },
+            "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+            "status": "saved"
+          },
+          "root": {
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 694
+            },
+            "horizontalOverflow": false,
+            "scroll": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "stage": {
+            "bounds": {
+              "x": 303,
+              "y": 79,
+              "width": 656,
+              "height": 654
+            },
+            "heightRatio": 0.9423631123919308,
+            "horizontalOverflow": false,
+            "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+          },
+          "fileTrigger": {
+            "expanded": "false",
+            "controls": "native-canvas-file-panel",
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 1,
+            "bounds": {
+              "x": 551,
+              "y": 685,
+              "width": 160,
+              "height": 38
+            },
+            "withinStage": true,
+            "ariaLabel": "Canvas 节点工具"
+          }
+        },
+        "focus": {
+          "tag": "div",
+          "id": "",
+          "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas",
+          "role": null,
+          "region": "central"
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_read_canvas": 1,
+            "knowledge_workspace_snapshot": 2
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 656,
+            "scrollHeight": 694,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "groupPanel1": {
+            "clientHeight": 694,
+            "clientWidth": 656,
+            "scrollHeight": 694,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    },
+    {
+      "name": "04-1180-canvas-graph-split",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "reducedMotion": "no-preference",
+      "evidence": {
+        "screenshot": "06-1180-canvas-graph-split.png",
+        "central": {
+          "groupCount": 2,
+          "tablistCount": 2,
+          "textareaCount": 0,
+          "saveActionCount": 0,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": false,
+              "bounds": {
+                "x": 303,
+                "y": 1,
+                "width": 325,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 2,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "false",
+                  "tabIndex": -1,
+                  "ariaLabel": "notes/visual-baseline.md，Markdown 源码",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                },
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                  "controls": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "Canvas",
+                  "title": "Canvas",
+                  "text": "Canvas"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelId": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": true,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 325,
+                "scrollHeight": 694,
+                "scrollWidth": 325,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            {
+              "id": "knowledge-group-secondary",
+              "active": true,
+              "bounds": {
+                "x": 633,
+                "y": 1,
+                "width": 326,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 2,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "false",
+                  "tabIndex": -1,
+                  "ariaLabel": "notes/visual-baseline.md，渲染预览",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                },
+                {
+                  "id": "knowledge-tab-knowledge-group-secondary-surface_3Agraph",
+                  "controls": "knowledge-panel-knowledge-group-secondary-surface_3Agraph",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "关系图",
+                  "title": "关系图",
+                  "text": "关系图"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-secondary-surface_3Agraph",
+              "panelId": "knowledge-panel-knowledge-group-secondary-surface_3Agraph",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-secondary-surface_3Agraph",
+              "panelContainsGraph": true,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 326,
+                "scrollHeight": 694,
+                "scrollWidth": 326,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            }
+          ],
+          "separator": {
+            "bounds": {
+              "x": 628,
+              "y": 1,
+              "width": 5,
+              "height": 732
+            },
+            "min": "30",
+            "max": "70",
+            "now": "50",
+            "orientation": "vertical"
+          }
+        },
+        "canvas": {
+          "rootCount": 1,
+          "reactFlowCount": 1,
+          "chrome": {
+            "count": 1,
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 325,
+              "height": 75
+            },
+            "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+            "status": "saved"
+          },
+          "root": {
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 325,
+              "height": 694
+            },
+            "horizontalOverflow": false,
+            "scroll": {
+              "clientHeight": 694,
+              "clientWidth": 325,
+              "scrollHeight": 694,
+              "scrollWidth": 325,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "stage": {
+            "bounds": {
+              "x": 303,
+              "y": 114,
+              "width": 325,
+              "height": 619
+            },
+            "heightRatio": 0.8919308357348703,
+            "horizontalOverflow": false,
+            "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+          },
+          "fileTrigger": {
+            "expanded": "false",
+            "controls": "native-canvas-file-panel",
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 1,
+            "bounds": {
+              "x": 460,
+              "y": 685,
+              "width": 160,
+              "height": 38
+            },
+            "withinStage": true,
+            "ariaLabel": "Canvas 节点工具"
+          }
+        }
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 10,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    },
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "preview"
+                    },
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_graph": 1,
+          "knowledge_workspace_read_canvas": 1,
+          "knowledge_workspace_read_markdown": 1,
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "visualComparison": {
+        "r0_04": {
+          "result": "PASS",
+          "difference": "左 Canvas、右 Graph、外侧目录/上下文与连续中央空间关系一致；Syn 组壳、节点尺度和既有 Graph 工具仍不同。"
+        },
+        "r0_08": {
+          "result": "GAP",
+          "difference": "此图保留左侧目录，不是 R0 08 的折叠态。"
+        }
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "04-1180-canvas-graph-split"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 260,
+            "height": 732
+          },
+          "central": {
+            "x": 303,
+            "y": 1,
+            "width": 656,
+            "height": 732
+          },
+          "right": {
+            "x": 959,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 1136,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 260,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 259,
+              "scrollHeight": 732,
+              "scrollWidth": 259,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 303,
+              "y": 1,
+              "width": 656,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 46,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 656,
+              "scrollHeight": 732,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 959,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 6,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 219,
+              "scrollHeight": 1408,
+              "scrollWidth": 219,
+              "canScrollY": true,
+              "movedOnProbe": true
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 1136,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 1136,
+              "scrollHeight": 25,
+              "scrollWidth": 1136,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 656,
+            "scrollHeight": 732,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 326,
+            "scrollHeight": 694,
+            "scrollWidth": 326,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 2,
+          "tablistCount": 2,
+          "textareaCount": 0,
+          "saveActionCount": 0,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": false,
+              "bounds": {
+                "x": 303,
+                "y": 1,
+                "width": 325,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 2,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-primary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "false",
+                  "tabIndex": -1,
+                  "ariaLabel": "notes/visual-baseline.md，Markdown 源码",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                },
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                  "controls": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "Canvas",
+                  "title": "Canvas",
+                  "text": "Canvas"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelId": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": true,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 325,
+                "scrollHeight": 694,
+                "scrollWidth": 325,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            {
+              "id": "knowledge-group-secondary",
+              "active": true,
+              "bounds": {
+                "x": 633,
+                "y": 1,
+                "width": 326,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 2,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controls": "knowledge-panel-knowledge-group-secondary-markdown_3Anotes_2Fvisual-baseline.md",
+                  "controlsExists": true,
+                  "selected": "false",
+                  "tabIndex": -1,
+                  "ariaLabel": "notes/visual-baseline.md，渲染预览",
+                  "title": "notes/visual-baseline.md",
+                  "text": "visual-baseline"
+                },
+                {
+                  "id": "knowledge-tab-knowledge-group-secondary-surface_3Agraph",
+                  "controls": "knowledge-panel-knowledge-group-secondary-surface_3Agraph",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "关系图",
+                  "title": "关系图",
+                  "text": "关系图"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-secondary-surface_3Agraph",
+              "panelId": "knowledge-panel-knowledge-group-secondary-surface_3Agraph",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-secondary-surface_3Agraph",
+              "panelContainsGraph": true,
+              "panelContainsCanvas": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 326,
+                "scrollHeight": 694,
+                "scrollWidth": 326,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            }
+          ],
+          "separator": {
+            "bounds": {
+              "x": 628,
+              "y": 1,
+              "width": 5,
+              "height": 732
+            },
+            "min": "30",
+            "max": "70",
+            "now": "50",
+            "orientation": "vertical"
+          }
+        },
+        "canvas": {
+          "rootCount": 1,
+          "reactFlowCount": 1,
+          "chrome": {
+            "count": 1,
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 325,
+              "height": 75
+            },
+            "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+            "status": "saved"
+          },
+          "root": {
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 325,
+              "height": 694
+            },
+            "horizontalOverflow": false,
+            "scroll": {
+              "clientHeight": 694,
+              "clientWidth": 325,
+              "scrollHeight": 694,
+              "scrollWidth": 325,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "stage": {
+            "bounds": {
+              "x": 303,
+              "y": 114,
+              "width": 325,
+              "height": 619
+            },
+            "heightRatio": 0.8919308357348703,
+            "horizontalOverflow": false,
+            "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+          },
+          "fileTrigger": {
+            "expanded": "false",
+            "controls": "native-canvas-file-panel",
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 1,
+            "bounds": {
+              "x": 460,
+              "y": 685,
+              "width": 160,
+              "height": 38
+            },
+            "withinStage": true,
+            "ariaLabel": "Canvas 节点工具"
+          }
+        },
+        "focus": {
+          "tag": "button",
+          "id": "knowledge-tab-knowledge-group-secondary-surface_3Agraph",
+          "ariaLabel": "关系图",
+          "role": "tab",
+          "region": "central"
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 10,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": "notes/visual-baseline.md",
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "source"
+                    },
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                },
+                {
+                  "id": "knowledge-group-secondary",
+                  "tabs": [
+                    {
+                      "id": "markdown:notes/visual-baseline.md",
+                      "kind": "markdown",
+                      "relativePath": "notes/visual-baseline.md",
+                      "projection": "preview"
+                    },
+                    {
+                      "id": "surface:graph",
+                      "kind": "surface",
+                      "surface": "graph"
+                    }
+                  ],
+                  "activeTabId": "surface:graph"
+                }
+              ],
+              "activeGroupId": "knowledge-group-secondary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_graph": 1,
+            "knowledge_workspace_read_canvas": 1,
+            "knowledge_workspace_read_markdown": 1,
+            "knowledge_workspace_snapshot": 2
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 326,
+            "scrollHeight": 694,
+            "scrollWidth": 326,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "groupPanel1": {
+            "clientHeight": 694,
+            "clientWidth": 325,
+            "scrollHeight": 694,
+            "scrollWidth": 325,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "groupPanel2": {
+            "clientHeight": 694,
+            "clientWidth": 326,
+            "scrollHeight": 694,
+            "scrollWidth": 326,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    },
+    {
+      "name": "05-900-double-sidebar-canvas",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "reducedMotion": "no-preference",
+      "evidence": {
+        "screenshot": "07-900-double-sidebar-canvas.png",
+        "canvas": {
+          "rootCount": 1,
+          "reactFlowCount": 1,
+          "chrome": {
+            "count": 1,
+            "bounds": {
+              "x": 263,
+              "y": 39,
+              "width": 436,
+              "height": 75
+            },
+            "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+            "status": "saved"
+          },
+          "root": {
+            "bounds": {
+              "x": 263,
+              "y": 39,
+              "width": 436,
+              "height": 694
+            },
+            "horizontalOverflow": false,
+            "scroll": {
+              "clientHeight": 694,
+              "clientWidth": 436,
+              "scrollHeight": 694,
+              "scrollWidth": 436,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "stage": {
+            "bounds": {
+              "x": 263,
+              "y": 114,
+              "width": 436,
+              "height": 619
+            },
+            "heightRatio": 0.8919308357348703,
+            "horizontalOverflow": false,
+            "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+          },
+          "fileTrigger": {
+            "expanded": "false",
+            "controls": "native-canvas-file-panel",
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 1,
+            "bounds": {
+              "x": 531,
+              "y": 685,
+              "width": 160,
+              "height": 38
+            },
+            "withinStage": true,
+            "ariaLabel": "Canvas 节点工具"
+          }
+        }
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_canvas": 1,
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "visualComparison": {
+        "r0_04": {
+          "result": "GAP",
+          "difference": "窄宽下 Canvas chrome 和内部工具保持可达，但没有 R0 04 的 Canvas/Graph 双组。"
+        },
+        "r0_08": {
+          "result": "GAP",
+          "difference": "双侧栏均展开，不是 R0 08 的折叠态。"
+        }
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "05-900-double-sidebar-canvas"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "central": {
+            "x": 263,
+            "y": 1,
+            "width": 436,
+            "height": 732
+          },
+          "right": {
+            "x": 699,
+            "y": 1,
+            "width": 200,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 856,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 219,
+              "scrollHeight": 732,
+              "scrollWidth": 219,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 263,
+              "y": 1,
+              "width": 436,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 21,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 436,
+              "scrollHeight": 732,
+              "scrollWidth": 436,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 699,
+              "y": 1,
+              "width": 200,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 4,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 199,
+              "scrollHeight": 1276,
+              "scrollWidth": 199,
+              "canScrollY": true,
+              "movedOnProbe": true
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 856,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 856,
+              "scrollHeight": 25,
+              "scrollWidth": 856,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 436,
+            "scrollHeight": 732,
+            "scrollWidth": 436,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 436,
+            "scrollHeight": 694,
+            "scrollWidth": 436,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 1,
+          "tablistCount": 1,
+          "textareaCount": 0,
+          "saveActionCount": 0,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": true,
+              "bounds": {
+                "x": 263,
+                "y": 1,
+                "width": 436,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                  "controls": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "Canvas",
+                  "title": "Canvas",
+                  "text": "Canvas"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelId": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": true,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 436,
+                "scrollHeight": 694,
+                "scrollWidth": 436,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            }
+          ],
+          "separator": null
+        },
+        "canvas": {
+          "rootCount": 1,
+          "reactFlowCount": 1,
+          "chrome": {
+            "count": 1,
+            "bounds": {
+              "x": 263,
+              "y": 39,
+              "width": 436,
+              "height": 75
+            },
+            "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+            "status": "saved"
+          },
+          "root": {
+            "bounds": {
+              "x": 263,
+              "y": 39,
+              "width": 436,
+              "height": 694
+            },
+            "horizontalOverflow": false,
+            "scroll": {
+              "clientHeight": 694,
+              "clientWidth": 436,
+              "scrollHeight": 694,
+              "scrollWidth": 436,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "stage": {
+            "bounds": {
+              "x": 263,
+              "y": 114,
+              "width": 436,
+              "height": 619
+            },
+            "heightRatio": 0.8919308357348703,
+            "horizontalOverflow": false,
+            "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+          },
+          "fileTrigger": {
+            "expanded": "false",
+            "controls": "native-canvas-file-panel",
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 1,
+            "bounds": {
+              "x": 531,
+              "y": 685,
+              "width": 160,
+              "height": 38
+            },
+            "withinStage": true,
+            "ariaLabel": "Canvas 节点工具"
+          }
+        },
+        "focus": {
+          "tag": "div",
+          "id": "",
+          "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas",
+          "role": null,
+          "region": "central"
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_read_canvas": 1,
+            "knowledge_workspace_snapshot": 2
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 436,
+            "scrollHeight": 694,
+            "scrollWidth": 436,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "groupPanel1": {
+            "clientHeight": 694,
+            "clientWidth": 436,
+            "scrollHeight": 694,
+            "scrollWidth": 436,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    },
+    {
+      "name": "06-900-sidebar-collapse-canvas",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "reducedMotion": "no-preference",
+      "evidence": {
+        "screenshots": [
+          "08-900-right-collapsed-canvas.png",
+          "09-900-both-collapsed-canvas.png"
+        ],
+        "rightCollapsed": {
+          "fixture": {
+            "dataOrigin": "synthetic-only",
+            "localStorageEmptyBeforeMount": true,
+            "scenario": "06a-900-right-collapsed-canvas"
+          },
+          "bounds": {
+            "activity": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "left": {
+              "x": 43,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "central": {
+              "x": 263,
+              "y": 1,
+              "width": 636,
+              "height": 732
+            },
+            "right": {
+              "x": 899,
+              "y": 1,
+              "width": 0,
+              "height": 732
+            },
+            "status": {
+              "x": 43,
+              "y": 733,
+              "width": 856,
+              "height": 26
+            }
+          },
+          "regions": {
+            "activity": {
+              "bounds": {
+                "x": 1,
+                "y": 1,
+                "width": 42,
+                "height": 758
+              },
+              "ariaHidden": null,
+              "inert": false,
+              "interactiveChildren": 8,
+              "scroll": {
+                "clientHeight": 758,
+                "clientWidth": 41,
+                "scrollHeight": 758,
+                "scrollWidth": 41,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "left": {
+              "bounds": {
+                "x": 43,
+                "y": 1,
+                "width": 220,
+                "height": 732
+              },
+              "ariaHidden": "false",
+              "inert": false,
+              "interactiveChildren": 45,
+              "scroll": {
+                "clientHeight": 732,
+                "clientWidth": 219,
+                "scrollHeight": 732,
+                "scrollWidth": 219,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "central": {
+              "bounds": {
+                "x": 263,
+                "y": 1,
+                "width": 636,
+                "height": 732
+              },
+              "ariaHidden": null,
+              "inert": false,
+              "interactiveChildren": 21,
+              "scroll": {
+                "clientHeight": 732,
+                "clientWidth": 636,
+                "scrollHeight": 732,
+                "scrollWidth": 636,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "right": {
+              "bounds": {
+                "x": 899,
+                "y": 1,
+                "width": 0,
+                "height": 732
+              },
+              "ariaHidden": "true",
+              "inert": true,
+              "interactiveChildren": 0,
+              "scroll": {
+                "clientHeight": 732,
+                "clientWidth": 0,
+                "scrollHeight": 732,
+                "scrollWidth": 0,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "status": {
+              "bounds": {
+                "x": 43,
+                "y": 733,
+                "width": 856,
+                "height": 26
+              },
+              "ariaHidden": null,
+              "inert": false,
+              "interactiveChildren": 0,
+              "scroll": {
+                "clientHeight": 25,
+                "clientWidth": 856,
+                "scrollHeight": 25,
+                "scrollWidth": 856,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            }
+          },
+          "overflow": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 900,
+              "scrollHeight": 760,
+              "scrollWidth": 900,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 900,
+              "scrollHeight": 760,
+              "scrollWidth": 900,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 898,
+              "scrollHeight": 758,
+              "scrollWidth": 898,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "centralSurface": {
+              "clientHeight": 732,
+              "clientWidth": 636,
+              "scrollHeight": 732,
+              "scrollWidth": 636,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 694,
+              "clientWidth": 636,
+              "scrollHeight": 694,
+              "scrollWidth": 636,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "overlay": null
+          },
+          "central": {
+            "groupCount": 1,
+            "tablistCount": 1,
+            "textareaCount": 0,
+            "saveActionCount": 0,
+            "groups": [
+              {
+                "id": "knowledge-group-primary",
+                "active": true,
+                "bounds": {
+                  "x": 263,
+                  "y": 1,
+                  "width": 636,
+                  "height": 732
+                },
+                "tablistCount": 1,
+                "tabCount": 1,
+                "tabs": [
+                  {
+                    "id": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                    "controls": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                    "controlsExists": true,
+                    "selected": "true",
+                    "tabIndex": 0,
+                    "ariaLabel": "Canvas",
+                    "title": "Canvas",
+                    "text": "Canvas"
+                  }
+                ],
+                "activeTabId": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                "panelId": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                "panelLabelledBy": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                "panelContainsGraph": false,
+                "panelContainsCanvas": true,
+                "scroll": {
+                  "clientHeight": 694,
+                  "clientWidth": 636,
+                  "scrollHeight": 694,
+                  "scrollWidth": 636,
+                  "canScrollY": false,
+                  "movedOnProbe": false
+                }
+              }
+            ],
+            "separator": null
+          },
+          "canvas": {
+            "rootCount": 1,
+            "reactFlowCount": 1,
+            "chrome": {
+              "count": 1,
+              "bounds": {
+                "x": 263,
+                "y": 39,
+                "width": 636,
+                "height": 40
+              },
+              "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+              "status": "saved"
+            },
+            "root": {
+              "bounds": {
+                "x": 263,
+                "y": 39,
+                "width": 636,
+                "height": 694
+              },
+              "horizontalOverflow": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 636,
+                "scrollHeight": 694,
+                "scrollWidth": 636,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "stage": {
+              "bounds": {
+                "x": 263,
+                "y": 79,
+                "width": 636,
+                "height": 654
+              },
+              "heightRatio": 0.9423631123919308,
+              "horizontalOverflow": false,
+              "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+            },
+            "fileTrigger": {
+              "expanded": "false",
+              "controls": "native-canvas-file-panel",
+              "controlsExists": false
+            },
+            "filePanel": {
+              "count": 0,
+              "bounds": null,
+              "withinRoot": null,
+              "position": null,
+              "interactiveChildren": 0
+            },
+            "inspector": {
+              "count": 0,
+              "bounds": null,
+              "withinRoot": null,
+              "position": null,
+              "interactiveChildren": 0
+            },
+            "selectedNode": {
+              "id": null,
+              "controls": null,
+              "controlsExists": false,
+              "expanded": null
+            },
+            "floatingTools": {
+              "count": 1,
+              "bounds": {
+                "x": 501,
+                "y": 685,
+                "width": 160,
+                "height": 38
+              },
+              "withinStage": true,
+              "ariaLabel": "Canvas 节点工具"
+            }
+          },
+          "focus": {
+            "tag": "button",
+            "id": "",
+            "ariaLabel": "切换右侧上下文",
+            "role": null,
+            "region": "activity"
+          },
+          "localStorage": {
+            "emptyBeforeMount": true,
+            "writeCount": 2,
+            "keys": [
+              "syn-native-knowledge-workspace-ui-v1"
+            ],
+            "latestKey": "syn-native-knowledge-workspace-ui-v1",
+            "latestNormalizedContent": {
+              "version": 2,
+              "selectedRelativePath": null,
+              "centralState": {
+                "groups": [
+                  {
+                    "id": "knowledge-group-primary",
+                    "tabs": [
+                      {
+                        "id": "surface:canvas",
+                        "kind": "surface",
+                        "surface": "canvas"
+                      }
+                    ],
+                    "activeTabId": "surface:canvas"
+                  }
+                ],
+                "activeGroupId": "knowledge-group-primary",
+                "splitRatio": 50
+              }
+            }
+          },
+          "mock": {
+            "allowedReadCommands": [
+              "knowledge_workspace_graph",
+              "knowledge_workspace_read_canvas",
+              "knowledge_workspace_read_markdown",
+              "knowledge_workspace_search",
+              "knowledge_workspace_snapshot"
+            ],
+            "callsByCommand": {
+              "knowledge_workspace_read_canvas": 1,
+              "knowledge_workspace_snapshot": 2
+            },
+            "writeCallCount": 0,
+            "unrecognizedCallCount": 0,
+            "unrecognizedCommandNames": []
+          }
+        },
+        "bothCollapsed": {
+          "fixture": {
+            "dataOrigin": "synthetic-only",
+            "localStorageEmptyBeforeMount": true,
+            "scenario": "06b-900-both-collapsed-canvas"
+          },
+          "bounds": {
+            "activity": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "left": {
+              "x": 43,
+              "y": 1,
+              "width": 0,
+              "height": 732
+            },
+            "central": {
+              "x": 43,
+              "y": 1,
+              "width": 856,
+              "height": 732
+            },
+            "right": {
+              "x": 899,
+              "y": 1,
+              "width": 0,
+              "height": 732
+            },
+            "status": {
+              "x": 43,
+              "y": 733,
+              "width": 856,
+              "height": 26
+            }
+          },
+          "regions": {
+            "activity": {
+              "bounds": {
+                "x": 1,
+                "y": 1,
+                "width": 42,
+                "height": 758
+              },
+              "ariaHidden": null,
+              "inert": false,
+              "interactiveChildren": 8,
+              "scroll": {
+                "clientHeight": 758,
+                "clientWidth": 41,
+                "scrollHeight": 758,
+                "scrollWidth": 41,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "left": {
+              "bounds": {
+                "x": 43,
+                "y": 1,
+                "width": 0,
+                "height": 732
+              },
+              "ariaHidden": "true",
+              "inert": true,
+              "interactiveChildren": 0,
+              "scroll": {
+                "clientHeight": 732,
+                "clientWidth": 0,
+                "scrollHeight": 732,
+                "scrollWidth": 0,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "central": {
+              "bounds": {
+                "x": 43,
+                "y": 1,
+                "width": 856,
+                "height": 732
+              },
+              "ariaHidden": null,
+              "inert": false,
+              "interactiveChildren": 21,
+              "scroll": {
+                "clientHeight": 732,
+                "clientWidth": 856,
+                "scrollHeight": 732,
+                "scrollWidth": 856,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "right": {
+              "bounds": {
+                "x": 899,
+                "y": 1,
+                "width": 0,
+                "height": 732
+              },
+              "ariaHidden": "true",
+              "inert": true,
+              "interactiveChildren": 0,
+              "scroll": {
+                "clientHeight": 732,
+                "clientWidth": 0,
+                "scrollHeight": 732,
+                "scrollWidth": 0,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "status": {
+              "bounds": {
+                "x": 43,
+                "y": 733,
+                "width": 856,
+                "height": 26
+              },
+              "ariaHidden": null,
+              "inert": false,
+              "interactiveChildren": 0,
+              "scroll": {
+                "clientHeight": 25,
+                "clientWidth": 856,
+                "scrollHeight": 25,
+                "scrollWidth": 856,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            }
+          },
+          "overflow": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 900,
+              "scrollHeight": 760,
+              "scrollWidth": 900,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 900,
+              "scrollHeight": 760,
+              "scrollWidth": 900,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 898,
+              "scrollHeight": 758,
+              "scrollWidth": 898,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "centralSurface": {
+              "clientHeight": 732,
+              "clientWidth": 856,
+              "scrollHeight": 732,
+              "scrollWidth": 856,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 694,
+              "clientWidth": 856,
+              "scrollHeight": 694,
+              "scrollWidth": 856,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "overlay": null
+          },
+          "central": {
+            "groupCount": 1,
+            "tablistCount": 1,
+            "textareaCount": 0,
+            "saveActionCount": 0,
+            "groups": [
+              {
+                "id": "knowledge-group-primary",
+                "active": true,
+                "bounds": {
+                  "x": 43,
+                  "y": 1,
+                  "width": 856,
+                  "height": 732
+                },
+                "tablistCount": 1,
+                "tabCount": 1,
+                "tabs": [
+                  {
+                    "id": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                    "controls": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                    "controlsExists": true,
+                    "selected": "true",
+                    "tabIndex": 0,
+                    "ariaLabel": "Canvas",
+                    "title": "Canvas",
+                    "text": "Canvas"
+                  }
+                ],
+                "activeTabId": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                "panelId": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                "panelLabelledBy": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                "panelContainsGraph": false,
+                "panelContainsCanvas": true,
+                "scroll": {
+                  "clientHeight": 694,
+                  "clientWidth": 856,
+                  "scrollHeight": 694,
+                  "scrollWidth": 856,
+                  "canScrollY": false,
+                  "movedOnProbe": false
+                }
+              }
+            ],
+            "separator": null
+          },
+          "canvas": {
+            "rootCount": 1,
+            "reactFlowCount": 1,
+            "chrome": {
+              "count": 1,
+              "bounds": {
+                "x": 43,
+                "y": 39,
+                "width": 856,
+                "height": 40
+              },
+              "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+              "status": "saved"
+            },
+            "root": {
+              "bounds": {
+                "x": 43,
+                "y": 39,
+                "width": 856,
+                "height": 694
+              },
+              "horizontalOverflow": false,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 856,
+                "scrollHeight": 694,
+                "scrollWidth": 856,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            },
+            "stage": {
+              "bounds": {
+                "x": 43,
+                "y": 79,
+                "width": 856,
+                "height": 654
+              },
+              "heightRatio": 0.9423631123919308,
+              "horizontalOverflow": false,
+              "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+            },
+            "fileTrigger": {
+              "expanded": "false",
+              "controls": "native-canvas-file-panel",
+              "controlsExists": false
+            },
+            "filePanel": {
+              "count": 0,
+              "bounds": null,
+              "withinRoot": null,
+              "position": null,
+              "interactiveChildren": 0
+            },
+            "inspector": {
+              "count": 0,
+              "bounds": null,
+              "withinRoot": null,
+              "position": null,
+              "interactiveChildren": 0
+            },
+            "selectedNode": {
+              "id": null,
+              "controls": null,
+              "controlsExists": false,
+              "expanded": null
+            },
+            "floatingTools": {
+              "count": 1,
+              "bounds": {
+                "x": 391,
+                "y": 685,
+                "width": 160,
+                "height": 38
+              },
+              "withinStage": true,
+              "ariaLabel": "Canvas 节点工具"
+            }
+          },
+          "focus": {
+            "tag": "body",
+            "id": "",
+            "ariaLabel": null,
+            "role": null,
+            "region": null
+          },
+          "localStorage": {
+            "emptyBeforeMount": true,
+            "writeCount": 2,
+            "keys": [
+              "syn-native-knowledge-workspace-ui-v1"
+            ],
+            "latestKey": "syn-native-knowledge-workspace-ui-v1",
+            "latestNormalizedContent": {
+              "version": 2,
+              "selectedRelativePath": null,
+              "centralState": {
+                "groups": [
+                  {
+                    "id": "knowledge-group-primary",
+                    "tabs": [
+                      {
+                        "id": "surface:canvas",
+                        "kind": "surface",
+                        "surface": "canvas"
+                      }
+                    ],
+                    "activeTabId": "surface:canvas"
+                  }
+                ],
+                "activeGroupId": "knowledge-group-primary",
+                "splitRatio": 50
+              }
+            }
+          },
+          "mock": {
+            "allowedReadCommands": [
+              "knowledge_workspace_graph",
+              "knowledge_workspace_read_canvas",
+              "knowledge_workspace_read_markdown",
+              "knowledge_workspace_search",
+              "knowledge_workspace_snapshot"
+            ],
+            "callsByCommand": {
+              "knowledge_workspace_read_canvas": 1,
+              "knowledge_workspace_snapshot": 2
+            },
+            "writeCallCount": 0,
+            "unrecognizedCallCount": 0,
+            "unrecognizedCommandNames": []
+          }
+        }
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_canvas": 1,
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "visualComparison": {
+        "r0_04": {
+          "result": "GAP",
+          "difference": "此场景验证单 Canvas 接管空间，没有 R0 04 的右组 Graph。"
+        },
+        "r0_08": {
+          "result": "PASS",
+          "difference": "左活动 rail 保留且折叠侧栏把宽度归还中央舞台；Syn 顶栏、节点卡和底部状态栏仍不同。"
+        }
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "06-900-sidebar-collapse-canvas"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 0,
+            "height": 732
+          },
+          "central": {
+            "x": 43,
+            "y": 1,
+            "width": 856,
+            "height": 732
+          },
+          "right": {
+            "x": 899,
+            "y": 1,
+            "width": 0,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 856,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 0,
+              "height": 732
+            },
+            "ariaHidden": "true",
+            "inert": true,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 0,
+              "scrollHeight": 732,
+              "scrollWidth": 0,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 856,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 21,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 856,
+              "scrollHeight": 732,
+              "scrollWidth": 856,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 899,
+              "y": 1,
+              "width": 0,
+              "height": 732
+            },
+            "ariaHidden": "true",
+            "inert": true,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 0,
+              "scrollHeight": 732,
+              "scrollWidth": 0,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 856,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 856,
+              "scrollHeight": 25,
+              "scrollWidth": 856,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 856,
+            "scrollHeight": 732,
+            "scrollWidth": 856,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 856,
+            "scrollHeight": 694,
+            "scrollWidth": 856,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 1,
+          "tablistCount": 1,
+          "textareaCount": 0,
+          "saveActionCount": 0,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": true,
+              "bounds": {
+                "x": 43,
+                "y": 1,
+                "width": 856,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                  "controls": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "Canvas",
+                  "title": "Canvas",
+                  "text": "Canvas"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelId": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": true,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 856,
+                "scrollHeight": 694,
+                "scrollWidth": 856,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            }
+          ],
+          "separator": null
+        },
+        "canvas": {
+          "rootCount": 1,
+          "reactFlowCount": 1,
+          "chrome": {
+            "count": 1,
+            "bounds": {
+              "x": 43,
+              "y": 39,
+              "width": 856,
+              "height": 40
+            },
+            "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+            "status": "saved"
+          },
+          "root": {
+            "bounds": {
+              "x": 43,
+              "y": 39,
+              "width": 856,
+              "height": 694
+            },
+            "horizontalOverflow": false,
+            "scroll": {
+              "clientHeight": 694,
+              "clientWidth": 856,
+              "scrollHeight": 694,
+              "scrollWidth": 856,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "stage": {
+            "bounds": {
+              "x": 43,
+              "y": 79,
+              "width": 856,
+              "height": 654
+            },
+            "heightRatio": 0.9423631123919308,
+            "horizontalOverflow": false,
+            "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+          },
+          "fileTrigger": {
+            "expanded": "false",
+            "controls": "native-canvas-file-panel",
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 1,
+            "bounds": {
+              "x": 391,
+              "y": 685,
+              "width": 160,
+              "height": 38
+            },
+            "withinStage": true,
+            "ariaLabel": "Canvas 节点工具"
+          }
+        },
+        "focus": {
+          "tag": "body",
+          "id": "",
+          "ariaLabel": null,
+          "role": null,
+          "region": null
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_read_canvas": 1,
+            "knowledge_workspace_snapshot": 2
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 856,
+            "scrollHeight": 694,
+            "scrollWidth": 856,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "groupPanel1": {
+            "clientHeight": 694,
+            "clientWidth": 856,
+            "scrollHeight": 694,
+            "scrollWidth": 856,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    },
+    {
+      "name": "07-1180-reduced-motion-canvas",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "reducedMotion": "reduce",
+      "evidence": {
+        "screenshot": "10-1180-reduced-motion-inspector.png",
+        "reducedMotionMatches": true,
+        "inspector": {
+          "rootCount": 1,
+          "reactFlowCount": 1,
+          "chrome": {
+            "count": 1,
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 40
+            },
+            "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+            "status": "saved"
+          },
+          "root": {
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 694
+            },
+            "horizontalOverflow": false,
+            "scroll": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "stage": {
+            "bounds": {
+              "x": 303,
+              "y": 79,
+              "width": 656,
+              "height": 654
+            },
+            "heightRatio": 0.9423631123919308,
+            "horizontalOverflow": false,
+            "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+          },
+          "fileTrigger": {
+            "expanded": "false",
+            "controls": "native-canvas-file-panel",
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 1,
+            "bounds": {
+              "x": 651,
+              "y": 87,
+              "width": 300,
+              "height": 490
+            },
+            "withinRoot": true,
+            "position": "absolute",
+            "interactiveChildren": 9
+          },
+          "selectedNode": {
+            "id": "baseline",
+            "controls": "native-canvas-node-inspector",
+            "controlsExists": true,
+            "expanded": "true"
+          },
+          "floatingTools": {
+            "count": 1,
+            "bounds": {
+              "x": 551,
+              "y": 685,
+              "width": 160,
+              "height": 38
+            },
+            "withinStage": true,
+            "ariaLabel": "Canvas 节点工具"
+          }
+        },
+        "focusAfterClose": {
+          "nodeId": null,
+          "isStage": true,
+          "isBody": false
+        }
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_canvas": 1,
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "visualComparison": {
+        "r0_04": {
+          "result": "GAP",
+          "difference": "reduced-motion inspector 是可用性证据，不对应 R0 04 的静态 Canvas/Graph 构图。"
+        },
+        "r0_08": {
+          "result": "GAP",
+          "difference": "左右侧栏均展开，没有 R0 08 的折叠构图。"
+        }
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "07-1180-reduced-motion-canvas"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 260,
+            "height": 732
+          },
+          "central": {
+            "x": 303,
+            "y": 1,
+            "width": 656,
+            "height": 732
+          },
+          "right": {
+            "x": 959,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 1136,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 260,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 259,
+              "scrollHeight": 732,
+              "scrollWidth": 259,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 303,
+              "y": 1,
+              "width": 656,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 21,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 656,
+              "scrollHeight": 732,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 959,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 4,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 219,
+              "scrollHeight": 1258,
+              "scrollWidth": 219,
+              "canScrollY": true,
+              "movedOnProbe": true
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 1136,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 1136,
+              "scrollHeight": 25,
+              "scrollWidth": 1136,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 732,
+            "clientWidth": 656,
+            "scrollHeight": 732,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 656,
+            "scrollHeight": 694,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "central": {
+          "groupCount": 1,
+          "tablistCount": 1,
+          "textareaCount": 0,
+          "saveActionCount": 0,
+          "groups": [
+            {
+              "id": "knowledge-group-primary",
+              "active": true,
+              "bounds": {
+                "x": 303,
+                "y": 1,
+                "width": 656,
+                "height": 732
+              },
+              "tablistCount": 1,
+              "tabCount": 1,
+              "tabs": [
+                {
+                  "id": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+                  "controls": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+                  "controlsExists": true,
+                  "selected": "true",
+                  "tabIndex": 0,
+                  "ariaLabel": "Canvas",
+                  "title": "Canvas",
+                  "text": "Canvas"
+                }
+              ],
+              "activeTabId": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelId": "knowledge-panel-knowledge-group-primary-surface_3Acanvas",
+              "panelLabelledBy": "knowledge-tab-knowledge-group-primary-surface_3Acanvas",
+              "panelContainsGraph": false,
+              "panelContainsCanvas": true,
+              "scroll": {
+                "clientHeight": 694,
+                "clientWidth": 656,
+                "scrollHeight": 694,
+                "scrollWidth": 656,
+                "canScrollY": false,
+                "movedOnProbe": false
+              }
+            }
+          ],
+          "separator": null
+        },
+        "canvas": {
+          "rootCount": 1,
+          "reactFlowCount": 1,
+          "chrome": {
+            "count": 1,
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 40
+            },
+            "currentPathLabel": "当前 Canvas：canvas/visual-baseline.canvas",
+            "status": "saved"
+          },
+          "root": {
+            "bounds": {
+              "x": 303,
+              "y": 39,
+              "width": 656,
+              "height": 694
+            },
+            "horizontalOverflow": false,
+            "scroll": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "stage": {
+            "bounds": {
+              "x": 303,
+              "y": 79,
+              "width": 656,
+              "height": 654
+            },
+            "heightRatio": 0.9423631123919308,
+            "horizontalOverflow": false,
+            "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas"
+          },
+          "fileTrigger": {
+            "expanded": "false",
+            "controls": "native-canvas-file-panel",
+            "controlsExists": false
+          },
+          "filePanel": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "inspector": {
+            "count": 0,
+            "bounds": null,
+            "withinRoot": null,
+            "position": null,
+            "interactiveChildren": 0
+          },
+          "selectedNode": {
+            "id": null,
+            "controls": null,
+            "controlsExists": false,
+            "expanded": null
+          },
+          "floatingTools": {
+            "count": 1,
+            "bounds": {
+              "x": 551,
+              "y": 685,
+              "width": 160,
+              "height": 38
+            },
+            "withinStage": true,
+            "ariaLabel": "Canvas 节点工具"
+          }
+        },
+        "focus": {
+          "tag": "div",
+          "id": "",
+          "ariaLabel": "JSON Canvas 图形编辑区：canvas/visual-baseline.canvas",
+          "role": null,
+          "region": "central"
+        },
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_read_canvas": 1,
+            "knowledge_workspace_snapshot": 2
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "activeGroupPanel": {
+            "clientHeight": 694,
+            "clientWidth": 656,
+            "scrollHeight": 694,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "groupPanel1": {
+            "clientHeight": 694,
+            "clientWidth": 656,
+            "scrollHeight": 694,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    }
+  ],
+  "screenshots": [
+    "01-1180-canvas-continuous.png",
+    "02-1180-file-panel-open.png",
+    "03-1180-file-panel-escaped.png",
+    "04-1180-node-inspector-open.png",
+    "05-1180-node-inspector-closed.png",
+    "06-1180-canvas-graph-split.png",
+    "07-900-double-sidebar-canvas.png",
+    "08-900-right-collapsed-canvas.png",
+    "09-900-both-collapsed-canvas.png",
+    "10-1180-reduced-motion-inspector.png"
+  ],
+  "outcome": "PASS"
+}

@@ -1,0 +1,877 @@
+{
+  "phase": "pre-implementation-red-first",
+  "fixture": "synthetic-only",
+  "viewport": {
+    "width": 1180,
+    "height": 760
+  },
+  "assertions": 6,
+  "failed": 4,
+  "failures": [
+    "empty opener -> Escape returns to the same empty opener",
+    "empty opener -> explicit close returns to the same empty opener",
+    "chrome opener -> successful selection focuses the continuous stage",
+    "empty opener -> successful selection focuses the continuous stage"
+  ],
+  "expectedFailures": [
+    "empty opener -> Escape returns to the same empty opener",
+    "empty opener -> explicit close returns to the same empty opener",
+    "chrome opener -> successful selection focuses the continuous stage",
+    "empty opener -> successful selection focuses the continuous stage"
+  ],
+  "matrix": [
+    {
+      "name": "chrome opener -> Escape returns to the same chrome opener",
+      "openerKind": "chrome",
+      "closeAction": "escape",
+      "passed": true,
+      "open": {
+        "identity": {
+          "sameNodeAsActiveElement": false,
+          "openerConnected": true,
+          "activeConnected": true,
+          "activeIsBody": false,
+          "activeKind": "file-panel",
+          "activeText": "canvas/visual-baseline.canvas",
+          "activeAriaLabel": null,
+          "openerKind": "chrome-opener",
+          "openerText": "画布",
+          "openerExpanded": "true",
+          "openerControls": "native-canvas-file-panel",
+          "openerControlsExists": true
+        },
+        "firstFocusInsidePanel": true,
+        "panelCount": 1,
+        "panelInteractiveChildren": 5
+      },
+      "after": {
+        "identity": {
+          "sameNodeAsActiveElement": true,
+          "openerConnected": true,
+          "activeConnected": true,
+          "activeIsBody": false,
+          "activeKind": "chrome-opener",
+          "activeText": "画布",
+          "activeAriaLabel": null,
+          "openerKind": "chrome-opener",
+          "openerText": "画布",
+          "openerExpanded": "false",
+          "openerControls": "native-canvas-file-panel",
+          "openerControlsExists": false
+        },
+        "panelCount": 0,
+        "panelInteractiveChildren": 0,
+        "canvasLoaded": false,
+        "expectedTarget": "chrome-opener-same-DOM-node"
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "overflow": {
+          "values": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "canvasRoot": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "ok": true
+        },
+        "exactReadAllowlist": true,
+        "callsStayInsideReadAllowlist": true,
+        "localStorageChromeOnly": true
+      },
+      "screenshot": null
+    },
+    {
+      "name": "empty opener -> Escape returns to the same empty opener",
+      "openerKind": "empty",
+      "closeAction": "escape",
+      "passed": false,
+      "open": {
+        "identity": {
+          "sameNodeAsActiveElement": false,
+          "openerConnected": true,
+          "activeConnected": true,
+          "activeIsBody": false,
+          "activeKind": "file-panel",
+          "activeText": "canvas/visual-baseline.canvas",
+          "activeAriaLabel": null,
+          "openerKind": "empty-opener",
+          "openerText": "选择画布",
+          "openerExpanded": null,
+          "openerControls": null,
+          "openerControlsExists": false
+        },
+        "firstFocusInsidePanel": true,
+        "panelCount": 1,
+        "panelInteractiveChildren": 5
+      },
+      "after": {
+        "identity": {
+          "sameNodeAsActiveElement": false,
+          "openerConnected": true,
+          "activeConnected": true,
+          "activeIsBody": false,
+          "activeKind": "chrome-opener",
+          "activeText": "画布",
+          "activeAriaLabel": null,
+          "openerKind": "empty-opener",
+          "openerText": "选择画布",
+          "openerExpanded": null,
+          "openerControls": null,
+          "openerControlsExists": false
+        },
+        "panelCount": 0,
+        "panelInteractiveChildren": 0,
+        "canvasLoaded": false,
+        "expectedTarget": "empty-opener-same-DOM-node"
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "overflow": {
+          "values": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "canvasRoot": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "ok": true
+        },
+        "exactReadAllowlist": true,
+        "callsStayInsideReadAllowlist": true,
+        "localStorageChromeOnly": true
+      },
+      "screenshot": "red-empty-opener-escape-wrong-focus.png"
+    },
+    {
+      "name": "chrome opener -> explicit close returns to the same chrome opener",
+      "openerKind": "chrome",
+      "closeAction": "explicit-close",
+      "passed": true,
+      "open": {
+        "identity": {
+          "sameNodeAsActiveElement": false,
+          "openerConnected": true,
+          "activeConnected": true,
+          "activeIsBody": false,
+          "activeKind": "file-panel",
+          "activeText": "canvas/visual-baseline.canvas",
+          "activeAriaLabel": null,
+          "openerKind": "chrome-opener",
+          "openerText": "画布",
+          "openerExpanded": "true",
+          "openerControls": "native-canvas-file-panel",
+          "openerControlsExists": true
+        },
+        "firstFocusInsidePanel": true,
+        "panelCount": 1,
+        "panelInteractiveChildren": 5
+      },
+      "after": {
+        "identity": {
+          "sameNodeAsActiveElement": true,
+          "openerConnected": true,
+          "activeConnected": true,
+          "activeIsBody": false,
+          "activeKind": "chrome-opener",
+          "activeText": "画布",
+          "activeAriaLabel": null,
+          "openerKind": "chrome-opener",
+          "openerText": "画布",
+          "openerExpanded": "false",
+          "openerControls": "native-canvas-file-panel",
+          "openerControlsExists": false
+        },
+        "panelCount": 0,
+        "panelInteractiveChildren": 0,
+        "canvasLoaded": false,
+        "expectedTarget": "chrome-opener-same-DOM-node"
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "overflow": {
+          "values": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "canvasRoot": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "ok": true
+        },
+        "exactReadAllowlist": true,
+        "callsStayInsideReadAllowlist": true,
+        "localStorageChromeOnly": true
+      },
+      "screenshot": null
+    },
+    {
+      "name": "empty opener -> explicit close returns to the same empty opener",
+      "openerKind": "empty",
+      "closeAction": "explicit-close",
+      "passed": false,
+      "open": {
+        "identity": {
+          "sameNodeAsActiveElement": false,
+          "openerConnected": true,
+          "activeConnected": true,
+          "activeIsBody": false,
+          "activeKind": "file-panel",
+          "activeText": "canvas/visual-baseline.canvas",
+          "activeAriaLabel": null,
+          "openerKind": "empty-opener",
+          "openerText": "选择画布",
+          "openerExpanded": null,
+          "openerControls": null,
+          "openerControlsExists": false
+        },
+        "firstFocusInsidePanel": true,
+        "panelCount": 1,
+        "panelInteractiveChildren": 5
+      },
+      "after": {
+        "identity": {
+          "sameNodeAsActiveElement": false,
+          "openerConnected": true,
+          "activeConnected": true,
+          "activeIsBody": false,
+          "activeKind": "chrome-opener",
+          "activeText": "画布",
+          "activeAriaLabel": null,
+          "openerKind": "empty-opener",
+          "openerText": "选择画布",
+          "openerExpanded": null,
+          "openerControls": null,
+          "openerControlsExists": false
+        },
+        "panelCount": 0,
+        "panelInteractiveChildren": 0,
+        "canvasLoaded": false,
+        "expectedTarget": "empty-opener-same-DOM-node"
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "overflow": {
+          "values": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "canvasRoot": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "ok": true
+        },
+        "exactReadAllowlist": true,
+        "callsStayInsideReadAllowlist": true,
+        "localStorageChromeOnly": true
+      },
+      "screenshot": null
+    },
+    {
+      "name": "chrome opener -> successful selection focuses the continuous stage",
+      "openerKind": "chrome",
+      "closeAction": "select-existing",
+      "passed": false,
+      "open": {
+        "identity": {
+          "sameNodeAsActiveElement": false,
+          "openerConnected": true,
+          "activeConnected": true,
+          "activeIsBody": false,
+          "activeKind": "file-panel",
+          "activeText": "canvas/visual-baseline.canvas",
+          "activeAriaLabel": null,
+          "openerKind": "chrome-opener",
+          "openerText": "画布",
+          "openerExpanded": "true",
+          "openerControls": "native-canvas-file-panel",
+          "openerControlsExists": true
+        },
+        "firstFocusInsidePanel": true,
+        "panelCount": 1,
+        "panelInteractiveChildren": 5
+      },
+      "after": {
+        "identity": {
+          "sameNodeAsActiveElement": true,
+          "openerConnected": true,
+          "activeConnected": true,
+          "activeIsBody": false,
+          "activeKind": "chrome-opener",
+          "activeText": "画布",
+          "activeAriaLabel": null,
+          "openerKind": "chrome-opener",
+          "openerText": "画布",
+          "openerExpanded": "false",
+          "openerControls": "native-canvas-file-panel",
+          "openerControlsExists": false
+        },
+        "panelCount": 0,
+        "panelInteractiveChildren": 0,
+        "canvasLoaded": true,
+        "expectedTarget": "stage"
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_canvas": 1,
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "overflow": {
+          "values": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "canvasRoot": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "ok": true
+        },
+        "exactReadAllowlist": true,
+        "callsStayInsideReadAllowlist": true,
+        "localStorageChromeOnly": true
+      },
+      "screenshot": null
+    },
+    {
+      "name": "empty opener -> successful selection focuses the continuous stage",
+      "openerKind": "empty",
+      "closeAction": "select-existing",
+      "passed": false,
+      "open": {
+        "identity": {
+          "sameNodeAsActiveElement": false,
+          "openerConnected": true,
+          "activeConnected": true,
+          "activeIsBody": false,
+          "activeKind": "file-panel",
+          "activeText": "canvas/visual-baseline.canvas",
+          "activeAriaLabel": null,
+          "openerKind": "empty-opener",
+          "openerText": "选择画布",
+          "openerExpanded": null,
+          "openerControls": null,
+          "openerControlsExists": false
+        },
+        "firstFocusInsidePanel": true,
+        "panelCount": 1,
+        "panelInteractiveChildren": 5
+      },
+      "after": {
+        "identity": {
+          "sameNodeAsActiveElement": false,
+          "openerConnected": false,
+          "activeConnected": true,
+          "activeIsBody": false,
+          "activeKind": "chrome-opener",
+          "activeText": "画布",
+          "activeAriaLabel": null,
+          "openerKind": "empty-opener",
+          "openerText": "选择画布",
+          "openerExpanded": null,
+          "openerControls": null,
+          "openerControlsExists": false
+        },
+        "panelCount": 0,
+        "panelInteractiveChildren": 0,
+        "canvasLoaded": true,
+        "expectedTarget": "stage"
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "localStorage": {
+          "emptyBeforeMount": true,
+          "writeCount": 2,
+          "keys": [
+            "syn-native-knowledge-workspace-ui-v1"
+          ],
+          "latestKey": "syn-native-knowledge-workspace-ui-v1",
+          "latestNormalizedContent": {
+            "version": 2,
+            "selectedRelativePath": null,
+            "centralState": {
+              "groups": [
+                {
+                  "id": "knowledge-group-primary",
+                  "tabs": [
+                    {
+                      "id": "surface:canvas",
+                      "kind": "surface",
+                      "surface": "canvas"
+                    }
+                  ],
+                  "activeTabId": "surface:canvas"
+                }
+              ],
+              "activeGroupId": "knowledge-group-primary",
+              "splitRatio": 50
+            }
+          }
+        },
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_read_canvas": 1,
+          "knowledge_workspace_snapshot": 2
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "overflow": {
+          "values": {
+            "documentElement": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "body": {
+              "clientHeight": 760,
+              "clientWidth": 1180,
+              "scrollHeight": 760,
+              "scrollWidth": 1180,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "shell": {
+              "clientHeight": 758,
+              "clientWidth": 1178,
+              "scrollHeight": 758,
+              "scrollWidth": 1178,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "activeGroupPanel": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            },
+            "canvasRoot": {
+              "clientHeight": 694,
+              "clientWidth": 656,
+              "scrollHeight": 694,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "ok": true
+        },
+        "exactReadAllowlist": true,
+        "callsStayInsideReadAllowlist": true,
+        "localStorageChromeOnly": true
+      },
+      "screenshot": null
+    }
+  ],
+  "screenshots": [
+    "red-empty-opener-escape-wrong-focus.png"
+  ],
+  "outcome": "EXPECTED_RED",
+  "visualConclusion": "VISUAL_UNCHANGED / FOCUS_PATH_BROKEN"
+}

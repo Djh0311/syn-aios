@@ -1,0 +1,5 @@
+after 0 {"activeTag":"BODY","activeLabel":"关系图×当前组+分栏刷新","activeIsLiveOpener":false,"storedStillConnected":true,"storedIsLive":true,"liveExists":true}
+after 30 {"activeTag":"BUTTON","activeLabel":"筛选","activeIsLiveOpener":true,"storedStillConnected":true,"storedIsLive":true,"liveExists":true}
+after 100 {"activeTag":"BUTTON","activeLabel":"筛选","activeIsLiveOpener":true,"storedStillConnected":true,"storedIsLive":true,"liveExists":true}
+after 300 {"activeTag":"BUTTON","activeLabel":"筛选","activeIsLiveOpener":true,"storedStillConnected":true,"storedIsLive":true,"liveExists":true}
+after 800 {"activeTag":"BUTTON","activeLabel":"筛选","activeIsLiveOpener":true,"storedStillConnected":true,"storedIsLive":true,"liveExists":true}

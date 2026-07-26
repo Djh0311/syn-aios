@@ -1,0 +1,638 @@
+{
+  "contract": "N2R-R3A-R1 overlay layering",
+  "phase": "green",
+  "fixture": "real React + production CSS + pure-synthetic data",
+  "assertions": 33,
+  "failed": 0,
+  "failures": [],
+  "contexts": [
+    {
+      "name": "quick-open",
+      "viewport": {
+        "width": 1180,
+        "height": 760
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_search": 1,
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "evidence": {
+        "query": "合成",
+        "initialFocus": "native-knowledge-quick-open",
+        "state": {
+          "optionCount": 16,
+          "currentCount": 1,
+          "activeDescendant": "native-knowledge-quick-open-option-1",
+          "hints": [
+            "↑↓ 选择",
+            "Enter 打开",
+            "Esc 关闭"
+          ]
+        },
+        "layering": {
+          "backdrop": {
+            "backgroundColor": "color(srgb 0.941176 0.929412 0.901961 / 0.72)",
+            "backgroundAlpha": 0.7215686274509804,
+            "backgroundImage": "none",
+            "backdropFilter": "none",
+            "filter": "none"
+          },
+          "panel": {
+            "backgroundColor": "rgb(255, 255, 255)",
+            "backgroundAlpha": 1,
+            "borderTopColor": "rgb(110, 127, 91)",
+            "borderTopWidth": "3px",
+            "boxShadow": "none"
+          },
+          "screenshotAnalysis": {
+            "base": {
+              "meanEdgeEnergy": 3.4142598909736437,
+              "sampledEdges": 78880,
+              "quantizedColorBuckets": 72
+            },
+            "overlay": {
+              "meanEdgeEnergy": 0.9695372160243371,
+              "sampledEdges": 78880,
+              "quantizedColorBuckets": 18
+            },
+            "retainedEdgeRatio": 0.28396702271772706,
+            "workspaceContextVisible": true
+          },
+          "overlayBox": {
+            "x": 310,
+            "y": 56,
+            "width": 560,
+            "height": 383.515625
+          },
+          "viewport": {
+            "width": 1180,
+            "height": 760
+          }
+        },
+        "afterEscape": {
+          "dialogCount": 0,
+          "focusAriaLabel": "搜索"
+        },
+        "screenshot": "02-r1-1180-quick-open-results.png"
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "quick-open"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 260,
+            "height": 732
+          },
+          "central": {
+            "x": 303,
+            "y": 1,
+            "width": 656,
+            "height": 732
+          },
+          "right": {
+            "x": 959,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 1136,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 260,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 259,
+              "scrollHeight": 732,
+              "scrollWidth": 259,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 303,
+              "y": 1,
+              "width": 656,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 656,
+              "scrollHeight": 732,
+              "scrollWidth": 656,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 959,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 1,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 219,
+              "scrollHeight": 1162,
+              "scrollWidth": 219,
+              "canScrollY": true,
+              "movedOnProbe": true
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 1136,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 1136,
+              "scrollHeight": 25,
+              "scrollWidth": 1136,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 687,
+            "clientWidth": 656,
+            "scrollHeight": 687,
+            "scrollWidth": 656,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "focus": {
+          "tag": "button",
+          "ariaLabel": "搜索",
+          "role": null,
+          "region": "activity"
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_search": 1,
+            "knowledge_workspace_snapshot": 1
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "document": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 1180,
+            "scrollHeight": 760,
+            "scrollWidth": 1180,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 1178,
+            "scrollHeight": 758,
+            "scrollWidth": 1178,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    },
+    {
+      "name": "command",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "audit": {
+        "localStorageEmptyBeforeMount": true,
+        "readAllowlist": [
+          "knowledge_workspace_graph",
+          "knowledge_workspace_read_canvas",
+          "knowledge_workspace_read_markdown",
+          "knowledge_workspace_search",
+          "knowledge_workspace_snapshot"
+        ],
+        "callsByCommand": {
+          "knowledge_workspace_snapshot": 1
+        },
+        "writeCallCount": 0,
+        "unrecognizedCallCount": 0,
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      },
+      "evidence": {
+        "query": "目录",
+        "initialCount": 2,
+        "state": {
+          "optionCount": 1,
+          "currentCount": 1,
+          "currentText": "新建目录进入固定 vault 内目录的受限相对路径表单。",
+          "focusedId": "native-knowledge-command-filter",
+          "hints": [
+            "↑↓ 选择",
+            "Enter 继续",
+            "Esc 关闭"
+          ]
+        },
+        "layering": {
+          "backdrop": {
+            "backgroundColor": "color(srgb 0.941176 0.929412 0.901961 / 0.72)",
+            "backgroundAlpha": 0.7215686274509804,
+            "backgroundImage": "none",
+            "backdropFilter": "none",
+            "filter": "none"
+          },
+          "panel": {
+            "backgroundColor": "rgb(255, 255, 255)",
+            "backgroundAlpha": 1,
+            "borderTopColor": "rgb(110, 127, 91)",
+            "borderTopWidth": "3px",
+            "boxShadow": "none"
+          },
+          "screenshotAnalysis": {
+            "base": {
+              "meanEdgeEnergy": 3.8220364281763,
+              "sampledEdges": 65076,
+              "quantizedColorBuckets": 68
+            },
+            "overlay": {
+              "meanEdgeEnergy": 1.064834488905267,
+              "sampledEdges": 65076,
+              "quantizedColorBuckets": 16
+            },
+            "retainedEdgeRatio": 0.2786039612430793,
+            "workspaceContextVisible": true
+          },
+          "overlayBox": {
+            "x": 170,
+            "y": 56,
+            "width": 560,
+            "height": 213.34375
+          },
+          "viewport": {
+            "width": 900,
+            "height": 760
+          }
+        },
+        "safeForm": {
+          "pathInputCount": 1,
+          "createButtonDisabled": true
+        },
+        "afterEscape": {
+          "dialogCount": 0,
+          "focusAriaLabel": "Syn 命令"
+        },
+        "screenshot": "03-r1-900-command-filter-results.png"
+      },
+      "metrics": {
+        "fixture": {
+          "dataOrigin": "synthetic-only",
+          "localStorageEmptyBeforeMount": true,
+          "scenario": "command"
+        },
+        "bounds": {
+          "activity": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "left": {
+            "x": 43,
+            "y": 1,
+            "width": 220,
+            "height": 732
+          },
+          "central": {
+            "x": 263,
+            "y": 1,
+            "width": 436,
+            "height": 732
+          },
+          "right": {
+            "x": 699,
+            "y": 1,
+            "width": 200,
+            "height": 732
+          },
+          "status": {
+            "x": 43,
+            "y": 733,
+            "width": 856,
+            "height": 26
+          }
+        },
+        "regions": {
+          "activity": {
+            "bounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 758
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 758,
+              "clientWidth": 41,
+              "scrollHeight": 758,
+              "scrollWidth": 41,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "left": {
+            "bounds": {
+              "x": 43,
+              "y": 1,
+              "width": 220,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 45,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 219,
+              "scrollHeight": 732,
+              "scrollWidth": 219,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "central": {
+            "bounds": {
+              "x": 263,
+              "y": 1,
+              "width": 436,
+              "height": 732
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 8,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 436,
+              "scrollHeight": 732,
+              "scrollWidth": 436,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          },
+          "right": {
+            "bounds": {
+              "x": 699,
+              "y": 1,
+              "width": 200,
+              "height": 732
+            },
+            "ariaHidden": "false",
+            "inert": false,
+            "interactiveChildren": 1,
+            "scroll": {
+              "clientHeight": 732,
+              "clientWidth": 199,
+              "scrollHeight": 1181,
+              "scrollWidth": 199,
+              "canScrollY": true,
+              "movedOnProbe": true
+            }
+          },
+          "status": {
+            "bounds": {
+              "x": 43,
+              "y": 733,
+              "width": 856,
+              "height": 26
+            },
+            "ariaHidden": null,
+            "inert": false,
+            "interactiveChildren": 0,
+            "scroll": {
+              "clientHeight": 25,
+              "clientWidth": 856,
+              "scrollHeight": 25,
+              "scrollWidth": 856,
+              "canScrollY": false,
+              "movedOnProbe": false
+            }
+          }
+        },
+        "overflow": {
+          "documentElement": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "centralSurface": {
+            "clientHeight": 687,
+            "clientWidth": 436,
+            "scrollHeight": 687,
+            "scrollWidth": 436,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "overlay": null
+        },
+        "focus": {
+          "tag": "button",
+          "ariaLabel": "Syn 命令",
+          "role": null,
+          "region": "activity"
+        },
+        "mock": {
+          "allowedReadCommands": [
+            "knowledge_workspace_graph",
+            "knowledge_workspace_read_canvas",
+            "knowledge_workspace_read_markdown",
+            "knowledge_workspace_search",
+            "knowledge_workspace_snapshot"
+          ],
+          "callsByCommand": {
+            "knowledge_workspace_snapshot": 1
+          },
+          "writeCallCount": 0,
+          "unrecognizedCallCount": 0,
+          "unrecognizedCommandNames": []
+        }
+      },
+      "overflow": {
+        "values": {
+          "document": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "body": {
+            "clientHeight": 760,
+            "clientWidth": 900,
+            "scrollHeight": 760,
+            "scrollWidth": 900,
+            "canScrollY": false,
+            "movedOnProbe": false
+          },
+          "shell": {
+            "clientHeight": 758,
+            "clientWidth": 898,
+            "scrollHeight": 758,
+            "scrollWidth": 898,
+            "canScrollY": false,
+            "movedOnProbe": false
+          }
+        },
+        "ok": true
+      }
+    }
+  ],
+  "screenshots": [
+    "02-r1-1180-quick-open-results.png",
+    "03-r1-900-command-filter-results.png"
+  ],
+  "outcome": "PASS"
+}

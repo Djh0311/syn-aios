@@ -1,0 +1,69 @@
+{
+  "phase": "pre-implementation-red-first",
+  "fixture": "offline-static-and-synthetic-browser",
+  "static": {
+    "command": "bundle/import tests/knowledge-canvas.test.tsx",
+    "contracts": 14,
+    "failed": 9,
+    "outcome": "EXPECTED_RED",
+    "failure_categories": [
+      "compact chrome replaces page header",
+      "page-level Canvas heading retirement",
+      "legacy static grid retirement",
+      "permanent catalog retirement",
+      "continuous Canvas stage",
+      "floating tools inside stage",
+      "full accessible current path",
+      "compact saved state",
+      "legacy static toolbar retirement"
+    ]
+  },
+  "browser": {
+    "command": "node evidence/raw/2026-07-26-l3-syn-n2r-r3c-canvas-first/red-browser-evidence.mjs",
+    "viewport": {
+      "width": 1180,
+      "height": 760
+    },
+    "assertions": 14,
+    "failed": 9,
+    "outcome": "EXPECTED_RED",
+    "screenshot": "red-1180-canvas-three-column.png",
+    "observed": {
+      "root_bounds": {
+        "x": 303,
+        "y": 39,
+        "width": 656,
+        "height": 573
+      },
+      "stage_bounds": {
+        "x": 483,
+        "y": 197,
+        "width": 440,
+        "height": 415
+      },
+      "stage_height_ratio": 0.7240213717151892,
+      "legacy_browser_grid": 1,
+      "page_header": 1,
+      "permanent_catalog": 1,
+      "permanent_toolbar": 1,
+      "empty_inspector": 1,
+      "compact_chrome": 0,
+      "file_trigger_aria_expanded": null,
+      "continuous_stage": 0,
+      "floating_tools_inside_stage": false,
+      "write_call_count": 0,
+      "unrecognized_call_count": 0
+    },
+    "failure_categories": [
+      "legacy three-column browser grid retirement",
+      "page-level Canvas header retirement",
+      "default-closed file panel",
+      "full-row toolbar retirement",
+      "selection-only inspector",
+      "compact chrome",
+      "file trigger ARIA state",
+      "continuous stage with at least 75 percent height",
+      "floating node tools inside stage"
+    ]
+  }
+}

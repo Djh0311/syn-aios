@@ -1,0 +1,2648 @@
+{
+  "phase": "pre-implementation-red",
+  "fixture": "synthetic-only",
+  "purpose": "R3E D1/D2/D3 现状反例：文字活动栏 + 平铺右栏 + 恒定半轴环形布局",
+  "outcome": "RED_ESTABLISHED",
+  "assertions": 13,
+  "failed": 7,
+  "redFindings": [
+    {
+      "dimension": "D1",
+      "claim": "1440 下活动栏是中文文字按钮、零 inline SVG",
+      "observed": {
+        "railWidth": 42,
+        "buttonCount": 8,
+        "svgCountTotal": 0,
+        "visibleTexts": [
+          "文件",
+          "搜索",
+          "关系图",
+          "Canvas",
+          "Syn 命令",
+          "设置与维护",
+          "来源",
+          "上下文"
+        ],
+        "accessibleNames": [
+          "文件",
+          "搜索",
+          "关系图",
+          "Canvas",
+          "Syn 命令",
+          "设置与维护",
+          "来源",
+          "切换右侧上下文"
+        ],
+        "perButton": [
+          {
+            "ariaLabel": "文件",
+            "bounds": {
+              "x": 5,
+              "y": 7,
+              "width": 33,
+              "height": 32
+            },
+            "clientHeight": 30,
+            "scrollHeight": 30,
+            "fontSize": 10,
+            "singleLineBudget": 22,
+            "wrapped": false
+          },
+          {
+            "ariaLabel": "搜索",
+            "bounds": {
+              "x": 5,
+              "y": 43,
+              "width": 33,
+              "height": 32
+            },
+            "clientHeight": 30,
+            "scrollHeight": 30,
+            "fontSize": 10,
+            "singleLineBudget": 22,
+            "wrapped": false
+          },
+          {
+            "ariaLabel": "关系图",
+            "bounds": {
+              "x": 5,
+              "y": 79,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "fontSize": 10,
+            "singleLineBudget": 22,
+            "wrapped": true
+          },
+          {
+            "ariaLabel": "Canvas",
+            "bounds": {
+              "x": 5,
+              "y": 117,
+              "width": 33,
+              "height": 32
+            },
+            "clientHeight": 30,
+            "scrollHeight": 30,
+            "fontSize": 10,
+            "singleLineBudget": 22,
+            "wrapped": false
+          },
+          {
+            "ariaLabel": "Syn 命令",
+            "bounds": {
+              "x": 5,
+              "y": 153,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "fontSize": 10,
+            "singleLineBudget": 22,
+            "wrapped": true
+          },
+          {
+            "ariaLabel": "设置与维护",
+            "bounds": {
+              "x": 5,
+              "y": 191,
+              "width": 33,
+              "height": 46
+            },
+            "clientHeight": 44,
+            "scrollHeight": 44,
+            "fontSize": 10,
+            "singleLineBudget": 22,
+            "wrapped": true
+          },
+          {
+            "ariaLabel": "来源",
+            "bounds": {
+              "x": 5,
+              "y": 241,
+              "width": 33,
+              "height": 32
+            },
+            "clientHeight": 30,
+            "scrollHeight": 30,
+            "fontSize": 10,
+            "singleLineBudget": 22,
+            "wrapped": false
+          },
+          {
+            "ariaLabel": "切换右侧上下文",
+            "bounds": {
+              "x": 5,
+              "y": 277,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "fontSize": 10,
+            "singleLineBudget": 22,
+            "wrapped": true
+          }
+        ]
+      }
+    },
+    {
+      "dimension": "D1",
+      "claim": "900 下活动栏文字按钮断行",
+      "observed": {
+        "railWidth": 42,
+        "wrappedButtons": [
+          "关系图",
+          "Syn 命令",
+          "设置与维护",
+          "切换右侧上下文"
+        ],
+        "perButton": [
+          {
+            "ariaLabel": "文件",
+            "visibleText": "文件",
+            "bounds": {
+              "x": 5,
+              "y": 7,
+              "width": 33,
+              "height": 32
+            },
+            "clientHeight": 30,
+            "scrollHeight": 30,
+            "fontSize": 10,
+            "lineHeight": 12,
+            "singleLineBudget": 22,
+            "wrapped": false
+          },
+          {
+            "ariaLabel": "搜索",
+            "visibleText": "搜索",
+            "bounds": {
+              "x": 5,
+              "y": 43,
+              "width": 33,
+              "height": 32
+            },
+            "clientHeight": 30,
+            "scrollHeight": 30,
+            "fontSize": 10,
+            "lineHeight": 12,
+            "singleLineBudget": 22,
+            "wrapped": false
+          },
+          {
+            "ariaLabel": "关系图",
+            "visibleText": "关系图",
+            "bounds": {
+              "x": 5,
+              "y": 79,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "fontSize": 10,
+            "lineHeight": 12,
+            "singleLineBudget": 22,
+            "wrapped": true
+          },
+          {
+            "ariaLabel": "Canvas",
+            "visibleText": "Canvas",
+            "bounds": {
+              "x": 5,
+              "y": 117,
+              "width": 33,
+              "height": 32
+            },
+            "clientHeight": 30,
+            "scrollHeight": 30,
+            "fontSize": 10,
+            "lineHeight": 12,
+            "singleLineBudget": 22,
+            "wrapped": false
+          },
+          {
+            "ariaLabel": "Syn 命令",
+            "visibleText": "Syn 命令",
+            "bounds": {
+              "x": 5,
+              "y": 153,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "fontSize": 10,
+            "lineHeight": 12,
+            "singleLineBudget": 22,
+            "wrapped": true
+          },
+          {
+            "ariaLabel": "设置与维护",
+            "visibleText": "设置与维护",
+            "bounds": {
+              "x": 5,
+              "y": 191,
+              "width": 33,
+              "height": 46
+            },
+            "clientHeight": 44,
+            "scrollHeight": 44,
+            "fontSize": 10,
+            "lineHeight": 12,
+            "singleLineBudget": 22,
+            "wrapped": true
+          },
+          {
+            "ariaLabel": "来源",
+            "visibleText": "来源",
+            "bounds": {
+              "x": 5,
+              "y": 241,
+              "width": 33,
+              "height": 32
+            },
+            "clientHeight": 30,
+            "scrollHeight": 30,
+            "fontSize": 10,
+            "lineHeight": 12,
+            "singleLineBudget": 22,
+            "wrapped": false
+          },
+          {
+            "ariaLabel": "切换右侧上下文",
+            "visibleText": "上下文",
+            "bounds": {
+              "x": 5,
+              "y": 277,
+              "width": 33,
+              "height": 34
+            },
+            "clientHeight": 32,
+            "scrollHeight": 32,
+            "fontSize": 10,
+            "lineHeight": 12,
+            "singleLineBudget": 22,
+            "wrapped": true
+          }
+        ]
+      }
+    },
+    {
+      "dimension": "D2",
+      "claim": "右栏为平铺长列表：零区块折叠控件、标题挂空大纲",
+      "observed": {
+        "headerText": "属性 / 反链 / 大纲 / 来源上下文",
+        "headerDeclaresOutline": true,
+        "ariaExpandedTotal": 1,
+        "ariaExpandedLabels": [
+          "折叠右侧栏"
+        ],
+        "sectionCount": 2,
+        "sectionsWithCollapseControl": 0,
+        "sections": [
+          {
+            "ariaLabel": "反链与属性",
+            "className": "native-workspace-margin",
+            "bounds": {
+              "x": 1200,
+              "y": 46.14,
+              "width": 239,
+              "height": 133.13
+            },
+            "directChildren": 2,
+            "hasExpandedControl": false
+          },
+          {
+            "ariaLabel": "合成来源上下文",
+            "className": "syn-knowledge-source-panel",
+            "bounds": {
+              "x": 1200,
+              "y": 179.27,
+              "width": 239,
+              "height": 984.13
+            },
+            "directChildren": 3,
+            "hasExpandedControl": false
+          }
+        ],
+        "sourceContextItemCount": 28,
+        "sourceContextBounds": {
+          "x": 1200,
+          "y": 179.27,
+          "width": 239,
+          "height": 984.13
+        },
+        "rightBounds": {
+          "x": 1199,
+          "y": 1,
+          "width": 240,
+          "height": 872
+        },
+        "rightScroll": {
+          "clientHeight": 872,
+          "scrollHeight": 1162,
+          "clientWidth": 239,
+          "scrollWidth": 239
+        }
+      }
+    },
+    {
+      "dimension": "D3",
+      "claim": "n=6 浏览器实测节点矩形相交对数",
+      "observed": {
+        "nodeCount": 6,
+        "edgeCount": 5,
+        "zoom": 1,
+        "intersectingPairs": 0,
+        "nodesInsideStage": 6,
+        "stageBounds": {
+          "x": 331,
+          "y": 79,
+          "width": 868,
+          "height": 794
+        },
+        "nodeBoxSample": [
+          {
+            "id": "notes/visual-baseline.md",
+            "x": 697,
+            "y": 296,
+            "right": 833,
+            "bottom": 336,
+            "width": 136,
+            "height": 40
+          },
+          {
+            "id": "notes/layout-convergence.md",
+            "x": 792,
+            "y": 376,
+            "right": 928,
+            "bottom": 416,
+            "width": 136,
+            "height": 40
+          },
+          {
+            "id": "notes/focus-return.md",
+            "x": 792,
+            "y": 536,
+            "right": 928,
+            "bottom": 576,
+            "width": 136,
+            "height": 40
+          }
+        ],
+        "examples": []
+      }
+    },
+    {
+      "dimension": "D3",
+      "claim": "n=40 浏览器实测节点矩形相交对数",
+      "observed": {
+        "nodeCount": 40,
+        "edgeCount": 39,
+        "zoom": 1,
+        "intersectingPairs": 116,
+        "nodesInsideStage": 40,
+        "stageBounds": {
+          "x": 331,
+          "y": 79,
+          "width": 868,
+          "height": 794
+        },
+        "nodeBoxSample": [
+          {
+            "id": "scale/synthetic-001.md",
+            "x": 697,
+            "y": 296,
+            "right": 833,
+            "bottom": 336,
+            "width": 136,
+            "height": 40
+          },
+          {
+            "id": "scale/synthetic-002.md",
+            "x": 714,
+            "y": 298,
+            "right": 850,
+            "bottom": 338,
+            "width": 136,
+            "height": 40
+          },
+          {
+            "id": "scale/synthetic-003.md",
+            "x": 731,
+            "y": 304,
+            "right": 867,
+            "bottom": 344,
+            "width": 136,
+            "height": 40
+          }
+        ],
+        "examples": [
+          {
+            "a": {
+              "id": "scale/synthetic-001.md",
+              "x": 697,
+              "y": 296,
+              "right": 833,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            },
+            "b": {
+              "id": "scale/synthetic-002.md",
+              "x": 714,
+              "y": 298,
+              "right": 850,
+              "bottom": 338,
+              "width": 136,
+              "height": 40
+            }
+          },
+          {
+            "a": {
+              "id": "scale/synthetic-001.md",
+              "x": 697,
+              "y": 296,
+              "right": 833,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            },
+            "b": {
+              "id": "scale/synthetic-003.md",
+              "x": 731,
+              "y": 304,
+              "right": 867,
+              "bottom": 344,
+              "width": 136,
+              "height": 40
+            }
+          },
+          {
+            "a": {
+              "id": "scale/synthetic-001.md",
+              "x": 697,
+              "y": 296,
+              "right": 833,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            },
+            "b": {
+              "id": "scale/synthetic-004.md",
+              "x": 747,
+              "y": 313,
+              "right": 883,
+              "bottom": 353,
+              "width": 136,
+              "height": 40
+            }
+          },
+          {
+            "a": {
+              "id": "scale/synthetic-001.md",
+              "x": 697,
+              "y": 296,
+              "right": 833,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            },
+            "b": {
+              "id": "scale/synthetic-005.md",
+              "x": 762,
+              "y": 327,
+              "right": 898,
+              "bottom": 367,
+              "width": 136,
+              "height": 40
+            }
+          }
+        ]
+      }
+    },
+    {
+      "dimension": "D3",
+      "claim": "n=512 浏览器实测节点矩形相交对数",
+      "observed": {
+        "nodeCount": 512,
+        "edgeCount": 511,
+        "zoom": 1,
+        "intersectingPairs": 22180,
+        "nodesInsideStage": 512,
+        "stageBounds": {
+          "x": 331,
+          "y": 79,
+          "width": 868,
+          "height": 794
+        },
+        "nodeBoxSample": [
+          {
+            "id": "scale/synthetic-001.md",
+            "x": 697,
+            "y": 296,
+            "right": 833,
+            "bottom": 336,
+            "width": 136,
+            "height": 40
+          },
+          {
+            "id": "scale/synthetic-002.md",
+            "x": 698,
+            "y": 296,
+            "right": 834,
+            "bottom": 336,
+            "width": 136,
+            "height": 40
+          },
+          {
+            "id": "scale/synthetic-003.md",
+            "x": 700,
+            "y": 296,
+            "right": 836,
+            "bottom": 336,
+            "width": 136,
+            "height": 40
+          }
+        ],
+        "examples": [
+          {
+            "a": {
+              "id": "scale/synthetic-001.md",
+              "x": 697,
+              "y": 296,
+              "right": 833,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            },
+            "b": {
+              "id": "scale/synthetic-002.md",
+              "x": 698,
+              "y": 296,
+              "right": 834,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            }
+          },
+          {
+            "a": {
+              "id": "scale/synthetic-001.md",
+              "x": 697,
+              "y": 296,
+              "right": 833,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            },
+            "b": {
+              "id": "scale/synthetic-003.md",
+              "x": 700,
+              "y": 296,
+              "right": 836,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            }
+          },
+          {
+            "a": {
+              "id": "scale/synthetic-001.md",
+              "x": 697,
+              "y": 296,
+              "right": 833,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            },
+            "b": {
+              "id": "scale/synthetic-004.md",
+              "x": 701,
+              "y": 296,
+              "right": 837,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            }
+          },
+          {
+            "a": {
+              "id": "scale/synthetic-001.md",
+              "x": 697,
+              "y": 296,
+              "right": 833,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            },
+            "b": {
+              "id": "scale/synthetic-005.md",
+              "x": 702,
+              "y": 296,
+              "right": 838,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "contexts": [
+    {
+      "name": "red-01-1440-activity-rail",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scenario": null,
+      "assertions": [
+        {
+          "name": "RED D1: 活动栏入口为紧凑 icon（现状应失败）",
+          "passed": false,
+          "detail": {
+            "railBounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 898
+            },
+            "railWidth": 42,
+            "railFlexDirection": "column",
+            "railScroll": {
+              "clientWidth": 41,
+              "scrollWidth": 41,
+              "clientHeight": 898,
+              "scrollHeight": 898
+            },
+            "buttonCount": 8,
+            "svgCountTotal": 0,
+            "buttons": [
+              {
+                "textLineBoxes": 1,
+                "textWraps": false,
+                "ariaLabel": "文件",
+                "visibleText": "文件",
+                "ariaPressed": "true",
+                "className": "is-active",
+                "bounds": {
+                  "x": 5,
+                  "y": 7,
+                  "width": 33,
+                  "height": 32
+                },
+                "clientHeight": 30,
+                "scrollHeight": 30,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": false,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 1,
+                "textWraps": false,
+                "ariaLabel": "搜索",
+                "visibleText": "搜索",
+                "ariaPressed": "false",
+                "className": "",
+                "bounds": {
+                  "x": 5,
+                  "y": 43,
+                  "width": 33,
+                  "height": 32
+                },
+                "clientHeight": 30,
+                "scrollHeight": 30,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": false,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 2,
+                "textWraps": true,
+                "ariaLabel": "关系图",
+                "visibleText": "关系图",
+                "ariaPressed": "false",
+                "className": "",
+                "bounds": {
+                  "x": 5,
+                  "y": 79,
+                  "width": 33,
+                  "height": 34
+                },
+                "clientHeight": 32,
+                "scrollHeight": 32,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": true,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 1,
+                "textWraps": false,
+                "ariaLabel": "Canvas",
+                "visibleText": "Canvas",
+                "ariaPressed": "false",
+                "className": "",
+                "bounds": {
+                  "x": 5,
+                  "y": 117,
+                  "width": 33,
+                  "height": 32
+                },
+                "clientHeight": 30,
+                "scrollHeight": 30,
+                "clientWidth": 31,
+                "scrollWidth": 33,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": false,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 2,
+                "textWraps": true,
+                "ariaLabel": "Syn 命令",
+                "visibleText": "Syn 命令",
+                "ariaPressed": null,
+                "className": "",
+                "bounds": {
+                  "x": 5,
+                  "y": 153,
+                  "width": 33,
+                  "height": 34
+                },
+                "clientHeight": 32,
+                "scrollHeight": 32,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": true,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 3,
+                "textWraps": true,
+                "ariaLabel": "设置与维护",
+                "visibleText": "设置与维护",
+                "ariaPressed": "false",
+                "className": "",
+                "bounds": {
+                  "x": 5,
+                  "y": 191,
+                  "width": 33,
+                  "height": 46
+                },
+                "clientHeight": 44,
+                "scrollHeight": 44,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": true,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 1,
+                "textWraps": false,
+                "ariaLabel": "来源",
+                "visibleText": "来源",
+                "ariaPressed": "false",
+                "className": "",
+                "bounds": {
+                  "x": 5,
+                  "y": 241,
+                  "width": 33,
+                  "height": 32
+                },
+                "clientHeight": 30,
+                "scrollHeight": 30,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": false,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 2,
+                "textWraps": true,
+                "ariaLabel": "切换右侧上下文",
+                "visibleText": "上下文",
+                "ariaPressed": "true",
+                "className": "is-active",
+                "bounds": {
+                  "x": 5,
+                  "y": 277,
+                  "width": 33,
+                  "height": 34
+                },
+                "clientHeight": 32,
+                "scrollHeight": 32,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": true,
+                "svgCount": 0,
+                "hitTargetOk": true
+              }
+            ],
+            "accessibleNames": [
+              "文件",
+              "搜索",
+              "关系图",
+              "Canvas",
+              "Syn 命令",
+              "设置与维护",
+              "来源",
+              "切换右侧上下文"
+            ],
+            "accessibleNamesMatchExpected": true,
+            "wrappedButtons": [
+              "关系图",
+              "Syn 命令",
+              "设置与维护",
+              "切换右侧上下文"
+            ],
+            "totalTextLineBoxes": 13
+          }
+        },
+        {
+          "name": "RED D1: 活动栏按钮不显示中文文字（现状应失败）",
+          "passed": false,
+          "detail": {
+            "visibleTexts": [
+              "文件",
+              "搜索",
+              "关系图",
+              "Canvas",
+              "Syn 命令",
+              "设置与维护",
+              "来源",
+              "上下文"
+            ]
+          }
+        },
+        {
+          "name": "RED D1: 活动栏宽度在 36-48px 区间（现状应失败）",
+          "passed": true
+        }
+      ],
+      "failures": [
+        {
+          "name": "RED D1: 活动栏入口为紧凑 icon（现状应失败）",
+          "detail": {
+            "railBounds": {
+              "x": 1,
+              "y": 1,
+              "width": 42,
+              "height": 898
+            },
+            "railWidth": 42,
+            "railFlexDirection": "column",
+            "railScroll": {
+              "clientWidth": 41,
+              "scrollWidth": 41,
+              "clientHeight": 898,
+              "scrollHeight": 898
+            },
+            "buttonCount": 8,
+            "svgCountTotal": 0,
+            "buttons": [
+              {
+                "textLineBoxes": 1,
+                "textWraps": false,
+                "ariaLabel": "文件",
+                "visibleText": "文件",
+                "ariaPressed": "true",
+                "className": "is-active",
+                "bounds": {
+                  "x": 5,
+                  "y": 7,
+                  "width": 33,
+                  "height": 32
+                },
+                "clientHeight": 30,
+                "scrollHeight": 30,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": false,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 1,
+                "textWraps": false,
+                "ariaLabel": "搜索",
+                "visibleText": "搜索",
+                "ariaPressed": "false",
+                "className": "",
+                "bounds": {
+                  "x": 5,
+                  "y": 43,
+                  "width": 33,
+                  "height": 32
+                },
+                "clientHeight": 30,
+                "scrollHeight": 30,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": false,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 2,
+                "textWraps": true,
+                "ariaLabel": "关系图",
+                "visibleText": "关系图",
+                "ariaPressed": "false",
+                "className": "",
+                "bounds": {
+                  "x": 5,
+                  "y": 79,
+                  "width": 33,
+                  "height": 34
+                },
+                "clientHeight": 32,
+                "scrollHeight": 32,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": true,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 1,
+                "textWraps": false,
+                "ariaLabel": "Canvas",
+                "visibleText": "Canvas",
+                "ariaPressed": "false",
+                "className": "",
+                "bounds": {
+                  "x": 5,
+                  "y": 117,
+                  "width": 33,
+                  "height": 32
+                },
+                "clientHeight": 30,
+                "scrollHeight": 30,
+                "clientWidth": 31,
+                "scrollWidth": 33,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": false,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 2,
+                "textWraps": true,
+                "ariaLabel": "Syn 命令",
+                "visibleText": "Syn 命令",
+                "ariaPressed": null,
+                "className": "",
+                "bounds": {
+                  "x": 5,
+                  "y": 153,
+                  "width": 33,
+                  "height": 34
+                },
+                "clientHeight": 32,
+                "scrollHeight": 32,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": true,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 3,
+                "textWraps": true,
+                "ariaLabel": "设置与维护",
+                "visibleText": "设置与维护",
+                "ariaPressed": "false",
+                "className": "",
+                "bounds": {
+                  "x": 5,
+                  "y": 191,
+                  "width": 33,
+                  "height": 46
+                },
+                "clientHeight": 44,
+                "scrollHeight": 44,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": true,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 1,
+                "textWraps": false,
+                "ariaLabel": "来源",
+                "visibleText": "来源",
+                "ariaPressed": "false",
+                "className": "",
+                "bounds": {
+                  "x": 5,
+                  "y": 241,
+                  "width": 33,
+                  "height": 32
+                },
+                "clientHeight": 30,
+                "scrollHeight": 30,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": false,
+                "svgCount": 0,
+                "hitTargetOk": true
+              },
+              {
+                "textLineBoxes": 2,
+                "textWraps": true,
+                "ariaLabel": "切换右侧上下文",
+                "visibleText": "上下文",
+                "ariaPressed": "true",
+                "className": "is-active",
+                "bounds": {
+                  "x": 5,
+                  "y": 277,
+                  "width": 33,
+                  "height": 34
+                },
+                "clientHeight": 32,
+                "scrollHeight": 32,
+                "clientWidth": 31,
+                "scrollWidth": 31,
+                "fontSize": 10,
+                "lineHeight": 12,
+                "singleLineBudget": 22,
+                "wrapped": true,
+                "svgCount": 0,
+                "hitTargetOk": true
+              }
+            ],
+            "accessibleNames": [
+              "文件",
+              "搜索",
+              "关系图",
+              "Canvas",
+              "Syn 命令",
+              "设置与维护",
+              "来源",
+              "切换右侧上下文"
+            ],
+            "accessibleNamesMatchExpected": true,
+            "wrappedButtons": [
+              "关系图",
+              "Syn 命令",
+              "设置与维护",
+              "切换右侧上下文"
+            ],
+            "totalTextLineBoxes": 13
+          }
+        },
+        {
+          "name": "RED D1: 活动栏按钮不显示中文文字（现状应失败）",
+          "detail": {
+            "visibleTexts": [
+              "文件",
+              "搜索",
+              "关系图",
+              "Canvas",
+              "Syn 命令",
+              "设置与维护",
+              "来源",
+              "上下文"
+            ]
+          }
+        }
+      ],
+      "evidence": {
+        "rail": {
+          "railBounds": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 898
+          },
+          "railWidth": 42,
+          "railFlexDirection": "column",
+          "railScroll": {
+            "clientWidth": 41,
+            "scrollWidth": 41,
+            "clientHeight": 898,
+            "scrollHeight": 898
+          },
+          "buttonCount": 8,
+          "svgCountTotal": 0,
+          "buttons": [
+            {
+              "textLineBoxes": 1,
+              "textWraps": false,
+              "ariaLabel": "文件",
+              "visibleText": "文件",
+              "ariaPressed": "true",
+              "className": "is-active",
+              "bounds": {
+                "x": 5,
+                "y": 7,
+                "width": 33,
+                "height": 32
+              },
+              "clientHeight": 30,
+              "scrollHeight": 30,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": false,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 1,
+              "textWraps": false,
+              "ariaLabel": "搜索",
+              "visibleText": "搜索",
+              "ariaPressed": "false",
+              "className": "",
+              "bounds": {
+                "x": 5,
+                "y": 43,
+                "width": 33,
+                "height": 32
+              },
+              "clientHeight": 30,
+              "scrollHeight": 30,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": false,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 2,
+              "textWraps": true,
+              "ariaLabel": "关系图",
+              "visibleText": "关系图",
+              "ariaPressed": "false",
+              "className": "",
+              "bounds": {
+                "x": 5,
+                "y": 79,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": true,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 1,
+              "textWraps": false,
+              "ariaLabel": "Canvas",
+              "visibleText": "Canvas",
+              "ariaPressed": "false",
+              "className": "",
+              "bounds": {
+                "x": 5,
+                "y": 117,
+                "width": 33,
+                "height": 32
+              },
+              "clientHeight": 30,
+              "scrollHeight": 30,
+              "clientWidth": 31,
+              "scrollWidth": 33,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": false,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 2,
+              "textWraps": true,
+              "ariaLabel": "Syn 命令",
+              "visibleText": "Syn 命令",
+              "ariaPressed": null,
+              "className": "",
+              "bounds": {
+                "x": 5,
+                "y": 153,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": true,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 3,
+              "textWraps": true,
+              "ariaLabel": "设置与维护",
+              "visibleText": "设置与维护",
+              "ariaPressed": "false",
+              "className": "",
+              "bounds": {
+                "x": 5,
+                "y": 191,
+                "width": 33,
+                "height": 46
+              },
+              "clientHeight": 44,
+              "scrollHeight": 44,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": true,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 1,
+              "textWraps": false,
+              "ariaLabel": "来源",
+              "visibleText": "来源",
+              "ariaPressed": "false",
+              "className": "",
+              "bounds": {
+                "x": 5,
+                "y": 241,
+                "width": 33,
+                "height": 32
+              },
+              "clientHeight": 30,
+              "scrollHeight": 30,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": false,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 2,
+              "textWraps": true,
+              "ariaLabel": "切换右侧上下文",
+              "visibleText": "上下文",
+              "ariaPressed": "true",
+              "className": "is-active",
+              "bounds": {
+                "x": 5,
+                "y": 277,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": true,
+              "svgCount": 0,
+              "hitTargetOk": true
+            }
+          ],
+          "accessibleNames": [
+            "文件",
+            "搜索",
+            "关系图",
+            "Canvas",
+            "Syn 命令",
+            "设置与维护",
+            "来源",
+            "切换右侧上下文"
+          ],
+          "accessibleNamesMatchExpected": true,
+          "wrappedButtons": [
+            "关系图",
+            "Syn 命令",
+            "设置与维护",
+            "切换右侧上下文"
+          ],
+          "totalTextLineBoxes": 13
+        }
+      },
+      "audit": {
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "red-02-900-activity-rail-wrap",
+      "viewport": {
+        "width": 900,
+        "height": 760
+      },
+      "scenario": null,
+      "assertions": [
+        {
+          "name": "RED D1: 900 下八入口零断行（现状应失败）",
+          "passed": false,
+          "detail": {
+            "wrappedButtons": [
+              "关系图",
+              "Syn 命令",
+              "设置与维护",
+              "切换右侧上下文"
+            ]
+          }
+        },
+        {
+          "name": "RED D1: 900 下活动栏宽度 36-48px（现状应失败）",
+          "passed": true
+        }
+      ],
+      "failures": [
+        {
+          "name": "RED D1: 900 下八入口零断行（现状应失败）",
+          "detail": {
+            "wrappedButtons": [
+              "关系图",
+              "Syn 命令",
+              "设置与维护",
+              "切换右侧上下文"
+            ]
+          }
+        }
+      ],
+      "evidence": {
+        "rail": {
+          "railBounds": {
+            "x": 1,
+            "y": 1,
+            "width": 42,
+            "height": 758
+          },
+          "railWidth": 42,
+          "railFlexDirection": "column",
+          "railScroll": {
+            "clientWidth": 41,
+            "scrollWidth": 41,
+            "clientHeight": 758,
+            "scrollHeight": 758
+          },
+          "buttonCount": 8,
+          "svgCountTotal": 0,
+          "buttons": [
+            {
+              "textLineBoxes": 1,
+              "textWraps": false,
+              "ariaLabel": "文件",
+              "visibleText": "文件",
+              "ariaPressed": "true",
+              "className": "is-active",
+              "bounds": {
+                "x": 5,
+                "y": 7,
+                "width": 33,
+                "height": 32
+              },
+              "clientHeight": 30,
+              "scrollHeight": 30,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": false,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 1,
+              "textWraps": false,
+              "ariaLabel": "搜索",
+              "visibleText": "搜索",
+              "ariaPressed": "false",
+              "className": "",
+              "bounds": {
+                "x": 5,
+                "y": 43,
+                "width": 33,
+                "height": 32
+              },
+              "clientHeight": 30,
+              "scrollHeight": 30,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": false,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 2,
+              "textWraps": true,
+              "ariaLabel": "关系图",
+              "visibleText": "关系图",
+              "ariaPressed": "false",
+              "className": "",
+              "bounds": {
+                "x": 5,
+                "y": 79,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": true,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 1,
+              "textWraps": false,
+              "ariaLabel": "Canvas",
+              "visibleText": "Canvas",
+              "ariaPressed": "false",
+              "className": "",
+              "bounds": {
+                "x": 5,
+                "y": 117,
+                "width": 33,
+                "height": 32
+              },
+              "clientHeight": 30,
+              "scrollHeight": 30,
+              "clientWidth": 31,
+              "scrollWidth": 33,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": false,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 2,
+              "textWraps": true,
+              "ariaLabel": "Syn 命令",
+              "visibleText": "Syn 命令",
+              "ariaPressed": null,
+              "className": "",
+              "bounds": {
+                "x": 5,
+                "y": 153,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": true,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 3,
+              "textWraps": true,
+              "ariaLabel": "设置与维护",
+              "visibleText": "设置与维护",
+              "ariaPressed": "false",
+              "className": "",
+              "bounds": {
+                "x": 5,
+                "y": 191,
+                "width": 33,
+                "height": 46
+              },
+              "clientHeight": 44,
+              "scrollHeight": 44,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": true,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 1,
+              "textWraps": false,
+              "ariaLabel": "来源",
+              "visibleText": "来源",
+              "ariaPressed": "false",
+              "className": "",
+              "bounds": {
+                "x": 5,
+                "y": 241,
+                "width": 33,
+                "height": 32
+              },
+              "clientHeight": 30,
+              "scrollHeight": 30,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": false,
+              "svgCount": 0,
+              "hitTargetOk": true
+            },
+            {
+              "textLineBoxes": 2,
+              "textWraps": true,
+              "ariaLabel": "切换右侧上下文",
+              "visibleText": "上下文",
+              "ariaPressed": "true",
+              "className": "is-active",
+              "bounds": {
+                "x": 5,
+                "y": 277,
+                "width": 33,
+                "height": 34
+              },
+              "clientHeight": 32,
+              "scrollHeight": 32,
+              "clientWidth": 31,
+              "scrollWidth": 31,
+              "fontSize": 10,
+              "lineHeight": 12,
+              "singleLineBudget": 22,
+              "wrapped": true,
+              "svgCount": 0,
+              "hitTargetOk": true
+            }
+          ],
+          "accessibleNames": [
+            "文件",
+            "搜索",
+            "关系图",
+            "Canvas",
+            "Syn 命令",
+            "设置与维护",
+            "来源",
+            "切换右侧上下文"
+          ],
+          "accessibleNamesMatchExpected": true,
+          "wrappedButtons": [
+            "关系图",
+            "Syn 命令",
+            "设置与维护",
+            "切换右侧上下文"
+          ],
+          "totalTextLineBoxes": 13
+        }
+      },
+      "audit": {
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "red-03-1440-right-context-flat",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scenario": null,
+      "assertions": [
+        {
+          "name": "RED D2: 右栏每个区块有折叠控件（现状应失败）",
+          "passed": false,
+          "detail": {
+            "headerText": "属性 / 反链 / 大纲 / 来源上下文",
+            "headerDeclaresOutline": true,
+            "ariaExpandedTotal": 1,
+            "ariaExpandedLabels": [
+              "折叠右侧栏"
+            ],
+            "sectionCount": 2,
+            "sections": [
+              {
+                "ariaLabel": "反链与属性",
+                "className": "native-workspace-margin",
+                "bounds": {
+                  "x": 1200,
+                  "y": 46.14,
+                  "width": 239,
+                  "height": 133.13
+                },
+                "directChildren": 2,
+                "hasExpandedControl": false
+              },
+              {
+                "ariaLabel": "合成来源上下文",
+                "className": "syn-knowledge-source-panel",
+                "bounds": {
+                  "x": 1200,
+                  "y": 179.27,
+                  "width": 239,
+                  "height": 984.13
+                },
+                "directChildren": 3,
+                "hasExpandedControl": false
+              }
+            ],
+            "sectionsWithCollapseControl": 0,
+            "sourceContextPresent": true,
+            "sourceContextItemCount": 28,
+            "sourceContextFirstItem": "上下文量尺 01",
+            "sourceContextLastItem": "上下文量尺 28",
+            "sourceContextBounds": {
+              "x": 1200,
+              "y": 179.27,
+              "width": 239,
+              "height": 984.13
+            },
+            "rightBounds": {
+              "x": 1199,
+              "y": 1,
+              "width": 240,
+              "height": 872
+            },
+            "rightScroll": {
+              "clientHeight": 872,
+              "scrollHeight": 1162,
+              "clientWidth": 239,
+              "scrollWidth": 239
+            },
+            "flatDirectChildren": 3
+          }
+        },
+        {
+          "name": "RED D2: 右栏标题不再声明大纲（现状应失败）",
+          "passed": false,
+          "detail": {
+            "headerText": "属性 / 反链 / 大纲 / 来源上下文"
+          }
+        }
+      ],
+      "failures": [
+        {
+          "name": "RED D2: 右栏每个区块有折叠控件（现状应失败）",
+          "detail": {
+            "headerText": "属性 / 反链 / 大纲 / 来源上下文",
+            "headerDeclaresOutline": true,
+            "ariaExpandedTotal": 1,
+            "ariaExpandedLabels": [
+              "折叠右侧栏"
+            ],
+            "sectionCount": 2,
+            "sections": [
+              {
+                "ariaLabel": "反链与属性",
+                "className": "native-workspace-margin",
+                "bounds": {
+                  "x": 1200,
+                  "y": 46.14,
+                  "width": 239,
+                  "height": 133.13
+                },
+                "directChildren": 2,
+                "hasExpandedControl": false
+              },
+              {
+                "ariaLabel": "合成来源上下文",
+                "className": "syn-knowledge-source-panel",
+                "bounds": {
+                  "x": 1200,
+                  "y": 179.27,
+                  "width": 239,
+                  "height": 984.13
+                },
+                "directChildren": 3,
+                "hasExpandedControl": false
+              }
+            ],
+            "sectionsWithCollapseControl": 0,
+            "sourceContextPresent": true,
+            "sourceContextItemCount": 28,
+            "sourceContextFirstItem": "上下文量尺 01",
+            "sourceContextLastItem": "上下文量尺 28",
+            "sourceContextBounds": {
+              "x": 1200,
+              "y": 179.27,
+              "width": 239,
+              "height": 984.13
+            },
+            "rightBounds": {
+              "x": 1199,
+              "y": 1,
+              "width": 240,
+              "height": 872
+            },
+            "rightScroll": {
+              "clientHeight": 872,
+              "scrollHeight": 1162,
+              "clientWidth": 239,
+              "scrollWidth": 239
+            },
+            "flatDirectChildren": 3
+          }
+        },
+        {
+          "name": "RED D2: 右栏标题不再声明大纲（现状应失败）",
+          "detail": {
+            "headerText": "属性 / 反链 / 大纲 / 来源上下文"
+          }
+        }
+      ],
+      "evidence": {
+        "right": {
+          "headerText": "属性 / 反链 / 大纲 / 来源上下文",
+          "headerDeclaresOutline": true,
+          "ariaExpandedTotal": 1,
+          "ariaExpandedLabels": [
+            "折叠右侧栏"
+          ],
+          "sectionCount": 2,
+          "sections": [
+            {
+              "ariaLabel": "反链与属性",
+              "className": "native-workspace-margin",
+              "bounds": {
+                "x": 1200,
+                "y": 46.14,
+                "width": 239,
+                "height": 133.13
+              },
+              "directChildren": 2,
+              "hasExpandedControl": false
+            },
+            {
+              "ariaLabel": "合成来源上下文",
+              "className": "syn-knowledge-source-panel",
+              "bounds": {
+                "x": 1200,
+                "y": 179.27,
+                "width": 239,
+                "height": 984.13
+              },
+              "directChildren": 3,
+              "hasExpandedControl": false
+            }
+          ],
+          "sectionsWithCollapseControl": 0,
+          "sourceContextPresent": true,
+          "sourceContextItemCount": 28,
+          "sourceContextFirstItem": "上下文量尺 01",
+          "sourceContextLastItem": "上下文量尺 28",
+          "sourceContextBounds": {
+            "x": 1200,
+            "y": 179.27,
+            "width": 239,
+            "height": 984.13
+          },
+          "rightBounds": {
+            "x": 1199,
+            "y": 1,
+            "width": 240,
+            "height": 872
+          },
+          "rightScroll": {
+            "clientHeight": 872,
+            "scrollHeight": 1162,
+            "clientWidth": 239,
+            "scrollWidth": 239
+          },
+          "flatDirectChildren": 3
+        }
+      },
+      "audit": {
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "red-04-1440-graph-n6",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scenario": null,
+      "assertions": [
+        {
+          "name": "RED D3: n=6 零节点矩形相交（现状 n>6 应失败）",
+          "passed": true
+        },
+        {
+          "name": "RED D3: n=6 全部节点在舞台内（现状 n>6 应失败）",
+          "passed": true
+        }
+      ],
+      "failures": [],
+      "evidence": {
+        "graph": {
+          "nodeCount": 6,
+          "edgeCount": 5,
+          "zoom": 1,
+          "intersectingPairs": 0,
+          "examples": [],
+          "stageBounds": {
+            "x": 331,
+            "y": 79,
+            "width": 868,
+            "height": 794
+          },
+          "nodesInsideStage": 6,
+          "nodeBoxSample": [
+            {
+              "id": "notes/visual-baseline.md",
+              "x": 697,
+              "y": 296,
+              "right": 833,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            },
+            {
+              "id": "notes/layout-convergence.md",
+              "x": 792,
+              "y": 376,
+              "right": 928,
+              "bottom": 416,
+              "width": 136,
+              "height": 40
+            },
+            {
+              "id": "notes/focus-return.md",
+              "x": 792,
+              "y": 536,
+              "right": 928,
+              "bottom": 576,
+              "width": 136,
+              "height": 40
+            }
+          ],
+          "firstNodeAriaLabel": "打开笔记：视觉基线工作台。路径 notes/visual-baseline.md。 标签 #visual-baseline、#synthetic。",
+          "firstTitleVisible": true
+        }
+      },
+      "audit": {
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "red-04-1440-graph-n40",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scenario": "graph-scale-40",
+      "assertions": [
+        {
+          "name": "RED D3: n=40 零节点矩形相交（现状 n>6 应失败）",
+          "passed": false,
+          "detail": {
+            "nodeCount": 40,
+            "intersectingPairs": 116,
+            "examples": [
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-002.md",
+                  "x": 714,
+                  "y": 298,
+                  "right": 850,
+                  "bottom": 338,
+                  "width": 136,
+                  "height": 40
+                }
+              },
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-003.md",
+                  "x": 731,
+                  "y": 304,
+                  "right": 867,
+                  "bottom": 344,
+                  "width": 136,
+                  "height": 40
+                }
+              },
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-004.md",
+                  "x": 747,
+                  "y": 313,
+                  "right": 883,
+                  "bottom": 353,
+                  "width": 136,
+                  "height": 40
+                }
+              },
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-005.md",
+                  "x": 762,
+                  "y": 327,
+                  "right": 898,
+                  "bottom": 367,
+                  "width": 136,
+                  "height": 40
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "RED D3: n=40 全部节点在舞台内（现状 n>6 应失败）",
+          "passed": true
+        }
+      ],
+      "failures": [
+        {
+          "name": "RED D3: n=40 零节点矩形相交（现状 n>6 应失败）",
+          "detail": {
+            "nodeCount": 40,
+            "intersectingPairs": 116,
+            "examples": [
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-002.md",
+                  "x": 714,
+                  "y": 298,
+                  "right": 850,
+                  "bottom": 338,
+                  "width": 136,
+                  "height": 40
+                }
+              },
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-003.md",
+                  "x": 731,
+                  "y": 304,
+                  "right": 867,
+                  "bottom": 344,
+                  "width": 136,
+                  "height": 40
+                }
+              },
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-004.md",
+                  "x": 747,
+                  "y": 313,
+                  "right": 883,
+                  "bottom": 353,
+                  "width": 136,
+                  "height": 40
+                }
+              },
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-005.md",
+                  "x": 762,
+                  "y": 327,
+                  "right": 898,
+                  "bottom": 367,
+                  "width": 136,
+                  "height": 40
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "evidence": {
+        "graph": {
+          "nodeCount": 40,
+          "edgeCount": 39,
+          "zoom": 1,
+          "intersectingPairs": 116,
+          "examples": [
+            {
+              "a": {
+                "id": "scale/synthetic-001.md",
+                "x": 697,
+                "y": 296,
+                "right": 833,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              },
+              "b": {
+                "id": "scale/synthetic-002.md",
+                "x": 714,
+                "y": 298,
+                "right": 850,
+                "bottom": 338,
+                "width": 136,
+                "height": 40
+              }
+            },
+            {
+              "a": {
+                "id": "scale/synthetic-001.md",
+                "x": 697,
+                "y": 296,
+                "right": 833,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              },
+              "b": {
+                "id": "scale/synthetic-003.md",
+                "x": 731,
+                "y": 304,
+                "right": 867,
+                "bottom": 344,
+                "width": 136,
+                "height": 40
+              }
+            },
+            {
+              "a": {
+                "id": "scale/synthetic-001.md",
+                "x": 697,
+                "y": 296,
+                "right": 833,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              },
+              "b": {
+                "id": "scale/synthetic-004.md",
+                "x": 747,
+                "y": 313,
+                "right": 883,
+                "bottom": 353,
+                "width": 136,
+                "height": 40
+              }
+            },
+            {
+              "a": {
+                "id": "scale/synthetic-001.md",
+                "x": 697,
+                "y": 296,
+                "right": 833,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              },
+              "b": {
+                "id": "scale/synthetic-005.md",
+                "x": 762,
+                "y": 327,
+                "right": 898,
+                "bottom": 367,
+                "width": 136,
+                "height": 40
+              }
+            }
+          ],
+          "stageBounds": {
+            "x": 331,
+            "y": 79,
+            "width": 868,
+            "height": 794
+          },
+          "nodesInsideStage": 40,
+          "nodeBoxSample": [
+            {
+              "id": "scale/synthetic-001.md",
+              "x": 697,
+              "y": 296,
+              "right": 833,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            },
+            {
+              "id": "scale/synthetic-002.md",
+              "x": 714,
+              "y": 298,
+              "right": 850,
+              "bottom": 338,
+              "width": 136,
+              "height": 40
+            },
+            {
+              "id": "scale/synthetic-003.md",
+              "x": 731,
+              "y": 304,
+              "right": 867,
+              "bottom": 344,
+              "width": 136,
+              "height": 40
+            }
+          ],
+          "firstNodeAriaLabel": "打开笔记：规模节点 001。路径 scale/synthetic-001.md。 标签 #visual-baseline、#synthetic。",
+          "firstTitleVisible": true
+        }
+      },
+      "audit": {
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "red-04-1440-graph-n512",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "scenario": "graph-scale-512",
+      "assertions": [
+        {
+          "name": "RED D3: n=512 零节点矩形相交（现状 n>6 应失败）",
+          "passed": false,
+          "detail": {
+            "nodeCount": 512,
+            "intersectingPairs": 22180,
+            "examples": [
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-002.md",
+                  "x": 698,
+                  "y": 296,
+                  "right": 834,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                }
+              },
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-003.md",
+                  "x": 700,
+                  "y": 296,
+                  "right": 836,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                }
+              },
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-004.md",
+                  "x": 701,
+                  "y": 296,
+                  "right": 837,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                }
+              },
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-005.md",
+                  "x": 702,
+                  "y": 296,
+                  "right": 838,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "RED D3: n=512 全部节点在舞台内（现状 n>6 应失败）",
+          "passed": true
+        }
+      ],
+      "failures": [
+        {
+          "name": "RED D3: n=512 零节点矩形相交（现状 n>6 应失败）",
+          "detail": {
+            "nodeCount": 512,
+            "intersectingPairs": 22180,
+            "examples": [
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-002.md",
+                  "x": 698,
+                  "y": 296,
+                  "right": 834,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                }
+              },
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-003.md",
+                  "x": 700,
+                  "y": 296,
+                  "right": 836,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                }
+              },
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-004.md",
+                  "x": 701,
+                  "y": 296,
+                  "right": 837,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                }
+              },
+              {
+                "a": {
+                  "id": "scale/synthetic-001.md",
+                  "x": 697,
+                  "y": 296,
+                  "right": 833,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                },
+                "b": {
+                  "id": "scale/synthetic-005.md",
+                  "x": 702,
+                  "y": 296,
+                  "right": 838,
+                  "bottom": 336,
+                  "width": 136,
+                  "height": 40
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "evidence": {
+        "graph": {
+          "nodeCount": 512,
+          "edgeCount": 511,
+          "zoom": 1,
+          "intersectingPairs": 22180,
+          "examples": [
+            {
+              "a": {
+                "id": "scale/synthetic-001.md",
+                "x": 697,
+                "y": 296,
+                "right": 833,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              },
+              "b": {
+                "id": "scale/synthetic-002.md",
+                "x": 698,
+                "y": 296,
+                "right": 834,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              }
+            },
+            {
+              "a": {
+                "id": "scale/synthetic-001.md",
+                "x": 697,
+                "y": 296,
+                "right": 833,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              },
+              "b": {
+                "id": "scale/synthetic-003.md",
+                "x": 700,
+                "y": 296,
+                "right": 836,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              }
+            },
+            {
+              "a": {
+                "id": "scale/synthetic-001.md",
+                "x": 697,
+                "y": 296,
+                "right": 833,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              },
+              "b": {
+                "id": "scale/synthetic-004.md",
+                "x": 701,
+                "y": 296,
+                "right": 837,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              }
+            },
+            {
+              "a": {
+                "id": "scale/synthetic-001.md",
+                "x": 697,
+                "y": 296,
+                "right": 833,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              },
+              "b": {
+                "id": "scale/synthetic-005.md",
+                "x": 702,
+                "y": 296,
+                "right": 838,
+                "bottom": 336,
+                "width": 136,
+                "height": 40
+              }
+            }
+          ],
+          "stageBounds": {
+            "x": 331,
+            "y": 79,
+            "width": 868,
+            "height": 794
+          },
+          "nodesInsideStage": 512,
+          "nodeBoxSample": [
+            {
+              "id": "scale/synthetic-001.md",
+              "x": 697,
+              "y": 296,
+              "right": 833,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            },
+            {
+              "id": "scale/synthetic-002.md",
+              "x": 698,
+              "y": 296,
+              "right": 834,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            },
+            {
+              "id": "scale/synthetic-003.md",
+              "x": 700,
+              "y": 296,
+              "right": 836,
+              "bottom": 336,
+              "width": 136,
+              "height": 40
+            }
+          ],
+          "firstNodeAriaLabel": "打开笔记：规模节点 001。路径 scale/synthetic-001.md。 标签 #visual-baseline、#synthetic。",
+          "firstTitleVisible": true
+        }
+      },
+      "audit": {
+        "externalRequestCount": 0,
+        "consoleErrorCount": 0,
+        "pageErrorCount": 0,
+        "externalRequests": [],
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    }
+  ]
+}
