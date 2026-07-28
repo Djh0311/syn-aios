@@ -1,0 +1,772 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-31T03:11:46.435Z",
+  "sourceRoot": "/Users/yoyi/harness engineering/harness-engineering",
+  "files": {
+    "AGENTS.md": {
+      "source": "AGENTS.md",
+      "sourceSha256": "f5f7379c711d8a0d06d829d0f2721bf17138f1331010f944c5d026201282204c",
+      "installedSha256": "f5f7379c711d8a0d06d829d0f2721bf17138f1331010f944c5d026201282204c"
+    },
+    "codex-multi-agent-safe-collaboration.md": {
+      "source": "codex-multi-agent-safe-collaboration.md",
+      "sourceSha256": "7c78bf668246df330fb97a35ab689e05f135b79bef87d52cc35f29e5a008ddda",
+      "installedSha256": "7c78bf668246df330fb97a35ab689e05f135b79bef87d52cc35f29e5a008ddda"
+    },
+    "harness.config.example.json": {
+      "source": "harness.config.example.json",
+      "sourceSha256": "01c1aa81a70bcd63d56c98a470c6bbcf5822cbe071bd9579dc6c09c192cc1041",
+      "installedSha256": "01c1aa81a70bcd63d56c98a470c6bbcf5822cbe071bd9579dc6c09c192cc1041"
+    },
+    "skills/brainstorming/SKILL.md": {
+      "source": "skills/brainstorming/SKILL.md",
+      "sourceSha256": "1636080f745b5cd09b8498098fac9004e3acc3a5f3d769e0c5931168048052a5",
+      "installedSha256": "1636080f745b5cd09b8498098fac9004e3acc3a5f3d769e0c5931168048052a5"
+    },
+    "skills/dispatching-parallel-agents/SKILL.md": {
+      "source": "skills/dispatching-parallel-agents/SKILL.md",
+      "sourceSha256": "b377085ce8084a4d4c5988ade3bdff4eba7cbd365d48f94d9d1ea4b0695ab52b",
+      "installedSha256": "b377085ce8084a4d4c5988ade3bdff4eba7cbd365d48f94d9d1ea4b0695ab52b"
+    },
+    "skills/evaluator-acceptance-review/SKILL.md": {
+      "source": "skills/evaluator-acceptance-review/SKILL.md",
+      "sourceSha256": "938b15eafaf1ce5261aec03e58be1c33038e48faf1278ddc47656555dd14bd72",
+      "installedSha256": "938b15eafaf1ce5261aec03e58be1c33038e48faf1278ddc47656555dd14bd72"
+    },
+    "skills/executing-plans/SKILL.md": {
+      "source": "skills/executing-plans/SKILL.md",
+      "sourceSha256": "702fae7c831d943b07751b528c015597246c998b7154ccd79a92f80bfa01fd01",
+      "installedSha256": "702fae7c831d943b07751b528c015597246c998b7154ccd79a92f80bfa01fd01"
+    },
+    "skills/finishing-a-development-branch/SKILL.md": {
+      "source": "skills/finishing-a-development-branch/SKILL.md",
+      "sourceSha256": "17dffe887669b3c99920ba5fdcaffb64898432a233eb353b51ad1d1c53fe8f19",
+      "installedSha256": "17dffe887669b3c99920ba5fdcaffb64898432a233eb353b51ad1d1c53fe8f19"
+    },
+    "skills/learning-from-mistakes/SKILL.md": {
+      "source": "skills/learning-from-mistakes/SKILL.md",
+      "sourceSha256": "5884a2af4070bad8acfeb21e6df7993eb7c07a6cad08cc45283ed70ec600c240",
+      "installedSha256": "5884a2af4070bad8acfeb21e6df7993eb7c07a6cad08cc45283ed70ec600c240"
+    },
+    "skills/receiving-code-review/SKILL.md": {
+      "source": "skills/receiving-code-review/SKILL.md",
+      "sourceSha256": "0c7a5b50c300797fd18bc090efbb3d136ef57b9330eed3b3078445c96861e39a",
+      "installedSha256": "0c7a5b50c300797fd18bc090efbb3d136ef57b9330eed3b3078445c96861e39a"
+    },
+    "skills/requesting-code-review/SKILL.md": {
+      "source": "skills/requesting-code-review/SKILL.md",
+      "sourceSha256": "8e7379995c65a3dd802375e204e7260b7c2ce0d3658680402e59bf22ebca5824",
+      "installedSha256": "8e7379995c65a3dd802375e204e7260b7c2ce0d3658680402e59bf22ebca5824"
+    },
+    "skills/requesting-code-review/code-reviewer.md": {
+      "source": "skills/requesting-code-review/code-reviewer.md",
+      "sourceSha256": "7f5328dca12cb200005ae9d4386f63a9b0acb735ece57f82db206b4a3189ccae",
+      "installedSha256": "7f5328dca12cb200005ae9d4386f63a9b0acb735ece57f82db206b4a3189ccae"
+    },
+    "skills/subagent-driven-development/SKILL.md": {
+      "source": "skills/subagent-driven-development/SKILL.md",
+      "sourceSha256": "cfd40856112c22a144daa99ba0c86bc73c79c1b0573224751f5f3fce2fb2ab61",
+      "installedSha256": "cfd40856112c22a144daa99ba0c86bc73c79c1b0573224751f5f3fce2fb2ab61"
+    },
+    "skills/subagent-driven-development/code-quality-reviewer-prompt.md": {
+      "source": "skills/subagent-driven-development/code-quality-reviewer-prompt.md",
+      "sourceSha256": "6b7e1e76bd348a518de9154a67e2cee0bd6d4f86b2096d015bfd2aba794f97eb",
+      "installedSha256": "6b7e1e76bd348a518de9154a67e2cee0bd6d4f86b2096d015bfd2aba794f97eb"
+    },
+    "skills/subagent-driven-development/implementer-prompt.md": {
+      "source": "skills/subagent-driven-development/implementer-prompt.md",
+      "sourceSha256": "e3c0150217d013489333cc957e097172789bbb4b9d635fbbb2b3fd28eff35ac6",
+      "installedSha256": "e3c0150217d013489333cc957e097172789bbb4b9d635fbbb2b3fd28eff35ac6"
+    },
+    "skills/subagent-driven-development/spec-reviewer-prompt.md": {
+      "source": "skills/subagent-driven-development/spec-reviewer-prompt.md",
+      "sourceSha256": "84b42d882a460d478c55c623b396054727616c8d7a0830442fad08472a7c6c0e",
+      "installedSha256": "84b42d882a460d478c55c623b396054727616c8d7a0830442fad08472a7c6c0e"
+    },
+    "skills/systematic-debugging/CREATION-LOG.md": {
+      "source": "skills/systematic-debugging/CREATION-LOG.md",
+      "sourceSha256": "5b47a8eaf71613354add0cde2aeac9c67ea626022ea1d642f0d06dc4b648e5b4",
+      "installedSha256": "5b47a8eaf71613354add0cde2aeac9c67ea626022ea1d642f0d06dc4b648e5b4"
+    },
+    "skills/systematic-debugging/SKILL.md": {
+      "source": "skills/systematic-debugging/SKILL.md",
+      "sourceSha256": "62c1127030ec050c5bed423076c977e01fcff86d2fbca2f99ce691eebdbb2ec4",
+      "installedSha256": "62c1127030ec050c5bed423076c977e01fcff86d2fbca2f99ce691eebdbb2ec4"
+    },
+    "skills/systematic-debugging/condition-based-waiting-example.ts": {
+      "source": "skills/systematic-debugging/condition-based-waiting-example.ts",
+      "sourceSha256": "40ae5ebe497fdf310200e43fe986552546d0a22837c0d39e855db1cfd33eb88e",
+      "installedSha256": "40ae5ebe497fdf310200e43fe986552546d0a22837c0d39e855db1cfd33eb88e"
+    },
+    "skills/systematic-debugging/condition-based-waiting.md": {
+      "source": "skills/systematic-debugging/condition-based-waiting.md",
+      "sourceSha256": "e89fec8400d6cd50f43407cec9fab50976ba4d55d0ec2eb51c0bd68036b54c26",
+      "installedSha256": "e89fec8400d6cd50f43407cec9fab50976ba4d55d0ec2eb51c0bd68036b54c26"
+    },
+    "skills/systematic-debugging/defense-in-depth.md": {
+      "source": "skills/systematic-debugging/defense-in-depth.md",
+      "sourceSha256": "1e175fb86fc357e58c6aebf5441e481e1b7868b4380c0456b63a17eefbd18ba7",
+      "installedSha256": "1e175fb86fc357e58c6aebf5441e481e1b7868b4380c0456b63a17eefbd18ba7"
+    },
+    "skills/systematic-debugging/find-polluter.sh": {
+      "source": "skills/systematic-debugging/find-polluter.sh",
+      "sourceSha256": "6462747eae9b175ac145b78bcfaeab755654a75e32637f08eb633f065a9e1d7c",
+      "installedSha256": "6462747eae9b175ac145b78bcfaeab755654a75e32637f08eb633f065a9e1d7c"
+    },
+    "skills/systematic-debugging/root-cause-tracing.md": {
+      "source": "skills/systematic-debugging/root-cause-tracing.md",
+      "sourceSha256": "a81bee9448794d261b4aca8487c595d11ff4bd4e10a5f96bca1117dd32527050",
+      "installedSha256": "a81bee9448794d261b4aca8487c595d11ff4bd4e10a5f96bca1117dd32527050"
+    },
+    "skills/systematic-debugging/test-academic.md": {
+      "source": "skills/systematic-debugging/test-academic.md",
+      "sourceSha256": "fe2ba480d78ac0d686dc025f41c2a32a43d642bf533f91b0c6053a04d35d6486",
+      "installedSha256": "fe2ba480d78ac0d686dc025f41c2a32a43d642bf533f91b0c6053a04d35d6486"
+    },
+    "skills/systematic-debugging/test-pressure-1.md": {
+      "source": "skills/systematic-debugging/test-pressure-1.md",
+      "sourceSha256": "0b6a915db0054577819834c79be9eb614e97bddba10d73768e1fbe91cfed048a",
+      "installedSha256": "0b6a915db0054577819834c79be9eb614e97bddba10d73768e1fbe91cfed048a"
+    },
+    "skills/systematic-debugging/test-pressure-2.md": {
+      "source": "skills/systematic-debugging/test-pressure-2.md",
+      "sourceSha256": "b2030aeffba07050e8ad573ddf87486457c4a016a786bb326235bebd856f2016",
+      "installedSha256": "b2030aeffba07050e8ad573ddf87486457c4a016a786bb326235bebd856f2016"
+    },
+    "skills/systematic-debugging/test-pressure-3.md": {
+      "source": "skills/systematic-debugging/test-pressure-3.md",
+      "sourceSha256": "96b50a52e2c7989c9cf20fb752c47c1e9a3a70dc362f8f7989f8f5b64dac7708",
+      "installedSha256": "96b50a52e2c7989c9cf20fb752c47c1e9a3a70dc362f8f7989f8f5b64dac7708"
+    },
+    "skills/test-driven-development/SKILL.md": {
+      "source": "skills/test-driven-development/SKILL.md",
+      "sourceSha256": "2434e9d14669ce62fa7b4086a59f722f7b5d9be53344ec3d73bf0dc3b337e552",
+      "installedSha256": "2434e9d14669ce62fa7b4086a59f722f7b5d9be53344ec3d73bf0dc3b337e552"
+    },
+    "skills/test-driven-development/testing-anti-patterns.md": {
+      "source": "skills/test-driven-development/testing-anti-patterns.md",
+      "sourceSha256": "c1d7591654d61a53bb601b602dcd9bd78cee9196299fbc862dfb3333ecdaeb70",
+      "installedSha256": "c1d7591654d61a53bb601b602dcd9bd78cee9196299fbc862dfb3333ecdaeb70"
+    },
+    "skills/ui-browser-verification/SKILL.md": {
+      "source": "skills/ui-browser-verification/SKILL.md",
+      "sourceSha256": "4fec06d666873861fe192a4ff52c714974123981277bbc5dc6e187e67350a5ff",
+      "installedSha256": "4fec06d666873861fe192a4ff52c714974123981277bbc5dc6e187e67350a5ff"
+    },
+    "skills/using-git-worktrees/SKILL.md": {
+      "source": "skills/using-git-worktrees/SKILL.md",
+      "sourceSha256": "66b9b19f21e77d2bab7e21421b046ed3860eaa4a102fedf7c0074c5e90b23810",
+      "installedSha256": "66b9b19f21e77d2bab7e21421b046ed3860eaa4a102fedf7c0074c5e90b23810"
+    },
+    "skills/using-superpowers/SKILL.md": {
+      "source": "skills/using-superpowers/SKILL.md",
+      "sourceSha256": "e6193154d46156173fbe6ae3272f7af741fcfd6d617a8d7f0998cb5adecdea9b",
+      "installedSha256": "e6193154d46156173fbe6ae3272f7af741fcfd6d617a8d7f0998cb5adecdea9b"
+    },
+    "skills/verification-before-completion/SKILL.md": {
+      "source": "skills/verification-before-completion/SKILL.md",
+      "sourceSha256": "44f7d9458e9a39b3e3fc178f0571a64f73b9d284adf050cd2ccb396487030ab2",
+      "installedSha256": "44f7d9458e9a39b3e3fc178f0571a64f73b9d284adf050cd2ccb396487030ab2"
+    },
+    "skills/writing-plans/SKILL.md": {
+      "source": "skills/writing-plans/SKILL.md",
+      "sourceSha256": "517e6c4c39a8b1afeddae38693b7a1353fc8968e54af0ec7cd8789ec6118d542",
+      "installedSha256": "517e6c4c39a8b1afeddae38693b7a1353fc8968e54af0ec7cd8789ec6118d542"
+    },
+    "skills/writing-skills/SKILL.md": {
+      "source": "skills/writing-skills/SKILL.md",
+      "sourceSha256": "1a67f6bf238c0280f40531ee97504d820b4b3c0da98c848f5ef10d2c7b9db882",
+      "installedSha256": "1a67f6bf238c0280f40531ee97504d820b4b3c0da98c848f5ef10d2c7b9db882"
+    },
+    "skills/writing-skills/examples/AGENTS_MD_TESTING.md": {
+      "source": "skills/writing-skills/examples/AGENTS_MD_TESTING.md",
+      "sourceSha256": "5ec5e7e6b543cc82fd46fd42c86a27d64df2ce69db65787ee27a1d89b16ac247",
+      "installedSha256": "5ec5e7e6b543cc82fd46fd42c86a27d64df2ce69db65787ee27a1d89b16ac247"
+    },
+    "skills/writing-skills/graphviz-conventions.dot": {
+      "source": "skills/writing-skills/graphviz-conventions.dot",
+      "sourceSha256": "177c0da7130c871b72d6f43f3097d5b0f76b6f33143e9766dff549e142b14c2e",
+      "installedSha256": "177c0da7130c871b72d6f43f3097d5b0f76b6f33143e9766dff549e142b14c2e"
+    },
+    "skills/writing-skills/persuasion-principles.md": {
+      "source": "skills/writing-skills/persuasion-principles.md",
+      "sourceSha256": "298ebb4f31f6eece0321ac9128f6db9cc639e75c037c75acae222e88f744d3d4",
+      "installedSha256": "298ebb4f31f6eece0321ac9128f6db9cc639e75c037c75acae222e88f744d3d4"
+    },
+    "skills/writing-skills/render-graphs.js": {
+      "source": "skills/writing-skills/render-graphs.js",
+      "sourceSha256": "95f9c1d3deb17b3c22c74573d7c740bf89b10792aa02344ab7320569260cdca9",
+      "installedSha256": "95f9c1d3deb17b3c22c74573d7c740bf89b10792aa02344ab7320569260cdca9"
+    },
+    "skills/writing-skills/skill-authoring-best-practices.md": {
+      "source": "skills/writing-skills/skill-authoring-best-practices.md",
+      "sourceSha256": "0e3f162e3baa8a88ed00634ef359d1f451d0256e9949a5702960c4bb563517bb",
+      "installedSha256": "0e3f162e3baa8a88ed00634ef359d1f451d0256e9949a5702960c4bb563517bb"
+    },
+    "skills/writing-skills/testing-skills-with-subagents.md": {
+      "source": "skills/writing-skills/testing-skills-with-subagents.md",
+      "sourceSha256": "df07b9da990b9a4602361470df498aba9d326b5849593683ac5184227668fddb",
+      "installedSha256": "df07b9da990b9a4602361470df498aba9d326b5849593683ac5184227668fddb"
+    },
+    "scripts/harness/browser-evidence-check.js": {
+      "source": "scripts/harness/browser-evidence-check.js",
+      "sourceSha256": "1f1c59ec4456c454d05276bab78fd7410b8bfb1881dfa110600f1f887f9f2a56",
+      "installedSha256": "1f1c59ec4456c454d05276bab78fd7410b8bfb1881dfa110600f1f887f9f2a56"
+    },
+    "scripts/harness/capability-map.js": {
+      "source": "scripts/harness/capability-map.js",
+      "sourceSha256": "82e0802f18e119e6cd86600cc016ba481d7177c018c732d0812113833e758b53",
+      "installedSha256": "82e0802f18e119e6cd86600cc016ba481d7177c018c732d0812113833e758b53"
+    },
+    "scripts/harness/capability-scan.js": {
+      "source": "scripts/harness/capability-scan.js",
+      "sourceSha256": "69af4241506a7a8268d2ce88df80da898c655e48287ed24f76c4c2e4aea3cd0d",
+      "installedSha256": "69af4241506a7a8268d2ce88df80da898c655e48287ed24f76c4c2e4aea3cd0d"
+    },
+    "scripts/harness/ci-gate.js": {
+      "source": "scripts/harness/ci-gate.js",
+      "sourceSha256": "dab5880e447769736775a34971de76dd7af4f37d61c1fe75234f424304faf323",
+      "installedSha256": "dab5880e447769736775a34971de76dd7af4f37d61c1fe75234f424304faf323"
+    },
+    "scripts/harness/ci-init.js": {
+      "source": "scripts/harness/ci-init.js",
+      "sourceSha256": "05e5c28b558f0d4e7d35e7bd6ee122e44a2bd6f123d3e92d8873c23170f5bc3a",
+      "installedSha256": "05e5c28b558f0d4e7d35e7bd6ee122e44a2bd6f123d3e92d8873c23170f5bc3a"
+    },
+    "scripts/harness/ci-validate.js": {
+      "source": "scripts/harness/ci-validate.js",
+      "sourceSha256": "d0e0993f927105a2b44dbc4a4ad4e2e19869e14f33f81990daad50eeca6d9c1a",
+      "installedSha256": "d0e0993f927105a2b44dbc4a4ad4e2e19869e14f33f81990daad50eeca6d9c1a"
+    },
+    "scripts/harness/config-check.js": {
+      "source": "scripts/harness/config-check.js",
+      "sourceSha256": "c394a8c54ac38d05cdff19f35514d970307328acd24b7c3b06a5f0336c9226ff",
+      "installedSha256": "c394a8c54ac38d05cdff19f35514d970307328acd24b7c3b06a5f0336c9226ff"
+    },
+    "scripts/harness/config-init.js": {
+      "source": "scripts/harness/config-init.js",
+      "sourceSha256": "7a23ecbb14ac98cf35d57266e8e7e9f12776ce06be3289e269f5129d9a099788",
+      "installedSha256": "7a23ecbb14ac98cf35d57266e8e7e9f12776ce06be3289e269f5129d9a099788"
+    },
+    "scripts/harness/config-migrate.js": {
+      "source": "scripts/harness/config-migrate.js",
+      "sourceSha256": "64e2f13fe3b9922606d86a9a883a9fd0f59d69b3328b7789e64316f76cdcbc79",
+      "installedSha256": "64e2f13fe3b9922606d86a9a883a9fd0f59d69b3328b7789e64316f76cdcbc79"
+    },
+    "scripts/harness/config-policy.js": {
+      "source": "scripts/harness/config-policy.js",
+      "sourceSha256": "b1963d2756cb44c7788bdde7a659b61533fb80447d9971e3de936d16ab865130",
+      "installedSha256": "b1963d2756cb44c7788bdde7a659b61533fb80447d9971e3de936d16ab865130"
+    },
+    "scripts/harness/config-schema.js": {
+      "source": "scripts/harness/config-schema.js",
+      "sourceSha256": "5a9e009adc804c4884021cf3f139d5b52ee4608015ba4dfe4c1911867753a3e6",
+      "installedSha256": "5a9e009adc804c4884021cf3f139d5b52ee4608015ba4dfe4c1911867753a3e6"
+    },
+    "scripts/harness/context-pack.js": {
+      "source": "scripts/harness/context-pack.js",
+      "sourceSha256": "2f6fd8f36128a58b7832c2247adc924d7b0df008e4db51bb19e2a2d7d170a04a",
+      "installedSha256": "2f6fd8f36128a58b7832c2247adc924d7b0df008e4db51bb19e2a2d7d170a04a"
+    },
+    "scripts/harness/eval/cases/context-pack.json": {
+      "source": "scripts/harness/eval/cases/context-pack.json",
+      "sourceSha256": "fbc294573432dc4a8325f113dc53ff9d8676e2081c71b2ab9f7a7443d8e8bc7a",
+      "installedSha256": "fbc294573432dc4a8325f113dc53ff9d8676e2081c71b2ab9f7a7443d8e8bc7a"
+    },
+    "scripts/harness/eval/cases/memory-governance.json": {
+      "source": "scripts/harness/eval/cases/memory-governance.json",
+      "sourceSha256": "b1bf9c3dee37d72df7eb6850863af53d45b8f9de1b97b8f3a2480735f7cc302c",
+      "installedSha256": "b1bf9c3dee37d72df7eb6850863af53d45b8f9de1b97b8f3a2480735f7cc302c"
+    },
+    "scripts/harness/eval/cases/mistake-retrieval.json": {
+      "source": "scripts/harness/eval/cases/mistake-retrieval.json",
+      "sourceSha256": "d89a8a1b09ee03bc71c55fa2df93186736cf2b714f27a9c729d23d3e33a98bd5",
+      "installedSha256": "d89a8a1b09ee03bc71c55fa2df93186736cf2b714f27a9c729d23d3e33a98bd5"
+    },
+    "scripts/harness/eval/cases/security/prompt-injection.json": {
+      "source": "scripts/harness/eval/cases/security/prompt-injection.json",
+      "sourceSha256": "ba03c00dcf249119ed188f72b170cce8c473726df8e8eb06c85a552ce952129b",
+      "installedSha256": "ba03c00dcf249119ed188f72b170cce8c473726df8e8eb06c85a552ce952129b"
+    },
+    "scripts/harness/eval/cases/skill-recommend.json": {
+      "source": "scripts/harness/eval/cases/skill-recommend.json",
+      "sourceSha256": "91fa26f5f338d61e2945a1e190d7a845758573edbc72877895a36ddeba395bed",
+      "installedSha256": "91fa26f5f338d61e2945a1e190d7a845758573edbc72877895a36ddeba395bed"
+    },
+    "scripts/harness/eval-runner.js": {
+      "source": "scripts/harness/eval-runner.js",
+      "sourceSha256": "7a659d70f32587b78b33d68d753f23fc71ae36cbd4381c19ef50b54423cb28b5",
+      "installedSha256": "7a659d70f32587b78b33d68d753f23fc71ae36cbd4381c19ef50b54423cb28b5"
+    },
+    "scripts/harness/evidence-check.js": {
+      "source": "scripts/harness/evidence-check.js",
+      "sourceSha256": "72c226bb3490b937b37819e8d93889c22e4d6f437bc4378a2ca116867c08b71a",
+      "installedSha256": "72c226bb3490b937b37819e8d93889c22e4d6f437bc4378a2ca116867c08b71a"
+    },
+    "scripts/harness/evidence-command.js": {
+      "source": "scripts/harness/evidence-command.js",
+      "sourceSha256": "689676b26970327da0a47370c858100466c94c906e941063ea4b1562d37e03e1",
+      "installedSha256": "689676b26970327da0a47370c858100466c94c906e941063ea4b1562d37e03e1"
+    },
+    "scripts/harness/evidence-compact.js": {
+      "source": "scripts/harness/evidence-compact.js",
+      "sourceSha256": "8c9d6b26adc52eb4bafb7d63ed37ea12bb031026a556c3ffcac51a483fe62b0a",
+      "installedSha256": "8c9d6b26adc52eb4bafb7d63ed37ea12bb031026a556c3ffcac51a483fe62b0a"
+    },
+    "scripts/harness/evidence-freshness.js": {
+      "source": "scripts/harness/evidence-freshness.js",
+      "sourceSha256": "c9d75aa3d9e76caf1a806be3303681888468edea9257552af0f5df8726ef0ebe",
+      "installedSha256": "c9d75aa3d9e76caf1a806be3303681888468edea9257552af0f5df8726ef0ebe"
+    },
+    "scripts/harness/evidence-index.js": {
+      "source": "scripts/harness/evidence-index.js",
+      "sourceSha256": "8cb26ebef34993818459f8b68c0057e1cb416217e5d34180b8dc618947b3a2cd",
+      "installedSha256": "8cb26ebef34993818459f8b68c0057e1cb416217e5d34180b8dc618947b3a2cd"
+    },
+    "scripts/harness/evidence-new.js": {
+      "source": "scripts/harness/evidence-new.js",
+      "sourceSha256": "2dcbf8232bb513e49686aeee4a22c837484fc1e86d2ba73b0f1d5452c9a6c9a5",
+      "installedSha256": "2dcbf8232bb513e49686aeee4a22c837484fc1e86d2ba73b0f1d5452c9a6c9a5"
+    },
+    "scripts/harness/evidence-query.js": {
+      "source": "scripts/harness/evidence-query.js",
+      "sourceSha256": "e70d3c0d8d47735e5f404e27f927c25f1827642c37edb90910f3382d2d78e139",
+      "installedSha256": "e70d3c0d8d47735e5f404e27f927c25f1827642c37edb90910f3382d2d78e139"
+    },
+    "scripts/harness/evidence-retention.js": {
+      "source": "scripts/harness/evidence-retention.js",
+      "sourceSha256": "71839e380f6a7403c977ae315cf272b4144cb9ed0a924da96a9505a1d6b5cf0d",
+      "installedSha256": "71839e380f6a7403c977ae315cf272b4144cb9ed0a924da96a9505a1d6b5cf0d"
+    },
+    "scripts/harness/fixture-check.js": {
+      "source": "scripts/harness/fixture-check.js",
+      "sourceSha256": "bc28919165a47139f030e82c2962ad1d8dca250534bdd2495d919d8eb7358ecf",
+      "installedSha256": "bc28919165a47139f030e82c2962ad1d8dca250534bdd2495d919d8eb7358ecf"
+    },
+    "scripts/harness/git-gate.js": {
+      "source": "scripts/harness/git-gate.js",
+      "sourceSha256": "adbdc9b405de4d831e06fb213195857b8f2569fadf604ff5b2dc3dc08e6563ac",
+      "installedSha256": "adbdc9b405de4d831e06fb213195857b8f2569fadf604ff5b2dc3dc08e6563ac"
+    },
+    "scripts/harness/guard-state-files.js": {
+      "source": "scripts/harness/guard-state-files.js",
+      "sourceSha256": "88406ded8f865b218e82524868f3bc1b4d249fa366ea80deded90c1cefeb6b23",
+      "installedSha256": "88406ded8f865b218e82524868f3bc1b4d249fa366ea80deded90c1cefeb6b23"
+    },
+    "scripts/harness/harness-doctor.js": {
+      "source": "scripts/harness/harness-doctor.js",
+      "sourceSha256": "ec0e664ed3357945ff92f69dfb510c4ec53ba2dfb57036ade55e549f0d4eb15a",
+      "installedSha256": "ec0e664ed3357945ff92f69dfb510c4ec53ba2dfb57036ade55e549f0d4eb15a"
+    },
+    "scripts/harness/harness.js": {
+      "source": "scripts/harness/harness.js",
+      "sourceSha256": "eb78449528bc0a532ef7d78a9ff0e782d709d5d75cdc20e4f9917b113513c9ab",
+      "installedSha256": "eb78449528bc0a532ef7d78a9ff0e782d709d5d75cdc20e4f9917b113513c9ab"
+    },
+    "scripts/harness/hook-install.js": {
+      "source": "scripts/harness/hook-install.js",
+      "sourceSha256": "85b00a75fb91f8497a7f094d52608b351093094fc9280c84fcd9ef9626b73d5d",
+      "installedSha256": "85b00a75fb91f8497a7f094d52608b351093094fc9280c84fcd9ef9626b73d5d"
+    },
+    "scripts/harness/hook-uninstall.js": {
+      "source": "scripts/harness/hook-uninstall.js",
+      "sourceSha256": "f8b8963d0e05e1a5aa9eb03182873af183bbc787f5097aba240de998c81c7ba6",
+      "installedSha256": "f8b8963d0e05e1a5aa9eb03182873af183bbc787f5097aba240de998c81c7ba6"
+    },
+    "scripts/harness/install-harness.js": {
+      "source": "scripts/harness/install-harness.js",
+      "sourceSha256": "e9e57a0f87d0ea8c6c8ddf7566be9521fdbe9be975dff3554f1b9dca50114d24",
+      "installedSha256": "e9e57a0f87d0ea8c6c8ddf7566be9521fdbe9be975dff3554f1b9dca50114d24"
+    },
+    "scripts/harness/installed-health.js": {
+      "source": "scripts/harness/installed-health.js",
+      "sourceSha256": "0847b6ed9e059e0f9bc183cffeabcfc7e6ea60dba36bd0ed7f2223ea93413d71",
+      "installedSha256": "0847b6ed9e059e0f9bc183cffeabcfc7e6ea60dba36bd0ed7f2223ea93413d71"
+    },
+    "scripts/harness/lib/agentmemory-client.js": {
+      "source": "scripts/harness/lib/agentmemory-client.js",
+      "sourceSha256": "5d4290e4c4fb2e2d1b48d658c6137d47fb8bbbbe1e1b6a9a24e40758c74ee69d",
+      "installedSha256": "5d4290e4c4fb2e2d1b48d658c6137d47fb8bbbbe1e1b6a9a24e40758c74ee69d"
+    },
+    "scripts/harness/lib/check-runner.js": {
+      "source": "scripts/harness/lib/check-runner.js",
+      "sourceSha256": "bc21c43f9fd8b04a6f48b17a9549faa4296f9814c324a22f0cc17929c0fd651b",
+      "installedSha256": "bc21c43f9fd8b04a6f48b17a9549faa4296f9814c324a22f0cc17929c0fd651b"
+    },
+    "scripts/harness/lib/config-loader.js": {
+      "source": "scripts/harness/lib/config-loader.js",
+      "sourceSha256": "362ebc54d86fdf569b7b04bb7fd7181f55706ffe35dc3c3f5f6baa5b69a9ff6c",
+      "installedSha256": "362ebc54d86fdf569b7b04bb7fd7181f55706ffe35dc3c3f5f6baa5b69a9ff6c"
+    },
+    "scripts/harness/lib/context-pack.js": {
+      "source": "scripts/harness/lib/context-pack.js",
+      "sourceSha256": "c57f7057074ffabcd4142dc071b7082a7224fd4719d43101b1aee89914fe50c7",
+      "installedSha256": "c57f7057074ffabcd4142dc071b7082a7224fd4719d43101b1aee89914fe50c7"
+    },
+    "scripts/harness/lib/evidence-audit.js": {
+      "source": "scripts/harness/lib/evidence-audit.js",
+      "sourceSha256": "68cbc99e07bc5627f667331c20d8b3a5601e281745a6a40ece32a1abd7795b1f",
+      "installedSha256": "68cbc99e07bc5627f667331c20d8b3a5601e281745a6a40ece32a1abd7795b1f"
+    },
+    "scripts/harness/lib/manifest.js": {
+      "source": "scripts/harness/lib/manifest.js",
+      "sourceSha256": "f51172a71a1d30636cdf1aa091527732df73de6022cbea9a90d0d10aeed904fe",
+      "installedSha256": "f51172a71a1d30636cdf1aa091527732df73de6022cbea9a90d0d10aeed904fe"
+    },
+    "scripts/harness/lib/memory-governance.js": {
+      "source": "scripts/harness/lib/memory-governance.js",
+      "sourceSha256": "f8dd9518b826f692c320d806e4f92d7061d2b7a7fb5de62b06570eba8ad69092",
+      "installedSha256": "f8dd9518b826f692c320d806e4f92d7061d2b7a7fb5de62b06570eba8ad69092"
+    },
+    "scripts/harness/lib/mistake-retrieval.js": {
+      "source": "scripts/harness/lib/mistake-retrieval.js",
+      "sourceSha256": "27d4ad05bb4ff0957b7b77fcf6de893912afdaf25453da06df9b7cf5784754dd",
+      "installedSha256": "27d4ad05bb4ff0957b7b77fcf6de893912afdaf25453da06df9b7cf5784754dd"
+    },
+    "scripts/harness/lib/project-kind.js": {
+      "source": "scripts/harness/lib/project-kind.js",
+      "sourceSha256": "bad9a1f4c7a09ea43c233b9daac8227303417aa348a0b4428b556522576942df",
+      "installedSha256": "bad9a1f4c7a09ea43c233b9daac8227303417aa348a0b4428b556522576942df"
+    },
+    "scripts/harness/lib/risk-classifier.js": {
+      "source": "scripts/harness/lib/risk-classifier.js",
+      "sourceSha256": "05fe0fbf80d16f95e5cd28fd827ffe72c4882add8ed6bfad1ec048bbfc4d7d99",
+      "installedSha256": "05fe0fbf80d16f95e5cd28fd827ffe72c4882add8ed6bfad1ec048bbfc4d7d99"
+    },
+    "scripts/harness/lib/security.js": {
+      "source": "scripts/harness/lib/security.js",
+      "sourceSha256": "29a430f8857158d550d5cad87cf941bd3756bfa511587bf6ee2038058ec7d583",
+      "installedSha256": "29a430f8857158d550d5cad87cf941bd3756bfa511587bf6ee2038058ec7d583"
+    },
+    "scripts/harness/lib/skill-index.js": {
+      "source": "scripts/harness/lib/skill-index.js",
+      "sourceSha256": "8f06b9cb2a56c45642cefe4d66d82dd5a477a7597a73e6b08d9348d1c6deab50",
+      "installedSha256": "8f06b9cb2a56c45642cefe4d66d82dd5a477a7597a73e6b08d9348d1c6deab50"
+    },
+    "scripts/harness/lib/task-package-schema.js": {
+      "source": "scripts/harness/lib/task-package-schema.js",
+      "sourceSha256": "f489465d32ebb27c9ece38c1182994cbd1affee2bf2b836e2fb30e11bfcebe07",
+      "installedSha256": "f489465d32ebb27c9ece38c1182994cbd1affee2bf2b836e2fb30e11bfcebe07"
+    },
+    "scripts/harness/managed-files-audit.js": {
+      "source": "scripts/harness/managed-files-audit.js",
+      "sourceSha256": "d6de4614c4cb5953bf422ba55e09876947c21790ba07ab21d69bc3a2935b2af5",
+      "installedSha256": "d6de4614c4cb5953bf422ba55e09876947c21790ba07ab21d69bc3a2935b2af5"
+    },
+    "scripts/harness/mcp-doctor.js": {
+      "source": "scripts/harness/mcp-doctor.js",
+      "sourceSha256": "f67808702816e78f7e2abe27f9a25338169d22814c7b4d146ccdb71c37415ac2",
+      "installedSha256": "f67808702816e78f7e2abe27f9a25338169d22814c7b4d146ccdb71c37415ac2"
+    },
+    "scripts/harness/memory-agentmemory-query.js": {
+      "source": "scripts/harness/memory-agentmemory-query.js",
+      "sourceSha256": "20275b66ee26444848760a7b9987b7992b6e7144426cf7c8a76212cba4255069",
+      "installedSha256": "20275b66ee26444848760a7b9987b7992b6e7144426cf7c8a76212cba4255069"
+    },
+    "scripts/harness/memory-agentmemory-save.js": {
+      "source": "scripts/harness/memory-agentmemory-save.js",
+      "sourceSha256": "9c7886222ff07585e6ebff9b55ac56f41a47abacff10bc409c5cde5a59816027",
+      "installedSha256": "9c7886222ff07585e6ebff9b55ac56f41a47abacff10bc409c5cde5a59816027"
+    },
+    "scripts/harness/memory-candidate-lint.js": {
+      "source": "scripts/harness/memory-candidate-lint.js",
+      "sourceSha256": "58451455b440436f9838b8fe197ad54ea86fd08c0d83c09ad9af99d0bd4272f9",
+      "installedSha256": "58451455b440436f9838b8fe197ad54ea86fd08c0d83c09ad9af99d0bd4272f9"
+    },
+    "scripts/harness/memory-candidate-new.js": {
+      "source": "scripts/harness/memory-candidate-new.js",
+      "sourceSha256": "44cbd0faf6af2f9cf8c87dd8533ebc311a5083d255dc32ed0b5b849008e49a21",
+      "installedSha256": "44cbd0faf6af2f9cf8c87dd8533ebc311a5083d255dc32ed0b5b849008e49a21"
+    },
+    "scripts/harness/memory-maintenance.js": {
+      "source": "scripts/harness/memory-maintenance.js",
+      "sourceSha256": "24d24d1a2adf2465a2110b4f076d34e6d6b6cac0c1d8cc335253cf2fc0453417",
+      "installedSha256": "24d24d1a2adf2465a2110b4f076d34e6d6b6cac0c1d8cc335253cf2fc0453417"
+    },
+    "scripts/harness/memory-review.js": {
+      "source": "scripts/harness/memory-review.js",
+      "sourceSha256": "7d8c95ea08cde56db546f3fcd410d05656c0f2a5b8c7ce91795e6ec3ee284dcc",
+      "installedSha256": "7d8c95ea08cde56db546f3fcd410d05656c0f2a5b8c7ce91795e6ec3ee284dcc"
+    },
+    "scripts/harness/memory-stale-check.js": {
+      "source": "scripts/harness/memory-stale-check.js",
+      "sourceSha256": "b0f2ecf905da8cb1ff681b809ca6277b8d75822369478d3e7cba346c91be4be1",
+      "installedSha256": "b0f2ecf905da8cb1ff681b809ca6277b8d75822369478d3e7cba346c91be4be1"
+    },
+    "scripts/harness/mistake-check.js": {
+      "source": "scripts/harness/mistake-check.js",
+      "sourceSha256": "e7075eaf8569596dd129185ef26d94a6000c9df67d506b20e8be506ed98d067a",
+      "installedSha256": "e7075eaf8569596dd129185ef26d94a6000c9df67d506b20e8be506ed98d067a"
+    },
+    "scripts/harness/mistake-new.js": {
+      "source": "scripts/harness/mistake-new.js",
+      "sourceSha256": "44e1d564ba7f1c9833f5041d944b9e2734731fa1509e6511d45a2678c6f70ced",
+      "installedSha256": "44e1d564ba7f1c9833f5041d944b9e2734731fa1509e6511d45a2678c6f70ced"
+    },
+    "scripts/harness/mistake-query.js": {
+      "source": "scripts/harness/mistake-query.js",
+      "sourceSha256": "8045587e34d1a502ebb0049641574a11e9f0c52ec81be24ba348da4970779197",
+      "installedSha256": "8045587e34d1a502ebb0049641574a11e9f0c52ec81be24ba348da4970779197"
+    },
+    "scripts/harness/pre-completion.js": {
+      "source": "scripts/harness/pre-completion.js",
+      "sourceSha256": "b0c28ede1ceba957bd0bb7951dfbe519f9d5349967b1a92c07e8b6d210cc8203",
+      "installedSha256": "b0c28ede1ceba957bd0bb7951dfbe519f9d5349967b1a92c07e8b6d210cc8203"
+    },
+    "scripts/harness/pre-work.js": {
+      "source": "scripts/harness/pre-work.js",
+      "sourceSha256": "1da809297043a489456f76869e3d90e5bddc61376bc65b976b1ab6f3894f54b1",
+      "installedSha256": "1da809297043a489456f76869e3d90e5bddc61376bc65b976b1ab6f3894f54b1"
+    },
+    "scripts/harness/project-profile.js": {
+      "source": "scripts/harness/project-profile.js",
+      "sourceSha256": "803c733dea8933b4f5ab4a53287fbad590c223c68599b10c467ffdc68aa63a25",
+      "installedSha256": "803c733dea8933b4f5ab4a53287fbad590c223c68599b10c467ffdc68aa63a25"
+    },
+    "scripts/harness/rules-lint.js": {
+      "source": "scripts/harness/rules-lint.js",
+      "sourceSha256": "6e339cbbf54b2a0df1e83b5f4ba9f492540399befdf2293d4b8f4d2b90382fdd",
+      "installedSha256": "6e339cbbf54b2a0df1e83b5f4ba9f492540399befdf2293d4b8f4d2b90382fdd"
+    },
+    "scripts/harness/runtime-docs-diff.js": {
+      "source": "scripts/harness/runtime-docs-diff.js",
+      "sourceSha256": "fa7c8f1478296da9ac8e2617b2972e216f4410938f53ba276f902e607c482439",
+      "installedSha256": "fa7c8f1478296da9ac8e2617b2972e216f4410938f53ba276f902e607c482439"
+    },
+    "scripts/harness/runtime-docs-init.js": {
+      "source": "scripts/harness/runtime-docs-init.js",
+      "sourceSha256": "c2e04b38668a0ddd6d09f6916ef0efae54a484eda1c5f063c0e975890cc36e8d",
+      "installedSha256": "c2e04b38668a0ddd6d09f6916ef0efae54a484eda1c5f063c0e975890cc36e8d"
+    },
+    "scripts/harness/security-scan.js": {
+      "source": "scripts/harness/security-scan.js",
+      "sourceSha256": "e4228b2a7d788242fcfedc2f7a751e61b0d395d684157dab628e65486f637b34",
+      "installedSha256": "e4228b2a7d788242fcfedc2f7a751e61b0d395d684157dab628e65486f637b34"
+    },
+    "scripts/harness/self-test.js": {
+      "source": "scripts/harness/self-test.js",
+      "sourceSha256": "5e3c7209df4b5dbca9335582660b01fc2ed5a5fc693a5fd10861d39b6be4536a",
+      "installedSha256": "5e3c7209df4b5dbca9335582660b01fc2ed5a5fc693a5fd10861d39b6be4536a"
+    },
+    "scripts/harness/skill-recommend.js": {
+      "source": "scripts/harness/skill-recommend.js",
+      "sourceSha256": "0ea0f5e14c993867df00a30a812a54d27fc9f2d682b262c34f5c2833d11b3c3b",
+      "installedSha256": "0ea0f5e14c993867df00a30a812a54d27fc9f2d682b262c34f5c2833d11b3c3b"
+    },
+    "scripts/harness/stale-control-check.js": {
+      "source": "scripts/harness/stale-control-check.js",
+      "sourceSha256": "b57cf2d83cfb92a788f5235a6d5c5e5e6024b2c45d22ecc1a859c672e8022e50",
+      "installedSha256": "b57cf2d83cfb92a788f5235a6d5c5e5e6024b2c45d22ecc1a859c672e8022e50"
+    },
+    "scripts/harness/status-snapshot.js": {
+      "source": "scripts/harness/status-snapshot.js",
+      "sourceSha256": "65b13d800e6e05850f12a8d9382417dc51c74fce7bcdd5e0e4c05b12fdda6da7",
+      "installedSha256": "65b13d800e6e05850f12a8d9382417dc51c74fce7bcdd5e0e4c05b12fdda6da7"
+    },
+    "scripts/harness/sync-harness.js": {
+      "source": "scripts/harness/sync-harness.js",
+      "sourceSha256": "64a0759a0e1afc1483809e19c1219483bcff181ee2b4dcd388e7fa1a08ebedc7",
+      "installedSha256": "64a0759a0e1afc1483809e19c1219483bcff181ee2b4dcd388e7fa1a08ebedc7"
+    },
+    "scripts/harness/task-finish.js": {
+      "source": "scripts/harness/task-finish.js",
+      "sourceSha256": "e869923b2c08cb7a5f751dc6f615c93c579ba3c8a017ae530fe12c090f14c0cf",
+      "installedSha256": "e869923b2c08cb7a5f751dc6f615c93c579ba3c8a017ae530fe12c090f14c0cf"
+    },
+    "scripts/harness/task-package-lint.js": {
+      "source": "scripts/harness/task-package-lint.js",
+      "sourceSha256": "62c3bb298e39976192bd2dd6b0100a001023de3b85aba8100530dda95b5823d4",
+      "installedSha256": "62c3bb298e39976192bd2dd6b0100a001023de3b85aba8100530dda95b5823d4"
+    },
+    "scripts/harness/task-package-new.js": {
+      "source": "scripts/harness/task-package-new.js",
+      "sourceSha256": "12be0a3c05c6a76c7c8dd552cfd91a17961c8c59ad54fe10af20c77ee353f43a",
+      "installedSha256": "12be0a3c05c6a76c7c8dd552cfd91a17961c8c59ad54fe10af20c77ee353f43a"
+    },
+    "scripts/harness/task-risk.js": {
+      "source": "scripts/harness/task-risk.js",
+      "sourceSha256": "a9c58feba160f5758df27bfa547d1005126d0cdfe8a10db3238cf627d38f6794",
+      "installedSha256": "a9c58feba160f5758df27bfa547d1005126d0cdfe8a10db3238cf627d38f6794"
+    },
+    "scripts/harness/task-start.js": {
+      "source": "scripts/harness/task-start.js",
+      "sourceSha256": "548da6260cf2432c314aafd2a10374f1c773c258a9083472efcc1af18760b262",
+      "installedSha256": "548da6260cf2432c314aafd2a10374f1c773c258a9083472efcc1af18760b262"
+    },
+    "scripts/harness/task-status.js": {
+      "source": "scripts/harness/task-status.js",
+      "sourceSha256": "dc80493d46a1535c62928e332c0e8766e69f2f375ce3a650e2ad40e9fb744907",
+      "installedSha256": "dc80493d46a1535c62928e332c0e8766e69f2f375ce3a650e2ad40e9fb744907"
+    },
+    "scripts/harness/ui-verify.js": {
+      "source": "scripts/harness/ui-verify.js",
+      "sourceSha256": "856815487542270534dcf3af47792d40ad7f4f54f850c41087eea11f9474d8cd",
+      "installedSha256": "856815487542270534dcf3af47792d40ad7f4f54f850c41087eea11f9474d8cd"
+    },
+    "scripts/harness/verification-plan.js": {
+      "source": "scripts/harness/verification-plan.js",
+      "sourceSha256": "a87ac06d78dce69b96b9b8d9008b8668ec126587eb129ade3e1d6a07dfe19e1d",
+      "installedSha256": "a87ac06d78dce69b96b9b8d9008b8668ec126587eb129ade3e1d6a07dfe19e1d"
+    },
+    "scripts/harness/verification-runner.js": {
+      "source": "scripts/harness/verification-runner.js",
+      "sourceSha256": "301f3dc7ed77372e57895c36ac3adaaa6b9189a9a621368d07d1cb4d0ecd0bd8",
+      "installedSha256": "301f3dc7ed77372e57895c36ac3adaaa6b9189a9a621368d07d1cb4d0ecd0bd8"
+    },
+    "scripts/harness/verification-suite.js": {
+      "source": "scripts/harness/verification-suite.js",
+      "sourceSha256": "5ad4f9de907c053db8985870bf3acb99c7732fb19d9e424172e32c384d6d0b89",
+      "installedSha256": "5ad4f9de907c053db8985870bf3acb99c7732fb19d9e424172e32c384d6d0b89"
+    },
+    "templates/ci/github-actions/harness.yml": {
+      "source": "templates/ci/github-actions/harness.yml",
+      "sourceSha256": "28cf5b2da72960b2e805bcd7a710bdd9407f76baabf8483fea2db1616eaf1e2b",
+      "installedSha256": "28cf5b2da72960b2e805bcd7a710bdd9407f76baabf8483fea2db1616eaf1e2b"
+    },
+    "templates/ci/gitlab/harness.yml": {
+      "source": "templates/ci/gitlab/harness.yml",
+      "sourceSha256": "d813630396784bcec7f7967cf695d82c566bc8a86bcc6aea79b66b48303ae151",
+      "installedSha256": "d813630396784bcec7f7967cf695d82c566bc8a86bcc6aea79b66b48303ae151"
+    },
+    "templates/docs/agent-memory-governance.md": {
+      "source": "templates/docs/agent-memory-governance.md",
+      "sourceSha256": "9be150fe58e3d9c9eb6bc2008516431b5a4ce70ca369c2b360b67463f9d8ae49",
+      "installedSha256": "9be150fe58e3d9c9eb6bc2008516431b5a4ce70ca369c2b360b67463f9d8ae49"
+    },
+    "templates/docs/agent-mistake-ledger.md": {
+      "source": "templates/docs/agent-mistake-ledger.md",
+      "sourceSha256": "e0116304103cf1e7922abbd97292ffca279341407e58c815cd3ad0f74fd7a9e8",
+      "installedSha256": "e0116304103cf1e7922abbd97292ffca279341407e58c815cd3ad0f74fd7a9e8"
+    },
+    "templates/docs/agent-work-summary.md": {
+      "source": "templates/docs/agent-work-summary.md",
+      "sourceSha256": "62031304f0498e92be2360f4852c8078207dc97bddfa674ac690ede993f95201",
+      "installedSha256": "62031304f0498e92be2360f4852c8078207dc97bddfa674ac690ede993f95201"
+    },
+    "templates/docs/context-checkpoints.md": {
+      "source": "templates/docs/context-checkpoints.md",
+      "sourceSha256": "9a70d3ec6f21b315ced7203525dad788812bba60945ab16fc4f882840ed1de3c",
+      "installedSha256": "9a70d3ec6f21b315ced7203525dad788812bba60945ab16fc4f882840ed1de3c"
+    },
+    "templates/docs/current-state.md": {
+      "source": "templates/docs/current-state.md",
+      "sourceSha256": "a1e2bb9396f691bd32ae554a7e9a7f7650461955f390c9f1b40f1b334455ec67",
+      "installedSha256": "a1e2bb9396f691bd32ae554a7e9a7f7650461955f390c9f1b40f1b334455ec67"
+    },
+    "templates/docs/decisions.md": {
+      "source": "templates/docs/decisions.md",
+      "sourceSha256": "ed4d02bf8323cfae3ad47c817b17f967cc2b383d243d75cca8d759015961915e",
+      "installedSha256": "ed4d02bf8323cfae3ad47c817b17f967cc2b383d243d75cca8d759015961915e"
+    },
+    "templates/docs/evidence/README.md": {
+      "source": "templates/docs/evidence/README.md",
+      "sourceSha256": "80f2fbd5223a12a55c2abd61bdd9b2af4bfd8bbc2826df00b749e5e868676fb3",
+      "installedSha256": "80f2fbd5223a12a55c2abd61bdd9b2af4bfd8bbc2826df00b749e5e868676fb3"
+    },
+    "templates/docs/open-questions.md": {
+      "source": "templates/docs/open-questions.md",
+      "sourceSha256": "d45899e76b779c548758342c015552f049437d0a0751fd3ebf2c937b3e95df02",
+      "installedSha256": "d45899e76b779c548758342c015552f049437d0a0751fd3ebf2c937b3e95df02"
+    },
+    "templates/docs/plans/README.md": {
+      "source": "templates/docs/plans/README.md",
+      "sourceSha256": "01d166f75f3d6379764ae496b3ff8e3d4b29a29bc794085f82efc41b6bb60bcc",
+      "installedSha256": "01d166f75f3d6379764ae496b3ff8e3d4b29a29bc794085f82efc41b6bb60bcc"
+    },
+    "templates/docs/requirements-matrix.md": {
+      "source": "templates/docs/requirements-matrix.md",
+      "sourceSha256": "225cfe1882ec95701f91681eb66d15a5b44f57307d325ba28c0f1c8adbf18634",
+      "installedSha256": "225cfe1882ec95701f91681eb66d15a5b44f57307d325ba28c0f1c8adbf18634"
+    },
+    "templates/docs/sprint-contract.md": {
+      "source": "templates/docs/sprint-contract.md",
+      "sourceSha256": "156a31cdb56f9dc3b60800781b5612bb5a4d28ce7d85197d3c6a1b6a8cbc2f9a",
+      "installedSha256": "156a31cdb56f9dc3b60800781b5612bb5a4d28ce7d85197d3c6a1b6a8cbc2f9a"
+    },
+    "templates/docs/task-queue.md": {
+      "source": "templates/docs/task-queue.md",
+      "sourceSha256": "e22a5c3bd9a8102b9600089d14b40f91d2af9c9227c8d9c44dadbbabb8c34d3b",
+      "installedSha256": "e22a5c3bd9a8102b9600089d14b40f91d2af9c9227c8d9c44dadbbabb8c34d3b"
+    },
+    "templates/docs/tooling-and-mcp-registry.md": {
+      "source": "templates/docs/tooling-and-mcp-registry.md",
+      "sourceSha256": "e87c8d7bd5b258f8d475e5572adc3f1b18a5e90f1a75870625c8488879660c88",
+      "installedSha256": "e87c8d7bd5b258f8d475e5572adc3f1b18a5e90f1a75870625c8488879660c88"
+    },
+    "templates/hooks/pre-commit": {
+      "source": "templates/hooks/pre-commit",
+      "sourceSha256": "d20812b6b8e0c0e157f4bdea9b43610241b2db62bce66e1c220056b003563a2b",
+      "installedSha256": "d20812b6b8e0c0e157f4bdea9b43610241b2db62bce66e1c220056b003563a2b"
+    },
+    "templates/hooks/pre-push": {
+      "source": "templates/hooks/pre-push",
+      "sourceSha256": "0750f6e27683278770544d59622f45b3fdfd0aefb6f6724d5239b6a81bb73209",
+      "installedSha256": "0750f6e27683278770544d59622f45b3fdfd0aefb6f6724d5239b6a81bb73209"
+    },
+    "docs/agent-memory-governance.md": {
+      "source": "templates/docs/agent-memory-governance.md",
+      "sourceSha256": "9be150fe58e3d9c9eb6bc2008516431b5a4ce70ca369c2b360b67463f9d8ae49",
+      "installedSha256": "9be150fe58e3d9c9eb6bc2008516431b5a4ce70ca369c2b360b67463f9d8ae49"
+    },
+    "docs/agent-mistake-ledger.md": {
+      "source": "templates/docs/agent-mistake-ledger.md",
+      "sourceSha256": "e0116304103cf1e7922abbd97292ffca279341407e58c815cd3ad0f74fd7a9e8",
+      "installedSha256": "e0116304103cf1e7922abbd97292ffca279341407e58c815cd3ad0f74fd7a9e8"
+    },
+    "docs/agent-work-summary.md": {
+      "source": "templates/docs/agent-work-summary.md",
+      "sourceSha256": "62031304f0498e92be2360f4852c8078207dc97bddfa674ac690ede993f95201",
+      "installedSha256": "62031304f0498e92be2360f4852c8078207dc97bddfa674ac690ede993f95201"
+    },
+    "docs/context-checkpoints.md": {
+      "source": "templates/docs/context-checkpoints.md",
+      "sourceSha256": "9a70d3ec6f21b315ced7203525dad788812bba60945ab16fc4f882840ed1de3c",
+      "installedSha256": "9a70d3ec6f21b315ced7203525dad788812bba60945ab16fc4f882840ed1de3c"
+    },
+    "docs/current-state.md": {
+      "source": "templates/docs/current-state.md",
+      "sourceSha256": "a1e2bb9396f691bd32ae554a7e9a7f7650461955f390c9f1b40f1b334455ec67",
+      "installedSha256": "a1e2bb9396f691bd32ae554a7e9a7f7650461955f390c9f1b40f1b334455ec67"
+    },
+    "docs/decisions.md": {
+      "source": "templates/docs/decisions.md",
+      "sourceSha256": "ed4d02bf8323cfae3ad47c817b17f967cc2b383d243d75cca8d759015961915e",
+      "installedSha256": "ed4d02bf8323cfae3ad47c817b17f967cc2b383d243d75cca8d759015961915e"
+    },
+    "docs/evidence/README.md": {
+      "source": "templates/docs/evidence/README.md",
+      "sourceSha256": "80f2fbd5223a12a55c2abd61bdd9b2af4bfd8bbc2826df00b749e5e868676fb3",
+      "installedSha256": "80f2fbd5223a12a55c2abd61bdd9b2af4bfd8bbc2826df00b749e5e868676fb3"
+    },
+    "docs/open-questions.md": {
+      "source": "templates/docs/open-questions.md",
+      "sourceSha256": "d45899e76b779c548758342c015552f049437d0a0751fd3ebf2c937b3e95df02",
+      "installedSha256": "d45899e76b779c548758342c015552f049437d0a0751fd3ebf2c937b3e95df02"
+    },
+    "docs/plans/README.md": {
+      "source": "templates/docs/plans/README.md",
+      "sourceSha256": "01d166f75f3d6379764ae496b3ff8e3d4b29a29bc794085f82efc41b6bb60bcc",
+      "installedSha256": "01d166f75f3d6379764ae496b3ff8e3d4b29a29bc794085f82efc41b6bb60bcc"
+    },
+    "docs/requirements-matrix.md": {
+      "source": "templates/docs/requirements-matrix.md",
+      "sourceSha256": "225cfe1882ec95701f91681eb66d15a5b44f57307d325ba28c0f1c8adbf18634",
+      "installedSha256": "225cfe1882ec95701f91681eb66d15a5b44f57307d325ba28c0f1c8adbf18634"
+    },
+    "docs/sprint-contract.md": {
+      "source": "templates/docs/sprint-contract.md",
+      "sourceSha256": "156a31cdb56f9dc3b60800781b5612bb5a4d28ce7d85197d3c6a1b6a8cbc2f9a",
+      "installedSha256": "156a31cdb56f9dc3b60800781b5612bb5a4d28ce7d85197d3c6a1b6a8cbc2f9a"
+    },
+    "docs/task-queue.md": {
+      "source": "templates/docs/task-queue.md",
+      "sourceSha256": "e22a5c3bd9a8102b9600089d14b40f91d2af9c9227c8d9c44dadbbabb8c34d3b",
+      "installedSha256": "e22a5c3bd9a8102b9600089d14b40f91d2af9c9227c8d9c44dadbbabb8c34d3b"
+    },
+    "docs/tooling-and-mcp-registry.md": {
+      "source": "templates/docs/tooling-and-mcp-registry.md",
+      "sourceSha256": "e87c8d7bd5b258f8d475e5572adc3f1b18a5e90f1a75870625c8488879660c88",
+      "installedSha256": "e87c8d7bd5b258f8d475e5572adc3f1b18a5e90f1a75870625c8488879660c88"
+    }
+  }
+}
