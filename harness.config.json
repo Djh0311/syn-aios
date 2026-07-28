@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 2,
+  "project": {
+    "name": "product-line",
+    "pack": "generic"
+  },
+  "components": {
+    "collaborationContract": {
+      "enabled": true
+    },
+    "contextRouter": {
+      "enabled": true
+    },
+    "agentAdapters": {
+      "enabled": true
+    },
+    "stagedGitSafety": {
+      "enabled": true,
+      "hook": "pre-commit",
+      "scope": "staged-only"
+    },
+    "codeMap": {
+      "enabled": true,
+      "indexPath": "docs/code-map/index.json",
+      "hookAdvisory": true,
+      "limit": 10
+    },
+    "taskPackageCollaboration": {
+      "enabled": true,
+      "templatePath": "docs/task-packages/TEMPLATE.md",
+      "headerMaxBytes": 4096,
+      "headerMaxLines": 60,
+      "bodySoftMaxBytes": 32768
+    },
+    "gitTaskLifecycle": {
+      "enabled": false,
+      "defaultContext": false,
+      "automaticStaging": false,
+      "dryRunByDefault": true,
+      "persistentLedger": false,
+      "pushSupported": false,
+      "forceCleanupSupported": false
+    },
+    "mistakeLedger": {
+      "enabled": false,
+      "path": "docs/harness/MISTAKES.md",
+      "defaultContext": false,
+      "automaticAppend": false,
+      "softMaxActiveEntries": 30,
+      "softMaxBytes": 40960
+    },
+    "highRiskBoundary": {
+      "enabled": true,
+      "rulesPath": "docs/harness/components/high-risk-boundary.md",
+      "runbookTemplatePath": "docs/harness/runbooks/HIGH_RISK_TEMPLATE.md",
+      "loadJustInTime": true,
+      "preflightConsumesAuthorization": false
+    },
+    "harnessObservation": {
+      "enabled": false,
+      "ledgerPath": "docs/harness/observations/WAVE-1.tsv",
+      "defaultContext": false,
+      "automaticAppend": false,
+      "blocksCompletion": false,
+      "minimumSamples": 8,
+      "maximumSamples": 12
+    },
+    "engineeringSkills": {
+      "enabled": false,
+      "defaultLoad": false,
+      "codexRoot": ".agents/skills",
+      "claudeRoot": ".claude/skills",
+      "skills": []
+    },
+    "installationAudit": {
+      "enabled": true
+    },
+    "ktErp": {
+      "enabled": false,
+      "loadByDefault": false,
+      "loadMatchingRunbookOnly": true
+    },
+    "mengchongBox": {
+      "enabled": false,
+      "loadByDefault": false,
+      "loadMatchingRunbookOnly": true
+    }
+  }
+}

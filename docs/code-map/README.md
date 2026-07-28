@@ -24,9 +24,9 @@ tests before using a capability.
 
 Use the explicit commands only:
 
-    node scripts/harness/codebase-map.js query --target . --query "conversation transport"
-    node scripts/harness/codebase-map.js overlay --target .
-    node scripts/harness/codebase-map.js check --target . --staged --strict
+    node scripts/harness-v2/codebase-map.js query --target . --query "conversation transport"
+    node scripts/harness-v2/codebase-map.js overlay --target .
+    node scripts/harness-v2/codebase-map.js check --target . --staged --strict
 
 The map is intentionally not wired into hooks, config, or the default project
 context route. A no-match means `NO_MATCH_IN_PARTIAL_MAP`, never that a

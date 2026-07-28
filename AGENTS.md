@@ -43,9 +43,9 @@
 - `decisions/**`：拍过的板（防反复纠结同一件事）。
 - `mistake-ledger`：**只在同一个错犯第二次**才记。
 - **停用**（单人项目负担）：requirements-matrix / task-queue / open-questions / context-checkpoints / sprint-contract。
-- `scripts/harness/**`（guard / checkpoint-audit / evidence-freshness…）**默认关，需要时手动跑**。
-- `scripts/harness/project-context.js` 是新会话的**人工显式**最短导航（`node scripts/harness/project-context.js --target .`）；它仍属按需手动工具，不是 Hook、pre-work 或完成门，默认不运行 Git、Hook、Code Map、源码扫描或历史全文。
-- `scripts/harness/maintenance-audit.js` 是按需人工执行的只读漂移报告；不接 Hook、CI、cron 或默认 CLI，不自动回写 `CURRENT.md` / Code Map；同周无业务变化或既有阶段 evidence 已覆盖时不强制运行。
+- 旧 `scripts/harness/**` 已于 2026-07-28 随 schema-1 老 harness 整批退役（Git 历史可回查）；只读检查走 `scripts/harness-v2/`（`config-check`、`active-path-audit`、`adapt.js inspect`、`git-gate`），均按需手动跑、不作默认门禁。
+- `scripts/harness-v2/project-context.js` 是新会话的**人工显式**最短导航（`node scripts/harness-v2/project-context.js --target .`）；它仍属按需手动工具，不是 Hook、pre-work 或完成门，默认不运行 Git、Hook、Code Map、源码扫描或历史全文。
+- `scripts/harness-v2/adapt.js inspect` 是按需人工执行的只读适配检查；不接 Hook、CI、cron 或默认 CLI，不自动回写 `CURRENT.md` / Code Map；同周无业务变化或既有阶段 evidence 已覆盖时不强制运行。
 
 ## 五、不随便砍的硬线（砍完别失稳）
 - **砍低危流程 ≠ 砍真闸**：高危清单那 5 条反而因周围安静**更该显眼**，别一起松。
