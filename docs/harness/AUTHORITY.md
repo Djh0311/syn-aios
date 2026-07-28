@@ -8,7 +8,7 @@ updated-at: 2026-07-28T00:00:00+08:00
 
 - project-rules: AGENTS.md
 - current-state: docs/harness/CURRENT.md
-- active-authority: docs/harness/CURRENT.md
+- active-authority: docs/task-packages/active/TASK-I5-R3.md
 - master-plan: docs/plans/2026-07-23-l3-syn-native-knowledge-workspace-small-stage-plan-v2.md
 - stage-plan: docs/plans/2026-07-23-l3-syn-native-knowledge-workspace-small-stage-plan-v2.md
 - code-map: docs/code-map/index.json
