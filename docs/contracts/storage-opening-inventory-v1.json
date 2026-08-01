@@ -1,0 +1,302 @@
+{
+  "schema": "syn.storage-opening-inventory.v1",
+  "task_id": "SYN-FND-001-R1",
+  "evidence_level": "STATIC_OPENING_ONLY",
+  "base_oid": "2bf9406bd688db8eb84d2138f9b3c6994dac2fb9",
+  "resolution_rule": "resolved_record is a shallow merge of family.defaults and member; member arrays replace defaults; every resolved record must retain a unique id and physical_name",
+  "truth_boundary": "Static source shape does not prove live data, live mutation ownership, DB-primary truth, row counts, parity, cutover, or rollback readiness.",
+  "required_resolved_fields": ["kind", "source_ref", "owner_contract", "domain_owner", "natural_key", "revision", "join_key", "read_entries", "write_entries", "data_level", "truth_status", "migration_status", "next_owner", "hold_refs", "unknown_disposition", "corrupt_disposition", "sensitive_disposition"],
+  "truth_status_enum": ["LEGACY_UNKNOWN", "COMPAT_PROJECTION", "REBUILDABLE_PROJECTION"],
+  "migration_status_enum": ["GUARDED_LEGACY", "NOT_IN_SCOPE", "HOLD"],
+  "entry_ref_grammar": {
+    "SOURCE": "SOURCE::<source-opening-manifest.source_files[].id>::<exact symbol text in frozen source>",
+    "TAURI": "TAURI::<exact entrypoint-inventory.tauri_routes[].commands[] value>",
+    "MCP": "MCP::<exact entrypoint-inventory.supervisor_mcp_capabilities[].name>",
+    "HOLD": "HOLD::<exact open-design-holds-v1.holds[].id>; unresolved reader/writer only, never a callable entry"
+  },
+  "disposition_enum": {
+    "unknown_disposition": ["BLOCK_OR_QUARANTINE_REF_ONLY", "NO_AUTHORITY"],
+    "corrupt_disposition": ["BLOCK_OR_QUARANTINE_REF_ONLY", "DISCARD_AND_REBUILD"],
+    "sensitive_disposition": ["SCRUB_AND_STOP_BEFORE_ORDINARY_STORE", "SCRUB_OR_OMIT"]
+  },
+  "families": [
+    {
+      "id": "sqlite-migration-metadata",
+      "defaults": {
+        "kind": "SQLITE_TABLE",
+        "source_ref": "workbench-sqlite-schema",
+        "owner_contract": "event-audit-outbox-v1",
+        "domain_owner": "migration_platform",
+        "revision": "record_hash plus source detected revision unless the member states a stronger key",
+        "read_entries": ["SOURCE::workbench-sqlite-schema::WORKBENCH_SQLITE_SCHEMA_DDL", "HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],
+        "write_entries": ["HOLD::HOLD-DB-BLOCKED-WRITE"],
+        "data_level": "INTERNAL_MIGRATION_METADATA; actual rows not inspected",
+        "truth_status": "LEGACY_UNKNOWN",
+        "migration_status": "HOLD",
+        "next_owner": "SYN-DAT-001/SYN-DAT-005",
+        "unknown_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "corrupt_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "sensitive_disposition": "SCRUB_AND_STOP_BEFORE_ORDINARY_STORE",
+        "hold_refs": ["HOLD-DB-JSON-RUNTIME-TRUTH", "HOLD-UNKNOWN-QUARANTINE-STORE", "HOLD-DB-BLOCKED-WRITE"]
+      },
+      "members": [
+        {"id":"sqlite.schema_migrations","physical_name":"schema_migrations","natural_key":"version","revision":"version","join_key":"none"},
+        {"id":"sqlite.import_batches","physical_name":"import_batches","natural_key":"batch_id","revision":"importer_version plus source_root_hash plus mode","join_key":"batch_id to import_sources.batch_id; logical source_batch_id from export_batches and rollback_points"},
+        {"id":"sqlite.import_sources","physical_name":"import_sources","natural_key":"source_id and unique(batch_id,source_kind,source_path_hash,source_hash)","revision":"source_schema_version plus detected_revision plus source_hash","join_key":"batch_id to import_batches.batch_id; source_id is imported-row provenance"},
+        {"id":"sqlite.source_records","physical_name":"source_records","natural_key":"source_record_id and unique(source_id,record_kind,natural_key)","revision":"record_hash","join_key":"source_id to import_sources.source_id"},
+        {"id":"sqlite.export_batches","physical_name":"export_batches","natural_key":"export_id","revision":"export_hash plus manifest revision","join_key":"source_batch_id to import_batches.batch_id when present"},
+        {"id":"sqlite.rollback_points","physical_name":"rollback_points","natural_key":"rollback_id","revision":"manifest revision plus created_at","join_key":"source_batch_id to import_batches.batch_id when present"},
+        {"id":"sqlite.workflow_state_meta","physical_name":"workflow_state_meta","natural_key":"workspace_id plus source_root_hash","revision":"revision or schema_version plus workflow_version plus source_root_hash","join_key":"source_id to import_sources.source_id; workspace/root to workflow-state source"}
+      ]
+    },
+    {
+      "id": "sqlite-workflow-project",
+      "defaults": {
+        "kind": "SQLITE_TABLE",
+        "source_ref": "workbench-sqlite-schema",
+        "owner_contract": "project-orchestration-v1",
+        "domain_owner": "project_workflow",
+        "revision": "record_json revision when present, otherwise record_hash plus source detected revision",
+        "read_entries": ["SOURCE::workbench-sqlite-schema::WORKBENCH_SQLITE_SCHEMA_DDL", "TAURI::load_workflow_state_snapshot", "HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],
+        "write_entries": ["SOURCE::workflow-db-primary-wiring::write_m5b_batch1_workflow_state_db_primary", "SOURCE::workflow-db-primary-wiring::write_m5b_batch2_workflow_state_db_primary", "HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],
+        "data_level": "INTERNAL_DOMAIN_STATE; source JSON remains untrusted until classified",
+        "truth_status": "LEGACY_UNKNOWN",
+        "migration_status": "HOLD",
+        "next_owner": "SYN-DAT-001/SYN-DAT-005",
+        "unknown_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "corrupt_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "sensitive_disposition": "SCRUB_AND_STOP_BEFORE_ORDINARY_STORE",
+        "hold_refs": ["HOLD-DB-JSON-RUNTIME-TRUTH", "HOLD-CROSS-SCOPE-ROLE-MAPPING", "HOLD-DB-BLOCKED-WRITE"]
+      },
+      "members": [
+        {"id":"sqlite.projects","physical_name":"projects","natural_key":"project_id","join_key":"project_id from workflows, memory scopes, execution, and supervisor rows"},
+        {"id":"sqlite.agent_adapters","physical_name":"agent_adapters","owner_contract":"connector-capability-v1","domain_owner":"connector_registry","natural_key":"adapter_id","join_key":"standalone opening key; capability and role relation is HOLD","hold_refs":["HOLD-CREDENTIAL-BACKEND","HOLD-FIRST-CONNECTOR","HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.workflows","physical_name":"workflows","natural_key":"workflow_id","join_key":"project_id to projects; workflow_id from nodes, edges, work items, reviews, dispatch, execution, and supervisor rows"},
+        {"id":"sqlite.workflow_nodes","physical_name":"workflow_nodes","natural_key":"node_id","join_key":"workflow_id to workflows; node_id from edges and work items"},
+        {"id":"sqlite.workflow_edges","physical_name":"workflow_edges","natural_key":"edge_id","join_key":"workflow_id to workflows; source_node_id and target_node_id to workflow_nodes"},
+        {"id":"sqlite.work_items","physical_name":"work_items","natural_key":"work_item_id","join_key":"workflow_id to workflows; node_id to workflow_nodes; work_item_id from artifacts, reviews, bindings, dispatches, and execution"},
+        {"id":"sqlite.workflow_artifacts","physical_name":"workflow_artifacts","natural_key":"artifact_id","join_key":"work_item_id to work_items"},
+        {"id":"sqlite.workflow_reviews","physical_name":"workflow_reviews","natural_key":"review_id","join_key":"workflow_id to workflows; work_item_id to work_items"},
+        {"id":"sqlite.workflow_audit_events","physical_name":"workflow_audit_events","owner_contract":"event-audit-outbox-v1","domain_owner":"workflow_audit","natural_key":"event_id","join_key":"target_kind plus target_id polymorphic logical join; source_id to import_sources","data_level":"RESTRICTED_AUDIT_METADATA; raw content forbidden","hold_refs":["HOLD-RAW-TRANSCRIPT-RETENTION","HOLD-DB-JSON-RUNTIME-TRUTH","HOLD-DB-BLOCKED-WRITE"]},
+        {"id":"sqlite.workflow_node_session_bindings","physical_name":"workflow_node_session_bindings","owner_contract":"role-session-v1","domain_owner":"workflow_dispatch_session","natural_key":"binding_id","join_key":"workflow_id, node_id, work_item_id; session_id to target RoleSession is HOLD","hold_refs":["HOLD-CROSS-SCOPE-ROLE-MAPPING","HOLD-DB-JSON-RUNTIME-TRUTH","HOLD-EXECUTION-GRANT-PERSISTENCE"]},
+        {"id":"sqlite.workflow_node_dispatches","physical_name":"workflow_node_dispatches","natural_key":"dispatch_id","join_key":"workflow_id, node_id, work_item_id; dispatch_id from execution_attempts"},
+        {"id":"sqlite.capabilities","physical_name":"capabilities","owner_contract":"connector-capability-v1","domain_owner":"connector_registry","natural_key":"capability_id","join_key":"standalone opening key; canonical grant binding is HOLD","hold_refs":["HOLD-FIRST-CONNECTOR","HOLD-CREDENTIAL-BACKEND","HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.harness_resources","physical_name":"harness_resources","owner_contract":"connector-capability-v1","domain_owner":"harness_resource_registry","natural_key":"resource_id","join_key":"standalone opening key; capability and project scope relation is HOLD","hold_refs":["HOLD-FIRST-CONNECTOR","HOLD-DB-JSON-RUNTIME-TRUTH"]}
+      ]
+    },
+    {
+      "id": "sqlite-memory-governance",
+      "defaults": {
+        "kind": "SQLITE_TABLE",
+        "source_ref": "workbench-sqlite-schema",
+        "owner_contract": "memory-personal-model-v1",
+        "domain_owner": "memory_governance",
+        "revision": "record_json revision when present, otherwise record_hash plus source detected revision",
+        "read_entries": ["SOURCE::workbench-sqlite-schema::WORKBENCH_SQLITE_SCHEMA_DDL", "HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],
+        "write_entries": ["HOLD::HOLD-DB-BLOCKED-WRITE"],
+        "data_level": "INTERNAL_MEMORY_METADATA; content requires later scrub and retention classification",
+        "truth_status": "LEGACY_UNKNOWN",
+        "migration_status": "HOLD",
+        "next_owner": "SYN-DAT-001/SYN-DAT-005/SYN-MEM-001",
+        "unknown_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "corrupt_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "sensitive_disposition": "SCRUB_AND_STOP_BEFORE_ORDINARY_STORE",
+        "hold_refs": ["HOLD-MEMORY-PROMOTION-POLICY", "HOLD-RAW-TRANSCRIPT-RETENTION", "HOLD-UNKNOWN-QUARANTINE-STORE", "HOLD-DB-JSON-RUNTIME-TRUTH"]
+      },
+      "members": [
+        {"id":"sqlite.memory_scopes","physical_name":"memory_scopes","natural_key":"scope_id","join_key":"project_id, workflow_id, and session_id to their source domains"},
+        {"id":"sqlite.memory_source_refs","physical_name":"memory_source_refs","natural_key":"source_ref_id","join_key":"source_kind plus source_id plus source_hash is polymorphic provenance"},
+        {"id":"sqlite.formal_memory_records","physical_name":"formal_memory_records","natural_key":"memory_id","join_key":"scope_id to memory_scopes; source_id to import_sources; memory_id from versions, audit, and candidates"},
+        {"id":"sqlite.formal_memory_versions","physical_name":"formal_memory_versions","natural_key":"version_id","join_key":"memory_id to formal_memory_records"},
+        {"id":"sqlite.formal_memory_audit_events","physical_name":"formal_memory_audit_events","natural_key":"audit_event_id","join_key":"memory_id to formal_memory_records"},
+        {"id":"sqlite.memory_candidates","physical_name":"memory_candidates","natural_key":"candidate_key with candidate_id alternate unique","join_key":"formal_memory_id to formal memories; candidate_key from events, observations, and capture"},
+        {"id":"sqlite.memory_candidate_events","physical_name":"memory_candidate_events","natural_key":"audit_ref_id","join_key":"candidate_key to memory_candidates"},
+        {"id":"sqlite.observations","physical_name":"observations","natural_key":"observation_key with observation_id alternate unique","join_key":"candidate_key to candidates; observation_key from events and capture"},
+        {"id":"sqlite.observation_events","physical_name":"observation_events","natural_key":"audit_ref_id","join_key":"observation_key to observations"},
+        {"id":"sqlite.memory_capture_events","physical_name":"memory_capture_events","natural_key":"event_key with capture_event_id alternate unique","join_key":"observation_key to observations; candidate_key to memory_candidates"},
+        {"id":"sqlite.memory_lint_runs","physical_name":"memory_lint_runs","natural_key":"lint_run_id","join_key":"lint_run_id from memory_lint_findings"},
+        {"id":"sqlite.memory_lint_findings","physical_name":"memory_lint_findings","natural_key":"finding_id","join_key":"lint_run_id to memory_lint_runs"},
+        {"id":"sqlite.memory_entity_relations","physical_name":"memory_entity_relations","natural_key":"relation_id","join_key":"entity endpoints remain record-level HOLD"},
+        {"id":"sqlite.mature_pattern_candidates","physical_name":"mature_pattern_candidates","natural_key":"candidate_id","join_key":"candidate_id from mature_pattern_audit_events"},
+        {"id":"sqlite.mature_pattern_audit_events","physical_name":"mature_pattern_audit_events","natural_key":"audit_event_id","join_key":"candidate_id to mature_pattern_candidates"},
+        {"id":"sqlite.blackboard_candidates","physical_name":"blackboard_candidates","owner_contract":"project-orchestration-v1","domain_owner":"blackboard_candidate","natural_key":"candidate_key","join_key":"candidate_key from blackboard_candidate_audit_events; project/workflow relation is HOLD","hold_refs":["HOLD-UNKNOWN-QUARANTINE-STORE","HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.blackboard_candidate_audit_events","physical_name":"blackboard_candidate_audit_events","owner_contract":"event-audit-outbox-v1","domain_owner":"blackboard_candidate_audit","natural_key":"audit_event_id","join_key":"candidate_key to blackboard_candidates","data_level":"RESTRICTED_AUDIT_METADATA; raw content forbidden","hold_refs":["HOLD-UNKNOWN-QUARANTINE-STORE","HOLD-RAW-TRANSCRIPT-RETENTION","HOLD-DB-JSON-RUNTIME-TRUTH"]}
+      ]
+    },
+    {
+      "id": "sqlite-proposal-execution-runtime",
+      "defaults": {
+        "kind": "SQLITE_TABLE",
+        "source_ref": "workbench-sqlite-schema",
+        "owner_contract": "project-orchestration-v1",
+        "domain_owner": "proposal_execution_runtime",
+        "revision": "record_json revision when present, otherwise record_hash plus source detected revision",
+        "read_entries": ["SOURCE::workbench-sqlite-schema::WORKBENCH_SQLITE_SCHEMA_DDL", "HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],
+        "write_entries": ["HOLD::HOLD-DB-BLOCKED-WRITE"],
+        "data_level": "RESTRICTED_EXECUTION_AUDIT; raw content forbidden",
+        "truth_status": "LEGACY_UNKNOWN",
+        "migration_status": "HOLD",
+        "next_owner": "SYN-DAT-001/SYN-DAT-005/SYN-FND-004C",
+        "unknown_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "corrupt_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "sensitive_disposition": "SCRUB_AND_STOP_BEFORE_ORDINARY_STORE",
+        "hold_refs": ["HOLD-EXECUTION-GRANT-PERSISTENCE", "HOLD-DB-JSON-RUNTIME-TRUTH", "HOLD-DB-BLOCKED-WRITE", "HOLD-RAW-TRANSCRIPT-RETENTION", "HOLD-UNKNOWN-QUARANTINE-STORE"]
+      },
+      "members": [
+        {"id":"sqlite.project_proposals","physical_name":"project_proposals","domain_owner":"project_proposal","natural_key":"proposal_id","join_key":"project_id and workflow_id to source domains; proposal_id from decision/audit and authorization"},
+        {"id":"sqlite.project_proposal_decisions","physical_name":"project_proposal_decisions","domain_owner":"project_proposal","natural_key":"decision_id","join_key":"proposal_id to project_proposals"},
+        {"id":"sqlite.project_proposal_audit_events","physical_name":"project_proposal_audit_events","domain_owner":"project_proposal_audit","natural_key":"audit_event_id","join_key":"proposal_id to project_proposals"},
+        {"id":"sqlite.plan_authorizations","physical_name":"plan_authorizations","domain_owner":"plan_authorization","natural_key":"authorization_id","join_key":"source_proposal_id to proposals; authorization_id from audit, scopes, and supervisor sessions"},
+        {"id":"sqlite.plan_authorization_audit_events","physical_name":"plan_authorization_audit_events","domain_owner":"plan_authorization_audit","natural_key":"audit_event_id","join_key":"authorization_id to plan_authorizations"},
+        {"id":"sqlite.authorized_execution_scopes","physical_name":"authorized_execution_scopes","domain_owner":"execution_grant_scope","natural_key":"authorization_id","revision":"scope_fingerprint plus scope record; immutable grant semantics remain HOLD","join_key":"authorization_id to plan_authorizations"},
+        {"id":"sqlite.stage_c_reviews","physical_name":"stage_c_reviews","domain_owner":"stage_c_review","natural_key":"review_id","join_key":"review kind and domain reference remain record-level HOLD"},
+        {"id":"sqlite.stage_c_acceptance_summaries","physical_name":"stage_c_acceptance_summaries","domain_owner":"stage_c_acceptance","natural_key":"artifact_id","join_key":"source_id to import_sources; review/command link is HOLD"},
+        {"id":"sqlite.product_commands","physical_name":"product_commands","source_ref":"real-execution-db-primary","owner_contract":"command-v1","domain_owner":"product_command","natural_key":"product_command_id","join_key":"product_command_id from previews, decisions, attempts, and continuations","read_entries":["SOURCE::real-execution-db-primary::db_primary_projection_records","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["SOURCE::real-execution-db-primary::write","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.product_command_previews","physical_name":"product_command_previews","source_ref":"real-execution-db-primary","owner_contract":"command-v1","domain_owner":"product_command","natural_key":"preview_id","revision":"preview_hash plus record_hash","join_key":"product_command_id to product_commands","read_entries":["SOURCE::real-execution-db-primary::db_primary_projection_records","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["SOURCE::real-execution-db-primary::write","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.product_command_decisions","physical_name":"product_command_decisions","source_ref":"real-execution-db-primary","owner_contract":"command-v1","domain_owner":"product_command","natural_key":"decision_id","join_key":"product_command_id to product_commands","read_entries":["SOURCE::real-execution-db-primary::db_primary_projection_records","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["SOURCE::real-execution-db-primary::write","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.product_command_attempts","physical_name":"product_command_attempts","source_ref":"real-execution-db-primary","owner_contract":"command-v1","domain_owner":"product_command_attempt","natural_key":"attempt_id","join_key":"product_command_id to product_commands; attempt_id from readback_results","read_entries":["SOURCE::real-execution-db-primary::db_primary_projection_records","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["SOURCE::real-execution-db-primary::write","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.session_continuations","physical_name":"session_continuations","source_ref":"session-continuation-db-primary","owner_contract":"role-session-v1","domain_owner":"session_continuation","natural_key":"continuation_id","join_key":"product_command_id to product_commands; continuation_id from attempts and audit","read_entries":["SOURCE::session-continuation-db-primary::db_primary_projection_records","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["SOURCE::session-continuation-db-primary::write","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.session_continuation_attempts","physical_name":"session_continuation_attempts","source_ref":"session-continuation-db-primary","owner_contract":"role-session-v1","domain_owner":"session_continuation","natural_key":"attempt_id","join_key":"continuation_id to session_continuations","read_entries":["SOURCE::session-continuation-db-primary::db_primary_projection_records","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["SOURCE::session-continuation-db-primary::write","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.session_continuation_audit_events","physical_name":"session_continuation_audit_events","source_ref":"session-continuation-db-primary","owner_contract":"event-audit-outbox-v1","domain_owner":"session_continuation_audit","natural_key":"event_id","join_key":"continuation_id to session_continuations","read_entries":["SOURCE::session-continuation-db-primary::db_primary_projection_records","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["SOURCE::session-continuation-db-primary::write","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.runtime_log_entries","physical_name":"runtime_log_entries","source_ref":"runtime-log-db-primary","owner_contract":"event-audit-outbox-v1","domain_owner":"runtime_log","natural_key":"entry_id","join_key":"entry_id from runtime_source_refs; attempt/session relation is HOLD","read_entries":["SOURCE::runtime-log-db-primary::db_primary_projection_records","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["SOURCE::runtime-log-db-primary::write_store_with_db_primary","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.runtime_log_summaries","physical_name":"runtime_log_summaries","source_ref":"runtime-log-db-primary","owner_contract":"event-audit-outbox-v1","domain_owner":"runtime_log_summary","natural_key":"summary_id","revision":"summary_hash plus record_hash","join_key":"batch_id logical join to import_batches","read_entries":["SOURCE::runtime-log-db-primary::db_primary_projection_records","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["SOURCE::runtime-log-db-primary::write_store_with_db_primary","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.runtime_source_refs","physical_name":"runtime_source_refs","source_ref":"runtime-log-db-primary","owner_contract":"event-audit-outbox-v1","domain_owner":"runtime_log_provenance","natural_key":"runtime_source_ref_id","revision":"reference record plus source kind and source id","join_key":"entry_id to runtime_log_entries; source kind/id polymorphic HOLD","read_entries":["SOURCE::runtime-log-db-primary::db_primary_projection_records","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["SOURCE::runtime-log-db-primary::write_store_with_db_primary","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sqlite.readback_results","physical_name":"readback_results","owner_contract":"command-v1","domain_owner":"command_readback","natural_key":"readback_id","join_key":"attempt_id to product_command_attempts; source kind/id polymorphic HOLD"}
+      ]
+    },
+    {
+      "id": "sqlite-workflow-top-level-legacy",
+      "defaults": {
+        "kind": "SQLITE_TABLE",
+        "source_ref": "workbench-sqlite-schema",
+        "owner_contract": "project-orchestration-v1",
+        "domain_owner": "legacy_workflow_runtime",
+        "revision": "record_json revision when present, otherwise record_hash plus source detected revision",
+        "read_entries": ["SOURCE::workbench-sqlite-schema::WORKBENCH_SQLITE_SCHEMA_DDL", "TAURI::load_workflow_state_snapshot", "HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],
+        "write_entries": ["HOLD::HOLD-EXECUTION-GRANT-PERSISTENCE", "HOLD::HOLD-DB-BLOCKED-WRITE"],
+        "data_level": "RESTRICTED_LEGACY_RUNTIME_STATE; current production truth not proven",
+        "truth_status": "LEGACY_UNKNOWN",
+        "migration_status": "GUARDED_LEGACY",
+        "next_owner": "SYN-DAT-001/SYN-DAT-005/SYN-FND-004B/SYN-FND-004C",
+        "unknown_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "corrupt_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "sensitive_disposition": "SCRUB_AND_STOP_BEFORE_ORDINARY_STORE",
+        "hold_refs": ["HOLD-EXECUTION-GRANT-PERSISTENCE", "HOLD-ORCHESTRATION-RETRY-LEASE", "HOLD-DB-JSON-RUNTIME-TRUTH", "HOLD-UNKNOWN-QUARANTINE-STORE"]
+      },
+      "members": [
+        {"id":"sqlite.execution_attempts","physical_name":"execution_attempts","natural_key":"attempt_id","join_key":"workflow_id, work_item_id, dispatch_id, and project_id to source rows"},
+        {"id":"sqlite.permission_requests","physical_name":"permission_requests","natural_key":"request_id","join_key":"workflow_id, work_item_id, dispatch_id, and project_id to source rows"},
+        {"id":"sqlite.workflow_chain_runs","physical_name":"workflow_chain_runs","natural_key":"chain_run_id","join_key":"workflow_id and project_id to source rows"},
+        {"id":"sqlite.workflow_execution_controls","physical_name":"workflow_execution_controls","natural_key":"control_id","join_key":"workflow_id, work_item_id, and project_id to source rows"},
+        {"id":"sqlite.workflow_machine_runs","physical_name":"workflow_machine_runs","natural_key":"run_id","join_key":"workflow_id, work_item_id, and project_id to source rows","migration_status":"HOLD"}
+      ]
+    },
+    {
+      "id": "sqlite-supervisor",
+      "defaults": {
+        "kind": "SQLITE_TABLE",
+        "source_ref": "global-supervisor-review-db-primary",
+        "owner_contract": "handoff-v1",
+        "domain_owner": "global_supervisor",
+        "revision": "record_json revision when present, otherwise record_hash plus source detected revision",
+        "read_entries": ["SOURCE::global-supervisor-review-db-primary::db_primary_projection_records", "HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],
+        "write_entries": ["SOURCE::global-supervisor-review-db-primary::write_store_with_db_primary", "HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],
+        "data_level": "RESTRICTED_SUPERVISOR_AUDIT; raw content forbidden",
+        "truth_status": "LEGACY_UNKNOWN",
+        "migration_status": "HOLD",
+        "next_owner": "SYN-DAT-001/SYN-DAT-005/M6",
+        "unknown_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "corrupt_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "sensitive_disposition": "SCRUB_AND_STOP_BEFORE_ORDINARY_STORE",
+        "hold_refs": ["HOLD-CROSS-SCOPE-ROLE-MAPPING", "HOLD-RAW-TRANSCRIPT-RETENTION", "HOLD-DB-JSON-RUNTIME-TRUTH", "HOLD-DB-BLOCKED-WRITE"]
+      },
+      "members": [
+        {"id":"sqlite.supervisor_reviews","physical_name":"supervisor_reviews","natural_key":"review_id","join_key":"project_id and workflow_id to source rows"},
+        {"id":"sqlite.supervisor_review_audit_events","physical_name":"supervisor_review_audit_events","owner_contract":"event-audit-outbox-v1","domain_owner":"supervisor_audit","natural_key":"event_id","join_key":"workflow_id to workflows; review relation remains record-level HOLD"},
+        {"id":"sqlite.supervisor_boundary_reviews","physical_name":"supervisor_boundary_reviews","natural_key":"review_id","join_key":"project_id to projects; proposal_id to project_proposals"},
+        {"id":"sqlite.supervisor_boundary_audit_events","physical_name":"supervisor_boundary_audit_events","owner_contract":"event-audit-outbox-v1","domain_owner":"supervisor_audit","natural_key":"event_id","join_key":"proposal_id to project_proposals"},
+        {"id":"sqlite.supervisor_actions","physical_name":"supervisor_actions","source_ref":"workbench-sqlite-schema","natural_key":"action_id with idempotency_key alternate unique when present","revision":"idempotency_key plus record_hash","join_key":"run_id to supervisor sessions; project_id and workflow_id to source rows","read_entries":["SOURCE::workbench-sqlite-schema::WORKBENCH_SQLITE_SCHEMA_DDL","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["HOLD::HOLD-DB-BLOCKED-WRITE"]},
+        {"id":"sqlite.supervisor_orchestrator_sessions","physical_name":"supervisor_orchestrator_sessions","source_ref":"workbench-sqlite-schema","natural_key":"run_id","join_key":"workflow_id to workflows; authorization_id to plan_authorizations; root identity is HOLD","read_entries":["SOURCE::workbench-sqlite-schema::WORKBENCH_SQLITE_SCHEMA_DDL","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["HOLD::HOLD-DB-BLOCKED-WRITE"]},
+        {"id":"sqlite.supervisor_orchestrator_audit_events","physical_name":"supervisor_orchestrator_audit_events","source_ref":"workbench-sqlite-schema","owner_contract":"event-audit-outbox-v1","domain_owner":"supervisor_audit","natural_key":"event_id","join_key":"run_id to supervisor_orchestrator_sessions","read_entries":["SOURCE::workbench-sqlite-schema::WORKBENCH_SQLITE_SCHEMA_DDL","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["HOLD::HOLD-DB-BLOCKED-WRITE"]}
+      ]
+    },
+    {
+      "id": "sidecar-compatibility",
+      "defaults": {
+        "kind": "SIDECAR",
+        "source_ref": "tauri-command-registry",
+        "owner_contract": "event-audit-outbox-v1",
+        "domain_owner": "sidecar_compatibility",
+        "revision": "schema version plus declared revision and canonical record hash",
+        "read_entries": ["HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],
+        "write_entries": ["HOLD::HOLD-DB-BLOCKED-WRITE"],
+        "data_level": "UNTRUSTED_JSON_SOURCE; actual files and records not opened",
+        "truth_status": "LEGACY_UNKNOWN",
+        "migration_status": "GUARDED_LEGACY",
+        "next_owner": "SYN-DAT-001/SYN-DAT-005",
+        "unknown_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "corrupt_disposition": "BLOCK_OR_QUARANTINE_REF_ONLY",
+        "sensitive_disposition": "SCRUB_AND_STOP_BEFORE_ORDINARY_STORE",
+        "hold_refs": ["HOLD-DB-JSON-RUNTIME-TRUTH", "HOLD-UNKNOWN-QUARANTINE-STORE", "HOLD-DB-BLOCKED-WRITE"]
+      },
+      "members": [
+        {"id":"sidecar.workflow_state","physical_name":"workflow-state.v0.json","owner_contract":"project-orchestration-v1","domain_owner":"project_workflow","natural_key":"workspace/root source identity plus member domain keys","join_key":"workflow_state_meta and workflow/project table keys","read_entries":["TAURI::load_workflow_state_snapshot","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::initialize_workflow_state","TAURI::update_work_item_state","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.project_proposals","physical_name":"project-proposals.v1.json","owner_contract":"project-orchestration-v1","domain_owner":"project_proposal","natural_key":"proposal_id; decision_id; audit_event_id","join_key":"proposal_id to proposal decisions/audit and plan authorization source","read_entries":["TAURI::load_project_consultation_proposal_store","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::create_project_consultation_proposal","TAURI::record_project_consultation_proposal_decision","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.plan_authorizations","physical_name":"plan-authorizations.v1.json","owner_contract":"project-orchestration-v1","domain_owner":"plan_authorization","natural_key":"authorization_id; audit_event_id","join_key":"authorization_id to authorization audit and execution scope","read_entries":["TAURI::load_plan_authorization_store","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::create_plan_authorization","TAURI::record_plan_authorization_user_confirmation","TAURI::revoke_plan_authorization","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"hold_refs":["HOLD-EXECUTION-GRANT-PERSISTENCE","HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.global_supervisor_reviews","physical_name":"global-supervisor-reviews.v1.json","owner_contract":"handoff-v1","domain_owner":"global_supervisor","natural_key":"review_id and event_id by collection","join_key":"maps supervisor review and boundary tables","read_entries":["TAURI::global_supervisor_review_store::load_global_supervisor_review_store","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::global_supervisor_agent::run_global_supervisor_review","TAURI::global_supervisor_agent::run_global_supervisor_boundary_review","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"data_level":"RESTRICTED_SUPERVISOR_AUDIT","hold_refs":["HOLD-CROSS-SCOPE-ROLE-MAPPING","HOLD-RAW-TRANSCRIPT-RETENTION","HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.supervisor_orchestrator","physical_name":"supervisor-orchestrator.v1.json","owner_contract":"handoff-v1","domain_owner":"global_supervisor","natural_key":"run_id; event_id","join_key":"run_id to supervisor session/audit tables","read_entries":["HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::supervisor_session_launcher::launch_supervisor_pilot","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"data_level":"RESTRICTED_SUPERVISOR_AUDIT"},
+        {"id":"sidecar.supervisor_action_control","physical_name":"supervisor-action-control.v1.json","owner_contract":"handoff-v1","domain_owner":"global_supervisor","natural_key":"action_id","join_key":"action_id to supervisor_actions; alternate idempotency key","read_entries":["HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["HOLD::HOLD-DB-BLOCKED-WRITE"],"data_level":"RESTRICTED_SUPERVISOR_AUDIT"},
+        {"id":"sidecar.real_execution_product_commands","physical_name":"real-execution-product-commands.v1.json","owner_contract":"command-v1","domain_owner":"product_command","natural_key":"product_command_id; preview_id; decision_id; attempt_id","join_key":"product_command_id joins all collections and SQLite family","read_entries":["TAURI::preview_real_execution_product_command","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::prepare_real_execution_product_command","TAURI::record_real_execution_product_command_decision","TAURI::confirm_real_execution_product_command","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"data_level":"RESTRICTED_EXECUTION_AUDIT","hold_refs":["HOLD-EXECUTION-GRANT-PERSISTENCE","HOLD-RAW-TRANSCRIPT-RETENTION","HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.session_continuations","physical_name":"session-continuations.v1.json","owner_contract":"role-session-v1","domain_owner":"session_continuation","natural_key":"continuation_id; attempt_id; event_id","join_key":"continuation_id joins collections and SQLite family","read_entries":["TAURI::load_session_continuation_store","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::confirm_controlled_session_continuation","TAURI::run_controlled_session_continuation_stub","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"data_level":"RESTRICTED_EXECUTION_AUDIT"},
+        {"id":"sidecar.runtime_logs","physical_name":"runtime-logs.v1.json","source_ref":"runtime-log-db-primary","owner_contract":"event-audit-outbox-v1","domain_owner":"runtime_log","natural_key":"entry_id; summary_id","join_key":"entry_id to runtime source refs; batch_id logical import join","read_entries":["SOURCE::runtime-log-db-primary::db_primary_projection_records","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["SOURCE::runtime-log-db-primary::write_store_with_db_primary","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"data_level":"RESTRICTED_EXECUTION_AUDIT"},
+        {"id":"sidecar.exec_process_registry","physical_name":"exec-process-registry.v1.json","source_ref":"exec-process-registry","owner_contract":"command-v1","domain_owner":"local_process_registry","natural_key":"sidecar_scope=parent(workflow_state_path); entries=(run_id,pid,started_at,process_group_id); audit_events=event_id","revision":"top-level revision; mutate path increments it after successful mutation","join_key":"entries.run_id is a legacy logical run reference; typed WorkflowRun/ExecutionAttempt relation remains HOLD","read_entries":["SOURCE::exec-process-registry::load_store","SOURCE::exec-process-registry::reap_registered_orphans"],"write_entries":["SOURCE::exec-process-registry::register_entry","SOURCE::exec-process-registry::unregister_entry","SOURCE::exec-process-registry::write_store_atomic"],"data_level":"RESTRICTED_RUNTIME_METADATA","migration_status":"HOLD","hold_refs":["HOLD-EXECUTION-GRANT-PERSISTENCE","HOLD-UNKNOWN-QUARANTINE-STORE","HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.formal_memories","physical_name":"formal-memories.v1.json","owner_contract":"memory-personal-model-v1","domain_owner":"formal_memory_repository","natural_key":"memory_id; version_id; audit_event_id","join_key":"memory_id joins collections and SQLite family","read_entries":["TAURI::load_formal_memory_store","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::create_formal_memory_record","TAURI::record_formal_memory_lifecycle_operation","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.memory_candidates","physical_name":"memory-candidates.v1.json","owner_contract":"memory-personal-model-v1","domain_owner":"memory_governance","natural_key":"candidate_key with candidate_id fallback; audit_ref_id","join_key":"candidate_key joins collections and SQLite family","read_entries":["TAURI::load_memory_candidate_store","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::create_memory_candidate","TAURI::record_memory_candidate_decision","TAURI::adopt_memory_candidate_to_formal_memory","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.memory_capture_events","physical_name":"memory-capture-events.v1.json","owner_contract":"memory-personal-model-v1","domain_owner":"memory_capture","natural_key":"event_key with capture_event_id fallback","join_key":"observation_key and candidate_key to source records","read_entries":["TAURI::load_memory_capture_store","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::capture_memory_event","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.observations","physical_name":"observations.v1.json","owner_contract":"memory-personal-model-v1","domain_owner":"memory_capture","natural_key":"observation_key with observation_id fallback; audit_ref_id","join_key":"observation_key joins collections and SQLite family","read_entries":["TAURI::load_observation_store","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::create_observation","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.memory_lint","physical_name":"memory-lint.v1.json","owner_contract":"memory-personal-model-v1","domain_owner":"memory_governance","natural_key":"lint_run_id; finding_id","join_key":"lint_run_id joins findings and SQLite family","read_entries":["TAURI::load_memory_lint_store","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::run_memory_lint","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.memory_entity_relations","physical_name":"memory-entity-relations.v1.json","owner_contract":"memory-personal-model-v1","domain_owner":"memory_governance","natural_key":"relation_id","join_key":"maps memory_entity_relations; endpoint mapping is HOLD","read_entries":["TAURI::load_memory_entity_relation_store","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::record_memory_entity_alias_decision","TAURI::record_memory_entity_merge_decision","TAURI::record_memory_relation_candidate_decision","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.memory_patterns","physical_name":"memory-patterns.v1.json","owner_contract":"memory-personal-model-v1","domain_owner":"memory_governance","natural_key":"candidate_id; audit_event_id","join_key":"candidate_id joins collections and SQLite family","read_entries":["TAURI::load_memory_pattern_store","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::record_mature_pattern_decision","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"sidecar.blackboard_candidates","physical_name":"blackboard-candidates.v1.json","owner_contract":"project-orchestration-v1","domain_owner":"blackboard_candidate","natural_key":"candidate_key; audit_event_id","join_key":"candidate_key joins collections and SQLite family","read_entries":["TAURI::load_blackboard_candidate_store","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["TAURI::record_blackboard_candidate_decision","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"migration_status":"HOLD"}
+      ],
+      "aliases": [
+        {"id":"sidecar.runtime_log_legacy_alias","physical_name":"runtime-log.v1.json","canonical_member":"sidecar.runtime_logs","write_rule":"read-only legacy alias; canonical output name is runtime-logs.v1.json"}
+      ]
+    },
+    {
+      "id": "projection-read-models",
+      "defaults": {
+        "kind": "PROJECTION",
+        "source_ref": "workbench-sqlite-schema",
+        "owner_contract": "event-audit-outbox-v1",
+        "domain_owner": "PROJECTOR_ID",
+        "revision": "projector version plus source watermark/revision plus canonical hash",
+        "read_entries": ["SOURCE::workbench-sqlite-schema::WORKBENCH_SQLITE_SCHEMA_DDL", "HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],
+        "write_entries": ["HOLD::HOLD-DB-BLOCKED-WRITE"],
+        "data_level": "DERIVED_SCRUBBED_READ_MODEL",
+        "truth_status": "REBUILDABLE_PROJECTION",
+        "migration_status": "NOT_IN_SCOPE",
+        "next_owner": "SYN-DAT-003/SYN-DAT-004/SYN-DAT-005",
+        "unknown_disposition": "NO_AUTHORITY",
+        "corrupt_disposition": "DISCARD_AND_REBUILD",
+        "sensitive_disposition": "SCRUB_OR_OMIT",
+        "hold_refs": ["HOLD-DB-JSON-RUNTIME-TRUTH", "HOLD-UNKNOWN-QUARANTINE-STORE"]
+      },
+      "members": [
+        {"id":"projection.sqlite_bridge","physical_name":"sqlite_bridge","domain_owner":"migration_projector","natural_key":"source kind plus record kind plus natural key plus source hash","join_key":"import provenance to imported domain rows"},
+        {"id":"projection.workflow","physical_name":"workflow","source_ref":"workflow-db-primary-wiring","owner_contract":"project-orchestration-v1","domain_owner":"workflow_projector","natural_key":"workspace/root identity plus workflow-state revision/hash","join_key":"workflow_state_meta and workflow/project keys","read_entries":["TAURI::load_workflow_state_snapshot","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["SOURCE::workflow-db-primary-wiring::write_m5b_batch1_workflow_state_db_primary","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"projection.page_read_model","physical_name":"page_read_model","source_ref":"page-read-model","owner_contract":"object-ref-navigation-v1","domain_owner":"page_projector","natural_key":"page_id plus project scope plus object ref plus source watermark","join_key":"typed object ref to authoritative aggregate","read_entries":["TAURI::load_workbench_snapshot","TAURI::query_workbench_page_read_model"],"write_entries":["HOLD::HOLD-DB-BLOCKED-WRITE"]},
+        {"id":"projection.audit","physical_name":"audit","source_ref":"audit-ledger-read-model","owner_contract":"event-audit-outbox-v1","domain_owner":"audit_projector","natural_key":"audit record or event source ref plus projector watermark","join_key":"domain audit IDs to scrubbed audit record","read_entries":["TAURI::audit_ledger_read_model::query_audit_ledger_read_model"],"write_entries":["HOLD::HOLD-DB-BLOCKED-WRITE"],"data_level":"DERIVED_SCRUBBED_AUDIT","hold_refs":["HOLD-RAW-TRANSCRIPT-RETENTION","HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"projection.knowledge","physical_name":"knowledge","source_ref":"knowledge-index","owner_contract":"object-ref-navigation-v1","domain_owner":"knowledge_projector","natural_key":"vault object ref plus canonical file hash plus indexer version","join_key":"file-truth object ref to index/graph/backlink entries","read_entries":["TAURI::knowledge_index::knowledge_workspace_snapshot","TAURI::knowledge_index::knowledge_workspace_search"],"write_entries":["HOLD::HOLD-DB-BLOCKED-WRITE"],"hold_refs":["HOLD-PATH-REALPATH-SYMLINK","HOLD-OBJECT-EXTERNAL-URI","HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"projection.secretary","physical_name":"secretary","source_ref":"secretary-agent","owner_contract":"attention-decision-v1","domain_owner":"attention_projector","natural_key":"actor personal scope plus source watermark","join_key":"open loop and decision source refs; no secretary truth store","read_entries":["TAURI::secretary_agent::run_secretary_explain"],"write_entries":["HOLD::HOLD-DB-BLOCKED-WRITE"],"hold_refs":["HOLD-ATTENTION-NOTIFICATION-POLICY","HOLD-CROSS-SCOPE-ROLE-MAPPING","HOLD-DB-JSON-RUNTIME-TRUTH"]},
+        {"id":"projection.runtime","physical_name":"runtime","source_ref":"real-execution-db-primary","owner_contract":"command-v1","domain_owner":"execution_runtime_projector","natural_key":"attempt, continuation, or entry id plus source watermark","join_key":"command attempts, session continuations, logs, and legacy execution arrays","read_entries":["SOURCE::real-execution-db-primary::db_primary_projection_records","SOURCE::session-continuation-db-primary::db_primary_projection_records","SOURCE::runtime-log-db-primary::db_primary_projection_records","HOLD::HOLD-DB-JSON-RUNTIME-TRUTH"],"write_entries":["HOLD::HOLD-DB-BLOCKED-WRITE"],"data_level":"DERIVED_SCRUBBED_RUNTIME","hold_refs":["HOLD-EXECUTION-GRANT-PERSISTENCE","HOLD-RAW-TRANSCRIPT-RETENTION","HOLD-DB-JSON-RUNTIME-TRUTH"]}
+      ]
+    }
+  ],
+  "coverage": {
+    "sqlite_tables": 68,
+    "canonical_sidecars": 18,
+    "projections": 7,
+    "legacy_aliases_not_primary": ["runtime-log.v1.json"]
+  }
+}

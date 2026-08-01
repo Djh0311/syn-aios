@@ -1,0 +1,12 @@
+{
+  "schema": "syn.fixture.inventory.v1",
+  "cases": [
+    {"id":"not-in-scope-known-bypass","record":{"owner_contract":"command-v1","scope_rule":"PROJECT_EXACT","policy_gateway":"command-v1","bypass_status":"KNOWN_BYPASS","migration_status":"NOT_IN_SCOPE","disposition":"REWRITE_LATER","migration_target":"CommandReceipt adapter","next_task":"M2","hold_refs":[]},"expected":"PASS"},
+    {"id":"guarded-server-proof","record":{"owner_contract":"command-v1","scope_rule":"PROJECT_EXACT","policy_gateway":"server registry","bypass_status":"NONE_OBSERVED","migration_status":"GUARDED_LEGACY","disposition":"KEEP_ADAPTER","migration_target":"adapter","next_task":"M2","hold_refs":[],"guard_proof":{"authorization_source":"SERVER","caller_influences_allow":false,"source_refs":["mcp-capability-registry:100"]}},"expected":"PASS"},
+    {"id":"guarded-without-proof","record":{"owner_contract":"command-v1","scope_rule":"PROJECT_EXACT","policy_gateway":"server registry","bypass_status":"NONE_OBSERVED","migration_status":"GUARDED_LEGACY","disposition":"KEEP_ADAPTER","migration_target":"adapter","next_task":"M2","hold_refs":[]},"expected":"GUARD_PROOF_REQUIRED"},
+    {"id":"blocked-with-proof","record":{"owner_contract":"command-v1","scope_rule":"STATIC_BLOCK","policy_gateway":"blocked result","bypass_status":"STATICALLY_BLOCKED","migration_status":"BLOCKED","disposition":"RETAIN_BLOCK","migration_target":"none","next_task":"M5","hold_refs":[],"block_proof":{"source_refs":["workflow-execution-entrypoints:1782"],"mechanism":"unconditional block"}},"expected":"PASS"},
+    {"id":"blocked-without-proof","record":{"owner_contract":"command-v1","scope_rule":"STATIC_BLOCK","policy_gateway":"blocked result","bypass_status":"STATICALLY_BLOCKED","migration_status":"BLOCKED","disposition":"RETAIN_BLOCK","migration_target":"none","next_task":"M5","hold_refs":[]},"expected":"BLOCK_PROOF_REQUIRED"},
+    {"id":"unknown-status","record":{"owner_contract":"command-v1","scope_rule":"PROJECT_EXACT","policy_gateway":"command-v1","bypass_status":"KNOWN_BYPASS","migration_status":"MAPPED_NOT_MIGRATED","disposition":"REWRITE_LATER","migration_target":"adapter","next_task":"M2","hold_refs":[]},"expected":"UNKNOWN_ENUM"},
+    {"id":"missing-owner","record":{"scope_rule":"PROJECT_EXACT","policy_gateway":"command-v1","bypass_status":"NONE_OBSERVED","migration_status":"NOT_IN_SCOPE","disposition":"KEEP_ADAPTER","migration_target":"adapter","next_task":"M2","hold_refs":[]},"expected":"REQUIRED_FIELD"}
+  ]
+}

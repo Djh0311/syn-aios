@@ -1,0 +1,104 @@
+{
+  "schema": "syn.contract-manifest.v1",
+  "task_id": "SYN-FND-001-R1",
+  "contract_status": "FROZEN_V1",
+  "evidence_level": "STATIC_OPENING_ONLY",
+  "opening": {
+    "base_oid": "2bf9406bd688db8eb84d2138f9b3c6994dac2fb9",
+    "tauri_command_count": 171,
+    "supervisor_mcp_capability_count": 8
+  },
+  "contracts": [
+    {
+      "id": "identity-scope-v1",
+      "path": "identity-scope-v1.md",
+      "schema_authority": "identity_scope_contract_authority",
+      "dependencies": [],
+      "exports": ["ActorId", "ProjectId", "ProjectRootRef", "ScopeRef", "RoleRef", "CurrentObjectRef", "ExecutionChannel", "PermissionProfile", "PermissionSnapshotRef", "ScopeChain", "IdentitySnapshot"],
+      "implementation_status": "MIXED_OPENING"
+    },
+    {
+      "id": "command-v1",
+      "path": "command-v1.md",
+      "schema_authority": "command_contract_authority",
+      "dependencies": ["identity-scope-v1"],
+      "exports": ["CommandId", "CorrelationId", "CausationId", "TraceContext", "CommandEnvelope", "CommandReceipt"],
+      "implementation_status": "MIXED_OPENING"
+    },
+    {
+      "id": "event-audit-outbox-v1",
+      "path": "event-audit-outbox-v1.md",
+      "schema_authority": "fact_delivery_contract_authority",
+      "dependencies": ["identity-scope-v1", "command-v1"],
+      "exports": ["EventId", "WorkbenchEventEnvelope", "AuditRecord", "OutboxItem", "OutboxLease", "ProjectionCheckpoint", "CurrentSnapshot", "UnknownQuarantineRef"],
+      "implementation_status": "ABSENT"
+    },
+    {
+      "id": "role-session-v1",
+      "path": "role-session-v1.md",
+      "schema_authority": "role_session_contract_authority",
+      "dependencies": ["identity-scope-v1", "event-audit-outbox-v1"],
+      "exports": ["RoleSessionId", "RoleSession", "TurnId", "Turn", "ProviderHandleRef", "ConversationContextRef", "SessionBinding"],
+      "implementation_status": "ABSENT"
+    },
+    {
+      "id": "handoff-v1",
+      "path": "handoff-v1.md",
+      "schema_authority": "handoff_contract_authority",
+      "dependencies": ["identity-scope-v1", "command-v1", "event-audit-outbox-v1", "role-session-v1", "object-ref-navigation-v1"],
+      "exports": ["HandoffId", "HandoffPermissionRequest", "Handoff", "HandoffReceipt"],
+      "implementation_status": "ABSENT"
+    },
+    {
+      "id": "attention-decision-v1",
+      "path": "attention-decision-v1.md",
+      "schema_authority": "attention_decision_contract_authority",
+      "dependencies": ["identity-scope-v1", "command-v1", "event-audit-outbox-v1", "handoff-v1", "object-ref-navigation-v1"],
+      "exports": ["InboxItem", "OpenLoop", "OpenLoopTodoRelation", "Todo", "Notification", "Reminder", "DecisionRequest", "DecisionRequestProjection"],
+      "implementation_status": "ABSENT"
+    },
+    {
+      "id": "project-orchestration-v1",
+      "path": "project-orchestration-v1.md",
+      "schema_authority": "project_orchestration_contract_authority",
+      "dependencies": ["identity-scope-v1", "command-v1", "event-audit-outbox-v1", "role-session-v1", "handoff-v1", "attention-decision-v1", "object-ref-navigation-v1"],
+      "exports": ["OrchestrationId", "Proposal", "PlanAuthorization", "WorkflowRun", "WorkItem", "PreparedAttempt", "ExecutionGrant", "Dispatch", "ExecutedReport", "ManualOfflineClaim", "Review", "AuthorizationDecision", "ResultUserDecision", "ProjectSummary"],
+      "implementation_status": "MIXED_OPENING"
+    },
+    {
+      "id": "memory-personal-model-v1",
+      "path": "memory-personal-model-v1.md",
+      "schema_authority": "memory_personal_model_contract_authority",
+      "dependencies": ["identity-scope-v1", "command-v1", "event-audit-outbox-v1", "attention-decision-v1", "object-ref-navigation-v1"],
+      "exports": ["Observation", "MemoryCandidate", "FormalMemory", "PersonalFact", "ModelAssertion", "MemoryPolicyResult", "MemoryConflict", "MemoryVersion"],
+      "implementation_status": "MIXED_OPENING"
+    },
+    {
+      "id": "connector-capability-v1",
+      "path": "connector-capability-v1.md",
+      "schema_authority": "connector_capability_contract_authority",
+      "dependencies": ["identity-scope-v1", "command-v1", "event-audit-outbox-v1", "attention-decision-v1", "object-ref-navigation-v1"],
+      "exports": ["ConnectorDefinition", "ConnectionAccount", "CredentialRef", "CapabilityId", "CapabilityGrant", "SyncCursor", "InboundItem", "ActionRequest", "ActionResult"],
+      "implementation_status": "ABSENT"
+    },
+    {
+      "id": "object-ref-navigation-v1",
+      "path": "object-ref-navigation-v1.md",
+      "schema_authority": "object_navigation_contract_authority",
+      "dependencies": ["identity-scope-v1", "command-v1", "event-audit-outbox-v1", "role-session-v1"],
+      "exports": ["ObjectRef", "ObjectKind", "NavigationIntent", "NavigationReceipt", "DeepLinkResolution"],
+      "implementation_status": "ABSENT"
+    }
+  ],
+  "global_invariants": [
+    "Each schema has one schema authority; each exported type declares one domain owner and one opening status.",
+    "Every import resolves to exactly one exported type and the dependency graph is acyclic.",
+    "CurrentObjectRef is the identity-context binding; ObjectRef schema, resolution, and navigation are owned by object-ref-navigation-v1, while source facts remain with ObjectRef.source_owner_ref.",
+    "CorrelationId, CausationId, and TraceContext are owned by command-v1; event contracts import them.",
+    "OrchestrationId is owned only by project-orchestration-v1.",
+    "Every formal action names command, policy, state transition, event, audit, and outbox behavior.",
+    "Secret values, raw transcripts, prompts, provider responses, stdout, stderr, and tool outputs never enter contract payloads.",
+    "UNKNOWN, CORRUPT, or SENSITIVE input is blocked or quarantined; it is never promoted to migrated truth.",
+    "M1 freezes external schemas and owner boundaries only; M2 owns storage selection, shadow-write mechanics, parity execution, rollback implementation, and cutover timing."
+  ]
+}

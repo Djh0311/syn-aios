@@ -1,0 +1,22 @@
+{
+  "schema": "syn.fixture.runner-definition.v1",
+  "cases": [
+    {"id":"single-definition","source":"fn run_job() {}\nrun_job();\n","symbol":"run_job","declared_lines":[1],"expected":"PASS"},
+    {"id":"call-is-not-definition","source":"fn run_job() {}\nrun_job();\n","symbol":"run_job","declared_lines":[2],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"comment-is-not-definition","source":"// fn run_job() {}\nfn other() {}\n","symbol":"run_job","declared_lines":[1],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"block-comment-is-not-definition","source":"/*\nfn run_job() {}\n*/\nfn other() {}\n","symbol":"run_job","declared_lines":[2],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"raw-string-is-not-definition","source":"let source = r#\"\nfn run_job() {}\n\"#;\n","symbol":"run_job","declared_lines":[2],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"macro-token-is-not-definition","source":"macro_rules! fake {\n() => {\nfn run_job() {}\n}\n}\n","symbol":"run_job","declared_lines":[3],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"macro-token-spaced-bang-is-not-definition","source":"quote ! {\nfn run_job() {}\n}\n","symbol":"run_job","declared_lines":[2],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"macro-rules-spaced-bang-is-not-definition","source":"macro_rules ! fake {\n() => {\nfn run_job() {}\n}\n}\n","symbol":"run_job","declared_lines":[3],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"unicode-macro-token-is-not-definition","source":"构造 ! {\nfn run_job() {}\n}\n","symbol":"run_job","declared_lines":[2],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"attribute-token-is-not-definition","source":"#[tokens(\nfn run_job() {}\n)]\nfn other() {}\n","symbol":"run_job","declared_lines":[2],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"declarative-macro2-token-is-not-definition","source":"macro fake() {\nfn run_job() {}\n}\n","symbol":"run_job","declared_lines":[2],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"trait-declaration-is-not-definition","source":"trait Fake {\n  fn run_job();\n}\n","symbol":"run_job","declared_lines":[2],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"extern-declaration-is-not-definition","source":"extern \"C\" {\n  fn run_job();\n}\n","symbol":"run_job","declared_lines":[2],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"off-by-one","source":"\nasync fn run_job() {}\n","symbol":"run_job","declared_lines":[1],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"cfg-variants-complete","source":"pub(crate) fn start() {}\nfn other() {}\npub(crate) fn start() {}\n","symbol":"start","declared_lines":[1,3],"expected":"PASS"},
+    {"id":"cfg-variant-missing","source":"pub(crate) fn start() {}\npub(crate) fn start() {}\n","symbol":"start","declared_lines":[1],"expected":"RUNNER_DEFINITION_VARIANTS"},
+    {"id":"symbol-must-be-identifier","source":"fn run_job() {}\n","symbol":"fn run_job()","declared_lines":[1],"expected":"RUNNER_SYMBOL_IDENTIFIER"}
+  ]
+}

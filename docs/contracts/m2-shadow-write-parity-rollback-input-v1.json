@@ -1,0 +1,61 @@
+{
+  "schema": "syn.m2-input.v1",
+  "status": "FROZEN_V1",
+  "scope": "external_contracts_and_safety_invariants_only",
+  "ownership_boundary": {
+    "m1_owns": "versioned external types, semantic owners, required fields, forbidden material, and fail-closed invariants",
+    "m2_owns": "physical persistence, transaction boundaries, repository ports, indexes, lease/retry state machine, shadow execution, parity evidence, rollback implementation, quarantine storage, and cutover",
+    "no_runtime_claim": "This artifact contains no live manifest, store read, migration, parity result, cutover, or rollback-ready claim."
+  },
+  "outbox_runtime_hold": {
+    "semantic_interface_owner":"event-audit-outbox-v1",
+    "runtime_owner":"M2_HOLD",
+    "runtime_fields":"M2_HOLD",
+    "runtime_state_machine":"M2_HOLD",
+    "forbidden_m1_commands":["ClaimOutboxItem"],
+    "forbidden_m1_transitions":["AVAILABLE->LEASED","LEASED->AVAILABLE","LEASED->DELIVERED","LEASED->RETRY_WAIT","RETRY_WAIT->AVAILABLE"]
+  },
+  "storage_input_requirements": [
+    "store/table/sidecar/projection owner",
+    "natural key and revision",
+    "join key and projection relationship",
+    "read and write entrypoints",
+    "data level and unknown/corrupt/sensitive disposition"
+  ],
+  "interfaces": [
+    {"name":"CommandReceipt","owner_contract":"command-v1","domain_owner":"application_command_receipt_ledger","required_fields":["receipt_id","command_id","idempotency_key","request_hash","actor_id","scope_ref","current_object_ref","policy_decision_ref","status","correlation_id","accepted_at","result_ref","result_hash","committed_revision","error_code"]},
+    {"name":"WorkbenchEventEnvelope","owner_contract":"event-audit-outbox-v1","domain_owner":"event_ledger_repository","required_fields":["event_id","event_type","occurred_at","actor_id","scope_ref","source_ref","source_revision","command_id","correlation_id","causation_id","trace_context","schema_version","sensitivity","summary_ref","payload_ref","payload_hash"]},
+    {"name":"AuditRecord","owner_contract":"event-audit-outbox-v1","domain_owner":"audit_ledger_repository","required_fields":["audit_id","action","decision","reason_code","actor_id","scope_ref","subject_ref","command_id","correlation_id","occurred_at","sensitivity","scrub_result","source_refs"]},
+    {"name":"OutboxItem","owner_contract":"event-audit-outbox-v1","domain_owner":"outbox_repository","required_fields":["outbox_item_id","owning_command_id","owning_command_receipt_ref","effect_id","capability_id","scope_ref","subject_ref","payload_ref","payload_hash","result_command_type","idempotency_key","correlation_id","status","created_at"]},
+    {"name":"OutboxLease","owner_contract":"event-audit-outbox-v1","domain_owner":"outbox_claimer","required_fields":["lease_id","outbox_item_id","claimer_id","lease_token_ref","acquired_at","expires_at"],"persistence_owner":"M2_HOLD","runtime_state_machine":"M2_HOLD"},
+    {"name":"CurrentSnapshot","owner_contract":"event-audit-outbox-v1","domain_owner":"source_domain_projector","required_fields":["object_ref","object_revision","source_watermark","snapshot_hash","projector_id","built_at"]},
+    {"name":"ProjectionCheckpoint","owner_contract":"event-audit-outbox-v1","domain_owner":"PROJECTOR_ID","required_fields":["projector_id","projector_version","last_event_id","source_watermark","status","error_receipt_ref","updated_at"]},
+    {"name":"UnknownQuarantineRef","owner_contract":"event-audit-outbox-v1","domain_owner":"unknown_quarantine_repository","required_fields":["quarantine_id","source_ref","reason_code","scope_ref","observed_at","resolution_state"],"persistence_owner":"M2_HOLD","runtime_state_machine":"M2_HOLD"}
+  ],
+  "shadow_write": {
+    "states": ["DISABLED", "OBSERVE_ONLY", "SHADOW_WRITING", "PARITY_HOLD", "ROLLBACK_READY"],
+    "invariants": [
+      "There is one declared primary truth owner at a time.",
+      "A shadow failure never redirects or silently replaces the primary write.",
+      "Every shadow attempt retains command receipt, audit record, and correlation chain references.",
+      "Unknown, corrupt, sensitive, or unjoinable input is blocked or quarantined by reference.",
+      "No destructive cleanup occurs before semantic parity, rollback proof, and a separately accepted cutover package."
+    ]
+  },
+  "parity_dimensions": ["identity", "scope", "count", "key", "canonical_hash", "semantic", "state", "ordering", "idempotency", "audit", "redaction", "projection_readback", "recovery", "unknown", "corrupt", "sensitive"],
+  "classification_rules": {
+    "unknown": "BLOCK_OR_QUARANTINE_REF_ONLY; never infer migrated truth",
+    "corrupt": "BLOCK_OR_QUARANTINE_REF_ONLY; preserve value-free provenance and reason",
+    "sensitive": "SCRUB_AND_STOP_BEFORE_ORDINARY_STORE; never copy the original value",
+    "approved_difference": "requires named owner, reason, expected canonical result, and accepted receipt",
+    "bug": "parity remains HOLD until fixed and rerun"
+  },
+  "rollback_guards": [
+    "Rollback is non-destructive and retains the last known primary position plus shadow evidence.",
+    "Rollback never replays a command without original idempotency, correlation, and causation keys.",
+    "Rollback blocks on unresolved quarantine, join, or redaction violations.",
+    "Each domain cutover has an independent rollback owner and accepted runtime package.",
+    "User-visible cutover and deletion require later explicit authorization."
+  ],
+  "premature_decisions_forbidden_in_m1": ["table_name", "ddl", "sql", "index_name", "unique_index", "lease_seconds", "retry_count", "backoff_ms", "cutover_at", "provider_name", "secret_value", "live_store_path", "primary_store", "delete_legacy_at", "quarantine_table", "rollback_script"]
+}

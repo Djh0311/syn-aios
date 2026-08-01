@@ -1,0 +1,44 @@
+{
+  "schema": "syn.fixture.owner-dag.v1",
+  "cases": [
+    {
+      "id": "valid-linear-and-fan-in",
+      "contracts": [
+        {"id":"a","owner":"owner_a","dependencies":[]},
+        {"id":"b","owner":"owner_b","dependencies":["a"]},
+        {"id":"c","owner":"owner_c","dependencies":["a","b"]}
+      ],
+      "expected": "PASS"
+    },
+    {
+      "id": "duplicate-owner",
+      "contracts": [
+        {"id":"a","owner":"owner_a","dependencies":[]},
+        {"id":"b","owner":"owner_a","dependencies":[]}
+      ],
+      "expected": "DUPLICATE_OWNER"
+    },
+    {
+      "id": "unknown-dependency",
+      "contracts": [
+        {"id":"a","owner":"owner_a","dependencies":["missing"]}
+      ],
+      "expected": "UNKNOWN_DEPENDENCY"
+    },
+    {
+      "id": "self-cycle",
+      "contracts": [
+        {"id":"a","owner":"owner_a","dependencies":["a"]}
+      ],
+      "expected": "CYCLE"
+    },
+    {
+      "id": "two-node-cycle",
+      "contracts": [
+        {"id":"a","owner":"owner_a","dependencies":["b"]},
+        {"id":"b","owner":"owner_b","dependencies":["a"]}
+      ],
+      "expected": "CYCLE"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "schema": "syn.fixture.migration.v1",
+  "cases": [
+    {"id":"known-not-in-scope","item":{"migration_status":"NOT_IN_SCOPE","disposition":"REWRITE","source_classification":"KNOWN_SCHEMA","quarantine":{"mode":"NOT_REQUIRED_FOR_KNOWN_SCHEMA","ref":"NONE","payload_mode":"REF_ONLY"}},"expected":"PASS"},
+    {"id":"status-migrated","item":{"migration_status":"MIGRATED","disposition":"REWRITE","source_classification":"KNOWN_SCHEMA"},"expected":"MIGRATION_STATUS_ENUM"},
+    {"id":"status-trailing-space","item":{"migration_status":"MIGRATED ","disposition":"REWRITE","source_classification":"KNOWN_SCHEMA"},"expected":"MIGRATION_STATUS_ENUM"},
+    {"id":"status-lowercase","item":{"migration_status":"migrated","disposition":"REWRITE","source_classification":"KNOWN_SCHEMA"},"expected":"MIGRATION_STATUS_ENUM"},
+    {"id":"status-complete","item":{"migration_status":"COMPLETE","disposition":"REWRITE","source_classification":"KNOWN_SCHEMA"},"expected":"MIGRATION_STATUS_ENUM"},
+    {"id":"classification-unknown-not-blocked","item":{"migration_status":"NOT_IN_SCOPE","disposition":"HOLD","source_classification":"UNKNOWN","quarantine":{"mode":"REQUIRED","ref":"quarantine_ref_01","owner":"SYN-DAT-006","payload_mode":"REF_ONLY"}},"expected":"MIGRATION_CLASSIFICATION_NOT_BLOCKED"},
+    {"id":"unknown-valid-quarantine","item":{"migration_status":"BLOCKED","disposition":"HOLD","source_classification":"UNKNOWN","quarantine":{"mode":"REQUIRED","ref":"quarantine_ref_01","owner":"SYN-DAT-006","payload_mode":"REF_ONLY"}},"expected":"PASS"},
+    {"id":"unknown-placeholder-ref","item":{"migration_status":"BLOCKED","disposition":"HOLD","source_classification":"UNKNOWN","quarantine":{"mode":"REQUIRED","ref":"NONE","owner":"SYN-DAT-006","payload_mode":"REF_ONLY"}},"expected":"MIGRATION_QUARANTINE_REQUIRED"},
+    {"id":"unknown-missing-owner","item":{"migration_status":"BLOCKED","disposition":"HOLD","source_classification":"UNKNOWN","quarantine":{"mode":"REQUIRED","ref":"quarantine_ref_02","payload_mode":"REF_ONLY"}},"expected":"MIGRATION_QUARANTINE_REQUIRED"},
+    {"id":"unknown-missing-quarantine","item":{"migration_status":"BLOCKED","disposition":"HOLD","source_classification":"UNKNOWN"},"expected":"MIGRATION_QUARANTINE_REQUIRED"},
+    {"id":"corrupt-empty-ref","item":{"migration_status":"HOLD","disposition":"HOLD","source_classification":"CORRUPT","quarantine":{"mode":"REQUIRED","ref":"","owner":"SYN-DAT-006","payload_mode":"REF_ONLY"}},"expected":"MIGRATION_QUARANTINE_REQUIRED"},
+    {"id":"sensitive-raw-copy","item":{"migration_status":"BLOCKED","disposition":"HOLD","source_classification":"SENSITIVE","quarantine":{"mode":"REQUIRED","ref":"quarantine_ref_02","owner":"SYN-DAT-006","payload_mode":"RAW_COPY"}},"expected":"MIGRATION_SENSITIVE_REF_ONLY"},
+    {"id":"guarded-missing-proof","item":{"migration_status":"GUARDED_LEGACY","disposition":"KEEP","source_classification":"KNOWN_SCHEMA"},"expected":"MIGRATION_GUARD_PROOF_REQUIRED"}
+  ]
+}

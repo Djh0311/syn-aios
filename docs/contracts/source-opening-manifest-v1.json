@@ -1,0 +1,224 @@
+{
+  "schema": "syn.source-opening-manifest.v1",
+  "task_id": "SYN-FND-001-R1",
+  "evidence_level": "STATIC_OPENING_ONLY",
+  "base_oid": "2bf9406bd688db8eb84d2138f9b3c6994dac2fb9",
+  "counts": {
+    "tauri_commands": 171,
+    "supervisor_mcp_capabilities": 8,
+    "sqlite_tables": 68,
+    "source_files": 30
+  },
+  "source_files": [
+    {
+      "id": "tauri-command-registry",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs",
+      "blob_oid": "94e6ba922e5b559a650591c3962bbccbc75e1c2a",
+      "sha256": "a8c637a599dc9b403779079d6778aa51b72e7a43237ddfda7d262b42629e029f",
+      "purpose": "exact Tauri generate_handler opening registry"
+    },
+    {
+      "id": "tauri-command-implementations",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+      "blob_oid": "43c573eb00cf775b1769d7f58d514ad16e8eb4fc",
+      "sha256": "dfcf3c753881d297befbd8be74f83ca236714c37848651a848323f271f30eeeb",
+      "purpose": "legacy command and workflow entry implementations"
+    },
+    {
+      "id": "mcp-capability-registry",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/capability_registry.rs",
+      "blob_oid": "7fa833cdb1c5aa485d997c894d7e99d7e631e8a3",
+      "sha256": "b2df720e13e759fc0d2e011394c5ea5b50124acf4322ae84b7e56314d67461c2",
+      "purpose": "exact Supervisor MCP capability opening registry"
+    },
+    {
+      "id": "mcp-supervisor-orchestrator",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/supervisor_orchestrator.rs",
+      "blob_oid": "0bf4292c4588e01998afb03ab5511bb5565db791",
+      "sha256": "3bf3c1183063c19a6c36336736178fb31538dc1584d81bc076ccbf1e782a76da",
+      "purpose": "Supervisor MCP orchestration routing"
+    },
+    {
+      "id": "mcp-command-handlers",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/commands.rs",
+      "blob_oid": "6ac10939faa79197005c36f88a948d43aefc073e",
+      "sha256": "5b7d602f7eaed39f11f5a70689dd0017a47925e52bde368913d723469d343abe",
+      "purpose": "Supervisor MCP handler and canvas entrypoints"
+    },
+    {
+      "id": "mcp-storage",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/storage.rs",
+      "blob_oid": "c55bc0c2669babb54a4a8a8a099b0f53bb0027b9",
+      "sha256": "683fbc1c08319fca4e7af2cff0d0228f01e1c5bd5b03e1a681495880878d3c86",
+      "purpose": "MCP worker and proposal storage compatibility"
+    },
+    {
+      "id": "codex-local-runner",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/codex_local_runner.rs",
+      "blob_oid": "396d3599062afa1f5dc7caf98a53012a693eb49d",
+      "sha256": "4f83ca3da18206a925025820329180c3c077a242c919800ca9ae1ddbfb1c046c",
+      "purpose": "local process runner boundary"
+    },
+    {
+      "id": "manual-relay",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/manual_relay.rs",
+      "blob_oid": "a328f8643ff7be85e73810f2d50bad6354aafe0b",
+      "sha256": "62d97639ea14ba6800f5c3106a98d7051da43a564a8dbe5918dba9779906f06f",
+      "purpose": "manual relay and background attempt routing"
+    },
+    {
+      "id": "conversation-transport",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/manual_relay/conversation_transport.rs",
+      "blob_oid": "b29c4096939e0552b6f9b81c620980267a8e2c21",
+      "sha256": "a69018176f0b6b1db8899198577d9453fcfebaea3b58325b6228291036a10749",
+      "purpose": "conversation transport attempt lifecycle"
+    },
+    {
+      "id": "workflow-chain-controller",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_chain_controller.rs",
+      "blob_oid": "c8c86d6f57e586fbdc2aae5289bb2024502a9eae",
+      "sha256": "ae506f643f7b7641004e8c52dab0edb032ef8592fd692d552659543adad6bae8",
+      "purpose": "workflow chain background runner"
+    },
+    {
+      "id": "workflow-execution-entrypoints",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_execution_entrypoints.rs",
+      "blob_oid": "6ef6fac19905badc9b711b1481da959df9415647",
+      "sha256": "9ec57ceeb2d401085292125130c9dbc978c2273386ea6989d37070937c5e59c4",
+      "purpose": "workflow execution entry boundary"
+    },
+    {
+      "id": "director-agent",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/director_agent.rs",
+      "blob_oid": "7794ea7c7bde9c81cbbd3a81dcdf02ab029798a4",
+      "sha256": "33c0b588c13d4233659cb55774972060c4dc171de89228be69d99d34a413767c",
+      "purpose": "director dispatch and role-loop routing"
+    },
+    {
+      "id": "real-execution-command",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command.rs",
+      "blob_oid": "c6af4e7ad9dc507d56ed20a9675ec3d9b2b553bd",
+      "sha256": "b7f49f9c947bf29c6b9d31e3092a9756b70b4700e7c6cf4c2548df0a04180c09",
+      "purpose": "real execution authorization boundary"
+    },
+    {
+      "id": "project-workflow-automation",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/project_workflow_automation.rs",
+      "blob_oid": "4cf96de7ddc308c94581fc0871c4076a548806b3",
+      "sha256": "4b2a46d18a6bb044548f8cbcfc2c8654aea30dbc4bead12d371176bc8540a9e3",
+      "purpose": "project automation phased execution"
+    },
+    {
+      "id": "supervisor-session-launcher",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/supervisor_session_launcher.rs",
+      "blob_oid": "92c13d244b8884482313e9950ff6b3e9558954fa",
+      "sha256": "8c6f5f4bf7ae40b9c9f85cd12690edc0b026daea779c4d03a34a9ecb8772ecb3",
+      "purpose": "Supervisor pilot launcher and resident answer entry"
+    },
+    {
+      "id": "supervisor-resident-oneshot-session",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/supervisor_resident_oneshot_session.rs",
+      "blob_oid": "042c3b977a673ee7ae398a998c7567b7528533d2",
+      "sha256": "745b8b0dccb67da47ae87aad6c13b0308ec04bcb5acaa070a69bf4d21fabc1bf",
+      "purpose": "resident one-shot process boundary"
+    },
+    {
+      "id": "secretary-agent",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/secretary_agent.rs",
+      "blob_oid": "12b2d8f07d0d84148019c3759cc599539f88cdfe",
+      "sha256": "19ebcc916d5223e2458452b35443e3347dc201fa32a801a0bafb206857220661",
+      "purpose": "secretary explanation read model"
+    },
+    {
+      "id": "global-supervisor-agent",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/global_supervisor_agent.rs",
+      "blob_oid": "22f0606aa82154a1da99ee103e11aad031010bb2",
+      "sha256": "b6e222495e55135d322a5ab9ac43a209d4f35885e4fb2007dd16d7b40e1144eb",
+      "purpose": "global review and boundary review"
+    },
+    {
+      "id": "knowledge-open-relay",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/knowledge_open_relay.rs",
+      "blob_oid": "5157e1a69ac53e96013a245f4f42ebba91450789",
+      "sha256": "200d2efa9bfda417f8eee3a1b1d29efcd8fba1a1e66d42661df0dc58b02e7905",
+      "purpose": "short-lived knowledge-open intent relay"
+    },
+    {
+      "id": "exec-process-registry",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/exec_process_registry.rs",
+      "blob_oid": "ef011c50cb96ffbe2b9fde0e354f8adcb10a8f1e",
+      "sha256": "8d2d8cf759450f6312a740ffc1fa102d94e5be89aa92f2ca8821e0848655fade",
+      "purpose": "background process ownership and cancellation registry"
+    },
+    {
+      "id": "workbench-sqlite-schema",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_schema.rs",
+      "blob_oid": "10fc975f636ffeaaf15c8f4bb11c078a81f55cb0",
+      "sha256": "7d1e1db850f4a4fc6730994d7507ff177547850cc627a7a8a041cd7a1879fa76",
+      "purpose": "opening SQLite table registry"
+    },
+    {
+      "id": "workflow-db-primary-wiring",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_db_primary_wiring.rs",
+      "blob_oid": "8716dbb1da9ef6e44fb55c33ce34282fd965add1",
+      "sha256": "c61ab2b93fd32d1b6e4c9780e6055dbf3dca7e5dcacdba02a1b306ff04cfc70a",
+      "purpose": "workflow DB-primary and projection compatibility wiring"
+    },
+    {
+      "id": "global-supervisor-review-db-primary",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/global_supervisor_review_store_db_primary.rs",
+      "blob_oid": "30ee3f65419112324d5e518c9214aeedac2d4572",
+      "sha256": "37b44ffcde59da9202d3da6ac4e367218076b60e19462085664ec712977c1778",
+      "purpose": "Supervisor review DB-primary compatibility bridge"
+    },
+    {
+      "id": "real-execution-db-primary",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/real_execution_command_db_primary.rs",
+      "blob_oid": "1499708c3a77db3648a398ded3d58312cd096fe8",
+      "sha256": "f68831e2845d6bc0fa09f0eb7f27d15dce28bc39a3c555a8e4cec021da8bd0c4",
+      "purpose": "real execution command DB-primary compatibility bridge"
+    },
+    {
+      "id": "session-continuation-db-primary",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/session_continuation_store_db_primary.rs",
+      "blob_oid": "d04a2df54bdc8817586bd94de1f8f451cc347a17",
+      "sha256": "4254fece3c039e701e17c91bd4079bd9e74f7a61b8c61a4399b4031b25e6af82",
+      "purpose": "session continuation DB-primary compatibility bridge"
+    },
+    {
+      "id": "runtime-log-db-primary",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/runtime_log_store_db_primary.rs",
+      "blob_oid": "869db864aee4b6242527880bd418ae4fbc088735",
+      "sha256": "0449ae136d93bb430992786c8585db180fdd4abd08fa0d7f6324989a8776eda9",
+      "purpose": "runtime log DB-primary compatibility bridge"
+    },
+    {
+      "id": "workbench-sqlite-importer",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_importer.rs",
+      "blob_oid": "871222fc1ce08e69e9992ae03ea0a251fdeb9f6e",
+      "sha256": "a862e9a433ebe198e6e855a66061e54ddf0b0fbe2db70b05ef6e59f471efc847",
+      "purpose": "canonical and legacy sidecar naming authority"
+    },
+    {
+      "id": "page-read-model",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/page_read_model.rs",
+      "blob_oid": "8b0cbe3f94a881e88c422249aa7130a87bc4fa6f",
+      "sha256": "32dfd1408808f720b2352996e60e3d9223cad50eb7db9d52ef21e1ada44e81e9",
+      "purpose": "page read-model projection source anchor"
+    },
+    {
+      "id": "audit-ledger-read-model",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/audit_ledger_read_model.rs",
+      "blob_oid": "ffa4eca30e1f40ba574ce52ffe8427cbb5bf51a3",
+      "sha256": "5bde6d50754b7c0ba5d5c68decd052bb80ad3e203d52bdb5008823caf8bd6105",
+      "purpose": "audit projection source anchor"
+    },
+    {
+      "id": "knowledge-index",
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/knowledge_index.rs",
+      "blob_oid": "776fb53ae6bd1c23ce82b5510d3f8f9069b9f6ca",
+      "sha256": "942715488b852b81b713f3df56bf7015fa6a123ca6978abe395444997135db77",
+      "purpose": "knowledge projection source anchor"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "schema": "syn.fixture.document-shape.v1",
+  "front_matter_cases": [
+    {"id":"front-valid","text":"---\ncontract_id: x\nversion: 1\nstatus: CANDIDATE_V1\nevidence_level: STATIC_OPENING_ONLY\nschema_authority: owner\ndependencies: []\nhold_refs: []\n---\n","expected":"PASS"},
+    {"id":"front-duplicate","text":"---\ncontract_id: x\ncontract_id: y\nversion: 1\nstatus: CANDIDATE_V1\nevidence_level: STATIC_OPENING_ONLY\nschema_authority: owner\ndependencies: []\nhold_refs: []\n---\n","expected":"FRONT_MATTER_DUPLICATE_KEY"},
+    {"id":"front-malformed","text":"---\ncontract_id: x\nowner without colon\n---\n","expected":"FRONT_MATTER_MALFORMED_LINE"},
+    {"id":"front-unknown","text":"---\ncontract_id: x\nowmer: typo\n---\n","expected":"FRONT_MATTER_UNKNOWN_KEY"}
+  ],
+  "heading_cases": [
+    {"id":"heading-valid","text":"## contract.owner\nbody\n","heading":"contract.owner","expected":"PASS"},
+    {"id":"heading-extra-suffix","text":"## contract.owner-extra\nbody\n","heading":"contract.owner","expected":"CONTRACT_SECTION_MISSING"},
+    {"id":"heading-duplicate","text":"## contract.owner\none\n## contract.owner\ntwo\n","heading":"contract.owner","expected":"CONTRACT_SECTION_DUPLICATE"},
+    {"id":"heading-in-fence","text":"```md\n## contract.owner\n```\n","heading":"contract.owner","expected":"CONTRACT_SECTION_MISSING"},
+    {"id":"heading-in-html-comment","text":"<!--\n## contract.owner\nfake\n-->\n","heading":"contract.owner","expected":"CONTRACT_HTML_FORBIDDEN"},
+    {"id":"heading-in-script-block","text":"<script>\n## contract.owner\n</script>\n","heading":"contract.owner","expected":"CONTRACT_HTML_FORBIDDEN"},
+    {"id":"heading-in-pre-block","text":"<pre>\n## contract.owner\n</pre>\n","heading":"contract.owner","expected":"CONTRACT_HTML_FORBIDDEN"},
+    {"id":"heading-in-style-block","text":"<style>\n## contract.owner\n</style>\n","heading":"contract.owner","expected":"CONTRACT_HTML_FORBIDDEN"},
+    {"id":"heading-in-div-block","text":"<div>\n## contract.owner\n</div>\n","heading":"contract.owner","expected":"CONTRACT_HTML_FORBIDDEN"},
+    {"id":"heading-in-multiline-div-block","text":"<div\n>\n## contract.owner\n","heading":"contract.owner","expected":"CONTRACT_HTML_FORBIDDEN"},
+    {"id":"heading-in-lone-cr-div-block","text":"<div\r>\n## contract.owner\n","heading":"contract.owner","expected":"CONTRACT_HTML_FORBIDDEN"},
+    {"id":"heading-short-fence-close","text":"````md\n```\n## contract.owner\n````\n","heading":"contract.owner","expected":"CONTRACT_SECTION_MISSING"},
+    {"id":"heading-level-three","text":"### contract.owner\nbody\n","heading":"contract.owner","expected":"CONTRACT_SECTION_MISSING"}
+  ]
+}

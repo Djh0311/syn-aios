@@ -1,0 +1,39 @@
+{
+  "schema": "syn.fixture.m2-input.v1",
+  "forbidden_premature_keys": ["table_name", "ddl", "sql", "index_name", "unique_index", "lease_seconds", "retry_count", "backoff_ms", "cutover_at", "provider_name", "secret_value", "live_store_path", "primary_store", "delete_legacy_at", "quarantine_table", "rollback_script"],
+  "cases": [
+    {"id":"interfaces-only","input":{"name":"CommandReceipt","owner_contract":"command-v1","required_fields":["command_id","status"]},"expected":"PASS"},
+    {"id":"premature-table-top-level","input":{"name":"CommandReceipt","owner_contract":"command-v1","required_fields":["command_id"],"table_name":"commands"},"expected":"PREMATURE_DECISION"},
+    {"id":"premature-ddl-deep","input":{"name":"CommandReceipt","owner_contract":"command-v1","required_fields":["command_id"],"nested":{"ddl":"CREATE TABLE fixture"}},"expected":"PREMATURE_DECISION"},
+    {"id":"premature-lease-camel","input":{"name":"OutboxLease","owner_contract":"event-audit-outbox-v1","required_fields":["outbox_item_id"],"leaseSeconds":60},"expected":"PREMATURE_DECISION"},
+    {"id":"premature-fullwidth-path","input":{"name":"ProjectionCheckpoint","owner_contract":"event-audit-outbox-v1","required_fields":["projector_id"],"nested":{"ｌｉｖｅ＿ｓｔｏｒｅ＿ｐａｔｈ":"/fixture"}},"expected":"PREMATURE_DECISION"},
+    {"id":"premature-provider-punctuation","input":{"name":"ActionResult","owner_contract":"connector-capability-v1","required_fields":["status"],"nested":[{"provider.name":"fixture"}]},"expected":"PREMATURE_DECISION"},
+    {"id":"premature-delete-deep","input":{"name":"UnknownQuarantineRef","owner_contract":"event-audit-outbox-v1","required_fields":["quarantine_id"],"nested":[{"deeper":{"deleteLegacyAt":"later"}}]},"expected":"PREMATURE_DECISION"},
+    {"id":"interface-unknown-implementation-note","input":{"name":"CommandReceipt","owner_contract":"command-v1","required_fields":["command_id"],"implementation_note":"abstract only"},"expected":"M2_UNKNOWN_KEY"},
+    {"id":"missing-owner","input":{"name":"ProjectionCheckpoint","required_fields":["projector_id"]},"expected":"REQUIRED_FIELD"},
+    {"id":"empty-required-fields","input":{"name":"UnknownQuarantineRef","owner_contract":"event-audit-outbox-v1","required_fields":[]},"expected":"REQUIRED_FIELD"}
+  ],
+  "artifact_cases": [
+    {"id":"artifact-baseline","mutation":null,"expected":"PASS"},
+    {"id":"artifact-root-extra-key","mutation":{"path":["implementation_note"],"value":"CREATE TABLE commands(id TEXT)"},"expected":"M2_UNKNOWN_KEY"},
+    {"id":"artifact-interface-extra-key","mutation":{"path":["interfaces",0,"tableName"],"value":"commands"},"expected":"M2_UNKNOWN_KEY"},
+    {"id":"artifact-ownership-concrete-ddl","mutation":{"path":["ownership_boundary","m2_owns"],"value":"CREATE TABLE commands(id TEXT)"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-shadow-concrete-lease","mutation":{"path":["shadow_write","invariants",0],"value":"leaseSeconds = 60"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-classification-concrete-ddl","mutation":{"path":["classification_rules","unknown"],"value":"ALTER TABLE commands ADD COLUMN x"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-rollback-provider-selection","mutation":{"path":["rollback_guards",0],"value":"provider_name: fixture"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-ownership-comment-obfuscated-ddl","mutation":{"path":["ownership_boundary","m2_owns"],"value":"CREATE/**/TABLE commands(id TEXT)"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-outbox-owner-concrete-ddl","mutation":{"path":["outbox_runtime_hold","semantic_interface_owner"],"value":"CREATE TABLE commands(id TEXT)"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-ownership-temp-table-ddl","mutation":{"path":["ownership_boundary","m2_owns"],"value":"CREATE TEMP TABLE commands(id TEXT)"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-ownership-unique-index-ddl","mutation":{"path":["ownership_boundary","m2_owns"],"value":"CREATE UNIQUE INDEX idx ON commands(id)"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-pragma-journal-mode","mutation":{"path":["ownership_boundary","m2_owns"],"value":"PRAGMA journal_mode=WAL"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-attach-database","mutation":{"path":["ownership_boundary","m2_owns"],"value":"ATTACH DATABASE /tmp/x AS shadow"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-vacuum-into","mutation":{"path":["ownership_boundary","m2_owns"],"value":"VACUUM INTO /tmp/compact.db"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-reindex","mutation":{"path":["ownership_boundary","m2_owns"],"value":"REINDEX idx_commands"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-analyze","mutation":{"path":["ownership_boundary","m2_owns"],"value":"ANALYZE commands"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-vacuum-schema-into","mutation":{"path":["ownership_boundary","m2_owns"],"value":"VACUUM main INTO '/tmp/compact.db'"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-attach-bracket-alias","mutation":{"path":["ownership_boundary","m2_owns"],"value":"ATTACH DATABASE '/tmp/x' AS [shadow]"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-reindex-bracket-name","mutation":{"path":["ownership_boundary","m2_owns"],"value":"REINDEX [idx_commands]"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-analyze-bracket-name","mutation":{"path":["ownership_boundary","m2_owns"],"value":"ANALYZE [commands]"},"expected":"M2_PREMATURE_TEXT"},
+    {"id":"artifact-attach-expression","mutation":{"path":["ownership_boundary","m2_owns"],"value":"ATTACH DATABASE '/tmp/' || 'shadow.db' AS shadow"},"expected":"M2_PREMATURE_TEXT"}
+  ]
+}
