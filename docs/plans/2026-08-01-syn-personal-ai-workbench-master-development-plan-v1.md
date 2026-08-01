@@ -1,0 +1,493 @@
+# Syn 全能个人 AI 工作台总开发计划 v1
+
+日期：2026-08-01<br>
+状态：**CURRENT MASTER PLAN；已由用户确认产品方向，等待逐阶段任务激活。**<br>
+计划性质：定义长期重构和迁移顺序，不维护逐任务进度，不单独授予代码、App、store、真实消息、外部连接、凭据、Git 或发布权限。当前事实和 active task 只看 `../harness/CURRENT.md` 与 v0.5 active node。
+
+## 0. 目标
+
+把当前“能力很多、日常工作线分散、历史路线叠加”的工作台，重构为用户可以长期依赖的 Syn：
+
+- 秘书统筹用户每天需要知道、需要决定和不能遗漏的事情；
+- 全局主管独立处理跨项目优先级、边界、风险和复核；
+- 每个项目内有常驻项目主管，用长期对话组织项目事实和执行；
+- 个人范围与项目范围并存，不强迫所有生活和信息进入项目；
+- 日常与开发是明确的执行通道，共用角色、权限、事件、审计和记忆底座；
+- 知识、记忆、任务、方案、审批、工作流、Agent、Harness、通知、日报、外部软件和凭据作为受控能力协同，不成为互不相干的孤岛；
+- 现有后端能力按 `KEEP / EXTRACT / REWRITE / RETIRE / HOLD` 处置，通过绞杀式迁移逐步换掉旧路，不做一次性推倒重来。
+
+## 1. 权威与证据口径
+
+本计划受以下正本约束：
+
+1. 当前用户指令；
+2. `../../AGENTS.md`；
+3. `../harness/AUTHORITY.md` 与 `../harness/CURRENT.md`；
+4. `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`；
+5. `../../decisions/2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md`；
+6. 继续有效的角色、项目内 conversation-first、两轴治理、共享 transport 和执行人闸决策；
+7. `../2026-07-08-workbench-current-feature-inventory-for-prototype-v1.md` 的当前源码底账；
+8. `../workbench-system-architecture-v1.md` 的目标模块边界。
+
+证据分层：
+
+- 文档合同通过，只证明定义一致；
+- 静态 / typecheck / 单测，只证明对应代码性质；
+- fake adapter / temp store / synthetic UI，只证明隔离链；
+- 真实 Tauri App，只证明本机、该 profile、该场景；
+- 真实 Codex、真实项目写入、真实连接器或真实凭据，必须逐项另行授权和验收；
+- 任何一层都不自动升级成发布或生产结论。
+
+## 2. 目标运行工作线
+
+### 2.1 主循环
+
+```text
+事件在自己的作用域出现
+  → 该作用域的 owner 处理
+  → 秘书持续看住与用户有关的未闭环事项
+  → 必要时查询内部角色 / 请求全局主管只读分析
+  → 通过简报、克制打断或日终报告反馈给用户
+  → 正式业务对象只按用户明确语义、已批准规则或既有授权创建 / 改变
+  → 结果回到原真源
+  → 记忆另按记忆治理策略进入日报、正式记忆、个人模型或 SkillCandidate
+```
+
+### 2.2 用户每天看到什么
+
+- 打开 Syn：秘书给出有来源的当前情境，外部承诺和时间敏感事项优先。
+- 日间：没有事件就不空转；有事件才更新 attention、摘要、待决定或异常。
+- 明确项目工作：直接进入项目主管，不经过秘书猜项目。
+- 跨项目判断：直接进入全局主管，或由秘书发起有记录的只读咨询。
+- 需要专业对象：知识、记忆、Agent、方案、工作流、审计仍可直接打开。
+- 日终：定时整理完成、未闭环、风险、纠正和明日延续，并生成可回源的日报。
+
+### 2.3 不会发生什么
+
+- 普通聊天不自动创建项目、任务、工作流、日程、想法箱或批准。
+- 秘书不越过项目主管改项目，不替用户决定，不因关注而私自派活。
+- 全局主管意见不自动改变项目。
+- 项目摘要、首页、日报和读模型不复制成第二份事实。
+- 外部软件读取授权不自动包含写入授权。
+- 密钥和敏感原文不进入聊天、记忆、事件 payload 或普通数据库。
+- 没有新事件时 Agent / 模型不持续运行。
+
+## 3. 目标架构
+
+仍采用本地模块化单体，不拆微服务，不做全量事件溯源，不做通用节点自动化平台。
+
+```text
+Tauri / React UI
+  → Application Use Cases
+    → Identity & Scope Kernel
+    → Policy Kernel
+    → Domain Aggregates
+       ├─ Conversation / Handoff
+       ├─ Attention / Decision / Daily
+       ├─ Project Orchestration / Execution
+       ├─ Knowledge / Memory / Personal Model
+       └─ Connector / Credential Reference
+    → Transaction + Event + Audit + Outbox
+      → SQLite authoritative state
+      → Rebuildable read models
+    → Adapters
+       ├─ Agent / Model
+       ├─ Tool / MCP / Harness
+       ├─ Knowledge / File
+       └─ External Connector
+```
+
+### 3.1 Kernel 合同
+
+`identity_scope` 拥有：
+
+- `ProjectId` / `ProjectRoot`；
+- `ScopeRef(personal | global | project)`；
+- `RoleRef(secretary | global_supervisor | project_supervisor | stable_member | temporary_agent)`；
+- `CurrentObjectRef`；
+- `ExecutionChannel(daily | development)`；
+- `PermissionProfile`；
+- 项目归属、跨项目禁止和稳定对象引用规则。
+
+`policy` 统一判定：
+
+- command 是否允许；
+- 用户确认、风险升级和权限边界；
+- 状态迁移；
+- 候选能否成为事实 / 正式记忆 / 正式 skill；
+- adapter / connector capability 是否可调用。
+
+所有 Tauri command、MCP、runner、connector 和后台 job 都必须经过同一 policy，不允许前端或调用方自报授权后自洽通过。
+
+### 3.2 统一机制，不统一业务真源
+
+`WorkbenchEventEnvelope` 至少包含：
+
+```text
+event_id / schema_version / event_type / occurred_at
+actor_id / actor_role
+scope_type / scope_id / project_id?
+object_type / object_id
+execution_channel
+command_id / correlation_id / causation_id / idempotency_key
+source_adapter / sensitivity
+payload_summary / payload_ref / payload_hash
+```
+
+- 事件账本只保存结构化事实、最小摘要、hash 和引用；不保存 raw transcript、完整 prompt、完整 tool output 或 secret。
+- 项目、个人、连接器各自拥有业务事实；公共 event / audit / outbox 是机制，不是全局业务数据池。
+- 每条 command 在同一事务中写领域状态、event、audit 和 outbox；外部动作在提交后执行，再以结果 command 回写。
+
+### 3.3 核心对象合同
+
+| 对象 | 作用 | 真源 / 边界 |
+|---|---|---|
+| `RoleSession` | 固定角色、作用域、当前对象、通道和持久会话 | Syn 持有 binding；provider thread id 只是外部 handle |
+| `Handoff` | 显式跨角色 / 跨通道交接 | 保留 from/to、scope、目标、refs、权限请求与回执 |
+| `OpenLoop` | 秘书内部关注和闭环跟踪 | 协调状态，不是 Task；带来源、owner、理由、dismiss/close |
+| `DecisionRequest` | 需要用户作有约束力决定 | 回到原 owner / object；简单可聚合回答，复杂回源 |
+| `ProjectSummary` | 给秘书 / 全局主管的最小项目摘要 | 从项目真源投影，可重建，不可反向写项目 |
+| `DailyBrief/Report` | 开场态势与日终总结 | 每项带 source ref；不是正式事实或记忆 |
+| `Proposal/Authorization` | 执行前的目标、范围与批准 | 用户批准后才产生 ExecutionGrant |
+| `WorkflowRun/WorkItem` | 项目内持续或多步骤执行 | 项目主管拥有；adapter 无权推进状态 |
+| `Observation/MemoryCandidate/FormalMemory` | 受治理长期记忆 | 来源、scope、敏感性、冲突、版本、外发策略 |
+| `PersonalFact/ModelAssertion` | 个人明确事实与系统推断 | 两者严格分型；可纠正、可追源、secret 排除 |
+| `ConnectorDefinition/Grant` | 外部软件能力和授权 | view/index/sync/action/secret 分开授权 |
+| `CredentialRef` | 受保护凭据引用 | 不保存 secret 本文；日志、事件、记忆只存引用 / hash |
+| `SkillCandidate/SkillVersion` | 可复用方法和正式技能 | 版本、验证、权限和回滚；不自动扩权 |
+
+## 4. 现有能力处置
+
+这里处置的是能力，不是按文件粗暴删除。
+
+### 4.1 KEEP：保留规则和已经正确的能力
+
+- Tauri + Rust + React + Vite 桌面壳；
+- 项目作为复杂工作的主要身份、权限和执行边界；
+- proposal → 用户确认 → 边界复核 → authorization → execution 的治理语义；
+- worker report、review、用户验收和正式事实分层；
+- Supervisor MCP 的 trusted binding 与精确 capability allowlist；
+- Codex runner 的 cwd、sandbox、write roots、prompt hash、readback 和 process registry 防线；
+- Knowledge Vault 的固定根、路径 / CAS / 大小限制、文件真源、恢复和原生知识工作面；
+- Memory 的 observation / candidate / formal、来源、版本、scope、冲突、敏感性和审计结构；
+- SQLite / JSON reconcile 和兼容投影作为迁移设施；
+- 07-14 项目内五态交互 canon 的有效范围；
+- 两轴编排 / 风险治理和确定性机器拦截规则。
+
+### 4.2 EXTRACT：提取为稳定端口
+
+- 从 command registry / `commands.rs` 提取 scope resolver 与 authorization gateway；
+- 从 conversation transport 提取 `ConversationTransportPort`；
+- 从 Codex runner 提取 `AgentAdapter`；
+- 从 Supervisor MCP 提取 `CapabilityGateway` / `ToolAdapter`；
+- 从 sidecar / workflow 写入提取 Unit of Work、EventWriter、AuditWriter、Outbox；
+- 从 Native Knowledge Workspace 提取 `KnowledgeAdapter`；
+- 从 Harness 索引、readiness、verifier 提取 `HarnessAdapter`；
+- 从现有 memory stores 提取 repository 和治理服务；
+- 从前端项目聊天、Agent 会话和 transport UI 提取共用的角色会话显示层。
+
+### 4.3 REWRITE / NEW：重写或新增
+
+- 项目 / 个人 / 全局作用域与稳定对象身份；
+- 持久 `RoleSession`、`Turn`、`CurrentObjectRef`、`PermissionProfile`、`ExecutionChannel` 和 `Handoff`；
+- 统一 command / event / audit / snapshot / outbox 事务底座；
+- 通用项目主管编排和 execution aggregate；
+- Secretary、Global Supervisor 的应用服务与持续会话；
+- `OpenLoop`、Inbox、Todo、Notification、Reminder、DecisionRequest、DailyBrief / Report；
+- 个人事实、个人模型断言和来源治理；
+- 记忆自动治理策略、每日整理和 SkillCandidate / SkillVersion；
+- Connector registry、connection、grant、sync cursor、inbound item、action request / result、credential ref；
+- 各域读模型，停止页面查询反复构建完整 snapshot；
+- 首页秘书情境 + 对话、全局主管入口和成员目录。
+
+### 4.4 RETIRE：等替代链验收后退役
+
+- `run_workflow_machine` 正常产品入口；
+- 固定 Mario classic workflow chain 对通用主流程的控制；
+- resident supervisor one-shot / pilot legacy action loop；
+- synthetic Phase A 自动化的产品入口；
+- Legacy Canvas MCP 执行工具（Canvas 数据可迁移保留）；
+- offline role 人工粘贴链；
+- manual relay 正常业务入口（可降级为受限诊断 / 恢复工具）；
+- 等价验收后的旧 `knowledge_vault_*` 单层 note API；
+- workflow id contains slug 的项目归属兼容；
+- 只在前端内存维护的项目 conversation cache；
+- 页面全量 snapshot 拼装和多份启发式审计聚合；
+- 旧计划、旧按钮和隐藏 action 对当前施工的授权语义。
+
+退役必须走 `shadow → new primary → compatibility read-only → command unregister → archive/export`，一次只退一类，先验收替代链，再由用户单独批准不可逆清理。
+
+### 4.5 HOLD / UNKNOWN：不能在计划里假定
+
+- dirty worktree 上真实 DB-primary / JSON 降级和启动 reconcile 状态；
+- 普通项目对话、知识、runner、stop/retry/resume 的当前真实 App 表现；
+- 外部连接器首批具体产品和真实数据保存策略；
+- 凭据库采用 Keychain、加密文件或其他实现；
+- 自动记忆策略矩阵和 skill 启用阈值；
+- 多 provider、OpenClaw / Claude Code / OpenCode 的真实接入；
+- 生产、发布、真实资金、个人账号动作和无人值守执行。
+
+## 5. 阶段总览与依赖
+
+```text
+M0 文档与正本冻结（本轮）
+  ↓
+M1 合同 + 安全/作用域止血
+  ↓
+M2 事实、事件、审计、事务底座
+  ↓
+M3 角色会话 + 显式交接
+  ├─────────────┐
+  ↓             ↓
+M4 秘书/Attention/日报   M5 项目主管/执行闭环
+  └──────┬──────┘
+         ↓
+M6 全局主管 + 内部成员目录
+         ↓
+M7 记忆 + 个人模型 + Skill 整理
+         ↓
+M8 Connector + CredentialRef
+         ↓
+M9 读模型切换 + 旧路退役
+         ↓
+M10 全日使用试点 + 发布硬化
+```
+
+M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 可在 M2 后做存储和策略，但接入真实日常事件需等待 M4 / M5。M8 的 connector framework 可早做，真实第三方接入必须等凭据和外部动作合同独立通过。
+
+### 5.1 独立阶段计划索引
+
+下列文件把 master 的顺序展开为可单独审查的阶段合同。只有 M1 是当前阶段；M2-M10 均为 `PLANNED / NOT_ACTIVE`，不因文件存在而获得执行权。
+
+| 阶段 | 独立计划 | 当前路由状态 |
+|---|---|---|
+| M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `CURRENT_STAGE / READY_FOR_TASK_ACTIVATION`；首包仍是 `SYN-FND-001` |
+| M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M7 | `2026-08-01-syn-stage-7-memory-personal-model-and-skill-governance-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M8 | `2026-08-01-syn-stage-8-connector-and-credential-reference-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M9 | `2026-08-01-syn-stage-9-read-model-migration-and-legacy-retirement-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M10 | `2026-08-01-syn-stage-10-full-day-pilot-and-release-hardening-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+
+独立计划维护本阶段的现状事实、HOLD、owner、薄切片、写域、授权、验证和退出门；master 继续只维护长期方向、依赖和总完成定义，不复制动态任务状态。
+
+## 6. 分阶段开发合同
+
+### M0 — 文档、决定与当前路线冻结
+
+交付：
+
+- 两份 2026-08-01 正式修订；
+- 架构、前端边界、记忆、长期工作线、backlog、历史计划和入口对齐；
+- 本 master、当前 stage plan、AUTHORITY / CURRENT 指针；
+- 能力 disposition、依赖和验收矩阵。
+
+退出条件：当前入口不再指向不存在文件或自称 current 的旧路线；目标模型与现状库存明确分开；产品代码仍未被文档计划自动激活。
+
+### M1 — 合同与安全 / 作用域基础
+
+当前阶段详见 `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md`。
+
+必须完成：
+
+1. 冻结 Scope / Role / ObjectRef / Channel / Command / Event / Audit / OpenLoop / Handoff / Decision / Connector capability 合同；
+2. 建立 `identity_scope` 与 `policy` 的纯领域核心和表驱动测试；
+3. Agent Conversation 后端读取明确 role / scope / station，Station 3b 后端零写 enforcement；
+4. Canvas 路径 ID 拒绝 `..`、绝对路径、编码变体和 symlink 越界；
+5. `get_project_workflow_nodes` 强制项目归属；移除 slug contains 归属；
+6. worker report 全链验证 project / workflow / dispatch；
+7. execution 从持久 Authorization 解析 grant；
+8. 顶层秘书不以固定项目目录取得原始项目读取面；
+9. audit / error / receipt 统一 secret scrubber。
+
+退出门：所有拒绝都发生在 spawn、文件写、业务状态 / projection / outbox mutation 和外部调用之前；仅允许独立、append-only、已脱敏的 denial audit。跨项目、伪造 ID、Station 3b、路径越界、伪造授权表驱动测试全部 fail closed；隔离 profile 的真实 App 允许 / 拒绝场景通过。
+
+### M2 — 事实、事件、审计与事务底座
+
+交付：
+
+- typed event ledger、audit ledger、current snapshot、outbox；
+- command transaction / Unit of Work；
+- 旧 store repository adapters；
+- deterministic projector、shadow write、parity report、reconcile / recovery；
+- event payload secret / transcript / tool-output hard limits。
+
+退出门：同一 command 的领域状态、event、audit、outbox 原子提交；崩溃恢复不重复外部动作；旧 / 新对象 count、key、hash 可对账；投影失败有明确 receipt 和可恢复状态。
+
+真实 App：冷启动、写一笔、强制退出、重启、投影恢复、重复 command 幂等、DB / JSON 故障提示。
+
+### M3 — 角色会话与显式交接
+
+交付：
+
+- 持久 `RoleSession` / `Turn` / provider handle / ConversationContext；
+- 秘书、全局主管、项目主管和稳定成员共用角色会话应用合同；
+- transport 退化为 start / poll / stop / resume adapter；
+- App 重启后恢复正确角色、项目、对象、通道和会话；
+- 显式 Handoff、接单、回执和结果回源；
+- 项目聊天与 Agent Center 退掉两套前端 cache。
+
+前端：先增加明确角色入口和固定上下文标签，不先改首页视觉；Agent 中心成为成员 / 历史会话目录。
+
+退出门：每种角色新建 / 续接 / stop；重启恢复；跨项目续接拒绝；会话不静默生成 workflow / formal memory；Station 3b 后端真拒绝。真实 Codex 消息另行授权。
+
+### M4 — 秘书、个人范围、Attention 与日常节奏
+
+交付：
+
+- PersonalScope、InboxItem、OpenLoop、Todo、Notification、Reminder、DecisionRequest；
+- source-first 投影、dedupe、read / dismiss / snooze / close / reopen / carry-over；
+- Secretary 应用服务：主动查询内部状态、请求只读咨询、维护关注，不改 owner 事实；
+- 首页改为“情境简报 + 秘书持续对话”；
+- DailyBrief / DailyReport，LLM 不可用时仍能确定性生成；
+- 没有事件不调用 Agent / 模型的机械证明。
+
+排序底线：已与别人约定和时间敏感事项优先；所有条目必须显示来源、owner、为何出现、最后变化并能回源。
+
+退出门：App 重启不丢关注状态；“已知晓”不改项目 / 任务 / 记忆；同窗口日报幂等；每个日报项可回源；无事件窗口零模型调用。
+
+### M5 — 项目主管与既有执行能力重组
+
+交付：
+
+- 普通项目的常驻项目主管读取本项目事实、会话、知识、记忆、黑板和 Harness；
+- 对话明确提出结构化动作，用户确认后才创建 Proposal / Task / Workflow / Authorization；
+- Proposal、Authorization、C4、Dispatch、ExecutionAttempt、WorkerReport、C5 / C6、GlobalReview、UserDecision 用同一 correlation / run identity；
+- 项目主管按协调复杂度选择单 Agent 或多 Agent，风险治理独立判断；
+- runner 只接受控制核心生成的 ExecutionGrant；
+- stop / retry / resume 名称与真实能力一致；
+- 项目摘要投影给秘书 / 全局主管，不复制项目事实。
+
+前端：保留现有项目壳和专业 tab，不重新发明已撤回的项目页布局；默认项目主管对话，方案 / 审批 / 运行按明确动作打开。
+
+退出门：隔离 scratch project 覆盖 read-only、单 allowlisted write、用户拒绝、worker blocked、runner failure / recovery、全局意见和最终用户决定。固定测试路径不再定义通用业务语义。
+
+### M6 — 全局主管与内部组织
+
+交付：
+
+- 顶层全局主管入口和持久会话；
+- 跨项目摘要、风险、依赖、优先级建议和来源引用；
+- Secretary → Global Supervisor 的留痕只读咨询；
+- 稳定成员目录、角色档案、能力 / 权限、当前可用性、会话和直接联系；
+- 临时 agent 历史搜索、任务、结果和审计；
+- 内部组织默认后台，不要求组织图成为日常入口。
+
+退出门：全局主管能从两个项目摘要发现冲突并回源；意见未经用户确认不改任一项目；用户能找到并直接联系指定稳定成员；临时 agent 不伪装成常驻成员。
+
+### M7 — 记忆、个人模型、每日整理与 Skill
+
+交付：
+
+- memory capture / observation / candidate / formal 写入改为事务或可靠 saga；
+- 自动策略矩阵：可自动、需确认、禁止；
+- 用户明确事实与系统推断分表型 / 分状态；
+- PersonalFact / ModelAssertion 的来源、置信度、时效、纠正和历史；
+- 每日聊天、项目结果、纠正和重复模式整理；
+- SkillCandidate / SkillDraft / SkillVersion、验证、启用、权限和回滚；
+- task memory packet 带 revision / fingerprint / stale 判定；
+- 用户查看、纠正、冻结、废弃、关闭自动学习和批量撤销入口。
+
+退出门：故障注入无无解释半状态；secret / 权限 / 外部动作不得自动入记忆或扩权；冲突不静默覆盖；自动写入每条都有 policy result 和 audit；external-action skill 不因重复成功获得新权限。
+
+### M8 — Connector 与凭据引用
+
+交付：
+
+- ConnectorDefinition、ConnectionAccount、CredentialRef、CapabilityGrant、SyncCursor、InboundItem、ActionRequest / Result；
+- `view / index / sync / action / secret` 分开声明、授权、撤销和审计；
+- 先把 Codex、Knowledge Vault / Obsidian、Supervisor MCP、Harness 包装为内部 adapters；
+- 一个低风险只读外部 connector 作为第一真实样本；
+- 设置 / 管理面显示来源、授权范围、最近同步、错误、断开和撤权，不显示 secret 正文。
+
+进入真实连接器前，每个 provider 单独冻结数据合同：真源、正文 / 引用、同步方向、冲突、删除、撤权、外发、保留期和写操作确认。凭据存储选型和真实 secret 使用单独重档授权。
+
+退出门：未授权 capability 在 adapter 前拒绝；secret 不进 SQLite event / audit / memory / chat；mock connector 全合同通过；真实只读 connector 的授权、同步、断开和错误在 App 可见。
+
+### M9 — 读模型切换、数据迁移与旧路退役
+
+交付：
+
+- 首页、项目、角色会话、成员、运行中、待办、日报、审计各自 projector / query；
+- UI 不再拼底层 sidecar 或反复构建完整 snapshot；
+- 所有 UI 条目有 typed `ObjectRef` 和精确 deep link；
+- shadow read → new primary → compatibility read-only；
+- 按 §4.4 清单逐项 command unregister、归档和恢复演练。
+
+退出门：新旧页面逐页 parity；差异有批准说明；投影可重建；raw JSON 默认不出产品响应；旧 store 有只读 manifest / hash / export；回滚演练通过。物理删除另行批准。
+
+### M10 — 全日使用试点与发布硬化
+
+试点剧本至少覆盖：
+
+1. 打开 Syn，秘书给出可回源情境；
+2. 收到个人 / 外部事件，形成关注但不自动成任务；
+3. 用户明确把复杂事项升级为项目；
+4. 项目主管持续对话，明确创建方案并经授权执行；
+5. 项目结果回到项目，秘书只收到摘要；
+6. 全局主管复核跨项目冲突；
+7. 日终日报、记忆治理和 skill 候选分别结算；
+8. App 重启后会话、未决、运行和关注恢复；
+9. 连接器断开、provider 失败、DB / 投影失败和敏感内容被 fail closed；
+10. 用户能找到任一稳定成员和历史临时 agent。
+
+硬化项：性能、分页、索引重建、备份 / 恢复、迁移回滚、可观测性、secret scrub、成本 / 预算、故障注入、长时间运行、权限回归、真实桌面可用性。
+
+发布门：所有目标场景真实 App 通过；高风险外部动作仍未默认开放；旧路退役清单完成或明确 HOLD；没有把 synthetic / build 冒充真实使用。
+
+## 7. 并行与写所有权
+
+允许并行的前提：公共合同已冻结、文件写域不重叠、同一事实对象只有一个 owner。
+
+- Kernel / schema / migration 承重文件单写者；
+- Rust domain 与 React consumer 可以在 DTO 冻结后并行；
+- M4 Secretary 与 M5 Project Orchestration 可并行，但不得同时改公共 event / scope / App 装配；
+- Knowledge 和 Memory 可以分域并行，但统一 Unit of Work / outbox 由平台线单写；
+- Connector framework 与具体 connector 分开；真实 provider 一次只激活一个；
+- UI 视觉优化不与读模型切换混在同一任务包，除非验收必须。
+
+每个任务包必须声明：`authority_chain`、`plan_anchor`、`existing_before_new`、`write_surface`、`capabilities_touched`、`forbidden_alternatives`、`verification`、`rollback` 和 `retirement_effect`。
+
+## 8. 任务包与阶段激活规则
+
+- master plan 只定义顺序；current stage plan 定义当前阶段；active v0.5 node + matching active package 才是具体执行授权。
+- 每个任务包只交付一个可独立验收的薄切片，不能用“全面重构”做无界写面。
+- 安全 / scope、schema migration、真实 provider、凭据、真实项目写入、自动连环和不可逆退役分别建包。
+- 涉及安全闸、scope 或授权判断的实现包按 `AGENTS.md` 高危清单逐包取得用户明确授权；阶段已排入计划不等于这项授权已经发生。
+- 一个阶段未通过退出门，下一阶段只能做不依赖它的只读设计或隔离 fixture，不得假设前置已完成。
+- 完成任务后更新 `CURRENT` 的事实、证据和下一步；不在 master 复制逐任务进度。
+
+## 9. 全程停止条件
+
+遇到以下任一情况立即停止当前切片：
+
+- 目标对象没有唯一真源或无法证明 project / scope owner；
+- 新合同需要静默放宽旧权限、Station 3b 或高风险确认；
+- migration 无 before / after、幂等、回滚或残留解释；
+- 写面撞上未归属的 dirty WIP；
+- 真实消息、外部写入、凭据、生产项目、发布或 Git 操作没有单独授权；
+- 只能靠前端隐藏来声称后端安全；
+- 只能靠 fake / synthetic 来声称真实 App 可用；
+- 为赶进度需要一次删除多个旧真源或失去恢复路径。
+
+停止后只报告事实、影响和所需新决定，不私自改目标或放宽验收。
+
+## 10. 完成定义
+
+Syn 的这轮重构只有在以下条件同时满足时才算完成：
+
+- 用户每天可以从秘书、全局主管和项目内项目主管明确工作；
+- 角色、项目、对象、通道和权限不会被模型或前端猜测；
+- 个人事项与项目工作都能有真源、有闭环、不丢失；
+- 日常对话不会误建正式对象，明确决定能可靠进入治理链；
+- 项目主管能调用保留下来的方案、授权、执行、验证和交付能力；
+- 首页、日报、通知和摘要全部可回源且不形成镜像；
+- 记忆可以自发捕获和每日整理，同时可纠正、可审计、不泄密、不扩权；
+- 外部连接器按能力分权，凭据只以保护引用参与；
+- 内部成员可搜索、可直接联系，临时 agent 可追踪；
+- App 重启、失败、迁移和回滚不会让会话、未决、项目事实或未闭环事项静默消失；
+- 旧业务路径在替代链真实验收后有序退役；
+- 文档、CURRENT、代码、测试、真实 App 和发布结论各自诚实一致。

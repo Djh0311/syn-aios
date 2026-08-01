@@ -1,29 +1,44 @@
 # Plans Directory
 
-> 本目录保存设计、实施、迁移、发布与复核计划；计划不是状态真相。当前事实以 CURRENT.md 为准，唯一人工索引以 AUTHORITY.md 为准。
+> 本目录保存设计、实施、迁移、发布与复核计划。计划不是状态真相；当前事实只看 `docs/harness/CURRENT.md`，当前文档路由只看 `docs/harness/AUTHORITY.md`。
 
 ## 当前路由
 
-- 唯一业务执行计划：2026-07-16-master-execution-plan-conversation-first-v1.md。它承接 conversation-first 主线与共享 Conversation Transport 的后续顺序。
-- 方向与原则：2026-07-16-conversation-first-direction-and-execution-plan-v1.md。它不是第二个业务排期或执行入口。
-- 当前知识库子计划：2026-07-23-l3-syn-native-knowledge-workspace-small-stage-plan-v2.md。它只细化总计划中的 L3/N2R，不产生第二条总排期。
-- 2026-07-23-development-harness-routing-code-map-and-authority-governance-remediation-plan-v1.md 是并行的开发治理计划，不抢业务排期，也不改变上述唯一业务计划。
+- 唯一当前总开发计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md`。
+- 当前阶段计划：`2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md`。
+- M1-M10 独立阶段计划已经按当前源码事实、未知项、owner、依赖、授权和证据边界展开；除 M1 外均是 planned，不是 active。
+- 已确认运行模型：`../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`。
+- 当前没有活动工程任务；计划本身不授权产品代码。下一步只能激活 Stage 1 的合同切片 `SYN-FND-001`，不能从历史计划续跑。
 
-## 历史 / 已收官计划
+## M1-M10 独立阶段计划
 
-- 2026-06-10-stage-k-daily-use-codex-workbench-productization-plan-v1.md：Stage K 历史计划，不是当前执行入口。
-- 2026-06-07-stage-h-i-real-codex-automation-and-multi-agent-collaboration-plan-v1.md：Stage H/I 历史计划。
-- 2026-06-01-workbench-architecture-implementation-plan-v1.md 与 2026-06-06-stage-e-f-g-refinement-plan-v1.md：早期架构和阶段细化计划。
-- 2026-07-11-orchestrator-fast-path-five-stations-plan-v1.md 及其他旧 resident/private-home 相关计划：仅历史参照，不能借此重新派发。
+| 阶段 | 文件 | 状态 / 入口 |
+|---|---|---|
+| M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `CURRENT_STAGE / READY_FOR_TASK_ACTIVATION`；active package 仍为 NONE |
+| M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1 exit |
+| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1/M2 |
+| M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3，可与 M5 条件并行 |
+| M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3，可与 M4 条件并行 |
+| M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M3-M5 |
+| M7 | `2026-08-01-syn-stage-7-memory-personal-model-and-skill-governance-plan-v1.md` | `PLANNED / NOT_ACTIVE`；M7-A 等 M1/M2，M7-B live capture 等 M4/M5；A 完成不等于阶段完成 |
+| M8 | `2026-08-01-syn-stage-8-connector-and-credential-reference-plan-v1.md` | `PLANNED / NOT_ACTIVE`；CON-000 仅 design-only，framework 与真实 provider 分层授权 |
+| M9 | `2026-08-01-syn-stage-9-read-model-migration-and-legacy-retirement-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M2-M8 replacement evidence |
+| M10 | `2026-08-01-syn-stage-10-full-day-pilot-and-release-hardening-plan-v1.md` | `PLANNED / NOT_ACTIVE`；发布动作另获用户指令 |
 
-## 编写计划
+## 历史计划
 
-- 先标明当前权威、目标、明确不做什么、复用边界、停止条件与可直接复跑的验证。
-- 只有确实改变行为、范围或安全边界时，才链接或新增相应 decision。
-- 计划依赖的事实必须指向当前 authority；不要把计划内的状态标记当作已完成事实。
+- `2026-07-16-master-execution-plan-conversation-first-v1.md`：原 conversation-first 当时的唯一计划；已被当前 master supersede。之后出现过窄范围重建候选，但也已在激活前停止。
+- `2026-07-16-conversation-first-direction-and-execution-plan-v1.md`：保留自然对话、结构化实物和明确人闸等产品原则，不再承担当前排期。
+- `2026-08-01-jiaoban-bounded-rebuild-execution-plan-v1.md`：曾短暂作为候选当前路线；在 Phase 1 激活前因范围只覆盖项目助手 / 工作流拆分、不能覆盖全工作台后端协作而停止。
+- `2026-07-23-l3-syn-native-knowledge-workspace-small-stage-plan-v2.md`：知识线已停放，不能借此恢复施工。
+- `2026-07-23-development-harness-routing-code-map-and-authority-governance-remediation-plan-v1.md`：历史治理计划；当前机器图缺口以 AUTHORITY/CURRENT 为准。
+- 其他计划均按历史资料查阅，不能反向授予写入或运行权限。
 
-## 规则
+计划状态只使用以下含义：`CURRENT_MASTER`、`CURRENT_STAGE`、`PLANNED / NOT_ACTIVE`、`HISTORICAL / SUPERSEDED`、`STOPPED_BEFORE_ACTIVATION`、`PARKED / HOLD`。正文里的“当前”“下一步”“唯一”只在其状态栏允许时才有今天的效力。
 
-- 当前业务事实或唯一下一步变化时，更新 CURRENT.md；否则不因计划文本而制造状态 diff。
-- 暂停、已收官或历史计划永远不能成为默认派发入口。
-- requirements-matrix、task-queue、open-questions、current-state 与旧 docs/decisions.md 等停用文档不再是计划的强制前置或更新目标。
+## 编写与启用规则
+
+- 计划必须写清目标、不做什么、边界、阶段、验收层级、停止条件和退役条件。
+- 只有 active v0.5 节点、matching active package、AUTHORITY、CURRENT 和当前用户指令一致时，计划中的阶段才可进入产品代码。
+- 离线、synthetic、build、artifact、真实 App、发布分别结算，不得互相替代。
+- 当前路线变化时更新 CURRENT/AUTHORITY；不要在 README 或长期工作线复制动态状态。

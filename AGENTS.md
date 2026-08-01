@@ -35,26 +35,26 @@
 - **删掉所有「不得据此声称 X」。**
 - 任何「做好了 / 能用了」的声明，后面**必须跟「怎么验的 + 证据」**。一条真实验证 > 一百条「不得声称」，还写得快。
 - **含 Rust production 路径的包不能只跑 `cargo test`**：必须同时跑 `cargo check --lib` 或等价 non-test build，防止 `#[cfg(test)]` 把真实构建错误遮住。
-- **报「做没做 / 到哪步」状态，必须先核实物**（git log + 代码 grep + 真机），**严禁照搬 plan / roadmap / STAGE_PLAN 的 ✅/⏳**——除 `CURRENT.md` 外，所有文档状态默认按「可能过期」对待。（曾连续把做完的报成没做、皆因照搬过期文档；这条专治「读的一侧」，与「commit 回写 CURRENT」的「写的一侧」配齐。）
+- **报「做没做 / 到哪步」状态，必须先核实物**（git log + 代码 grep + 真机），**严禁照搬 plan / roadmap / STAGE_PLAN 的 ✅/⏳**——除 `docs/harness/CURRENT.md` 外，所有文档状态默认按「可能过期」对待。（曾连续把做完的报成没做、皆因照搬过期文档；这条专治「读的一侧」，与「commit 回写 CURRENT」的「写的一侧」配齐。）
 - **拦截记账**：`docs/harness-catch-log.md` 是 harness 战果唯一账本——总指导每次核实物必表态（有 catch 记行 / 零 catch 明写）；**每个 commit 信息必含 `catch:` 标记**（`.githooks/commit-msg` 机械强制，`--no-verify` 仅紧急、事后补账）；每站收口扫账本，连续零 catch 的环节按防复发条款反向议砍。
 
 ## 四、文件 = 一个真相源
-- `CURRENT.md`：① 现在真能用什么（验过的）② 在做什么 ③ 下一步 ④ 哪些锁着/没接。**砍到约 30 行，历史进 `archive/`。**
+- `docs/harness/CURRENT.md`：① 现在真能用什么（验过的）② 在做什么 ③ 下一步 ④ 哪些锁着/没接。**砍到约 30 行，历史进 `archive/`。**
 - `decisions/**`：拍过的板（防反复纠结同一件事）。
 - `mistake-ledger`：**只在同一个错犯第二次**才记。
 - **停用**（单人项目负担）：requirements-matrix / task-queue / open-questions / context-checkpoints / sprint-contract。
 - 旧 `scripts/harness/**` 已于 2026-07-28 随 schema-1 老 harness 整批退役（Git 历史可回查）；只读检查走 `scripts/harness-v2/`（`config-check`、`active-path-audit`、`adapt.js inspect`、`git-gate`），均按需手动跑、不作默认门禁。
 - `scripts/harness-v2/project-context.js` 是新会话的**人工显式**最短导航（`node scripts/harness-v2/project-context.js --target .`）；它仍属按需手动工具，不是 Hook、pre-work 或完成门，默认不运行 Git、Hook、Code Map、源码扫描或历史全文。
-- `scripts/harness-v2/adapt.js inspect` 是按需人工执行的只读适配检查；不接 Hook、CI、cron 或默认 CLI，不自动回写 `CURRENT.md` / Code Map；同周无业务变化或既有阶段 evidence 已覆盖时不强制运行。
+- `scripts/harness-v2/adapt.js inspect` 是按需人工执行的只读适配检查；不接 Hook、CI、cron 或默认 CLI，不自动回写 `docs/harness/CURRENT.md` / Code Map；同周无业务变化或既有阶段 evidence 已覆盖时不强制运行。
 
 ## 五、不随便砍的硬线（砍完别失稳）
 - **砍低危流程 ≠ 砍真闸**：高危清单那 5 条反而因周围安静**更该显眼**，别一起松。
 - **`git add` / `git commit` 仍问一次**才做；执行子线不 commit。
-- **commit 收口必带 `CURRENT.md` 回写**：完成项挪到①、刷新③下一步——**不回写不 commit**，与「完成必附验证」同级。（拆瘦砍重型流程时把「回写正本」一起漏砍了，这条补回来。）`CURRENT.md` 是唯一「每次工作完必更」的活正本；`master-roadmap` 只在阶段切换时动，per-task 状态以 `CURRENT.md` 为准。
+- **commit 收口必带 `docs/harness/CURRENT.md` 回写**：完成项挪到①、刷新③下一步——**不回写不 commit**，与「完成必附验证」同级。（拆瘦砍重型流程时把「回写正本」一起漏砍了，这条补回来。）`docs/harness/CURRENT.md` 是唯一「每次工作完必更」的活正本；`master-roadmap` 只在阶段切换时动，per-task 状态以它为准。
 - **真跑 codex 进非测试真实项目 / 改安全闸 / 开自动连环 = 用户明确授权那一下**，不可省。（固定测试项目跑 = 轻档，见高危#1 细化 2026-06-22。）
 - **本文 vs 产品**：本文管「我们开发自己用的流程」；蓝图里「乙·角色 / 审查 / 审计」是**产品功能**（到乙才做），不在砍的范围、别混。
 - **职位简化**：两条线——**主导线**（统筹 · 核 Codex 干的实物 · 和用户对接）/ **执行线**（Codex 干活）。科学家代号独立复核线、严格职位档案那套**已砍**（轻档不用）。
-- 项目方向（不变）：主线 = codex 会话管理 + workflow 编排；别把产品退回「任务包管理器」。
+- 项目方向：Syn 是只服务当前用户的全能个人 AI 工作台。项目是复杂工作的主要事实、权限与执行边界，个人范围与之并存；顶层入口是秘书和全局主管，项目主管常驻项目内部。日常 / 开发是每轮工作显式通道，对话是日常入口，知识、记忆、任务、工作流、Agent、连接器、工具、审计和日报是协作能力。工作流能力保留，但工作流界面不是产品中心；也不要把产品退回「任务包管理器」。
 - **重要任务开工前做计划对齐**：小改动不强制建包；只认短路由显式绑定的 current important task，checkpoint 不扫描历史包。
 - **对齐块只作机械导航**：`authority_chain`、`plan_anchor`、`existing_before_new`、`capabilities_touched`、`forbidden_alternatives` 必须完整可查。
 - **字段齐全不等于语义正确、代码完成或产品验收**；检查只报告字段、路径与 Code Map ID，不替用户选路线。
