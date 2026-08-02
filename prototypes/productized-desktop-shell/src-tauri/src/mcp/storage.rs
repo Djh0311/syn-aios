@@ -168,6 +168,9 @@ pub struct CanvasAuditEvent {
 }
 
 // ---------- paths ----------
+// SYN-FND-002: All object IDs pass through ValidatedObjectId before path construction.
+
+use crate::mcp::path_guard::{validate_resolved_path_within_root, ValidatedObjectId};
 
 pub fn canvas_v1_root() -> PathBuf {
     if let Some(paths) = crate::acceptance_runtime_profile::active_paths()
@@ -179,32 +182,58 @@ pub fn canvas_v1_root() -> PathBuf {
     PathBuf::from(home).join("Library/Application Support/CodexGovernanceWorkbench/canvas-v1")
 }
 
-pub fn canvas_path(canvas_id: &str) -> PathBuf {
-    canvas_v1_root()
+/// Validate and construct canvas file path. SYN-FND-002: ID validated before join.
+pub fn canvas_path(canvas_id: &str) -> Result<PathBuf, String> {
+    let id = ValidatedObjectId::parse(canvas_id)?;
+    Ok(canvas_v1_root()
         .join("canvas")
-        .join(format!("{canvas_id}.json"))
+        .join(format!("{}.json", id.as_str())))
 }
 
-pub fn run_dir(run_id: &str) -> PathBuf {
-    canvas_v1_root().join("runs").join(run_id)
+/// Validate and construct run directory path. SYN-FND-002: ID validated before join.
+pub fn run_dir(run_id: &str) -> Result<PathBuf, String> {
+    let id = ValidatedObjectId::parse(run_id)?;
+    Ok(canvas_v1_root().join("runs").join(id.as_str()))
 }
 
-pub fn run_state_path(run_id: &str) -> PathBuf {
-    run_dir(run_id).join("state.json")
+/// Validate and construct run state file path.
+pub fn run_state_path(run_id: &str) -> Result<PathBuf, String> {
+    Ok(run_dir(run_id)?.join("state.json"))
 }
 
-pub fn run_audit_path(run_id: &str) -> PathBuf {
-    run_dir(run_id).join("audit.jsonl")
+/// Validate and construct run audit file path.
+pub fn run_audit_path(run_id: &str) -> Result<PathBuf, String> {
+    Ok(run_dir(run_id)?.join("audit.jsonl"))
 }
 
-pub fn run_outbox_path(run_id: &str, node_id: &str) -> PathBuf {
-    run_dir(run_id).join("outbox").join(format!("{node_id}.md"))
+/// Validate and construct run outbox file path. SYN-FND-002: both IDs validated.
+pub fn run_outbox_path(run_id: &str, node_id: &str) -> Result<PathBuf, String> {
+    let nid = ValidatedObjectId::parse(node_id)?;
+    Ok(run_dir(run_id)?
+        .join("outbox")
+        .join(format!("{}.md", nid.as_str())))
+}
+
+/// SYN-FND-002 第二层防御：确保解析后路径不逃逸允许根。
+/// 在 ValidatedObjectId 拒绝明显恶意 ID 之后，再用 canonicalize 检查 symlink 逃逸。
+fn ensure_path_within_root(path: &Path) -> Result<(), String> {
+    let root = canvas_v1_root();
+    // 只在路径已存在时检查（新建文件/目录时 parent 必须存在）
+    if path.exists() {
+        validate_resolved_path_within_root(path, &root)?;
+    } else if let Some(parent) = path.parent() {
+        if parent.exists() {
+            validate_resolved_path_within_root(parent, &root)?;
+        }
+    }
+    Ok(())
 }
 
 // ---------- canvas ----------
 
 pub fn load_canvas(canvas_id: &str) -> Result<CanvasDefinition, String> {
-    let p = canvas_path(canvas_id);
+    let p = canvas_path(canvas_id)?;
+    ensure_path_within_root(&p)?; // SYN-FND-002 第二层防御
     let text = fs::read_to_string(&p).map_err(|e| format!("读画布失败 {}：{e}", p.display()))?;
     let canvas: CanvasDefinition = serde_json::from_str(&text)
         .map_err(|e| format!("画布 JSON 解析失败 {}：{e}", p.display()))?;
@@ -218,7 +247,8 @@ pub fn load_canvas(canvas_id: &str) -> Result<CanvasDefinition, String> {
 }
 
 pub fn save_canvas(canvas: &CanvasDefinition) -> Result<(), String> {
-    let p = canvas_path(&canvas.canvas_id);
+    let p = canvas_path(&canvas.canvas_id)?;
+    ensure_path_within_root(&p)?; // SYN-FND-002 第二层防御
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("建目录失败 {}：{e}", parent.display()))?;
     }
@@ -231,15 +261,17 @@ pub fn workflow_template_dir() -> PathBuf {
     canvas_v1_root().join("workflow-templates")
 }
 
-pub fn workflow_template_path(template_id: &str) -> PathBuf {
-    workflow_template_dir().join(format!("{template_id}.json"))
+/// Validate and construct workflow template file path. SYN-FND-002: ID validated before join.
+pub fn workflow_template_path(template_id: &str) -> Result<PathBuf, String> {
+    let id = ValidatedObjectId::parse(template_id)?;
+    Ok(workflow_template_dir().join(format!("{}.json", id.as_str())))
 }
 
 pub fn save_workflow_template(template: &WorkflowTemplate) -> Result<(), String> {
     if template.template_id.trim().is_empty() {
         return Err("workflow template 缺 template_id".to_string());
     }
-    let p = workflow_template_path(&template.template_id);
+    let p = workflow_template_path(&template.template_id)?;
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("建目录失败 {}：{e}", parent.display()))?;
     }
@@ -247,7 +279,7 @@ pub fn save_workflow_template(template: &WorkflowTemplate) -> Result<(), String>
 }
 
 pub fn load_workflow_template(template_id: &str) -> Result<WorkflowTemplate, String> {
-    let p = workflow_template_path(template_id);
+    let p = workflow_template_path(template_id)?;
     let text = fs::read_to_string(&p).map_err(|e| format!("读模板失败 {}：{e}", p.display()))?;
     let template: WorkflowTemplate = serde_json::from_str(&text)
         .map_err(|e| format!("模板 JSON 解析失败 {}：{e}", p.display()))?;
@@ -294,7 +326,7 @@ pub fn list_workflow_templates() -> Result<Vec<WorkflowTemplateSummary>, String>
 }
 
 pub fn delete_workflow_template(template_id: &str) -> Result<(), String> {
-    let p = workflow_template_path(template_id);
+    let p = workflow_template_path(template_id)?;
     if !p.exists() {
         return Ok(());
     }
@@ -304,7 +336,8 @@ pub fn delete_workflow_template(template_id: &str) -> Result<(), String> {
 // ---------- run state ----------
 
 pub fn load_run_state(run_id: &str) -> Result<CanvasRunState, String> {
-    let p = run_state_path(run_id);
+    let p = run_state_path(run_id)?;
+    ensure_path_within_root(&p)?; // SYN-FND-002 第二层防御
     let text =
         fs::read_to_string(&p).map_err(|e| format!("读 run state 失败 {}：{e}", p.display()))?;
     let st: CanvasRunState = serde_json::from_str(&text)
@@ -319,7 +352,8 @@ pub fn load_run_state(run_id: &str) -> Result<CanvasRunState, String> {
 }
 
 pub fn save_run_state(state: &CanvasRunState) -> Result<(), String> {
-    let p = run_state_path(&state.run_id);
+    let p = run_state_path(&state.run_id)?;
+    ensure_path_within_root(&p)?; // SYN-FND-002 第二层防御
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("建目录失败 {}：{e}", parent.display()))?;
     }
@@ -343,7 +377,7 @@ pub fn create_run(run_id: &str, canvas_id: &str, goal: &str) -> Result<CanvasRun
         updated_at: now,
     };
     save_run_state(&st)?;
-    fs::create_dir_all(run_dir(run_id).join("outbox"))
+    fs::create_dir_all(run_dir(run_id)?.join("outbox"))
         .map_err(|e| format!("建 outbox 目录失败：{e}"))?;
     Ok(st)
 }
@@ -351,7 +385,7 @@ pub fn create_run(run_id: &str, canvas_id: &str, goal: &str) -> Result<CanvasRun
 // ---------- audit ----------
 
 pub fn append_audit(run_id: &str, event: &CanvasAuditEvent) -> Result<(), String> {
-    let p = run_audit_path(run_id);
+    let p = run_audit_path(run_id)?;
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("建目录失败 {}：{e}", parent.display()))?;
     }
@@ -366,7 +400,7 @@ pub fn append_audit(run_id: &str, event: &CanvasAuditEvent) -> Result<(), String
 }
 
 pub fn read_recent_audit(run_id: &str, n: usize) -> Result<Vec<CanvasAuditEvent>, String> {
-    let p = run_audit_path(run_id);
+    let p = run_audit_path(run_id)?;
     if !p.exists() {
         return Ok(Vec::new());
     }
@@ -393,7 +427,8 @@ pub fn read_recent_audit(run_id: &str, n: usize) -> Result<Vec<CanvasAuditEvent>
 // ---------- outbox ----------
 
 pub fn write_outbox(run_id: &str, node_id: &str, content: &str) -> Result<PathBuf, String> {
-    let p = run_outbox_path(run_id, node_id);
+    let p = run_outbox_path(run_id, node_id)?;
+    ensure_path_within_root(&p)?; // SYN-FND-002 第二层防御
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("建目录失败 {}：{e}", parent.display()))?;
     }
@@ -402,7 +437,7 @@ pub fn write_outbox(run_id: &str, node_id: &str, content: &str) -> Result<PathBu
 }
 
 pub fn read_outbox_file(run_id: &str, node_id: &str) -> Result<String, String> {
-    let p = run_outbox_path(run_id, node_id);
+    let p = run_outbox_path(run_id, node_id)?;
     fs::read_to_string(&p).map_err(|e| format!("读 outbox 失败 {}：{e}", p.display()))
 }
 

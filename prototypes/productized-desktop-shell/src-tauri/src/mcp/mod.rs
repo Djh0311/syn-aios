@@ -11,6 +11,7 @@
 pub(crate) mod capability_registry;
 pub mod commands;
 pub mod orchestrator;
+pub(crate) mod path_guard;
 mod protocol;
 pub mod storage;
 pub(crate) mod supervisor_conversation_binding;

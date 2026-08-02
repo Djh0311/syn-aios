@@ -6472,7 +6472,6 @@ fn list_project_workflows(
     }
     let value = read_workflow_state_value(&state.workflow_state_path)?;
     let pid = project_id(&project_root);
-    let slug = stable_id(&project_root);
     let default_id = default_workflow_id(&project_root);
     let nodes = value
         .get("nodes")
@@ -6489,9 +6488,10 @@ fn list_project_workflows(
         let Some(wid) = optional_string_from(&wf, "workflow_id") else {
             continue;
         };
-        // 归属该项目：workflow 带 project_id 命中，或 workflow_id 含项目 slug（兼容老记录）。
-        let belongs = optional_string_from(&wf, "project_id").as_deref() == Some(pid.as_str())
-            || wid.contains(&slug);
+        // SYN-FND-004A: 归属判定只认 project_id 精确匹配。
+        // 旧的 wid.contains(&slug) 兼容判定已删除——模糊匹配不作为归属真源。
+        // 无法归属的 workflow 不自动猜 owner，跳过即可。
+        let belongs = optional_string_from(&wf, "project_id").as_deref() == Some(pid.as_str());
         if !belongs {
             continue;
         }
@@ -6774,17 +6774,43 @@ fn submit_project_workflow_draft_at(
 // P3 E · 取某工作流的画布节点/边，供「编辑工作流」把现有 nodes 加载进草案（避免空白覆盖，§12）。
 // 返回 { nodes: [画布节点], edges: [{id,from,to} 画布 id] }：canvas-submitted 节点用其 canvas_payload；
 // 老 bootstrap 节点无 payload → 用结构字段合成一个，使默认治理工作流也能被编辑回填。
+//
+// SYN-FND-004A: 验证 workflow 属于请求方 project。不信任前端传入的 workflow_id 归属。
 #[tauri::command]
 fn get_project_workflow_nodes(
     project_root: String,
     workflow_id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<Value, String> {
-    let _ = project_root;
     if !state.workflow_state_path.exists() {
         return Ok(json!({ "nodes": [], "edges": [] }));
     }
+
+    // SYN-FND-004A: 验证 workflow 归属——从 project_root 派生 project_id，检查 workflow 的 project_id
+    let expected_pid = project_id(&project_root);
     let value = read_workflow_state_value(&state.workflow_state_path)?;
+
+    // 查找目标 workflow 并验证归属
+    let workflow_belongs = value
+        .get("workflows")
+        .and_then(Value::as_array)
+        .map(|wfs| {
+            wfs.iter().any(|wf| {
+                let wid_match =
+                    optional_string_from(wf, "workflow_id").as_deref() == Some(workflow_id.as_str());
+                let pid_match =
+                    optional_string_from(wf, "project_id").as_deref() == Some(expected_pid.as_str());
+                wid_match && pid_match
+            })
+        })
+        .unwrap_or(false);
+
+    if !workflow_belongs {
+        return Err(format!(
+            "fnd004a_rejected: workflow '{workflow_id}' 不属于项目 '{expected_pid}'，拒绝返回节点"
+        ));
+    }
+
     let mut node_to_canvas: Vec<(String, String)> = Vec::new();
     let mut nodes_out: Vec<Value> = Vec::new();
     for n in value
@@ -7043,4 +7069,181 @@ fn reveal_indexed_rollout(
     }
     run_open(&["-R", request.path.as_str()])?;
     Ok(format!("已请求定位 rollout 文件：{}", request.path))
+}
+
+// SYN-FND-004A 测试：归属止血的负例验证
+#[cfg(test)]
+mod fnd004a_ownership_tests {
+    use super::*;
+
+    /// list_project_workflows 的 _at 版本，用于测试
+    fn list_project_workflows_at(
+        path: &std::path::Path,
+        project_root: &str,
+    ) -> Result<Vec<Value>, String> {
+        if !path.exists() {
+            return Ok(vec![]);
+        }
+        let value = read_workflow_state_value(path)?;
+        let pid = project_id(project_root);
+        let default_id = default_workflow_id(project_root);
+        let nodes = value
+            .get("nodes")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let mut out = Vec::new();
+        for wf in value
+            .get("workflows")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+        {
+            let Some(wid) = optional_string_from(&wf, "workflow_id") else {
+                continue;
+            };
+            let belongs = optional_string_from(&wf, "project_id").as_deref() == Some(pid.as_str());
+            if !belongs {
+                continue;
+            }
+            let node_count = nodes
+                .iter()
+                .filter(|n| optional_string_from(n, "workflow_id").as_deref() == Some(wid.as_str()))
+                .count();
+            out.push(json!({
+              "workflow_id": wid,
+              "title": optional_string_from(&wf, "title").unwrap_or_default(),
+              "state": optional_string_from(&wf, "state").unwrap_or_default(),
+              "node_count": node_count,
+              "is_default": wid == default_id,
+            }));
+        }
+        Ok(out)
+    }
+
+    /// get_project_workflow_nodes 的 _at 版本，用于测试
+    fn get_project_workflow_nodes_at(
+        path: &std::path::Path,
+        project_root: &str,
+        workflow_id: &str,
+    ) -> Result<Value, String> {
+        if !path.exists() {
+            return Ok(json!({ "nodes": [], "edges": [] }));
+        }
+        let expected_pid = project_id(project_root);
+        let value = read_workflow_state_value(path)?;
+
+        let workflow_belongs = value
+            .get("workflows")
+            .and_then(Value::as_array)
+            .map(|wfs| {
+                wfs.iter().any(|wf| {
+                    let wid_match =
+                        optional_string_from(wf, "workflow_id").as_deref() == Some(workflow_id);
+                    let pid_match =
+                        optional_string_from(wf, "project_id").as_deref() == Some(expected_pid.as_str());
+                    wid_match && pid_match
+                })
+            })
+            .unwrap_or(false);
+
+        if !workflow_belongs {
+            return Err(format!(
+                "fnd004a_rejected: workflow '{workflow_id}' 不属于项目 '{expected_pid}'，拒绝返回节点"
+            ));
+        }
+        Ok(json!({ "nodes": [], "edges": [] }))
+    }
+
+    fn temp_test_dir(label: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        std::env::temp_dir().join(format!("fnd004a-test-{label}-{stamp}"))
+    }
+
+    /// 无 project_id 的老 workflow 记录不应出现在 list_project_workflows 结果中
+    #[test]
+    fn list_project_workflows_excludes_old_record_without_project_id() {
+        let dir = temp_test_dir("list-old");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("workflow-state.v0.json");
+        let state = json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "updated_at": "test",
+            "projects": [],
+            "agent_adapters": [],
+            "workflows": [
+                {
+                    "workflow_id": "workflow:old-slug-based:123",
+                    "title": "old workflow without project_id",
+                    "state": "active"
+                },
+                {
+                    "workflow_id": "workflow:users-yoyi-test-project:456",
+                    "project_id": "project:users-yoyi-test-project",
+                    "title": "new workflow with project_id",
+                    "state": "active"
+                }
+            ],
+            "nodes": [],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "audit_events": [],
+            "capabilities": [],
+            "harness_resources": []
+        });
+        fs::write(&path, serde_json::to_string_pretty(&state).unwrap()).unwrap();
+
+        let result = list_project_workflows_at(&path, "/Users/yoyi/test-project").unwrap();
+        assert_eq!(result.len(), 1, "无 project_id 的老记录不应出现");
+        assert_eq!(result[0]["workflow_id"], "workflow:users-yoyi-test-project:456");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// get_project_workflow_nodes 对不属于请求项目的 workflow 返回 fnd004a_rejected
+    #[test]
+    fn get_project_workflow_nodes_rejects_foreign_workflow() {
+        let dir = temp_test_dir("nodes-foreign");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("workflow-state.v0.json");
+        let state = json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "updated_at": "test",
+            "projects": [],
+            "agent_adapters": [],
+            "workflows": [
+                {
+                    "workflow_id": "workflow:other-project:789",
+                    "project_id": "project:other-project",
+                    "title": "other project workflow",
+                    "state": "active"
+                }
+            ],
+            "nodes": [],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "audit_events": [],
+            "capabilities": [],
+            "harness_resources": []
+        });
+        fs::write(&path, serde_json::to_string_pretty(&state).unwrap()).unwrap();
+
+        let result = get_project_workflow_nodes_at(
+            &path,
+            "/Users/yoyi/my-project",
+            "workflow:other-project:789",
+        );
+        assert!(result.is_err(), "应拒绝不属于请求项目的 workflow");
+        let err = result.unwrap_err();
+        assert!(err.contains("fnd004a_rejected"), "错误应包含 fnd004a_rejected: {err}");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
