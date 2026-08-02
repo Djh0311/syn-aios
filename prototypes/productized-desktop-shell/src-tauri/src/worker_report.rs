@@ -34,6 +34,8 @@ pub(crate) struct WorkerReviewEvidence {
 
 /// worker 回程契约结构：做了啥 / 产出在哪（路径列表）/ 成败 / 怎么证明 / 结论条目。
 /// 全 `#[serde(default)]`——缺字段不报错，配合软着陆语义。
+///
+/// SYN-FND-004B: 新增 report_kind 字段区分执行型/手动型/离线型报告。
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 pub(crate) struct WorkerReport {
     #[serde(default)]
@@ -62,6 +64,70 @@ pub(crate) struct WorkerReport {
     pub(crate) direction_risks: Vec<String>,
     #[serde(default)]
     pub(crate) follow_up_suggestions: Vec<String>,
+    /// SYN-FND-004B: 报告类型。
+    /// "execution" = 真实 Codex 执行后的回程报告
+    /// "manual" = 手动粘贴的离线报告（不冒充真实执行）
+    /// "offline" = 完全离线的手动输入
+    ///
+    /// **本字段是 worker 自报的**（从 worker 交回的 json 块反序列化，缺省
+    /// "execution" 以兼容旧报文），因此**不可作为「这份报告真的来自一次执行」
+    /// 的凭据**。`consume_worker_report_after_completion` 会在服务端把它覆盖成
+    /// "execution"；除该入口外，任何读到此字段的地方都必须假设它可被伪造。
+    #[serde(default = "default_report_kind")]
+    pub(crate) report_kind: String,
+}
+
+/// SYN-FND-004B: 真实执行回程报告的 report_kind 取值。
+pub(crate) const EXECUTION_REPORT_KIND: &str = "execution";
+
+fn default_report_kind() -> String {
+    EXECUTION_REPORT_KIND.to_string()
+}
+
+/// SYN-FND-004B: 服务端覆盖 worker 自报的 report_kind。
+///
+/// **作用边界（别高估）**：`report_kind` 当前**没有进 store**——
+/// `WorkerStructuredReportInput` 里没有这个字段，`record_worker_structured_report_at`
+/// 写的审计事件也不含它。它唯一的下游读者是 `build_report_input` 里的报文哈希预像。
+/// 所以本函数保证的是「哈希预像里的 kind 不受 worker 摆布」，
+/// **不是**「store 里记下了这份报告的类型」。
+fn stamp_execution_report_kind(report: &mut WorkerReport) {
+    report.report_kind = EXECUTION_REPORT_KIND.to_string();
+}
+
+/// SYN-FND-004B: 执行型报告允许的 attempt 状态白名单。
+/// 不在白名单中的状态不允许出现在执行型报告中。
+pub(crate) const EXECUTION_REPORT_ALLOWED_ATTEMPT_STATES: &[&str] = &[
+    "completed",
+    "completed_with_warnings",
+    "failed",
+    "timed_out",
+    "cancelled",
+    "blocked",
+];
+
+/// SYN-FND-004B: 验证执行型报告的 attempt 状态是否合法。
+/// 手动/离线报告不受此约束。
+///
+/// **未接线**：本函数与上面的白名单当前**没有任何生产调用者**（只有单测）。
+/// 接线需要让 `consume_worker_report_after_completion` 收一个 attempt/dispatch
+/// 状态参数并在落库前调用它——那要改 director_agent 的调用点签名，属后续包。
+/// 在接上之前，不要把它当成「执行型报告的状态已被约束」的证据。
+pub(crate) fn validate_execution_report_attempt_state(
+    report_kind: &str,
+    attempt_state: &str,
+) -> Result<(), String> {
+    if report_kind != "execution" {
+        return Ok(());
+    }
+    if EXECUTION_REPORT_ALLOWED_ATTEMPT_STATES.contains(&attempt_state) {
+        Ok(())
+    } else {
+        Err(format!(
+            "fnd004b_rejected: 执行型报告不允许 attempt 状态 '{attempt_state}'，允许: {:?}",
+            EXECUTION_REPORT_ALLOWED_ATTEMPT_STATES
+        ))
+    }
 }
 
 /// 追加给 worker 的契约段（确定性文本·不经 LM·同 consultant/director 的 json 块成熟套路）。
@@ -191,6 +257,10 @@ fn report_status_field(status: &str) -> Option<String> {
 /// - Some(report) → 组登记入参调 `record_worker_structured_report_at`；落库失败仅出 warning、不断链；
 ///   summary = did（status）。
 /// - None（无块/坏 json）→ warning（附原文尾 200 字）+ summary None；任务仍算完成（软着陆）。
+///
+/// SYN-FND-004B: 新增 attempt_id、authenticated_actor 参数，精确绑定执行上下文。
+/// 本入口进来即无条件把 report_kind 盖成 "execution"——不是靠代码判断来源，
+/// 是靠调用路径：只有真实执行回程走到这里。边界见 `stamp_execution_report_kind`。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn consume_worker_report_after_completion(
     state_path: &Path,
@@ -200,12 +270,24 @@ pub(crate) fn consume_worker_report_after_completion(
     workflow_node_id: &str,
     work_item_id: &str,
     dispatch_id: Option<&str>,
+    attempt_id: Option<&str>,
+    authenticated_actor: &str,
     actor_role: &str,
     task_title: &str,
     last_message_full: &str,
 ) -> WorkerReportConsumeOutcome {
     match parse_worker_report(last_message_full) {
-        Some(report) => {
+        Some(mut report) => {
+            // SYN-FND-004B: report_kind 由服务端在此覆盖，不采用 worker 自报值。
+            // `WorkerReport::report_kind` 是从 worker 交回的 json 块反序列化出来的，
+            // worker 可以自己写任意值；本函数是**真实执行回程**的唯一入口
+            // （生产调用点只有 director_agent 的两处 completed 分支），故一律置
+            // "execution"，覆盖掉报文里可能存在的任何自报值。
+            // 手动/离线报告若将来要走这条路，必须由**另一个**入口构造并显式标注，
+            // 不能靠 worker 在 json 里自称。
+            // 覆盖能保证什么、不能保证什么，见 `stamp_execution_report_kind` 注释。
+            stamp_execution_report_kind(&mut report);
+
             let summary = worker_report_summary(&report);
             let help_signal = worker_report_help_signal(&report, &summary);
             let input = build_report_input(
@@ -215,6 +297,8 @@ pub(crate) fn consume_worker_report_after_completion(
                 workflow_node_id,
                 work_item_id,
                 dispatch_id,
+                attempt_id,
+                authenticated_actor,
                 actor_role,
                 &report,
             );
@@ -356,6 +440,8 @@ fn worker_report_summary(report: &WorkerReport) -> String {
 
 /// WorkerReport → 现成登记入参映射。必填字段兜底非空（登记机器 validate 硬要求）。
 /// 字段填法照 `project_workflow_automation.rs` 的现成范本（source_kind/sensitive_level 等）。
+///
+/// SYN-FND-004B: 新增 attempt_id、authenticated_actor、report_hash 精确绑定。
 #[allow(clippy::too_many_arguments)]
 fn build_report_input(
     project_root: &str,
@@ -364,6 +450,8 @@ fn build_report_input(
     workflow_node_id: &str,
     work_item_id: &str,
     dispatch_id: Option<&str>,
+    attempt_id: Option<&str>,
+    authenticated_actor: &str,
     actor_role: &str,
     report: &WorkerReport,
 ) -> crate::WorkerStructuredReportInput {
@@ -406,6 +494,21 @@ fn build_report_input(
     } else {
         report.evidence.clone()
     };
+
+    // SYN-FND-004B: 计算报文哈希（检测报文内容是否与登记时一致，非防篡改）
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(report.did.as_bytes());
+    hasher.update(report.status.as_bytes());
+    for output in &report.outputs {
+        hasher.update(output.as_bytes());
+    }
+    for evidence in &report.evidence {
+        hasher.update(evidence.as_bytes());
+    }
+    hasher.update(report.report_kind.as_bytes());
+    let report_hash = format!("sha256:{:064x}", hasher.finalize());
+
     crate::WorkerStructuredReportInput {
         project_root: project_root.to_string(),
         project_id: project_id.to_string(),
@@ -413,6 +516,9 @@ fn build_report_input(
         workflow_node_id: workflow_node_id.to_string(),
         work_item_id: work_item_id.to_string(),
         dispatch_id: dispatch_id.map(str::to_string),
+        attempt_id: attempt_id.map(str::to_string),
+        authenticated_actor: authenticated_actor.to_string(),
+        report_hash,
         actor_role: actor_role.to_string(),
         executed_what,
         changed_what,
@@ -451,6 +557,61 @@ fn tail_chars(text: &str, n: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SYN-FND-004B: worker 在 json 里自称 report_kind 的值必须被服务端覆盖。
+    /// 锁的是 `stamp_execution_report_kind`——真实执行回程入口调它。
+    #[test]
+    fn worker_self_reported_report_kind_is_overridden_server_side() {
+        // worker 自称 "manual"，想让这份真实执行的报告看着像手动粘贴的。
+        let mut report = parse_worker_report(
+            "```json\n{\"did\":\"d\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"e\"],\"report_kind\":\"manual\"}\n```",
+        )
+        .expect("报文应解析成功");
+        assert_eq!(
+            report.report_kind, "manual",
+            "前置条件：worker 自报值确实进得来（本字段可被伪造，这正是要覆盖它的原因）"
+        );
+
+        stamp_execution_report_kind(&mut report);
+
+        assert_eq!(
+            report.report_kind, EXECUTION_REPORT_KIND,
+            "服务端必须把 report_kind 覆盖成 execution，不采用 worker 自报值"
+        );
+    }
+
+    /// SYN-FND-004B: 覆盖后的 report_kind 必须真正影响报文哈希预像。
+    /// 若哪天 build_report_input 不再把 kind 喂进哈希，这条会红——
+    /// 因为那时覆盖就成了纯注释，report_kind 会彻底没有下游读者。
+    #[test]
+    fn report_kind_override_changes_report_hash_preimage() {
+        let base = "```json\n{\"did\":\"d\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"e\"],\"report_kind\":\"manual\"}\n```";
+        let self_reported = parse_worker_report(base).expect("报文应解析成功");
+        let mut stamped = self_reported.clone();
+        stamp_execution_report_kind(&mut stamped);
+
+        let hash_of = |report: &WorkerReport| {
+            build_report_input(
+                "/p",
+                "proj",
+                "wf-1",
+                "wf-1:node:director",
+                "wi-1",
+                None,
+                None,
+                "test-actor",
+                "developer",
+                report,
+            )
+            .report_hash
+        };
+
+        assert_ne!(
+            hash_of(&self_reported),
+            hash_of(&stamped),
+            "kind 变了哈希就该变；相等说明 report_kind 已不在哈希预像里、覆盖已无下游读者"
+        );
+    }
 
     #[test]
     fn parses_full_block() {
@@ -655,7 +816,9 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-1",
-            None,
+            None,         // dispatch_id
+            None,         // attempt_id (SYN-FND-004B)
+            "test-actor", // authenticated_actor (SYN-FND-004B)
             "developer",
             "任务T",
             GOOD_MSG,
@@ -691,7 +854,9 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-1",
-            None,
+            None,         // dispatch_id
+            None,         // attempt_id (SYN-FND-004B)
+            "test-actor", // authenticated_actor (SYN-FND-004B)
             "developer",
             "任务T",
             "我做完了但忘了给 json 块",
@@ -726,7 +891,9 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-DOES-NOT-EXIST",
-            None,
+            None,         // dispatch_id
+            None,         // attempt_id (SYN-FND-004B)
+            "test-actor", // authenticated_actor (SYN-FND-004B)
             "developer",
             "任务T",
             GOOD_MSG,
@@ -756,7 +923,9 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-1",
-            None,
+            None,         // dispatch_id
+            None,         // attempt_id (SYN-FND-004B)
+            "test-actor", // authenticated_actor (SYN-FND-004B)
             "developer",
             "任务T",
             msg,
@@ -799,7 +968,9 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-1",
-            None,
+            None,         // dispatch_id
+            None,         // attempt_id (SYN-FND-004B)
+            "test-actor", // authenticated_actor (SYN-FND-004B)
             "developer",
             "任务T",
             "我卡住了，需要权限读取 /secure。\n```json\n{\"status\":\"blocked\",\n```",
@@ -832,7 +1003,9 @@ mod tests {
                 "wf-1",
                 "wf-1:node:director",
                 "wi-1",
-                None,
+                None,         // dispatch_id
+                None,         // attempt_id (SYN-FND-004B)
+                "test-actor", // authenticated_actor (SYN-FND-004B)
                 "developer",
                 "任务T",
                 msg,

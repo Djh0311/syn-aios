@@ -381,6 +381,10 @@ fn worker_report_candidate(
         workflow_node_id: workflow_node_id.to_string(),
         work_item_id: work_item_id.to_string(),
         dispatch_id: Some(request.dispatch_id.clone()),
+        // SYN-FND-004B: Level A 预览，prompt 未发送，worker 未执行，无真实 attempt
+        attempt_id: None,
+        authenticated_actor: request.project_id.clone(),
+        report_hash: "hash:h5-level-a-candidate".to_string(),
         actor_role: "codex_local_worker_candidate".to_string(),
         executed_what: "Level A preview only; worker did not execute.".to_string(),
         changed_what: "No project files changed; no prompt was sent.".to_string(),

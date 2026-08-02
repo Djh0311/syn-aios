@@ -2731,6 +2731,12 @@ struct WorkerStructuredReportInput {
     workflow_node_id: String,
     work_item_id: String,
     dispatch_id: Option<String>,
+    /// SYN-FND-004B: 执行尝试 ID，精确绑定到具体的一次执行尝试
+    attempt_id: Option<String>,
+    /// SYN-FND-004B: 已认证的作用域标识（服务端从 project_root 派生的 project_id，非前端传入）
+    authenticated_actor: String,
+    /// SYN-FND-004B: 报文哈希（SHA-256），检测报文内容是否与登记时一致
+    report_hash: String,
     actor_role: String,
     executed_what: String,
     changed_what: String,

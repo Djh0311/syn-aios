@@ -2557,6 +2557,10 @@ mod tests {
             workflow_node_id: node_id.to_string(),
             work_item_id: work_item_id.to_string(),
             dispatch_id: Some(dispatch_id.to_string()),
+            // SYN-FND-004B 测试夹具: dispatch_id 即 attempt_id
+            attempt_id: Some(dispatch_id.to_string()),
+            authenticated_actor: project_id(project_root),
+            report_hash: "hash:c5-fixture".to_string(),
             actor_role: "codex-dev".to_string(),
             executed_what: "执行 C5 离线结构化汇报测试。".to_string(),
             changed_what: "只写工作台 workflow-state audit event，不写正式事实。".to_string(),
