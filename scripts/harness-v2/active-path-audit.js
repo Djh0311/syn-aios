@@ -235,6 +235,18 @@ function gitPath(targetRoot, ...arguments_) {
   return path.resolve(targetRoot, value);
 }
 
+function pathIsWithin(parent, candidate) {
+  const relative = path.relative(parent, candidate);
+  return (
+    relative === '' ||
+    (
+      relative !== '..' &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative)
+    )
+  );
+}
+
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -266,15 +278,27 @@ function inspectGitHooks(targetRoot, selectedComponents, strict, errors, warning
     return;
   }
   const expectedHooks = path.join(commonDirectory, 'hooks');
-  if (path.normalize(configuredHooks) !== path.normalize(expectedHooks)) {
-    errors.push('custom core.hooksPath is active; the managed repository hook is not authoritative');
+  const customHooks = path.normalize(configuredHooks) !== path.normalize(expectedHooks);
+  if (customHooks && !pathIsWithin(targetRoot, configuredHooks)) {
+    errors.push('custom core.hooksPath must resolve inside the repository worktree');
     return;
   }
   const hooksStat = lstatIfPresent(configuredHooks);
   if (hooksStat && (hooksStat.isSymbolicLink() || !hooksStat.isDirectory())) {
-    errors.push('standard Git hooks carrier must be a regular non-symlink directory');
+    errors.push('configured Git hooks carrier must be a regular non-symlink directory');
     return;
   }
+  if (customHooks && hooksStat) {
+    const realTargetRoot = fs.realpathSync(targetRoot);
+    const realConfiguredHooks = fs.realpathSync(configuredHooks);
+    if (!pathIsWithin(realTargetRoot, realConfiguredHooks)) {
+      errors.push('custom core.hooksPath must resolve inside the repository worktree');
+      return;
+    }
+  }
+  const hookCarrierLabel = customHooks
+    ? path.relative(targetRoot, configuredHooks).split(path.sep).join('/')
+    : '.git/hooks';
   const prePushPath = path.join(configuredHooks, 'pre-push');
   const prePushStat = lstatIfPresent(prePushPath);
   if (prePushStat) {
@@ -283,15 +307,15 @@ function inspectGitHooks(targetRoot, selectedComponents, strict, errors, warning
     } else {
       const hookText = fs.readFileSync(prePushPath);
       const findings = [];
-      scanText('.git/hooks/pre-push', hookText, findings);
+      scanText(`${hookCarrierLabel}/pre-push`, hookText, findings);
       const text = hookText.toString('utf8');
       if (
         text.includes(START_MARKER) ||
         /scripts\/harness-v2\//i.test(text)
       ) {
-        findings.push('.git/hooks/pre-push contains a Harness consumer');
+        findings.push(`${hookCarrierLabel}/pre-push contains a Harness consumer`);
       }
-      scanAutomaticCommands('.git/hooks/pre-push', Buffer.from(text), findings);
+      scanAutomaticCommands(`${hookCarrierLabel}/pre-push`, Buffer.from(text), findings);
       errors.push(...findings);
     }
   }
@@ -304,7 +328,7 @@ function inspectGitHooks(targetRoot, selectedComponents, strict, errors, warning
       (strict ? errors : warnings).push(message);
     } else {
       hook = fs.readFileSync(preCommitPath, 'utf8');
-      scanAutomaticCommands('.git/hooks/pre-commit', Buffer.from(hook), errors);
+      scanAutomaticCommands(`${hookCarrierLabel}/pre-commit`, Buffer.from(hook), errors);
     }
   }
   if (!selectedComponents.has('staged-git-safety')) return;
@@ -353,7 +377,22 @@ function inspectGitHooks(targetRoot, selectedComponents, strict, errors, warning
   for (const [needle, label] of requirements) {
     if (!hook.includes(needle)) errors.push(`pre-commit is missing ${label}`);
   }
-  scanText('.git/hooks/pre-commit', Buffer.from(hook), errors);
+  scanText(`${hookCarrierLabel}/pre-commit`, Buffer.from(hook), errors);
+}
+
+function inspectManagedInstallationEntry(relativePath, entry, state, errors) {
+  const digest = sha256Buffer(state.content);
+  const harnessOwned = ['created', 'adopted'].includes(entry.ownership);
+  if (harnessOwned && entry.mutable !== true && digest !== entry.installedSha256) {
+    errors.push(`${relativePath} drifted from its managed installation`);
+  }
+  if (
+    harnessOwned &&
+    Number.isInteger(entry.installedMode) &&
+    state.mode !== entry.installedMode
+  ) {
+    errors.push(`${relativePath} drifted from its managed installation mode`);
+  }
 }
 
 function inspectAgentEntrypoints(targetRoot, manifest, errors) {
@@ -433,18 +472,7 @@ function auditTarget(target, options = {}) {
     if (AUTOMATIC_OBSERVATION_CONSUMERS.has(relativePath)) {
       scanAutomaticCommands(relativePath, state.content, errors);
     }
-    const digest = sha256Buffer(state.content);
-    const harnessOwned = ['created', 'adopted'].includes(entry.ownership);
-    if (harnessOwned && digest !== entry.installedSha256) {
-      errors.push(`${relativePath} drifted from its managed installation`);
-    }
-    if (
-      harnessOwned &&
-      Number.isInteger(entry.installedMode) &&
-      state.mode !== entry.installedMode
-    ) {
-      errors.push(`${relativePath} drifted from its managed installation mode`);
-    }
+    inspectManagedInstallationEntry(relativePath, entry, state, errors);
     scanText(relativePath, state.content, errors);
   }
   let configResult;
@@ -538,7 +566,9 @@ module.exports = {
   findManagedBlock,
   inspectCiConsumers,
   inspectGitHooks,
+  inspectManagedInstallationEntry,
   inspectRelativeFile,
+  pathIsWithin,
   parseArgs,
   runCli,
   scanAutomaticCommands,
