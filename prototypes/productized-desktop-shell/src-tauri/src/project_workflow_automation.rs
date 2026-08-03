@@ -2622,7 +2622,8 @@ fn worker_report_input(
         authenticated_actor_id: "phase-a-noop".to_string(),
         authenticated_project_scope: project_id_value.to_string(),
         report_hash: "hash:k3-phase-a-noop".to_string(),
-        report_kind: "execution".to_string(),
+        // SYN-FND-004B: Phase A no-op 非真实执行，按合同用 offline，不冒充 execution
+        report_kind: "offline".to_string(),
         actor_role: "developer_execution".to_string(),
         executed_what:
             "记录 K3 Level A Product Command Phase A no-op；未发送 prompt，未执行真实 Codex。"

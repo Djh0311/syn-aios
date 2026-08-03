@@ -246,10 +246,10 @@ pub fn resolve_identity(
         None => RoleKind::TemporaryAgent, // 未知角色兜底为临时代理
     };
 
-    // 3. Resolve channel（未知通道使用 Development 兜底，不拒绝）
+    // 3. Resolve channel（未知通道兜底为 Daily=只读，fail-safe：不给写权限）
     let channel_kind = match ChannelKind::from_str(channel_str) {
         Some(c) => c,
-        None => ChannelKind::Development, // 未知通道兜底为开发通道
+        None => ChannelKind::Daily, // 未知通道兜底为只读日常通道，不得落到 WriteLocal
     };
 
     // 4. Derive project_id from project_root (deterministic, not caller-claimed)
@@ -631,8 +631,18 @@ mod tests {
             "development",
             false,
         );
-        // 未知角色使用 TemporaryAgent 兜底，不拒绝
-        assert!(matches!(result, IdentityResolution::Resolved(_)));
+        // 未知角色兜底 TemporaryAgent（内核对该角色 allow 空、deny *，fail-safe 零权限）
+        match result {
+            IdentityResolution::Resolved(snapshot) => {
+                assert_eq!(snapshot.role_ref.kind, RoleKind::TemporaryAgent);
+                assert_eq!(
+                    snapshot.permission_snapshot_ref.profile_id,
+                    "profile:temporary_agent:development",
+                    "未知角色必须挂到 deny-all 的 temporary_agent profile"
+                );
+            }
+            other => panic!("未知角色应走零权限兜底而不是拒绝：{other:?}"),
+        }
     }
 
     #[test]
@@ -644,8 +654,18 @@ mod tests {
             "invalid_channel",
             false,
         );
-        // 未知通道使用 Development 兜底，不拒绝
-        assert!(matches!(result, IdentityResolution::Resolved(_)));
+        // 未知通道兜底 Daily=ReadOnly（fail-safe），不得落到 WriteLocal
+        match result {
+            IdentityResolution::Resolved(snapshot) => {
+                assert_eq!(snapshot.execution_channel.kind, ChannelKind::Daily);
+                assert_eq!(
+                    snapshot.execution_channel.side_effect_mode,
+                    SideEffectMode::ReadOnly,
+                    "未知通道必须只读，不给写权限"
+                );
+            }
+            other => panic!("未知通道应走只读兜底而不是拒绝：{other:?}"),
+        }
     }
 
     // ---- policy_check_capability ----

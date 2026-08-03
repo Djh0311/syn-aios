@@ -90,7 +90,12 @@
 
 ## 统计
 
-- 总执行入口: 22 个（底层 4 + Tauri 19 + 辅助 3 - 重叠）
-- migrated: 22
-- blocked: 5（Phase A 不 spawn + j2_b_b1 写死）
+按上表明细逐行加算（S1–S4 + T1–T22 + M1–M8，共 34 行）：
+
+- 总条目： 34（底层 spawn 引擎 4 + Tauri 命令入口 22 + MCP 工具 8）
+- migrated: 30（引擎 4 + Tauri 18 + MCP 8）
+- blocked: 4（T6/T9/T13 为 Phase A 不 spawn；T10 j2_b_b1 写死 mario test 永拦）
 - guarded-legacy: 0
+- not-in-scope: 0
+
+> 注：Tauri 22 个入口中 migrated 18、blocked 4；T6/T9/T13 虽标 blocked，属"该阶段设计上不 spawn"而非失控入口。caller-controlled execution 入口无一处于未标记状态。
