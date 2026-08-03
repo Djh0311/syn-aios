@@ -48,6 +48,18 @@ mod workbench_sqlite_dual_write;
 mod workbench_sqlite_exporter;
 mod workbench_sqlite_importer;
 mod workbench_sqlite_observation_period;
+
+// M2 transaction foundation modules
+pub mod m2_dto;
+pub mod m2_ports;
+mod workbench_sqlite_schema_m2;
+mod m2_workflow_state;
+mod m2_outbox;
+mod m2_projector;
+mod m2_legacy_adapter;
+mod m2_domain_cutover;
+mod m2_isolated_app_acceptance;
+mod m2_update_work_item_state;
 mod workbench_sqlite_preflight;
 mod workbench_sqlite_production_apply;
 mod workbench_sqlite_read_cut;

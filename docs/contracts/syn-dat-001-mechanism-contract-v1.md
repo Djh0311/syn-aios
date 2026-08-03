@@ -489,3 +489,48 @@ hold_refs: ["HOLD-DB-JSON-RUNTIME-TRUTH", "HOLD-UNKNOWN-QUARANTINE-STORE", "HOLD
 **冻结日期**: 2026-08-03
 **冻结者**: M2 执行线
 **验证状态**: 静态合同冻结，待 DAT-002 实现验证
+
+---
+
+## 附录 A: 生产 Work Item 状态机映射表（M2a 修正 2026-08-03）
+
+### A.1 生产状态机（来源：`lib.rs:948-990`）
+
+| 状态 | 中文标签 | 允许的下一状态 |
+|---|---|---|
+| `draft` | 草稿 | `ready_to_dispatch`, `paused` |
+| `ready_to_dispatch` | 待派发 | `running`, `paused` |
+| `running` | 执行中 | `waiting_for_permission`, `retry_pending`, `failed`, `timed_out`, `cancelled`, `ready_for_review`, `paused` |
+| `waiting_for_permission` | 等待权限 | `running`, `failed`, `cancelled`, `paused` |
+| `retry_pending` | 待重试 | `running`, `failed`, `paused` |
+| `failed` | 失败 | `retry_pending`, `needs_changes`, `paused` |
+| `timed_out` | 已超时 | `retry_pending`, `needs_changes`, `paused` |
+| `cancelled` | 已取消 | `needs_changes`, `paused` |
+| `ready_for_review` | 待回收 | `accepted`, `needs_changes`, `paused` |
+| `accepted` | 已接受 | （终态） |
+| `needs_changes` | 需修改 | `ready_to_dispatch`, `paused` |
+| `paused` | 暂停 | `ready_to_dispatch` |
+
+### A.2 M2 合同 WorkItemStatus 映射
+
+| M2 合同状态 | 生产状态 | 说明 |
+|---|---|---|
+| `Draft` | `draft` | 直接映射 |
+| `ReadyToDispatch` | `ready_to_dispatch` | 直接映射 |
+| `Running` | `running` | 直接映射 |
+| `WaitingForPermission` | `waiting_for_permission` | 直接映射 |
+| `RetryPending` | `retry_pending` | 直接映射 |
+| `Failed` | `failed` | 直接映射 |
+| `TimedOut` | `timed_out` | 直接映射 |
+| `Cancelled` | `cancelled` | 直接映射 |
+| `ReadyForReview` | `ready_for_review` | 直接映射 |
+| `Accepted` | `accepted` | 直接映射 |
+| `NeedsChanges` | `needs_changes` | 直接映射 |
+| `Paused` | `paused` | 直接映射 |
+
+### A.3 修正说明
+
+- **修正日期**: 2026-08-03
+- **修正原因**: M2a kickoff 驳回上一轮"M2 COMPLETE"虚报，发现 DAT-001 合同与 `m2_workflow_state.rs` 使用自创五态（draft/ready/in_progress/completed/failed），与生产状态机不一致
+- **修正内容**: 将 `WorkItemStatus` 枚举从 5 态扩展为 12 态，与生产状态机完全对齐
+- **验证状态**: 已更新 `m2_workflow_state.rs`，待 T1 接线验证

@@ -567,7 +567,80 @@ fn update_work_item_state_db_primary(
         .and_then(|item| optional_string_from(item, "state"))
         .unwrap_or_else(|| "draft".to_string());
     let next_state = request.next_state.trim();
-    control_core::validate_work_item_state_transition(&before_state, next_state)?;
+
+    // 构造 M2 command：command_id 与 idempotency_key 对同一逻辑命令（同 work_item + 同目标状态）保持确定，
+    // 使重放命中 M2 幂等分支（同 command_id + idempotency_key + 相同 request_hash → 返回既有 receipt）
+    let command_id = format!("cmd-{}-{}", request.work_item_id, request.next_state);
+    let idempotency_key = format!("idem-{}-{}", request.work_item_id, request.next_state);
+    let request_hash = crate::m2_update_work_item_state::update_work_item_state_request_hash(
+        &command_id,
+        &idempotency_key,
+        &request.work_item_id,
+        next_state,
+    );
+
+    // 幂等预检：同键同 hash → 返回既有 receipt（零新增行、零业务变更）；同键不同 hash → conflict
+    match repository.find_command_receipt_for_idempotency(&command_id, &idempotency_key)? {
+        Some((existing_receipt_id, existing_hash)) if existing_hash == request_hash => {
+            let snapshot = read_workflow_state_snapshot(path)?;
+            return Ok(WorkflowStateMutationResult {
+                message: format!(
+                    "幂等重放：该状态推进命令已处理，返回既有 receipt，未新增任何变更：{} -> {}",
+                    work_item_state_label(&before_state),
+                    work_item_state_label(next_state)
+                ),
+                path: path.display().to_string(),
+                backup_path: None,
+                audit_event_id: format!("idempotent-replay:{}", existing_receipt_id),
+                first_initialize: false,
+                snapshot,
+            });
+        }
+        Some((_, existing_hash)) => {
+            return Err(format!(
+                "idempotent_conflict: command_id={}, idempotency_key={}, existing_hash={}, new_hash={}",
+                command_id, idempotency_key, existing_hash, request_hash
+            ));
+        }
+        None => {}
+    }
+
+    // Policy 预检（真闸：control_core 状态转换表）；非法转换走 M2 denial receipt（同一事务落盘），
+    // 零 domain/event/outbox mutation，JSON 业务状态不变，命令以错误返回
+    if let Err(policy_reason) =
+        control_core::validate_work_item_state_transition(&before_state, next_state)
+    {
+        let m2_denial_command = crate::m2_workflow_state::UpdateWorkItemStateCommand {
+            command_id: command_id.clone(),
+            idempotency_key: idempotency_key.clone(),
+            actor_id: "user".to_string(),
+            scope_ref: format!("workflow:{}", request.project_root),
+            project_id: request.project_root.clone(),
+            workflow_id: workflow_id.clone(),
+            work_item_id: request.work_item_id.clone(),
+            expected_revision: None,
+            new_status: Some(crate::m2_workflow_state::WorkItemStatus::from_str(next_state)),
+            new_state_json: None,
+        };
+        repository.with_immediate_transaction(
+            "update_work_item_state_m2_denial",
+            None,
+            |transaction| {
+                crate::m2_update_work_item_state::update_work_item_state_m2_with_transaction(
+                    transaction,
+                    m2_denial_command.clone(),
+                )
+                .map_err(|e| {
+                    crate::workbench_sqlite_repository::RepositoryMutationError::Message(
+                        format!("m2_denial_chain: {}", e),
+                    )
+                })?;
+                Ok(()) as Result<(), crate::workbench_sqlite_repository::RepositoryMutationError>
+            },
+        )
+        .map_err(|e| format!("update_work_item_state_m2_denial: {}", e))?;
+        return Err(policy_reason);
+    }
 
     let current_node_id = workflow_node_for_work_item_state(&workflow_id, next_state);
     {
@@ -624,18 +697,56 @@ fn update_work_item_state_db_primary(
         })
         .cloned()
         .ok_or_else(|| "DB 主写找不到更新后的 workflow node".to_string())?;
-    repository.transition_work_item_with_audit(
-        &work_item_after,
-        &node_after,
-        &before_state,
-        &crate::workbench_sqlite_repository::RepositoryAuditEntry {
-            event_id: audit_event_id.clone(),
-            target_kind: "workflow_state".to_string(),
-            target_id: request.work_item_id.clone(),
-            payload: audit_event,
-        },
+
+    let m2_command = crate::m2_workflow_state::UpdateWorkItemStateCommand {
+        command_id: command_id.clone(),
+        idempotency_key: idempotency_key.clone(),
+        actor_id: "user".to_string(),
+        scope_ref: format!("workflow:{}", request.project_root),
+        project_id: request.project_root.clone(),
+        workflow_id: workflow_id.clone(),
+        work_item_id: request.work_item_id.clone(),
+        expected_revision: None,
+        new_status: Some(crate::m2_workflow_state::WorkItemStatus::from_str(next_state)),
+        new_state_json: None,
+    };
+
+    // 同一 SQLite 事务：M2 UoW 全链 + repository work_item/node 更新 + repository audit
+    repository.with_immediate_transaction(
+        "update_work_item_state_m2_wired",
         None,
-    )?;
+        |transaction| {
+            // M2 UoW 全链（policy → idempotency → domain state → event → audit → receipt → snapshot）
+            crate::m2_update_work_item_state::update_work_item_state_m2_with_transaction(
+                transaction,
+                m2_command.clone(),
+            ).map_err(|e| crate::workbench_sqlite_repository::RepositoryMutationError::Message(
+                format!("m2_chain: {}", e),
+            ))?;
+
+            // repository work_item + node 状态更新（同一事务）
+            crate::workbench_sqlite_repository::update_work_item_and_node_state_in_transaction(
+                transaction,
+                &work_item_after,
+                &node_after,
+                &before_state,
+            )?;
+
+            // repository audit record（同一事务）
+            crate::workbench_sqlite_repository::append_audit_in_transaction(
+                transaction,
+                &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+                    event_id: audit_event_id.clone(),
+                    target_kind: "workflow_state".to_string(),
+                    target_id: request.work_item_id.clone(),
+                    payload: audit_event.clone(),
+                },
+            )?;
+
+            Ok(()) as Result<(), crate::workbench_sqlite_repository::RepositoryMutationError>
+        },
+    ).map_err(|e| format!("update_work_item_state_m2_wired: {}", e))?;
+
     crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
         path,
         "work_item_state_transition",

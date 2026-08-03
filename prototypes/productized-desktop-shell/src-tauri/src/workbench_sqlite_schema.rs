@@ -214,6 +214,8 @@ fn initialize_workbench_sqlite_db(path: &Path, path_kind: &str) -> Result<(), St
     connection
         .execute_batch(&WORKBENCH_SQLITE_SCHEMA_DDL.join(";\n"))
         .map_err(|error| format!("initialize workbench sqlite schema failed: {error}"))?;
+    crate::workbench_sqlite_schema_m2::apply_m2_schema(&connection)
+        .map_err(|error| format!("initialize workbench sqlite m2 schema failed: {error}"))?;
     connection
         .execute(
             "INSERT OR IGNORE INTO schema_migrations (version, applied_at, description) VALUES (?1, ?2, ?3)",
