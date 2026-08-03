@@ -26,6 +26,9 @@
 
 ## 残留（不阻关闭，但 M2 规划不得当作已有防御）
 
+> 补记（2026-08-03）：用户拍板将以下残留项**直接划入 M2 阶段范围**，承接关系见
+> `docs/plans/2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` §0.4。
+
 1. **grant 校验是格式级**：无 grant store，活路径 grant_id = dispatch_id，`verify_grant`
    跑的是自铸通配 grant。M2 必须换真 mint/load/verify。
 2. **场景 3/4（伪造 report/grant 全链）** 需 fake runner 夹具；**场景 5（Station 3b）**

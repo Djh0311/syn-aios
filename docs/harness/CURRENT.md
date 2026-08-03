@@ -47,7 +47,7 @@ phase: M1 (Stage 1: contracts & security foundation) is CLOSED — accepted by t
 
 ## Next action
 
-- M1 is closed. Before any M2 activation, the user decides: (a) whether to build the fake-runner full-chain fixture (scenarios 3/4) and supervisor session fixture (scenario 5) as pre-M2 hardening; (b) M2 scope and activation. `origin` (`Djh0311/syn-aios`, private) remains unpushed; pushing needs explicit authorization.
+- M1 is closed and its residuals are folded into the M2 stage plan's scope (`docs/plans/2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` §0.4, per user decision 2026-08-03). M2's hard precondition is met; it remains `PLANNED / NOT_ACTIVE` until the user explicitly activates it. On activation the first task is `SYN-DAT-001` (mechanism contracts + per-domain migration list, docs-only). `origin` (`Djh0311/syn-aios`, private) remains unpushed; pushing needs explicit authorization.
 - `origin` (`Djh0311/syn-aios`, private) remains unpushed; pushing needs explicit authorization.
 
 ## Safety
