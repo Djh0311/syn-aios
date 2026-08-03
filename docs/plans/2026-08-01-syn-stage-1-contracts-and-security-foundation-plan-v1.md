@@ -2,7 +2,7 @@
 
 日期：2026-08-01<br>
 阶段：`M1`<br>
-状态：**CURRENT_STAGE / READY_FOR_TASK_ACTIVATION；当前 active node / package：NONE。**<br>
+状态：**CLOSED / ACCEPTED 2026-08-03（用户拍板，见 `decisions/2026-08-03-syn-m1-closure-acceptance-v1.md`）；M2 未激活。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M1。<br>
 当前权限：本计划本身不授权产品代码；只有 v0.5 active node 与 matching active package 激活后才能执行对应切片。
 

@@ -5,11 +5,11 @@ updated-at: 2026-08-03T17:00:00+08:00
 mode: PLAN
 work-state: WIP_COMMITTED
 active-id: SYN-FND-002-R1 (no canonical node; see Blockers)
-phase: M1 is the current stage. All six product-code slices are wired, the three acceptance-review deviations are fixed, the attempt-state allow-list is wired, and FND-006 has runtime evidence for 5 command-level scenarios plus positive controls. M1 closing is ready for the user's decision.
+phase: M1 (Stage 1: contracts & security foundation) is CLOSED — accepted by the user on 2026-08-03, decision recorded in `decisions/2026-08-03-syn-m1-closure-acceptance-v1.md`. M2 remains `PLANNED / NOT_ACTIVE` until the user explicitly activates it.
 
 ## Status
 
-- `docs/plans/2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` remains the only current long-term route. M1 is current; M2-M10 remain `PLANNED / NOT_ACTIVE`.
+- `docs/plans/2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` remains the only current long-term route. **M1 is CLOSED (2026-08-03, user-accepted; see `decisions/2026-08-03-syn-m1-closure-acceptance-v1.md`); M2-M10 remain `PLANNED / NOT_ACTIVE`.**
 - `SYN-FND-001-R1` froze the ten versioned contracts in `0b257db8d3265850137a2f357c9bb7e0d0ed983f`. `PARKED / RETAINED`, evidence level `STATIC_OPENING_ONLY`.
 - Batches on branch `syn-fnd-002-dev`, based on `81cf1a322a4387802bdf87f6980c69fefd46815d`: `63c58c5` (SYN-FND-002/004A), `3488135` (SYN-FND-004B), `89c62f2` (SYN-FND-003/004C/005 staged foundations), `a408997` (wire 003/004C/005 into the report path + FND-006 suite + 2 grant fail-closed tests), `6a722d1` (deviation fixes: read-only channel fallback, honest report_kind, inventory math), plus the attempt-state wiring batch (validate_execution_report_attempt_state now has production callers). No merge, push, release or integration has occurred.
 
@@ -40,14 +40,14 @@ phase: M1 is the current stage. All six product-code slices are wired, the three
 
 ## Blockers
 
-- **M1 closing is ready for the user's decision.** All six slices are wired; FND-006 has runtime evidence for 5 command-level scenarios plus positive controls (record: `test-fixtures/fnd-006-acceptance/acceptance-record-2026-08-03.md`); scenarios 3/4/5 remain at integration/unit level with reasons recorded. M2 must not treat grant/identity as real defenses — the grant check is format-only and no grant store exists.
+- **M1 is CLOSED (user-accepted 2026-08-03).** Residuals carried forward (recorded in the closure decision): the grant check is format-only with no grant store; scenarios 3/4 (fake-runner fixture) and 5 (supervisor session fixture) remain at integration/unit level; the stable sqlite preflight failure and the process-fixture environment family are uninvestigated; code-map advisory persists. M2 must not treat grant/identity as real defenses until these are addressed.
 - **No canonical task node exists for this work.** `task start` is fail-closed against an existing registered worktree; authority for these writes is the user's direct instruction (2026-08-02 / 2026-08-03) plus proposal digest `73916f0a49d2a72a60b36a72499be8a29b2eb904d1e0eb79aece0938c3216128`.
 - Integration of the FND-001 contract commit remains a separate HOLD. The contract commit is not observed in integration `main@36b99905f3a8f9f9534c8f401ca2d01355a06079`.
 - The `mcp/storage.rs` rustfmt-only WIP that predates this work has owner `UNKNOWN` and is not attributed to any FND slice.
 
 ## Next action
 
-- The user decides whether M1 closes. If closed: evaluate the fake-runner full-chain fixture for scenarios 3/4 (grant consume path) and the supervisor session fixture for scenario 5 as pre-M2 work.
+- M1 is closed. Before any M2 activation, the user decides: (a) whether to build the fake-runner full-chain fixture (scenarios 3/4) and supervisor session fixture (scenario 5) as pre-M2 hardening; (b) M2 scope and activation. `origin` (`Djh0311/syn-aios`, private) remains unpushed; pushing needs explicit authorization.
 - `origin` (`Djh0311/syn-aios`, private) remains unpushed; pushing needs explicit authorization.
 
 ## Safety
