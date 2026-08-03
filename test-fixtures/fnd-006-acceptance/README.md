@@ -77,11 +77,22 @@
 
 ## 隔离启动命令
 
+> 订正（2026-08-03）：此前版本写的 `SYN_ISOLATED_PROFILE=1` 在代码库中不存在。
+> 真实隔离机制是改 `HOME`（应用数据目录全部由 `$HOME` 派生），并把 rustup/cargo
+> 的家指回真实路径（rustup 按 `$HOME/.rustup` 找 toolchain）。
+
 ```bash
 cd /Users/yoyi/workspace/product-line-syn-fnd-002/prototypes/productized-desktop-shell
 
-# 使用隔离 profile 启动（不碰真实 store）
-SYN_ISOLATED_PROFILE=1 cargo tauri dev
+# 使用隔离 HOME 启动（不碰真实 store）
+HOME=/tmp/fnd006-isolated-home \
+RUSTUP_HOME=/Users/yoyi/.rustup \
+CARGO_HOME=/Users/yoyi/.cargo \
+tauri dev
+
+# 验收前后对真实 HOME 应用目录做指纹比对，必须 IDENTICAL：
+find ~/Library/Application\ Support/CodexGovernanceWorkbench \
+  -exec stat -f "%N|%m|%z" {} \; | sort > /tmp/real-appdir.txt
 
 # 或者只运行单元测试验证
 cargo test --lib

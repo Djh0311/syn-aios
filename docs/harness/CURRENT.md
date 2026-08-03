@@ -27,26 +27,27 @@ phase: M1 is the current stage. All six product-code slices are now wired at som
 
 ### SYN-FND-006 acceptance status
 
-- Automated: 10 tests in `fnd006_acceptance.rs` (scenario 3 calls the production consume entry with None/malformed grants and asserts rejection plus zero file side effects). `docs/execution-entry-inventory.md` lists 34 entries (4 spawn engines + 22 Tauri commands + 8 MCP tools): 30 migrated, 4 blocked, summary arithmetic verified against the line items. `test-fixtures/fnd-006-acceptance/` holds the manual isolated-profile runbook (blank template) and a quick script.
-- **Not done**: the isolated-Tauri-profile runtime acceptance has never been executed; scenarios 1 (legitimate read-only session allowed) and 6 (Secretary profile reads no raw project root) have no test coverage at any level. Real App behavior remains `UNKNOWN`.
+- Automated: 10 tests in `fnd006_acceptance.rs` (scenario 3 calls the production consume entry with None/malformed grants and asserts rejection plus zero file side effects). `docs/execution-entry-inventory.md` lists 34 entries (30 migrated / 4 blocked, arithmetic verified). `test-fixtures/fnd-006-acceptance/` holds the runbook, a quick script, and the 2026-08-03 acceptance record.
+- **Runtime (partial, 2026-08-03)**: the app was built and launched under a truly isolated `HOME` (temp dir; `RUSTUP_HOME`/`CARGO_HOME` pointed back — rustup resolves toolchains via `$HOME`). Runtime evidence obtained: the storage layer binds to the isolated HOME (boot log), only the app log file was written there, the real-HOME app directory fingerprint (1098 entries) was byte-identical before/after, and a clean restart against the same isolated profile succeeded. See `test-fixtures/fnd-006-acceptance/acceptance-record-2026-08-03.md`.
+- **Not done**: 6 of 8 runbook scenarios (cross-project, path traversal, forged report/grant, Station 3b, audit-UI scrub, identity) have no command-level runtime evidence — `withGlobalTauri` is `false` (no console invoke bridge) and the fresh isolated profile has no fixtures. Remaining route: temporarily enable `withGlobalTauri` for acceptance, create two scratch projects + workflow + sensitive-report fixtures, rerun. The runbook's `SYN_ISOLATED_PROFILE` variable was fictitious and has been corrected to the real `HOME`-based mechanism.
 
 ## Verification actually run
 
 - `cargo check --lib`: exit 0, **599** warnings (was 601; the diff of the full warning set shows exactly two removals — `validate_execution_report_attempt_state` and `EXECUTION_REPORT_ALLOWED_ATTEMPT_STATES` are no longer `never used` — and zero additions).
 - `cargo test --lib` (foreground, full log): **1304 passed; 2 failed; 45 ignored** (57.38s). Failures: `workbench_sqlite_production_apply::tests::sqlite_production_preflight_blocked_creates_no_db_or_report` (stable, pre-existing since `3488135`, zero dependency on this diff) and `manual_relay::tests::supervisor_final_active_slot_collision_rekeys_pending_child_and_preserves_old_owner` (process-fixture environment family — "fixture child must run" at `manual_relay.rs:6394`; fails identically in isolation; zero references to the changed modules; a different member of this family — codex_local_runner timeout, obsidian timing — failed in each of the previous full runs while the others passed).
 - Focused: `worker_report` 27/27 (includes grant None/malformed and mid-flight attempt-state rejection tests), `fnd006` 10/10, `identity_kernel` 16/16.
-- No App, Vite, browser, real store, real project, connector, credential or provider was touched. Every claim above is static or unit/integration level. Real runtime behavior remains `UNKNOWN`.
+- No real store, real project, connector, credential or provider was touched — the 2026-08-03 runtime launch used a temp `HOME` and wrote only one log file there (real-HOME fingerprint verified identical). Guard behavior at the command level remains runtime-`UNKNOWN` until the `withGlobalTauri` + fixture pass.
 
 ## Blockers
 
-- **M1 is conditionally accepted, not closed.** Closing requires the isolated-profile runtime acceptance per `test-fixtures/fnd-006-acceptance/README.md`. M2 must not treat grant/identity as real defenses — the grant check is format-only and no grant store exists.
+- **M1 is conditionally accepted, not closed.** Closing requires the remaining 6 runbook scenarios to pass at runtime (route: temporarily enable `withGlobalTauri`, build two-project + workflow + sensitive-report fixtures in the isolated profile, rerun per `test-fixtures/fnd-006-acceptance/acceptance-record-2026-08-03.md`). M2 must not treat grant/identity as real defenses — the grant check is format-only and no grant store exists.
 - **No canonical task node exists for this work.** `task start` is fail-closed against an existing registered worktree; authority for these writes is the user's direct instruction (2026-08-02 / 2026-08-03) plus proposal digest `73916f0a49d2a72a60b36a72499be8a29b2eb904d1e0eb79aece0938c3216128`.
 - Integration of the FND-001 contract commit remains a separate HOLD. The contract commit is not observed in integration `main@36b99905f3a8f9f9534c8f401ca2d01355a06079`.
 - The `mcp/storage.rs` rustfmt-only WIP that predates this work has owner `UNKNOWN` and is not attributed to any FND slice.
 
 ## Next action
 
-- Execute the isolated-profile FND-006 acceptance (`test-fixtures/fnd-006-acceptance/README.md`) and record before/after runtime evidence — the only remaining route to kill `UNKNOWN`.
+- Finish the FND-006 runtime pass: enable `withGlobalTauri` in a throwaway dev config, create isolated fixtures (two scratch projects, one workflow, one sensitive-content report event), then drive scenarios 1/2/5/6/8 via devtools-console `invoke` and record before/after evidence per `test-fixtures/fnd-006-acceptance/acceptance-record-2026-08-03.md`.
 - `origin` (`Djh0311/syn-aios`, private) remains unpushed; pushing needs explicit authorization.
 
 ## Safety
