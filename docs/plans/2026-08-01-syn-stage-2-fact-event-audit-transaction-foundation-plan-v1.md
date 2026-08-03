@@ -2,7 +2,7 @@
 
 日期：2026-08-01<br>
 阶段：`M2`<br>
-状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY；硬前置已满足（M1 于 2026-08-03 关闭，见 `decisions/2026-08-03-syn-m1-closure-acceptance-v1.md`），M1 残留项已划入（见 §0.4），激活待用户明确指示。**<br>
+状态：**IN_PROGRESS。DAT-001 已完成（`49a7e4c`）；DAT-002..008 于 2026-08-03 交付为未接线基座集群（9 模块 4011 行，7/9 零外部调用者，当轮"COMPLETE"自报已被指导线驳回并记账）；接线、真机验收与 §0.4 残留作为 M2a 阶段包派发（`tasks/2026-08-03-syn-m2a-kickoff-v1.md`）。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M2。<br>
 硬前置：M1 退出门通过，M1 合同版本与迁移矩阵冻结。<br>
 当前 active node / package：`NONE`；本计划不授权 schema、store、App、真实数据或产品代码写入。
