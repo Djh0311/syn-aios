@@ -81,6 +81,7 @@ mod fnd006_acceptance_tests {
             "wi-1",
             None,
             None,
+            "completed",
             "forged-actor",
             None, // grant_id = None：伪造无授权回程
             "worker",
@@ -104,6 +105,7 @@ mod fnd006_acceptance_tests {
             "wi-1",
             None,
             None,
+            "completed",
             "forged-actor",
             Some("caller-forged-grant"),
             "worker",

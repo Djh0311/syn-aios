@@ -109,10 +109,11 @@ pub(crate) const EXECUTION_REPORT_ALLOWED_ATTEMPT_STATES: &[&str] = &[
 /// SYN-FND-004B: 验证执行型报告的 attempt 状态是否合法。
 /// 手动/离线报告不受此约束。
 ///
-/// **未接线**：本函数与上面的白名单当前**没有任何生产调用者**（只有单测）。
-/// 接线需要让 `consume_worker_report_after_completion` 收一个 attempt/dispatch
-/// 状态参数并在落库前调用它——那要改 director_agent 的调用点签名，属后续包。
-/// 在接上之前，不要把它当成「执行型报告的状态已被约束」的证据。
+/// **已接线**：`consume_worker_report_after_completion` 在落库前调用本函数，
+/// 该路径 report_kind 恒为 "execution"，故执行回程恒受白名单约束。
+/// 生产调用点只有 director_agent 的两处 completed 分支（该处状态恒为
+/// "completed"）；白名单的真正价值在挡住**未来**以中间态（running 等）
+/// 回程落库的路径。
 pub(crate) fn validate_execution_report_attempt_state(
     report_kind: &str,
     attempt_state: &str,
@@ -260,6 +261,8 @@ fn report_status_field(status: &str) -> Option<String> {
 ///
 /// SYN-FND-004B: 新增 attempt_id、authenticated_actor 参数，精确绑定执行上下文。
 /// SYN-FND-004C: 新增 grant_id 参数，执行回程必须携带有效 grant 才能落库。
+/// SYN-FND-004B: 新增 attempt_state 参数，执行型报告只接受白名单内的 attempt 状态
+///（completed/failed/timed_out 等终态；running/dispatched 等中间态拒绝落库）。
 /// 本入口进来即无条件把 report_kind 盖成 "execution"——不是靠代码判断来源，
 /// 是靠调用路径：只有真实执行回程走到这里。边界见 `stamp_execution_report_kind`。
 #[allow(clippy::too_many_arguments)]
@@ -272,6 +275,8 @@ pub(crate) fn consume_worker_report_after_completion(
     work_item_id: &str,
     dispatch_id: Option<&str>,
     attempt_id: Option<&str>,
+    // SYN-FND-004B: 该次尝试的真实状态（服务端 dispatch 记录，非 worker 自报）
+    attempt_state: &str,
     // SYN-FND-004B: 真实执行者身份（服务端派生，非 project_id）
     authenticated_actor_id: &str,
     // SYN-FND-004C: 执行授权 grant_id（服务端校验过，None = 无授权）
@@ -361,6 +366,17 @@ pub(crate) fn consume_worker_report_after_completion(
             report_warning: Some(format!(
                 "任务「{task_title}」报文拒绝落库：grant 验证失败（FND-004C fail-closed）：{grant_verification:?}"
             )),
+            report_status: None,
+            help_signal: None,
+        };
+    }
+
+    // SYN-FND-004B: 执行型报告只接受白名单内的 attempt 终态（fail closed）。
+    // 本路径 report_kind 恒为 "execution"（见下方 stamp），故恒受白名单约束。
+    if let Err(reason) = validate_execution_report_attempt_state("execution", attempt_state) {
+        return WorkerReportConsumeOutcome {
+            report_summary: None,
+            report_warning: Some(format!("任务「{task_title}」报文拒绝落库：{reason}")),
             report_status: None,
             help_signal: None,
         };
@@ -907,6 +923,7 @@ mod tests {
             "wi-1",
             None,         // dispatch_id
             None,         // attempt_id (SYN-FND-004B)
+            "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
             Some("grant:test"), // grant_id (SYN-FND-004C)
             "developer",
@@ -946,6 +963,7 @@ mod tests {
             "wi-1",
             None,         // dispatch_id
             None,         // attempt_id (SYN-FND-004B)
+            "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
             Some("grant:test"), // grant_id (SYN-FND-004C)
             "developer",
@@ -984,6 +1002,7 @@ mod tests {
             "wi-DOES-NOT-EXIST",
             None,         // dispatch_id
             None,         // attempt_id (SYN-FND-004B)
+            "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
             Some("grant:test"), // grant_id (SYN-FND-004C)
             "developer",
@@ -1017,6 +1036,7 @@ mod tests {
             "wi-1",
             None,         // dispatch_id
             None,         // attempt_id (SYN-FND-004B)
+            "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
             Some("grant:test"), // grant_id (SYN-FND-004C)
             "developer",
@@ -1063,6 +1083,7 @@ mod tests {
             "wi-1",
             None,         // dispatch_id
             None,         // attempt_id (SYN-FND-004B)
+            "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
             Some("grant:test"), // grant_id (SYN-FND-004C)
             "developer",
@@ -1099,6 +1120,7 @@ mod tests {
                 "wi-1",
                 None,         // dispatch_id
                 None,         // attempt_id (SYN-FND-004B)
+                "completed",  // attempt_state (SYN-FND-004B): 合法终态
                 "test-actor", // authenticated_actor_id (SYN-FND-004B)
                 Some("grant:test"), // grant_id (SYN-FND-004C)
                 "developer",
@@ -1144,6 +1166,7 @@ mod tests {
             "wi-1",
             None,         // dispatch_id
             None,         // attempt_id (SYN-FND-004B)
+            "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
             None,         // grant_id (SYN-FND-004C): 无授权
             "developer",
@@ -1176,6 +1199,7 @@ mod tests {
             "wi-1",
             None,         // dispatch_id
             None,         // attempt_id (SYN-FND-004B)
+            "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
             Some("forged-by-caller"), // grant_id (SYN-FND-004C): 格式非法
             "developer",
@@ -1187,6 +1211,38 @@ mod tests {
         assert!(
             warning.contains("grant_id 格式无效"),
             "warning 应指明拒绝原因：{warning}"
+        );
+        assert_eq!(fs::read(&path).unwrap(), before, "拒绝必须零 store 变化");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // SYN-FND-004B: 中间态（非白名单）的 attempt 回程必须 fail closed——合法 grant 也救不回。
+    #[test]
+    fn consume_with_mid_flight_attempt_state_is_rejected_and_writes_nothing() {
+        let dir = tmp_dir("midflight");
+        let path = write_fixture_store(&dir);
+        let before = fs::read(&path).unwrap();
+        let outcome = consume_worker_report_after_completion(
+            &path,
+            "/p",
+            "proj",
+            "wf-1",
+            "wf-1:node:director",
+            "wi-1",
+            None,         // dispatch_id
+            None,         // attempt_id (SYN-FND-004B)
+            "running",    // attempt_state (SYN-FND-004B): 中间态，不在白名单
+            "test-actor", // authenticated_actor_id (SYN-FND-004B)
+            Some("grant:test"), // grant_id (SYN-FND-004C): grant 合法
+            "developer",
+            "任务T",
+            GOOD_MSG,
+        );
+        assert!(outcome.report_summary.is_none(), "中间态不得产生摘要");
+        let warning = outcome.report_warning.expect("中间态必须有诊断 warning");
+        assert!(
+            warning.contains("fnd004b_rejected"),
+            "warning 应含白名单拒绝码：{warning}"
         );
         assert_eq!(fs::read(&path).unwrap(), before, "拒绝必须零 store 变化");
         let _ = fs::remove_dir_all(dir);
