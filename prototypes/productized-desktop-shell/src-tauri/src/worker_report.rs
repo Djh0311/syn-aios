@@ -259,6 +259,7 @@ fn report_status_field(status: &str) -> Option<String> {
 /// - None（无块/坏 json）→ warning（附原文尾 200 字）+ summary None；任务仍算完成（软着陆）。
 ///
 /// SYN-FND-004B: 新增 attempt_id、authenticated_actor 参数，精确绑定执行上下文。
+/// SYN-FND-004C: 新增 grant_id 参数，执行回程必须携带有效 grant 才能落库。
 /// 本入口进来即无条件把 report_kind 盖成 "execution"——不是靠代码判断来源，
 /// 是靠调用路径：只有真实执行回程走到这里。边界见 `stamp_execution_report_kind`。
 #[allow(clippy::too_many_arguments)]
@@ -271,20 +272,104 @@ pub(crate) fn consume_worker_report_after_completion(
     work_item_id: &str,
     dispatch_id: Option<&str>,
     attempt_id: Option<&str>,
-    authenticated_actor: &str,
+    // SYN-FND-004B: 真实执行者身份（服务端派生，非 project_id）
+    authenticated_actor_id: &str,
+    // SYN-FND-004C: 执行授权 grant_id（服务端校验过，None = 无授权）
+    grant_id: Option<&str>,
     actor_role: &str,
     task_title: &str,
     last_message_full: &str,
 ) -> WorkerReportConsumeOutcome {
+    // SYN-FND-004C: 无有效 grant 的执行回程拒绝落库（fail closed）
+    if grant_id.is_none() {
+        return WorkerReportConsumeOutcome {
+            report_summary: None,
+            report_warning: Some(format!(
+                "任务「{task_title}」报文拒绝落库：无有效执行授权 grant_id（FND-004C fail-closed）"
+            )),
+            report_status: None,
+            help_signal: None,
+        };
+    }
+
+    // SYN-FND-003: 使用 identity_kernel 解析执行者身份（服务端派生，非前端传入）
+    let identity = crate::mcp::identity_kernel::resolve_identity(
+        authenticated_actor_id,
+        project_root,
+        actor_role,
+        "development", // 真实执行 = development 通道
+        false,         // caller_boolean = 输入，不影响解析
+    );
+    // 身份解析失败 → 拒绝落库（fail closed）
+    if let crate::mcp::identity_kernel::IdentityResolution::Denied(reason) = &identity {
+        return WorkerReportConsumeOutcome {
+            report_summary: None,
+            report_warning: Some(format!(
+                "任务「{task_title}」报文拒绝落库：身份解析失败（FND-003 fail-closed）：{reason}"
+            )),
+            report_status: None,
+            help_signal: None,
+        };
+    }
+
+    // SYN-FND-004C: 验证 grant_id 格式（M1 阶段只做格式校验，M2 将做完整验证）
+    let grant_id_str = grant_id.unwrap_or("");
+    if !grant_id_str.starts_with("grant:") && !grant_id_str.starts_with("dispatch:") {
+        return WorkerReportConsumeOutcome {
+            report_summary: None,
+            report_warning: Some(format!(
+                "任务「{task_title}」报文拒绝落库：grant_id 格式无效（FND-004C fail-closed）"
+            )),
+            report_status: None,
+            help_signal: None,
+        };
+    }
+
+    // SYN-FND-004C: 创建临时 grant 并验证（M1 阶段证明模块已接线；M2 将改为从 store 查询）
+    let temp_grant = crate::mcp::execution_grant::mint_grant(
+        &crate::mcp::execution_grant::GrantMintInput {
+            authorization_id: grant_id_str.to_string(),
+            authorization_revision: 1,
+            scope_fingerprint: format!("fp:{}", project_id),
+            principal: authenticated_actor_id.to_string(),
+            project_id: project_id.to_string(),
+            workflow_id: workflow_id.to_string(),
+            allowed_work_item_types: vec!["*".to_string()],
+            allowed_role_ids: vec!["*".to_string()],
+            allowed_agent_ids: vec!["*".to_string()],
+            allowed_read_roots: vec!["*".to_string()],
+            allowed_write_roots: vec!["*".to_string()],
+            allowed_tools: vec!["*".to_string()],
+            allowed_checks: vec!["*".to_string()],
+            stop_conditions: vec![],
+            ttl_seconds: 3600,
+            minted_by: "server:m1-consume-path".to_string(),
+        },
+    );
+    let grant_verification = crate::mcp::execution_grant::verify_grant(
+        &temp_grant,
+        project_id,
+        workflow_id,
+        actor_role,
+        Some(authenticated_actor_id),
+        None,
+        None,
+    );
+    if grant_verification != crate::mcp::execution_grant::GrantVerification::Valid {
+        return WorkerReportConsumeOutcome {
+            report_summary: None,
+            report_warning: Some(format!(
+                "任务「{task_title}」报文拒绝落库：grant 验证失败（FND-004C fail-closed）：{grant_verification:?}"
+            )),
+            report_status: None,
+            help_signal: None,
+        };
+    }
+
     match parse_worker_report(last_message_full) {
         Some(mut report) => {
             // SYN-FND-004B: report_kind 由服务端在此覆盖，不采用 worker 自报值。
-            // `WorkerReport::report_kind` 是从 worker 交回的 json 块反序列化出来的，
-            // worker 可以自己写任意值；本函数是**真实执行回程**的唯一入口
-            // （生产调用点只有 director_agent 的两处 completed 分支），故一律置
-            // "execution"，覆盖掉报文里可能存在的任何自报值。
-            // 手动/离线报告若将来要走这条路，必须由**另一个**入口构造并显式标注，
-            // 不能靠 worker 在 json 里自称。
+            report.report_kind = "execution".to_string();
             // 覆盖能保证什么、不能保证什么，见 `stamp_execution_report_kind` 注释。
             stamp_execution_report_kind(&mut report);
 
@@ -298,7 +383,7 @@ pub(crate) fn consume_worker_report_after_completion(
                 work_item_id,
                 dispatch_id,
                 attempt_id,
-                authenticated_actor,
+                authenticated_actor_id,
                 actor_role,
                 &report,
             );
@@ -451,13 +536,15 @@ fn build_report_input(
     work_item_id: &str,
     dispatch_id: Option<&str>,
     attempt_id: Option<&str>,
-    authenticated_actor: &str,
+    // SYN-FND-004B: 真实执行者身份（服务端派生，非 project_id）
+    authenticated_actor_id: &str,
     actor_role: &str,
     report: &WorkerReport,
 ) -> crate::WorkerStructuredReportInput {
     let timestamp = crate::unix_timestamp_string();
-    let did = report.did.trim();
-    let status = report.status.trim();
+    // SYN-FND-005: 在构建输入前对报告内容进行敏感分类和脱敏
+    let did = crate::mcp::event_audit_boundary::scrub_content(report.did.trim());
+    let status = report.status.trim().to_string();
     // 必填 String 字段非空兜底（老实填、缺的用报文原文/占位兜）。
     let executed_what = if did.is_empty() {
         "worker 未在 did 说明做了什么".to_string()
@@ -517,8 +604,10 @@ fn build_report_input(
         work_item_id: work_item_id.to_string(),
         dispatch_id: dispatch_id.map(str::to_string),
         attempt_id: attempt_id.map(str::to_string),
-        authenticated_actor: authenticated_actor.to_string(),
+        authenticated_actor_id: authenticated_actor_id.to_string(),
+        authenticated_project_scope: project_id.to_string(),
         report_hash,
+        report_kind: report.report_kind.clone(),
         actor_role: actor_role.to_string(),
         executed_what,
         changed_what,
@@ -818,7 +907,8 @@ mod tests {
             "wi-1",
             None,         // dispatch_id
             None,         // attempt_id (SYN-FND-004B)
-            "test-actor", // authenticated_actor (SYN-FND-004B)
+            "test-actor", // authenticated_actor_id (SYN-FND-004B)
+            Some("grant:test"), // grant_id (SYN-FND-004C)
             "developer",
             "任务T",
             GOOD_MSG,
@@ -856,7 +946,8 @@ mod tests {
             "wi-1",
             None,         // dispatch_id
             None,         // attempt_id (SYN-FND-004B)
-            "test-actor", // authenticated_actor (SYN-FND-004B)
+            "test-actor", // authenticated_actor_id (SYN-FND-004B)
+            Some("grant:test"), // grant_id (SYN-FND-004C)
             "developer",
             "任务T",
             "我做完了但忘了给 json 块",
@@ -893,7 +984,8 @@ mod tests {
             "wi-DOES-NOT-EXIST",
             None,         // dispatch_id
             None,         // attempt_id (SYN-FND-004B)
-            "test-actor", // authenticated_actor (SYN-FND-004B)
+            "test-actor", // authenticated_actor_id (SYN-FND-004B)
+            Some("grant:test"), // grant_id (SYN-FND-004C)
             "developer",
             "任务T",
             GOOD_MSG,
@@ -925,7 +1017,8 @@ mod tests {
             "wi-1",
             None,         // dispatch_id
             None,         // attempt_id (SYN-FND-004B)
-            "test-actor", // authenticated_actor (SYN-FND-004B)
+            "test-actor", // authenticated_actor_id (SYN-FND-004B)
+            Some("grant:test"), // grant_id (SYN-FND-004C)
             "developer",
             "任务T",
             msg,
@@ -970,7 +1063,8 @@ mod tests {
             "wi-1",
             None,         // dispatch_id
             None,         // attempt_id (SYN-FND-004B)
-            "test-actor", // authenticated_actor (SYN-FND-004B)
+            "test-actor", // authenticated_actor_id (SYN-FND-004B)
+            Some("grant:test"), // grant_id (SYN-FND-004C)
             "developer",
             "任务T",
             "我卡住了，需要权限读取 /secure。\n```json\n{\"status\":\"blocked\",\n```",
@@ -1005,7 +1099,8 @@ mod tests {
                 "wi-1",
                 None,         // dispatch_id
                 None,         // attempt_id (SYN-FND-004B)
-                "test-actor", // authenticated_actor (SYN-FND-004B)
+                "test-actor", // authenticated_actor_id (SYN-FND-004B)
+                Some("grant:test"), // grant_id (SYN-FND-004C)
                 "developer",
                 "任务T",
                 msg,
@@ -1031,6 +1126,69 @@ mod tests {
             "有块缺 status → None"
         );
         assert_eq!(run("没有 json 块").report_status, None, "没交口供 → None");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // SYN-FND-004C: 无 grant_id 的执行回程必须 fail closed——拒绝落库、诊断 warning、store 逐字节不变。
+    #[test]
+    fn consume_without_grant_id_is_rejected_and_writes_nothing() {
+        let dir = tmp_dir("nogrant");
+        let path = write_fixture_store(&dir);
+        let before = fs::read(&path).unwrap();
+        let outcome = consume_worker_report_after_completion(
+            &path,
+            "/p",
+            "proj",
+            "wf-1",
+            "wf-1:node:director",
+            "wi-1",
+            None,         // dispatch_id
+            None,         // attempt_id (SYN-FND-004B)
+            "test-actor", // authenticated_actor_id (SYN-FND-004B)
+            None,         // grant_id (SYN-FND-004C): 无授权
+            "developer",
+            "任务T",
+            GOOD_MSG,
+        );
+        assert!(outcome.report_summary.is_none(), "无 grant 不得产生摘要");
+        assert!(outcome.report_status.is_none(), "无 grant 不得产生状态");
+        let warning = outcome.report_warning.expect("无 grant 必须有诊断 warning");
+        assert!(
+            warning.contains("无有效执行授权 grant_id"),
+            "warning 应指明拒绝原因：{warning}"
+        );
+        assert_eq!(fs::read(&path).unwrap(), before, "拒绝必须零 store 变化");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // SYN-FND-004C: grant_id 格式非法（非 grant:/dispatch: 前缀）同样 fail closed。
+    #[test]
+    fn consume_with_malformed_grant_id_is_rejected_and_writes_nothing() {
+        let dir = tmp_dir("badgrant");
+        let path = write_fixture_store(&dir);
+        let before = fs::read(&path).unwrap();
+        let outcome = consume_worker_report_after_completion(
+            &path,
+            "/p",
+            "proj",
+            "wf-1",
+            "wf-1:node:director",
+            "wi-1",
+            None,         // dispatch_id
+            None,         // attempt_id (SYN-FND-004B)
+            "test-actor", // authenticated_actor_id (SYN-FND-004B)
+            Some("forged-by-caller"), // grant_id (SYN-FND-004C): 格式非法
+            "developer",
+            "任务T",
+            GOOD_MSG,
+        );
+        assert!(outcome.report_summary.is_none(), "非法 grant 不得产生摘要");
+        let warning = outcome.report_warning.expect("非法 grant 必须有诊断 warning");
+        assert!(
+            warning.contains("grant_id 格式无效"),
+            "warning 应指明拒绝原因：{warning}"
+        );
+        assert_eq!(fs::read(&path).unwrap(), before, "拒绝必须零 store 变化");
         let _ = fs::remove_dir_all(dir);
     }
 }

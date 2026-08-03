@@ -2733,10 +2733,14 @@ struct WorkerStructuredReportInput {
     dispatch_id: Option<String>,
     /// SYN-FND-004B: 执行尝试 ID，精确绑定到具体的一次执行尝试
     attempt_id: Option<String>,
-    /// SYN-FND-004B: 已认证的作用域标识（服务端从 project_root 派生的 project_id，非前端传入）
-    authenticated_actor: String,
+    /// SYN-FND-004B: 已认证的执行者身份（服务端派生，非前端传入）
+    authenticated_actor_id: String,
+    /// SYN-FND-004B: 已认证的作用域标识（服务端从 project_root 派生的 project_id）
+    authenticated_project_scope: String,
     /// SYN-FND-004B: 报文哈希（SHA-256），检测报文内容是否与登记时一致
     report_hash: String,
+    /// SYN-FND-004B: 报告类型（execution/manual/offline）
+    report_kind: String,
     actor_role: String,
     executed_what: String,
     changed_what: String,

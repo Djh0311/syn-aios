@@ -1,60 +1,59 @@
 # product-line Current
 
 schema: harness-current/v2
-updated-at: 2026-08-03T03:00:00+08:00
+updated-at: 2026-08-03T17:00:00+08:00
 mode: PLAN
 work-state: WIP_COMMITTED
 active-id: SYN-FND-002-R1 (no canonical node; see Blockers)
-phase: M1 is the current stage. SYN-FND-001-R1 is frozen and PARKED / RETAINED. The M1 product-code slices are committed at three distinct connection levels; M1 is NOT accepted as complete.
+phase: M1 is the current stage. All six product-code slices are now wired at some level and FND-006 has unit/integration-level automated acceptance. M1 is CONDITIONALLY ACCEPTED — closing it requires the recorded deviations to be dispositioned and the isolated-profile runtime acceptance to be executed.
 
 ## Status
 
 - `docs/plans/2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` remains the only current long-term route. M1 is current; M2-M10 remain `PLANNED / NOT_ACTIVE`.
 - `SYN-FND-001-R1` froze the ten versioned contracts in `0b257db8d3265850137a2f357c9bb7e0d0ed983f`. `PARKED / RETAINED`, evidence level `STATIC_OPENING_ONLY`.
-- The local WIP is committed in three batches on branch `syn-fnd-002-dev`, based on `81cf1a322a4387802bdf87f6980c69fefd46815d`: `63c58c5` (SYN-FND-002/004A), `3488135` (SYN-FND-004B), and `89c62f2` (SYN-FND-003/004C/005 staged foundations). No merge, push, release or integration has occurred.
+- Four batches are committed on branch `syn-fnd-002-dev`, based on `81cf1a322a4387802bdf87f6980c69fefd46815d`: `63c58c5` (SYN-FND-002/004A), `3488135` (SYN-FND-004B), `89c62f2` (SYN-FND-003/004C/005 staged foundations), and the acceptance batch (wire 003/004C/005 into the report path + FND-006 suite + 2 grant fail-closed tests). No merge, push, release or integration has occurred.
 
 ### Connected to a live path
 
-- `SYN-FND-002` (path guard): `mcp/storage.rs` path builders return `Result`; `ValidatedObjectId::parse` runs before every `join`; the six changed builders have no callers outside `storage.rs`, where `?` handles their results. `mcp/tools.rs` and `mcp/orchestrator.rs` were not changed. `ensure_path_within_root` adds realpath-escape checks at 5 read/write sites. **Coverage limit**: that second layer only fires when the path or its parent already exists; when neither exists it returns `Ok` without checking. Evidence: 32 unit tests.
-- `SYN-FND-004A` (workflow ownership): `wid.contains(&slug)` fuzzy attribution removed; ownership is `project_id` exact match only. `get_project_workflow_nodes` rejects workflows not owned by the requesting project. `store_hygiene.rs` matches by `project_id`. **Known behavior change**: legacy workflow records without `project_id` disappear from listings and are rejected on edit. Accepted by the user on 2026-08-02 on the grounds that the workbench is not in use; no migration was performed. Evidence: 3 new negative tests.
+- `SYN-FND-002` (path guard): `mcp/storage.rs` path builders return `Result`; `ValidatedObjectId::parse` runs before every `join`; the six changed builders have no callers outside `storage.rs`, where `?` handles their results. `ensure_path_within_root` adds realpath-escape checks at 5 read/write sites. **Coverage limit**: that second layer only fires when the path or its parent already exists; when neither exists it returns `Ok` without checking. Evidence: 32 unit tests.
+- `SYN-FND-004A` (workflow ownership): `wid.contains(&slug)` fuzzy attribution removed; ownership is `project_id` exact match only. **Known behavior change**: legacy workflow records without `project_id` disappear from listings and are rejected on edit. Accepted by the user on 2026-08-02; no migration was performed. Evidence: 3 negative tests.
+- `SYN-FND-004B` (worker report binding): the audit event written by `record_worker_structured_report_at` now carries `attempt_id`, `authenticated_actor_id`, `authenticated_project_scope`, `report_hash` and `report_kind` — the bound fields now cross the store boundary. `report_hash` is `sha2::Sha256` (content-match detection, not tamper-proofing). `report_kind` is server-stamped `"execution"` on the real-execution return path and is now persisted. **Residual**: `validate_execution_report_attempt_state` and its allow-list still have 0 callers; the h5 bridge and K3 Phase A no-op constructors hardcode `report_kind:"execution"` on non-execution reports — recorded catch, disposition pending.
 
-### Partially connected
+### Wired with recorded limits (formerly "staged, 0 callers")
 
-- `SYN-FND-004B` (worker report binding): `report_hash` now uses `sha2::Sha256` (was a 64-bit `DefaultHasher`); it detects whether report content matches what was registered — it is not tamper-proofing, since an unkeyed hash can be recomputed by anyone. `attempt_id` carries real values: `dispatch_id` on the director path (one dispatch is one attempt there), the existing `attempt.attempt_id` in `project_workflow_automation.rs`; `h5_project_dispatch_bridge.rs` keeps `None` because Level A previews send no prompt and run no worker. `authenticated_actor` carries the server-derived `project_id` — the field name says actor, the value is a scope; not yet reconciled.
-  - `report_kind` is no longer trusted from the worker: `stamp_execution_report_kind` overwrites it with `"execution"` at the top of `consume_worker_report_after_completion`, the only real-execution return path. **Boundary — do not overstate**: `report_kind` is not a field of `WorkerStructuredReportInput` and the audit event does not carry it, so the override's only downstream reader is the report-hash preimage in `build_report_input`. It guarantees the kind in the hash preimage is not worker-controlled; it does not mean the store records the report's kind. Two tests lock this (`worker_self_reported_report_kind_is_overridden_server_side`, `report_kind_override_changes_report_hash_preimage`); the second fails loudly if the override ever loses its last reader.
-  - **Not done**: `record_worker_structured_report_at` does not write `attempt_id`, `authenticated_actor`, `report_hash` or `report_kind` into the audit event — read directly from the function body, not inferred: the event's field list stops at `dispatch_id`. `validate_worker_structured_report_input` does not check any of the four either. So all four bound fields still have zero consumers past the boundary. `validate_execution_report_attempt_state` and its allow-list have zero callers.
+- `SYN-FND-003` (identity kernel): `resolve_identity` now runs at two production sites — `consume_worker_report_after_completion` (Denied ⇒ fail-closed, nothing persisted) and `record_worker_structured_report_at` (Denied ⇒ degrade to the raw role string). **Deviation**: unknown role falls back to `TemporaryAgent` (allow nothing, deny `*` — fail-safe); unknown **channel** falls back to `Development` (= WriteLocal — fail-open direction). This deviates from the FND-003 "reject all" acceptance wording. All current production call sites hardcode `"development"`, so live behavior is unchanged; the kernel contract itself is what moved. User informed 2026-08-03; final disposition pending before M2.
+- `SYN-FND-004C` (execution grant): the report consume path fails closed when `grant_id` is None or not `grant:`/`dispatch:`-prefixed; 2 new tests plus FND-006 scenario 3 assert rejection with zero store/file side effects. **Boundary — wiring proof, not authorization**: no grant store exists; the live path passes `dispatch_id` as the grant; `verify_grant` runs against a self-minted wildcard grant. M2 must replace this with real mint/load/verify. **Boundary**: the fail-closed check guards only the report-write path; spawn-side entries still run on path-lock / continuation authorization (see `docs/execution-entry-inventory.md`).
+- `SYN-FND-005` (event/audit boundary): `scrub_content` now runs on `did`, `executed_what`, `changed_what` and `summary`/`reason` before they are persisted into the audit event.
 
-### Staged foundations — built, not connected, not accepted
+### SYN-FND-006 acceptance status
 
-- `SYN-FND-003` (identity kernel), `SYN-FND-004C` (execution grant), `SYN-FND-005` (event/audit boundary): 1779 lines of types and functions across three modules (767 + 545 + 467), each with **0 external callers** — verified by whole-repo grep, not inferred. Marked `#[allow(dead_code)]` with STAGED headers so the state is visible in the source. Evidence level is unit tests only (16/15/15). None of these three is a live defense. Connecting them requires wrapping Tauri command entry points, which is a separate task.
+- Automated: 10 tests in `fnd006_acceptance.rs` (scenario 3 calls the production consume entry with None/malformed grants and asserts rejection plus zero file side effects). `docs/execution-entry-inventory.md` lists spawn/command/MCP entries with `migrated/blocked` status — line-level content spot-checked, but its summary arithmetic is internally inconsistent (recorded catch). `test-fixtures/fnd-006-acceptance/` holds the manual isolated-profile runbook (blank template) and a quick script.
+- **Not done**: the isolated-Tauri-profile runtime acceptance has never been executed; scenarios 1 (legitimate read-only session allowed) and 6 (Secretary profile reads no raw project root) have no test coverage at any level. Real App behavior remains `UNKNOWN`.
 
 ## Verification actually run
 
-- `cargo check --lib`: exit 0, **601** warnings (baseline 659; the reduction is the `allow(dead_code)` markers and unused-variable fixes on the three staged modules, plus one warning cleared because `report_kind` now has a reader). Counting note: cargo's own summary line reports 601; a naive `grep -c '^warning:'` returns 602 because it also counts that summary line. 601 is the real count.
-- A 2026-08-03 `cargo test --lib` rerun observed `manual_relay::tests::manual_relay_gui_direct_stop_kills_mock_process_group_children` failing. Its captured output did not reach a final test summary, so this run is not a complete pass/fail count. The 46 staged-module test entries all reported `ok`; their focused evidence is still unit-only.
-- The prior handoff recorded `1292 passed; 1 failed; 45 ignored` with `workbench_sqlite_production_apply::tests::sqlite_production_preflight_blocked_creates_no_db_or_report` as the failure. That historical result was not reproduced as a complete summary in the current rerun and must not be treated as a current baseline.
-- `obsidian_integration::tests::fake_executable_proves_non_utf8_is_rejected` and `..._proves_nonzero_timeout_and_output_cap_are_closed` are **timing-flaky** (20ms and 1s deadlines against a sleeping fake executable). They failed in one earlier run and passed in another; the file was not modified this round. A single run of these two is not a baseline.
-- No App, Vite, browser, real store, real project, connector, credential or provider was touched. Every claim above is static or unit-level. Real runtime behavior remains `UNKNOWN`.
+- `cargo check --lib`: exit 0, **601** warnings (baseline unchanged).
+- `cargo test --lib` (foreground, full log): **1303 passed; 2 failed; 45 ignored** (62.05s). Failures: `workbench_sqlite_production_apply::tests::sqlite_production_preflight_blocked_creates_no_db_or_report` (stable, pre-existing since `3488135`, zero dependency on this diff) and one rotating process/timing flaky — `obsidian_integration::tests::fake_executable_proves_nonzero_timeout_and_output_cap_are_closed` this run, `codex_local_runner::tests::real_process_timeout_kills_and_reaps_mock_child` in the previous run. Both flaky candidates have zero imports of the changed modules; the obsidian pair is documented timing-flaky.
+- Focused: `worker_report` 26/26 (includes the 2 new grant fail-closed tests), `fnd006` 10/10.
+- No App, Vite, browser, real store, real project, connector, credential or provider was touched. Every claim above is static or unit/integration level. Real runtime behavior remains `UNKNOWN`.
 
 ## Blockers
 
-- **M1 is not accepted.** Three of six slices are staged-only; `SYN-FND-004B` binds inputs that no consumer reads. M2 must not be treated as unblocked on top of this.
-- **No canonical task node exists for this work.** `task propose` produced a valid proposal (digest `73916f0a49d2a72a60b36a72499be8a29b2eb904d1e0eb79aece0938c3216128`) but `task start` is fail-closed against an existing registered worktree (`WORKTREE_TARGET_ALREADY_EXISTS` / `WORKTREE_TARGET_ALREADY_REGISTERED`), and `start recover --action ADOPT` requires a marker that only `start` can create. Authority for these writes is the user's direct instruction on 2026-08-02 plus the write-scope recorded in that proposal.
-- `record_worker_structured_report_at` audit enrichment requires editing `c4_c6_workflow_governance_entrypoints.rs`, outside the current scope.
-- Real App, real store and provider behavior remain `UNKNOWN` until the isolated FND-006 acceptance slice.
+- **M1 is conditionally accepted, not closed.** Closing requires: (a) disposition of the three recorded deviations (channel-fallback direction; `report_kind:"execution"` on non-execution paths; inventory arithmetic); (b) isolated-profile runtime acceptance per `test-fixtures/fnd-006-acceptance/README.md`; (c) a wire-or-retire decision for `validate_execution_report_attempt_state`. M2 must not treat grant/identity as real defenses — the grant check is format-only and unknown channels degrade toward write permission.
+- **No canonical task node exists for this work.** `task start` is fail-closed against an existing registered worktree; authority for these writes is the user's direct instruction (2026-08-02 / 2026-08-03) plus proposal digest `73916f0a49d2a72a60b36a72499be8a29b2eb904d1e0eb79aece0938c3216128`.
 - Integration of the FND-001 contract commit remains a separate HOLD. The contract commit is not observed in integration `main@36b99905f3a8f9f9534c8f401ca2d01355a06079`.
 - The `mcp/storage.rs` rustfmt-only WIP that predates this work has owner `UNKNOWN` and is not attributed to any FND slice.
 
 ## Next action
 
-- The three M1 WIP batches are committed. Before any M2 activation, decide whether the staged modules will be connected, deferred or reverted, and do not treat their existence as a live defense.
-- Decide `SYN-FND-004B`'s remaining gap: whether to enrich the audit event so the bound fields (`attempt_id`, `authenticated_actor`, `report_hash`, `report_kind`) are actually read by something. The `report_kind` server-side override is done, but it only reaches the hash preimage — until the store boundary widens, none of the four bound fields is persisted.
-- Decide whether the three staged modules get connected, deferred to a later stage, or reverted — before any M2 activation, since M2 planning would otherwise assume three defenses that do not exist.
-- FND-006 acceptance with an isolated Tauri profile remains the only route to runtime evidence.
+- Execute the isolated-profile FND-006 acceptance (`test-fixtures/fnd-006-acceptance/README.md`) and record before/after runtime evidence — the only remaining route to kill `UNKNOWN`.
+- Disposition the three recorded deviations before M2 planning (channel fallback direction; `report_kind` mislabel on preview/no-op paths; inventory summary arithmetic).
+- Decide whether `validate_execution_report_attempt_state` gets wired (requires a signature change at the director call sites) or retired.
+- `origin` (`Djh0311/syn-aios`, private) remains unpushed; pushing needs explicit authorization.
 
 ## Safety
 
-- Preserve all existing WIP; no reset, clean, stash, overwrite, bulk staging or blanket attribution. With a shared worktree, `git add -A` is forbidden — list files explicitly.
+- No reset, clean, stash, overwrite, bulk staging or blanket attribution. With a shared worktree, `git add -A` is forbidden — list files explicitly.
 - Product-code writes and local commits are limited to an ACTIVE task's exact package. Push, merge, release, deployment and publication remain outside the boundary.
 - Do not start App, Vite or browser, and do not touch real store, message, workflow, connector, credential, provider or real project data.
 - Static, unit, temp and isolated-fixture evidence must remain labeled at its actual proof level. "Compiles and unit-tests pass" is not "connected"; "connected" is not "verified at runtime".

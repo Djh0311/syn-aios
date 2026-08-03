@@ -2809,9 +2809,12 @@ fn run_director_task_chain_inner(
                         &result.dispatch.node_id,
                         &result.dispatch.work_item_id,
                         Some(dispatch_id.as_str()),
-                        // SYN-FND-004B: 本路径一次派发即一次尝试,dispatch_id 即 attempt 身份;重试产生新 dispatch
+                        // SYN-FND-004B: 本路径一次派发即一次尝试,dispatch_id 即 attempt 身份
                         Some(dispatch_id.as_str()),
-                        &result.dispatch.project_id,
+                        // SYN-FND-004B: 真实执行者 = 被派发的 worker（dispatch_id 标识）
+                        &dispatch_id,
+                        // SYN-FND-004C: 执行授权 grant_id（当前路径由 path-lock 保护，grant 为 dispatch_id）
+                        Some(&dispatch_id),
                         &task.scope.target_role,
                         &task.title,
                         &last_message_full,
@@ -2911,9 +2914,12 @@ fn run_director_task_chain_inner(
                     &result.dispatch.node_id,
                     &result.dispatch.work_item_id,
                     Some(dispatch_id.as_str()),
-                    // SYN-FND-004B: 本路径一次派发即一次尝试,dispatch_id 即 attempt 身份;重试产生新 dispatch
+                    // SYN-FND-004B: 本路径一次派发即一次尝试,dispatch_id 即 attempt 身份
                     Some(dispatch_id.as_str()),
-                    &result.dispatch.project_id,
+                    // SYN-FND-004B: 真实执行者 = 被派发的 worker（dispatch_id 标识）
+                    &dispatch_id,
+                    // SYN-FND-004C: 执行授权 grant_id（当前路径由 path-lock 保护，grant 为 dispatch_id）
+                    Some(&dispatch_id),
                     &task.scope.target_role,
                     &task.title,
                     &last_message_full,

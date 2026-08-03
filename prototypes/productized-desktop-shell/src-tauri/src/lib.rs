@@ -2559,8 +2559,11 @@ mod tests {
             dispatch_id: Some(dispatch_id.to_string()),
             // SYN-FND-004B 测试夹具: dispatch_id 即 attempt_id
             attempt_id: Some(dispatch_id.to_string()),
-            authenticated_actor: project_id(project_root),
+            // SYN-FND-004B 测试夹具: 真实执行者 = dispatch_id
+            authenticated_actor_id: dispatch_id.to_string(),
+            authenticated_project_scope: project_id(project_root),
             report_hash: "hash:c5-fixture".to_string(),
+            report_kind: "execution".to_string(),
             actor_role: "codex-dev".to_string(),
             executed_what: "执行 C5 离线结构化汇报测试。".to_string(),
             changed_what: "只写工作台 workflow-state audit event，不写正式事实。".to_string(),
@@ -14820,3 +14823,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         serde_json::from_str(&text).expect("fixture should parse")
     }
 }
+
+// SYN-FND-006: 自动化集成验收测试
+#[cfg(test)]
+mod fnd006_acceptance;

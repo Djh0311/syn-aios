@@ -240,24 +240,16 @@ pub fn resolve_identity(
         );
     }
 
-    // 2. Resolve role
+    // 2. Resolve role（未知角色使用 TemporaryAgent 兜底，不拒绝）
     let role_kind = match RoleKind::from_str(role_str) {
         Some(r) => r,
-        None => {
-            return IdentityResolution::Denied(format!(
-                "identity_kernel_rejected: 未知角色 '{role_str}'"
-            ));
-        }
+        None => RoleKind::TemporaryAgent, // 未知角色兜底为临时代理
     };
 
-    // 3. Resolve channel
+    // 3. Resolve channel（未知通道使用 Development 兜底，不拒绝）
     let channel_kind = match ChannelKind::from_str(channel_str) {
         Some(c) => c,
-        None => {
-            return IdentityResolution::Denied(format!(
-                "identity_kernel_rejected: 未知通道 '{channel_str}'"
-            ));
-        }
+        None => ChannelKind::Development, // 未知通道兜底为开发通道
     };
 
     // 4. Derive project_id from project_root (deterministic, not caller-claimed)
@@ -631,7 +623,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_identity_invalid_role() {
+    fn resolve_identity_invalid_role_uses_default() {
         let result = resolve_identity(
             "actor-001",
             "/path",
@@ -639,11 +631,12 @@ mod tests {
             "development",
             false,
         );
-        assert!(matches!(result, IdentityResolution::Denied(_)));
+        // 未知角色使用 TemporaryAgent 兜底，不拒绝
+        assert!(matches!(result, IdentityResolution::Resolved(_)));
     }
 
     #[test]
-    fn resolve_identity_invalid_channel() {
+    fn resolve_identity_invalid_channel_uses_default() {
         let result = resolve_identity(
             "actor-001",
             "/path",
@@ -651,7 +644,8 @@ mod tests {
             "invalid_channel",
             false,
         );
-        assert!(matches!(result, IdentityResolution::Denied(_)));
+        // 未知通道使用 Development 兜底，不拒绝
+        assert!(matches!(result, IdentityResolution::Resolved(_)));
     }
 
     // ---- policy_check_capability ----

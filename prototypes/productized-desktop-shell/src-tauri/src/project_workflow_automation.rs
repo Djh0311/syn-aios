@@ -2618,8 +2618,11 @@ fn worker_report_input(
             .product_command_attempt
             .as_ref()
             .map(|attempt| attempt.attempt_id.clone()),
-        authenticated_actor: project_id_value.to_string(),
+        // SYN-FND-004B: Phase A no-op，无真实执行者；用占位标识
+        authenticated_actor_id: "phase-a-noop".to_string(),
+        authenticated_project_scope: project_id_value.to_string(),
         report_hash: "hash:k3-phase-a-noop".to_string(),
+        report_kind: "execution".to_string(),
         actor_role: "developer_execution".to_string(),
         executed_what:
             "记录 K3 Level A Product Command Phase A no-op；未发送 prompt，未执行真实 Codex。"
