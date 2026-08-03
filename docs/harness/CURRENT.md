@@ -22,7 +22,7 @@ goal: Build the shared transaction foundation (UoW/event/audit/outbox/projector)
 
 ## Next action
 
-- Activate `SYN-DAT-001` (mechanism contracts + per-domain migration list; docs-only; worktree `product-line-syn-dat-001` based on `syn-fnd-002-dev`).
+- Execute `tasks/2026-08-03-syn-m2-kickoff-v1.md` (whole-M2 dispatch, self-contained; first slice `SYN-DAT-001`, docs-only).
 
 ## Safety
 
