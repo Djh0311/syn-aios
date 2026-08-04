@@ -1726,6 +1726,7 @@ enum ManualRelayProcessMode {
     PlaceholderSleep,
     MockCodexComplete(PathBuf),
     MockCodexSleep(PathBuf),
+    MockCodexSleepSh(String),
     RealCodexEnvGated,
     RealCodexProductGui,
 }
@@ -1747,6 +1748,9 @@ fn manual_relay_process_mode(mock_behavior: &str) -> Option<ManualRelayProcessMo
     }
     if let Some(path) = mock_behavior.strip_prefix("mock_codex_process_sleep:") {
         return Some(ManualRelayProcessMode::MockCodexSleep(PathBuf::from(path)));
+    }
+    if let Some(body) = mock_behavior.strip_prefix("mock_codex_process_sleep_sh:") {
+        return Some(ManualRelayProcessMode::MockCodexSleepSh(body.to_string()));
     }
     mock_behavior
         .strip_prefix("mock_codex_process:")
@@ -1799,6 +1803,25 @@ fn process_config_for_mode(
         }
         ManualRelayProcessMode::MockCodexSleep(program) => {
             command_plan.program = program.display().to_string();
+            command_plan.redacted_preview =
+                "mock codex sleep fixture <stdin prompt> # workbench-managed last-message"
+                    .to_string();
+            Ok(ManualRelayProcessConfig {
+                command_plan,
+                process_kind: "mock_codex".to_string(),
+                real_codex_executed: false,
+                return_running: true,
+                completed_status: "completed_mock_codex".to_string(),
+            })
+        }
+        ManualRelayProcessMode::MockCodexSleepSh(body) => {
+            // 进程夹具确定性边界：载荷经 argv 喂给常驻温热的 /bin/sh，不新建脚本文件。
+            // 新建脚本首次 exec 在本沙箱实测 155ms~3.2s，全量并行会撞穿夹具就绪预算。
+            command_plan.program = "/bin/sh".to_string();
+            command_plan.argv = vec!["-c".to_string(), body]
+                .into_iter()
+                .chain(command_plan.argv)
+                .collect();
             command_plan.redacted_preview =
                 "mock codex sleep fixture <stdin prompt> # workbench-managed last-message"
                     .to_string();
@@ -6286,14 +6309,6 @@ printf '%s\n' "$second" >&2
         let workflow_state_path = root.join("workflow-state.json");
         let ready_path = root.join("child-ready.txt");
         let leaked_path = root.join("child-leaked-after-retry.txt");
-        let script = mock_codex_script(
-            "supervisor-active-slot-recovery",
-            &format!(
-                "#!/bin/sh\n( printf 'ready\\n' > \"{}\"; sleep 1; printf 'leaked\\n' > \"{}\" ) &\nsleep 30\n",
-                ready_path.display(),
-                leaked_path.display(),
-            ),
-        );
         let preview = preview_manual_relay(
             existing_fixture_preview_input("supervisor active slot recovery"),
             "2026-07-23T00:00:00Z",
@@ -6303,8 +6318,17 @@ printf '%s\n' "$second" >&2
             .command_plan
             .clone()
             .expect("fixture command plan");
-        command_plan.program = script.display().to_string();
-        command_plan.argv.clear();
+        // 进程夹具确定性边界：载荷经 argv 喂给常驻温热的 /bin/sh，不新建脚本文件。
+        // 新建脚本首次 exec 在本沙箱实测 155ms~3.2s，会撞穿 3s 就绪预算。
+        command_plan.program = "/bin/sh".to_string();
+        command_plan.argv = vec![
+            "-c".to_string(),
+            format!(
+                "( printf 'ready\\n' > \"{}\"; sleep 1; printf 'leaked\\n' > \"{}\" ) &\nsleep 30\n",
+                ready_path.display(),
+                leaked_path.display(),
+            ),
+        ];
         command_plan.last_message_path = root.join("must-stay-empty.txt").display().to_string();
         let attempt_id = format!(
             "supervisor-active-slot-recovery:{}:{}",
@@ -7453,18 +7477,14 @@ wait
         let leaked_path = marker_dir.join("leaked.txt");
         let _ = std::fs::remove_file(&ready_path);
         let _ = std::fs::remove_file(&leaked_path);
-        let script = mock_codex_script(
-            "app-shutdown-process-group",
-            &format!(
-                r#"#!/bin/sh
-( sleep 1; printf 'leaked child survived shutdown\n' > "{leaked}" ) &
+        let mock_body = format!(
+            r#"( sleep 1; printf 'leaked child survived shutdown\n' > "{leaked}" ) &
 printf 'child spawned\n' > "{ready}"
 cat >/dev/null
 wait
 "#,
-                leaked = leaked_path.display(),
-                ready = ready_path.display(),
-            ),
+            leaked = leaked_path.display(),
+            ready = ready_path.display(),
         );
         let fixture = existing_fixture_preview_input("GUI direct app shutdown");
         let input = ManualRelayGuiDirectRunInput {
@@ -7482,7 +7502,7 @@ wait
         run_manual_relay_gui_direct_once_for_test(
             input,
             "2026-06-18T09:22:00Z",
-            &format!("mock_codex_process_sleep:{}", script.display()),
+            &format!("mock_codex_process_sleep_sh:{mock_body}"),
         )
         .expect("app shutdown fixture should start");
         let started = Instant::now();

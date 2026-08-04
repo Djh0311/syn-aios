@@ -1991,25 +1991,16 @@ mod tests {
         let pid_path = test_dir.path().join("mock-child.pid");
         let last_message_path = test_dir.path().join("last-message.txt");
         fs::write(&last_message_path, "stale result").expect("seed stale last message");
-        let mock_codex_path = test_dir.path().join("codex");
+        // 进程夹具确定性边界：不新建脚本文件，载荷经 argv 喂给常驻温热的 /bin/sh。
+        // 新建脚本首次 exec 在本沙箱实测 155ms~3.2s，全量并行会撞穿 2s 超时窗；
+        // /bin/sh 常驻温热（实测 ~7ms），子进程 exec 延迟不再是夹具变量。
         let quoted_pid_path = pid_path.display().to_string().replace('\'', "'\\\"'\\\"'");
-        fs::write(
-            &mock_codex_path,
-            format!("#!/bin/sh\necho $$ > '{quoted_pid_path}'\n/bin/sleep 10\n"),
-        )
-        .expect("write mock codex script");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut permissions = fs::metadata(&mock_codex_path)
-                .expect("mock codex metadata")
-                .permissions();
-            permissions.set_mode(0o700);
-            fs::set_permissions(&mock_codex_path, permissions).expect("make mock codex executable");
-        }
         let command_plan = CodexLocalCommandPlan {
-            program: mock_codex_path.display().to_string(),
-            argv: vec!["exec".to_string()],
+            program: "/bin/sh".to_string(),
+            argv: vec![
+                "-c".to_string(),
+                format!("echo $$ > '{quoted_pid_path}'\n/bin/sleep 10\n"),
+            ],
             stdin_prompt_ref: "mock-timeout-prompt".to_string(),
             stdin_prompt_sha256: "mock-timeout-hash".to_string(),
             prompt_in_command: false,
@@ -2019,8 +2010,11 @@ mod tests {
             warnings: vec![],
         };
 
+        let request = safe_request();
+        let spawned_run_id =
+            crate::exec_process_registry::test_spawned_codex_process_run_id(&request);
         let result = run_real_codex_process(
-            &safe_request(),
+            &request,
             &command_plan,
             "mock prompt",
             &last_message_path,
@@ -2036,11 +2030,24 @@ mod tests {
             !last_message_path.exists(),
             "timed-out run must not retain or reuse the seeded last message"
         );
-        let pid = fs::read_to_string(&pid_path)
-            .expect("mock child wrote its pid")
-            .trim()
-            .parse::<u32>()
-            .expect("mock child pid is numeric");
+        // 确定性握手：spawn 登记通道在父进程同步点记下真实子进程 pid，
+        // 不依赖子进程自报 pid 文件是否赶在超时杀之前被调度执行。
+        let pid = crate::exec_process_registry::test_take_spawned_codex_process_group(
+            &spawned_run_id,
+        )
+        .expect("spawned mock child pid registered at spawn");
+        // 子进程自报的 pid 文件若已落盘（正常调度路径），必须与登记 pid 一致；
+        // 极端调度延迟下文件可能不存在，此时回收核验仍由登记 pid 独立完成。
+        if let Ok(recorded) = fs::read_to_string(&pid_path) {
+            let self_reported = recorded
+                .trim()
+                .parse::<u32>()
+                .expect("mock child self-reported pid is numeric");
+            assert_eq!(
+                self_reported, pid,
+                "child self-reported pid must match the spawn-registered pid"
+            );
+        }
         wait_for_mock_child_to_exit(pid);
     }
     use crate::CodexLocalReadbackPlan;

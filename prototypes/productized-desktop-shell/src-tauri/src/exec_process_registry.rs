@@ -292,7 +292,7 @@ pub(crate) fn register_spawned_codex_process_group(
     let run_id = codex_local_process_run_id(request);
     #[cfg(test)]
     {
-        let _ = (run_id, pid);
+        test_record_spawned_codex_process_group(&run_id, pid);
         return Ok(DurableProcessRegistration {
             workflow_state_path,
             entry: None,
@@ -306,6 +306,37 @@ pub(crate) fn register_spawned_codex_process_group(
         "codex local runner",
         &SystemProcessOperations,
     )
+}
+
+// 测试构建专用的 spawn 登记通道：登记发生在父进程 spawn 的同步点上，
+// 不依赖子进程是否已被调度运行（子进程自报 pid 文件存在调度竞态）。
+// 仅供进程夹具测试按 run_id 取回真实 spawn pid 做回收核验；生产构建不含此通道。
+#[cfg(test)]
+static TEST_SPAWNED_CODEX_PROCESS_GROUPS: std::sync::Mutex<Vec<(String, u32)>> =
+    std::sync::Mutex::new(Vec::new());
+
+#[cfg(test)]
+fn test_record_spawned_codex_process_group(run_id: &str, pid: u32) {
+    TEST_SPAWNED_CODEX_PROCESS_GROUPS
+        .lock()
+        .expect("test spawned process registry lock")
+        .push((run_id.to_string(), pid));
+}
+
+#[cfg(test)]
+pub(crate) fn test_spawned_codex_process_run_id(request: &CodexLocalExecutionRequest) -> String {
+    codex_local_process_run_id(request)
+}
+
+#[cfg(test)]
+pub(crate) fn test_take_spawned_codex_process_group(run_id: &str) -> Option<u32> {
+    let mut entries = TEST_SPAWNED_CODEX_PROCESS_GROUPS
+        .lock()
+        .expect("test spawned process registry lock");
+    entries
+        .iter()
+        .position(|(registered_run_id, _)| registered_run_id == run_id)
+        .map(|index| entries.remove(index).1)
 }
 
 fn codex_local_process_run_id(request: &CodexLocalExecutionRequest) -> String {
