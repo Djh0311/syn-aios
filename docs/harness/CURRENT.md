@@ -1,28 +1,28 @@
 # product-line Current
 
 schema: harness-current/v2
-updated-at: 2026-08-04T10:35:00+08:00
+updated-at: 2026-08-04T09:18:50+08:00
 mode: PLAN
 work-state: IN_PROGRESS
 active-id: NONE
-phase: M1 CLOSED. M2 IN_PROGRESS — T1-R2 reference slice wiring delivered with isolated-runtime three-scenario evidence; awaiting director verification before T2 dispatch.
+phase: M1 CLOSED. M2 IN_PROGRESS — T1-R2 A1-A5 independently verified; T4-A is user-approved ahead of T2 to remove its A6 verification blockers.
 goal: Build the shared transaction foundation (UoW/event/audit/outbox/projector) on the frozen M1 contracts, one reference slice at a time.
 
 ## Status
 
-- Route: master plan v1. M1 CLOSED; M2 IN_PROGRESS (M2a stage package: T1-R2 delivered, T2-T4 pending); M3-M10 `PLANNED / NOT_ACTIVE`.
-- T1-R2 (reference slice wiring): `update_work_item_state` db-primary path now executes `update_work_item_state_m2_with_transaction` + repository mutation + audit in ONE SQLite transaction (`workflow_run_dispatch_entrypoints.rs:642-676`); R1 decoration deleted; policy = real `control_core` transition gate (stub removed); idempotency pre-check replays same-receipt / conflicts on hash mismatch; M2 schema applied at DB init (`workbench_sqlite_schema.rs:217`).
-- T1-R2 evidence: unit 4/4 m2 tests green (allowed / denied / replay / conflict); isolated App (HOME=/private/tmp/m2a-iso, db_primary green) console-invoked 3 scenarios — legal commit, same-key replay (same receipt, zero new rows), illegal transition (DENIED receipt, zero business change) — DB state read back at `/private/tmp/m2a-iso/**/runtime-artifacts/workbench.sqlite`; record at `test-fixtures/m2a-acceptance/acceptance-record-2026-08-04-t1r2.md`.
-- Numbers (executor-run, director to re-run): `cargo check --lib` exit 0 / 694 warnings; `cargo test --lib` 1342 passed / 1 failed / 45 ignored (1 failed = pre-existing sqlite preflight, T4 scope).
+- Route: master plan v1. M1 CLOSED; M2 IN_PROGRESS (T1-R2 functionally evidenced, T4-A active before T1 closure; T2-T4 remainder pending); M3-M10 `PLANNED / NOT_ACTIVE`.
+- T1-R2 A1-A5: production `update_work_item_state` calls `update_work_item_state_m2_with_transaction` inside the repository's SQLite transaction; policy, replay/conflict, and isolated three-scenario DB evidence were independently read and verified. This is not yet T1 acceptance.
+- T1-R2 A6 director result: `cargo check --lib` exit 0 / 693 warnings, not executor-reported 694. Standard full test produced 1341 passed / 2 failed / 45 ignored: stable sqlite preflight failure plus a full-suite-only real-process fixture failure; individual real-process tests pass outside the sandbox. Both failure families predate `d9d3074` and are assigned to T4 by the M2a kickoff.
+- T4-A exception is user-approved and active: repair only the sqlite preflight denial contract and the real-process timeout fixture; task at `tasks/2026-08-04-syn-m2a-t4a-acceptance-unblock-package-v1.md`.
 - M2 authorization: `decisions/2026-08-03-syn-m2-blanket-authorization-v1.md` (§8 items pre-authorized; hard lines unchanged).
 
 ## Blockers
 
-- T1-R2 acceptance is pending director physical verification (call-site line read, DB replay, number re-run); T2-T4 dispatch waits on it.
+- T1-R2 is not accepted until its A6 numbers are re-run after T4-A. T2 remains blocked; remaining T4 work is not activated by this exception.
 
 ## Next action
 
-- Director verifies T1-R2 against `tasks/2026-08-03-syn-m2a-t1-r2-package-v1.md` A1-A6, then dispatches T2 (isolated crash-recovery acceptance).
+- Executor completes T4-A; director re-runs T1-R2 A6 and either accepts T1 then dispatches T2, or returns the exact failing criterion.
 
 ## Safety
 
