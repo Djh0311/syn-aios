@@ -996,6 +996,11 @@ impl WorkbenchSqliteRepository {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(RepositoryMutationError::Sqlite)?;
         let value = operation(&transaction)?;
+        // T2 崩溃恢复验收门（debug-only，profile 有效 + 门文件存在才武装；release 编译消失）：
+        // 在 operation 完成、commit 之前的确定性窗口阻塞，操作者可在窗口内 SIGKILL 验证零半提交。
+        #[cfg(debug_assertions)]
+        crate::acceptance_runtime_profile::acceptance_wait_for_gate_release("pre-commit")
+            .map_err(RepositoryMutationError::Message)?;
         if failure == Some(RepositoryFailurePoint::BeforeCommit) {
             return Err(RepositoryMutationError::InjectedBeforeCommit);
         }

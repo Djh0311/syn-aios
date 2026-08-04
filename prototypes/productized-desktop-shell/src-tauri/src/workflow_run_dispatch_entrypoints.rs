@@ -747,10 +747,22 @@ fn update_work_item_state_db_primary(
         },
     ).map_err(|e| format!("update_work_item_state_m2_wired: {}", e))?;
 
+    // T2 崩溃恢复验收门（debug-only）：commit 已落盘、JSON 投影未开始的确定性窗口。
+    // 操作者在窗口内 SIGKILL → 重启走 DB-leading replay 恢复投影。
+    #[cfg(debug_assertions)]
+    crate::acceptance_runtime_profile::acceptance_wait_for_gate_release("post-commit")?;
+
     crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
         path,
         "work_item_state_transition",
         || {
+            // T2 投影失败验收门（debug-only）：武装时注入确定性投影失败，验证 fail-closed/降级语义。
+            #[cfg(debug_assertions)]
+            if let Some(injected) =
+                crate::acceptance_runtime_profile::acceptance_injected_failure("projection-fail")
+            {
+                return Err(injected);
+            }
             let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
             write_validated_workflow_state(path, &value)?;
             let snapshot = read_workflow_state_snapshot(path)?;
