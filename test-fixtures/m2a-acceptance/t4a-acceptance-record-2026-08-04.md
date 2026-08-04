@@ -58,7 +58,7 @@ cargo test --lib workbench_sqlite_production_apply::tests::sqlite_production_pre
 |---|---|---|
 | `cargo test --lib workbench_sqlite_production_apply::tests::sqlite_production_preflight_blocked_creates_no_db_or_report -- --exact --nocapture` | 0 | `test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1387 filtered out` |
 | `cargo test --lib codex_local_runner::tests::real_process_timeout_kills_and_reaps_mock_child -- --exact --nocapture` | 0 | `test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1387 filtered out` |
-| `cargo check --lib` | 0 | **694 warnings**（与 T1-R2 交付基线一致，零新增；唯一相关 `manual_relay.rs:4230 reserve_confirmation_once never used` 为预存） |
+| `cargo check --lib` | 0 | **693 warnings**（与 T1-R2 指导线基线一致，零新增；唯一相关 `manual_relay.rs:4230 reserve_confirmation_once never used` 为预存） |
 | `cargo test --lib`（全量 × 3 连续） | 0 | **`test result: ok. 1343 passed; 0 failed; 45 ignored; 0 measured`** ×3（修复过程中曾见 obsidian/manual_relay/quality_debt 翻转，逐个定性修复后稳定） |
 | `git diff --check` | 0 | 零输出 |
 
