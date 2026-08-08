@@ -2613,6 +2613,17 @@ fn worker_report_input(
         workflow_node_id: node_id.to_string(),
         work_item_id: work_item_id.to_string(),
         dispatch_id: None,
+        // SYN-FND-004B: 填现成的 attempt.attempt_id——2629-2631 就在取它
+        attempt_id: phase_a
+            .product_command_attempt
+            .as_ref()
+            .map(|attempt| attempt.attempt_id.clone()),
+        // SYN-FND-004B: Phase A no-op，无真实执行者；用占位标识
+        authenticated_actor_id: "phase-a-noop".to_string(),
+        authenticated_project_scope: project_id_value.to_string(),
+        report_hash: "hash:k3-phase-a-noop".to_string(),
+        // SYN-FND-004B: Phase A no-op 非真实执行，按合同用 offline，不冒充 execution
+        report_kind: "offline".to_string(),
         actor_role: "developer_execution".to_string(),
         executed_what:
             "记录 K3 Level A Product Command Phase A no-op；未发送 prompt，未执行真实 Codex。"

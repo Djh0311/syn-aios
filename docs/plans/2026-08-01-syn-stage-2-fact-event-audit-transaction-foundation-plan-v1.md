@@ -2,7 +2,7 @@
 
 日期：2026-08-01<br>
 阶段：`M2`<br>
-状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
+状态：**IN_PROGRESS。DAT-001 已完成（`49a7e4c`）；DAT-002..008 于 2026-08-03 交付为未接线基座集群（9 模块 4011 行，7/9 零外部调用者，当轮"COMPLETE"自报已被指导线驳回并记账）；接线、真机验收与 §0.4 残留作为 M2a 阶段包派发（`tasks/2026-08-03-syn-m2a-kickoff-v1.md`）。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M2。<br>
 硬前置：M1 退出门通过，M1 合同版本与迁移矩阵冻结。<br>
 当前 active node / package：`NONE`；本计划不授权 schema、store、App、真实数据或产品代码写入。
@@ -36,6 +36,20 @@
 - 当前测试、non-test build、真实 App 冷启动 / 强退 / 重启表现。
 
 这些事项必须在获批任务中以 temp fixture 或经授权的隔离 profile 核验，计划不预填“通过”。
+
+### 0.4 M1 残留项（2026-08-03 用户拍板划入本阶段范围）
+
+以下来自 `decisions/2026-08-03-syn-m1-closure-acceptance-v1.md` 的残留清单，并入本阶段对应切片，不再是 M1 债务：
+
+| 残留项 | 承接切片 | 说明 |
+|---|---|---|
+| grant 校验仅为格式级：无 grant store，活路径 `grant_id = dispatch_id`，`verify_grant` 跑自铸通配 grant | DAT-002（schema/ports）+ DAT-003（vertical slice） | M2 建真 grant 持久化与 mint/load/verify；在接上之前，任何规划不得把 grant 当作真实防御 |
+| FND-006 场景 3/4（伪造 report/grant 全链运行时验证） | DAT-008（隔离 App 验收） | 需 fake runner 全链夹具；届时 consume 路径的 grant 拒绝可拿运行时证据 |
+| FND-006 场景 5（Station 3b 写入拒绝运行时验证） | DAT-008；若 supervisor 会话机制不在 M2 建成，则顺延至 M3 并在 M2 退出时显式标注 | 需 supervisor 会话夹具 |
+| `sqlite_production_preflight_blocked_creates_no_db_or_report` 稳定失败（M1 前既有） | DAT-002 期间定性修复 | preflight 期望拦截、实际 completed 且建库；属本阶段存储域 |
+| 进程夹具族环境性失败（codex_local_runner / obsidian / manual_relay 轮流翻） | DAT-002 期间合并排查 | 07-26 R3B 浏览器抖动、07-27 Rust 抖动同族并案 |
+| code-map advisory（`MAP_UPDATE_REQUIRED`：新模块无能力映射、`index.json` invalid domain path） | 随首个 DAT 提交批处理 | 非阻断但持续告警 |
+| FND-001 合同 commit 未进 integration main（HOLD） | M2 激活前由指导线决定集成路径 | 不涉及产品代码 |
 
 ## 1. 阶段目标
 

@@ -438,6 +438,27 @@ fn record_worker_structured_report_at(
         stable_id(&request.summary),
         timestamp
     );
+
+    // SYN-FND-003: 使用 identity_kernel 解析执行者身份
+    let identity = crate::mcp::identity_kernel::resolve_identity(
+        &request.authenticated_actor_id,
+        &request.project_root,
+        &request.actor_role,
+        "development",
+        false,
+    );
+    let resolved_actor = match &identity {
+        crate::mcp::identity_kernel::IdentityResolution::Resolved(s) => {
+            format!("{}:{}", s.role_ref.kind.as_str(), s.actor_id.0)
+        }
+        _ => request.actor_role.clone(), // 降级使用原始 role
+    };
+
+    // SYN-FND-005: 使用 event_audit_boundary 对报告内容脱敏
+    let scrubbed_executed_what = crate::mcp::event_audit_boundary::scrub_content(&request.executed_what);
+    let scrubbed_changed_what = crate::mcp::event_audit_boundary::scrub_content(&request.changed_what);
+    let scrubbed_summary = crate::mcp::event_audit_boundary::scrub_content(&request.summary);
+
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": report_id,
       "event_type": "worker_structured_report_recorded",
@@ -447,12 +468,19 @@ fn record_worker_structured_report_at(
       "node_id": request.workflow_node_id,
       "work_item_id": request.work_item_id,
       "dispatch_id": request.dispatch_id,
-      "actor_ref": request.actor_role,
+      // SYN-FND-004B: 精确绑定字段
+      "attempt_id": request.attempt_id,
+      "authenticated_actor_id": request.authenticated_actor_id,
+      "authenticated_project_scope": request.authenticated_project_scope,
+      "report_hash": request.report_hash,
+      "report_kind": request.report_kind,
+      // SYN-FND-003: 使用解析后的真实身份
+      "actor_ref": resolved_actor,
       "source_kind": "worker_handoff",
       "permission_level": "workflow_event_record",
-      "executed_what": request.executed_what.trim(),
-      "changed_what": request.changed_what.trim(),
-      "reason": request.summary.trim(),
+      "executed_what": scrubbed_executed_what.trim(),
+      "changed_what": scrubbed_changed_what.trim(),
+      "reason": scrubbed_summary.trim(),
       "evidence_refs": request.evidence_refs,
       "open_issues": request.open_issues,
       "permission_requests": request.permission_requests,

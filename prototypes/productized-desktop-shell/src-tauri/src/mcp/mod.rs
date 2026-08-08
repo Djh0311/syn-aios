@@ -10,7 +10,11 @@
 
 pub(crate) mod capability_registry;
 pub mod commands;
+pub(crate) mod event_audit_boundary;
+pub(crate) mod execution_grant;
+pub(crate) mod identity_kernel;
 pub mod orchestrator;
+pub(crate) mod path_guard;
 mod protocol;
 pub mod storage;
 pub(crate) mod supervisor_conversation_binding;

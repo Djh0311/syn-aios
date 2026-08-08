@@ -9,7 +9,7 @@ use std::os::unix::{
 };
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub(crate) const PROFILE_ENV: &str = "SYN_R4_ACCEPTANCE_PROFILE";
 pub(crate) const PROFILE_FILENAME: &str = "profile.json";
@@ -26,6 +26,10 @@ const CODEX_DB_RELATIVE_PATH: &str = "codex-db/state.sqlite";
 const VAULT_DIR_NAME: &str = "knowledge-vault";
 const RECOVERY_DIR_NAME: &str = "knowledge-workspace-recovery";
 const LOGS_DIR_NAME: &str = "logs";
+// T2 崩溃恢复扩展：runtime-artifacts 为可选第 7 项（db_primary 配置/DB、验收门、重进标记的落点）；
+// .r4-initialized 由操作者在首次校验通过后落盘（harness 只读不写），内容必须为同 run_id。
+const RUNTIME_ARTIFACTS_DIR_NAME: &str = "runtime-artifacts";
+const REENTRY_MARKER_NAME: &str = ".r4-initialized";
 pub(crate) const PREPARED_ROOT_ENTRY_NAMES: [&str; 6] = [
     PROFILE_FILENAME,
     "fixture",
@@ -266,6 +270,11 @@ pub(crate) fn resolve_paths_with_context(
 
     let (root, manifest_path) = validate_profile_location(profile_manifest, context.current_uid)?;
     let manifest = read_and_validate_manifest(&manifest_path, context.now_ms)?;
+    if is_reentry(&root, &manifest)? {
+        let project_root = validate_reentry_layout(&root, &manifest)?;
+        validate_manifest_runtime_identity(&manifest, &project_root)?;
+        return Ok(Some(runtime_paths_from_manifest(root, project_root)));
+    }
     let fixture = validate_root_layout(&root, &manifest)?;
     validate_manifest_runtime_identity(&manifest, &fixture.project_root)?;
     validate_fixture_contents(&fixture, &manifest)?;
@@ -273,6 +282,96 @@ pub(crate) fn resolve_paths_with_context(
         root,
         fixture.project_root,
     )))
+}
+
+/// 崩溃重进判定：marker 存在即进入重进模式；内容必须是同 run_id，否则按复用拒绝。
+/// harness 从不写 marker——由验收操作者在首次校验通过后显式落盘。
+fn is_reentry(root: &Path, manifest: &ProfileManifest) -> Result<bool, String> {
+    let marker = root
+        .join(RUNTIME_ARTIFACTS_DIR_NAME)
+        .join(REENTRY_MARKER_NAME);
+    if !marker.exists() {
+        return Ok(false);
+    }
+    let recorded = fs::read_to_string(&marker).map_err(|_| ERROR_REUSED.to_string())?;
+    if recorded.trim() != manifest.run_id {
+        return Err(ERROR_REUSED.to_string());
+    }
+    Ok(true)
+}
+
+/// 重进模式布局校验：身份与落点仍强校验（目录/文件类型、symlink、project dir 与 run_id 对应），
+/// 但不再要求全新夹具内容与空目录——崩溃后的脏 store 正是验收对象。
+fn validate_reentry_layout(root: &Path, manifest: &ProfileManifest) -> Result<PathBuf, String> {
+    let entries = read_direct_entries(root)?;
+    for path in entries.values() {
+        reject_symlink(path)?;
+    }
+    for required in PREPARED_ROOT_ENTRY_NAMES {
+        require_directory_or_file(entries.get(required), required)?;
+    }
+    if let Some(runtime_artifacts) = entries.get(RUNTIME_ARTIFACTS_DIR_NAME) {
+        require_directory(Some(runtime_artifacts))?;
+    }
+    let extra = entries
+        .keys()
+        .filter(|name| {
+            !PREPARED_ROOT_ENTRY_NAMES.contains(&name.as_str())
+                && name.as_str() != RUNTIME_ARTIFACTS_DIR_NAME
+        })
+        .count();
+    if extra > 0 {
+        return Err(ERROR_REUSED.to_string());
+    }
+
+    let fixture_dir = entries.get("fixture").ok_or_else(|| ERROR_REUSED.to_string())?;
+    require_single_link_regular_file_at(fixture_dir.join("codex-index.json"))?;
+    require_single_link_regular_file_at(fixture_dir.join("tasks.md"))?;
+    let project_dir = format!("SYN R4 ISOLATED ACCEPTANCE {}", manifest.run_id);
+    let project_path = fixture_dir.join(&project_dir);
+    require_directory(Some(&project_path))?;
+    let canonical_project_root =
+        fs::canonicalize(&project_path).map_err(|_| ERROR_FIXTURE.to_string())?;
+    let canonical_fixture_dir =
+        fs::canonicalize(fixture_dir).map_err(|_| ERROR_FIXTURE.to_string())?;
+    if canonical_project_root.parent() != Some(canonical_fixture_dir.as_path()) {
+        return Err(ERROR_FIXTURE.to_string());
+    }
+
+    let workflow_state_file = entries
+        .get("workflow-state")
+        .ok_or_else(|| ERROR_REUSED.to_string())?
+        .join("workflow-state.v0.json");
+    require_single_link_regular_file_at(workflow_state_file)?;
+    Ok(canonical_project_root)
+}
+
+fn require_directory_or_file(path: Option<&PathBuf>, name: &str) -> Result<(), String> {
+    let path = path.ok_or_else(|| ERROR_REUSED.to_string())?;
+    let metadata = fs::symlink_metadata(path).map_err(|_| ERROR_REUSED.to_string())?;
+    if metadata.file_type().is_symlink() {
+        return Err(ERROR_SYMLINK.to_string());
+    }
+    let expect_dir = name != PROFILE_FILENAME;
+    if metadata.is_dir() != expect_dir {
+        return Err(ERROR_REUSED.to_string());
+    }
+    Ok(())
+}
+
+fn require_single_link_regular_file_at(path: PathBuf) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(&path).map_err(|_| ERROR_REUSED.to_string())?;
+    if metadata.file_type().is_symlink() {
+        return Err(ERROR_SYMLINK.to_string());
+    }
+    if !metadata.is_file() {
+        return Err(ERROR_REUSED.to_string());
+    }
+    #[cfg(unix)]
+    if metadata.nlink() != 1 {
+        return Err(ERROR_HARDLINK.to_string());
+    }
+    Ok(())
 }
 
 pub(crate) fn initialize_from_env() -> Result<(), String> {
@@ -466,7 +565,11 @@ fn validate_root_layout(
     for path in entries.values() {
         reject_symlink(path)?;
     }
-    let names = entries.keys().cloned().collect::<BTreeSet<_>>();
+    let mut names = entries.keys().cloned().collect::<BTreeSet<_>>();
+    // runtime-artifacts 为可选扩展项（db_primary 配置/DB 与验收门落点），存在时必须是目录
+    if names.remove(RUNTIME_ARTIFACTS_DIR_NAME) {
+        require_directory(entries.get(RUNTIME_ARTIFACTS_DIR_NAME))?;
+    }
     let prepared = PREPARED_ROOT_ENTRY_NAMES
         .iter()
         .map(|entry| (*entry).to_string())
@@ -827,5 +930,61 @@ fn runtime_paths_from_manifest(root: PathBuf, project_root: PathBuf) -> RuntimeP
         app_log_dir: root.join(LOGS_DIR_NAME),
         app_data_root,
         root,
+    }
+}
+
+// ---- T2 崩溃恢复：debug-only 验收门 ----
+// 门只在 SYN_R4_ACCEPTANCE_PROFILE 有效（debug build + 受控 /private/tmp root 强校验）
+// 且操作者在 <root>/runtime-artifacts/acceptance-gates/<gate>.pause 落盘时武装。
+// 普通 App 路径（无 profile）恒惰性；release 构建不含调用点（调用点全部 #[cfg(debug_assertions)]）。
+
+const ACCEPTANCE_GATE_WAIT_INTERVAL: Duration = Duration::from_millis(50);
+const ACCEPTANCE_GATE_WAIT_BUDGET: Duration = Duration::from_secs(120);
+
+fn acceptance_gate_file(gate: &str) -> Option<PathBuf> {
+    let paths = active_paths().ok().flatten()?;
+    Some(
+        paths
+            .root
+            .join(RUNTIME_ARTIFACTS_DIR_NAME)
+            .join("acceptance-gates")
+            .join(format!("{gate}.pause")),
+    )
+}
+
+/// 门是否武装：profile 有效且门文件存在。无 profile / 无门文件恒 false。
+pub(crate) fn acceptance_gate_armed(gate: &str) -> bool {
+    acceptance_gate_file(gate).is_some_and(|path| path.exists())
+}
+
+/// 在确定性窗口阻塞，直到操作者移除门文件；超时 fail-closed 报错（不继续后续提交动作）。
+/// 阻塞期间进程可被 SIGKILL，窗口边界 = 门文件存在期间，可观察、可重复。
+pub(crate) fn acceptance_wait_for_gate_release(gate: &str) -> Result<(), String> {
+    if !acceptance_gate_armed(gate) {
+        return Ok(());
+    }
+    eprintln!("acceptance_gate_armed:{gate}: waiting for operator release");
+    let deadline = std::time::Instant::now() + ACCEPTANCE_GATE_WAIT_BUDGET;
+    loop {
+        if !acceptance_gate_armed(gate) {
+            eprintln!("acceptance_gate_released:{gate}");
+            return Ok(());
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(format!(
+                "acceptance_gate_release_timeout:{gate}: operator did not release within {:?}",
+                ACCEPTANCE_GATE_WAIT_BUDGET
+            ));
+        }
+        std::thread::sleep(ACCEPTANCE_GATE_WAIT_INTERVAL);
+    }
+}
+
+/// 失败注入门：武装时返回注入错误文案，否则 None（无行为变化）。
+pub(crate) fn acceptance_injected_failure(gate: &str) -> Option<String> {
+    if acceptance_gate_armed(gate) {
+        Some(format!("acceptance_injected_failure:{gate}"))
+    } else {
+        None
     }
 }

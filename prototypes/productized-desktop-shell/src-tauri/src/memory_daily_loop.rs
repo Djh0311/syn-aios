@@ -599,6 +599,13 @@ mod tests {
                 .to_string(),
             work_item_id: "work-item:l5:001".to_string(),
             dispatch_id: Some("dispatch:l5:001".to_string()),
+            // SYN-FND-004B 测试夹具: dispatch_id 即 attempt_id
+            attempt_id: Some("dispatch:l5:001".to_string()),
+            // SYN-FND-004B 测试夹具: 真实执行者 = dispatch_id
+            authenticated_actor_id: "dispatch:l5:001".to_string(),
+            authenticated_project_scope: "project:tmp-l5-memory-daily-loop-project".to_string(),
+            report_hash: "hash:fixture".to_string(),
+            report_kind: "execution".to_string(),
             actor_role: "codex-dev".to_string(),
             executed_what: "执行了一轮工作".to_string(),
             changed_what: "改了若干文件".to_string(),

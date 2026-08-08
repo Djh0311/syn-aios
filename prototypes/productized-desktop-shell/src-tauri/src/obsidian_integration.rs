@@ -970,28 +970,33 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn fake_executable(body: &str) -> (PathBuf, PathBuf) {
-        use std::os::unix::fs::PermissionsExt;
-
+    fn fake_cli_cwd(tag: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
-            "obsidian-integration-cli-test-{}-{}",
+            "obsidian-integration-cli-test-{}-{}-{}",
             std::process::id(),
+            tag,
             FAKE_EXECUTABLE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&root).unwrap();
-        let script = root.join("fake-cli");
-        fs::write(&script, format!("#!/bin/sh\n{body}\n")).unwrap();
-        let mut permissions = fs::metadata(&script).unwrap().permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&script, permissions).unwrap();
-        (root, script)
+        root
+    }
+
+    // 进程夹具确定性边界：不新建脚本文件，直接把载荷作为 argv 喂给系统 /bin/sh。
+    // 新建脚本首次 exec 在本沙箱实测 155ms~3.2s（系统对新可执行文件的检查），
+    // 全量并行时稳定撞穿 1s deadline；/bin/sh 本身常驻温热（实测 ~7ms），
+    // exec 延迟不再是夹具变量，产品超时/上限语义一字不动。
+    #[cfg(unix)]
+    fn fake_sh_argv(body: &str) -> Vec<String> {
+        vec!["-c".to_string(), body.to_string()]
     }
 
     #[cfg(unix)]
     #[test]
     fn fake_executable_proves_nonzero_timeout_and_output_cap_are_closed() {
-        let (root, nonzero) = fake_executable("exit 7");
-        let error = run_process_with_limits(&nonzero, &root, &[], Duration::from_secs(1), 1024)
+        let sh = Path::new("/bin/sh");
+
+        let root = fake_cli_cwd("nonzero");
+        let error = run_process_with_limits(sh, &root, &fake_sh_argv("exit 7"), Duration::from_secs(1), 1024)
             .unwrap_err();
         assert!(
             error.contains("退出码 7"),
@@ -999,14 +1004,14 @@ mod tests {
         );
         let _ = fs::remove_dir_all(&root);
 
-        let (root, timeout) = fake_executable("sleep 1");
-        let error = run_process_with_limits(&timeout, &root, &[], Duration::from_millis(20), 1024)
+        let root = fake_cli_cwd("timeout");
+        let error = run_process_with_limits(sh, &root, &fake_sh_argv("sleep 1"), Duration::from_millis(20), 1024)
             .unwrap_err();
         assert!(error.contains("超时"));
         let _ = fs::remove_dir_all(&root);
 
-        let (root, too_large) = fake_executable("yes x | head -c 2048");
-        let error = run_process_with_limits(&too_large, &root, &[], Duration::from_secs(1), 128)
+        let root = fake_cli_cwd("too-large");
+        let error = run_process_with_limits(sh, &root, &fake_sh_argv("yes x | head -c 2048"), Duration::from_secs(1), 128)
             .unwrap_err();
         assert!(error.contains("超过安全上限"));
         let _ = fs::remove_dir_all(&root);
@@ -1015,9 +1020,15 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn fake_executable_proves_non_utf8_is_rejected() {
-        let (root, script) = fake_executable("printf '\\377'");
-        let error =
-            run_process_with_limits(&script, &root, &[], Duration::from_secs(1), 1024).unwrap_err();
+        let root = fake_cli_cwd("non-utf8");
+        let error = run_process_with_limits(
+            Path::new("/bin/sh"),
+            &root,
+            &fake_sh_argv("printf '\\377'"),
+            Duration::from_secs(1),
+            1024,
+        )
+        .unwrap_err();
         assert!(error.contains("不是有效 UTF-8"));
         let _ = fs::remove_dir_all(&root);
     }

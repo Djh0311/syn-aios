@@ -1439,3 +1439,102 @@ fn acceptance_runtime_profile_prelaunch_layout_and_exit_contract_fail_closed() {
         );
     }
 }
+
+#[test]
+fn first_init_allows_optional_runtime_artifacts_dir() {
+    let fixture = AcceptanceFixture::new("runtime-artifacts-first-init");
+    let manifest = fixture.write_manifest(&valid_manifest(&fixture, run_id()));
+    prepare_valid_fixture(&fixture);
+    let runtime_artifacts = fixture.root.join("runtime-artifacts");
+    fs::create_dir(&runtime_artifacts).expect("runtime artifacts dir");
+    fs::write(runtime_artifacts.join("storage-mode.v1.json"), "{}").expect("operator file");
+
+    let paths = resolve_paths_with_context(Some(&manifest), fixture.context())
+        .expect("first init with runtime-artifacts dir must resolve")
+        .expect("isolated profile");
+    assert_eq!(paths.root, fixture.root);
+}
+
+#[test]
+fn reentry_with_matching_marker_accepts_dirty_root() {
+    let fixture = AcceptanceFixture::new("reentry-dirty");
+    let manifest = fixture.write_manifest(&valid_manifest(&fixture, run_id()));
+    prepare_valid_fixture(&fixture);
+    resolve_paths_with_context(Some(&manifest), fixture.context())
+        .expect("first init")
+        .expect("isolated profile");
+
+    // 模拟崩溃后的脏现场：store 已变更、备份目录、日志、runtime-artifacts + 重进标记
+    fs::write(
+        fixture.root.join("workflow-state/workflow-state.v0.json"),
+        "{\"schema_version\":\"workflow_state_v0\",\"mutated\":true}",
+    )
+    .expect("mutated store");
+    fs::create_dir(fixture.root.join("workflow-state/backups")).expect("backups dir");
+    fs::write(fixture.root.join("logs/app.log"), "log line").expect("log file");
+    let runtime_artifacts = fixture.root.join("runtime-artifacts");
+    fs::create_dir(&runtime_artifacts).expect("runtime artifacts dir");
+    fs::write(
+        runtime_artifacts.join(".r4-initialized"),
+        format!("{}\n", run_id()),
+    )
+    .expect("reentry marker");
+
+    let paths = resolve_paths_with_context(Some(&manifest), fixture.context())
+        .expect("reentry with matching marker must resolve")
+        .expect("isolated profile");
+    assert_eq!(paths.root, fixture.root);
+}
+
+#[test]
+fn reentry_marker_with_wrong_run_id_is_rejected() {
+    let fixture = AcceptanceFixture::new("reentry-wrong-marker");
+    let manifest = fixture.write_manifest(&valid_manifest(&fixture, run_id()));
+    prepare_valid_fixture(&fixture);
+    let runtime_artifacts = fixture.root.join("runtime-artifacts");
+    fs::create_dir(&runtime_artifacts).expect("runtime artifacts dir");
+    fs::write(
+        runtime_artifacts.join(".r4-initialized"),
+        "syn-r4-0000000000000000",
+    )
+    .expect("foreign reentry marker");
+
+    assert_error(
+        resolve_paths_with_context(Some(&manifest), fixture.context()),
+        "acceptance_runtime_profile_reused",
+    );
+}
+
+#[test]
+fn reentry_still_rejects_unknown_extra_entries() {
+    let fixture = AcceptanceFixture::new("reentry-extra-entry");
+    let manifest = fixture.write_manifest(&valid_manifest(&fixture, run_id()));
+    prepare_valid_fixture(&fixture);
+    let runtime_artifacts = fixture.root.join("runtime-artifacts");
+    fs::create_dir(&runtime_artifacts).expect("runtime artifacts dir");
+    fs::write(
+        runtime_artifacts.join(".r4-initialized"),
+        run_id(),
+    )
+    .expect("reentry marker");
+    fs::write(fixture.root.join("junk.txt"), "junk").expect("unknown extra entry");
+
+    assert_error(
+        resolve_paths_with_context(Some(&manifest), fixture.context()),
+        "acceptance_runtime_profile_reused",
+    );
+}
+
+#[test]
+fn acceptance_gates_are_inert_without_initialized_profile() {
+    use super::acceptance_runtime_profile::{
+        acceptance_gate_armed, acceptance_injected_failure, acceptance_wait_for_gate_release,
+    };
+
+    // 测试进程的全局 profile 状态从未初始化：门必须完全惰性（普通 App 路径无故障开关）。
+    assert!(!acceptance_gate_armed("pre-commit"));
+    assert!(!acceptance_gate_armed("post-commit"));
+    assert!(!acceptance_gate_armed("projection-fail"));
+    assert_eq!(acceptance_wait_for_gate_release("pre-commit"), Ok(()));
+    assert_eq!(acceptance_injected_failure("projection-fail"), None);
+}

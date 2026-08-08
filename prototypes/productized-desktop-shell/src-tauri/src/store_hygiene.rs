@@ -67,24 +67,16 @@ pub(crate) struct SweepCanvasRunResidueResult {
     pub(crate) message: String,
 }
 
-/// slug 化 project_root，逻辑与 `plan_authorization_store::stable_id` 一致
-/// （该 fn 为 mod-private 无法跨 mod 复用，这里内联一份仅用于 project_root 可选过滤）。
-fn slugify_project_root(value: &str) -> String {
-    value
-        .trim()
-        .to_lowercase()
-        .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
-        .collect::<String>()
-        .split('-')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
-}
-
 /// 判断一条 work_item 是否命中「canvas-run 形状 + ready_for_review + 超龄」三条件。
 /// 命中返回 age_days；任一不满足（含无法解析 created_at）返回 None——不确定就不碰。
-fn residue_age_days(item: &Value, now_ms: i64, project_slug: Option<&str>) -> Option<i64> {
+///
+/// SYN-FND-004A: 归属判定只认 project_id 精确匹配，不再使用 workflow_id.contains(slug)。
+fn residue_age_days(
+    item: &Value,
+    now_ms: i64,
+    expected_project_id: Option<&str>,
+    workflows: &[Value],
+) -> Option<i64> {
     let work_item_id = crate::optional_string_from(item, "work_item_id")?;
     if !work_item_id.contains(CANVAS_RUN_ID_MARKER) {
         return None;
@@ -93,11 +85,21 @@ fn residue_age_days(item: &Value, now_ms: i64, project_slug: Option<&str>) -> Op
         return None;
     }
     let workflow_id = crate::optional_string_from(item, "workflow_id")?;
-    if let Some(slug) = project_slug {
-        if !workflow_id.contains(slug) {
+
+    // SYN-FND-004A: 通过 workflow 的 project_id 精确匹配归属，不再模糊 contains(slug)
+    if let Some(expected_pid) = expected_project_id {
+        let owns = workflows.iter().any(|wf| {
+            let wid_match =
+                crate::optional_string_from(wf, "workflow_id").as_deref() == Some(workflow_id.as_str());
+            let pid_match =
+                crate::optional_string_from(wf, "project_id").as_deref() == Some(expected_pid);
+            wid_match && pid_match
+        });
+        if !owns {
             return None;
         }
     }
+
     let created_ms: i64 = crate::optional_string_from(item, "created_at")?
         .trim()
         .parse()
@@ -134,14 +136,27 @@ fn sweep_canvas_run_residue_at(
         ));
     }
 
-    let project_slug = request.project_root.as_deref().map(slugify_project_root);
+    // SYN-FND-004A: 使用 project_id 精确匹配，不再使用 slug 模糊匹配
+    let expected_project_id = request
+        .project_root
+        .as_deref()
+        .map(|root| crate::project_id(root));
+    let workflows = value
+        .get("workflows")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
 
     // 盘点：收集命中项 (index, work_item_id, workflow_id, age_days)。只读。
     let mut matched: Vec<(usize, String, String, i64)> = Vec::new();
     if let Some(items) = value.get("work_items").and_then(Value::as_array) {
         for (idx, item) in items.iter().enumerate() {
-            if let Some(age_days) = residue_age_days(item, request.now_ms, project_slug.as_deref())
-            {
+            if let Some(age_days) = residue_age_days(
+                item,
+                request.now_ms,
+                expected_project_id.as_deref(),
+                &workflows,
+            ) {
                 let work_item_id =
                     crate::optional_string_from(item, "work_item_id").unwrap_or_default();
                 let workflow_id =
@@ -328,6 +343,7 @@ mod tests {
     }
 
     /// 一个通过 validate_workflow_state 的最小合法 store，塞入各类 work_item。
+    /// SYN-FND-004A: 包含 workflows 数组以支持 project_id 归属匹配。
     fn fixture_state(work_items: Vec<Value>) -> Value {
         json!({
             "schema_version": "workflow_state_v0",
@@ -335,7 +351,14 @@ mod tests {
             "updated_at": "seed",
             "projects": [],
             "agent_adapters": [],
-            "workflows": [],
+            "workflows": [
+                {
+                    "workflow_id": "workflow:users-yoyi-codex-workflow-mario-test:1782115268646",
+                    "project_id": "project:users-yoyi-codex-workflow-mario-test",
+                    "title": "test workflow",
+                    "state": "active"
+                }
+            ],
             "nodes": [],
             "edges": [],
             "work_items": work_items,
@@ -529,6 +552,32 @@ mod tests {
         };
         let result = sweep_canvas_run_residue_at(&path, &scoped).expect("scoped ok");
         assert_eq!(result.matched_count, 2, "只扫 mario-test 项目下的 2 条");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// SYN-FND-004A 负例：无 project_id 的老 workflow 记录不再被扫到
+    #[test]
+    fn residue_age_days_excludes_old_record_without_project_id() {
+        let dir = temp_dir("sweep-old-record");
+        let cwf_old = "workflow:old-slug-mario-test:123";
+        let items = vec![
+            // 老记录：workflow_id 包含 slug 但无 project_id → 不应被扫到
+            work_item(
+                &format!("work-item:{cwf_old}:canvas-run:1"),
+                cwf_old,
+                "ready_for_review",
+                OLD_MS,
+            ),
+        ];
+        let path = write_fixture(&dir, items);
+
+        let scoped = SweepCanvasRunResidueRequest {
+            project_root: Some("/Users/yoyi/codex-workflow-mario-test".to_string()),
+            dry_run: true,
+            now_ms: NOW_MS,
+        };
+        let result = sweep_canvas_run_residue_at(&path, &scoped).expect("ok");
+        assert_eq!(result.matched_count, 0, "无 project_id 的老记录不应被扫到");
         let _ = fs::remove_dir_all(dir);
     }
 }

@@ -2,7 +2,7 @@
 
 schema: harness-authority/v2
 project: product-line
-updated-at: 2026-08-01T22:10:00+08:00
+updated-at: 2026-08-03T19:30:00+08:00
 
 ## Canonical
 
@@ -10,7 +10,7 @@ updated-at: 2026-08-01T22:10:00+08:00
 - current-state: docs/harness/CURRENT.md
 - active-authority: docs/harness/CURRENT.md
 - master-plan: docs/plans/2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md
-- stage-plan: docs/plans/2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md
+- stage-plan: docs/plans/2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md
 - code-map: docs/code-map/index.json
 - mistake-ledger: none
 

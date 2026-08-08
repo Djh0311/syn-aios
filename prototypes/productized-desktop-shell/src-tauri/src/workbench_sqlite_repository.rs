@@ -178,6 +178,23 @@ impl WorkbenchSqliteRepository {
         })
     }
 
+    // M2 幂等预检：按 command_id + idempotency_key 查询既有 receipt（receipt_id, request_hash）
+    pub(crate) fn find_command_receipt_for_idempotency(
+        &self,
+        command_id: &str,
+        idempotency_key: &str,
+    ) -> Result<Option<(String, String)>, String> {
+        let connection = self.configured_connection()?;
+        connection
+            .query_row(
+                "SELECT receipt_id, request_hash FROM command_receipts WHERE command_id = ?1 AND idempotency_key = ?2",
+                params![command_id, idempotency_key],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|error| format!("find_command_receipt_for_idempotency:{error}"))
+    }
+
     pub(crate) fn record_proposal_with_audit(
         &self,
         proposal: &Value,
@@ -949,7 +966,7 @@ impl WorkbenchSqliteRepository {
         Ok(connection)
     }
 
-    fn with_immediate_transaction<T>(
+    pub(crate) fn with_immediate_transaction<T>(
         &self,
         operation_name: &str,
         failure: Option<RepositoryFailurePoint>,
@@ -979,6 +996,11 @@ impl WorkbenchSqliteRepository {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(RepositoryMutationError::Sqlite)?;
         let value = operation(&transaction)?;
+        // T2 崩溃恢复验收门（debug-only，profile 有效 + 门文件存在才武装；release 编译消失）：
+        // 在 operation 完成、commit 之前的确定性窗口阻塞，操作者可在窗口内 SIGKILL 验证零半提交。
+        #[cfg(debug_assertions)]
+        crate::acceptance_runtime_profile::acceptance_wait_for_gate_release("pre-commit")
+            .map_err(RepositoryMutationError::Message)?;
         if failure == Some(RepositoryFailurePoint::BeforeCommit) {
             return Err(RepositoryMutationError::InjectedBeforeCommit);
         }
@@ -1003,7 +1025,7 @@ enum ReservedActionMutation {
 type RepositoryMutationResult<T> = Result<T, RepositoryMutationError>;
 
 #[derive(Debug)]
-enum RepositoryMutationError {
+pub(crate) enum RepositoryMutationError {
     Sqlite(SqlError),
     InjectedBeforeCommit,
     ReportFailedAfterCommit,
@@ -1029,7 +1051,7 @@ impl RepositoryMutationError {
     }
 }
 
-fn append_audit_in_transaction(
+pub(crate) fn append_audit_in_transaction(
     transaction: &Transaction<'_>,
     audit: &RepositoryAuditEntry,
 ) -> RepositoryMutationResult<usize> {
@@ -1051,7 +1073,7 @@ fn append_audit_in_transaction(
         .map_err(RepositoryMutationError::Sqlite)
 }
 
-fn update_work_item_and_node_state_in_transaction(
+pub(crate) fn update_work_item_and_node_state_in_transaction(
     transaction: &Transaction<'_>,
     work_item_after: &Value,
     node_after: &Value,
