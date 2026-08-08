@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "observedAt": "2026-08-08",
+  "branch": "codex/product-line-lite-migration",
+  "headBefore": "32693e83efb4642fd549a66c44d72c7a13f337e2",
+  "liteSource": {
+    "path": "/Users/yoyi/harness engineering/harness-lite",
+    "commit": "19be06ba91e5c283bbaea1ce1ba2b2af263260bd",
+    "version": "0.4.0",
+    "clean": true
+  },
+  "rules": {
+    "agentsBeforeSha256": "6479cfcbfa87a57f9ce68922e3599b5c7ebd85418240ffc2fa7e742e8a55a5b2",
+    "claudeBeforeSha256": "f72027c69cf153d53c40ed58b1669bf53045f53e4889f16fdbb2a919545aa1d3",
+    "agentsAfterSha256": "c86445f67d5d7af1d33f18716cad7871f2b34d32968c9fad3129befc5c28ffba",
+    "claudeAfterSha256": "b7ca0575486c601cc1fc90460c7946e3068733f4e9e0cd2eed47b8f494564162",
+    "agentsMatchesSource": true,
+    "claudeMatchesSource": true,
+    "removedProjectSpecificRuleMatches": 0,
+    "catchHookPreserved": true,
+    "checksPreserved": true
+  },
+  "ownership": {
+    "versionBefore": "0.3.0",
+    "versionAfter": "0.4.0",
+    "ownedBefore": 44,
+    "ownedAfter": 46,
+    "exact": 42,
+    "projectModified": [
+      "docs/harness/plan.md",
+      "docs/harness/MISTAKES.md",
+      "docs/harness/checks.json"
+    ],
+    "activelyMissing": ["docs/harness/stages/stage-01.md"],
+    "firstUpgradePayloadWrites": 1,
+    "firstUpgradeAdoptedRules": 2,
+    "repeatUpgradePayloadWrites": 0,
+    "repeatUpgradeStatusBefore": "590a77906d09df3e67f9ba9b19f94f66434545668ea969d43c1e4c6cc064db8b",
+    "repeatUpgradeStatusAfter": "590a77906d09df3e67f9ba9b19f94f66434545668ea969d43c1e4c6cc064db8b"
+  },
+  "verification": {
+    "chainProgressAuth": "pass",
+    "quick": "pass",
+    "task": "pass",
+    "nodeCheck": "pass",
+    "shellCheck": "pass",
+    "diffCheck": "pass",
+    "productDiffFiles": 0,
+    "stagedBeforeCloseout": 0,
+    "fullNotRun": true,
+    "realAppNotRun": true
+  },
+  "closeout": {
+    "leafArchived": true,
+    "stageArchived": true,
+    "planChecked": true,
+    "completedLeaves": 7,
+    "currentStage": null,
+    "currentLeaf": null,
+    "authorizationInherited": false
+  },
+  "protectedWip": {
+    "productLineStatus": "9de7a6ac5e561ec61b6404204f960d78ddf9cfad5c51bf74716126b539bb598b",
+    "productLineTrackedDiff": "a9b688c3aaacb7fc51d0f9dd7fdbb7c66b75aec77ee0a7f26be72a060cf16fad",
+    "productLineUntracked": "0214a578acc5852537d8b52d64cd5bbb0736a821a7ee44a3be1f9a05b2ee5941",
+    "fndStatus": "60f1395f2df3b0e7355952b65f23bae4c121fbe63090802d8c4793178385f399",
+    "fndTrackedDiff": "996452ac558c938d8558bd77c6d233be0d26f00d4989aa67a0dc773475086b2e",
+    "fndUntracked": "00ea3446b3bc465de304018f2ca803b048ace695619e6e066e516c1fce89629a",
+    "staged": 0
+  },
+  "pushed": false,
+  "externalChanged": false
+}

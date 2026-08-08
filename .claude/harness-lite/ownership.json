@@ -3,7 +3,7 @@
   "managedBy": "harness-lite",
   "packages": {
     "core": {
-      "packageVersion": "0.3.0",
+      "packageVersion": "0.4.0",
       "files": {
         "docs/harness/plan.md": "cbddf80e6cfcd60853df119536c0cca7e58edfb40514347b1caabe415e9e4499",
         "docs/harness/stages/stage-01.md": "3c848f85bd0df34a3c0030a97fadb5616925029e695b9096c47fba2572e1d16a",
@@ -38,7 +38,7 @@
         ".claude/harness-lite/lib/limits.js": "eb604eb182a74d8e863c4c7c8510a26418711d8f0d805cef423f35d9b7858487",
         ".claude/harness-lite/lib/map.js": "2e8398f1e5dcfd0ee705f00cd54d5228035fa8f48938a0a08a67e6db68fb904d",
         ".claude/harness-lite/lib/mistakes.js": "daac9b485f46be158267ed1f5414b12b5cfcf32e9c6519d31a9abe81d0b82854",
-        ".claude/harness-lite/lib/ownership.js": "9287f090b004967dc7ef9999a718de4314db10086254582de8e3771d7719bd88",
+        ".claude/harness-lite/lib/ownership.js": "9fa134dd588ae646854c54acbebbc26cc1b024641009a6ea610c1c68b15fea66",
         ".claude/harness-lite/lib/report.js": "7f9f68e9724e96804a60b9b88efe749fc0107c07337946f1254dc78d0ec325cd",
         ".claude/harness-lite/lib/tests-pick.js": "fcc015deb579ef930b6a6c332ac83a98c122d268cf3dcd4ba913e1d061f3882d",
         ".claude/harness-lite/lib/tree.js": "0b279bab31fe26c5f9b6959938eae34b45e90a9accfb6d49f2d4e08a46e198da",
@@ -48,7 +48,9 @@
         ".claude/harness-lite/hooks/stop.js": "2961ad5811961e52057daf716d0498a35d4350ed31d23cd30f673b71378ec0e6",
         ".claude/harness-lite/hooks/pre-push.js": "cacb713d342e4f407495fdd8df4811b85f0cbed2baa1dec8c3841f06812c51cc",
         ".claude/harness-lite/hooks/README.md": "523846b14814260676337f52e59e4d8799eb9fdcad85424933ff6bce15c29740",
-        ".claude/harness-lite/bin/hl.js": "4bb31f3ba2c90b18703e1c35750f1befd0ecbb509bb4a8ed4e48c60b407cf7cf"
+        ".claude/harness-lite/bin/hl.js": "4bb31f3ba2c90b18703e1c35750f1befd0ecbb509bb4a8ed4e48c60b407cf7cf",
+        "AGENTS.md": "c86445f67d5d7af1d33f18716cad7871f2b34d32968c9fad3129befc5c28ffba",
+        "CLAUDE.md": "b7ca0575486c601cc1fc90460c7946e3068733f4e9e0cd2eed47b8f494564162"
       }
     }
   }

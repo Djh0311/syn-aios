@@ -1,74 +1,23 @@
-# AGENTS.md — product-line 开发协作规则（Harness Lite 适配）
+# Harness Lite 协作入口
 
-全程中文和大白话。当前用户指令决定要做什么；本文件保留项目自己的协作边界，Harness Lite 只管理开发工作的生命周期、授权与最小相关验证，不承载产品功能。
+先读 `docs/harness/plan.md`，再读 `stages/` 里的当前阶段，最后读 `leaves/` 里唯一的当前 leaf。`unfinished/` 放未开始、暂停或受阻的工作；`done/YYYY-MM/` 只归档已经完成的工作。根 README 只做介绍，不是执行授权。
 
-## 唯一开发入口
-
-每次开始或上下文压缩后依次运行：
+开始或压缩后运行：
 
 ```text
-node .claude/harness-lite/bin/hl.js chain --target .
-node .claude/harness-lite/bin/hl.js progress --target .
-node .claude/harness-lite/bin/hl.js auth --target .
+node .claude/harness-lite/bin/hl.js chain --target <项目目录>
+node .claude/harness-lite/bin/hl.js progress --target <项目目录>
+node .claude/harness-lite/bin/hl.js auth --target <项目目录>
 ```
 
-开发生命周期唯一链是：
+用户授权决定可以做什么，Harness 决定授权范围内怎么推进。只从 `docs/harness/authorization.json` 读取当前用户授权；没有 `authorize` 命令，模型不得写“用户已授权”给自己放行。同一 stage 授权可供主 agent 和子 agent 使用。
 
-```text
-AGENTS.md
-→ docs/harness/plan.md
-→ docs/harness/stages/ 中唯一当前 stage
-→ docs/harness/leaves/ 中唯一 current leaf
-→ docs/harness/authorization.json（只核对当前用户授权）
-```
+只有五类事进硬门：进入远端/服务器/生产/真实世界；删除或难恢复；改变或结束当前工作；修改 Harness 的守门、授权或审计；项目额外声明的真实凭据、设备等边界。明确授权已经覆盖的具体动作直接通过，不重复问；未授权才停。普通开发由模型判断并继续。
 
-`docs/plans/`、`docs/contracts/`、`tasks/`、`handoffs/`、`archive/`、`plans/v0.5.0/` 和旧治理状态只提供产品输入或历史证据，不授予执行权限。根 README 只做产品介绍。
+`leaves/` 必须恰好一个 current。未完成用 `hl park <leaf> <原因> --write` 放回 `unfinished/`，不能归档；整阶段授权下可用 `hl resume` 恢复。`hl done <leaf> --write` 是“当前 leaf 已完成”的流程声明，随后归档；整阶段授权会自动进入下一项，只授权当前 leaf 时则退出并答九件。
 
-## 五类硬边界
+完成一个 leaf 先说四样：做出什么、验证跑了什么、改了哪些文件、遗留什么。最后一个 leaf 完成后运行 `hl close-stage --write`，用原整阶段授权只归档这个已完成 stage 并勾总计划，不恢复其他权限。随后停止并回答：入口、实际结果和验收、遗留与接手人、改动位置、是否并主线、分支/worktree、测试材料、下一入口，以及记录是否真的在提交里并列出该提交文件。
 
-只有以下事情进入重档：
+break-glass 只处理已经授权却被适配器误拦的动作，必须引用授权里的专用 grant、给出原因并写审计。不得记录原始命令、凭据或敏感参数。
 
-1. 进入远端、服务器、生产、真实 App、真实账号或真实消息，并造成真实副作用。
-2. 读取凭据，或写用户级 `/Users/yoyi/.codex`。
-3. 删除、覆盖、清理或做其他难恢复操作。
-4. 修改或结束当前工作，或修改 Harness 的授权、守门和审计。
-5. 开启非测试真实项目的自动连环、多项目接力、push、发布或部署。
-
-明确授权已经覆盖的具体动作直接执行；未覆盖的硬边界才停。普通本地开发按当前 leaf 的精确范围继续。
-
-## 验证和事实
-
-- 做状态判断前先核实 Git、代码和直接验证，不照搬旧计划、handoff 或历史任务包的完成标记。
-- 完成时必须说明怎么验、实际证据和证明边界；局部测试不等于真实 App、生产或发布通过。
-- 含 Rust production 路径的改动不能只跑 `cargo test`，必须同时跑 `cargo check --lib` 或等价 non-test build。
-- Stop 不跑项目测试；task 只选与本次改动有关的小检查；full 只在显式调用时运行。
-- 范围扩大、事实漂移、共享所有权冲突或需要创造未授权产品行为时停止。
-
-## 保护现有工作
-
-- 任何已有 dirty、untracked 或 ignored 内容都视为用户工作；不 reset、clean、stash、覆盖、整批归因或整批暂存。
-- 不使用 `git add -A`。只列出本次精确文件。
-- `git add` / `git commit` 需要当前用户指令或当前 Harness 授权明确覆盖；执行子 agent 不提交。
-- push、共享分支合并、发布、部署和删除分支/worktree 仍需单独授权。
-
-## 项目 Git 约定
-
-- `.githooks/commit-msg` 保留项目既有 `catch:` 标记；`docs/harness-catch-log.md` 保留为历史与项目拦截账本。这是项目 Git 约定，不是另一套生命周期。
-- `.githooks/pre-commit` 只做 staged diff 的机械检查，不解释任务、授权或产品事实。
-- 完成 leaf 使用 `hl done`，完成整个 stage 使用 `hl close-stage`；不再回写旧 `CURRENT.md` / `AUTHORITY.md`。
-
-## 协作方式
-
-- 两条线：主导线负责统筹、对接用户、核实实物；执行线负责范围内实现。执行线自报完成不等于主导线接受。
-- 重要任务只认 Lite 当前 leaf。项目任务补充材料可以使用 `TASK_TEMPLATE.md`，但模板和字段齐全都不激活工作。
-- 用户要求多 agent 时，同一 stage 授权可供主 agent 与子 agent 使用；子 agent 仍受相同文件范围和硬边界约束。
-
-## 产品边界
-
-Syn 是服务当前用户的全能个人 AI 工作台。项目是复杂工作的主要事实、权限与执行边界；秘书和全局主管是顶层入口，项目主管在项目内部。对话、知识、记忆、任务、工作流、Agent、连接器、工具、审计和日报是协作能力。工作流能力保留，但工作流界面不是产品中心；也不要把产品退回任务包管理器。
-
-产品 truth、SQLite/store、provider、Codex 会话、NPC/Agent、资产和 runtime 都留在产品代码与产品资料中，不搬进 Harness Lite。
-
-## 完成和退场
-
-每个 leaf 先交代：做出什么、验证跑了什么、改了哪些文件、遗留什么。最后一个 leaf 完成后关闭 stage，并交代入口、实际结果、遗留和接手人、改动位置、是否并主线、分支/worktree、测试材料、下一入口，以及记录是否真的在提交里。
+这是轻量协作门。已注册的 Codex/Claude hook、CLI 和 Git hook 会在各自入口阻断，但同一系统账号可以停用或修改它们；不要把它说成防本机蓄意绕过的安全边界。push、服务器、生产、真实凭据和物理动作仍按项目授权边界处理。

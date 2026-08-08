@@ -70,16 +70,15 @@ function installPackage(root, packageId, packageVersion, items, opts) {
     throw new Error(`${packageId} 已安装内容和当前源不同；请显式使用 --upgrade`);
   }
   const files = { ...(prior ? prior.files : {}) };
-  const roots = (o.upgradeRoots || []).map((x) => `${relative(x).replace(/\/$/, '')}/`);
-  const changed = [];
-  let rows;
+  const roots = (o.upgradeRoots || []).map((x) => `${relative(x).replace(/\/$/, '')}/`), paths = new Set((o.upgradePaths || []).map(relative)), adopt = new Set((o.adoptPaths || []).map(relative));
+  const changed = []; let rows;
   try { rows = prepared.map((item) => {
     const recorded = files[item.rel];
-    const allowed = !roots.length || roots.some((x) => item.rel.startsWith(x));
+    const allowedByRoot = !roots.length && !paths.size ? true : roots.some((x) => item.rel.startsWith(x)), allowedByPath = paths.has(item.rel);
+    const allowed = allowedByRoot || allowedByPath, adoptionRequested = o.upgrade && adopt.has(item.rel) && !recorded;
     if (!item.stat) {
-      if (prior && (recorded || (o.upgrade && !allowed))) {
-        return { rel: item.rel, wrote: false, skipped: true, protected: !!recorded, preserved: !allowed };
-      }
+      const canAdd = allowedByRoot || adoptionRequested;
+      if (prior && (recorded || (o.upgrade && !canAdd))) return { rel: item.rel, wrote: false, skipped: true, protected: !!recorded, preserved: !canAdd };
       if (o.write) {
         changed.push([item.abs, null]);
         fs.mkdirSync(path.dirname(item.abs), { recursive: true });
@@ -88,15 +87,16 @@ function installPackage(root, packageId, packageVersion, items, opts) {
       }
       return { rel: item.rel, wrote: !!o.write, skipped: false, protected: false };
     }
+    if (adoptionRequested && item.current === item.hash) { if (o.write) files[item.rel] = item.hash;
+      return { rel: item.rel, wrote: false, skipped: false, protected: false, adopted: true }; }
     if (o.upgrade && allowed && recorded && item.current === recorded && item.hash !== recorded) {
       if (o.write) { changed.push([item.abs, fs.readFileSync(item.abs)]); fs.writeFileSync(item.abs, item.body); files[item.rel] = item.hash; }
       return { rel: item.rel, wrote: !!o.write, skipped: false, protected: false, updated: true };
     }
-    const protectedFile = !!recorded && (item.current !== recorded || item.hash !== recorded);
-    return { rel: item.rel, wrote: false, skipped: true, protected: protectedFile, preserved: !!o.upgrade && !allowed };
+    const protectedFile = adoptionRequested || (!!recorded && (item.current !== recorded || item.hash !== recorded));
+    return { rel: item.rel, wrote: false, skipped: true, protected: protectedFile, preserved: !!o.upgrade && (!allowed || (allowedByPath && !recorded)) };
   });
-  const versionChanged = !!prior && prior.packageVersion !== packageVersion;
-  if (o.write && (versionChanged || rows.some((row) => row.wrote))) {
+  const versionChanged = !!prior && prior.packageVersion !== packageVersion; if (o.write && (versionChanged || rows.some((row) => row.wrote || row.adopted))) {
     const ledger = path.join(root, MANIFEST);
     changed.push([ledger, stat(ledger) ? fs.readFileSync(ledger) : null]);
     manifest.packages[packageId] = { packageVersion, files };
@@ -110,7 +110,7 @@ function installPackage(root, packageId, packageVersion, items, opts) {
     root, packageId, wrote: !!o.write, rows,
     written: rows.filter((row) => row.wrote).length,
     skipped: rows.filter((row) => row.skipped).map((row) => row.rel),
-    protected: rows.filter((row) => row.protected).map((row) => row.rel),
+    protected: rows.filter((row) => row.protected).map((row) => row.rel), adopted: rows.filter((row) => row.adopted).map((row) => row.rel),
     total: rows.length,
   };
 }
