@@ -1,24 +1,24 @@
 {
   "version": 1,
-  "id": "USER-PRODUCT-LINE-LITE-STAGE-02-20260808",
+  "id": "USER-SYN-M2-MAINLINE-CLOSEOUT-STAGE-03-20260808",
   "issuedBy": "user",
   "scope": {
     "kind": "stage",
-    "id": "stage-02"
+    "id": "stage-03"
   },
-  "summary": "用户明确授权为 Syn 创建新 Stage 与 authorization，使用 Lite 源仓修复纠正 AGENTS/CLAUDE、完成测试和本地提交；不 push。",
+  "summary": "用户明确同意开始完成 M2 主线收口，并要求完成后新开指导对话交接；范围包括建立 Lite Stage、精确提取 M2 改动、本地提交、合并 main、验收和收口，不 push、不启动 M3。",
   "grants": [
     {
-      "id": "PLH02-CONTEXT",
+      "id": "M2C-CONTEXT",
       "category": "context",
       "operations": ["change"],
       "targets": ["*"]
     },
     {
-      "id": "PLH02-CONTROL",
+      "id": "M2C-CONTROL",
       "category": "control",
       "operations": ["modify"],
-      "targets": ["AGENTS.md", "CLAUDE.md", ".claude/harness-lite/", ".codex/harness-lite/", "docs/harness/"]
+      "targets": ["docs/harness/"]
     }
   ],
   "exclusions": [
@@ -30,6 +30,8 @@
     "database",
     "browser",
     "real-account",
-    "real-message"
+    "real-message",
+    "destructive-cleanup",
+    "M3"
   ]
 }
