@@ -422,8 +422,8 @@
       "id": "workflow-execution-governance.m2-legacy-dispatch-grant-ledger",
       "domain": "workflow-execution-governance",
       "name": "M2 legacy dispatch grant ledger",
-      "status": "candidate",
-      "coverage": "unverified-candidate",
+      "status": "active",
+      "coverage": "verified-partial",
       "canonical": {
         "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/execution_grant.rs",
         "symbol": "mint_dispatch_grant",
@@ -540,7 +540,8 @@
         "DB primary",
         "M2"
       ],
-      "verificationBoundary": "dirty-worktree candidate; installed managed Code Map cannot validate structured provenance until a separately authorized managed-pack/schema upgrade"
+      "verificationBoundary": "mainline-verified M2 bounded reference slice; real-app evidence is limited to isolated scratch R4 and does not claim live Workbench migration, provider integration, M3 review/decision ownership, or production rollout",
+      "verifiedAtCommit": "d6bf4e464e32bd5310dfdfb2e46dfd0a47fd787f"
     }
   ]
 }
