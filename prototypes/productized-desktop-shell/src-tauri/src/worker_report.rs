@@ -11,7 +11,10 @@
 // waiting_decision。落库走现成 `record_worker_structured_report_at`（自带校验），best-effort。
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// 只读复核 worker 为字节级验收交回的机器可核实证。
 ///
@@ -231,6 +234,15 @@ pub(crate) struct WorkerReportConsumeOutcome {
     pub(crate) report_status: Option<String>,
     /// C3a·worker 求助强信号：blocked 或求助字段非空时返回；调用方据此停在 waiting_decision。
     pub(crate) help_signal: Option<WorkerReportHelpSignal>,
+    /// M2 has no persisted ExecutedReport claim ledger yet. A valid
+    /// grant-bearing report therefore stops at an explicit typed boundary;
+    /// it neither creates a pseudo receipt nor writes any projection state.
+    pub(crate) grant_bearing_boundary: Option<GrantBearingReportBoundary>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GrantBearingReportBoundary {
+    NotMigratedHold,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -253,6 +265,262 @@ fn report_status_field(status: &str) -> Option<String> {
     }
 }
 
+/// Reload the grant-bearing dispatch from the same authority used by the
+/// execution path.  A DB-primary process may deliberately have a stale JSON
+/// projection after a committed write, so report admission must never use the
+/// projection as its authorization source.
+fn load_persisted_dispatch_for_grant_verification(
+    state_path: &Path,
+    dispatch_id: &str,
+) -> Result<Value, String> {
+    match crate::workbench_sqlite_storage_mode::storage_mode_for(state_path) {
+        crate::workbench_sqlite_storage_mode::StorageMode::DbPrimaryJsonProjection(config) => {
+            let connection = Connection::open_with_flags(&config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(|_| "execution_grant_db_primary_dispatch_open_failed".to_string())?;
+            let record_json = connection
+                .query_row(
+                    "SELECT record_json FROM workflow_node_dispatches WHERE dispatch_id = ?1",
+                    [dispatch_id],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(|_| "execution_grant_db_primary_dispatch_query_failed".to_string())?
+                .ok_or_else(|| "execution_grant_dispatch_not_found".to_string())?;
+            serde_json::from_str(&record_json)
+                .map_err(|_| "execution_grant_db_primary_dispatch_record_invalid".to_string())
+        }
+        crate::workbench_sqlite_storage_mode::StorageMode::JsonOnly { .. } => {
+            let value = crate::read_workflow_state_value(state_path)?;
+            value
+                .get("workflow_node_dispatches")
+                .and_then(Value::as_array)
+                .and_then(|dispatches| {
+                    dispatches.iter().find(|candidate| {
+                        crate::optional_string_from(candidate, "dispatch_id").as_deref()
+                            == Some(dispatch_id)
+                    })
+                })
+                .cloned()
+                .ok_or_else(|| "execution_grant_dispatch_not_found".to_string())
+        }
+    }
+}
+
+/// The report path rechecks the *current* exact work-item binding instead of
+/// trusting the binding copied into a dispatch at runner start.  This closes a
+/// rebind/revocation window between dispatch and report finalization.
+fn load_persisted_binding_for_grant_verification(
+    state_path: &Path,
+    binding_id: &str,
+) -> Result<Value, String> {
+    match crate::workbench_sqlite_storage_mode::storage_mode_for(state_path) {
+        crate::workbench_sqlite_storage_mode::StorageMode::DbPrimaryJsonProjection(config) => {
+            let connection = Connection::open_with_flags(&config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(|_| "execution_grant_db_primary_binding_open_failed".to_string())?;
+            let record_json = connection
+                .query_row(
+                    "SELECT record_json FROM workflow_node_session_bindings WHERE binding_id = ?1",
+                    [binding_id],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(|_| "execution_grant_db_primary_binding_query_failed".to_string())?
+                .ok_or_else(|| "execution_grant_exact_work_item_binding_missing".to_string())?;
+            serde_json::from_str(&record_json)
+                .map_err(|_| "execution_grant_db_primary_binding_record_invalid".to_string())
+        }
+        crate::workbench_sqlite_storage_mode::StorageMode::JsonOnly { .. } => {
+            let value = crate::read_workflow_state_value(state_path)?;
+            value
+                .get("workflow_node_session_bindings")
+                .and_then(Value::as_array)
+                .and_then(|bindings| {
+                    bindings.iter().find(|candidate| {
+                        crate::optional_string_from(candidate, "binding_id").as_deref()
+                            == Some(binding_id)
+                    })
+                })
+                .cloned()
+                .ok_or_else(|| "execution_grant_exact_work_item_binding_missing".to_string())
+        }
+    }
+}
+
+fn verify_current_persisted_dispatch_binding_for_report(
+    state_path: &Path,
+    binding_id: &str,
+    workflow_id: &str,
+    workflow_node_id: &str,
+    work_item_id: &str,
+    authenticated_actor_id: &str,
+) -> Result<(), String> {
+    let binding = load_persisted_binding_for_grant_verification(state_path, binding_id)?;
+    for (field, expected) in [
+        ("binding_id", binding_id),
+        ("workflow_id", workflow_id),
+        ("node_id", workflow_node_id),
+        ("work_item_id", work_item_id),
+        ("native_thread_id", authenticated_actor_id),
+        ("lifecycle", "active"),
+    ] {
+        if crate::optional_string_from(&binding, field).as_deref() != Some(expected) {
+            return Err(format!("execution_grant_exact_work_item_binding_{field}_mismatch"));
+        }
+    }
+    Ok(())
+}
+
+fn verify_persisted_dispatch_grant_for_report(
+    state_path: &Path,
+    project_id: &str,
+    workflow_id: &str,
+    workflow_node_id: &str,
+    work_item_id: &str,
+    dispatch_id: Option<&str>,
+    attempt_id: Option<&str>,
+    attempt_state: &str,
+    authenticated_actor_id: &str,
+    grant_id: Option<&str>,
+    actor_role: &str,
+) -> Result<(), String> {
+    // Reject a missing or malformed authorization reference before reading a
+    // caller-selected state path. The remaining IDs are checked against the
+    // reloaded canonical dispatch record immediately afterwards.
+    let grant_id = grant_id
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "execution_grant_id_missing".to_string())?;
+    if !is_canonical_execution_grant_id(grant_id) {
+        return Err("execution_grant_id_invalid".to_string());
+    }
+    let dispatch_id = dispatch_id
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "execution_grant_dispatch_id_missing".to_string())?;
+    let attempt_id = attempt_id
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "execution_grant_attempt_id_missing".to_string())?;
+    let dispatch = load_persisted_dispatch_for_grant_verification(state_path, dispatch_id)?;
+    for (field, expected) in [
+        ("project_id", project_id),
+        ("workflow_id", workflow_id),
+        ("node_id", workflow_node_id),
+        ("work_item_id", work_item_id),
+        ("native_thread_id", authenticated_actor_id),
+        ("state", attempt_state),
+        ("execution_grant_id", grant_id),
+        ("execution_attempt_id", attempt_id),
+    ] {
+        let actual = crate::optional_string_from(&dispatch, field)
+            .unwrap_or_else(|| "<missing>".to_string());
+        if actual != expected {
+            return Err(format!("execution_grant_dispatch_{field}_mismatch"));
+        }
+    }
+    let binding_id = crate::optional_string_from(&dispatch, "binding_id")
+        .ok_or_else(|| "execution_grant_binding_id_missing".to_string())?;
+    verify_current_persisted_dispatch_binding_for_report(
+        state_path,
+        &binding_id,
+        workflow_id,
+        workflow_node_id,
+        work_item_id,
+        authenticated_actor_id,
+    )?;
+    let grant: crate::mcp::execution_grant::ExecutionGrant = serde_json::from_value(
+        dispatch
+            .get("execution_grant")
+            .cloned()
+            .ok_or_else(|| "execution_grant_persisted_record_missing".to_string())?,
+    )
+    .map_err(|_| "execution_grant_persisted_record_invalid".to_string())?;
+    if grant.grant_id.0 != grant_id {
+        return Err("execution_grant_persisted_id_mismatch".to_string());
+    }
+    let source = crate::plan_authorization_store::load_active_execution_grant_source(
+        state_path,
+        &grant.authorization_id,
+        project_id,
+        workflow_id,
+        worker_report_timestamp_ms(),
+    )
+    .map_err(|reason| format!("execution_grant_authorization_source_rejected:{reason}"))?;
+    crate::mcp::execution_grant::verify_dispatch_grant_authorization_source(&grant, &source)
+        .map_err(|reason| format!("execution_grant_authorization_source_rejected:{reason}"))?;
+    match crate::mcp::execution_grant::verify_dispatch_grant(
+        &grant,
+        &crate::mcp::execution_grant::DispatchGrantVerificationContext {
+            project_id,
+            workflow_id,
+            workflow_node_id,
+            work_item_id,
+            dispatch_id,
+            attempt_id,
+            binding_id: &binding_id,
+            principal: authenticated_actor_id,
+            actor_role,
+        },
+    ) {
+        crate::mcp::execution_grant::GrantVerification::Valid => Ok(()),
+        result => Err(format!("execution_grant_verification_rejected:{result:?}")),
+    }
+}
+
+/// M1 dispatches predate the M2 grant envelope.  This narrow compatibility
+/// check is only for a persisted dispatch that proves it has no grant at all;
+/// it cannot be used to strip a grant from an M2 report because the canonical
+/// record is reloaded before any report write.
+fn verify_persisted_legacy_dispatch_for_report(
+    state_path: &Path,
+    project_id: &str,
+    workflow_id: &str,
+    workflow_node_id: &str,
+    work_item_id: &str,
+    dispatch_id: Option<&str>,
+    attempt_state: &str,
+    authenticated_actor_id: &str,
+) -> Result<(), String> {
+    let dispatch_id = dispatch_id
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "legacy_m1_dispatch_id_missing".to_string())?;
+    let dispatch = load_persisted_dispatch_for_grant_verification(state_path, dispatch_id)?;
+    for (field, expected) in [
+        ("project_id", project_id),
+        ("workflow_id", workflow_id),
+        ("node_id", workflow_node_id),
+        ("work_item_id", work_item_id),
+        ("native_thread_id", authenticated_actor_id),
+        ("state", attempt_state),
+    ] {
+        let actual = crate::optional_string_from(&dispatch, field)
+            .unwrap_or_else(|| "<missing>".to_string());
+        if actual != expected {
+            return Err(format!("legacy_m1_dispatch_{field}_mismatch"));
+        }
+    }
+    if crate::optional_string_from(&dispatch, "execution_grant_id")
+        .is_some_and(|grant_id| !grant_id.trim().is_empty())
+        || dispatch
+            .get("execution_grant")
+            .is_some_and(|grant| !grant.is_null())
+    {
+        return Err("legacy_m1_dispatch_carries_m2_grant".to_string());
+    }
+    Ok(())
+}
+
+fn worker_report_timestamp_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| i64::try_from(duration.as_millis()).unwrap_or(i64::MAX))
+        .unwrap_or(0)
+}
+
+fn is_canonical_execution_grant_id(value: &str) -> bool {
+    value
+        .strip_prefix("grant:")
+        .filter(|suffix| suffix.len() == 64)
+        .is_some_and(|suffix| suffix.bytes().all(|byte| byte.is_ascii_hexdigit()))
+}
+
 /// 链每任务**完成后**消费一次 worker 最后消息（全文）：解析 → best-effort 落库（现成登记机器·
 /// 自带校验）→ 出摘要或求助强信号。
 /// - Some(report) → 组登记入参调 `record_worker_structured_report_at`；落库失败仅出 warning、不断链；
@@ -260,7 +528,8 @@ fn report_status_field(status: &str) -> Option<String> {
 /// - None（无块/坏 json）→ warning（附原文尾 200 字）+ summary None；任务仍算完成（软着陆）。
 ///
 /// SYN-FND-004B: 新增 attempt_id、authenticated_actor 参数，精确绑定执行上下文。
-/// SYN-FND-004C: 新增 grant_id 参数，执行回程必须携带有效 grant 才能落库。
+/// SYN-M2A-T4: grant_id 只是对 server-owned dispatch ledger 的引用；本入口会重读
+/// 持久化 dispatch/grant，绝不根据调用方字段自铸或补全授权。
 /// SYN-FND-004B: 新增 attempt_state 参数，执行型报告只接受白名单内的 attempt 状态
 ///（completed/failed/timed_out 等终态；running/dispatched 等中间态拒绝落库）。
 /// 本入口进来即无条件把 report_kind 盖成 "execution"——不是靠代码判断来源，
@@ -285,17 +554,138 @@ pub(crate) fn consume_worker_report_after_completion(
     task_title: &str,
     last_message_full: &str,
 ) -> WorkerReportConsumeOutcome {
-    // SYN-FND-004C: 无有效 grant 的执行回程拒绝落库（fail closed）
-    if grant_id.is_none() {
+    if let Err(reason) = verify_persisted_dispatch_grant_for_report(
+        state_path,
+        project_id,
+        workflow_id,
+        workflow_node_id,
+        work_item_id,
+        dispatch_id,
+        attempt_id,
+        attempt_state,
+        authenticated_actor_id,
+        grant_id,
+        actor_role,
+    ) {
         return WorkerReportConsumeOutcome {
             report_summary: None,
             report_warning: Some(format!(
-                "任务「{task_title}」报文拒绝落库：无有效执行授权 grant_id（FND-004C fail-closed）"
+                "任务「{task_title}」报文拒绝落库：真实持久 execution grant 验证失败（M2 fail-closed）：{reason}"
             )),
             report_status: None,
             help_signal: None,
+            grant_bearing_boundary: None,
         };
     }
+    // The M2 grant boundary may not admit a report claim while its dedicated
+    // claim owner is NOT_MIGRATED, but it must still reject a non-terminal
+    // execution attempt before returning that boundary result.  Otherwise a
+    // mid-flight report could be mistaken for a harmless hold response.
+    if let Err(reason) = validate_execution_report_attempt_state("execution", attempt_state) {
+        return WorkerReportConsumeOutcome {
+            report_summary: None,
+            report_warning: Some(format!("任务「{task_title}」报文拒绝落库：{reason}")),
+            report_status: None,
+            help_signal: None,
+            grant_bearing_boundary: None,
+        };
+    }
+    let _ = (
+        project_root,
+        project_id,
+        workflow_id,
+        workflow_node_id,
+        work_item_id,
+        dispatch_id,
+        attempt_id,
+        attempt_state,
+        authenticated_actor_id,
+        actor_role,
+        last_message_full,
+    );
+    WorkerReportConsumeOutcome {
+        report_summary: None,
+        report_warning: Some(format!(
+            "任务「{task_title}」grant-bearing ExecutedReport 已完成 grant/source/binding/revocation 校验；M2 claim ledger 尚未迁移，返回 NOT_MIGRATED/HOLD，零持久化写入。"
+        )),
+        report_status: None,
+        help_signal: None,
+        grant_bearing_boundary: Some(GrantBearingReportBoundary::NotMigratedHold),
+    }
+}
+
+/// Frozen M1 report admission retained for a canonical dispatch that contains
+/// no M2 grant.  M2 report callers must use `consume_worker_report_after_completion`.
+/// This compatibility path is a GUARDED_LEGACY_ADAPTER.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn consume_legacy_m1_worker_report_after_completion(
+    state_path: &Path,
+    project_root: &str,
+    project_id: &str,
+    workflow_id: &str,
+    workflow_node_id: &str,
+    work_item_id: &str,
+    dispatch_id: Option<&str>,
+    attempt_id: Option<&str>,
+    attempt_state: &str,
+    authenticated_actor_id: &str,
+    actor_role: &str,
+    task_title: &str,
+    last_message_full: &str,
+) -> WorkerReportConsumeOutcome {
+    if let Err(reason) = verify_persisted_legacy_dispatch_for_report(
+        state_path,
+        project_id,
+        workflow_id,
+        workflow_node_id,
+        work_item_id,
+        dispatch_id,
+        attempt_state,
+        authenticated_actor_id,
+    ) {
+        return WorkerReportConsumeOutcome {
+            report_summary: None,
+            report_warning: Some(format!(
+                "任务「{task_title}」报文拒绝落库：M1 兼容派发记录不匹配：{reason}"
+            )),
+            report_status: None,
+            help_signal: None,
+            grant_bearing_boundary: None,
+        };
+    }
+    consume_authorized_worker_report_after_completion(
+        state_path,
+        project_root,
+        project_id,
+        workflow_id,
+        workflow_node_id,
+        work_item_id,
+        dispatch_id,
+        attempt_id,
+        attempt_state,
+        authenticated_actor_id,
+        actor_role,
+        task_title,
+        last_message_full,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn consume_authorized_worker_report_after_completion(
+    state_path: &Path,
+    project_root: &str,
+    project_id: &str,
+    workflow_id: &str,
+    workflow_node_id: &str,
+    work_item_id: &str,
+    dispatch_id: Option<&str>,
+    attempt_id: Option<&str>,
+    attempt_state: &str,
+    authenticated_actor_id: &str,
+    actor_role: &str,
+    task_title: &str,
+    last_message_full: &str,
+) -> WorkerReportConsumeOutcome {
 
     // SYN-FND-003: 使用 identity_kernel 解析执行者身份（服务端派生，非前端传入）
     let identity = crate::mcp::identity_kernel::resolve_identity(
@@ -314,60 +704,7 @@ pub(crate) fn consume_worker_report_after_completion(
             )),
             report_status: None,
             help_signal: None,
-        };
-    }
-
-    // SYN-FND-004C: 验证 grant_id 格式（M1 阶段只做格式校验，M2 将做完整验证）
-    let grant_id_str = grant_id.unwrap_or("");
-    if !grant_id_str.starts_with("grant:") && !grant_id_str.starts_with("dispatch:") {
-        return WorkerReportConsumeOutcome {
-            report_summary: None,
-            report_warning: Some(format!(
-                "任务「{task_title}」报文拒绝落库：grant_id 格式无效（FND-004C fail-closed）"
-            )),
-            report_status: None,
-            help_signal: None,
-        };
-    }
-
-    // SYN-FND-004C: 创建临时 grant 并验证（M1 阶段证明模块已接线；M2 将改为从 store 查询）
-    let temp_grant = crate::mcp::execution_grant::mint_grant(
-        &crate::mcp::execution_grant::GrantMintInput {
-            authorization_id: grant_id_str.to_string(),
-            authorization_revision: 1,
-            scope_fingerprint: format!("fp:{}", project_id),
-            principal: authenticated_actor_id.to_string(),
-            project_id: project_id.to_string(),
-            workflow_id: workflow_id.to_string(),
-            allowed_work_item_types: vec!["*".to_string()],
-            allowed_role_ids: vec!["*".to_string()],
-            allowed_agent_ids: vec!["*".to_string()],
-            allowed_read_roots: vec!["*".to_string()],
-            allowed_write_roots: vec!["*".to_string()],
-            allowed_tools: vec!["*".to_string()],
-            allowed_checks: vec!["*".to_string()],
-            stop_conditions: vec![],
-            ttl_seconds: 3600,
-            minted_by: "server:m1-consume-path".to_string(),
-        },
-    );
-    let grant_verification = crate::mcp::execution_grant::verify_grant(
-        &temp_grant,
-        project_id,
-        workflow_id,
-        actor_role,
-        Some(authenticated_actor_id),
-        None,
-        None,
-    );
-    if grant_verification != crate::mcp::execution_grant::GrantVerification::Valid {
-        return WorkerReportConsumeOutcome {
-            report_summary: None,
-            report_warning: Some(format!(
-                "任务「{task_title}」报文拒绝落库：grant 验证失败（FND-004C fail-closed）：{grant_verification:?}"
-            )),
-            report_status: None,
-            help_signal: None,
+            grant_bearing_boundary: None,
         };
     }
 
@@ -379,6 +716,7 @@ pub(crate) fn consume_worker_report_after_completion(
             report_warning: Some(format!("任务「{task_title}」报文拒绝落库：{reason}")),
             report_status: None,
             help_signal: None,
+            grant_bearing_boundary: None,
         };
     }
 
@@ -403,8 +741,9 @@ pub(crate) fn consume_worker_report_after_completion(
                 actor_role,
                 &report,
             );
-            match crate::record_worker_structured_report_at(state_path, &input) {
-                Ok(_) => WorkerReportConsumeOutcome {
+            let record_result = crate::record_worker_structured_report_at(state_path, &input);
+            match record_result {
+                Ok(_result) => WorkerReportConsumeOutcome {
                     report_summary: if help_signal.is_some() {
                         None
                     } else {
@@ -413,6 +752,7 @@ pub(crate) fn consume_worker_report_after_completion(
                     report_warning: None,
                     report_status: report_status_field(&report.status),
                     help_signal,
+                    grant_bearing_boundary: None,
                 },
                 Err(err) => WorkerReportConsumeOutcome {
                     report_summary: if help_signal.is_some() {
@@ -425,6 +765,7 @@ pub(crate) fn consume_worker_report_after_completion(
                     )),
                     report_status: report_status_field(&report.status),
                     help_signal,
+                    grant_bearing_boundary: None,
                 },
             }
         }
@@ -435,6 +776,7 @@ pub(crate) fn consume_worker_report_after_completion(
                     report_warning: None,
                     report_status: None,
                     help_signal: Some(help_signal),
+                    grant_bearing_boundary: None,
                 };
             }
             // 有内容但抠不到契约块 → worker 没守契约，出一条诊断；last_message 为空（无输出/非真跑）→ 无从判断，静默。
@@ -452,6 +794,7 @@ pub(crate) fn consume_worker_report_after_completion(
                 report_warning,
                 report_status: None,
                 help_signal: None,
+                grant_bearing_boundary: None,
             }
         }
     }
@@ -620,6 +963,7 @@ fn build_report_input(
         work_item_id: work_item_id.to_string(),
         dispatch_id: dispatch_id.map(str::to_string),
         attempt_id: attempt_id.map(str::to_string),
+        execution_grant_id: None,
         authenticated_actor_id: authenticated_actor_id.to_string(),
         authenticated_project_scope: project_id.to_string(),
         report_hash,
@@ -885,18 +1229,161 @@ mod tests {
         dir
     }
 
-    /// 手写满足登记机器校验的最小 store（workflow/work_item/node + schema）——自包含、不依赖 lib.rs helper。
-    fn write_fixture_store(dir: &Path) -> PathBuf {
+    struct FixtureStore {
+        path: PathBuf,
+        dispatch_id: String,
+        attempt_id: String,
+        grant_id: String,
+        authorization_id: String,
+        authorization_revision: i64,
+    }
+
+    /// 手写满足登记机器校验的最小 store，并把 server-side persisted
+    /// grant 放进 canonical dispatch ledger。它不把调用方参数当授权来源。
+    fn write_fixture_store(dir: &Path) -> FixtureStore {
+        write_fixture_store_with_dispatch(dir, "wi-1", "completed")
+    }
+
+    fn write_fixture_store_with_dispatch(
+        dir: &Path,
+        dispatch_work_item_id: &str,
+        dispatch_state: &str,
+    ) -> FixtureStore {
+        let mut source = crate::mcp::execution_grant::ExecutionGrantAuthorizationSource {
+            authorization_id: "plan-auth:fixture".to_string(),
+            authorization_store_revision: 1,
+            authorization_source_hash: "fixture-source-hash".to_string(),
+            project_id: "proj".to_string(),
+            workflow_id: "wf-1".to_string(),
+            allowed_work_item_types: vec!["task_package".to_string()],
+            allowed_role_ids: vec!["developer".to_string()],
+            allowed_agent_ids: vec!["test-actor".to_string()],
+            allowed_read_roots: vec!["/p".to_string()],
+            allowed_write_roots: vec!["/p".to_string()],
+            allowed_tools: vec!["cargo-test".to_string()],
+            allowed_checks: vec!["cargo-test".to_string()],
+            stop_conditions: vec!["user-rejected".to_string()],
+            expires_at_ms: None,
+            max_worker_dispatches: Some(1),
+            max_runtime_minutes: Some(1),
+        };
+        let binding = crate::mcp::execution_grant::ExecutionGrantBinding {
+            dispatch_id: "dispatch:fixture".to_string(),
+            project_id: "proj".to_string(),
+            workflow_id: "wf-1".to_string(),
+            workflow_node_id: "wf-1:node:director".to_string(),
+            work_item_id: dispatch_work_item_id.to_string(),
+            binding_id: "binding:fixture".to_string(),
+            principal: "test-actor".to_string(),
+            prepared_dispatch_id: "prepared:fixture".to_string(),
+        };
+        let authorization_id = source.authorization_id.clone();
+        let authorization_revision = source.authorization_store_revision;
+        let authorization_store = serde_json::json!({
+            "schema_version": "plan_authorization_store.v1",
+            "revision": authorization_revision,
+            "authorizations": [{
+                "authorization_id": authorization_id,
+                "schema_version": "plan_authorization.v1",
+                "project_id": "proj",
+                "workflow_id": "wf-1",
+                "source_proposal_id": "proposal:fixture",
+                "title": "worker report fixture authorization",
+                "goal_summary": "server-owned grant source fixture",
+                "status": "active",
+                "scope": {
+                    "project_id": "proj",
+                    "workflow_id": "wf-1",
+                    "allowed_role_ids": source.allowed_role_ids,
+                    "allowed_agent_ids": source.allowed_agent_ids,
+                    "allowed_read_roots": source.allowed_read_roots,
+                    "allowed_write_roots": source.allowed_write_roots,
+                    "allowed_tools": source.allowed_tools,
+                    "allowed_checks": source.allowed_checks,
+                    "allowed_task_package_kinds": source.allowed_work_item_types,
+                    "max_worker_dispatches": 1,
+                    "max_runtime_minutes": 1,
+                    "stop_conditions": [{
+                        "condition_id": "user-rejected",
+                        "kind": "fixture",
+                        "summary": "fixture stop condition",
+                        "requires_user_confirmation": false
+                    }]
+                },
+                "user_confirmation": {
+                    "confirmed_by": "user",
+                    "confirmed_at_ms": 1700000000000_i64,
+                    "confirmation_summary": "fixture confirmed"
+                },
+                "global_boundary_review": {
+                    "reviewed_by": "global_director",
+                    "reviewed_at_ms": 1700000000000_i64,
+                    "status": "approved",
+                    "summary": "fixture approved",
+                    "source_proposal_id": "proposal:fixture",
+                    "checklist": null,
+                    "findings": [],
+                    "reviewed_scope_fingerprint": "fixture"
+                },
+                "audit_refs": [],
+                "created_at_ms": 1700000000000_i64,
+                "updated_at_ms": 1700000000000_i64,
+                "expires_at_ms": null
+            }],
+            "audit_events": [],
+            "updated_at_ms": 1700000000000_i64,
+            "warnings": []
+        });
+        let authorization: crate::PlanAuthorization = serde_json::from_value(
+            authorization_store["authorizations"][0].clone(),
+        )
+        .expect("fixture authorization source");
+        source.authorization_source_hash = crate::utils::hash::sha256_hex(
+            &serde_json::to_string(&authorization).expect("serialize fixture authorization source"),
+        );
+        let grant = crate::mcp::execution_grant::mint_dispatch_grant(&source, &binding, 60)
+            .expect("fixture persisted grant");
+        let grant_id = grant.grant_id.0.clone();
+        let attempt_id = grant.attempt_id.clone().expect("fixture attempt");
         let store = serde_json::json!({
             "schema_version": "workflow_state_v0",
             "workflow_version": 1,
             "updated_at": "seed",
-            "projects": [],
+            "projects": [{"project_id": "proj"}],
             "agent_adapters": [],
-            "workflows": [{"workflow_id": "wf-1"}],
+            "workflows": [{"workflow_id": "wf-1", "project_id": "proj"}],
             "nodes": [{"workflow_id": "wf-1", "node_id": "wf-1:node:director"}],
             "edges": [],
             "work_items": [{"workflow_id": "wf-1", "work_item_id": "wi-1", "state": "ready_for_review"}],
+            "workflow_node_session_bindings": [{
+                "binding_id": binding.binding_id.clone(),
+                "project_id": "proj",
+                "workflow_id": "wf-1",
+                "node_id": "wf-1:node:director",
+                "work_item_id": dispatch_work_item_id,
+                "agent_type": "codex",
+                "adapter_id": "codex-local",
+                "native_thread_id": "test-actor",
+                "binding_source": "fixture",
+                "binding_mode": "fixture",
+                "lifecycle": "active",
+                "created_at_ms": 1700000000000_i64,
+                "updated_at_ms": 1700000000000_i64,
+                "warnings": []
+            }],
+            "workflow_node_dispatches": [{
+                "dispatch_id": binding.dispatch_id.clone(),
+                "project_id": "proj",
+                "workflow_id": "wf-1",
+                "node_id": "wf-1:node:director",
+                "work_item_id": dispatch_work_item_id,
+                "binding_id": binding.binding_id.clone(),
+                "native_thread_id": "test-actor",
+                "state": dispatch_state,
+                "execution_grant_id": grant_id.clone(),
+                "execution_attempt_id": attempt_id.clone(),
+                "execution_grant": serde_json::to_value(&grant).expect("serialize fixture grant")
+            }],
             "artifacts": [],
             "reviews": [],
             "audit_events": [],
@@ -905,15 +1392,31 @@ mod tests {
         });
         let path = dir.join("workflow-state.v0.json");
         fs::write(&path, serde_json::to_string_pretty(&store).unwrap()).expect("write store");
-        path
+        let authorization_path = crate::plan_authorization_store::sidecar_path(&path)
+            .expect("fixture authorization sidecar path");
+        fs::write(
+            authorization_path,
+            serde_json::to_vec_pretty(&authorization_store).expect("serialize auth source fixture"),
+        )
+        .expect("write authorization source fixture");
+        FixtureStore {
+            path,
+            dispatch_id: binding.dispatch_id,
+            attempt_id: grant.attempt_id.expect("fixture attempt"),
+            grant_id: grant.grant_id.0,
+            authorization_id,
+            authorization_revision,
+        }
     }
 
     const GOOD_MSG: &str = "干完了。\n```json\n{\"did\":\"改了登录\",\"outputs\":[\"/p/login.tsx\"],\"status\":\"done\",\"evidence\":[\"cargo test 绿\"]}\n```";
 
     #[test]
-    fn consume_good_block_records_to_store() {
+    fn grant_bearing_valid_report_returns_not_migrated_hold_without_write() {
         let dir = tmp_dir("good");
-        let path = write_fixture_store(&dir);
+        let fixture = write_fixture_store(&dir);
+        let path = fixture.path.as_path();
+        let before = fs::read(path).unwrap();
         let outcome = consume_worker_report_after_completion(
             &path,
             "/p",
@@ -921,38 +1424,37 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-1",
-            None,         // dispatch_id
-            None,         // attempt_id (SYN-FND-004B)
+            Some(fixture.dispatch_id.as_str()),
+            Some(fixture.attempt_id.as_str()),
             "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
-            Some("grant:test"), // grant_id (SYN-FND-004C)
+            Some(fixture.grant_id.as_str()),
             "developer",
             "任务T",
             GOOD_MSG,
         );
-        assert!(outcome.report_summary.is_some(), "解析成功应有摘要");
-        assert!(outcome.report_summary.as_deref().unwrap().contains("done"));
         assert!(
-            outcome.report_warning.is_none(),
-            "落库成功不该有诊断 warning：{:?}",
+            outcome.report_warning.is_some(),
+            "M2 必须明确返回 NOT_MIGRATED/HOLD：{:?}",
             outcome.report_warning
         );
-        // 断言登记机器**真跑过**：store 里有 worker_structured_report_recorded 审计。
-        let after: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        let recorded = after["audit_events"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|e| e["event_type"] == "worker_structured_report_recorded");
-        assert!(recorded, "store 应有 worker 报文审计（经登记机器校验落库）");
+        assert_eq!(
+            outcome.grant_bearing_boundary,
+            Some(GrantBearingReportBoundary::NotMigratedHold),
+            "验证通过的 grant-bearing report 必须命中 typed NOT_MIGRATED/HOLD"
+        );
+        assert!(outcome.report_summary.is_none());
+        assert!(outcome.help_signal.is_none());
+        assert!(outcome.report_warning.as_deref().is_some_and(|warning| warning.contains("NOT_MIGRATED/HOLD")));
+        assert_eq!(fs::read(&path).unwrap(), before, "valid M2 hold must not append pseudo claim/audit, update top-level timestamp, or mutate any owner");
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn consume_no_block_soft_lands_without_write() {
+    fn grant_bearing_non_contract_payload_still_returns_hold_without_write() {
         let dir = tmp_dir("noblock");
-        let path = write_fixture_store(&dir);
+        let fixture = write_fixture_store(&dir);
+        let path = fixture.path.as_path();
         let before = fs::read(&path).unwrap();
         let outcome = consume_worker_report_after_completion(
             &path,
@@ -961,38 +1463,35 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-1",
-            None,         // dispatch_id
-            None,         // attempt_id (SYN-FND-004B)
+            Some(fixture.dispatch_id.as_str()),
+            Some(fixture.attempt_id.as_str()),
             "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
-            Some("grant:test"), // grant_id (SYN-FND-004C)
+            Some(fixture.grant_id.as_str()),
             "developer",
             "任务T",
             "我做完了但忘了给 json 块",
         );
-        assert!(outcome.report_summary.is_none(), "无块 → 无摘要");
-        assert!(
-            outcome
-                .report_warning
-                .as_deref()
-                .unwrap_or("")
-                .contains("未按契约"),
-            "有输出无契约块 → step 级诊断 warning：{:?}",
-            outcome.report_warning
+        assert!(outcome.report_summary.is_none());
+        assert_eq!(
+            outcome.grant_bearing_boundary,
+            Some(GrantBearingReportBoundary::NotMigratedHold)
         );
+        assert!(outcome.report_warning.as_deref().is_some_and(|warning| warning.contains("NOT_MIGRATED/HOLD")));
         assert_eq!(
             fs::read(&path).unwrap(),
             before,
-            "无块不写 store（软着陆·任务仍算完成）"
+            "M2 boundary does not parse or persist the report payload"
         );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn consume_record_failure_warns_without_breaking() {
+    fn grant_bearing_boundary_does_not_attempt_legacy_report_record() {
         let dir = tmp_dir("fail");
-        let path = write_fixture_store(&dir);
-        // work_item_id 不存在 → 登记机器校验 Err → best-effort warning、不断链、不 panic。
+        let fixture = write_fixture_store_with_dispatch(&dir, "wi-DOES-NOT-EXIST", "completed");
+        let path = fixture.path.as_path();
+        let before = fs::read(path).unwrap();
         let outcome = consume_worker_report_after_completion(
             &path,
             "/p",
@@ -1000,32 +1499,29 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-DOES-NOT-EXIST",
-            None,         // dispatch_id
-            None,         // attempt_id (SYN-FND-004B)
+            Some(fixture.dispatch_id.as_str()),
+            Some(fixture.attempt_id.as_str()),
             "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
-            Some("grant:test"), // grant_id (SYN-FND-004C)
+            Some(fixture.grant_id.as_str()),
             "developer",
             "任务T",
             GOOD_MSG,
         );
-        assert!(outcome.report_summary.is_some(), "解析成功仍给摘要");
-        assert!(
-            outcome
-                .report_warning
-                .as_deref()
-                .unwrap_or("")
-                .contains("落库失败"),
-            "应出落库失败 step 级诊断 warning：{:?}",
-            outcome.report_warning
+        assert_eq!(
+            outcome.grant_bearing_boundary,
+            Some(GrantBearingReportBoundary::NotMigratedHold)
         );
+        assert_eq!(fs::read(path).unwrap(), before, "M2 boundary must not fall through to the legacy report recorder");
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn consume_blocked_report_returns_help_signal_and_records_real_fields() {
+    fn grant_bearing_blocked_payload_returns_hold_without_forwarding_or_write() {
         let dir = tmp_dir("blocked");
-        let path = write_fixture_store(&dir);
+        let fixture = write_fixture_store(&dir);
+        let path = fixture.path.as_path();
+        let before = fs::read(path).unwrap();
         let msg = "我需要主管处理。\n```json\n{\"did\":\"权限不足，无法继续\",\"outputs\":[],\"status\":\"blocked\",\"evidence\":[\"读 /secure 被拒\"],\"permission_requests\":[\"请授权读取 /secure\"],\"open_issues\":[\"缺少真实配置文件\"],\"direction_risks\":[\"继续猜会误改沙箱\"],\"follow_up_suggestions\":[\"主管补充路径后重派\"]}\n```";
         let outcome = consume_worker_report_after_completion(
             &path,
@@ -1034,45 +1530,88 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-1",
-            None,         // dispatch_id
-            None,         // attempt_id (SYN-FND-004B)
+            Some(fixture.dispatch_id.as_str()),
+            Some(fixture.attempt_id.as_str()),
             "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
-            Some("grant:test"), // grant_id (SYN-FND-004C)
+            Some(fixture.grant_id.as_str()),
             "developer",
             "任务T",
             msg,
         );
-        let help = outcome.help_signal.as_ref().expect("blocked 应返求助信号");
-        assert_eq!(help.status, "blocked");
-        assert!(help.summary.contains("权限不足"));
-        assert_eq!(help.permission_requests, vec!["请授权读取 /secure"]);
-        assert_eq!(help.open_issues, vec!["缺少真实配置文件"]);
-        assert_eq!(help.direction_risks, vec!["继续猜会误改沙箱"]);
-        assert_eq!(help.follow_up_suggestions, vec!["主管补充路径后重派"]);
-        assert_eq!(outcome.report_summary, None, "求助不是完成摘要");
-        assert_eq!(outcome.report_status.as_deref(), Some("blocked"));
-
-        let after: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        let recorded = after["audit_events"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|event| event["event_type"] == "worker_structured_report_recorded")
-            .expect("求助也应经登记机器落库，成为唯一真源");
-        assert_eq!(recorded["acceptance_status"], "blocked");
-        assert_eq!(recorded["permission_requests"][0], "请授权读取 /secure");
-        assert_eq!(recorded["open_issues"][0], "缺少真实配置文件");
-        assert_eq!(recorded["direction_risks"][0], "继续猜会误改沙箱");
-        assert_eq!(recorded["follow_up_suggestions"][0], "主管补充路径后重派");
+        assert_eq!(
+            outcome.grant_bearing_boundary,
+            Some(GrantBearingReportBoundary::NotMigratedHold)
+        );
+        assert!(outcome.help_signal.is_none());
+        assert!(outcome.report_status.is_none());
+        assert_eq!(fs::read(path).unwrap(), before, "grant-bearing hold must not forward report content to a legacy side effect");
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn consume_suspected_help_without_valid_json_escalates_to_help_signal() {
+    fn grant_bearing_hold_is_repeatable_and_payload_independent_zero_write() {
+        let dir = tmp_dir("grant-hold-replay");
+        let fixture = write_fixture_store(&dir);
+        let path = fixture.path.as_path();
+        let before = fs::read(path).unwrap();
+        let consume = |message: &str| {
+            consume_worker_report_after_completion(
+                path,
+                "/p",
+                "proj",
+                "wf-1",
+                "wf-1:node:director",
+                "wi-1",
+                Some(fixture.dispatch_id.as_str()),
+                Some(fixture.attempt_id.as_str()),
+                "completed",
+                "test-actor",
+                Some(fixture.grant_id.as_str()),
+                "developer",
+                "任务T",
+                message,
+            )
+        };
+
+        let first = consume(GOOD_MSG);
+        assert_eq!(
+            first.grant_bearing_boundary,
+            Some(GrantBearingReportBoundary::NotMigratedHold)
+        );
+        let replay = consume(GOOD_MSG);
+        assert_eq!(
+            replay.grant_bearing_boundary,
+            Some(GrantBearingReportBoundary::NotMigratedHold),
+            "same valid report remains a typed hold until the real claim ledger exists"
+        );
+        assert_eq!(
+            fs::read(path).expect("read replayed claim"),
+            before,
+            "M2 hold must not append audit, bump state, or rewrite a foreign owner"
+        );
+
+        let divergent = consume(
+            "```json\n{\"did\":\"different report\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"fixture\"]}\n```",
+        );
+        assert_eq!(
+            divergent.grant_bearing_boundary,
+            Some(GrantBearingReportBoundary::NotMigratedHold),
+            "different valid payload cannot create an ad-hoc claim receipt or overwrite a future claim"
+        );
+        assert_eq!(
+            fs::read(path).expect("read divergent claim"),
+            before,
+            "different valid payload must leave the entire store byte-for-byte unchanged"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn grant_bearing_malformed_payload_returns_hold_without_write() {
         let dir = tmp_dir("suspected-help");
-        let path = write_fixture_store(&dir);
+        let fixture = write_fixture_store(&dir);
+        let path = fixture.path.as_path();
         let before = fs::read(&path).unwrap();
         let outcome = consume_worker_report_after_completion(
             &path,
@@ -1081,35 +1620,38 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-1",
-            None,         // dispatch_id
-            None,         // attempt_id (SYN-FND-004B)
+            Some(fixture.dispatch_id.as_str()),
+            Some(fixture.attempt_id.as_str()),
             "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
-            Some("grant:test"), // grant_id (SYN-FND-004C)
+            Some(fixture.grant_id.as_str()),
             "developer",
             "任务T",
             "我卡住了，需要权限读取 /secure。\n```json\n{\"status\":\"blocked\",\n```",
         );
-        let help = outcome.help_signal.expect("疑似求助坏 json 应升级");
-        assert_eq!(help.status, "suspected_blocked");
-        assert!(help.summary.contains("疑似求助"));
-        assert!(help
-            .open_issues
-            .iter()
-            .any(|item| item.contains("我卡住了")));
-        assert!(
-            outcome.report_warning.is_none(),
-            "疑似求助不能降成普通 warning"
+        assert_eq!(
+            outcome.grant_bearing_boundary,
+            Some(GrantBearingReportBoundary::NotMigratedHold)
         );
+        assert!(outcome.report_summary.is_none());
+        assert!(outcome.report_status.is_none());
+        assert!(outcome.help_signal.is_none());
+        assert!(outcome
+            .report_warning
+            .as_deref()
+            .is_some_and(|warning| warning.contains("NOT_MIGRATED/HOLD")));
         assert_eq!(fs::read(&path).unwrap(), before, "坏 json 不写 store");
         let _ = fs::remove_dir_all(dir);
     }
 
-    // 刀A·口供上脸：consume 把 worker 自报 status 透传进 report_status（done/partial/缺失三态）。
+    // M2 grant-bearing reports stop before parsing or forwarding worker-owned
+    // status.  The future claim/review owner, not this boundary, owns those
+    // semantics.
     #[test]
-    fn report_status_passthrough_three_states() {
+    fn grant_bearing_reports_do_not_forward_worker_status_before_claim_migration() {
         let dir = tmp_dir("status");
-        let path = write_fixture_store(&dir);
+        let fixture = write_fixture_store(&dir);
+        let path = fixture.path.as_path();
         let run = |msg: &str| {
             consume_worker_report_after_completion(
                 &path,
@@ -1118,36 +1660,31 @@ mod tests {
                 "wf-1",
                 "wf-1:node:director",
                 "wi-1",
-                None,         // dispatch_id
-                None,         // attempt_id (SYN-FND-004B)
+                Some(fixture.dispatch_id.as_str()),
+                Some(fixture.attempt_id.as_str()),
                 "completed",  // attempt_state (SYN-FND-004B): 合法终态
                 "test-actor", // authenticated_actor_id (SYN-FND-004B)
-                Some("grant:test"), // grant_id (SYN-FND-004C)
+                Some(fixture.grant_id.as_str()),
                 "developer",
                 "任务T",
                 msg,
             )
         };
-        assert_eq!(
-            run("```json\n{\"did\":\"d\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"e\"]}\n```")
-                .report_status
-                .as_deref(),
-            Some("done"),
-            "done 透传"
-        );
-        assert_eq!(
-            run("```json\n{\"did\":\"d\",\"outputs\":[],\"status\":\"partial\",\"evidence\":[\"e\"]}\n```")
-                .report_status
-                .as_deref(),
-            Some("partial"),
-            "partial 透传"
-        );
-        assert_eq!(
-            run("```json\n{\"did\":\"d\",\"outputs\":[],\"evidence\":[\"e\"]}\n```").report_status,
-            None,
-            "有块缺 status → None"
-        );
-        assert_eq!(run("没有 json 块").report_status, None, "没交口供 → None");
+        for message in [
+            "```json\n{\"did\":\"d\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"e\"]}\n```",
+            "```json\n{\"did\":\"d\",\"outputs\":[],\"status\":\"partial\",\"evidence\":[\"e\"]}\n```",
+            "```json\n{\"did\":\"d\",\"outputs\":[],\"evidence\":[\"e\"]}\n```",
+            "没有 json 块",
+        ] {
+            let outcome = run(message);
+            assert_eq!(
+                outcome.grant_bearing_boundary,
+                Some(GrantBearingReportBoundary::NotMigratedHold),
+                "grant-bearing payload must stop at the M2 boundary"
+            );
+            assert!(outcome.report_status.is_none());
+            assert!(outcome.help_signal.is_none());
+        }
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1155,7 +1692,8 @@ mod tests {
     #[test]
     fn consume_without_grant_id_is_rejected_and_writes_nothing() {
         let dir = tmp_dir("nogrant");
-        let path = write_fixture_store(&dir);
+        let fixture = write_fixture_store(&dir);
+        let path = fixture.path.as_path();
         let before = fs::read(&path).unwrap();
         let outcome = consume_worker_report_after_completion(
             &path,
@@ -1164,8 +1702,8 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-1",
-            None,         // dispatch_id
-            None,         // attempt_id (SYN-FND-004B)
+            Some(fixture.dispatch_id.as_str()),
+            Some(fixture.attempt_id.as_str()),
             "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
             None,         // grant_id (SYN-FND-004C): 无授权
@@ -1177,18 +1715,19 @@ mod tests {
         assert!(outcome.report_status.is_none(), "无 grant 不得产生状态");
         let warning = outcome.report_warning.expect("无 grant 必须有诊断 warning");
         assert!(
-            warning.contains("无有效执行授权 grant_id"),
+            warning.contains("execution_grant_id_missing"),
             "warning 应指明拒绝原因：{warning}"
         );
         assert_eq!(fs::read(&path).unwrap(), before, "拒绝必须零 store 变化");
         let _ = fs::remove_dir_all(dir);
     }
 
-    // SYN-FND-004C: grant_id 格式非法（非 grant:/dispatch: 前缀）同样 fail closed。
+    // SYN-M2A-T4: malformed caller-supplied grant ID is rejected before any store read.
     #[test]
     fn consume_with_malformed_grant_id_is_rejected_and_writes_nothing() {
         let dir = tmp_dir("badgrant");
-        let path = write_fixture_store(&dir);
+        let fixture = write_fixture_store(&dir);
+        let path = fixture.path.as_path();
         let before = fs::read(&path).unwrap();
         let outcome = consume_worker_report_after_completion(
             &path,
@@ -1197,8 +1736,8 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-1",
-            None,         // dispatch_id
-            None,         // attempt_id (SYN-FND-004B)
+            Some(fixture.dispatch_id.as_str()),
+            Some(fixture.attempt_id.as_str()),
             "completed",  // attempt_state (SYN-FND-004B): 合法终态
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
             Some("forged-by-caller"), // grant_id (SYN-FND-004C): 格式非法
@@ -1209,10 +1748,142 @@ mod tests {
         assert!(outcome.report_summary.is_none(), "非法 grant 不得产生摘要");
         let warning = outcome.report_warning.expect("非法 grant 必须有诊断 warning");
         assert!(
-            warning.contains("grant_id 格式无效"),
+            warning.contains("execution_grant_id_invalid"),
             "warning 应指明拒绝原因：{warning}"
         );
         assert_eq!(fs::read(&path).unwrap(), before, "拒绝必须零 store 变化");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // A caller can mimic the surface shape of a grant ID, but it cannot replace
+    // the immutable ID stored in the server-owned dispatch ledger.
+    #[test]
+    fn consume_with_forged_canonical_grant_id_is_rejected_and_writes_nothing() {
+        let dir = tmp_dir("forged-grant");
+        let fixture = write_fixture_store(&dir);
+        let path = fixture.path.as_path();
+        let before = fs::read(path).unwrap();
+        let forged_grant_id = format!("grant:{}", "a".repeat(64));
+        let outcome = consume_worker_report_after_completion(
+            path,
+            "/p",
+            "proj",
+            "wf-1",
+            "wf-1:node:director",
+            "wi-1",
+            Some(fixture.dispatch_id.as_str()),
+            Some(fixture.attempt_id.as_str()),
+            "completed",
+            "test-actor",
+            Some(&forged_grant_id),
+            "developer",
+            "任务T",
+            GOOD_MSG,
+        );
+        assert!(outcome.report_summary.is_none());
+        assert!(outcome
+            .report_warning
+            .as_deref()
+            .unwrap_or("")
+            .contains("execution_grant_dispatch_execution_grant_id_mismatch"));
+        assert_eq!(fs::read(path).unwrap(), before, "forged grant must not mutate store");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // A copied real grant is also insufficient when the report's server-side
+    // actor context does not match the persisted dispatch subject.
+    #[test]
+    fn consume_with_forged_report_subject_is_rejected_and_writes_nothing() {
+        let dir = tmp_dir("forged-report");
+        let fixture = write_fixture_store(&dir);
+        let path = fixture.path.as_path();
+        let before = fs::read(path).unwrap();
+        let outcome = consume_worker_report_after_completion(
+            path,
+            "/p",
+            "proj",
+            "wf-1",
+            "wf-1:node:director",
+            "wi-1",
+            Some(fixture.dispatch_id.as_str()),
+            Some(fixture.attempt_id.as_str()),
+            "completed",
+            "forged-actor",
+            Some(fixture.grant_id.as_str()),
+            "developer",
+            "任务T",
+            GOOD_MSG,
+        );
+        assert!(outcome.report_summary.is_none());
+        assert!(outcome
+            .report_warning
+            .as_deref()
+            .unwrap_or("")
+            .contains("execution_grant_dispatch_native_thread_id_mismatch"));
+        assert_eq!(fs::read(path).unwrap(), before, "forged report must not mutate store");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn consume_after_authorization_revocation_is_rejected_and_writes_nothing() {
+        let dir = tmp_dir("revoked-authority");
+        let fixture = write_fixture_store(&dir);
+        crate::plan_authorization_store::revoke_authorization(
+            &fixture.path,
+            &crate::RevokePlanAuthorizationInput {
+                project_root: "/p".to_string(),
+                authorization_id: fixture.authorization_id.clone(),
+                actor_id: "fixture-user".to_string(),
+                actor_role: "user".to_string(),
+                reason: "fixture revoke after mint".to_string(),
+                expected_store_revision: Some(fixture.authorization_revision),
+            },
+            worker_report_timestamp_ms(),
+            "worker-report-revoke-fixture",
+        )
+        .expect("revoke server authorization after grant mint");
+        let state_before = fs::read(&fixture.path).expect("read state after revoke");
+        let authorization_path = crate::plan_authorization_store::sidecar_path(&fixture.path)
+            .expect("authorization sidecar path");
+        let authorization_before = fs::read(&authorization_path).expect("read sidecar after revoke");
+
+        let outcome = consume_worker_report_after_completion(
+            &fixture.path,
+            "/p",
+            "proj",
+            "wf-1",
+            "wf-1:node:director",
+            "wi-1",
+            Some(fixture.dispatch_id.as_str()),
+            Some(fixture.attempt_id.as_str()),
+            "completed",
+            "test-actor",
+            Some(fixture.grant_id.as_str()),
+            "developer",
+            "任务T",
+            GOOD_MSG,
+        );
+        assert!(outcome.report_summary.is_none(), "revoked source must not produce a report");
+        assert!(outcome.report_status.is_none(), "revoked source must not produce a status");
+        assert!(
+            outcome
+                .report_warning
+                .as_deref()
+                .unwrap_or("")
+                .contains("execution_grant_authorization_source_rejected:execution_grant_authorization_not_active"),
+            "revocation must reject the previously minted grant: {:?}",
+            outcome.report_warning
+        );
+        assert_eq!(
+            fs::read(&fixture.path).expect("read state after rejected report"),
+            state_before,
+            "rejected post-revocation report must not write workflow state"
+        );
+        assert_eq!(
+            fs::read(&authorization_path).expect("read sidecar after rejected report"),
+            authorization_before,
+            "rejected post-revocation report must not write authorization source"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1220,7 +1891,8 @@ mod tests {
     #[test]
     fn consume_with_mid_flight_attempt_state_is_rejected_and_writes_nothing() {
         let dir = tmp_dir("midflight");
-        let path = write_fixture_store(&dir);
+        let fixture = write_fixture_store_with_dispatch(&dir, "wi-1", "running");
+        let path = fixture.path.as_path();
         let before = fs::read(&path).unwrap();
         let outcome = consume_worker_report_after_completion(
             &path,
@@ -1229,11 +1901,11 @@ mod tests {
             "wf-1",
             "wf-1:node:director",
             "wi-1",
-            None,         // dispatch_id
-            None,         // attempt_id (SYN-FND-004B)
+            Some(fixture.dispatch_id.as_str()),
+            Some(fixture.attempt_id.as_str()),
             "running",    // attempt_state (SYN-FND-004B): 中间态，不在白名单
             "test-actor", // authenticated_actor_id (SYN-FND-004B)
-            Some("grant:test"), // grant_id (SYN-FND-004C): grant 合法
+            Some(fixture.grant_id.as_str()),
             "developer",
             "任务T",
             GOOD_MSG,

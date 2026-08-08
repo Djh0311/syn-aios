@@ -5,37 +5,37 @@
     {
       "id": "conversation-transport",
       "name": "Agent conversation transport",
-      "path": "docs/code-map/domains/conversation-transport.json",
+      "file": "docs/code-map/domains/conversation-transport.json",
       "coverage": "verified-partial"
     },
     {
       "id": "syn-mcp-supervision",
       "name": "Syn and MCP supervision",
-      "path": "docs/code-map/domains/syn-mcp-supervision.json",
+      "file": "docs/code-map/domains/syn-mcp-supervision.json",
       "coverage": "seed-partial"
     },
     {
       "id": "workflow-execution-governance",
       "name": "Workflow execution governance",
-      "path": "docs/code-map/domains/workflow-execution-governance.json",
+      "file": "docs/code-map/domains/workflow-execution-governance.json",
       "coverage": "verified-partial"
     },
     {
       "id": "persistence-canonical-state",
       "name": "Persistence and canonical state",
-      "path": "docs/code-map/domains/persistence-canonical-state.json",
+      "file": "docs/code-map/domains/persistence-canonical-state.json",
       "coverage": "seed-partial"
     },
     {
       "id": "ui-shared-foundation",
       "name": "Shared UI foundation",
-      "path": "docs/code-map/domains/ui-shared-foundation.json",
+      "file": "docs/code-map/domains/ui-shared-foundation.json",
       "coverage": "verified-partial"
     },
     {
       "id": "development-harness",
       "name": "Development harness",
-      "path": "docs/code-map/domains/development-harness.json",
+      "file": "docs/code-map/domains/development-harness.json",
       "coverage": "verified-partial"
     }
   ]

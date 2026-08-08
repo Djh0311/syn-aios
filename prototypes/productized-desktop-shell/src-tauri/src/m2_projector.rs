@@ -5,7 +5,6 @@ use crate::m2_dto::*;
 use crate::m2_ports::*;
 use rusqlite::Connection;
 use std::fmt;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Deterministic Projector Implementation
 pub struct DeterministicProjectorImpl {
@@ -38,11 +37,9 @@ impl DeterministicProjectorImpl {
         event: &WorkbenchEventEnvelopeDto,
     ) -> Result<(), String> {
         // 1. Get current checkpoint
-        let checkpoint = self.checkpoint_repo.get(
-            connection,
-            &self.projector_id,
-            &self.projector_version,
-        )?;
+        let checkpoint =
+            self.checkpoint_repo
+                .get(connection, &self.projector_id, &self.projector_version)?;
 
         // 2. Check if event has already been processed
         if let Some(ref checkpoint) = checkpoint {
@@ -72,7 +69,10 @@ impl DeterministicProjectorImpl {
     }
 
     /// Normalize event (canonical normalization)
-    fn normalize_event(&self, event: &WorkbenchEventEnvelopeDto) -> Result<WorkbenchEventEnvelopeDto, String> {
+    fn normalize_event(
+        &self,
+        event: &WorkbenchEventEnvelopeDto,
+    ) -> Result<WorkbenchEventEnvelopeDto, String> {
         // Create normalized copy with sorted fields
         let mut normalized = event.clone();
 
@@ -107,11 +107,9 @@ impl DeterministicProjectorImpl {
         event: &WorkbenchEventEnvelopeDto,
     ) -> Result<(), String> {
         // Get current snapshot
-        let current_snapshot = self.snapshot_repo.get(
-            connection,
-            &event.source_ref,
-            &self.projector_id,
-        )?;
+        let current_snapshot =
+            self.snapshot_repo
+                .get(connection, &event.source_ref, &self.projector_id)?;
 
         // Create new snapshot
         let new_snapshot = CurrentSnapshotDto {
@@ -160,17 +158,10 @@ impl DeterministicProjectorImpl {
     }
 
     /// Rebuild projector from source
-    pub fn rebuild(
-        &self,
-        connection: &Connection,
-        source_watermark: &str,
-    ) -> Result<(), String> {
+    pub fn rebuild(&self, connection: &Connection, source_watermark: &str) -> Result<(), String> {
         // 1. Delete existing checkpoint
-        self.checkpoint_repo.delete(
-            connection,
-            &self.projector_id,
-            &self.projector_version,
-        )?;
+        self.checkpoint_repo
+            .delete(connection, &self.projector_id, &self.projector_version)?;
 
         // 2. Create new checkpoint
         self.update_checkpoint(
@@ -201,11 +192,8 @@ impl DeterministicProjectorImpl {
         &self,
         connection: &Connection,
     ) -> Result<Option<ProjectionCheckpointDto>, String> {
-        self.checkpoint_repo.get(
-            connection,
-            &self.projector_id,
-            &self.projector_version,
-        )
+        self.checkpoint_repo
+            .get(connection, &self.projector_id, &self.projector_version)
     }
 }
 
@@ -292,7 +280,9 @@ impl ParityCheckerImpl {
         projector_id: &str,
     ) -> Result<ParityResult, String> {
         // 1. Get primary snapshot
-        let primary = self.primary_repo.get(connection, object_ref, projector_id)?;
+        let primary = self
+            .primary_repo
+            .get(connection, object_ref, projector_id)?;
 
         // 2. Get shadow snapshot
         let shadow = self.shadow_repo.get(connection, object_ref, projector_id)?;
@@ -324,10 +314,14 @@ impl ParityCheckerImpl {
         projector_id: &str,
     ) -> Result<CountParityResult, String> {
         // 1. Get all primary snapshots
-        let primary_snapshots = self.primary_repo.get_by_projector(connection, projector_id)?;
+        let primary_snapshots = self
+            .primary_repo
+            .get_by_projector(connection, projector_id)?;
 
         // 2. Get all shadow snapshots
-        let shadow_snapshots = self.shadow_repo.get_by_projector(connection, projector_id)?;
+        let shadow_snapshots = self
+            .shadow_repo
+            .get_by_projector(connection, projector_id)?;
 
         // 3. Compare counts
         let primary_count = primary_snapshots.len();
@@ -352,10 +346,14 @@ impl ParityCheckerImpl {
         projector_id: &str,
     ) -> Result<KeyParityResult, String> {
         // 1. Get all primary snapshots
-        let primary_snapshots = self.primary_repo.get_by_projector(connection, projector_id)?;
+        let primary_snapshots = self
+            .primary_repo
+            .get_by_projector(connection, projector_id)?;
 
         // 2. Get all shadow snapshots
-        let shadow_snapshots = self.shadow_repo.get_by_projector(connection, projector_id)?;
+        let shadow_snapshots = self
+            .shadow_repo
+            .get_by_projector(connection, projector_id)?;
 
         // 3. Extract keys
         let primary_keys: Vec<String> = primary_snapshots
@@ -369,9 +367,7 @@ impl ParityCheckerImpl {
 
         // 4. Compare keys
         if primary_keys == shadow_keys {
-            Ok(KeyParityResult::Match {
-                keys: primary_keys,
-            })
+            Ok(KeyParityResult::Match { keys: primary_keys })
         } else {
             let missing_in_shadow: Vec<String> = primary_keys
                 .iter()
@@ -399,7 +395,9 @@ impl ParityCheckerImpl {
         projector_id: &str,
     ) -> Result<HashParityResult, String> {
         // 1. Get primary snapshot
-        let primary = self.primary_repo.get(connection, object_ref, projector_id)?;
+        let primary = self
+            .primary_repo
+            .get(connection, object_ref, projector_id)?;
 
         // 2. Get shadow snapshot
         let shadow = self.shadow_repo.get(connection, object_ref, projector_id)?;
@@ -441,7 +439,9 @@ pub enum ParityResult {
 /// Count Parity Result
 #[derive(Clone, Debug, PartialEq)]
 pub enum CountParityResult {
-    Match { count: usize },
+    Match {
+        count: usize,
+    },
     Mismatch {
         primary_count: usize,
         shadow_count: usize,
@@ -451,7 +451,9 @@ pub enum CountParityResult {
 /// Key Parity Result
 #[derive(Clone, Debug, PartialEq)]
 pub enum KeyParityResult {
-    Match { keys: Vec<String> },
+    Match {
+        keys: Vec<String>,
+    },
     Mismatch {
         missing_in_shadow: Vec<String>,
         missing_in_primary: Vec<String>,
@@ -461,7 +463,9 @@ pub enum KeyParityResult {
 /// Hash Parity Result
 #[derive(Clone, Debug, PartialEq)]
 pub enum HashParityResult {
-    Match { hash: String },
+    Match {
+        hash: String,
+    },
     Mismatch {
         primary_hash: String,
         shadow_hash: String,
@@ -469,39 +473,14 @@ pub enum HashParityResult {
     MissingSnapshot,
 }
 
-/// Generate UUID v4 (simplified)
+/// Generate UUIDv7 through the narrow M2 UTC/identifier helper.
 fn generate_uuid() -> String {
-    let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes).expect("failed to generate random bytes");
-    // Set version 4 and variant bits
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    format!(
-        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-        bytes[0], bytes[1], bytes[2], bytes[3],
-        bytes[4], bytes[5],
-        bytes[6], bytes[7],
-        bytes[8], bytes[9],
-        bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
-    )
+    crate::m2_clock::uuid_v7()
 }
 
 /// Generate ISO 8601 timestamp
 fn generate_timestamp() -> String {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards");
-    let secs = duration.as_secs();
-    let nanos = duration.subsec_nanos();
-
-    // Simple ISO 8601 format
-    format!(
-        "2026-08-03T{:02}:{:02}:{:02}.{:09}Z",
-        (secs / 3600) % 24,
-        (secs / 60) % 60,
-        secs % 60,
-        nanos
-    )
+    crate::m2_clock::utc_now_rfc3339()
 }
 
 /// SHA-256 hash helper
@@ -557,7 +536,10 @@ mod tests {
             primary_count: 5,
             shadow_count: 3,
         };
-        assert!(matches!(mismatch_result, CountParityResult::Mismatch { .. }));
+        assert!(matches!(
+            mismatch_result,
+            CountParityResult::Mismatch { .. }
+        ));
     }
 
     #[test]

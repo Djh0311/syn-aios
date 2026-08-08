@@ -10,6 +10,7 @@ use crate::{
     RecordPlanAuthorizationGlobalBoundaryReviewInput, RecordPlanAuthorizationOutput,
     RecordPlanAuthorizationUserConfirmationInput, RevokePlanAuthorizationInput,
 };
+use rusqlite::OpenFlags;
 use serde_json::Value;
 use std::fs;
 use std::io::Write;
@@ -46,6 +47,166 @@ pub(crate) fn load_store(
     })?;
     validate_store(&store)?;
     Ok(store)
+}
+
+/// Loads the exact server-side authorization used to mint an M2 legacy-dispatch
+/// grant. This is intentionally read-only and fail-closed: an already prepared
+/// dispatch cannot recover authority from a caller-supplied scope or revision.
+pub(crate) fn load_active_execution_grant_source(
+    workflow_state_path: &Path,
+    authorization_id: &str,
+    project_id: &str,
+    workflow_id: &str,
+    timestamp_ms: i64,
+) -> Result<crate::mcp::execution_grant::ExecutionGrantAuthorizationSource, String> {
+    if authorization_id.trim().is_empty()
+        || project_id.trim().is_empty()
+        || workflow_id.trim().is_empty()
+    {
+        return Err("execution_grant_authorization_identity_missing".to_string());
+    }
+    // DB-primary is authoritative.  Do not reconstruct a grant from the JSON
+    // projection when SQLite is active: the projection can intentionally lag
+    // after a committed write and would reopen a revoke/scope TOCTOU window.
+    let (authorization, authorization_store_revision, authorization_source_hash) =
+        match crate::workbench_sqlite_storage_mode::storage_mode_for(workflow_state_path) {
+            crate::workbench_sqlite_storage_mode::StorageMode::DbPrimaryJsonProjection(config) => {
+                let connection = rusqlite::Connection::open_with_flags(
+                    &config.db_path,
+                    OpenFlags::SQLITE_OPEN_READ_ONLY,
+                )
+                .map_err(|error| format!("execution_grant_db_primary_open_failed:{error}"))?;
+                let record_json: String = connection
+                    .query_row(
+                        "SELECT record_json FROM plan_authorizations WHERE authorization_id = ?1",
+                        [authorization_id],
+                        |row| row.get(0),
+                    )
+                    .map_err(|error| {
+                        format!("execution_grant_db_primary_authorization_load_failed:{error}")
+                    })?;
+                let authorization: PlanAuthorization =
+                    serde_json::from_str(&record_json).map_err(|error| {
+                        format!("execution_grant_db_primary_authorization_parse_failed:{error}")
+                    })?;
+                let source_hash = crate::utils::hash::sha256_hex(&record_json);
+                (
+                    authorization.clone(),
+                    authorization.updated_at_ms,
+                    source_hash,
+                )
+            }
+            crate::workbench_sqlite_storage_mode::StorageMode::JsonOnly { .. } => {
+                let store = load_store(workflow_state_path, timestamp_ms)?;
+                let authorization = store
+                    .authorizations
+                    .iter()
+                    .find(|authorization| authorization.authorization_id == authorization_id)
+                    .cloned()
+                    .ok_or_else(|| "execution_grant_authorization_not_found".to_string())?;
+                let source_hash = crate::utils::hash::sha256_hex(
+                    &serde_json::to_string(&authorization).map_err(|error| {
+                        format!("execution_grant_authorization_serialize_failed:{error}")
+                    })?,
+                );
+                (authorization, store.revision, source_hash)
+            }
+        };
+    execution_grant_source_from_authorization(
+        authorization,
+        authorization_store_revision,
+        authorization_source_hash,
+        authorization_id,
+        project_id,
+        workflow_id,
+        timestamp_ms,
+    )
+}
+
+/// Builds the exact M2 dispatch-grant source from one canonical authorization
+/// record already loaded by the caller.  DB-primary repository transactions
+/// use this helper too, so a reservation cannot merely compare a raw hash and
+/// then trust caller-supplied scope/quota candidates.
+pub(crate) fn execution_grant_source_from_authorization_record_json(
+    record_json: &str,
+    authorization_id: &str,
+    project_id: &str,
+    workflow_id: &str,
+    timestamp_ms: i64,
+) -> Result<crate::mcp::execution_grant::ExecutionGrantAuthorizationSource, String> {
+    let authorization: PlanAuthorization = serde_json::from_str(record_json)
+        .map_err(|error| format!("execution_grant_db_primary_authorization_parse_failed:{error}"))?;
+    let authorization_store_revision = authorization.updated_at_ms;
+    execution_grant_source_from_authorization(
+        authorization,
+        // DB-primary records do not carry the sidecar-wide revision. Their
+        // canonical record update timestamp is the persisted revision used by
+        // the existing loader and is therefore what grants bind to.
+        authorization_store_revision,
+        crate::utils::hash::sha256_hex(record_json),
+        authorization_id,
+        project_id,
+        workflow_id,
+        timestamp_ms,
+    )
+}
+
+fn execution_grant_source_from_authorization(
+    authorization: PlanAuthorization,
+    authorization_store_revision: i64,
+    authorization_source_hash: String,
+    authorization_id: &str,
+    project_id: &str,
+    workflow_id: &str,
+    timestamp_ms: i64,
+) -> Result<crate::mcp::execution_grant::ExecutionGrantAuthorizationSource, String> {
+    if authorization.authorization_id != authorization_id {
+        return Err("execution_grant_authorization_identity_mismatch".to_string());
+    }
+    if authorization.status != PlanAuthorizationStatus::Active {
+        return Err("execution_grant_authorization_not_active".to_string());
+    }
+    if authorization.project_id != project_id || authorization.workflow_id != workflow_id {
+        return Err("execution_grant_authorization_scope_mismatch".to_string());
+    }
+    if authorization.user_confirmation.is_none()
+        || authorization
+            .global_boundary_review
+            .as_ref()
+            .map(|review| review.status.as_str())
+            != Some("approved")
+    {
+        return Err("execution_grant_authorization_confirmation_or_review_missing".to_string());
+    }
+    if authorization
+        .expires_at_ms
+        .is_some_and(|expires_at_ms| expires_at_ms <= timestamp_ms)
+    {
+        return Err("execution_grant_authorization_expired".to_string());
+    }
+    Ok(crate::mcp::execution_grant::ExecutionGrantAuthorizationSource {
+        authorization_id: authorization.authorization_id.clone(),
+        authorization_store_revision,
+        authorization_source_hash,
+        project_id: authorization.project_id.clone(),
+        workflow_id: authorization.workflow_id.clone(),
+        allowed_work_item_types: authorization.scope.allowed_task_package_kinds.clone(),
+        allowed_role_ids: authorization.scope.allowed_role_ids.clone(),
+        allowed_agent_ids: authorization.scope.allowed_agent_ids.clone(),
+        allowed_read_roots: authorization.scope.allowed_read_roots.clone(),
+        allowed_write_roots: authorization.scope.allowed_write_roots.clone(),
+        allowed_tools: authorization.scope.allowed_tools.clone(),
+        allowed_checks: authorization.scope.allowed_checks.clone(),
+        stop_conditions: authorization
+            .scope
+            .stop_conditions
+            .iter()
+            .map(|condition| condition.condition_id.clone())
+            .collect(),
+        expires_at_ms: authorization.expires_at_ms,
+        max_worker_dispatches: authorization.scope.max_worker_dispatches,
+        max_runtime_minutes: authorization.scope.max_runtime_minutes,
+    })
 }
 
 pub(crate) fn create_authorization(

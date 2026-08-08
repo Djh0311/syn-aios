@@ -6,121 +6,20 @@ mod tests {
     use super::*;
     use rusqlite::Connection;
     use std::fs;
+    use std::path::Path;
     use std::path::PathBuf;
 
     fn temp_dir(name: &str) -> PathBuf {
-        let mut path = std::env::temp_dir();
-        path.push(format!("syn-m2-wiring-test-{}-{}", name, std::process::id()));
-        path
+        super::temp_dir(&format!("linked-{name}"))
     }
 
     fn create_test_db(path: &Path) -> Connection {
-        let connection = Connection::open(path).expect("open db");
-        connection.execute_batch("PRAGMA foreign_keys = ON;").expect("enable foreign keys");
-
-        // 创建 M2 schema
-        connection.execute_batch(
-            "CREATE TABLE IF NOT EXISTS command_receipts (
-                receipt_id TEXT PRIMARY KEY,
-                command_id TEXT NOT NULL,
-                idempotency_key TEXT NOT NULL,
-                request_hash TEXT NOT NULL,
-                actor_id TEXT NOT NULL,
-                scope_ref TEXT NOT NULL,
-                current_object_ref TEXT,
-                policy_decision_ref TEXT NOT NULL,
-                status TEXT NOT NULL,
-                correlation_id TEXT,
-                accepted_at TEXT NOT NULL,
-                result_ref TEXT,
-                result_hash TEXT,
-                committed_revision INTEGER,
-                error_code TEXT,
-                created_at TEXT NOT NULL,
-                UNIQUE(command_id, idempotency_key)
-            )"
-        ).expect("create command_receipts table");
-
-        connection.execute_batch(
-            "CREATE TABLE IF NOT EXISTS events (
-                event_id TEXT PRIMARY KEY,
-                event_type TEXT NOT NULL,
-                occurred_at TEXT NOT NULL,
-                actor_id TEXT NOT NULL,
-                scope_ref TEXT NOT NULL,
-                source_ref TEXT NOT NULL,
-                source_revision TEXT,
-                command_id TEXT,
-                correlation_id TEXT,
-                causation_id TEXT,
-                trace_context TEXT,
-                schema_version TEXT NOT NULL,
-                sensitivity TEXT NOT NULL,
-                summary_ref TEXT,
-                payload_ref TEXT,
-                payload_hash TEXT,
-                created_at TEXT NOT NULL
-            )"
-        ).expect("create events table");
-
-        connection.execute_batch(
-            "CREATE TABLE IF NOT EXISTS audit_records (
-                audit_id TEXT PRIMARY KEY,
-                action TEXT NOT NULL,
-                decision TEXT NOT NULL,
-                reason_code TEXT,
-                actor_id TEXT NOT NULL,
-                scope_ref TEXT NOT NULL,
-                subject_ref TEXT,
-                command_id TEXT,
-                correlation_id TEXT,
-                occurred_at TEXT NOT NULL,
-                sensitivity TEXT NOT NULL,
-                scrub_result TEXT,
-                source_refs TEXT,
-                created_at TEXT NOT NULL
-            )"
-        ).expect("create audit_records table");
-
-        connection.execute_batch(
-            "CREATE TABLE IF NOT EXISTS current_snapshots (
-                object_ref TEXT NOT NULL,
-                object_revision INTEGER NOT NULL,
-                source_watermark TEXT NOT NULL,
-                snapshot_hash TEXT NOT NULL,
-                projector_id TEXT NOT NULL,
-                built_at TEXT NOT NULL,
-                PRIMARY KEY (object_ref, projector_id)
-            )"
-        ).expect("create current_snapshots table");
-
-        // work_items 表（check_policy 和 get_aggregate 需要）
-        connection.execute_batch(
-            "CREATE TABLE IF NOT EXISTS work_items (
-                work_item_id TEXT PRIMARY KEY,
-                workflow_id TEXT,
-                node_id TEXT,
-                source_id TEXT,
-                record_hash TEXT NOT NULL,
-                record_json TEXT NOT NULL
-            )"
-        ).expect("create work_items table");
-
-        connection
+        super::create_test_db(path)
     }
 
     /// 插入测试用 work_item 到 work_items 表
     fn insert_test_work_item(connection: &Connection, work_item_id: &str, workflow_id: &str, state: &str) {
-        let record_json = serde_json::json!({
-            "work_item_id": work_item_id,
-            "workflow_id": workflow_id,
-            "state": state,
-        }).to_string();
-        connection.execute(
-            "INSERT OR REPLACE INTO work_items (work_item_id, workflow_id, node_id, source_id, record_hash, record_json)
-             VALUES (?1, ?2, 'node-001', 'test', 'hash', ?3)",
-            rusqlite::params![work_item_id, workflow_id, record_json],
-        ).expect("insert test work_item");
+        super::insert_test_work_item(connection, work_item_id, workflow_id, state);
     }
 
     #[test]

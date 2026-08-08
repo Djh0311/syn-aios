@@ -417,6 +417,130 @@
         "real-run authorization"
       ],
       "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+    },
+    {
+      "id": "workflow-execution-governance.m2-legacy-dispatch-grant-ledger",
+      "domain": "workflow-execution-governance",
+      "name": "M2 legacy dispatch grant ledger",
+      "status": "candidate",
+      "coverage": "unverified-candidate",
+      "canonical": {
+        "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/execution_grant.rs",
+        "symbol": "mint_dispatch_grant",
+        "kind": "Rust immutable dispatch grant ledger"
+      },
+      "entrypoints": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_execution_entrypoints.rs",
+          "symbol": "write_started_dispatch",
+          "kind": "Rust dispatch write"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/worker_report.rs",
+          "symbol": "consume_worker_report_after_completion",
+          "kind": "Rust report consumer"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+          "symbol": "record_external_worker_structured_report_at",
+          "kind": "Tauri ingress deny gate"
+        }
+      ],
+      "publicSymbols": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/execution_grant.rs",
+          "symbol": "verify_dispatch_grant",
+          "kind": "Rust crate-visible verifier"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/director_agent.rs",
+          "symbol": "run_director_task_chain_inner",
+          "kind": "Rust authorized dispatch caller"
+        }
+      ],
+      "stateOwners": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/types.rs",
+          "symbol": "WorkflowNodeDispatchRecord",
+          "kind": "canonical dispatch ledger record"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/plan_authorization_store.rs",
+          "symbol": "load_active_execution_grant_source",
+          "kind": "active authorization source"
+        }
+      ],
+      "contracts": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_read_model_entrypoints.rs",
+          "symbol": "parse_workflow_node_dispatch_record",
+          "kind": "persisted grant read model"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/execution_grant.rs",
+          "symbol": "DispatchGrantVerificationContext",
+          "kind": "exact project/workflow/node/work-item/attempt binding"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/execution_grant.rs",
+          "symbol": "verify_dispatch_grant_authorization_source",
+          "kind": "fresh active authorization source and revision check"
+        }
+      ],
+      "tests": [
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/mcp/execution_grant.rs",
+          "symbol": "persisted_dispatch_grant_binds_every_server_context_field",
+          "kind": "inline Rust test"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/worker_report.rs",
+          "symbol": "consume_with_forged_canonical_grant_id_is_rejected_and_writes_nothing",
+          "kind": "inline Rust negative test"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/worker_report.rs",
+          "symbol": "consume_after_authorization_revocation_is_rejected_and_writes_nothing",
+          "kind": "inline Rust revocation zero-write test"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+          "symbol": "forged_execution_report_tauri_ingress_is_rejected_before_any_state_write",
+          "kind": "Tauri ingress zero-write test"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/lib.rs",
+          "symbol": "s3_director_dispatch_db_primary_grant_ledger_round_trip",
+          "kind": "isolated DB-primary mint-persist-fresh-load-verify test"
+        },
+        {
+          "path": "prototypes/productized-desktop-shell/src-tauri/src/fnd006_acceptance.rs",
+          "symbol": "extra_execution_grant_lifecycle",
+          "kind": "inline M2 grant lifecycle regression test"
+        }
+      ],
+      "related": [
+        {
+          "id": "workflow-execution-governance.proposal-authorization-guard",
+          "relationship": "fresh-loads the exact active plan authorization before grant mint"
+        },
+        {
+          "id": "workflow-execution-governance.workflow-state-dispatch-review",
+          "relationship": "persists the grant with its canonical dispatch ledger"
+        }
+      ],
+      "knownDuplicates": [],
+      "keywords": [
+        "execution grant",
+        "grant ledger",
+        "forged report",
+        "dispatch binding",
+        "DB primary",
+        "M2"
+      ],
+      "verificationBoundary": "dirty-worktree candidate; installed managed Code Map cannot validate structured provenance until a separately authorized managed-pack/schema upgrade"
     }
   ]
 }

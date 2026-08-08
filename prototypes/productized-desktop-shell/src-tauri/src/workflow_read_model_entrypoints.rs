@@ -42,6 +42,7 @@ fn empty_workflow_state_snapshot(path: &Path, warnings: Vec<String>) -> Workflow
         project_workflows: vec![],
         project_blackboards: vec![],
         warnings,
+        m2_port_provenance: None,
     }
 }
 
@@ -2305,6 +2306,8 @@ fn parse_workflow_node_dispatch_record(
         authorization_check: value
             .get("authorization_check")
             .and_then(|check| serde_json::from_value(check.clone()).ok()),
+        execution_grant_id: optional_string_from(value, "execution_grant_id"),
+        execution_attempt_id: optional_string_from(value, "execution_attempt_id"),
         offline_role_dispatch: value
             .get("offline_role_dispatch")
             .and_then(|dispatch| serde_json::from_value(dispatch.clone()).ok()),

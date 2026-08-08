@@ -40,6 +40,7 @@ fn read_workflow_state_snapshot(path: &Path) -> Result<WorkflowStateSnapshot, St
             }
             warnings
         },
+        m2_port_provenance: None,
     })
 }
 
@@ -96,6 +97,7 @@ fn initialize_workflow_state_at(path: &Path) -> Result<WorkflowStateMutationResu
         path: path.display().to_string(),
         backup_path: backup_path.map(|backup| backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: !existed,
         snapshot,
     })
@@ -158,6 +160,7 @@ fn bootstrap_project_workflow_at(
             path: path.display().to_string(),
             backup_path: None,
             audit_event_id: "no-op:existing-workflow".to_string(),
+            receipt_id: None,
             first_initialize: !existed,
             snapshot,
         });
@@ -187,6 +190,7 @@ fn bootstrap_project_workflow_at(
         path: path.display().to_string(),
         backup_path: backup_path.map(|backup| backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: !existed,
         snapshot,
     })
@@ -354,6 +358,7 @@ fn create_task_draft_at(
             path: path.display().to_string(),
             backup_path: None,
             audit_event_id: "no-op:existing-task-draft".to_string(),
+            receipt_id: None,
             first_initialize: false,
             snapshot,
         });
@@ -455,6 +460,7 @@ fn create_task_draft_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })
@@ -671,6 +677,7 @@ fn update_task_package_fields_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })

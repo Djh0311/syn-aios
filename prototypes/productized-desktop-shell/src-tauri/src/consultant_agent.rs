@@ -373,7 +373,7 @@ fn consultant_build_prompt(ctx: &ProjectContext, question: &str) -> String {
   "execution_scope": {
     "requires_write": true,
     "target_files": ["预期改动的具体文件·相对项目根(尽量列出·可空)"],
-    "checks": ["怎么验收,如 cargo test / npm test / 浏览器打开看效果"]
+    "checks": ["怎么验收,如 cargo test / npm test / 浏览器打开看效果"],
   },
   "suggest_workflow": true,
   "tasks": [
@@ -433,6 +433,13 @@ struct ConsultExecutionScopeJson {
     tools: Vec<String>,
     #[serde(default)]
     checks: Vec<String>,
+    // Historic supervisor payloads may carry these advisory values.  The
+    // frozen M1 consultation mapper accepts but deliberately does not turn
+    // them into an execution grant or an authorization quota.
+    #[serde(default)]
+    max_worker_dispatches: Option<i64>,
+    #[serde(default)]
+    max_runtime_minutes: Option<i64>,
 }
 
 #[derive(serde::Deserialize)]
@@ -638,6 +645,25 @@ fn submit_proposal_required_bool(
         .ok_or_else(|| submit_proposal_error(&format!("{parent}.{field} 必须是布尔值")))
 }
 
+fn submit_proposal_optional_positive_i64(
+    object: &serde_json::Map<String, Value>,
+    field: &str,
+    parent: &str,
+) -> Result<Option<i64>, String> {
+    let Some(value) = object.get(field) else {
+        return Ok(None);
+    };
+    let value = value
+        .as_i64()
+        .ok_or_else(|| submit_proposal_error(&format!("{parent}.{field} 必须是正整数")))?;
+    if value <= 0 {
+        return Err(submit_proposal_error(&format!(
+            "{parent}.{field} 必须是正整数"
+        )));
+    }
+    Ok(Some(value))
+}
+
 fn submit_proposal_required_string_array(
     object: &serde_json::Map<String, Value>,
     field: &str,
@@ -708,15 +734,30 @@ pub(crate) fn parse_supervisor_submit_proposal_arguments(
                 "target_files",
                 "tools",
                 "checks",
+                "max_worker_dispatches",
+                "max_runtime_minutes",
             ];
             submit_proposal_reject_unknown_fields(scope, &allowed, "arguments.execution_scope")?;
-            for field in allowed {
+            for field in ["requires_write", "write_roots", "target_files", "tools", "checks"] {
                 if !scope.contains_key(field) {
                     return Err(submit_proposal_error(&format!(
                         "arguments.execution_scope 缺少字段 {field}"
                     )));
                 }
             }
+            // Preserve old supervisor payload acceptance without letting this
+            // M1 form manufacture a grant.  A real M2 grant needs the
+            // separate server-side capability recorded in the authorization.
+            let _ = submit_proposal_optional_positive_i64(
+                scope,
+                "max_worker_dispatches",
+                "arguments.execution_scope",
+            )?;
+            let _ = submit_proposal_optional_positive_i64(
+                scope,
+                "max_runtime_minutes",
+                "arguments.execution_scope",
+            )?;
             Some(ConsultationExecutionScope {
                 requires_write: submit_proposal_required_bool(
                     scope,

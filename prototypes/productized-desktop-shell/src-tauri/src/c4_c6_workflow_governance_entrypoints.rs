@@ -91,6 +91,8 @@ fn prepare_authorized_auto_dispatch_for_index_at(
         planned_tasks.clone(),
         timestamp_ms,
     );
+    let execution_grant_envelope_schema =
+        m2_execution_grant_envelope_schema(&context.authorization)?;
 
     // 2.3·任务级工序图（纯加法）：收「过了 guard 的」任务的 (任务节点 id, planned_task_id, title, depends_on)，
     // 循环后据此建依赖边。task_node_order 只对**已物化**任务递增（blocked 不建节点·不占位·§3 边界语义不动）。
@@ -165,15 +167,30 @@ fn prepare_authorized_auto_dispatch_for_index_at(
         )?;
 
         let binding = active_binding_for_planned_task(index, &value, &node_id, &work_item_id);
-        // C1·chain_binds_per_task（canon 2026-07-09·架构收官）：链会每任务 create_and_bind 真会话 → 无绑定/
-        // rollout 缺时**不判 needs_binding**，改产 prepared·thread 延迟（下方 binding_id/native_thread_id 置 null +
-        // thread_binding_deferred 标记 + 审计变体·透明不吞）。**只放宽「有无会话」就绪判定·授权/安全一条不松**
-        // （guard_result 授权检查照旧）。`force_fresh_task_session` 只供主管试点使用：即使 role/node 留有
-        // 可用旧绑定，也必须延迟到派发前创建并绑定本 work item 的新会话，不能把历史上下文带进新任务。
-        // false 路（手动挡/existing/前端预 prepare）needs_binding 判定**逐字不变**。
+        // Preserve the frozen M1 preparation contract: a live role binding can
+        // prepare a legacy dispatch, while chain mode may deliberately defer a
+        // per-task session.  The M2 grant path performs its own fresh exact
+        // work-item binding check immediately before runner start and never
+        // promotes this preparation-time record into that authorization.
+        // A node-level binding is only a compatibility fallback.  When the
+        // active authorization explicitly excludes that principal, it must
+        // not be reused as the task binding: chain mode will create and bind
+        // the already-authorized per-task session instead.  This preserves
+        // the frozen M1 fallback for authorizations without an agent allow
+        // list and does not enlarge the authorization scope.
+        let binding_principal_not_authorized = binding.as_ref().is_some_and(|binding| {
+            !context.authorization.scope.allowed_agent_ids.is_empty()
+                && !context
+                    .authorization
+                    .scope
+                    .allowed_agent_ids
+                    .iter()
+                    .any(|agent_id| agent_id == &binding.native_thread_id)
+        });
         let thread_deferred = request.chain_binds_per_task
             && (request.force_fresh_task_session
-                || binding.as_ref().map(|b| !b.rollout_exists).unwrap_or(true));
+                || binding_principal_not_authorized
+                || binding.as_ref().map(|binding| !binding.rollout_exists).unwrap_or(true));
         if !thread_deferred {
             let Some(binding) = binding.as_ref() else {
                 task.status = "needs_binding".to_string();
@@ -237,6 +254,12 @@ fn prepare_authorized_auto_dispatch_for_index_at(
                 ),
                 _ => (Value::Null, Value::Null, Vec::new()),
             };
+        // Keep the C4 authorization snapshot distinct from the legacy
+        // dispatch binding reference.  The latter can legitimately be
+        // migrated/rebound by C1 before execution; changing it must never
+        // rewrite the authorization that was approved at prepare time.
+        let authorization_binding_id_json = binding_id_json.clone();
+        let authorization_native_thread_json = native_thread_json.clone();
         array_mut(&mut value, "workflow_node_dispatches")?.push(json!({
           "dispatch_id": dispatch_id,
           "project_id": context.authorization.project_id,
@@ -245,6 +268,10 @@ fn prepare_authorized_auto_dispatch_for_index_at(
           "work_item_id": work_item_id,
           "binding_id": binding_id_json,
           "native_thread_id": native_thread_json,
+          "authorization_binding_snapshot_schema": "c4-prepared-binding-snapshot.v1",
+          "authorization_binding_mode": if thread_deferred { "deferred" } else { "exact" },
+          "authorization_binding_id": authorization_binding_id_json,
+          "authorization_native_thread_id": authorization_native_thread_json,
           "thread_binding_deferred": thread_deferred,
           "prompt_preview": prompt_preview,
           "prompt_kind": "authorized_prepared_auto_dispatch",
@@ -252,6 +279,7 @@ fn prepare_authorized_auto_dispatch_for_index_at(
           "memory_packet_fingerprint": memory_snapshot.fingerprint,
           "plan_authorization_id": context.authorization.authorization_id,
           "authorization_check": serde_json::to_value(&authorization_check).unwrap_or(Value::Null),
+          "execution_grant_envelope_schema": execution_grant_envelope_schema,
           "state": "prepared",
           "started_at_ms": Value::Null,
           "ended_at_ms": Value::Null,
@@ -378,6 +406,11 @@ fn record_worker_structured_report_at(
     path: &Path,
     request: &WorkerStructuredReportInput,
 ) -> Result<WorkflowStateMutationResult, String> {
+    // This writer is also reached by internal legacy callers.  Do not rely on
+    // the Tauri wrapper as its only boundary: a manual/offline report may not
+    // carry any execution join, otherwise it could be confused with an
+    // authenticated dispatch before we even inspect or back up state.
+    reject_non_execution_worker_report_execution_join(request)?;
     if !path.exists() {
         return Err("工作流状态文件不存在；无法记录 worker 结构化汇报".to_string());
     }
@@ -423,7 +456,11 @@ fn record_worker_structured_report_at(
         let state = optional_string_from(dispatch, "state").unwrap_or_default();
         if !matches!(
             state.as_str(),
-            "prepared" | "completed" | "failed" | "timed_out" | "cancelled"
+            "prepared"
+                | "completed"
+                | "failed"
+                | "timed_out"
+                | "cancelled"
         ) {
             return Err(format!(
                 "关联 dispatch 状态 {state} 不能作为 C5 worker 汇报来源"
@@ -474,6 +511,8 @@ fn record_worker_structured_report_at(
       "authenticated_project_scope": request.authenticated_project_scope,
       "report_hash": request.report_hash,
       "report_kind": request.report_kind,
+      "claim_status": "GUARDED_LEGACY_ADAPTER",
+      "command_id": "RecordWorkerStructuredReport",
       // SYN-FND-003: 使用解析后的真实身份
       "actor_ref": resolved_actor,
       "source_kind": "worker_handoff",
@@ -503,9 +542,27 @@ fn record_worker_structured_report_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id: report_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })
+}
+
+/// `manual` and `offline` are observations, not execution claims.  Keeping
+/// their execution join fields absent at both public ingress and the lower
+/// writer prevents a caller from using a report kind to tunnel a dispatch,
+/// attempt, or grant association into the legacy persistence path.
+fn reject_non_execution_worker_report_execution_join(
+    request: &WorkerStructuredReportInput,
+) -> Result<(), String> {
+    if matches!(request.report_kind.trim(), "manual" | "offline")
+        && (request.dispatch_id.is_some()
+            || request.attempt_id.is_some()
+            || request.execution_grant_id.is_some())
+    {
+        return Err("non_execution_worker_report_execution_join_forbidden".to_string());
+    }
+    Ok(())
 }
 
 fn record_project_director_process_fact_decision_at(
@@ -771,6 +828,7 @@ fn record_global_final_result_review_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })
@@ -863,6 +921,7 @@ fn record_user_result_decision_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })
@@ -954,6 +1013,7 @@ fn generate_stage_c_acceptance_summary_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })
@@ -1936,8 +1996,21 @@ fn annotate_project_director_planned_tasks(
             );
 
             let binding = active_binding_for_planned_task(index, value, &node_id, &work_item_id);
+            // Do not feed an explicitly excluded compatibility binding into
+            // the authorization guard.  If the authorization names concrete
+            // principals, inspect one of those principals; chain preparation
+            // will still require/create the actual task binding before use.
             let target_agent_id = binding
                 .as_ref()
+                .filter(|binding| {
+                    context.authorization.scope.allowed_agent_ids.is_empty()
+                        || context
+                            .authorization
+                            .scope
+                            .allowed_agent_ids
+                            .iter()
+                            .any(|agent_id| agent_id == &binding.native_thread_id)
+                })
                 .map(|binding| binding.native_thread_id.clone())
                 .or_else(|| {
                     context
@@ -2633,6 +2706,10 @@ fn active_binding_for_planned_task(
         })
         .and_then(|work_item| optional_string_from(work_item, "workflow_id"))
         .or_else(|| node_id.split(":node:").next().map(str::to_string))?;
+    // M1 preparation historically accepts the active role binding when a
+    // work-item binding has not yet been materialized.  M2 execution does not
+    // inherit that fallback: its grant start path re-reads an exact current
+    // work-item binding before minting or reserving anything.
     let binding_index =
         workflow_node_session_binding_index(value, &workflow_id, node_id, Some(work_item_id))
             .or_else(|| workflow_node_session_binding_index(value, &workflow_id, node_id, None))?;
@@ -2656,6 +2733,34 @@ fn active_binding_for_planned_task(
         rollout_exists,
         warnings: dedupe_strings(warnings),
     })
+}
+
+/// The M2 grant route is an explicit server-side, user-confirmed capability.
+/// Quotas alone existed on M1 authorization records and therefore can never
+/// upgrade a historic dispatch by themselves.
+fn m2_execution_grant_envelope_schema(
+    authorization: &PlanAuthorization,
+) -> Result<Option<&'static str>, String> {
+    if !authorization
+        .scope
+        .allowed_tools
+        .iter()
+        .any(|capability| {
+            capability == crate::mcp::execution_grant::EXECUTION_GRANT_LEDGER_V2_CAPABILITY
+        })
+    {
+        return Ok(None);
+    }
+    match (
+        authorization.scope.max_worker_dispatches,
+        authorization.scope.max_runtime_minutes,
+    ) {
+        (None, None) => Ok(None),
+        (Some(dispatches), Some(minutes)) if dispatches > 0 && minutes > 0 => {
+            Ok(Some("execution-grant-ledger.v2"))
+        }
+        _ => Err("execution_grant_quota_envelope_incomplete_or_invalid".to_string()),
+    }
 }
 
 fn find_task_package_artifact_by_id<'a>(value: &'a Value, work_item_id: &str) -> Option<&'a Value> {
@@ -2747,7 +2852,7 @@ fn push_authorized_prepared_dispatch_thread_deferred_audit(
       "before_state": "ready_to_dispatch",
       "after_state": "prepared",
       "created_at": timestamp,
-      "reason": format!("项目主管在 active 授权 {} 范围内创建 prepared dispatch {}；C1 自动路——会话未预绑，thread 由链每任务 create_and_bind 补（授权/安全未松·仅放宽「有无会话」就绪判定）。", authorization_id, dispatch_id),
+      "reason": format!("项目主管自动在 active 授权 {} 范围内创建 prepared dispatch {}；C1 自动路——会话未预绑，thread 由链每任务 create_and_bind 补（授权/安全未松·仅放宽「有无会话」就绪判定）。", authorization_id, dispatch_id),
       "plan_authorization_id": authorization_id,
       "project_director_planned_task_id": task.planned_task_id
     }));

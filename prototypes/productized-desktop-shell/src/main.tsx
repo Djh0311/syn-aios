@@ -1,7 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { emit, listen } from "@tauri-apps/api/event";
 import { App } from "./App";
+import { updateWorkItemState } from "./lib/tauri";
 import { setTauriWindowTitle } from "./lib/tauriWindow";
+import type { WorkItemStateUpdateRequest } from "./lib/types/workflow";
 import "./styles.css";
 import "./manualRelay.css";
 import "./components/sourceStylePlaceholder.css";
@@ -19,6 +22,87 @@ type BootErrorBoundaryState = {
 
 const BOOT_VISIBLE_PROBE_ID = "tauri-boot-visible-probe";
 const bootProbeEnabled = import.meta.env.DEV;
+
+// M2 DAT-008 accepts exactly one debug/R4 fixture command through the same
+// Tauri IPC wrapper used by the product UI.  The Rust host emits this request
+// only after a validated isolated profile reaches runtime readiness; this
+// frontend bridge is otherwise inert and exposes no new command.
+const M2_R4_IPC_READY_EVENT = "syn-m2-r4-reference-slice-ui-ready";
+const M2_R4_IPC_INVOKE_EVENT = "syn-m2-r4-reference-slice-invoke";
+const M2_R4_IPC_RESULT_EVENT = "syn-m2-r4-reference-slice-result";
+const M2_R4_IPC_SCHEMA_VERSION = "syn_m2_r4_tauri_ipc.v1";
+
+type M2R4IpcInvocation = {
+  schema_version: typeof M2_R4_IPC_SCHEMA_VERSION;
+  operation: "update_work_item_state";
+  attempt: string;
+  nonce: string;
+  request: WorkItemStateUpdateRequest;
+};
+
+function isM2R4IpcInvocation(value: unknown): value is M2R4IpcInvocation {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<M2R4IpcInvocation>;
+  return (
+    candidate.schema_version === M2_R4_IPC_SCHEMA_VERSION &&
+    candidate.operation === "update_work_item_state" &&
+    typeof candidate.attempt === "string" &&
+    /^[a-z0-9-]{1,48}$/.test(candidate.attempt) &&
+    typeof candidate.nonce === "string" &&
+    /^[a-f0-9]{32}$/.test(candidate.nonce) &&
+    Boolean(candidate.request) &&
+    typeof candidate.request?.project_root === "string" &&
+    typeof candidate.request?.work_item_id === "string" &&
+    typeof candidate.request?.next_state === "string"
+  );
+}
+
+async function installM2R4TauriIpcBridge() {
+  if (!("__TAURI_INTERNALS__" in window)) return;
+  try {
+    await listen<M2R4IpcInvocation>(M2_R4_IPC_INVOKE_EVENT, async ({ payload }) => {
+      if (!isM2R4IpcInvocation(payload)) return;
+      try {
+        // Two separate frontend invokes intentionally exercise the registered
+        // command's replay contract.  They are not a Rust helper call.
+        const first = await updateWorkItemState(payload.request);
+        const replay = await updateWorkItemState(payload.request);
+        if (!first.receipt_id || first.receipt_id !== replay.receipt_id) {
+          throw new Error("m2_r4_reference_slice_ipc_replay_receipt_mismatch");
+        }
+        await emit(M2_R4_IPC_RESULT_EVENT, {
+          schema_version: M2_R4_IPC_SCHEMA_VERSION,
+          operation: payload.operation,
+          attempt: payload.attempt,
+          nonce: payload.nonce,
+          receipt_id: first.receipt_id,
+          replay_receipt_id: replay.receipt_id,
+          outcome: "PASS",
+        });
+      } catch (error) {
+        // Do not put product state or raw errors into the cross-process
+        // acceptance event.  Rust persists only a value-free failure family.
+        const message = error instanceof Error ? error.message : String(error);
+        await emit(M2_R4_IPC_RESULT_EVENT, {
+          schema_version: M2_R4_IPC_SCHEMA_VERSION,
+          operation: payload.operation,
+          attempt: payload.attempt,
+          nonce: payload.nonce,
+          outcome: "REJECTED",
+          error_family: message.includes("acceptance_injected_failure:projection-fail")
+            ? "projection_fail"
+            : "command_rejected",
+        });
+      }
+    });
+    await emit(M2_R4_IPC_READY_EVENT, {
+      schema_version: M2_R4_IPC_SCHEMA_VERSION,
+      surface: "registered_tauri_command_ipc",
+    });
+  } catch {
+    // The Rust driver has its own bounded readiness timeout and fails closed.
+  }
+}
 
 class BootErrorBoundary extends React.Component<BootErrorBoundaryProps, BootErrorBoundaryState> {
   state: BootErrorBoundaryState = { error: null };
@@ -79,6 +163,7 @@ async function markFrontendLoaded() {
 
 mountVisibleBootProbe();
 void markFrontendLoaded();
+void installM2R4TauriIpcBridge();
 
 window.addEventListener("error", (event) => {
   const root = document.getElementById("root");

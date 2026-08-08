@@ -2,6 +2,7 @@ use tauri::Manager;
 
 const ACCEPTANCE_RUNTIME_PROFILE_INITIALIZATION_EXIT_CODE: i32 = 78;
 const ACCEPTANCE_APP_STATE_INITIALIZATION_EXIT_CODE: i32 = 79;
+const ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE: i32 = 80;
 
 fn exit_acceptance_startup_failure(exit_code: i32) -> ! {
     eprintln!("验收 runtime profile 启动失败");
@@ -612,6 +613,22 @@ pub fn run() {
             return;
         }
     };
+    let m2_r4_reference_slice_requested = match crate::m2_r4_reference_slice_driver::requested() {
+        Ok(requested) => requested,
+        Err(error) => {
+            if acceptance_profile_requested {
+                eprintln!("M2 R4 reference-slice runner 请求无效：{error}");
+                exit_acceptance_startup_failure(ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE);
+            }
+            return;
+        }
+    };
+    if m2_r4_reference_slice_requested {
+        if let Err(error) = crate::m2_r4_reference_slice_driver::prepare_before_startup(&state) {
+            eprintln!("M2 R4 reference-slice runner 预置失败：{error}");
+            exit_acceptance_startup_failure(ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE);
+        }
+    }
     if let Err(error) =
         crate::migrate_legacy_workflow_node_session_binding_ids_at(&state.workflow_state_path)
     {
@@ -632,14 +649,26 @@ pub fn run() {
     if let Err(error) =
         crate::workbench_sqlite_storage_mode::initialize_for_startup(&state.workflow_state_path)
     {
+        if acceptance_profile_requested {
+            if m2_r4_reference_slice_requested {
+                eprintln!("M2 R4 reference-slice DB-primary startup failure:{error}");
+            }
+            exit_acceptance_startup_failure(ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE);
+        }
         eprintln!("DB 主写模式启动对账未通过：{error}");
+    }
+    if acceptance_profile_requested {
+        if let Err(error) = crate::acceptance_runtime_profile::finalize_first_r4_initialization() {
+            eprintln!("验收 runtime profile 首次初始化标记失败：{error}");
+            exit_acceptance_startup_failure(ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE);
+        }
     }
     let app = tauri::Builder::default()
         .manage(state)
         .manage(mcp::orchestrator::OrchestratorState::new())
         .manage(crate::knowledge_open_relay::KnowledgeOpenRelayState::new())
         .invoke_handler(workbench_command_handler!())
-        .setup(|app| {
+        .setup(move |app| {
             let isolated_profile_active = crate::acceptance_runtime_profile::active_paths()
                 .map_err(std::io::Error::other)?
                 .is_some();
@@ -667,6 +696,10 @@ pub fn run() {
                         .build(),
                 };
                 app.handle().plugin(log_plugin)?;
+            }
+            if m2_r4_reference_slice_requested {
+                crate::m2_r4_reference_slice_driver::install_after_runtime_ready(app)
+                    .map_err(std::io::Error::other)?;
             }
             Ok(())
         })

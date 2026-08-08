@@ -50,21 +50,27 @@ mod workbench_sqlite_importer;
 mod workbench_sqlite_observation_period;
 
 // M2 transaction foundation modules
-pub mod m2_dto;
-pub mod m2_ports;
-mod workbench_sqlite_schema_m2;
-mod m2_workflow_state;
-mod m2_outbox;
-mod m2_projector;
-mod m2_legacy_adapter;
 mod m2_domain_cutover;
+mod m2_clock;
+pub mod m2_dto;
 mod m2_isolated_app_acceptance;
+mod m2_legacy_adapter;
+mod m2_outbox;
+// Historical generic candidate traits are deliberately crate-private.  The
+// one M2 authority surface is the concrete
+// `workflow-state-sidecar.repository.m2.v1` adapter in
+// `workbench_sqlite_repository`.
+mod m2_ports;
+mod m2_projector;
+mod m2_r4_reference_slice_driver;
 mod m2_update_work_item_state;
+mod m2_workflow_state;
 mod workbench_sqlite_preflight;
 mod workbench_sqlite_production_apply;
 mod workbench_sqlite_read_cut;
 mod workbench_sqlite_repository;
 mod workbench_sqlite_schema;
+mod workbench_sqlite_schema_m2;
 mod workbench_sqlite_snapshot_apply;
 mod workbench_sqlite_stop_write;
 mod workbench_sqlite_storage_mode;
@@ -2287,14 +2293,38 @@ mod tests {
 
     include!("lib_stage_c_governance_tests.rs");
 
-    fn create_active_project_director_authorization_fixture(
+    fn create_active_project_director_authorization_fixture_with_allowed_agents(
         path: &Path,
         project_root: &str,
-        thread_id: &str,
+        allowed_agent_ids: &[&str],
+        timestamp_ms: i64,
+    ) -> (ProjectConsultationProposal, PlanAuthorization, i64) {
+        create_active_project_director_authorization_fixture_with_server_capabilities(
+            path,
+            project_root,
+            allowed_agent_ids,
+            &[],
+            timestamp_ms,
+        )
+    }
+
+    fn create_active_project_director_authorization_fixture_with_server_capabilities(
+        path: &Path,
+        project_root: &str,
+        allowed_agent_ids: &[&str],
+        server_capabilities: &[&str],
         timestamp_ms: i64,
     ) -> (ProjectConsultationProposal, PlanAuthorization, i64) {
         let mut input = fixture_project_consultation_proposal_input(project_root);
-        input.scope_draft.allowed_agent_ids = vec![thread_id.to_string()];
+        input.scope_draft.allowed_agent_ids = allowed_agent_ids
+            .iter()
+            .map(|agent_id| (*agent_id).to_string())
+            .collect();
+        input.scope_draft.allowed_tools.extend(
+            server_capabilities
+                .iter()
+                .map(|capability| (*capability).to_string()),
+        );
         let created = project_consultation_proposal_store::create_proposal(
             path,
             &input,
@@ -2341,6 +2371,35 @@ mod tests {
             confirmed.proposal,
             output.authorization,
             output.store_revision,
+        )
+    }
+
+    fn create_active_project_director_authorization_fixture(
+        path: &Path,
+        project_root: &str,
+        thread_id: &str,
+        timestamp_ms: i64,
+    ) -> (ProjectConsultationProposal, PlanAuthorization, i64) {
+        create_active_project_director_authorization_fixture_with_allowed_agents(
+            path,
+            project_root,
+            &[thread_id],
+            timestamp_ms,
+        )
+    }
+
+    fn create_active_project_director_execution_grant_authorization_fixture(
+        path: &Path,
+        project_root: &str,
+        thread_id: &str,
+        timestamp_ms: i64,
+    ) -> (ProjectConsultationProposal, PlanAuthorization, i64) {
+        create_active_project_director_authorization_fixture_with_server_capabilities(
+            path,
+            project_root,
+            &[thread_id],
+            &[crate::mcp::execution_grant::EXECUTION_GRANT_LEDGER_V2_CAPABILITY],
+            timestamp_ms,
         )
     }
 
@@ -2571,6 +2630,7 @@ mod tests {
             dispatch_id: Some(dispatch_id.to_string()),
             // SYN-FND-004B 测试夹具: dispatch_id 即 attempt_id
             attempt_id: Some(dispatch_id.to_string()),
+            execution_grant_id: None,
             // SYN-FND-004B 测试夹具: 真实执行者 = dispatch_id
             authenticated_actor_id: dispatch_id.to_string(),
             authenticated_project_scope: project_id(project_root),
@@ -3978,7 +4038,18 @@ mod tests {
                 fs::create_dir_all(parent)
                     .map_err(|error| format!("fixture output dir create failed: {error}"))?;
             }
-            fs::write(last_message_path, "EXPERIMENT_STUB_OK")
+            // This runner models a successful production worker.  A zero
+            // exit without a structured report is no longer a completion
+            // signal: the director must fail closed rather than derive a
+            // final screen from raw text.  Tests that exercise a missing or
+            // malformed report use an explicit dedicated runner instead.
+            fs::write(
+                last_message_path,
+                format!(
+                    "```json\n{}\n```",
+                    c4a_worker_report("done", &["permissive fixture report"], &[])
+                ),
+            )
                 .map_err(|error| format!("fixture last message write failed: {error}"))?;
             Ok((
                 CodexResumeRunResult {
@@ -5276,8 +5347,90 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
 
     // ===== S3·主管→派发联调（LM planned_tasks → prepare → S1 闸 → worker）·stub 集成 =====
     // 复用 S2-3 全链结构，把 prepare 的 vec![]兜底 换成 **director 的显式 planned_tasks**；闸/派发/沙箱 0-diff。
-    #[test]
-    fn s3_director_dispatch_integration_stub() {
+    // The explicit empty value is used only to seed an isolated DB-primary fixture before
+    // proposal/authorization creation. It must remain shape-compatible with the canonical
+    // workflow document, so startup reconciliation can prove that no JSON-leading state exists.
+    fn s3_empty_workflow_state() -> Value {
+        json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "revision": 0,
+            "projects": [],
+            "agent_adapters": [],
+            "workflows": [],
+            "nodes": [],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "workflow_node_session_bindings": [],
+            "workflow_node_dispatches": [],
+            "capabilities": [],
+            "harness_resources": [],
+            "audit_events": []
+        })
+    }
+
+    fn enable_s3_db_primary_dispatch_fixture(
+        workflow_state_path: &Path,
+    ) -> crate::workbench_sqlite_storage_mode::DbPrimaryJsonProjectionConfig {
+        let canonical_state_path =
+            fs::canonicalize(workflow_state_path).expect("canonical S3 workflow state path");
+        let current_state = read_workflow_state_value(&canonical_state_path)
+            .expect("read S3 bootstrap state before DB-primary seed");
+        let config_path =
+            crate::workbench_sqlite_storage_mode::storage_mode_path(&canonical_state_path)
+                .expect("S3 storage-mode path");
+        let runtime_artifacts = config_path.parent().expect("S3 runtime-artifacts parent");
+        fs::create_dir_all(runtime_artifacts).expect("create S3 runtime-artifacts");
+        let canonical_runtime_artifacts =
+            fs::canonicalize(runtime_artifacts).expect("canonical S3 runtime-artifacts");
+        let config = crate::workbench_sqlite_storage_mode::DbPrimaryJsonProjectionConfig {
+            workflow_state_path: canonical_state_path.clone(),
+            confirmed_workflow_state_path: canonical_state_path.clone(),
+            db_path: canonical_runtime_artifacts.join("workbench.sqlite"),
+            confirmed_db_path: canonical_runtime_artifacts.join("workbench.sqlite"),
+            denied_path_markers: vec![],
+        };
+        fs::write(
+            config_path,
+            serde_json::to_vec_pretty(&json!({
+                "schema_version": crate::workbench_sqlite_storage_mode::STORAGE_MODE_SCHEMA_VERSION,
+                "mode": "db_primary_json_projection",
+                "workflow_state_path": config.workflow_state_path,
+                "confirmed_workflow_state_path": config.confirmed_workflow_state_path,
+                "db_path": config.db_path,
+                "confirmed_db_path": config.confirmed_db_path,
+                "denied_path_markers": config.denied_path_markers,
+            }))
+            .expect("serialize S3 DB-primary storage mode"),
+        )
+        .expect("write S3 DB-primary storage mode");
+        let repository =
+            crate::workbench_sqlite_repository::WorkbenchSqliteRepository::open_confirmed(
+                &crate::workbench_sqlite_repository::ConfirmedWorkbenchSqliteRepositoryConfig {
+                    db_path: config.db_path.clone(),
+                    confirmed_db_path: config.confirmed_db_path.clone(),
+                    denied_path_markers: vec![],
+                },
+            )
+            .expect("open S3 DB-primary repository");
+        repository
+            .record_workflow_state_delta_with_audit(
+                &s3_empty_workflow_state(),
+                &current_state,
+                None,
+            )
+            .expect("seed S3 bootstrap state in DB-primary repository");
+        crate::workbench_sqlite_storage_mode::clear_storage_mode_cache_for_path_for_tests(
+            &canonical_state_path,
+        );
+        crate::workbench_sqlite_storage_mode::initialize_for_startup(&canonical_state_path)
+            .expect("initialize S3 DB-primary fixture");
+        config
+    }
+
+    fn s3_director_dispatch_integration_stub_with_storage_mode(db_primary: bool) {
         struct MustNotRunOnAuthorizationMismatch;
         impl CodexResumeRunner for MustNotRunOnAuthorizationMismatch {
             fn resume_with_options(
@@ -5299,8 +5452,10 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let index_path = dir.join("codex-index.json");
         let index = fixture_dispatch_index(test_root, thread_id);
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
+        let path = fs::canonicalize(&path).expect("canonical S3 workflow path");
+        let db_config = db_primary.then(|| enable_s3_db_primary_dispatch_fixture(&path));
         let (proposal, authorization, revision) =
-            create_active_project_director_authorization_fixture(
+            create_active_project_director_execution_grant_authorization_fixture(
                 &path,
                 test_root,
                 thread_id,
@@ -5318,18 +5473,21 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         // 主管 LM(stub) 拆 planned_tasks（target_role=codex-dev → c4_node_id 映射到已绑节点）
         let planned = StubDirector.plan(&ctx, &proposal).expect("director plan");
         // prepare 用 director **显式** planned_tasks（非 vec![] 兜底）
-        let prepared = prepare_authorized_auto_dispatch_for_index_at(
-            &path,
-            &index,
-            &fixture_project_director_prepare_input(
-                test_root,
-                &proposal.proposal_id,
-                &authorization.authorization_id,
-                revision,
-                planned.clone(),
-            ),
-        )
-        .expect("prepare with director planned_tasks");
+        let mut prepare_input = fixture_project_director_prepare_input(
+            test_root,
+            &proposal.proposal_id,
+            &authorization.authorization_id,
+            revision,
+            planned.clone(),
+        );
+        // This path creates the exact per-work-item session immediately before
+        // execution.  Its C4 prepared authorization must therefore record the
+        // deliberately deferred binding snapshot, not borrow the older role
+        // binding above.
+        prepare_input.chain_binds_per_task = true;
+        prepare_input.force_fresh_task_session = true;
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(&path, &index, &prepare_input)
+            .expect("prepare with director planned_tasks");
         assert!(
             !prepared.prepared_dispatches.is_empty(),
             "director planned_tasks 应过授权 guard 产出 prepared dispatch"
@@ -5399,10 +5557,10 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             &authorization.authorization_id,
             &allowed_write,
         )
-        .expect("worker 经 S1 闸应授权放行并 completed");
+        .expect("worker 经 S1 闸应授权放行并完成 execution-owner readback");
         assert_eq!(
             run.dispatch.state, "completed",
-            "LM 主管计划真驱动的 worker 应 completed"
+            "execution-owner 的进程结束/readback 与 report claim 入账是两个独立 command；report 不会靠 grant 自动成为事实"
         );
         assert_eq!(
             run.dispatch.plan_authorization_id.as_deref(),
@@ -5417,7 +5575,190 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             Some("authorized"),
             "执行记录必须保留已通过的授权检查"
         );
+        // SYN-M2A-T4: do not trust the in-memory result as the grant source of
+        // truth. Reload the canonical ledger from disk and verify the immutable
+        // grant against the reloaded dispatch context.
+        let persisted_state = read_workflow_state_value(&path).expect("fresh persisted state");
+        let json_persisted_dispatch = persisted_state
+            .get("workflow_node_dispatches")
+            .and_then(Value::as_array)
+            .and_then(|dispatches| {
+                dispatches.iter().find(|dispatch| {
+                    optional_string_from(dispatch, "dispatch_id").as_deref()
+                        == Some(run.dispatch.dispatch_id.as_str())
+                })
+            })
+            .expect("canonical persisted dispatch");
+        // The DB-primary variant reloads the record from a fresh read-only SQLite connection.
+        // Equality with the JSON projection proves the projection is not substituting a distinct
+        // ledger; the grant verification below then operates on the authoritative DB record.
+        let persisted_dispatch = match db_config.as_ref() {
+            Some(config) => {
+                let connection = rusqlite::Connection::open_with_flags(
+                    &config.db_path,
+                    rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+                )
+                .expect("open S3 DB-primary dispatch ledger read-only");
+                let record_json: String = connection
+                    .query_row(
+                        "SELECT record_json FROM workflow_node_dispatches WHERE dispatch_id = ?1",
+                        [run.dispatch.dispatch_id.as_str()],
+                        |row| row.get(0),
+                    )
+                    .expect("load persisted dispatch from DB-primary ledger");
+                let database_dispatch: Value = serde_json::from_str(&record_json)
+                    .expect("deserialize DB-primary dispatch ledger record");
+                assert_eq!(
+                    &database_dispatch, json_persisted_dispatch,
+                    "DB-primary dispatch record and JSON projection must agree before grant verification"
+                );
+                database_dispatch
+            }
+            None => json_persisted_dispatch.clone(),
+        };
+        let persisted_grant: crate::mcp::execution_grant::ExecutionGrant = serde_json::from_value(
+            persisted_dispatch
+                .get("execution_grant")
+                .cloned()
+                .expect("persisted execution grant"),
+        )
+        .expect("deserialize persisted execution grant");
+        let persisted_attempt_id =
+            optional_string_from(&persisted_dispatch, "execution_attempt_id")
+                .expect("persisted execution attempt id");
+        let persisted_binding_id = optional_string_from(&persisted_dispatch, "binding_id")
+            .expect("persisted dispatch binding id");
+        let persisted_project_id =
+            optional_string_from(&persisted_dispatch, "project_id").expect("persisted project");
+        let persisted_workflow_id =
+            optional_string_from(&persisted_dispatch, "workflow_id").expect("persisted workflow");
+        let persisted_node_id =
+            optional_string_from(&persisted_dispatch, "node_id").expect("persisted node");
+        let persisted_work_item_id =
+            optional_string_from(&persisted_dispatch, "work_item_id").expect("persisted work item");
+        assert_eq!(
+            optional_string_from(&persisted_dispatch, "execution_grant_id").as_deref(),
+            Some(persisted_grant.grant_id.0.as_str()),
+            "ledger grant ID must name the serialized immutable grant"
+        );
+        assert_eq!(
+            persisted_grant.dispatch_id.as_deref(),
+            Some(run.dispatch.dispatch_id.as_str())
+        );
+        assert_eq!(
+            persisted_grant.attempt_id.as_deref(),
+            Some(persisted_attempt_id.as_str())
+        );
+        assert_eq!(
+            persisted_grant.authorization_id,
+            authorization.authorization_id
+        );
+        assert_eq!(persisted_grant.principal, thread_id);
+        assert!(persisted_grant
+            .allowed_agent_ids
+            .iter()
+            .any(|id| id == thread_id));
+        assert!(persisted_grant
+            .allowed_role_ids
+            .iter()
+            .any(|role| role == "codex-dev"));
+        let active_source = plan_authorization_store::load_active_execution_grant_source(
+            &path,
+            &authorization.authorization_id,
+            &persisted_project_id,
+            &persisted_workflow_id,
+            timestamp_ms,
+        )
+        .expect("fresh active plan authorization source for persisted grant");
+        crate::mcp::execution_grant::verify_dispatch_grant_authorization_source(
+            &persisted_grant,
+            &active_source,
+        )
+        .expect("persisted grant must still match its active authorization source");
+        assert_eq!(
+            crate::mcp::execution_grant::verify_dispatch_grant(
+                &persisted_grant,
+                &crate::mcp::execution_grant::DispatchGrantVerificationContext {
+                    project_id: persisted_project_id.as_str(),
+                    workflow_id: persisted_workflow_id.as_str(),
+                    workflow_node_id: persisted_node_id.as_str(),
+                    work_item_id: persisted_work_item_id.as_str(),
+                    dispatch_id: run.dispatch.dispatch_id.as_str(),
+                    attempt_id: persisted_attempt_id.as_str(),
+                    binding_id: persisted_binding_id.as_str(),
+                    principal: thread_id,
+                    actor_role: "codex-dev",
+                },
+            ),
+            crate::mcp::execution_grant::GrantVerification::Valid,
+            "freshly loaded grant must bind exactly to the canonical dispatch"
+        );
+        if db_config.is_some() {
+            // This is the production joined path: worker-report admission
+            // must reload dispatch, source and binding from SQLite before it
+            // reaches the deliberately narrow M2 NOT_MIGRATED/HOLD boundary.
+            let before_grant_report = fs::read(&path).expect("read before grant report hold");
+            let report_outcome = crate::worker_report::consume_worker_report_after_completion(
+                &path,
+                test_root,
+                &persisted_project_id,
+                &persisted_workflow_id,
+                &persisted_node_id,
+                &persisted_work_item_id,
+                Some(run.dispatch.dispatch_id.as_str()),
+                Some(persisted_attempt_id.as_str()),
+                "completed",
+                thread_id,
+                Some(persisted_grant.grant_id.0.as_str()),
+                "codex-dev",
+                "S3 DB-primary persisted grant report",
+                "```json\n{\"did\":\"S3 DB-primary report\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"fixture\"]}\n```",
+            );
+            assert_eq!(
+                report_outcome.grant_bearing_boundary,
+                Some(crate::worker_report::GrantBearingReportBoundary::NotMigratedHold),
+                "fresh DB-primary verification must stop at the typed M2 boundary until a real claim ledger/UoW exists"
+            );
+            assert!(
+                report_outcome.report_warning.as_deref().is_some_and(|warning| warning.contains("NOT_MIGRATED/HOLD")),
+                "valid M2 grant report must report its hold truth"
+            );
+            assert_eq!(
+                fs::read(&path).expect("read after grant report hold"),
+                before_grant_report,
+                "valid M2 grant report must not create a pseudo claim/audit/receipt or update any owner"
+            );
+        }
+        if let Some(config) = db_config.as_ref() {
+            crate::workbench_sqlite_storage_mode::clear_storage_mode_cache_for_path_for_tests(
+                &path,
+            );
+            crate::workbench_sqlite_storage_mode::initialize_for_startup(&path)
+                .expect("DB-primary dispatch ledger must reconcile on fresh startup");
+            assert!(
+                crate::workbench_sqlite_storage_mode::reconcile_db_vs_json(config)
+                    .expect("read DB-primary/JSON reconciliation")
+                    .is_green(),
+                "DB-primary dispatch ledger and JSON projection must remain green after restart"
+            );
+            crate::workbench_sqlite_storage_mode::clear_storage_mode_cache_for_path_for_tests(
+                &path,
+            );
+        }
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn s3_director_dispatch_integration_stub() {
+        s3_director_dispatch_integration_stub_with_storage_mode(false);
+    }
+
+    #[test]
+    fn s3_director_dispatch_db_primary_grant_ledger_round_trip() {
+        let _serial = crate::workbench_sqlite_storage_mode::storage_mode_test_lock()
+            .lock()
+            .expect("storage mode test lock");
+        s3_director_dispatch_integration_stub_with_storage_mode(true);
     }
 
     #[test]
@@ -6355,8 +6696,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
     // ===== S3·主管→worker 多任务依赖链（薄驱动·拓扑序+失败即停+runaway）·stub =====
 
     // 共享 setup：bind codex-dev + create_active 方案 + StubDirector 多任务 + prepare → 返回链驱动所需件。
-    fn s3_director_prepared_chain(
+    fn s3_director_prepared_chain_with_allowed_agents(
         name: &str,
+        allowed_agent_ids: &[&str],
     ) -> (
         PathBuf,
         PathBuf,
@@ -6374,10 +6716,10 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         let index = fixture_dispatch_index(test_root, thread_id);
         bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("workflow");
         let (proposal, authorization, revision) =
-            create_active_project_director_authorization_fixture(
+            create_active_project_director_authorization_fixture_with_allowed_agents(
                 &path,
                 test_root,
-                thread_id,
+                allowed_agent_ids,
                 timestamp_ms,
             );
         let workflow_id = default_workflow_id(test_root);
@@ -6394,19 +6736,60 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         .expect("bind");
         let ctx = load_project_context(test_root).expect("ctx");
         let planned = StubDirector.plan(&ctx, &proposal).expect("plan");
-        let prepared = prepare_authorized_auto_dispatch_for_index_at(
-            &path,
-            &index,
-            &fixture_project_director_prepare_input(
-                test_root,
-                &proposal.proposal_id,
-                &authorization.authorization_id,
-                revision,
-                planned,
-            ),
-        )
-        .expect("prepare");
+        let mut prepare_input = fixture_project_director_prepare_input(
+            test_root,
+            &proposal.proposal_id,
+            &authorization.authorization_id,
+            revision,
+            planned,
+        );
+        // This shared chain fixture exercises the production prepared-grant
+        // route.  Preparation deliberately snapshots a deferred C4 binding;
+        // the fixture then materializes the exact work-item binding before
+        // its stub runner is allowed to start.  Do not fall back to the
+        // earlier role/node binding used only for planning.
+        prepare_input.chain_binds_per_task = true;
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(&path, &index, &prepare_input)
+            .expect("prepare");
+        for dispatch in prepared
+            .prepared_dispatches
+            .iter()
+            .filter(|dispatch| dispatch.dispatch_id.is_some())
+        {
+            let node_id = dispatch
+                .workflow_node_id
+                .as_deref()
+                .expect("prepared dispatch should identify its workflow node");
+            let work_item_id = dispatch
+                .work_item_id
+                .as_deref()
+                .expect("prepared dispatch should identify its work item");
+            bind_workflow_node_codex_session_for_index_at(
+                &path,
+                &index,
+                &fixture_node_session_bind_request(
+                    test_root,
+                    node_id,
+                    Some(work_item_id),
+                    thread_id,
+                ),
+            )
+            .expect("shared chain fixture must materialize the exact work-item binding");
+        }
         (dir, path, index, index_path, workflow_id, prepared)
+    }
+
+    fn s3_director_prepared_chain(
+        name: &str,
+    ) -> (
+        PathBuf,
+        PathBuf,
+        Value,
+        PathBuf,
+        String,
+        AuthorizedPreparedDispatchResult,
+    ) {
+        s3_director_prepared_chain_with_allowed_agents(name, &["thread-s3-chain"])
     }
 
     #[test]
@@ -6592,8 +6975,27 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
         ProjectDirectorPlannedTask,
         String,
     ) {
-        let (dir, path, default_index, index_path, workflow_id, prepared) =
-            s3_director_prepared_chain(name);
+        // A change-session test must model a proposal that explicitly named
+        // the prospective replacement principal.  Do not weaken the runtime
+        // source check merely because the fixture changes C1 binding later.
+        let prepared_chain = if index.is_some() {
+            let allowed_agent_ids = index
+                .as_ref()
+                .and_then(|value| value.get("threads"))
+                .and_then(Value::as_array)
+                .expect("fixture index must carry exact allowed principals")
+                .iter()
+                .filter_map(|thread| optional_string_from(thread, "thread_id"))
+                .collect::<Vec<_>>();
+            let allowed_agent_refs = allowed_agent_ids
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
+            s3_director_prepared_chain_with_allowed_agents(name, &allowed_agent_refs)
+        } else {
+            s3_director_prepared_chain(name)
+        };
+        let (dir, path, default_index, index_path, workflow_id, prepared) = prepared_chain;
         let index = index.unwrap_or(default_index);
         let tasks = c4a_single_prepared_task(&prepared);
         let failing = FailingCodexResumeRunner {
@@ -7590,7 +7992,14 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 if let Some(parent) = last_message_path.parent() {
                     fs::create_dir_all(parent).ok();
                 }
-                fs::write(last_message_path, "STOP_VIA_CMD_OK").ok();
+                fs::write(
+                    last_message_path,
+                    format!(
+                        "```json\n{}\n```",
+                        c4a_worker_report("done", &["stop-boundary fixture report"], &[])
+                    ),
+                )
+                .ok();
                 // 模拟用户点「停链」：走现成停链命令（按 workflow_id+running 找记录）。能找到 → 证明
                 // 本薄驱动建的链记录被现成 stop 命令认得（0-diff 复用）。
                 stop_project_workflow_chain_at(
@@ -9185,7 +9594,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             .filter(|event| {
                 matches!(
                     optional_string_from(event, "event_type").as_deref(),
-                    Some("workflow_node_dispatch_prepared")
+                    Some("authorized_prepared_dispatch_thread_deferred")
                         | Some("workflow_node_dispatch_started")
                 )
             })
@@ -10963,6 +11372,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                     project_root: test_root.to_string(),
                     work_item_id: wid.to_string(),
                     next_state: next.to_string(),
+                    command_id: None,
+                    idempotency_key: None,
+                    expected_revision: None,
                 },
             )
             .expect("set residue state");
@@ -11058,6 +11470,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                     project_root: test_root.to_string(),
                     work_item_id: wid1.clone(),
                     next_state: next.to_string(),
+                    command_id: None,
+                    idempotency_key: None,
+                    expected_revision: None,
                 },
             )
             .expect("to accepted");
@@ -14577,6 +14992,9 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             project_root: project_root.to_string(),
             work_item_id: work_item_id.to_string(),
             next_state: next_state.to_string(),
+            command_id: None,
+            idempotency_key: None,
+            expected_revision: None,
         }
     }
 

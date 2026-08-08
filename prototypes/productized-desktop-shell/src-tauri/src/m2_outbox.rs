@@ -5,7 +5,6 @@ use crate::m2_dto::*;
 use crate::m2_ports::*;
 use rusqlite::Connection;
 use std::fmt;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Outbox Processor Implementation
 pub struct OutboxProcessorImpl {
@@ -15,9 +14,7 @@ pub struct OutboxProcessorImpl {
 impl OutboxProcessorImpl {
     /// Create a new OutboxProcessorImpl
     pub fn new(outbox_repo: Box<dyn OutboxRepository>) -> Self {
-        Self {
-            outbox_repo,
-        }
+        Self { outbox_repo }
     }
 
     /// Claim an outbox item
@@ -28,7 +25,9 @@ impl OutboxProcessorImpl {
         claimer_id: &str,
     ) -> Result<OutboxLeaseDto, String> {
         // 1. Get the outbox item
-        let item = self.outbox_repo.get_by_id(connection, outbox_item_id)?
+        let item = self
+            .outbox_repo
+            .get_by_id(connection, outbox_item_id)?
             .ok_or_else(|| format!("outbox_item_not_found: {}", outbox_item_id))?;
 
         // 2. Check if item is available for claiming
@@ -43,10 +42,7 @@ impl OutboxProcessorImpl {
         if let Some(expires_at) = &item.expires_at {
             let now = generate_timestamp();
             if now > *expires_at {
-                return Err(format!(
-                    "outbox_item_expired: expires_at={}",
-                    expires_at
-                ));
+                return Err(format!("outbox_item_expired: expires_at={}", expires_at));
             }
         }
 
@@ -65,11 +61,8 @@ impl OutboxProcessorImpl {
         )?;
 
         // 6. Update status to Leased
-        self.outbox_repo.update_status(
-            connection,
-            outbox_item_id,
-            OutboxItemStatus::Leased,
-        )?;
+        self.outbox_repo
+            .update_status(connection, outbox_item_id, OutboxItemStatus::Leased)?;
 
         // 7. Create and return lease
         let lease = OutboxLeaseDto {
@@ -92,7 +85,9 @@ impl OutboxProcessorImpl {
         lease_token: &str,
     ) -> Result<(), String> {
         // 1. Get the outbox item
-        let item = self.outbox_repo.get_by_id(connection, outbox_item_id)?
+        let item = self
+            .outbox_repo
+            .get_by_id(connection, outbox_item_id)?
             .ok_or_else(|| format!("outbox_item_not_found: {}", outbox_item_id))?;
 
         // 2. Check if item is leased
@@ -109,18 +104,12 @@ impl OutboxProcessorImpl {
         }
 
         // 4. Update status to Available
-        self.outbox_repo.update_status(
-            connection,
-            outbox_item_id,
-            OutboxItemStatus::Available,
-        )?;
+        self.outbox_repo
+            .update_status(connection, outbox_item_id, OutboxItemStatus::Available)?;
 
         // 5. Clear lease information
-        self.outbox_repo.increment_attempt(
-            connection,
-            outbox_item_id,
-            None,
-        )?;
+        self.outbox_repo
+            .increment_attempt(connection, outbox_item_id, None)?;
 
         Ok(())
     }
@@ -167,7 +156,9 @@ impl OutboxProcessorImpl {
         limit: i64,
     ) -> Result<Vec<OutboxItemDto>, String> {
         // 1. Get available items
-        let available_items = self.outbox_repo.get_available_for_claim(connection, limit)?;
+        let available_items = self
+            .outbox_repo
+            .get_available_for_claim(connection, limit)?;
 
         let mut processed_items = Vec::new();
 
@@ -186,7 +177,10 @@ impl OutboxProcessorImpl {
                 }
                 Err(error) => {
                     // Log error and continue with next item
-                    eprintln!("Failed to claim outbox item {}: {}", item.outbox_item_id, error);
+                    eprintln!(
+                        "Failed to claim outbox item {}: {}",
+                        item.outbox_item_id, error
+                    );
                 }
             }
         }
@@ -195,10 +189,7 @@ impl OutboxProcessorImpl {
     }
 
     /// Handle expired leases
-    pub fn handle_expired_leases(
-        &self,
-        connection: &Connection,
-    ) -> Result<Vec<String>, String> {
+    pub fn handle_expired_leases(&self, connection: &Connection) -> Result<Vec<String>, String> {
         let mut expired_ids = Vec::new();
 
         // Get all leased items
@@ -234,10 +225,7 @@ impl OutboxProcessorImpl {
     }
 
     /// Handle retry items
-    pub fn handle_retry_items(
-        &self,
-        connection: &Connection,
-    ) -> Result<Vec<String>, String> {
+    pub fn handle_retry_items(&self, connection: &Connection) -> Result<Vec<String>, String> {
         let mut retry_ids = Vec::new();
 
         // Get all retry wait items
@@ -277,7 +265,8 @@ impl OutboxProcessorImpl {
         let items = self.outbox_repo.get_available_for_claim(connection, 1000)?;
 
         for item in items {
-            if item.status == OutboxItemStatus::Leased || item.status == OutboxItemStatus::RetryWait {
+            if item.status == OutboxItemStatus::Leased || item.status == OutboxItemStatus::RetryWait
+            {
                 // Check if retry count exceeded
                 if let Some(attempt_count) = item.attempt_count {
                     if attempt_count >= max_retry_count {
@@ -298,13 +287,11 @@ impl OutboxProcessorImpl {
     }
 
     /// Cancel an outbox item
-    pub fn cancel_item(
-        &self,
-        connection: &Connection,
-        outbox_item_id: &str,
-    ) -> Result<(), String> {
+    pub fn cancel_item(&self, connection: &Connection, outbox_item_id: &str) -> Result<(), String> {
         // 1. Get the outbox item
-        let item = self.outbox_repo.get_by_id(connection, outbox_item_id)?
+        let item = self
+            .outbox_repo
+            .get_by_id(connection, outbox_item_id)?
             .ok_or_else(|| format!("outbox_item_not_found: {}", outbox_item_id))?;
 
         // 2. Check if item can be cancelled (only Declared items)
@@ -316,11 +303,8 @@ impl OutboxProcessorImpl {
         }
 
         // 3. Update status to Cancelled
-        self.outbox_repo.update_status(
-            connection,
-            outbox_item_id,
-            OutboxItemStatus::Cancelled,
-        )?;
+        self.outbox_repo
+            .update_status(connection, outbox_item_id, OutboxItemStatus::Cancelled)?;
 
         Ok(())
     }
@@ -355,7 +339,9 @@ impl ResultCommandHandler {
         result_hash: Option<String>,
     ) -> Result<(), String> {
         // 1. Get the outbox item
-        let item = self.outbox_repo.get_by_id(connection, outbox_item_id)?
+        let item = self
+            .outbox_repo
+            .get_by_id(connection, outbox_item_id)?
             .ok_or_else(|| format!("outbox_item_not_found: {}", outbox_item_id))?;
 
         // 2. Verify effect_id matches
@@ -420,56 +406,22 @@ impl ResultCommandHandler {
     }
 }
 
-/// Generate UUID v4 (simplified)
+/// Generate UUIDv7 through the narrow M2 UTC/identifier helper.
 fn generate_uuid() -> String {
-    let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes).expect("failed to generate random bytes");
-    // Set version 4 and variant bits
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    format!(
-        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-        bytes[0], bytes[1], bytes[2], bytes[3],
-        bytes[4], bytes[5],
-        bytes[6], bytes[7],
-        bytes[8], bytes[9],
-        bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
-    )
+    crate::m2_clock::uuid_v7()
 }
 
 /// Generate ISO 8601 timestamp
 fn generate_timestamp() -> String {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards");
-    let secs = duration.as_secs();
-    let nanos = duration.subsec_nanos();
-
-    // Simple ISO 8601 format
-    format!(
-        "2026-08-03T{:02}:{:02}:{:02}.{:09}Z",
-        (secs / 3600) % 24,
-        (secs / 60) % 60,
-        secs % 60,
-        nanos
-    )
+    crate::m2_clock::utc_now_rfc3339()
 }
 
 /// Calculate expiration time
 fn calculate_expires_at(seconds: i64) -> String {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards");
-    let secs = duration.as_secs() as i64 + seconds;
-    let nanos = duration.subsec_nanos();
-
-    format!(
-        "2026-08-03T{:02}:{:02}:{:02}.{:09}Z",
-        (secs / 3600) % 24,
-        (secs / 60) % 60,
-        secs % 60,
-        nanos
-    )
+    let epoch_ms = crate::m2_clock::M2UtcClock::system()
+        .epoch_ms()
+        .saturating_add(seconds.saturating_mul(1_000));
+    crate::m2_clock::utc_rfc3339_at_epoch_ms(epoch_ms)
 }
 
 #[cfg(test)]

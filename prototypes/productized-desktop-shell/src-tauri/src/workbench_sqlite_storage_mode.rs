@@ -1,12 +1,13 @@
-use crate::utils::hash::sha256_hex;
+use crate::utils::hash::{sha256_hex, sha256_hex_bytes};
 use crate::workbench_sqlite_repository::{
     ConfirmedWorkbenchSqliteRepositoryConfig, RepositoryAuditEntry, WorkbenchSqliteRepository,
+    WorkflowStateSidecarQuarantineManifestEntry, WorkflowStateSidecarQuarantineReason,
     CONFIRMED_DB_DENIED_PATH_MARKERS,
 };
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -23,7 +24,8 @@ mod m5f1;
 mod read_model;
 
 pub(crate) use m5f1::{
-    primary_repository_for_write, workflow_state_write_route, WorkflowStateWriteRoute,
+    primary_repository_for_m2_t2_fail_closed_write, primary_repository_for_write,
+    workflow_state_write_route, WorkflowStateWriteRoute,
 };
 pub(crate) use read_model::db_primary_health_snapshot;
 
@@ -177,12 +179,19 @@ pub(crate) fn initialize_for_startup(workflow_state_path: &Path) -> Result<(), S
                 config.db_path_hash()
             );
             let startup = (|| {
+                quarantine_m2_workflow_state_sidecar_if_needed(&config)?;
+                require_no_unresolved_m2_workflow_state_sidecar_quarantine(&config)?;
                 let report = reconcile_db_vs_json(&config)?;
                 if report.has_json_leading_or_divergence() {
                     return Err(report.fail_closed_reason());
                 }
                 let replayed_db_primary_projection = report.has_db_leading();
                 if replayed_db_primary_projection {
+                    // The workflow-state JSON file is an internal,
+                    // rebuildable projection.  It deliberately has no
+                    // external-effect lease or result-command state: startup
+                    // replays the authoritative DB snapshot directly and
+                    // verifies parity below.
                     replay_db_primary_projection(&config)?;
                     let replayed = reconcile_db_vs_json(&config)?;
                     if !replayed.is_green() {
@@ -194,6 +203,7 @@ pub(crate) fn initialize_for_startup(workflow_state_path: &Path) -> Result<(), S
                 if !final_report.is_green() {
                     return Err(final_report.fail_closed_reason());
                 }
+                repair_m2_workflow_state_sidecar_checkpoint_after_startup(&config)?;
                 Ok(())
             })();
             let mut health = health_cache().lock().expect("storage mode health lock");
@@ -215,6 +225,257 @@ pub(crate) fn initialize_for_startup(workflow_state_path: &Path) -> Result<(), S
             }
         }
     }
+}
+
+/// The M2 reference slice has exactly one legacy owner: the workflow-state
+/// JSON sidecar.  This adapter examines only its structural envelope and
+/// records a reference-only quarantine before any input which is corrupt,
+/// sensitive, unknown, or unjoinable can reach ordinary SQLite tables.
+///
+/// It intentionally does not inspect values for output, import a raw payload,
+/// or provide a caller-selected migration path.  Repair/rebuild remains an
+/// explicit future operation over the retained original source.
+fn quarantine_m2_workflow_state_sidecar_if_needed(
+    config: &DbPrimaryJsonProjectionConfig,
+) -> Result<(), String> {
+    let Some(observation) = inspect_m2_workflow_state_sidecar(config)? else {
+        return Ok(());
+    };
+    let repository = WorkbenchSqliteRepository::open_confirmed(&config.repository_config())?;
+    let (entry, _) = repository
+        .with_immediate_transaction(
+            "m2_workflow_state_sidecar_quarantine",
+            None,
+            |transaction| {
+                crate::workbench_sqlite_repository::quarantine_m2_workflow_state_sidecar_in_transaction(
+                    transaction,
+                    &observation.source_sha256,
+                    observation.reason,
+                    crate::unix_timestamp_ms(),
+                )
+            },
+        )
+        .map_err(|error| format!("m2_workflow_state_sidecar_quarantine:{error}"))?;
+    let current_sha256 = sha256_hex_bytes(
+        &fs::read(&config.workflow_state_path)
+            .map_err(|error| format!("m2_workflow_state_sidecar_quarantine_recheck:{error}"))?,
+    );
+    if current_sha256 != observation.source_sha256 {
+        return Err("m2_workflow_state_sidecar_quarantine_input_changed_during_record".to_string());
+    }
+    let expected_source_ref = format!("workflow-state-sidecar:sha256:{current_sha256}");
+    if entry.source_ref != expected_source_ref
+        || entry.scope_ref
+            != crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_QUARANTINE_SCOPE
+        || entry.reason_code != observation.reason.code()
+    {
+        return Err("m2_workflow_state_sidecar_quarantine_receipt_mismatch".to_string());
+    }
+    Err(format!(
+        "m2_workflow_state_sidecar_quarantined:{}:{}",
+        entry.reason_code, entry.quarantine_id
+    ))
+}
+
+/// Value-free only: callers can enumerate retained M2 reference-slice
+/// quarantine metadata for an authorized repair or export decision, but never
+/// source bytes, paths, field names, or original values.
+pub(crate) fn m2_workflow_state_sidecar_quarantine_manifest(
+    config: &DbPrimaryJsonProjectionConfig,
+) -> Result<Vec<WorkflowStateSidecarQuarantineManifestEntry>, String> {
+    WorkbenchSqliteRepository::open_confirmed(&config.repository_config())?
+        .m2_workflow_state_sidecar_quarantine_manifest()
+}
+
+/// This is not an automatic startup repair and is not exposed as a product
+/// command.  A controlled caller must name the already-exported quarantine
+/// receipt.  The current sidecar must independently pass the M2 envelope and
+/// DB/JSON reconciliation before its retained record can become `REBUILT`.
+pub(crate) fn rebuild_m2_workflow_state_sidecar_quarantine(
+    config: &DbPrimaryJsonProjectionConfig,
+    quarantine_id: &str,
+) -> Result<WorkflowStateSidecarQuarantineManifestEntry, String> {
+    if inspect_m2_workflow_state_sidecar(config)?.is_some() {
+        return Err("m2_workflow_state_sidecar_quarantine_rebuild_current_input_not_green".to_string());
+    }
+    let report = reconcile_db_vs_json(config)?;
+    if !report.is_green() {
+        return Err("m2_workflow_state_sidecar_quarantine_rebuild_reconciliation_not_green".to_string());
+    }
+    let current_sha256 = sha256_hex_bytes(
+        &fs::read(&config.workflow_state_path)
+            .map_err(|error| format!("m2_workflow_state_sidecar_quarantine_rebuild_read:{error}"))?,
+    );
+    let repository = WorkbenchSqliteRepository::open_confirmed(&config.repository_config())?;
+    let (entry, _) = repository
+        .with_immediate_transaction(
+            "m2_workflow_state_sidecar_quarantine_rebuild",
+            None,
+            |transaction| {
+                crate::workbench_sqlite_repository::rebuild_m2_workflow_state_sidecar_quarantine_in_transaction(
+                    transaction,
+                    quarantine_id,
+                    &current_sha256,
+                    crate::unix_timestamp_ms(),
+                )
+            },
+        )
+        .map_err(|error| format!("m2_workflow_state_sidecar_quarantine_rebuild:{error}"))?;
+    let rechecked_sha256 = sha256_hex_bytes(
+        &fs::read(&config.workflow_state_path).map_err(|error| {
+            format!("m2_workflow_state_sidecar_quarantine_rebuild_recheck:{error}")
+        })?,
+    );
+    if rechecked_sha256 != current_sha256 || entry.resolution_state != "REBUILT" {
+        return Err("m2_workflow_state_sidecar_quarantine_rebuild_receipt_mismatch".to_string());
+    }
+    Ok(entry)
+}
+
+fn require_no_unresolved_m2_workflow_state_sidecar_quarantine(
+    config: &DbPrimaryJsonProjectionConfig,
+) -> Result<(), String> {
+    let unresolved = m2_workflow_state_sidecar_quarantine_manifest(config)?
+        .into_iter()
+        .filter(|entry| entry.resolution_state == "PENDING" || entry.resolution_state == "HELD")
+        .map(|entry| entry.quarantine_id)
+        .collect::<Vec<_>>();
+    if unresolved.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "m2_workflow_state_sidecar_unresolved_quarantine:{}",
+            unresolved.join(",")
+        ))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct M2WorkflowStateSidecarObservation {
+    source_sha256: String,
+    reason: WorkflowStateSidecarQuarantineReason,
+}
+
+fn inspect_m2_workflow_state_sidecar(
+    config: &DbPrimaryJsonProjectionConfig,
+) -> Result<Option<M2WorkflowStateSidecarObservation>, String> {
+    let bytes = fs::read(&config.workflow_state_path)
+        .map_err(|error| format!("m2_workflow_state_sidecar_read:{error}"))?;
+    let source_sha256 = sha256_hex_bytes(&bytes);
+    let observation = |reason| {
+        Some(M2WorkflowStateSidecarObservation {
+            source_sha256: source_sha256.clone(),
+            reason,
+        })
+    };
+    let value: Value = match serde_json::from_slice(&bytes) {
+        Ok(value) => value,
+        Err(_) => return Ok(observation(WorkflowStateSidecarQuarantineReason::CorruptInput)),
+    };
+    let Some(object) = value.as_object() else {
+        return Ok(observation(
+            WorkflowStateSidecarQuarantineReason::UnjoinableReferenceRecord,
+        ));
+    };
+    if !crate::validate_workflow_state(&value).is_empty() {
+        return Ok(observation(
+            WorkflowStateSidecarQuarantineReason::UnjoinableReferenceRecord,
+        ));
+    }
+    for field in object.keys() {
+        if m2_workflow_state_sidecar_sensitive_root_field(field) {
+            return Ok(observation(WorkflowStateSidecarQuarantineReason::SensitiveInput));
+        }
+        if !M2_WORKFLOW_STATE_SIDECAR_ALLOWED_ROOT_FIELDS.contains(&field.as_str()) {
+            return Ok(observation(WorkflowStateSidecarQuarantineReason::UnknownInput));
+        }
+    }
+    for (array_name, key_field) in [
+        ("work_items", "work_item_id"),
+        ("nodes", "node_id"),
+        ("workflow_node_session_bindings", "binding_id"),
+        ("workflow_node_dispatches", "dispatch_id"),
+    ] {
+        if !m2_workflow_state_sidecar_records_joinable(&value, array_name, key_field) {
+            return Ok(observation(
+                WorkflowStateSidecarQuarantineReason::UnjoinableReferenceRecord,
+            ));
+        }
+    }
+    Ok(None)
+}
+
+const M2_WORKFLOW_STATE_SIDECAR_ALLOWED_ROOT_FIELDS: &[&str] = &[
+    "schema_version",
+    "workflow_version",
+    "revision",
+    "workspace_id",
+    "created_at",
+    "updated_at",
+    "source_kind",
+    "permission_level",
+    "projects",
+    "agent_adapters",
+    "workflows",
+    "nodes",
+    "edges",
+    "work_items",
+    "artifacts",
+    "reviews",
+    "workflow_node_session_bindings",
+    "workflow_node_dispatches",
+    "audit_events",
+    "capabilities",
+    "harness_resources",
+    // These are forward compatibility containers.  The M2 adapter does not
+    // interpret them, but recognizes their fixed public envelope so a later
+    // stage cannot be mistaken for a raw unknown input.
+    "execution_attempts",
+    "workflow_chain_runs",
+    "workflow_execution_controls",
+    "permission_requests",
+];
+
+fn m2_workflow_state_sidecar_sensitive_root_field(field: &str) -> bool {
+    matches!(
+        field.to_ascii_lowercase().as_str(),
+        "secret"
+            | "secrets"
+            | "secret_value"
+            | "token"
+            | "tokens"
+            | "credential"
+            | "credentials"
+            | "credential_token"
+            | "oauth"
+            | "api_key"
+            | "private_key"
+            | "prompt_body"
+            | "full_transcript"
+    )
+}
+
+fn m2_workflow_state_sidecar_records_joinable(
+    value: &Value,
+    array_name: &str,
+    key_field: &str,
+) -> bool {
+    let Some(array) = value.get(array_name) else {
+        // These two arrays are optional in the frozen v0 sidecar shape.  If
+        // present, however, every record must have a unique exact join key.
+        return true;
+    };
+    let Some(array) = array.as_array() else {
+        return false;
+    };
+    let mut keys = BTreeSet::new();
+    array.iter().all(|record| {
+        record
+            .get(key_field)
+            .and_then(Value::as_str)
+            .filter(|key| !key.is_empty())
+            .is_some_and(|key| keys.insert(key.to_string()))
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -630,21 +891,227 @@ fn replay_db_primary_projection(config: &DbPrimaryJsonProjectionConfig) -> Resul
     Ok(())
 }
 
+/// A crash after the DB-primary commit and JSON projection, but before the
+/// M2 projection checkpoint, leaves the named reference slice green at the
+/// DB/JSON layer while its checkpoint is stale.  Startup repairs only that
+/// exact, already-authoritative checkpoint: it re-reads the persisted JSON,
+/// derives the same full aggregate DTO/hash as the SQLite port, and refuses
+/// to advance anything if the source snapshot/event/receipt no longer match.
+/// No JSON value is ever imported back into SQLite.
+fn repair_m2_workflow_state_sidecar_checkpoint_after_startup(
+    config: &DbPrimaryJsonProjectionConfig,
+) -> Result<(), String> {
+    let persisted_projection = crate::read_workflow_state_value(&config.workflow_state_path)?;
+    let repository = WorkbenchSqliteRepository::open_confirmed(&config.repository_config())?;
+    repository
+        .with_immediate_transaction(
+            "m2_workflow_state_sidecar_startup_checkpoint_recovery",
+            None,
+            |transaction| {
+                let snapshots = {
+                    let mut statement = transaction
+                        .prepare(
+                            "SELECT object_ref, object_revision, source_watermark, snapshot_hash
+                             FROM current_snapshots
+                             WHERE projector_id = 'workflow_projector'
+                               AND object_ref LIKE 'workflow_state:%'
+                             ORDER BY object_ref",
+                        )
+                        .map_err(crate::workbench_sqlite_repository::RepositoryMutationError::Sqlite)?;
+                    let rows = statement
+                        .query_map([], |row| {
+                            Ok((
+                                row.get::<_, String>(0)?,
+                                row.get::<_, i64>(1)?,
+                                row.get::<_, String>(2)?,
+                                row.get::<_, String>(3)?,
+                            ))
+                        })
+                        .map_err(crate::workbench_sqlite_repository::RepositoryMutationError::Sqlite)?;
+                    rows
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(crate::workbench_sqlite_repository::RepositoryMutationError::Sqlite)?
+                };
+                let Some((object_ref, revision, source_watermark, stored_hash)) =
+                    snapshots.into_iter().next()
+                else {
+                    return Ok(())
+                        as Result<(), crate::workbench_sqlite_repository::RepositoryMutationError>;
+                };
+                if transaction
+                    .query_row(
+                        "SELECT COUNT(*) FROM current_snapshots
+                         WHERE projector_id = 'workflow_projector'
+                           AND object_ref LIKE 'workflow_state:%'",
+                        [],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .map_err(crate::workbench_sqlite_repository::RepositoryMutationError::Sqlite)?
+                    != 1
+                {
+                    return Err(
+                        crate::workbench_sqlite_repository::RepositoryMutationError::Message(
+                            "m2_workflow_state_startup_checkpoint_multiple_named_slices".to_string(),
+                        ),
+                    );
+                }
+                let (project_ref, workflow_id) =
+                    m2_workflow_state_projection_identity_for_object_ref(
+                        &object_ref,
+                        &persisted_projection,
+                    )
+                    .map_err(crate::workbench_sqlite_repository::RepositoryMutationError::Message)?;
+                let projection_snapshot = crate::workbench_sqlite_repository::
+                    m2_workflow_state_sidecar_snapshot_from_projection(
+                        &project_ref,
+                        &workflow_id,
+                        revision,
+                        &persisted_projection,
+                    )
+                    .map_err(crate::workbench_sqlite_repository::RepositoryMutationError::Message)?;
+                if projection_snapshot.object_ref != object_ref
+                    || projection_snapshot.snapshot_hash != stored_hash
+                {
+                    return Err(
+                        crate::workbench_sqlite_repository::RepositoryMutationError::Message(
+                            "m2_workflow_state_startup_checkpoint_projection_hash_mismatch".to_string(),
+                        ),
+                    );
+                }
+                let checkpoint: Option<(Option<String>, String, String)> = transaction
+                    .query_row(
+                        "SELECT last_event_id, source_watermark, status
+                         FROM projection_checkpoints
+                         WHERE projector_id = ?1 AND projector_version = ?2",
+                        [
+                            crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_PROJECTOR_ID,
+                            crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_PROJECTOR_VERSION,
+                        ],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    )
+                    .optional()
+                    .map_err(crate::workbench_sqlite_repository::RepositoryMutationError::Sqlite)?;
+                if checkpoint.as_ref().is_some_and(|(last_event_id, watermark, status)| {
+                    last_event_id.as_deref() == Some(source_watermark.as_str())
+                        && watermark == &source_watermark
+                        && status == "CAUGHT_UP"
+                }) {
+                    return Ok(())
+                        as Result<(), crate::workbench_sqlite_repository::RepositoryMutationError>;
+                }
+                let receipt_id: String = transaction
+                    .query_row(
+                        "SELECT receipts.receipt_id
+                         FROM events
+                         JOIN command_receipts AS receipts
+                           ON receipts.command_id = events.command_id
+                         WHERE events.event_id = ?1
+                         ORDER BY receipts.receipt_id
+                         LIMIT 1",
+                        [&source_watermark],
+                        |row| row.get(0),
+                    )
+                    .optional()
+                    .map_err(crate::workbench_sqlite_repository::RepositoryMutationError::Sqlite)?
+                    .ok_or_else(|| {
+                        crate::workbench_sqlite_repository::RepositoryMutationError::Message(
+                            "m2_workflow_state_startup_checkpoint_source_receipt_missing".to_string(),
+                        )
+                    })?;
+                crate::workbench_sqlite_repository::WorkflowStateSidecarRepositoryV1::new(
+                    transaction,
+                    crate::workbench_sqlite_repository::M2WorkflowStateSidecarConsumerId::StartupCheckpointRecovery,
+                )
+                .record_projection_checkpoint(
+                    &object_ref,
+                    revision,
+                    &source_watermark,
+                    &receipt_id,
+                    &projection_snapshot.snapshot_hash,
+                    crate::unix_timestamp_ms(),
+                )?;
+                Ok(()) as Result<(), crate::workbench_sqlite_repository::RepositoryMutationError>
+            },
+        )
+        .map_err(|error| format!("m2_workflow_state_startup_checkpoint_recovery:{error}"))?;
+    Ok(())
+}
+
+fn m2_workflow_state_projection_identity_for_object_ref(
+    object_ref: &str,
+    projection: &Value,
+) -> Result<(String, String), String> {
+    let remainder = object_ref
+        .strip_prefix("workflow_state:")
+        .ok_or_else(|| "m2_workflow_state_startup_checkpoint_object_ref_invalid".to_string())?;
+    let workflows = projection
+        .get("workflows")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "m2_workflow_state_startup_checkpoint_workflows_missing".to_string())?;
+    let candidates = workflows
+        .iter()
+        .filter_map(|workflow| {
+            let workflow_id = workflow.get("workflow_id").and_then(Value::as_str)?;
+            let suffix = format!(":{workflow_id}");
+            remainder
+                .strip_suffix(&suffix)
+                .filter(|project_ref| !project_ref.trim().is_empty())
+                .map(|project_ref| (project_ref.to_string(), workflow_id.to_string()))
+        })
+        .collect::<Vec<_>>();
+    match candidates.as_slice() {
+        [identity] => Ok(identity.clone()),
+        [] => Err("m2_workflow_state_startup_checkpoint_object_ref_unjoinable".to_string()),
+        _ => Err("m2_workflow_state_startup_checkpoint_object_ref_ambiguous".to_string()),
+    }
+}
+
+fn has_stable_startup_mode_audit(value: &Value, db_path_hash: &str) -> bool {
+    value
+        .get("audit_events")
+        .and_then(Value::as_array)
+        .is_some_and(|audits| {
+            audits.iter().any(|audit| {
+                audit.get("event_type").and_then(Value::as_str)
+                    == Some("storage_mode_initialized")
+                    && audit.get("target_ref").and_then(Value::as_str) == Some(db_path_hash)
+                    && audit.get("actor_ref").and_then(Value::as_str)
+                        == Some("workbench_storage_mode")
+                    && audit.get("source_kind").and_then(Value::as_str)
+                        == Some("workspace_state")
+                    && audit.get("permission_level").and_then(Value::as_str)
+                        == Some("system_runtime")
+                    && audit.get("before_state").and_then(Value::as_str)
+                        == Some("db_primary_json_projection")
+                    && audit.get("after_state").and_then(Value::as_str)
+                        == Some("db_primary_json_projection")
+            })
+        })
+}
+
 fn append_startup_mode_audit(
     config: &DbPrimaryJsonProjectionConfig,
     replayed_db_primary_projection: bool,
 ) -> Result<(), String> {
-    let timestamp = crate::unix_timestamp_string();
     let mut value = crate::read_workflow_state_value(&config.workflow_state_path)?;
+    let db_path_hash = config.db_path_hash();
+    // A green DB-primary restart is a read-only recovery check.  The original
+    // initialization audit is durable evidence, but writing another one on
+    // every restart changes both the projection and DB without a business
+    // transition.  A DB-leading replay remains explicitly auditable.
+    if !replayed_db_primary_projection && has_stable_startup_mode_audit(&value, &db_path_hash) {
+        return Ok(());
+    }
+    let timestamp = crate::unix_timestamp_string();
     let event_id = crate::workflow_audit::audit_event_identity(
         "storage-mode-startup",
-        &config.db_path_hash(),
+        &db_path_hash,
         &timestamp,
     );
     let event = json!({
         "event_id": event_id,
         "event_type": if replayed_db_primary_projection { "storage_mode_projection_replayed" } else { "storage_mode_initialized" },
-        "target_ref": config.db_path_hash(),
+        "target_ref": db_path_hash,
         "actor_ref": "workbench_storage_mode",
         "source_kind": "workspace_state",
         "permission_level": "system_runtime",
@@ -1404,6 +1871,52 @@ fn validate_db_primary_config(
             config.db_path.display()
         ));
     }
+    // An acceptance R4 process has one legal storage authority: its active
+    // isolated root.  Canonicality alone is insufficient because another
+    // clean temporary DB would otherwise be accepted as DB-primary.
+    let active_profile = crate::acceptance_runtime_profile::active_paths()?;
+    validate_active_r4_root_binding(actual_workflow_state_path, config, active_profile.as_ref())?;
+    Ok(())
+}
+
+fn validate_active_r4_root_binding(
+    actual_workflow_state_path: &Path,
+    config: &DbPrimaryJsonProjectionConfig,
+    active_profile: Option<&crate::acceptance_runtime_profile::RuntimePaths>,
+) -> Result<(), String> {
+    let Some(paths) = active_profile else {
+        return Ok(());
+    };
+    if actual_workflow_state_path != paths.workflow_state_path {
+        return Err(format!(
+            "storage_mode_r4_workflow_state_path_mismatch:expected={}:actual={}",
+            paths.workflow_state_path.display(),
+            actual_workflow_state_path.display()
+        ));
+    }
+    let expected_mode_path = paths
+        .root
+        .join("runtime-artifacts")
+        .join(STORAGE_MODE_FILE_NAME);
+    if storage_mode_path(actual_workflow_state_path)? != expected_mode_path {
+        return Err(format!(
+            "storage_mode_r4_config_path_mismatch:expected={}:actual={}",
+            expected_mode_path.display(),
+            storage_mode_path(actual_workflow_state_path)?.display()
+        ));
+    }
+    let expected_db_path = paths
+        .root
+        .join("runtime-artifacts")
+        .join("workbench.sqlite");
+    if config.db_path != expected_db_path || config.confirmed_db_path != expected_db_path {
+        return Err(format!(
+            "storage_mode_r4_db_path_mismatch:expected={}:configured={}:confirmed={}",
+            expected_db_path.display(),
+            config.db_path.display(),
+            config.confirmed_db_path.display()
+        ));
+    }
     Ok(())
 }
 
@@ -1503,7 +2016,7 @@ mod tests {
     use std::cell::Cell;
     use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::Mutex;
+    use std::sync::{Arc, Barrier, Mutex};
 
     static TEST_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -1572,6 +2085,91 @@ mod tests {
         fs::canonicalize(root).expect("canonical temp fixture root")
     }
 
+    fn r4_runtime_paths(root: PathBuf) -> crate::acceptance_runtime_profile::RuntimePaths {
+        let app_data_root = root.join("app-data");
+        crate::acceptance_runtime_profile::RuntimePaths {
+            index_path: root.join("fixture/codex-index.json"),
+            tasks_path: root.join("fixture/tasks.md"),
+            project_root: root.join("fixture/SYN R4 ISOLATED ACCEPTANCE syn-r4-0123456789abcdef"),
+            workflow_state_path: root.join("workflow-state/workflow-state.v0.json"),
+            app_data_root: app_data_root.clone(),
+            vault_root: app_data_root.join("knowledge-vault"),
+            recovery_backups_root: root.join("app-data/knowledge-workspace-recovery"),
+            canvas_root: root.join("app-data/canvas-v1"),
+            codex_db_path: root.join("codex-db/state.sqlite"),
+            app_log_dir: root.join("logs"),
+            root,
+        }
+    }
+
+    fn r4_db_primary_config(
+        paths: &crate::acceptance_runtime_profile::RuntimePaths,
+    ) -> DbPrimaryJsonProjectionConfig {
+        let db_path = paths.root.join("runtime-artifacts/workbench.sqlite");
+        DbPrimaryJsonProjectionConfig {
+            workflow_state_path: paths.workflow_state_path.clone(),
+            confirmed_workflow_state_path: paths.workflow_state_path.clone(),
+            db_path: db_path.clone(),
+            confirmed_db_path: db_path,
+            denied_path_markers: vec![],
+        }
+    }
+
+    #[test]
+    fn m2_t2_r4_db_primary_accepts_exact_active_root_binding() {
+        let paths = r4_runtime_paths(PathBuf::from("/tmp/syn-r4-acceptance-bound-root"));
+        let config = r4_db_primary_config(&paths);
+        validate_active_r4_root_binding(&paths.workflow_state_path, &config, Some(&paths))
+            .expect("only the exact active R4 root may be DB-primary");
+    }
+
+    #[test]
+    fn m2_t2_r4_db_primary_rejects_foreign_or_wrong_in_root_paths() {
+        let paths = r4_runtime_paths(PathBuf::from("/tmp/syn-r4-acceptance-bound-root"));
+        let mut foreign = r4_db_primary_config(&paths);
+        foreign.db_path = PathBuf::from("/tmp/other-clean-root/workbench.sqlite");
+        foreign.confirmed_db_path = foreign.db_path.clone();
+        assert!(validate_active_r4_root_binding(
+            &paths.workflow_state_path,
+            &foreign,
+            Some(&paths)
+        )
+        .expect_err("foreign canonical DB must be rejected")
+        .starts_with("storage_mode_r4_db_path_mismatch"));
+
+        let mut wrong_name = r4_db_primary_config(&paths);
+        wrong_name.db_path = paths.root.join("runtime-artifacts/other.sqlite");
+        wrong_name.confirmed_db_path = wrong_name.db_path.clone();
+        assert!(validate_active_r4_root_binding(
+            &paths.workflow_state_path,
+            &wrong_name,
+            Some(&paths)
+        )
+        .expect_err("wrong in-root DB name must be rejected")
+        .starts_with("storage_mode_r4_db_path_mismatch"));
+
+        let mut wrong_state = r4_db_primary_config(&paths);
+        wrong_state.workflow_state_path = paths.root.join("workflow-state/other.json");
+        wrong_state.confirmed_workflow_state_path = wrong_state.workflow_state_path.clone();
+        assert!(validate_active_r4_root_binding(
+            &wrong_state.workflow_state_path,
+            &wrong_state,
+            Some(&paths),
+        )
+        .expect_err("wrong active workflow state must be rejected")
+        .starts_with("storage_mode_r4_workflow_state_path_mismatch"));
+    }
+
+    #[test]
+    fn m2_t2_r4_db_primary_normal_mode_remains_unbound() {
+        let paths = r4_runtime_paths(PathBuf::from("/tmp/syn-r4-acceptance-bound-root"));
+        let mut config = r4_db_primary_config(&paths);
+        config.db_path = PathBuf::from("/tmp/ordinary-workbench.sqlite");
+        config.confirmed_db_path = config.db_path.clone();
+        validate_active_r4_root_binding(&paths.workflow_state_path, &config, None)
+            .expect("normal mode must not inherit R4 root constraints");
+    }
+
     fn project_record(project_root: &str) -> crate::ProjectRecord {
         crate::ProjectRecord {
             project_root: project_root.to_string(),
@@ -1618,6 +2216,9 @@ mod tests {
                 project_root: project_root.to_string(),
                 work_item_id: work_item_id.clone(),
                 next_state: "ready_to_dispatch".to_string(),
+                command_id: None,
+                idempotency_key: None,
+                expected_revision: None,
             },
         )
         .expect("make work item ready");
@@ -1792,6 +2393,41 @@ mod tests {
                 None,
             )
             .expect("seed complete workflow-state projection face");
+        // This test fixture uses the established DB-primary projection writer,
+        // whose rows carry its named provenance.  Install the corresponding
+        // sidecar-meta row explicitly so the M2 v1 port tests the same exact
+        // binding that a real imported sidecar must provide.  The production
+        // command still rejects a missing or mismatched binding.
+        let state_bytes = fs::read(&config.workflow_state_path)
+            .expect("read seeded workflow state for M2 fixture provenance");
+        let workspace_id = format!(
+            "m2-fixture:{}",
+            sha256_hex(&config.workflow_state_path.display().to_string())
+        );
+        let source_root_hash = sha256_hex_bytes(&state_bytes);
+        let meta_json = serde_json::to_string(&json!({
+            "schema_version": state.get("schema_version").cloned().unwrap_or(Value::Null),
+            "workflow_version": state.get("workflow_version").cloned().unwrap_or(Value::Null),
+            "revision": state.get("revision").cloned().unwrap_or(Value::Null),
+            "fixture_provenance": "db_primary_projection_writer"
+        }))
+        .expect("serialize M2 fixture sidecar meta");
+        connection
+            .execute(
+                "INSERT INTO workflow_state_meta
+                 (workspace_id, source_root_hash, schema_version, workflow_version, revision, source_id, meta_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    workspace_id,
+                    source_root_hash,
+                    state.get("schema_version").and_then(Value::as_str).unwrap_or("workflow_state_v0"),
+                    state.get("workflow_version").and_then(Value::as_i64).unwrap_or(1),
+                    state.get("revision").and_then(Value::as_i64).unwrap_or(0),
+                    crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_REPOSITORY_SOURCE_ID,
+                    meta_json,
+                ],
+            )
+            .expect("seed M2 fixture sidecar-meta provenance");
     }
 
     fn append_workflow_state_row(state: &mut Value, array_name: &str, row: Value) {
@@ -2032,6 +2668,7 @@ mod tests {
             memory_packet_fingerprint: None,
             plan_authorization_id: None,
             authorization_check: None,
+            prepared_dispatch_id: None,
             user_reviewed_instruction: None,
             warnings: vec![],
         }
@@ -2064,6 +2701,29 @@ mod tests {
             (table, count)
         })
         .collect()
+    }
+
+    // Counts only the M2 transaction foundation tables exercised by the
+    // workflow-state reference slice.  This deliberately does not turn the
+    // storage-mode fixture into a claim about unrelated product flows.
+    fn m2_workflow_state_ledger_counts(config: &DbPrimaryJsonProjectionConfig) -> [i64; 5] {
+        let connection =
+            Connection::open_with_flags(&config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open M2 fixture DB read only");
+        [
+            "command_receipts",
+            "events",
+            "audit_records",
+            "outbox_items",
+            "current_snapshots",
+        ]
+        .map(|table| {
+            connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .expect("count M2 reference-slice table")
+        })
     }
 
     fn degradation_audits(state_path: &Path) -> Vec<Value> {
@@ -2545,6 +3205,37 @@ mod tests {
     }
 
     #[test]
+    fn m2_versioned_db_record_is_db_leading_over_an_unversioned_legacy_projection() {
+        let key = "workflow:m2:node:codex-dev".to_string();
+        let db_value = json!({
+            "node_id": key,
+            "state": "running",
+            "workflow_revision_after": 7
+        });
+        let json_value = json!({
+            "node_id": key,
+            "state": "draft"
+        });
+        let table = reconcile_table(
+            "workflow_nodes",
+            vec![DbRecord {
+                natural_key: key.clone(),
+                record_hash: record_hash(&db_value).expect("DB record hash"),
+                value: db_value,
+            }],
+            vec![DbRecord {
+                natural_key: key.clone(),
+                record_hash: record_hash(&json_value).expect("JSON record hash"),
+                value: json_value,
+            }],
+        );
+
+        assert_eq!(table.db_leading, vec![key], "{table:?}");
+        assert!(table.json_leading.is_empty(), "{table:?}");
+        assert!(table.hash_mismatches.is_empty(), "{table:?}");
+    }
+
+    #[test]
     fn m5a_db_primary_writes_five_product_flows_and_reconciles_without_lag() {
         let _serial = test_lock().lock().expect("storage mode test lock");
         let fixture = db_primary_fixture("five-flows");
@@ -2604,6 +3295,9 @@ mod tests {
                 project_root: fixture.project_root.clone(),
                 work_item_id: fixture.work_item_id.clone(),
                 next_state: "ready_for_review".to_string(),
+                command_id: None,
+                idempotency_key: None,
+                expected_revision: None,
             },
         )
         .expect("DB-primary work item transition");
@@ -2632,6 +3326,1922 @@ mod tests {
             .tables
             .iter()
             .all(|table| table.hash_mismatches.is_empty()));
+    }
+
+    #[test]
+    fn m2_green_db_primary_restart_does_not_rewrite_startup_audit_or_projection() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-green-restart-is-read-only");
+        let json_before = fs::read(&fixture.state_path).expect("read green JSON projection");
+        let db_before = fs::read(&fixture.config.db_path).expect("read green DB projection");
+        let audit_count_before = crate::read_workflow_state_value(&fixture.state_path)
+            .expect("read green workflow state")
+            .get("audit_events")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .expect("workflow audit array");
+
+        // The cache clear models a new App process.  A green restart may
+        // reconcile and verify, but must not manufacture another startup
+        // audit or alter either primary/projection artifact.
+        clear_storage_mode_cache_for_path_for_tests(&fixture.state_path);
+        initialize_for_startup(&fixture.state_path).expect("green restart reconciliation");
+
+        assert_eq!(
+            fs::read(&fixture.state_path).expect("read JSON after restart"),
+            json_before,
+            "green restart must not rewrite the JSON projection"
+        );
+        assert_eq!(
+            fs::read(&fixture.config.db_path).expect("read DB after restart"),
+            db_before,
+            "green restart must not append a duplicate SQLite startup audit"
+        );
+        let audit_count_after = crate::read_workflow_state_value(&fixture.state_path)
+            .expect("read workflow state after restart")
+            .get("audit_events")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .expect("workflow audit array after restart");
+        assert_eq!(audit_count_after, audit_count_before);
+    }
+
+    #[test]
+    fn m2_reference_slice_db_primary_commits_internal_projection_and_replays_once() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-reference-slice-outbox");
+        let before = m2_workflow_state_ledger_counts(&fixture.config);
+        assert_eq!(before, [0, 0, 0, 0, 0], "fixture must start ledger-clean");
+        let expected_revision = primary_repository_for_write(&fixture.state_path)
+            .expect("DB-primary repository gate")
+            .expect("DB-primary repository")
+            .m2_workflow_state_sidecar_revision(&fixture.workflow_id, &fixture.work_item_id)
+            .expect("read authoritative M2 workflow revision");
+
+        let request = crate::WorkItemStateUpdateRequest {
+            project_root: fixture.project_root.clone(),
+            work_item_id: fixture.work_item_id.clone(),
+            next_state: "running".to_string(),
+            command_id: Some("m2-reference-slice-replay-command".to_string()),
+            idempotency_key: Some("m2-reference-slice-replay-key".to_string()),
+            expected_revision: Some(expected_revision),
+        };
+        let first = crate::update_work_item_state_at(&fixture.state_path, &request)
+            .expect("DB-primary M2 reference-slice transition");
+        let receipt_id = first.receipt_id.clone().expect("M2 receipt id");
+        let json_after_first = fs::read(&fixture.state_path).expect("read first JSON projection");
+
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open M2 fixture DB read only");
+        let command_id = "m2-reference-slice-replay-command".to_string();
+        let receipt_status: String = connection
+            .query_row(
+                "SELECT status FROM command_receipts WHERE receipt_id = ?1 AND command_id = ?2",
+                params![receipt_id, command_id],
+                |row| row.get(0),
+            )
+            .expect("load completed M2 receipt");
+        assert_eq!(receipt_status, "COMMITTED");
+        let outbox_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM outbox_items", [], |row| row.get(0))
+            .expect("count external effects");
+        assert_eq!(
+            outbox_count, 0,
+            "the JSON sidecar is internal/rebuildable and must not create an outbox effect"
+        );
+        let event_id: String = connection
+            .query_row(
+                "SELECT event_id FROM events WHERE command_id = ?1 AND event_type = 'WorkItemStateUpdated'",
+                [command_id.as_str()],
+                |row| row.get(0),
+            )
+            .expect("load the reference-slice domain event");
+        let (checkpoint_version, checkpoint_last_event, checkpoint_watermark, checkpoint_status, checkpoint_error):
+            (String, Option<String>, String, String, Option<String>) = connection
+            .query_row(
+                "SELECT projector_version, last_event_id, source_watermark, status, error_receipt_ref
+                 FROM projection_checkpoints
+                 WHERE projector_id = ?1",
+                [crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_PROJECTOR_ID],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            )
+            .expect("record the completed reference-slice checkpoint");
+        assert_eq!(
+            checkpoint_version,
+            crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_PROJECTOR_VERSION
+        );
+        assert_eq!(checkpoint_last_event.as_deref(), Some(event_id.as_str()));
+        assert_eq!(checkpoint_watermark, event_id);
+        assert_eq!(checkpoint_status, "CAUGHT_UP");
+        assert_eq!(checkpoint_error, None);
+        let authoritative_snapshot_hash: String = connection
+            .query_row(
+                "SELECT snapshot_hash FROM current_snapshots
+                 WHERE object_ref = ?1 AND projector_id = 'workflow_projector'",
+                [format!("workflow_state:{}:{}", fixture.project_root, fixture.workflow_id)],
+                |row| row.get(0),
+            )
+            .expect("load authoritative snapshot hash");
+        assert_eq!(
+            authoritative_snapshot_hash.len(),
+            64,
+            "the authoritative snapshot uses a SHA-256 canonical content hash"
+        );
+        assert_eq!(
+            m2_workflow_state_ledger_counts(&fixture.config),
+            [1, 1, 1, 0, 1],
+            "the M2 UoW must not manufacture an external effect"
+        );
+        let state = crate::read_workflow_state_value(&fixture.state_path)
+            .expect("read projected workflow state");
+        assert_eq!(state["work_items"][0]["state"], "running");
+        assert!(
+            state["work_items"][0]["workflow_revision_after"]
+                .as_i64()
+                .is_some_and(|revision| revision > 0),
+            "M2 changes must carry a receipt-backed ordering field for DB-leading recovery"
+        );
+        assert!(
+            state["nodes"]
+                .as_array()
+                .is_some_and(|nodes| nodes.iter().any(|node| {
+                    node["state"] == "running"
+                        && node["workflow_revision_after"]
+                            .as_i64()
+                            .is_some_and(|revision| revision > 0)
+                })),
+            "the transitioned node must carry the same M2 ordering mechanism"
+        );
+
+        let replay = crate::update_work_item_state_at(&fixture.state_path, &request)
+            .expect("completed M2 receipt may replay");
+        assert_eq!(replay.receipt_id.as_deref(), Some(receipt_id.as_str()));
+        assert_eq!(
+            fs::read(&fixture.state_path).expect("read replayed JSON projection"),
+            json_after_first,
+            "completed replay must not rewrite the JSON projection"
+        );
+        assert_eq!(
+            m2_workflow_state_ledger_counts(&fixture.config),
+            [1, 1, 1, 0, 1],
+            "completed replay must not grow the M2 ledger"
+        );
+    }
+
+    #[test]
+    fn m2_reference_slice_external_pending_owner_replays_without_duplicate_mutation() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-reference-slice-external-pending-replay");
+        let expected_revision = primary_repository_for_write(&fixture.state_path)
+            .expect("DB-primary repository gate")
+            .expect("DB-primary repository")
+            .m2_workflow_state_sidecar_revision(&fixture.workflow_id, &fixture.work_item_id)
+            .expect("read authoritative M2 workflow revision");
+        let request = crate::WorkItemStateUpdateRequest {
+            project_root: fixture.project_root.clone(),
+            work_item_id: fixture.work_item_id.clone(),
+            next_state: "running".to_string(),
+            command_id: Some("m2-reference-slice-external-pending-command".to_string()),
+            idempotency_key: Some("m2-reference-slice-external-pending-key".to_string()),
+            expected_revision: Some(expected_revision),
+        };
+        let first = crate::update_work_item_state_at(&fixture.state_path, &request)
+            .expect("initial M2 reference-slice transition");
+        let receipt_id = first.receipt_id.expect("first receipt");
+        let json_before_replay = fs::read(&fixture.state_path).expect("read first projection");
+        let ledger_before_replay = m2_workflow_state_ledger_counts(&fixture.config);
+        let connection = Connection::open(&fixture.config.db_path).expect("open fixture DB write");
+        let rows = connection
+            .execute(
+                "UPDATE command_receipts SET status = 'EXTERNAL_PENDING'
+                 WHERE receipt_id = ?1 AND command_id = ?2 AND status = 'COMMITTED'",
+                params![receipt_id, "m2-reference-slice-external-pending-command"],
+            )
+            .expect("mark exact existing owner as externally pending");
+        assert_eq!(rows, 1, "only the completed owning receipt may transition");
+        drop(connection);
+
+        let replay = crate::update_work_item_state_at(&fixture.state_path, &request)
+            .expect("an external-pending owner still replays its immutable receipt");
+        assert_eq!(replay.receipt_id.as_deref(), Some(receipt_id.as_str()));
+        assert_eq!(
+            fs::read(&fixture.state_path).expect("read replay projection"),
+            json_before_replay,
+            "external-pending replay may not rewrite the JSON projection"
+        );
+        assert_eq!(
+            m2_workflow_state_ledger_counts(&fixture.config),
+            ledger_before_replay,
+            "external-pending replay may not create another receipt/event/audit/outbox/snapshot"
+        );
+    }
+
+    #[test]
+    fn m2_reference_slice_checkpoint_rejects_projection_hash_mismatch_without_advancing() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-reference-slice-snapshot-parity");
+        let repository = primary_repository_for_write(&fixture.state_path)
+            .expect("DB-primary repository gate")
+            .expect("DB-primary repository");
+        let object_ref = format!("workflow_state:{}:{}", fixture.project_root, fixture.workflow_id);
+        let watermark = "event:m2-snapshot-parity";
+        let content_hash = crate::m2_update_work_item_state::canonical_workflow_state_sidecar_snapshot_hash(
+            &fixture.project_root,
+            &fixture.workflow_id,
+            11,
+            &json!({"work_item_id": fixture.work_item_id, "state": "running"}),
+            &json!({"node_id": "node:m2-snapshot-parity", "state": "running"}),
+        );
+        let mismatched_hash = crate::m2_update_work_item_state::canonical_workflow_state_sidecar_snapshot_hash(
+            &fixture.project_root,
+            &fixture.workflow_id,
+            11,
+            &json!({"work_item_id": fixture.work_item_id, "state": "completed"}),
+            &json!({"node_id": "node:m2-snapshot-parity", "state": "completed"}),
+        );
+        repository
+            .with_immediate_transaction(
+                "m2_snapshot_parity_seed_authoritative",
+                None,
+                |transaction| crate::workbench_sqlite_repository::record_m2_workflow_state_sidecar_snapshot_in_transaction(
+                    transaction,
+                    &object_ref,
+                    11,
+                    watermark,
+                    &content_hash,
+                    1_800_000_000_000,
+                ),
+            )
+            .expect("persist authoritative canonical snapshot");
+        repository
+            .with_immediate_transaction(
+                "m2_snapshot_parity_checkpoint_match",
+                None,
+                |transaction| crate::workbench_sqlite_repository::record_m2_workflow_state_sidecar_projection_checkpoint_in_transaction(
+                    transaction,
+                    &object_ref,
+                    11,
+                    watermark,
+                    "receipt:m2-snapshot-parity",
+                    &content_hash,
+                    1_800_000_000_001,
+                ),
+            )
+            .expect("matching internal projection advances checkpoint");
+        let mismatch = repository
+            .with_immediate_transaction(
+                "m2_snapshot_parity_checkpoint_mismatch",
+                None,
+                |transaction| crate::workbench_sqlite_repository::record_m2_workflow_state_sidecar_projection_checkpoint_in_transaction(
+                    transaction,
+                    &object_ref,
+                    11,
+                    watermark,
+                    "receipt:m2-snapshot-parity-forged",
+                    &mismatched_hash,
+                    1_800_000_000_002,
+                ),
+            )
+            .expect_err("mismatched projection may not advance a checkpoint");
+        assert!(mismatch.contains("m2_workflow_state_projection_snapshot_hash_mismatch"), "{mismatch}");
+
+        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("open checkpoint DB read only");
+        let (checkpoint_status, checkpoint_watermark, stored_hash): (String, String, String) = connection
+            .query_row(
+                "SELECT checkpoints.status, checkpoints.source_watermark, snapshots.snapshot_hash
+                 FROM projection_checkpoints AS checkpoints
+                 JOIN current_snapshots AS snapshots
+                   ON snapshots.projector_id = 'workflow_projector'
+                 WHERE checkpoints.projector_id = ?1 AND snapshots.object_ref = ?2",
+                [
+                    crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_PROJECTOR_ID,
+                    object_ref.as_str(),
+                ],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read retained authoritative snapshot and checkpoint");
+        assert_eq!(checkpoint_status, "CAUGHT_UP");
+        assert_eq!(checkpoint_watermark, watermark, "mismatch may not forge a later checkpoint");
+        assert_eq!(stored_hash, content_hash, "source snapshot remains durable for recovery");
+    }
+
+    #[test]
+    fn m2_reference_slice_full_aggregate_snapshot_rebuilds_checkpoint_after_crash_window() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-reference-slice-full-aggregate-checkpoint-recovery");
+        let expected_revision = primary_repository_for_write(&fixture.state_path)
+            .expect("DB-primary repository gate")
+            .expect("DB-primary repository")
+            .m2_workflow_state_sidecar_revision(&fixture.workflow_id, &fixture.work_item_id)
+            .expect("read authoritative workflow revision");
+        let request = crate::WorkItemStateUpdateRequest {
+            project_root: fixture.project_root.clone(),
+            work_item_id: fixture.work_item_id.clone(),
+            next_state: "running".to_string(),
+            command_id: Some("m2-reference-slice-full-aggregate-command".to_string()),
+            idempotency_key: Some("m2-reference-slice-full-aggregate-key".to_string()),
+            expected_revision: Some(expected_revision),
+        };
+        crate::update_work_item_state_at(&fixture.state_path, &request)
+            .expect("commit the named reference-slice transition");
+
+        let persisted = crate::read_workflow_state_value(&fixture.state_path)
+            .expect("read persisted full aggregate");
+        let snapshot = crate::workbench_sqlite_repository::
+            m2_workflow_state_sidecar_snapshot_from_projection(
+                &fixture.project_root,
+                &fixture.workflow_id,
+                expected_revision + 1,
+                &persisted,
+            )
+            .expect("derive canonical full aggregate snapshot");
+        assert_eq!(
+            snapshot.object_ref,
+            format!("workflow_state:{}:{}", fixture.project_root, fixture.workflow_id)
+        );
+
+        // A different item and node in the same workflow must affect the
+        // authoritative aggregate hash; this prevents a local current-item
+        // pair from masquerading as the workflow-state snapshot.
+        let mut changed_same_workflow = persisted.clone();
+        let mut another_node = changed_same_workflow["nodes"]
+            .as_array()
+            .and_then(|nodes| nodes.first())
+            .cloned()
+            .expect("fixture node");
+        another_node["node_id"] = Value::String(format!("{}:node:parallel", fixture.workflow_id));
+        let mut another_item = changed_same_workflow["work_items"]
+            .as_array()
+            .and_then(|items| items.first())
+            .cloned()
+            .expect("fixture work item");
+        another_item["work_item_id"] =
+            Value::String(format!("{}:work-item:parallel", fixture.workflow_id));
+        another_item["node_id"] = another_node["node_id"].clone();
+        changed_same_workflow["nodes"]
+            .as_array_mut()
+            .expect("fixture node array")
+            .push(another_node);
+        changed_same_workflow["work_items"]
+            .as_array_mut()
+            .expect("fixture work item array")
+            .push(another_item);
+        let changed_snapshot = crate::workbench_sqlite_repository::
+            m2_workflow_state_sidecar_snapshot_from_projection(
+                &fixture.project_root,
+                &fixture.workflow_id,
+                expected_revision + 1,
+                &changed_same_workflow,
+            )
+            .expect("derive changed full aggregate snapshot");
+        assert_ne!(
+            changed_snapshot.snapshot_hash, snapshot.snapshot_hash,
+            "another named-slice item/node must change the authoritative aggregate hash"
+        );
+
+        // The same semantic record with a different object-key insertion
+        // order is canonicalized to the same snapshot hash.
+        let mut reordered = persisted.clone();
+        let work_item = reordered["work_items"]
+            .as_array_mut()
+            .and_then(|items| items.first_mut())
+            .expect("fixture work item for key reorder");
+        let original = work_item.as_object().expect("work item object").clone();
+        let mut reverse_order = serde_json::Map::new();
+        for (key, value) in original.iter().rev() {
+            reverse_order.insert(key.clone(), value.clone());
+        }
+        *work_item = Value::Object(reverse_order);
+        let reordered_snapshot = crate::workbench_sqlite_repository::
+            m2_workflow_state_sidecar_snapshot_from_projection(
+                &fixture.project_root,
+                &fixture.workflow_id,
+                expected_revision + 1,
+                &reordered,
+            )
+            .expect("derive reordered full aggregate snapshot");
+        assert_eq!(
+            reordered_snapshot.snapshot_hash, snapshot.snapshot_hash,
+            "key-only JSON reordering must not change the canonical aggregate hash"
+        );
+
+        let connection = Connection::open(&fixture.config.db_path).expect("open fixture DB write");
+        let (object_ref, revision, source_watermark, stored_hash): (String, i64, String, String) =
+            connection
+                .query_row(
+                    "SELECT object_ref, object_revision, source_watermark, snapshot_hash
+                     FROM current_snapshots
+                     WHERE object_ref = ?1 AND projector_id = 'workflow_projector'",
+                    [snapshot.object_ref.as_str()],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )
+                .expect("read durable authoritative snapshot");
+        assert_eq!(revision, expected_revision + 1);
+        assert_eq!(stored_hash, snapshot.snapshot_hash);
+        let rows = connection
+            .execute(
+                "UPDATE projection_checkpoints
+                 SET last_event_id = 'event:stale-before-checkpoint',
+                     source_watermark = 'event:stale-before-checkpoint',
+                     status = 'ADVANCING'
+                 WHERE projector_id = ?1 AND projector_version = ?2",
+                params![
+                    crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_PROJECTOR_ID,
+                    crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_PROJECTOR_VERSION,
+                ],
+            )
+            .expect("model crash after projection before checkpoint");
+        assert_eq!(rows, 1, "fixture has one named-slice checkpoint");
+        drop(connection);
+        let json_before_restart = fs::read(&fixture.state_path).expect("read projection before restart");
+        let owner_ledger_before_restart = m2_workflow_state_ledger_counts(&fixture.config);
+
+        clear_storage_mode_cache_for_path_for_tests(&fixture.state_path);
+        initialize_for_startup(&fixture.state_path)
+            .expect("green persisted aggregate repairs its stale checkpoint on restart");
+
+        assert_eq!(
+            fs::read(&fixture.state_path).expect("read projection after checkpoint repair"),
+            json_before_restart,
+            "checkpoint recovery must not rewrite the persisted JSON projection"
+        );
+        assert_eq!(
+            m2_workflow_state_ledger_counts(&fixture.config),
+            owner_ledger_before_restart,
+            "checkpoint recovery must not duplicate owner receipt/event/audit/outbox/snapshot facts"
+        );
+        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("open checkpoint DB after restart");
+        let checkpoint: (Option<String>, String, String) = connection
+            .query_row(
+                "SELECT last_event_id, source_watermark, status
+                 FROM projection_checkpoints WHERE projector_id = ?1 AND projector_version = ?2",
+                params![
+                    crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_PROJECTOR_ID,
+                    crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_PROJECTOR_VERSION,
+                ],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read repaired checkpoint");
+        assert_eq!(checkpoint.0.as_deref(), Some(source_watermark.as_str()));
+        assert_eq!(checkpoint.1, source_watermark);
+        assert_eq!(checkpoint.2, "CAUGHT_UP");
+        assert!(
+            reconcile_db_vs_json(&fixture.config)
+                .expect("reconcile rebuilt checkpoint fixture")
+                .is_green(),
+            "checkpoint recovery must preserve DB-primary/JSON parity"
+        );
+        assert_eq!(object_ref, snapshot.object_ref);
+    }
+
+    #[test]
+    fn m2_reference_slice_persisted_projection_tamper_is_fail_closed_without_checkpoint_or_db_rewrite() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-reference-slice-persisted-projection-tamper");
+        let expected_revision = primary_repository_for_write(&fixture.state_path)
+            .expect("DB-primary repository gate")
+            .expect("DB-primary repository")
+            .m2_workflow_state_sidecar_revision(&fixture.workflow_id, &fixture.work_item_id)
+            .expect("read authoritative workflow revision");
+        let request = crate::WorkItemStateUpdateRequest {
+            project_root: fixture.project_root.clone(),
+            work_item_id: fixture.work_item_id.clone(),
+            next_state: "running".to_string(),
+            command_id: Some("m2-reference-slice-persisted-projection-tamper-command".to_string()),
+            idempotency_key: Some("m2-reference-slice-persisted-projection-tamper-key".to_string()),
+            expected_revision: Some(expected_revision),
+        };
+        crate::update_work_item_state_at(&fixture.state_path, &request)
+            .expect("create the authoritative snapshot and persisted projection");
+
+        let persisted_before_tamper = crate::read_workflow_state_value(&fixture.state_path)
+            .expect("read persisted canonical projection before tamper");
+        let equivalent_hash_left = crate::workbench_sqlite_repository::
+            m2_workflow_state_sidecar_snapshot_from_projection(
+                &fixture.project_root,
+                &fixture.workflow_id,
+                expected_revision + 1,
+                &persisted_before_tamper,
+            )
+            .expect("derive canonical persisted aggregate")
+            .snapshot_hash;
+        let mut reordered_projection = persisted_before_tamper.clone();
+        let work_item = reordered_projection["work_items"]
+            .as_array_mut()
+            .and_then(|items| items.first_mut())
+            .expect("fixture work item for canonical reorder");
+        let original = work_item.as_object().expect("work item object").clone();
+        let mut reverse_order = serde_json::Map::new();
+        for (key, value) in original.iter().rev() {
+            reverse_order.insert(key.clone(), value.clone());
+        }
+        *work_item = Value::Object(reverse_order);
+        let equivalent_hash_right = crate::workbench_sqlite_repository::
+            m2_workflow_state_sidecar_snapshot_from_projection(
+                &fixture.project_root,
+                &fixture.workflow_id,
+                expected_revision + 1,
+                &reordered_projection,
+            )
+            .expect("derive reordered canonical aggregate")
+            .snapshot_hash;
+        assert_eq!(
+            equivalent_hash_left, equivalent_hash_right,
+            "canonical snapshot hashing must not depend on JSON object key order"
+        );
+
+        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("open authoritative DB before disk tamper");
+        let checkpoint_before: (String, String, Option<String>) = connection
+            .query_row(
+                "SELECT status, source_watermark, last_event_id
+                 FROM projection_checkpoints WHERE projector_id = ?1",
+                [crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_PROJECTOR_ID],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read checkpoint before disk tamper");
+        let snapshot_before: String = connection
+            .query_row(
+                "SELECT snapshot_hash FROM current_snapshots
+                 WHERE object_ref = ?1 AND projector_id = 'workflow_projector'",
+                [format!("workflow_state:{}:{}", fixture.project_root, fixture.workflow_id)],
+                |row| row.get(0),
+            )
+            .expect("read authoritative snapshot before disk tamper");
+        drop(connection);
+        let db_before = fs::read(&fixture.config.db_path).expect("read DB before disk tamper");
+
+        let mut persisted_projection = crate::read_workflow_state_value(&fixture.state_path)
+            .expect("read persisted JSON projection");
+        let item = persisted_projection["work_items"]
+            .as_array_mut()
+            .and_then(|items| {
+                items.iter_mut().find(|item| {
+                    item.get("work_item_id").and_then(Value::as_str)
+                        == Some(fixture.work_item_id.as_str())
+                })
+            })
+            .expect("find persisted work item to tamper");
+        item["title"] = Value::String("tampered after authoritative commit".to_string());
+        crate::write_validated_workflow_state(&fixture.state_path, &persisted_projection)
+            .expect("write structurally valid but semantically divergent projection");
+        let tampered_json = fs::read(&fixture.state_path).expect("read tampered projection bytes");
+
+        clear_storage_mode_cache_for_path_for_tests(&fixture.state_path);
+        let error = initialize_for_startup(&fixture.state_path)
+            .expect_err("persisted projection tamper must block DB-primary startup");
+        assert!(error.contains("db_primary_projection_blocked"), "{error}");
+        assert!(
+            error.contains("hash_mismatches") || error.contains("json_leading"),
+            "{error}"
+        );
+        assert_eq!(
+            fs::read(&fixture.config.db_path).expect("read DB after rejected tamper"),
+            db_before,
+            "a JSON projection tamper must not rewrite authoritative DB state"
+        );
+        assert_eq!(
+            fs::read(&fixture.state_path).expect("read JSON after rejected tamper"),
+            tampered_json,
+            "fail-closed startup must not reverse-overwrite the disk projection"
+        );
+
+        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("open DB after rejected tamper");
+        let checkpoint_after: (String, String, Option<String>) = connection
+            .query_row(
+                "SELECT status, source_watermark, last_event_id
+                 FROM projection_checkpoints WHERE projector_id = ?1",
+                [crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_PROJECTOR_ID],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read checkpoint after rejected tamper");
+        let snapshot_after: String = connection
+            .query_row(
+                "SELECT snapshot_hash FROM current_snapshots
+                 WHERE object_ref = ?1 AND projector_id = 'workflow_projector'",
+                [format!("workflow_state:{}:{}", fixture.project_root, fixture.workflow_id)],
+                |row| row.get(0),
+            )
+            .expect("read authoritative snapshot after rejected tamper");
+        assert_eq!(checkpoint_after, checkpoint_before, "tamper may not advance checkpoint");
+        assert_eq!(snapshot_after, snapshot_before, "tamper may not replace authoritative snapshot");
+    }
+
+    #[test]
+    fn m2_reference_slice_r4_fake_external_adapter_state_machine_is_real_uow_only() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-reference-slice-r4-fake-external-adapter");
+        let repository = primary_repository_for_write(&fixture.state_path)
+            .expect("DB-primary repository gate")
+            .expect("DB-primary repository");
+        const FIRST_CLAIM_AT: i64 = 1_800_000_000_000;
+
+        // The profile is deliberately isolated.  It proves the frozen outbox
+        // state chain through the production SQLite repository/UoW without a
+        // provider, normal-product side effect, or JSON projection outbox.
+        let success_payload_hash = sha256_hex("m2-r4-fake-external-success");
+        let success = repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_declare_success",
+                None,
+                |transaction| {
+                    crate::workbench_sqlite_repository::declare_m2_r4_fake_external_adapter_effect_in_transaction(
+                        transaction,
+                        &crate::workbench_sqlite_repository::M2R4FakeExternalAdapterDeclaration {
+                            command_id: "cmd:m2-r4-fake-external-success",
+                            idempotency_key: "idem:m2-r4-fake-external-success",
+                            actor_id: "m2-reference-slice-test",
+                            scope_ref: "workflow-state-sidecar:m2-r4-acceptance",
+                            subject_ref: "work-item:m2-r4-acceptance",
+                            payload_hash: &success_payload_hash,
+                            cancel_before_available: false,
+                        },
+                        FIRST_CLAIM_AT,
+                    )
+                },
+            )
+            .expect("declare isolated fake external effect")
+            .0;
+        assert_eq!(success.status, "AVAILABLE");
+
+        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("open declared effect DB read only");
+        let (available_status, pending_owner): (String, String) = connection
+            .query_row(
+                "SELECT outbox_items.status, command_receipts.status
+                 FROM outbox_items JOIN command_receipts
+                   ON command_receipts.receipt_id = outbox_items.owning_command_receipt_ref
+                 WHERE outbox_item_id = ?1",
+                [&success.outbox_item_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read declaration state chain");
+        assert_eq!(available_status, "AVAILABLE");
+        assert_eq!(pending_owner, "EXTERNAL_PENDING");
+        drop(connection);
+
+        let lease = match repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_claim_success",
+                None,
+                |transaction| crate::workbench_sqlite_repository::claim_m2_r4_fake_external_adapter_effect_in_transaction(
+                    transaction,
+                    &success.outbox_item_id,
+                    FIRST_CLAIM_AT,
+                ),
+            )
+            .expect("claim isolated fake effect")
+            .0
+        {
+            crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::Leased(lease) => lease,
+            other => panic!("new fake effect must lease: {other:?}"),
+        };
+        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("open leased effect DB read only");
+        let expires_at: Option<String> = connection
+            .query_row(
+                "SELECT expires_at FROM outbox_items WHERE outbox_item_id = ?1",
+                [&success.outbox_item_id],
+                |row| row.get(0),
+            )
+            .expect("read frozen 300s lease expiry");
+        assert_eq!(
+            expires_at.as_deref(),
+            Some(
+                (FIRST_CLAIM_AT
+                    + crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_LEASE_MS)
+                    .to_string()
+                    .as_str()
+            ),
+            "the R4-only adapter must use the frozen 300s lease"
+        );
+        drop(connection);
+        for extension_at in [FIRST_CLAIM_AT + 1, FIRST_CLAIM_AT + 2] {
+            let extended = repository
+                .with_immediate_transaction(
+                    "m2_r4_fake_external_adapter_extend_success",
+                    None,
+                    |transaction| crate::workbench_sqlite_repository::extend_m2_r4_fake_external_adapter_lease_in_transaction(
+                        transaction,
+                        &lease,
+                        extension_at,
+                    ),
+                )
+                .expect("the first two 300s lease extensions are permitted")
+                .0;
+            assert_eq!(extended, lease, "extension preserves the exact lease identity");
+        }
+        let extension_limit = repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_extend_limit",
+                None,
+                |transaction| crate::workbench_sqlite_repository::extend_m2_r4_fake_external_adapter_lease_in_transaction(
+                    transaction,
+                    &lease,
+                    FIRST_CLAIM_AT + 3,
+                ),
+            )
+            .expect_err("a third extension is rejected without another outbox transition");
+        assert!(extension_limit.contains("lease_extension_limit"), "{extension_limit}");
+        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("open extended lease DB read only");
+        let (extension_count, extended_expiry): (i64, String) = connection
+            .query_row(
+                "SELECT lease_extension_count, expires_at FROM outbox_items WHERE outbox_item_id = ?1",
+                [&success.outbox_item_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read exact extension state");
+        assert_eq!(
+            extension_count,
+            crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_MAX_LEASE_EXTENSIONS,
+        );
+        assert_eq!(
+            extended_expiry,
+            (FIRST_CLAIM_AT + 2 + crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_LEASE_MS).to_string(),
+        );
+        drop(connection);
+        let result_hash = repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_deliver_success",
+                None,
+                |transaction| crate::workbench_sqlite_repository::deliver_m2_r4_fake_external_adapter_effect_in_transaction(
+                    transaction,
+                    &lease,
+                    FIRST_CLAIM_AT + 4,
+                ),
+            )
+            .expect("deliver deterministic local fake effect")
+            .0;
+        // Admission is re-resolved from the owning receipt/outbox, rather
+        // than accepted from a caller supplied result envelope.  Every wrong
+        // semantic binding must reject before it can create a result receipt,
+        // event, audit or mutate the owning effect.
+        let ledger_counts = || -> [i64; 4] {
+            let connection = Connection::open_with_flags(
+                &fixture.config.db_path,
+                OpenFlags::SQLITE_OPEN_READ_ONLY,
+            )
+            .expect("open result-admission DB read only");
+            [
+                connection
+                    .query_row("SELECT COUNT(*) FROM command_receipts", [], |row| row.get(0))
+                    .expect("count receipts"),
+                connection
+                    .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
+                    .expect("count events"),
+                connection
+                    .query_row("SELECT COUNT(*) FROM audit_records", [], |row| row.get(0))
+                    .expect("count audit"),
+                connection
+                    .query_row("SELECT COUNT(*) FROM outbox_items", [], |row| row.get(0))
+                    .expect("count outbox"),
+            ]
+        };
+        for (case_name, actor_id, scope_ref, effect_id, correlation_id) in [
+            (
+                "wrong-actor",
+                "m2-r4-forged-actor",
+                success.scope_ref.as_str(),
+                success.effect_id.as_str(),
+                success.correlation_id.as_str(),
+            ),
+            (
+                "wrong-scope",
+                success.actor_id.as_str(),
+                "workflow-state-sidecar:forged-scope",
+                success.effect_id.as_str(),
+                success.correlation_id.as_str(),
+            ),
+            (
+                "wrong-effect",
+                success.actor_id.as_str(),
+                success.scope_ref.as_str(),
+                "m2-r4-forged-effect",
+                success.correlation_id.as_str(),
+            ),
+            (
+                "wrong-correlation",
+                success.actor_id.as_str(),
+                success.scope_ref.as_str(),
+                success.effect_id.as_str(),
+                "m2-r4-forged-correlation",
+            ),
+        ] {
+            let before = ledger_counts();
+            let error = repository
+                .with_immediate_transaction(
+                    "m2_r4_fake_external_adapter_result_binding_rejected",
+                    None,
+                    |transaction| {
+                        crate::workbench_sqlite_repository::record_m2_r4_fake_external_adapter_result_command_in_transaction(
+                            transaction,
+                            &crate::workbench_sqlite_repository::M2R4FakeExternalAdapterResultCommand {
+                                command_id: "cmd:m2-r4-fake-external-result",
+                                idempotency_key: "idem:m2-r4-fake-external-result",
+                                outbox_item_id: success.outbox_item_id.as_str(),
+                                result_hash: result_hash.as_str(),
+                                owning_command_id: success.owning_command_id.as_str(),
+                                owning_receipt_id: success.owning_receipt_id.as_str(),
+                                effect_id,
+                                envelope: crate::workbench_sqlite_repository::M2R4NormalizedCommandEnvelope {
+                                    actor_id,
+                                    scope_ref,
+                                    current_object_ref: success.current_object_ref.as_str(),
+                                    channel: crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_RESULT_CHANNEL,
+                                    permission_ref: crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_RESULT_PERMISSION,
+                                    admission_ref: crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_RESULT_ADMISSION,
+                                    correlation_id,
+                                    causation_id: success.causation_id.as_str(),
+                                },
+                            },
+                            FIRST_CLAIM_AT + 5,
+                        )
+                    },
+                )
+                .expect_err("wrong result envelope must be denied before write");
+            assert!(
+                error.contains("m2_r4_fake_external_result"),
+                "{case_name}:{error}"
+            );
+            assert_eq!(ledger_counts(), before, "{case_name} may not mutate any ledger");
+        }
+        let result = repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_result_success",
+                None,
+                |transaction| crate::workbench_sqlite_repository::record_m2_r4_fake_external_adapter_result_command_in_transaction(
+                    transaction,
+                    &crate::workbench_sqlite_repository::M2R4FakeExternalAdapterResultCommand::for_owned_effect(
+                        "cmd:m2-r4-fake-external-result",
+                        "idem:m2-r4-fake-external-result",
+                        &success,
+                        &result_hash,
+                    ),
+                    FIRST_CLAIM_AT + 5,
+                ),
+            )
+            .expect("record separately identified result command")
+            .0;
+        assert!(!result.replayed);
+        let replay = repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_result_replay",
+                None,
+                |transaction| crate::workbench_sqlite_repository::record_m2_r4_fake_external_adapter_result_command_in_transaction(
+                    transaction,
+                    &crate::workbench_sqlite_repository::M2R4FakeExternalAdapterResultCommand::for_owned_effect(
+                        "cmd:m2-r4-fake-external-result",
+                        "idem:m2-r4-fake-external-result",
+                        &success,
+                        &result_hash,
+                    ),
+                    FIRST_CLAIM_AT + 6,
+                ),
+            )
+            .expect("exact result command replay")
+            .0;
+        assert!(replay.replayed);
+        assert_eq!(replay.receipt_id, result.receipt_id);
+        let forged_result_hash = sha256_hex("m2-r4-fake-external-forged-result");
+        let divergent_error = repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_result_divergent",
+                None,
+                |transaction| crate::workbench_sqlite_repository::record_m2_r4_fake_external_adapter_result_command_in_transaction(
+                    transaction,
+                    &crate::workbench_sqlite_repository::M2R4FakeExternalAdapterResultCommand::for_owned_effect(
+                        "cmd:m2-r4-fake-external-result",
+                        "idem:m2-r4-fake-external-result",
+                        &success,
+                        &forged_result_hash,
+                    ),
+                    FIRST_CLAIM_AT + 7,
+                ),
+            )
+            .expect_err("divergent result may not overwrite an accepted result");
+        assert!(divergent_error.contains("idempotency_conflict"), "{divergent_error}");
+
+        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("open result DB read only");
+        let (result_status, owner_status, result_receipts): (String, String, i64) = connection
+            .query_row(
+                "SELECT outbox_items.status, owning.status,
+                        (SELECT COUNT(*) FROM command_receipts WHERE command_id = 'cmd:m2-r4-fake-external-result')
+                 FROM outbox_items JOIN command_receipts AS owning
+                   ON owning.receipt_id = outbox_items.owning_command_receipt_ref
+                 WHERE outbox_items.outbox_item_id = ?1",
+                [&success.outbox_item_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read completed state chain");
+        assert_eq!(result_status, "RESULT_RECEIVED");
+        assert_eq!(owner_status, "EXTERNAL_RESULT");
+        assert_eq!(result_receipts, 1, "replay must not grow result receipts");
+        drop(connection);
+
+        let retry_payload_hash = sha256_hex("m2-r4-fake-external-retry");
+        let retry = repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_declare_retry",
+                None,
+                |transaction| crate::workbench_sqlite_repository::declare_m2_r4_fake_external_adapter_effect_in_transaction(
+                    transaction,
+                    &crate::workbench_sqlite_repository::M2R4FakeExternalAdapterDeclaration {
+                        command_id: "cmd:m2-r4-fake-external-retry",
+                        idempotency_key: "idem:m2-r4-fake-external-retry",
+                        actor_id: "m2-reference-slice-test",
+                        scope_ref: "workflow-state-sidecar:m2-r4-acceptance",
+                        subject_ref: "work-item:m2-r4-acceptance",
+                        payload_hash: &retry_payload_hash,
+                        cancel_before_available: false,
+                    },
+                    FIRST_CLAIM_AT,
+                ),
+            )
+            .expect("declare retry effect")
+            .0;
+        let retry_lease_one = match repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_claim_retry_one",
+                None,
+                |transaction| crate::workbench_sqlite_repository::claim_m2_r4_fake_external_adapter_effect_in_transaction(transaction, &retry.outbox_item_id, FIRST_CLAIM_AT),
+            )
+            .expect("claim retry effect")
+            .0
+        {
+            crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::Leased(lease) => lease,
+            other => panic!("retry effect must first lease: {other:?}"),
+        };
+        let expired_available = match repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_expire_retry_one",
+                None,
+                |transaction| crate::workbench_sqlite_repository::claim_m2_r4_fake_external_adapter_effect_in_transaction(
+                    transaction,
+                    &retry_lease_one.outbox_item_id,
+                    FIRST_CLAIM_AT
+                        + crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_LEASE_MS,
+                ),
+            )
+            .expect("expired 300s lease returns to AVAILABLE without spending retry budget")
+            .0
+        {
+            crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::LeaseExpiredAvailable { outbox_item_id } => outbox_item_id,
+            other => panic!("expired first lease must return AVAILABLE: {other:?}"),
+        };
+        assert_eq!(expired_available, retry.outbox_item_id);
+        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("open expired lease DB read only");
+        let (expired_status, expiry_attempts): (String, i64) = connection
+            .query_row(
+                "SELECT status, attempt_count FROM outbox_items WHERE outbox_item_id = ?1",
+                [&retry.outbox_item_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read released expiry state");
+        assert_eq!(expired_status, "AVAILABLE");
+        assert_eq!(expiry_attempts, 0, "lease expiry is not a delivery failure");
+        drop(connection);
+        let retry_lease_two = match repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_claim_retry_two",
+                None,
+                |transaction| crate::workbench_sqlite_repository::claim_m2_r4_fake_external_adapter_effect_in_transaction(
+                    transaction,
+                    &retry.outbox_item_id,
+                    FIRST_CLAIM_AT + crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_LEASE_MS + 1,
+                ),
+            )
+            .expect("released effect is claimable again")
+            .0
+        {
+            crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::Leased(lease) => lease,
+            other => panic!("released effect must lease: {other:?}"),
+        };
+        let retry_two_at = match repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_fail_retry_two",
+                None,
+                |transaction| crate::workbench_sqlite_repository::fail_m2_r4_fake_external_adapter_delivery_in_transaction(
+                    transaction,
+                    &retry_lease_two,
+                    FIRST_CLAIM_AT + crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_LEASE_MS + 2,
+                    "fixture_retry_one",
+                ),
+            )
+            .expect("first explicit delivery failure schedules retry")
+            .0
+        {
+            crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::RetryScheduled { retry_not_before, .. } => retry_not_before,
+            other => panic!("first delivery failure must retry: {other:?}"),
+        };
+        assert!(
+            retry_two_at
+                > FIRST_CLAIM_AT
+                    + crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_LEASE_MS
+                    + 1_000,
+            "delivery failure retry is exponential plus deterministic jitter"
+        );
+        let retry_lease_three = match repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_claim_retry_three",
+                None,
+                |transaction| crate::workbench_sqlite_repository::claim_m2_r4_fake_external_adapter_effect_in_transaction(transaction, &retry.outbox_item_id, retry_two_at),
+            )
+            .expect("second lease after scheduled retry")
+            .0
+        {
+            crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::Leased(lease) => lease,
+            other => panic!("second attempt must lease before poison: {other:?}"),
+        };
+        let poison = repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_fail_retry_two",
+                None,
+                |transaction| crate::workbench_sqlite_repository::fail_m2_r4_fake_external_adapter_delivery_in_transaction(transaction, &retry_lease_three, retry_two_at + 1, "fixture_retry_two"),
+            )
+            .expect("second delivery failure schedules the last retry")
+            .0;
+        let retry_three_at = match poison {
+            crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::RetryScheduled { retry_not_before, .. } => retry_not_before,
+            other => panic!("second delivery failure must schedule final retry: {other:?}"),
+        };
+        let retry_lease_four = match repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_claim_retry_four",
+                None,
+                |transaction| crate::workbench_sqlite_repository::claim_m2_r4_fake_external_adapter_effect_in_transaction(transaction, &retry.outbox_item_id, retry_three_at),
+            )
+            .expect("third delivery attempt leases after scheduled retry")
+            .0
+        {
+            crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::Leased(lease) => lease,
+            other => panic!("third delivery attempt must lease before poison: {other:?}"),
+        };
+        let poison = repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_fail_retry_three",
+                None,
+                |transaction| crate::workbench_sqlite_repository::fail_m2_r4_fake_external_adapter_delivery_in_transaction(transaction, &retry_lease_four, retry_three_at + 1, "fixture_retry_three"),
+            )
+            .expect("third delivery failure poisons")
+            .0;
+        assert!(matches!(poison, crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::Poisoned { .. }));
+        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("open poison DB read only");
+        let (poison_status, attempts, poisoned_owner): (String, i64, String) = connection
+            .query_row(
+                "SELECT outbox_items.status, outbox_items.attempt_count, command_receipts.status
+                 FROM outbox_items JOIN command_receipts
+                   ON command_receipts.receipt_id = outbox_items.owning_command_receipt_ref
+                 WHERE outbox_items.outbox_item_id = ?1",
+                [&retry.outbox_item_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read poison state");
+        assert_eq!(poison_status, "POISON");
+        assert_eq!(attempts, crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_MAX_ATTEMPTS);
+        assert_eq!(poisoned_owner, "PROJECTION_DEGRADED");
+        drop(connection);
+
+        let cancelled_payload_hash = sha256_hex("m2-r4-fake-external-cancelled");
+        let cancelled = repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_declare_cancelled",
+                None,
+                |transaction| crate::workbench_sqlite_repository::declare_m2_r4_fake_external_adapter_effect_in_transaction(
+                    transaction,
+                    &crate::workbench_sqlite_repository::M2R4FakeExternalAdapterDeclaration {
+                        command_id: "cmd:m2-r4-fake-external-cancelled",
+                        idempotency_key: "idem:m2-r4-fake-external-cancelled",
+                        actor_id: "m2-reference-slice-test",
+                        scope_ref: "workflow-state-sidecar:m2-r4-acceptance",
+                        subject_ref: "work-item:m2-r4-acceptance",
+                        payload_hash: &cancelled_payload_hash,
+                        cancel_before_available: true,
+                    },
+                    FIRST_CLAIM_AT,
+                ),
+            )
+            .expect("declare cancelled branch")
+            .0;
+        assert_eq!(cancelled.status, "CANCELLED");
+    }
+
+    #[test]
+    fn m2_reference_slice_r4_fake_external_adapter_concurrent_result_is_one_receipt() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-reference-slice-r4-fake-external-concurrent-result");
+        let repository = primary_repository_for_write(&fixture.state_path)
+            .expect("DB-primary repository gate")
+            .expect("DB-primary repository");
+        const NOW: i64 = 1_800_000_100_000;
+        let payload_hash = sha256_hex("m2-r4-fake-external-concurrent-result");
+        let declaration = repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_concurrent_declare",
+                None,
+                |transaction| crate::workbench_sqlite_repository::declare_m2_r4_fake_external_adapter_effect_in_transaction(
+                    transaction,
+                    &crate::workbench_sqlite_repository::M2R4FakeExternalAdapterDeclaration {
+                        command_id: "cmd:m2-r4-fake-external-concurrent-owner",
+                        idempotency_key: "idem:m2-r4-fake-external-concurrent-owner",
+                        actor_id: "m2-reference-slice-test",
+                        scope_ref: "workflow-state-sidecar:m2-r4-acceptance",
+                        subject_ref: "work-item:m2-r4-acceptance",
+                        payload_hash: &payload_hash,
+                        cancel_before_available: false,
+                    },
+                    NOW,
+                ),
+            )
+            .expect("declare concurrent result fixture")
+            .0;
+        let lease = match repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_concurrent_claim",
+                None,
+                |transaction| crate::workbench_sqlite_repository::claim_m2_r4_fake_external_adapter_effect_in_transaction(
+                    transaction,
+                    &declaration.outbox_item_id,
+                    NOW,
+                ),
+            )
+            .expect("claim concurrent result fixture")
+            .0
+        {
+            crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::Leased(lease) => lease,
+            other => panic!("concurrent result fixture must lease: {other:?}"),
+        };
+        let result_hash = repository
+            .with_immediate_transaction(
+                "m2_r4_fake_external_adapter_concurrent_deliver",
+                None,
+                |transaction| crate::workbench_sqlite_repository::deliver_m2_r4_fake_external_adapter_effect_in_transaction(
+                    transaction,
+                    &lease,
+                    NOW + 1,
+                ),
+            )
+            .expect("deliver concurrent result fixture")
+            .0;
+
+        let start = Arc::new(Barrier::new(3));
+        let hash_one = result_hash.clone();
+        let declaration_one = declaration.clone();
+        let repository_one = repository.clone();
+        let start_one = Arc::clone(&start);
+        let hash_two = result_hash.clone();
+        let declaration_two = declaration.clone();
+        let repository_two = repository.clone();
+        let start_two = Arc::clone(&start);
+        let (first, second) = std::thread::scope(|scope| {
+            let first = scope.spawn(move || {
+                start_one.wait();
+                repository_one
+                    .with_immediate_transaction(
+                        "m2_r4_fake_external_adapter_concurrent_result_one",
+                        None,
+                        |transaction| crate::workbench_sqlite_repository::record_m2_r4_fake_external_adapter_result_command_in_transaction(
+                            transaction,
+                            &crate::workbench_sqlite_repository::M2R4FakeExternalAdapterResultCommand::for_owned_effect(
+                                "cmd:m2-r4-fake-external-concurrent-result",
+                                "idem:m2-r4-fake-external-concurrent-result",
+                                &declaration_one,
+                                &hash_one,
+                            ),
+                            NOW + 2,
+                        ),
+                    )
+                    .map(|result| result.0)
+            });
+            let second = scope.spawn(move || {
+                start_two.wait();
+                repository_two
+                    .with_immediate_transaction(
+                        "m2_r4_fake_external_adapter_concurrent_result_two",
+                        None,
+                        |transaction| crate::workbench_sqlite_repository::record_m2_r4_fake_external_adapter_result_command_in_transaction(
+                            transaction,
+                            &crate::workbench_sqlite_repository::M2R4FakeExternalAdapterResultCommand::for_owned_effect(
+                                "cmd:m2-r4-fake-external-concurrent-result",
+                                "idem:m2-r4-fake-external-concurrent-result",
+                                &declaration_two,
+                                &hash_two,
+                            ),
+                            NOW + 2,
+                        ),
+                    )
+                    .map(|result| result.0)
+            });
+            start.wait();
+            (
+                first.join().expect("first concurrent result thread joined"),
+                second.join().expect("second concurrent result thread joined"),
+            )
+        });
+        let first = first.expect("first concurrent result command accepted");
+        let second = second.expect("second concurrent result command replayed");
+        assert_eq!(first.receipt_id, second.receipt_id);
+        assert_ne!(first.replayed, second.replayed, "one result writes and one replays");
+        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("open concurrent result DB read only");
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM command_receipts
+                 WHERE command_id = 'cmd:m2-r4-fake-external-concurrent-result'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count concurrent result receipts");
+        assert_eq!(count, 1, "concurrent identical result commands have one durable receipt");
+    }
+
+    // Retained only as source-history context for the former JSON-projection
+    // experiment.  JSON is now an internal rebuildable projection, so this
+    // test is intentionally not compiled or counted as a DAT-004 result path.
+    #[cfg(any())]
+    fn legacy_json_projection_outbox_state_machine_retained_as_non_authoritative_fixture() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-reference-slice-outbox-state-machine");
+        let repository = primary_repository_for_write(&fixture.state_path)
+            .expect("DB-primary repository gate")
+            .expect("DB-primary repository");
+        let command = crate::m2_workflow_state::UpdateWorkItemStateCommand {
+            command_id: format!("cmd-{}-running-outbox-state-machine", fixture.work_item_id),
+            idempotency_key: "m2-reference-slice-outbox-state-machine".to_string(),
+            actor_id: "m2-reference-slice-test".to_string(),
+            scope_ref: format!("workflow:{}", fixture.project_root),
+            project_id: fixture.project_root.clone(),
+            workflow_id: fixture.workflow_id.clone(),
+            work_item_id: fixture.work_item_id.clone(),
+            expected_revision: None,
+            new_status: Some(crate::m2_workflow_state::WorkItemStatus::Running),
+            new_state_json: None,
+        };
+        let (outbox_item_id, receipt_id) = repository
+            .with_immediate_transaction(
+                "m2_reference_slice_outbox_state_machine_seed",
+                None,
+                |transaction| {
+                    let result = crate::m2_update_work_item_state::update_work_item_state_m2_with_transaction(
+                        transaction,
+                        command.clone(),
+                    )
+                    .map_err(crate::workbench_sqlite_repository::RepositoryMutationError::Message)?;
+                    let outbox_item = result.outbox_item.ok_or_else(|| {
+                        crate::workbench_sqlite_repository::RepositoryMutationError::Message(
+                            "m2_reference_slice_outbox_missing".to_string(),
+                        )
+                    })?;
+                    Ok((outbox_item.outbox_item_id, result.receipt.receipt_id))
+                },
+            )
+            .expect("commit the exact reference-slice outbox declaration")
+            .0;
+
+        let cancellation_error = repository
+            .with_immediate_transaction(
+                "m2_reference_slice_required_projection_cancellation",
+                None,
+                |transaction| {
+                    crate::workbench_sqlite_repository::reject_m2_sidecar_outbox_cancellation_in_transaction(
+                        transaction,
+                        &outbox_item_id,
+                    )
+                },
+            )
+            .expect_err("the mandatory local projection must not be silently cancelled");
+        assert!(
+            cancellation_error.contains("m2_sidecar_outbox_cancellation_forbidden_required_projection"),
+            "{cancellation_error}"
+        );
+
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open M2 fixture DB read only");
+        let available_status: String = connection
+            .query_row(
+                "SELECT status FROM outbox_items WHERE outbox_item_id = ?1",
+                [outbox_item_id.as_str()],
+                |row| row.get(0),
+            )
+            .expect("read cancellation-refused outbox state");
+        assert_eq!(available_status, "AVAILABLE");
+        drop(connection);
+
+        const FIRST_CLAIM_AT: i64 = 1_800_000_000_000;
+        let first_lease = match repository
+            .with_immediate_transaction(
+                "m2_reference_slice_first_claim",
+                None,
+                |transaction| {
+                    crate::workbench_sqlite_repository::claim_m2_sidecar_outbox_in_transaction(
+                        transaction,
+                        &outbox_item_id,
+                        FIRST_CLAIM_AT,
+                    )
+                },
+            )
+            .expect("claim the exact reference-slice effect")
+            .0
+        {
+            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Leased(lease) => lease,
+            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Poisoned { .. } => {
+                panic!("a new reference-slice effect must not be poisoned")
+            }
+        };
+
+        // A second claimant after the lease interval must durably consume the
+        // expired attempt and acquire the one retry lease, rather than rolling
+        // the expiry transition back with an error return.
+        let expired_reclaim = match repository
+            .with_immediate_transaction(
+                "m2_reference_slice_expired_lease_reclaim",
+                None,
+                |transaction| {
+                    crate::workbench_sqlite_repository::claim_m2_sidecar_outbox_in_transaction(
+                        transaction,
+                        &outbox_item_id,
+                        FIRST_CLAIM_AT + 120_001,
+                    )
+                },
+            )
+            .expect("expired lease must enter the bounded retry path")
+            .0
+        {
+            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Leased(lease) => lease,
+            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Poisoned { .. } => {
+                panic!("the first expired attempt must still be retryable")
+            }
+        };
+        assert_ne!(first_lease.lease_token, expired_reclaim.lease_token);
+
+        let retry_status = repository
+            .with_immediate_transaction(
+                "m2_reference_slice_second_failed_delivery",
+                None,
+                |transaction| {
+                    crate::workbench_sqlite_repository::retry_m2_sidecar_outbox_in_transaction(
+                        transaction,
+                        &expired_reclaim,
+                        FIRST_CLAIM_AT + 120_002,
+                        "fixture_second_delivery_failure",
+                    )
+                },
+            )
+            .expect("record the second bounded failed delivery")
+            .0;
+        assert_eq!(retry_status, "RETRY_WAIT");
+
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open retry fixture DB read only");
+        let retry_not_before: String = connection
+            .query_row(
+                "SELECT next_retry_not_before FROM outbox_items WHERE outbox_item_id = ?1",
+                [outbox_item_id.as_str()],
+                |row| row.get(0),
+            )
+            .expect("read exact retry schedule");
+        drop(connection);
+        let retry_claim_at = retry_not_before
+            .parse::<i64>()
+            .expect("retry schedule must be an epoch millisecond");
+        let final_lease = match repository
+            .with_immediate_transaction(
+                "m2_reference_slice_final_retry_claim",
+                None,
+                |transaction| {
+                    crate::workbench_sqlite_repository::claim_m2_sidecar_outbox_in_transaction(
+                        transaction,
+                        &outbox_item_id,
+                        retry_claim_at,
+                    )
+                },
+            )
+            .expect("claim the final bounded retry")
+            .0
+        {
+            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Leased(lease) => lease,
+            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Poisoned { .. } => {
+                panic!("the third attempt begins as a lease before its failure is recorded")
+            }
+        };
+        let poison_status = repository
+            .with_immediate_transaction(
+                "m2_reference_slice_poison_after_bounded_failures",
+                None,
+                |transaction| {
+                    crate::workbench_sqlite_repository::retry_m2_sidecar_outbox_in_transaction(
+                        transaction,
+                        &final_lease,
+                        retry_claim_at + 1,
+                        "fixture_final_delivery_failure",
+                    )
+                },
+            )
+            .expect("persist poison after the bounded retry limit")
+            .0;
+        assert_eq!(poison_status, "POISON");
+
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open final outbox fixture DB read only");
+        let (status, attempt_count, receipt_status): (String, i64, String) = connection
+            .query_row(
+                "SELECT outbox_items.status, outbox_items.attempt_count, command_receipts.status
+                 FROM outbox_items
+                 JOIN command_receipts
+                   ON command_receipts.receipt_id = outbox_items.owning_command_receipt_ref
+                 WHERE outbox_items.outbox_item_id = ?1",
+                [outbox_item_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read bounded poison outcome");
+        assert_eq!(status, "POISON");
+        assert_eq!(attempt_count, 3);
+        assert_eq!(receipt_status, "PROJECTION_DEGRADED");
+        let (checkpoint_status, checkpoint_last_event, checkpoint_error_receipt):
+            (String, Option<String>, Option<String>) = connection
+            .query_row(
+                "SELECT status, last_event_id, error_receipt_ref
+                 FROM projection_checkpoints WHERE projector_id = ?1",
+                [crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_PROJECTOR_ID],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("record degraded checkpoint for the exact failed sidecar");
+        assert_eq!(checkpoint_status, "DEGRADED");
+        assert_eq!(checkpoint_last_event, None);
+        assert_eq!(checkpoint_error_receipt.as_deref(), Some(receipt_id.as_str()));
+    }
+
+    fn assert_m2_workflow_state_sidecar_quarantine_case(
+        label: &str,
+        expected_reason: &str,
+        raw_marker: Option<&str>,
+        mutate: impl FnOnce(&std::path::Path),
+    ) {
+        let fixture = db_primary_fixture(label);
+        let original = fs::read(&fixture.state_path).expect("retain the pre-quarantine sidecar");
+        assert_eq!(
+            m2_workflow_state_ledger_counts(&fixture.config),
+            [0, 0, 0, 0, 0],
+            "case starts without M2 ledger rows"
+        );
+        mutate(&fixture.state_path);
+        let observed_bytes = fs::read(&fixture.state_path).expect("read changed sidecar bytes");
+        let observed_sha256 = sha256_hex_bytes(&observed_bytes);
+
+        let blocked = initialize_for_startup(&fixture.state_path)
+            .expect_err("unknown/corrupt/sensitive/unjoinable sidecar must fail closed");
+        assert!(
+            blocked.contains(&format!(
+                "m2_workflow_state_sidecar_quarantined:{expected_reason}:"
+            )),
+            "{blocked}"
+        );
+        assert_db_primary_health_blocked(&fixture.state_path, "m2_workflow_state_sidecar_quarantined");
+        let manifest = m2_workflow_state_sidecar_quarantine_manifest(&fixture.config)
+            .expect("value-free quarantine export");
+        let [entry] = manifest.as_slice() else {
+            panic!("expected one exact quarantine entry: {manifest:?}");
+        };
+        assert_eq!(entry.reason_code, expected_reason);
+        assert_eq!(
+            entry.source_ref,
+            format!("workflow-state-sidecar:sha256:{observed_sha256}")
+        );
+        assert_eq!(
+            entry.scope_ref,
+            crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_QUARANTINE_SCOPE
+        );
+        assert_eq!(entry.resolution_state, "PENDING");
+        assert!(
+            !format!("{entry:?}").contains(&fixture.state_path.display().to_string()),
+            "value-free manifest must not expose the filesystem path"
+        );
+        assert_eq!(
+            m2_workflow_state_ledger_counts(&fixture.config),
+            [0, 1, 1, 0, 0],
+            "quarantine records only one scrubbed event and audit, never a domain/outbox/snapshot mutation"
+        );
+
+        let replay_blocked = initialize_for_startup(&fixture.state_path)
+            .expect_err("the same unresolved source remains fail closed");
+        assert!(replay_blocked.contains(expected_reason), "{replay_blocked}");
+        assert_eq!(
+            m2_workflow_state_ledger_counts(&fixture.config),
+            [0, 1, 1, 0, 0],
+            "same input replay must not grow quarantine evidence"
+        );
+
+        if let Some(raw_marker) = raw_marker {
+            let connection = Connection::open_with_flags(
+                &fixture.config.db_path,
+                OpenFlags::SQLITE_OPEN_READ_ONLY,
+            )
+            .expect("open quarantine DB read only");
+            let needle = format!("%{raw_marker}%");
+            let references_with_marker: i64 = connection
+                .query_row(
+                    "SELECT
+                       (SELECT COUNT(*) FROM unknown_quarantine
+                        WHERE source_ref LIKE ?1 OR COALESCE(resolution_ref, '') LIKE ?1)
+                     + (SELECT COUNT(*) FROM events
+                        WHERE source_ref LIKE ?1 OR COALESCE(summary_ref, '') LIKE ?1
+                           OR COALESCE(payload_ref, '') LIKE ?1)
+                     + (SELECT COUNT(*) FROM audit_records
+                        WHERE COALESCE(subject_ref, '') LIKE ?1
+                           OR COALESCE(source_refs, '') LIKE ?1)",
+                    [needle],
+                    |row| row.get(0),
+                )
+                .expect("query value-free quarantine surfaces");
+            assert_eq!(
+                references_with_marker, 0,
+                "sensitive input must never enter ordinary SQLite evidence"
+            );
+        }
+
+        fs::write(&fixture.state_path, &original).expect("restore retained known-good fixture source");
+        let unresolved = initialize_for_startup(&fixture.state_path)
+            .expect_err("manual rebuild decision is required after an input quarantine");
+        assert!(
+            unresolved.contains("m2_workflow_state_sidecar_unresolved_quarantine"),
+            "{unresolved}"
+        );
+        let rebuilt = rebuild_m2_workflow_state_sidecar_quarantine(
+            &fixture.config,
+            &entry.quarantine_id,
+        )
+        .expect("only a green replacement sidecar can rebuild the exact receipt");
+        assert_eq!(rebuilt.quarantine_id, entry.quarantine_id);
+        assert_eq!(rebuilt.resolution_state, "REBUILT");
+        initialize_for_startup(&fixture.state_path)
+            .expect("repaired value-free source may restart after exact rebuild receipt");
+        assert_eq!(
+            m2_workflow_state_ledger_counts(&fixture.config),
+            [0, 2, 2, 0, 0],
+            "rebuild contributes only its scrubbed event/audit receipt"
+        );
+        let exported = m2_workflow_state_sidecar_quarantine_manifest(&fixture.config)
+            .expect("export rebuilt manifest");
+        assert_eq!(exported.len(), 1);
+        assert_eq!(exported[0].resolution_state, "REBUILT");
+    }
+
+    #[test]
+    fn m2_reference_slice_sidecar_quarantine_is_value_free_idempotent_and_rebuildable() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        assert_m2_workflow_state_sidecar_quarantine_case(
+            "m2-reference-slice-quarantine-unknown",
+            "UNKNOWN_INPUT",
+            None,
+            |state_path| {
+                let mut value: Value = serde_json::from_slice(
+                    &fs::read(state_path).expect("read unknown-input fixture"),
+                )
+                .expect("fixture JSON");
+                value["future_unclassified_envelope"] = json!({"fixture_only": true});
+                fs::write(state_path, serde_json::to_vec(&value).expect("serialize unknown fixture"))
+                    .expect("write unknown fixture");
+            },
+        );
+        assert_m2_workflow_state_sidecar_quarantine_case(
+            "m2-reference-slice-quarantine-sensitive",
+            "SENSITIVE_INPUT",
+            Some("m2-quarantine-secret-never-persist"),
+            |state_path| {
+                let mut value: Value = serde_json::from_slice(
+                    &fs::read(state_path).expect("read sensitive-input fixture"),
+                )
+                .expect("fixture JSON");
+                value["credential_token"] = json!("m2-quarantine-secret-never-persist");
+                fs::write(state_path, serde_json::to_vec(&value).expect("serialize sensitive fixture"))
+                    .expect("write sensitive fixture");
+            },
+        );
+        assert_m2_workflow_state_sidecar_quarantine_case(
+            "m2-reference-slice-quarantine-unjoinable",
+            "UNJOINABLE_REFERENCE_RECORD",
+            None,
+            |state_path| {
+                let mut value: Value = serde_json::from_slice(
+                    &fs::read(state_path).expect("read unjoinable-input fixture"),
+                )
+                .expect("fixture JSON");
+                value["work_items"] = json!([{ "state": "running" }]);
+                fs::write(state_path, serde_json::to_vec(&value).expect("serialize unjoinable fixture"))
+                    .expect("write unjoinable fixture");
+            },
+        );
+        assert_m2_workflow_state_sidecar_quarantine_case(
+            "m2-reference-slice-quarantine-corrupt",
+            "CORRUPT_INPUT",
+            None,
+            |state_path| {
+                fs::write(state_path, b"{m2-corrupt-json")
+                    .expect("write corrupt-input fixture");
+            },
+        );
+    }
+
+    #[test]
+    fn m2_reference_slice_scratch_export_manifest_and_noop_rollback_preserve_sidecar() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-reference-slice-scratch-export-noop-rollback");
+        let sidecar_before = fs::read(&fixture.state_path).expect("read retained sidecar before export");
+        let database_before = fs::read(&fixture.config.db_path).expect("read DB before export");
+        let source_ref = format!(
+            "workflow-state-sidecar:sha256:{}",
+            sha256_hex_bytes(&sidecar_before)
+        );
+
+        // Reuse the existing confirmed-DB dry-run exporter rather than adding
+        // another M2 export surface.  Its return is retained only in this
+        // scratch test: production callers never receive raw projections.
+        let manifest = crate::workbench_sqlite_exporter::export_confirmed_db_to_json_dry_run(
+            &fixture.config.db_path,
+            &fixture.config.confirmed_db_path,
+            &source_ref,
+        )
+        .expect("confirmed scratch DB export manifest");
+        assert_eq!(manifest.mode, "dry_run");
+        assert_eq!(manifest.status, "planned");
+        assert_eq!(manifest.target_root_ref, source_ref);
+        assert!(!manifest.export_hash.is_empty(), "canonical export hash required");
+        let workflow_projection = manifest
+            .projected_files
+            .iter()
+            .find(|file| file.path == "workflow-state.v0.json")
+            .expect("workflow-state canonical projection");
+        assert!(workflow_projection.canonical);
+        assert!(!workflow_projection.projected_hash.is_empty());
+        assert!(manifest
+            .redaction_manifest
+            .iter()
+            .any(|entry| entry.contains("credential")));
+
+        assert_eq!(
+            fs::read(&fixture.state_path).expect("read sidecar after dry-run export"),
+            sidecar_before,
+            "export must retain the original sidecar byte-for-byte"
+        );
+        assert_eq!(
+            fs::read(&fixture.config.db_path).expect("read DB after dry-run export"),
+            database_before,
+            "export must not mutate the DB-primary source"
+        );
+
+        // The M2 rollback boundary for this no-cutover scratch slice is a
+        // no-op: preserve the source, restart the normal reconciliation, and
+        // prove that neither retained source nor DB becomes a new writer.
+        clear_storage_mode_cache_for_path_for_tests(&fixture.state_path);
+        initialize_for_startup(&fixture.state_path).expect("no-op rollback restart readback");
+        assert_eq!(
+            fs::read(&fixture.state_path).expect("read sidecar after no-op rollback"),
+            sidecar_before,
+            "no-op rollback must retain the original sidecar"
+        );
+        assert_eq!(
+            fs::read(&fixture.config.db_path).expect("read DB after no-op rollback"),
+            database_before,
+            "no-op rollback must not append a new DB mutation"
+        );
+    }
+
+    #[test]
+    fn m2_reference_slice_db_primary_denial_is_audited_and_never_replayed_as_success() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-reference-slice-denial");
+        let before = m2_workflow_state_ledger_counts(&fixture.config);
+        let json_before = fs::read(&fixture.state_path).expect("read pre-denial JSON projection");
+        let expected_revision = primary_repository_for_write(&fixture.state_path)
+            .expect("DB-primary repository gate")
+            .expect("DB-primary repository")
+            .m2_workflow_state_sidecar_revision(&fixture.workflow_id, &fixture.work_item_id)
+            .expect("read authoritative M2 workflow revision");
+        let request = crate::WorkItemStateUpdateRequest {
+            project_root: fixture.project_root.clone(),
+            work_item_id: fixture.work_item_id.clone(),
+            next_state: "failed".to_string(),
+            command_id: Some("m2-reference-slice-denied-command".to_string()),
+            idempotency_key: Some("m2-reference-slice-denied-key".to_string()),
+            expected_revision: Some(expected_revision),
+        };
+
+        let error = crate::update_work_item_state_at(&fixture.state_path, &request)
+            .expect_err("ready_to_dispatch -> failed must be denied by the M2 policy gate");
+        assert!(
+            error.contains("非法工作项状态跳转：ready_to_dispatch -> failed"),
+            "{error}"
+        );
+        assert_eq!(
+            fs::read(&fixture.state_path).expect("read denied JSON projection"),
+            json_before,
+            "denial must not change the business projection"
+        );
+        assert_eq!(
+            m2_workflow_state_ledger_counts(&fixture.config),
+            [
+                before[0] + 1,
+                before[1],
+                before[2] + 1,
+                before[3],
+                before[4]
+            ],
+            "denial may append only its receipt and audit"
+        );
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open M2 fixture DB read only");
+        let command_id = "m2-reference-slice-denied-command";
+        let (receipt_status, audit_action): (String, String) = connection
+            .query_row(
+                "SELECT r.status, a.action
+                 FROM command_receipts r
+                 JOIN audit_records a ON a.command_id = r.command_id
+                 WHERE r.command_id = ?1",
+                [command_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("load denial receipt and audit");
+        assert_eq!(receipt_status, "DENIED");
+        assert_eq!(audit_action, "DENIED");
+
+        let replay_error = crate::update_work_item_state_at(&fixture.state_path, &request)
+            .expect_err("denied receipt must not be returned as a successful replay");
+        assert!(
+            replay_error.contains("m2_existing_receipt_not_successful")
+                && replay_error.contains("status=DENIED"),
+            "{replay_error}"
+        );
+        assert_eq!(
+            fs::read(&fixture.state_path).expect("read denied replay JSON projection"),
+            json_before,
+            "denied replay must still leave the business projection untouched"
+        );
+        assert_eq!(
+            m2_workflow_state_ledger_counts(&fixture.config),
+            [
+                before[0] + 1,
+                before[1],
+                before[2] + 1,
+                before[3],
+                before[4]
+            ],
+            "denied replay must not grow the M2 ledger"
+        );
+    }
+
+    #[test]
+    fn m2_reference_slice_command_identity_allows_new_commands_but_rejects_stale_revisions() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-reference-slice-command-identity");
+        let repository = primary_repository_for_write(&fixture.state_path)
+            .expect("DB-primary repository gate")
+            .expect("DB-primary repository");
+        let initial_revision = repository
+            .m2_workflow_state_sidecar_revision(&fixture.workflow_id, &fixture.work_item_id)
+            .expect("read initial M2 revision");
+        let request = |command_id: &str, idempotency_key: &str, expected_revision: i64, next_state: &str| {
+            crate::WorkItemStateUpdateRequest {
+                project_root: fixture.project_root.clone(),
+                work_item_id: fixture.work_item_id.clone(),
+                next_state: next_state.to_string(),
+                command_id: Some(command_id.to_string()),
+                idempotency_key: Some(idempotency_key.to_string()),
+                expected_revision: Some(expected_revision),
+            }
+        };
+
+        let denied = request(
+            "m2-reference-slice-denied-then-legal",
+            "m2-reference-slice-denied-key",
+            initial_revision,
+            "failed",
+        );
+        let denial = crate::update_work_item_state_at(&fixture.state_path, &denied)
+            .expect_err("the first command is denied without advancing M2 revision");
+        assert!(
+            denial.contains("非法工作项状态跳转：ready_to_dispatch -> failed"),
+            "{denial}"
+        );
+
+        let legal = request(
+            "m2-reference-slice-legal-after-denial",
+            "m2-reference-slice-legal-key",
+            initial_revision,
+            "running",
+        );
+        let legal_result = crate::update_work_item_state_at(&fixture.state_path, &legal)
+            .expect("a distinct legal command must not alias the denied receipt");
+        let response_provenance = legal_result
+            .snapshot
+            .m2_port_provenance
+            .as_ref()
+            .expect("explicit M2 response must expose its versioned port provenance");
+        assert_eq!(
+            response_provenance.repository_port_version,
+            crate::workbench_sqlite_repository::M2_WORKFLOW_STATE_SIDECAR_PORT_VERSION
+        );
+        assert_eq!(
+            response_provenance.schema_version,
+            crate::workbench_sqlite_schema_m2::M2_SCHEMA_VERSION
+        );
+        assert_eq!(response_provenance.caller_mode, "EXPLICIT_M2_REQUEST");
+        let connection = Connection::open_with_flags(
+            &fixture.config.db_path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("open DB provenance ledger");
+        let (receipt_policy_ref, event_trace_context, audit_source_refs):
+            (String, Option<String>, Option<String>) = connection
+            .query_row(
+                "SELECT r.policy_decision_ref, e.trace_context, a.source_refs
+                 FROM command_receipts r
+                 JOIN events e ON e.command_id = r.command_id
+                 JOIN audit_records a ON a.command_id = r.command_id
+                 WHERE r.command_id = ?1",
+                ["m2-reference-slice-legal-after-denial"],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("the committed M2 receipt, event, and audit must share provenance");
+        let expected_trace = format!(
+            "repository_port_version={};schema_version={};caller_mode=EXPLICIT_M2_REQUEST",
+            crate::workbench_sqlite_repository::M2_WORKFLOW_STATE_SIDECAR_PORT_VERSION,
+            crate::workbench_sqlite_schema_m2::M2_SCHEMA_VERSION,
+        );
+        assert_eq!(event_trace_context.as_deref(), Some(expected_trace.as_str()));
+        assert!(receipt_policy_ref.starts_with("policy_gateway:allowed;"));
+        assert!(receipt_policy_ref.ends_with(&expected_trace));
+        assert!(audit_source_refs
+            .as_deref()
+            .is_some_and(|value| value.ends_with(&expected_trace)));
+        drop(connection);
+        let legal_receipt = legal_result.receipt_id.expect("legal receipt");
+
+        let stale = request(
+            "m2-reference-slice-stale-command",
+            "m2-reference-slice-stale-key",
+            initial_revision,
+            "retry_pending",
+        );
+        let stale_error = crate::update_work_item_state_at(&fixture.state_path, &stale)
+            .expect_err("a new command with the prior aggregate revision must fail closed");
+        assert!(stale_error.contains("m2_workflow_state_expected_revision_stale"));
+
+        let revision_after_running = repository
+            .m2_workflow_state_sidecar_revision(&fixture.workflow_id, &fixture.work_item_id)
+            .expect("read revision after running");
+        assert!(revision_after_running > initial_revision);
+        let retry_pending = request(
+            "m2-reference-slice-state-cycle-retry",
+            "m2-reference-slice-state-cycle-retry-key",
+            revision_after_running,
+            "retry_pending",
+        );
+        let retry_result = crate::update_work_item_state_at(&fixture.state_path, &retry_pending)
+            .expect("running -> retry_pending is a distinct legal command");
+        let retry_receipt = retry_result.receipt_id.expect("retry receipt");
+        assert_ne!(legal_receipt, retry_receipt);
+
+        let revision_after_retry = repository
+            .m2_workflow_state_sidecar_revision(&fixture.workflow_id, &fixture.work_item_id)
+            .expect("read revision after retry_pending");
+        let running_again = request(
+            "m2-reference-slice-state-cycle-running",
+            "m2-reference-slice-state-cycle-running-key",
+            revision_after_retry,
+            "running",
+        );
+        let running_again_result = crate::update_work_item_state_at(&fixture.state_path, &running_again)
+            .expect("retry_pending -> running must not collide with the first running command");
+        assert_ne!(
+            running_again_result.receipt_id.as_deref(),
+            Some(legal_receipt.as_str())
+        );
+
+        let state = crate::read_workflow_state_value(&fixture.state_path)
+            .expect("read the projected reference slice");
+        assert_eq!(state["work_items"][0]["state"], "running");
+        let receipt_count: i64 = Connection::open_with_flags(
+            &fixture.config.db_path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("open DB receipt ledger")
+        .query_row("SELECT COUNT(*) FROM command_receipts", [], |row| row.get(0))
+        .expect("count command receipts");
+        assert_eq!(
+            receipt_count, 4,
+            "one denied plus three logical commands; stale preflight must add no receipt"
+        );
     }
 
     #[test]
@@ -2775,7 +5385,48 @@ mod tests {
     }
 
     #[test]
-    fn m5a_blocked_mode_degrades_all_six_product_flows_to_json_once_without_db_writes() {
+    fn m2_t2_dispatch_refuses_a_blocked_db_primary_without_json_fallback() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m2-t2-fail-closed-dispatch");
+        let context = dispatch_context(&fixture);
+        crate::write_prepared_dispatch(&fixture.state_path, context.clone())
+            .expect("prepare the DB-primary dispatch before the injected gate failure");
+        let json_before = fs::read(&fixture.state_path).expect("snapshot JSON before frozen write");
+        let db_before = db_primary_row_counts(&fixture.config);
+        let degradation_audits_before = degradation_audits(&fixture.state_path).len();
+        block_db_primary_writes(
+            &fixture.state_path,
+            "m2_t2_post_commit_gate",
+            "injected post-commit timeout",
+        );
+
+        let error = crate::write_started_dispatch(&fixture.state_path, &context)
+            .expect_err("M2/T2 dispatch must freeze rather than fall back to JSON");
+        assert!(
+            error.contains("db_primary_m2_t2_write_frozen:workflow_node_dispatch_started")
+                && error.contains("m2_t2_post_commit_gate"),
+            "{error}"
+        );
+        assert_eq!(
+            fs::read(&fixture.state_path).expect("read JSON after frozen write"),
+            json_before,
+            "a blocked M2/T2 mutation must not write a JSON projection, backup, or audit"
+        );
+        assert_eq!(
+            db_primary_row_counts(&fixture.config),
+            db_before,
+            "a blocked M2/T2 mutation must not append DB records"
+        );
+        assert_eq!(
+            degradation_audits(&fixture.state_path).len(),
+            degradation_audits_before,
+            "M2/T2 refusal must not record the historical JSON-fallback degradation audit"
+        );
+        clear_storage_mode_cache_for_tests();
+    }
+
+    #[test]
+    fn m5a_blocked_mode_preserves_non_m2_legacy_fallback_flows_once_without_db_writes() {
         let _serial = test_lock().lock().expect("storage mode test lock");
         let fixture = db_primary_fixture("blocked-six-flow-json-fallback");
         let supervisor_runtime = prepare_active_supervisor_run(&fixture);
@@ -2793,30 +5444,13 @@ mod tests {
             "m5a-blocked-six-flow-proposal",
         )
         .expect("proposal flow must fall back to JSON");
-        let authorization = crate::plan_authorization_store::create_authorization(
+        let _authorization = crate::plan_authorization_store::create_authorization(
             &fixture.state_path,
             &authorization_input(&fixture, &proposal.proposal.proposal_id),
             1_700_000_000_501,
             "m5a-blocked-six-flow-authorization",
         )
         .expect("authorization flow must fall back to JSON");
-        let mut context = dispatch_context(&fixture);
-        context.binding_id = "binding:m5a:blocked-six-flow".to_string();
-        context.native_thread_id = "thread:m5a:blocked-six-flow".to_string();
-        context.plan_authorization_id = Some(authorization.authorization.authorization_id.clone());
-        crate::write_prepared_dispatch(&fixture.state_path, context.clone())
-            .expect("prepared dispatch flow must fall back to JSON");
-        crate::write_started_dispatch(&fixture.state_path, &context)
-            .expect("started dispatch flow must fall back to JSON");
-        crate::update_work_item_state_at(
-            &fixture.state_path,
-            &crate::WorkItemStateUpdateRequest {
-                project_root: fixture.project_root.clone(),
-                work_item_id: fixture.work_item_id.clone(),
-                next_state: "ready_for_review".to_string(),
-            },
-        )
-        .expect("work item flow must fall back to JSON");
         let adapter = JsonFallbackSupervisorAdapter {
             executions: Cell::new(0),
         };

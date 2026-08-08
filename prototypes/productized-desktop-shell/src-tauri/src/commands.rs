@@ -8,6 +8,195 @@ fn load_workbench_snapshot(state: tauri::State<'_, AppState>) -> Result<Workbenc
     Ok(build_snapshot(&state, &index, &tasks_text))
 }
 
+#[cfg(test)]
+mod m2a_execution_report_ingress_tests {
+    use super::*;
+
+    fn non_execution_join_request(
+        report_kind: &str,
+        dispatch_id: Option<&str>,
+        attempt_id: Option<&str>,
+        execution_grant_key: Option<(&str, &str)>,
+        report_hash: &str,
+    ) -> WorkerStructuredReportInput {
+        let mut request = serde_json::json!({
+            "project_root": "/tmp/m2a-forged-report",
+            "project_id": "project:m2a-forged-report",
+            "workflow_id": "workflow:m2a-forged-report",
+            "workflow_node_id": "workflow:m2a-forged-report:node:worker",
+            "work_item_id": "work-item:m2a-forged-report",
+            "dispatch_id": dispatch_id,
+            "attempt_id": attempt_id,
+            "authenticated_actor_id": "attacker",
+            "authenticated_project_scope": "project:m2a-forged-report",
+            "report_hash": report_hash,
+            "report_kind": report_kind,
+            "actor_role": "developer",
+            "executed_what": "forged execution",
+            "changed_what": "forged state change",
+            "summary": "forged report",
+            "evidence_refs": ["forged-evidence"],
+            "open_issues": [],
+            "permission_requests": [],
+            "direction_risks": [],
+            "follow_up_suggestions": [],
+            "acceptance_status": "reported_completed",
+            "source_refs": [],
+            "expected_workflow_revision": null
+        });
+        if let Some((key, value)) = execution_grant_key {
+            request[key] = serde_json::Value::String(value.to_string());
+        }
+        serde_json::from_value(request).expect("deserialize non-execution join request")
+    }
+
+    fn assert_non_execution_join_rejected_before_any_persistence(
+        path: &std::path::Path,
+        request: &WorkerStructuredReportInput,
+        before: &[u8],
+    ) {
+        let public_error = record_external_worker_structured_report_at(path, request)
+            .expect_err("public ingress must reject a non-execution join");
+        assert_eq!(
+            public_error,
+            "non_execution_worker_report_execution_join_forbidden"
+        );
+        assert_eq!(
+            std::fs::read(path).expect("read sentinel after public rejection"),
+            before,
+            "public rejection must precede state read, backup, DB/JSON write, and capture"
+        );
+
+        let lower_error = record_worker_structured_report_at(path, request)
+            .expect_err("lower legacy writer must independently reject a non-execution join");
+        assert_eq!(
+            lower_error,
+            "non_execution_worker_report_execution_join_forbidden"
+        );
+        assert_eq!(
+            std::fs::read(path).expect("read sentinel after lower rejection"),
+            before,
+            "lower rejection must precede state read, backup, DB/JSON write, and capture"
+        );
+    }
+
+    #[test]
+    fn forged_execution_report_tauri_ingress_is_rejected_before_any_state_write() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("m2a-forged-report-ingress-{stamp}"));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("workflow-state.v0.json");
+        std::fs::write(&path, b"sentinel-state-must-not-be-read-or-written")
+            .expect("seed sentinel state");
+        let before = std::fs::read(&path).expect("read sentinel before");
+        let request: WorkerStructuredReportInput = serde_json::from_value(serde_json::json!({
+            "project_root": "/tmp/m2a-forged-report",
+            "project_id": "project:m2a-forged-report",
+            "workflow_id": "workflow:m2a-forged-report",
+            "workflow_node_id": "workflow:m2a-forged-report:node:worker",
+            "work_item_id": "work-item:m2a-forged-report",
+            "dispatch_id": "dispatch:m2a-forged-report",
+            "attempt_id": "attempt:m2a-forged-report",
+            "authenticated_actor_id": "attacker",
+            "authenticated_project_scope": "project:m2a-forged-report",
+            "report_hash": "forged",
+            "report_kind": "execution",
+            "actor_role": "developer",
+            "executed_what": "forged execution",
+            "changed_what": "forged state change",
+            "summary": "forged report",
+            "evidence_refs": ["forged-evidence"],
+            "open_issues": [],
+            "permission_requests": [],
+            "direction_risks": [],
+            "follow_up_suggestions": [],
+            "acceptance_status": "reported_completed",
+            "source_refs": [],
+            "expected_workflow_revision": null
+        }))
+        .expect("deserialize forged request");
+
+        let err = record_external_worker_structured_report_at(&path, &request)
+            .expect_err("public Tauri ingress must refuse forged execution report");
+        assert_eq!(
+            err,
+            "execution_worker_report_requires_server_verified_grant_path"
+        );
+        assert_eq!(
+            std::fs::read(&path).expect("read sentinel after"),
+            before,
+            "rejection must occur before the command reads or writes workflow state"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn manual_offline_execution_joins_and_divergent_replays_are_rejected_before_capture() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("m2a-nonexecution-report-ingress-{stamp}"));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("workflow-state.v0.json");
+        std::fs::write(&path, b"sentinel-state-must-not-be-read-or-written")
+            .expect("seed sentinel state");
+        let before = std::fs::read(&path).expect("read sentinel before");
+
+        for request in [
+            non_execution_join_request(
+                "manual",
+                Some("dispatch:grant-backed"),
+                None,
+                None,
+                "sha256:manual-dispatch",
+            ),
+            non_execution_join_request(
+                "offline",
+                None,
+                Some("attempt:forged"),
+                None,
+                "sha256:offline-attempt",
+            ),
+            non_execution_join_request(
+                "manual",
+                None,
+                None,
+                Some(("execution_grant_id", "grant:forged")),
+                "sha256:manual-grant",
+            ),
+            // `grant_id` is an accepted wire alias, so it must be rejected as
+            // an association rather than silently ignored by serde.
+            non_execution_join_request(
+                "offline",
+                None,
+                None,
+                Some(("grant_id", "grant:forged-alias")),
+                "sha256:offline-grant-alias",
+            ),
+            // Same logical forged dispatch, divergent payload: neither the
+            // first submission nor the replay may create a receipt or capture.
+            non_execution_join_request(
+                "manual",
+                Some("dispatch:grant-backed"),
+                None,
+                None,
+                "sha256:manual-dispatch-divergent-replay",
+            ),
+        ] {
+            assert_non_execution_join_rejected_before_any_persistence(&path, &request, &before);
+            let entries = std::fs::read_dir(&dir)
+                .expect("list temp dir")
+                .count();
+            assert_eq!(entries, 1, "rejection must not create backup, DB, or sidecar files");
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
 #[tauri::command]
 fn query_workbench_page_read_model(
     request: page_read_model::PageReadModelQueryInput,
@@ -4697,7 +4886,7 @@ fn record_worker_structured_report(
     request: WorkerStructuredReportInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowStateMutationResult, String> {
-    let result = record_worker_structured_report_at(&state.workflow_state_path, &request)?;
+    let result = record_external_worker_structured_report_at(&state.workflow_state_path, &request)?;
     let captured_at = unix_timestamp_string();
     let ctx = memory_daily_loop::MemoryDailyLoopContext {
         project_root: &request.project_root,
@@ -4715,6 +4904,25 @@ fn record_worker_structured_report(
         "wr",
     );
     Ok(result)
+}
+
+/// The Tauri surface is an untrusted client ingress.  It may archive a
+/// manual/offline observation, but it cannot assert that an execution report
+/// came from a server-owned dispatch.  Real execution reports enter only via
+/// `worker_report::consume_worker_report_after_completion`, which reloads and
+/// verifies the persisted grant ledger before calling the shared writer.
+fn record_external_worker_structured_report_at(
+    path: &std::path::Path,
+    request: &WorkerStructuredReportInput,
+) -> Result<WorkflowStateMutationResult, String> {
+    reject_non_execution_worker_report_execution_join(request)?;
+    match request.report_kind.trim() {
+        "manual" | "offline" => record_worker_structured_report_at(path, request),
+        "execution" => Err(
+            "execution_worker_report_requires_server_verified_grant_path".to_string(),
+        ),
+        _ => Err("worker_structured_report_kind_invalid".to_string()),
+    }
 }
 
 #[tauri::command]
@@ -5774,6 +5982,9 @@ fn execute_experiment_node_dispatch_at(
             project_root: project_root.to_string(),
             work_item_id: work_item_id.clone(),
             next_state: "ready_to_dispatch".to_string(),
+            command_id: None,
+            idempotency_key: None,
+            expected_revision: None,
         },
     )?;
 
@@ -5895,7 +6106,30 @@ fn execute_authorized_project_workflow_node_at(
         readback_db_path,
         runner,
         request,
-        Some((authorization_id, allowed_write)),
+        Some((authorization_id, allowed_write, None)),
+    )
+}
+
+/// The director must consume the exact prepared dispatch it created.  Looking
+/// up the "latest matching" prepared record leaves a TOCTOU window in which a
+/// later binding can accidentally inherit an earlier authorization check.
+fn execute_authorized_project_workflow_node_from_prepared_at(
+    path: &Path,
+    index: &Value,
+    readback_db_path: &Path,
+    runner: &dyn CodexResumeRunner,
+    request: &ProjectWorkflowNodeRunRequest,
+    authorization_id: &str,
+    allowed_write: &[String],
+    prepared_dispatch_id: &str,
+) -> Result<WorkflowNodeDispatchResult, String> {
+    execute_project_workflow_node_with_authorization_at(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        request,
+        Some((authorization_id, allowed_write, Some(prepared_dispatch_id))),
     )
 }
 
@@ -5905,7 +6139,7 @@ fn execute_project_workflow_node_with_authorization_at(
     readback_db_path: &Path,
     runner: &dyn CodexResumeRunner,
     request: &ProjectWorkflowNodeRunRequest,
-    supervisor_authorization: Option<(&str, &[String])>,
+    supervisor_authorization: Option<(&str, &[String], Option<&str>)>,
 ) -> Result<WorkflowNodeDispatchResult, String> {
     let project = find_index_project(index, &request.project_root)
         .ok_or_else(|| "项目不在当前索引内，已拒绝运行项目节点".to_string())?;
@@ -5925,11 +6159,11 @@ fn execute_project_workflow_node_with_authorization_at(
                 .filter(|prefix| !prefix.is_empty())
         })
         .unwrap_or_else(|| default_workflow_id(&request.project_root));
-    if let Some((_, allowed_write)) = supervisor_authorization {
+    if let Some((_, allowed_write, _)) = supervisor_authorization {
         require_supervisor_mario_authorization_write_shape(&request.project_root, allowed_write)?;
     }
     let prepared_authorization = supervisor_authorization
-        .map(|(authorization_id, allowed_write)| {
+        .map(|(authorization_id, allowed_write, prepared_dispatch_id)| {
             authorized_prepared_dispatch_for_execution(
                 path,
                 &request.project_root,
@@ -5938,6 +6172,7 @@ fn execute_project_workflow_node_with_authorization_at(
                 &request.work_item_id,
                 authorization_id,
                 allowed_write,
+                prepared_dispatch_id,
             )
         })
         .transpose()?;
@@ -6012,7 +6247,10 @@ fn execute_project_workflow_node_with_authorization_at(
         .filter(|s| optional_string_from(s, "mode").as_deref() == Some("resume"))
         .and_then(|s| optional_string_from(s, "thread_id"))
         .filter(|t| !t.trim().is_empty());
-    let thread_id = if supervisor_authorization.is_some() {
+    let m2_execution_grant_required = prepared_authorization
+        .as_ref()
+        .is_some_and(|prepared| prepared.m2_execution_grant_required);
+    let thread_id = if m2_execution_grant_required {
         exact_work_item_thread.ok_or_else(|| {
             "主管授权派发缺少当前 work item 的精确 active 会话绑定；拒绝回退旧 node 会话"
                 .to_string()
@@ -6308,6 +6546,7 @@ fn authorized_prepared_dispatch_for_execution(
     work_item_id: &str,
     authorization_id: &str,
     allowed_write: &[String],
+    expected_prepared_dispatch_id: Option<&str>,
 ) -> Result<PreparedDispatchAuthorization, String> {
     let value = read_workflow_state_value(path)?;
     let work_item = find_work_item(&value, workflow_id, work_item_id)
@@ -6341,6 +6580,9 @@ fn authorized_prepared_dispatch_for_execution(
                         == Some(work_item_id)
                     && optional_string_from(dispatch, "plan_authorization_id").as_deref()
                         == Some(authorization_id)
+                    && expected_prepared_dispatch_id.is_none_or(|expected| {
+                        optional_string_from(dispatch, "dispatch_id").as_deref() == Some(expected)
+                    })
             })
         })
         .ok_or_else(|| {
@@ -6362,9 +6604,90 @@ fn authorized_prepared_dispatch_for_execution(
     {
         return Err("prepared dispatch 的授权检查未完整放行，已拒绝启动 worker".to_string());
     }
+    let m2_execution_grant_required = match optional_string_from(
+        dispatch,
+        "execution_grant_envelope_schema",
+    ) {
+        None => false,
+        Some(schema) if schema == "execution-grant-ledger.v2" => true,
+        Some(_) => {
+            return Err(
+                "已授权 prepared dispatch 的 execution grant schema 不受支持，已拒绝启动 worker"
+                    .to_string(),
+            )
+        }
+    };
+    let (authorization_binding_id, authorization_native_thread_id, thread_binding_deferred) =
+        if m2_execution_grant_required {
+            let thread_binding_deferred = dispatch
+                .get("thread_binding_deferred")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| {
+                    "已授权 prepared dispatch 缺延迟绑定声明，已拒绝启动 worker".to_string()
+                })?;
+            let authorization_binding_schema = optional_string_from(
+                dispatch,
+                "authorization_binding_snapshot_schema",
+            )
+            .ok_or_else(|| {
+                "已授权 prepared dispatch 缺授权绑定快照 schema，已拒绝启动 worker".to_string()
+            })?;
+            if authorization_binding_schema != "c4-prepared-binding-snapshot.v1" {
+                return Err("已授权 prepared dispatch 的授权绑定快照 schema 不受支持，已拒绝启动 worker".to_string());
+            }
+            let authorization_binding_mode = optional_string_from(dispatch, "authorization_binding_mode")
+                .ok_or_else(|| {
+                    "已授权 prepared dispatch 缺授权绑定模式，已拒绝启动 worker".to_string()
+                })?;
+            let expected_binding_mode = if thread_binding_deferred {
+                "deferred"
+            } else {
+                "exact"
+            };
+            if authorization_binding_mode != expected_binding_mode {
+                return Err("已授权 prepared dispatch 的授权绑定模式与延迟声明不一致，已拒绝启动 worker".to_string());
+            }
+            let authorization_binding_id = dispatch
+                .get("authorization_binding_id")
+                .ok_or_else(|| {
+                    "已授权 prepared dispatch 缺授权绑定快照，已拒绝启动 worker".to_string()
+                })?;
+            let authorization_native_thread_id = dispatch
+                .get("authorization_native_thread_id")
+                .ok_or_else(|| {
+                    "已授权 prepared dispatch 缺授权主体快照，已拒绝启动 worker".to_string()
+                })?;
+            if thread_binding_deferred {
+                if !authorization_binding_id.is_null() || !authorization_native_thread_id.is_null() {
+                    return Err(
+                        "延迟绑定 prepared dispatch 的授权快照不应预置主体，已拒绝启动 worker"
+                            .to_string(),
+                    );
+                }
+            } else if optional_string_from(dispatch, "authorization_binding_id").is_none()
+                || optional_string_from(dispatch, "authorization_native_thread_id").is_none()
+            {
+                return Err(
+                    "精确绑定 prepared dispatch 缺完整授权主体快照，已拒绝启动 worker".to_string(),
+                );
+            }
+            (
+                optional_string_from(dispatch, "authorization_binding_id"),
+                optional_string_from(dispatch, "authorization_native_thread_id"),
+                thread_binding_deferred,
+            )
+        } else {
+            (None, None, false)
+        };
     Ok(PreparedDispatchAuthorization {
         authorization_id: authorization_id.to_string(),
         authorization_check,
+        prepared_dispatch_id: optional_string_from(dispatch, "dispatch_id")
+            .ok_or_else(|| "已授权 prepared dispatch 缺 dispatch_id，已拒绝启动 worker".to_string())?,
+        authorization_binding_id,
+        authorization_native_thread_id,
+        thread_binding_deferred,
+        m2_execution_grant_required,
     })
 }
 
@@ -6766,6 +7089,7 @@ fn submit_project_workflow_draft_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })

@@ -5,7 +5,6 @@ use crate::m2_dto::*;
 use crate::m2_ports::*;
 use rusqlite::Connection;
 use std::fmt;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Isolated App Acceptance Implementation
 pub struct IsolatedAppAcceptanceImpl {
@@ -159,11 +158,9 @@ impl IsolatedAppAcceptanceImpl {
         self.checkpoint_repo.upsert(connection, &checkpoint)?;
 
         // 3. Recovery: verify checkpoint is consistent
-        let recovered_checkpoint = self.checkpoint_repo.get(
-            connection,
-            "workflow_projector",
-            "1.0.0",
-        )?;
+        let recovered_checkpoint =
+            self.checkpoint_repo
+                .get(connection, "workflow_projector", "1.0.0")?;
 
         match recovered_checkpoint {
             Some(checkpoint) => {
@@ -213,14 +210,13 @@ impl IsolatedAppAcceptanceImpl {
             updated_at: generate_timestamp(),
         };
 
-        self.checkpoint_repo.upsert(connection, &failed_checkpoint)?;
+        self.checkpoint_repo
+            .upsert(connection, &failed_checkpoint)?;
 
         // 3. Recovery: verify error receipt is recorded
-        let recovered_checkpoint = self.checkpoint_repo.get(
-            connection,
-            "workflow_projector",
-            "1.0.0",
-        )?;
+        let recovered_checkpoint =
+            self.checkpoint_repo
+                .get(connection, "workflow_projector", "1.0.0")?;
 
         match recovered_checkpoint {
             Some(checkpoint) => {
@@ -262,7 +258,9 @@ impl IsolatedAppAcceptanceImpl {
         self.quarantine_repo.create(connection, &quarantine)?;
 
         // 2. Verify quarantine exists
-        let exists = self.quarantine_repo.exists(connection, &quarantine.quarantine_id)?;
+        let exists = self
+            .quarantine_repo
+            .exists(connection, &quarantine.quarantine_id)?;
 
         if !exists {
             return Err("quarantine_not_created".to_string());
@@ -277,7 +275,9 @@ impl IsolatedAppAcceptanceImpl {
         )?;
 
         // 4. Verify resolution
-        let resolved = self.quarantine_repo.get_by_id(connection, &quarantine.quarantine_id)?;
+        let resolved = self
+            .quarantine_repo
+            .get_by_id(connection, &quarantine.quarantine_id)?;
 
         match resolved {
             Some(quarantine) => {
@@ -380,39 +380,14 @@ pub enum QuarantineHandlingStatus {
     Failed,
 }
 
-/// Generate UUID v4 (simplified)
+/// Generate UUIDv7 through the narrow M2 UTC/identifier helper.
 fn generate_uuid() -> String {
-    let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes).expect("failed to generate random bytes");
-    // Set version 4 and variant bits
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    format!(
-        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-        bytes[0], bytes[1], bytes[2], bytes[3],
-        bytes[4], bytes[5],
-        bytes[6], bytes[7],
-        bytes[8], bytes[9],
-        bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
-    )
+    crate::m2_clock::uuid_v7()
 }
 
 /// Generate ISO 8601 timestamp
 fn generate_timestamp() -> String {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards");
-    let secs = duration.as_secs();
-    let nanos = duration.subsec_nanos();
-
-    // Simple ISO 8601 format
-    format!(
-        "2026-08-03T{:02}:{:02}:{:02}.{:09}Z",
-        (secs / 3600) % 24,
-        (secs / 60) % 60,
-        secs % 60,
-        nanos
-    )
+    crate::m2_clock::utc_now_rfc3339()
 }
 
 /// SHA-256 hash helper
@@ -484,7 +459,10 @@ mod tests {
         };
 
         assert_eq!(result.status, ProjectionFailureRecoveryStatus::Recovered);
-        assert_eq!(result.error_receipt_ref, Some("error_receipt_789".to_string()));
+        assert_eq!(
+            result.error_receipt_ref,
+            Some("error_receipt_789".to_string())
+        );
     }
 
     #[test]
@@ -497,6 +475,9 @@ mod tests {
         };
 
         assert_eq!(result.status, QuarantineHandlingStatus::Resolved);
-        assert_eq!(result.resolution_state, QuarantineResolutionState::Reclassified);
+        assert_eq!(
+            result.resolution_state,
+            QuarantineResolutionState::Reclassified
+        );
     }
 }

@@ -86,11 +86,6 @@
       ],
       "tests": [
         {
-          "path": "scripts/harness/workbench-shape-gate.retired-style-family.selftest.js",
-          "symbol": "retired style family selftest",
-          "kind": "harness selftest"
-        },
-        {
           "path": "prototypes/productized-desktop-shell/tests/jiaoban-approval-seal-and-flag-note.test.tsx",
           "symbol": "jiaoban approval seal and flag note",
           "kind": "frontend test"

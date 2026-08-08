@@ -2614,10 +2614,11 @@ fn worker_report_input(
         work_item_id: work_item_id.to_string(),
         dispatch_id: None,
         // SYN-FND-004B: 填现成的 attempt.attempt_id——2629-2631 就在取它
-        attempt_id: phase_a
-            .product_command_attempt
-            .as_ref()
-            .map(|attempt| attempt.attempt_id.clone()),
+        // Offline Phase-A is not an execution report.  Preserve the evidence
+        // reference below, but never give the legacy report writer an execution
+        // join that could be mistaken for a server-owned completion.
+        attempt_id: None,
+        execution_grant_id: None,
         // SYN-FND-004B: Phase A no-op，无真实执行者；用占位标识
         authenticated_actor_id: "phase-a-noop".to_string(),
         authenticated_project_scope: project_id_value.to_string(),

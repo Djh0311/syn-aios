@@ -29,6 +29,26 @@ pub(crate) fn primary_repository_for_write(
     }
 }
 
+/// M2/T2 recovery paths deliberately do not inherit the historical
+/// `BlockedJsonOnly` degradation behavior. Once a DB-primary projection gate
+/// has failed, accepting a new workflow mutation through JSON would create a
+/// second writer while the canonical DB is frozen. These paths must stop
+/// before they create a backup, audit, receipt, dispatch, or business-state
+/// transition. JSON-only installations remain supported as an explicit mode.
+pub(crate) fn primary_repository_for_m2_t2_fail_closed_write(
+    workflow_state_path: &Path,
+    surface: &str,
+) -> Result<Option<WorkbenchSqliteRepository>, String> {
+    match workflow_state_write_route(workflow_state_path)? {
+        WorkflowStateWriteRoute::DbPrimary(repository) => Ok(Some(repository)),
+        WorkflowStateWriteRoute::JsonOnly => Ok(None),
+        WorkflowStateWriteRoute::BlockedJsonOnly(degradation) => Err(format!(
+            "db_primary_m2_t2_write_frozen:{surface}:{}",
+            degradation.reason
+        )),
+    }
+}
+
 pub(crate) fn workflow_state_write_route(
     workflow_state_path: &Path,
 ) -> Result<WorkflowStateWriteRoute, String> {

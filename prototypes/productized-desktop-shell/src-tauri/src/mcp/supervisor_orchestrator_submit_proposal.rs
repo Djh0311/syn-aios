@@ -83,7 +83,9 @@ pub(super) fn input_schema() -> Value {
             "write_roots": string_array.clone(),
             "target_files": string_array.clone(),
             "tools": string_array.clone(),
-            "checks": string_array.clone()
+            "checks": string_array.clone(),
+            "max_worker_dispatches": {"type": "integer", "minimum": 1, "maximum": 32},
+            "max_runtime_minutes": {"type": "integer", "minimum": 1, "maximum": 1440}
         },
         "required": ["requires_write", "write_roots", "target_files", "tools", "checks"],
         "additionalProperties": false

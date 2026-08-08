@@ -314,7 +314,10 @@ mod tests {
     fn command_receipt_status_display() {
         assert_eq!(CommandReceiptStatus::Denied.to_string(), "DENIED");
         assert_eq!(CommandReceiptStatus::Committed.to_string(), "COMMITTED");
-        assert_eq!(CommandReceiptStatus::ExternalPending.to_string(), "EXTERNAL_PENDING");
+        assert_eq!(
+            CommandReceiptStatus::ExternalPending.to_string(),
+            "EXTERNAL_PENDING"
+        );
     }
 
     #[test]
@@ -349,7 +352,10 @@ mod tests {
     #[test]
     fn quarantine_resolution_state_display() {
         assert_eq!(QuarantineResolutionState::Pending.to_string(), "PENDING");
-        assert_eq!(QuarantineResolutionState::Reclassified.to_string(), "RECLASSIFIED");
+        assert_eq!(
+            QuarantineResolutionState::Reclassified.to_string(),
+            "RECLASSIFIED"
+        );
         assert_eq!(QuarantineResolutionState::Rebuilt.to_string(), "REBUILT");
     }
 }

@@ -5,7 +5,6 @@ use crate::m2_dto::*;
 use crate::m2_ports::*;
 use rusqlite::Connection;
 use std::fmt;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Workflow State Aggregate
 /// Domain owner: project_workflow
@@ -104,6 +103,10 @@ pub struct UpdateWorkItemStateResult {
     pub event: WorkbenchEventEnvelopeDto,
     pub audit: AuditRecordDto,
     pub snapshot: Option<CurrentSnapshotDto>,
+    /// The one narrowly-scoped post-commit projection effect for the M2
+    /// workflow-state reference slice.  Denials and idempotent replays must
+    /// not manufacture another effect.
+    pub outbox_item: Option<OutboxItemDto>,
 }
 
 /// Workflow State Aggregate Repository
@@ -180,7 +183,8 @@ impl WorkflowStateAggregateRoot {
         }
 
         // 3. Get current aggregate state
-        let mut aggregate = self.repository
+        let mut aggregate = self
+            .repository
             .get(connection, &command.project_id, &command.workflow_id)?
             .unwrap_or_else(|| WorkflowStateAggregate {
                 project_id: command.project_id.clone(),
@@ -204,7 +208,10 @@ impl WorkflowStateAggregateRoot {
         }
 
         // 5. Find work item
-        let work_item = aggregate.work_items.iter_mut().find(|wi| wi.work_item_id == command.work_item_id);
+        let work_item = aggregate
+            .work_items
+            .iter_mut()
+            .find(|wi| wi.work_item_id == command.work_item_id);
 
         let work_item = match work_item {
             Some(wi) => wi,
@@ -241,7 +248,10 @@ impl WorkflowStateAggregateRoot {
             idempotency_key: command.idempotency_key.clone(),
             request_hash: sha256_hex(&format!(
                 "{}:{}:{}:{}",
-                command.command_id, command.idempotency_key, command.work_item_id, aggregate.revision
+                command.command_id,
+                command.idempotency_key,
+                command.work_item_id,
+                aggregate.revision
             )),
             actor_id: command.actor_id.clone(),
             scope_ref: command.scope_ref.clone(),
@@ -308,10 +318,7 @@ impl WorkflowStateAggregateRoot {
             reason_code: Some("policy_allowed".to_string()),
             actor_id: command.actor_id.clone(),
             scope_ref: command.scope_ref.clone(),
-            subject_ref: Some(format!(
-                "work_item:{}",
-                command.work_item_id
-            )),
+            subject_ref: Some(format!("work_item:{}", command.work_item_id)),
             command_id: Some(command.command_id.clone()),
             correlation_id: Some(command.command_id.clone()),
             occurred_at: generate_timestamp(),
@@ -354,6 +361,7 @@ impl WorkflowStateAggregateRoot {
             event,
             audit,
             snapshot: Some(snapshot),
+            outbox_item: None,
         })
     }
 }
@@ -366,46 +374,21 @@ fn sha256_hex(input: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-/// Generate UUID v4 (simplified)
+/// Generate UUIDv7 through the narrow M2 UTC/identifier helper.
 fn generate_uuid() -> String {
-    let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes).expect("failed to generate random bytes");
-    // Set version 4 and variant bits
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    format!(
-        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-        bytes[0], bytes[1], bytes[2], bytes[3],
-        bytes[4], bytes[5],
-        bytes[6], bytes[7],
-        bytes[8], bytes[9],
-        bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
-    )
+    crate::m2_clock::uuid_v7()
 }
 
 /// Generate ISO 8601 timestamp
 fn generate_timestamp() -> String {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards");
-    let secs = duration.as_secs();
-    let nanos = duration.subsec_nanos();
-
-    // Simple ISO 8601 format
-    format!(
-        "2026-08-03T{:02}:{:02}:{:02}.{:09}Z",
-        (secs / 3600) % 24,
-        (secs / 60) % 60,
-        secs % 60,
-        nanos
-    )
+    crate::m2_clock::utc_now_rfc3339()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use std::cell::RefCell;
+    use std::collections::HashMap;
 
     /// Mock WorkflowStateRepository for testing
     struct MockWorkflowStateRepository {

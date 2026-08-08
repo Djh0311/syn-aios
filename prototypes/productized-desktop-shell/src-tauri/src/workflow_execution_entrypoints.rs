@@ -5,6 +5,16 @@ fn inspect_workflow_node_dispatch_authorization(
     path: &Path,
     context: &WorkflowNodeDispatchContext,
 ) -> Result<AutoDispatchGuardResult, String> {
+    // The authorization inspection itself records an audit receipt.  In
+    // DB-primary mode that must not become an early JSON-side write after a
+    // post-commit projection failure: the caller has not yet reserved a
+    // prepared dispatch, but a new authorization audit would still create a
+    // second writer.  Keep the check at the shared production entrypoint so
+    // prepare and supervisor follow-up cannot bypass it.
+    let _ = crate::workbench_sqlite_storage_mode::primary_repository_for_m2_t2_fail_closed_write(
+        path,
+        "workflow_node_dispatch_authorization_inspect",
+    )?;
     let mut requested_read_roots = Vec::new();
     let mut requested_write_roots = Vec::new();
     let mut requested_tools = Vec::new();
@@ -330,7 +340,10 @@ fn write_prepared_dispatch(
     context: WorkflowNodeDispatchContext,
 ) -> Result<WorkflowNodeDispatchResult, String> {
     if let Some(repository) =
-        crate::workbench_sqlite_storage_mode::primary_repository_for_write(path)?
+        crate::workbench_sqlite_storage_mode::primary_repository_for_m2_t2_fail_closed_write(
+            path,
+            "workflow_node_dispatch_prepared",
+        )?
     {
         return write_prepared_dispatch_db_primary(path, context, &repository);
     }
@@ -490,12 +503,252 @@ fn write_prepared_dispatch_db_primary(
     )
 }
 
+/// Mint only when this invocation inherited an exact, already-prepared M2
+/// execution-grant envelope.  The frozen M1 authorization shape has neither
+/// quota and remains a no-grant dispatch; it cannot be silently upgraded into
+/// a default grant.  A partial envelope is an invalid M2 authorization.
+fn mint_execution_grant_for_started_dispatch(
+    path: &Path,
+    context: &WorkflowNodeDispatchContext,
+    dispatch_id: &str,
+    timestamp_ms: i64,
+) -> Result<
+    Option<(
+        crate::mcp::execution_grant::ExecutionGrant,
+        crate::mcp::execution_grant::ExecutionGrantAuthorizationSource,
+    )>,
+    String,
+> {
+    let Some(authorization_id) = context.plan_authorization_id.as_deref() else {
+        return Ok(None);
+    };
+    let source = crate::plan_authorization_store::load_active_execution_grant_source(
+        path,
+        authorization_id,
+        &context.project_id,
+        &context.workflow_id,
+        timestamp_ms,
+    )?;
+    // M1 authorization records already had optional quota metadata.  It is
+    // not an opt-in to M2: the fresh canonical source must carry the explicit
+    // server capability as well, so a caller cannot upgrade a legacy record
+    // by changing only a prepared JSON projection.
+    if !source
+        .allowed_tools
+        .iter()
+        .any(|capability| {
+            capability == crate::mcp::execution_grant::EXECUTION_GRANT_LEDGER_V2_CAPABILITY
+        })
+    {
+        return Ok(None);
+    }
+    match (source.max_worker_dispatches, source.max_runtime_minutes) {
+        (None, None) => return Ok(None),
+        (Some(_), Some(_)) => {}
+        _ => return Err("execution_grant_quota_envelope_incomplete".to_string()),
+    }
+    let prepared_dispatch_id = context
+        .prepared_dispatch_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "execution_grant_prepared_dispatch_reference_missing".to_string())?;
+    let authorization_check = context
+        .authorization_check
+        .as_ref()
+        .ok_or_else(|| "execution_grant_authorization_check_missing".to_string())?;
+    if authorization_check.status != "authorized"
+        || authorization_check.authorization_id.as_deref() != Some(authorization_id)
+        || authorization_check.required_user_confirmation
+        || authorization_check.required_global_review
+    {
+        return Err("execution_grant_authorization_check_rejected".to_string());
+    }
+    let actor_role = role_id_from_node_id(&context.node_id);
+    if (!source.allowed_agent_ids.is_empty()
+        && !source
+            .allowed_agent_ids
+            .iter()
+            .any(|agent| agent == &context.native_thread_id))
+        || !source
+            .allowed_role_ids
+            .iter()
+            .any(|role| role == &actor_role)
+    {
+        return Err("execution_grant_current_binding_subject_or_role_rejected".to_string());
+    }
+    let ttl_seconds = u64::try_from(
+        source
+            .max_runtime_minutes
+            .ok_or_else(|| "execution_grant_runtime_quota_missing_or_invalid".to_string())?,
+    )
+    .map_err(|_| "execution_grant_runtime_quota_invalid".to_string())?
+    .checked_mul(60)
+    .ok_or_else(|| "execution_grant_runtime_quota_overflow".to_string())?;
+    let grant = crate::mcp::execution_grant::mint_dispatch_grant(
+        &source,
+        &crate::mcp::execution_grant::ExecutionGrantBinding {
+            dispatch_id: dispatch_id.to_string(),
+            project_id: context.project_id.clone(),
+            workflow_id: context.workflow_id.clone(),
+            workflow_node_id: context.node_id.clone(),
+            work_item_id: context.work_item_id.clone(),
+            binding_id: context.binding_id.clone(),
+            principal: context.native_thread_id.clone(),
+            prepared_dispatch_id: prepared_dispatch_id.to_string(),
+        },
+        ttl_seconds,
+    )?;
+    Ok(Some((grant, source)))
+}
+
+fn execution_grant_dispatch_value(
+    grant: Option<&crate::mcp::execution_grant::ExecutionGrant>,
+) -> Result<Value, String> {
+    match grant {
+        Some(grant) => serde_json::to_value(grant)
+            .map_err(|error| format!("execution_grant_serialize_failed:{error}")),
+        None => Ok(Value::Null),
+    }
+}
+
+fn validate_current_execution_grant_binding(
+    value: &Value,
+    context: &WorkflowNodeDispatchContext,
+) -> Result<(), String> {
+    if context.plan_authorization_id.is_none() {
+        return Ok(());
+    }
+    let binding_index = workflow_node_session_binding_index(
+        value,
+        &context.workflow_id,
+        &context.node_id,
+        Some(&context.work_item_id),
+    )
+    .ok_or_else(|| "execution_grant_exact_work_item_binding_required".to_string())?;
+    let binding = value
+        .get("workflow_node_session_bindings")
+        .and_then(Value::as_array)
+        .and_then(|bindings| bindings.get(binding_index))
+        .ok_or_else(|| "execution_grant_exact_work_item_binding_missing".to_string())?;
+    if optional_string_from(binding, "binding_id").as_deref() != Some(context.binding_id.as_str())
+        || optional_string_from(binding, "native_thread_id").as_deref()
+            != Some(context.native_thread_id.as_str())
+        || optional_string_from(binding, "lifecycle").as_deref() != Some("active")
+    {
+        return Err("execution_grant_exact_work_item_binding_stale".to_string());
+    }
+    Ok(())
+}
+
+fn reserve_prepared_dispatch_in_value(
+    value: &mut Value,
+    context: &WorkflowNodeDispatchContext,
+    dispatch_id: &str,
+    grant: &crate::mcp::execution_grant::ExecutionGrant,
+    source: &crate::mcp::execution_grant::ExecutionGrantAuthorizationSource,
+    timestamp_ms: i64,
+) -> Result<(Value, String), String> {
+    let authorization_id = context
+        .plan_authorization_id
+        .as_deref()
+        .ok_or_else(|| "execution_grant_authorization_reference_missing".to_string())?;
+    let prepared_dispatch_id = context
+        .prepared_dispatch_id
+        .as_deref()
+        .ok_or_else(|| "execution_grant_prepared_dispatch_reference_missing".to_string())?;
+    let max_dispatches = source
+        .max_worker_dispatches
+        .filter(|value| *value > 0)
+        .ok_or_else(|| "execution_grant_worker_quota_missing_or_invalid".to_string())?;
+    let reserved_count = value
+        .get("workflow_node_dispatches")
+        .and_then(Value::as_array)
+        .map(|dispatches| {
+            dispatches
+                .iter()
+                .filter(|candidate| {
+                    optional_string_from(candidate, "plan_authorization_id").as_deref()
+                        == Some(authorization_id)
+                        && candidate
+                            .get("execution_grant")
+                            .is_some_and(|execution_grant| !execution_grant.is_null())
+                })
+                .count()
+        })
+        .unwrap_or_default();
+    if i64::try_from(reserved_count).unwrap_or(i64::MAX) >= max_dispatches {
+        return Err("execution_grant_worker_quota_exhausted".to_string());
+    }
+    let dispatches = array_mut(value, "workflow_node_dispatches")?;
+    let prepared = dispatches
+        .iter_mut()
+        .find(|candidate| {
+            optional_string_from(candidate, "dispatch_id").as_deref() == Some(prepared_dispatch_id)
+        })
+        .ok_or_else(|| "execution_grant_prepared_dispatch_not_found".to_string())?;
+    if optional_string_from(prepared, "state").as_deref() != Some("prepared")
+        || optional_string_from(prepared, "plan_authorization_id").as_deref()
+            != Some(authorization_id)
+        || optional_string_from(prepared, "workflow_id").as_deref()
+            != Some(context.workflow_id.as_str())
+        || optional_string_from(prepared, "node_id").as_deref() != Some(context.node_id.as_str())
+        || optional_string_from(prepared, "work_item_id").as_deref()
+            != Some(context.work_item_id.as_str())
+    {
+        return Err("execution_grant_prepared_dispatch_not_reservable".to_string());
+    }
+    let before_hash =
+        crate::utils::hash::sha256_hex(&serde_json::to_string(prepared).map_err(|error| {
+            format!("execution_grant_prepared_dispatch_serialize_failed:{error}")
+        })?);
+    prepared["state"] = Value::String("consumed".to_string());
+    prepared["consumed_by_dispatch_id"] = Value::String(dispatch_id.to_string());
+    prepared["consumed_execution_grant_id"] = Value::String(grant.grant_id.0.clone());
+    prepared["consumed_execution_attempt_id"] = Value::String(
+        grant
+            .attempt_id
+            .clone()
+            .ok_or_else(|| "execution_grant_attempt_id_missing".to_string())?,
+    );
+    prepared["consumed_authorization_source_hash"] =
+        Value::String(source.authorization_source_hash.clone());
+    prepared["consumed_at_ms"] = Value::Number(timestamp_ms.into());
+    Ok((prepared.clone(), before_hash))
+}
+
+fn execution_grant_attempt_value(
+    context: &WorkflowNodeDispatchContext,
+    dispatch_id: &str,
+    attempt_id: &str,
+    timestamp: &str,
+) -> Value {
+    json!({
+      "attempt_id": attempt_id,
+      "project_id": context.project_id,
+      "workflow_id": context.workflow_id,
+      "work_item_id": context.work_item_id,
+      "dispatch_id": dispatch_id,
+      "attempt_no": 1,
+      "state": "running",
+      "started_at": timestamp,
+      "ended_at": Value::Null,
+      "failure_reason": Value::Null,
+      "retry_scheduled_at": Value::Null,
+      "timed_out_at": Value::Null,
+      "cancel_requested_at": Value::Null,
+      "warnings": ["server_owned_execution_grant_attempt"]
+    })
+}
+
 fn write_started_dispatch(
     path: &Path,
     context: &WorkflowNodeDispatchContext,
 ) -> Result<WorkflowNodeDispatchRecord, String> {
     if let Some(repository) =
-        crate::workbench_sqlite_storage_mode::primary_repository_for_write(path)?
+        crate::workbench_sqlite_storage_mode::primary_repository_for_m2_t2_fail_closed_write(
+            path,
+            "workflow_node_dispatch_started",
+        )?
     {
         return write_started_dispatch_db_primary(path, context, &repository);
     }
@@ -503,13 +756,24 @@ fn write_started_dispatch(
     let timestamp_ms = unix_timestamp_ms();
     let mut value = read_workflow_state_value(path)?;
     ensure_workflow_node_dispatches_array(&mut value)?;
-    let _backup = backup_workflow_state_file(path, &timestamp)?;
     let work_item_index = find_work_item_index(&value, &context.workflow_id, &context.work_item_id)
         .ok_or_else(|| "当前 workflow 下找不到该 work item；无法执行节点派发".to_string())?;
     let before_state = optional_string_from(&value["work_items"][work_item_index], "state")
         .unwrap_or_else(|| "unknown".to_string());
     control_core::validate_dispatch_start(&before_state)?;
+    // Re-read the exact work-item binding from the state we are about to
+    // mutate.  The C4 authorization check is only a prepare-time fact; it
+    // must not authorize a later rebind through this execution path.
     let dispatch_id = next_workflow_node_dispatch_id(context, &timestamp);
+    let execution_grant_material =
+        mint_execution_grant_for_started_dispatch(path, context, &dispatch_id, timestamp_ms)?;
+    if execution_grant_material.is_some() {
+        validate_current_execution_grant_binding(&value, context)?;
+    }
+    let execution_grant = execution_grant_material.as_ref().map(|(grant, _)| grant);
+    let execution_grant_id = execution_grant.map(|grant| grant.grant_id.0.clone());
+    let execution_attempt_id = execution_grant.and_then(|grant| grant.attempt_id.clone());
+    let execution_grant_value = execution_grant_dispatch_value(execution_grant)?;
     let output_dir = default_workflow_node_dispatch_output_dir();
     let output_nonce = unix_timestamp_nanos();
     let last_message_path = output_dir.join(format!(
@@ -534,6 +798,9 @@ fn write_started_dispatch(
       "memory_packet_fingerprint": context.memory_packet_fingerprint,
       "plan_authorization_id": context.plan_authorization_id,
       "authorization_check": context.authorization_check.as_ref().map(|check| serde_json::to_value(check).unwrap_or(Value::Null)).unwrap_or(Value::Null),
+      "execution_grant_id": execution_grant_id,
+      "execution_attempt_id": execution_attempt_id,
+      "execution_grant": execution_grant_value,
       "user_reviewed_instruction": context.user_reviewed_instruction.as_ref().map(user_reviewed_instruction_value).unwrap_or(Value::Null),
       "state": "running",
       "started_at_ms": timestamp_ms,
@@ -547,6 +814,30 @@ fn write_started_dispatch(
       "created_at_ms": timestamp_ms,
       "updated_at_ms": timestamp_ms
     });
+    if let Some((grant, source)) = execution_grant_material.as_ref() {
+        let (prepared_after, _prepared_before_hash) = reserve_prepared_dispatch_in_value(
+            &mut value,
+            context,
+            &dispatch_id,
+            grant,
+            source,
+            timestamp_ms,
+        )?;
+        let attempt_id = grant
+            .attempt_id
+            .as_deref()
+            .ok_or_else(|| "execution_grant_attempt_id_missing".to_string())?;
+        ensure_array_mut(&mut value, "execution_attempts")?.push(execution_grant_attempt_value(
+            context,
+            &dispatch_id,
+            attempt_id,
+            &timestamp,
+        ));
+        // Keep this value live through the state mutation so JSON-only
+        // callers get the same fail-closed prepared transition.  SQLite has
+        // an additional transaction-level recheck below.
+        let _ = prepared_after;
+    }
     array_mut(&mut value, "workflow_node_dispatches")?.push(dispatch);
     {
         let work_items = array_mut(&mut value, "work_items")?;
@@ -598,6 +889,15 @@ fn write_started_dispatch_db_primary(
         .unwrap_or_else(|| "unknown".to_string());
     control_core::validate_dispatch_start(&before_state)?;
     let dispatch_id = next_workflow_node_dispatch_id(context, &timestamp);
+    let execution_grant_material =
+        mint_execution_grant_for_started_dispatch(path, context, &dispatch_id, timestamp_ms)?;
+    if execution_grant_material.is_some() {
+        validate_current_execution_grant_binding(&value, context)?;
+    }
+    let execution_grant = execution_grant_material.as_ref().map(|(grant, _)| grant);
+    let execution_grant_id = execution_grant.map(|grant| grant.grant_id.0.clone());
+    let execution_attempt_id = execution_grant.and_then(|grant| grant.attempt_id.clone());
+    let execution_grant_value = execution_grant_dispatch_value(execution_grant)?;
     let output_dir = default_workflow_node_dispatch_output_dir();
     let output_nonce = unix_timestamp_nanos();
     let last_message_path = output_dir.join(format!(
@@ -622,6 +922,9 @@ fn write_started_dispatch_db_primary(
       "memory_packet_fingerprint": context.memory_packet_fingerprint,
       "plan_authorization_id": context.plan_authorization_id,
       "authorization_check": context.authorization_check.as_ref().map(|check| serde_json::to_value(check).unwrap_or(Value::Null)).unwrap_or(Value::Null),
+      "execution_grant_id": execution_grant_id,
+      "execution_attempt_id": execution_attempt_id,
+      "execution_grant": execution_grant_value,
       "user_reviewed_instruction": context.user_reviewed_instruction.as_ref().map(user_reviewed_instruction_value).unwrap_or(Value::Null),
       "state": "running",
       "started_at_ms": timestamp_ms,
@@ -635,6 +938,27 @@ fn write_started_dispatch_db_primary(
       "created_at_ms": timestamp_ms,
       "updated_at_ms": timestamp_ms
     });
+    let prepared_grant_reservation = if let Some((grant, source)) =
+        execution_grant_material.as_ref()
+    {
+        let (prepared_after, expected_prepared_hash) = reserve_prepared_dispatch_in_value(
+            &mut value,
+            context,
+            &dispatch_id,
+            grant,
+            source,
+            timestamp_ms,
+        )?;
+        let attempt_id = grant
+            .attempt_id
+            .as_deref()
+            .ok_or_else(|| "execution_grant_attempt_id_missing".to_string())?;
+        let attempt = execution_grant_attempt_value(context, &dispatch_id, attempt_id, &timestamp);
+        ensure_array_mut(&mut value, "execution_attempts")?.push(attempt.clone());
+        Some((prepared_after, expected_prepared_hash, attempt))
+    } else {
+        None
+    };
     array_mut(&mut value, "workflow_node_dispatches")?.push(dispatch.clone());
     {
         let work_items = array_mut(&mut value, "work_items")?;
@@ -685,19 +1009,59 @@ fn write_started_dispatch_db_primary(
         })
         .cloned()
         .ok_or_else(|| "DB 主写找不到更新后的 workflow node".to_string())?;
-    repository.reserve_dispatch_with_audit(
-        &dispatch,
-        &work_item_after,
-        &node_after,
-        &before_state,
-        &crate::workbench_sqlite_repository::RepositoryAuditEntry {
-            event_id: audit_event_id,
-            target_kind: "workflow_state".to_string(),
-            target_id: dispatch_id.clone(),
-            payload: audit_event,
-        },
-        None,
-    )?;
+    let repository_audit = crate::workbench_sqlite_repository::RepositoryAuditEntry {
+        event_id: audit_event_id,
+        target_kind: "workflow_state".to_string(),
+        target_id: dispatch_id.clone(),
+        payload: audit_event,
+    };
+    if let (Some((grant, source)), Some((prepared_after, expected_prepared_hash, attempt))) = (
+        execution_grant_material.as_ref(),
+        prepared_grant_reservation.as_ref(),
+    ) {
+        let prepared_dispatch_id = context
+            .prepared_dispatch_id
+            .as_deref()
+            .ok_or_else(|| "execution_grant_prepared_dispatch_reference_missing".to_string())?;
+        let authorization_id = context
+            .plan_authorization_id
+            .as_deref()
+            .ok_or_else(|| "execution_grant_authorization_reference_missing".to_string())?;
+        repository.reserve_prepared_execution_grant_with_audit(
+            &dispatch,
+            &work_item_after,
+            &node_after,
+            &before_state,
+            &repository_audit,
+            &crate::workbench_sqlite_repository::PreparedExecutionGrantReservation {
+                prepared_dispatch_id,
+                expected_prepared_hash,
+                prepared_after,
+                authorization_id,
+                authorization_source_hash: &source.authorization_source_hash,
+                max_worker_dispatches: source
+                    .max_worker_dispatches
+                    .ok_or_else(|| "execution_grant_worker_quota_missing_or_invalid".to_string())?,
+                binding_id: &context.binding_id,
+                native_thread_id: &context.native_thread_id,
+                workflow_id: &context.workflow_id,
+                node_id: &context.node_id,
+                work_item_id: &context.work_item_id,
+                execution_attempt: attempt,
+            },
+            None,
+        )?;
+        let _ = grant;
+    } else {
+        repository.reserve_dispatch_with_audit(
+            &dispatch,
+            &work_item_after,
+            &node_after,
+            &before_state,
+            &repository_audit,
+            None,
+        )?;
+    }
     crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
         path,
         "workflow_node_dispatch_started",
@@ -719,6 +1083,10 @@ fn write_completed_dispatch(
     exit_code: i32,
     stats: CodexDispatchReadbackStats,
 ) -> Result<WorkflowNodeDispatchResult, String> {
+    crate::workbench_sqlite_storage_mode::primary_repository_for_m2_t2_fail_closed_write(
+        path,
+        "workflow_node_dispatch_completed",
+    )?;
     let timestamp = unix_timestamp_string();
     let timestamp_ms = unix_timestamp_ms();
     let mut value = read_workflow_state_value(path)?;
@@ -748,11 +1116,21 @@ fn write_completed_dispatch(
             "节点派发记录不是 running，控制核心已拒绝完成派发：{dispatch_state}"
         ));
     }
+    // Process completion/readback belongs to the execution owner.  A
+    // server-minted grant still makes the later worker report an unverified
+    // claim, but that claim is recorded by its own command and never performs
+    // this execution transition.
+    let has_execution_grant = value["workflow_node_dispatches"][dispatch_index]
+        .get("execution_grant_id")
+        .and_then(Value::as_str)
+        .is_some_and(|grant_id| !grant_id.trim().is_empty());
+    let next_dispatch_state = "completed";
+    let next_work_item_state = "ready_for_review";
     let work_item_index = find_work_item_index(&value, &workflow_id, &work_item_id)
         .ok_or_else(|| "当前 workflow 下找不到该 work item；无法完成节点派发".to_string())?;
     let work_item_state = optional_string_from(&value["work_items"][work_item_index], "state")
         .unwrap_or_else(|| "unknown".to_string());
-    control_core::validate_dispatch_completion_transition(&work_item_state, "ready_for_review")?;
+    control_core::validate_dispatch_completion_transition(&work_item_state, next_work_item_state)?;
     let prompt_kind = optional_string_from(
         &value["workflow_node_dispatches"][dispatch_index],
         "prompt_kind",
@@ -772,7 +1150,7 @@ fn write_completed_dispatch(
         let dispatch = dispatches
             .get_mut(dispatch_index)
             .ok_or_else(|| "找不到节点派发记录；无法完成派发".to_string())?;
-        dispatch["state"] = Value::String("completed".to_string());
+        dispatch["state"] = Value::String(next_dispatch_state.to_string());
         dispatch["ended_at_ms"] = Value::Number(timestamp_ms.into());
         dispatch["exit_code"] = Value::Number(exit_code.into());
         dispatch["last_message_summary"] = last_message_summary
@@ -787,19 +1165,24 @@ fn write_completed_dispatch(
         let work_item = work_items
             .get_mut(work_item_index)
             .ok_or_else(|| "当前 workflow 下找不到该 work item；无法完成节点派发".to_string())?;
-        work_item["state"] = Value::String("ready_for_review".to_string());
+        work_item["state"] = Value::String(next_work_item_state.to_string());
         work_item["current_node_id"] = Value::String(workflow_node_for_work_item_state(
             &workflow_id,
-            "ready_for_review",
+            next_work_item_state,
         ));
         work_item["updated_at"] = Value::String(timestamp.clone());
     }
-    let review_node_id = workflow_node_for_work_item_state(&workflow_id, "ready_for_review");
-    update_node_state_for_id(&mut value, &review_node_id, "ready_for_review", &timestamp)?;
+    let review_node_id = workflow_node_for_work_item_state(&workflow_id, next_work_item_state);
+    update_node_state_for_id(
+        &mut value,
+        &review_node_id,
+        next_work_item_state,
+        &timestamp,
+    )?;
     update_node_state_for_id(
         &mut value,
         &dispatch_node_id,
-        "ready_for_review",
+        next_work_item_state,
         &timestamp,
     )?;
     let audit_event_id = crate::workflow_audit::audit_event_identity(
@@ -815,9 +1198,9 @@ fn write_completed_dispatch(
       "source_kind": "workspace_state_and_codex_resume",
       "permission_level": "user_confirmed_write",
       "before_state": "running",
-      "after_state": "ready_for_review",
+      "after_state": next_work_item_state,
       "created_at": timestamp,
-      "reason": "Codex resume 完成；已写最终回复摘要和 transcript 统计，没有保存完整 transcript。"
+      "reason": "Codex resume 完成；已写执行 owner 的最终回复摘要和 transcript 统计。若有 worker report，它仍须经独立 claim/review command，不能由该事件或 grant 自动成为事实。"
     }));
     array_mut(&mut value, "audit_events")?.push(json!({
       "event_id": crate::workflow_audit::audit_event_identity("workflow-node-dispatch-readback", dispatch_id, &timestamp),
@@ -831,6 +1214,12 @@ fn write_completed_dispatch(
       "created_at": timestamp,
       "reason": format!("native transcript parser 只回填统计：events={} hits={}", stats.transcript_event_count, stats.transcript_target_hits)
     }));
+    let canonical_attempt_id = value["workflow_node_dispatches"][dispatch_index]
+        .get("execution_attempt_id")
+        .and_then(Value::as_str)
+        .filter(|attempt_id| !attempt_id.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("attempt:{}:{}", stable_id(dispatch_id), timestamp));
     if prompt_kind == "user_reviewed_instruction" {
         let dispatch_project_id = optional_string_from(
             &value["workflow_node_dispatches"][dispatch_index],
@@ -847,8 +1236,8 @@ fn write_completed_dispatch(
           "project_id": dispatch_project_id,
           "workflow_id": workflow_id.clone(),
           "work_item_id": work_item_id.clone(),
-          "control_state": "ready_for_review",
-          "long_task_state": "completed",
+          "control_state": next_work_item_state,
+          "long_task_state": next_dispatch_state,
           "retry_count": 0,
           "max_retries": 0,
           "timeout_seconds": Value::Null,
@@ -864,22 +1253,37 @@ fn write_completed_dispatch(
         )
         .unwrap_or_default();
         let attempts = ensure_array_mut(&mut value, "execution_attempts")?;
-        attempts.push(json!({
-          "attempt_id": format!("attempt:{}:{}", stable_id(dispatch_id), timestamp),
-          "project_id": dispatch_project_id,
-          "workflow_id": workflow_id.clone(),
-          "work_item_id": work_item_id.clone(),
-          "dispatch_id": dispatch_id,
-          "attempt_no": 1,
-          "state": "completed",
-          "started_at": Value::Null,
-          "ended_at": timestamp,
-          "failure_reason": Value::Null,
-          "retry_scheduled_at": Value::Null,
-          "timed_out_at": Value::Null,
-          "cancel_requested_at": Value::Null,
-          "warnings": []
-        }));
+        if has_execution_grant {
+            let attempt = attempts
+                .iter_mut()
+                .find(|candidate| {
+                    optional_string_from(candidate, "attempt_id").as_deref()
+                        == Some(canonical_attempt_id.as_str())
+                })
+                .ok_or_else(|| "execution_grant_attempt_ledger_missing".to_string())?;
+            if optional_string_from(attempt, "state").as_deref() != Some("running") {
+                return Err("execution_grant_attempt_ledger_state_mismatch".to_string());
+            }
+            attempt["state"] = Value::String(next_dispatch_state.to_string());
+            attempt["ended_at"] = Value::String(timestamp.clone());
+        } else {
+            attempts.push(json!({
+              "attempt_id": canonical_attempt_id,
+              "project_id": dispatch_project_id,
+              "workflow_id": workflow_id.clone(),
+              "work_item_id": work_item_id.clone(),
+              "dispatch_id": dispatch_id,
+              "attempt_no": 1,
+              "state": next_dispatch_state,
+              "started_at": Value::Null,
+              "ended_at": timestamp,
+              "failure_reason": Value::Null,
+              "retry_scheduled_at": Value::Null,
+              "timed_out_at": Value::Null,
+              "cancel_requested_at": Value::Null,
+              "warnings": []
+            }));
+        }
     }
     value["updated_at"] = Value::String(timestamp);
     write_m5b_batch1_workflow_state(path, "workflow_node_dispatch_completed", &value)?;
@@ -888,7 +1292,7 @@ fn write_completed_dispatch(
         Some(backup),
         &audit_event_id,
         dispatch_id,
-        "节点派发完成，工作项已进入待回收。",
+        "节点派发完成，工作项已进入待回收；worker report 如有仅能由独立 claim command 入账。",
     )
 }
 
@@ -898,6 +1302,10 @@ fn write_failed_dispatch(
     exit_code: i32,
     warnings: Vec<String>,
 ) -> Result<WorkflowNodeDispatchResult, String> {
+    crate::workbench_sqlite_storage_mode::primary_repository_for_m2_t2_fail_closed_write(
+        path,
+        "workflow_node_dispatch_failed",
+    )?;
     let timestamp = unix_timestamp_string();
     let timestamp_ms = unix_timestamp_ms();
     let mut value = read_workflow_state_value(path)?;
@@ -956,6 +1364,15 @@ fn write_failed_dispatch(
     } else {
         warnings.join(", ")
     };
+    // A grant-owned dispatch already created one canonical running attempt at
+    // reservation time.  A failed worker result must close that exact attempt;
+    // creating a second `attempt:<dispatch>:timestamp` would leave the
+    // grant-owned attempt falsely running and break receipt/attempt identity.
+    let canonical_attempt_id = value["workflow_node_dispatches"][dispatch_index]
+        .get("execution_attempt_id")
+        .and_then(Value::as_str)
+        .filter(|attempt_id| !attempt_id.trim().is_empty())
+        .map(str::to_string);
     {
         let dispatches = array_mut(&mut value, "workflow_node_dispatches")?;
         let dispatch = dispatches
@@ -979,7 +1396,30 @@ fn write_failed_dispatch(
         work_item["updated_at"] = Value::String(timestamp.clone());
     }
     update_node_state_for_id(&mut value, &dispatch_node_id, attempt_state, &timestamp)?;
-    if prompt_kind == "user_reviewed_instruction" {
+    if let Some(canonical_attempt_id) = canonical_attempt_id.as_deref() {
+        let attempts = ensure_array_mut(&mut value, "execution_attempts")?;
+        let attempt = attempts
+            .iter_mut()
+            .find(|candidate| {
+                optional_string_from(candidate, "attempt_id").as_deref()
+                    == Some(canonical_attempt_id)
+            })
+            .ok_or_else(|| "execution_grant_attempt_ledger_missing".to_string())?;
+        if optional_string_from(attempt, "dispatch_id").as_deref() != Some(dispatch_id)
+            || optional_string_from(attempt, "state").as_deref() != Some("running")
+        {
+            return Err("execution_grant_attempt_ledger_state_mismatch".to_string());
+        }
+        attempt["state"] = Value::String(attempt_state.to_string());
+        attempt["ended_at"] = Value::String(timestamp.clone());
+        attempt["failure_reason"] = Value::String(failure_reason.clone());
+        attempt["timed_out_at"] = if attempt_state == "timed_out" {
+            json!(timestamp)
+        } else {
+            Value::Null
+        };
+        attempt["warnings"] = string_vec_value(&warnings);
+    } else if prompt_kind == "user_reviewed_instruction" {
         let instruction_timeout = dispatch_instruction
             .get("timeout_seconds")
             .and_then(Value::as_i64)
@@ -1056,6 +1496,10 @@ fn write_readback_dispatch(
     dispatch_id: &str,
     stats: CodexDispatchReadbackStats,
 ) -> Result<WorkflowNodeDispatchResult, String> {
+    crate::workbench_sqlite_storage_mode::primary_repository_for_m2_t2_fail_closed_write(
+        path,
+        "workflow_node_dispatch_readback",
+    )?;
     let timestamp = unix_timestamp_string();
     let timestamp_ms = unix_timestamp_ms();
     let mut value = read_workflow_state_value(path)?;
@@ -1111,6 +1555,10 @@ fn record_workflow_dispatch_director_review_at(
     if !path.exists() {
         return Err("工作流状态文件不存在；无法记录总指导回收意见".to_string());
     }
+    crate::workbench_sqlite_storage_mode::primary_repository_for_m2_t2_fail_closed_write(
+        path,
+        "workflow_dispatch_director_review",
+    )?;
 
     let timestamp = unix_timestamp_string();
     let mut value = read_workflow_state_value(path)?;
@@ -1201,6 +1649,7 @@ fn record_workflow_dispatch_director_review_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })
@@ -1288,6 +1737,7 @@ fn record_workflow_permission_decision_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })
@@ -1663,6 +2113,7 @@ fn record_offline_director_review_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })

@@ -3,10 +3,9 @@
 
 use crate::m2_dto::*;
 use crate::m2_ports::*;
-use crate::m2_workflow_state::{WorkflowStateAggregate, WorkItem};
+use crate::m2_workflow_state::{WorkItem, WorkflowStateAggregate};
 use rusqlite::Connection;
 use std::fmt;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Legacy Adapter Implementation
 pub struct LegacyAdapterImpl {
@@ -44,30 +43,15 @@ impl LegacyAdapterImpl {
 
         // 6. Quarantine unknown/corrupt/sensitive data
         for field in &unknown_fields {
-            self.quarantine_field(
-                connection,
-                field,
-                sidecar_path,
-                "UNKNOWN_FIELD",
-            )?;
+            self.quarantine_field(connection, field, sidecar_path, "UNKNOWN_FIELD")?;
         }
 
         for field in &corrupt_fields {
-            self.quarantine_field(
-                connection,
-                field,
-                sidecar_path,
-                "CORRUPT_FIELD",
-            )?;
+            self.quarantine_field(connection, field, sidecar_path, "CORRUPT_FIELD")?;
         }
 
         for field in &sensitive_fields {
-            self.quarantine_field(
-                connection,
-                field,
-                sidecar_path,
-                "SENSITIVE_FIELD",
-            )?;
+            self.quarantine_field(connection, field, sidecar_path, "SENSITIVE_FIELD")?;
         }
 
         // 7. Create adapted data
@@ -219,19 +203,25 @@ impl LegacyAdapterImpl {
     }
 
     /// Extract workflow state
-    fn extract_workflow_state(&self, json_value: &serde_json::Value) -> Result<WorkflowStateAggregate, String> {
+    fn extract_workflow_state(
+        &self,
+        json_value: &serde_json::Value,
+    ) -> Result<WorkflowStateAggregate, String> {
         // Simplified extraction
-        let project_id = json_value.get("project_id")
+        let project_id = json_value
+            .get("project_id")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown")
             .to_string();
 
-        let workflow_id = json_value.get("workflow_id")
+        let workflow_id = json_value
+            .get("workflow_id")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown")
             .to_string();
 
-        let revision = json_value.get("revision")
+        let revision = json_value
+            .get("revision")
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
 
@@ -304,10 +294,8 @@ impl QuarantineManagerImpl {
         &self,
         connection: &Connection,
     ) -> Result<Vec<UnknownQuarantineDto>, String> {
-        self.quarantine_repo.get_by_state(
-            connection,
-            QuarantineResolutionState::Pending,
-        )
+        self.quarantine_repo
+            .get_by_state(connection, QuarantineResolutionState::Pending)
     }
 
     /// Resolve a quarantine record
@@ -394,39 +382,14 @@ impl QuarantineManagerImpl {
     }
 }
 
-/// Generate UUID v4 (simplified)
+/// Generate UUIDv7 through the narrow M2 UTC/identifier helper.
 fn generate_uuid() -> String {
-    let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes).expect("failed to generate random bytes");
-    // Set version 4 and variant bits
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    format!(
-        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-        bytes[0], bytes[1], bytes[2], bytes[3],
-        bytes[4], bytes[5],
-        bytes[6], bytes[7],
-        bytes[8], bytes[9],
-        bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
-    )
+    crate::m2_clock::uuid_v7()
 }
 
 /// Generate ISO 8601 timestamp
 fn generate_timestamp() -> String {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards");
-    let secs = duration.as_secs();
-    let nanos = duration.subsec_nanos();
-
-    // Simple ISO 8601 format
-    format!(
-        "2026-08-03T{:02}:{:02}:{:02}.{:09}Z",
-        (secs / 3600) % 24,
-        (secs / 60) % 60,
-        secs % 60,
-        nanos
-    )
+    crate::m2_clock::utc_now_rfc3339()
 }
 
 #[cfg(test)]

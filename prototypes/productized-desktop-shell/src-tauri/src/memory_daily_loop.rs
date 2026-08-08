@@ -601,6 +601,7 @@ mod tests {
             dispatch_id: Some("dispatch:l5:001".to_string()),
             // SYN-FND-004B 测试夹具: dispatch_id 即 attempt_id
             attempt_id: Some("dispatch:l5:001".to_string()),
+            execution_grant_id: None,
             // SYN-FND-004B 测试夹具: 真实执行者 = dispatch_id
             authenticated_actor_id: "dispatch:l5:001".to_string(),
             authenticated_project_scope: "project:tmp-l5-memory-daily-loop-project".to_string(),

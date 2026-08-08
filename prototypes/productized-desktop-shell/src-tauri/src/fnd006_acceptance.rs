@@ -22,7 +22,7 @@ mod fnd006_acceptance_tests {
         // 用 Project A 的身份尝试访问 Project B
         let identity = resolve_identity(
             "worker-001",
-            "/Users/yoyi/project-a",  // Project A
+            "/Users/yoyi/project-a", // Project A
             "worker",
             "development",
             false,
@@ -58,11 +58,7 @@ mod fnd006_acceptance_tests {
 
         for id in malicious_ids {
             let result = ValidatedObjectId::parse(id);
-            assert!(
-                result.is_err(),
-                "恶意 ID '{}' 应该被拒绝",
-                id
-            );
+            assert!(result.is_err(), "恶意 ID '{}' 应该被拒绝", id);
         }
     }
 
@@ -91,7 +87,7 @@ mod fnd006_acceptance_tests {
         assert!(outcome.report_summary.is_none(), "无 grant 不得产生摘要");
         let warning = outcome.report_warning.expect("无 grant 必须有诊断");
         assert!(
-            warning.contains("无有效执行授权 grant_id"),
+            warning.contains("execution_grant_id_missing"),
             "诊断应指明 fail-closed 原因：{warning}"
         );
         assert!(!bogus_path.exists(), "拒绝必须零文件副作用");
@@ -118,7 +114,7 @@ mod fnd006_acceptance_tests {
                 .report_warning
                 .as_deref()
                 .unwrap_or("")
-                .contains("grant_id 格式无效"),
+                .contains("execution_grant_id_invalid"),
             "非法格式应被拒：{:?}",
             outcome.report_warning
         );
@@ -149,7 +145,7 @@ mod fnd006_acceptance_tests {
             "supervisor-001",
             "/Users/yoyi/Documents/mario test",
             "project_supervisor",
-            "daily",  // daily = 只读通道
+            "daily", // daily = 只读通道
             false,
         );
 
@@ -205,7 +201,10 @@ mod fnd006_acceptance_tests {
         for content in forbidden_contents {
             let classification = classify_content(content);
             assert!(
-                matches!(classification, crate::mcp::event_audit_boundary::ContentClassification::Forbidden { .. }),
+                matches!(
+                    classification,
+                    crate::mcp::event_audit_boundary::ContentClassification::Forbidden { .. }
+                ),
                 "禁止内容 '{}' 应该被拒绝",
                 content
             );
@@ -239,17 +238,15 @@ mod fnd006_acceptance_tests {
             ("worker-001", "worker", RoleKind::Worker),
             ("user-001", "user", RoleKind::User),
             ("system-001", "system", RoleKind::System),
-            ("director-001", "project_director", RoleKind::ProjectSupervisor),
+            (
+                "director-001",
+                "project_director",
+                RoleKind::ProjectSupervisor,
+            ),
         ];
 
         for (actor, role, expected_kind) in test_cases {
-            let identity = resolve_identity(
-                actor,
-                "/test/project",
-                role,
-                "development",
-                false,
-            );
+            let identity = resolve_identity(actor, "/test/project", role, "development", false);
 
             match identity {
                 crate::mcp::identity_kernel::IdentityResolution::Resolved(snapshot) => {
@@ -263,7 +260,7 @@ mod fnd006_acceptance_tests {
         let identity = resolve_identity(
             "hacker-001",
             "/test/project",
-            "hacker",  // 未知角色
+            "hacker", // 未知角色
             "development",
             false,
         );
@@ -292,18 +289,18 @@ mod fnd006_acceptance_tests {
             principal: "worker-test".to_string(),
             project_id: "project:test".to_string(),
             workflow_id: "workflow:test:default".to_string(),
-            allowed_work_item_types: vec!["*".to_string()],
+            allowed_work_item_types: vec!["task_package".to_string()],
             allowed_role_ids: vec!["worker".to_string()],
-            allowed_agent_ids: vec!["*".to_string()],
-            allowed_read_roots: vec!["*".to_string()],
-            allowed_write_roots: vec!["*".to_string()],
-            allowed_tools: vec!["*".to_string()],
-            allowed_checks: vec!["*".to_string()],
+            allowed_agent_ids: vec!["worker-test".to_string()],
+            allowed_read_roots: vec!["/allowed/read".to_string()],
+            allowed_write_roots: vec!["/allowed/root".to_string()],
+            allowed_tools: vec!["bash".to_string()],
+            allowed_checks: vec!["cargo-test".to_string()],
             stop_conditions: vec![],
             ttl_seconds: 3600,
             minted_by: "test-server".to_string(),
         };
-        let grant = mint_grant(&input);
+        let grant = mint_grant(&input).expect("精确 scope 应能 mint grant");
 
         // 2. 验证 grant 有效
         let result = verify_grant(
@@ -318,7 +315,6 @@ mod fnd006_acceptance_tests {
         assert_eq!(result, GrantVerification::Valid);
 
         // 3. 吊销 grant
-        revoke_grant(&mut grant.clone(), "test revocation");
         let mut revoked_grant = grant.clone();
         revoke_grant(&mut revoked_grant, "test revocation");
 
@@ -347,6 +343,7 @@ mod fnd006_acceptance_tests {
             work_item_id: "wi:test".to_string(),
             dispatch_id: Some("dispatch:test".to_string()),
             attempt_id: Some("attempt:test".to_string()),
+            execution_grant_id: None,
             authenticated_actor_id: "actor:test".to_string(),
             authenticated_project_scope: "project:test".to_string(),
             report_hash: "sha256:test".to_string(),

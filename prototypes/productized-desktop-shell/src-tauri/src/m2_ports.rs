@@ -27,7 +27,11 @@ pub trait CommandReceiptRepository {
     fn create(&self, connection: &Connection, receipt: &CommandReceiptDto) -> Result<(), String>;
 
     /// Get a command receipt by receipt_id
-    fn get_by_id(&self, connection: &Connection, receipt_id: &str) -> Result<Option<CommandReceiptDto>, String>;
+    fn get_by_id(
+        &self,
+        connection: &Connection,
+        receipt_id: &str,
+    ) -> Result<Option<CommandReceiptDto>, String>;
 
     /// Get a command receipt by command_id and idempotency_key
     fn get_by_command_and_idempotency(
@@ -63,10 +67,18 @@ pub trait CommandReceiptRepository {
 /// Domain owner: event_ledger_repository
 pub trait EventLedgerRepository {
     /// Create a new event
-    fn create(&self, connection: &Connection, event: &WorkbenchEventEnvelopeDto) -> Result<(), String>;
+    fn create(
+        &self,
+        connection: &Connection,
+        event: &WorkbenchEventEnvelopeDto,
+    ) -> Result<(), String>;
 
     /// Get an event by event_id
-    fn get_by_id(&self, connection: &Connection, event_id: &str) -> Result<Option<WorkbenchEventEnvelopeDto>, String>;
+    fn get_by_id(
+        &self,
+        connection: &Connection,
+        event_id: &str,
+    ) -> Result<Option<WorkbenchEventEnvelopeDto>, String>;
 
     /// Get events by command_id
     fn get_by_command_id(
@@ -101,7 +113,11 @@ pub trait AuditLedgerRepository {
     fn create(&self, connection: &Connection, audit: &AuditRecordDto) -> Result<(), String>;
 
     /// Get an audit record by audit_id
-    fn get_by_id(&self, connection: &Connection, audit_id: &str) -> Result<Option<AuditRecordDto>, String>;
+    fn get_by_id(
+        &self,
+        connection: &Connection,
+        audit_id: &str,
+    ) -> Result<Option<AuditRecordDto>, String>;
 
     /// Get audit records by command_id
     fn get_by_command_id(
@@ -129,7 +145,11 @@ pub trait OutboxRepository {
     fn create(&self, connection: &Connection, item: &OutboxItemDto) -> Result<(), String>;
 
     /// Get an outbox item by outbox_item_id
-    fn get_by_id(&self, connection: &Connection, outbox_item_id: &str) -> Result<Option<OutboxItemDto>, String>;
+    fn get_by_id(
+        &self,
+        connection: &Connection,
+        outbox_item_id: &str,
+    ) -> Result<Option<OutboxItemDto>, String>;
 
     /// Get outbox items by owning_command_id
     fn get_by_command_id(
@@ -237,7 +257,11 @@ pub trait CurrentSnapshotRepository {
 /// Domain owner: PROJECTOR_ID
 pub trait ProjectionCheckpointRepository {
     /// Create or update a projection checkpoint
-    fn upsert(&self, connection: &Connection, checkpoint: &ProjectionCheckpointDto) -> Result<(), String>;
+    fn upsert(
+        &self,
+        connection: &Connection,
+        checkpoint: &ProjectionCheckpointDto,
+    ) -> Result<(), String>;
 
     /// Get a projection checkpoint by projector_id and projector_version
     fn get(
@@ -277,10 +301,18 @@ pub trait ProjectionCheckpointRepository {
 /// Domain owner: unknown_quarantine_repository
 pub trait UnknownQuarantineRepository {
     /// Create a new quarantine record
-    fn create(&self, connection: &Connection, quarantine: &UnknownQuarantineDto) -> Result<(), String>;
+    fn create(
+        &self,
+        connection: &Connection,
+        quarantine: &UnknownQuarantineDto,
+    ) -> Result<(), String>;
 
     /// Get a quarantine record by quarantine_id
-    fn get_by_id(&self, connection: &Connection, quarantine_id: &str) -> Result<Option<UnknownQuarantineDto>, String>;
+    fn get_by_id(
+        &self,
+        connection: &Connection,
+        quarantine_id: &str,
+    ) -> Result<Option<UnknownQuarantineDto>, String>;
 
     /// Get quarantine records by resolution_state
     fn get_by_state(
@@ -319,11 +351,7 @@ pub trait Projector {
     ) -> Result<(), String>;
 
     /// Rebuild the projector from source
-    fn rebuild(
-        &self,
-        connection: &Connection,
-        source_watermark: &str,
-    ) -> Result<(), String>;
+    fn rebuild(&self, connection: &Connection, source_watermark: &str) -> Result<(), String>;
 
     /// Get the current checkpoint
     fn get_checkpoint(

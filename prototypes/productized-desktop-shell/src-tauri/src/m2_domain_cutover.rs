@@ -5,12 +5,13 @@ use crate::m2_dto::*;
 use crate::m2_ports::*;
 use rusqlite::Connection;
 use std::fmt;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Count Parity Result
 #[derive(Clone, Debug, PartialEq)]
 pub enum CountParityResult {
-    Match { count: usize },
+    Match {
+        count: usize,
+    },
     Mismatch {
         primary_count: usize,
         shadow_count: usize,
@@ -20,7 +21,9 @@ pub enum CountParityResult {
 /// Key Parity Result
 #[derive(Clone, Debug, PartialEq)]
 pub enum KeyParityResult {
-    Match { keys: Vec<String> },
+    Match {
+        keys: Vec<String>,
+    },
     Mismatch {
         missing_in_shadow: Vec<String>,
         missing_in_primary: Vec<String>,
@@ -30,7 +33,9 @@ pub enum KeyParityResult {
 /// Hash Parity Result
 #[derive(Clone, Debug, PartialEq)]
 pub enum HashParityResult {
-    Match { hash: String },
+    Match {
+        hash: String,
+    },
     Mismatch {
         primary_hash: String,
         shadow_hash: String,
@@ -73,7 +78,8 @@ impl DomainCutoverImpl {
         let primary_result = self.new_primary_phase(connection, domain, projector_id)?;
 
         // 4. Compatibility read-only phase
-        let compatibility_result = self.compatibility_readonly_phase(connection, domain, projector_id)?;
+        let compatibility_result =
+            self.compatibility_readonly_phase(connection, domain, projector_id)?;
 
         Ok(CutoverResult {
             domain: domain.to_string(),
@@ -94,7 +100,9 @@ impl DomainCutoverImpl {
         projector_id: &str,
     ) -> Result<ShadowWriteResult, String> {
         // 1. Get all primary snapshots for domain
-        let primary_snapshots = self.primary_repo.get_by_projector(connection, projector_id)?;
+        let primary_snapshots = self
+            .primary_repo
+            .get_by_projector(connection, projector_id)?;
 
         let mut written_count = 0;
         let mut error_count = 0;
@@ -132,10 +140,14 @@ impl DomainCutoverImpl {
         projector_id: &str,
     ) -> Result<ParityCheckResult, String> {
         // 1. Get all primary snapshots
-        let primary_snapshots = self.primary_repo.get_by_projector(connection, projector_id)?;
+        let primary_snapshots = self
+            .primary_repo
+            .get_by_projector(connection, projector_id)?;
 
         // 2. Get all shadow snapshots
-        let shadow_snapshots = self.shadow_repo.get_by_projector(connection, projector_id)?;
+        let shadow_snapshots = self
+            .shadow_repo
+            .get_by_projector(connection, projector_id)?;
 
         // 3. Check count parity
         let primary_count = primary_snapshots.len();
@@ -162,9 +174,7 @@ impl DomainCutoverImpl {
             .collect();
 
         let key_parity = if primary_keys == shadow_keys {
-            KeyParityResult::Match {
-                keys: primary_keys,
-            }
+            KeyParityResult::Match { keys: primary_keys }
         } else {
             let missing_in_shadow: Vec<String> = primary_keys
                 .iter()
@@ -246,7 +256,9 @@ impl DomainCutoverImpl {
         projector_id: &str,
     ) -> Result<NewPrimaryResult, String> {
         // 1. Get all shadow snapshots
-        let shadow_snapshots = self.shadow_repo.get_by_projector(connection, projector_id)?;
+        let shadow_snapshots = self
+            .shadow_repo
+            .get_by_projector(connection, projector_id)?;
 
         let mut promoted_count = 0;
         let mut error_count = 0;
@@ -258,7 +270,10 @@ impl DomainCutoverImpl {
                     promoted_count += 1;
                 }
                 Err(error) => {
-                    eprintln!("Primary promote failed for {}: {}", snapshot.object_ref, error);
+                    eprintln!(
+                        "Primary promote failed for {}: {}",
+                        snapshot.object_ref, error
+                    );
                     error_count += 1;
                 }
             }
@@ -284,10 +299,14 @@ impl DomainCutoverImpl {
         projector_id: &str,
     ) -> Result<CompatibilityReadonlyResult, String> {
         // 1. Verify primary is readable
-        let primary_snapshots = self.primary_repo.get_by_projector(connection, projector_id)?;
+        let primary_snapshots = self
+            .primary_repo
+            .get_by_projector(connection, projector_id)?;
 
         // 2. Verify shadow is readable
-        let shadow_snapshots = self.shadow_repo.get_by_projector(connection, projector_id)?;
+        let shadow_snapshots = self
+            .shadow_repo
+            .get_by_projector(connection, projector_id)?;
 
         // 3. Verify parity after cutover
         let primary_count = primary_snapshots.len();
@@ -409,20 +428,7 @@ pub enum CompatibilityReadonlyStatus {
 
 /// Generate ISO 8601 timestamp
 fn generate_timestamp() -> String {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards");
-    let secs = duration.as_secs();
-    let nanos = duration.subsec_nanos();
-
-    // Simple ISO 8601 format
-    format!(
-        "2026-08-03T{:02}:{:02}:{:02}.{:09}Z",
-        (secs / 3600) % 24,
-        (secs / 60) % 60,
-        secs % 60,
-        nanos
-    )
+    crate::m2_clock::utc_now_rfc3339()
 }
 
 #[cfg(test)]

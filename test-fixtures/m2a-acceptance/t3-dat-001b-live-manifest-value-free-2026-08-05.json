@@ -1,0 +1,104 @@
+{
+  "schema": "syn-dat-001b-live-manifest-evidence/v1",
+  "recorded_at": "2026-08-05T01:36:52+08:00",
+  "evidence_level": "LIVE_MANIFEST_READ_ONLY",
+  "result": "HOLD",
+  "reference_slice_id": "workflow-state-sidecar",
+  "scope_exclusions": ["/Users/yoyi/.codex", "credentials", "external providers"],
+  "root": {
+    "canonical_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench",
+    "type": "directory",
+    "mode": "0755",
+    "uid": 501,
+    "gid": 20,
+    "mtime_epoch_seconds": 1784823276,
+    "size_bytes": 320,
+    "symlink": false
+  },
+  "sources": [
+    {
+      "kind": "workflow_json_sidecar",
+      "canonical_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/workflow-state/workflow-state.v0.json",
+      "type": "regular_file",
+      "mode": "0644",
+      "uid": 501,
+      "gid": 20,
+      "mtime_epoch_seconds": 1785519338,
+      "size_bytes": 7654539,
+      "sha256": "4137836236f20fbc8390d7f1b73d2dcb19eb5e592c6de72ab633d4c70f52e89c",
+      "symlink": false,
+      "read_method": "byte hash plus JSON parse with value-free counters"
+    },
+    {
+      "kind": "storage_mode_projection",
+      "canonical_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/runtime-artifacts/storage-mode.v1.json",
+      "type": "regular_file",
+      "mode": "0644",
+      "uid": 501,
+      "gid": 20,
+      "mtime_epoch_seconds": 1783961349,
+      "size_bytes": 606,
+      "sha256": "b35188a133852dc260f248c4af61e0cf186348698e5fb64742737691ef25c155",
+      "symlink": false,
+      "read_method": "JSON parse; only boolean cross-check results retained",
+      "db_primary_json_projection": true,
+      "workflow_path_field_count": 2,
+      "workflow_paths_match": true,
+      "db_path_field_count": 2,
+      "db_paths_match": true
+    },
+    {
+      "kind": "sqlite_primary",
+      "canonical_path": "/Users/yoyi/Library/Application Support/CodexGovernanceWorkbench/production-db/workbench-state.v1.sqlite",
+      "type": "regular_file",
+      "mode": "0644",
+      "uid": 501,
+      "gid": 20,
+      "mtime_epoch_seconds": 1785517932,
+      "size_bytes": 32235520,
+      "sha256": "1c333ccdd98d852ad858e6fc1fb3f04a87e5625b8c90556a6a4c0238b6f32357",
+      "symlink": false,
+      "read_method": "sqlite3 -readonly; PRAGMA query_only=ON; integrity_check and fixed aggregate counts",
+      "integrity_check": "ok"
+    }
+  ],
+  "value_free_counts": {
+    "projects": 5,
+    "workflows": 8,
+    "work_items": 58,
+    "workflow_audit_events": 1819,
+    "execution_attempts": 164,
+    "json_objects": 4007,
+    "json_arrays": 4726,
+    "restricted_key_occurrences": 841,
+    "restricted_key_name_count": 6
+  },
+  "restricted_object_disposition": {
+    "restricted_key_shapes": {
+      "owner": "UNRESOLVED_DATA_OWNER",
+      "sensitivity": "RESTRICTED_SHAPE_ONLY",
+      "migration_state": "HOLD_NO_ORDINARY_STORE",
+      "retention": "retain_in_current_live_source",
+      "quarantine": "manual_value_free_classification_required",
+      "rollback": "no_op_until_migration_is_authorized",
+      "export": "not_authorized"
+    },
+    "execution_attempts": {
+      "owner": "UNRESOLVED_LEGACY_WORKFLOW_RUNTIME_OWNER",
+      "sensitivity": "RESTRICTED_LEGACY_RUNTIME_STATE",
+      "migration_state": "HOLD_NO_CUTOVER",
+      "retention": "retain_in_current_live_source",
+      "quarantine": "explicit_disposition_required",
+      "rollback": "not_verified",
+      "export": "not_verified"
+    }
+  },
+  "zero_mutation": {
+    "project_files_written": ["this value-free artifact only"],
+    "workbench_files_written": false,
+    "sqlite_write_operations": false,
+    "json_write_operations": false,
+    "codex_home_accessed": false
+  },
+  "hold_reason": "restricted shape classification and execution_attempts owner/disposition are unresolved; this is not live migration/cutover evidence"
+}

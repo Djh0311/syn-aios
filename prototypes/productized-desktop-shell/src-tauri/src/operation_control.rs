@@ -386,6 +386,7 @@ pub(crate) fn record_operation_control_decision_at(
         path: workflow_state_path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })

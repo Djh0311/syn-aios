@@ -1667,6 +1667,12 @@ export type WorkflowStateMutationResult = {
   path: string;
   backup_path?: string | null;
   audit_event_id: string;
+  /**
+   * Present only for the DB-primary M2 command path.  UI callers use this to
+   * prove an exact retry returned the canonical receipt instead of inferring
+   * idempotency from display text.
+   */
+  receipt_id?: string | null;
   first_initialize: boolean;
   snapshot: WorkflowStateSnapshot;
 };
@@ -1918,6 +1924,12 @@ export type WorkItemStateUpdateRequest = {
   project_root: string;
   work_item_id: string;
   next_state: string;
+  /** Stable identity for one logical state-mutation command/retry. */
+  command_id?: string;
+  /** Must be resent with command_id to request receipt replay. */
+  idempotency_key?: string;
+  /** Caller-observed M2 workflow-state-sidecar revision. */
+  expected_revision?: number;
 };
 
 export type WorkflowNodeSessionBindRequest = {

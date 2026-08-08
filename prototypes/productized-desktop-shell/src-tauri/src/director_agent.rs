@@ -1221,6 +1221,157 @@ fn reopen_failed_chain_node_for_action(
     write_m5b_batch1_workflow_state(path, "director_failed_action_reopened", &value)
 }
 
+/// A failed/reworked chain item must never restart from the prepared
+/// authorization which started its previous attempt.  That prepared dispatch
+/// has been consumed with the old grant/attempt and is deliberately not
+/// reusable.  Re-enter the normal C4 prepare lifecycle instead, after the
+/// caller has restored the work item and (where requested) installed the
+/// exact current C1 binding.
+///
+/// This is intentionally narrow: the old prepared dispatch supplies only the
+/// immutable authorization identity to cross-check against the *currently*
+/// active authorization and confirmed proposal.  The new prepared dispatch is
+/// created by `prepare_authorized_auto_dispatch_for_index_at`, which
+/// recalculates guard/scope/binding state rather than copying an old check.
+fn reprepare_failed_action_task_for_retry(
+    path: &std::path::Path,
+    index: &Value,
+    project_root: &str,
+    workflow_id: &str,
+    task: &ProjectDirectorPlannedTask,
+    action: &str,
+) -> Result<ProjectDirectorPlannedTask, String> {
+    let old_prepared_dispatch_id = task
+        .prepared_dispatch_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            "failed_action_prepared_dispatch_reference_missing: 旧任务没有已消费的 prepared dispatch，拒绝重跑。"
+                .to_string()
+        })?;
+    let state = read_workflow_state_value(path)?;
+    let old_prepared = find_workflow_node_dispatch(&state, old_prepared_dispatch_id).ok_or_else(|| {
+        "failed_action_prepared_dispatch_not_found: 找不到旧 prepared dispatch，拒绝重跑。".to_string()
+    })?;
+    if optional_string_from(old_prepared, "workflow_id").as_deref() != Some(workflow_id)
+        || optional_string_from(old_prepared, "work_item_id").as_deref()
+            != task.work_item_id.as_deref()
+        || optional_string_from(old_prepared, "c4_planned_task_id").as_deref()
+            != Some(task.planned_task_id.as_str())
+        || optional_string_from(old_prepared, "state").as_deref() != Some("consumed")
+    {
+        return Err(
+            "failed_action_prepared_dispatch_identity_or_lifecycle_mismatch: 旧 prepared dispatch 不是本任务已消费授权，拒绝重跑。"
+                .to_string(),
+        );
+    }
+    let authorization_id = optional_string_from(old_prepared, "plan_authorization_id").ok_or_else(|| {
+        "failed_action_prepared_dispatch_authorization_missing: 旧 prepared dispatch 缺授权引用，拒绝重跑。"
+            .to_string()
+    })?;
+    let now_ms = unix_timestamp_ms();
+    let authorization_store = plan_authorization_store::load_store(path, now_ms)?;
+    let authorization = authorization_store
+        .authorizations
+        .iter()
+        .find(|candidate| candidate.authorization_id == authorization_id)
+        .ok_or_else(|| {
+            "failed_action_authorization_not_found: 找不到旧 dispatch 对应授权，拒绝重跑。"
+                .to_string()
+        })?;
+    if authorization.status != PlanAuthorizationStatus::Active
+        || authorization.project_id != project_id(project_root)
+        || authorization.workflow_id != workflow_id
+        || authorization
+            .expires_at_ms
+            .is_some_and(|expires_at_ms| expires_at_ms <= now_ms)
+    {
+        return Err(
+            "failed_action_authorization_not_active_or_scope_mismatch: 当前授权已失效、撤销或不属于此项目/workflow，拒绝重跑。"
+                .to_string(),
+        );
+    }
+    let proposal_id = authorization.source_proposal_id.as_deref().ok_or_else(|| {
+        "failed_action_authorization_source_proposal_missing: 当前授权缺少已确认方案回链，拒绝重跑。"
+            .to_string()
+    })?;
+    let proposal_store = project_consultation_proposal_store::load_store(path, now_ms)?;
+    let proposal = proposal_store
+        .proposals
+        .iter()
+        .find(|candidate| candidate.proposal_id == proposal_id)
+        .ok_or_else(|| {
+            "failed_action_source_proposal_not_found: 找不到当前授权的方案，拒绝重跑。".to_string()
+        })?;
+    if proposal.status != ProjectConsultationProposalStatus::UserConfirmed
+        || proposal.project_id != authorization.project_id
+        || proposal.workflow_id != authorization.workflow_id
+        || proposal.plan_authorization_id.as_deref() != Some(authorization_id.as_str())
+    {
+        return Err(
+            "failed_action_source_proposal_not_confirmed_or_mismatch: 方案/授权回链不再精确成立，拒绝重跑。"
+                .to_string(),
+        );
+    }
+
+    let mut fresh_task = task.clone();
+    // Do not let annotation rediscover the consumed dispatch through a caller
+    // supplied field.  It must construct a new prepared dispatch from the
+    // current source, guard, and exact work-item binding.
+    fresh_task.prepared_dispatch_id = None;
+    fresh_task.status = "planned".to_string();
+    fresh_task.guard_result = None;
+    fresh_task.blocked_reasons.clear();
+    let prepared = prepare_authorized_auto_dispatch_for_index_at(
+        path,
+        index,
+        &PrepareAuthorizedAutoDispatchInput {
+            project_root: project_root.to_string(),
+            project_id: authorization.project_id.clone(),
+            workflow_id: workflow_id.to_string(),
+            proposal_id: proposal.proposal_id.clone(),
+            authorization_id: authorization_id.clone(),
+            actor_id: "project_director".to_string(),
+            planned_tasks: vec![fresh_task],
+            // The failed-action path has just made the desired state current;
+            // C4 still re-reads it before persisting a replacement prepare.
+            expected_workflow_revision: None,
+            expected_authorization_revision: Some(authorization_store.revision),
+            // retry/change_session already use the current exact work-item
+            // binding.  Do not create a deferred C1 authorization snapshot
+            // here, because no later chain session-creation step follows.
+            chain_binds_per_task: false,
+            force_fresh_task_session: false,
+        },
+    )?;
+    let fresh = prepared
+        .plan
+        .planned_tasks
+        .into_iter()
+        .find(|candidate| candidate.planned_task_id == task.planned_task_id)
+        .ok_or_else(|| {
+            "failed_action_reprepare_result_missing_task: C4 未返回目标任务，拒绝启动 runner。".to_string()
+        })?;
+    if fresh.status != "prepared"
+        || fresh.prepared_dispatch_id.as_deref().is_none_or(|value| value.trim().is_empty())
+        || fresh.prepared_dispatch_id.as_deref() == Some(old_prepared_dispatch_id)
+        || fresh.work_item_id != task.work_item_id
+        || fresh.workflow_node_id != task.workflow_node_id
+    {
+        return Err(format!(
+            "failed_action_reprepare_not_exact_or_not_prepared:{action}: replacement C4 prepare 未形成同一任务的新 prepared dispatch，拒绝启动 runner。fresh_status={} fresh_dispatch={:?} old_dispatch={} fresh_work_item={:?} old_work_item={:?} fresh_node={:?} old_node={:?}",
+            fresh.status,
+            fresh.prepared_dispatch_id,
+            old_prepared_dispatch_id,
+            fresh.work_item_id,
+            task.work_item_id,
+            fresh.workflow_node_id,
+            task.workflow_node_id,
+        ));
+    }
+    Ok(fresh)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_project_director_failed_action_inner(
     path: &std::path::Path,
@@ -1311,7 +1462,24 @@ fn run_project_director_failed_action_inner(
                     "主管显式选择 retry：交回现有链驱动重跑单任务。"
                 },
             )?;
-            let one_task = vec![task.clone()];
+            // M1 failed-action flows reuse their existing prepared dispatch.
+            // Only the explicitly versioned M2 grant envelope is single-use
+            // and therefore needs a fresh prepared dispatch before retry.
+            let one_task = if prepared_dispatch_requires_m2_execution_grant(
+                path,
+                task.prepared_dispatch_id.as_deref(),
+            )? {
+                vec![reprepare_failed_action_task_for_retry(
+                    path,
+                    index,
+                    &request.project_root,
+                    &request.workflow_id,
+                    task,
+                    action,
+                )?]
+            } else {
+                vec![task.clone()]
+            };
             let chain_outcome = run_director_task_chain(
                 path,
                 index,
@@ -1575,6 +1743,9 @@ fn reset_work_item_for_retry(
                 project_root: project_root.to_string(),
                 work_item_id: work_item_id.to_string(),
                 next_state: next_state.to_string(),
+                command_id: None,
+                idempotency_key: None,
+                expected_revision: None,
             },
         )
         .is_ok()
@@ -1582,6 +1753,35 @@ fn reset_work_item_for_retry(
     let _ = step("failed"); // 若卡在 running：running→failed（已 failed 则非法·忽略）
     let _ = step("needs_changes"); // failed/timed_out → needs_changes
     step("ready_to_dispatch") // needs_changes → ready_to_dispatch（末步·返回是否复位成功）
+}
+
+/// A C4 prepared record is the compatibility boundary between frozen M1
+/// chains and the new M2 grant path.  Only the explicit version marker makes
+/// a retry single-use; quota metadata by itself never changes an M1 retry.
+fn prepared_dispatch_requires_m2_execution_grant(
+    path: &std::path::Path,
+    prepared_dispatch_id: Option<&str>,
+) -> Result<bool, String> {
+    let Some(prepared_dispatch_id) = prepared_dispatch_id.filter(|id| !id.trim().is_empty())
+    else {
+        return Ok(false);
+    };
+    let value = read_workflow_state_value(path)?;
+    let dispatch = value
+        .get("workflow_node_dispatches")
+        .and_then(Value::as_array)
+        .and_then(|dispatches| {
+            dispatches.iter().find(|dispatch| {
+                optional_string_from(dispatch, "dispatch_id").as_deref()
+                    == Some(prepared_dispatch_id)
+            })
+        })
+        .ok_or_else(|| "director_retry_prepared_dispatch_missing".to_string())?;
+    match optional_string_from(dispatch, "execution_grant_envelope_schema").as_deref() {
+        None => Ok(false),
+        Some("execution-grant-ledger.v2") => Ok(true),
+        Some(_) => Err("director_retry_prepared_execution_grant_schema_unsupported".to_string()),
+    }
 }
 
 fn reset_work_item_for_director_rework(
@@ -1596,6 +1796,9 @@ fn reset_work_item_for_director_rework(
                 project_root: project_root.to_string(),
                 work_item_id: work_item_id.to_string(),
                 next_state: next_state.to_string(),
+                command_id: None,
+                idempotency_key: None,
+                expected_revision: None,
             },
         )
         .is_ok()
@@ -2759,8 +2962,32 @@ fn run_director_task_chain_inner(
             work_item_id,
             workflow_id: Some(workflow_id.to_string()),
         };
-        let mut outcome =
-            execute_project_workflow_node_at(path, index, readback_db_path, runner, &request);
+        // Production director work must consume the exact C4 prepared record.
+        // A missing guard/prepared reference is a refusal before any runner is
+        // started; it is not a legacy fallback that can mint an empty grant.
+        let mut outcome = match (
+            task.guard_result.as_ref(),
+            task.prepared_dispatch_id.as_deref(),
+        ) {
+            (Some(guard), Some(prepared_dispatch_id))
+                if guard.status == "authorized"
+                    && guard.authorization_id.as_deref().is_some()
+                    && !guard.required_user_confirmation
+                    && !guard.required_global_review =>
+            {
+                execute_authorized_project_workflow_node_from_prepared_at(
+                    path,
+                    index,
+                    readback_db_path,
+                    runner,
+                    &request,
+                    guard.authorization_id.as_deref().expect("checked above"),
+                    &task.scope.allowed_write_scope,
+                    prepared_dispatch_id,
+                )
+            }
+            _ => Err("director_prepared_authorization_missing_fail_closed".to_string()),
+        };
 
         // 2.4 flaky 自动重试一次：仅 tier-1 偶发早退（exit≠0·非 timeout·非沙箱/gate·记忆 real-codex-run-flaky）
         // 原地重试一次；越权被拒/闸拦/超时按原语义不 retry（is_tier1_early_exit 只认早退特征）。**不循环**。
@@ -2776,8 +3003,23 @@ fn run_director_task_chain_inner(
                     task.title
                 ),
             );
-            outcome =
-                execute_project_workflow_node_at(path, index, readback_db_path, runner, &request);
+            // The frozen M1 chain may retry through its existing generic
+            // dispatch transition.  Only an explicitly marked M2 grant
+            // envelope is single-use and must stop for a new prepared grant.
+            outcome = if prepared_dispatch_requires_m2_execution_grant(
+                path,
+                task.prepared_dispatch_id.as_deref(),
+            )? {
+                Err("director_retry_requires_fresh_prepared_authorization".to_string())
+            } else {
+                execute_project_workflow_node_at(
+                    path,
+                    index,
+                    readback_db_path,
+                    runner,
+                    &request,
+                )
+            };
         }
 
         // 重读（execute 写过文件，避免覆盖它的写入）。
@@ -2792,7 +3034,8 @@ fn run_director_task_chain_inner(
             stable_id(task_id)
         );
         match outcome {
-            Ok(result) if result.dispatch.state == "completed" => {
+            Ok(result) if result.dispatch.state == "completed" =>
+            {
                 let dispatch_id = result.dispatch.dispatch_id.clone();
                 let last_message_full = result
                     .dispatch
@@ -2800,8 +3043,13 @@ fn run_director_task_chain_inner(
                     .as_deref()
                     .and_then(|last_message_path| std::fs::read_to_string(last_message_path).ok())
                     .unwrap_or_default();
-                if worker_report::help_signal_from_raw(&last_message_full).is_some() {
-                    let report_outcome = worker_report::consume_worker_report_after_completion(
+                let m2_grant_dispatch = result
+                    .dispatch
+                    .execution_grant_id
+                    .as_deref()
+                    .is_some_and(|grant_id| !grant_id.trim().is_empty());
+                let report_outcome = if m2_grant_dispatch {
+                    worker_report::consume_worker_report_after_completion(
                         path,
                         project_root,
                         &result.dispatch.project_id,
@@ -2809,28 +3057,84 @@ fn run_director_task_chain_inner(
                         &result.dispatch.node_id,
                         &result.dispatch.work_item_id,
                         Some(dispatch_id.as_str()),
-                        // SYN-FND-004B: 本路径一次派发即一次尝试,dispatch_id 即 attempt 身份
-                        Some(dispatch_id.as_str()),
-                        // SYN-FND-004B: 真实 attempt 状态 = 服务端 dispatch 记录（本分支恒 completed）
+                        result.dispatch.execution_attempt_id.as_deref(),
                         &result.dispatch.state,
-                        // SYN-FND-004B: 真实执行者 = 被派发的 worker（dispatch_id 标识）
-                        &dispatch_id,
-                        // SYN-FND-004C: 执行授权 grant_id（当前路径由 path-lock 保护，grant 为 dispatch_id）
-                        Some(&dispatch_id),
+                        &result.dispatch.native_thread_id,
+                        result.dispatch.execution_grant_id.as_deref(),
                         &task.scope.target_role,
                         &task.title,
                         &last_message_full,
-                    );
-                    let help_signal = report_outcome.help_signal.clone().unwrap_or_else(|| {
-                        worker_report::WorkerReportHelpSignal {
-                            status: "suspected_blocked".to_string(),
-                            summary: "worker 疑似求助·主管必看".to_string(),
-                            open_issues: vec![],
-                            permission_requests: vec![],
-                            direction_risks: vec![],
-                            follow_up_suggestions: vec![],
-                        }
+                    )
+                } else {
+                    // M1 dispatches have no execution-grant envelope.  Keep
+                    // their frozen report/terminal contract intact, but do
+                    // not represent their parsed report as M2-verified.
+                    worker_report::consume_legacy_m1_worker_report_after_completion(
+                        path,
+                        project_root,
+                        &result.dispatch.project_id,
+                        &result.dispatch.workflow_id,
+                        &result.dispatch.node_id,
+                        &result.dispatch.work_item_id,
+                        Some(dispatch_id.as_str()),
+                        result
+                            .dispatch
+                            .execution_attempt_id
+                            .as_deref()
+                            .or(Some(dispatch_id.as_str())),
+                        &result.dispatch.state,
+                        &result.dispatch.native_thread_id,
+                        &task.scope.target_role,
+                        &task.title,
+                        &last_message_full,
+                    )
+                };
+                if m2_grant_dispatch {
+                    // The M2 slice does not yet own a real ExecutedReport
+                    // claim ledger/UoW. A valid grant proof therefore stops
+                    // at a typed NOT_MIGRATED/HOLD boundary: no pseudo claim
+                    // receipt, audit event, or director transition is made.
+                    let (claim_note, stopped_reason) = match report_outcome
+                        .grant_bearing_boundary
+                    {
+                        Some(worker_report::GrantBearingReportBoundary::NotMigratedHold) => (
+                            "grant-bearing ExecutedReport 已通过 grant/source/binding/revocation 校验；真实 claim ledger 尚未迁移，按 NOT_MIGRATED/HOLD 零写入停下。"
+                                .to_string(),
+                            "grant_report_not_migrated_hold",
+                        ),
+                        None => (
+                            format!(
+                                "grant-bearing ExecutedReport 已拒绝：{}；未调用 director final screen，未改任何 foreign owner。",
+                                report_outcome.report_warning.as_deref().unwrap_or("grant verification failed closed")
+                            ),
+                            "grant_report_rejected_fail_closed",
+                        ),
+                    };
+                    warnings.push(claim_note.clone());
+                    steps.push(DirectorChainStep {
+                        planned_task_id: task_id.clone(),
+                        title: task.title.clone(),
+                        // This is response-only; no chain/attempt/work-item
+                        // state is persisted from this M2 claim command.
+                        state: "stopped".to_string(),
+                        report_summary: None,
+                        report_warning: Some(claim_note),
+                        report_status: None,
                     });
+                    return Ok(DirectorChainOutcome {
+                        total,
+                        dispatched,
+                        completed,
+                        skipped,
+                        chain_run_id,
+                        steps,
+                        director_summary: None,
+                        warnings,
+                        stopped_reason: Some(format!("{stopped_reason}:{}", task.title)),
+                    });
+                }
+                let final_report = worker_report::parse_worker_report(&last_message_full);
+                if let Some(help_signal) = report_outcome.help_signal.clone() {
                     let mut after_help = read_workflow_state_value(path)?;
                     let help_message = worker_help_message(&help_signal);
                     set_chain_node_state(
@@ -2907,28 +3211,7 @@ fn run_director_task_chain_inner(
                         )),
                     });
                 }
-                let parsed_report = worker_report::parse_worker_report(&last_message_full);
-                let report_outcome = worker_report::consume_worker_report_after_completion(
-                    path,
-                    project_root,
-                    &result.dispatch.project_id,
-                    &result.dispatch.workflow_id,
-                    &result.dispatch.node_id,
-                    &result.dispatch.work_item_id,
-                    Some(dispatch_id.as_str()),
-                    // SYN-FND-004B: 本路径一次派发即一次尝试,dispatch_id 即 attempt 身份
-                    Some(dispatch_id.as_str()),
-                    // SYN-FND-004B: 真实 attempt 状态 = 服务端 dispatch 记录（本分支恒 completed）
-                    &result.dispatch.state,
-                    // SYN-FND-004B: 真实执行者 = 被派发的 worker（dispatch_id 标识）
-                    &dispatch_id,
-                    // SYN-FND-004C: 执行授权 grant_id（当前路径由 path-lock 保护，grant 为 dispatch_id）
-                    Some(&dispatch_id),
-                    &task.scope.target_role,
-                    &task.title,
-                    &last_message_full,
-                );
-                let screen = director_final_screen(task, parsed_report.as_ref());
+                let screen = director_final_screen(task, final_report.as_ref());
                 let attempts_used = chain_node_usize_field(
                     &read_workflow_state_value(path)?,
                     &chain_run_id,
@@ -6611,7 +6894,12 @@ mod fix9_tests {
             suggest_workflow: false,
             tasks: vec![],
         };
-        let c1 = map_consultation_to_c1_input(&consult, test_root, "consultant").expect("map");
+        let mut c1 = map_consultation_to_c1_input(&consult, test_root, "consultant").expect("map");
+        // The M2 grant path deliberately refuses an unconstrained source.
+        // This fixture models a user-confirmed, finite authorization for the
+        // concrete session that it later binds, rather than relying on the
+        // legacy empty-agent/unbounded defaults.
+        c1.scope_draft.allowed_agent_ids = vec!["thread-fix9-succeeding".to_string()];
         assert!(
             !c1.scope_draft.allowed_write_roots.is_empty(),
             "前置：档位方案写根非空"
@@ -6712,7 +7000,16 @@ mod quality_debt_tests {
     }
 
     // 造 active 授权（档位方案·写根非空）+ 绑会话 → auto_advance 可一路跑到链。
-    fn seed_active_run(path: &std::path::Path, index: &Value, test_root: &str) -> String {
+    // 该 fixture 明确把可运行 principal 和有限配额作为已确认授权事实；C1 的
+    // 新会话测试不能暗中复用 node 级旧 binding 或把新 thread 追加进旧授权。
+    fn seed_active_run_with_grant_scope(
+        path: &std::path::Path,
+        index: &Value,
+        test_root: &str,
+        allowed_agent_ids: &[&str],
+        max_worker_dispatches: i64,
+        enable_execution_grant: bool,
+    ) -> String {
         bootstrap_project_workflow_at(path, &fixture_project_record(test_root)).expect("bootstrap");
         let consult = ConsultationProposal {
             user_goal: "减少一个怪物".to_string(),
@@ -6735,7 +7032,22 @@ mod quality_debt_tests {
             suggest_workflow: false,
             tasks: vec![],
         };
-        let c1 = map_consultation_to_c1_input(&consult, test_root, "consultant").expect("map");
+        let mut c1 = map_consultation_to_c1_input(&consult, test_root, "consultant").expect("map");
+        // The production M2 grant path requires a finite, user-confirmed
+        // dispatch/runtime budget.  Keep this fixture equally explicit so it
+        // exercises the same authorization chain rather than relying on the
+        // old unbounded defaults.
+        c1.scope_draft.allowed_agent_ids = allowed_agent_ids
+            .iter()
+            .map(|agent_id| (*agent_id).to_string())
+            .collect();
+        c1.scope_draft.max_worker_dispatches = Some(max_worker_dispatches);
+        c1.scope_draft.max_runtime_minutes = Some(30);
+        if enable_execution_grant {
+            c1.scope_draft
+                .allowed_tools
+                .push(crate::mcp::execution_grant::EXECUTION_GRANT_LEDGER_V2_CAPABILITY.to_string());
+        }
         let created = project_consultation_proposal_store::create_proposal(
             path,
             &c1,
@@ -6803,6 +7115,10 @@ mod quality_debt_tests {
         )
         .expect("bind session");
         workflow_id
+    }
+
+    fn seed_active_run(path: &std::path::Path, index: &Value, test_root: &str) -> String {
+        seed_active_run_with_grant_scope(path, index, test_root, &["thread-qdebt"], 4, false)
     }
 
     // 拆任务 stub：每次被调记录收到的 ctx.prior_completed_summary；产 2 任务（t2 依赖 t1）。
@@ -6967,6 +7283,21 @@ mod quality_debt_tests {
         }
     }
 
+    // The production chain binds each generated work item to a live session
+    // immediately before the runner starts.  Keep the quality-debt fixtures on
+    // that real path instead of letting a role-level seed binding stand in for
+    // an exact work-item binding.
+    struct FixtureTaskSessionCreator;
+    impl JiaobanNewSessionCreator for FixtureTaskSessionCreator {
+        fn create_initialized_session(
+            &self,
+            _initialization_text: &str,
+            _requested_by: &str,
+        ) -> Result<String, String> {
+            Ok("thread-qdebt".to_string())
+        }
+    }
+
     fn run_loop(
         path: &std::path::Path,
         index: &Value,
@@ -6977,7 +7308,7 @@ mod quality_debt_tests {
         workflow_id: &str,
         approved: Option<&[ProjectDirectorPlannedTask]>,
     ) -> Result<AutoAdvanceRoleLoopOutcome, String> {
-        run_auto_advance_authorized_role_loop(
+        run_auto_advance_authorized_role_loop_with_session_creator(
             path,
             index,
             &dir.join("readback.sqlite"),
@@ -6988,6 +7319,7 @@ mod quality_debt_tests {
             "user-fixture",
             10,
             approved,
+            &FixtureTaskSessionCreator,
         )
     }
 
@@ -7782,7 +8114,14 @@ mod quality_debt_tests {
             "projects": [{ "project_root": test_root }],
             "threads": threads_json
         });
-        let workflow_id = seed_active_run(&path, &index, test_root);
+        let workflow_id = seed_active_run_with_grant_scope(
+            &path,
+            &index,
+            test_root,
+            &["thread-c1-task-1", "thread-c1-task-2", "thread-c1-task-3"],
+            3,
+            false,
+        );
         let pstore = project_consultation_proposal_store::load_store(&path, unix_timestamp_ms())
             .expect("pstore");
         let proposal = pstore.proposals[0].clone();
@@ -7832,7 +8171,7 @@ mod quality_debt_tests {
                 planned_tasks: planned,
                 expected_workflow_revision: None,
                 expected_authorization_revision: None,
-                chain_binds_per_task: false,
+                chain_binds_per_task: true,
                 force_fresh_task_session: false,
             },
         )
@@ -7863,7 +8202,7 @@ mod quality_debt_tests {
         .expect("C1 链应跑完");
 
         // 断言①：会话工厂每任务一次 = 3。
-        assert_eq!(creator.calls.get(), 3, "① creator 被调 3 次");
+        assert_eq!(creator.calls.get(), 3, "① creator 被调 3 次：{outcome:?}");
         assert_eq!(outcome.completed, 3, "3 任务全完成");
         // 断言②：各任务 dispatch 用各自新 thread（互异·且是新建会话号）。
         let threads = runner.threads.borrow();
@@ -7897,6 +8236,181 @@ mod quality_debt_tests {
             session_ids.len(),
             3,
             "③ 3 个 target_session_id 物化且互异：{session_ids:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m2_grant_chain_stops_at_not_migrated_report_boundary_without_director_completion() {
+        struct ValidReportRunner;
+        impl CodexResumeRunner for ValidReportRunner {
+            fn resume_with_options(
+                &self,
+                _thread_id: &str,
+                _prompt: &str,
+                last_message_path: &Path,
+                _options: &CodexResumeRequestOptions,
+            ) -> Result<(CodexResumeRunResult, WorkflowNodeDispatchExecutionOptions), String>
+            {
+                if let Some(parent) = last_message_path.parent() {
+                    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+                }
+                fs::write(
+                    last_message_path,
+                    "```json\n{\"did\":\"fixture execution\",\"outputs\":[],\"status\":\"done\",\"evidence\":[\"fixture\"]}\n```",
+                )
+                .map_err(|error| error.to_string())?;
+                Ok((
+                    CodexResumeRunResult {
+                        exit_code: 0,
+                        timed_out: false,
+                        stderr_summary: None,
+                    },
+                    WorkflowNodeDispatchExecutionOptions {
+                        readback_stats: Some(CodexDispatchReadbackStats {
+                            transcript_event_count: 1,
+                            transcript_target_hits: 1,
+                        }),
+                    },
+                ))
+            }
+        }
+
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = tmp_dir("m2-grant-report-hold");
+        let path = dir.join("workflow-state.v0.json");
+        let index = fixture_index(test_root, "thread-qdebt");
+        let workflow_id = seed_active_run_with_grant_scope(
+            &path,
+            &index,
+            test_root,
+            &["thread-qdebt"],
+            1,
+            true,
+        );
+        let proposal = project_consultation_proposal_store::load_store(&path, unix_timestamp_ms())
+            .expect("load proposal")
+            .proposals
+            .into_iter()
+            .find(|proposal| proposal.workflow_id == workflow_id)
+            .expect("active proposal");
+        let authorization = plan_authorization_store::load_store(&path, unix_timestamp_ms())
+            .expect("load authorization")
+            .authorizations
+            .into_iter()
+            .find(|authorization| {
+                authorization.workflow_id == workflow_id
+                    && authorization.status == PlanAuthorizationStatus::Active
+            })
+            .expect("active authorization");
+        let task = ProjectDirectorPlannedTask {
+            planned_task_id: format!("planned-task:{workflow_id}:grant-claim"),
+            title: "grant-bearing claim only".to_string(),
+            task_goal: "record an ExecutedReport claim without director finalization".to_string(),
+            scope: director_task_scope_from_proposal(&proposal, "codex-dev"),
+            depends_on: vec![],
+            worker_acceptance_criteria: vec!["fixture".to_string()],
+            control_core_acceptance_criteria: vec!["fixture".to_string()],
+            supervisor_acceptance_criteria: vec!["fixture".to_string()],
+            acceptance_criteria: vec!["fixture".to_string()],
+            report_format: vec!["structured report".to_string()],
+            status: "planned".to_string(),
+            guard_result: None,
+            work_item_id: None,
+            workflow_node_id: None,
+            task_package_id: None,
+            memory_packet_snapshot_id: None,
+            prepared_dispatch_id: None,
+            blocked_reasons: vec![],
+        };
+        let prepared = prepare_authorized_auto_dispatch_for_index_at(
+            &path,
+            &index,
+            &PrepareAuthorizedAutoDispatchInput {
+                project_root: test_root.to_string(),
+                project_id: project_id(test_root),
+                workflow_id: workflow_id.clone(),
+                proposal_id: proposal.proposal_id.clone(),
+                authorization_id: authorization.authorization_id.clone(),
+                actor_id: "fixture-user".to_string(),
+                planned_tasks: vec![task],
+                expected_workflow_revision: None,
+                expected_authorization_revision: None,
+                chain_binds_per_task: true,
+                force_fresh_task_session: true,
+            },
+        )
+        .expect("prepare grant-bearing dispatch");
+        let prepared_dispatch = prepared
+            .prepared_dispatches
+            .first()
+            .expect("one prepared dispatch");
+        bind_workflow_node_codex_session_for_index_at(
+            &path,
+            &index,
+            &WorkflowNodeSessionBindRequest {
+                project_root: test_root.to_string(),
+                node_id: prepared_dispatch
+                    .workflow_node_id
+                    .clone()
+                    .expect("prepared node"),
+                work_item_id: Some(
+                    prepared_dispatch
+                        .work_item_id
+                        .clone()
+                        .expect("prepared work item"),
+                ),
+                thread_id: "thread-qdebt".to_string(),
+            },
+        )
+        .expect("bind exact work-item session before grant runner start");
+        let outcome = run_director_task_chain(
+            &path,
+            &index,
+            &dir.join("readback.sqlite"),
+            &ValidReportRunner,
+            test_root,
+            &workflow_id,
+            &prepared.plan.planned_tasks,
+            1,
+        )
+        .expect("chain must stop at the M2 report hold boundary");
+        assert_eq!(outcome.completed, 0, "grant report hold must not complete director chain");
+        assert!(
+            outcome
+                .stopped_reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("grant_report_not_migrated_hold"),
+            "chain must expose the independent owner boundary: {outcome:?}"
+        );
+
+        let state = read_workflow_state_value(&path).expect("read chain state");
+        let dispatch = state["workflow_node_dispatches"]
+            .as_array()
+            .and_then(|dispatches| dispatches.iter().find(|dispatch| {
+                optional_string_from(dispatch, "execution_grant_id")
+                    .is_some_and(|grant_id| !grant_id.is_empty())
+            }))
+            .expect("prepared execution grant dispatch");
+        assert_eq!(optional_string_from(dispatch, "state").as_deref(), Some("completed"));
+        assert!(
+            !state["audit_events"].as_array().is_some_and(|events| events.iter().any(|event| {
+                event["event_type"] == "executed_report_claim_recorded"
+                    || event["command_id"] == "RecordExecutedReportClaim"
+            })),
+            "M2 hold must not create a pseudo ExecutedReport claim/audit/receipt"
+        );
+        assert!(
+            !state["audit_events"].as_array().is_some_and(|events| events.iter().any(|event| {
+                event["event_type"] == "workflow_chain_node_completed"
+                    || event["event_type"] == "workflow_node_dispatch_report_verified"
+            })),
+            "claim command must not write director completion or a fictitious verified-report event"
+        );
+        assert!(
+            state["reviews"].as_array().is_none_or(|reviews| reviews.is_empty()),
+            "claim admission must not create a review or result decision"
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -8041,7 +8555,14 @@ mod quality_debt_tests {
             "projects": [{ "project_root": test_root }],
             "threads": threads_json
         });
-        let workflow_id = seed_active_run(&path, &index, test_root);
+        let workflow_id = seed_active_run_with_grant_scope(
+            &path,
+            &index,
+            test_root,
+            &["thread-c1-task-1", "thread-c1-task-2", "thread-c1-task-3"],
+            3,
+            false,
+        );
         let readback = dir.join("readback.db");
         let creator = DistinctCreator {
             calls: Cell::new(0),

@@ -445,7 +445,10 @@ fn update_work_item_state_at(
         return Err("工作流状态文件不存在；无法推进工作项状态".to_string());
     }
     if let Some(repository) =
-        crate::workbench_sqlite_storage_mode::primary_repository_for_write(path)?
+        crate::workbench_sqlite_storage_mode::primary_repository_for_m2_t2_fail_closed_write(
+            path,
+            "workflow_work_item_state_update",
+        )?
     {
         return update_work_item_state_db_primary(path, request, &repository);
     }
@@ -533,9 +536,32 @@ fn update_work_item_state_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })
+}
+
+fn with_explicit_m2_port_provenance(
+    mut snapshot: WorkflowStateSnapshot,
+    explicit_m2_identity: bool,
+    command_id: &str,
+) -> WorkflowStateSnapshot {
+    if explicit_m2_identity {
+        let caller_mode = if command_id.starts_with("workflow-state-sidecar.m2.r4:") {
+            "R4_ACCEPTANCE"
+        } else {
+            "EXPLICIT_M2_REQUEST"
+        };
+        snapshot.m2_port_provenance = Some(WorkflowStateM2PortProvenance {
+            repository_port_version:
+                crate::workbench_sqlite_repository::M2_WORKFLOW_STATE_SIDECAR_PORT_VERSION
+                    .to_string(),
+            schema_version: crate::workbench_sqlite_schema_m2::M2_SCHEMA_VERSION.to_string(),
+            caller_mode: caller_mode.to_string(),
+        });
+    }
+    snapshot
 }
 
 fn update_work_item_state_db_primary(
@@ -567,36 +593,103 @@ fn update_work_item_state_db_primary(
         .and_then(|item| optional_string_from(item, "state"))
         .unwrap_or_else(|| "draft".to_string());
     let next_state = request.next_state.trim();
-
-    // 构造 M2 command：command_id 与 idempotency_key 对同一逻辑命令（同 work_item + 同目标状态）保持确定，
-    // 使重放命中 M2 幂等分支（同 command_id + idempotency_key + 相同 request_hash → 返回既有 receipt）
-    let command_id = format!("cmd-{}-{}", request.work_item_id, request.next_state);
-    let idempotency_key = format!("idem-{}-{}", request.work_item_id, request.next_state);
-    let request_hash = crate::m2_update_work_item_state::update_work_item_state_request_hash(
-        &command_id,
-        &idempotency_key,
-        &request.work_item_id,
-        next_state,
-    );
+    let current_node_id = workflow_node_for_work_item_state(&workflow_id, next_state);
+    // A caller that supplies the complete v1 command identity opts into the
+    // M2 reference-slice port.  Existing M1 callers intentionally provide no
+    // identity fields; they retain their historical compatibility path rather
+    // than being made to guess an M2 sidecar revision.  Partial identity is
+    // never accepted, so this cannot silently downgrade an M2 command.
+    let (command_id, idempotency_key, expected_revision, explicit_m2_identity) = match (
+        request.command_id.as_deref().filter(|value| !value.trim().is_empty()),
+        request
+            .idempotency_key
+            .as_deref()
+            .filter(|value| !value.trim().is_empty()),
+    ) {
+        (None, None) => {
+            let command_id = format!(
+                "workflow-state-sidecar.m2.v1:{}",
+                crate::m2_clock::uuid_v7()
+            );
+            (command_id.clone(), format!("idem:{command_id}"), None, false)
+        }
+        (Some(command_id), Some(idempotency_key)) => {
+            let expected_revision = request.expected_revision.ok_or_else(|| {
+                "m2_command_identity_requires_expected_revision".to_string()
+            })?;
+            (
+                command_id.to_string(),
+                idempotency_key.to_string(),
+                Some(expected_revision),
+                true,
+            )
+        }
+        _ => return Err("m2_command_identity_pair_required".to_string()),
+    };
+    let command_state_json = serde_json::to_string(&serde_json::json!({
+        "schema_version": "workflow-state-sidecar.command-state.v1",
+        "repository_port_version": crate::workbench_sqlite_repository::M2_WORKFLOW_STATE_SIDECAR_PORT_VERSION,
+        "after_state": next_state,
+        "current_node_id": current_node_id,
+    }))
+    .map_err(|error| format!("m2_command_state_serialize_failed:{error}"))?;
+    let m2_command = crate::m2_workflow_state::UpdateWorkItemStateCommand {
+        command_id: command_id.clone(),
+        idempotency_key: idempotency_key.clone(),
+        actor_id: "user".to_string(),
+        scope_ref: format!("workflow:{}", request.project_root),
+        project_id: request.project_root.clone(),
+        workflow_id: workflow_id.clone(),
+        work_item_id: request.work_item_id.clone(),
+        expected_revision,
+        new_status: Some(crate::m2_workflow_state::WorkItemStatus::from_str(next_state)),
+        new_state_json: Some(command_state_json),
+    };
+    let request_hash = crate::m2_update_work_item_state::update_work_item_state_request_hash(&m2_command);
 
     // 幂等预检：同键同 hash → 返回既有 receipt（零新增行、零业务变更）；同键不同 hash → conflict
     match repository.find_command_receipt_for_idempotency(&command_id, &idempotency_key)? {
-        Some((existing_receipt_id, existing_hash)) if existing_hash == request_hash => {
-            let snapshot = read_workflow_state_snapshot(path)?;
-            return Ok(WorkflowStateMutationResult {
-                message: format!(
-                    "幂等重放：该状态推进命令已处理，返回既有 receipt，未新增任何变更：{} -> {}",
-                    work_item_state_label(&before_state),
-                    work_item_state_label(next_state)
-                ),
-                path: path.display().to_string(),
-                backup_path: None,
-                audit_event_id: format!("idempotent-replay:{}", existing_receipt_id),
-                first_initialize: false,
-                snapshot,
-            });
+        Some((existing_receipt_id, existing_hash, existing_status))
+            if existing_hash == request_hash =>
+        {
+            // The normal workflow-state sidecar projection is internal and
+            // rebuildable, so its owning command is complete at COMMITTED.
+            // An explicitly armed R4 effect moves the *same* completed owner
+            // receipt to EXTERNAL_PENDING; an exact duplicate must still
+            // return that immutable receipt and must never create a second
+            // mutation/outbox row while the independent result is pending.
+            // Older scratch receipts may retain EXTERNAL_RESULT from the
+            // superseded local-projection outbox experiment; preserve only
+            // their replay compatibility without treating degraded receipts
+            // as successful commands.
+            if matches!(
+                existing_status.as_str(),
+                "COMMITTED" | "EXTERNAL_PENDING" | "EXTERNAL_RESULT"
+            ) {
+                let snapshot = with_explicit_m2_port_provenance(
+                    read_workflow_state_snapshot(path)?,
+                    explicit_m2_identity,
+                    &command_id,
+                );
+                return Ok(WorkflowStateMutationResult {
+                    message: format!(
+                        "幂等重放：该状态推进命令已处理，返回既有 receipt，未新增任何变更：{} -> {}",
+                        work_item_state_label(&before_state),
+                        work_item_state_label(next_state)
+                    ),
+                    path: path.display().to_string(),
+                    backup_path: None,
+                    audit_event_id: format!("idempotent-replay:{}", existing_receipt_id),
+                    receipt_id: Some(existing_receipt_id),
+                    first_initialize: false,
+                    snapshot,
+                });
+            }
+            return Err(format!(
+                "m2_existing_receipt_not_successful:receipt_id={existing_receipt_id},status={existing_status}"
+            ));
         }
-        Some((_, existing_hash)) => {
+        Some((_, existing_hash, _)) => {
             return Err(format!(
                 "idempotent_conflict: command_id={}, idempotency_key={}, existing_hash={}, new_hash={}",
                 command_id, idempotency_key, existing_hash, request_hash
@@ -605,44 +698,47 @@ fn update_work_item_state_db_primary(
         None => {}
     }
 
+    // A completed command is replayed from its immutable receipt before
+    // comparing the now-advanced aggregate revision.  A new explicit M2
+    // command still performs its authoritative revision preflight before any
+    // policy or domain write, so a stale command cannot create a denial or
+    // partial side effect.
+    if explicit_m2_identity {
+        let authoritative_revision = repository.m2_workflow_state_sidecar_revision(
+            &workflow_id,
+            &request.work_item_id,
+        )?;
+        if expected_revision != Some(authoritative_revision) {
+            return Err(format!(
+                "m2_workflow_state_expected_revision_stale:expected={},actual={authoritative_revision}",
+                expected_revision.expect("explicit M2 identity has expected revision")
+            ));
+        }
+    }
+
     // Policy 预检（真闸：control_core 状态转换表）；非法转换走 M2 denial receipt（同一事务落盘），
     // 零 domain/event/outbox mutation，JSON 业务状态不变，命令以错误返回
     if let Err(policy_reason) =
         control_core::validate_work_item_state_transition(&before_state, next_state)
     {
-        let m2_denial_command = crate::m2_workflow_state::UpdateWorkItemStateCommand {
-            command_id: command_id.clone(),
-            idempotency_key: idempotency_key.clone(),
-            actor_id: "user".to_string(),
-            scope_ref: format!("workflow:{}", request.project_root),
-            project_id: request.project_root.clone(),
-            workflow_id: workflow_id.clone(),
-            work_item_id: request.work_item_id.clone(),
-            expected_revision: None,
-            new_status: Some(crate::m2_workflow_state::WorkItemStatus::from_str(next_state)),
-            new_state_json: None,
-        };
-        repository.with_immediate_transaction(
+        repository
+            .with_m2_reference_command_transaction(
             "update_work_item_state_m2_denial",
+            &command_id,
             None,
             |transaction| {
-                crate::m2_update_work_item_state::update_work_item_state_m2_with_transaction(
+                crate::workbench_sqlite_repository::WorkflowStateSidecarRepositoryV1::new(
                     transaction,
-                    m2_denial_command.clone(),
+                    crate::workbench_sqlite_repository::M2WorkflowStateSidecarConsumerId::UpdateWorkItemStateDbPrimary,
                 )
-                .map_err(|e| {
-                    crate::workbench_sqlite_repository::RepositoryMutationError::Message(
-                        format!("m2_denial_chain: {}", e),
-                    )
-                })?;
+                .execute_update(m2_command.clone())?;
                 Ok(()) as Result<(), crate::workbench_sqlite_repository::RepositoryMutationError>
             },
-        )
-        .map_err(|e| format!("update_work_item_state_m2_denial: {}", e))?;
+            )
+            .map_err(|e| format!("update_work_item_state_m2_denial: {}", e))?;
         return Err(policy_reason);
     }
 
-    let current_node_id = workflow_node_for_work_item_state(&workflow_id, next_state);
     {
         let work_items = array_mut(&mut value, "work_items")?;
         let work_item = work_items
@@ -698,43 +794,78 @@ fn update_work_item_state_db_primary(
         .cloned()
         .ok_or_else(|| "DB 主写找不到更新后的 workflow node".to_string())?;
 
-    let m2_command = crate::m2_workflow_state::UpdateWorkItemStateCommand {
-        command_id: command_id.clone(),
-        idempotency_key: idempotency_key.clone(),
-        actor_id: "user".to_string(),
-        scope_ref: format!("workflow:{}", request.project_root),
-        project_id: request.project_root.clone(),
-        workflow_id: workflow_id.clone(),
-        work_item_id: request.work_item_id.clone(),
-        expected_revision: None,
-        new_status: Some(crate::m2_workflow_state::WorkItemStatus::from_str(next_state)),
-        new_state_json: None,
-    };
-
-    // 同一 SQLite 事务：M2 UoW 全链 + repository work_item/node 更新 + repository audit
-    repository.with_immediate_transaction(
-        "update_work_item_state_m2_wired",
-        None,
-        |transaction| {
-            // M2 UoW 全链（policy → idempotency → domain state → event → audit → receipt → snapshot）
-            crate::m2_update_work_item_state::update_work_item_state_m2_with_transaction(
+    // Same immediate transaction: the UoW is the authoritative idempotency
+    // decision.  The advisory precheck above reduces work but cannot decide a
+    // concurrent race; a replay must not append another repository audit,
+    // mutate state, or start a JSON projection.
+    let replay_receipt_id = std::cell::RefCell::new(None::<String>);
+    let applied_receipt_id = std::cell::RefCell::new(None::<String>);
+    let applied_workflow_revision = std::cell::RefCell::new(None::<i64>);
+    let applied_event_id = std::cell::RefCell::new(None::<String>);
+    let applied_snapshot_hash = std::cell::RefCell::new(None::<String>);
+    repository
+        .with_m2_reference_command_transaction(
+            "update_work_item_state_m2_wired",
+            &command_id,
+            None,
+            |transaction| {
+            let port = crate::workbench_sqlite_repository::WorkflowStateSidecarRepositoryV1::new(
                 transaction,
-                m2_command.clone(),
-            ).map_err(|e| crate::workbench_sqlite_repository::RepositoryMutationError::Message(
-                format!("m2_chain: {}", e),
-            ))?;
+                crate::workbench_sqlite_repository::M2WorkflowStateSidecarConsumerId::UpdateWorkItemStateDbPrimary,
+            );
+            // M2 UoW 全链（policy → idempotency → domain state → event → audit → receipt → snapshot）
+            let m2_result = port.execute_update(m2_command.clone())?;
+            if m2_result.event.event_type == "WorkItemStateUpdateIdempotent" {
+                *replay_receipt_id.borrow_mut() = Some(m2_result.receipt.receipt_id);
+                return Ok(())
+                    as Result<(), crate::workbench_sqlite_repository::RepositoryMutationError>;
+            }
+            if m2_result.receipt.status == crate::m2_dto::CommandReceiptStatus::Denied {
+                return Err(
+                    crate::workbench_sqlite_repository::RepositoryMutationError::Message(
+                        "m2_chain_denied_after_fresh_transaction_check".to_string(),
+                    ),
+                );
+            }
+            let committed_revision = m2_result.receipt.committed_revision.ok_or_else(|| {
+                crate::workbench_sqlite_repository::RepositoryMutationError::Message(
+                    "m2_workflow_state_revision_missing".to_string(),
+                )
+            })?;
+            // M1 JSON records can legitimately predate the M2 revision field.
+            // Persist it only on records this M2 command changed, with the same
+            // receipt-backed revision as the UoW.  On a post-commit projection
+            // failure this is the causal ordering proof that lets startup replay
+            // the DB-primary state without treating an unversioned legacy record
+            // as an arbitrary hash conflict.
+            let mut committed_work_item_after = work_item_after.clone();
+            let mut committed_node_after = node_after.clone();
+            committed_work_item_after["workflow_revision_after"] =
+                Value::Number(committed_revision.into());
+            committed_node_after["workflow_revision_after"] =
+                Value::Number(committed_revision.into());
+            *applied_receipt_id.borrow_mut() = Some(m2_result.receipt.receipt_id.clone());
+            *applied_workflow_revision.borrow_mut() = Some(committed_revision);
 
             // repository work_item + node 状态更新（同一事务）
-            crate::workbench_sqlite_repository::update_work_item_and_node_state_in_transaction(
-                transaction,
-                &work_item_after,
-                &node_after,
+            port.write_domain_state(
+                &committed_work_item_after,
+                &committed_node_after,
                 &before_state,
             )?;
 
+            let authoritative_snapshot = port.record_authoritative_snapshot(
+                &request.project_root,
+                &workflow_id,
+                committed_revision,
+                &m2_result.event.event_id,
+                crate::unix_timestamp_ms(),
+            )?;
+            *applied_event_id.borrow_mut() = Some(m2_result.event.event_id.clone());
+            *applied_snapshot_hash.borrow_mut() = Some(authoritative_snapshot.snapshot_hash.clone());
+
             // repository audit record（同一事务）
-            crate::workbench_sqlite_repository::append_audit_in_transaction(
-                transaction,
+            port.append_owning_audit(
                 &crate::workbench_sqlite_repository::RepositoryAuditEntry {
                     event_id: audit_event_id.clone(),
                     target_kind: "workflow_state".to_string(),
@@ -743,47 +874,191 @@ fn update_work_item_state_db_primary(
                 },
             )?;
 
+            // DAT-004/008 has exactly one optional external-effect branch:
+            // the debug R4 driver must prove its full attempt/nonce/command
+            // binding before this production UoW reaches the repository.  The
+            // declaration reuses this command's receipt/event/audit/domain
+            // facts and creates no synthetic owning command.
+            #[cfg(debug_assertions)]
+            if crate::m2_r4_reference_slice_driver::current_reference_effect_is_armed(
+                &command_id,
+            )
+            .map_err(crate::workbench_sqlite_repository::RepositoryMutationError::Message)?
+            {
+                port.declare_armed_r4_effect(
+                    &crate::workbench_sqlite_repository::M2R4ArmedReferenceEffectDeclaration {
+                        owning_command_id: &command_id,
+                        owning_receipt_id: m2_result.receipt.receipt_id.as_str(),
+                        owning_event_id: m2_result.event.event_id.as_str(),
+                        actor_id: m2_result.receipt.actor_id.as_str(),
+                        scope_ref: m2_result.receipt.scope_ref.as_str(),
+                        subject_ref: &format!("work-item:{}", request.work_item_id),
+                        payload_hash: authoritative_snapshot.snapshot_hash.as_str(),
+                        correlation_id: &command_id,
+                        causation_id: &command_id,
+                    },
+                    crate::unix_timestamp_ms(),
+                )?;
+            }
+
             Ok(()) as Result<(), crate::workbench_sqlite_repository::RepositoryMutationError>
         },
-    ).map_err(|e| format!("update_work_item_state_m2_wired: {}", e))?;
+        )
+        .map_err(|e| format!("update_work_item_state_m2_wired: {}", e))?;
+
+    if let Some(receipt_id) = replay_receipt_id.into_inner() {
+        let snapshot = with_explicit_m2_port_provenance(
+            read_workflow_state_snapshot(path)?,
+            explicit_m2_identity,
+            &command_id,
+        );
+        return Ok(WorkflowStateMutationResult {
+            message: format!(
+                "幂等重放：同一 receipt 已在事务内确认，未新增业务、审计或投影：{} -> {}",
+                work_item_state_label(&before_state),
+                work_item_state_label(next_state)
+            ),
+            path: path.display().to_string(),
+            backup_path: None,
+            audit_event_id: format!("idempotent-replay:{receipt_id}"),
+            receipt_id: Some(receipt_id),
+            first_initialize: false,
+            snapshot,
+        });
+    }
+
+    let committed_workflow_revision = applied_workflow_revision.into_inner().ok_or_else(|| {
+        crate::workbench_sqlite_storage_mode::block_db_primary_writes(
+            path,
+            "workflow_state_revision_missing",
+            "accepted M2 command returned without a committed workflow revision",
+        );
+        "m2_workflow_state_revision_missing".to_string()
+    })?;
+    value["work_items"]
+        .as_array_mut()
+        .and_then(|items| items.get_mut(work_item_index))
+        .ok_or_else(|| "M2 投影找不到已提交的 work item".to_string())?["workflow_revision_after"] =
+        Value::Number(committed_workflow_revision.into());
+    value["nodes"]
+        .as_array_mut()
+        .and_then(|nodes| {
+            nodes.iter_mut().find(|node| {
+                optional_string_from(node, "node_id").as_deref() == Some(current_node_id.as_str())
+            })
+        })
+        .ok_or_else(|| "M2 投影找不到已提交的 workflow node".to_string())?
+        ["workflow_revision_after"] = Value::Number(committed_workflow_revision.into());
 
     // T2 崩溃恢复验收门（debug-only）：commit 已落盘、JSON 投影未开始的确定性窗口。
     // 操作者在窗口内 SIGKILL → 重启走 DB-leading replay 恢复投影。
-    #[cfg(debug_assertions)]
-    crate::acceptance_runtime_profile::acceptance_wait_for_gate_release("post-commit")?;
+    let projection_result =
+        crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
+            path,
+            "work_item_state_transition",
+            || {
+                // This gate is deliberately inside the projection/freeze wrapper.
+                // A timeout after DB commit must block subsequent DB-primary
+                // writes until startup reconciliation, not return while leaving a
+                // writable DB-leading process behind.
+                #[cfg(debug_assertions)]
+                crate::m2_r4_reference_slice_driver::wait_for_current_reference_command_gate(
+                    "post-commit",
+                    &command_id,
+                )?;
+                // T2 投影失败验收门（debug-only）：武装时注入确定性投影失败，验证 fail-closed/降级语义。
+                #[cfg(debug_assertions)]
+                if let Some(injected) = crate::m2_r4_reference_slice_driver::
+                    injected_current_reference_command_failure("projection-fail", &command_id)?
+                {
+                    return Err(injected);
+                }
+                let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
+                write_validated_workflow_state(path, &value)?;
+                let snapshot = with_explicit_m2_port_provenance(
+                    read_workflow_state_snapshot(path)?,
+                    explicit_m2_identity,
+                    &command_id,
+                );
+                if !snapshot.exists {
+                    return Err("推进工作项状态后重新读取校验失败".to_string());
+                }
+                // The parity formula must be derived from bytes that were
+                // written and parsed back from the internal projection, not
+                // the pre-write in-memory candidate.  A disk tamper or a
+                // serializer divergence therefore cannot advance a checkpoint
+                // or make the DB accept JSON as a source of truth.
+                let persisted_value = read_workflow_state_value(path)?;
+                let persisted_warnings = validate_workflow_state(&persisted_value);
+                if !persisted_warnings.is_empty() {
+                    return Err(format!(
+                        "m2_workflow_state_projection_persisted_schema_invalid:{}",
+                        persisted_warnings.join(",")
+                    ));
+                }
+                let projection_snapshot = crate::workbench_sqlite_repository::
+                    m2_workflow_state_sidecar_snapshot_from_projection(
+                        &request.project_root,
+                        &workflow_id,
+                        committed_workflow_revision,
+                        &persisted_value,
+                    )?;
+                let projection_hash = projection_snapshot.snapshot_hash;
+                let expected_snapshot_hash = applied_snapshot_hash
+                    .borrow()
+                    .clone()
+                    .ok_or_else(|| "m2_workflow_state_snapshot_hash_missing".to_string())?;
+                if projection_hash != expected_snapshot_hash {
+                    return Err(format!(
+                        "m2_workflow_state_projection_snapshot_hash_mismatch:expected={expected_snapshot_hash},actual={projection_hash}"
+                    ));
+                }
+                let event_id = applied_event_id
+                    .borrow()
+                    .clone()
+                    .ok_or_else(|| "m2_workflow_state_event_id_missing".to_string())?;
+                let receipt_id = applied_receipt_id
+                    .borrow()
+                    .clone()
+                    .ok_or_else(|| "m2_workflow_state_receipt_id_missing".to_string())?;
 
-    crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
-        path,
-        "work_item_state_transition",
-        || {
-            // T2 投影失败验收门（debug-only）：武装时注入确定性投影失败，验证 fail-closed/降级语义。
-            #[cfg(debug_assertions)]
-            if let Some(injected) =
-                crate::acceptance_runtime_profile::acceptance_injected_failure("projection-fail")
-            {
-                return Err(injected);
-            }
-            let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
-            write_validated_workflow_state(path, &value)?;
-            let snapshot = read_workflow_state_snapshot(path)?;
-            if !snapshot.exists {
-                return Err("推进工作项状态后重新读取校验失败".to_string());
-            }
+                repository
+                    .with_immediate_transaction(
+                        "workflow_state_internal_projection_checkpoint",
+                        None,
+                        |transaction| {
+                            crate::workbench_sqlite_repository::WorkflowStateSidecarRepositoryV1::new(
+                                transaction,
+                                crate::workbench_sqlite_repository::M2WorkflowStateSidecarConsumerId::UpdateWorkItemStateDbPrimary,
+                            )
+                            .record_projection_checkpoint(
+                                &projection_snapshot.object_ref,
+                                committed_workflow_revision,
+                                &event_id,
+                                &receipt_id,
+                                &projection_hash,
+                                crate::unix_timestamp_ms(),
+                            )
+                        },
+                    )
+                    .map_err(|error| format!("workflow_state_internal_projection_checkpoint:{error}"))?;
 
-            Ok(WorkflowStateMutationResult {
-                message: format!(
-                    "已推进工作项状态：{} -> {}",
-                    work_item_state_label(&before_state),
-                    work_item_state_label(next_state)
-                ),
-                path: path.display().to_string(),
-                backup_path: Some(backup.display().to_string()),
-                audit_event_id,
-                first_initialize: false,
-                snapshot,
-            })
-        },
-    )
+                Ok(WorkflowStateMutationResult {
+                    message: format!(
+                        "已推进工作项状态：{} -> {}",
+                        work_item_state_label(&before_state),
+                        work_item_state_label(next_state)
+                    ),
+                    path: path.display().to_string(),
+                    backup_path: Some(backup.display().to_string()),
+                    audit_event_id,
+                    receipt_id: applied_receipt_id.borrow().clone(),
+                    first_initialize: false,
+                    snapshot,
+                })
+            },
+        );
+    projection_result
 }
 
 struct WorkflowNodeSessionBindingProvenance {
@@ -988,6 +1263,7 @@ fn bind_workflow_node_codex_session_with_provenance_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })
@@ -1286,6 +1562,7 @@ fn unbind_workflow_node_codex_session_at(
         path: path.display().to_string(),
         backup_path: Some(backup.display().to_string()),
         audit_event_id,
+        receipt_id: None,
         first_initialize: false,
         snapshot,
     })
@@ -1339,14 +1616,66 @@ fn execute_workflow_node_dispatch_with_authorization_at(
     };
     let mut context = workflow_node_dispatch_context(path, index, &prepare_request)?;
     if let Some(prepared_authorization) = prepared_authorization {
+        if prepared_authorization.m2_execution_grant_required {
+            // The M2 grant route must attach to the exact work-item binding
+            // created by C1.  Frozen M1 prepared dispatches continue to use
+            // their existing role-binding behavior and never mint a grant.
+            let current = read_workflow_state_value(path)?;
+            let binding_index = workflow_node_session_binding_index(
+                &current,
+                &context.workflow_id,
+                &context.node_id,
+                Some(&context.work_item_id),
+            )
+            .ok_or_else(|| "execution_grant_exact_work_item_binding_required".to_string())?;
+            let exact_binding = current
+                .get("workflow_node_session_bindings")
+                .and_then(Value::as_array)
+                .and_then(|bindings| bindings.get(binding_index))
+                .ok_or_else(|| "execution_grant_exact_work_item_binding_missing".to_string())?;
+            if optional_string_from(exact_binding, "binding_id").as_deref()
+                != Some(context.binding_id.as_str())
+                || optional_string_from(exact_binding, "native_thread_id").as_deref()
+                    != Some(context.native_thread_id.as_str())
+            {
+                return Err("execution_grant_exact_work_item_binding_stale".to_string());
+            }
+        }
         context.plan_authorization_id = Some(prepared_authorization.authorization_id.clone());
         context.authorization_check = Some(prepared_authorization.authorization_check.clone());
+        context.prepared_dispatch_id = Some(prepared_authorization.prepared_dispatch_id.clone());
         context
             .warnings
             .push("authorized_prepared_dispatch_inherited".to_string());
+        if prepared_authorization.m2_execution_grant_required {
+            // Exact prepared authorization is bound either to its immutable C4
+            // binding snapshot or (only when C4 explicitly deferred it) to
+            // the live per-task binding resolved by this invocation.
+            if prepared_authorization.thread_binding_deferred {
+                if prepared_authorization.authorization_binding_id.is_some()
+                    || prepared_authorization
+                        .authorization_native_thread_id
+                        .is_some()
+                {
+                    return Err(
+                        "execution_grant_prepared_deferred_binding_snapshot_invalid".to_string()
+                    );
+                }
+            } else if prepared_authorization.authorization_binding_id.as_deref()
+                != Some(context.binding_id.as_str())
+                || prepared_authorization
+                    .authorization_native_thread_id
+                    .as_deref()
+                    != Some(context.native_thread_id.as_str())
+            {
+                return Err("execution_grant_prepared_binding_snapshot_stale".to_string());
+            }
+        }
     }
     control_core::validate_dispatch_start(&context.work_item_state)?;
-    let _prepared = write_prepared_dispatch(path, context.clone())?;
+    if context.prepared_dispatch_id.is_none() {
+        let _prepared = write_prepared_dispatch(path, context.clone())?;
+    }
     let dispatch = write_started_dispatch(path, &context)?;
     let dispatch_id = dispatch.dispatch_id.clone();
     let last_message_path = dispatch
@@ -1437,6 +1766,11 @@ fn read_workflow_node_dispatch_result_at(
 struct PreparedDispatchAuthorization {
     authorization_id: String,
     authorization_check: AutoDispatchGuardResult,
+    prepared_dispatch_id: String,
+    authorization_binding_id: Option<String>,
+    authorization_native_thread_id: Option<String>,
+    thread_binding_deferred: bool,
+    m2_execution_grant_required: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -1454,6 +1788,7 @@ struct WorkflowNodeDispatchContext {
     memory_packet_fingerprint: Option<String>,
     plan_authorization_id: Option<String>,
     authorization_check: Option<AutoDispatchGuardResult>,
+    prepared_dispatch_id: Option<String>,
     user_reviewed_instruction: Option<UserReviewedInstructionInput>,
     warnings: Vec<String>,
 }
@@ -1578,6 +1913,7 @@ fn workflow_node_dispatch_context(
             .map(|snapshot| snapshot.fingerprint.clone()),
         plan_authorization_id: None,
         authorization_check: None,
+        prepared_dispatch_id: None,
         user_reviewed_instruction,
         warnings,
     })

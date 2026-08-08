@@ -96,7 +96,9 @@ fn valid_submit_proposal_arguments() -> Value {
             "write_roots": [PROJECT],
             "target_files": ["src/s1-proof.txt"],
             "tools": ["shell(读写·写域由沙箱锁定)"],
-            "checks": ["cargo test --lib"]
+            "checks": ["cargo test --lib"],
+            "max_worker_dispatches": 1,
+            "max_runtime_minutes": 30
         },
         "suggest_workflow": true,
         "tasks": [{

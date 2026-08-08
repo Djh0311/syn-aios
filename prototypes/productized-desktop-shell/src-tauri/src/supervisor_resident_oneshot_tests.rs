@@ -854,7 +854,9 @@ fn valid_submit_proposal_arguments() -> Value {
             "write_roots": [crate::WORKFLOW_ENGINE_TEST_PROJECT_ROOT],
             "target_files": ["src/s1b-proof.txt"],
             "tools": ["shell(读写·写域由沙箱锁定)"],
-            "checks": ["cargo test --lib"]
+            "checks": ["cargo test --lib"],
+            "max_worker_dispatches": 1,
+            "max_runtime_minutes": 30
         },
         "suggest_workflow": true,
         "tasks": [{

@@ -972,6 +972,145 @@ fn acceptance_runtime_profile_process_state_is_immutable_and_uninitialized_gette
 }
 
 #[test]
+fn acceptance_runtime_profile_production_reentry_requires_app_written_capability_marker() {
+    const CAPABILITY: &str = "a4d99ec52bdf376bd1d72684b5840eca9275ea242b0e1ee68d7172e8639ec19a";
+    const WRONG_CAPABILITY: &str =
+        "b4d99ec52bdf376bd1d72684b5840eca9275ea242b0e1ee68d7172e8639ec19a";
+
+    let fixture = AcceptanceFixture::new("strict-reentry");
+    let manifest = fixture.write_manifest(&valid_manifest(&fixture, run_id()));
+    prepare_valid_fixture(&fixture);
+
+    let mut first_start = ProfileProcessState::default();
+    first_start
+        .initialize_from_startup_manifest(&manifest, fixture.context(), CAPABILITY)
+        .expect("first production startup must validate the pristine fixture");
+    assert!(
+        !fixture
+            .root
+            .join("runtime-artifacts/.r4-initialized")
+            .exists(),
+        "a marker must not exist before AppState and DB-primary startup have succeeded"
+    );
+    first_start
+        .finalize_first_r4_initialization()
+        .expect("only the validated App startup may write the reentry marker");
+    first_start
+        .finalize_first_r4_initialization()
+        .expect("marker finalization must be replay-safe in the same process");
+
+    let marker = fixture.root.join("runtime-artifacts/.r4-initialized");
+    let marker_json: Value = serde_json::from_slice(&fs::read(&marker).expect("marker bytes"))
+        .expect("marker must be structured JSON");
+    assert_eq!(
+        marker_json["schema_version"],
+        json!("syn-r4-reentry-marker.v1")
+    );
+    assert_eq!(marker_json["run_id"], json!(run_id()));
+    assert!(
+        !fs::read_to_string(&marker)
+            .expect("marker text")
+            .contains(CAPABILITY),
+        "the launcher capability itself must never be persisted"
+    );
+    #[cfg(unix)]
+    assert_eq!(
+        fs::metadata(&marker)
+            .expect("marker metadata")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600,
+        "marker must remain owner-private"
+    );
+
+    // A crash leaves a dirty state. The next child from the same launcher
+    // capability may reenter, but a different capability cannot impersonate it.
+    fs::write(
+        fixture.root.join("workflow-state/workflow-state.v0.json"),
+        "{\"schema_version\":\"workflow_state_v0\",\"recovered\":true}",
+    )
+    .expect("dirty crash-recovery state");
+    fs::write(fixture.root.join("logs/app.log"), "crash then restart").expect("reentry log");
+
+    let mut same_launcher_restart = ProfileProcessState::default();
+    same_launcher_restart
+        .initialize_from_startup_manifest(&manifest, fixture.context(), CAPABILITY)
+        .expect("same launcher capability must admit the dirty recovery root");
+    assert_eq!(
+        same_launcher_restart
+            .active_paths()
+            .expect("initialized restart")
+            .expect("profile active")
+            .root,
+        fixture.root
+    );
+
+    let mut wrong_launcher_restart = ProfileProcessState::default();
+    assert_eq!(
+        wrong_launcher_restart
+            .initialize_from_startup_manifest(&manifest, fixture.context(), WRONG_CAPABILITY)
+            .expect_err("a new launcher capability cannot reuse a prior root"),
+        "acceptance_runtime_profile_reused"
+    );
+}
+
+#[test]
+fn acceptance_runtime_profile_production_rejects_preseeded_or_linked_reentry_marker() {
+    const CAPABILITY: &str = "c4d99ec52bdf376bd1d72684b5840eca9275ea242b0e1ee68d7172e8639ec19a";
+
+    let preseeded = AcceptanceFixture::new("preseeded-reentry");
+    let manifest = preseeded.write_manifest(&valid_manifest(&preseeded, run_id()));
+    prepare_valid_fixture(&preseeded);
+    // Deliberately make the otherwise-required pristine fixture invalid. A
+    // preseeded run-id-like marker must not bypass that first validation.
+    fs::remove_file(preseeded.root.join("fixture/tasks.md")).expect("remove pristine fixture file");
+    let artifacts = preseeded.root.join("runtime-artifacts");
+    fs::create_dir(&artifacts).expect("runtime artifacts dir");
+    let marker = artifacts.join(".r4-initialized");
+    fs::write(
+        &marker,
+        json!({
+            "schema_version": "syn-r4-reentry-marker.v1",
+            "run_id": run_id(),
+            "profile_sha256": "forged",
+            "capability_sha256": "forged"
+        })
+        .to_string(),
+    )
+    .expect("preseeded marker");
+    #[cfg(unix)]
+    fs::set_permissions(&marker, fs::Permissions::from_mode(0o600))
+        .expect("owner-private forged marker");
+    let mut preseeded_state = ProfileProcessState::default();
+    assert_eq!(
+        preseeded_state
+            .initialize_from_startup_manifest(&manifest, preseeded.context(), CAPABILITY)
+            .expect_err("preseeded marker must fail closed"),
+        "acceptance_runtime_profile_reused"
+    );
+
+    #[cfg(unix)]
+    {
+        let linked = AcceptanceFixture::new("linked-reentry");
+        let manifest = linked.write_manifest(&valid_manifest(&linked, run_id()));
+        prepare_valid_fixture(&linked);
+        let artifacts = linked.root.join("runtime-artifacts");
+        fs::create_dir(&artifacts).expect("runtime artifacts dir");
+        let outside_marker = linked.root.join("outside-marker");
+        fs::write(&outside_marker, "outside").expect("outside marker");
+        symlink(&outside_marker, artifacts.join(".r4-initialized")).expect("marker symlink");
+        let mut linked_state = ProfileProcessState::default();
+        assert_eq!(
+            linked_state
+                .initialize_from_startup_manifest(&manifest, linked.context(), CAPABILITY)
+                .expect_err("linked marker must fail closed"),
+            "acceptance_runtime_profile_reentry_marker_invalid"
+        );
+    }
+}
+
+#[test]
 fn acceptance_runtime_profile_normal_mode_stays_normal_and_non_debug_rejects_profile() {
     let fixture = AcceptanceFixture::new("build-mode");
     let manifest = fixture.write_manifest(&valid_manifest(&fixture, run_id()));
@@ -1014,6 +1153,7 @@ fn acceptance_runtime_profile_static_startup_order_and_consumer_wiring_contract(
             "exec_process_registry::reap_registered_orphans",
             "reap_supervisor_resident_stale_sessions_at",
             "workbench_sqlite_storage_mode::initialize_for_startup",
+            "crate::acceptance_runtime_profile::finalize_first_r4_initialization()",
             "tauri::Builder::default()",
         ],
     );
@@ -1428,6 +1568,7 @@ fn acceptance_runtime_profile_prelaunch_layout_and_exit_contract_fail_closed() {
     for token in [
         "const ACCEPTANCE_RUNTIME_PROFILE_INITIALIZATION_EXIT_CODE: i32 = 78;",
         "const ACCEPTANCE_APP_STATE_INITIALIZATION_EXIT_CODE: i32 = 79;",
+        "const ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE: i32 = 80;",
         "fn exit_acceptance_startup_failure(exit_code: i32) -> ! {",
         "std::process::exit(exit_code);",
         "exit_acceptance_startup_failure(ACCEPTANCE_RUNTIME_PROFILE_INITIALIZATION_EXIT_CODE);",
@@ -1512,11 +1653,7 @@ fn reentry_still_rejects_unknown_extra_entries() {
     prepare_valid_fixture(&fixture);
     let runtime_artifacts = fixture.root.join("runtime-artifacts");
     fs::create_dir(&runtime_artifacts).expect("runtime artifacts dir");
-    fs::write(
-        runtime_artifacts.join(".r4-initialized"),
-        run_id(),
-    )
-    .expect("reentry marker");
+    fs::write(runtime_artifacts.join(".r4-initialized"), run_id()).expect("reentry marker");
     fs::write(fixture.root.join("junk.txt"), "junk").expect("unknown extra entry");
 
     assert_error(

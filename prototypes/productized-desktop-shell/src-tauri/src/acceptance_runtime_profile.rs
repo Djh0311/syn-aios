@@ -1,7 +1,8 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::{
     ffi::OsStrExt,
@@ -12,6 +13,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub(crate) const PROFILE_ENV: &str = "SYN_R4_ACCEPTANCE_PROFILE";
+pub(crate) const REENTRY_CAPABILITY_ENV: &str = "SYN_R4_REENTRY_CAPABILITY";
 pub(crate) const PROFILE_FILENAME: &str = "profile.json";
 pub(crate) const PROFILE_SCHEMA_VERSION: u64 = 1;
 pub(crate) const PROFILE_PURPOSE: &str = "syn-r4-isolated-runtime-profile";
@@ -26,10 +28,14 @@ const CODEX_DB_RELATIVE_PATH: &str = "codex-db/state.sqlite";
 const VAULT_DIR_NAME: &str = "knowledge-vault";
 const RECOVERY_DIR_NAME: &str = "knowledge-workspace-recovery";
 const LOGS_DIR_NAME: &str = "logs";
-// T2 崩溃恢复扩展：runtime-artifacts 为可选第 7 项（db_primary 配置/DB、验收门、重进标记的落点）；
-// .r4-initialized 由操作者在首次校验通过后落盘（harness 只读不写），内容必须为同 run_id。
+// T2 崩溃恢复扩展：runtime-artifacts 为可选第 7 项（db_primary 配置/DB、验收门、重进标记的落点）。
+// .r4-initialized 只能由已通过首次启动校验的受控 App 以 launcher capability 落盘；
+// 绝不接受操作者预置的 run_id 文本 marker。
 const RUNTIME_ARTIFACTS_DIR_NAME: &str = "runtime-artifacts";
 const REENTRY_MARKER_NAME: &str = ".r4-initialized";
+const REENTRY_MARKER_SCHEMA_VERSION: &str = "syn-r4-reentry-marker.v1";
+const REENTRY_CAPABILITY_HEX_LENGTH: usize = 64;
+const REENTRY_MARKER_MAX_BYTES: u64 = 1024;
 pub(crate) const PREPARED_ROOT_ENTRY_NAMES: [&str; 6] = [
     PROFILE_FILENAME,
     "fixture",
@@ -51,6 +57,8 @@ const ERROR_FIXTURE: &str = "acceptance_runtime_profile_fixture_invalid";
 const ERROR_UNINITIALIZED: &str = "acceptance_runtime_profile_uninitialized";
 const ERROR_DUPLICATE_INITIALIZATION: &str = "acceptance_runtime_profile_duplicate_initialization";
 const ERROR_NON_DEBUG: &str = "acceptance_runtime_profile_non_debug_rejected";
+const ERROR_REENTRY_CAPABILITY: &str = "acceptance_runtime_profile_reentry_capability_invalid";
+const ERROR_REENTRY_MARKER: &str = "acceptance_runtime_profile_reentry_marker_invalid";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ProfileBuild {
@@ -90,9 +98,33 @@ impl RuntimePaths {
 pub(crate) struct ProfileProcessState {
     initialized: bool,
     paths: Option<RuntimePaths>,
+    pending_first_initialization: Option<PendingFirstInitialization>,
+}
+
+#[derive(Clone, Debug)]
+struct PendingFirstInitialization {
+    marker_path: PathBuf,
+    run_id: String,
+    profile_sha256: String,
+    capability_sha256: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ReentryMarker {
+    schema_version: String,
+    run_id: String,
+    profile_sha256: String,
+    capability_sha256: String,
+}
+
+struct StartupResolvedProfile {
+    paths: RuntimePaths,
+    pending_first_initialization: Option<PendingFirstInitialization>,
 }
 
 impl ProfileProcessState {
+    #[cfg(test)]
     pub(crate) fn initialize_from_manifest(
         &mut self,
         profile_manifest: Option<&Path>,
@@ -104,6 +136,35 @@ impl ProfileProcessState {
         let paths = resolve_paths_with_context(profile_manifest, context)?;
         self.paths = paths;
         self.initialized = true;
+        Ok(())
+    }
+
+    pub(crate) fn initialize_from_startup_manifest(
+        &mut self,
+        profile_manifest: &Path,
+        context: ProfileValidationContext,
+        reentry_capability: &str,
+    ) -> Result<(), String> {
+        if self.initialized {
+            return Err(ERROR_DUPLICATE_INITIALIZATION.to_string());
+        }
+        let resolved =
+            resolve_startup_profile_with_capability(profile_manifest, context, reentry_capability)?;
+        self.paths = Some(resolved.paths);
+        self.pending_first_initialization = resolved.pending_first_initialization;
+        self.initialized = true;
+        Ok(())
+    }
+
+    pub(crate) fn finalize_first_r4_initialization(&mut self) -> Result<(), String> {
+        if !self.initialized {
+            return Err(ERROR_UNINITIALIZED.to_string());
+        }
+        let Some(pending) = self.pending_first_initialization.as_ref() else {
+            return Ok(());
+        };
+        write_first_initialization_marker(pending)?;
+        self.pending_first_initialization = None;
         Ok(())
     }
 
@@ -257,6 +318,7 @@ struct SyntheticWorkflow {
     updated_at: String,
 }
 
+#[cfg(test)]
 pub(crate) fn resolve_paths_with_context(
     profile_manifest: Option<&Path>,
     context: ProfileValidationContext,
@@ -284,8 +346,165 @@ pub(crate) fn resolve_paths_with_context(
     )))
 }
 
+/// Production startup uses a stronger reentry contract than the pure resolver
+/// retained for old fixture-shape tests.  A real R4 process must receive the
+/// launcher-created one-time capability and can only reenter through the
+/// marker that this process writes after the first successful startup.
+fn resolve_startup_profile_with_capability(
+    profile_manifest: &Path,
+    context: ProfileValidationContext,
+    reentry_capability: &str,
+) -> Result<StartupResolvedProfile, String> {
+    if context.build != ProfileBuild::Debug {
+        return Err(ERROR_NON_DEBUG.to_string());
+    }
+    let capability_sha256 = reentry_capability_sha256(reentry_capability)?;
+    let (root, manifest_path) = validate_profile_location(profile_manifest, context.current_uid)?;
+    let manifest = read_and_validate_manifest(&manifest_path, context.now_ms)?;
+    let profile_sha256 = crate::utils::hash::sha256_hex_bytes(
+        &fs::read(&manifest_path).map_err(|_| ERROR_SCHEMA.to_string())?,
+    );
+    if reentry_marker_matches(
+        &root,
+        &manifest,
+        &profile_sha256,
+        &capability_sha256,
+        context.current_uid,
+    )? {
+        let project_root = validate_reentry_layout(&root, &manifest)?;
+        validate_manifest_runtime_identity(&manifest, &project_root)?;
+        return Ok(StartupResolvedProfile {
+            paths: runtime_paths_from_manifest(root, project_root),
+            pending_first_initialization: None,
+        });
+    }
+    let fixture = validate_root_layout(&root, &manifest)?;
+    validate_manifest_runtime_identity(&manifest, &fixture.project_root)?;
+    validate_fixture_contents(&fixture, &manifest)?;
+    let marker_path = root
+        .join(RUNTIME_ARTIFACTS_DIR_NAME)
+        .join(REENTRY_MARKER_NAME);
+    Ok(StartupResolvedProfile {
+        paths: runtime_paths_from_manifest(root, fixture.project_root),
+        pending_first_initialization: Some(PendingFirstInitialization {
+            marker_path,
+            run_id: manifest.run_id,
+            profile_sha256,
+            capability_sha256,
+        }),
+    })
+}
+
+fn reentry_capability_sha256(reentry_capability: &str) -> Result<String, String> {
+    if reentry_capability.len() != REENTRY_CAPABILITY_HEX_LENGTH
+        || !reentry_capability
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(ERROR_REENTRY_CAPABILITY.to_string());
+    }
+    Ok(crate::utils::hash::sha256_hex(reentry_capability))
+}
+
+fn reentry_marker_matches(
+    root: &Path,
+    manifest: &ProfileManifest,
+    profile_sha256: &str,
+    capability_sha256: &str,
+    expected_uid: u32,
+) -> Result<bool, String> {
+    let marker = root
+        .join(RUNTIME_ARTIFACTS_DIR_NAME)
+        .join(REENTRY_MARKER_NAME);
+    let metadata = match fs::symlink_metadata(&marker) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(_) => return Err(ERROR_REENTRY_MARKER.to_string()),
+    };
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() > REENTRY_MARKER_MAX_BYTES
+    {
+        return Err(ERROR_REENTRY_MARKER.to_string());
+    }
+    #[cfg(unix)]
+    {
+        if metadata.nlink() != 1 {
+            return Err(ERROR_HARDLINK.to_string());
+        }
+        if metadata.uid() != expected_uid {
+            return Err(ERROR_OWNER.to_string());
+        }
+        if metadata.permissions().mode() & 0o777 != 0o600 {
+            return Err(ERROR_PERMISSIONS.to_string());
+        }
+    }
+    let marker: ReentryMarker =
+        serde_json::from_slice(&fs::read(&marker).map_err(|_| ERROR_REENTRY_MARKER.to_string())?)
+            .map_err(|_| ERROR_REENTRY_MARKER.to_string())?;
+    if marker.schema_version != REENTRY_MARKER_SCHEMA_VERSION
+        || marker.run_id != manifest.run_id
+        || marker.profile_sha256 != profile_sha256
+        || marker.capability_sha256 != capability_sha256
+    {
+        return Err(ERROR_REUSED.to_string());
+    }
+    Ok(true)
+}
+
+fn write_first_initialization_marker(pending: &PendingFirstInitialization) -> Result<(), String> {
+    let parent = pending
+        .marker_path
+        .parent()
+        .ok_or_else(|| ERROR_REENTRY_MARKER.to_string())?;
+    match fs::create_dir(parent) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(_) => return Err(ERROR_REENTRY_MARKER.to_string()),
+    }
+    let parent_metadata =
+        fs::symlink_metadata(parent).map_err(|_| ERROR_REENTRY_MARKER.to_string())?;
+    if parent_metadata.file_type().is_symlink() || !parent_metadata.is_dir() {
+        return Err(ERROR_REENTRY_MARKER.to_string());
+    }
+    #[cfg(unix)]
+    {
+        if parent_metadata.uid() != effective_uid()? {
+            return Err(ERROR_REENTRY_MARKER.to_string());
+        }
+        fs::set_permissions(parent, fs::Permissions::from_mode(0o700))
+            .map_err(|_| ERROR_REENTRY_MARKER.to_string())?;
+    }
+    let marker = ReentryMarker {
+        schema_version: REENTRY_MARKER_SCHEMA_VERSION.to_string(),
+        run_id: pending.run_id.clone(),
+        profile_sha256: pending.profile_sha256.clone(),
+        capability_sha256: pending.capability_sha256.clone(),
+    };
+    let bytes = serde_json::to_vec(&marker).map_err(|_| ERROR_REENTRY_MARKER.to_string())?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > REENTRY_MARKER_MAX_BYTES {
+        return Err(ERROR_REENTRY_MARKER.to_string());
+    }
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&pending.marker_path)
+        .map_err(|_| ERROR_REENTRY_MARKER.to_string())?;
+    #[cfg(unix)]
+    file.set_permissions(fs::Permissions::from_mode(0o600))
+        .map_err(|_| ERROR_REENTRY_MARKER.to_string())?;
+    file.write_all(&bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|_| ERROR_REENTRY_MARKER.to_string())?;
+    fs::File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|_| ERROR_REENTRY_MARKER.to_string())?;
+    Ok(())
+}
+
 /// 崩溃重进判定：marker 存在即进入重进模式；内容必须是同 run_id，否则按复用拒绝。
 /// harness 从不写 marker——由验收操作者在首次校验通过后显式落盘。
+#[cfg(test)]
 fn is_reentry(root: &Path, manifest: &ProfileManifest) -> Result<bool, String> {
     let marker = root
         .join(RUNTIME_ARTIFACTS_DIR_NAME)
@@ -324,7 +543,9 @@ fn validate_reentry_layout(root: &Path, manifest: &ProfileManifest) -> Result<Pa
         return Err(ERROR_REUSED.to_string());
     }
 
-    let fixture_dir = entries.get("fixture").ok_or_else(|| ERROR_REUSED.to_string())?;
+    let fixture_dir = entries
+        .get("fixture")
+        .ok_or_else(|| ERROR_REUSED.to_string())?;
     require_single_link_regular_file_at(fixture_dir.join("codex-index.json"))?;
     require_single_link_regular_file_at(fixture_dir.join("tasks.md"))?;
     let project_dir = format!("SYN R4 ISOLATED ACCEPTANCE {}", manifest.run_id);
@@ -378,11 +599,23 @@ pub(crate) fn initialize_from_env() -> Result<(), String> {
     let Some(profile_path) = std::env::var_os(PROFILE_ENV).map(PathBuf::from) else {
         return Ok(());
     };
+    let reentry_capability =
+        std::env::var(REENTRY_CAPABILITY_ENV).map_err(|_| ERROR_REENTRY_CAPABILITY.to_string())?;
     let context = production_context()?;
     let mut state = process_state()
         .lock()
         .map_err(|_| ERROR_UNINITIALIZED.to_string())?;
-    state.initialize_from_manifest(Some(&profile_path), context)
+    state.initialize_from_startup_manifest(&profile_path, context, &reentry_capability)
+}
+
+/// The marker is deliberately written only after AppState and DB-primary
+/// startup reconciliation have both succeeded.  A preseeded marker or a
+/// startup that fails before this point cannot acquire reentry eligibility.
+pub(crate) fn finalize_first_r4_initialization() -> Result<(), String> {
+    let mut state = process_state()
+        .lock()
+        .map_err(|_| ERROR_UNINITIALIZED.to_string())?;
+    state.finalize_first_r4_initialization()
 }
 
 pub(crate) fn active_paths() -> Result<Option<RuntimePaths>, String> {
@@ -940,6 +1173,15 @@ fn runtime_paths_from_manifest(root: PathBuf, project_root: PathBuf) -> RuntimeP
 
 const ACCEPTANCE_GATE_WAIT_INTERVAL: Duration = Duration::from_millis(50);
 const ACCEPTANCE_GATE_WAIT_BUDGET: Duration = Duration::from_secs(120);
+const M2_REFERENCE_GATE_MAX_BYTES: u64 = 2048;
+
+#[derive(Deserialize)]
+struct M2ReferenceCommandGateBinding {
+    operation: String,
+    attempt: String,
+    command_id: String,
+    nonce: String,
+}
 
 fn acceptance_gate_file(gate: &str) -> Option<PathBuf> {
     let paths = active_paths().ok().flatten()?;
@@ -987,4 +1229,84 @@ pub(crate) fn acceptance_injected_failure(gate: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// M2's R4 crash gates are deliberately narrower than the pre-existing
+/// filename-only gates.  A pause file can affect the reference command only
+/// when it names the exact operation, logical command identity, fixture
+/// attempt, and one-time nonce.  Startup/reconcile/outbox transactions have
+/// no matching binding and therefore cannot accidentally become an S2/S3/S4
+/// crash window.
+fn m2_reference_gate_is_armed_for(
+    gate: &str,
+    operation: &str,
+    attempt: &str,
+    command_id: &str,
+    nonce: &str,
+) -> Result<bool, String> {
+    let Some(path) = acceptance_gate_file(gate) else {
+        return Ok(false);
+    };
+    if !path.exists() {
+        return Ok(false);
+    }
+    let metadata = fs::symlink_metadata(&path)
+        .map_err(|error| format!("m2_reference_gate_metadata_failed:{gate}:{error}"))?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(format!("m2_reference_gate_file_invalid:{gate}"));
+    }
+    if metadata.len() == 0 || metadata.len() > M2_REFERENCE_GATE_MAX_BYTES {
+        return Err(format!("m2_reference_gate_size_invalid:{gate}"));
+    }
+    let binding: M2ReferenceCommandGateBinding = serde_json::from_slice(
+        &fs::read(&path).map_err(|error| format!("m2_reference_gate_read_failed:{gate}:{error}"))?,
+    )
+    .map_err(|_| format!("m2_reference_gate_binding_invalid:{gate}"))?;
+    if binding.operation != operation
+        || binding.attempt != attempt
+        || binding.command_id != command_id
+        || binding.nonce != nonce
+    {
+        return Err(format!("m2_reference_gate_binding_mismatch:{gate}"));
+    }
+    Ok(true)
+}
+
+pub(crate) fn acceptance_wait_for_m2_reference_gate_release(
+    gate: &str,
+    operation: &str,
+    attempt: &str,
+    command_id: &str,
+    nonce: &str,
+) -> Result<(), String> {
+    if !m2_reference_gate_is_armed_for(gate, operation, attempt, command_id, nonce)? {
+        return Ok(());
+    }
+    eprintln!("acceptance_m2_reference_gate_armed:{gate}:{operation}:{attempt}");
+    let deadline = std::time::Instant::now() + ACCEPTANCE_GATE_WAIT_BUDGET;
+    loop {
+        if !m2_reference_gate_is_armed_for(gate, operation, attempt, command_id, nonce)? {
+            eprintln!("acceptance_m2_reference_gate_released:{gate}:{operation}:{attempt}");
+            return Ok(());
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(format!(
+                "acceptance_m2_reference_gate_release_timeout:{gate}:{operation}:{attempt}"
+            ));
+        }
+        std::thread::sleep(ACCEPTANCE_GATE_WAIT_INTERVAL);
+    }
+}
+
+pub(crate) fn acceptance_injected_m2_reference_failure(
+    gate: &str,
+    operation: &str,
+    attempt: &str,
+    command_id: &str,
+    nonce: &str,
+) -> Result<Option<String>, String> {
+    if m2_reference_gate_is_armed_for(gate, operation, attempt, command_id, nonce)? {
+        return Ok(Some(format!("acceptance_injected_failure:{gate}")));
+    }
+    Ok(None)
 }

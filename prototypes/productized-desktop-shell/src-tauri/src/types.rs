@@ -2724,6 +2724,7 @@ struct H5ProjectWorkflowDispatchPreview {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 struct WorkerStructuredReportInput {
     project_root: String,
     project_id: String,
@@ -2733,6 +2734,12 @@ struct WorkerStructuredReportInput {
     dispatch_id: Option<String>,
     /// SYN-FND-004B: 执行尝试 ID，精确绑定到具体的一次执行尝试
     attempt_id: Option<String>,
+    /// Execution-grant linkage is modeled explicitly so the public manual/offline
+    /// ingress can reject it before it reaches any legacy persistence code.  The
+    /// `grant_id` alias keeps the wire contract fail-closed instead of silently
+    /// dropping a caller-supplied grant association.
+    #[serde(default, alias = "grant_id")]
+    execution_grant_id: Option<String>,
     /// SYN-FND-004B: 已认证的执行者身份（服务端派生，非前端传入）
     authenticated_actor_id: String,
     /// SYN-FND-004B: 已认证的作用域标识（服务端从 project_root 派生的 project_id）
@@ -4926,6 +4933,8 @@ struct WorkflowNodeDispatchRecord {
     memory_packet_fingerprint: Option<String>,
     plan_authorization_id: Option<String>,
     authorization_check: Option<AutoDispatchGuardResult>,
+    execution_grant_id: Option<String>,
+    execution_attempt_id: Option<String>,
     offline_role_dispatch: Option<OfflineRoleDispatchRequest>,
     user_reviewed_instruction: Option<WorkflowUserReviewedInstruction>,
     state: String,
@@ -5025,6 +5034,13 @@ struct WorkflowExecutionAttemptRecord {
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+struct WorkflowStateM2PortProvenance {
+    repository_port_version: String,
+    schema_version: String,
+    caller_mode: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 struct WorkflowStateSnapshot {
     exists: bool,
     path: String,
@@ -5037,6 +5053,10 @@ struct WorkflowStateSnapshot {
     project_workflows: Vec<ProjectWorkflowSummary>,
     project_blackboards: Vec<ProjectBlackboard>,
     warnings: Vec<String>,
+    /// Only an explicit M2 v1 request exposes this. Legacy callers keep the
+    /// historical response shape and are reported as guarded legacy elsewhere.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    m2_port_provenance: Option<WorkflowStateM2PortProvenance>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
@@ -5045,6 +5065,10 @@ struct WorkflowStateMutationResult {
     path: String,
     backup_path: Option<String>,
     audit_event_id: String,
+    /// DB-primary mutation paths expose the canonical M2 command receipt so
+    /// callers can verify replay identity without reverse-parsing audit text.
+    /// JSON-only legacy paths have no M2 receipt and return None.
+    receipt_id: Option<String>,
     first_initialize: bool,
     snapshot: WorkflowStateSnapshot,
 }
@@ -5105,6 +5129,20 @@ struct WorkItemStateUpdateRequest {
     project_root: String,
     work_item_id: String,
     next_state: String,
+    /// Stable caller-provided identity for one logical command.  Omitting it
+    /// remains compatible with old callers, but the DB-primary M2 route will
+    /// mint a fresh UUIDv7 and therefore cannot mistake a later state cycle
+    /// for a retry.
+    #[serde(default)]
+    command_id: Option<String>,
+    /// Retry key paired with `command_id`; an explicit retry must resend both.
+    #[serde(default)]
+    idempotency_key: Option<String>,
+    /// Caller-observed aggregate revision.  DB-primary validates it in the
+    /// same immediate transaction; old callers may omit it and use the
+    /// JSON-projected revision as a compatibility precondition.
+    #[serde(default)]
+    expected_revision: Option<i64>,
 }
 
 #[derive(Deserialize)]
