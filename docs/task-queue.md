@@ -4,6 +4,6 @@
 
 `stage-04 / M0C01` 已完成上述既有文档的路径核验、本地提交和开发护栏归档；没有修改产品代码，也没有启动真实服务提供方、真实消息、实时桌面工作台、部署或发布。
 
-用户已经明确批准在干净基线成立后自主推进 M3。当前活动阶段是 `stage-05`；M3C01 实施补充合同已冻结并归档，唯一活动叶是 `M3C02-agent-existing-owner-scope-guard`。本叶只在点名的 Rust 后端文件增加 existing-thread 的 owner / scope spawn 前守卫和离线测试，不接 repository、schema、真实 provider、真实消息或前端。
+用户已经明确批准在干净基线成立后自主推进 M3。当前活动阶段是 `stage-05`；M3C01 实施补充合同和 M3C02 existing-thread owner / scope 守卫已完成并归档，唯一活动叶是 `M3C03-role-session-repository-shadow-import`。本叶只在点名的 Rust 文件建立 M3 自有临时 repository / schema、domain types 与只读 shadow import 分类，不接真实 provider、真实 Codex 数据、实时迁移、真实消息或前端。
 
 施工权限只看当前用户指令、`AGENTS.md` 和轻量开发护栏的有效当前链；本文件只导航，不授权。

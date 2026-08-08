@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-08-09，产品代码内容仍以 M2 收口的 `a8c6381dd33c3098e343a2b6a7f2ec9b94b6cce9` 为基线；M0 文档正本基线已由 `cfdbbf7cbd2018c1f1b70e7940bc08a9d24d6167` 收口，护栏于 `0a598d0` 归档。用户随后明确批准自主推进 M3；stage-05 已激活，M3C01 实施补充合同由 `29085cc` 冻结，当前进入 M3C02 后端守卫。合同完成不等于对应产品实现已成立，也没有进入真实服务提供方、真实消息、部署或发布。
+截至 2026-08-09，当前主线以 M2 收口 `a8c6381dd33c3098e343a2b6a7f2ec9b94b6cce9` 为底，M0 文档正本基线由 `cfdbbf7cbd2018c1f1b70e7940bc08a9d24d6167` 收口、护栏于 `0a598d0` 归档。用户随后明确批准自主推进 M3；stage-05 已激活，M3C01 实施补充合同由 `29085cc` 冻结，M3C02 existing-thread owner / scope 守卫由 `17933ea` 进入主线，当前进入 M3C03 临时 repository / schema / shadow import。局部实现不等于完整角色会话底座已成立，也没有进入真实服务提供方、真实消息、部署或发布。
 
 ## 现在分别看哪里
 
@@ -30,12 +30,13 @@
 - M2 的具名 `workflow-state-sidecar`（工作流状态旁路存储）参考切片已经进入主线，覆盖工作单元、拒绝审计、回执、快照、发件箱、投影与检查点、同等性与恢复，以及隔离崩溃和重启验收。
 - M2 完整 Rust（系统实现语言）库测试结果为 1385 通过、0 失败、45 忽略。
 - 干净主线隔离 R4（第四轮恢复演练）为 7 项全部通过，回执哈希为 `fbd799a347934225f5e2eb652d286b690d8137c69c7baa55b4835fbebfc3ac13`。
+- M3C02 已为 shared Agent existing、legacy raw existing 和 GUI-direct existing 增加 provider spawn 前的 server index、canonical thread owner、Station 3b 与固定权限 envelope 守卫；聚焦离线测试 5 项通过，非测试库构建通过。它是 repository 前的止血层，不是 durable RoleSession / permission 真源，也不证明真实 provider 或桌面应用通过。
 
 这些结论的证据边界见 `docs/harness/reports/M2C02-mainline-integration-and-acceptance.md` 与 `docs/harness/reports/M2C03-lite-closeout-and-guidance-handoff.md`；报告不扩大它们点名的版本和场景。
 
 ## 仍未成立
 
-- M3C01 已冻结 RoleSession / Turn / ProviderHandle / ConversationContext / Handoff 的实施解释和迁移矩阵，但对应 repository、schema、transport、状态机、读模型和前端接线仍未成立。
+- M3C01 已冻结 RoleSession / Turn / ProviderHandle / ConversationContext / Handoff 的实施解释和迁移矩阵，M3C02 只补了 existing-thread 启动前守卫；对应 durable repository、schema、transport、状态机、读模型和前端接线仍未成立。
 - 评审、决定和来源所有者的应用结果尚未形成完整产品闭环。
 - 实时桌面工作台数据没有迁移或切换；`DAT-007` 仍是“未迁移、未切换”。
 - 真实服务提供方、真实账号、真实消息、部署、发布和完整桌面应用验收均未进入。
@@ -44,7 +45,7 @@
 
 ## 当前开发状态
 
-轻量开发护栏的前四个阶段均已完成并归档。当前活动阶段是 `stage-05 / M3`；M3C01 已完成并归档，唯一活动叶是 `M3C02-agent-existing-owner-scope-guard`，业务写入面仅限该叶点名的 Rust 后端文件。`docs/harness/authorization.json` 已记录本轮用户给出的 M3 持续授权和外部动作禁止项。
+轻量开发护栏的前四个阶段均已完成并归档。当前活动阶段是 `stage-05 / M3`；M3C01、M3C02 已完成并归档，唯一活动叶是 `M3C03-role-session-repository-shadow-import`，业务写入面仅限该叶点名的 M3 Rust domain / repository / schema 和必要接线文件。`docs/harness/authorization.json` 已记录本轮用户给出的 M3 持续授权和外部动作禁止项。
 
 M0 文档内容、路径核验、本地提交和护栏归档已经完成。M3 现在按窄叶连续推进；工程拆分、实现和离线验证由阶段主管收口，产品正本变更、真实 provider/账号/消息、merge、push、发布和破坏性动作仍需停下请示或保持排除。
 
