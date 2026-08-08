@@ -256,15 +256,29 @@ fn confirm_manual_codex_relay_once(
 #[tauri::command]
 fn run_manual_codex_relay_once(
     request: manual_relay::ManualRelayRunInput,
+    state: tauri::State<'_, AppState>,
 ) -> Result<manual_relay::ManualRelayReceipt, String> {
-    manual_relay::run_manual_relay_once(request, &unix_timestamp_string())
+    let binding = request.envelope.target_binding.clone();
+    run_after_raw_manual_existing_thread_scope_at(
+        &state,
+        &binding,
+        &codex_db::default_state_db_path(),
+        || manual_relay::run_manual_relay_once(request, &unix_timestamp_string()),
+    )
 }
 
 #[tauri::command]
 fn run_manual_codex_relay_gui_direct(
     request: manual_relay::ManualRelayGuiDirectRunInput,
+    state: tauri::State<'_, AppState>,
 ) -> Result<manual_relay::ManualRelayReceipt, String> {
-    manual_relay::run_manual_relay_gui_direct_once(request, &unix_timestamp_string())
+    let scope_input = request.clone();
+    run_after_gui_direct_existing_thread_scope_at(
+        &state,
+        &scope_input,
+        &codex_db::default_state_db_path(),
+        || manual_relay::run_manual_relay_gui_direct_once(request, &unix_timestamp_string()),
+    )
 }
 
 #[tauri::command]
@@ -303,6 +317,9 @@ const SUPERVISOR_CONVERSATION_MAX_RUNTIME_MINUTES: i64 =
     mcp::supervisor_conversation_binding::SUPERVISOR_CONVERSATION_MAX_RUNTIME_MINUTES;
 const SHARED_CONVERSATION_USER_EVENT: &str = "supervisor_resident_user_message_recorded";
 const SHARED_CONVERSATION_ASSISTANT_EVENT: &str = "supervisor_resident_supervisor_message_recorded";
+const M3C02_EXISTING_THREAD_OWNER_REJECTED: &str =
+    "conversation_transport_existing_thread_owner_rejected";
+const M3C02_AGENT_SCOPE_REJECTED: &str = "conversation_transport_agent_scope_rejected";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -602,10 +619,29 @@ fn start_conversation_transport_for_host_profile(
     match profile {
         ConversationTransportHostProfile::AgentWorkspaceWrite => {
             reject_agent_only_context_expansion(&request.context)?;
-            let receipt = manual_relay::conversation_transport::start_agent_conversation_transport(
-                input, &timestamp,
-            )
-            .map_err(|_| "conversation_transport_start_failed".to_string())?;
+            let receipt = run_after_agent_indexed_project_scope(
+                state,
+                &target_project_root,
+                || match thread_id.as_deref() {
+                    Some(existing_thread_id) => run_after_existing_thread_owner_preflight_at(
+                        &codex_db::default_state_db_path(),
+                        existing_thread_id,
+                        &target_project_root,
+                        || {
+                            manual_relay::conversation_transport::start_agent_conversation_transport(
+                                input, &timestamp,
+                            )
+                            .map_err(|_| "conversation_transport_start_failed".to_string())
+                        },
+                    ),
+                    None => {
+                        manual_relay::conversation_transport::start_agent_conversation_transport(
+                            input, &timestamp,
+                        )
+                        .map_err(|_| "conversation_transport_start_failed".to_string())
+                    }
+                },
+            )?;
             let response = normalize_conversation_transport_receipt(&receipt, None);
             register_conversation_transport_attempt_if_pending(
                 &response,
@@ -1193,6 +1229,243 @@ fn reject_agent_only_context_expansion(
 ) -> Result<(), String> {
     if context.project_id.is_some() || context.workflow_id.is_some() {
         return Err("conversation_transport_agent_context_expansion_forbidden".to_string());
+    }
+    Ok(())
+}
+
+/// M3C02 is a narrow pre-RoleSession stopgap: the server-side project index
+/// defines the observable project scope, the host fixes the Agent profile, and
+/// Station 3b remains read-only.  Durable role/permission truth is introduced
+/// by the later M3 repository leaf; this check must not be presented as that
+/// resolver.
+fn verify_agent_indexed_project_scope(state: &AppState, project_root: &str) -> Result<(), String> {
+    verify_agent_indexed_project_scope_at(state, project_root, STATION_3B_READONLY_PROJECT_ROOT)
+}
+
+fn run_after_agent_indexed_project_scope<T>(
+    state: &AppState,
+    project_root: &str,
+    launch: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    verify_agent_indexed_project_scope(state, project_root)?;
+    launch()
+}
+
+#[cfg(test)]
+fn run_after_agent_indexed_project_scope_at<T>(
+    state: &AppState,
+    project_root: &str,
+    station3b_project_root: &str,
+    launch: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    verify_agent_indexed_project_scope_at(state, project_root, station3b_project_root)?;
+    launch()
+}
+
+fn verify_agent_indexed_project_scope_at(
+    state: &AppState,
+    project_root: &str,
+    station3b_project_root: &str,
+) -> Result<(), String> {
+    let index = read_index(state).map_err(|_| M3C02_AGENT_SCOPE_REJECTED.to_string())?;
+    if !indexed_project_root_matches(&index, project_root)
+        || canonical_project_roots_match(project_root, station3b_project_root)
+    {
+        return Err(M3C02_AGENT_SCOPE_REJECTED.to_string());
+    }
+    Ok(())
+}
+
+fn canonical_project_roots_match(left: &str, right: &str) -> bool {
+    if left == right {
+        return true;
+    }
+    match (
+        canonical_conversation_project_root(left),
+        canonical_conversation_project_root(right),
+    ) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
+fn verify_existing_thread_owner_at(
+    db_path: &Path,
+    thread_id: &str,
+    expected_project_root: &str,
+) -> Result<(), String> {
+    let thread = codex_db::find_thread_by_id(db_path, thread_id)
+        .map_err(|_| M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string())?
+        .ok_or_else(|| M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string())?;
+    let owner_root = thread
+        .project_root
+        .as_deref()
+        .ok_or_else(|| M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string())?;
+    let canonical_owner_root = canonical_conversation_project_root(owner_root)
+        .map_err(|_| M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string())?;
+    let canonical_expected_root = canonical_conversation_project_root(expected_project_root)
+        .map_err(|_| M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string())?;
+    if canonical_owner_root != canonical_expected_root {
+        return Err(M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string());
+    }
+    Ok(())
+}
+
+fn run_after_existing_thread_owner_preflight_at<T>(
+    db_path: &Path,
+    thread_id: &str,
+    expected_project_root: &str,
+    launch: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    verify_existing_thread_owner_at(db_path, thread_id, expected_project_root)?;
+    launch()
+}
+
+fn verify_raw_manual_existing_thread_scope(
+    state: &AppState,
+    binding: &manual_relay::ManualRelayTargetBinding,
+    db_path: &Path,
+) -> Result<(), String> {
+    verify_raw_manual_existing_thread_scope_at(
+        state,
+        binding,
+        db_path,
+        STATION_3B_READONLY_PROJECT_ROOT,
+    )
+}
+
+fn verify_raw_manual_existing_thread_scope_at(
+    state: &AppState,
+    binding: &manual_relay::ManualRelayTargetBinding,
+    db_path: &Path,
+    station3b_project_root: &str,
+) -> Result<(), String> {
+    let thread_id = match (binding.new_session, binding.target_session_id.as_deref()) {
+        (true, None) => return Ok(()),
+        (false, Some(thread_id)) => thread_id,
+        _ => return Err(M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string()),
+    };
+    let project_root = canonical_conversation_project_root(&binding.project_root_canonical)
+        .map_err(|_| M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string())?;
+    verify_raw_existing_project_scope_at(
+        state,
+        &project_root,
+        &binding.sandbox,
+        &binding.allowed_write_roots,
+        station3b_project_root,
+    )?;
+    verify_existing_thread_owner_at(db_path, thread_id, &project_root)
+}
+
+fn run_after_raw_manual_existing_thread_scope_at<T>(
+    state: &AppState,
+    binding: &manual_relay::ManualRelayTargetBinding,
+    db_path: &Path,
+    launch: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    verify_raw_manual_existing_thread_scope(state, binding, db_path)?;
+    launch()
+}
+
+#[cfg(test)]
+fn run_after_raw_manual_existing_thread_scope_with_station_at<T>(
+    state: &AppState,
+    binding: &manual_relay::ManualRelayTargetBinding,
+    db_path: &Path,
+    station3b_project_root: &str,
+    launch: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    verify_raw_manual_existing_thread_scope_at(state, binding, db_path, station3b_project_root)?;
+    launch()
+}
+
+fn verify_gui_direct_existing_thread_scope(
+    state: &AppState,
+    input: &manual_relay::ManualRelayGuiDirectRunInput,
+    db_path: &Path,
+) -> Result<(), String> {
+    verify_gui_direct_existing_thread_scope_at(
+        state,
+        input,
+        db_path,
+        STATION_3B_READONLY_PROJECT_ROOT,
+    )
+}
+
+fn verify_gui_direct_existing_thread_scope_at(
+    state: &AppState,
+    input: &manual_relay::ManualRelayGuiDirectRunInput,
+    db_path: &Path,
+    station3b_project_root: &str,
+) -> Result<(), String> {
+    let project_root = canonical_conversation_project_root(&input.target_project_root)
+        .map_err(|_| M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string())?;
+    if input.sandbox != "workspace-write" {
+        return Err(M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string());
+    }
+    verify_raw_existing_project_scope_at(
+        state,
+        &project_root,
+        &input.sandbox,
+        &input.allowed_write_roots,
+        station3b_project_root,
+    )?;
+    verify_existing_thread_owner_at(db_path, &input.target_session_id, &project_root)
+}
+
+fn run_after_gui_direct_existing_thread_scope_at<T>(
+    state: &AppState,
+    input: &manual_relay::ManualRelayGuiDirectRunInput,
+    db_path: &Path,
+    launch: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    verify_gui_direct_existing_thread_scope(state, input, db_path)?;
+    launch()
+}
+
+#[cfg(test)]
+fn run_after_gui_direct_existing_thread_scope_with_station_at<T>(
+    state: &AppState,
+    input: &manual_relay::ManualRelayGuiDirectRunInput,
+    db_path: &Path,
+    station3b_project_root: &str,
+    launch: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    verify_gui_direct_existing_thread_scope_at(state, input, db_path, station3b_project_root)?;
+    launch()
+}
+
+fn verify_raw_existing_project_scope_at(
+    state: &AppState,
+    project_root: &str,
+    sandbox: &str,
+    allowed_write_roots: &[String],
+    station3b_project_root: &str,
+) -> Result<(), String> {
+    let index = read_index(state).map_err(|_| M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string())?;
+    if !indexed_project_root_matches(&index, project_root) {
+        return Err(M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string());
+    }
+    // This legacy adapter is not M3 role/permission truth.  Until the durable
+    // resolver lands, caller fields must exactly match one of two host-bounded
+    // envelopes: read-only with no write roots, or project workspace-write
+    // with the single server-resolved canonical project root.  Manual relay's
+    // confirmation, target hash, and strict canonical-path checks still run
+    // downstream before any process spawn.
+    let permission_scope_valid = match sandbox {
+        "read-only" => allowed_write_roots.is_empty(),
+        "workspace-write" => {
+            allowed_write_roots.len() == 1 && allowed_write_roots[0] == project_root
+        }
+        _ => false,
+    };
+    if !permission_scope_valid {
+        return Err(M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string());
+    }
+    if canonical_project_roots_match(project_root, station3b_project_root)
+        && (sandbox != "read-only" || !allowed_write_roots.is_empty())
+    {
+        return Err(M3C02_EXISTING_THREAD_OWNER_REJECTED.to_string());
     }
     Ok(())
 }
@@ -3468,6 +3741,638 @@ mod conversation_transport_command_tests {
             "user_text": "hello"
         }));
         assert!(capability_error.is_err());
+    }
+
+    struct M3c02OwnerFixture {
+        root: PathBuf,
+        project_root: PathBuf,
+        other_root: PathBuf,
+        db_path: PathBuf,
+        state: AppState,
+    }
+
+    impl M3c02OwnerFixture {
+        fn new() -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "m3c02-owner-scope-{}-{}",
+                std::process::id(),
+                CANONICAL_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+            ));
+            let project_root = root.join("project");
+            let other_root = root.join("project-other");
+            fs::create_dir_all(&project_root).expect("M3C02 project root");
+            fs::create_dir_all(&other_root).expect("M3C02 other root");
+            let project_root = fs::canonicalize(project_root).expect("canonical M3C02 project");
+            let other_root = fs::canonicalize(other_root).expect("canonical M3C02 other project");
+            let index_path = root.join("index.json");
+            fs::write(
+                &index_path,
+                serde_json::to_vec(&json!({
+                    "projects": [{
+                        "project_id": project_id(&project_root.display().to_string()),
+                        "project_root": project_root
+                    }]
+                }))
+                .expect("M3C02 index JSON"),
+            )
+            .expect("M3C02 index");
+            let tasks_path = root.join("tasks.md");
+            let workflow_state_path = root.join("workflow-state.json");
+            fs::write(&tasks_path, "").expect("M3C02 tasks fixture");
+            fs::write(&workflow_state_path, "{}").expect("M3C02 workflow fixture");
+            let db_path = root.join("state.sqlite");
+            let connection = rusqlite::Connection::open(&db_path).expect("M3C02 sqlite");
+            connection
+                .execute_batch(
+                    r#"
+                    CREATE TABLE threads (
+                        id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        cwd TEXT NOT NULL,
+                        updated_at_ms INTEGER,
+                        archived INTEGER NOT NULL,
+                        rollout_path TEXT NOT NULL,
+                        model TEXT,
+                        reasoning_effort TEXT,
+                        thread_source TEXT,
+                        source TEXT NOT NULL DEFAULT 'cli',
+                        has_user_event INTEGER NOT NULL
+                    );
+                    "#,
+                )
+                .expect("M3C02 threads schema");
+            drop(connection);
+            Self {
+                root,
+                project_root,
+                other_root,
+                db_path,
+                state: AppState {
+                    index_path,
+                    tasks_path,
+                    workflow_state_path,
+                },
+            }
+        }
+
+        fn insert_thread(&self, thread_id: &str, cwd: &str, has_user_event: i64) {
+            let connection =
+                rusqlite::Connection::open(&self.db_path).expect("M3C02 reopen sqlite");
+            connection
+                .execute(
+                    "INSERT INTO threads (id, title, cwd, updated_at_ms, archived, rollout_path, \
+                     model, reasoning_effort, thread_source, has_user_event) \
+                     VALUES (?1, 'fixture', ?2, 1, 0, '', 'gpt-test', 'high', 'exec', ?3)",
+                    rusqlite::params![thread_id, cwd, has_user_event],
+                )
+                .expect("M3C02 insert thread");
+        }
+
+        fn project_root_text(&self) -> String {
+            self.project_root.display().to_string()
+        }
+    }
+
+    impl Drop for M3c02OwnerFixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn m3c02_existing_owner_failures_happen_before_launch_without_path_disclosure() {
+        use std::cell::Cell;
+
+        let fixture = M3c02OwnerFixture::new();
+        fixture.insert_thread("thread-ownerless", "", 0);
+        fixture.insert_thread(
+            "thread-mismatch",
+            &fixture.other_root.display().to_string(),
+            0,
+        );
+        fixture.insert_thread(
+            "thread-invalid-owner",
+            &fixture
+                .root
+                .join("missing-owner-root")
+                .display()
+                .to_string(),
+            0,
+        );
+        let launch_count = Cell::new(0_u32);
+        for thread_id in [
+            "thread-unknown",
+            "thread-ownerless",
+            "thread-mismatch",
+            "thread-invalid-owner",
+        ] {
+            let error = run_after_existing_thread_owner_preflight_at(
+                &fixture.db_path,
+                thread_id,
+                &fixture.project_root_text(),
+                || {
+                    launch_count.set(launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 invalid owner must fail before launch");
+            assert_eq!(error, M3C02_EXISTING_THREAD_OWNER_REJECTED);
+            assert!(!error.contains(&fixture.root.display().to_string()));
+        }
+        assert_eq!(launch_count.get(), 0);
+
+        let unreadable_db = fixture.root.join("missing-state.sqlite");
+        let error = run_after_existing_thread_owner_preflight_at(
+            &unreadable_db,
+            "thread-any",
+            &fixture.project_root_text(),
+            || {
+                launch_count.set(launch_count.get() + 1);
+                Ok(())
+            },
+        )
+        .expect_err("M3C02 unreadable owner catalog must fail closed");
+        assert_eq!(error, M3C02_EXISTING_THREAD_OWNER_REJECTED);
+        assert_eq!(launch_count.get(), 0);
+    }
+
+    #[test]
+    fn m3c02_same_canonical_project_hidden_exec_thread_reaches_fake_launch_once() {
+        use std::cell::Cell;
+
+        let fixture = M3c02OwnerFixture::new();
+        fixture.insert_thread("thread-hidden-exec", &fixture.project_root_text(), 0);
+        let listed = codex_db::read_threads(&fixture.db_path).expect("M3C02 list threads");
+        assert!(listed
+            .iter()
+            .all(|thread| thread.thread_id != "thread-hidden-exec"));
+
+        let launch_count = Cell::new(0_u32);
+        let same_root_alias = fixture.project_root.join(".");
+        let result = run_after_existing_thread_owner_preflight_at(
+            &fixture.db_path,
+            "thread-hidden-exec",
+            &same_root_alias.display().to_string(),
+            || {
+                launch_count.set(launch_count.get() + 1);
+                Ok("fake-launch-only")
+            },
+        )
+        .expect("M3C02 same canonical owner may reach fake closure");
+        assert_eq!(result, "fake-launch-only");
+        assert_eq!(launch_count.get(), 1);
+    }
+
+    #[test]
+    fn m3c02_agent_scope_uses_server_index_and_keeps_station3b_read_only() {
+        use std::cell::Cell;
+
+        let fixture = M3c02OwnerFixture::new();
+        assert!(
+            verify_agent_indexed_project_scope(&fixture.state, &fixture.project_root_text())
+                .is_ok()
+        );
+        let valid_launch_count = Cell::new(0_u32);
+        let valid_result = run_after_agent_indexed_project_scope_at(
+            &fixture.state,
+            &fixture.project_root_text(),
+            &fixture.other_root.display().to_string(),
+            || {
+                valid_launch_count.set(valid_launch_count.get() + 1);
+                Ok("fake-agent-launch-only")
+            },
+        )
+        .expect("M3C02 indexed non-Station3b Agent may reach a fake closure");
+        assert_eq!(valid_result, "fake-agent-launch-only");
+        assert_eq!(valid_launch_count.get(), 1);
+        let unindexed =
+            canonical_conversation_project_root(&fixture.other_root.display().to_string())
+                .expect("M3C02 canonical other root");
+        assert_eq!(
+            verify_agent_indexed_project_scope(&fixture.state, &unindexed)
+                .expect_err("M3C02 unindexed project must fail closed"),
+            M3C02_AGENT_SCOPE_REJECTED
+        );
+
+        #[cfg(unix)]
+        let station3b_alias = {
+            let alias = fixture.root.join("station-3b-symlink-alias");
+            std::os::unix::fs::symlink(&fixture.project_root, &alias)
+                .expect("M3C02 Station 3b symlink alias");
+            alias.display().to_string()
+        };
+        #[cfg(not(unix))]
+        let station3b_alias = fixture.project_root_text();
+        let launch_count = Cell::new(0_u32);
+        assert_eq!(
+            run_after_agent_indexed_project_scope_at(
+                &fixture.state,
+                &fixture.project_root_text(),
+                &station3b_alias,
+                || {
+                    launch_count.set(launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 Station 3b Agent writes must stop before launch"),
+            M3C02_AGENT_SCOPE_REJECTED
+        );
+        assert_eq!(launch_count.get(), 0);
+    }
+
+    #[test]
+    fn m3c02_raw_existing_routes_share_index_and_owner_preflight() {
+        use std::cell::Cell;
+
+        let fixture = M3c02OwnerFixture::new();
+        fixture.insert_thread("thread-raw", &fixture.project_root_text(), 0);
+        let raw_launch_count = Cell::new(0_u32);
+        let gui_launch_count = Cell::new(0_u32);
+        let binding = manual_relay::ManualRelayTargetBinding {
+            project_root_canonical: fixture.project_root_text(),
+            target_cwd_canonical: fixture.project_root_text(),
+            target_session_id: Some("thread-raw".to_string()),
+            new_session: false,
+            sandbox: "workspace-write".to_string(),
+            allowed_write_roots: vec![fixture.project_root_text()],
+            target_hash: "fixture-not-used-by-preflight".to_string(),
+            path_verified: true,
+        };
+        run_after_raw_manual_existing_thread_scope_at(
+            &fixture.state,
+            &binding,
+            &fixture.db_path,
+            || {
+                raw_launch_count.set(raw_launch_count.get() + 1);
+                Ok(())
+            },
+        )
+        .expect("M3C02 raw envelope route reaches only a fake closure after owner preflight");
+
+        let gui_input = manual_relay::ManualRelayGuiDirectRunInput {
+            original_user_text: "fixture only".to_string(),
+            target_project_root: fixture.project_root_text(),
+            target_cwd: fixture.project_root_text(),
+            target_session_id: "thread-raw".to_string(),
+            sandbox: "workspace-write".to_string(),
+            allowed_write_roots: vec![fixture.project_root_text()],
+            requested_by: "fixture".to_string(),
+        };
+        run_after_gui_direct_existing_thread_scope_at(
+            &fixture.state,
+            &gui_input,
+            &fixture.db_path,
+            || {
+                gui_launch_count.set(gui_launch_count.get() + 1);
+                Ok(())
+            },
+        )
+        .expect("M3C02 GUI-direct route reaches only a fake closure after owner preflight");
+        assert_eq!(raw_launch_count.get(), 1);
+        assert_eq!(gui_launch_count.get(), 1);
+
+        #[cfg(unix)]
+        let station3b_alias = {
+            let alias = fixture.root.join("station-3b-symlink-alias");
+            std::os::unix::fs::symlink(&fixture.project_root, &alias)
+                .expect("M3C02 raw Station 3b symlink alias");
+            alias.display().to_string()
+        };
+        #[cfg(not(unix))]
+        let station3b_alias = fixture.project_root_text();
+        let station_blocked_launch_count = Cell::new(0_u32);
+        assert_eq!(
+            run_after_raw_manual_existing_thread_scope_with_station_at(
+                &fixture.state,
+                &binding,
+                &fixture.db_path,
+                &station3b_alias,
+                || {
+                    station_blocked_launch_count.set(station_blocked_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 raw Station 3b write must stop before launch"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+        assert_eq!(
+            run_after_gui_direct_existing_thread_scope_with_station_at(
+                &fixture.state,
+                &gui_input,
+                &fixture.db_path,
+                &station3b_alias,
+                || {
+                    station_blocked_launch_count.set(station_blocked_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 GUI-direct Station 3b write must stop before launch"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+        assert_eq!(station_blocked_launch_count.get(), 0);
+
+        let mut read_only_binding = binding.clone();
+        read_only_binding.sandbox = "read-only".to_string();
+        read_only_binding.allowed_write_roots.clear();
+        let mut read_only_gui_input = gui_input.clone();
+        read_only_gui_input.sandbox = "read-only".to_string();
+        read_only_gui_input.allowed_write_roots.clear();
+        let read_only_launch_count = Cell::new(0_u32);
+        run_after_raw_manual_existing_thread_scope_with_station_at(
+            &fixture.state,
+            &read_only_binding,
+            &fixture.db_path,
+            &station3b_alias,
+            || {
+                read_only_launch_count.set(read_only_launch_count.get() + 1);
+                Ok(())
+            },
+        )
+        .expect("M3C02 generic raw Station 3b read-only compatibility remains available");
+        assert_eq!(
+            run_after_gui_direct_existing_thread_scope_with_station_at(
+                &fixture.state,
+                &read_only_gui_input,
+                &fixture.db_path,
+                &station3b_alias,
+                || {
+                    read_only_launch_count.set(read_only_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 GUI-direct profile remains fixed to workspace-write"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+        assert_eq!(read_only_launch_count.get(), 1);
+
+        let unindexed_root = fixture.other_root.display().to_string();
+        let mut unindexed_binding = binding.clone();
+        unindexed_binding.project_root_canonical = unindexed_root.clone();
+        unindexed_binding.target_cwd_canonical = unindexed_root.clone();
+        let mut unindexed_gui_input = gui_input.clone();
+        unindexed_gui_input.target_project_root = unindexed_root.clone();
+        unindexed_gui_input.target_cwd = unindexed_root;
+        let unindexed_launch_count = Cell::new(0_u32);
+        assert_eq!(
+            run_after_raw_manual_existing_thread_scope_at(
+                &fixture.state,
+                &unindexed_binding,
+                &fixture.db_path,
+                || {
+                    unindexed_launch_count.set(unindexed_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 raw unindexed project must stop before launch"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+        assert_eq!(
+            run_after_gui_direct_existing_thread_scope_at(
+                &fixture.state,
+                &unindexed_gui_input,
+                &fixture.db_path,
+                || {
+                    unindexed_launch_count.set(unindexed_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 GUI-direct unindexed project must stop before launch"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+        assert_eq!(unindexed_launch_count.get(), 0);
+
+        let permission_blocked_launch_count = Cell::new(0_u32);
+        let mut unsupported_sandbox_binding = binding.clone();
+        unsupported_sandbox_binding.sandbox = "danger-full-access".to_string();
+        assert_eq!(
+            run_after_raw_manual_existing_thread_scope_at(
+                &fixture.state,
+                &unsupported_sandbox_binding,
+                &fixture.db_path,
+                || {
+                    permission_blocked_launch_count.set(permission_blocked_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 raw caller-selected sandbox must stop before launch"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+        let mut unsupported_sandbox_gui = gui_input.clone();
+        unsupported_sandbox_gui.sandbox = "danger-full-access".to_string();
+        assert_eq!(
+            run_after_gui_direct_existing_thread_scope_at(
+                &fixture.state,
+                &unsupported_sandbox_gui,
+                &fixture.db_path,
+                || {
+                    permission_blocked_launch_count.set(permission_blocked_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 GUI-direct caller-selected sandbox must stop before launch"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+
+        let mut read_only_with_write_root = binding.clone();
+        read_only_with_write_root.sandbox = "read-only".to_string();
+        assert_eq!(
+            run_after_raw_manual_existing_thread_scope_at(
+                &fixture.state,
+                &read_only_with_write_root,
+                &fixture.db_path,
+                || {
+                    permission_blocked_launch_count.set(permission_blocked_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 read-only raw binding cannot carry write roots"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+        let mut workspace_write_without_root = gui_input.clone();
+        workspace_write_without_root.allowed_write_roots.clear();
+        assert_eq!(
+            run_after_gui_direct_existing_thread_scope_at(
+                &fixture.state,
+                &workspace_write_without_root,
+                &fixture.db_path,
+                || {
+                    permission_blocked_launch_count.set(permission_blocked_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 workspace-write GUI binding requires a project write root"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+
+        let scoped_subdirectory = fixture.project_root.join("scoped-subdirectory");
+        fs::create_dir_all(&scoped_subdirectory).expect("M3C02 scoped subdirectory");
+        let mut caller_selected_subdirectory = binding.clone();
+        caller_selected_subdirectory.allowed_write_roots =
+            vec![scoped_subdirectory.display().to_string()];
+        assert_eq!(
+            run_after_raw_manual_existing_thread_scope_at(
+                &fixture.state,
+                &caller_selected_subdirectory,
+                &fixture.db_path,
+                || {
+                    permission_blocked_launch_count.set(permission_blocked_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 caller-selected subdirectory is not server-resolved scope"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+        let mut caller_added_write_root = binding.clone();
+        caller_added_write_root
+            .allowed_write_roots
+            .push(scoped_subdirectory.display().to_string());
+        assert_eq!(
+            run_after_raw_manual_existing_thread_scope_at(
+                &fixture.state,
+                &caller_added_write_root,
+                &fixture.db_path,
+                || {
+                    permission_blocked_launch_count.set(permission_blocked_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 caller-added write root is not server-resolved scope"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+
+        #[cfg(unix)]
+        {
+            let escaping_root = fixture.project_root.join("escaping-write-root");
+            std::os::unix::fs::symlink(&fixture.other_root, &escaping_root)
+                .expect("M3C02 escaping write-root symlink");
+            let mut escaping_binding = binding.clone();
+            escaping_binding.allowed_write_roots = vec![escaping_root.display().to_string()];
+            assert_eq!(
+                run_after_raw_manual_existing_thread_scope_at(
+                    &fixture.state,
+                    &escaping_binding,
+                    &fixture.db_path,
+                    || {
+                        permission_blocked_launch_count
+                            .set(permission_blocked_launch_count.get() + 1);
+                        Ok(())
+                    },
+                )
+                .expect_err("M3C02 symlink write root cannot escape the indexed project"),
+                M3C02_EXISTING_THREAD_OWNER_REJECTED
+            );
+        }
+        assert_eq!(permission_blocked_launch_count.get(), 0);
+
+        let mut mismatch = binding.clone();
+        mismatch.target_session_id = Some("thread-unknown".to_string());
+        assert_eq!(
+            run_after_raw_manual_existing_thread_scope_at(
+                &fixture.state,
+                &mismatch,
+                &fixture.db_path,
+                || {
+                    raw_launch_count.set(raw_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 raw unknown owner must be rejected"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+        let mut gui_mismatch = gui_input;
+        gui_mismatch.target_session_id = "thread-unknown".to_string();
+        assert_eq!(
+            run_after_gui_direct_existing_thread_scope_at(
+                &fixture.state,
+                &gui_mismatch,
+                &fixture.db_path,
+                || {
+                    gui_launch_count.set(gui_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 GUI-direct unknown owner must be rejected"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+        assert_eq!(raw_launch_count.get(), 1);
+        assert_eq!(gui_launch_count.get(), 1);
+
+        let mut contradictory_new_session = binding.clone();
+        contradictory_new_session.new_session = true;
+        assert_eq!(
+            run_after_raw_manual_existing_thread_scope_at(
+                &fixture.state,
+                &contradictory_new_session,
+                &fixture.db_path,
+                || {
+                    raw_launch_count.set(raw_launch_count.get() + 1);
+                    Ok(())
+                },
+            )
+            .expect_err("M3C02 contradictory new/existing binding must not bypass the guard"),
+            M3C02_EXISTING_THREAD_OWNER_REJECTED
+        );
+        assert_eq!(raw_launch_count.get(), 1);
+
+        let mut new_session = mismatch;
+        new_session.new_session = true;
+        new_session.target_session_id = None;
+        run_after_raw_manual_existing_thread_scope_at(
+            &fixture.state,
+            &new_session,
+            &fixture.root.join("not-a-db"),
+            || {
+                raw_launch_count.set(raw_launch_count.get() + 1);
+                Ok(())
+            },
+        )
+        .expect("M3C02 owner guard does not widen into raw new-session behavior");
+        assert_eq!(raw_launch_count.get(), 2);
+    }
+
+    #[test]
+    fn m3c02_agent_request_rejects_context_expansion_and_client_authority_fields() {
+        for context in [
+            ConversationTransportContextRequest {
+                project_root: "/tmp/project".to_string(),
+                project_id: Some("project:client".to_string()),
+                workflow_id: None,
+            },
+            ConversationTransportContextRequest {
+                project_root: "/tmp/project".to_string(),
+                project_id: None,
+                workflow_id: Some("workflow:client".to_string()),
+            },
+        ] {
+            assert_eq!(
+                reject_agent_only_context_expansion(&context)
+                    .expect_err("M3C02 Agent context expansion must be rejected"),
+                "conversation_transport_agent_context_expansion_forbidden"
+            );
+        }
+
+        for (field, value) in [
+            ("profile_id", json!("supervisor-read-only")),
+            ("role", json!("project_supervisor")),
+            ("capabilities", json!(["submit_proposal"])),
+            ("station", json!("station-3b")),
+            ("channel", json!("supervisor")),
+            ("permission", json!({"write": true})),
+        ] {
+            let mut request = json!({
+                "context": {"project_root": "/tmp/project"},
+                "mode": "existing",
+                "conversation_id": "conversation:fixture",
+                "thread_id": "thread:fixture",
+                "turn_id": "turn:fixture",
+                "user_text": "hello"
+            });
+            request["context"][field] = value;
+            assert!(
+                serde_json::from_value::<ConversationTransportStartRequest>(request).is_err(),
+                "M3C02 client authority field must be denied by serde: {field}"
+            );
+        }
     }
 }
 
