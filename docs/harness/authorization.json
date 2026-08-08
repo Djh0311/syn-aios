@@ -12,7 +12,7 @@
       "id": "M3-CONTEXT",
       "category": "context",
       "operations": ["change"],
-      "targets": ["*"]
+      "targets": ["M3C*", "docs/harness/stages/stage-05.md"]
     },
     {
       "id": "M3-CONTROL",
@@ -28,7 +28,6 @@
     "deploy",
     "release",
     "provider",
-    "database",
     "live-database",
     "live-migration",
     "real-provider-process",

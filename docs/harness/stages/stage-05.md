@@ -14,7 +14,7 @@
 
 允许动：
 
-- docs/contracts/
+- docs/contracts/m3-role-session-turn-handoff-resolution-v1.md
 - docs/current-state.md
 - docs/plans/2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md
 - docs/plans/2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md
@@ -28,22 +28,16 @@
 - prototypes/productized-desktop-shell/src-tauri/src/lib.rs
 - prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_repository.rs
 - prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_schema.rs
-- prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_schema_m2.rs
 - prototypes/productized-desktop-shell/src-tauri/src/manual_relay/
-- prototypes/productized-desktop-shell/src-tauri/src/mcp/
 - prototypes/productized-desktop-shell/src-tauri/src/m3_role_session.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_role_session_repository.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_role_session_schema.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_conversation_transport.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_handoff.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_acceptance.rs
-- prototypes/productized-desktop-shell/src-tauri/Cargo.toml
 - prototypes/productized-desktop-shell/src/lib/
 - prototypes/productized-desktop-shell/src/views/agent/
 - prototypes/productized-desktop-shell/src/views/projects/jiaoban/
-- prototypes/productized-desktop-shell/src/**/*.test.*
-- prototypes/productized-desktop-shell/src/**/*.spec.*
-- prototypes/productized-desktop-shell/package.json
 - refs/heads/main
 - /private/tmp/product-line-syn-m3-
 
