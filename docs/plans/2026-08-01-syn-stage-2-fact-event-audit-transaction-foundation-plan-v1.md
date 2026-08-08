@@ -2,14 +2,14 @@
 
 日期：2026-08-01<br>
 阶段：`M2`<br>
-状态：**IN_PROGRESS。DAT-001 已完成（`49a7e4c`）；DAT-002..008 于 2026-08-03 交付为未接线基座集群（9 模块 4011 行，7/9 零外部调用者，当轮"COMPLETE"自报已被指导线驳回并记账）；接线、真机验收与 §0.4 残留作为 M2a 阶段包派发（`tasks/2026-08-03-syn-m2a-kickoff-v1.md`）。**<br>
+状态：**COMPLETED / MAINLINE / BOUNDED_REFERENCE_SLICE（2026-08-08）。完成积分只来自具名 `workflow-state-sidecar` reference slice 与 isolated scratch R4；live Workbench、DAT-007 cutover、provider 和 M3 均未进入。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M2。<br>
 硬前置：M1 退出门通过，M1 合同版本与迁移矩阵冻结。<br>
-当前 active node / package：`NONE`；本计划不授权 schema、store、App、真实数据或产品代码写入。
+当前 active stage / leaf：`NONE`；本计划不授权 schema、store、App、真实数据或产品代码写入。
 
 ## 0. 权威与现状口径
 
-权威顺序：当前用户指令 → `../harness/AUTHORITY.md` / `../harness/CURRENT.md` → 2026-08-01 两份修订 → master → M1 → 本计划。现状只按当前 inventory 与直接源码核验结算；旧迁移计划和证据只能证明当时 fixture / dry-run，不证明当前 dirty tree 的 live store。
+权威顺序：当前用户指令 → `../../AGENTS.md` → Harness Lite `../harness/plan.md` / current stage / current leaf / `../harness/authorization.json` → 2026-08-01 两份修订 → master → M1 → 本计划。现状只按当前 main、直接源码核验与主线验收结算；旧迁移计划和证据只能证明当时 fixture / dry-run，不证明 live store。
 
 ### 0.1 当前已经存在
 
@@ -195,3 +195,11 @@ DAT-001B(domain X) ───────→ DAT-005 / DAT-007（使用真实 sto
 - 旧数据未被物理删除，rollback / export 可执行；
 - CURRENT 回写实际完成、证据、HOLD 和下一阶段；
 - 用户显式激活 M3 前不得自动进入角色会话实现。
+
+### 9.1 2026-08-08 主线收口
+
+- 实现提交：`d6bf4e464e32bd5310dfdfb2e46dfd0a47fd787f`。
+- 主线验收记录：`../harness/reports/M2C02-mainline-integration-and-acceptance.md`。
+- 具名 reference slice 的 UoW、denial audit、receipt、canonical snapshot/hash、outbox、projector/checkpoint、parity/recovery 与 isolation R4 7/7 已通过；完整 Rust 库测为 1385 passed / 0 failed / 45 ignored。
+- 没有进入的 live domain 全部保持 `NOT_MIGRATED / NO_CUTOVER`；因此不把未发生的 live migration 伪装为需要执行的 rollback，也不把隔离 R4 升级为真实数据结论。
+- M3 仍为 `PLANNED / NOT_ACTIVE`；本阶段完成不构成 M3 授权。

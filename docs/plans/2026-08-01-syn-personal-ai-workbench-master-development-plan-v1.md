@@ -1,8 +1,8 @@
 # Syn 全能个人 AI 工作台总开发计划 v1
 
 日期：2026-08-01<br>
-状态：**CURRENT MASTER PLAN；已由用户确认产品方向，等待逐阶段任务激活。**<br>
-计划性质：定义长期重构和迁移顺序，不维护逐任务进度，不单独授予代码、App、store、真实消息、外部连接、凭据、Git 或发布权限。当前事实和 active task 只看 `../harness/CURRENT.md` 与 v0.5 active node。
+状态：**CURRENT MASTER PLAN；M1/M2 已完成主线收口，M3-M10 等待逐阶段任务激活。**<br>
+计划性质：定义长期重构和迁移顺序，不维护逐任务进度，不单独授予代码、App、store、真实消息、外部连接、凭据、Git 或发布权限。当前事实和 active task 只看 Harness Lite 的 `../harness/plan.md`、当前 stage、唯一 current leaf 与 `../harness/authorization.json`。
 
 ## 0. 目标
 
@@ -22,7 +22,7 @@
 
 1. 当前用户指令；
 2. `../../AGENTS.md`；
-3. `../harness/AUTHORITY.md` 与 `../harness/CURRENT.md`；
+3. Harness Lite 的 `../harness/plan.md`、当前 stage、唯一 current leaf 与 `../harness/authorization.json`；
 4. `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`；
 5. `../../decisions/2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md`；
 6. 继续有效的角色、项目内 conversation-first、两轴治理、共享 transport 和执行人闸决策；
@@ -257,13 +257,13 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 可在 M2 
 
 ### 5.1 独立阶段计划索引
 
-下列文件把 master 的顺序展开为可单独审查的阶段合同。只有 M1 是当前阶段；M2-M10 均为 `PLANNED / NOT_ACTIVE`，不因文件存在而获得执行权。
+下列文件把 master 的顺序展开为可单独审查的阶段合同。M1、M2 已完成主线收口；M3-M10 均为 `PLANNED / NOT_ACTIVE`，不因文件存在而获得执行权。
 
 | 阶段 | 独立计划 | 当前路由状态 |
 |---|---|---|
-| M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `CURRENT_STAGE / READY_FOR_TASK_ACTIVATION`；首包仍是 `SYN-FND-001` |
-| M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
-| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `COMPLETED / MAINLINE` |
+| M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `COMPLETED / MAINLINE / BOUNDED_REFERENCE_SLICE` |
+| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `PLANNED / NOT_ACTIVE`；下一入口仅只读复核 |
 | M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
@@ -453,7 +453,7 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 可在 M2 
 
 ## 8. 任务包与阶段激活规则
 
-- master plan 只定义顺序；current stage plan 定义当前阶段；active v0.5 node + matching active package 才是具体执行授权。
+- master plan 只定义顺序；只有 Harness Lite current stage、唯一 current leaf 与 matching `authorization.json` 才构成具体执行授权。
 - 每个任务包只交付一个可独立验收的薄切片，不能用“全面重构”做无界写面。
 - 安全 / scope、schema migration、真实 provider、凭据、真实项目写入、自动连环和不可逆退役分别建包。
 - 涉及安全闸、scope 或授权判断的实现包按 `AGENTS.md` 高危清单逐包取得用户明确授权；阶段已排入计划不等于这项授权已经发生。

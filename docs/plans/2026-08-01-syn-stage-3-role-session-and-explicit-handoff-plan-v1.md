@@ -7,7 +7,7 @@
 硬前置：M1 identity / scope / policy 合同和后端守卫通过；M2 UoW / event / audit / receipt ports 可用。<br>
 当前 active node / package：`NONE`；本计划不授权消息、Codex、App、store 或产品代码操作。
 
-权威顺序：当前用户指令 → `../harness/AUTHORITY.md` / `../harness/CURRENT.md` → 2026-08-01 修订与当前 inventory → master → M1/M2 exit receipts → 本计划。下文的目标对象均是计划，不是当前实现事实。
+权威顺序：当前用户指令 → `../../AGENTS.md` → Harness Lite `../harness/plan.md` / current stage / current leaf / `../harness/authorization.json` → 2026-08-01 修订与当前 inventory → master → M1/M2 exit receipts → 本计划。下文的目标对象均是计划，不是当前实现事实。
 
 ## 0. 当前事实与未知
 

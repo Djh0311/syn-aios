@@ -1,22 +1,21 @@
 # 产品计划历史索引
 
-> 本目录保存设计、实施、迁移、发布与复核计划。下方“当前”“下一步”和状态表冻结于 2026-08-01 前后的旧路由，只能作为产品规划输入；当前开发工作只看 Harness Lite 的 plan、当前 stage、唯一 current leaf 与当前用户授权。
+> 本目录保存设计、实施、迁移、发布与复核计划。阶段状态已于 2026-08-08 按 main 的 M2 收口事实校正；当前开发工作仍只看 Harness Lite 的 plan、当前 stage、唯一 current leaf 与当前用户授权。
 
-## 旧路由快照（不激活工作）
+## 当前阶段路由（不自行激活工作）
 
 - 唯一当前总开发计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md`。
-- 当前阶段计划：`2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md`。
-- M1-M10 独立阶段计划已经按当前源码事实、未知项、owner、依赖、授权和证据边界展开；除 M1 外均是 planned，不是 active。
+- M1 与 M2 已完成主线收口；M3-M10 仍是 planned，不是 active。
+- 当前没有活动工程任务。下一入口是只读复核 M3；实现仍需新的用户指令和 Harness Lite 激活。
 - 已确认运行模型：`../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`。
-- 当前没有活动工程任务；计划本身不授权产品代码。下一步只能激活 Stage 1 的合同切片 `SYN-FND-001`，不能从历史计划续跑。
 
 ## M1-M10 独立阶段计划
 
 | 阶段 | 文件 | 状态 / 入口 |
 |---|---|---|
-| M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `CURRENT_STAGE / READY_FOR_TASK_ACTIVATION`；active package 仍为 NONE |
-| M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1 exit |
-| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1/M2 |
+| M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `COMPLETED / MAINLINE` |
+| M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `COMPLETED / MAINLINE / BOUNDED_REFERENCE_SLICE`；live cutover 未进入本阶段 |
+| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `PLANNED / NOT_ACTIVE`；下一入口仅只读复核 |
 | M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3，可与 M5 条件并行 |
 | M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3，可与 M4 条件并行 |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M3-M5 |
@@ -34,7 +33,7 @@
 - `2026-07-23-development-harness-routing-code-map-and-authority-governance-remediation-plan-v1.md`：历史治理计划；旧 AUTHORITY/CURRENT 已退出当前入口。
 - 其他计划均按历史资料查阅，不能反向授予写入或运行权限。
 
-计划状态只使用以下含义：`CURRENT_MASTER`、`CURRENT_STAGE`、`PLANNED / NOT_ACTIVE`、`HISTORICAL / SUPERSEDED`、`STOPPED_BEFORE_ACTIVATION`、`PARKED / HOLD`。正文里的“当前”“下一步”“唯一”只在其状态栏允许时才有今天的效力。
+计划状态只使用以下含义：`CURRENT_MASTER`、`CURRENT_STAGE`、`PLANNED / NOT_ACTIVE`、`HISTORICAL / SUPERSEDED`、`STOPPED_BEFORE_ACTIVATION`、`PARKED / HOLD`。正文里的“当前”“下一步”“唯一”只在其状态栏允许时才有当前效力。
 
 ## 编写与启用规则
 
