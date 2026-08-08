@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "observedAt": "2026-08-08",
+  "branch": "codex/product-line-lite-migration",
+  "mergeCommit": "c9d53a9063a076d409239a35cdd12e25332c1869",
+  "tree": "04dbe9e7ae546e55697b381d8ca9f2f83e94a5c9",
+  "parents": [
+    "e5269557b65998de56d09d83fa901c4bd92145bd",
+    "2a7229bde7f0b5bb6701f4a7aa21944973f1881f"
+  ],
+  "source": {
+    "branch": "syn-fnd-002-dev",
+    "head": "2a7229bde7f0b5bb6701f4a7aa21944973f1881f",
+    "mergedFiles": 65,
+    "insertions": 12784,
+    "deletions": 185
+  },
+  "excluded": [
+    "codex/syn-m2-g0-b2-harness-i5-binding-repair",
+    "dirty worktree content",
+    "ui-wip-snapshot-2026-07-01"
+  ],
+  "verification": {
+    "treeMatchesPLH002": true,
+    "diffCheck": "pass",
+    "cargoCheckLibOffline": {
+      "result": "pass",
+      "warnings": 693,
+      "errors": 0
+    },
+    "cargoTestLibOffline": {
+      "result": "pass",
+      "passed": 1348,
+      "failed": 0,
+      "ignored": 45
+    }
+  },
+  "protectedWip": {
+    "product-line-status": "9de7a6ac5e561ec61b6404204f960d78ddf9cfad5c51bf74716126b539bb598b",
+    "product-line-syn-fnd-002-status": "60f1395f2df3b0e7355952b65f23bae4c121fbe63090802d8c4793178385f399",
+    "staged": 0
+  },
+  "remoteChanged": false,
+  "pushed": false
+}

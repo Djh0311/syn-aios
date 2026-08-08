@@ -1,29 +1,8 @@
 #!/bin/sh
-# >>> ADAPTIVE HARNESS V2 PRE-COMMIT >>>
-# HARNESS V2 MANAGED HOOK: pre-commit
-# Hard gates inspect staged content only. Code Map is a non-blocking advisory.
-
+# product-line 项目自有的最小 staged diff 检查；不解释任务、授权或产品事实。
 set -eu
 
-ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-cd "$ROOT_DIR"
-
-if [ ! -f "scripts/harness-v2/git-gate.js" ]; then
-  printf '%s\n' "harness pre-commit: staged Git safety gate is missing; refusing commit" >&2
-  exit 1
-fi
-
 if ! git diff --cached --check >/dev/null 2>&1; then
-  printf '%s\n' "harness pre-commit: staged whitespace check failed (trailing whitespace or conflict marker)" >&2
+  printf '%s\n' "pre-commit: staged whitespace check failed" >&2
   exit 1
 fi
-node scripts/harness-v2/git-gate.js --target . --strict
-
-if [ -f "scripts/harness-v2/codebase-map.js" ]; then
-  if ! node scripts/harness-v2/codebase-map.js check --target . --staged --shadow --limit 10; then
-    printf '%s\n' "WARN MAP_ADVISORY_UNAVAILABLE Code Map check failed; commit continues" >&2
-  fi
-else
-  printf '%s\n' "WARN MAP_ADVISORY_UNAVAILABLE Code Map component is not installed; commit continues" >&2
-fi
-# <<< ADAPTIVE HARNESS V2 PRE-COMMIT <<<

@@ -1,37 +1,11 @@
 # Structured Code Map seed
 
-This is a small, partial navigation map created in Phase 3. It is not a source
-of runtime, product, or acceptance truth. Follow each source reference and its
-tests before using a capability.
+这是一个小型、局部、历史累积的导航图，不是 runtime、产品或验收真相。使用任何能力前，必须回到当前源码与测试核实。
 
-- `index.json` names the six deliberately bounded domains; each domain file is
-  independent and records its coverage and verification commit.
-- A `canonical` reference is only allowed when its repository-relative source
-  path is tracked at `HEAD`. `needs-confirmation` deliberately uses `null` when
-  current ownership or runtime selection cannot be proved from tracked code.
-- Every `publicSymbols[].symbol` is a bare declared source identifier checked
-  with `git show <verifiedAtCommit>:<path>`; a CLI without an appropriate public
-  identifier uses an empty `publicSymbols` list instead of a descriptive label.
-- `active` means a tracked code capability exists at its verification commit. It
-  never grants real execution: the current plan, user authorization, and safety
-  gates remain separately required.
-- `legacy` entries are discoverable history, not a default route or a request
-  to build another implementation. In particular, resident/private-home is not
-  a third conversation transport.
-- The map never writes source code or derives canonical facts from dirty files.
-  `overlay` reports unstaged and untracked paths separately; `check --staged`
-  reports staged rename/delete impact.
+- `index.json` 列出六个有边界的 domain；各 domain 记录覆盖范围与当时的验证信息。
+- `canonical` 只有在所指源码仍存在并经过当前 Git/测试核实时才可信。
+- `active` 只表示记录生成时存在代码能力，不授予真实执行；当前开发流程和用户授权始终由 Harness Lite 单独决定。
+- `legacy`、`dead` 和 `needs-confirmation` 只帮助定位历史或待复核项，不是默认实现路线。
+- dirty/untracked 内容和历史验证提交都不能自动提升为当前事实。
 
-Use the explicit commands only:
-
-    node scripts/harness-v2/codebase-map.js query --target . --query "conversation transport"
-    node scripts/harness-v2/codebase-map.js overlay --target .
-    node scripts/harness-v2/codebase-map.js check --target . --staged --strict
-
-The map is intentionally not wired into hooks, config, or the default project
-context route. A no-match means `NO_MATCH_IN_PARTIAL_MAP`, never that a
-capability is absent from the repository.
-
-`maintenance-audit` is an explicit, read-only drift report. It never consumes
-overlay paths, rewrites this map, or enters Hook/CI/cron/default routing; a
-finding asks for human review rather than an automatic map update.
+旧结构化 Code Map CLI 已退出；本目录现在保留为静态项目资料。Harness Lite 的 `hl map` 是轻量源码导航，不宣称等价替代这套结构化图。需要新增或重建 Code Map 工具时，应另开明确 leaf。

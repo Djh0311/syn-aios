@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "checks": [
+    {
+      "id": "git-diff-check",
+      "profile": "quick",
+      "argv": ["git", "diff", "--check"],
+      "timeoutMs": 30000
+    },
+    {
+      "id": "harness-lite-cli-syntax",
+      "profile": "task",
+      "paths": [".claude/harness-lite", ".codex", ".githooks", "docs/harness", "AGENTS.md", "CLAUDE.md", "README.md"],
+      "argv": ["node", "--check", ".claude/harness-lite/bin/hl.js"],
+      "timeoutMs": 30000
+    },
+    {
+      "id": "rust-non-test-build",
+      "profile": "task",
+      "paths": ["prototypes/productized-desktop-shell/src-tauri/src"],
+      "argv": ["cargo", "check", "--manifest-path", "prototypes/productized-desktop-shell/src-tauri/Cargo.toml", "--lib", "--offline"],
+      "timeoutMs": 120000
+    },
+    {
+      "id": "frontend-typecheck",
+      "profile": "task",
+      "paths": ["prototypes/productized-desktop-shell/src"],
+      "argv": ["npm", "--prefix", "prototypes/productized-desktop-shell", "run", "typecheck"],
+      "timeoutMs": 120000
+    },
+    {
+      "id": "rust-lib-full",
+      "profile": "full",
+      "argv": ["cargo", "test", "--manifest-path", "prototypes/productized-desktop-shell/src-tauri/Cargo.toml", "--lib", "--offline"],
+      "timeoutMs": 3600000
+    },
+    {
+      "id": "real-app-observation",
+      "profile": "manual",
+      "note": "只有当前用户明确开启真实 App 观察时执行；机器检查不能替代。"
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "observedAt": "2026-08-08",
+  "target": "/Users/yoyi/workspace/product-line-lite-migration",
+  "base": {
+    "branch": "codex/product-line-lite-migration",
+    "head": "e5269557b65998de56d09d83fa901c4bd92145bd",
+    "tree": "7e7dbb9e72c9623a3633aaa1072ca972803f7988",
+    "main": "e5269557b65998de56d09d83fa901c4bd92145bd",
+    "originMain": "local-main-ahead-33"
+  },
+  "candidateCommittedSource": {
+    "branch": "syn-fnd-002-dev",
+    "head": "2a7229bde7f0b5bb6701f4a7aa21944973f1881f",
+    "mainOnlyCommits": 2,
+    "sourceOnlyCommits": 24,
+    "changedFilesFromMergeBase": 65,
+    "runtimeFiles": 38
+  },
+  "excludedCommittedSource": {
+    "branch": "codex/syn-m2-g0-b2-harness-i5-binding-repair",
+    "head": "e365717c6828a0ab6ba188218c5e730ac0968a6c",
+    "commitsAfterCandidate": 3,
+    "filesAfterCandidate": 3,
+    "reason": "harness-only repair; not product baseline evidence"
+  },
+  "protectedDirtyWorktrees": [
+    {
+      "path": "/Users/yoyi/workspace/product-line",
+      "branch": "wip/preserve-pre-syn-fnd-001-r1-20260801",
+      "head": "2bf9406bd688db8eb84d2138f9b3c6994dac2fb9",
+      "trackedModified": 86,
+      "untrackedFiles": 314,
+      "staged": 0,
+      "statusSha256": "9de7a6ac5e561ec61b6404204f960d78ddf9cfad5c51bf74716126b539bb598b",
+      "trackedDiffSha256": "a9b688c3aaacb7fc51d0f9dd7fdbb7c66b75aec77ee0a7f26be72a060cf16fad",
+      "untrackedManifestSha256": "0214a578acc5852537d8b52d64cd5bbb0736a821a7ee44a3be1f9a05b2ee5941"
+    },
+    {
+      "path": "/Users/yoyi/workspace/product-line-syn-fnd-002",
+      "branch": "syn-fnd-002-dev",
+      "head": "2a7229bde7f0b5bb6701f4a7aa21944973f1881f",
+      "trackedModified": 64,
+      "untrackedFiles": 14,
+      "staged": 0,
+      "statusSha256": "60f1395f2df3b0e7355952b65f23bae4c121fbe63090802d8c4793178385f399",
+      "trackedDiffSha256": "996452ac558c938d8558bd77c6d233be0d26f00d4989aa67a0dc773475086b2e",
+      "untrackedManifestSha256": "00ea3446b3bc465de304018f2ca803b048ace695619e6e066e516c1fce89629a"
+    }
+  ],
+  "legacyHarness": {
+    "version": "0.5.0",
+    "manifestSha256": "b617d591ac21efda3b66d23585f0de2563579df1ace7515d92bb5ccc7d298fde",
+    "manifestFiles": 58,
+    "created": 53,
+    "external": 5,
+    "delete": 51,
+    "migrate": 7,
+    "preserve": 9,
+    "history": 39
+  },
+  "liteBootstrap": {
+    "version": "0.3.0",
+    "ownedFiles": 44,
+    "existingEntrypointsSkippedByInstaller": ["AGENTS.md", "CLAUDE.md"],
+    "hostHooksRegistered": false,
+    "authorizationPresent": false
+  }
+}

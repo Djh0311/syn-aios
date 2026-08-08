@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "observedAt": "2026-08-08",
+  "branch": "codex/product-line-lite-migration",
+  "headBeforeCutover": "c9d53a9063a076d409239a35cdd12e25332c1869",
+  "treeBeforeCutover": "04dbe9e7ae546e55697b381d8ca9f2f83e94a5c9",
+  "preCutoverSnapshot": {
+    "path": "/private/tmp/product-line-harness-lite-real-cutover-20260808-before.tar",
+    "sha256": "85c491ef837ffac3deddf719b2ffc41188749f37e5eb467932f77177cd937216",
+    "entries": 165
+  },
+  "legacyRemoval": {
+    "manifestTargets": 50,
+    "manifestTargetsPresentAfter": 0,
+    "unmanifestedTestRemoved": true,
+    "manifestRemovedLast": true,
+    "totalOldCarriersRemoved": 52,
+    "activeCarrierReferencesAfter": 0,
+    "activeEntrypointReferencesAfter": 0
+  },
+  "authority": {
+    "entry": "docs/harness/plan.md",
+    "oldAuthorityMovedTo": "docs/harness/history/adaptive-v0.5/AUTHORITY.md",
+    "oldCurrentMovedTo": "docs/harness/history/adaptive-v0.5/CURRENT.md",
+    "oldTaskPackageActivationDisabled": true
+  },
+  "lite": {
+    "version": "0.3.0",
+    "owned": 44,
+    "matchingRecordedHash": 40,
+    "projectModifiedProtected": 4,
+    "missing": 0,
+    "repeatInstallWritten": 0,
+    "repeatInstallSkipped": 46,
+    "repeatInstallStatusBefore": "9f013f27e86727c352464f0117ddd0ce88dca79994b160cb992a2709e16c0cbf",
+    "repeatInstallStatusAfter": "9f013f27e86727c352464f0117ddd0ce88dca79994b160cb992a2709e16c0cbf",
+    "hostRegistrations": [".claude/settings.json", ".codex/hooks.json"],
+    "registeredHookTargetsExist": true
+  },
+  "gitHooks": {
+    "hooksPath": ".githooks",
+    "preCommitMode": "0755",
+    "preCommitTemporaryIndexCheck": "pass",
+    "commitMsgPreserved": true
+  },
+  "verification": {
+    "chainProgressAuth": "pass",
+    "jsonFilesParsed": 7,
+    "liteJavaScriptSyntax": "pass",
+    "shellSyntax": "pass",
+    "quick": "pass",
+    "task": "pass",
+    "diffCheck": "pass",
+    "productCodeDiffFiles": 0,
+    "finalControlScopeFingerprint": "ac7c2cc7609735d530062a3113d774062623ad99ad801c195c245f1545adddcd"
+  },
+  "worktree": {
+    "trackedDeleted": 54,
+    "trackedModified": 13,
+    "untracked": 67,
+    "staged": 0
+  },
+  "protectedWip": {
+    "product-line-status": "9de7a6ac5e561ec61b6404204f960d78ddf9cfad5c51bf74716126b539bb598b",
+    "product-line-syn-fnd-002-status": "60f1395f2df3b0e7355952b65f23bae4c121fbe63090802d8c4793178385f399"
+  },
+  "committed": false,
+  "externalChanged": false,
+  "pushed": false
+}

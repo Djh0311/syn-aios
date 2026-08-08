@@ -1,8 +1,8 @@
-# Plans Directory
+# 产品计划历史索引
 
-> 本目录保存设计、实施、迁移、发布与复核计划。计划不是状态真相；当前事实只看 `docs/harness/CURRENT.md`，当前文档路由只看 `docs/harness/AUTHORITY.md`。
+> 本目录保存设计、实施、迁移、发布与复核计划。下方“当前”“下一步”和状态表冻结于 2026-08-01 前后的旧路由，只能作为产品规划输入；当前开发工作只看 Harness Lite 的 plan、当前 stage、唯一 current leaf 与当前用户授权。
 
-## 当前路由
+## 旧路由快照（不激活工作）
 
 - 唯一当前总开发计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md`。
 - 当前阶段计划：`2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md`。
@@ -31,7 +31,7 @@
 - `2026-07-16-conversation-first-direction-and-execution-plan-v1.md`：保留自然对话、结构化实物和明确人闸等产品原则，不再承担当前排期。
 - `2026-08-01-jiaoban-bounded-rebuild-execution-plan-v1.md`：曾短暂作为候选当前路线；在 Phase 1 激活前因范围只覆盖项目助手 / 工作流拆分、不能覆盖全工作台后端协作而停止。
 - `2026-07-23-l3-syn-native-knowledge-workspace-small-stage-plan-v2.md`：知识线已停放，不能借此恢复施工。
-- `2026-07-23-development-harness-routing-code-map-and-authority-governance-remediation-plan-v1.md`：历史治理计划；当前机器图缺口以 AUTHORITY/CURRENT 为准。
+- `2026-07-23-development-harness-routing-code-map-and-authority-governance-remediation-plan-v1.md`：历史治理计划；旧 AUTHORITY/CURRENT 已退出当前入口。
 - 其他计划均按历史资料查阅，不能反向授予写入或运行权限。
 
 计划状态只使用以下含义：`CURRENT_MASTER`、`CURRENT_STAGE`、`PLANNED / NOT_ACTIVE`、`HISTORICAL / SUPERSEDED`、`STOPPED_BEFORE_ACTIVATION`、`PARKED / HOLD`。正文里的“当前”“下一步”“唯一”只在其状态栏允许时才有今天的效力。
@@ -39,6 +39,6 @@
 ## 编写与启用规则
 
 - 计划必须写清目标、不做什么、边界、阶段、验收层级、停止条件和退役条件。
-- 只有 active v0.5 节点、matching active package、AUTHORITY、CURRENT 和当前用户指令一致时，计划中的阶段才可进入产品代码。
+- 只有 Harness Lite 当前 leaf 与当前用户授权明确覆盖时，计划中的产品切片才可进入代码。
 - 离线、synthetic、build、artifact、真实 App、发布分别结算，不得互相替代。
-- 当前路线变化时更新 CURRENT/AUTHORITY；不要在 README 或长期工作线复制动态状态。
+- 当前路线变化时更新 Lite plan/stage/leaf；不要在 README 或长期计划里复制动态状态。

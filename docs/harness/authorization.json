@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "id": "USER-PRODUCT-LINE-LITE-STAGE-01-20260808",
+  "issuedBy": "user",
+  "scope": {
+    "kind": "stage",
+    "id": "stage-01"
+  },
+  "summary": "用户明确授权 agent 代为落盘并完整推进 product-line 代码事实收敛、旧 Harness 卸载与 Harness Lite 切换；仅限本地，不 push。",
+  "grants": [
+    {
+      "id": "PLH-CONTEXT",
+      "category": "context",
+      "operations": ["change"],
+      "targets": ["*"]
+    },
+    {
+      "id": "PLH-CONTROL",
+      "category": "control",
+      "operations": ["modify"],
+      "targets": ["*"]
+    },
+    {
+      "id": "PLH-OLD-HARNESS-DELETE",
+      "category": "destructive",
+      "operations": ["delete"],
+      "targets": [
+        "/private/tmp/product-line-harness-lite-*",
+        ".harness/",
+        "scripts/harness-v2/",
+        "harness.config.json",
+        "docs/harness/components/high-risk-boundary.md",
+        "docs/task-packages/TEMPLATE.md"
+      ]
+    }
+  ],
+  "exclusions": [
+    "push",
+    "remote",
+    "deploy",
+    "release",
+    "provider",
+    "database",
+    "browser",
+    "real-account",
+    "real-message"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "id": "USER-...",
+  "issuedBy": "user",
+  "scope": {
+    "kind": "stage",
+    "id": "stage-01"
+  },
+  "summary": "只记录用户已经明确给出的授权",
+  "grants": []
+}

@@ -1,192 +1,60 @@
 {
   "schemaVersion": 1,
   "domain": "development-harness",
-  "coverage": "verified-partial",
+  "coverage": "migration-verified-partial",
   "capabilities": [
     {
-      "id": "development-harness.config-validation",
+      "id": "development-harness.harness-lite-lifecycle",
       "domain": "development-harness",
-      "name": "Harness configuration validation",
+      "name": "Harness Lite development lifecycle",
       "status": "active",
-      "coverage": "verified-partial",
+      "coverage": "migration-verified-partial",
       "canonical": {
-        "path": "scripts/harness/config-check.js",
-        "symbol": "config-check CLI",
+        "path": ".claude/harness-lite/bin/hl.js",
+        "symbol": "hl CLI",
         "kind": "Node CLI"
       },
       "entrypoints": [
-        {
-          "path": "scripts/harness/config-policy.js",
-          "symbol": "config-policy CLI",
-          "kind": "Node CLI"
-        },
-        {
-          "path": "scripts/harness/config-schema.js",
-          "symbol": "config-schema CLI",
-          "kind": "Node CLI"
-        }
+        { "path": "AGENTS.md", "symbol": "project collaboration rules", "kind": "project entry" },
+        { "path": "docs/harness/plan.md", "symbol": "Lite plan", "kind": "lifecycle entry" }
       ],
       "publicSymbols": [],
       "consumers": [
-        {
-          "path": "scripts/harness/harness.js",
-          "symbol": "main",
-          "kind": "harness command consumer"
-        }
+        { "path": ".claude/settings.json", "symbol": "Claude hook registration", "kind": "host adapter" },
+        { "path": ".codex/hooks.json", "symbol": "Codex hook registration", "kind": "host adapter" }
       ],
       "stateOwners": [
-        {
-          "path": "harness.config.json",
-          "symbol": "harness config",
-          "kind": "configuration state"
-        }
+        { "path": "docs/harness/stages", "symbol": "current stage", "kind": "lifecycle state" },
+        { "path": "docs/harness/leaves", "symbol": "current leaf", "kind": "lifecycle state" },
+        { "path": "docs/harness/authorization.json", "symbol": "current user authorization", "kind": "authorization state" }
       ],
-      "contracts": [
-        {
-          "path": "scripts/harness/config-check.js",
-          "symbol": "strict validation report",
-          "kind": "configuration contract"
-        }
-      ],
+      "contracts": [],
       "tests": [],
       "related": [
-        {
-          "id": "development-harness.workbench-shape-gate",
-          "relationship": "separate harness gate with independent historical debt"
-        }
+        { "id": "development-harness.adaptive-v0.5", "relationship": "replaces the retired development lifecycle" }
       ],
       "knownDuplicates": [],
-      "keywords": [
-        "config check",
-        "config policy",
-        "config schema",
-        "harness config",
-        "严格校验",
-        "autoRisk",
-        "verificationRunner",
-        "taskLifecycle"
-      ],
-      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+      "keywords": ["harness lite", "current leaf", "authorization", "开发生命周期"],
+      "verifiedInWorktree": "codex/product-line-lite-migration"
     },
     {
-      "id": "development-harness.workbench-shape-gate",
+      "id": "development-harness.adaptive-v0.5",
       "domain": "development-harness",
-      "name": "Workbench shape gate",
-      "status": "active",
-      "coverage": "verified-partial",
-      "canonical": {
-        "path": "scripts/harness/workbench-shape-gate.js",
-        "symbol": "workbench-shape-gate CLI",
-        "kind": "Node CLI"
-      },
-      "entrypoints": [
-        {
-          "path": "scripts/harness/workbench-shape-gate.js",
-          "symbol": "baseline/check modes",
-          "kind": "CLI modes"
-        }
-      ],
-      "publicSymbols": [],
-      "consumers": [
-        {
-          "path": "scripts/harness/harness.js",
-          "symbol": "main",
-          "kind": "harness command consumer"
-        }
-      ],
-      "stateOwners": [
-        {
-          "path": "scripts/harness/workbench-shape-gate.js",
-          "symbol": "shape rules and baseline",
-          "kind": "rule source"
-        }
-      ],
-      "contracts": [
-        {
-          "path": "scripts/harness/workbench-shape-gate.js",
-          "symbol": "baseline/check output",
-          "kind": "shape contract"
-        }
-      ],
-      "tests": [
-        {
-          "path": "scripts/harness/workbench-shape-gate.retired-style-family.selftest.js",
-          "symbol": "retired style family selftest",
-          "kind": "Node selftest"
-        }
-      ],
-      "related": [
-        {
-          "id": "development-harness.config-validation",
-          "relationship": "separate gate; neither masks the other"
-        }
-      ],
-      "knownDuplicates": [],
-      "keywords": [
-        "workbench shape gate",
-        "shape baseline",
-        "shape check",
-        "16/5/5",
-        "形状检查"
-      ],
-      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
-    },
-    {
-      "id": "development-harness.legacy-local-capability-discovery",
-      "domain": "development-harness",
-      "name": "Legacy local capability discovery scripts",
-      "status": "legacy",
-      "coverage": "seed-partial",
+      "name": "Retired Adaptive Harness v0.5",
+      "status": "dead",
+      "coverage": "historical",
       "canonical": null,
-      "entrypoints": [
-        {
-          "path": "scripts/harness/capability-map.js",
-          "symbol": "capability-map CLI",
-          "kind": "legacy local scanner"
-        },
-        {
-          "path": "scripts/harness/capability-scan.js",
-          "symbol": "capability-scan CLI",
-          "kind": "legacy local scanner"
-        }
-      ],
+      "entrypoints": [],
       "publicSymbols": [],
-      "consumers": [
-        {
-          "path": "scripts/harness/harness.js",
-          "symbol": "main",
-          "kind": "legacy harness integration"
-        }
-      ],
-      "stateOwners": [
-        {
-          "path": "scripts/harness/capability-map.js",
-          "symbol": "local discovery output",
-          "kind": "non-canonical scan result"
-        }
-      ],
-      "contracts": [
-        {
-          "path": "scripts/harness/capability-scan.js",
-          "symbol": "runtime docs check",
-          "kind": "historical local discovery contract"
-        }
-      ],
+      "consumers": [],
+      "stateOwners": [],
+      "contracts": [],
       "tests": [],
-      "related": [],
-      "knownDuplicates": [
-        {
-          "id": "development-harness.config-validation",
-          "relationship": "not a replacement for strict config validation"
-        }
+      "related": [
+        { "id": "development-harness.harness-lite-lifecycle", "relationship": "historical predecessor" }
       ],
-      "keywords": [
-        "legacy capability map",
-        "capability scan",
-        "local discovery",
-        "历史能力扫描"
-      ],
-      "verifiedAtCommit": "e9ad7f3a204a1ebb11ce26c1e8c05b19c04c0991"
+      "knownDuplicates": [],
+      "keywords": ["adaptive harness", "v0.5", "historical", "retired"]
     }
   ]
 }

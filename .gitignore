@@ -30,7 +30,10 @@ prototypes/tauri-capability-probe/.tauri-cli/
 .harness/
 evidence/raw/2026-07-14-reseed/apply-backup/source-files/
 
-# 工具本地目录(不跟仓·AGENTS/交接纪律):截图与临时产物
+# 工具本地目录：默认忽略 Claude 本地内容，只版本化项目 Harness Lite runtime 与注册文件
 prototypes/productized-desktop-shell/output/
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/harness-lite/
+!.claude/harness-lite/**
 .playwright-cli/

@@ -1,97 +1,74 @@
-# AGENTS.md — 开发协作规则（精简版 v2 · 2026-06-19）
+# AGENTS.md — product-line 开发协作规则（Harness Lite 适配）
 
-> **取代旧的重型流程版**（旧版见 git 历史，commit `3d291d3` 及之前）。
-> 核心原则：**护栏强度 = 这个动作能造成的真实、不可逆损害；护栏跟阶段长。** 现在是「甲·手动中转 · 自用 · 打 temp」级，风险低，用匹配的轻护栏；到「乙·自动连环」风险才真变大，那时再把对应的重闸加回来。**砍的是流程噪音，不是安全本身。** 全程中文。
+全程中文和大白话。当前用户指令决定要做什么；本文件保留项目自己的协作边界，Harness Lite 只管理开发工作的生命周期、授权与最小相关验证，不承载产品功能。
 
-## 拍板摘要
-- **批准什么**：用「**高危清单 + 两档流程 + 完成必附验证**」取代旧的「六步 mock → 科学家代号复核线 → 咨询审实物 → 满屏『不得据此声称』」。
-- **代价**：低危开发（约 90%）不再走重流程，靠「完成附真验证证据」兜底。
-- **不批**：不砍高危清单那几道真闸；不砍 `git commit` 问一次；不动产品蓝图里「乙」要做的治理**功能**。
+## 唯一开发入口
 
-## 一句话判据
-**这个动作碰不碰下面「高危清单」5 条？碰 → 重档；不碰 → 轻档。**
+每次开始或上下文压缩后依次运行：
 
-## 一、高危清单（只有这些走重档）
-真正不可逆 / 能造成真实损害的：
-1. 让 codex 在**非测试的真实（生产）项目目录**真执行——写文件 / 跑命令。〔2026-06-22 细化：固定测试项目 `/Users/yoyi/codex-workflow-mario-test`（专用开发靶子、git 可回滚）跑进去 = **轻档·随便读写**；前提 path-lock 仍锁死该测试项目 + 沙箱不外溢（松了就回高危）。temp/沙箱、该测试项目都不算本条；**其它真实项目仍是本条高危**。〕
-2. **写** `/Users/yoyi/.codex`，或读其**凭据**（auth/token/secret）。注：`.codex` 一般会话/工具内容**读已放开**（记忆 `feedback-codex-home-read-allowed`）
-3. 改动**安全闸 / 沙箱 / codex 审批逻辑**本身
-4. （将来）开启**自动连环 / 多项目接力**执行。〔2026-06-23 细化：**固定测试项目 `/Users/yoyi/codex-workflow-mario-test` 内的自动连环 = 轻档·可做**（前提 path-lock+沙箱守住、runaway上限/可中断/审计/回滚 四护栏在；松了回高危）；非测试真实项目的连环、多项目接力、auto-approve 仍本条高危。见 `decisions/2026-06-23-test-project-auto-chain-light-tier-v1.md`。〕
-5. `git push` / 对外发布 / 删除不可恢复数据
+```text
+node .claude/harness-lite/bin/hl.js chain --target .
+node .claude/harness-lite/bin/hl.js progress --target .
+node .claude/harness-lite/bin/hl.js auth --target .
+```
 
-## 二、两档流程
-**轻档（默认，约 90%：前端 / UI / 后端命令逻辑 / 文档 / 重构 / temp 跑 codex）**
-- **直接做真的，不先 mock**；在 temp/沙箱真跑一次看效果。
-- 完成必附**一句话「怎么验的 + 真证据」**（命令输出 / 截图 / 文件）。**没验就写「已实现，未验证」，不许说「做好了」。**
-- 范围超出预期 → 停下说一声。
-- 不开复核线、不写复核文件、不写「不得声称」清单。
-- **若交给 Codex 干**：完成后主导线核一眼**实物**——重跑关键测试 / 扫 diff 碰没碰「高危清单」，一句话结论；**不信 Codex 自报证据**（它会假报）。这是最小核实，**≠** 旧的科学家代号长报告复核线（那个砍了）。
+开发生命周期唯一链是：
 
-**重档（只给高危清单那 5 条）**
-- 用户在场 + 单独一步 + 沙箱限定 + **明确授权那一下** + 一份**简短**证据（做了什么 / 在哪跑 / 结果）。
-- 复核：用户看一眼，或一个 AI **只读、只查一件事**（「这 diff 碰没碰 `.codex` 凭据 / 绕没绕沙箱？」yes/no）。**不要代号复核线、不要长报告、不要几百字咒语。**
+```text
+AGENTS.md
+→ docs/harness/plan.md
+→ docs/harness/stages/ 中唯一当前 stage
+→ docs/harness/leaves/ 中唯一 current leaf
+→ docs/harness/authorization.json（只核对当前用户授权）
+```
 
-## 三、验证证据替免责声明（最重要）
-- **删掉所有「不得据此声称 X」。**
-- 任何「做好了 / 能用了」的声明，后面**必须跟「怎么验的 + 证据」**。一条真实验证 > 一百条「不得声称」，还写得快。
-- **含 Rust production 路径的包不能只跑 `cargo test`**：必须同时跑 `cargo check --lib` 或等价 non-test build，防止 `#[cfg(test)]` 把真实构建错误遮住。
-- **报「做没做 / 到哪步」状态，必须先核实物**（git log + 代码 grep + 真机），**严禁照搬 plan / roadmap / STAGE_PLAN 的 ✅/⏳**——除 `docs/harness/CURRENT.md` 外，所有文档状态默认按「可能过期」对待。（曾连续把做完的报成没做、皆因照搬过期文档；这条专治「读的一侧」，与「commit 回写 CURRENT」的「写的一侧」配齐。）
-- **拦截记账**：`docs/harness-catch-log.md` 是 harness 战果唯一账本——总指导每次核实物必表态（有 catch 记行 / 零 catch 明写）；**每个 commit 信息必含 `catch:` 标记**（`.githooks/commit-msg` 机械强制，`--no-verify` 仅紧急、事后补账）；每站收口扫账本，连续零 catch 的环节按防复发条款反向议砍。
+`docs/plans/`、`docs/contracts/`、`tasks/`、`handoffs/`、`archive/`、`plans/v0.5.0/` 和旧治理状态只提供产品输入或历史证据，不授予执行权限。根 README 只做产品介绍。
 
-## 四、文件 = 一个真相源
-- `docs/harness/CURRENT.md`：① 现在真能用什么（验过的）② 在做什么 ③ 下一步 ④ 哪些锁着/没接。**砍到约 30 行，历史进 `archive/`。**
-- `decisions/**`：拍过的板（防反复纠结同一件事）。
-- `mistake-ledger`：**只在同一个错犯第二次**才记。
-- **停用**（单人项目负担）：requirements-matrix / task-queue / open-questions / context-checkpoints / sprint-contract。
-- 旧 `scripts/harness/**` 已于 2026-07-28 随 schema-1 老 harness 整批退役（Git 历史可回查）；只读检查走 `scripts/harness-v2/`（`config-check`、`active-path-audit`、`adapt.js inspect`、`git-gate`），均按需手动跑、不作默认门禁。
-- `scripts/harness-v2/project-context.js` 是新会话的**人工显式**最短导航（`node scripts/harness-v2/project-context.js --target .`）；它仍属按需手动工具，不是 Hook、pre-work 或完成门，默认不运行 Git、Hook、Code Map、源码扫描或历史全文。
-- `scripts/harness-v2/adapt.js inspect` 是按需人工执行的只读适配检查；不接 Hook、CI、cron 或默认 CLI，不自动回写 `docs/harness/CURRENT.md` / Code Map；同周无业务变化或既有阶段 evidence 已覆盖时不强制运行。
+## 五类硬边界
 
-## 五、不随便砍的硬线（砍完别失稳）
-- **砍低危流程 ≠ 砍真闸**：高危清单那 5 条反而因周围安静**更该显眼**，别一起松。
-- **`git add` / `git commit` 仍问一次**才做；执行子线不 commit。
-- **commit 收口必带 `docs/harness/CURRENT.md` 回写**：完成项挪到①、刷新③下一步——**不回写不 commit**，与「完成必附验证」同级。（拆瘦砍重型流程时把「回写正本」一起漏砍了，这条补回来。）`docs/harness/CURRENT.md` 是唯一「每次工作完必更」的活正本；`master-roadmap` 只在阶段切换时动，per-task 状态以它为准。
-- **真跑 codex 进非测试真实项目 / 改安全闸 / 开自动连环 = 用户明确授权那一下**，不可省。（固定测试项目跑 = 轻档，见高危#1 细化 2026-06-22。）
-- **本文 vs 产品**：本文管「我们开发自己用的流程」；蓝图里「乙·角色 / 审查 / 审计」是**产品功能**（到乙才做），不在砍的范围、别混。
-- **职位简化**：两条线——**主导线**（统筹 · 核 Codex 干的实物 · 和用户对接）/ **执行线**（Codex 干活）。科学家代号独立复核线、严格职位档案那套**已砍**（轻档不用）。
-- 项目方向：Syn 是只服务当前用户的全能个人 AI 工作台。项目是复杂工作的主要事实、权限与执行边界，个人范围与之并存；顶层入口是秘书和全局主管，项目主管常驻项目内部。日常 / 开发是每轮工作显式通道，对话是日常入口，知识、记忆、任务、工作流、Agent、连接器、工具、审计和日报是协作能力。工作流能力保留，但工作流界面不是产品中心；也不要把产品退回「任务包管理器」。
-- **重要任务开工前做计划对齐**：小改动不强制建包；只认短路由显式绑定的 current important task，checkpoint 不扫描历史包。
-- **对齐块只作机械导航**：`authority_chain`、`plan_anchor`、`existing_before_new`、`capabilities_touched`、`forbidden_alternatives` 必须完整可查。
-- **字段齐全不等于语义正确、代码完成或产品验收**；检查只报告字段、路径与 Code Map ID，不替用户选路线。
+只有以下事情进入重档：
 
----
+1. 进入远端、服务器、生产、真实 App、真实账号或真实消息，并造成真实副作用。
+2. 读取凭据，或写用户级 `/Users/yoyi/.codex`。
+3. 删除、覆盖、清理或做其他难恢复操作。
+4. 修改或结束当前工作，或修改 Harness 的授权、守门和审计。
+5. 开启非测试真实项目的自动连环、多项目接力、push、发布或部署。
 
-*精简版 v2 取代旧重型流程。护栏跟阶段长：现在轻、到乙再重。*
+明确授权已经覆盖的具体动作直接执行；未覆盖的硬边界才停。普通本地开发按当前 leaf 的精确范围继续。
 
----
+## 验证和事实
 
-## Harness v2 入口（Adaptive Harness v0.5.0 · 已替换 schema-1 老 harness）
+- 做状态判断前先核实 Git、代码和直接验证，不照搬旧计划、handoff 或历史任务包的完成标记。
+- 完成时必须说明怎么验、实际证据和证明边界；局部测试不等于真实 App、生产或发布通过。
+- 含 Rust production 路径的改动不能只跑 `cargo test`，必须同时跑 `cargo check --lib` 或等价 non-test build。
+- Stop 不跑项目测试；task 只选与本次改动有关的小检查；full 只在显式调用时运行。
+- 范围扩大、事实漂移、共享所有权冲突或需要创造未授权产品行为时停止。
 
-先运行 `node scripts/harness-v2/project-context.js --target .`，再按当前
-authority、任务边界和源代码中的直接事实工作。这个入口是只读的；它不替代
-用户授权，也不把历史材料变成当前指令。任务权威为 v0.5 节点图；
-`tasks/` 历史包与 `archive/` 是项目文档档案。
+## 保护现有工作
 
-### Quick
+- 任何已有 dirty、untracked 或 ignored 内容都视为用户工作；不 reset、clean、stash、覆盖、整批归因或整批暂存。
+- 不使用 `git add -A`。只列出本次精确文件。
+- `git add` / `git commit` 需要当前用户指令或当前 Harness 授权明确覆盖；执行子 agent 不提交。
+- push、共享分支合并、发布、部署和删除分支/worktree 仍需单独授权。
 
-纯问答不改项目，也不创建控制文件；说明结论来自已读材料还是未知即可。
+## 项目 Git 约定
 
-### Plan
+- `.githooks/commit-msg` 保留项目既有 `catch:` 标记；`docs/harness-catch-log.md` 保留为历史与项目拦截账本。这是项目 Git 约定，不是另一套生命周期。
+- `.githooks/pre-commit` 只做 staged diff 的机械检查，不解释任务、授权或产品事实。
+- 完成 leaf 使用 `hl done`，完成整个 stage 使用 `hl close-stage`；不再回写旧 `CURRENT.md` / `AUTHORITY.md`。
 
-范围、权限、验收或风险不清时，先做只读核对并列出依据；计划本身不授予写入。
+## 协作方式
 
-### Guidance
+- 两条线：主导线负责统筹、对接用户、核实实物；执行线负责范围内实现。执行线自报完成不等于主导线接受。
+- 重要任务只认 Lite 当前 leaf。项目任务补充材料可以使用 `TASK_TEMPLATE.md`，但模板和字段齐全都不激活工作。
+- 用户要求多 agent 时，同一 stage 授权可供主 agent 与子 agent 使用；子 agent 仍受相同文件范围和硬边界约束。
 
-指导者只分派、检查返回的改动和直接验证；返回"完成"不等于已被接受。
+## 产品边界
 
-### Development
+Syn 是服务当前用户的全能个人 AI 工作台。项目是复杂工作的主要事实、权限与执行边界；秘书和全局主管是顶层入口，项目主管在项目内部。对话、知识、记忆、任务、工作流、Agent、连接器、工具、审计和日报是协作能力。工作流能力保留，但工作流界面不是产品中心；也不要把产品退回任务包管理器。
 
-只在当前任务允许的范围内修改；对改动运行最小直接验证，并如实区分局部结果、真实运行和发布结论。
+产品 truth、SQLite/store、provider、Codex 会话、NPC/Agent、资产和 runtime 都留在产品代码与产品资料中，不搬进 Harness Lite。
 
-## 什么才算完成
+## 完成和退场
 
-交付结果符合当前任务，范围内改动和直接验证已被核对，Git 现实及未完成事项没有被隐瞒。局部绿灯不等于生产或发布通过。
-
-## 完成后怎么退场
-
-记录结果、验证、Git 处置和后续负责人或阻塞项；push、共享分支合并、发布、部署和破坏性清理仍需单独确认。不得自动退场、自动清理或把普通失败拆成新任务。
+每个 leaf 先交代：做出什么、验证跑了什么、改了哪些文件、遗留什么。最后一个 leaf 完成后关闭 stage，并交代入口、实际结果、遗留和接手人、改动位置、是否并主线、分支/worktree、测试材料、下一入口，以及记录是否真的在提交里。

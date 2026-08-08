@@ -1,4 +1,5 @@
 ---
+historical-note: 2026-08-08 Harness Lite cutover; lifecycle below is frozen history and is not current authority
 id: SYN-FND-001-R1
 kind: TASK
 parent-id: PL-SYN-PRODUCT-LINE

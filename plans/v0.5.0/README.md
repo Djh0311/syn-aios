@@ -1,6 +1,8 @@
-# Adaptive Harness v0.5 task packages
+# Adaptive Harness v0.5 task packages（历史）
 
-This directory is the canonical carrier for v0.5 task packages.
+> 2026-08-08 起本目录仅作旧任务包审计材料。包内 lifecycle、scope、verification 和 next 字段不再激活工作，也不授予权限；当前工作只认 Harness Lite 当前链。
+
+This directory was the canonical carrier for v0.5 task packages before the Harness Lite cutover.
 
 - A package named `<TASK_ID>.md` is created only by the v0.5 `task start` flow.
 - The package must match one active task node with the same full task ID.

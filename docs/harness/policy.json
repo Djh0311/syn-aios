@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hardCategories": [
+    "external",
+    "destructive",
+    "context",
+    "control",
+    "project-sensitive"
+  ],
+  "sensitivePathPatterns": [],
+  "sensitiveCommandPatterns": [],
+  "trustBoundary": "lightweight-same-user-account"
+}

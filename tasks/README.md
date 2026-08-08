@@ -1,11 +1,5 @@
-# tasks/ 目录说明
+# tasks/ 历史任务材料
 
-任务包存放处（内部协议 · 审计 · 交接物，模板见 `../TASK_TEMPLATE.md`）。
+本目录保留旧任务包、审计和交接材料，供追溯产品背景。这里没有当前任务队列，文件中的 ACTIVE、READY、下一步或授权字段在 Harness Lite 切换后都不自行生效。
 
-**本文件不再维护「当前阶段 / checkpoint 队列」**——那套 task-queue 职责已随 `AGENTS.md` v2（2026-06-19）停用。查当前状态与待办：
-
-- 当前事实唯一正本 = `../CURRENT.md`（四块：能用 / 在做 / 下一步 / 锁着）；
-- 当前阶段 / 串行排布唯一入口 = `../docs/plans/2026-07-16-master-execution-plan-conversation-first-v1.md`；
-- 产品方向正本 = `../docs/plans/2026-07-16-conversation-first-direction-and-execution-plan-v1.md`；06-27 Phase A–E 路线图只作历史参照。
-
-旧版内容（Root Treatment 时代 checkpoint 流水账，停更于 2026-06-14）存档：`../archive/2026-07-06-tasks-readme-root-treatment-era-final.md`。
+当前开发工作只从 `../docs/harness/plan.md` → 当前 stage → 唯一 current leaf 进入；新任务使用 `../docs/harness/templates/leaf.md`，产品专属补充字段可参考 `../TASK_TEMPLATE.md`。

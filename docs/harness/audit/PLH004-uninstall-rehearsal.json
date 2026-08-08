@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "observedAt": "2026-08-08",
+  "base": {
+    "commit": "c9d53a9063a076d409239a35cdd12e25332c1869",
+    "tree": "04dbe9e7ae546e55697b381d8ca9f2f83e94a5c9"
+  },
+  "legacyHarness": {
+    "version": "0.5.0",
+    "manifestSha256": "9460364c1676911c14f7a461dbb74bab1a9e91fabf733c3b450973558e2267b2",
+    "manifestOwnedReplaceManaged": 50,
+    "manifestTargetReceipt": "eeddf05e44c959ec4e19f3e32021672a855caf2ed4655c8bbd80dcc49395adf7",
+    "manifestBlobReceipt": "357735b3d3e2deff352fb377b36d3b7eeeef204028940c54c5cf6fe8b3ae76e7",
+    "unmanifestedOldTest": "scripts/harness-v2/active-path-audit.test.js",
+    "unmanifestedOldTestBlob": "17aeb5d4acdbcbf1c1814a2ed45a7238c16b99f7",
+    "finalDeleteCount": 52
+  },
+  "hookMigration": {
+    "hooksPath": ".githooks",
+    "oldPreCommitBlob": "068ca087f5d6cd3b0906269de2d30b2ac135ad4e",
+    "preCommitAdapted": true,
+    "preCommitMode": "0755",
+    "commitMsgPreserved": true,
+    "activeOldHookReferencesAfter": 0,
+    "temporaryIndexCheck": "pass"
+  },
+  "lite": {
+    "version": "0.3.0",
+    "ownedFiles": 44,
+    "hostRegistrationFiles": [".claude/settings.json", ".codex/hooks.json"],
+    "repeatInstallWritten": 0,
+    "repeatInstallSkipped": 46,
+    "uninstallRemoved": 40,
+    "uninstallProtectedProjectFiles": 4,
+    "candidateScopeFingerprintBefore": "dac474b47c03c187bb8f91aaf79001cc6f46d4945e9c2068e5fca057e483874b",
+    "candidateScopeFingerprintAfterRestore": "dac474b47c03c187bb8f91aaf79001cc6f46d4945e9c2068e5fca057e483874b"
+  },
+  "rollback": {
+    "preCutoverArchiveSha256": "02b76077fc7bf6446efbe62f150c22a9d9af0dbf87aba6d9f5c14f24f2d3d59d",
+    "preCutoverArchiveEntries": 162,
+    "restoredManifestSha256": "9460364c1676911c14f7a461dbb74bab1a9e91fabf733c3b450973558e2267b2",
+    "restoredPreCommitBlob": "068ca087f5d6cd3b0906269de2d30b2ac135ad4e",
+    "restoredLiteOwnershipSha256": "f5a14f5c609852eb218994796f4a31e941f8608a0118a060defce3ce69b29a17",
+    "restoredHookModes": ["0755", "0755"]
+  },
+  "verification": {
+    "chainProgressAuth": "pass",
+    "jsonFilesParsed": 7,
+    "liteJavaScriptSyntax": "pass",
+    "shellSyntax": "pass",
+    "quickCheck": "pass",
+    "taskCheck": "pass",
+    "activeLegacyCarrierReferences": 0,
+    "activeLegacyEntrypointReferences": 0,
+    "diffCheck": "pass",
+    "productCodeDiffFiles": 0
+  },
+  "protectedWip": {
+    "product-line-status": "9de7a6ac5e561ec61b6404204f960d78ddf9cfad5c51bf74716126b539bb598b",
+    "product-line-syn-fnd-002-status": "60f1395f2df3b0e7355952b65f23bae4c121fbe63090802d8c4793178385f399"
+  },
+  "externalChanged": false,
+  "pushed": false
+}
