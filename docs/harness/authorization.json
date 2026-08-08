@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "id": "USER-SYN-M2-MAINLINE-CLOSEOUT-STAGE-03-20260808",
+  "id": "USER-SYN-M3-AUTONOMOUS-STAGE-04-M0C01-20260809",
   "issuedBy": "user",
   "scope": {
     "kind": "stage",
-    "id": "stage-03"
+    "id": "stage-04"
   },
-  "summary": "用户明确同意开始完成 M2 主线收口，并要求完成后新开指导对话交接；范围包括建立 Lite Stage、精确提取 M2 改动、本地提交、合并 main、验收和收口，不 push、不启动 M3。",
+  "summary": "用户明确批准自主推进 M3；先完成 M0C01 干净基线，允许任务包内文件修改、离线测试、精确暂存和本地提交，禁止 merge、push、发布、真实 provider/消息及破坏性操作。本记录只覆盖前置 stage-04/M0C01。",
   "grants": [
     {
-      "id": "M2C-CONTEXT",
+      "id": "M0C01-CONTEXT",
       "category": "context",
       "operations": ["change"],
       "targets": ["*"]
     },
     {
-      "id": "M2C-CONTROL",
+      "id": "M0C01-CONTROL",
       "category": "control",
       "operations": ["modify"],
       "targets": ["docs/harness/"]
@@ -23,15 +23,18 @@
   ],
   "exclusions": [
     "push",
+    "merge",
     "remote",
     "deploy",
     "release",
     "provider",
+    "product-source",
     "database",
+    "migration",
     "browser",
     "real-account",
     "real-message",
     "destructive-cleanup",
-    "M3"
+    "M3-implementation"
   ]
 }
