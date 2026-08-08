@@ -1,5 +1,7 @@
 # M0 — SQLite 迁移完整性合同 v1
 
+> 资料状态（2026-08-09）：历史迁移合同和来源证据，不是当前迁移计划或切换授权。当前数据事实看 `docs/current-state.md`；任何迁移、切换和真实数据动作都需要新的计划、验证和明确授权。
+
 日期:2026-07-13 · 基线 commit:`d952a7d` · 任务包:`tasks/2026-07-13-sqlite-migration-completeness-m0-m1-m3-package-v1.md`
 勘察正本:本合同的每一条分类/坐标均来自 2026-07-13 只读勘察(交叉核过 live JSON + 源码 + 8-agent adversarial cross-check),坐标已按今日基线校正。
 

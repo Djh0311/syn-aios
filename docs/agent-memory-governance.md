@@ -1,5 +1,7 @@
 # Agent Memory Governance
 
+> 资料状态（2026-08-09）：工程智能体跨会话记忆治理，不是 Syn 产品记忆层正本。产品记忆要求看 `docs/product/syn-product-canon-v1.md`；本文件只约束参与开发的智能体怎样使用工程记忆。
+
 Purpose: define how agent memory may be created, reviewed, used, expired, and revoked in this project.
 
 Memory is not a source of authority. Current code, current tests, current user instructions, `AGENTS.md`, required skills, `docs/decisions.md`, and fresh evidence outrank recalled memory.

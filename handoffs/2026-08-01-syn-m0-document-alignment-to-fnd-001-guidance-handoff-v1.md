@@ -1,16 +1,16 @@
 # Syn M0 文档对齐至 FND-001 指导交接 v1
 
 - 日期：2026-08-01
-- 状态：**CURRENT GUIDANCE HANDOFF / TEMPORARY / NO EXECUTION AUTHORITY**
+- 状态：**历史指导交接 / 已被后续阶段取代 / 不定义当前产品、授权或下一入口**
 - task-id：`SYN-M0-TO-FND-001-GUIDANCE-HANDOFF`
 - from：当前 Syn M0 文档对齐主导线
 - to：下一位 Syn 主导线或 `SYN-FND-001` 执行线
-- summary：M0 已完成文档、决定和路线冻结；下一任务只能先显式激活合同切片 `SYN-FND-001`。
+- summary：本文件记录 M0 收口时的事实与当时交给 `SYN-FND-001` 的指导；该下一任务已经失效。
 - 仓库：`/Users/yoyi/workspace/product-line`
 - Git 基线：`main@8f63076ff4ac`
-- 当前 Harness：`mode=PLAN`、`work-state=READY`、`active-id=NONE`
+- 当时开发护栏（Harness）：`mode=PLAN`、`work-state=READY`、`active-id=NONE`
 
-> 本交接只压缩 M0 的已确认结果、当前事实、边界和下一动作。它不是新的产品正本、任务包或执行授权。发生冲突时，依次服从当前用户指令、`../docs/harness/AUTHORITY.md`、`../docs/harness/CURRENT.md`、当前决定和当前计划。
+> 历史说明（2026-08-09）：本交接只压缩 M0 当时的结果、事实、边界和下一动作。它不是产品正本、当前状态、候选方案、任务包或执行授权；不得从文中的旧路径、旧状态和旧“下一步”恢复施工。当前信息从仓库根 `README.md`、`AGENTS.md` 与 `docs/current-state.md` 进入。
 
 ## 1. 交接结论
 
@@ -76,7 +76,7 @@ M0“文档、决定与当前路线冻结”已经完成，可以在这里结束
 - 通用个人收件箱、正式日报实体、个人模型、统一 Connector 运行面和凭据生命周期仍未完成。
 - M0 只修改和校正文档；没有启动 App、发送真实消息、调用真实 store、运行 workflow、连接外部软件、读取真实凭据或验收产品运行态。
 
-## 5. 下一任务：`SYN-FND-001`
+## 5. 当时下一任务：`SYN-FND-001`（历史，已经失效）
 
 ### 5.1 激活前提
 
@@ -157,7 +157,7 @@ M0 文档收口已经通过：
 
 本轮没有 stage、commit 或 push。上述验证只证明文档与 Harness 路由一致，不证明产品代码、真实 App、外部软件或发布通过。
 
-## 9. 下一任务阅读顺序
+## 9. 当时下一任务阅读顺序（历史）
 
 1. `../AGENTS.md`
 2. `../docs/harness/AUTHORITY.md`

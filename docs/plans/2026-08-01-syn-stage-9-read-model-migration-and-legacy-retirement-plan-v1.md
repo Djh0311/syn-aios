@@ -5,9 +5,9 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M9。<br>
 硬前置：M1-M8 exit receipts；各目标 domain 有 authoritative source、projector、parity、rollback 与 replacement acceptance。<br>
-当前 active node / package：`NONE`；本计划不授权主读切换、command unregister、archive、删除、App 或产品代码。
+当前活动阶段 / 叶：无（`NONE`）；M3 尚未激活，本计划也未激活；本计划不授权主读切换、命令注销、归档、删除、桌面应用或产品代码。
 
-权威顺序：当前用户指令 → `../harness/AUTHORITY.md` / `../harness/CURRENT.md` → 当前 inventory → master → M1-M8 exit / HOLD receipts → 本计划。历史 migration fixture / dry-run 只作素材，不升级为 live cutover 事实。
+权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../current-state.md` → 当前能力盘点 → master → M1-M8 退出 / 暂缓回执 → 本计划。历史迁移夹具和演练只作素材，不升级为真实切换事实。
 
 ## 0. 当前事实与未知
 
@@ -151,7 +151,7 @@ MIG-001 → MIG-002 → MIG-003 → MIG-004 → MIG-005 → MIG-005A
 | Isolated Tauri | 每页 deep link、errors、rollback、old read-only 可见 | 真实数据完成 |
 | 经授权 live cutover | 精确 family 的 before/after/parity/reference-zero/rollback | 其他 family 或删除通过 |
 
-每个 family 的最低 evidence：replacement real-App acceptance（若属用户路径）、old/new parity、fallback / error count、reference search + runtime telemetry、export/restore、rollback drill、CURRENT 状态。
+每个能力族的最低证据：替代路径真实应用验收（若属用户路径）、新旧同等性、回退与错误计数、引用检索与运行观测、导出恢复、回滚演练，以及 `../current-state.md` 状态。
 
 ## 8. 授权与停止条件
 
@@ -170,4 +170,4 @@ MIG-001 → MIG-002 → MIG-003 → MIG-004 → MIG-005 → MIG-005A
 - raw JSON 默认不出产品响应；
 - 旧 store 未未经授权物理删除；
 - 给 M10 提供 release candidate 路由、HOLD、recovery / rollback scripts 和全日场景 truth sources；
-- CURRENT 回写实际完成 / HOLD / 下一步，M10 未激活不得续跑。
+- `../current-state.md` 回写实际完成、暂缓和下一入口；M10 未激活不得续跑。

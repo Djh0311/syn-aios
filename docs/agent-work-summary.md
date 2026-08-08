@@ -5,7 +5,7 @@
 > 结论：`PASS__RISK_CLEANED__READY_FOR_3B`
 > 边界：站 3b 未启动；未执行 `git add`、commit 或 push。
 
-本文是站 3a 的历史工作总结，不是当前状态正本。当前状态先读 `CURRENT.md`，权威索引读 `AUTHORITY.md`，完成事实与原始证据以 `evidence/2026-07-12-orchestrator-station3a-control-core-bridge-v1.md` 为准。
+本文是站 3a 的历史工作总结，不是当前状态正本。当前状态看 `docs/current-state.md`，文件效力看 `docs/product/authority-register-v1.md`，当时完成事实与原始证据以 `evidence/2026-07-12-orchestrator-station3a-control-core-bridge-v1.md` 为准。
 
 ## 1. 这轮做了什么
 

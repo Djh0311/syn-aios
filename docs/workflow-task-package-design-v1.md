@@ -1,5 +1,7 @@
 # Workflow And Task Package Design v1
 
+> 资料状态（2026-08-09）：混合的详细设计来源，不是当前产品入口，也不整篇拥有现行效力。任务包的最小上下文、权限、来源和“请求更多资料”原则已经由产品与架构正本吸收；旧对象草案、旧状态机、旧界面、旧实现清单和未定项按历史或候选阅读。当前产品定义看 `docs/product/syn-product-canon-v1.md`，未决问题只看 `docs/product/candidate-register-v1.md`。
+
 状态：最终蓝图下的工作流和任务包设计草案。
 
 本文从最终蓝图倒推工作流和任务包的完整形态，不替代 `CURRENT.md`、`README.md`、`decisions/**` 或最终蓝图。

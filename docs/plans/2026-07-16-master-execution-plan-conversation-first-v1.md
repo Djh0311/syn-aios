@@ -1,5 +1,7 @@
 # 总执行计划(唯一计划入口)· 对话优先改造 v1
 
+> **状态校正（2026-08-09）：HISTORICAL / SUPERSEDED。** 本文只保存 2026-07 当时的执行现场；标题和正文中的“唯一计划”“当前”“下一步”均已失效。当前产品方向看 `../product/syn-product-canon-v1.md`，当前排期看 `2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md`，具体执行另看当前轻量开发护栏链。
+
 日期:2026-07-25 · 状态:**共享 Conversation Transport + Syn MCP Capability Plane 已完成代码与离线回归，三句真实 App 重验包已冻结但仍待新授权；L3 知识库 N0-N5 既有能力离线收口，N2R-R0 真实参考已冻结，首个 React-only 单壳收口包待用户 kickoff；N6 继续 HOLD** · 本文=全仓待办与计划的**唯一收敛入口**:CURRENT §三只留顺序指针;旧计划文档全部在 §三 归位。方向正本=`docs/plans/2026-07-16-conversation-first-direction-and-execution-plan-v1.md`；当前 transport/MCP 决策=`decisions/2026-07-22-shared-conversation-transport-and-syn-mcp-capability-plane-v1.md`；L3 当前决策=`decisions/2026-07-23-l3-syn-native-knowledge-workspace-route-v2.md`(本文不重复其内容,只管「怎么执行不跑偏」)。
 
 ## 〇、防跑偏总则(执行任何包前重读,违反=机械拒)

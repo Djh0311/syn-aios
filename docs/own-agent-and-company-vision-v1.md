@@ -1,5 +1,7 @@
 # 自有 Agent 与公司化愿景 v1
 
+> 资料状态（2026-08-09）：历史愿景来源，不再单独充当当前产品正本。仍有效的用户拍板已经合并到 `docs/product/syn-product-canon-v1.md`；未决的组织、换模型抽查和扩编细节统一进入 `docs/product/candidate-register-v1.md`。本文中的“固定模型”和旧开发护栏入口不再具有现行效力。
+
 日期：2026-06-12
 来源：2026-06-11 至 2026-06-12 用户与 Claude（咨询线）的愿景讨论。本文把讨论中用户已拍板的口径沉淀为设计依据。
 状态：**当前愿景 / 组织设计依据，不是任务授权。** 功能落地只走 current master / stage → active v0.5 node → matching task package；旧 backlog 或历史阶段不能直接开工。

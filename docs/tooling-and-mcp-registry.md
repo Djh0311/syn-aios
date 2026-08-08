@@ -1,5 +1,7 @@
 # Tooling And MCP Registry
 
+> 资料状态（2026-08-09）：开发环境工具登记，不是 Syn 产品技能注册表或知识正本。记录存在不表示当前可用、已授权或已进入产品。
+
 Purpose: define which external tools, MCP servers, and browser harnesses should be used for each kind of engineering evidence. This is the default place to check before selecting verification or debugging tools.
 
 Tool status values: `Preferred`, `Fallback`, `Optional`, `Unavailable`, `Needs Setup`.

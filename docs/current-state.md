@@ -1,32 +1,55 @@
 # 当前状态
 
-截至 2026-08-08，M2 已在 `main` 完成项目级收口；M3 保持 `PLANNED / NOT_ACTIVE`，没有活动产品开发包。
+截至 2026-08-09，产品代码基线仍是 M2 收口后的 `main@a8c6381dd33c3098e343a2b6a7f2ec9b94b6cce9`。本轮只收拢产品正本、知识基础设施定义、权威分工、候选清单和历史资料入口；没有修改产品代码，没有启动 M3，也没有进入真实服务提供方、真实消息、桌面应用验收、部署或发布。
 
-## 当前权威入口
+## 现在分别看哪里
 
-1. 当前用户指令；
-2. `AGENTS.md`；
-3. `docs/harness/plan.md` → 当前 stage → 唯一 current leaf；
-4. `docs/harness/authorization.json`；
-5. 对应阶段计划、合同、源码与验收材料。
+1. 当前用户指令：决定本轮目标和授权；
+2. `docs/product/syn-product-canon-v1.md`：决定 Syn 长期是什么；
+3. `docs/product/authority-register-v1.md`：决定各类文件当前有什么效力；
+4. `docs/workbench-system-architecture-v1.md`：决定现行系统边界；
+5. `docs/current-state.md`、源码和新鲜验证：说明现在实际做到了什么；
+6. `AGENTS.md` 与当前轻量开发护栏链：决定本轮怎样安全施工。
 
-Stage 3 归档后没有 active stage、current leaf 或持续授权。计划、handoff、报告和历史 Harness 文件只提供事实与导航，不自行授权施工。
+验收、交接、历史任务、研究和旧决定只按登记状态提供证据或来源，不自行成为产品定义、当前计划或持续授权。
 
-## 已完成
+## 本轮文档收口结果
 
-- M1 合同、安全与作用域基础已经进入 main。
-- M2 的具名 `workflow-state-sidecar` reference slice 已进入 main，覆盖 UoW、denial audit、receipt、snapshot、outbox、projector/checkpoint、parity/recovery，以及隔离 R4 崩溃/重启验收。
-- M2 完整 Rust 库测为 1385 passed / 0 failed / 45 ignored；干净主线 R4 为 7/7 PASS。
+- 已建立完整产品正本、所有智能体共用的知识基础设施正本、精确权威登记和唯一活动候选登记。
+- 当前决定改为精确清单；`decisions/` 其余文件统一降为历史、来源、验收或过期授权，不再因为目录名恢复效力。
+- 旧待办、旧开发线和旧重型多智能体协议已缩成历史桥接页；旧根部设计加了现行替代指针。
+- 计划已明确：M3 只冻结角色会话需要的最小知识上下文接口；M7 承接完整知识、记忆、个人模型与技能治理；M8 只接外部知识来源适配器，不把知识核心再次外置。
+- 产品候选已按用户逐项确认收缩：第一批角色、多视角咨询、用户知识深度、项目摘要位置、技能首版、后期个人服务器备份和开源成本工具均已有去向；活动候选只保留自动换智能体 / 模型、高级检索时机和自动优化器。
+- 当前产品定义与 M0-M10 公共底座重构路线已经完整；逐阶段动态施工包仍在进入对应阶段前结合当时源码生成，M10 后五类业务扩展不冒充已经排完的终身计划。
+- 证据、交接、研究、设计、合同和归档已有目录级效力说明。因历史交叉引用很多，本轮没有批量移动既有证据和交接文件。
+- 用户在前端的明确修改被定义为正式输入，写回原事实所有者；用户明确指定外部项目时可以建立本次范围，不作永久跨项目禁止。
 
-验收与提交事实见 `docs/harness/reports/M2C02-mainline-integration-and-acceptance.md` 和 `docs/harness/reports/M2C03-lite-closeout-and-guidance-handoff.md`。
+## 已经成立的代码事实
 
-## 保留边界
+- M1 合同、安全和作用域基础已经进入主线。
+- M2 的具名 `workflow-state-sidecar`（工作流状态旁路存储）参考切片已经进入主线，覆盖工作单元、拒绝审计、回执、快照、发件箱、投影与检查点、同等性与恢复，以及隔离崩溃和重启验收。
+- M2 完整 Rust（系统实现语言）库测试结果为 1385 通过、0 失败、45 忽略。
+- 干净主线隔离 R4（第四轮恢复演练）为 7 项全部通过，回执哈希为 `fbd799a347934225f5e2eb652d286b690d8137c69c7baa55b4835fbebfc3ac13`。
 
-- live Workbench 数据没有迁移或切换；DAT-007 保持 `NOT_MIGRATED / NO_CUTOVER`。
-- provider、真实账号、真实消息、部署和发布没有进入 M2。
-- review、decision、source-owner apply-result 与 RoleSession/Handoff 属后续阶段，不因 M2 收口自动成立。
-- 混合开发工作树 `/Users/yoyi/workspace/product-line-syn-fnd-002` 保持只读，既有 WIP 不作为 main 的当前事实。
+这些结论的证据边界见 `docs/harness/reports/M2C02-mainline-integration-and-acceptance.md` 与 `docs/harness/reports/M2C03-lite-closeout-and-guidance-handoff.md`；报告不扩大它们点名的版本和场景。
 
-## 下一入口
+## 仍未成立
 
-下一工作只允许先做 M3 计划与事实的只读复核。任何 M3 产品实现、Harness stage 或 leaf 激活，都需要用户新的明确指令。
+- M3 仍是“已计划、未激活”。角色会话、轮次、服务提供方句柄、对话上下文和显式交接尚未因 M2 自动成立。
+- 评审、决定和来源所有者的应用结果尚未形成完整产品闭环。
+- 实时桌面工作台数据没有迁移或切换；`DAT-007` 仍是“未迁移、未切换”。
+- 真实服务提供方、真实账号、真实消息、部署、发布和完整桌面应用验收均未进入。
+- 知识基础设施本轮形成产品与架构正本，不表示对应全部代码已经实现。
+- 角色身份与模型、服务提供方和线程分离、多视角咨询、用户知识深度以及常驻角色恢复“用户是谁、近期、长期和未闭环事项”都是目标要求，当前代码尚未因文档确认自动具备。
+
+## 当前开发状态
+
+轻量开发护栏的前三个阶段均已完成并归档。当前活动控制链是 `stage-04 / M0C01-doc-authority-clean-baseline`，只负责把本轮 77 个既有 Markdown 整理收成可复现的本地干净基线；它不授权产品源码、数据库、迁移或 M3 实现。`docs/harness/authorization.json` 已换成与该阶段匹配的用户授权记录。
+
+M0 文档内容收口已经完成，当前只剩路径核验、本地提交和护栏归档。用户已经明确批准在干净基线成立后自主推进 M3；在 `M0C01` 完成并确认工作树干净之前，M3 仍保持未激活，也不因这份文档本身自动获得执行效力。
+
+## 保全
+
+- `/Users/yoyi/workspace/product-line-syn-fnd-002` 继续只读保留既有战略开发中工作；它不是当前主线事实。
+- `/Users/yoyi/workspace/product-line-syn-m2-closeout` 继续保留 M2 审查锚点。
+- 不从这些工作树清理、覆盖、暂存或归责既有改动。

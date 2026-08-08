@@ -1,5 +1,7 @@
 # 开发 Harness Phase 0：基线与 consumer 审计 v1
 
+> 资料状态（2026-08-09）：已退出的旧开发护栏基线审计，只按历史证据阅读。当前施工规则看 `AGENTS.md` 和轻量开发护栏；本文不定义 Syn 产品，也不提供当前授权。
+
 日期：2026-07-23
 性质：只读基线 / consumer 分类；不改变 Harness 运行语义，不授权删除、隐藏、改名、接 Hook 或修改业务代码。
 对应：[整改执行计划 v1](plans/2026-07-23-development-harness-routing-code-map-and-authority-governance-remediation-plan-v1.md) Phase 0；[运行模型决策](../decisions/2026-07-23-development-harness-operating-model-v1.md)。

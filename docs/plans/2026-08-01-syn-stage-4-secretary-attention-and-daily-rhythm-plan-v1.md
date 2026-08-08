@@ -5,9 +5,9 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M4。<br>
 硬前置：M1 identity / scope / policy、M2 UoW / event / projector、M3 Secretary RoleSession 可用；项目摘要由 M5 owner 提供时再接项目源。<br>
-当前 active node / package：`NONE`；本计划不授权 App、模型调用、个人真实数据或产品代码。
+当前活动阶段 / 叶：无（`NONE`）；M3 尚未激活，本计划也未激活；本计划不授权桌面应用、模型调用、个人真实数据或产品代码。
 
-权威顺序：当前用户指令 → `../harness/AUTHORITY.md` / `../harness/CURRENT.md` → 2026-08-01 修订与当前 inventory → master → M1-M3 exit receipts → 本计划。M5 ProjectSummary 和 M6 consult 未完成时只能显式 HOLD，不能由本计划补写成当前事实。
+权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../current-state.md` → 2026-08-01 修订与当前能力盘点 → master → M1-M3 退出回执 → 本计划。M5 项目摘要和 M6 咨询未完成时只能显式暂缓，不能由本计划补写成当前事实。
 
 ## 0. 当前事实与未知
 
@@ -162,4 +162,4 @@ local schema / store migration、App 启动 / 强制退出、个人真实数据�
 - 旧派生面有 parity / compatibility / rollback，不物理删除；
 - isolated App 场景通过；真实数据结论逐项记录；
 - 把 source event / DailyReport ref 合同交 M7，把咨询合同交 M6；
-- CURRENT 回写实际完成和 HOLD，未激活不得续跑。
+- `../current-state.md` 回写实际完成和暂缓项；未激活不得续跑。

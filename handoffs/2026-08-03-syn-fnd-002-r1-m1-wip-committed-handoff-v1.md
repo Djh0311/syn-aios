@@ -2,11 +2,14 @@
 
 schema: harness-handoff/v1
 date: 2026-08-03
+状态：历史交接；不定义当前产品、授权或下一入口
 line: 指导线（Claude Code，干净会话）
 worktree: `product-line-syn-fnd-002`，branch `syn-fnd-002-dev`
 opening HEAD: `81cf1a3`
 closing HEAD: `3488135`（**第三批未落地**，见 §1）
 evidence-level: STATIC + UNIT_ONLY（无任何真机/真存储/真 provider 证据）
+
+> 历史说明（2026-08-09）：本文件保留 M1 WIP 当时的提交、失败、证据与保全事实。正文中的待办、优先级、授权依据和接手命令均已失去当前效力；不得据此修改保全工作树或恢复旧任务。当前信息从仓库根 `README.md`、`AGENTS.md` 与 `docs/current-state.md` 进入。
 
 ---
 
@@ -193,7 +196,7 @@ evidence-level: STATIC + UNIT_ONLY（无任何真机/真存储/真 provider 证�
 
 ---
 
-## 6. 下一步（按优先级，均需用户拍板）
+## 6. 当时下一步（历史记录，不得照此续跑）
 
 0. **【最高优先】把第三批真提上去。** 内容完好在工作树（3 个 untracked 模块 + `mod.rs` 的 3 行 mod 声明），
    已在 staged tree `8ba62b4c` 上验过 check exit 0 / test 1292 passed。**但那次验证也在假输出区间内，
@@ -223,7 +226,7 @@ evidence-level: STATIC + UNIT_ONLY（无任何真机/真存储/真 provider 证�
 
 ---
 
-## 7. 给下一个会话的最短上手路径
+## 7. 给当时下一个会话的最短上手路径（历史）
 
 ```
 cd /Users/yoyi/workspace/product-line-syn-fnd-002

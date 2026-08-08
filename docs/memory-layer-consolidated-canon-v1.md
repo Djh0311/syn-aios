@@ -1,7 +1,9 @@
 # 记忆层已确定汇编（正本索引）v1
 
+> 资料状态（2026-08-09）：历史汇编和来源导航，已经退出当前权威入口。现行产品要求与文件效力分别看 `docs/product/syn-product-canon-v1.md` 和 `docs/product/authority-register-v1.md`；下文对已删除 `docs/harness/CURRENT.md`、`docs/harness/AUTHORITY.md` 的引用只反映旧护栏时期，不再用于判断当前状态或授权。
+
 日期：2026-06-16
-出自：咨询线（Claude）。性质：把记忆层**已确定**的事实与决策梳理到一处，做导航入口；**不替代**详细正本（设计文档 / R3 schema 契约 / 治理 schema / 历史状态快照），每条都带指针指向源文件。今天的当前状态只看 `docs/harness/CURRENT.md`。
+出自：咨询线（Claude）。性质：把当时记忆层**已确定**的事实与决策梳理到一处，作为历史导航；**不替代**现行产品正本、详细来源或当前状态。今天的实现状态看 `docs/current-state.md`、源码和新鲜验证。
 
 > **2026-08-01 正本修订：**`decisions/2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md` 已覆盖本文关于“普通聊天一律不捕获、正式记忆必须逐条人工确认、auto-skillification 全部 deferred”的默认口径。七层模型、17 表目标、来源、作用域、敏感性、版本、冲突、外发、append-only 审计和权威 / 索引分离继续有效。本文中的旧实施状态仍按当时事实阅读，不得改写成自动治理已经落地。
 

@@ -1,5 +1,7 @@
 # Middleware Version Stage Plan v1
 
+> **状态校正（2026-08-09）：HISTORICAL / SUPERSEDED。** 本文只保存中间版本的阶段现场，正文中的“当前中间版本”和后续入口均已失效。当前产品方向看 `../product/syn-product-canon-v1.md`，当前计划看 `2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md`。
+
 日期：2026-06-06
 
 状态：当前中间版本整体阶段计划。本文承接 `docs/middleware-version-development-plan-v1.md` 和 `docs/plans/memory-layer-implementation-slice-v1.md`，用于指导后续任务包拆分和执行顺序。

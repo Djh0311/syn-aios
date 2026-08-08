@@ -1,8 +1,8 @@
 # Syn 全能个人 AI 工作台总开发计划 v1
 
 日期：2026-08-01<br>
-状态：**CURRENT MASTER PLAN；M1/M2 已完成主线收口，M3-M10 等待逐阶段任务激活。**<br>
-计划性质：定义长期重构和迁移顺序，不维护逐任务进度，不单独授予代码、App、store、真实消息、外部连接、凭据、Git 或发布权限。当前事实和 active task 只看 Harness Lite 的 `../harness/plan.md`、当前 stage、唯一 current leaf 与 `../harness/authorization.json`。
+状态：**当前总开发计划；M0 文档收口与 M1/M2 主线收口已完成，M3-M10 均未激活。**<br>
+计划性质：定义长期重构和迁移顺序，不维护逐任务进度，不单独授予代码、桌面应用、存储、真实消息、外部连接、凭据、Git（版本控制写入）或发布权限。当前事实看 `../current-state.md`、源码和新鲜验证；具体施工入口看当前用户指令、`AGENTS.md` 与轻量开发护栏的活动阶段、唯一活动叶和 `../harness/authorization.json`。没有活动阶段时，不从本计划推导自动下一包。
 
 ## 0. 目标
 
@@ -21,13 +21,15 @@
 本计划受以下正本约束：
 
 1. 当前用户指令；
-2. `../../AGENTS.md`；
-3. Harness Lite 的 `../harness/plan.md`、当前 stage、唯一 current leaf 与 `../harness/authorization.json`；
+2. `../product/syn-product-canon-v1.md` 与 `../product/authority-register-v1.md`；
+3. `../product/knowledge-infrastructure-canon-v1.md`；
 4. `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`；
 5. `../../decisions/2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md`；
-6. 继续有效的角色、项目内 conversation-first、两轴治理、共享 transport 和执行人闸决策；
-7. `../2026-07-08-workbench-current-feature-inventory-for-prototype-v1.md` 的当前源码底账；
-8. `../workbench-system-architecture-v1.md` 的目标模块边界。
+6. 继续有效的角色、项目内自然对话、两轴治理、共享传输和执行人闸决定；
+7. `../workbench-system-architecture-v1.md` 的目标模块边界；
+8. `../current-state.md`、当前源码与新鲜验证所证明的实现事实。
+
+`../../AGENTS.md` 与轻量开发护栏只管理每次施工怎样进行和是否有权限，不反过来定义产品。计划、阶段文件和开发护栏存在，都不等于当前任务已经激活。
 
 证据分层：
 
@@ -81,6 +83,7 @@ Tauri / React UI
   → Application Use Cases
     → Identity & Scope Kernel
     → Policy Kernel
+    → Knowledge & Context Foundation
     → Domain Aggregates
        ├─ Conversation / Handoff
        ├─ Attention / Decision / Daily
@@ -93,7 +96,7 @@ Tauri / React UI
     → Adapters
        ├─ Agent / Model
        ├─ Tool / MCP / Harness
-       ├─ Knowledge / File
+       ├─ External Knowledge / File
        └─ External Connector
 ```
 
@@ -107,7 +110,7 @@ Tauri / React UI
 - `CurrentObjectRef`；
 - `ExecutionChannel(daily | development)`；
 - `PermissionProfile`；
-- 项目归属、跨项目禁止和稳定对象引用规则。
+- 项目归属、默认范围隔离、用户明确跨项目请求和稳定对象引用规则。
 
 `policy` 统一判定：
 
@@ -144,6 +147,7 @@ payload_summary / payload_ref / payload_hash
 |---|---|---|
 | `RoleSession` | 固定角色、作用域、当前对象、通道和持久会话 | Syn 持有 binding；provider thread id 只是外部 handle |
 | `Handoff` | 显式跨角色 / 跨通道交接 | 保留 from/to、scope、目标、refs、权限请求与回执 |
+| `KnowledgeContextPacket` | 按角色、范围、任务和权限装配资料、来源与技能说明 | 记录来源、版本、纳入和排除理由；不是事实、记忆或执行授权 |
 | `OpenLoop` | 秘书内部关注和闭环跟踪 | 协调状态，不是 Task；带来源、owner、理由、dismiss/close |
 | `DecisionRequest` | 需要用户作有约束力决定 | 回到原 owner / object；简单可聚合回答，复杂回源 |
 | `ProjectSummary` | 给秘书 / 全局主管的最小项目摘要 | 从项目真源投影，可重建，不可反向写项目 |
@@ -181,7 +185,7 @@ payload_summary / payload_ref / payload_hash
 - 从 Codex runner 提取 `AgentAdapter`；
 - 从 Supervisor MCP 提取 `CapabilityGateway` / `ToolAdapter`；
 - 从 sidecar / workflow 写入提取 Unit of Work、EventWriter、AuditWriter、Outbox；
-- 从 Native Knowledge Workspace 提取 `KnowledgeAdapter`；
+- 从原生知识工作区提取外部资料来源端口与知识来源适配器；来源登记、检索路由和上下文装配留在核心知识层；
 - 从 Harness 索引、readiness、verifier 提取 `HarnessAdapter`；
 - 从现有 memory stores 提取 repository 和治理服务；
 - 从前端项目聊天、Agent 会话和 transport UI 提取共用的角色会话显示层。
@@ -189,6 +193,7 @@ payload_summary / payload_ref / payload_hash
 ### 4.3 REWRITE / NEW：重写或新增
 
 - 项目 / 个人 / 全局作用域与稳定对象身份；
+- `KnowledgeSourceRegistry`（知识来源登记）、`KnowledgeContextAssembler`（知识上下文装配）和技能发现桥梁；
 - 持久 `RoleSession`、`Turn`、`CurrentObjectRef`、`PermissionProfile`、`ExecutionChannel` 和 `Handoff`；
 - 统一 command / event / audit / snapshot / outbox 事务底座；
 - 通用项目主管编排和 execution aggregate；
@@ -244,7 +249,7 @@ M4 秘书/Attention/日报   M5 项目主管/执行闭环
          ↓
 M6 全局主管 + 内部成员目录
          ↓
-M7 记忆 + 个人模型 + Skill 整理
+M7 知识 + 记忆 + 个人模型 + 技能治理
          ↓
 M8 Connector + CredentialRef
          ↓
@@ -253,7 +258,9 @@ M9 读模型切换 + 旧路退役
 M10 全日使用试点 + 发布硬化
 ```
 
-M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 可在 M2 后做存储和策略，但接入真实日常事件需等待 M4 / M5。M8 的 connector framework 可早做，真实第三方接入必须等凭据和外部动作合同独立通过。
+M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 / 记忆合同和隔离存储可在 M2 后先做；角色知识装配要与 M3 合同对齐，真实日常事件接入再等待 M4 / M5。M8 的连接器框架可早做，真实第三方接入必须等凭据和外部动作合同独立通过。
+
+本计划的完整范围是“Syn 公共底座重构 → 首个全日使用试点 → 发布候选”，不是 Syn 一生所有业务能力的逐功能排期。M10 以后，游戏开发、智能体开发、企业系统、个人工作和股票市场分别按真实使用需要建立业务路线；个人服务器异地备份、开源成本工具和高级知识检索也在进入真实需求时单独建包。它们没有提前排成固定阶段，不影响 M3-M10 的主线完整性。
 
 ### 5.1 独立阶段计划索引
 
@@ -263,7 +270,7 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 可在 M2 
 |---|---|---|
 | M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `COMPLETED / MAINLINE` |
 | M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `COMPLETED / MAINLINE / BOUNDED_REFERENCE_SLICE` |
-| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `PLANNED / NOT_ACTIVE`；下一入口仅只读复核 |
+| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
@@ -280,12 +287,13 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 可在 M2 
 
 交付：
 
-- 两份 2026-08-01 正式修订；
+- 两份 2026-08-01 正式修订和 2026-08-09 产品正本确认决定；
 - 架构、前端边界、记忆、长期工作线、backlog、历史计划和入口对齐；
-- 本 master、当前 stage plan、AUTHORITY / CURRENT 指针；
+- 本总计划、产品正本、知识基础设施正本、权威登记表、唯一候选登记、当前状态和阶段计划入口；
+- 非权威材料的合并、降级、目录状态与历史回链；
 - 能力 disposition、依赖和验收矩阵。
 
-退出条件：当前入口不再指向不存在文件或自称 current 的旧路线；目标模型与现状库存明确分开；产品代码仍未被文档计划自动激活。
+退出条件：当前入口不再指向不存在文件或自称 current 的旧路线；散落候选统一进入唯一登记，非权威材料不再因文件位置自行升格；目标模型与现状库存明确分开；产品代码仍未被文档计划自动激活。该文档收口已在 2026-08-09 完成，不因此激活 M3。
 
 ### M1 — 合同与安全 / 作用域基础
 
@@ -330,7 +338,9 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 可在 M2 
 - 显式 Handoff、接单、回执和结果回源；
 - 项目聊天与 Agent Center 退掉两套前端 cache。
 
-前端：先增加明确角色入口和固定上下文标签，不先改首页视觉；Agent 中心成为成员 / 历史会话目录。
+角色会话从第一版就携带可追溯的知识上下文引用：会话开始、恢复、交接和任务派发时，按角色、范围、当前对象和权限装配最小资料包；缺资料时可以说明理由请求更多。此处只冻结和打通上下文合同，不把完整知识检索、同步或界面一次塞进 M3。
+
+前端：先增加明确角色入口和固定上下文标签，不先改首页视觉；智能体中心成为成员与历史会话目录。
 
 退出门：每种角色新建 / 续接 / stop；重启恢复；跨项目续接拒绝；会话不静默生成 workflow / formal memory；Station 3b 后端真拒绝。真实 Codex 消息另行授权。
 
@@ -374,24 +384,31 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 可在 M2 
 - Secretary → Global Supervisor 的留痕只读咨询；
 - 稳定成员目录、角色档案、能力 / 权限、当前可用性、会话和直接联系；
 - 临时 agent 历史搜索、任务、结果和审计；
+- 重大问题可按需组织不同模型或不同方法的独立多视角咨询，并排呈现共识、分歧和来源；
 - 内部组织默认后台，不要求组织图成为日常入口。
 
-退出门：全局主管能从两个项目摘要发现冲突并回源；意见未经用户确认不改任一项目；用户能找到并直接联系指定稳定成员；临时 agent 不伪装成常驻成员。
+稳定成员身份由 Syn 持有，不等于模型、服务提供方、线程或进程；替换底层能力不会换人、重置记忆或扩大权限。
 
-### M7 — 记忆、个人模型、每日整理与 Skill
+退出门：全局主管能从两个项目摘要发现冲突并回源；需要时能取得彼此独立的多视角意见；意见未经用户确认不改任一项目；用户能找到并直接联系指定稳定成员；替换底层服务后成员身份和权限不漂移；临时 agent 不伪装成常驻成员。
+
+### M7 — 知识、记忆、个人模型、每日整理与技能
 
 交付：
 
+- 统一知识来源登记、索引、检索路由和上下文装配；常驻角色有稳定默认范围，临时智能体拿任务最小资料包；
+- 资料、决定、代码索引、历史成果和技能说明带来源、版本、新鲜度、作用域和权限过滤；
+- 技能可通过知识层被发现和理解，实际启用仍经过技能注册、角色权限和任务授权；
 - memory capture / observation / candidate / formal 写入改为事务或可靠 saga；
 - 自动策略矩阵：可自动、需确认、禁止；
 - 用户明确事实与系统推断分表型 / 分状态；
 - PersonalFact / ModelAssertion 的来源、置信度、时效、纠正和历史；
+- 建立可纠正的用户知识深度：用户自述进入个人事实，系统判断进入带来源、置信度和时效的模型推断；
 - 每日聊天、项目结果、纠正和重复模式整理；
 - SkillCandidate / SkillDraft / SkillVersion、验证、启用、权限和回滚；
 - task memory packet 带 revision / fingerprint / stale 判定；
 - 用户查看、纠正、冻结、废弃、关闭自动学习和批量撤销入口。
 
-退出门：故障注入无无解释半状态；secret / 权限 / 外部动作不得自动入记忆或扩权；冲突不静默覆盖；自动写入每条都有 policy result 和 audit；external-action skill 不因重复成功获得新权限。
+退出门：任一稳定角色和临时智能体都能按范围取得带来源的最小资料包，并能看见资料不足、过期、冲突和技能不可用；常驻角色重启后能区分并取回“用户是谁、近期做了什么、长期做过什么、当前有哪些未闭环事项”，且每项带来源、时间和作用域；用户知识深度可纠正，事实与推断不混型；检索命中不自动成为事实，技能发现不自动扩权；故障注入无无解释半状态；敏感信息、权限和外部动作不得自动入记忆或扩权；冲突不静默覆盖；自动写入每条都有策略结果和审计；外部动作技能不因重复成功获得新权限。
 
 ### M8 — Connector 与凭据引用
 
@@ -399,13 +416,13 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 可在 M2 
 
 - ConnectorDefinition、ConnectionAccount、CredentialRef、CapabilityGrant、SyncCursor、InboundItem、ActionRequest / Result；
 - `view / index / sync / action / secret` 分开声明、授权、撤销和审计；
-- 先把 Codex、Knowledge Vault / Obsidian、Supervisor MCP、Harness 包装为内部 adapters；
+- 先把 Codex（代码智能体）、外部知识库与文件源、主管能力协议和开发护栏包装为内部适配器；外部系统支持模型上下文协议（MCP）时优先使用，但核心知识与上下文服务本身不放在适配器层；
 - 一个低风险只读外部 connector 作为第一真实样本；
 - 设置 / 管理面显示来源、授权范围、最近同步、错误、断开和撤权，不显示 secret 正文。
 
 进入真实连接器前，每个 provider 单独冻结数据合同：真源、正文 / 引用、同步方向、冲突、删除、撤权、外发、保留期和写操作确认。凭据存储选型和真实 secret 使用单独重档授权。
 
-退出门：未授权 capability 在 adapter 前拒绝；secret 不进 SQLite event / audit / memory / chat；mock connector 全合同通过；真实只读 connector 的授权、同步、断开和错误在 App 可见。
+退出门：未授权 capability 在 adapter 前拒绝；secret 不进 SQLite event / audit / memory / chat；至少两种内部标识和调用形状不同的伪适配器通过同一角色、会话、权限和结果合同，证明接口不绑定 Codex 或某一家线程编号；mock connector 全合同通过；真实只读 connector 的授权、同步、断开和错误在 App 可见。
 
 ### M9 — 读模型切换、数据迁移与旧路退役
 
@@ -432,7 +449,10 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 可在 M2 
 7. 日终日报、记忆治理和 skill 候选分别结算；
 8. App 重启后会话、未决、运行和关注恢复；
 9. 连接器断开、provider 失败、DB / 投影失败和敏感内容被 fail closed；
-10. 用户能找到任一稳定成员和历史临时 agent。
+10. 用户能找到任一稳定成员和历史临时 agent；
+11. 用户在前端明确编辑或纠正后，内容写回唯一真源，重启后的角色读到新版；
+12. 常驻角色带来源恢复用户是谁、近期与长期工作和未闭环事项，知识深度可以纠正；
+13. 稳定角色与临时智能体按不同权限取得正确资料和技能说明，未获准的技能仍不可执行。
 
 硬化项：性能、分页、索引重建、备份 / 恢复、迁移回滚、可观测性、secret scrub、成本 / 预算、故障注入、长时间运行、权限回归、真实桌面可用性。
 
@@ -445,7 +465,7 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 可在 M2 
 - Kernel / schema / migration 承重文件单写者；
 - Rust domain 与 React consumer 可以在 DTO 冻结后并行；
 - M4 Secretary 与 M5 Project Orchestration 可并行，但不得同时改公共 event / scope / App 装配；
-- Knowledge 和 Memory 可以分域并行，但统一 Unit of Work / outbox 由平台线单写；
+- 知识和记忆可以分域并行，但知识来源登记、上下文包所有权以及统一工作单元与发件箱各自只有一个写入者；
 - Connector framework 与具体 connector 分开；真实 provider 一次只激活一个；
 - UI 视觉优化不与读模型切换混在同一任务包，除非验收必须。
 
@@ -458,7 +478,7 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 可在 M2 
 - 安全 / scope、schema migration、真实 provider、凭据、真实项目写入、自动连环和不可逆退役分别建包。
 - 涉及安全闸、scope 或授权判断的实现包按 `AGENTS.md` 高危清单逐包取得用户明确授权；阶段已排入计划不等于这项授权已经发生。
 - 一个阶段未通过退出门，下一阶段只能做不依赖它的只读设计或隔离 fixture，不得假设前置已完成。
-- 完成任务后更新 `CURRENT` 的事实、证据和下一步；不在 master 复制逐任务进度。
+- 完成任务后更新 `../current-state.md` 的事实、证据和下一入口；不在总计划复制逐任务进度。
 
 ## 9. 全程停止条件
 
@@ -482,12 +502,15 @@ Syn 的这轮重构只有在以下条件同时满足时才算完成：
 - 用户每天可以从秘书、全局主管和项目内项目主管明确工作；
 - 角色、项目、对象、通道和权限不会被模型或前端猜测；
 - 个人事项与项目工作都能有真源、有闭环、不丢失；
+- 所有稳定角色、临时智能体、执行者和审查者都能按角色、范围、任务和权限快速取得所需资料、来源与可用技能说明；
+- 常驻角色能带来源恢复用户身份、近期与长期工作、未闭环事项和可纠正的知识深度；
 - 日常对话不会误建正式对象，明确决定能可靠进入治理链；
 - 项目主管能调用保留下来的方案、授权、执行、验证和交付能力；
 - 首页、日报、通知和摘要全部可回源且不形成镜像；
+- 用户在前端的明确修改进入唯一真源，并被后续角色稳定读到；
 - 记忆可以自发捕获和每日整理，同时可纠正、可审计、不泄密、不扩权；
 - 外部连接器按能力分权，凭据只以保护引用参与；
 - 内部成员可搜索、可直接联系，临时 agent 可追踪；
 - App 重启、失败、迁移和回滚不会让会话、未决、项目事实或未闭环事项静默消失；
 - 旧业务路径在替代链真实验收后有序退役；
-- 文档、CURRENT、代码、测试、真实 App 和发布结论各自诚实一致。
+- 产品正本、当前状态、代码、测试、真实应用和发布结论各自诚实一致。

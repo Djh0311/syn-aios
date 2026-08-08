@@ -1,5 +1,7 @@
 # Memory Layer Design
 
+> 资料状态（2026-08-09）：记忆层详细设计与研究来源，不是当前产品入口，也不整篇拥有现行效力。已确认的长期要求看 `docs/product/syn-product-canon-v1.md` 和 `decisions/2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md`；知识与记忆边界看 `docs/product/knowledge-infrastructure-canon-v1.md`；仍未拍板的算法、对象和界面细节只在 `docs/product/candidate-register-v1.md` 登记。本文的旧阶段顺序、旧实现状态和旧入口按历史阅读。
+
 状态：最终蓝图下的记忆层设计草案。
 
 本文从最终蓝图倒推记忆层的阶段开发顺序，不替代 `CURRENT.md`、`README.md`、`decisions/**` 或最终蓝图。

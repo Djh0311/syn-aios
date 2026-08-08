@@ -1,5 +1,7 @@
 # M2 — 91 txt 分类 + 搬迁计划 + hash 清单 v1(**只出计划·不执行搬迁**)
 
+> 资料状态（2026-08-09）：历史分类计划和来源证据，不是当前迁移入口或授权。下文数量、路径和哈希只对点名基线成立；当前事实必须重新核对。
+
 日期:2026-07-13 · 基线 `d952a7d` · 配套:M0 合同 `docs/2026-07-13-sqlite-migration-completeness-contract-m0-v1.md` · hash 清单 `evidence/2026-07-13-sqlite-migration-m2-live-root-hash-manifest.txt`
 
 > **状态门**:本件只分类 + 出计划 + 留 hash。**不执行任何真实搬迁/删除/移动**(红线 #1/#6)。真实根一个文件不动(M3 亲核 hash 前后不变)。

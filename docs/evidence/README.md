@@ -1,12 +1,16 @@
-# Evidence Bridge
+# 证据目录兼容说明
 
-This directory exists for harness compatibility.
+状态：**兼容入口，不是产品正本、当前状态、候选方案、任务入口或执行授权。**
 
-Current evidence authority remains:
+`docs/evidence/` 是旧开发流程留下的兼容目录，其中已有文件只记录各自日期、版本、环境和证据等级下的实施或验收结果。新旧记录目前还分布在：
 
-- `evidence/**`
-- `handoffs/**`
-- `archive/evidence/**`
-- `archive/handoffs/**`
+- `evidence/`：实施、验收和原始证据；
+- `handoffs/`：交接、复核和接手记录；
+- `archive/evidence/`：更早的历史证据；
+- `archive/handoffs/`：更早的历史交接。
 
-Do not move current evidence into this directory unless a later explicit decision changes the evidence layout.
+这些路径都不拥有产品定义。文件名或正文中的“当前”“权威”“最终”“冻结”“完成”只描述当时受检对象与证据范围，不自动延续到今天。
+
+判断当前能力时，应以 `docs/current-state.md` 为入口，并直接核对当前版本库（Git）、源码和与问题对应的新鲜验证。判断产品要求时，应回到当前产品正本和仍有效的正式决定。历史证据只能提供来源、反例和复核线索。
+
+本轮先建立清楚的目录边界，不批量移动既有文件。后续如统一证据位置，必须先建立旧路径到新路径的映射，更新相互引用，并验证文件数量、内容哈希和 Markdown（文本标记格式）链接。

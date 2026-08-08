@@ -5,9 +5,9 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M6。<br>
 硬前置：M3 Global Supervisor RoleSession / Handoff；M5 ProjectSummary 与 execution identity；M4 Secretary consult 入口。<br>
-当前 active node / package：`NONE`；本计划不授权跨项目写、真实消息、App 或产品代码。
+当前活动阶段 / 叶：无（`NONE`）；M3 尚未激活，本计划也未激活；本计划不授权跨项目写、真实消息、桌面应用或产品代码。
 
-权威顺序：当前用户指令 → `../harness/AUTHORITY.md` / `../harness/CURRENT.md` → 2026-08-01 修订与当前 inventory → master → M3-M5 exit receipts → 本计划。M5 未验收的 legacy records 不得被本计划升级成统一组织事实。
+权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../product/syn-product-canon-v1.md` 与 `../product/knowledge-infrastructure-canon-v1.md` → `../current-state.md` → 2026-08-01 修订与当前能力盘点 → master → M3-M5 退出回执 → 本计划。M5 未验收的旧记录不得被本计划升级成统一组织事实。
 
 ## 0. 当前事实与未知
 
@@ -33,6 +33,7 @@
 - availability 的定义、TTL、busy / offline / unknown 与陈旧提示；
 - 全局主管最小可读 ProjectSummary 字段、freshness / sensitivity / ACL；
 - 用户采纳跨项目建议后，由谁、按哪些 per-project grants 应用，部分成功如何回滚；
+- 多视角咨询的触发条件、独立性证明、成本上限、超时和结果并排方式；
 - 真实全局主管模型 / provider、成本和跨项目真实数据。
 
 ## 1. 阶段目标
@@ -43,7 +44,8 @@
 4. 任何 advisory 未经用户确认不改变任何项目；即使用户采纳，也由各项目 owner 通过独立 grant 执行；
 5. 建立稳定成员目录：角色、能力、权限、availability、会话和直接联系；
 6. 建立临时 agent 历史：来源任务、attempt、结果和审计，并与稳定成员严格分型；
-7. 内部组织默认是后台能力与目录，不强迫组织图成为日常入口。
+7. 重大问题可按需让不同模型或不同方法的咨询角色独立形成意见，并排呈现共识、分歧和来源；
+8. 内部组织默认是后台能力与目录，不强迫组织图成为日常入口。
 
 ## 2. 本阶段不做
 
@@ -64,10 +66,11 @@
 | `ProjectSummary` | 各项目 projector | M6 只经 M5 `ProjectSummaryQueryPort` 按 RoleSession / scope / policy 读取；不可直接读项目 store / projection / root，不可反写 |
 | `CrossProjectAdvisory` | Global Supervisor domain | `AdvisoryId`、Global RoleSession、ConsultHandoff、每个 ProjectSummary id/version/watermark、policy decision、generated_at；status 仅 advice lifecycle |
 | `AdvisoryApplicationProjection` | M6 read model | 只引用各项目 owner 的 authoritative command / application receipt；不得改变 Advisory lifecycle 或拥有项目执行结果 |
-| `StableMember` | Organization directory | stable `MemberId`、membership lifecycle、scope assignments、role assignments、contact binding。capability / permission 仅存 source+revision+observed_at 的只读 ref/projection，授权仍归 policy owner |
+| `StableMember` | Organization directory | stable `MemberId`、membership lifecycle、scope assignments、role assignments、contact binding；身份不等于模型、服务提供方、线程或进程。capability / permission 仅存 source+revision+observed_at 的只读 ref/projection，授权仍归 policy owner |
 | `TemporaryAgent` | Execution history projection | stable `TemporaryAgentId`，绑定 execution identity、WorkItem / Attempt / Report / RoleSession；不会自动稳定化 |
 | `Availability` | directory projection | source、observed_at、TTL；陈旧即 unknown，不作授权 |
 | `ConsultHandoff` | M3 Handoff | from/to、scope、refs、question、receipt；无项目写权限 |
+| `MultiViewConsultation` | Global Supervisor / consultation domain | question、独立咨询角色与模型 / 方法引用、各自来源、共识、分歧、成本、结果状态；只提供意见，不拥有用户决定或项目执行 |
 
 跨项目读取只允许 ProjectSummary，以及 ref 的 type、title、scrubbed summary、version、deep-link metadata；原始项目文件、transcript、secret 和未裁剪 memory 不进入 global scope。模型侧解引用必须再次经过项目 owner 的 policy gateway；用户点击 deep link 回源不等于把原文加入 global session。
 
@@ -97,6 +100,10 @@
 
 从 M5 WorkItem / Attempt / Report / audit 投影临时 agent；可搜索任务、结果、失败和来源；UI 明确“临时”。人工晋升新建 / 绑定 StableMember 并保留 `promoted_from`，不修改原历史类型 / 来源。
 
+### SYN-ORG-006A — 独立多视角会诊
+
+对同一重大问题向两个以上相互独立的咨询角色派发相同、最小且有来源的问题包；咨询方在提交前互不读取对方结论，系统再并排生成共识、分歧和证据索引。普通问题仍走单角色；会诊结果只形成意见和用户待决定项，不直接生成项目命令、授权或正式事实。
+
 ### SYN-ORG-007 — 隔离 App 双项目验收
 
 两个 scratch projects + fake roles 覆盖冲突发现、stale summary、ACL denied、consult、稳定 / 临时成员查找和直接联系。真实项目 summaries / 模型 / messages 另包。
@@ -107,7 +114,8 @@
 ORG-001 → ORG-003 → ORG-002 → ORG-004
    ├────────────────→ ORG-005
    └────────────────→ ORG-006
-ORG-002 + ORG-003 + ORG-004 + ORG-005 + ORG-006 → ORG-007
+ORG-003 + ORG-005 + ORG-006 → ORG-006A
+ORG-002 + ORG-003 + ORG-004 + ORG-005 + ORG-006 + ORG-006A → ORG-007
 ```
 
 - Global Supervisor / organization domain 由 M6 单写；ProjectSummary 由 M5 owner，RoleSession / Handoff 由 M3 owner；
@@ -130,14 +138,14 @@ ORG-002 + ORG-003 + ORG-004 + ORG-005 + ORG-006 → ORG-007
 
 | 层级 | 必须证明 | 不能声称 |
 |---|---|---|
-| Contract / fixtures | ACL、watermark、member lifecycle、采纳边界 | service 已实现 |
-| Unit / property | 无反写、stale/denied、temporary≠stable、contact 不扩权 | App 可用 |
+| Contract / fixtures | ACL、watermark、member lifecycle、多视角独立性、采纳边界 | service 已实现 |
+| Unit / property | 无反写、stale/denied、temporary≠stable、contact 不扩权、会诊不自动变决定 | App 可用 |
 | Temp integration | 两项目冲突、partial/missing summary、handoff 幂等 | 真实项目数据通过 |
 | Non-test build | production path 可构建 | 桌面交互正确 |
 | Isolated Tauri | 顶层入口、source link、成员查找 / 联系可见，并保留桌面窗口截图 / 交互 / deep-link 点击证据 | 真实模型 / 消息通过 |
 | 经授权真实场景 | 指定 summary / provider / profile 的只读分析 | 跨项目写或发布通过 |
 
-关键验收：从两个项目摘要发现冲突并回源；对项目 domain store、event/audit/outbox、sidecar / compatibility projection、文件和 spawn 设置 write-spy / hash baseline，M6 允许变化的只有自身 advisory / directory / audit owner；用户能找到并联系 stable member；temporary agent 不伪装成 stable；stale availability 不参与能力判定。
+关键验收：从两个项目摘要发现冲突并回源；对项目 domain store、event/audit/outbox、sidecar / compatibility projection、文件和 spawn 设置 write-spy / hash baseline，M6 允许变化的只有自身 advisory / directory / audit owner；用户能找到并联系 stable member；更换伪服务提供方后 stable member 的身份、记忆引用和权限不漂移；temporary agent 不伪装成 stable；多视角意见在汇总前保持独立且不自动生成决定；stale availability 不参与能力判定。
 
 ## 8. 授权与停止条件
 
@@ -154,7 +162,9 @@ local schema / store migration、App 启动 / 强制退出、真实项目 summar
 - advisory / ConsultHandoff / summaries / policy decision 精确 join；用户采纳只形成 DecisionRequest，逐项目应用拥有独立 grant 和 authoritative receipt，M6 的 `applied / failed / rolled-back / unknown` 仅是引用这些 receipts 的 projection；
 - Secretary consult Handoff 可追踪 / 幂等 / 回源；
 - stable / temporary member 类型、生命周期、availability 和 contact receipt 冻结；
+- stable member 与模型、服务提供方、线程和进程解耦，底层替换不换人或扩权；
+- 多视角会诊能独立产出并排意见，结果只进入用户待决定链；
 - 双项目 isolated App 场景通过；真实数据证据单独结算；
 - 旧 review / Agent Center 有 compatibility / export / rollback；
 - 把 advisory、member 与 source-ref 事件合同交 M7，不自动成为记忆；
-- CURRENT 回写完成 / HOLD / 下一步，M7 未激活不得续跑。
+- `../current-state.md` 回写完成、暂缓和下一入口；M7 未激活不得续跑。

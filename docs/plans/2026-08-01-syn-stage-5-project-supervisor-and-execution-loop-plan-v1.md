@@ -5,9 +5,9 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M5。<br>
 硬前置：M1 scope / workflow-owner / report / ExecutionGrant；M2 UoW；M3 Project Supervisor RoleSession。<br>
-当前 active node / package：`NONE`；本计划不授权真实项目写、Runner、Codex、App 或产品代码。
+当前活动阶段 / 叶：无（`NONE`）；M3 尚未激活，本计划也未激活；本计划不授权真实项目写、执行器、Codex、桌面应用或产品代码。
 
-权威顺序：当前用户指令 → `../harness/AUTHORITY.md` / `../harness/CURRENT.md` → 2026-08-01 修订与当前 inventory → master → M1-M3 exit receipts → 本计划。现有 special-path 零件只作迁移素材，不等于普通项目闭环。
+权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../current-state.md` → 2026-08-01 修订与当前能力盘点 → master → M1-M3 退出回执 → 本计划。现有特殊路径零件只作迁移素材，不等于普通项目闭环。
 
 ## 0. 当前事实与未知
 
@@ -172,4 +172,4 @@ scope / owner 修复、local schema / store migration、App 启动 / 强制退�
 - scratch isolated App 全链通过，真实项目证据按授权单独结算；
 - 旧 fixed path 有 manifest / compatibility / rollback，未删除；
 - 把 ProjectSummary 和 temporary agent attempt/report 合同交 M6；
-- CURRENT 回写实际完成与 HOLD，M6 未激活不得续跑。
+- `../current-state.md` 回写实际完成与暂缓项；M6 未激活不得续跑。

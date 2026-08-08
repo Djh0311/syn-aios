@@ -1,5 +1,7 @@
 # Task Package UI Display Boundary Rule v1
 
+> **状态校正（2026-08-09）：HISTORICAL RULE SOURCE / NOT CURRENT HARD RULE。** 本文中的桌面端边界和“普通界面不暴露内部治理细节”等原则仍可作为来源，但本文件不再自行要求所有任务包引用。当前产品与界面权威看 `../product/syn-product-canon-v1.md`、`../product/authority-register-v1.md` 和当前任务的明确边界。
+
 日期：2026-06-04
 
 状态：当前任务包写作硬规则。凡是任务包可能改到前端、读模型展示、导航入口、右侧面板、项目页、智能体页、画布、记忆、知识库、秘书、管理、通知、待办或运行中状态，都必须引用并落实本文。

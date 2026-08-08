@@ -2,17 +2,17 @@
 
 日期：2026-08-01<br>
 阶段：`M1`<br>
-状态：**CLOSED / ACCEPTED 2026-08-03（用户拍板，见 `decisions/2026-08-03-syn-m1-closure-acceptance-v1.md`）；M2 未激活。**<br>
+状态：**CLOSED / ACCEPTED 2026-08-03（用户拍板，见 `decisions/2026-08-03-syn-m1-closure-acceptance-v1.md`）；M2 后续已完成，M3 仍为 PLANNED / NOT_ACTIVE。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M1。<br>
-当前权限：本计划本身不授权产品代码；只有 v0.5 active node 与 matching active package 激活后才能执行对应切片。
+当前权限：本计划已经关闭，只作 M1 阶段合同与验收范围记录；它不再授权任何产品代码，也不激活 M3 或后续阶段。
 
 `SYN-FND-002`—`SYN-FND-005` 会改安全闸、作用域或授权判断，属于 `AGENTS.md` 高危清单；即使写在本阶段里，也必须每包由用户单独明确授权，不能因 Stage 1 已是 current 就自动连跑。
 
 ## 0. 权威、现状与入口冻结
 
-权威顺序：当前用户指令 → `../harness/AUTHORITY.md` / `../harness/CURRENT.md` → 两份 2026-08-01 正式修订 → 上位 master → 本计划。旧 conversation-first、Jiaoban rebuild、R7 和知识专题计划只作历史证据，不能从中恢复执行权。
+当前权威链：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../current-state.md` → 两份 2026-08-01 正式修订 → 上位 master。M1 关闭事实再回看本计划和验收记录；旧 conversation-first、Jiaoban rebuild、R7 和知识专题计划只作历史证据，不能从中恢复执行权。
 
-本计划依据的是当前 dirty working-tree 静态盘点，不把计划目标写成实现事实：
+下表依据的是 M1 启动时的脏工作树静态盘点，只保存当时输入；当前事实改看 `../current-state.md`、当前源码与 M1/M2 主线验收，不把下表重新解释成今天的状态：
 
 | 维度 | 当前事实 | 本阶段必须处理 |
 |---|---|---|

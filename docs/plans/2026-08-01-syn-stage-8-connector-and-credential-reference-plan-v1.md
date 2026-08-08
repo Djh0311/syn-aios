@@ -5,9 +5,9 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M8。<br>
 分层前置：`CON-000` design-only 仍需当前用户明确指令或 matching active package；“design-only”只缩小写面，不豁免激活规则。framework 实现需 M1/M2 exit；RoleSession / memory / Secretary 集成再等 M3/M7/M4 合同；真实 provider 另需独立授权。<br>
-当前 active node / package：`NONE`；本计划不授权网络、真实账号、凭据、付费 provider、外部 action、App 或产品代码。
+当前活动阶段 / 叶：无（`NONE`）；M3 尚未激活，本计划也未激活；本计划不授权网络、真实账号、凭据、付费服务提供方、外部动作、桌面应用或产品代码。
 
-权威顺序：当前用户指令 → `../harness/AUTHORITY.md` / `../harness/CURRENT.md` → 2026-08-01 修订与当前 inventory → master → 对应分层前置 receipts → 本计划。提前 design-only 不得建立 production connector / credential 真源。
+权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../product/syn-product-canon-v1.md` 与 `../product/knowledge-infrastructure-canon-v1.md` → `../current-state.md` → 2026-08-01 修订 → 总计划 → 对应分层前置回执 → 本计划。提前只做设计不得建立生产连接器或凭据真源。
 
 ## 0. 当前事实与未知
 
@@ -15,7 +15,7 @@
 
 - Codex local adapter 已有能力描述；其他 adapter 多为 planned / read-model-only。
 - Supervisor MCP 有固定、fail-closed capability registry；`tools/list` 与 `tools/call` 共用授权，可提取为 CapabilityGateway。
-- Knowledge Vault / Workspace 的 read/search/open/cite 能力有固定路径 / schema 边界，可提取为内部 KnowledgeAdapter。
+- 现有知识文件库与工作区的读取、搜索、打开和引用能力有固定路径与合同边界，可提取为“外部知识来源适配器”的素材；所有智能体共用的知识登记、检索路由和上下文装配仍属于 M7 核心知识层，不在 M8 重新包装成外部适配器。
 - Harness、Skill、Plugin 页面能显示索引 / metadata；它们是 inventory，不是运行能力。
 - 现有 `CredentialRequirementDescriptor` 只描述 provider / status / read policy，并明确不读取 secret，可保留为诊断 metadata。
 
@@ -25,7 +25,7 @@
 - 没有统一 connector lifecycle、provider data contract、授权 / 撤权、sync cursor、断线或错误状态；
 - 没有明确的 credential vault port / backend；未发现可作为现状真源的 Keychain / encrypted vault 实现；
 - 现有 ActionRequest / Result 属于项目 / supervisor 语义，不是 connector action contract；
-- Knowledge 写当前可能先落文件、后写 audit，存在可靠 saga 缺口；
+- 某些外部知识来源写入当前可能先落文件、后写审计，存在可靠长事务缺口；
 - 没有真实外部 connector、真实凭据、断开 / 撤权、App 显示证据。
 
 ### HOLD / 需冻结决定
@@ -44,7 +44,7 @@
 2. 建立 ConnectorDefinition、ConnectionAccount metadata、CapabilityGrant、SyncCursor、InboundItem、ActionRequest / Result；
 3. `view / index / sync / action / secret` 分开声明、授权、撤销和审计；
 4. 建立 opaque `CredentialRef` 与 vault port；普通 DB / event / audit / memory / chat 只存 opaque ref、非敏感 status 和非 secret-derived content hash，不存 secret 或 secret 的直接 hash；
-5. 先把 Codex、Knowledge、Supervisor MCP、Harness 包装为内部 adapters；
+5. 先把 Codex（代码智能体）、外部知识来源、主管能力协议和开发护栏包装为内部适配器；知识核心服务本身不在本阶段适配器化；
 6. 先用 mock provider 走完整合同，再以一个低风险只读 connector 做首个真实样本；
 7. 设置 / 管理面展示来源、授权范围、最近同步、错误、断开和撤权，不显示 secret 正文；
 8. 写型 external action 永远与只读 connector 分包，并用 M2 outbox / effect id / result command。
@@ -59,7 +59,7 @@
 - 不让 adapter 直接推进 domain state 或绕过 policy / grant；
 - 不以 mock、index metadata 或 capability list 声称 provider 已接入；
 - 不在 M8 物理删除旧内部命令 / adapter；
-- 不把 Harness candidate、Skill plugin 或 Knowledge index 自动视为可执行连接器。
+- 不把开发护栏候选、技能插件或知识索引自动视为可执行连接器。
 
 ## 3. 对象、owner 与 capability 边界
 
@@ -84,11 +84,11 @@
 
 ### SYN-CON-001 — Adapter 与 Provider Data Contract 基线
 
-冻结内部 / 外部 adapter interface、capability taxonomy、provider data contract 模板、secret boundary、error / receipt、revoke / delete / retention、mock fixtures。只写合同。
+冻结内部 / 外部 adapter interface、capability taxonomy、provider data contract 模板、secret boundary、error / receipt、revoke / delete / retention、mock fixtures。至少设计两种内部标识和调用形状不同的伪服务提供方，证明 Syn 的角色和会话身份不依赖某一家线程编号。只写合同。
 
 ### SYN-CON-002 — 内部 Adapter 抽取
 
-把 Codex、Knowledge、Supervisor MCP、Harness 包装为统一 capability descriptors / ports；不改变现有权限，不引入 CredentialRef，不把只读 index 变执行面。
+把 Codex（代码智能体）、外部知识来源、主管能力协议和开发护栏包装为统一能力描述与端口；外部来源可使用模型上下文协议（MCP）或其他受控协议。用两种伪适配器通过同一角色、会话、权限、结果和错误合同；不改变现有权限，不引入凭据引用，不把只读索引变成执行面，也不复制 M7 的知识来源登记与上下文装配职责。
 
 ### SYN-CON-003 — CredentialRef 与 vault port
 
@@ -127,7 +127,7 @@ CON-001 → CON-002
 - CredentialRef port / backend 分包，backend owner 不与普通 connector repository 共享 secret 写面；
 - M2 owns outbox / event / receipt，M8 只消费；M7 owns memory policy，InboundItem 不直接成为 FormalMemory；
 - M4 只消费经过 provider-data contract、policy 和 sensitivity scrub 的 event summary + opaque source ref，不直接读取 InboundItem repository / 正文；M8 不直接写 Attention owner；
-- internal adapter 抽取不得扩大 MCP / Harness / Knowledge 现有 capability；
+- 内部适配器抽取不得扩大主管能力协议、开发护栏或外部知识来源的现有能力；
 - command registry、AppState、settings shell、SQLite schema、secret boundary 都必须唯一 writer 与 opening hash。
 
 ## 6. 迁移、撤权与回滚
@@ -146,7 +146,7 @@ CON-001 → CON-002
 |---|---|---|
 | Contract / static | capability、secret、provider data、revoke 边界一致 | adapter 已接入 |
 | Unit / property | 未授权在 adapter 前拒绝、cursor 幂等、secret exclusion | 网络 / provider 可用 |
-| Mock integration | auth/sync/disconnect/revoke/error/retry、fake vault | 真实 connector 通过 |
+| Mock integration | 两种不同形状的伪适配器、auth/sync/disconnect/revoke/error/retry、fake vault | 真实 connector 通过 |
 | Non-test build | production path 可构建 | 桌面 / network 行为正确 |
 | Isolated Tauri | 管理面、错误、撤权、secret 不可见 | 真实账号通过 |
 | 经授权真实 read connector | 指定 provider/account/dataset 的真实证据 | write action、其他 provider 或发布通过 |
@@ -163,11 +163,11 @@ CON-001 → CON-002
 
 全部满足才完成 M8：
 
-- internal adapters 在统一 capability contract 下工作且未扩权；
+- internal adapters 在统一 capability contract 下工作且未扩权，两种不同形状的伪适配器证明角色 / 会话身份不绑定 Codex 或某一家线程编号；
 - Connector / Grant / Cursor / Inbound / CredentialRef 合同和 repository 冻结；
 - mock connector 全生命周期、secret exclusion、failure / recovery 通过；
 - 一个低风险真实只读 connector 只有在获批后才记录真实 App 证据；若未获批则 M8 整体保持 `PARTIAL / HOLD`，不得标 `COMPLETE`。framework 可事实收口，但 master 的真实 Connector / App 退出门仍未通过；
 - write action 仍关闭或有独立未激活包；
 - 旧 adapter / command 有 manifest / rollback，不物理删除；
 - 向 M9 交已通过的 framework / read-model contracts 与 retirement candidates；真实 connector 处于 HOLD 时，M9 不得假设 runtime 成立或退役其替代链；
-- CURRENT 回写实际完成 / HOLD / 下一步，M9 未激活不得续跑。
+- `../current-state.md` 回写实际完成、暂缓和下一入口；M9 未激活不得续跑。

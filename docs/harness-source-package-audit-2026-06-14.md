@@ -1,5 +1,7 @@
 # Harness 上游源码包审计（agent-safety-harness）
 
+> 资料状态（2026-08-09）：旧开发护栏上游包的日期快照与历史审计，不是当前产品、当前工具清单或施工入口。
+
 - 审计日期：2026-06-14
 - 目标：`/Users/yoyi/harness engineering/harness-engineering`（即 product-line `.harness/manifest.json` 里记的 `sourceRoot`——product-line 就是从这里 install 的）
 - 性质：纯只读。未改动/未删除/未运行任何脚本（含 `npm test` / `self-test.js`），未提交。本文件写入 product-line 仓库 docs/ 作为 [上一份安装副本审计](harness-script-audit-2026-06-14.md) 的姊妹篇。

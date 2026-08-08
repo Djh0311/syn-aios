@@ -1,5 +1,7 @@
 # 中间版本开发方案
 
+> **状态校正（2026-08-09）：HISTORICAL / SUPERSEDED。** 本文保留中间版本目标和实现演化来源，不再是当前权威口径或执行入口。当前产品方向看 `product/syn-product-canon-v1.md`，当前计划看 `plans/2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md`。
+
 版本：v1.0  
 日期：2026-06-03  
 状态：已确认中间版本权威口径；原始阶段草案保留为历史素材，执行必须按本文件第 0 节和后续任务包解释。

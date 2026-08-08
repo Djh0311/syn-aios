@@ -2,7 +2,9 @@
 
 日期：2026-08-08
 
-本文件是跨对话临时导航，不是第二份权威，也不授予 M3 实现。当前权威仍是用户指令、`AGENTS.md` 与 Harness Lite 当前链。
+状态：**历史交接 / 已被当前项目清理工作取代 / 不定义产品、授权或下一入口**
+
+> 历史说明（2026-08-09）：本文件保留 M2 收口时的提交、验收边界和保全事实；其中指向 M3 的下一任务与阅读顺序已经失效。当前信息从仓库根 `README.md`、`AGENTS.md` 与 `docs/current-state.md` 进入，不得从本交接恢复施工或权限。
 
 ## 已完成事实
 
@@ -26,7 +28,7 @@
 - 混合开发工作树：`/Users/yoyi/workspace/product-line-syn-fnd-002`，branch `syn-fnd-002-dev`，只读保留 64 tracked + 14 untracked；13 项战略 WIP 指纹未被 M2 收口改写。
 - 本轮没有 push、部署或发布。
 
-## 新指导对话的第一任务
+## 当时新指导对话的第一任务（历史，已经失效）
 
 只读复核 `docs/plans/2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md`：
 
@@ -35,7 +37,7 @@
 3. 输出 M3 阶段计划复核结论和建议的首个任务包边界；
 4. 在用户再次明确同意前，不修改产品代码，不激活 Harness，不运行真实 provider/消息，不 push。
 
-## 建议阅读顺序
+## 当时建议阅读顺序（历史）
 
 1. `AGENTS.md`
 2. `docs/current-state.md`

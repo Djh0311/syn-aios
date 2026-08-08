@@ -1,5 +1,7 @@
 # Sprint Contract Bridge
 
+> 资料状态（2026-08-09）：工程施工模板桥接页，不定义 Syn 产品，也不自行创建当前任务或授权。只有当前任务明确采用时才生效。
+
 Status: Superseded
 Last Updated: 2026-08-08
 

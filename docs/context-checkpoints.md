@@ -1,5 +1,7 @@
 # Context Checkpoints
 
+> 资料状态（2026-08-09）：工程协作上下文检查点，不是 Syn 角色会话、产品记忆或知识基础设施正本。
+
 Purpose: periodic anti-context-rot snapshots for long-running work. Add a checkpoint every 60-90 minutes, every 2-3 completed tasks, after interruption recovery, and before cross-session continuation.
 
 ---

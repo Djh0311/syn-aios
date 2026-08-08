@@ -1,5 +1,7 @@
 # 决策：开发 Harness 轻量导航运行模型 v1
 
+> **状态校正（2026-08-09）：HISTORICAL / SUPERSEDED BY HARNESS LITE。** 本文记录已经退出的旧开发护栏；正文中的 `AUTHORITY.md`、`CURRENT.md`、第七阶段等待派发和旧命令路由均不再是当前入口。当前只看项目 `AGENTS.md`、`docs/harness/plan.md`、活动阶段、唯一活动叶和 `docs/harness/authorization.json`。
+
 日期：2026-07-23
 状态：**已定并落地（Phase 0～6、Phase 5-R1 与 Phase 6-R1 已完成并复核；短路由、权威索引、CURRENT 历史分离、结构化 Code Map、重要任务计划对齐、CLI / config / legacy consumer 收缩及只读 maintenance audit 已落地，自动 / Hook 语义未改变；Phase 7 等待用户单独派发）**
 依据：[开发 Harness 短路由、代码图谱与权威治理整改执行计划 v1](../docs/plans/2026-07-23-development-harness-routing-code-map-and-authority-governance-remediation-plan-v1.md)；[Phase 0 基线与 consumer 审计](../docs/2026-07-23-development-harness-phase0-baseline-and-consumer-audit-v1.md)

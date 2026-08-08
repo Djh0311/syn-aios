@@ -5,9 +5,9 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M10。<br>
 硬前置：M1-M9 exit receipts、retirement / HOLD manifest、可恢复 read models、隔离 profile 和发布候选配置均冻结。<br>
-当前 active node / package：`NONE`；本计划不授权启动 App、真实数据 / provider / 项目写、签名、公证、发布、Git 或外部动作。
+当前活动阶段 / 叶：无（`NONE`）；M3 尚未激活，本计划也未激活；本计划不授权启动桌面应用、真实数据 / 服务提供方 / 项目写、签名、公证、发布、Git 或外部动作。
 
-权威顺序：当前用户指令 → `../harness/AUTHORITY.md` / `../harness/CURRENT.md` → 当前 source / real-App evidence → master → M1-M9 exit / HOLD receipts → 本计划。任何历史 build、截图或 profile receipt 都按原证据层级使用。
+权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../product/syn-product-canon-v1.md` 与 `../product/knowledge-infrastructure-canon-v1.md` → `../current-state.md` → 当前源码 / 真实桌面应用证据 → master → M1-M9 退出 / 暂缓回执 → 本计划。任何历史构建、截图或配置回执都按原证据层级使用。
 
 ## 0. 当前事实与未知
 
@@ -29,6 +29,8 @@
 
 - 目标发布平台 / 架构、最低系统版本、签名身份、公证、分发渠道、updater、rollback / downgrade；
 - pilot profile、真实数据范围、备份、保留、红线与销毁；
+- 用户个人服务器作为异地备份目标时的地址、协议、认证、加密、频率和恢复演练；个人服务器尚未进入时，不阻挡本地导出、备份与恢复合同验收；
+- 成本统计优先接入的开源工具、数据可信度、采样范围和用户可见指标；
 - 真实 provider / account / connector、预算 / rate limit、外部写 action 是否保持关闭；
 - release SLO / performance budget、错误预算、telemetry / privacy、crash report、support / recovery；
 - 哪些 M9 legacy HOLD 可随 release 保留，哪些必须阻断发布；
@@ -40,7 +42,7 @@
 
 1. 在真实 Tauri App 中完成一整天可回源、可恢复、权限诚实的核心工作线；
 2. 对 cold start、warm resume、App crash、provider failure、DB / projector failure、connector disconnect、敏感输入做故障注入；
-3. 验证 performance、pagination、index rebuild、backup / restore、migration rollback、long-running、cost / budget、observability 和 permission regression；
+3. 验证 performance、pagination、index rebuild、backup / restore、migration rollback、long-running、cost / budget、observability 和 permission regression；成本统计优先复用成熟开源工具，不预设自研复杂账房；
 4. 建立 release configuration、versioning、bundle、签名 / notarization、artifact manifest、update / rollback、release notes 和 support runbook；
 5. 高风险外部 action 默认关闭，任何试点例外逐动作 grant；
 6. 将 synthetic、build、isolated App、真实 App、release candidate、published artifact 分层结算；
@@ -50,18 +52,21 @@
 
 试点必须按统一 correlation / source refs 记录，并至少覆盖：
 
-1. 打开 Syn，Secretary 给出有来源、owner、reason 和 deep link 的当前情境；
-2. 一条个人 / 外部事件进入，只形成 Inbox / Attention，不自动成 Task / Project / Memory；
-3. 用户明确把复杂事项升级为项目；scope / owner / handoff 清楚；
-4. Project Supervisor 持续对话，明确提出 Proposal，用户确认后获得 ExecutionGrant 并执行；
-5. 结果经过 Report / Review / UserDecision 回到项目，Secretary 只收到 ProjectSummary；
-6. Global Supervisor 对两个项目摘要发现冲突，意见不自动改项目；
-7. DailyReport、Memory consolidation、PersonalFact / Assertion 与 SkillCandidate 分别结算，不越级；
-8. App 重启后角色会话、未决、运行、attention、connector cursor 和 projector checkpoint 恢复；
-9. connector disconnect、provider failure、DB busy/corrupt、projection degraded、敏感内容均 fail closed 且用户可见；
-10. 用户找到一名 stable member 和一名 historical temporary agent，并可回源 / 联系；
-11. 无事件窗口保持零模型调用；有事件时预算 / cost receipt 可见；
-12. backup / restore 与当前 release rollback 在隔离副本实际演练。
+1. 打开 Syn，秘书给出有来源、owner、reason 和 deep link 的当前情境；
+2. 用户在前端明确编辑或纠正一项内容，变更写回唯一真源；重启后原角色和另一获准角色都读到新版，旧缓存不能反向覆盖；
+3. 一条个人 / 外部事件进入，只形成收件与关注，不自动成为任务、项目或正式记忆；
+4. 用户明确把复杂事项升级为项目；作用域、所有者和交接清楚；
+5. 项目主管持续对话，明确提出方案，用户确认后获得执行授权并执行；
+6. 结果经过汇报、复核和用户决定回到项目，秘书只收到可回源的项目摘要；
+7. 全局主管对两个项目摘要发现冲突；重大问题可组织独立多视角咨询，意见不自动改项目；
+8. 日报、每日记忆整理、个人事实 / 模型推断与技能候选分别结算，不越级；
+9. 常驻角色带来源恢复“用户是谁、近期做了什么、长期做过什么、当前有哪些未闭环事项”，用户知识深度可以纠正；
+10. 稳定角色和临时智能体按不同权限取得正确资料与技能说明，未获准技能仍不可执行；
+11. App 重启后角色会话、未决、运行、关注、连接器游标和投影检查点恢复；
+12. 连接器断开、服务提供方失败、数据库忙碌 / 损坏、投影降级和敏感内容均诚实关闭且用户可见；
+13. 用户找到一名稳定成员和一名历史临时智能体，并可回源和联系；
+14. 无事件窗口保持零模型调用；有事件时预算与成本回执可见；
+15. 本地导出、备份 / 恢复与当前发布回退在隔离副本实际演练；个人服务器异地备份在该基础上另包接入。
 
 任一场景缺少真实 truth source、直接观察、receipt 或 recovery，只能记录 `NOT_ACCEPTED / HOLD`，不能用邻近测试补齐。
 
@@ -111,7 +116,7 @@
 
 ### SYN-PIL-005 — 故障、恢复与长运行
 
-独立注入 provider / connector / DB / projector / process / network / disk / permission / receipt failures；覆盖 backup / restore、migration rollback、stale / retry、long-running 与 resource budgets。
+独立注入 provider / connector / DB / projector / process / network / disk / permission / receipt failures；覆盖本地导出、backup / restore、migration rollback、stale / retry、long-running 与 resource budgets。个人服务器只在用户已搭建并单独批准对应目标、凭据和网络后作为异地备份适配器加入，不成为本地恢复能力的前置。
 
 ### SYN-PIL-006 — 打包、安装、更新与回退候选
 
@@ -183,10 +188,12 @@ M10 只有同时满足以下条件才可称“阶段完成”：
 
 - §2 全日真实 App 场景逐项 `ACCEPTED`，或非阻断项有用户明确接受的 bounded HOLD；
 - 关键故障与 long-running / budget / permission regression 通过；
+- 前端明确修改已写回唯一真源，角色重启后读到新版；
+- 常驻角色恢复用户身份、近期 / 长期工作和未闭环事项，知识深度可纠正；不同角色按权限获得资料与技能，未授权技能仍关闭；
 - backup / restore、migration / updater rollback、projector rebuild 实际演练；
 - release candidate 可复现、可追源、可安装、可更新、可回退；
 - high-risk external action 默认关闭，secret boundary 通过；
 - M9 legacy / compatibility 清单真实一致；
 - 独立验收给出 go / no-go，用户另行明确是否执行发布；
-- CURRENT、AUTHORITY、release notes、support / rollback runbook 只记录实际事实；
+- 产品权威登记、`../current-state.md`、发布说明以及支持与回滚手册只记录实际事实；
 - 未获发布授权时安全停在“release candidate accepted / not published”，不得自动 tag / push / publish。

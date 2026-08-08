@@ -1,5 +1,7 @@
 # Agent Mistake Ledger
 
+> 资料状态（2026-08-09）：工程协作纠错记录，不是 Syn 产品记忆、产品要求或当前授权。
+
 Purpose: durable memory for mandatory-record agent mistakes and other mistakes likely to recur or cause real damage. This file prevents the same important mistake from being made twice without turning small corrections into process noise.
 
 Status values: `Open`, `Encoded In Test`, `Encoded In Skill`, `Encoded In Rule`, `Accepted Risk`, `Obsolete`.

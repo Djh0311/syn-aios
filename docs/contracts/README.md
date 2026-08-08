@@ -1,5 +1,7 @@
 # Syn M1 contract baseline
 
+> 资料状态（2026-08-09）：M1 独立验收过的冻结工程合同基线。它约束点名对象、所有权和安全边界，但不定义 Syn 最终产品，不证明当前代码全部实现，也不提供后续阶段授权。当前产品、实现和施工分别看 `../product/syn-product-canon-v1.md`、`../current-state.md` 与当前轻量开发护栏链。
+
 This directory is the independently accepted, frozen static contract baseline for `SYN-FND-001-R1`.
 It freezes vocabulary, ownership, failure behavior, compatibility boundaries, opening
 inventories, and the minimum input handed to M2. It does not switch a runtime source of
