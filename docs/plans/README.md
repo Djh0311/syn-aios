@@ -19,7 +19,7 @@
 - M0 产品正本、权威分级、候选收口和文档入口整理已经完成；它是文档收口，不是产品代码阶段。
 - M1、M2 已完成主线收口。
 - M3 已由用户授权并通过 `stage-05` 激活；M4-M10 仍是计划中、未激活。
-- 文档基线收口 `stage-04 / M0C01` 已完成并归档；当前唯一活动叶是 `M3C01-contract-and-migration-resolution`。
+- 文档基线收口 `stage-04 / M0C01` 和 M3C01 合同冻结均已完成并归档；当前唯一活动叶是 `M3C02-agent-existing-owner-scope-guard`。
 - 当前产品运行模型见 `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`。
 
 ## M1-M10 独立阶段计划

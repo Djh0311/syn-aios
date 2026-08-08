@@ -5,7 +5,7 @@
 状态：**ACTIVE / USER_AUTHORIZED / STAGE-05。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M3。<br>
 硬前置：M1 identity / scope / policy 合同和后端守卫通过；M2 UoW / event / audit / receipt ports 可用。<br>
-当前活动阶段 / 任务包：`stage-05 / M3C01-contract-and-migration-resolution`；当前用户授权允许任务包内文件修改、离线测试、精确暂存和本地提交，禁止 merge、push、发布、真实 provider / 消息及破坏性操作。具体写入面继续以唯一活动叶为准。
+当前活动阶段 / 任务包：`stage-05 / M3C02-agent-existing-owner-scope-guard`；M3C01 实施补充合同已由 `29085cc` 冻结并归档。当前用户授权允许任务包内文件修改、离线测试、精确暂存和本地提交，禁止 merge、push、发布、真实 provider / 消息及破坏性操作。具体写入面继续以唯一活动叶为准。
 
 权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → 轻量开发护栏 `../harness/plan.md` / 活动阶段 / 唯一活动叶 / `../harness/authorization.json` → `../product/syn-product-canon-v1.md` 与 `../product/knowledge-infrastructure-canon-v1.md` → `../current-state.md` → 2026-08-01 修订 → 总计划 → M1/M2 退出回执 → 本计划。下文的目标对象均是计划，不是当前实现事实。
 
@@ -29,15 +29,11 @@
 - offline role handoff 是人工写 workflow state 的旧路，不是目标 Handoff；
 - 当前没有真实桌面 new / continue / stop / restart、跨项目拒绝或真实 Codex 成功证据。
 
-### HOLD / 需冻结决定
+### M3C01 已冻结与仍后置的决定
 
-- provider thread 的 natural key、重复索引、thread collision 和 orphan recovery；
-- raw transcript 是只读引用、摘要还是缓存，以及保留 / 删除策略；
-- M3 只需要冻结的知识上下文引用、来源、新鲜度、缺口和请求更多资料合同；完整检索、技能发现和知识工作区接线归后续知识切片；
-- in-flight 子进程重启后是 resume、orphan、failed 还是 user decision；
-- Handoff 超时、拒绝、取消、重试与结果回源语义；
-- 各角色真实 provider、模型、成本和消息权限；
-- Station 3b、项目写、真实 Codex 消息的实际验收。
+- M3C01 已冻结 provider handle 复合 natural key、碰撞 / orphan / 重启失败关闭、最小知识上下文、Handoff 超时 / CAS / 重试 / 回源和七类迁移；实施以 `../contracts/m3-role-session-turn-handoff-resolution-v1.md` 为准。
+- raw transcript 的全局保留 / 删除策略继续保持 `HOLD-RAW-TRANSCRIPT-RETENTION`；M3 默认不复制原始正文，也不借此替全局策略拍板。
+- 各角色真实 provider、模型、成本、消息权限，以及 Station 3b / 项目写 / 真实 Codex 消息验收继续后置，逐项另获授权。
 
 ## 1. 阶段目标
 
