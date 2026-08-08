@@ -18,8 +18,8 @@
 - 该计划完整覆盖公共底座重构到首个全日试点和发布候选；M10 之后五类长期业务、个人服务器备份、开源成本工具和高级检索按真实需求另建路线，不伪装成已经排完的终身计划。
 - M0 产品正本、权威分级、候选收口和文档入口整理已经完成；它是文档收口，不是产品代码阶段。
 - M1、M2 已完成主线收口。
-- M3-M10 的产品阶段状态仍是计划中、未激活；用户已批准在 M0 干净基线成立后自主推进 M3，下一步由对应活动阶段和窄叶正式承接。
-- 文档基线收口 `stage-04 / M0C01` 已完成并归档；当前没有活动阶段或活动叶。
+- M3 已由用户授权并通过 `stage-05` 激活；M4-M10 仍是计划中、未激活。
+- 文档基线收口 `stage-04 / M0C01` 已完成并归档；当前唯一活动叶是 `M3C01-contract-and-migration-resolution`。
 - 当前产品运行模型见 `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`。
 
 ## M1-M10 独立阶段计划
@@ -28,7 +28,7 @@
 |---|---|---|
 | M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `COMPLETED / MAINLINE`；关闭验收只证明 M1 |
 | M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `COMPLETED / MAINLINE / BOUNDED_REFERENCE_SLICE`；真实工作台切换未进入 |
-| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `ACTIVE / USER_AUTHORIZED / STAGE-05` |
 | M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3 |
 | M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3 |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M3-M5 |

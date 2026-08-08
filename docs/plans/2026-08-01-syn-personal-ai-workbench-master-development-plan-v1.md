@@ -1,7 +1,7 @@
 # Syn 全能个人 AI 工作台总开发计划 v1
 
 日期：2026-08-01<br>
-状态：**当前总开发计划；M0 文档收口与 M1/M2 主线收口已完成，M3-M10 均未激活。**<br>
+状态：**当前总开发计划；M0 文档收口与 M1/M2 主线收口已完成，M3 已由 stage-05 激活，M4-M10 未激活。**<br>
 计划性质：定义长期重构和迁移顺序，不维护逐任务进度，不单独授予代码、桌面应用、存储、真实消息、外部连接、凭据、Git（版本控制写入）或发布权限。当前事实看 `../current-state.md`、源码和新鲜验证；具体施工入口看当前用户指令、`AGENTS.md` 与轻量开发护栏的活动阶段、唯一活动叶和 `../harness/authorization.json`。没有活动阶段时，不从本计划推导自动下一包。
 
 ## 0. 目标
@@ -264,13 +264,13 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 
 ### 5.1 独立阶段计划索引
 
-下列文件把 master 的顺序展开为可单独审查的阶段合同。M1、M2 已完成主线收口；M3-M10 均为 `PLANNED / NOT_ACTIVE`，不因文件存在而获得执行权。
+下列文件把 master 的顺序展开为可单独审查的阶段合同。M1、M2 已完成主线收口；M3 已由当前用户指令和 stage-05 激活；M4-M10 仍为 `PLANNED / NOT_ACTIVE`，不因文件存在而获得执行权。
 
 | 阶段 | 独立计划 | 当前路由状态 |
 |---|---|---|
 | M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `COMPLETED / MAINLINE` |
 | M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `COMPLETED / MAINLINE / BOUNDED_REFERENCE_SLICE` |
-| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `ACTIVE / USER_AUTHORIZED / STAGE-05` |
 | M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE` |

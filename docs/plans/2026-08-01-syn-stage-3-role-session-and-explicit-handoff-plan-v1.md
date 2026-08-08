@@ -2,10 +2,10 @@
 
 日期：2026-08-01<br>
 阶段：`M3`<br>
-状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
+状态：**ACTIVE / USER_AUTHORIZED / STAGE-05。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M3。<br>
 硬前置：M1 identity / scope / policy 合同和后端守卫通过；M2 UoW / event / audit / receipt ports 可用。<br>
-当前活动阶段 / 任务包：无；本计划不授权消息、Codex（代码智能体）、桌面应用、存储或产品代码操作。
+当前活动阶段 / 任务包：`stage-05 / M3C01-contract-and-migration-resolution`；当前用户授权允许任务包内文件修改、离线测试、精确暂存和本地提交，禁止 merge、push、发布、真实 provider / 消息及破坏性操作。具体写入面继续以唯一活动叶为准。
 
 权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → 轻量开发护栏 `../harness/plan.md` / 活动阶段 / 唯一活动叶 / `../harness/authorization.json` → `../product/syn-product-canon-v1.md` 与 `../product/knowledge-infrastructure-canon-v1.md` → `../current-state.md` → 2026-08-01 修订 → 总计划 → M1/M2 退出回执 → 本计划。下文的目标对象均是计划，不是当前实现事实。
 

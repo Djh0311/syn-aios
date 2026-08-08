@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "id": "USER-SYN-M3-AUTONOMOUS-STAGE-04-M0C01-20260809",
+  "id": "USER-SYN-M3-AUTONOMOUS-STAGE-05-20260809",
   "issuedBy": "user",
   "scope": {
     "kind": "stage",
-    "id": "stage-04"
+    "id": "stage-05"
   },
-  "summary": "用户明确批准自主推进 M3；先完成 M0C01 干净基线，允许任务包内文件修改、离线测试、精确暂存和本地提交，禁止 merge、push、发布、真实 provider/消息及破坏性操作。本记录只覆盖前置 stage-04/M0C01。",
+  "summary": "用户明确批准在 M0C01 干净基线完成后自主推进 M3，并允许任务包内文件修改、离线测试、精确暂存和本地提交；禁止 merge、push、发布、真实 provider/消息及破坏性操作。当前 M0C01 已完成，本记录覆盖 stage-05 的窄叶连续推进。",
   "grants": [
     {
-      "id": "M0C01-CONTEXT",
+      "id": "M3-CONTEXT",
       "category": "context",
       "operations": ["change"],
       "targets": ["*"]
     },
     {
-      "id": "M0C01-CONTROL",
+      "id": "M3-CONTROL",
       "category": "control",
       "operations": ["modify"],
       "targets": ["docs/harness/"]
@@ -28,13 +28,16 @@
     "deploy",
     "release",
     "provider",
-    "product-source",
     "database",
-    "migration",
-    "browser",
+    "live-database",
+    "live-migration",
+    "real-provider-process",
+    "real-project-data",
     "real-account",
     "real-message",
+    "credential",
+    "external-connector",
     "destructive-cleanup",
-    "M3-implementation"
+    "M4-M10-implementation"
   ]
 }
